@@ -1394,6 +1394,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489888}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489889}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -1551,6 +1554,27 @@ MonoBehaviour:
   swellAnchorPenalty: 2.6
   gatherRatePerCrew: 1.1
   approachSpeedLimit: 6.5
+--- !u!114 &2143489889
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3fbd93a74405a4404a07b75b88067e3e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.HullIntegrity
+  integrity: 1
+  speedPenaltyAtWreck: 0.4
+  wallowAtWreck: 0.25
+  hullMargin: 7
+  freeImpactSpeed: 2.5
+  damagePerImpactSpeed: 0.035
+  crewShock: 0.12
+  repairRate: 0.05
+  timberPerHullPoint: 12
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -23,32 +23,82 @@ namespace SeaSick.World
         /// How close the ship must be before the anchor option appears.
         public float AnchorRadius => radius + 30f;
 
+        float startingAmount;
+        bool hasHill;
+        readonly List<GameObject> props = new List<GameObject>();
+
         void OnEnable() { if (!All.Contains(this)) All.Add(this); }
         void OnDisable() { All.Remove(this); }
 
-        public void Configure(string resource, float amount, float islandRadius, bool home)
+        public void Configure(string resource, float amount, float islandRadius, bool home,
+            bool islandHasHill = true)
         {
             resourceName = resource;
             remaining = amount;
+            startingAmount = Mathf.Max(1f, amount);
             radius = islandRadius;
             isHome = home;
+            hasHill = islandHasHill;
+        }
+
+        /// Resource props (trees, boulders…) so the island shows what it is —
+        /// and visibly empties as the crew strip it.
+        public void RegisterProps(List<GameObject> resourceProps)
+        {
+            props.Clear();
+            props.AddRange(resourceProps);
         }
 
         public float Extract(float amount)
         {
             float take = Mathf.Min(amount, remaining);
             remaining -= take;
+            UpdateProps();
             return take;
         }
 
-        /// A standing spot on the beach for crew member `index` of `total`.
-        public Vector3 ShorePoint(int index, int total)
+        void UpdateProps()
         {
-            float ang = (total <= 1 ? 0f : (index / (float)total) * Mathf.PI * 2f) + 0.7f;
-            float d = radius * 0.5f;
-            // Matches the sand dome built by ArchipelagoGenerator.
-            float y = -0.12f * radius + 0.2f * radius * Mathf.Sqrt(Mathf.Max(0f, 1f - 0.25f));
-            return transform.position + new Vector3(Mathf.Sin(ang) * d, y, Mathf.Cos(ang) * d);
+            if (props.Count == 0) return;
+            int shouldShow = Mathf.CeilToInt(props.Count * (remaining / startingAmount));
+            for (int i = 0; i < props.Count; i++)
+                if (props[i] != null && props[i].activeSelf != (i < shouldShow))
+                    props[i].SetActive(i < shouldShow);
+        }
+
+        /// A working spot for crew member `index` of `total`, spread across the
+        /// shore FACING the ship — so the shore party stays on screen.
+        public Vector3 ShorePoint(int index, int total, Vector3 shipPos)
+        {
+            Vector3 toShip = shipPos - transform.position;
+            toShip.y = 0f;
+            if (toShip.sqrMagnitude < 0.01f) toShip = Vector3.forward;
+            float baseAng = Mathf.Atan2(toShip.x, toShip.z);
+            float spread = Mathf.Deg2Rad * 46f;
+            float ang = baseAng + (total <= 1 ? 0f : Mathf.Lerp(-spread, spread, index / (float)(total - 1)));
+            return SurfacePoint(ang, radius * 0.62f);
+        }
+
+        /// A point on the island's visible surface — whichever of the sand dome
+        /// or the grass hill is higher there. Both match the shapes built by
+        /// ArchipelagoGenerator; without the hill term, props sink inside it.
+        public Vector3 SurfacePoint(float angleRad, float distFromCentre)
+        {
+            float d = Mathf.Min(distFromCentre, radius * 0.97f);
+            float t = d / radius;
+            float y = -0.12f * radius + 0.2f * radius * Mathf.Sqrt(Mathf.Max(0f, 1f - t * t));
+
+            if (hasHill)
+            {
+                float hillReach = radius * 0.6f;   // hill sphere: 1.2r wide
+                if (d < hillReach)
+                {
+                    float u = d / hillReach;
+                    float hillY = radius * 0.05f + radius * 0.275f * Mathf.Sqrt(Mathf.Max(0f, 1f - u * u));
+                    y = Mathf.Max(y, hillY);
+                }
+            }
+            return transform.position + new Vector3(Mathf.Sin(angleRad) * d, y, Mathf.Cos(angleRad) * d);
         }
 
         public static Island Nearest(Vector3 pos, bool requireResources = false)

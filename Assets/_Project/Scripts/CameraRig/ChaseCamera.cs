@@ -20,6 +20,10 @@ namespace SeaSick.CameraRig
 
         public Transform Target { get => target; set => target = value; }
 
+        /// When set (e.g. a shore party), the camera backs off and frames both
+        /// the ship and this point so the player can watch the crew work.
+        public Vector3? PointOfInterest { get; set; }
+
         Camera cam;
         SeaSick.Ship.ShipMotor motor;
 
@@ -42,16 +46,39 @@ namespace SeaSick.CameraRig
                 cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 1f - Mathf.Exp(-2f * dt));
             }
 
-            Vector3 flatForward = target.forward;
-            flatForward.y = 0f;
-            flatForward = flatForward.sqrMagnitude < 0.001f ? Vector3.forward : flatForward.normalized;
+            Vector3 shipFlat = new Vector3(target.position.x, 0f, target.position.z);
+            Vector3 anchor, desired, lookPoint;
 
-            Vector3 anchor = new Vector3(target.position.x, 0f, target.position.z);
-            Vector3 desired = anchor - flatForward * distance + Vector3.up * height;
+            if (PointOfInterest.HasValue)
+            {
+                // Frame ship + shore party: sit on the far side of the ship
+                // looking past it at the island, pulled back by their spread.
+                Vector3 poi = PointOfInterest.Value;
+                poi.y = 0f;
+                Vector3 axis = shipFlat - poi;
+                float separation = axis.magnitude;
+                axis = separation < 0.5f ? -target.forward : axis / separation;
+
+                // Bias toward the shore party — they're what the player wants
+                // to watch — and back off enough to hold both in frame.
+                anchor = Vector3.Lerp(poi, shipFlat, 0.38f);
+                float back = distance * 0.85f + separation * 0.8f;
+                desired = anchor + axis * back + Vector3.up * (height + separation * 0.4f);
+                lookPoint = anchor + Vector3.up * lookHeight;
+            }
+            else
+            {
+                Vector3 flatForward = target.forward;
+                flatForward.y = 0f;
+                flatForward = flatForward.sqrMagnitude < 0.001f ? Vector3.forward : flatForward.normalized;
+
+                anchor = shipFlat;
+                desired = anchor - flatForward * distance + Vector3.up * height;
+                lookPoint = anchor + flatForward * lookAhead + Vector3.up * lookHeight;
+            }
+
             transform.position = Vector3.Lerp(
                 transform.position, desired, 1f - Mathf.Exp(-positionResponse * dt));
-
-            Vector3 lookPoint = anchor + flatForward * lookAhead + Vector3.up * lookHeight;
             Quaternion desiredRot = Quaternion.LookRotation(lookPoint - transform.position, Vector3.up);
             transform.rotation = Quaternion.Slerp(
                 transform.rotation, desiredRot, 1f - Mathf.Exp(-rotationResponse * dt));

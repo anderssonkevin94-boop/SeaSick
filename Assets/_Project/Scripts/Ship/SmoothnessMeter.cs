@@ -32,6 +32,7 @@ namespace SeaSick.Ship
         public float Smoothness01 => 1f - Roughness01;
 
         ShipMotor motor;
+        HullIntegrity hull;
         float prevY;
         float prevPitch;
         float prevRoll;
@@ -39,7 +40,12 @@ namespace SeaSick.Ship
         Vector3 prevPos;
         bool primed;
 
-        void OnEnable() { primed = false; motor = GetComponent<ShipMotor>(); }
+        void OnEnable()
+        {
+            primed = false;
+            motor = GetComponent<ShipMotor>();
+            hull = GetComponent<HullIntegrity>();
+        }
 
         void LateUpdate()
         {
@@ -78,12 +84,13 @@ namespace SeaSick.Ship
             prevYaw = yaw; prevPos = pos;
 
             float gust = motor != null ? motor.GustFactor01 : 0f;
+            float wallow = hull != null ? hull.Wallow01 : 0f;
             float raw =
                 verticalWeight * Mathf.Clamp01(Mathf.Abs(velY) / heaveRateCeiling) +
                 pitchWeight * Mathf.Clamp01(Mathf.Abs(pitchRate) / pitchRateCeiling) +
                 rollWeight * Mathf.Clamp01(Mathf.Abs(rollRate) / rollRateCeiling) +
                 lateralWeight * Mathf.Clamp01(lateralAcc / lateralAccelCeiling) +
-                gustWeight * gust;
+                gustWeight * gust + wallow;
 
             float blend = 1f - Mathf.Exp(-(0.6931f / smoothingHalflife) * dt);
             Roughness01 = Mathf.Lerp(Roughness01, Mathf.Clamp01(raw), blend);

@@ -77,6 +77,19 @@ namespace SeaSick.Voyage
 
         public void AddSalvage(int amount) => AddLoot(amount, "Timber");
 
+        public int AmountOf(string resource) => held.TryGetValue(resource, out int n) ? n : 0;
+
+        /// Spend cargo (repairs burn timber). False if the hold can't cover it.
+        public bool TryConsume(string resource, int amount)
+        {
+            if (!held.TryGetValue(resource, out int have) || have < amount) return false;
+            held[resource] = have - amount;
+            if (held[resource] <= 0) held.Remove(resource);
+            TotalHeld -= amount;
+            ship.CargoLoad01 = Mathf.Clamp01((float)TotalHeld / holdCapacity);
+            return true;
+        }
+
         /// Mutinous crew throwing loot overboard (stage 4). Lightening the
         /// ship also restores speed — they really do get home faster.
         public void DitchCargo(int amount)

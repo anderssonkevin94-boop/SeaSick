@@ -23,20 +23,26 @@ namespace SeaSick.Ship
         public Island CurrentIsland { get; private set; }
 
         ShipMotor motor;
+        HullIntegrity hull;
         CrewAgent[] crew;
         VoyageManager voyage;
         WaveField waves;
+        SeaSick.CameraRig.ChaseCamera chaseCam;
 
         float timer;
         float gatherFraction;
+        float repairDebt;
+        bool repairing;
         GUIStyle buttonStyle, infoStyle;
 
         void Start()
         {
             motor = GetComponent<ShipMotor>();
+            hull = GetComponent<HullIntegrity>();
             crew = GetComponentsInChildren<CrewAgent>(true);
             voyage = FindFirstObjectByType<VoyageManager>();
             waves = FindFirstObjectByType<WaveField>();
+            chaseCam = FindFirstObjectByType<SeaSick.CameraRig.ChaseCamera>();
         }
 
         Island IslandInRange()
@@ -74,8 +80,45 @@ namespace SeaSick.Ship
 
                 case State.Ashore:
                     Harvest(dt);
-                    if (AllAboard()) CurrentState = State.Anchored;
+                    Repair(dt);
+                    if (AllAboard()) { CurrentState = State.Anchored; repairing = false; }
                     break;
+            }
+
+            UpdateCameraFocus();
+        }
+
+        /// While the crew are ashore, pull the camera back to frame them —
+        /// otherwise they wander out of shot and the player misses the work.
+        void UpdateCameraFocus()
+        {
+            if (chaseCam == null) return;
+            if (CurrentState != State.Ashore) { chaseCam.PointOfInterest = null; return; }
+
+            Vector3 sum = Vector3.zero;
+            int n = 0;
+            foreach (var c in crew)
+                if (c != null && !c.IsAboard) { sum += c.transform.position; n++; }
+
+            chaseCam.PointOfInterest = n > 0
+                ? sum / n
+                : (CurrentIsland != null ? CurrentIsland.transform.position : (Vector3?)null);
+        }
+
+        void Repair(float dt)
+        {
+            if (!repairing || hull == null || voyage == null) return;
+            if (!hull.NeedsRepair) { repairing = false; return; }
+
+            float timberOnHand = voyage.AmountOf("Timber") - repairDebt;
+            float used = hull.RepairStep(dt, timberOnHand);
+            if (used <= 0f) { repairing = false; return; }
+
+            repairDebt += used;
+            while (repairDebt >= 1f)
+            {
+                if (!voyage.TryConsume("Timber", 1)) { repairing = false; break; }
+                repairDebt -= 1f;
             }
         }
 
@@ -116,7 +159,8 @@ namespace SeaSick.Ship
         {
             if (CurrentIsland == null) return;
             for (int i = 0; i < crew.Length; i++)
-                if (crew[i] != null) crew[i].GoAshore(CurrentIsland.ShorePoint(i, crew.Length));
+                if (crew[i] != null)
+                    crew[i].GoAshore(CurrentIsland.ShorePoint(i, crew.Length, transform.position));
             CurrentState = State.Ashore;
         }
 
@@ -196,9 +240,26 @@ namespace SeaSick.Ship
                     string status = CurrentIsland != null && CurrentIsland.HasResources
                         ? $"harvesting {CurrentIsland.ResourceName} — {CurrentIsland.Remaining:F0} left"
                         : "the crew rests on solid ground";
+                    if (repairing) status += "   ·   repairing hull";
                     GUI.Label(new Rect(0f, by - 26f, w, 24f), status, infoStyle);
-                    UIBlocker.Block(primary);
-                    if (GUI.Button(primary, "recall crew aboard", buttonStyle)) RecallCrew();
+
+                    bool canRepair = hull != null && hull.NeedsRepair && voyage != null
+                        && voyage.AmountOf("Timber") > 0;
+                    if (canRepair || repairing)
+                    {
+                        UIBlocker.Block(primary);
+                        UIBlocker.Block(secondary);
+                        string repairLabel = repairing
+                            ? $"stop repairs — hull {hull.Integrity01:P0}"
+                            : $"repair hull ({hull.Integrity01:P0}) — uses timber";
+                        if (GUI.Button(primary, repairLabel, buttonStyle)) repairing = !repairing;
+                        if (GUI.Button(secondary, "recall crew aboard", buttonStyle)) RecallCrew();
+                    }
+                    else
+                    {
+                        UIBlocker.Block(primary);
+                        if (GUI.Button(primary, "recall crew aboard", buttonStyle)) RecallCrew();
+                    }
                     break;
                 }
             }

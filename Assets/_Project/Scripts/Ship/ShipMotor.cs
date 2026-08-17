@@ -52,6 +52,16 @@ namespace SeaSick.Ship
         public float WindStrength { get; private set; } = 1f;
         public float GustFactor01 { get; private set; }
         public float MaxSpeed => maxSpeed;
+        public Vector3 Velocity => velocity;
+
+        /// Used by grounding: cancel the component of momentum driving the
+        /// hull into the rock, keeping whatever slides along the shore.
+        public void KillVelocityAlong(Vector3 outwardNormal)
+        {
+            float into = Vector3.Dot(velocity, outwardNormal);
+            if (into < 0f) velocity -= outwardNormal * into;
+            speed = velocity.magnitude;
+        }
         /// Signed angle between where the hull points and where it's actually
         /// moving — the visible drift. ~0 in a straight line, spikes in turns.
         public float DriftAngleDeg =>
@@ -62,8 +72,11 @@ namespace SeaSick.Ship
         float speed;     // |velocity|, for HUD/camera/turn-rate
         Vector3 velocity; // world-space; decoupled from heading so the hull can slide
 
+        HullIntegrity hull;
+
         void Start()
         {
+            hull = GetComponent<HullIntegrity>();
             heading = transform.eulerAngles.y;
             if (rudderPivot == null) rudderPivot = transform.Find("RudderPivot");
             if (mastPivot == null) mastPivot = transform.Find("MastPivot");
@@ -77,6 +90,7 @@ namespace SeaSick.Ship
             // --- Steering & speed ---
             float load = Mathf.Clamp01(CargoLoad01);
             float effMaxSpeed = maxSpeed * (1f - 0.18f * load);
+            if (hull != null) effMaxSpeed *= hull.SpeedMultiplier;
             float speedFactor = Mathf.Clamp01(speed / maxSpeed);
             float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor) * (1f - 0.25f * load);
 

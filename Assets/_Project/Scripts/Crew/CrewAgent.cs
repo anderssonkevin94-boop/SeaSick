@@ -54,6 +54,13 @@ namespace SeaSick.Crew
         /// Full recovery — called when the ship docks at home.
         public void Rest() { Sickness01 = 0f; Anger01 = 0f; }
 
+        /// Thrown across the deck — running aground rattles them badly.
+        public void Jolt(float amount)
+        {
+            Sickness01 = Mathf.Clamp01(Sickness01 + amount);
+            Anger01 = Mathf.Clamp01(Anger01 + amount * 1.4f);
+        }
+
         enum State { Station, ToRail, Puking, Returning, GoingAshore, Ashore, Boarding }
         State state = State.Station;
 
@@ -193,6 +200,22 @@ namespace SeaSick.Crew
         bool WalkToWorld(Vector3 target, float dt)
         {
             Vector3 pos = Vector3.MoveTowards(transform.position, target, shoreWalkSpeed * dt);
+
+            // Over open water they wade/bob on the surface rather than hanging
+            // in mid-air between ship and beach.
+            var isle = World.Island.Nearest(pos);
+            if (isle != null)
+            {
+                Vector3 flat = pos - isle.transform.position;
+                flat.y = 0f;
+                if (flat.magnitude > isle.Radius)
+                {
+                    var waves = Ocean.WaveField.Instance;
+                    if (waves != null)
+                        pos.y = waves.SampleHeight(new Vector2(pos.x, pos.z), Time.time) + 0.35f;
+                }
+            }
+
             transform.position = pos;
             Vector3 look = target - pos;
             look.y = 0f;

@@ -61,8 +61,10 @@ namespace SeaSick.Dev
             string gust = motor.GustFactor01 > 0.1f ? $"   GUST ×{motor.WindStrength:F2}" : "";
             GUI.Label(new Rect(x, y += line, w, line),
                 $"sail {motor.SailSetting:P0}   wind {windAngle:F0}° off bow{gust}", label);
+            var hull = motor.GetComponent<HullIntegrity>();
+            string hullText = hull != null ? $"   hull {hull.Integrity01:P0}" : "";
             GUI.Label(new Rect(x, y += line, w, line),
-                $"roughness {meter.Roughness01:F2}", label);
+                $"roughness {meter.Roughness01:F2}{hullText}", label);
 
             // Roughness bar: green calm, red rough.
             var barRect = new Rect(x, y + line * 1.1f, w, line * 0.5f);

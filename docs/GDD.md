@@ -97,6 +97,12 @@ _Append-only._
 - 2026-08-17 — Roster with persistent villagers/traits/breeding planned post-MVP; crew modeled as data (ScriptableObjects) from day one to allow it.
 - 2026-08-17 — Development order: sailing first, work backward to base.
 - 2026-08-17 — Device target: iPhone (iOS first). Default orientation set to Portrait.
+- 2026-08-17 — **Islands are solid, legible, and watchable.**
+  - **Grounding & hull** (HullIntegrity): islands have a hard radius (+7m hull margin). Impacts above 2.5 m/s damage the hull (~29% at 14 m/s), stop the ship dead, and jolt the crew (sickness + anger spike). Damage costs top speed (−40% at zero hull) and adds wallow to the roughness metric, so a wrecked ship makes the crew sicker.
+  - **Repairs**: careen ashore and rebuild using **Timber from the hold** (~12 timber for a full rebuild) — the first real sink for a resource, and it competes with harvest time. Verified 40% → 100%.
+  - **Resource props**: each island wears its material — palm-ish trees (Timber), grey boulders (Stone), dark rock with glowing gold veins (Ore), flowering bushes (Spice). Shelter-only rocks stay bare. **Props deactivate as the island is harvested**, so you can see an island being stripped (14 trees → 1 at zero resource). Type is identifiable from open water.
+  - **Shore-party camera**: ChaseCamera takes a PointOfInterest while crew are ashore, biasing toward the crew and backing off by their spread so the harvest stays on screen. Crew now also disembark on the shore arc **facing the ship**, and ride the wave surface while crossing open water instead of walking through mid-air.
+  - Fixed: props were spawning inside the grass-hill dome (Island.SurfacePoint now takes the hill into account, not just the sand).
 - 2026-08-17 — **Shelter loop** (answer to "everything feels random — what can I DO?"). The sea becomes a map of harbours and the player gets a verb.
   - **Anchoring** (AnchorController): near any island → drop anchor (3.5s; **×2.6 in a swell**) → send crew ashore → they harvest AND recover → recall → weigh anchor (2.8s). Ship holds station while anchored, helm disabled. IMGUI buttons register with UIBlocker so tapping never steers.
   - **Shore leave** (CrewAgent): crew unparent, walk to the beach, sickness drains to a **partial floor of 0.2** (full recovery awaits doctors) and anger cools. Transit neither heals nor harms. Anchored ships still rock — only land is truly safe.
