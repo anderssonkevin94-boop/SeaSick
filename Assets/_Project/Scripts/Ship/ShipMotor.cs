@@ -9,8 +9,9 @@ namespace SeaSick.Ship
     public class ShipMotor : MonoBehaviour
     {
         [Header("Sailing")]
-        [SerializeField] float maxSpeed = 12f;         // m/s at full wind
-        [SerializeField] float acceleration = 2.2f;    // m/s^2
+        [SerializeField] float maxSpeed = 15f;         // m/s at full wind
+        [SerializeField] float acceleration = 2.6f;    // m/s^2
+        [SerializeField] float keelGrip = 2.2f;        // /s decay of sideways slip; lower = driftier
         [SerializeField] float minTurnRate = 6f;       // deg/s when drifting
         [SerializeField] float maxTurnRate = 26f;      // deg/s at full speed
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.35f); // where the wind blows toward
@@ -49,9 +50,15 @@ namespace SeaSick.Ship
         public float WindStrength { get; private set; } = 1f;
         public float GustFactor01 { get; private set; }
         public float MaxSpeed => maxSpeed;
+        /// Signed angle between where the hull points and where it's actually
+        /// moving — the visible drift. ~0 in a straight line, spikes in turns.
+        public float DriftAngleDeg =>
+            speed < 0.5f ? 0f : Vector3.SignedAngle(
+                Quaternion.Euler(0f, heading, 0f) * Vector3.forward, velocity, Vector3.up);
 
         float heading;   // degrees, 0 = +Z
-        float speed;
+        float speed;     // |velocity|, for HUD/camera/turn-rate
+        Vector3 velocity; // world-space; decoupled from heading so the hull can slide
 
         void Start()
         {
@@ -100,10 +107,21 @@ namespace SeaSick.Ship
             float windFactor = Mathf.Lerp(1f - upwindPenalty, 1f, (windAlignment + 1f) * 0.5f);
             float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(Mathf.Min(SailSetting, SailCap)));
             float targetSpeed = effMaxSpeed * windFactor * sailPower * WindStrength;
-            speed = Mathf.MoveTowards(speed, targetSpeed, acceleration * dt);
+
+            // Sea-of-Thieves-style carve: thrust builds along the hull, but
+            // momentum keeps its own direction. Turning converts forward way
+            // into sideways slip, which the keel bleeds off over ~half a
+            // second — so the stern slides out and you move THROUGH the water.
+            Vector3 right = new Vector3(forward.z, 0f, -forward.x);
+            float forwardWay = Vector3.Dot(velocity, forward);
+            float sideWay = Vector3.Dot(velocity, right);
+            forwardWay = Mathf.MoveTowards(forwardWay, targetSpeed, acceleration * dt);
+            sideWay *= Mathf.Exp(-keelGrip * dt);
+            velocity = forward * forwardWay + right * sideWay;
+            speed = velocity.magnitude;
 
             Vector3 pos = transform.position;
-            pos += forward * (speed * dt);
+            pos += velocity * dt;
 
             // --- Seat the hull on the waves ---
             var field = WaveField.Instance;

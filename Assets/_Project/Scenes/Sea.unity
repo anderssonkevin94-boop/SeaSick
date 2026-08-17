@@ -1357,14 +1357,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.CameraRig.ChaseCamera
   target: {fileID: 2143489877}
-  distance: 27
-  height: 14
+  distance: 25
+  height: 12.5
   lookAhead: 28
   lookHeight: 2.5
   positionResponse: 2.2
   rotationResponse: 3
   fovBase: 55
-  fovSpeedBoost: 7
+  fovSpeedBoost: 10
 --- !u!81 &2086288690
 AudioListener:
   m_ObjectHideFlags: 0
@@ -1612,6 +1612,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489886}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489887}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -1652,8 +1655,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cdb2b2664dcc442c0a9eb54073eec039, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.ShipMotor
-  maxSpeed: 12
-  acceleration: 2.2
+  maxSpeed: 15
+  acceleration: 2.6
+  keelGrip: 2.2
   minTurnRate: 6
   maxTurnRate: 26
   windDirection: {x: 1, y: 0.35}
@@ -1735,6 +1739,22 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.SpeedJuice
   sprayFullRate: 55
   wakeFullRate: 30
+--- !u!114 &2143489887
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c4584343215ed463e914c88b825e4bee, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.WindArrow
+  hoverHeight: 9
+  hoverBehind: 4
+  calmColor: {r: 1, g: 0.95, b: 0.7, a: 0.9}
+  gustColor: {r: 1, g: 0.75, b: 0.2, a: 1}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
