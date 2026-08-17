@@ -13,7 +13,7 @@ namespace SeaSick.Dev
 
         ShipMotor motor;
         SmoothnessMeter meter;
-        CrewAgent crew;
+        CrewAgent[] crew;
         GUIStyle label;
 
         void Awake()
@@ -22,7 +22,7 @@ namespace SeaSick.Dev
             meter = GetComponent<SmoothnessMeter>();
         }
 
-        void Start() { crew = GetComponentInChildren<CrewAgent>(); }
+        void Start() { crew = GetComponentsInChildren<CrewAgent>(); }
 
         void Update()
         {
@@ -45,8 +45,9 @@ namespace SeaSick.Dev
             float x = 12f, y = 12f;
             const float line = FontSize * 1.7f;
 
+            int crewCount = crew != null ? crew.Length : 0;
             GUI.color = new Color(0f, 0f, 0f, 0.45f);
-            GUI.DrawTexture(new Rect(6f, 6f, w + 12f, line * (crew != null ? 6.6f : 4.4f)), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(6f, 6f, w + 12f, line * (4.4f + crewCount * 1.75f)), Texture2D.whiteTexture);
             GUI.color = Color.white;
 
             Vector3 fwd = motor.transform.forward;
@@ -71,19 +72,22 @@ namespace SeaSick.Dev
                 Texture2D.whiteTexture);
             GUI.color = Color.white;
 
-            if (crew != null)
+            if (crew == null) return;
+            y = barRect.yMax + line * 0.2f;
+            foreach (var c in crew)
             {
-                y = barRect.yMax + line * 0.2f;
-                string who = crew.Def != null ? crew.Def.displayName : "crew";
+                if (c == null) continue;
+                string who = c.Def != null ? c.Def.displayName : "crew";
                 GUI.Label(new Rect(x, y, w, line),
-                    $"{who}: sickness {crew.Sickness01:F2}  [{crew.StateName}]", label);
-                var sickRect = new Rect(x, y + line, w, line * 0.5f);
+                    $"{who}: sick {c.Sickness01:F2}  anger {c.Anger01:F2}  [{c.StateName}]", label);
+                var sickRect = new Rect(x, y + line, w, line * 0.4f);
                 GUI.color = new Color(0f, 0f, 0f, 0.4f);
                 GUI.DrawTexture(sickRect, Texture2D.whiteTexture);
-                GUI.color = Color.Lerp(new Color(0.85f, 0.75f, 0.4f), new Color(0.45f, 0.8f, 0.3f), crew.Sickness01);
-                GUI.DrawTexture(new Rect(sickRect.x, sickRect.y, sickRect.width * crew.Sickness01, sickRect.height),
+                GUI.color = Color.Lerp(new Color(0.85f, 0.75f, 0.4f), new Color(0.45f, 0.8f, 0.3f), c.Sickness01);
+                GUI.DrawTexture(new Rect(sickRect.x, sickRect.y, sickRect.width * c.Sickness01, sickRect.height),
                     Texture2D.whiteTexture);
                 GUI.color = Color.white;
+                y += line * 1.75f;
             }
         }
     }

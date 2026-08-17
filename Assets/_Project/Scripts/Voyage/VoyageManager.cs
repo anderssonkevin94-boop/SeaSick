@@ -22,7 +22,9 @@ namespace SeaSick.Voyage
         enum Phase { Outbound, Gathering, ReturnLeg, Tally }
         Phase phase = Phase.Outbound;
 
-        CrewAgent crew;
+        public Transform HomePoint => homePoint;
+
+        CrewAgent[] crew;
         float gatherT;
         float voyageStartTime;
         int pukesAtStart;
@@ -36,7 +38,7 @@ namespace SeaSick.Voyage
         void Start()
         {
             if (ship == null) ship = FindFirstObjectByType<ShipMotor>();
-            crew = ship != null ? ship.GetComponentInChildren<CrewAgent>() : null;
+            crew = ship != null ? ship.GetComponentsInChildren<CrewAgent>() : new CrewAgent[0];
             BeginVoyage();
         }
 
@@ -44,8 +46,24 @@ namespace SeaSick.Voyage
         {
             phase = Phase.Outbound;
             voyageStartTime = Time.time;
-            pukesAtStart = crew != null ? crew.PukeCount : 0;
+            pukesAtStart = TotalPukes();
             lootHeld = 0;
+        }
+
+        int TotalPukes()
+        {
+            int n = 0;
+            foreach (var c in crew) n += c.PukeCount;
+            return n;
+        }
+
+        /// Mutinous crew throwing loot overboard (stage 4). Lightening the
+        /// ship also restores speed — they really do get home faster.
+        public void DitchCargo(int amount)
+        {
+            if (lootHeld <= 0) return;
+            lootHeld = Mathf.Max(0, lootHeld - amount);
+            ship.CargoLoad01 = lootPerTrip > 0 ? (float)lootHeld / lootPerTrip : 0f;
         }
 
         void Update()
@@ -77,16 +95,16 @@ namespace SeaSick.Voyage
                     if (Flat(shipPos, homePoint.position) < homeRadius)
                     {
                         completedTime = Time.time - voyageStartTime;
-                        completedPukes = (crew != null ? crew.PukeCount : 0) - pukesAtStart;
+                        completedPukes = TotalPukes() - pukesAtStart;
                         lootBanked += lootHeld;
                         ship.CargoLoad01 = 0f;
-                        if (crew != null) crew.Rest();
+                        foreach (var c in crew) c.Rest();
                         phase = Phase.Tally;
                     }
                     break;
 
                 case Phase.Tally:
-                    if (crew != null) crew.Rest(); // docked: no sickness at home
+                    foreach (var c in crew) c.Rest(); // docked: no sickness at home
                     bool tap = Pointer.current != null && Pointer.current.press.wasPressedThisFrame;
                     bool key = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
                     if (tap || key) BeginVoyage();
@@ -149,8 +167,8 @@ namespace SeaSick.Voyage
                     int m = Mathf.FloorToInt(completedTime / 60f);
                     int s = Mathf.FloorToInt(completedTime % 60f);
                     string bo = completedPukes == 0
-                        ? "Bo kept it together!"
-                        : $"Bo puked {completedPukes}×";
+                        ? "the crew kept it together!"
+                        : $"the crew puked {completedPukes}×";
                     GUI.Label(panel, $"VOYAGE COMPLETE\n\n+{lootHeld} timber  (stock: {lootBanked})\ntime {m}:{s:00}   ·   {bo}\n\ntap / space to set sail", centerLabel);
                     break;
                 }

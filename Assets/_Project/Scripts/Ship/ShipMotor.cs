@@ -9,8 +9,8 @@ namespace SeaSick.Ship
     public class ShipMotor : MonoBehaviour
     {
         [Header("Sailing")]
-        [SerializeField] float maxSpeed = 8f;          // m/s at full wind
-        [SerializeField] float acceleration = 1.6f;    // m/s^2
+        [SerializeField] float maxSpeed = 12f;         // m/s at full wind
+        [SerializeField] float acceleration = 2.2f;    // m/s^2
         [SerializeField] float minTurnRate = 6f;       // deg/s when drifting
         [SerializeField] float maxTurnRate = 26f;      // deg/s at full speed
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.35f); // where the wind blows toward
@@ -37,6 +37,11 @@ namespace SeaSick.Ship
         public float SailSetting { get; set; } = 1f;
         /// 0 empty .. 1 full hold. Loaded ships are slower and turn heavier.
         public float CargoLoad01 { get; set; }
+        /// Mutinous crew won't give you full canvas (set by MutinyController).
+        public float SailCap { get; set; } = 1f;
+        /// When set, the crew has seized the helm: rudder input is ignored and
+        /// the ship steers itself toward this point (mutiny stage 3+).
+        public Vector3? AutopilotTarget { get; set; }
         public float CurrentSpeed => speed;
         public float Heading => heading;
         public Vector2 WindDirection => windDirection.normalized;
@@ -62,13 +67,21 @@ namespace SeaSick.Ship
             float effMaxSpeed = maxSpeed * (1f - 0.18f * load);
             float speedFactor = Mathf.Clamp01(speed / maxSpeed);
             float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor) * (1f - 0.25f * load);
-            heading += Rudder * turnRate * dt;
+
+            float effectiveRudder = Rudder;
+            if (AutopilotTarget.HasValue)
+            {
+                Vector3 to = AutopilotTarget.Value - transform.position;
+                float desiredYaw = Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg;
+                effectiveRudder = Mathf.Clamp(Mathf.DeltaAngle(heading, desiredYaw) / 20f, -1f, 1f);
+            }
+            heading += effectiveRudder * turnRate * dt;
 
             Vector3 forward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
             Vector2 wind = windDirection.normalized;
             float windAlignment = Vector2.Dot(new Vector2(forward.x, forward.z), wind); // -1..1
             float windFactor = Mathf.Lerp(1f - upwindPenalty, 1f, (windAlignment + 1f) * 0.5f);
-            float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(SailSetting));
+            float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(Mathf.Min(SailSetting, SailCap)));
             float targetSpeed = effMaxSpeed * windFactor * sailPower;
             speed = Mathf.MoveTowards(speed, targetSpeed, acceleration * dt);
 
@@ -110,7 +123,7 @@ namespace SeaSick.Ship
 
             // --- Visual pivots ---
             if (rudderPivot != null)
-                rudderPivot.localRotation = Quaternion.Euler(0f, -Rudder * rudderVisualAngle, 0f);
+                rudderPivot.localRotation = Quaternion.Euler(0f, -effectiveRudder * rudderVisualAngle, 0f);
             if (mastPivot != null)
             {
                 // Trim the yards roughly square to the wind, clamped to the rig's limits.

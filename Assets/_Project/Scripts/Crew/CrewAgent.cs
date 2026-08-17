@@ -24,19 +24,27 @@ namespace SeaSick.Crew
         [SerializeField] Vector3 railLocal = new Vector3(1.8f, 2.0f, -2.5f);
         [SerializeField] float walkSpeed = 1.4f;
 
+        [Header("Anger (fuel for mutiny)")]
+        [SerializeField] float angerRiseRate = 0.035f;   // per s while very sick
+        [SerializeField] float angerDecayRate = 0.012f;  // per s once feeling better
+        [SerializeField] float verySickThreshold = 0.8f;
+
         [Header("Acting")]
         [SerializeField] Renderer[] tintRenderers;
         [SerializeField] Color healthyTint = new Color(0.87f, 0.65f, 0.48f);
         [SerializeField] Color sickTint = new Color(0.55f, 0.78f, 0.45f);
+        [SerializeField] Color angryTint = new Color(0.9f, 0.38f, 0.3f);
         [SerializeField] float maxSwayDegrees = 9f;
 
         public float Sickness01 { get; private set; }
+        /// Fuel for mutiny: rises while very sick, cools once they feel better.
+        public float Anger01 { get; private set; }
         public int PukeCount { get; private set; }
         public string StateName => state.ToString();
         public CrewMemberDef Def => def;
 
         /// Full recovery — called when the ship docks at home.
-        public void Rest() { Sickness01 = 0f; }
+        public void Rest() { Sickness01 = 0f; Anger01 = 0f; }
 
         enum State { Station, ToRail, Puking, Returning }
         State state = State.Station;
@@ -70,6 +78,13 @@ namespace SeaSick.Crew
             float resistance = def != null ? def.ironStomach : 0f;
             float rate = (baseRate + roughnessRate * rough * rough) * (1f - 0.5f * resistance);
             Sickness01 = Mathf.Clamp01(Sickness01 + rate * dt);
+
+            // Puking drops sickness below the anger threshold, so letting them
+            // puke literally buys off the mutiny for a while.
+            if (Sickness01 >= verySickThreshold)
+                Anger01 = Mathf.Clamp01(Anger01 + angerRiseRate * dt);
+            else if (Sickness01 < 0.6f)
+                Anger01 = Mathf.Clamp01(Anger01 - angerDecayRate * dt);
         }
 
         void RunStateMachine(float dt)
@@ -138,8 +153,10 @@ namespace SeaSick.Crew
                 transform.localRotation = Quaternion.Euler(0f, 0f, sway);
             }
 
-            // Green shift: readable well before the puke threshold.
+            // Green shift readable well before the puke threshold; anger adds
+            // a red flush on top so a brewing mutiny is visible on bodies.
             Color tint = Color.Lerp(healthyTint, sickTint, Mathf.Clamp01(Sickness01 * 1.15f));
+            tint = Color.Lerp(tint, angryTint, Anger01 * 0.8f);
             block.SetColor(BaseColorId, tint);
             foreach (var r in tintRenderers)
                 if (r != null) r.SetPropertyBlock(block);
