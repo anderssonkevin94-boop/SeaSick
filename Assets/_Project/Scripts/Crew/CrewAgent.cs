@@ -197,32 +197,54 @@ namespace SeaSick.Crew
             }
         }
 
+        /// Travel horizontally toward a world target, riding the water surface
+        /// while over open sea. Arrival is judged on HORIZONTAL distance only:
+        /// the deck sits about 2m above the waterline, so a 3D distance test
+        /// could never be satisfied while the wading code pins them to the
+        /// surface — which left recalled crew walking forever.
         bool WalkToWorld(Vector3 target, float dt)
         {
-            Vector3 pos = Vector3.MoveTowards(transform.position, target, shoreWalkSpeed * dt);
+            Vector3 pos = transform.position;
+            Vector3 flatPos = new Vector3(pos.x, 0f, pos.z);
+            Vector3 flatTarget = new Vector3(target.x, 0f, target.z);
+            Vector3 next = Vector3.MoveTowards(flatPos, flatTarget, shoreWalkSpeed * dt);
+            float horizontal = Vector3.Distance(next, flatTarget);
 
-            // Over open water they wade/bob on the surface rather than hanging
-            // in mid-air between ship and beach.
-            var isle = World.Island.Nearest(pos);
-            if (isle != null)
+            if (horizontal < 0.35f)
             {
-                Vector3 flat = pos - isle.transform.position;
-                flat.y = 0f;
-                if (flat.magnitude > isle.Radius)
+                transform.position = target;   // snap: guarantees arrival
+                return true;
+            }
+
+            float y;
+            if (horizontal < 4f)
+            {
+                // Close in, climb to the target height (up onto the deck or beach).
+                y = Mathf.Lerp(pos.y, target.y, 1f - Mathf.Exp(-6f * dt));
+            }
+            else
+            {
+                y = target.y;
+                var isle = World.Island.Nearest(next);
+                if (isle != null)
                 {
-                    var waves = Ocean.WaveField.Instance;
-                    if (waves != null)
-                        pos.y = waves.SampleHeightFast(new Vector2(pos.x, pos.z), Time.time) + 0.35f;
+                    Vector3 flat = next - isle.transform.position;
+                    flat.y = 0f;
+                    if (flat.magnitude > isle.Radius)
+                    {
+                        var waves = Ocean.WaveField.Instance;
+                        if (waves != null)
+                            y = waves.SampleHeightFast(new Vector2(next.x, next.z), Time.time) + 0.35f;
+                    }
                 }
             }
 
-            transform.position = pos;
-            Vector3 look = target - pos;
-            look.y = 0f;
+            transform.position = new Vector3(next.x, y, next.z);
+            Vector3 look = flatTarget - next;
             if (look.sqrMagnitude > 0.01f)
                 transform.rotation = Quaternion.Slerp(transform.rotation,
                     Quaternion.LookRotation(look, Vector3.up), 1f - Mathf.Exp(-6f * dt));
-            return (pos - target).sqrMagnitude < 0.05f;
+            return false;
         }
 
         bool WalkTo(Vector3 targetLocal, float dt)
