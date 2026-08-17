@@ -78,47 +78,19 @@ namespace SeaSick.Ocean
         void OnGUI()
         {
             if (!field.SwellActive || ship == null) return;
-            if (style == null)
-            {
-                style = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 18, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter,
-                };
-                subStyle = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 14, alignment = TextAnchor.MiddleCenter,
-                };
-            }
 
             bool inside = ShipIntensity > 0.15f;
-            var r = new Rect(0f, Screen.height * 0.29f, Screen.width, 30f);
-            var r2 = new Rect(0f, Screen.height * 0.29f + 28f, Screen.width, 22f);
-
-            GUI.color = inside
-                ? new Color(0.65f, 0.06f, 0.04f, 0.82f)
-                : new Color(0.92f, 0.55f, 0.08f, 0.72f);
-            GUI.DrawTexture(new Rect(r.x, r.y, r.width, 50f), Texture2D.whiteTexture);
-            GUI.color = Color.white;
-
             var shelter = Island.Nearest(ship.transform.position);
             string shelterText = shelter != null
                 ? $"nearest shelter {Island.FlatDistance(ship.transform.position, shelter.transform.position):F0} m"
                 : "no shelter in range";
 
             if (inside)
-            {
-                GUI.Label(r, "CAUGHT IN THE SWELL — make for land!", style);
-                GUI.Label(r2, shelterText, subStyle);
-            }
+                SeaSick.UI.UITheme.Banner(0.11f, "CAUGHT IN THE SWELL",
+                    new Color(0.62f, 0.08f, 0.06f, 0.80f), shelterText);
             else if (SecondsToImpact > 0f)
-            {
-                GUI.Label(r, $"BIG SWELL INCOMING — {SecondsToImpact:F0}s", style);
-                GUI.Label(r2, shelterText, subStyle);
-            }
-            else
-            {
-                GUI.Label(r, "the swell is passing…", style);
-            }
+                SeaSick.UI.UITheme.Banner(0.11f, $"BIG SWELL  ·  {SecondsToImpact:F0}s",
+                    new Color(0.80f, 0.46f, 0.06f, 0.72f), shelterText);
         }
     }
 }

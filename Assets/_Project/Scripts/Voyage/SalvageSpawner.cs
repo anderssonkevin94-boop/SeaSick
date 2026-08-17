@@ -115,15 +115,8 @@ namespace SeaSick.Voyage
         void OnGUI()
         {
             if (Time.time > messageUntil) return;
-            if (style == null)
-                style = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 19,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter,
-                };
-            var r = new Rect(0f, Screen.height * 0.72f, Screen.width, 30f);
-            GUI.Label(r, $"+{salvageValue} timber salvaged!", style);
+            var r = new Rect(0f, Screen.height * 0.62f, Screen.width, SeaSick.UI.UITheme.Unit * 2f);
+            GUI.Label(r, $"+{salvageValue} timber", SeaSick.UI.UITheme.Toast);
         }
     }
 }

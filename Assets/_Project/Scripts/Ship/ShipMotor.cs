@@ -9,19 +9,21 @@ namespace SeaSick.Ship
     public class ShipMotor : MonoBehaviour
     {
         [Header("Sailing")]
-        [SerializeField] float maxSpeed = 15f;         // m/s at full wind
+        [SerializeField] float maxSpeed = 18f;         // m/s at full wind
         [SerializeField] float acceleration = 2.6f;    // m/s^2
         [SerializeField] float keelGrip = 2.2f;        // /s decay of sideways slip; lower = driftier
 
         [Header("Wave riding")]
         [Tooltip("How hard gravity pulls the hull down a wave face. This is what makes the ocean terrain.")]
-        [SerializeField] float surfPower = 30f;
-        [SerializeField] float surfSampleDistance = 11f;
+        [SerializeField] float surfPower = 22f;
+        [SerializeField] float surfSampleDistance = 16f;
+        [Tooltip("How quickly the surf pull follows the slope. Lower = smoother.")]
+        [SerializeField] float surfResponse = 2.2f;
         [Tooltip("Surfing can carry you past normal top speed by this factor.")]
-        [SerializeField] float surfOvershoot = 1.5f;
+        [SerializeField] float surfOvershoot = 1.25f;
         [SerializeField] float overspeedDragScale = 0.35f;
-        [SerializeField] float minTurnRate = 6f;       // deg/s when drifting
-        [SerializeField] float maxTurnRate = 26f;      // deg/s at full speed
+        [SerializeField] float minTurnRate = 9f;       // deg/s when drifting
+        [SerializeField] float maxTurnRate = 34f;      // deg/s at full speed
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.35f); // where the wind blows toward
         [SerializeField, Range(0f, 1f)] float upwindPenalty = 0.65f;
         [SerializeField, Range(0f, 0.5f)] float steerageWay = 0.15f; // min drive with sails fully reefed
@@ -146,7 +148,7 @@ namespace SeaSick.Ship
             // Sample the surface just ahead of the bow: running downhill pulls
             // the hull forward, climbing a face bleeds momentum. This is what
             // turns the sea into terrain you steer across rather than through.
-            SurfAccel = 0f;
+            float rawSurf = 0f;
             var waveField = Ocean.WaveField.Instance;
             if (waveField != null && !Anchored)
             {
@@ -155,8 +157,11 @@ namespace SeaSick.Ship
                 Vector2 ahead = here + new Vector2(forward.x, forward.z) * surfSampleDistance;
                 float slope = (waveField.SampleHeight(ahead, Time.time)
                              - waveField.SampleHeight(here, Time.time)) / surfSampleDistance;
-                SurfAccel = -slope * surfPower;
+                rawSurf = -slope * surfPower;
             }
+            // Smoothed so the pull swells and fades like a real wave rather
+            // than jittering frame to frame.
+            SurfAccel = Mathf.Lerp(SurfAccel, rawSurf, 1f - Mathf.Exp(-surfResponse * dt));
 
             Vector3 right = new Vector3(forward.z, 0f, -forward.x);
             float forwardWay = Vector3.Dot(velocity, forward);

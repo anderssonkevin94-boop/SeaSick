@@ -9,7 +9,9 @@ namespace SeaSick.Dev
     [RequireComponent(typeof(ShipMotor), typeof(SmoothnessMeter))]
     public class DevHUD : MonoBehaviour
     {
-        [SerializeField] bool visible = true;
+        // Off by default now that StatusHUD owns the permanent readouts.
+        // F1 brings back the full diagnostic wall when tuning.
+        [SerializeField] bool visible = false;
 
         ShipMotor motor;
         SmoothnessMeter meter;

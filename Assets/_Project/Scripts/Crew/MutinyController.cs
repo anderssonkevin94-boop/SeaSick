@@ -71,27 +71,15 @@ namespace SeaSick.Crew
         void OnGUI()
         {
             if (Stage == 0) return;
-            if (style == null)
-                style = new GUIStyle(GUI.skin.label)
-                {
-                    fontSize = 17,
-                    fontStyle = FontStyle.Bold,
-                    alignment = TextAnchor.MiddleCenter,
-                };
-
             string msg = Stage switch
             {
-                1 => "The crew grumbles about the rough ride…",
-                2 => "The crew refuses full sail!",
-                3 => "MUTINY — they've seized the helm and turned for home!",
-                _ => "They're throwing the cargo overboard!",
+                1 => "the crew is grumbling",
+                2 => "the crew refuses full sail",
+                3 => "MUTINY — they've taken the helm",
+                _ => "they're throwing cargo overboard",
             };
-
-            var r = new Rect(0f, Screen.height * 0.235f, Screen.width, 32f);
-            GUI.color = new Color(0.55f, 0.08f, 0.05f, Stage >= 3 ? 0.8f : 0.55f);
-            GUI.DrawTexture(r, Texture2D.whiteTexture);
-            GUI.color = Color.white;
-            GUI.Label(r, msg, style);
+            SeaSick.UI.UITheme.Banner(0.185f, msg,
+                new Color(0.55f, 0.08f, 0.05f, Stage >= 3 ? 0.82f : 0.55f));
         }
     }
 }

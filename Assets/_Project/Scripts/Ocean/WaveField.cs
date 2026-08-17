@@ -22,10 +22,13 @@ namespace SeaSick.Ocean
         [SerializeField]
         GerstnerWave[] waves =
         {
-            new GerstnerWave { direction = new Vector2(1f, 0.30f),  wavelength = 48f, steepness = 0.20f },
-            new GerstnerWave { direction = new Vector2(0.7f, -0.4f), wavelength = 24f, steepness = 0.15f },
-            new GerstnerWave { direction = new Vector2(-0.2f, 1f),   wavelength = 13f, steepness = 0.10f },
-            new GerstnerWave { direction = new Vector2(0.5f, 0.8f),  wavelength = 8f,  steepness = 0.07f },
+            // Ocean swell, not chop. Long primary wavelength (130m ≈ 6 ship
+            // lengths) so the hull rides broad rolling faces instead of
+            // bouncing through ripples. Short waves are decoration only.
+            new GerstnerWave { direction = new Vector2(1f, 0.22f),   wavelength = 130f, steepness = 0.13f },
+            new GerstnerWave { direction = new Vector2(0.85f, -0.3f), wavelength = 70f,  steepness = 0.085f },
+            new GerstnerWave { direction = new Vector2(-0.15f, 1f),   wavelength = 31f,  steepness = 0.055f },
+            new GerstnerWave { direction = new Vector2(0.5f, 0.8f),   wavelength = 15f,  steepness = 0.035f },
         };
 
         // --- Swell front: a band of heavy water sweeping across the world ---

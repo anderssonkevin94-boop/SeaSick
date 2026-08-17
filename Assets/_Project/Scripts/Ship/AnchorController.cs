@@ -179,21 +179,18 @@ namespace SeaSick.Ship
 
         void OnGUI()
         {
-            if (buttonStyle == null)
-            {
-                buttonStyle = new GUIStyle(GUI.skin.button) { fontSize = 17, fontStyle = FontStyle.Bold };
-                infoStyle = new GUIStyle(GUI.skin.label)
-                { fontSize = 15, alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
-            }
+            buttonStyle = UITheme.Button;
+            infoStyle = UITheme.Small2Centered;
 
+            int u = UITheme.Unit;
             float w = Screen.width;
             float h = Screen.height;
-            float bw = Mathf.Min(w * 0.62f, 340f);
-            float bh = 52f;
+            float bw = Mathf.Min(w * 0.68f, u * 20f);
+            float bh = u * 2.7f;
             float bx = (w - bw) * 0.5f;
-            float by = h * 0.78f;
+            float by = h - u * 4.2f - bh;
             var primary = new Rect(bx, by, bw, bh);
-            var secondary = new Rect(bx, by + bh + 8f, bw, bh);
+            var secondary = new Rect(bx, by - bh - u * 0.5f, bw, bh);
 
             switch (CurrentState)
             {
@@ -213,14 +210,14 @@ namespace SeaSick.Ship
                 }
 
                 case State.Dropping:
-                    GUI.Label(new Rect(0f, by, w, 30f),
+                    GUI.Label(new Rect(0f, by, w, bh),
                         SwellHere() > 0.25f
-                            ? $"dropping anchor in heavy water… {timer:F1}s"
-                            : $"dropping anchor… {timer:F1}s", infoStyle);
+                            ? $"dropping anchor in heavy water…  {timer:F1}s"
+                            : $"dropping anchor…  {timer:F1}s", infoStyle);
                     break;
 
                 case State.Weighing:
-                    GUI.Label(new Rect(0f, by, w, 30f), $"weighing anchor… {timer:F1}s", infoStyle);
+                    GUI.Label(new Rect(0f, by, w, bh), $"weighing anchor…  {timer:F1}s", infoStyle);
                     break;
 
                 case State.Anchored:
@@ -241,7 +238,7 @@ namespace SeaSick.Ship
                         ? $"harvesting {CurrentIsland.ResourceName} — {CurrentIsland.Remaining:F0} left"
                         : "the crew rests on solid ground";
                     if (repairing) status += "   ·   repairing hull";
-                    GUI.Label(new Rect(0f, by - 26f, w, 24f), status, infoStyle);
+                    GUI.Label(new Rect(0f, secondary.y - u * 2f, w, u * 1.8f), status, infoStyle);
 
                     bool canRepair = hull != null && hull.NeedsRepair && voyage != null
                         && voyage.AmountOf("Timber") > 0;

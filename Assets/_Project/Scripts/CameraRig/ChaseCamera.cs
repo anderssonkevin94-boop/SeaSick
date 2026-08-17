@@ -15,10 +15,13 @@ namespace SeaSick.CameraRig
         [SerializeField] float positionResponse = 2.2f;
         [SerializeField] float rotationResponse = 3f;
 
-        [SerializeField] float fovBase = 55f;
-        [SerializeField] float fovSpeedBoost = 13f;
-        [Tooltip("Extra FOV kick while surfing down a wave face.")]
-        [SerializeField] float fovSurfPunch = 7f;
+        // FOV motion is the main cause of simulator sickness in a chase cam.
+        // Keep the total swing small (a few degrees) and ease it slowly.
+        [SerializeField] float fovBase = 58f;
+        [SerializeField] float fovSpeedBoost = 4f;
+        [Tooltip("Extra FOV kick while surfing down a wave face. Keep tiny.")]
+        [SerializeField] float fovSurfPunch = 1.5f;
+        [SerializeField] float fovResponse = 1.1f;
         [Tooltip("Never let the lens dip under the water surface.")]
         [SerializeField] float minHeightAboveWater = 2.6f;
 
@@ -49,7 +52,7 @@ namespace SeaSick.CameraRig
                 float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
                 float targetFov = fovBase + fovSpeedBoost * s01 * s01
                                   + fovSurfPunch * motor.SurfBoost01;
-                cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 1f - Mathf.Exp(-3.5f * dt));
+                cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 1f - Mathf.Exp(-fovResponse * dt));
             }
 
             Vector3 shipFlat = new Vector3(target.position.x, 0f, target.position.z);

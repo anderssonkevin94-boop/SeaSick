@@ -24,6 +24,8 @@ namespace SeaSick.Voyage
         public Transform HomePoint => homePoint;
         public bool HoldFull => TotalHeld >= holdCapacity;
         public int TotalHeld { get; private set; }
+        public int HoldCapacity => holdCapacity;
+        public float HoldFill01 => holdCapacity > 0 ? (float)TotalHeld / holdCapacity : 0f;
 
         readonly Dictionary<string, int> held = new Dictionary<string, int>();
         readonly Dictionary<string, int> banked = new Dictionary<string, int>();
@@ -156,40 +158,36 @@ namespace SeaSick.Voyage
 
         void OnGUI()
         {
-            if (centerLabel == null)
-            {
-                centerLabel = new GUIStyle(GUI.skin.label)
-                { fontSize = 18, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-                cargoLabel = new GUIStyle(GUI.skin.label)
-                { fontSize = 15, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            }
+            // At sea the permanent HUD (StatusHUD) covers cargo and distance —
+            // this class only draws the end-of-voyage moment.
+            if (phase != Phase.Tally) return;
 
+            int u = SeaSick.UI.UITheme.Unit;
             float w = Screen.width, h = Screen.height;
+            var panel = new Rect(w * 0.08f, h * 0.30f, w * 0.84f, u * 16f);
+            SeaSick.UI.UITheme.Rect(panel, SeaSick.UI.UITheme.PanelSolid);
+            SeaSick.UI.UITheme.Rect(new Rect(panel.x, panel.y, panel.width, 2f), SeaSick.UI.UITheme.Sea);
 
-            if (phase == Phase.AtSea)
-            {
-                var strip = new Rect(0f, h * 0.90f, w, 26f);
-                GUI.color = new Color(0f, 0f, 0f, 0.45f);
-                GUI.DrawTexture(strip, Texture2D.whiteTexture);
-                GUI.color = Color.white;
-                float home = Flat(ship.transform.position, homePoint.position);
-                string hold = TotalHeld > 0 ? HoldSummary() : "hold empty";
-                GUI.Label(strip, $"{hold}   ({TotalHeld}/{holdCapacity})   ·   home {home:F0} m", cargoLabel);
-                return;
-            }
+            float y = panel.y + u * 1.4f;
+            GUI.Label(new Rect(panel.x, y, panel.width, u * 2f), "VOYAGE COMPLETE", SeaSick.UI.UITheme.Title);
+            y += u * 3.2f;
+            GUI.Label(new Rect(panel.x, y, panel.width, u * 1.8f), completedHaul, SeaSick.UI.UITheme.Strong);
+            y += u * 2.6f;
 
-            var panel = new Rect(w * 0.1f, h * 0.3f, w * 0.8f, h * 0.32f);
-            GUI.color = new Color(0.05f, 0.08f, 0.12f, 0.9f);
-            GUI.DrawTexture(panel, Texture2D.whiteTexture);
-            GUI.color = Color.white;
             int m = Mathf.FloorToInt(completedTime / 60f);
             int s = Mathf.FloorToInt(completedTime % 60f);
             string crewLine = completedPukes == 0
-                ? "the crew kept it together!"
+                ? "the crew kept it together"
                 : $"the crew puked {completedPukes}×";
-            GUI.Label(panel,
-                $"VOYAGE COMPLETE\n\n{completedHaul}\n\nstores: {BankSummary()}\ntime {m}:{s:00}   ·   {crewLine}\n\ntap / space to set sail",
-                centerLabel);
+            GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
+                $"{m}:{s:00}   ·   {crewLine}", SeaSick.UI.UITheme.Small2Centered);
+            y += u * 2.2f;
+            GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
+                $"stores — {BankSummary()}", SeaSick.UI.UITheme.Small2Centered);
+
+            var btn = new Rect(panel.center.x - u * 6f, panel.yMax - u * 3.4f, u * 12f, u * 2.4f);
+            SeaSick.UI.UIBlocker.Block(btn);
+            if (GUI.Button(btn, "set sail", SeaSick.UI.UITheme.Button)) BeginVoyage();
         }
 
         string HoldSummary()
