@@ -22,6 +22,18 @@ namespace SeaSick.Ship
         [Tooltip("Surfing can carry you past normal top speed by this factor.")]
         [SerializeField] float surfOvershoot = 1.25f;
         [SerializeField] float overspeedDragScale = 0.35f;
+        // Stokes drift: waves carry a float along with them. These are target
+        // SPEEDS in m/s and they, not maxWaveAccel, set how hard a drifting
+        // ship gets pushed — raising the accel cap alone barely moved it.
+        [SerializeField] float waveDrift = 2f;
+        [SerializeField] float swellDrift = 5.5f;
+        [Tooltip("A hull resists being shoved sideways far more than forward.")]
+        [SerializeField, Range(0f, 1f)] float lateralWaveScale = 0.4f;
+        [Tooltip("Ceiling on wave acceleration so a swell can't fling the ship.")]
+        // Ceiling on wave acceleration. Measured with sails genuinely furled:
+        // 2.2 carries a drifting ship at ~2.9 m/s in a swell, 4.5 at ~5 m/s.
+        [SerializeField] float maxWaveAccel = 4.5f;
+        [SerializeField] float driftResponse = 1f;
         [SerializeField] float minTurnRate = 15f;      // deg/s when barely moving — always escapable
         [SerializeField] float maxTurnRate = 34f;      // deg/s at full speed
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.35f); // where the wind blows toward
@@ -117,6 +129,12 @@ namespace SeaSick.Ship
         float heading;   // degrees, 0 = +Z
         float speed;     // |velocity|, for HUD/camera/turn-rate
         Vector3 velocity; // world-space; decoupled from heading so the hull can slide
+        Vector3 waveAccel;             // smoothed 2D push from the surface slope
+        Vector3 waterVelocity;         // the water mass's own motion (drift)
+        Vector3 targetWaterVelocity;
+
+        /// How fast the water under the ship is itself moving.
+        public Vector3 WaterVelocity => waterVelocity;
 
         HullIntegrity hull;
 
@@ -185,20 +203,55 @@ namespace SeaSick.Ship
             // Sample the surface just ahead of the bow: running downhill pulls
             // the hull forward, climbing a face bleeds momentum. This is what
             // turns the sea into terrain you steer across rather than through.
-            float rawSurf = 0f;
+            // Wave force as a proper 2D world vector, not just a push along the
+            // hull. Water runs downhill, so the surface gradient shoves the
+            // boat whichever way it faces — a beam-on swell moves you sideways
+            // and a boat lying still still gets carried about.
+            Vector3 rawWaveAccel = Vector3.zero;
             var waveField = Ocean.WaveField.Instance;
             if (waveField != null && !Anchored)
             {
                 Vector3 p = transform.position;
+                float t = Time.time;
                 Vector2 here = new Vector2(p.x, p.z);
-                Vector2 ahead = here + new Vector2(forward.x, forward.z) * surfSampleDistance;
-                float slope = (waveField.SampleHeight(ahead, Time.time)
-                             - waveField.SampleHeight(here, Time.time)) / surfSampleDistance;
-                rawSurf = -slope * surfPower;
+                float h0 = waveField.SampleHeight(here, t);
+                float e = surfSampleDistance;
+                float slopeX = (waveField.SampleHeight(here + new Vector2(e, 0f), t) - h0) / e;
+                float slopeZ = (waveField.SampleHeight(here + new Vector2(0f, e), t) - h0) / e;
+                rawWaveAccel = new Vector3(-slopeX, 0f, -slopeZ) * surfPower;
+
+                // Stokes drift is the water mass itself moving. It is NOT a
+                // force on the hull: a keel resists moving THROUGH water, not
+                // being carried WITH it. So it's tracked separately and added
+                // at integration, where neither keel grip nor sail drag can
+                // eat it (which is exactly what was swallowing it before).
+                Vector3 driftVel = Vector3.zero;
+                Vector2 windWave = waveField.WindDirection;
+                driftVel += new Vector3(windWave.x, 0f, windWave.y) * (waveDrift * waveField.SeaState01);
+                if (waveField.SwellActive)
+                {
+                    float intensity = waveField.SwellIntensity(here, t);
+                    Vector2 sd = waveField.SwellDirection;
+                    driftVel += new Vector3(sd.x, 0f, sd.y) * (swellDrift * intensity);
+                }
+                targetWaterVelocity = driftVel;
             }
-            // Smoothed so the pull swells and fades like a real wave rather
+
+            // The hull only yields so much to a beam sea: keep the along-hull
+            // component and damp the across-hull one, then cap the whole thing
+            // so a big swell shoves the ship without hurling it.
+            {
+                Vector3 r = new Vector3(forward.z, 0f, -forward.x);
+                float along = Vector3.Dot(rawWaveAccel, forward);
+                float lateral = Vector3.Dot(rawWaveAccel, r) * lateralWaveScale;
+                rawWaveAccel = forward * along + r * lateral;
+                rawWaveAccel = Vector3.ClampMagnitude(rawWaveAccel, maxWaveAccel);
+            }
+
+            // Smoothed so the push swells and fades like a real wave rather
             // than jittering frame to frame.
-            SurfAccel = Mathf.Lerp(SurfAccel, rawSurf, 1f - Mathf.Exp(-surfResponse * dt));
+            waveAccel = Vector3.Lerp(waveAccel, rawWaveAccel, 1f - Mathf.Exp(-surfResponse * dt));
+            SurfAccel = Vector3.Dot(waveAccel, forward);
 
             Vector3 right = new Vector3(forward.z, 0f, -forward.x);
             float forwardWay = Vector3.Dot(velocity, forward);
@@ -211,15 +264,29 @@ namespace SeaSick.Ship
                 : acceleration;
             forwardWay = Mathf.MoveTowards(forwardWay, targetSpeed,
                 (Anchored ? acceleration * 2.5f : pull) * dt);
-            forwardWay += SurfAccel * dt;
             forwardWay = Mathf.Clamp(forwardWay, -2f, effMaxSpeed * surfOvershoot);
 
             sideWay *= Mathf.Exp(-(Anchored ? keelGrip * 3f : keelGrip) * dt);
             velocity = forward * forwardWay + right * sideWay;
-            speed = velocity.magnitude;
+
+            // Wave push goes on last, in world space, so the sail-drag solve
+            // above can't cancel it in the same frame. The keel bleeds off the
+            // sideways part over the following frames, which is what turns a
+            // beam sea into leeway rather than a shove you can ignore.
+            if (!Anchored) velocity += waveAccel * dt;
+            velocity = Vector3.ClampMagnitude(velocity, effMaxSpeed * surfOvershoot + 6f);
+
+            // The anchor holds against the drift; otherwise the water carries
+            // the hull bodily along with it.
+            waterVelocity = Vector3.Lerp(waterVelocity,
+                Anchored ? Vector3.zero : targetWaterVelocity,
+                1f - Mathf.Exp(-driftResponse * dt));
+
+            Vector3 groundVelocity = velocity + waterVelocity;
+            speed = groundVelocity.magnitude;
 
             Vector3 pos = transform.position;
-            pos += velocity * dt;
+            pos += groundVelocity * dt;
 
             // --- Seat the hull on the waves ---
             var field = WaveField.Instance;

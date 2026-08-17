@@ -8,13 +8,14 @@ namespace SeaSick.CameraRig
     public class ChaseCamera : MonoBehaviour
     {
         [SerializeField] Transform target;
-        // Three-quarter view: the tilt comes from (height - lookHeight) over
-        // (distance + lookAhead). A long lookAhead flattens the camera toward
-        // the horizon and puts the rig in your face, so keep it short here.
-        // Current values give roughly 41 degrees below horizontal.
-        [SerializeField] float distance = 24f;
-        [SerializeField] float height = 30f;
-        [SerializeField] float lookAhead = 10f;
+        // Three-quarter view: tilt = (height - lookHeight) / (distance +
+        // lookAhead). Vertical FOV is 60, so the frame spans tilt +/- 30
+        // degrees — the horizon is only visible while tilt stays under 30.
+        // These give ~22 degrees, which keeps a band of sky at the top while
+        // still looking down onto the deck.
+        [SerializeField] float distance = 25f;
+        [SerializeField] float height = 19f;
+        [SerializeField] float lookAhead = 20f;
         [SerializeField] float lookHeight = 0.5f;
         [SerializeField] float positionResponse = 2.2f;
         [SerializeField] float rotationResponse = 3f;
