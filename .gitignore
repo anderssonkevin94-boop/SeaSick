@@ -1,0 +1,40 @@
+# ===== Unity generated =====
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Never ignore asset meta files
+!/[Aa]ssets/**/*.meta
+
+# ===== IDE =====
+.idea/
+.vs/
+.vscode/
+.utmp/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# ===== OS =====
+.DS_Store
+._*
+
+# ===== Crash reports =====
+sysinfo.txt
+*.stackdump
+crashlytics-build.properties
