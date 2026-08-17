@@ -16,7 +16,11 @@ namespace SeaSick.CameraRig
         [SerializeField] float rotationResponse = 3f;
 
         [SerializeField] float fovBase = 55f;
-        [SerializeField] float fovSpeedBoost = 7f;
+        [SerializeField] float fovSpeedBoost = 13f;
+        [Tooltip("Extra FOV kick while surfing down a wave face.")]
+        [SerializeField] float fovSurfPunch = 7f;
+        [Tooltip("Never let the lens dip under the water surface.")]
+        [SerializeField] float minHeightAboveWater = 2.6f;
 
         public Transform Target { get => target; set => target = value; }
 
@@ -38,12 +42,14 @@ namespace SeaSick.CameraRig
             if (target == null) return;
             float dt = Time.deltaTime;
 
-            // Speed reads in the lens: FOV opens up as the ship accelerates.
+            // Speed reads in the lens: FOV opens with speed and punches when
+            // the hull drops onto a wave face.
             if (cam != null && motor != null)
             {
                 float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
-                float targetFov = fovBase + fovSpeedBoost * s01 * s01;
-                cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 1f - Mathf.Exp(-2f * dt));
+                float targetFov = fovBase + fovSpeedBoost * s01 * s01
+                                  + fovSurfPunch * motor.SurfBoost01;
+                cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 1f - Mathf.Exp(-3.5f * dt));
             }
 
             Vector3 shipFlat = new Vector3(target.position.x, 0f, target.position.z);
@@ -79,6 +85,16 @@ namespace SeaSick.CameraRig
 
             transform.position = Vector3.Lerp(
                 transform.position, desired, 1f - Mathf.Exp(-positionResponse * dt));
+
+            // A low camera sells speed, but it must never end up underwater.
+            var waves = SeaSick.Ocean.WaveField.Instance;
+            if (waves != null)
+            {
+                Vector3 cp = transform.position;
+                float surface = waves.SampleHeight(new Vector2(cp.x, cp.z), Time.time);
+                if (cp.y < surface + minHeightAboveWater)
+                    transform.position = new Vector3(cp.x, surface + minHeightAboveWater, cp.z);
+            }
             Quaternion desiredRot = Quaternion.LookRotation(lookPoint - transform.position, Vector3.up);
             transform.rotation = Quaternion.Slerp(
                 transform.rotation, desiredRot, 1f - Mathf.Exp(-rotationResponse * dt));

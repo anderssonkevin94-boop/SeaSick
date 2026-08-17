@@ -17,9 +17,16 @@ namespace SeaSick.World
             public float minRing; // 0..1 — how far out this resource starts appearing
         }
 
-        [SerializeField] int islandCount = 15;
-        [SerializeField] float innerDistance = 190f;
-        [SerializeField] float outerDistance = 880f;
+        [SerializeField] int islandCount = 16;
+        // Tighter than it was: a denser map means more arrivals and decisions
+        // per session instead of long stretches of holding a course.
+        [SerializeField] float innerDistance = 120f;
+        [SerializeField] float outerDistance = 520f;
+        [Header("Reefs")]
+        [SerializeField] int reefCount = 26;
+        [SerializeField] Vector2 reefRadiusRange = new Vector2(5f, 11f);
+        [SerializeField] float reefMinDistance = 90f;
+        [SerializeField] float reefMaxDistance = 540f;
         [SerializeField] Vector2 radiusRange = new Vector2(13f, 72f);
         [SerializeField] float richnessPerRadius = 0.95f;
         [SerializeField] float shelterOnlyBelowRadius = 21f;
@@ -66,6 +73,73 @@ namespace SeaSick.World
                 float richness = shelterOnly ? 0f : Mathf.Round(radius * richnessPerRadius * Random.Range(0.8f, 1.2f));
 
                 Build($"Island_{kind.name}_{i}", pos, radius, kind, richness, shelterOnly);
+            }
+
+            BuildReefs();
+        }
+
+        void BuildReefs()
+        {
+            var rockMat = MakeMat(new Color(0.26f, 0.27f, 0.30f));
+            var foamMat = MakeMat(new Color(0.92f, 0.95f, 0.97f));
+
+            for (int i = 0; i < reefCount; i++)
+            {
+                float ang = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+                float dist = Random.Range(reefMinDistance, reefMaxDistance);
+                var pos = new Vector3(Mathf.Sin(ang) * dist, 0f, Mathf.Cos(ang) * dist);
+
+                // Never plant a reef on top of an island.
+                bool clash = false;
+                foreach (var isle in Island.All)
+                {
+                    Vector3 d = isle.transform.position - pos;
+                    d.y = 0f;
+                    if (d.magnitude < isle.Radius + 45f) { clash = true; break; }
+                }
+                if (clash) continue;
+
+                float radius = Random.Range(reefRadiusRange.x, reefRadiusRange.y);
+                var root = new GameObject($"Reef_{i}");
+                root.transform.position = pos;
+
+                int rocks = Random.Range(2, 5);
+                for (int r = 0; r < rocks; r++)
+                {
+                    var rock = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    Destroy(rock.GetComponent<Collider>());
+                    rock.transform.SetParent(root.transform, false);
+                    float rs = radius * Random.Range(0.45f, 0.85f);
+                    rock.transform.localScale = new Vector3(rs, rs * Random.Range(0.8f, 1.5f), rs);
+                    float ra = Random.Range(0f, Mathf.PI * 2f);
+                    float rd = Random.Range(0f, radius * 0.55f);
+                    // Mostly submerged: just the teeth show above the surface.
+                    rock.transform.localPosition = new Vector3(
+                        Mathf.Sin(ra) * rd, Random.Range(-0.4f, 0.9f), Mathf.Cos(ra) * rd);
+                    rock.transform.localRotation = Quaternion.Euler(
+                        Random.Range(-18f, 18f), Random.Range(0f, 360f), Random.Range(-18f, 18f));
+                    rock.GetComponent<MeshRenderer>().sharedMaterial = rockMat;
+                }
+
+                // Foam ring: the visual warning that there's rock under there.
+                var foam = GameObject.CreatePrimitive(PrimitiveType.Quad);
+                Destroy(foam.GetComponent<Collider>());
+                foam.transform.SetParent(root.transform, false);
+                foam.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                foam.transform.localPosition = new Vector3(0f, 0.25f, 0f);
+                foam.transform.localScale = Vector3.one * radius * 3.2f;
+                var fm = new Material(foamMat);
+                fm.SetFloat("_Surface", 1f);
+                fm.SetOverrideTag("RenderType", "Transparent");
+                fm.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                fm.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                fm.SetInt("_ZWrite", 0);
+                fm.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                fm.renderQueue = 3020;
+                fm.SetColor("_BaseColor", new Color(0.95f, 0.98f, 1f, 0.42f));
+                foam.GetComponent<MeshRenderer>().sharedMaterial = fm;
+
+                root.AddComponent<Reef>().Configure(radius);
             }
         }
 

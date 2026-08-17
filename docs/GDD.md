@@ -97,6 +97,14 @@ _Append-only._
 - 2026-08-17 — Roster with persistent villagers/traits/breeding planned post-MVP; crew modeled as data (ScriptableObjects) from day one to allow it.
 - 2026-08-17 — Development order: sailing first, work backward to base.
 - 2026-08-17 — Device target: iPhone (iOS first). Default orientation set to Portrait.
+- 2026-08-17 — **Pace pass** (response to "movement still feels slow and not engaging"). Re-diagnosed: *slow* was a **scale** problem (a 21m ship at 15 m/s covers 0.7 ship-lengths/sec, with a camera 25m back and nothing near the lens) and *unengaging* was a **cadence** problem (one meaningful decision every ~20s; good games ask every 1–3s). Fixes:
+  - **Wave riding** — ShipMotor samples the surface slope ahead of the bow: run down a face and you accelerate, climb one and you bog down. Turns the ocean into terrain and gives continuous, second-to-second steering texture. Surfing can carry you 1.5× past nominal top speed; overspeed drag reduced so boosts persist. Measured: speed swings **9.6 → 14.3 m/s** on the same heading purely from wave choice (surfAccel −3.0 to +4.2 m/s²). `surfPower` is the master feel dial (30).
+  - **Camera down at the water** — 17m back / 6.5m up (was 25/12.5), FOV opens with speed² and punches +7° when surfing, never dips below the surface. This alone is most of the perceived-speed fix.
+  - **SeaStreaks** — ~46 foam streaks lying on the water near the ship, recycled from astern to ahead. The ship moves past *them*, which is what an empty ocean was missing.
+  - **SeaAudio** — wind, water rush and hull slap synthesized in code as filtered noise (no audio assets, no Coplay dependency). Wind rises in gusts, rush tracks speed and surf, hull slaps when the bow drops into a trough.
+  - **Denser map** — islands now 120–520m (was 190–880m), so arrivals and decisions come far more often.
+  - **Reefs** — 26 half-submerged hazards with foam warning rings scattered between the islands; hitting one at speed costs ~37% hull. Open water now demands attention everywhere.
+  - Deferred: manual sail trim (adds control complexity to a one-thumb game; wave riding already supplies the moment-to-moment texture).
 - 2026-08-17 — **Islands are solid, legible, and watchable.**
   - **Grounding & hull** (HullIntegrity): islands have a hard radius (+7m hull margin). Impacts above 2.5 m/s damage the hull (~29% at 14 m/s), stop the ship dead, and jolt the crew (sickness + anger spike). Damage costs top speed (−40% at zero hull) and adds wallow to the roughness metric, so a wrecked ship makes the crew sicker.
   - **Repairs**: careen ashore and rebuild using **Timber from the hold** (~12 timber for a full rebuild) — the first real sink for a resource, and it competes with harvest time. Verified 40% → 100%.

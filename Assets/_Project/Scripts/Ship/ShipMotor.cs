@@ -12,6 +12,14 @@ namespace SeaSick.Ship
         [SerializeField] float maxSpeed = 15f;         // m/s at full wind
         [SerializeField] float acceleration = 2.6f;    // m/s^2
         [SerializeField] float keelGrip = 2.2f;        // /s decay of sideways slip; lower = driftier
+
+        [Header("Wave riding")]
+        [Tooltip("How hard gravity pulls the hull down a wave face. This is what makes the ocean terrain.")]
+        [SerializeField] float surfPower = 30f;
+        [SerializeField] float surfSampleDistance = 11f;
+        [Tooltip("Surfing can carry you past normal top speed by this factor.")]
+        [SerializeField] float surfOvershoot = 1.5f;
+        [SerializeField] float overspeedDragScale = 0.35f;
         [SerializeField] float minTurnRate = 6f;       // deg/s when drifting
         [SerializeField] float maxTurnRate = 26f;      // deg/s at full speed
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.35f); // where the wind blows toward
@@ -53,6 +61,10 @@ namespace SeaSick.Ship
         public float GustFactor01 { get; private set; }
         public float MaxSpeed => maxSpeed;
         public Vector3 Velocity => velocity;
+        /// Positive when running down a wave face, negative climbing one.
+        /// Drives camera punch, spray, and audio — the feel of catching a wave.
+        public float SurfAccel { get; private set; }
+        public float SurfBoost01 => Mathf.Clamp01(SurfAccel / 3.5f);
 
         /// Used by grounding: cancel the component of momentum driving the
         /// hull into the rock, keeping whatever slides along the shore.
@@ -130,11 +142,36 @@ namespace SeaSick.Ship
             // second — so the stern slides out and you move THROUGH the water.
             if (Anchored) targetSpeed = 0f;
 
+            // --- Wave riding ---
+            // Sample the surface just ahead of the bow: running downhill pulls
+            // the hull forward, climbing a face bleeds momentum. This is what
+            // turns the sea into terrain you steer across rather than through.
+            SurfAccel = 0f;
+            var waveField = Ocean.WaveField.Instance;
+            if (waveField != null && !Anchored)
+            {
+                Vector3 p = transform.position;
+                Vector2 here = new Vector2(p.x, p.z);
+                Vector2 ahead = here + new Vector2(forward.x, forward.z) * surfSampleDistance;
+                float slope = (waveField.SampleHeight(ahead, Time.time)
+                             - waveField.SampleHeight(here, Time.time)) / surfSampleDistance;
+                SurfAccel = -slope * surfPower;
+            }
+
             Vector3 right = new Vector3(forward.z, 0f, -forward.x);
             float forwardWay = Vector3.Dot(velocity, forward);
             float sideWay = Vector3.Dot(velocity, right);
+
+            // Drag toward the wind-driven target is gentler above it, so a
+            // surf boost carries for a while instead of evaporating.
+            float pull = forwardWay > targetSpeed
+                ? acceleration * overspeedDragScale
+                : acceleration;
             forwardWay = Mathf.MoveTowards(forwardWay, targetSpeed,
-                (Anchored ? acceleration * 2.5f : acceleration) * dt);
+                (Anchored ? acceleration * 2.5f : pull) * dt);
+            forwardWay += SurfAccel * dt;
+            forwardWay = Mathf.Clamp(forwardWay, -2f, effMaxSpeed * surfOvershoot);
+
             sideWay *= Mathf.Exp(-(Anchored ? keelGrip * 3f : keelGrip) * dt);
             velocity = forward * forwardWay + right * sideWay;
             speed = velocity.magnitude;

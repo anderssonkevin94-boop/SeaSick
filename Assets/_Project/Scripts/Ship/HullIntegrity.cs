@@ -19,6 +19,7 @@ namespace SeaSick.Ship
         [SerializeField] float freeImpactSpeed = 2.5f; // gentle nudges cost nothing
         [SerializeField] float damagePerImpactSpeed = 0.035f;
         [SerializeField] float crewShock = 0.12f;      // sickness/anger jolt on a bad hit
+        [SerializeField] float reefDamageScale = 1f; // a full-speed reef hit costs ~37% hull
 
         [Header("Repair")]
         [SerializeField] float repairRate = 0.05f;        // hull per second
@@ -42,19 +43,40 @@ namespace SeaSick.Ship
 
         void Update()
         {
+            // Whichever obstacle we're actually inside — island or reef.
             var isle = Island.Nearest(transform.position);
-            if (isle == null) return;
+            var reef = Reef.Nearest(transform.position);
 
-            Vector3 toShip = transform.position - isle.transform.position;
+            Vector3 obstaclePos = Vector3.zero;
+            float obstacleRadius = 0f;
+            float damageScale = 1f;
+            bool intruding = false;
+
+            if (isle != null && Intrudes(isle.transform.position, isle.Radius))
+            {
+                obstaclePos = isle.transform.position;
+                obstacleRadius = isle.Radius;
+                intruding = true;
+            }
+            else if (reef != null && Intrudes(reef.transform.position, reef.Radius))
+            {
+                obstaclePos = reef.transform.position;
+                obstacleRadius = reef.Radius;
+                damageScale = reefDamageScale; // jagged rock bites harder
+                intruding = true;
+            }
+            if (!intruding) return;
+
+            Vector3 toShip = transform.position - obstaclePos;
             toShip.y = 0f;
             float dist = toShip.magnitude;
-            float solidRadius = isle.Radius + hullMargin;
-            if (dist >= solidRadius || dist < 0.01f) return;
+            float solidRadius = obstacleRadius + hullMargin;
+            if (dist < 0.01f) return;
 
             // Aground: shove the hull back out to the shoreline.
             Vector3 outward = toShip / dist;
             Vector3 pos = transform.position;
-            Vector3 fixedPos = isle.transform.position + outward * solidRadius;
+            Vector3 fixedPos = obstaclePos + outward * solidRadius;
             transform.position = new Vector3(fixedPos.x, pos.y, fixedPos.z);
 
             float closingSpeed = -Vector3.Dot(motor.Velocity, outward);
@@ -63,7 +85,7 @@ namespace SeaSick.Ship
             if (closingSpeed > freeImpactSpeed && Time.time - LastImpactTime > 0.5f)
             {
                 float excess = closingSpeed - freeImpactSpeed;
-                integrity = Mathf.Clamp01(integrity - excess * damagePerImpactSpeed);
+                integrity = Mathf.Clamp01(integrity - excess * damagePerImpactSpeed * damageScale);
                 LastImpactTime = Time.time;
                 LastImpactSpeed = closingSpeed;
 
@@ -71,6 +93,13 @@ namespace SeaSick.Ship
                 float shock = crewShock * Mathf.Clamp01(excess / 8f);
                 foreach (var c in crew) if (c != null) c.Jolt(shock);
             }
+        }
+
+        bool Intrudes(Vector3 centre, float radius)
+        {
+            Vector3 d = transform.position - centre;
+            d.y = 0f;
+            return d.sqrMagnitude < (radius + hullMargin) * (radius + hullMargin);
         }
 
         /// Returns the timber consumed this frame (0 if nothing to do).

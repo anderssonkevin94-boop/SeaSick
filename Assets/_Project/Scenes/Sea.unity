@@ -167,6 +167,56 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &69521649
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 69521651}
+  - component: {fileID: 69521650}
+  m_Layer: 0
+  m_Name: SeaAudio
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &69521650
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 69521649}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c94a7b41ce424fc79cc05699b2a9f10, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Audio.SeaAudio
+  windBaseVolume: 0.16
+  windGustVolume: 0.34
+  rushMaxVolume: 0.42
+  slapVolume: 0.55
+  slapCooldown: 0.45
+  slapHeaveThreshold: 1.6
+--- !u!4 &69521651
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 69521649}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &259739192
 GameObject:
   m_ObjectHideFlags: 0
@@ -286,9 +336,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4fb04dd1c181e44af9386612b44e538d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.ArchipelagoGenerator
-  islandCount: 15
-  innerDistance: 190
-  outerDistance: 880
+  islandCount: 16
+  innerDistance: 120
+  outerDistance: 520
+  reefCount: 26
+  reefRadiusRange: {x: 5, y: 11}
+  reefMinDistance: 90
+  reefMaxDistance: 540
   radiusRange: {x: 13, y: 72}
   richnessPerRadius: 0.95
   shelterOnlyBelowRadius: 21
@@ -631,6 +685,7 @@ GameObject:
   - component: {fileID: 1412075591}
   - component: {fileID: 1412075592}
   - component: {fileID: 1412075593}
+  - component: {fileID: 1412075594}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -808,6 +863,23 @@ MonoBehaviour:
   steepness: 0.62
   wavelength: 72
   clearBeyond: 520
+--- !u!114 &1412075594
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412075583}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 85702ff14104040cfbd27e2d62770c57, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.SeaStreaks
+  streakCount: 46
+  spawnRadius: 85
+  recycleBehind: 60
+  sizeRange: {x: 4.5, y: 13}
+  foamColor: {r: 1, g: 1, b: 1, a: 0.3}
 --- !u!1 &1482035839
 GameObject:
   m_ObjectHideFlags: 0
@@ -1133,14 +1205,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.CameraRig.ChaseCamera
   target: {fileID: 2143489877}
-  distance: 25
-  height: 12.5
-  lookAhead: 28
-  lookHeight: 2.5
+  distance: 17
+  height: 6.5
+  lookAhead: 30
+  lookHeight: 3.2
   positionResponse: 2.2
   rotationResponse: 3
-  fovBase: 55
-  fovSpeedBoost: 10
+  fovBase: 56
+  fovSpeedBoost: 13
+  fovSurfPunch: 7
+  minHeightAboveWater: 2.6
 --- !u!81 &2086288690
 AudioListener:
   m_ObjectHideFlags: 0
@@ -1440,6 +1514,10 @@ MonoBehaviour:
   maxSpeed: 15
   acceleration: 2.6
   keelGrip: 2.2
+  surfPower: 30
+  surfSampleDistance: 11
+  surfOvershoot: 1.5
+  overspeedDragScale: 0.35
   minTurnRate: 6
   maxTurnRate: 26
   windDirection: {x: 1, y: 0.35}
@@ -1573,6 +1651,7 @@ MonoBehaviour:
   freeImpactSpeed: 2.5
   damagePerImpactSpeed: 0.035
   crewShock: 0.12
+  reefDamageScale: 1.35
   repairRate: 0.05
   timberPerHullPoint: 12
 --- !u!1660057539 &9223372036854775807
@@ -1587,3 +1666,4 @@ SceneRoots:
   - {fileID: 38900269}
   - {fileID: 1482035841}
   - {fileID: 355815509}
+  - {fileID: 69521651}
