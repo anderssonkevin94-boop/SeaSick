@@ -12,6 +12,7 @@ namespace SeaSick.Ship
         [SerializeField] float hoverBehind = 4f; // toward the stern so it clears the sails
         [SerializeField] Color calmColor = new Color(1f, 0.95f, 0.7f, 0.9f);
         [SerializeField] Color gustColor = new Color(1f, 0.75f, 0.2f, 1f);
+        [SerializeField] Color noGoColor = new Color(0.95f, 0.28f, 0.22f, 1f);
 
         ShipMotor motor;
         Transform arrow;
@@ -66,7 +67,11 @@ namespace SeaSick.Ship
 
             float gust = motor.GustFactor01;
             arrow.localScale = new Vector3(1f, 1f, 1f + gust * 0.5f);
-            mat.SetColor(BaseColorId, Color.Lerp(calmColor, gustColor, gust));
+            // Flashes red the moment you point into the no-go zone.
+            Color c = Color.Lerp(calmColor, gustColor, gust);
+            if (motor.Luff01 > 0.01f)
+                c = Color.Lerp(c, noGoColor, Mathf.Clamp01(motor.Luff01 * 1.5f));
+            mat.SetColor(BaseColorId, c);
         }
     }
 }

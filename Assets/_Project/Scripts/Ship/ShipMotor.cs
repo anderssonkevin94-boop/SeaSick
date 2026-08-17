@@ -25,8 +25,7 @@ namespace SeaSick.Ship
         [SerializeField] float minTurnRate = 9f;       // deg/s when drifting
         [SerializeField] float maxTurnRate = 34f;      // deg/s at full speed
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.35f); // where the wind blows toward
-        [SerializeField, Range(0f, 1f)] float upwindPenalty = 0.65f;
-        [SerializeField, Range(0f, 0.5f)] float steerageWay = 0.15f; // min drive with sails fully reefed
+        [SerializeField, Range(0f, 0.5f)] float steerageWay = 0.12f; // min drive with sails furled
 
         [Header("Seating on the water")]
         [SerializeField] float verticalResponse = 4f;  // how quickly the hull follows wave height
@@ -67,6 +66,37 @@ namespace SeaSick.Ship
         /// Drives camera punch, spray, and audio — the feel of catching a wave.
         public float SurfAccel { get; private set; }
         public float SurfBoost01 => Mathf.Clamp01(SurfAccel / 3.5f);
+
+        /// Degrees between the bow and the direction the wind blows FROM.
+        /// 0 = pointing straight into the wind, 180 = dead downwind.
+        public float WindAngleDeg { get; private set; } = 90f;
+        /// How badly the sails are shaking: 1 in irons, 0 once they draw.
+        public float Luff01 { get; private set; }
+        public bool InIrons => WindAngleDeg < NoGoDegrees;
+        /// Drive available from the current heading, before sail setting.
+        public float PolarEfficiency { get; private set; } = 1f;
+
+        public const float NoGoDegrees = 45f;
+
+        public string PointOfSailName =>
+            WindAngleDeg < 32f ? "in irons"
+            : WindAngleDeg < NoGoDegrees ? "pinching"
+            : WindAngleDeg < 70f ? "close hauled"
+            : WindAngleDeg < 105f ? "beam reach"
+            : WindAngleDeg < 150f ? "broad reach"
+            : "running";
+
+        /// Classic sailing polar: no drive upwind, best on a beam reach,
+        /// slightly down again dead downwind. This is what forces tacking.
+        public static float SailPolar(float thetaDeg)
+        {
+            if (thetaDeg < 32f) return 0.02f;
+            if (thetaDeg < 45f) return Mathf.Lerp(0.02f, 0.50f, (thetaDeg - 32f) / 13f);
+            if (thetaDeg < 70f) return Mathf.Lerp(0.50f, 0.90f, (thetaDeg - 45f) / 25f);
+            if (thetaDeg < 105f) return Mathf.Lerp(0.90f, 1.00f, (thetaDeg - 70f) / 35f);
+            if (thetaDeg < 150f) return Mathf.Lerp(1.00f, 0.88f, (thetaDeg - 105f) / 45f);
+            return Mathf.Lerp(0.88f, 0.70f, (thetaDeg - 150f) / 30f);
+        }
 
         /// Used by grounding: cancel the component of momentum driving the
         /// hull into the rock, keeping whatever slides along the shore.
@@ -133,10 +163,15 @@ namespace SeaSick.Ship
                 GustFactor01 = 0f;
             }
             Vector2 wind = WindDirection;
-            float windAlignment = Vector2.Dot(new Vector2(forward.x, forward.z), wind); // -1..1
-            float windFactor = Mathf.Lerp(1f - upwindPenalty, 1f, (windAlignment + 1f) * 0.5f);
+
+            // Points of sail: measure the bow against where the wind comes FROM.
+            Vector3 windFromWorld = new Vector3(-wind.x, 0f, -wind.y);
+            WindAngleDeg = Vector3.Angle(new Vector3(forward.x, 0f, forward.z), windFromWorld);
+            PolarEfficiency = SailPolar(WindAngleDeg);
+            Luff01 = Mathf.Clamp01(1f - (WindAngleDeg - 20f) / 25f);
+
             float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(Mathf.Min(SailSetting, SailCap)));
-            float targetSpeed = effMaxSpeed * windFactor * sailPower * WindStrength;
+            float targetSpeed = effMaxSpeed * PolarEfficiency * sailPower * WindStrength;
 
             // Sea-of-Thieves-style carve: thrust builds along the hull, but
             // momentum keeps its own direction. Turning converts forward way
@@ -225,13 +260,25 @@ namespace SeaSick.Ship
                 rudderPivot.localRotation = Quaternion.Euler(0f, -effectiveRudder * rudderVisualAngle, 0f);
             if (mastPivot != null)
             {
-                // Trim the yards roughly square to the wind, clamped to the rig's limits.
                 Vector3 windWorld = new Vector3(wind.x, 0f, wind.y);
                 float windYaw = Vector3.SignedAngle(forward, windWorld, Vector3.up);
-                float trim = Mathf.Clamp(windYaw * 0.5f, -40f, 40f);
+                float trim;
+                float blend;
+                if (Luff01 > 0.35f)
+                {
+                    // Luffing: the yards weathervane and the canvas shakes —
+                    // the clearest possible signal that you're pinching.
+                    trim = Mathf.Clamp(windYaw, -80f, 80f)
+                           + Mathf.Sin(Time.time * 16f) * 14f * Luff01;
+                    blend = 1f - Mathf.Exp(-7f * dt);
+                }
+                else
+                {
+                    trim = Mathf.Clamp(windYaw * 0.5f, -70f, 70f);
+                    blend = 1f - Mathf.Exp(-2f * dt);
+                }
                 mastPivot.localRotation = Quaternion.Slerp(
-                    mastPivot.localRotation, Quaternion.Euler(0f, trim, 0f),
-                    1f - Mathf.Exp(-2f * dt));
+                    mastPivot.localRotation, Quaternion.Euler(0f, trim, 0f), blend);
             }
         }
     }
