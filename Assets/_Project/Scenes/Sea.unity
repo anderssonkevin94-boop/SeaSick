@@ -730,6 +730,7 @@ GameObject:
   - component: {fileID: 1412075592}
   - component: {fileID: 1412075593}
   - component: {fileID: 1412075594}
+  - component: {fileID: 1412075595}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -749,7 +750,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4ef8ca202df784ddb986875577f262fe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanRenderer
-  gridQuads: 110
+  gridQuads: 72
   extent: 460
   followTarget: {fileID: 2143489877}
 --- !u!114 &1412075585
@@ -764,19 +765,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 054c3bac680604658bea84add2b12667, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WaveField
-  waves:
-  - direction: {x: 1, y: 0.22}
-    wavelength: 130
-    steepness: 0.13
-  - direction: {x: 0.85, y: -0.3}
-    wavelength: 70
-    steepness: 0.085
-  - direction: {x: -0.15, y: 1}
-    wavelength: 31
-    steepness: 0.055
-  - direction: {x: 0.5, y: 0.8}
-    wavelength: 15
-    steepness: 0.035
+  waveCount: 10
+  windSpeed: 11
+  windDirection: {x: 1, y: 0.22}
+  minWavelength: 9
+  maxWavelength: 190
+  totalSteepness: 0.34
+  spectrumWidth: 0.62
+  seed: 1337
+  calmFloor: 0.14
+  roughCeiling: 1.15
+  changeSpeed: 0.011
 --- !u!23 &1412075586
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -884,7 +883,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 37de5a792823c46ca91772a592ba5a9b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.GustVisuals
-  quadsPerGust: 24
+  quadsPerGust: 14
   quadSize: 7
   rippleColor: {r: 0.02, g: 0.08, b: 0.14, a: 0.5}
 --- !u!114 &1412075593
@@ -924,6 +923,29 @@ MonoBehaviour:
   recycleBehind: 60
   sizeRange: {x: 4.5, y: 13}
   foamColor: {r: 1, g: 1, b: 1, a: 0.3}
+--- !u!114 &1412075595
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412075583}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 054c3bac680604658bea84add2b12667, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WaveField
+  waveCount: 12
+  windSpeed: 11
+  windDirection: {x: 1, y: 0.22}
+  minWavelength: 9
+  maxWavelength: 190
+  totalSteepness: 0.34
+  spectrumWidth: 0.62
+  seed: 1337
+  calmFloor: 0.14
+  roughCeiling: 1.15
+  changeSpeed: 0.011
 --- !u!1 &1482035839
 GameObject:
   m_ObjectHideFlags: 0
@@ -1516,6 +1538,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489889}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489890}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -1543,7 +1568,6 @@ MonoBehaviour:
   engageSpeed: 3.5
   recenterSpeed: 1.2
   testRudder: 0
-  sailAdjustSpeed: 0.7
 --- !u!114 &2143489879
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1567,7 +1591,6 @@ MonoBehaviour:
   minTurnRate: 9
   maxTurnRate: 34
   windDirection: {x: 1, y: 0.35}
-  upwindPenalty: 0.65
   steerageWay: 0.15
   verticalResponse: 4
   angularResponse: 2.5
@@ -1661,6 +1684,7 @@ MonoBehaviour:
   hoverBehind: 4
   calmColor: {r: 1, g: 0.95, b: 0.7, a: 0.9}
   gustColor: {r: 1, g: 0.75, b: 0.2, a: 1}
+  noGoColor: {r: 0.95, g: 0.28, b: 0.22, a: 1}
 --- !u!114 &2143489888
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1700,6 +1724,29 @@ MonoBehaviour:
   reefDamageScale: 1.35
   repairRate: 0.05
   timberPerHullPoint: 12
+--- !u!114 &2143489890
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 128a5ccd4c92c409fa6d9fc44712fe31, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.HullDisplacement
+  hullHalfLength: 11
+  hullHalfWidth: 4.5
+  troughDepth: 1.25
+  troughFalloff: 12
+  bowOffset: 9
+  bowHeight: 1.5
+  bowWidth: 7
+  wakeHalfAngleDeg: 19.47
+  wakeLength: 110
+  wakeCrestHeight: 0.55
+  wakeArmWidth: 5.5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

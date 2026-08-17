@@ -79,7 +79,7 @@ namespace SeaSick.Voyage
         {
             Vector3 p = f.position;
             if (waves != null)
-                p.y = waves.SampleHeight(new Vector2(p.x, p.z), t) + 0.15f;
+                p.y = waves.SampleHeightFast(new Vector2(p.x, p.z), t) + 0.15f;
             f.position = p;
             f.rotation = Quaternion.Euler(
                 Mathf.Sin(t * 0.9f + seed * 2.1f) * 8f,

@@ -68,7 +68,7 @@ namespace SeaSick.Ocean
                 {
                     int i = g * quadsPerGust + k;
                     Vector2 p = gust.pos + localOffsets[i] * gust.radius;
-                    float y = waves.SampleHeight(p, t) + 0.10f;
+                    float y = waves.SampleHeightFast(p, t) + 0.10f;
                     quads[i].position = new Vector3(p.x, y, p.y);
                     quads[i].rotation = Quaternion.Euler(90f, 0f, 0f);
                     quads[i].localScale = Vector3.one * quadSize;

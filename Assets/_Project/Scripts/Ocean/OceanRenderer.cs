@@ -8,13 +8,14 @@ namespace SeaSick.Ocean
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer), typeof(WaveField))]
     public class OceanRenderer : MonoBehaviour
     {
-        [SerializeField] int gridQuads = 110;
+        [SerializeField] int gridQuads = 72;
         [SerializeField] float extent = 460f;
         [SerializeField] Transform followTarget;
 
         Mesh mesh;
         Vector3[] baseVerts;
         Vector3[] verts;
+        Vector3[] normals;
         WaveField field;
 
         public Transform FollowTarget { get => followTarget; set => followTarget = value; }
@@ -30,6 +31,7 @@ namespace SeaSick.Ocean
             int n = gridQuads + 1;
             baseVerts = new Vector3[n * n];
             verts = new Vector3[n * n];
+            normals = new Vector3[n * n];
             var uvs = new Vector2[n * n];
             float half = extent * 0.5f;
             float step = extent / gridQuads;
@@ -73,14 +75,49 @@ namespace SeaSick.Ocean
 
             float t = Time.time;
             Vector3 origin = transform.position;
+            var hull = HullDisplacement.Instance;
             for (int i = 0; i < baseVerts.Length; i++)
             {
                 Vector3 b = baseVerts[i];
-                Vector3 d = field.Displace(new Vector2(origin.x + b.x, origin.z + b.z), t);
-                verts[i] = new Vector3(b.x + d.x, d.y, b.z + d.z);
+                var world = new Vector2(origin.x + b.x, origin.z + b.z);
+                Vector3 d = field.Displace(world, t);
+                float y = d.y;
+                // The ship actually shoves the surface around: trough, bow
+                // wave and Kelvin wake are part of the water, not decals.
+                if (hull != null) y += hull.HeightAt(new Vector2(world.x + d.x, world.y + d.z));
+                verts[i] = new Vector3(b.x + d.x, y, b.z + d.z);
             }
-            mesh.vertices = verts;
-            mesh.RecalculateNormals();
+            // SetVertices/SetNormals skip the validation and bounds work the
+            // property setters do; bounds are fixed for this mesh anyway.
+            mesh.SetVertices(verts, 0, verts.Length, NoValidation);
+            RecalculateGridNormals();
         }
+
+        /// Normals straight from the grid neighbours. Unity's RecalculateNormals
+        /// walks every triangle and re-normalises shared vertices, which is the
+        /// single most expensive thing we were doing per frame; a central
+        /// difference over the lattice gives the same result far cheaper.
+        void RecalculateGridNormals()
+        {
+            int n = gridQuads + 1;
+            for (int z = 0; z < n; z++)
+            {
+                int row = z * n;
+                for (int x = 0; x < n; x++)
+                {
+                    int i = row + x;
+                    Vector3 dx = verts[i + (x < n - 1 ? 1 : 0)] - verts[i - (x > 0 ? 1 : 0)];
+                    Vector3 dz = verts[i + (z < n - 1 ? n : 0)] - verts[i - (z > 0 ? n : 0)];
+                    var nrm = Vector3.Cross(dz, dx);
+                    normals[i] = nrm.y < 0f ? -nrm.normalized : nrm.normalized;
+                }
+            }
+            mesh.SetNormals(normals, 0, normals.Length, NoValidation);
+        }
+
+        const UnityEngine.Rendering.MeshUpdateFlags NoValidation =
+            UnityEngine.Rendering.MeshUpdateFlags.DontValidateIndices |
+            UnityEngine.Rendering.MeshUpdateFlags.DontRecalculateBounds |
+            UnityEngine.Rendering.MeshUpdateFlags.DontNotifyMeshUsers;
     }
 }

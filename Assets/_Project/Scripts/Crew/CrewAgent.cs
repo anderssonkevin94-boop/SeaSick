@@ -212,7 +212,7 @@ namespace SeaSick.Crew
                 {
                     var waves = Ocean.WaveField.Instance;
                     if (waves != null)
-                        pos.y = waves.SampleHeight(new Vector2(pos.x, pos.z), Time.time) + 0.35f;
+                        pos.y = waves.SampleHeightFast(new Vector2(pos.x, pos.z), Time.time) + 0.35f;
                 }
             }
 

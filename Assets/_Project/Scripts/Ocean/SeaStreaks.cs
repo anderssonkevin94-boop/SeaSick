@@ -92,7 +92,7 @@ namespace SeaSick.Ocean
                     p = streaks[i].position;
                 }
 
-                float h = waves != null ? waves.SampleHeight(new Vector2(p.x, p.z), t) : 0f;
+                float h = waves != null ? waves.SampleHeightFast(new Vector2(p.x, p.z), t) : 0f;
                 streaks[i].position = new Vector3(p.x, h + 0.08f, p.z);
                 streaks[i].rotation = Quaternion.Euler(90f, 0f, 0f);
             }
