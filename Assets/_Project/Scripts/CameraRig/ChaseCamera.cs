@@ -15,12 +15,32 @@ namespace SeaSick.CameraRig
         [SerializeField] float positionResponse = 2.2f;
         [SerializeField] float rotationResponse = 3f;
 
+        [SerializeField] float fovBase = 55f;
+        [SerializeField] float fovSpeedBoost = 7f;
+
         public Transform Target { get => target; set => target = value; }
+
+        Camera cam;
+        SeaSick.Ship.ShipMotor motor;
+
+        void Start()
+        {
+            cam = GetComponent<Camera>();
+            if (target != null) motor = target.GetComponent<SeaSick.Ship.ShipMotor>();
+        }
 
         void LateUpdate()
         {
             if (target == null) return;
             float dt = Time.deltaTime;
+
+            // Speed reads in the lens: FOV opens up as the ship accelerates.
+            if (cam != null && motor != null)
+            {
+                float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
+                float targetFov = fovBase + fovSpeedBoost * s01 * s01;
+                cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 1f - Mathf.Exp(-2f * dt));
+            }
 
             Vector3 flatForward = target.forward;
             flatForward.y = 0f;

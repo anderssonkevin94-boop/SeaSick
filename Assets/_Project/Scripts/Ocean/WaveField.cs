@@ -28,6 +28,36 @@ namespace SeaSick.Ocean
             new GerstnerWave { direction = new Vector2(0.5f, 0.8f),  wavelength = 8f,  steepness = 0.07f },
         };
 
+        // Transient rogue swell (rogue wave sets, milestone: sailing feel)
+        Vector2 swellDir;
+        float swellStart = -999f;
+        float swellDuration;
+        float swellSteepness;
+        float swellWavelength;
+
+        /// Direction the swell travels toward. Envelope ramps in and out so the
+        /// set builds on the horizon, peaks, and passes.
+        public void TriggerSwell(Vector2 direction, float duration, float steepness, float wavelength)
+        {
+            swellDir = direction.normalized;
+            swellStart = Time.time;
+            swellDuration = duration;
+            swellSteepness = steepness;
+            swellWavelength = wavelength;
+        }
+
+        public float SwellEnvelope
+        {
+            get
+            {
+                float t01 = (Time.time - swellStart) / swellDuration;
+                if (t01 < 0f || t01 > 1f) return 0f;
+                return Mathf.Sin(t01 * Mathf.PI);
+            }
+        }
+
+        public Vector2 SwellDirection => swellDir;
+
         void OnEnable() { Instance = this; }
         void OnDisable() { if (Instance == this) Instance = null; }
 
@@ -48,7 +78,27 @@ namespace SeaSick.Ocean
                 d.z += dir.y * amplitude * cos;
                 d.y += amplitude * Mathf.Sin(phase);
             }
+
+            float env = SwellEnvelopeAt(time);
+            if (env > 0.001f)
+            {
+                float k = 2f * Mathf.PI / swellWavelength;
+                float amplitude = (swellSteepness * env) / k;
+                float omega = Mathf.Sqrt(Gravity * k);
+                float phase = k * Vector2.Dot(swellDir, restPos) - omega * time;
+                float cos = Mathf.Cos(phase);
+                d.x += swellDir.x * amplitude * cos;
+                d.z += swellDir.y * amplitude * cos;
+                d.y += amplitude * Mathf.Sin(phase);
+            }
             return d;
+        }
+
+        float SwellEnvelopeAt(float time)
+        {
+            float t01 = (time - swellStart) / swellDuration;
+            if (t01 < 0f || t01 > 1f) return 0f;
+            return Mathf.Sin(t01 * Mathf.PI);
         }
 
         /// Water surface height at a fixed horizontal world position.

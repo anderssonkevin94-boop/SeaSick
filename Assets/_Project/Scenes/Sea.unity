@@ -782,6 +782,9 @@ GameObject:
   - component: {fileID: 1412075586}
   - component: {fileID: 1412075585}
   - component: {fileID: 1412075584}
+  - component: {fileID: 1412075591}
+  - component: {fileID: 1412075589}
+  - component: {fileID: 1412075592}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -893,6 +896,114 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1412075583}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1412075589
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412075583}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f59147bd94da400aac2527ae10eacdc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.RogueWaveDirector
+  intervalRange: {x: 28, y: 50}
+  swellDuration: 18
+  swellSteepness: 0.55
+  swellWavelength: 68
+  warningSeconds: 8
+--- !u!114 &1412075591
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412075583}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fdf3c53bd4a184f78bb2cd26d56f8c32, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WindField
+  baseAngleDeg: 71
+  wanderDegrees: 28
+  wanderSpeed: 0.018
+  gustStrength: 1.45
+  gustCount: 6
+  gustRadiusRange: {x: 22, y: 40}
+  gustDriftSpeed: 4.5
+  spawnRingMin: 100
+  spawnRingMax: 320
+  despawnDistance: 420
+  focus: {fileID: 2143489877}
+--- !u!114 &1412075592
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412075583}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 37de5a792823c46ca91772a592ba5a9b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.GustVisuals
+  quadsPerGust: 24
+  quadSize: 7
+  rippleColor: {r: 0.02, g: 0.08, b: 0.14, a: 0.5}
+--- !u!1 &1482035839
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1482035841}
+  - component: {fileID: 1482035840}
+  m_Layer: 0
+  m_Name: Salvage
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1482035840
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1482035839}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b745b1ce3332a46b0b4a5dcfc900cf15, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Voyage.SalvageSpawner
+  ship: {fileID: 0}
+  voyage: {fileID: 0}
+  crateCount: 7
+  flotsamCount: 16
+  pickupRadius: 6
+  salvageValue: 2
+  spawnRingMin: 80
+  spawnRingMax: 320
+  despawnDistance: 450
+--- !u!4 &1482035841
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1482035839}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -1252,6 +1363,8 @@ MonoBehaviour:
   lookHeight: 2.5
   positionResponse: 2.2
   rotationResponse: 3
+  fovBase: 55
+  fovSpeedBoost: 7
 --- !u!81 &2086288690
 AudioListener:
   m_ObjectHideFlags: 0
@@ -1496,6 +1609,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489885}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489886}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -1572,6 +1688,7 @@ MonoBehaviour:
   pitchWeight: 0.25
   rollWeight: 0.2
   lateralWeight: 0.2
+  gustWeight: 0.15
   smoothingHalflife: 1.2
 --- !u!114 &2143489884
 MonoBehaviour:
@@ -1604,6 +1721,20 @@ MonoBehaviour:
   ditchAt: 0.9
   ditchInterval: 6
   ditchAmount: 3
+--- !u!114 &2143489886
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3523d3020c86c418dba2944b8b471451, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.SpeedJuice
+  sprayFullRate: 55
+  wakeFullRate: 30
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1615,3 +1746,4 @@ SceneRoots:
   - {fileID: 1901280689}
   - {fileID: 1050006673}
   - {fileID: 38900269}
+  - {fileID: 1482035841}

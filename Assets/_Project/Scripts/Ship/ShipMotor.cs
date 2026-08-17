@@ -44,7 +44,10 @@ namespace SeaSick.Ship
         public Vector3? AutopilotTarget { get; set; }
         public float CurrentSpeed => speed;
         public float Heading => heading;
-        public Vector2 WindDirection => windDirection.normalized;
+        /// Actual wind at the ship this frame (WindField if present, else static).
+        public Vector2 WindDirection { get; private set; } = new Vector2(0.95f, 0.33f);
+        public float WindStrength { get; private set; } = 1f;
+        public float GustFactor01 { get; private set; }
         public float MaxSpeed => maxSpeed;
 
         float heading;   // degrees, 0 = +Z
@@ -78,11 +81,25 @@ namespace SeaSick.Ship
             heading += effectiveRudder * turnRate * dt;
 
             Vector3 forward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
-            Vector2 wind = windDirection.normalized;
+            Vector2 posXZ = new Vector2(transform.position.x, transform.position.z);
+            var windField = WindField.Instance;
+            if (windField != null)
+            {
+                WindDirection = windField.BaseDir;
+                WindStrength = windField.SampleStrength(posXZ);
+                GustFactor01 = windField.GustFactor(posXZ);
+            }
+            else
+            {
+                WindDirection = windDirection.normalized;
+                WindStrength = 1f;
+                GustFactor01 = 0f;
+            }
+            Vector2 wind = WindDirection;
             float windAlignment = Vector2.Dot(new Vector2(forward.x, forward.z), wind); // -1..1
             float windFactor = Mathf.Lerp(1f - upwindPenalty, 1f, (windAlignment + 1f) * 0.5f);
             float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(Mathf.Min(SailSetting, SailCap)));
-            float targetSpeed = effMaxSpeed * windFactor * sailPower;
+            float targetSpeed = effMaxSpeed * windFactor * sailPower * WindStrength;
             speed = Mathf.MoveTowards(speed, targetSpeed, acceleration * dt);
 
             Vector3 pos = transform.position;
@@ -107,7 +124,10 @@ namespace SeaSick.Ship
 
                 float pitchDeg = Mathf.Atan2(hStern - hBow, bowPoint.z - portPoint.z) * Mathf.Rad2Deg;
                 float rollDeg = Mathf.Atan2(hStar - hPort, starboardPoint.x - portPoint.x) * Mathf.Rad2Deg;
-                rollDeg += Rudder * speedFactor * turnHeel;
+                rollDeg += effectiveRudder * speedFactor * turnHeel;
+                // Gusts shove the rig: extra heel away from the wind.
+                float windSide = Mathf.Sign(Vector3.Cross(forward, new Vector3(wind.x, 0f, wind.y)).y);
+                rollDeg += GustFactor01 * sailPower * 4f * windSide;
 
                 pos.y = Mathf.Lerp(pos.y, hCenter, 1f - Mathf.Exp(-verticalResponse * dt));
                 Quaternion targetRot = Quaternion.Euler(pitchDeg, heading, rollDeg);

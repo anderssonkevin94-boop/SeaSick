@@ -19,6 +19,7 @@ namespace SeaSick.Ship
         [SerializeField] float pitchWeight = 0.25f;
         [SerializeField] float rollWeight = 0.20f;
         [SerializeField] float lateralWeight = 0.20f;
+        [SerializeField] float gustWeight = 0.15f; // gusts are fast but bumpy
 
         [SerializeField] float smoothingHalflife = 1.2f; // seconds; EMA over the raw signal
 
@@ -27,6 +28,7 @@ namespace SeaSick.Ship
         /// Convenience inverse for scoring/UI.
         public float Smoothness01 => 1f - Roughness01;
 
+        ShipMotor motor;
         float prevY;
         float prevPitch;
         float prevRoll;
@@ -34,7 +36,7 @@ namespace SeaSick.Ship
         Vector3 prevPos;
         bool primed;
 
-        void OnEnable() { primed = false; }
+        void OnEnable() { primed = false; motor = GetComponent<ShipMotor>(); }
 
         void LateUpdate()
         {
@@ -72,11 +74,13 @@ namespace SeaSick.Ship
             prevY = y; prevPitch = pitch; prevRoll = roll;
             prevYaw = yaw; prevPos = pos;
 
+            float gust = motor != null ? motor.GustFactor01 : 0f;
             float raw =
                 verticalWeight * Mathf.Clamp01(Mathf.Abs(velY) / heaveRateCeiling) +
                 pitchWeight * Mathf.Clamp01(Mathf.Abs(pitchRate) / pitchRateCeiling) +
                 rollWeight * Mathf.Clamp01(Mathf.Abs(rollRate) / rollRateCeiling) +
-                lateralWeight * Mathf.Clamp01(lateralAcc / lateralAccelCeiling);
+                lateralWeight * Mathf.Clamp01(lateralAcc / lateralAccelCeiling) +
+                gustWeight * gust;
 
             float blend = 1f - Mathf.Exp(-(0.6931f / smoothingHalflife) * dt);
             Roughness01 = Mathf.Lerp(Roughness01, Mathf.Clamp01(raw), blend);

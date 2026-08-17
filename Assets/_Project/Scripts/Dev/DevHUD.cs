@@ -58,8 +58,9 @@ namespace SeaSick.Dev
 
             GUI.Label(new Rect(x, y, w, line),
                 $"speed {motor.CurrentSpeed:F1} m/s  ({motor.CurrentSpeed / motor.MaxSpeed:P0})", label);
+            string gust = motor.GustFactor01 > 0.1f ? $"   GUST ×{motor.WindStrength:F2}" : "";
             GUI.Label(new Rect(x, y += line, w, line),
-                $"sail {motor.SailSetting:P0}   wind {windAngle:F0}° off bow", label);
+                $"sail {motor.SailSetting:P0}   wind {windAngle:F0}° off bow{gust}", label);
             GUI.Label(new Rect(x, y += line, w, line),
                 $"roughness {meter.Roughness01:F2}", label);
 

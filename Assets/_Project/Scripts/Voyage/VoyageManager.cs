@@ -66,6 +66,16 @@ namespace SeaSick.Voyage
             ship.CargoLoad01 = lootPerTrip > 0 ? (float)lootHeld / lootPerTrip : 0f;
         }
 
+        /// Fished a floating crate out of the sea. Rides in the hold like any
+        /// other loot (and mutineers will happily ditch it too).
+        public void AddSalvage(int amount)
+        {
+            if (phase == Phase.Tally) return;
+            lootHeld += amount;
+            ship.CargoLoad01 = lootPerTrip > 0
+                ? Mathf.Clamp01((float)lootHeld / lootPerTrip) : 0f;
+        }
+
         void Update()
         {
             if (ship == null) return;
