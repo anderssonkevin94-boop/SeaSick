@@ -35,6 +35,8 @@ namespace SeaSick.Ship
         /// 0 (fully reefed) .. 1 (full canvas). The trim decision: more sail is
         /// faster but rougher on the crew; easing sail in chop is a skill.
         public float SailSetting { get; set; } = 1f;
+        /// 0 empty .. 1 full hold. Loaded ships are slower and turn heavier.
+        public float CargoLoad01 { get; set; }
         public float CurrentSpeed => speed;
         public float Heading => heading;
         public Vector2 WindDirection => windDirection.normalized;
@@ -56,8 +58,10 @@ namespace SeaSick.Ship
             if (dt <= 0f) return;
 
             // --- Steering & speed ---
+            float load = Mathf.Clamp01(CargoLoad01);
+            float effMaxSpeed = maxSpeed * (1f - 0.18f * load);
             float speedFactor = Mathf.Clamp01(speed / maxSpeed);
-            float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor);
+            float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor) * (1f - 0.25f * load);
             heading += Rudder * turnRate * dt;
 
             Vector3 forward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
@@ -65,7 +69,7 @@ namespace SeaSick.Ship
             float windAlignment = Vector2.Dot(new Vector2(forward.x, forward.z), wind); // -1..1
             float windFactor = Mathf.Lerp(1f - upwindPenalty, 1f, (windAlignment + 1f) * 0.5f);
             float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(SailSetting));
-            float targetSpeed = maxSpeed * windFactor * sailPower;
+            float targetSpeed = effMaxSpeed * windFactor * sailPower;
             speed = Mathf.MoveTowards(speed, targetSpeed, acceleration * dt);
 
             Vector3 pos = transform.position;

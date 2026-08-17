@@ -31,8 +31,12 @@ namespace SeaSick.Crew
         [SerializeField] float maxSwayDegrees = 9f;
 
         public float Sickness01 { get; private set; }
+        public int PukeCount { get; private set; }
         public string StateName => state.ToString();
         public CrewMemberDef Def => def;
+
+        /// Full recovery — called when the ship docks at home.
+        public void Rest() { Sickness01 = 0f; }
 
         enum State { Station, ToRail, Puking, Returning }
         State state = State.Station;
@@ -92,6 +96,7 @@ namespace SeaSick.Crew
                     if (pukeTimer <= 0f)
                     {
                         Sickness01 = Mathf.Max(0f, Sickness01 - pukeRelief);
+                        PukeCount++;
                         state = State.Returning;
                     }
                     break;
