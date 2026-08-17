@@ -15,6 +15,7 @@ namespace SeaSick.Ship
         [SerializeField] float maxTurnRate = 26f;      // deg/s at full speed
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.35f); // where the wind blows toward
         [SerializeField, Range(0f, 1f)] float upwindPenalty = 0.65f;
+        [SerializeField, Range(0f, 0.5f)] float steerageWay = 0.15f; // min drive with sails fully reefed
 
         [Header("Seating on the water")]
         [SerializeField] float verticalResponse = 4f;  // how quickly the hull follows wave height
@@ -31,8 +32,13 @@ namespace SeaSick.Ship
 
         /// -1 (full port) .. 1 (full starboard). Set by HelmInput.
         public float Rudder { get; set; }
+        /// 0 (fully reefed) .. 1 (full canvas). The trim decision: more sail is
+        /// faster but rougher on the crew; easing sail in chop is a skill.
+        public float SailSetting { get; set; } = 1f;
         public float CurrentSpeed => speed;
         public float Heading => heading;
+        public Vector2 WindDirection => windDirection.normalized;
+        public float MaxSpeed => maxSpeed;
 
         float heading;   // degrees, 0 = +Z
         float speed;
@@ -58,7 +64,8 @@ namespace SeaSick.Ship
             Vector2 wind = windDirection.normalized;
             float windAlignment = Vector2.Dot(new Vector2(forward.x, forward.z), wind); // -1..1
             float windFactor = Mathf.Lerp(1f - upwindPenalty, 1f, (windAlignment + 1f) * 0.5f);
-            float targetSpeed = maxSpeed * windFactor;
+            float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(SailSetting));
+            float targetSpeed = maxSpeed * windFactor * sailPower;
             speed = Mathf.MoveTowards(speed, targetSpeed, acceleration * dt);
 
             Vector3 pos = transform.position;

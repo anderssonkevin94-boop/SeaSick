@@ -14,8 +14,11 @@ namespace SeaSick.Ship
         [SerializeField] float recenterSpeed = 1.2f; // rudder units/s on release
         [SerializeField, Range(-1f, 1f)] float testRudder = 0f; // editor/testing override
 
+        [SerializeField] float sailAdjustSpeed = 0.7f; // sail units/s on W/S
+
         ShipMotor motor;
         float rudder;
+        float sail = 1f;
 
         void Awake() { motor = GetComponent<ShipMotor>(); }
 
@@ -39,8 +42,14 @@ namespace SeaSick.Ship
             var kb = Keyboard.current;
             if (kb != null)
             {
-                if (kb.aKey.isPressed) { target = -1f; steering = true; }
-                else if (kb.dKey.isPressed) { target = 1f; steering = true; }
+                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) { target = -1f; steering = true; }
+                else if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) { target = 1f; steering = true; }
+
+                if (kb.wKey.isPressed || kb.upArrowKey.isPressed)
+                    sail = Mathf.MoveTowards(sail, 1f, sailAdjustSpeed * Time.deltaTime);
+                else if (kb.sKey.isPressed || kb.downArrowKey.isPressed)
+                    sail = Mathf.MoveTowards(sail, 0f, sailAdjustSpeed * Time.deltaTime);
+                motor.SailSetting = sail;
             }
 
             if (!Mathf.Approximately(testRudder, 0f)) { target = testRudder; steering = true; }
