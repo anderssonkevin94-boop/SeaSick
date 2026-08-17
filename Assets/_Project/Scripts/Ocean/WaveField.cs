@@ -61,6 +61,49 @@ namespace SeaSick.Ocean
                 1f - Mathf.Exp(-0.5f * Time.deltaTime));
         }
 
+        void LateUpdate() { PushToGpu(Time.time); }
+
+        const int MaxGpuWaves = 16;
+        static readonly int WavesId = Shader.PropertyToID("_SS_Waves");
+        static readonly int WaveCountId = Shader.PropertyToID("_SS_WaveCount");
+        static readonly int SwellId = Shader.PropertyToID("_SS_Swell");
+        static readonly int SwellFrontId = Shader.PropertyToID("_SS_SwellFront");
+        static readonly int SwellExtraId = Shader.PropertyToID("_SS_SwellExtra");
+        readonly Vector4[] gpuWaves = new Vector4[MaxGpuWaves];
+
+        /// Hand the same constants the CPU uses to the vertex shader, so the
+        /// visible surface and the surface the ship floats on are identical.
+        void PushToGpu(float time)
+        {
+            EnsureConstants(time);
+            int count = Mathf.Min(constants.Length, MaxGpuWaves);
+            for (int i = 0; i < count; i++)
+            {
+                var c = constants[i];
+                gpuWaves[i] = new Vector4(c.kx, c.kz, c.amp, c.phaseOffset);
+            }
+            for (int i = count; i < MaxGpuWaves; i++) gpuWaves[i] = Vector4.zero;
+
+            Shader.SetGlobalVectorArray(WavesId, gpuWaves);
+            Shader.SetGlobalInt(WaveCountId, count);
+
+            if (swellActive)
+            {
+                float k = 2f * Mathf.PI / swellWavelength;
+                float omega = Mathf.Sqrt(Gravity * k);
+                Shader.SetGlobalVector(SwellId, new Vector4(
+                    swellDir.x * k, swellDir.y * k, swellSteepness / k, -omega * time));
+                Vector2 centre = SwellCenter(time);
+                Shader.SetGlobalVector(SwellFrontId,
+                    new Vector4(centre.x, centre.y, swellDir.x, swellDir.y));
+                Shader.SetGlobalVector(SwellExtraId, new Vector4(swellHalfWidth, 1f, 0f, 0f));
+            }
+            else
+            {
+                Shader.SetGlobalVector(SwellExtraId, Vector4.zero);
+            }
+        }
+
         void BuildSpectrum()
         {
             waves = new GerstnerWave[Mathf.Max(1, waveCount)];

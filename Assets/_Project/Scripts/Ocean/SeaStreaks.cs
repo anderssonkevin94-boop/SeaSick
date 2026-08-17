@@ -11,8 +11,8 @@ namespace SeaSick.Ocean
         [SerializeField] int streakCount = 46;
         [SerializeField] float spawnRadius = 85f;
         [SerializeField] float recycleBehind = 60f;
-        [SerializeField] Vector2 sizeRange = new Vector2(4.5f, 13f);
-        [SerializeField] Color foamColor = new Color(1f, 1f, 1f, 0.30f);
+        [SerializeField] Vector2 sizeRange = new Vector2(3.5f, 10f);
+        [SerializeField] Color foamColor = new Color(1f, 1f, 1f, 0.14f);
 
         Transform target;
         WaveField waves;

@@ -50,14 +50,33 @@ namespace SeaSick.Ocean
             influenceRadiusSq = reach * reach;
         }
 
+        static readonly int ShipPosId = Shader.PropertyToID("_SS_ShipPos");
+        static readonly int ShipParamsId = Shader.PropertyToID("_SS_ShipParams");
+        static readonly int HullShapeId = Shader.PropertyToID("_SS_HullShape");
+        static readonly int WakeShapeId = Shader.PropertyToID("_SS_WakeShape");
+
         void LateUpdate()
         {
-            if (ship == null) return;
+            if (ship == null)
+            {
+                Shader.SetGlobalVector(ShipParamsId, Vector4.zero);
+                return;
+            }
             pos = new Vector2(ship.position.x, ship.position.z);
             Vector3 f = ship.forward;
             fwd = new Vector2(f.x, f.z).normalized;
             right = new Vector2(fwd.y, -fwd.x);
             speed01 = motor != null ? Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed) : 0f;
+
+            // The ocean shader does the same maths in the vertex stage.
+            float reach = Mathf.Sqrt(influenceRadiusSq);
+            Shader.SetGlobalVector(ShipPosId, new Vector4(pos.x, pos.y, fwd.x, fwd.y));
+            Shader.SetGlobalVector(ShipParamsId, new Vector4(speed01, 1f, reach, 0f));
+            Shader.SetGlobalVector(HullShapeId,
+                new Vector4(hullHalfLength, hullHalfWidth, troughDepth, troughFalloff));
+            Shader.SetGlobalVector(WakeShapeId, new Vector4(
+                bowOffset, bowHeight,
+                Mathf.Tan(wakeHalfAngleDeg * Mathf.Deg2Rad), wakeLength));
         }
 
         /// Vertical offset the hull adds to the water at a world position.

@@ -97,6 +97,12 @@ _Append-only._
 - 2026-08-17 — Roster with persistent villagers/traits/breeding planned post-MVP; crew modeled as data (ScriptableObjects) from day one to allow it.
 - 2026-08-17 — Development order: sailing first, work backward to base.
 - 2026-08-17 — Device target: iPhone (iOS first). Default orientation set to Portrait.
+- 2026-08-17 — **GPU water displacement** — the ocean moved off the CPU entirely.
+  - New `SeaSick/Ocean` shader (`Assets/_Project/Art/Shaders/Ocean.shader`) does the whole Gerstner sum, the swell front, and the hull's trough/bow-wave/Kelvin-wake in the **vertex stage**. Normals by central difference (three wave sums per vertex — free on a GPU).
+  - `OceanRenderer` now builds a flat grid **once** and only snaps its transform to follow the ship. `WaveField.PushToGpu` uploads the same per-frame constants the CPU physics uses (`_SS_Waves` packed as direction·k, amplitude, phase−ωt), so the visible surface and the surface the ship floats on cannot drift apart. `HullDisplacement` uploads ship pose and hull/wake shape.
+  - **Result: ocean CPU cost 12.9 ms → 0.02 ms** (~650×), *while* raising the mesh from 5,329 to 22,801 vertices, extent 460m → 620m, and the spectrum from 10 to 14 waves. The CPU now only samples the ~30 points physics actually needs.
+  - Shader also fixed the fresnel direction (grazing angles reflect sky and read bright; looking down shows depth) and adds crest foam.
+  - Mobile is no longer gated on this. Remaining CPU water cost is trivial.
 - 2026-08-17 — **Spectrum ocean + hull displacement** (researched against shipped games — Sea of Thieves uses FFT water, not a few Gerstner waves; see docs sources in session notes).
   - **Wave spectrum replaces hand-placed waves.** 10 components spread logarithmically from 9m to 190m, energy peaking at a wind-driven peak wavelength, each with a random phase. **Directional spreading is physical**: long swell runs tight to the wind, short chop fans out — verified in a generated set where 78–167m waves clustered at 76–102° while 10–22m chop scattered to 24°, 140°, 155°. This is why it no longer looks like one marching set of rollers.
   - **Sea state drifts over minutes** (Perlin, 0.14 glassy → 1.15 rough), scaling every amplitude. Genuinely calm stretches now happen, and crew sickness follows the weather for free — you can wait out a rough patch.

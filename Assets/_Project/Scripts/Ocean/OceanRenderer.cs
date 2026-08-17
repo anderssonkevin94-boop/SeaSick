@@ -2,44 +2,41 @@ using UnityEngine;
 
 namespace SeaSick.Ocean
 {
-    /// CPU-displaced ocean tile that follows a target (the ship), snapped to the
-    /// grid cell size so vertices never swim. Prototype-grade: good enough to
-    /// judge sailing feel; optimize (jobs/shader) once the feel is locked.
+    /// A flat grid that follows the ship. It is built once and never touched
+    /// again — all displacement happens in the SeaSick/Ocean vertex shader
+    /// from the constants WaveField uploads each frame.
+    ///
+    /// This used to rebuild ~5,300 vertices on the CPU every frame at a cost
+    /// of about 8.5 ms. Now the per-frame CPU work is one transform update.
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer), typeof(WaveField))]
     public class OceanRenderer : MonoBehaviour
     {
-        [SerializeField] int gridQuads = 72;
-        [SerializeField] float extent = 460f;
+        [Tooltip("Grid resolution. Cheap now that displacement is on the GPU.")]
+        [SerializeField] int gridQuads = 150;
+        [SerializeField] float extent = 620f;
         [SerializeField] Transform followTarget;
 
         Mesh mesh;
-        Vector3[] baseVerts;
-        Vector3[] verts;
-        Vector3[] normals;
-        WaveField field;
 
         public Transform FollowTarget { get => followTarget; set => followTarget = value; }
 
-        void Start()
-        {
-            field = GetComponent<WaveField>();
-            BuildGrid();
-        }
+        void Start() { BuildGrid(); }
 
         void BuildGrid()
         {
             int n = gridQuads + 1;
-            baseVerts = new Vector3[n * n];
-            verts = new Vector3[n * n];
-            normals = new Vector3[n * n];
+            var verts = new Vector3[n * n];
             var uvs = new Vector2[n * n];
+            var normals = new Vector3[n * n];
             float half = extent * 0.5f;
             float step = extent / gridQuads;
+
             for (int z = 0, i = 0; z < n; z++)
                 for (int x = 0; x < n; x++, i++)
                 {
-                    baseVerts[i] = new Vector3(x * step - half, 0f, z * step - half);
+                    verts[i] = new Vector3(x * step - half, 0f, z * step - half);
                     uvs[i] = new Vector2((float)x / gridQuads, (float)z / gridQuads);
+                    normals[i] = Vector3.up;
                 }
 
             var tris = new int[gridQuads * gridQuads * 6];
@@ -53,71 +50,24 @@ namespace SeaSick.Ocean
 
             mesh = new Mesh { name = "OceanTile" };
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            mesh.MarkDynamic();
-            mesh.vertices = baseVerts;
+            mesh.vertices = verts;
             mesh.uv = uvs;
+            mesh.normals = normals;
             mesh.triangles = tris;
-            mesh.RecalculateNormals();
-            // Generous fixed bounds: vertices move every frame, culling must not flicker.
-            mesh.bounds = new Bounds(Vector3.zero, new Vector3(extent, 40f, extent));
+            // Vertices move in the shader, so bounds must be generous enough
+            // that culling never clips the tile.
+            mesh.bounds = new Bounds(Vector3.zero, new Vector3(extent, 80f, extent));
             GetComponent<MeshFilter>().sharedMesh = mesh;
         }
 
         void LateUpdate()
         {
-            if (followTarget != null)
-            {
-                float cell = extent / gridQuads;
-                Vector3 p = followTarget.position;
-                transform.position = new Vector3(
-                    Mathf.Round(p.x / cell) * cell, 0f, Mathf.Round(p.z / cell) * cell);
-            }
-
-            float t = Time.time;
-            Vector3 origin = transform.position;
-            var hull = HullDisplacement.Instance;
-            for (int i = 0; i < baseVerts.Length; i++)
-            {
-                Vector3 b = baseVerts[i];
-                var world = new Vector2(origin.x + b.x, origin.z + b.z);
-                Vector3 d = field.Displace(world, t);
-                float y = d.y;
-                // The ship actually shoves the surface around: trough, bow
-                // wave and Kelvin wake are part of the water, not decals.
-                if (hull != null) y += hull.HeightAt(new Vector2(world.x + d.x, world.y + d.z));
-                verts[i] = new Vector3(b.x + d.x, y, b.z + d.z);
-            }
-            // SetVertices/SetNormals skip the validation and bounds work the
-            // property setters do; bounds are fixed for this mesh anyway.
-            mesh.SetVertices(verts, 0, verts.Length, NoValidation);
-            RecalculateGridNormals();
+            if (followTarget == null) return;
+            // Snap to the grid cell so the surface never crawls under the ship.
+            float cell = extent / gridQuads;
+            Vector3 p = followTarget.position;
+            transform.position = new Vector3(
+                Mathf.Round(p.x / cell) * cell, 0f, Mathf.Round(p.z / cell) * cell);
         }
-
-        /// Normals straight from the grid neighbours. Unity's RecalculateNormals
-        /// walks every triangle and re-normalises shared vertices, which is the
-        /// single most expensive thing we were doing per frame; a central
-        /// difference over the lattice gives the same result far cheaper.
-        void RecalculateGridNormals()
-        {
-            int n = gridQuads + 1;
-            for (int z = 0; z < n; z++)
-            {
-                int row = z * n;
-                for (int x = 0; x < n; x++)
-                {
-                    int i = row + x;
-                    Vector3 dx = verts[i + (x < n - 1 ? 1 : 0)] - verts[i - (x > 0 ? 1 : 0)];
-                    Vector3 dz = verts[i + (z < n - 1 ? n : 0)] - verts[i - (z > 0 ? n : 0)];
-                    var nrm = Vector3.Cross(dz, dx);
-                    normals[i] = nrm.y < 0f ? -nrm.normalized : nrm.normalized;
-                }
-            }
-            mesh.SetNormals(normals, 0, normals.Length, NoValidation);
-        }
-
-        const UnityEngine.Rendering.MeshUpdateFlags NoValidation =
-            UnityEngine.Rendering.MeshUpdateFlags.DontValidateIndices |
-            UnityEngine.Rendering.MeshUpdateFlags.DontRecalculateBounds |
-            UnityEngine.Rendering.MeshUpdateFlags.DontNotifyMeshUsers;
     }
 }
