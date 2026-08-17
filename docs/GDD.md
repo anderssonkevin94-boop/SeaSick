@@ -96,3 +96,5 @@ _Append-only._
 - 2026-08-17 — Combat deferred until sailing is proven fun.
 - 2026-08-17 — Roster with persistent villagers/traits/breeding planned post-MVP; crew modeled as data (ScriptableObjects) from day one to allow it.
 - 2026-08-17 — Development order: sailing first, work backward to base.
+- 2026-08-17 — Device target: iPhone (iOS first). Default orientation set to Portrait.
+- 2026-08-17 — Milestone 1 built: Gerstner WaveField (single source of truth for water), CPU-displaced ocean tile following the ship, kinematic ShipMotor (3-point wave seating, wind-angle speed, turn heel, sail auto-trim, rudder visual), one-thumb HelmInput (bottom-45%-of-screen absolute tiller + A/D in editor), yaw-only ChaseCamera. Scene: Assets/_Project/Scenes/Sea.unity.

@@ -1,0 +1,115 @@
+using SeaSick.Ocean;
+using UnityEngine;
+
+namespace SeaSick.Ship
+{
+    /// Kinematic sailing model: heading/speed integration on the water plane,
+    /// with the hull seated on the WaveField via three float points. Fully
+    /// deterministic and tunable — no rigidbody surprises on mobile.
+    public class ShipMotor : MonoBehaviour
+    {
+        [Header("Sailing")]
+        [SerializeField] float maxSpeed = 8f;          // m/s at full wind
+        [SerializeField] float acceleration = 1.6f;    // m/s^2
+        [SerializeField] float minTurnRate = 6f;       // deg/s when drifting
+        [SerializeField] float maxTurnRate = 26f;      // deg/s at full speed
+        [SerializeField] Vector2 windDirection = new Vector2(1f, 0.35f); // where the wind blows toward
+        [SerializeField, Range(0f, 1f)] float upwindPenalty = 0.65f;
+
+        [Header("Seating on the water")]
+        [SerializeField] float verticalResponse = 4f;  // how quickly the hull follows wave height
+        [SerializeField] float angularResponse = 2.5f; // how quickly pitch/roll follow the surface
+        [SerializeField] float turnHeel = 5f;          // extra roll (deg) at full rudder + speed
+        [SerializeField] Vector3 bowPoint = new Vector3(0f, 0f, 7.5f);
+        [SerializeField] Vector3 portPoint = new Vector3(-2.2f, 0f, -6f);
+        [SerializeField] Vector3 starboardPoint = new Vector3(2.2f, 0f, -6f);
+
+        [Header("Visual pivots")]
+        [SerializeField] Transform rudderPivot;
+        [SerializeField] Transform mastPivot;
+        [SerializeField] float rudderVisualAngle = 35f;
+
+        /// -1 (full port) .. 1 (full starboard). Set by HelmInput.
+        public float Rudder { get; set; }
+        public float CurrentSpeed => speed;
+        public float Heading => heading;
+
+        float heading;   // degrees, 0 = +Z
+        float speed;
+
+        void Start()
+        {
+            heading = transform.eulerAngles.y;
+            if (rudderPivot == null) rudderPivot = transform.Find("RudderPivot");
+            if (mastPivot == null) mastPivot = transform.Find("MastPivot");
+        }
+
+        void Update()
+        {
+            float dt = Time.deltaTime;
+            if (dt <= 0f) return;
+
+            // --- Steering & speed ---
+            float speedFactor = Mathf.Clamp01(speed / maxSpeed);
+            float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor);
+            heading += Rudder * turnRate * dt;
+
+            Vector3 forward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
+            Vector2 wind = windDirection.normalized;
+            float windAlignment = Vector2.Dot(new Vector2(forward.x, forward.z), wind); // -1..1
+            float windFactor = Mathf.Lerp(1f - upwindPenalty, 1f, (windAlignment + 1f) * 0.5f);
+            float targetSpeed = maxSpeed * windFactor;
+            speed = Mathf.MoveTowards(speed, targetSpeed, acceleration * dt);
+
+            Vector3 pos = transform.position;
+            pos += forward * (speed * dt);
+
+            // --- Seat the hull on the waves ---
+            var field = WaveField.Instance;
+            if (field != null)
+            {
+                float t = Time.time;
+                Quaternion yawOnly = Quaternion.Euler(0f, heading, 0f);
+                Vector3 bowW = pos + yawOnly * bowPoint;
+                Vector3 portW = pos + yawOnly * portPoint;
+                Vector3 starW = pos + yawOnly * starboardPoint;
+
+                float hBow = field.SampleHeight(new Vector2(bowW.x, bowW.z), t);
+                float hPort = field.SampleHeight(new Vector2(portW.x, portW.z), t);
+                float hStar = field.SampleHeight(new Vector2(starW.x, starW.z), t);
+
+                float hStern = (hPort + hStar) * 0.5f;
+                float hCenter = (hBow + hStern) * 0.5f;
+
+                float pitchDeg = Mathf.Atan2(hStern - hBow, bowPoint.z - portPoint.z) * Mathf.Rad2Deg;
+                float rollDeg = Mathf.Atan2(hStar - hPort, starboardPoint.x - portPoint.x) * Mathf.Rad2Deg;
+                rollDeg += Rudder * speedFactor * turnHeel;
+
+                pos.y = Mathf.Lerp(pos.y, hCenter, 1f - Mathf.Exp(-verticalResponse * dt));
+                Quaternion targetRot = Quaternion.Euler(pitchDeg, heading, rollDeg);
+                transform.rotation = Quaternion.Slerp(
+                    transform.rotation, targetRot, 1f - Mathf.Exp(-angularResponse * dt));
+            }
+            else
+            {
+                transform.rotation = Quaternion.Euler(0f, heading, 0f);
+            }
+
+            transform.position = pos;
+
+            // --- Visual pivots ---
+            if (rudderPivot != null)
+                rudderPivot.localRotation = Quaternion.Euler(0f, -Rudder * rudderVisualAngle, 0f);
+            if (mastPivot != null)
+            {
+                // Trim the yards roughly square to the wind, clamped to the rig's limits.
+                Vector3 windWorld = new Vector3(wind.x, 0f, wind.y);
+                float windYaw = Vector3.SignedAngle(forward, windWorld, Vector3.up);
+                float trim = Mathf.Clamp(windYaw * 0.5f, -40f, 40f);
+                mastPivot.localRotation = Quaternion.Slerp(
+                    mastPivot.localRotation, Quaternion.Euler(0f, trim, 0f),
+                    1f - Mathf.Exp(-2f * dt));
+            }
+        }
+    }
+}
