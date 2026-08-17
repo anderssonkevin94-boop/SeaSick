@@ -52,13 +52,19 @@ namespace SeaSick.Ship
             float damageScale = 1f;
             bool intruding = false;
 
-            if (isle != null && Intrudes(isle.transform.position, isle.Radius))
+            // Islands aren't circles any more — use the shoreline distance on
+            // the bearing the ship is actually approaching from.
+            if (isle != null)
             {
-                obstaclePos = isle.transform.position;
-                obstacleRadius = isle.Radius;
-                intruding = true;
+                float shoreRadius = isle.RadiusToward(transform.position);
+                if (Intrudes(isle.transform.position, shoreRadius))
+                {
+                    obstaclePos = isle.transform.position;
+                    obstacleRadius = shoreRadius;
+                    intruding = true;
+                }
             }
-            else if (reef != null && Intrudes(reef.transform.position, reef.Radius))
+            if (!intruding && reef != null && Intrudes(reef.transform.position, reef.Radius))
             {
                 obstaclePos = reef.transform.position;
                 obstacleRadius = reef.Radius;

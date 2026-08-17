@@ -41,7 +41,7 @@ namespace SeaSick.World
             new ResourceKind { name = "Spice",  beaconColor = new Color(0.95f, 0.45f, 0.75f), minRing = 0.78f },
         };
 
-        Material sandMat, grassMat;
+        Material sandMat, grassMat, rockMat;
 
         void Awake()
         {
@@ -53,8 +53,9 @@ namespace SeaSick.World
             var stale = GameObject.Find("Island_Windward");
             if (stale != null) Destroy(stale);
 
-            sandMat = MakeMat(new Color(0.85f, 0.74f, 0.52f));
-            grassMat = MakeMat(new Color(0.36f, 0.62f, 0.32f));
+            sandMat = MakeMat(new Color(0.87f, 0.78f, 0.56f));
+            grassMat = MakeMat(new Color(0.34f, 0.55f, 0.28f));
+            rockMat = MakeMat(new Color(0.47f, 0.45f, 0.46f));
 
             float goldenAngle = 137.508f;
             for (int i = 0; i < islandCount; i++)
@@ -159,40 +160,44 @@ namespace SeaSick.World
             var root = new GameObject(name);
             root.transform.position = pos;
 
-            var sand = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            sand.name = "Sand";
-            Destroy(sand.GetComponent<Collider>());
-            sand.transform.SetParent(root.transform, false);
-            sand.transform.localScale = new Vector3(radius * 2f, radius * 0.4f, radius * 2f);
-            sand.transform.localPosition = new Vector3(0f, -radius * 0.12f, 0f);
-            sand.GetComponent<MeshRenderer>().sharedMaterial = sandMat;
+            // Small islands are bare sand; bigger ones grow a dirt cap, and the
+            // largest push up rock. Mixed in so the archipelago isn't uniform.
+            var islandKind = shelterOnly
+                ? IslandMeshBuilder.IslandKind.SandOnly
+                : radius > radiusRange.y * 0.62f && Random.value < 0.75f
+                    ? IslandMeshBuilder.IslandKind.Mountainous
+                    : IslandMeshBuilder.IslandKind.SandAndDirt;
+
+            var profile = IslandMeshBuilder.BuildProfile(radius, islandKind, Random.Range(0, 99999));
+            var mesh = IslandMeshBuilder.Build(profile, out float maxHeight);
+
+            var body = new GameObject("Land");
+            body.transform.SetParent(root.transform, false);
+            body.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = body.AddComponent<MeshRenderer>();
+            mr.sharedMaterials = new[] { sandMat, grassMat, rockMat };
+
+            var island = root.AddComponent<Island>();
+            island.Configure(shelterOnly ? "—" : kind.name, richness, radius, false, false);
+            island.SetProfile(profile);
 
             if (!shelterOnly)
             {
-                var hill = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                hill.name = "Hill";
-                Destroy(hill.GetComponent<Collider>());
-                hill.transform.SetParent(root.transform, false);
-                hill.transform.localScale = new Vector3(radius * 1.2f, radius * 0.55f, radius * 1.2f);
-                hill.transform.localPosition = new Vector3(0f, radius * 0.05f, 0f);
-                hill.GetComponent<MeshRenderer>().sharedMaterial = grassMat;
-
                 var beacon = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
                 beacon.name = "Beacon";
                 Destroy(beacon.GetComponent<Collider>());
                 beacon.transform.SetParent(root.transform, false);
-                beacon.transform.localScale = new Vector3(1.5f, Mathf.Lerp(22f, 52f, radius / radiusRange.y), 1.5f);
-                beacon.transform.localPosition = new Vector3(0f, beacon.transform.localScale.y * 0.75f, 0f);
+                float beaconH = Mathf.Lerp(20f, 44f, radius / radiusRange.y);
+                beacon.transform.localScale = new Vector3(1.5f, beaconH, 1.5f);
+                beacon.transform.localPosition = new Vector3(0f, maxHeight + beaconH * 0.75f, 0f);
                 var bm = MakeMat(kind.beaconColor);
                 bm.EnableKeyword("_EMISSION");
                 bm.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
                 bm.SetColor("_EmissionColor", kind.beaconColor * 2.2f);
                 beacon.GetComponent<MeshRenderer>().sharedMaterial = bm;
-            }
 
-            var island = root.AddComponent<Island>();
-            island.Configure(shelterOnly ? "—" : kind.name, richness, radius, false, !shelterOnly);
-            if (!shelterOnly) island.RegisterProps(BuildProps(root.transform, island, kind.name, radius));
+                island.RegisterProps(BuildProps(root.transform, island, kind.name, radius));
+            }
         }
 
         /// Each resource gets its own silhouette so you can read an island's
@@ -204,7 +209,7 @@ namespace SeaSick.World
             for (int i = 0; i < count; i++)
             {
                 float ang = Random.Range(0f, Mathf.PI * 2f);
-                float dist = Random.Range(radius * 0.12f, radius * 0.72f);
+                float dist = Random.Range(radius * 0.15f, island.RadiusAt(ang) * 0.8f);
                 Vector3 p = island.SurfacePoint(ang, dist);
                 var prop = kind switch
                 {

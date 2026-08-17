@@ -51,9 +51,14 @@ namespace SeaSick.Ship
         {
             var isle = Island.Nearest(transform.position);
             if (isle == null) return null;
-            return Island.FlatDistance(transform.position, isle.transform.position) <= isle.AnchorRadius
+            float reach = isle.RadiusToward(transform.position) + 30f;
+            return Island.FlatDistance(transform.position, isle.transform.position) <= reach
                 ? isle : null;
         }
+
+        /// You can only put a boat ashore on a beach — cliff faces drop sheer
+        /// into the water, so the approach bearing matters.
+        bool CanLandHere(Island isle) => isle != null && isle.HasBeachToward(transform.position);
 
         float SwellHere() => waves != null
             ? waves.SwellIntensity(new Vector2(transform.position.x, transform.position.z), Time.time)
@@ -203,12 +208,15 @@ namespace SeaSick.Ship
                 {
                     var isle = IslandInRange();
                     if (isle == null) return;
+                    bool beach = CanLandHere(isle);
                     bool slowEnough = motor.CurrentSpeed <= approachSpeedLimit;
-                    string label = slowEnough
-                        ? $"⚓  Drop anchor — {isle.ResourceName}"
-                        : "slow down to anchor  (S)";
+                    string label = !beach
+                        ? "sheer cliff — find a beach"
+                        : slowEnough
+                            ? $"⚓  Drop anchor — {isle.ResourceName}"
+                            : "slow down to anchor  (S)";
                     UIBlocker.Block(primary);
-                    GUI.enabled = slowEnough;
+                    GUI.enabled = slowEnough && beach;
                     if (GUI.Button(primary, label, buttonStyle)) DropAnchor(isle);
                     GUI.enabled = true;
                     break;

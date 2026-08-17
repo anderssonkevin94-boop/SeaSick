@@ -43,6 +43,10 @@ namespace SeaSick.Ocean
         [SerializeField] float roughCeiling = 1.15f;
         [SerializeField] float changeSpeed = 0.011f;
 
+        [Header("Shore")]
+        [Tooltip("Metres over which waves die down as they approach land.")]
+        [SerializeField] float shoreFalloff = 34f;
+
         GerstnerWave[] waves;
 
         /// 0.14 ≈ glassy, 1.15 ≈ rough. Everything scales off this.
@@ -71,6 +75,11 @@ namespace SeaSick.Ocean
         static readonly int SwellExtraId = Shader.PropertyToID("_SS_SwellExtra");
         readonly Vector4[] gpuWaves = new Vector4[MaxGpuWaves];
 
+        const int MaxGpuIslands = 24;
+        static readonly int IslandsId = Shader.PropertyToID("_SS_Islands");
+        static readonly int IslandCountId = Shader.PropertyToID("_SS_IslandCount");
+        readonly Vector4[] gpuIslands = new Vector4[MaxGpuIslands];
+
         /// Hand the same constants the CPU uses to the vertex shader, so the
         /// visible surface and the surface the ship floats on are identical.
         void PushToGpu(float time)
@@ -86,6 +95,22 @@ namespace SeaSick.Ocean
 
             Shader.SetGlobalVectorArray(WavesId, gpuWaves);
             Shader.SetGlobalInt(WaveCountId, count);
+
+            // Shore falloff data, so the shader kills the same waves the
+            // physics does and the sea stops cutting through the beaches.
+            var isles = World.Island.All;
+            int islandCount = Mathf.Min(isles.Count, MaxGpuIslands);
+            for (int i = 0; i < islandCount; i++)
+            {
+                var isle = isles[i];
+                if (isle == null) { gpuIslands[i] = Vector4.zero; continue; }
+                Vector3 c = isle.transform.position;
+                float inner = isle.MaxRadius * 1.02f;
+                gpuIslands[i] = new Vector4(c.x, c.z, inner, inner + shoreFalloff);
+            }
+            for (int i = islandCount; i < MaxGpuIslands; i++) gpuIslands[i] = Vector4.zero;
+            Shader.SetGlobalVectorArray(IslandsId, gpuIslands);
+            Shader.SetGlobalInt(IslandCountId, islandCount);
 
             if (swellActive)
             {
@@ -239,10 +264,35 @@ namespace SeaSick.Ocean
             }
         }
 
+        /// Waves shoal and die as they reach land. Without this the open-sea
+        /// swell drives straight through the islands and clips the beaches.
+        /// The ocean shader applies the identical falloff.
+        public float ShoreAttenuation(Vector2 p)
+        {
+            float atten = 1f;
+            var isles = World.Island.All;
+            for (int i = 0; i < isles.Count; i++)
+            {
+                var isle = isles[i];
+                if (isle == null) continue;
+                Vector3 c = isle.transform.position;
+                float dx = p.x - c.x, dz = p.y - c.z;
+                float dist = Mathf.Sqrt(dx * dx + dz * dz);
+                float inner = isle.MaxRadius * 1.02f;
+                float outer = inner + shoreFalloff;
+                if (dist >= outer) continue;
+                atten = Mathf.Min(atten, Mathf.SmoothStep(0f, 1f, (dist - inner) / (outer - inner)));
+                if (atten <= 0f) return 0f;
+            }
+            return atten;
+        }
+
         /// Full Gerstner displacement (dx, height, dz) for a rest-position point.
         public Vector3 Displace(Vector2 restPos, float time)
         {
             EnsureConstants(time);
+            float shore = ShoreAttenuation(restPos);
+            if (shore <= 0.001f) return Vector3.zero;
             float x = restPos.x, z = restPos.y;
             float dx = 0f, dy = 0f, dz = 0f;
             for (int i = 0; i < constants.Length; i++)
@@ -269,7 +319,7 @@ namespace SeaSick.Ocean
                 d.z += swellDir.y * amplitude * cos;
                 d.y += amplitude * Mathf.Sin(ph);
             }
-            return d;
+            return d * shore;
         }
 
         /// Water surface height at a fixed horizontal world position.

@@ -63,6 +63,11 @@ Shader "SeaSick/Ocean"
             // x = half width, y = active flag.
             float4 _SS_SwellExtra;
 
+            // Shore falloff: xy = island centre, z = inner radius, w = outer.
+            #define MAX_ISLANDS 24
+            float4 _SS_Islands[MAX_ISLANDS];
+            int    _SS_IslandCount;
+
             // Ship: xy = position, zw = forward (normalised).
             float4 _SS_ShipPos;
             // x = speed01, y = active flag, z = influence radius.
@@ -87,10 +92,30 @@ Shader "SeaSick/Ocean"
                 float  fogCoord   : TEXCOORD3;
             };
 
+            // Waves shoal and die at the shoreline. Must match
+            // WaveField.ShoreAttenuation exactly or the water the ship floats
+            // on and the water you see would disagree near land.
+            float ShoreAttenuation(float2 p)
+            {
+                float atten = 1.0;
+                [loop]
+                for (int i = 0; i < _SS_IslandCount; i++)
+                {
+                    float4 isle = _SS_Islands[i];
+                    if (isle.w <= 0.0) continue;
+                    float dist = distance(p, isle.xy);
+                    if (dist >= isle.w) continue;
+                    atten = min(atten, smoothstep(0.0, 1.0, (dist - isle.z) / (isle.w - isle.z)));
+                }
+                return atten;
+            }
+
             // Gerstner sum at a world XZ position. Returns (dx, height, dz).
             float3 WaveDisplacement(float2 p)
             {
                 float3 d = 0;
+                float shore = ShoreAttenuation(p);
+                if (shore <= 0.001) return d;
 
                 [loop]
                 for (int i = 0; i < _SS_WaveCount; i++)
@@ -127,7 +152,7 @@ Shader "SeaSick/Ocean"
                         }
                     }
                 }
-                return d;
+                return d * shore;
             }
 
             // The ship's own effect on the surface: trough, bow wave and a

@@ -27,6 +27,59 @@ namespace SeaSick.World
         bool hasHill;
         readonly List<GameObject> props = new List<GameObject>();
 
+        IslandMeshBuilder.Profile profile;
+        bool hasProfile;
+
+        public bool HasProfile => hasProfile;
+
+        public void SetProfile(IslandMeshBuilder.Profile p)
+        {
+            profile = p;
+            hasProfile = true;
+            radius = p.radius;
+        }
+
+        static int SectorOf(float angleRad)
+        {
+            int s = Mathf.RoundToInt(angleRad / (Mathf.PI * 2f) * IslandMeshBuilder.Sectors);
+            return ((s % IslandMeshBuilder.Sectors) + IslandMeshBuilder.Sectors) % IslandMeshBuilder.Sectors;
+        }
+
+        static float BearingTo(Vector3 from, Vector3 to)
+        {
+            Vector3 d = from - to;
+            return Mathf.Atan2(d.x, d.z);
+        }
+
+        /// The shoreline distance on a given bearing — islands aren't circles,
+        /// so collision and docking both need the real outline.
+        public float RadiusAt(float angleRad)
+        {
+            if (!hasProfile) return radius;
+            return profile.outline[SectorOf(angleRad)];
+        }
+
+        public float RadiusToward(Vector3 worldPos) => RadiusAt(BearingTo(worldPos, transform.position));
+
+        /// Can a ship land here? Cliff sectors drop sheer into the water.
+        public bool HasBeachToward(Vector3 worldPos)
+        {
+            if (!hasProfile) return true;
+            return profile.hasBeach[SectorOf(BearingTo(worldPos, transform.position))];
+        }
+
+        /// Largest shoreline distance, for spawn spacing and safety margins.
+        public float MaxRadius
+        {
+            get
+            {
+                if (!hasProfile) return radius;
+                float m = 0f;
+                foreach (var o in profile.outline) m = Mathf.Max(m, o);
+                return m;
+            }
+        }
+
         void OnEnable() { if (!All.Contains(this)) All.Add(this); }
         void OnDisable() { All.Remove(this); }
 
@@ -76,29 +129,38 @@ namespace SeaSick.World
             float baseAng = Mathf.Atan2(toShip.x, toShip.z);
             float spread = Mathf.Deg2Rad * 46f;
             float ang = baseAng + (total <= 1 ? 0f : Mathf.Lerp(-spread, spread, index / (float)(total - 1)));
-            return SurfacePoint(ang, radius * 0.62f);
+            // Stand just inland of the waterline on that bearing.
+            return SurfacePoint(ang, RadiusAt(ang) * 0.78f);
         }
 
-        /// A point on the island's visible surface — whichever of the sand dome
-        /// or the grass hill is higher there. Both match the shapes built by
-        /// ArchipelagoGenerator; without the hill term, props sink inside it.
+        /// A point on the island's visible surface. Follows the generated mesh
+        /// when there is one, so props sit on the ground instead of inside it.
         public Vector3 SurfacePoint(float angleRad, float distFromCentre)
         {
-            float d = Mathf.Min(distFromCentre, radius * 0.97f);
-            float t = d / radius;
-            float y = -0.12f * radius + 0.2f * radius * Mathf.Sqrt(Mathf.Max(0f, 1f - t * t));
+            if (hasProfile)
+            {
+                int s = SectorOf(angleRad);
+                float outR = profile.outline[s];
+                float d = Mathf.Min(distFromCentre, outR * 0.96f);
+                float y = IslandMeshBuilder.HeightAt(profile, s, d / Mathf.Max(0.001f, outR));
+                return transform.position + new Vector3(Mathf.Sin(angleRad) * d, y, Mathf.Cos(angleRad) * d);
+            }
 
+            // Legacy dome shape (the authored home island).
+            float dd = Mathf.Min(distFromCentre, radius * 0.97f);
+            float t = dd / radius;
+            float ly = -0.12f * radius + 0.2f * radius * Mathf.Sqrt(Mathf.Max(0f, 1f - t * t));
             if (hasHill)
             {
-                float hillReach = radius * 0.6f;   // hill sphere: 1.2r wide
-                if (d < hillReach)
+                float hillReach = radius * 0.6f;
+                if (dd < hillReach)
                 {
-                    float u = d / hillReach;
+                    float u = dd / hillReach;
                     float hillY = radius * 0.05f + radius * 0.275f * Mathf.Sqrt(Mathf.Max(0f, 1f - u * u));
-                    y = Mathf.Max(y, hillY);
+                    ly = Mathf.Max(ly, hillY);
                 }
             }
-            return transform.position + new Vector3(Mathf.Sin(angleRad) * d, y, Mathf.Cos(angleRad) * d);
+            return transform.position + new Vector3(Mathf.Sin(angleRad) * dd, ly, Mathf.Cos(angleRad) * dd);
         }
 
         public static Island Nearest(Vector3 pos, bool requireResources = false)
