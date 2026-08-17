@@ -730,7 +730,6 @@ GameObject:
   - component: {fileID: 1412075592}
   - component: {fileID: 1412075593}
   - component: {fileID: 1412075594}
-  - component: {fileID: 1412075595}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -898,11 +897,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 530990476a78240acbf4895ea99a6ac3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.SwellDirector
-  intervalRange: {x: 58, y: 88}
-  firstSwellDelay: 40
-  spawnDistance: 470
-  frontSpeed: 9.5
-  halfWidth: 115
+  intervalRange: {x: 70, y: 110}
+  firstSwellDelay: 45
+  spawnDistance: 360
+  frontSpeed: 7.5
+  halfWidth: 250
   steepness: 0.62
   wavelength: 72
   clearBeyond: 520
@@ -923,29 +922,6 @@ MonoBehaviour:
   recycleBehind: 60
   sizeRange: {x: 3.5, y: 10}
   foamColor: {r: 1, g: 1, b: 1, a: 0.14}
---- !u!114 &1412075595
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 054c3bac680604658bea84add2b12667, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WaveField
-  waveCount: 12
-  windSpeed: 11
-  windDirection: {x: 1, y: 0.22}
-  minWavelength: 9
-  maxWavelength: 190
-  totalSteepness: 0.34
-  spectrumWidth: 0.62
-  seed: 1337
-  calmFloor: 0.14
-  roughCeiling: 1.15
-  changeSpeed: 0.011
 --- !u!1 &1482035839
 GameObject:
   m_ObjectHideFlags: 0
@@ -1588,7 +1564,7 @@ MonoBehaviour:
   surfResponse: 2.2
   surfOvershoot: 1.25
   overspeedDragScale: 0.35
-  minTurnRate: 9
+  minTurnRate: 15
   maxTurnRate: 34
   windDirection: {x: 1, y: 0.35}
   steerageWay: 0.15
@@ -1697,9 +1673,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0b657a1b8704f40c6887cf529b05239e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.AnchorController
-  dropTime: 3.5
-  weighTime: 2.8
-  swellAnchorPenalty: 2.6
+  dropTime: 0
+  weighTime: 0
+  swellAnchorPenalty: 1
   gatherRatePerCrew: 1.1
   approachSpeedLimit: 6.5
 --- !u!114 &2143489889

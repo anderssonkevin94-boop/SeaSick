@@ -10,11 +10,13 @@ namespace SeaSick.Ocean
     [RequireComponent(typeof(WaveField))]
     public class SwellDirector : MonoBehaviour
     {
-        [SerializeField] Vector2 intervalRange = new Vector2(58f, 88f);
-        [SerializeField] float firstSwellDelay = 40f;
-        [SerializeField] float spawnDistance = 470f;
-        [SerializeField] float frontSpeed = 9.5f;
-        [SerializeField] float halfWidth = 115f;
+        [SerializeField] Vector2 intervalRange = new Vector2(70f, 110f);
+        [SerializeField] float firstSwellDelay = 45f;
+        // Warning is now short and the band is wide: the storm arrives soon
+        // after you're told, then stays with you for the best part of a minute.
+        [SerializeField] float spawnDistance = 360f;
+        [SerializeField] float frontSpeed = 7.5f;
+        [SerializeField] float halfWidth = 250f;
         [SerializeField] float steepness = 0.62f;
         [SerializeField] float wavelength = 72f;
         [SerializeField] float clearBeyond = 520f; // front has swept well past

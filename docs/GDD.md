@@ -97,6 +97,11 @@ _Append-only._
 - 2026-08-17 — Roster with persistent villagers/traits/breeding planned post-MVP; crew modeled as data (ScriptableObjects) from day one to allow it.
 - 2026-08-17 — Development order: sailing first, work backward to base.
 - 2026-08-17 — Device target: iPhone (iOS first). Default orientation set to Portrait.
+- 2026-08-17 — **Playability tuning** (feedback: in irons was a trap, storm too brief with too much warning, anchoring too slow).
+  - **Polar loosened so upwind is slow, never a trap.** No-go zone 45° → 35°; head-to-wind drive raised 0.02 → 0.22 (measured: 1.0 m/s → 5.6 m/s), close-hauled 0.50 → 0.85 at 50°. `minTurnRate` 9 → 15 deg/s so a stalled ship can always steer out. Tacking still pays; being caught head-to-wind no longer strands you.
+  - **Storm reshaped:** warning 37s → **~15s**, time inside the band ~24s → **~67s**. Band half-width 115 → 250m, front speed 9.5 → 7.5 m/s, spawn 470 → 360m, interval 70–110s.
+  - **Anchoring and weighing are instant** (both timers 0, swell penalty removed). State flips in the same frame — verified Underway→Anchored and Anchored→Underway with no frames waited.
+  - **Bug fixed:** the Ocean object had accumulated **two WaveField components**, both running `Update` and both writing the global shader uniforms every frame. Cause: an earlier setup script did `DestroyImmediate` + `AddComponent`, but `[RequireComponent]` on `OceanRenderer` silently blocked the destroy. Lesson: never destroy-and-re-add a required component to refresh defaults — set fields through `SerializedObject` instead. A duplicate-component sweep now covers the ocean and ship objects.
 - 2026-08-17 — **GPU water displacement** — the ocean moved off the CPU entirely.
   - New `SeaSick/Ocean` shader (`Assets/_Project/Art/Shaders/Ocean.shader`) does the whole Gerstner sum, the swell front, and the hull's trough/bow-wave/Kelvin-wake in the **vertex stage**. Normals by central difference (three wave sums per vertex — free on a GPU).
   - `OceanRenderer` now builds a flat grid **once** and only snaps its transform to follow the ship. `WaveField.PushToGpu` uploads the same per-frame constants the CPU physics uses (`_SS_Waves` packed as direction·k, amplitude, phase−ωt), so the visible surface and the surface the ship floats on cannot drift apart. `HullDisplacement` uploads ship pose and hull/wake shape.

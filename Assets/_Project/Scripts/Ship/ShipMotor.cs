@@ -22,7 +22,7 @@ namespace SeaSick.Ship
         [Tooltip("Surfing can carry you past normal top speed by this factor.")]
         [SerializeField] float surfOvershoot = 1.25f;
         [SerializeField] float overspeedDragScale = 0.35f;
-        [SerializeField] float minTurnRate = 9f;       // deg/s when drifting
+        [SerializeField] float minTurnRate = 15f;      // deg/s when barely moving — always escapable
         [SerializeField] float maxTurnRate = 34f;      // deg/s at full speed
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.35f); // where the wind blows toward
         [SerializeField, Range(0f, 0.5f)] float steerageWay = 0.12f; // min drive with sails furled
@@ -76,26 +76,28 @@ namespace SeaSick.Ship
         /// Drive available from the current heading, before sail setting.
         public float PolarEfficiency { get; private set; } = 1f;
 
-        public const float NoGoDegrees = 45f;
+        public const float NoGoDegrees = 35f;
 
         public string PointOfSailName =>
-            WindAngleDeg < 32f ? "in irons"
+            WindAngleDeg < 20f ? "in irons"
             : WindAngleDeg < NoGoDegrees ? "pinching"
-            : WindAngleDeg < 70f ? "close hauled"
+            : WindAngleDeg < 60f ? "close hauled"
             : WindAngleDeg < 105f ? "beam reach"
             : WindAngleDeg < 150f ? "broad reach"
             : "running";
 
-        /// Classic sailing polar: no drive upwind, best on a beam reach,
-        /// slightly down again dead downwind. This is what forces tacking.
+        /// Sailing polar. Upwind is genuinely slow and worth tacking out of,
+        /// but never a trap: even head-to-wind you keep enough drive to steer
+        /// out and get home. Peak is on a beam-to-broad reach.
         public static float SailPolar(float thetaDeg)
         {
-            if (thetaDeg < 32f) return 0.02f;
-            if (thetaDeg < 45f) return Mathf.Lerp(0.02f, 0.50f, (thetaDeg - 32f) / 13f);
-            if (thetaDeg < 70f) return Mathf.Lerp(0.50f, 0.90f, (thetaDeg - 45f) / 25f);
-            if (thetaDeg < 105f) return Mathf.Lerp(0.90f, 1.00f, (thetaDeg - 70f) / 35f);
-            if (thetaDeg < 150f) return Mathf.Lerp(1.00f, 0.88f, (thetaDeg - 105f) / 45f);
-            return Mathf.Lerp(0.88f, 0.70f, (thetaDeg - 150f) / 30f);
+            if (thetaDeg < 20f) return 0.22f;
+            if (thetaDeg < 35f) return Mathf.Lerp(0.22f, 0.55f, (thetaDeg - 20f) / 15f);
+            if (thetaDeg < 50f) return Mathf.Lerp(0.55f, 0.85f, (thetaDeg - 35f) / 15f);
+            if (thetaDeg < 75f) return Mathf.Lerp(0.85f, 0.97f, (thetaDeg - 50f) / 25f);
+            if (thetaDeg < 110f) return Mathf.Lerp(0.97f, 1.00f, (thetaDeg - 75f) / 35f);
+            if (thetaDeg < 150f) return Mathf.Lerp(1.00f, 0.92f, (thetaDeg - 110f) / 40f);
+            return Mathf.Lerp(0.92f, 0.80f, (thetaDeg - 150f) / 30f);
         }
 
         /// Used by grounding: cancel the component of momentum driving the
@@ -168,7 +170,7 @@ namespace SeaSick.Ship
             Vector3 windFromWorld = new Vector3(-wind.x, 0f, -wind.y);
             WindAngleDeg = Vector3.Angle(new Vector3(forward.x, 0f, forward.z), windFromWorld);
             PolarEfficiency = SailPolar(WindAngleDeg);
-            Luff01 = Mathf.Clamp01(1f - (WindAngleDeg - 20f) / 25f);
+            Luff01 = Mathf.Clamp01(1f - (WindAngleDeg - 12f) / 23f);
 
             float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(Mathf.Min(SailSetting, SailCap)));
             float targetSpeed = effMaxSpeed * PolarEfficiency * sailPower * WindStrength;

@@ -12,9 +12,11 @@ namespace SeaSick.Ship
     /// much longer, so the decision to run for shelter has to be made early.
     public class AnchorController : MonoBehaviour
     {
-        [SerializeField] float dropTime = 3.5f;
-        [SerializeField] float weighTime = 2.8f;
-        [SerializeField] float swellAnchorPenalty = 2.6f;
+        // Anchoring is immediate — the interesting decision is whether to stop
+        // at all, not watching a progress timer tick down.
+        [SerializeField] float dropTime = 0f;
+        [SerializeField] float weighTime = 0f;
+        [SerializeField] float swellAnchorPenalty = 1f;
         [SerializeField] float gatherRatePerCrew = 1.1f; // resource units/sec each
         [SerializeField] float approachSpeedLimit = 6.5f; // must slow down to anchor
 
@@ -150,9 +152,9 @@ namespace SeaSick.Ship
         void DropAnchor(Island isle)
         {
             CurrentIsland = isle;
-            timer = dropTime * (SwellHere() > 0.25f ? swellAnchorPenalty : 1f);
             motor.Anchored = true;
-            CurrentState = State.Dropping;
+            timer = dropTime * (SwellHere() > 0.25f ? swellAnchorPenalty : 1f);
+            CurrentState = timer > 0f ? State.Dropping : State.Anchored;
         }
 
         void SendAshore()
@@ -172,7 +174,10 @@ namespace SeaSick.Ship
         void WeighAnchor()
         {
             timer = weighTime;
-            CurrentState = State.Weighing;
+            if (timer > 0f) { CurrentState = State.Weighing; return; }
+            motor.Anchored = false;
+            CurrentIsland = null;
+            CurrentState = State.Underway;
         }
 
         // --- UI -------------------------------------------------------------
