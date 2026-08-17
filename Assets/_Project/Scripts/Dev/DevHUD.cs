@@ -1,3 +1,4 @@
+using SeaSick.Crew;
 using SeaSick.Ship;
 using UnityEngine;
 
@@ -12,6 +13,7 @@ namespace SeaSick.Dev
 
         ShipMotor motor;
         SmoothnessMeter meter;
+        CrewAgent crew;
         GUIStyle label;
 
         void Awake()
@@ -19,6 +21,8 @@ namespace SeaSick.Dev
             motor = GetComponent<ShipMotor>();
             meter = GetComponent<SmoothnessMeter>();
         }
+
+        void Start() { crew = GetComponentInChildren<CrewAgent>(); }
 
         void Update()
         {
@@ -29,18 +33,20 @@ namespace SeaSick.Dev
         void OnGUI()
         {
             if (!visible) return;
-            if (label == null)
+            const int FontSize = 16; // constant: view-size-derived values proved unreliable
+            if (label == null || label.fontSize != FontSize)
                 label = new GUIStyle(GUI.skin.label)
                 {
-                    fontSize = Mathf.Max(14, Mathf.RoundToInt(Screen.height * 0.02f)),
+                    fontSize = FontSize,
                     fontStyle = FontStyle.Bold,
                 };
 
             float w = Screen.width * 0.6f;
-            float x = 12f, y = 12f, line = label.fontSize * 1.7f;
+            float x = 12f, y = 12f;
+            const float line = FontSize * 1.7f;
 
             GUI.color = new Color(0f, 0f, 0f, 0.45f);
-            GUI.DrawTexture(new Rect(6f, 6f, w + 12f, line * 4.4f), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(6f, 6f, w + 12f, line * (crew != null ? 6.6f : 4.4f)), Texture2D.whiteTexture);
             GUI.color = Color.white;
 
             Vector3 fwd = motor.transform.forward;
@@ -64,6 +70,21 @@ namespace SeaSick.Dev
             GUI.DrawTexture(new Rect(barRect.x, barRect.y, barRect.width * meter.Roughness01, barRect.height),
                 Texture2D.whiteTexture);
             GUI.color = Color.white;
+
+            if (crew != null)
+            {
+                y = barRect.yMax + line * 0.2f;
+                string who = crew.Def != null ? crew.Def.displayName : "crew";
+                GUI.Label(new Rect(x, y, w, line),
+                    $"{who}: sickness {crew.Sickness01:F2}  [{crew.StateName}]", label);
+                var sickRect = new Rect(x, y + line, w, line * 0.5f);
+                GUI.color = new Color(0f, 0f, 0f, 0.4f);
+                GUI.DrawTexture(sickRect, Texture2D.whiteTexture);
+                GUI.color = Color.Lerp(new Color(0.85f, 0.75f, 0.4f), new Color(0.45f, 0.8f, 0.3f), crew.Sickness01);
+                GUI.DrawTexture(new Rect(sickRect.x, sickRect.y, sickRect.width * crew.Sickness01, sickRect.height),
+                    Texture2D.whiteTexture);
+                GUI.color = Color.white;
+            }
         }
     }
 }
