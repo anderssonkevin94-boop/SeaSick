@@ -1247,13 +1247,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.CameraRig.ChaseCamera
   target: {fileID: 2143489877}
-  distance: 17
-  height: 6.5
-  lookAhead: 30
-  lookHeight: 3.2
+  distance: 24
+  height: 30
+  lookAhead: 10
+  lookHeight: 0.5
   positionResponse: 2.2
   rotationResponse: 3
-  fovBase: 58
+  fovBase: 60
   fovSpeedBoost: 4
   fovSurfPunch: 1.5
   fovResponse: 1.1

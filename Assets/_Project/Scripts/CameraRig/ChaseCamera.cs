@@ -8,10 +8,14 @@ namespace SeaSick.CameraRig
     public class ChaseCamera : MonoBehaviour
     {
         [SerializeField] Transform target;
-        [SerializeField] float distance = 27f;
-        [SerializeField] float height = 14f;
-        [SerializeField] float lookAhead = 28f;
-        [SerializeField] float lookHeight = 2.5f;
+        // Three-quarter view: the tilt comes from (height - lookHeight) over
+        // (distance + lookAhead). A long lookAhead flattens the camera toward
+        // the horizon and puts the rig in your face, so keep it short here.
+        // Current values give roughly 41 degrees below horizontal.
+        [SerializeField] float distance = 24f;
+        [SerializeField] float height = 30f;
+        [SerializeField] float lookAhead = 10f;
+        [SerializeField] float lookHeight = 0.5f;
         [SerializeField] float positionResponse = 2.2f;
         [SerializeField] float rotationResponse = 3f;
 
@@ -69,11 +73,13 @@ namespace SeaSick.CameraRig
                 axis = separation < 0.5f ? -target.forward : axis / separation;
 
                 // Bias toward the shore party — they're what the player wants
-                // to watch — and back off enough to hold both in frame.
+                // to watch. Framing keys off their spread rather than the
+                // chase-cam height, which is deliberately high and would
+                // otherwise leave the crew as specks.
                 anchor = Vector3.Lerp(poi, shipFlat, 0.38f);
-                float back = distance * 0.85f + separation * 0.8f;
-                desired = anchor + axis * back + Vector3.up * (height + separation * 0.4f);
-                lookPoint = anchor + Vector3.up * lookHeight;
+                float back = 18f + separation * 0.55f;
+                desired = anchor + axis * back + Vector3.up * (14f + separation * 0.35f);
+                lookPoint = anchor + Vector3.up * 1.5f;
             }
             else
             {
