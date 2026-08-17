@@ -2,6 +2,8 @@
 
 ## Project facts
 - **Engine:** Unity 6000.4.3f1 (Unity 6), Universal Render Pipeline (URP), 3D
+- **Target platform:** mobile, **portrait orientation, one-handed play** — every gameplay/UI/control decision must respect this; keep the mobile URP asset (`Mobile_RPAsset`) in mind for performance
+- **Core design rule:** sailing feel is pillar #1; seasickness rate is driven by sailing smoothness (see GDD §6)
 - **Editor binary:** `/Applications/Unity/Hub/Editor/6000.4.3f1/Unity.app/Contents/MacOS/Unity`
 - **Input:** Unity Input System package (`com.unity.inputsystem`), not legacy Input Manager
 - **Design doc:** `docs/GDD.md` — read it before implementing gameplay features; keep it updated when design decisions change
