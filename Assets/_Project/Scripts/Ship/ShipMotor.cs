@@ -40,6 +40,8 @@ namespace SeaSick.Ship
         public float CargoLoad01 { get; set; }
         /// Mutinous crew won't give you full canvas (set by MutinyController).
         public float SailCap { get; set; } = 1f;
+        /// Anchored: no thrust, no steering, but the hull still rides the waves.
+        public bool Anchored { get; set; }
         /// When set, the crew has seized the helm: rudder input is ignored and
         /// the ship steers itself toward this point (mutiny stage 3+).
         public Vector3? AutopilotTarget { get; set; }
@@ -78,8 +80,8 @@ namespace SeaSick.Ship
             float speedFactor = Mathf.Clamp01(speed / maxSpeed);
             float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor) * (1f - 0.25f * load);
 
-            float effectiveRudder = Rudder;
-            if (AutopilotTarget.HasValue)
+            float effectiveRudder = Anchored ? 0f : Rudder;
+            if (!Anchored && AutopilotTarget.HasValue)
             {
                 Vector3 to = AutopilotTarget.Value - transform.position;
                 float desiredYaw = Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg;
@@ -112,11 +114,14 @@ namespace SeaSick.Ship
             // momentum keeps its own direction. Turning converts forward way
             // into sideways slip, which the keel bleeds off over ~half a
             // second — so the stern slides out and you move THROUGH the water.
+            if (Anchored) targetSpeed = 0f;
+
             Vector3 right = new Vector3(forward.z, 0f, -forward.x);
             float forwardWay = Vector3.Dot(velocity, forward);
             float sideWay = Vector3.Dot(velocity, right);
-            forwardWay = Mathf.MoveTowards(forwardWay, targetSpeed, acceleration * dt);
-            sideWay *= Mathf.Exp(-keelGrip * dt);
+            forwardWay = Mathf.MoveTowards(forwardWay, targetSpeed,
+                (Anchored ? acceleration * 2.5f : acceleration) * dt);
+            sideWay *= Mathf.Exp(-(Anchored ? keelGrip * 3f : keelGrip) * dt);
             velocity = forward * forwardWay + right * sideWay;
             speed = velocity.magnitude;
 

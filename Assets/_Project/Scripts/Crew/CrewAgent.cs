@@ -24,6 +24,14 @@ namespace SeaSick.Crew
         [SerializeField] Vector3 railLocal = new Vector3(1.8f, 2.0f, -2.5f);
         [SerializeField] float walkSpeed = 1.4f;
 
+        [Header("Shore leave")]
+        [Tooltip("Sickness drains this fast per second while ashore.")]
+        [SerializeField] float shoreRecoveryRate = 0.075f;
+        [Tooltip("Feet on land only gets them this far without a doctor aboard.")]
+        [SerializeField] float shoreRecoveryFloor = 0.2f;
+        [SerializeField] float shoreAngerRecovery = 0.05f;
+        [SerializeField] float shoreWalkSpeed = 3.2f;
+
         [Header("Anger (fuel for mutiny)")]
         [SerializeField] float angerRiseRate = 0.035f;   // per s while very sick
         [SerializeField] float angerDecayRate = 0.012f;  // per s once feeling better
@@ -46,8 +54,32 @@ namespace SeaSick.Crew
         /// Full recovery — called when the ship docks at home.
         public void Rest() { Sickness01 = 0f; Anger01 = 0f; }
 
-        enum State { Station, ToRail, Puking, Returning }
+        enum State { Station, ToRail, Puking, Returning, GoingAshore, Ashore, Boarding }
         State state = State.Station;
+
+        public bool IsAshore => state == State.Ashore;
+        public bool IsAboard => state == State.Station || state == State.ToRail
+            || state == State.Puking || state == State.Returning;
+
+        Transform ship;
+        Vector3 shoreTarget;
+
+        /// Send this crew member over the side to stand on solid ground.
+        public void GoAshore(Vector3 worldTarget)
+        {
+            if (state == State.GoingAshore || state == State.Ashore) return;
+            ship = transform.parent;
+            shoreTarget = worldTarget;
+            transform.SetParent(null, true);
+            state = State.GoingAshore;
+        }
+
+        /// Recall to the ship. Walks back and re-parents at their station.
+        public void ReturnAboard()
+        {
+            if (state != State.Ashore && state != State.GoingAshore) return;
+            state = State.Boarding;
+        }
 
         SmoothnessMeter meter;
         MaterialPropertyBlock block;
@@ -74,6 +106,17 @@ namespace SeaSick.Crew
 
         void AccumulateSickness(float dt)
         {
+            // Feet on solid ground is the cure — the walk over doesn't count.
+            if (state == State.Ashore)
+            {
+                Sickness01 = Mathf.Max(shoreRecoveryFloor, Sickness01 - shoreRecoveryRate * dt);
+                Anger01 = Mathf.Max(0f, Anger01 - shoreAngerRecovery * dt);
+                return;
+            }
+
+            // Clambering off or back aboard: neither cured nor punished.
+            if (state == State.GoingAshore || state == State.Boarding) return;
+
             float rough = meter != null ? meter.Roughness01 : 0f;
             float resistance = def != null ? def.ironStomach : 0f;
             float rate = (baseRate + roughnessRate * rough * rough) * (1f - 0.5f * resistance);
@@ -123,7 +166,40 @@ namespace SeaSick.Crew
                         state = State.Station;
                     }
                     break;
+
+                case State.GoingAshore:
+                    if (WalkToWorld(shoreTarget, dt)) state = State.Ashore;
+                    break;
+
+                case State.Ashore:
+                    // Small idle shuffle so they read as alive on the beach.
+                    transform.rotation = Quaternion.Euler(0f, Mathf.Sin(Time.time * 0.6f + shoreTarget.x) * 40f, 0f);
+                    break;
+
+                case State.Boarding:
+                    if (ship == null) { state = State.Station; break; }
+                    Vector3 boardPoint = ship.TransformPoint(stationLocal);
+                    if (WalkToWorld(boardPoint, dt))
+                    {
+                        transform.SetParent(ship, true);
+                        transform.localPosition = stationLocal;
+                        transform.localRotation = Quaternion.identity;
+                        state = State.Station;
+                    }
+                    break;
             }
+        }
+
+        bool WalkToWorld(Vector3 target, float dt)
+        {
+            Vector3 pos = Vector3.MoveTowards(transform.position, target, shoreWalkSpeed * dt);
+            transform.position = pos;
+            Vector3 look = target - pos;
+            look.y = 0f;
+            if (look.sqrMagnitude > 0.01f)
+                transform.rotation = Quaternion.Slerp(transform.rotation,
+                    Quaternion.LookRotation(look, Vector3.up), 1f - Mathf.Exp(-6f * dt));
+            return (pos - target).sqrMagnitude < 0.05f;
         }
 
         bool WalkTo(Vector3 targetLocal, float dt)

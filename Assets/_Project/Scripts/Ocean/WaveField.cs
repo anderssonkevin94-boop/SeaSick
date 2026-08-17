@@ -28,35 +28,59 @@ namespace SeaSick.Ocean
             new GerstnerWave { direction = new Vector2(0.5f, 0.8f),  wavelength = 8f,  steepness = 0.07f },
         };
 
-        // Transient rogue swell (rogue wave sets, milestone: sailing feel)
+        // --- Swell front: a band of heavy water sweeping across the world ---
+        // Spatial, not global: you can see it coming, sail away from it, or
+        // hide behind an island until it passes.
         Vector2 swellDir;
+        Vector2 swellOrigin;
         float swellStart = -999f;
-        float swellDuration;
+        float swellSpeed;
+        float swellHalfWidth;
         float swellSteepness;
         float swellWavelength;
+        bool swellActive;
 
-        /// Direction the swell travels toward. Envelope ramps in and out so the
-        /// set builds on the horizon, peaks, and passes.
-        public void TriggerSwell(Vector2 direction, float duration, float steepness, float wavelength)
+        public bool SwellActive => swellActive;
+        public Vector2 SwellDirection => swellDir;
+        public float SwellSpeed => swellSpeed;
+        public float SwellHalfWidth => swellHalfWidth;
+
+        public void LaunchSwell(Vector2 origin, Vector2 direction, float speed,
+            float halfWidth, float steepness, float wavelength)
         {
+            swellOrigin = origin;
             swellDir = direction.normalized;
-            swellStart = Time.time;
-            swellDuration = duration;
+            swellSpeed = speed;
+            swellHalfWidth = halfWidth;
             swellSteepness = steepness;
             swellWavelength = wavelength;
+            swellStart = Time.time;
+            swellActive = true;
         }
 
-        public float SwellEnvelope
+        public void ClearSwell() { swellActive = false; }
+
+        /// Centre line of the front right now.
+        public Vector2 SwellCenter(float time) =>
+            swellOrigin + swellDir * (swellSpeed * (time - swellStart));
+
+        /// 0 = calm water, 1 = the heart of the swell. Signed distance across
+        /// the band, smoothed so the front builds and passes rather than snaps.
+        public float SwellIntensity(Vector2 pos, float time)
         {
-            get
-            {
-                float t01 = (Time.time - swellStart) / swellDuration;
-                if (t01 < 0f || t01 > 1f) return 0f;
-                return Mathf.Sin(t01 * Mathf.PI);
-            }
+            if (!swellActive) return 0f;
+            float along = Vector2.Dot(pos - SwellCenter(time), swellDir);
+            float t = 1f - Mathf.Clamp01(Mathf.Abs(along) / swellHalfWidth);
+            return Mathf.SmoothStep(0f, 1f, t);
         }
 
-        public Vector2 SwellDirection => swellDir;
+        /// Metres until the front reaches this point (negative once it's past).
+        /// Positive dot = the point lies ahead of the front along its travel.
+        public float SwellApproachDistance(Vector2 pos, float time)
+        {
+            if (!swellActive) return float.MaxValue;
+            return Vector2.Dot(pos - SwellCenter(time), swellDir) - swellHalfWidth;
+        }
 
         void OnEnable() { Instance = this; }
         void OnDisable() { if (Instance == this) Instance = null; }
@@ -79,7 +103,7 @@ namespace SeaSick.Ocean
                 d.y += amplitude * Mathf.Sin(phase);
             }
 
-            float env = SwellEnvelopeAt(time);
+            float env = SwellIntensity(restPos, time);
             if (env > 0.001f)
             {
                 float k = 2f * Mathf.PI / swellWavelength;
@@ -94,12 +118,6 @@ namespace SeaSick.Ocean
             return d;
         }
 
-        float SwellEnvelopeAt(float time)
-        {
-            float t01 = (time - swellStart) / swellDuration;
-            if (t01 < 0f || t01 > 1f) return 0f;
-            return Mathf.Sin(t01 * Mathf.PI);
-        }
 
         /// Water surface height at a fixed horizontal world position.
         /// Iterates to undo the horizontal part of the Gerstner displacement.

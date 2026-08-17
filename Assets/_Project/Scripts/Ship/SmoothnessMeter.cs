@@ -9,10 +9,13 @@ namespace SeaSick.Ship
     public class SmoothnessMeter : MonoBehaviour
     {
         [Header("What counts as rough (normalization ceilings)")]
-        [SerializeField] float heaveRateCeiling = 1.7f;      // m/s of vertical motion
-        [SerializeField] float pitchRateCeiling = 18f;       // deg/s
-        [SerializeField] float rollRateCeiling = 20f;        // deg/s
-        [SerializeField] float lateralAccelCeiling = 2.8f;   // m/s^2, centripetal (hard turns)
+        // Ceilings are set so ordinary bobbing reads as CALM (~0.15) and only
+        // real punishment — swell, slamming, hard turns — climbs toward 1.
+        // Keeping ambient low is what makes good sailing feel rewarded.
+        [SerializeField] float heaveRateCeiling = 2.7f;      // m/s of vertical motion
+        [SerializeField] float pitchRateCeiling = 27f;       // deg/s
+        [SerializeField] float rollRateCeiling = 30f;        // deg/s
+        [SerializeField] float lateralAccelCeiling = 3.2f;   // m/s^2, centripetal (hard turns)
 
         [Header("Blend weights")]
         [SerializeField] float verticalWeight = 0.35f;

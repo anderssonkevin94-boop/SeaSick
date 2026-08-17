@@ -31,7 +31,7 @@ namespace SeaSick.Ship
             if (pointer != null && pointer.press.isPressed)
             {
                 Vector2 p = pointer.position.ReadValue();
-                if (p.y < Screen.height * steerZoneHeight)
+                if (p.y < Screen.height * steerZoneHeight && !SeaSick.UI.UIBlocker.Blocked(p))
                 {
                     // Slight overdrive (x2.2) so full rudder doesn't need the screen edge.
                     target = Mathf.Clamp((p.x / Screen.width - 0.5f) * 2.2f, -1f, 1f);
