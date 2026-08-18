@@ -284,6 +284,12 @@ namespace SeaSick.Crew
 
             // Green shift readable well before the puke threshold; anger adds
             // a red flush on top so a brewing mutiny is visible on bodies.
+            // Built on demand: crew are instantiated and re-parented at
+            // runtime, so Update can reach here before Start has run.
+            if (block == null) block = new MaterialPropertyBlock();
+            if (tintRenderers == null || tintRenderers.Length == 0)
+                tintRenderers = GetComponentsInChildren<Renderer>();
+
             Color tint = Color.Lerp(healthyTint, sickTint, Mathf.Clamp01(Sickness01 * 1.15f));
             tint = Color.Lerp(tint, angryTint, Anger01 * 0.8f);
             block.SetColor(BaseColorId, tint);

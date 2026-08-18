@@ -25,13 +25,18 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _CrestStrength: 0.9
+    - _CrestStrength: 1
     - _NormalSampleDist: 2.5
+    - _RippleScale: 0.09
+    - _RippleStrength: 0.14
+    - _ShallowBand: 55
+    - _ShoreFoamBand: 26
     - _Smoothness: 0.86
     m_Colors:
     - _CrestColor: {r: 0.66, g: 0.85, b: 0.93, a: 1}
     - _DeepColor: {r: 0.03, g: 0.16, b: 0.3, a: 1}
     - _ShallowColor: {r: 0.1, g: 0.44, b: 0.6, a: 1}
+    - _ShallowWater: {r: 0.34, g: 0.72, b: 0.74, a: 1}
     - _SpecColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

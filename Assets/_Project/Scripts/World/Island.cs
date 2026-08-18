@@ -30,12 +30,17 @@ namespace SeaSick.World
         IslandMeshBuilder.Profile profile;
         bool hasProfile;
 
-        public bool HasProfile => hasProfile;
+        /// True only when the profile is fully populated. The arrays are what
+        /// every query below indexes into, so a half-built profile must fall
+        /// back to the plain radius rather than throwing mid-frame.
+        public bool HasProfile => hasProfile
+            && profile.outline != null && profile.outline.Length > 0
+            && profile.hasBeach != null && profile.hasBeach.Length > 0;
 
         public void SetProfile(IslandMeshBuilder.Profile p)
         {
             profile = p;
-            hasProfile = true;
+            hasProfile = p.outline != null && p.outline.Length > 0;
             radius = p.radius;
         }
 
@@ -55,7 +60,7 @@ namespace SeaSick.World
         /// so collision and docking both need the real outline.
         public float RadiusAt(float angleRad)
         {
-            if (!hasProfile) return radius;
+            if (!HasProfile) return radius;
             return profile.outline[SectorOf(angleRad)];
         }
 
@@ -64,7 +69,7 @@ namespace SeaSick.World
         /// Can a ship land here? Cliff sectors drop sheer into the water.
         public bool HasBeachToward(Vector3 worldPos)
         {
-            if (!hasProfile) return true;
+            if (!HasProfile) return true;
             return profile.hasBeach[SectorOf(BearingTo(worldPos, transform.position))];
         }
 
@@ -73,7 +78,7 @@ namespace SeaSick.World
         {
             get
             {
-                if (!hasProfile) return radius;
+                if (!HasProfile) return radius;
                 float m = 0f;
                 foreach (var o in profile.outline) m = Mathf.Max(m, o);
                 return m;
@@ -137,7 +142,7 @@ namespace SeaSick.World
         /// when there is one, so props sit on the ground instead of inside it.
         public Vector3 SurfacePoint(float angleRad, float distFromCentre)
         {
-            if (hasProfile)
+            if (HasProfile)
             {
                 int s = SectorOf(angleRad);
                 float outR = profile.outline[s];

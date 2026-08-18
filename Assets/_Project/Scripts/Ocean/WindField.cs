@@ -48,14 +48,41 @@ namespace SeaSick.Ocean
         void OnEnable() { Instance = this; }
         void OnDisable() { if (Instance == this) Instance = null; }
 
-        void Start()
+        void Start() { EnsureGusts(); }
+
+        /// Built on demand rather than only in Start — other systems sample the
+        /// wind from their own callbacks and script order isn't guaranteed.
+        void EnsureGusts()
         {
-            gusts = new Gust[gustCount];
-            for (int i = 0; i < gustCount; i++) Respawn(ref gusts[i], initial: true);
+            if (gusts != null && gusts.Length == gustCount) return;
+            gusts = new Gust[Mathf.Max(1, gustCount)];
+            for (int i = 0; i < gusts.Length; i++) Respawn(ref gusts[i], initial: true);
         }
+
+        const int MaxGpuGusts = 8;
+        static readonly int GustsId = Shader.PropertyToID("_SS_Gusts");
+        static readonly int GustCountId = Shader.PropertyToID("_SS_GustCount");
+        readonly Vector4[] gpuGusts = new Vector4[MaxGpuGusts];
+
+        /// Hand gust positions to the water shader so it can darken and ruffle
+        /// the surface directly. Drawing them as quads laid on the water read
+        /// as flat tiles no matter how they were tinted.
+        void PushGustsToGpu()
+        {
+            if (gusts == null) return;
+            int count = Mathf.Min(gusts.Length, MaxGpuGusts);
+            for (int i = 0; i < count; i++)
+                gpuGusts[i] = new Vector4(gusts[i].pos.x, gusts[i].pos.y, gusts[i].radius, 0f);
+            for (int i = count; i < MaxGpuGusts; i++) gpuGusts[i] = Vector4.zero;
+            Shader.SetGlobalVectorArray(GustsId, gpuGusts);
+            Shader.SetGlobalInt(GustCountId, count);
+        }
+
+        void LateUpdate() { PushGustsToGpu(); }
 
         void Update()
         {
+            EnsureGusts();
             float wander = (Mathf.PerlinNoise(Time.time * wanderSpeed, 0.37f) * 2f - 1f) * wanderDegrees;
             float a = (baseAngleDeg + wander) * Mathf.Deg2Rad;
             BaseDir = new Vector2(Mathf.Sin(a), Mathf.Cos(a));

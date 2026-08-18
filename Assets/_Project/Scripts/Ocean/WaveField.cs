@@ -244,6 +244,10 @@ namespace SeaSick.Ocean
 
         void EnsureConstants(float time)
         {
+            // Other components sample the water from their own Awake/LateUpdate,
+            // and script order isn't guaranteed — build on demand rather than
+            // relying on ours having run first.
+            if (waves == null) BuildSpectrum();
             if (cachedTime == time && cachedSea == SeaState01 && constants != null) return;
             if (constants == null || constants.Length != waves.Length)
                 constants = new WaveConstants[waves.Length];

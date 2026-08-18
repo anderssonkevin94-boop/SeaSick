@@ -757,10 +757,9 @@ GameObject:
   - component: {fileID: 1412075585}
   - component: {fileID: 1412075584}
   - component: {fileID: 1412075591}
-  - component: {fileID: 1412075592}
   - component: {fileID: 1412075593}
-  - component: {fileID: 1412075594}
   - component: {fileID: 1412075595}
+  - component: {fileID: 1412075596}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -904,21 +903,6 @@ MonoBehaviour:
   spawnRingMax: 320
   despawnDistance: 420
   focus: {fileID: 2143489877}
---- !u!114 &1412075592
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 37de5a792823c46ca91772a592ba5a9b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.GustVisuals
-  quadsPerGust: 14
-  quadSize: 7
-  rippleColor: {r: 0.02, g: 0.08, b: 0.14, a: 0.5}
 --- !u!114 &1412075593
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -939,23 +923,6 @@ MonoBehaviour:
   steepness: 0.62
   wavelength: 72
   clearBeyond: 520
---- !u!114 &1412075594
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 85702ff14104040cfbd27e2d62770c57, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.SeaStreaks
-  streakCount: 46
-  spawnRadius: 85
-  recycleBehind: 60
-  sizeRange: {x: 3.5, y: 10}
-  foamColor: {r: 1, g: 1, b: 1, a: 0.14}
 --- !u!114 &1412075595
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -974,6 +941,26 @@ MonoBehaviour:
   lengthScale: 900
   spread: 900
   seed: 909
+--- !u!114 &1412075596
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412075583}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b79d21191970048519b03150639ba399, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WakeTexture
+  resolution: 512
+  worldSize: 420
+  decayPerSecond: 0.55
+  target: {fileID: 0}
+  hullLength: 20
+  hullWidth: 7
+  hullFoam: 1.5
+  hullDisplace: 0.9
 --- !u!1 &1482035839
 GameObject:
   m_ObjectHideFlags: 0
