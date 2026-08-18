@@ -140,20 +140,38 @@ namespace SeaSick.Voyage
             completedPukes = TotalPukes() - pukesAtStart;
 
             var sb = new StringBuilder();
+            var landed = new List<string>();
             foreach (var kv in held)
             {
                 if (sb.Length > 0) sb.Append("   ");
                 sb.Append($"+{kv.Value} {kv.Key}");
                 banked.TryGetValue(kv.Key, out int cur);
                 banked[kv.Key] = cur + kv.Value;
+                for (int i = 0; i < kv.Value; i++) landed.Add(kv.Key);
             }
             completedHaul = sb.Length > 0 ? sb.ToString() : "empty hold";
+
+            // Carry it ashore piece by piece so the pile visibly grows rather
+            // than the haul evaporating into a number.
+            if (landed.Count > 0) StartCoroutine(UnloadAshore(landed));
 
             held.Clear();
             TotalHeld = 0;
             ship.CargoLoad01 = 0f;
             foreach (var c in crew) if (c != null) c.Rest();
             phase = Phase.Tally;
+        }
+
+        System.Collections.IEnumerator UnloadAshore(List<string> units)
+        {
+            var pile = World.Stockpile.Instance;
+            var shipHold = ship != null ? ship.GetComponent<Ship.ShipHold>() : null;
+            foreach (var resource in units)
+            {
+                if (shipHold != null) shipHold.RemoveVisual();
+                if (pile != null) pile.Deposit(resource);
+                yield return new WaitForSeconds(0.18f);
+            }
         }
 
         static float Flat(Vector3 a, Vector3 b)

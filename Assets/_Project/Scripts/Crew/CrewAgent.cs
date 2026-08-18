@@ -30,7 +30,8 @@ namespace SeaSick.Crew
         [Tooltip("Feet on land only gets them this far without a doctor aboard.")]
         [SerializeField] float shoreRecoveryFloor = 0.2f;
         [SerializeField] float shoreAngerRecovery = 0.05f;
-        [SerializeField] float shoreWalkSpeed = 3.2f;
+        [SerializeField] float shoreWalkSpeed = 6.5f;
+        [SerializeField] float swingInterval = 0.42f;
 
         [Header("Anger (fuel for mutiny)")]
         [SerializeField] float angerRiseRate = 0.035f;   // per s while very sick
@@ -61,31 +62,91 @@ namespace SeaSick.Crew
             Anger01 = Mathf.Clamp01(Anger01 + amount * 1.4f);
         }
 
-        enum State { Station, ToRail, Puking, Returning, GoingAshore, Ashore, Boarding }
+        enum State
+        {
+            Station, ToRail, Puking, Returning,          // aboard
+            GoingAshore, ToNode, Chopping, ToShip, Idling, Boarding
+        }
         State state = State.Station;
 
-        public bool IsAshore => state == State.Ashore;
+        /// Ashore covers the whole work loop, not just standing about.
+        public bool IsAshore => state == State.ToNode || state == State.Chopping
+            || state == State.ToShip || state == State.Idling || state == State.GoingAshore;
         public bool IsAboard => state == State.Station || state == State.ToRail
             || state == State.Puking || state == State.Returning;
 
         Transform ship;
         Vector3 shoreTarget;
+        World.Island workIsland;
+        Ship.ShipHold hold;
+        Ship.Gangway gangway;
+        Voyage.VoyageManager voyage;
 
-        /// Send this crew member over the side to stand on solid ground.
-        public void GoAshore(Vector3 worldTarget)
+        World.ResourceNode targetNode;
+        GameObject carried;
+        string carriedResource;
+        int hitsLeft;
+        float swingTimer;
+
+        /// Send this crew member ashore to work an island.
+        public void GoAshore(Vector3 landingPoint, World.Island island,
+            Ship.ShipHold shipHold, Ship.Gangway plank, Voyage.VoyageManager voyageManager)
         {
-            if (state == State.GoingAshore || state == State.Ashore) return;
+            if (IsAshore) return;
             ship = transform.parent;
-            shoreTarget = worldTarget;
+            shoreTarget = landingPoint;
+            workIsland = island;
+            hold = shipHold;
+            gangway = plank;
+            voyage = voyageManager;
             transform.SetParent(null, true);
             state = State.GoingAshore;
         }
 
-        /// Recall to the ship. Walks back and re-parents at their station.
+        /// Recall to the ship. Drops any claim and walks back.
         public void ReturnAboard()
         {
-            if (state != State.Ashore && state != State.GoingAshore) return;
+            if (!IsAshore) return;
+            ReleaseNode();
             state = State.Boarding;
+        }
+
+        void ReleaseNode()
+        {
+            if (targetNode != null) targetNode.Release(this);
+            targetNode = null;
+        }
+
+        /// Look for the next thing to cut. Nothing left means idle on the beach.
+        void SeekWork()
+        {
+            if (workIsland == null || (voyage != null && voyage.HoldFull))
+            {
+                state = State.Idling;
+                return;
+            }
+            targetNode = World.ResourceNode.FindFree(workIsland, transform.position, this);
+            state = targetNode != null ? State.ToNode : State.Idling;
+        }
+
+        void PickUp(string resource)
+        {
+            carriedResource = resource;
+            carried = World.CargoVisual.Build(resource, transform);
+            carried.transform.localPosition = new Vector3(0f, 1.45f, 0.45f);
+            carried.transform.localScale = Vector3.one * 0.7f;
+        }
+
+        void DropOff()
+        {
+            if (carried != null) Destroy(carried);
+            carried = null;
+            if (voyage != null && !string.IsNullOrEmpty(carriedResource))
+            {
+                voyage.AddLoot(1, carriedResource);
+                if (hold != null) hold.AddVisual(carriedResource);
+            }
+            carriedResource = null;
         }
 
         [SerializeField] float rowingStrain = 2.1f;
@@ -118,7 +179,9 @@ namespace SeaSick.Crew
         void AccumulateSickness(float dt)
         {
             // Feet on solid ground is the cure — the walk over doesn't count.
-            if (state == State.Ashore)
+            // Working ashore counts: they're on land the whole time.
+            if (state == State.ToNode || state == State.Chopping
+                || state == State.ToShip || state == State.Idling)
             {
                 Sickness01 = Mathf.Max(shoreRecoveryFloor, Sickness01 - shoreRecoveryRate * dt);
                 Anger01 = Mathf.Max(0f, Anger01 - shoreAngerRecovery * dt);
@@ -183,12 +246,69 @@ namespace SeaSick.Crew
                     break;
 
                 case State.GoingAshore:
-                    if (WalkToWorld(shoreTarget, dt)) state = State.Ashore;
+                    if (WalkToWorld(shoreTarget, dt)) SeekWork();
                     break;
 
-                case State.Ashore:
-                    // Small idle shuffle so they read as alive on the beach.
-                    transform.rotation = Quaternion.Euler(0f, Mathf.Sin(Time.time * 0.6f + shoreTarget.x) * 40f, 0f);
+                case State.ToNode:
+                    if (targetNode == null || targetNode.Harvested) { SeekWork(); break; }
+                    // Stop a pace short so they stand beside the tree, not in it.
+                    if (WalkNear(targetNode.transform.position, 1.9f, dt))
+                    {
+                        hitsLeft = targetNode.HitsToHarvest;
+                        swingTimer = 0f;
+                        state = State.Chopping;
+                    }
+                    break;
+
+                case State.Chopping:
+                {
+                    if (targetNode == null || targetNode.Harvested) { SeekWork(); break; }
+                    swingTimer -= dt;
+                    if (swingTimer <= 0f)
+                    {
+                        swingTimer = swingInterval;
+                        targetNode.Strike();
+                        hitsLeft--;
+                        if (hitsLeft <= 0)
+                        {
+                            string res = targetNode.Resource;
+                            targetNode.Harvest();
+                            if (workIsland != null) workIsland.Extract(1f);
+                            targetNode = null;
+                            PickUp(res);
+                            state = State.ToShip;
+                        }
+                    }
+                    // Lean into the swing.
+                    float swing = Mathf.Sin(Time.time * 12f) * 16f;
+                    Vector3 face = targetNode != null
+                        ? targetNode.transform.position - transform.position : transform.forward;
+                    face.y = 0f;
+                    if (face.sqrMagnitude > 0.01f)
+                        transform.rotation = Quaternion.LookRotation(face, Vector3.up)
+                            * Quaternion.Euler(swing, 0f, 0f);
+                    break;
+                }
+
+                case State.ToShip:
+                {
+                    Vector3 drop = hold != null ? hold.DropPoint
+                        : (ship != null ? ship.TransformPoint(stationLocal) : transform.position);
+                    if (WalkNear(drop, 1.2f, dt))
+                    {
+                        DropOff();
+                        SeekWork();
+                    }
+                    break;
+                }
+
+                case State.Idling:
+                    // Nothing to cut — wait on the beach, and pick work back up
+                    // if the hold empties or another node frees.
+                    transform.rotation = Quaternion.Euler(
+                        0f, Mathf.Sin(Time.time * 0.6f + shoreTarget.x) * 40f, 0f);
+                    swingTimer -= dt;
+                    if (swingTimer <= 0f) { swingTimer = 1.5f; SeekWork(); }
                     break;
 
                 case State.Boarding:
@@ -210,6 +330,17 @@ namespace SeaSick.Crew
         /// the deck sits about 2m above the waterline, so a 3D distance test
         /// could never be satisfied while the wading code pins them to the
         /// surface — which left recalled crew walking forever.
+        /// Walk toward a point but stop `standOff` metres short of it.
+        bool WalkNear(Vector3 target, float standOff, float dt)
+        {
+            Vector3 flat = target - transform.position;
+            flat.y = 0f;
+            float dist = flat.magnitude;
+            if (dist <= standOff) return true;
+            Vector3 aim = target - flat.normalized * standOff;
+            return WalkToWorld(aim, dt) || dist <= standOff;
+        }
+
         bool WalkToWorld(Vector3 target, float dt)
         {
             Vector3 pos = transform.position;

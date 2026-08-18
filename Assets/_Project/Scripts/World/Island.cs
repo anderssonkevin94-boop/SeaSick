@@ -107,21 +107,15 @@ namespace SeaSick.World
             props.AddRange(resourceProps);
         }
 
+        /// Book-keeping only. Props are ResourceNodes now and remove themselves
+        /// when the crew fell them — the old code here also hid props as the
+        /// count drained, which made trees vanish unharvested and the island
+        /// report stock that no longer existed.
         public float Extract(float amount)
         {
             float take = Mathf.Min(amount, remaining);
             remaining -= take;
-            UpdateProps();
             return take;
-        }
-
-        void UpdateProps()
-        {
-            if (props.Count == 0) return;
-            int shouldShow = Mathf.CeilToInt(props.Count * (remaining / startingAmount));
-            for (int i = 0; i < props.Count; i++)
-                if (props[i] != null && props[i].activeSelf != (i < shouldShow))
-                    props[i].SetActive(i < shouldShow);
         }
 
         /// A working spot for crew member `index` of `total`, spread across the

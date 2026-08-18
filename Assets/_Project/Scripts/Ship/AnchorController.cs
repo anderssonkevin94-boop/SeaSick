@@ -17,7 +17,9 @@ namespace SeaSick.Ship
         [SerializeField] float dropTime = 0f;
         [SerializeField] float weighTime = 0f;
         [SerializeField] float swellAnchorPenalty = 1f;
-        [SerializeField] float gatherRatePerCrew = 1.1f; // resource units/sec each
+        [Tooltip("How far off the shoreline the ship lies when moored.")]
+        [SerializeField] float berthDistance = 11f;
+        [SerializeField] float berthSpeed = 1.6f;
         [SerializeField] float approachSpeedLimit = 6.5f; // must slow down to anchor
 
         public enum State { Underway, Dropping, Anchored, Ashore, Weighing }
@@ -26,6 +28,8 @@ namespace SeaSick.Ship
 
         ShipMotor motor;
         HullIntegrity hull;
+        ShipHold hold;
+        Gangway gangway;
         CrewAgent[] crew;
         VoyageManager voyage;
         WaveField waves;
@@ -41,6 +45,8 @@ namespace SeaSick.Ship
         {
             motor = GetComponent<ShipMotor>();
             hull = GetComponent<HullIntegrity>();
+            hold = GetComponent<ShipHold>();
+            gangway = GetComponent<Gangway>();
             crew = GetComponentsInChildren<CrewAgent>(true);
             voyage = FindFirstObjectByType<VoyageManager>();
             waves = FindFirstObjectByType<WaveField>();
@@ -86,13 +92,39 @@ namespace SeaSick.Ship
                     break;
 
                 case State.Ashore:
-                    Harvest(dt);
                     Repair(dt);
                     if (AllAboard()) { CurrentState = State.Anchored; repairing = false; }
                     break;
             }
 
+            MoorAlongside(dt);
             UpdateCameraFocus();
+        }
+
+        /// Once anchored, ease the ship in until it's lying alongside the beach
+        /// and run the plank out. Without this the crew had a long wade ashore.
+        void MoorAlongside(float dt)
+        {
+            bool moored = CurrentState == State.Anchored || CurrentState == State.Ashore;
+            if (!moored || CurrentIsland == null)
+            {
+                if (gangway != null) gangway.Withdraw();
+                return;
+            }
+
+            Vector3 c = CurrentIsland.transform.position;
+            Vector3 out2 = transform.position - c;
+            out2.y = 0f;
+            if (out2.sqrMagnitude < 0.01f) return;
+            float bearing = Mathf.Atan2(out2.x, out2.z);
+            float shore = CurrentIsland.RadiusAt(bearing);
+
+            Vector3 berth = c + out2.normalized * (shore + berthDistance);
+            Vector3 pos = transform.position;
+            berth.y = pos.y;
+            transform.position = Vector3.Lerp(pos, berth, 1f - Mathf.Exp(-berthSpeed * dt));
+
+            if (gangway != null) gangway.Extend(CurrentIsland);
         }
 
         /// While the crew are ashore, pull the camera back to frame them —
@@ -129,21 +161,9 @@ namespace SeaSick.Ship
             }
         }
 
-        void Harvest(float dt)
-        {
-            if (CurrentIsland == null || voyage == null) return;
-            int ashore = 0;
-            foreach (var c in crew) if (c != null && c.IsAshore) ashore++;
-            if (ashore == 0 || !CurrentIsland.HasResources) return;
-            if (voyage.HoldFull) return;
-
-            gatherFraction += CurrentIsland.Extract(gatherRatePerCrew * ashore * dt);
-            while (gatherFraction >= 1f)
-            {
-                gatherFraction -= 1f;
-                voyage.AddLoot(1, CurrentIsland.ResourceName);
-            }
-        }
+        // Harvesting is no longer a rate drained from the island — each crew
+        // member walks to a tree, works it, and carries the log back
+        // themselves (see CrewAgent).
 
         bool AllAboard()
         {
@@ -165,9 +185,17 @@ namespace SeaSick.Ship
         void SendAshore()
         {
             if (CurrentIsland == null) return;
+            // Land them at the foot of the plank, then they find their own work.
+            Vector3 landing = gangway != null && gangway.Ready
+                ? gangway.LandingPoint
+                : CurrentIsland.ShorePoint(0, 1, transform.position);
+
             for (int i = 0; i < crew.Length; i++)
-                if (crew[i] != null)
-                    crew[i].GoAshore(CurrentIsland.ShorePoint(i, crew.Length, transform.position));
+            {
+                if (crew[i] == null) continue;
+                Vector3 spread = transform.right * ((i - (crew.Length - 1) * 0.5f) * 2.2f);
+                crew[i].GoAshore(landing + spread, CurrentIsland, hold, gangway, voyage);
+            }
             CurrentState = State.Ashore;
         }
 

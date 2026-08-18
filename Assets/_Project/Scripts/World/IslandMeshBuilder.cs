@@ -115,10 +115,14 @@ namespace SeaSick.World
             float u = 1f - Mathf.Clamp01(t);          // 0 at edge, 1 at centre
             float beach = p.beachFrac[s % Sectors];
 
+            // The sand stands proud of the water rather than shelving away
+            // under it, so the ship can lie alongside and put a plank down on
+            // dry ground instead of the crew wading ashore.
             if (u < beach)
-                return Mathf.Lerp(-2.2f, 0.9f, u / Mathf.Max(0.001f, beach));
+                return Mathf.Lerp(0.25f, 2.4f, u / Mathf.Max(0.001f, beach));
 
             float inland = (u - beach) / Mathf.Max(0.001f, 1f - beach);
+            if (p.peakHeight <= 2.4f) return 2.4f;   // flat sand cay
             float shaped = p.kind == IslandKind.Mountainous
                 ? Mathf.Pow(inland, 1.5f)
                 : Mathf.SmoothStep(0f, 1f, inland);
@@ -131,7 +135,7 @@ namespace SeaSick.World
                 float influence = Mathf.Clamp01((1f - u) / 0.30f);
                 scale = Mathf.Lerp(1f, p.peakScale[s % Sectors], influence);
             }
-            return Mathf.Lerp(0.9f, p.peakHeight * scale, shaped);
+            return Mathf.Lerp(2.4f, p.peakHeight * scale, shaped);
         }
 
         public static Mesh Build(in Profile p, out float maxHeight)

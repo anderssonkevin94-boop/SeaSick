@@ -151,7 +151,7 @@ MonoBehaviour:
   ship: {fileID: 2143489879}
   homePoint: {fileID: 1901280689}
   homeRadius: 165
-  holdCapacity: 40
+  holdCapacity: 24
 --- !u!4 &38900269
 Transform:
   m_ObjectHideFlags: 0
@@ -1151,6 +1151,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1901280689}
   - component: {fileID: 1901280690}
+  - component: {fileID: 1901280691}
   m_Layer: 0
   m_Name: Island_Home
   m_TagString: Untagged
@@ -1192,6 +1193,22 @@ MonoBehaviour:
   remaining: 0
   radius: 28
   isHome: 1
+--- !u!114 &1901280691
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1901280688}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1ef2d5eb2e903401da41c2d634d7b0fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.Stockpile
+  perRow: 4
+  spacing: 1.7
+  layerHeight: 0.9
+  maxPerResource: 40
 --- !u!1001 &1977850535
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1557,6 +1574,12 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489890}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489892}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489891}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -1616,9 +1639,6 @@ MonoBehaviour:
   verticalResponse: 5.5
   angularResponse: 3.6
   turnHeel: 8
-  bowPoint: {x: 0, y: 0, z: 7.5}
-  portPoint: {x: -2.2, y: 0, z: -6}
-  starboardPoint: {x: 2.2, y: 0, z: -6}
   rudderPivot: {fileID: 0}
   mastPivot: {fileID: 0}
   rudderVisualAngle: 35
@@ -1691,6 +1711,10 @@ MonoBehaviour:
   sprayFullRate: 55
   wakeFullRate: 30
   shoulderRate: 75
+  beamImpactThreshold: 1.5
+  beamImpactCooldown: 0.45
+  slamThreshold: 1.9
+  slamCooldown: 0.5
 --- !u!114 &2143489887
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1723,7 +1747,8 @@ MonoBehaviour:
   dropTime: 0
   weighTime: 0
   swellAnchorPenalty: 1
-  gatherRatePerCrew: 1.1
+  berthDistance: 11
+  berthSpeed: 1.6
   approachSpeedLimit: 6.5
 --- !u!114 &2143489889
 MonoBehaviour:
@@ -1770,6 +1795,39 @@ MonoBehaviour:
   wakeLength: 110
   wakeCrestHeight: 0.55
   wakeArmWidth: 5.5
+--- !u!114 &2143489891
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a8200400047394b16b28ff638d09c20d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.Gangway
+  width: 1.5
+  thickness: 0.18
+  deckHeight: 1.9
+  extendSpeed: 3.5
+--- !u!114 &2143489892
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a18799dd18f8641158ac087f9140a46a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.ShipHold
+  stackOrigin: {x: 0, y: 2.05, z: -5.2}
+  perRow: 2
+  spacing: 1.5
+  layerHeight: 0.85
+  maxVisible: 24
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -246,7 +246,6 @@ namespace SeaSick.World
             mr.sharedMaterials = new[] { sandMat, grassMat, rockMat };
 
             var island = root.AddComponent<Island>();
-            island.Configure(shelterOnly ? "—" : kind.name, richness, radius, false, false);
             island.SetProfile(profile);
 
             if (!shelterOnly)
@@ -264,7 +263,14 @@ namespace SeaSick.World
                 bm.SetColor("_EmissionColor", kind.beaconColor * 2.2f);
                 beacon.GetComponent<MeshRenderer>().sharedMaterial = bm;
 
-                island.RegisterProps(BuildProps(root.transform, island, kind.name, radius));
+                var props = BuildProps(root.transform, island, kind.name, radius);
+                island.RegisterProps(props);
+                // The island holds exactly as much as there is standing on it.
+                island.Configure(kind.name, props.Count, radius, false, false);
+            }
+            else
+            {
+                island.Configure("—", 0f, radius, false, false);
             }
         }
 
@@ -273,7 +279,10 @@ namespace SeaSick.World
         List<GameObject> BuildProps(Transform parent, Island island, string kind, float radius)
         {
             var list = new List<GameObject>();
-            int count = Mathf.Clamp(Mathf.RoundToInt(radius * 0.55f), 8, 80);
+            // One prop is one unit of resource — ten trees means ten timber —
+            // so the count has to stay small enough that the crew can actually
+            // walk to every one of them in a reasonable stop.
+            int count = Mathf.Clamp(Mathf.RoundToInt(radius * 0.13f), 5, 26);
             for (int i = 0; i < count; i++)
             {
                 float ang = Random.Range(0f, Mathf.PI * 2f);
@@ -293,6 +302,11 @@ namespace SeaSick.World
                 // island was quietly destroying the sense of scale — a tree is
                 // a tree, and that's exactly what tells you how big the land is.
                 prop.transform.localScale *= Random.Range(0.85f, 1.3f);
+
+                // Each prop is a thing the crew can walk up to and work.
+                var node = prop.AddComponent<ResourceNode>();
+                node.Configure(kind, island, kind == "Stone" || kind == "Ore" ? 4 : 3);
+
                 list.Add(prop);
             }
             return list;
