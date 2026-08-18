@@ -7,14 +7,16 @@ namespace SeaSick.Ship
     [RequireComponent(typeof(ShipMotor))]
     public class SpeedJuice : MonoBehaviour
     {
-        [SerializeField] float sprayFullRate = 55f; // particles/s at max speed
-        [SerializeField] float wakeFullRate = 30f;
+        [SerializeField] float sprayFullRate = 130f; // particles/s at max speed
+        [SerializeField] float wakeFullRate = 85f;
+        [SerializeField] float shoulderRate = 75f;
 
         ShipMotor motor;
         ParticleSystem bowSpray;
         ParticleSystem wake;
         ParticleSystem shoulderPort;
         ParticleSystem shoulderStar;
+        ParticleSystem sternWash;
 
         void Start()
         {
@@ -53,6 +55,11 @@ namespace SeaSick.Ship
                 size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: true);
             shoulderPort.transform.localRotation = Quaternion.Euler(-8f, -118f, 0f);
             shoulderStar.transform.localRotation = Quaternion.Euler(-8f, 118f, 0f);
+
+            // Churn right under the transom — solid, close in, short-lived.
+            sternWash = MakeSystem("SternWash", new Vector3(0f, 0.1f, -9.5f), solid,
+                size: 0.7f, speed: 1.6f, spreadAngle: 55f, lifetime: 1.8f, gravity: 0.15f,
+                solidFoam: true);
         }
 
         ParticleSystem MakeSystem(string name, Vector3 localPos, Material mat,
@@ -72,7 +79,7 @@ namespace SeaSick.Ship
             main.gravityModifier = gravity;
             main.startColor = solidFoam ? Color.white : new Color(1f, 1f, 1f, 0.55f);
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 400;
+            main.maxParticles = 1200;
 
             var emission = ps.emission;
             emission.rateOverTime = 0f;
@@ -118,10 +125,11 @@ namespace SeaSick.Ship
             float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
             // Spray kicks in hard when the bow drops onto a wave face.
             float slam = Mathf.Clamp01(-motor.SurfAccel / 2.5f);
-            SetRate(bowSpray, sprayFullRate * (Mathf.Pow(s01, 1.6f) + slam * 0.6f));
+            SetRate(bowSpray, sprayFullRate * (Mathf.Pow(s01, 1.4f) + slam * 0.8f));
             SetRate(wake, wakeFullRate * s01);
-            SetRate(shoulderPort, wakeFullRate * 0.7f * s01);
-            SetRate(shoulderStar, wakeFullRate * 0.7f * s01);
+            SetRate(shoulderPort, shoulderRate * s01);
+            SetRate(shoulderStar, shoulderRate * s01);
+            SetRate(sternWash, wakeFullRate * 0.8f * s01);
         }
 
         static void SetRate(ParticleSystem ps, float rate)

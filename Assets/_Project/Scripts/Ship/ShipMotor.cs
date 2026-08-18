@@ -25,8 +25,10 @@ namespace SeaSick.Ship
         // Stokes drift: waves carry a float along with them. These are target
         // SPEEDS in m/s and they, not maxWaveAccel, set how hard a drifting
         // ship gets pushed — raising the accel cap alone barely moved it.
-        [SerializeField] float waveDrift = 2f;
-        [SerializeField] float swellDrift = 5.5f;
+        // Drift must never exceed what the ship can make head-to-wind, or an
+        // upwind leg becomes impossible during a swell.
+        [SerializeField] float waveDrift = 1f;
+        [SerializeField] float swellDrift = 2.5f;
         [Tooltip("A hull resists being shoved sideways far more than forward.")]
         [SerializeField, Range(0f, 1f)] float lateralWaveScale = 0.4f;
         [Tooltip("Ceiling on wave acceleration so a swell can't fling the ship.")]
@@ -98,15 +100,74 @@ namespace SeaSick.Ship
             : WindAngleDeg < 150f ? "broad reach"
             : "running";
 
+        static float bestUpwindAngle = -1f;
+
+        /// The heading that makes the most ground to windward — fast enough to
+        /// matter, close enough to the wind to gain. Shared by the autopilot
+        /// and the navigation tape so both give the same advice.
+        public static float BestUpwindAngle
+        {
+            get
+            {
+                if (bestUpwindAngle < 0f)
+                {
+                    float best = -999f;
+                    for (float a = 20f; a <= 90f; a += 1f)
+                    {
+                        float vmg = SailPolar(a) * Mathf.Cos(a * Mathf.Deg2Rad);
+                        if (vmg > best) { best = vmg; bestUpwindAngle = a; }
+                    }
+                }
+                return bestUpwindAngle;
+            }
+        }
+
+        int autopilotTack = 1;
+        bool beating;
+
+        /// Heading to steer to actually REACH a point. Sails straight at it
+        /// when it can, and beats to windward in tacks when it can't. Without
+        /// this an autopilot aimed at an upwind target parks itself in the
+        /// no-go zone and never arrives — which is what stranded mutinies.
+        public float CourseFor(Vector3 target, Vector2 wind)
+        {
+            Vector3 toTarget = target - transform.position;
+            toTarget.y = 0f;
+            if (toTarget.sqrMagnitude < 1f) return heading;
+
+            float targetBearing = Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
+            float windFrom = Mathf.Atan2(-wind.x, -wind.y) * Mathf.Rad2Deg;
+            float offWind = Mathf.Abs(Mathf.DeltaAngle(targetBearing, windFrom));
+
+            // Hysteresis: start beating once the target is inside the no-go
+            // zone, and only stop once it's comfortably clear. Without the gap
+            // the autopilot flickers between beating and steering direct.
+            if (!beating && offWind < NoGoDegrees + 3f) beating = true;
+            else if (beating && offWind > NoGoDegrees + 14f) beating = false;
+
+            if (!beating) return targetBearing;
+
+            // Cross-track measured against the UPWIND CORRIDOR through the
+            // target — not against the ship-to-target line, which is trivially
+            // always perpendicular to its own normal and therefore always zero.
+            Vector3 upwindAxis = new Vector3(-wind.x, 0f, -wind.y).normalized;
+            Vector3 across = new Vector3(upwindAxis.z, 0f, -upwindAxis.x); // right of upwind
+            float crossTrack = Vector3.Dot(transform.position - target, across);
+            float limit = Mathf.Clamp(toTarget.magnitude * 0.32f, 35f, 220f);
+            if (Mathf.Abs(crossTrack) > limit) autopilotTack = crossTrack > 0f ? -1 : 1;
+
+            return windFrom + BestUpwindAngle * autopilotTack;
+        }
+
         /// Sailing polar. Upwind is genuinely slow and worth tacking out of,
         /// but never a trap: even head-to-wind you keep enough drive to steer
         /// out and get home. Peak is on a beam-to-broad reach.
         public static float SailPolar(float thetaDeg)
         {
-            if (thetaDeg < 20f) return 0.22f;
-            if (thetaDeg < 35f) return Mathf.Lerp(0.22f, 0.55f, (thetaDeg - 20f) / 15f);
-            if (thetaDeg < 50f) return Mathf.Lerp(0.55f, 0.85f, (thetaDeg - 35f) / 15f);
-            if (thetaDeg < 75f) return Mathf.Lerp(0.85f, 0.97f, (thetaDeg - 50f) / 25f);
+            if (thetaDeg < 20f) return 0.34f;
+            if (thetaDeg < 35f) return Mathf.Lerp(0.34f, 0.62f, (thetaDeg - 20f) / 15f);
+            if (thetaDeg < 50f) return Mathf.Lerp(0.62f, 0.88f, (thetaDeg - 35f) / 15f);
+            if (thetaDeg < 75f) return Mathf.Lerp(0.88f, 0.97f, (thetaDeg - 50f) / 25f);
             if (thetaDeg < 110f) return Mathf.Lerp(0.97f, 1.00f, (thetaDeg - 75f) / 35f);
             if (thetaDeg < 150f) return Mathf.Lerp(1.00f, 0.92f, (thetaDeg - 110f) / 40f);
             return Mathf.Lerp(0.92f, 0.80f, (thetaDeg - 150f) / 30f);
@@ -158,16 +219,8 @@ namespace SeaSick.Ship
             float speedFactor = Mathf.Clamp01(speed / maxSpeed);
             float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor) * (1f - 0.25f * load);
 
-            float effectiveRudder = Anchored ? 0f : Rudder;
-            if (!Anchored && AutopilotTarget.HasValue)
-            {
-                Vector3 to = AutopilotTarget.Value - transform.position;
-                float desiredYaw = Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg;
-                effectiveRudder = Mathf.Clamp(Mathf.DeltaAngle(heading, desiredYaw) / 20f, -1f, 1f);
-            }
-            heading += effectiveRudder * turnRate * dt;
-
-            Vector3 forward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
+            // Wind is sampled BEFORE steering: the autopilot needs to know
+            // where the wind is to work out whether it has to tack.
             Vector2 posXZ = new Vector2(transform.position.x, transform.position.z);
             var windField = WindField.Instance;
             if (windField != null)
@@ -183,6 +236,16 @@ namespace SeaSick.Ship
                 GustFactor01 = 0f;
             }
             Vector2 wind = WindDirection;
+
+            float effectiveRudder = Anchored ? 0f : Rudder;
+            if (!Anchored && AutopilotTarget.HasValue)
+            {
+                float desiredYaw = CourseFor(AutopilotTarget.Value, wind);
+                effectiveRudder = Mathf.Clamp(Mathf.DeltaAngle(heading, desiredYaw) / 20f, -1f, 1f);
+            }
+            heading += effectiveRudder * turnRate * dt;
+
+            Vector3 forward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
 
             // Points of sail: measure the bow against where the wind comes FROM.
             Vector3 windFromWorld = new Vector3(-wind.x, 0f, -wind.y);
