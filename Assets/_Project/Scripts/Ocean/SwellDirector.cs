@@ -87,11 +87,12 @@ namespace SeaSick.Ocean
                 ? $"nearest shelter {Island.FlatDistance(ship.transform.position, shelter.transform.position):F0} m"
                 : "no shelter in range";
 
+            // Sits below the navigation tape, which owns the top of the screen.
             if (inside)
-                SeaSick.UI.UITheme.Banner(0.11f, "CAUGHT IN THE SWELL",
+                SeaSick.UI.UITheme.Banner(0.20f, "CAUGHT IN THE SWELL",
                     new Color(0.62f, 0.08f, 0.06f, 0.80f), shelterText);
             else if (SecondsToImpact > 0f)
-                SeaSick.UI.UITheme.Banner(0.11f, $"BIG SWELL  ·  {SecondsToImpact:F0}s",
+                SeaSick.UI.UITheme.Banner(0.20f, $"BIG SWELL  ·  {SecondsToImpact:F0}s",
                     new Color(0.80f, 0.46f, 0.06f, 0.72f), shelterText);
         }
     }

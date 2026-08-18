@@ -317,6 +317,7 @@ GameObject:
   m_Component:
   - component: {fileID: 330744239}
   - component: {fileID: 330744238}
+  - component: {fileID: 330744240}
   m_Layer: 0
   m_Name: HUD
   m_TagString: Untagged
@@ -351,6 +352,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &330744240
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330744237}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d86e4422466474874b5ade0bef370730, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.NavigationAid
+  visibleSpan: 90
 --- !u!1 &355815507
 GameObject:
   m_ObjectHideFlags: 0
@@ -775,6 +789,7 @@ MonoBehaviour:
   calmFloor: 0.14
   roughCeiling: 1.15
   changeSpeed: 0.011
+  shoreFalloff: 34
 --- !u!23 &1412075586
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -1564,7 +1579,7 @@ MonoBehaviour:
   surfResponse: 2.2
   surfOvershoot: 1.25
   overspeedDragScale: 0.35
-  waveDrift: 2
+  waveDrift: 1.3
   swellDrift: 5.5
   lateralWaveScale: 0.4
   maxWaveAccel: 4.5
