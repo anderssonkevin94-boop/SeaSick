@@ -20,8 +20,17 @@ namespace SeaSick.Ship
         {
             motor = GetComponent<ShipMotor>();
 
+            // Solid, lit foam. Translucent billboards read as grey squares over
+            // dark water; opaque chunks that catch the sun read as real spray
+            // and thrown water. These shrink away instead of fading out.
+            var solid = new Material(Shader.Find("Universal Render Pipeline/Particles/Lit"));
+            solid.SetColor("_BaseColor", new Color(0.97f, 0.99f, 1f, 1f));
+            solid.SetFloat("_Smoothness", 0.35f);
+
+            // The long wake still fades, so it dissolves into the sea rather
+            // than popping out of existence behind you.
             var mat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
-            mat.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.45f));
+            mat.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.5f));
             mat.SetFloat("_Surface", 1f);
             mat.SetOverrideTag("RenderType", "Transparent");
             mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -30,23 +39,25 @@ namespace SeaSick.Ship
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             mat.renderQueue = 3000;
 
-            bowSpray = MakeSystem("BowSpray", new Vector3(0f, 0.4f, 9.2f), mat, size: 0.45f,
-                speed: 5.5f, spreadAngle: 62f, lifetime: 1.0f, gravity: 1.3f);
+            bowSpray = MakeSystem("BowSpray", new Vector3(0f, 0.4f, 9.2f), solid, size: 0.5f,
+                speed: 5.5f, spreadAngle: 62f, lifetime: 1.0f, gravity: 1.3f, solidFoam: true);
             wake = MakeSystem("WakeFoam", new Vector3(0f, 0.15f, -8.6f), mat, size: 0.8f,
-                speed: 1.0f, spreadAngle: 42f, lifetime: 5.5f, gravity: 0f);
+                speed: 1.0f, spreadAngle: 42f, lifetime: 5.5f, gravity: 0f, solidFoam: false);
 
             // Foam where the hull actually parts the water, thrown out along
-            // the shoulders rather than straight back.
-            shoulderPort = MakeSystem("ShoulderPort", new Vector3(-2.4f, 0.15f, 5.5f), mat,
-                size: 0.9f, speed: 2.2f, spreadAngle: 34f, lifetime: 3.5f, gravity: 0f);
-            shoulderStar = MakeSystem("ShoulderStar", new Vector3(2.4f, 0.15f, 5.5f), mat,
-                size: 0.9f, speed: 2.2f, spreadAngle: 34f, lifetime: 3.5f, gravity: 0f);
+            // the shoulders rather than straight back. Solid — this is the
+            // water being displaced, and it should look like it has mass.
+            shoulderPort = MakeSystem("ShoulderPort", new Vector3(-2.4f, 0.15f, 5.5f), solid,
+                size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: true);
+            shoulderStar = MakeSystem("ShoulderStar", new Vector3(2.4f, 0.15f, 5.5f), solid,
+                size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: true);
             shoulderPort.transform.localRotation = Quaternion.Euler(-8f, -118f, 0f);
             shoulderStar.transform.localRotation = Quaternion.Euler(-8f, 118f, 0f);
         }
 
         ParticleSystem MakeSystem(string name, Vector3 localPos, Material mat,
-            float size, float speed, float spreadAngle, float lifetime, float gravity)
+            float size, float speed, float spreadAngle, float lifetime, float gravity,
+            bool solidFoam)
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
@@ -59,7 +70,7 @@ namespace SeaSick.Ship
             main.startSpeed = new ParticleSystem.MinMaxCurve(speed * 0.6f, speed);
             main.startLifetime = lifetime;
             main.gravityModifier = gravity;
-            main.startColor = new Color(1f, 1f, 1f, 0.55f);
+            main.startColor = solidFoam ? Color.white : new Color(1f, 1f, 1f, 0.55f);
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.maxParticles = 400;
 
@@ -71,13 +82,30 @@ namespace SeaSick.Ship
             shape.angle = spreadAngle;
             shape.radius = 0.3f;
 
-            var colorOverLife = ps.colorOverLifetime;
-            colorOverLife.enabled = true;
-            var grad = new Gradient();
-            grad.SetKeys(
-                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(0.8f, 0f), new GradientAlphaKey(0f, 1f) });
-            colorOverLife.color = grad;
+            if (solidFoam)
+            {
+                // Opaque foam can't fade, so it shrinks out of existence —
+                // which also reads as spray breaking up.
+                var sizeOverLife = ps.sizeOverLifetime;
+                sizeOverLife.enabled = true;
+                var curve = new AnimationCurve(
+                    new Keyframe(0f, 0.55f), new Keyframe(0.25f, 1f), new Keyframe(1f, 0f));
+                sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f, curve);
+
+                var rot = ps.rotationOverLifetime;
+                rot.enabled = true;
+                rot.z = new ParticleSystem.MinMaxCurve(-2.5f, 2.5f);
+            }
+            else
+            {
+                var colorOverLife = ps.colorOverLifetime;
+                colorOverLife.enabled = true;
+                var grad = new Gradient();
+                grad.SetKeys(
+                    new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                    new[] { new GradientAlphaKey(0.8f, 0f), new GradientAlphaKey(0f, 1f) });
+                colorOverLife.color = grad;
+            }
 
             var renderer = ps.GetComponent<ParticleSystemRenderer>();
             renderer.sharedMaterial = mat;

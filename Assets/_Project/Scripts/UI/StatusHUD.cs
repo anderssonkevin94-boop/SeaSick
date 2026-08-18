@@ -58,16 +58,17 @@ namespace SeaSick.UI
             }
         }
 
-        /// Top-right: hull condition and how full the hold is.
+        /// Top-right, tucked under the minimap.
         void DrawShip(float pad, int u)
         {
             float w = u * 7.5f;
             float h = u * 3.6f;
             float x = Screen.width - w - pad;
-            UITheme.Rect(new Rect(x, pad, w, h), UITheme.Panel);
+            float top = pad + MiniMap.ReservedHeight;
+            UITheme.Rect(new Rect(x, top, w, h), UITheme.Panel);
 
             float inner = u * 0.6f;
-            var hullRect = new Rect(x + inner, pad + inner, w - inner * 2f, u * 0.5f);
+            var hullRect = new Rect(x + inner, top + inner, w - inner * 2f, u * 0.5f);
             float integrity = hull != null ? hull.Integrity01 : 1f;
             UITheme.Bar(hullRect, integrity, UITheme.Ramp(1f - integrity));
             GUI.Label(new Rect(x + inner, hullRect.yMax, w, u * 1.2f),
@@ -75,7 +76,7 @@ namespace SeaSick.UI
 
             if (voyage != null)
             {
-                var cargoRect = new Rect(x + inner, pad + h - inner - u * 0.5f, w - inner * 2f, u * 0.5f);
+                var cargoRect = new Rect(x + inner, top + h - inner - u * 0.5f, w - inner * 2f, u * 0.5f);
                 UITheme.Bar(cargoRect, voyage.HoldFill01, UITheme.Cargo);
             }
         }

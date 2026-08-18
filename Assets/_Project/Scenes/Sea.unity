@@ -318,6 +318,7 @@ GameObject:
   - component: {fileID: 330744239}
   - component: {fileID: 330744238}
   - component: {fileID: 330744240}
+  - component: {fileID: 330744241}
   m_Layer: 0
   m_Name: HUD
   m_TagString: Untagged
@@ -365,6 +366,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.NavigationAid
   visibleSpan: 90
+--- !u!114 &330744241
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330744237}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1dacc98cccdd44a8e8e7374987b91ede, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.MiniMap
+  range: 750
 --- !u!1 &355815507
 GameObject:
   m_ObjectHideFlags: 0
