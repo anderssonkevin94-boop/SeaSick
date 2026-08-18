@@ -88,7 +88,10 @@ namespace SeaSick.Crew
             state = State.Boarding;
         }
 
+        [SerializeField] float rowingStrain = 2.1f;
+
         SmoothnessMeter meter;
+        Ship.ShipMotor motor;
         MaterialPropertyBlock block;
         float pukeTimer;
         float swayPhase;
@@ -97,6 +100,7 @@ namespace SeaSick.Crew
         void Start()
         {
             meter = GetComponentInParent<SmoothnessMeter>();
+            motor = GetComponentInParent<Ship.ShipMotor>();
             block = new MaterialPropertyBlock();
             if (tintRenderers == null || tintRenderers.Length == 0)
                 tintRenderers = GetComponentsInChildren<Renderer>();
@@ -127,6 +131,10 @@ namespace SeaSick.Crew
             float rough = meter != null ? meter.Roughness01 : 0f;
             float resistance = def != null ? def.ironStomach : 0f;
             float rate = (baseRate + roughnessRate * rough * rough) * (1f - 0.5f * resistance);
+
+            // Rowing is hard labour: it always gets you home, but it wears the
+            // crew out much faster than sailing does.
+            if (motor != null && motor.Rowing) rate *= rowingStrain;
             Sickness01 = Mathf.Clamp01(Sickness01 + rate * dt);
 
             // Puking drops sickness below the anger threshold, so letting them

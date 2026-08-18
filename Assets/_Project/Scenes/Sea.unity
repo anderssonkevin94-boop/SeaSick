@@ -760,6 +760,7 @@ GameObject:
   - component: {fileID: 1412075592}
   - component: {fileID: 1412075593}
   - component: {fileID: 1412075594}
+  - component: {fileID: 1412075595}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -795,11 +796,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WaveField
   waveCount: 14
-  windSpeed: 11
+  windSpeed: 8.5
   windDirection: {x: 1, y: 0.22}
   minWavelength: 9
   maxWavelength: 190
-  totalSteepness: 0.34
+  totalSteepness: 0.46
   spectrumWidth: 0.62
   seed: 1337
   calmFloor: 0.14
@@ -891,9 +892,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WindField
   baseAngleDeg: 71
-  wanderDegrees: 28
-  wanderSpeed: 0.018
-  gustStrength: 1.45
+  wanderDegrees: 62
+  wanderSpeed: 0.01
+  shadowLength: 260
+  shadowStrength: 0.72
+  gustStrength: 1.6
   gustCount: 6
   gustRadiusRange: {x: 22, y: 40}
   gustDriftSpeed: 4.5
@@ -953,6 +956,24 @@ MonoBehaviour:
   recycleBehind: 60
   sizeRange: {x: 3.5, y: 10}
   foamColor: {r: 1, g: 1, b: 1, a: 0.14}
+--- !u!114 &1412075595
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412075583}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 636c60ac797fd4e4ca189086c38fcd5d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.CurrentField
+  streamCount: 5
+  speedRange: {x: 2.2, y: 4.5}
+  halfWidthRange: {x: 90, y: 190}
+  lengthScale: 900
+  spread: 900
+  seed: 909
 --- !u!1 &1482035839
 GameObject:
   m_ObjectHideFlags: 0
@@ -1278,10 +1299,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.CameraRig.ChaseCamera
   target: {fileID: 2143489877}
-  distance: 25
-  height: 19
-  lookAhead: 20
-  lookHeight: 0.5
+  distance: 20
+  height: 13
+  lookAhead: 22
+  lookHeight: 1.2
   positionResponse: 2.2
   rotationResponse: 3
   fovBase: 60
@@ -1289,6 +1310,7 @@ MonoBehaviour:
   fovSurfPunch: 1.5
   fovResponse: 1.1
   minHeightAboveWater: 2.6
+  terrainClearance: 8
 --- !u!81 &2086288690
 AudioListener:
   m_ObjectHideFlags: 0
@@ -1587,7 +1609,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cdb2b2664dcc442c0a9eb54073eec039, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.ShipMotor
-  maxSpeed: 18
+  maxSpeed: 21
   acceleration: 2.6
   keelGrip: 2.2
   surfPower: 22
@@ -1601,18 +1623,19 @@ MonoBehaviour:
   maxWaveAccel: 4.5
   driftResponse: 1
   minTurnRate: 15
-  maxTurnRate: 34
+  maxTurnRate: 38
   windDirection: {x: 1, y: 0.35}
   steerageWay: 0.15
-  verticalResponse: 4
-  angularResponse: 2.5
-  turnHeel: 5
+  verticalResponse: 5.5
+  angularResponse: 3.6
+  turnHeel: 8
   bowPoint: {x: 0, y: 0, z: 7.5}
   portPoint: {x: -2.2, y: 0, z: -6}
   starboardPoint: {x: 2.2, y: 0, z: -6}
   rudderPivot: {fileID: 0}
   mastPivot: {fileID: 0}
   rudderVisualAngle: 35
+  rowSpeed: 9
 --- !u!114 &2143489883
 MonoBehaviour:
   m_ObjectHideFlags: 0

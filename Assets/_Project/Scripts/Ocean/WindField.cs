@@ -11,8 +11,16 @@ namespace SeaSick.Ocean
 
         [Header("Base wind")]
         [SerializeField] float baseAngleDeg = 71f;   // world yaw the wind blows toward
-        [SerializeField] float wanderDegrees = 28f;  // slow +/- drift
-        [SerializeField] float wanderSpeed = 0.018f;
+        // A big, slow rotation rather than jitter: over a voyage the wind
+        // genuinely changes which islands are upwind of you, so a route that
+        // was a beat on the way out can be a reach on the way back.
+        [SerializeField] float wanderDegrees = 62f;
+        [SerializeField] float wanderSpeed = 0.010f;
+
+        [Header("Wind shadow")]
+        [Tooltip("How far downwind of an island the air stays disturbed.")]
+        [SerializeField] float shadowLength = 260f;
+        [SerializeField, Range(0f, 1f)] float shadowStrength = 0.72f;
 
         [Header("Gusts")]
         [SerializeField] float gustStrength = 1.45f; // speed multiplier at gust center
@@ -96,6 +104,39 @@ namespace SeaSick.Ocean
         }
 
         public float SampleStrength(Vector2 pos) =>
-            1f + (gustStrength - 1f) * GustFactor(pos);
+            (1f + (gustStrength - 1f) * GustFactor(pos)) * ShadowFactor(pos);
+
+        /// Islands block the wind. Sailing into the lee of a big one robs you
+        /// of drive, which turns the land into something you route around
+        /// rather than just past.
+        public float ShadowFactor(Vector2 pos)
+        {
+            float factor = 1f;
+            foreach (var isle in World.Island.All)
+            {
+                if (isle == null) continue;
+                Vector3 c = isle.transform.position;
+                Vector2 rel = pos - new Vector2(c.x, c.z);
+                // Downwind of the island means along the direction it blows.
+                float along = Vector2.Dot(rel, BaseDir);
+                float radius = isle.MaxRadius;
+                // Reach is measured from the far shore, not the centre — a big
+                // island otherwise swallows its own shadow.
+                float reach = radius + shadowLength;
+                if (along <= 0f || along > reach) continue;
+
+                Vector2 acrossDir = new Vector2(BaseDir.y, -BaseDir.x);
+                float across = Mathf.Abs(Vector2.Dot(rel, acrossDir));
+                // The shadow spreads and thins as it trails away.
+                float width = radius * Mathf.Lerp(1f, 1.7f, along / reach);
+                if (across > width) continue;
+
+                float lateral = 1f - across / width;
+                float fade = 1f - along / reach;
+                factor = Mathf.Min(factor,
+                    1f - shadowStrength * Mathf.SmoothStep(0f, 1f, lateral) * Mathf.SmoothStep(0f, 1f, fade));
+            }
+            return factor;
+        }
     }
 }

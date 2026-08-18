@@ -27,13 +27,16 @@ namespace SeaSick.Ocean
 
         [Header("Spectrum")]
         [SerializeField] int waveCount = 10;
+        // Shorter peak wavelength relative to a 21m hull: on 75m swell the ship
+        // barely moved and sat ON the sea like a toy. Around 45m it rides
+        // through the waves instead of over them.
         [Tooltip("Drives the peak wavelength — bigger wind, longer swell.")]
-        [SerializeField] float windSpeed = 11f;
+        [SerializeField] float windSpeed = 8.5f;
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.22f);
         [SerializeField] float minWavelength = 9f;
         [SerializeField] float maxWavelength = 190f;
         [Tooltip("Total steepness shared across the spectrum. The look dial.")]
-        [SerializeField] float totalSteepness = 0.34f;
+        [SerializeField] float totalSteepness = 0.46f;
         [Tooltip("Width of the energy peak in log-wavelength space.")]
         [SerializeField] float spectrumWidth = 0.62f;
         [SerializeField] int seed = 1337;

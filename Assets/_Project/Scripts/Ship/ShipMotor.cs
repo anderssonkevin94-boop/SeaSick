@@ -65,6 +65,14 @@ namespace SeaSick.Ship
         public float SailCap { get; set; } = 1f;
         /// Anchored: no thrust, no steering, but the hull still rides the waves.
         public bool Anchored { get; set; }
+
+        [Header("Oars")]
+        [Tooltip("Speed under oars alone — wind-independent, always available.")]
+        [SerializeField] float rowSpeed = 9f;
+        /// Crew on the oars. Slower than a good point of sail, but it works in
+        /// any direction, which means there is always a way home.
+        public bool Rowing { get; set; }
+        public float RowSpeed => rowSpeed;
         /// When set, the crew has seized the helm: rudder input is ignored and
         /// the ship steers itself toward this point (mutiny stage 3+).
         public Vector3? AutopilotTarget { get; set; }
@@ -90,11 +98,13 @@ namespace SeaSick.Ship
         /// Drive available from the current heading, before sail setting.
         public float PolarEfficiency { get; private set; } = 1f;
 
-        public const float NoGoDegrees = 35f;
+        /// Where the slow zone ends. The wind is a GRADIENT, not a gate: you
+        /// can always sail anywhere, it's just slower dead upwind. Catching a
+        /// good angle should feel like a reward, not an escape from a trap.
+        public const float NoGoDegrees = 30f;
 
         public string PointOfSailName =>
-            WindAngleDeg < 20f ? "in irons"
-            : WindAngleDeg < NoGoDegrees ? "pinching"
+            WindAngleDeg < 30f ? "into the wind"
             : WindAngleDeg < 60f ? "close hauled"
             : WindAngleDeg < 105f ? "beam reach"
             : WindAngleDeg < 150f ? "broad reach"
@@ -164,13 +174,15 @@ namespace SeaSick.Ship
         /// out and get home. Peak is on a beam-to-broad reach.
         public static float SailPolar(float thetaDeg)
         {
-            if (thetaDeg < 20f) return 0.34f;
-            if (thetaDeg < 35f) return Mathf.Lerp(0.34f, 0.62f, (thetaDeg - 20f) / 15f);
-            if (thetaDeg < 50f) return Mathf.Lerp(0.62f, 0.88f, (thetaDeg - 35f) / 15f);
-            if (thetaDeg < 75f) return Mathf.Lerp(0.88f, 0.97f, (thetaDeg - 50f) / 25f);
-            if (thetaDeg < 110f) return Mathf.Lerp(0.97f, 1.00f, (thetaDeg - 75f) / 35f);
-            if (thetaDeg < 150f) return Mathf.Lerp(1.00f, 0.92f, (thetaDeg - 110f) / 40f);
-            return Mathf.Lerp(0.92f, 0.80f, (thetaDeg - 150f) / 30f);
+            // Floor is high enough that heading straight into the wind is
+            // merely slow, never a wall. The payoff for a good angle is the
+            // top of the curve, not escape from the bottom.
+            if (thetaDeg < 25f) return 0.55f;
+            if (thetaDeg < 45f) return Mathf.Lerp(0.55f, 0.80f, (thetaDeg - 25f) / 20f);
+            if (thetaDeg < 70f) return Mathf.Lerp(0.80f, 0.95f, (thetaDeg - 45f) / 25f);
+            if (thetaDeg < 115f) return Mathf.Lerp(0.95f, 1.00f, (thetaDeg - 70f) / 45f);
+            if (thetaDeg < 150f) return Mathf.Lerp(1.00f, 0.95f, (thetaDeg - 115f) / 35f);
+            return Mathf.Lerp(0.95f, 0.86f, (thetaDeg - 150f) / 30f);
         }
 
         /// Used by grounding: cancel the component of momentum driving the
@@ -256,6 +268,11 @@ namespace SeaSick.Ship
             float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(Mathf.Min(SailSetting, SailCap)));
             float targetSpeed = effMaxSpeed * PolarEfficiency * sailPower * WindStrength;
 
+            // Oars don't care about the wind. They never beat a good point of
+            // sail, but they'll always get you off a lee shore or home.
+            if (Rowing && !Anchored)
+                targetSpeed = Mathf.Max(targetSpeed, rowSpeed * (1f - 0.18f * load));
+
             // Sea-of-Thieves-style carve: thrust builds along the hull, but
             // momentum keeps its own direction. Turning converts forward way
             // into sideways slip, which the keel bleeds off over ~half a
@@ -297,6 +314,15 @@ namespace SeaSick.Ship
                     Vector2 sd = waveField.SwellDirection;
                     driftVel += new Vector3(sd.x, 0f, sd.y) * (swellDrift * intensity);
                 }
+                // Ocean currents — the water itself is going somewhere, and it
+                // takes the ship with it whichever way the bow points.
+                var currents = Ocean.CurrentField.Instance;
+                if (currents != null)
+                {
+                    Vector2 c = currents.Sample(here);
+                    driftVel += new Vector3(c.x, 0f, c.y);
+                }
+
                 targetWaterVelocity = driftVel;
             }
 

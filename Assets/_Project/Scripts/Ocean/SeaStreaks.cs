@@ -80,9 +80,27 @@ namespace SeaSick.Ocean
             fwd.y = 0f;
             fwd = fwd.sqrMagnitude < 0.01f ? Vector3.forward : fwd.normalized;
 
+            var currents = CurrentField.Instance;
+            float dt = Time.deltaTime;
+
             for (int i = 0; i < streaks.Length; i++)
             {
                 Vector3 p = streaks[i].position;
+
+                // Foam rides the current, which is the only way the player can
+                // SEE where the water is going — otherwise a current is an
+                // invisible hand shoving the ship for no visible reason.
+                if (currents != null)
+                {
+                    Vector2 flow = currents.Sample(new Vector2(p.x, p.z));
+                    p += new Vector3(flow.x, 0f, flow.y) * dt;
+                    streaks[i].position = p;
+                    if (flow.sqrMagnitude > 0.05f)
+                        streaks[i].localScale = new Vector3(
+                            Mathf.Lerp(streaks[i].localScale.x, 4f + flow.magnitude * 2.5f, dt),
+                            streaks[i].localScale.y, 1f);
+                }
+
                 Vector3 offset = p - target.position;
                 offset.y = 0f;
 

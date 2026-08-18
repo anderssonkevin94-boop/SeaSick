@@ -50,6 +50,8 @@ namespace SeaSick.Ship
 
                 if (kb.wKey.wasPressedThisFrame || kb.upArrowKey.wasPressedThisFrame) StepSail(1);
                 else if (kb.sKey.wasPressedThisFrame || kb.downArrowKey.wasPressedThisFrame) StepSail(-1);
+                // R, not space — space already dismisses the voyage tally.
+                if (kb.rKey.wasPressedThisFrame) motor.Rowing = !motor.Rowing;
             }
 
             if (!Mathf.Approximately(testRudder, 0f)) { target = testRudder; steering = true; }
@@ -95,6 +97,14 @@ namespace SeaSick.Ship
             if (GUI.Button(more, "▲", UITheme.Button)) StepSail(1);
             GUI.Label(new Rect(px, py + u * 2.9f, panelW, u * 1.2f),
                 SailNames[sailStep], UITheme.Small2Centered);
+
+            // Oars: always available, always works, wears the crew out.
+            var row = new Rect(px, py - u * 2.1f, panelW, u * 1.8f);
+            UIBlocker.Block(row);
+            var rowStyle = new GUIStyle(UITheme.Button);
+            if (motor.Rowing) rowStyle.normal = rowStyle.active;
+            if (GUI.Button(row, motor.Rowing ? "◉  rowing" : "◎  man the oars", rowStyle))
+                motor.Rowing = !motor.Rowing;
         }
     }
 }
