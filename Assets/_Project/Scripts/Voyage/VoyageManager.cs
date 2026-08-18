@@ -31,6 +31,7 @@ namespace SeaSick.Voyage
         readonly Dictionary<string, int> banked = new Dictionary<string, int>();
 
         CrewAgent[] crew;
+        bool hasLeftHome;
         float voyageStartTime;
         int pukesAtStart;
         float completedTime;
@@ -49,6 +50,7 @@ namespace SeaSick.Voyage
         void BeginVoyage()
         {
             phase = Phase.AtSea;
+            hasLeftHome = false;
             voyageStartTime = Time.time;
             pukesAtStart = TotalPukes();
             held.Clear();
@@ -116,8 +118,12 @@ namespace SeaSick.Voyage
 
             if (phase == Phase.AtSea)
             {
-                if (Flat(ship.transform.position, homePoint.position) < homeRadius)
-                    CompleteVoyage();
+                float home = Flat(ship.transform.position, homePoint.position);
+                // You have to actually leave before you can arrive — the ship
+                // starts inside the arrival radius, which otherwise completed
+                // a 0-second voyage the instant the game began.
+                if (!hasLeftHome && home > homeRadius * 1.25f) hasLeftHome = true;
+                if (hasLeftHome && home < homeRadius) CompleteVoyage();
             }
             else
             {

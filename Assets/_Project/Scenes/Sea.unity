@@ -18,8 +18,8 @@ RenderSettings:
   m_FogColor: {r: 0.62, g: 0.71, b: 0.79, a: 1}
   m_FogMode: 1
   m_FogDensity: 0.01
-  m_LinearFogStart: 220
-  m_LinearFogEnd: 480
+  m_LinearFogStart: 600
+  m_LinearFogEnd: 1500
   m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
@@ -150,7 +150,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Voyage.VoyageManager
   ship: {fileID: 2143489879}
   homePoint: {fileID: 1901280689}
-  homeRadius: 60
+  homeRadius: 165
   holdCapacity: 40
 --- !u!4 &38900269
 Transform:
@@ -378,7 +378,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1dacc98cccdd44a8e8e7374987b91ede, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.MiniMap
-  range: 750
+  range: 1500
 --- !u!1 &355815507
 GameObject:
   m_ObjectHideFlags: 0
@@ -408,16 +408,17 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4fb04dd1c181e44af9386612b44e538d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.ArchipelagoGenerator
-  islandCount: 16
-  innerDistance: 120
-  outerDistance: 520
-  reefCount: 26
+  islandCount: 10
+  innerDistance: 280
+  outerDistance: 1150
+  minIslandGap: 170
+  reefCount: 24
   reefRadiusRange: {x: 5, y: 11}
-  reefMinDistance: 90
-  reefMaxDistance: 540
-  radiusRange: {x: 13, y: 72}
+  reefMinDistance: 220
+  reefMaxDistance: 1200
+  radiusRange: {x: 45, y: 200}
   richnessPerRadius: 0.95
-  shelterOnlyBelowRadius: 21
+  shelterOnlyBelowRadius: 60
   seed: 0
   kinds:
   - name: Timber
@@ -432,6 +433,7 @@ MonoBehaviour:
   - name: Spice
     beaconColor: {r: 0.95, g: 0.45, b: 0.75, a: 1}
     minRing: 0.78
+  homeRadius: 95
 --- !u!4 &355815509
 Transform:
   m_ObjectHideFlags: 0
@@ -777,8 +779,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4ef8ca202df784ddb986875577f262fe, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanRenderer
-  gridQuads: 150
-  extent: 620
+  gridQuads: 260
+  extent: 1500
   followTarget: {fileID: 2143489877}
 --- !u!114 &1412075585
 MonoBehaviour:
@@ -803,7 +805,7 @@ MonoBehaviour:
   calmFloor: 0.14
   roughCeiling: 1.15
   changeSpeed: 0.011
-  shoreFalloff: 34
+  shoreFalloff: 60
 --- !u!23 &1412075586
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -1678,6 +1680,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.SpeedJuice
   sprayFullRate: 55
   wakeFullRate: 30
+  shoulderRate: 75
 --- !u!114 &2143489887
 MonoBehaviour:
   m_ObjectHideFlags: 0

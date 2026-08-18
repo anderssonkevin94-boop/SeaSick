@@ -12,7 +12,7 @@ namespace SeaSick.UI
     /// where to point, the map tells you what's out there.
     public class MiniMap : MonoBehaviour
     {
-        [SerializeField] float range = 750f;   // metres from edge to edge (half-extent)
+        [SerializeField] float range = 1500f;  // half-extent in metres
 
         /// How much vertical space the map claims in the top-right, so the
         /// ship status panel can sit underneath it instead of on top.

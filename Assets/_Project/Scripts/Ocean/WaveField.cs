@@ -45,7 +45,7 @@ namespace SeaSick.Ocean
 
         [Header("Shore")]
         [Tooltip("Metres over which waves die down as they approach land.")]
-        [SerializeField] float shoreFalloff = 34f;
+        [SerializeField] float shoreFalloff = 60f;
 
         GerstnerWave[] waves;
 

@@ -12,9 +12,9 @@ namespace SeaSick.World
     /// the water — which is what makes an approach worth thinking about.
     public static class IslandMeshBuilder
     {
-        public const int Sectors = 30;
-        const int Rings = 13;
-        const float SkirtDepth = 14f;   // below water, so there's never a gap
+        public const int Sectors = 46;
+        const int Rings = 16;
+        const float SkirtDepth = 18f;   // below water, so there's never a gap
 
         public struct Profile
         {
@@ -24,6 +24,7 @@ namespace SeaSick.World
             public float[] outline;      // outline radius per sector
             public float[] beachFrac;    // 0 = sheer cliff, larger = wide beach
             public bool[] hasBeach;      // can the ship land on this bearing?
+            public float[] peakScale;    // per-sector height, so ridges form
         }
 
         public enum IslandKind { SandOnly, SandAndDirt, Mountainous }
@@ -37,6 +38,7 @@ namespace SeaSick.World
             var outline = new float[Sectors];
             var beachFrac = new float[Sectors];
             var hasBeach = new bool[Sectors];
+            var peakScale = new float[Sectors];
 
             // One or two stretches of cliff, at least one good landing beach.
             int cliffCount = kind == IslandKind.Mountainous ? 2 : (rnd.NextDouble() < 0.6 ? 1 : 0);
@@ -51,11 +53,20 @@ namespace SeaSick.World
             for (int s = 0; s < Sectors; s++)
             {
                 float ang = s / (float)Sectors * Mathf.PI * 2f;
-                // Sample noise around a circle so the outline wraps seamlessly.
-                float n = Mathf.PerlinNoise(ox + Mathf.Cos(ang) * 1.6f, oy + Mathf.Sin(ang) * 1.6f);
-                float n2 = Mathf.PerlinNoise(ox * 0.5f + Mathf.Cos(ang) * 3.4f,
-                                             oy * 0.5f + Mathf.Sin(ang) * 3.4f);
-                outline[s] = radius * Mathf.Lerp(0.70f, 1.18f, n * 0.75f + n2 * 0.25f);
+                float cos = Mathf.Cos(ang), sin = Mathf.Sin(ang);
+                // Three octaves sampled around a circle so the outline wraps
+                // seamlessly: big lobes make bays and headlands, the finer
+                // octaves rough up the coast.
+                float n1 = Mathf.PerlinNoise(ox + cos * 1.0f, oy + sin * 1.0f);
+                float n2 = Mathf.PerlinNoise(ox * 0.7f + cos * 2.7f, oy * 0.7f + sin * 2.7f);
+                float n3 = Mathf.PerlinNoise(ox * 1.3f + cos * 6.2f, oy * 1.3f + sin * 6.2f);
+                float shape = n1 * 0.55f + n2 * 0.30f + n3 * 0.15f;
+                outline[s] = radius * Mathf.Lerp(0.45f, 1.35f, shape);
+
+                // Height varies around the island too, so the high ground forms
+                // ridges and saddles instead of a single tidy cone.
+                float hp = Mathf.PerlinNoise(ox * 2.1f + cos * 1.9f, oy * 2.1f + sin * 1.9f);
+                peakScale[s] = Mathf.Lerp(0.55f, 1.2f, hp);
 
                 bool cliff = false;
                 for (int c = 0; c < cliffCount; c++)
@@ -65,6 +76,13 @@ namespace SeaSick.World
                 hasBeach[s] = !cliff;
                 beachFrac[s] = cliff ? 0.03f : Mathf.Lerp(0.20f, 0.40f, n2);
             }
+
+            // Normalise the height variation around 1 so it reshapes the peak
+            // without changing the island's overall height.
+            float meanPeak = 0f;
+            foreach (var v in peakScale) meanPeak += v;
+            meanPeak = Mathf.Max(0.001f, meanPeak / Sectors);
+            for (int s = 0; s < Sectors; s++) peakScale[s] /= meanPeak;
 
             // Guarantee at least a quarter of the island is landable.
             int beaches = 0;
@@ -85,6 +103,7 @@ namespace SeaSick.World
                 outline = outline,
                 beachFrac = beachFrac,
                 hasBeach = hasBeach,
+                peakScale = peakScale,
             };
         }
 
@@ -103,7 +122,16 @@ namespace SeaSick.World
             float shaped = p.kind == IslandKind.Mountainous
                 ? Mathf.Pow(inland, 1.5f)
                 : Mathf.SmoothStep(0f, 1f, inland);
-            return Mathf.Lerp(0.9f, p.peakHeight, shaped);
+            // Every sector shares the same point at the centre, so the height
+            // variation must fade out there — otherwise each sector computes a
+            // different summit height and tears the peak into a spiky star.
+            float scale = 1f;
+            if (p.peakScale != null)
+            {
+                float influence = Mathf.Clamp01((1f - u) / 0.30f);
+                scale = Mathf.Lerp(1f, p.peakScale[s % Sectors], influence);
+            }
+            return Mathf.Lerp(0.9f, p.peakHeight * scale, shaped);
         }
 
         public static Mesh Build(in Profile p, out float maxHeight)

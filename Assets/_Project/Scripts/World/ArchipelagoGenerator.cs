@@ -17,19 +17,21 @@ namespace SeaSick.World
             public float minRing; // 0..1 — how far out this resource starts appearing
         }
 
-        [SerializeField] int islandCount = 16;
-        // Tighter than it was: a denser map means more arrivals and decisions
-        // per session instead of long stretches of holding a course.
-        [SerializeField] float innerDistance = 120f;
-        [SerializeField] float outerDistance = 520f;
+        // Fewer, bigger, further apart. The ship is 21m long, so a 45m-radius
+        // island is already four ship-lengths across and the largest are over
+        // twenty — land should dwarf the boat, not sit beside it.
+        [SerializeField] int islandCount = 10;
+        [SerializeField] float innerDistance = 280f;
+        [SerializeField] float outerDistance = 1150f;
+        [SerializeField] float minIslandGap = 170f;   // open water between shores
         [Header("Reefs")]
-        [SerializeField] int reefCount = 26;
-        [SerializeField] Vector2 reefRadiusRange = new Vector2(5f, 11f);
-        [SerializeField] float reefMinDistance = 90f;
-        [SerializeField] float reefMaxDistance = 540f;
-        [SerializeField] Vector2 radiusRange = new Vector2(13f, 72f);
+        [SerializeField] int reefCount = 24;
+        [SerializeField] Vector2 reefRadiusRange = new Vector2(6f, 13f);
+        [SerializeField] float reefMinDistance = 220f;
+        [SerializeField] float reefMaxDistance = 1200f;
+        [SerializeField] Vector2 radiusRange = new Vector2(45f, 200f);
         [SerializeField] float richnessPerRadius = 0.95f;
-        [SerializeField] float shelterOnlyBelowRadius = 21f;
+        [SerializeField] float shelterOnlyBelowRadius = 60f;
         [SerializeField] int seed = 0; // 0 = random each run
 
         [SerializeField]
@@ -58,16 +60,40 @@ namespace SeaSick.World
             rockMat = MakeMat(new Color(0.47f, 0.45f, 0.46f));
 
             float goldenAngle = 137.508f;
+            var placed = new List<(Vector3 pos, float radius)>();
+            // The home island is already on the map; nothing may sit on it.
+            foreach (var existing in FindObjectsByType<Island>(FindObjectsSortMode.None))
+                placed.Add((existing.transform.position, existing.MaxRadius));
+
             for (int i = 0; i < islandCount; i++)
             {
                 float ring = (i + 0.5f) / islandCount;
-                float dist = Mathf.Lerp(innerDistance, outerDistance, ring) * Random.Range(0.82f, 1.18f);
-                float ang = (i * goldenAngle + Random.Range(-14f, 14f)) * Mathf.Deg2Rad;
-                var pos = new Vector3(Mathf.Sin(ang) * dist, 0f, Mathf.Cos(ang) * dist);
 
                 // Bigger islands sit further out — the long voyage has to pay.
                 float radius = Mathf.Lerp(radiusRange.x, radiusRange.y, ring) * Random.Range(0.78f, 1.24f);
                 radius = Mathf.Clamp(radius, radiusRange.x, radiusRange.y * 1.1f);
+                float outerReach = radius * 1.35f;   // worst-case outline lobe
+
+                // Islands are big now, so placement has to check for overlap
+                // rather than trusting the spiral to keep them apart.
+                Vector3 pos = Vector3.zero;
+                bool ok = false;
+                for (int attempt = 0; attempt < 30 && !ok; attempt++)
+                {
+                    float dist = Mathf.Lerp(innerDistance, outerDistance, ring)
+                                 * Random.Range(0.82f, 1.18f) + attempt * 45f;
+                    float ang = (i * goldenAngle + Random.Range(-22f, 22f) + attempt * 11f) * Mathf.Deg2Rad;
+                    pos = new Vector3(Mathf.Sin(ang) * dist, 0f, Mathf.Cos(ang) * dist);
+
+                    ok = true;
+                    foreach (var (p, r) in placed)
+                    {
+                        if (Vector3.Distance(p, pos) < r + outerReach + minIslandGap) { ok = false; break; }
+                    }
+                }
+                if (!ok) continue;   // couldn't find room — the sea stays empty here
+
+                placed.Add((pos, outerReach));
 
                 bool shelterOnly = radius < shelterOnlyBelowRadius;
                 var kind = PickKind(ring);
@@ -76,7 +102,49 @@ namespace SeaSick.World
                 Build($"Island_{kind.name}_{i}", pos, radius, kind, richness, shelterOnly);
             }
 
+            RebuildHomeIsland();
             BuildReefs();
+        }
+
+        /// The home island was authored as stacked spheres before the mesh
+        /// builder existed. Rebuild it in the same style as the rest so it
+        /// doesn't read as a different game, keeping its transform (which
+        /// VoyageManager references) intact.
+        [SerializeField] float homeRadius = 95f;
+
+        void RebuildHomeIsland()
+        {
+            Island home = null;
+            foreach (var isle in FindObjectsByType<Island>(FindObjectsSortMode.None))
+                if (isle.IsHome) { home = isle; break; }
+            if (home == null) return;
+
+            for (int i = home.transform.childCount - 1; i >= 0; i--)
+                Destroy(home.transform.GetChild(i).gameObject);
+
+            var profile = IslandMeshBuilder.BuildProfile(
+                homeRadius, IslandMeshBuilder.IslandKind.SandAndDirt, 4242);
+            var mesh = IslandMeshBuilder.Build(profile, out float maxHeight);
+
+            var body = new GameObject("Land");
+            body.transform.SetParent(home.transform, false);
+            body.AddComponent<MeshFilter>().sharedMesh = mesh;
+            body.AddComponent<MeshRenderer>().sharedMaterials = new[] { sandMat, grassMat, rockMat };
+
+            home.Configure("Home", 0f, homeRadius, true, false);
+            home.SetProfile(profile);
+
+            var beacon = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            beacon.name = "Beacon";
+            Destroy(beacon.GetComponent<Collider>());
+            beacon.transform.SetParent(home.transform, false);
+            beacon.transform.localScale = new Vector3(2f, 46f, 2f);
+            beacon.transform.localPosition = new Vector3(0f, maxHeight + 34f, 0f);
+            var bm = MakeMat(new Color(1f, 0.55f, 0.25f));
+            bm.EnableKeyword("_EMISSION");
+            bm.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            bm.SetColor("_EmissionColor", new Color(1f, 0.5f, 0.2f) * 2.6f);
+            beacon.GetComponent<MeshRenderer>().sharedMaterial = bm;
         }
 
         void BuildReefs()
@@ -96,7 +164,7 @@ namespace SeaSick.World
                 {
                     Vector3 d = isle.transform.position - pos;
                     d.y = 0f;
-                    if (d.magnitude < isle.Radius + 45f) { clash = true; break; }
+                    if (d.magnitude < isle.MaxRadius + 70f) { clash = true; break; }
                 }
                 if (clash) continue;
 
@@ -187,7 +255,7 @@ namespace SeaSick.World
                 beacon.name = "Beacon";
                 Destroy(beacon.GetComponent<Collider>());
                 beacon.transform.SetParent(root.transform, false);
-                float beaconH = Mathf.Lerp(20f, 44f, radius / radiusRange.y);
+                float beaconH = Mathf.Lerp(26f, 60f, radius / radiusRange.y);
                 beacon.transform.localScale = new Vector3(1.5f, beaconH, 1.5f);
                 beacon.transform.localPosition = new Vector3(0f, maxHeight + beaconH * 0.75f, 0f);
                 var bm = MakeMat(kind.beaconColor);
@@ -205,11 +273,11 @@ namespace SeaSick.World
         List<GameObject> BuildProps(Transform parent, Island island, string kind, float radius)
         {
             var list = new List<GameObject>();
-            int count = Mathf.Clamp(Mathf.RoundToInt(radius * 0.42f), 4, 26);
+            int count = Mathf.Clamp(Mathf.RoundToInt(radius * 0.55f), 8, 80);
             for (int i = 0; i < count; i++)
             {
                 float ang = Random.Range(0f, Mathf.PI * 2f);
-                float dist = Random.Range(radius * 0.15f, island.RadiusAt(ang) * 0.8f);
+                float dist = Random.Range(radius * 0.12f, island.RadiusAt(ang) * 0.82f);
                 Vector3 p = island.SurfacePoint(ang, dist);
                 var prop = kind switch
                 {
@@ -221,8 +289,10 @@ namespace SeaSick.World
                 prop.transform.SetParent(parent, true);
                 prop.transform.position = p;
                 prop.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
-                float s = Random.Range(0.8f, 1.35f) * Mathf.Lerp(0.8f, 1.5f, radius / radiusRange.y);
-                prop.transform.localScale *= s;
+                // Props are a FIXED real-world size. Scaling trees with the
+                // island was quietly destroying the sense of scale — a tree is
+                // a tree, and that's exactly what tells you how big the land is.
+                prop.transform.localScale *= Random.Range(0.85f, 1.3f);
                 list.Add(prop);
             }
             return list;

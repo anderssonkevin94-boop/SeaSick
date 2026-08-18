@@ -29,6 +29,8 @@ namespace SeaSick.CameraRig
         [SerializeField] float fovResponse = 1.1f;
         [Tooltip("Never let the lens dip under the water surface.")]
         [SerializeField] float minHeightAboveWater = 2.6f;
+        [Tooltip("Keeps the camera above island terrain instead of inside it.")]
+        [SerializeField] float terrainClearance = 8f;
 
         public Transform Target { get => target; set => target = value; }
 
@@ -104,6 +106,25 @@ namespace SeaSick.CameraRig
                 float surface = waves.SampleHeight(new Vector2(cp.x, cp.z), Time.time);
                 if (cp.y < surface + minHeightAboveWater)
                     transform.position = new Vector3(cp.x, surface + minHeightAboveWater, cp.z);
+            }
+
+            // Islands are mountains now, and the camera sits well behind the
+            // ship — close in to a shore it would otherwise end up inside the
+            // hill, filling the screen with green.
+            var isle = SeaSick.World.Island.Nearest(transform.position);
+            if (isle != null)
+            {
+                Vector3 cp = transform.position;
+                Vector3 d = cp - isle.transform.position;
+                d.y = 0f;
+                float dist = d.magnitude;
+                float ang = Mathf.Atan2(d.x, d.z);
+                if (dist < isle.RadiusAt(ang))
+                {
+                    float ground = isle.SurfacePoint(ang, dist).y;
+                    if (cp.y < ground + terrainClearance)
+                        transform.position = new Vector3(cp.x, ground + terrainClearance, cp.z);
+                }
             }
             Quaternion desiredRot = Quaternion.LookRotation(lookPoint - transform.position, Vector3.up);
             transform.rotation = Quaternion.Slerp(
