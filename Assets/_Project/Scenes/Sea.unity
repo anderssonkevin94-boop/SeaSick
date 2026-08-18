@@ -1823,9 +1823,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a18799dd18f8641158ac087f9140a46a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.ShipHold
-  stackOrigin: {x: 0, y: 2.05, z: -5.2}
+  stackOrigin: {x: 0, y: 2.95, z: -4.4}
   perRow: 2
-  spacing: 1.5
+  spacing: 1.3
   layerHeight: 0.85
   maxVisible: 24
 --- !u!1660057539 &9223372036854775807

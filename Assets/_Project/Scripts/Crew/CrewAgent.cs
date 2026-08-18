@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using SeaSick.Ship;
 using UnityEngine;
 
@@ -100,6 +101,7 @@ namespace SeaSick.Crew
             gangway = plank;
             voyage = voyageManager;
             transform.SetParent(null, true);
+            PathToShore(landingPoint);
             state = State.GoingAshore;
         }
 
@@ -108,6 +110,7 @@ namespace SeaSick.Crew
         {
             if (!IsAshore) return;
             ReleaseNode();
+            PathToShip(ship != null ? ship.TransformPoint(stationLocal) : transform.position);
             state = State.Boarding;
         }
 
@@ -246,7 +249,7 @@ namespace SeaSick.Crew
                     break;
 
                 case State.GoingAshore:
-                    if (WalkToWorld(shoreTarget, dt)) SeekWork();
+                    if (FollowPath(dt, 0.4f)) SeekWork();
                     break;
 
                 case State.ToNode:
@@ -276,6 +279,8 @@ namespace SeaSick.Crew
                             if (workIsland != null) workIsland.Extract(1f);
                             targetNode = null;
                             PickUp(res);
+                            PathToShip(hold != null ? hold.DropPoint
+                                : (ship != null ? ship.TransformPoint(stationLocal) : transform.position));
                             state = State.ToShip;
                         }
                     }
@@ -291,16 +296,13 @@ namespace SeaSick.Crew
                 }
 
                 case State.ToShip:
-                {
-                    Vector3 drop = hold != null ? hold.DropPoint
-                        : (ship != null ? ship.TransformPoint(stationLocal) : transform.position);
-                    if (WalkNear(drop, 1.2f, dt))
+                    RefreshShipWaypoints(hold != null ? hold.DropPoint : Vector3.zero, hold != null);
+                    if (FollowPath(dt, 1.2f))
                     {
                         DropOff();
                         SeekWork();
                     }
                     break;
-                }
 
                 case State.Idling:
                     // Nothing to cut — wait on the beach, and pick work back up
@@ -313,8 +315,10 @@ namespace SeaSick.Crew
 
                 case State.Boarding:
                     if (ship == null) { state = State.Station; break; }
-                    Vector3 boardPoint = ship.TransformPoint(stationLocal);
-                    if (WalkToWorld(boardPoint, dt))
+                    // The last waypoint is the station, but the ship is moving
+                    // on the swell, so keep it current as we approach.
+                    RefreshShipWaypoints(ship.TransformPoint(stationLocal), true);
+                    if (FollowPath(dt, 0.35f))
                     {
                         transform.SetParent(ship, true);
                         transform.localPosition = stationLocal;
@@ -330,6 +334,64 @@ namespace SeaSick.Crew
         /// the deck sits about 2m above the waterline, so a 3D distance test
         /// could never be satisfied while the wading code pins them to the
         /// surface — which left recalled crew walking forever.
+        // --- Waypoint routing ---
+        // Crew must use the plank rather than cutting across open water, so
+        // every trip between ship and shore is routed through its two ends.
+        readonly List<Vector3> path = new List<Vector3>();
+        int pathIndex;
+        bool onPlank;
+
+        void SetPath(params Vector3[] points)
+        {
+            path.Clear();
+            foreach (var p in points) path.Add(p);
+            pathIndex = 0;
+        }
+
+        /// Route from wherever we are, over the plank, to a point on the ship.
+        void PathToShip(Vector3 finalPoint)
+        {
+            if (gangway != null && gangway.Ready)
+                SetPath(gangway.LandingPoint, gangway.DeckPoint, finalPoint);
+            else
+                SetPath(finalPoint);
+        }
+
+        /// Route from the deck, over the plank, to a point ashore.
+        void PathToShore(Vector3 finalPoint)
+        {
+            if (gangway != null && gangway.Ready)
+                SetPath(gangway.DeckPoint, gangway.LandingPoint, finalPoint);
+            else
+                SetPath(finalPoint);
+        }
+
+        /// The ship rides the swell, so any waypoint attached to it — the plank's
+        /// deck end and the destination on board — has to be re-read each frame
+        /// or the crew walk to where the ship used to be.
+        void RefreshShipWaypoints(Vector3 finalPoint, bool updateFinal)
+        {
+            if (path.Count == 0) return;
+            if (path.Count >= 3 && gangway != null && gangway.Ready)
+                path[1] = gangway.DeckPoint;
+            if (updateFinal) path[path.Count - 1] = finalPoint;
+        }
+
+        bool FollowPath(float dt, float finalStandOff)
+        {
+            if (path.Count == 0) return true;
+            bool last = pathIndex >= path.Count - 1;
+            // Intermediate points are plank ends: hug them so the crew stay on
+            // the timber instead of clipping the corner over the water.
+            onPlank = !last || path.Count > 1;
+            if (WalkNear(path[pathIndex], last ? finalStandOff : 0.6f, dt))
+            {
+                if (last) { onPlank = false; return true; }
+                pathIndex++;
+            }
+            return false;
+        }
+
         /// Walk toward a point but stop `standOff` metres short of it.
         bool WalkNear(Vector3 target, float standOff, float dt)
         {
@@ -356,9 +418,10 @@ namespace SeaSick.Crew
             }
 
             float y;
-            if (horizontal < 4f)
+            if (onPlank || horizontal < 4f)
             {
-                // Close in, climb to the target height (up onto the deck or beach).
+                // On the plank, follow its slope between the two ends instead
+                // of riding the water underneath it.
                 y = Mathf.Lerp(pos.y, target.y, 1f - Mathf.Exp(-6f * dt));
             }
             else

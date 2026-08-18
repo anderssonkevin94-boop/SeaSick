@@ -98,6 +98,15 @@ namespace SeaSick.Ship
             }
 
             MoorAlongside(dt);
+
+            // Finish the landing once the plank is actually down.
+            if (landingPending && CurrentState == State.Anchored
+                && gangway != null && gangway.Ready)
+            {
+                landingPending = false;
+                SendAshore();
+            }
+
             UpdateCameraFocus();
         }
 
@@ -174,6 +183,17 @@ namespace SeaSick.Ship
 
         // --- Player actions -------------------------------------------------
 
+        bool landingPending;
+
+        /// One press to put a shore party on an island: anchor, warp in
+        /// alongside, run the plank out and send the crew down it. Splitting
+        /// this into "anchor" then "go ashore" was two taps for one intention.
+        void Land(Island isle)
+        {
+            DropAnchor(isle);
+            landingPending = true;
+        }
+
         void DropAnchor(Island isle)
         {
             CurrentIsland = isle;
@@ -241,11 +261,13 @@ namespace SeaSick.Ship
                     string label = !beach
                         ? "sheer cliff — find a beach"
                         : slowEnough
-                            ? $"⚓  Drop anchor — {isle.ResourceName}"
-                            : "slow down to anchor  (S)";
+                            ? (isle.HasResources
+                                ? $"⚓  Land here — {isle.ResourceName}"
+                                : "⚓  Land here — rest")
+                            : "slow down to land  (S)";
                     UIBlocker.Block(primary);
                     GUI.enabled = slowEnough && beach;
-                    if (GUI.Button(primary, label, buttonStyle)) DropAnchor(isle);
+                    if (GUI.Button(primary, label, buttonStyle)) Land(isle);
                     GUI.enabled = true;
                     break;
                 }
@@ -263,13 +285,17 @@ namespace SeaSick.Ship
 
                 case State.Anchored:
                 {
-                    string res = CurrentIsland != null && CurrentIsland.HasResources
-                        ? $"go ashore — harvest {CurrentIsland.ResourceName}"
-                        : "go ashore — rest";
+                    if (landingPending)
+                    {
+                        GUI.Label(new Rect(0f, by, w, bh), "coming alongside…", infoStyle);
+                        break;
+                    }
+                    // Crew are back aboard: cast off, or put them ashore again.
                     UIBlocker.Block(primary);
                     UIBlocker.Block(secondary);
-                    if (GUI.Button(primary, res, buttonStyle)) SendAshore();
-                    if (GUI.Button(secondary, "⚓  Weigh anchor", buttonStyle)) WeighAnchor();
+                    if (GUI.Button(primary, "⚓  Cast off", buttonStyle)) WeighAnchor();
+                    if (CurrentIsland != null && CurrentIsland.HasResources
+                        && GUI.Button(secondary, "send crew ashore", buttonStyle)) SendAshore();
                     break;
                 }
 

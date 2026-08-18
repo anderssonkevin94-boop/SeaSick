@@ -10,9 +10,12 @@ namespace SeaSick.Ship
     /// glance what you're carrying.
     public class ShipHold : MonoBehaviour
     {
-        [SerializeField] Vector3 stackOrigin = new Vector3(0f, 2.05f, -5.2f);
+        // The hull floor rises toward the transom, so a stack sitting at deck
+        // height amidships was buried in the planking back here — the whole
+        // first layer (perRow², i.e. four items) was invisible.
+        [SerializeField] Vector3 stackOrigin = new Vector3(0f, 2.95f, -4.4f);
         [SerializeField] int perRow = 2;
-        [SerializeField] float spacing = 1.5f;
+        [SerializeField] float spacing = 1.3f;
         [SerializeField] float layerHeight = 0.85f;
         [SerializeField] int maxVisible = 24;
 
