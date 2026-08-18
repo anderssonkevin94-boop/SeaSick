@@ -17,6 +17,18 @@ namespace SeaSick.Ship
         ParticleSystem shoulderPort;
         ParticleSystem shoulderStar;
         ParticleSystem sternWash;
+        ParticleSystem beamPort;
+        ParticleSystem beamStar;
+
+        [Header("Wave impacts")]
+        [SerializeField] float beamImpactThreshold = 1.5f;
+        [SerializeField] float beamImpactCooldown = 0.45f;
+        [SerializeField] float slamThreshold = 1.9f;
+        [SerializeField] float slamCooldown = 0.5f;
+
+        float lastBeamImpact = -99f;
+        float lastSlam = -99f;
+        float prevSurf;
 
         void Start()
         {
@@ -55,6 +67,15 @@ namespace SeaSick.Ship
                 size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: true);
             shoulderPort.transform.localRotation = Quaternion.Euler(-8f, -118f, 0f);
             shoulderStar.transform.localRotation = Quaternion.Euler(-8f, 118f, 0f);
+
+            // Seas breaking against the beam — burst-emitted on impact rather
+            // than streamed, thrown up and outboard.
+            beamPort = MakeSystem("BeamSprayPort", new Vector3(-3.2f, 0.8f, 0.5f), solid,
+                size: 0.7f, speed: 7f, spreadAngle: 40f, lifetime: 1.3f, gravity: 1.6f, solidFoam: true);
+            beamStar = MakeSystem("BeamSprayStar", new Vector3(3.2f, 0.8f, 0.5f), solid,
+                size: 0.7f, speed: 7f, spreadAngle: 40f, lifetime: 1.3f, gravity: 1.6f, solidFoam: true);
+            beamPort.transform.localRotation = Quaternion.Euler(-52f, -90f, 0f);
+            beamStar.transform.localRotation = Quaternion.Euler(-52f, 90f, 0f);
 
             // Churn right under the transom — solid, close in, short-lived.
             sternWash = MakeSystem("SternWash", new Vector3(0f, 0.1f, -9.5f), solid,
@@ -130,6 +151,39 @@ namespace SeaSick.Ship
             SetRate(shoulderPort, shoulderRate * s01);
             SetRate(shoulderStar, shoulderRate * s01);
             SetRate(sternWash, wakeFullRate * 0.8f * s01);
+
+            WaveImpacts(s01);
+        }
+
+        /// Bursts of spray where the sea actually strikes the hull — off the
+        /// beam when a wave shoulders into the side, off the bow when the stem
+        /// drops into a trough. Each also stamps foam into the wake buffer, so
+        /// the mark stays on the water after the spray itself has gone.
+        void WaveImpacts(float speed01)
+        {
+            float lateral = motor.LateralWaveAccel;
+            if (Mathf.Abs(lateral) > beamImpactThreshold
+                && Time.time - lastBeamImpact > beamImpactCooldown)
+            {
+                lastBeamImpact = Time.time;
+                float force = Mathf.Clamp01((Mathf.Abs(lateral) - beamImpactThreshold) / 2.5f);
+                var side = lateral > 0f ? beamStar : beamPort;
+                if (side != null) side.Emit(Mathf.RoundToInt(Mathf.Lerp(10f, 45f, force)));
+
+                Vector3 at = transform.position + transform.right * (lateral > 0f ? 3.5f : -3.5f);
+                Ocean.WakeTexture.Splash(at, 6f, 0.5f + force);
+            }
+
+            // Bow slam: the surf pull reversing hard as the stem drops.
+            float dSurf = (motor.SurfAccel - prevSurf) / Mathf.Max(0.0001f, Time.deltaTime);
+            prevSurf = motor.SurfAccel;
+            if (dSurf < -slamThreshold * 4f && speed01 > 0.25f
+                && Time.time - lastSlam > slamCooldown)
+            {
+                lastSlam = Time.time;
+                if (bowSpray != null) bowSpray.Emit(Mathf.RoundToInt(Mathf.Lerp(14f, 50f, speed01)));
+                Ocean.WakeTexture.Splash(transform.position + transform.forward * 9f, 7f, 0.8f);
+            }
         }
 
         static void SetRate(ParticleSystem ps, float rate)

@@ -45,9 +45,18 @@ namespace SeaSick.Ship
         [SerializeField] float verticalResponse = 4f;  // how quickly the hull follows wave height
         [SerializeField] float angularResponse = 2.5f; // how quickly pitch/roll follow the surface
         [SerializeField] float turnHeel = 5f;          // extra roll (deg) at full rudder + speed
-        [SerializeField] Vector3 bowPoint = new Vector3(0f, 0f, 7.5f);
-        [SerializeField] Vector3 portPoint = new Vector3(-2.2f, 0f, -6f);
-        [SerializeField] Vector3 starboardPoint = new Vector3(2.2f, 0f, -6f);
+        // Six points down the hull rather than three. With only a bow and two
+        // stern points the ship stayed rigid; sampling along the length lets
+        // the bow ride up while midships is still in a trough.
+        static readonly Vector3[] FloatPoints =
+        {
+            new Vector3( 0.0f, 0f,  9.0f),   // stem
+            new Vector3(-2.0f, 0f,  4.0f),   // fore port
+            new Vector3( 2.0f, 0f,  4.0f),   // fore starboard
+            new Vector3(-2.4f, 0f, -4.0f),   // aft port
+            new Vector3( 2.4f, 0f, -4.0f),   // aft starboard
+            new Vector3( 0.0f, 0f, -8.5f),   // transom
+        };
 
         [Header("Visual pivots")]
         [SerializeField] Transform rudderPivot;
@@ -88,6 +97,9 @@ namespace SeaSick.Ship
         /// Drives camera punch, spray, and audio — the feel of catching a wave.
         public float SurfAccel { get; private set; }
         public float SurfBoost01 => Mathf.Clamp01(SurfAccel / 3.5f);
+        /// Sideways wave force on the hull. Positive = struck on the starboard
+        /// beam. Drives which side throws spray when a sea hits.
+        public float LateralWaveAccel { get; private set; }
 
         /// Degrees between the bow and the direction the wind blows FROM.
         /// 0 = pointing straight into the wind, 180 = dead downwind.
@@ -341,6 +353,8 @@ namespace SeaSick.Ship
             // than jittering frame to frame.
             waveAccel = Vector3.Lerp(waveAccel, rawWaveAccel, 1f - Mathf.Exp(-surfResponse * dt));
             SurfAccel = Vector3.Dot(waveAccel, forward);
+            // Signed: positive means the sea is shoving the starboard side.
+            LateralWaveAccel = Vector3.Dot(waveAccel, new Vector3(forward.z, 0f, -forward.x));
 
             Vector3 right = new Vector3(forward.z, 0f, -forward.x);
             float forwardWay = Vector3.Dot(velocity, forward);
@@ -383,23 +397,40 @@ namespace SeaSick.Ship
             {
                 float t = Time.time;
                 Quaternion yawOnly = Quaternion.Euler(0f, heading, 0f);
-                Vector3 bowW = pos + yawOnly * bowPoint;
-                Vector3 portW = pos + yawOnly * portPoint;
-                Vector3 starW = pos + yawOnly * starboardPoint;
 
-                float hBow = field.SampleHeight(new Vector2(bowW.x, bowW.z), t);
-                float hPort = field.SampleHeight(new Vector2(portW.x, portW.z), t);
-                float hStar = field.SampleHeight(new Vector2(starW.x, starW.z), t);
+                // Sample every float point, then fit the hull to them: mean
+                // height for heave, fore/aft difference for pitch, port/
+                // starboard difference for roll.
+                float sum = 0f, fore = 0f, aft = 0f, port = 0f, star = 0f;
+                int foreN = 0, aftN = 0, portN = 0, starN = 0;
+                for (int i = 0; i < FloatPoints.Length; i++)
+                {
+                    Vector3 w = pos + yawOnly * FloatPoints[i];
+                    float h = field.SampleHeight(new Vector2(w.x, w.z), t);
+                    sum += h;
+                    if (FloatPoints[i].z > 0.5f) { fore += h; foreN++; }
+                    else if (FloatPoints[i].z < -0.5f) { aft += h; aftN++; }
+                    if (FloatPoints[i].x < -0.5f) { port += h; portN++; }
+                    else if (FloatPoints[i].x > 0.5f) { star += h; starN++; }
+                }
 
-                float hStern = (hPort + hStar) * 0.5f;
-                float hCenter = (hBow + hStern) * 0.5f;
+                float hCenter = sum / FloatPoints.Length;
+                float hFore = foreN > 0 ? fore / foreN : hCenter;
+                float hAft = aftN > 0 ? aft / aftN : hCenter;
+                float hPort = portN > 0 ? port / portN : hCenter;
+                float hStar = starN > 0 ? star / starN : hCenter;
 
-                float pitchDeg = Mathf.Atan2(hStern - hBow, bowPoint.z - portPoint.z) * Mathf.Rad2Deg;
-                float rollDeg = Mathf.Atan2(hStar - hPort, starboardPoint.x - portPoint.x) * Mathf.Rad2Deg;
+                float pitchDeg = Mathf.Atan2(hAft - hFore, 13f) * Mathf.Rad2Deg;
+                float rollDeg = Mathf.Atan2(hStar - hPort, 4.4f) * Mathf.Rad2Deg;
                 rollDeg += effectiveRudder * speedFactor * turnHeel;
                 // Gusts shove the rig: extra heel away from the wind.
                 float windSide = Mathf.Sign(Vector3.Cross(forward, new Vector3(wind.x, 0f, wind.y)).y);
                 rollDeg += GustFactor01 * sailPower * 4f * windSide;
+
+                // Beam-on to a big swell the raw fit reached nearly 30 degrees
+                // of heel, which reads as capsizing rather than working the sea.
+                pitchDeg = Mathf.Clamp(pitchDeg, -16f, 16f);
+                rollDeg = Mathf.Clamp(rollDeg, -20f, 20f);
 
                 pos.y = Mathf.Lerp(pos.y, hCenter, 1f - Mathf.Exp(-verticalResponse * dt));
                 Quaternion targetRot = Quaternion.Euler(pitchDeg, heading, rollDeg);

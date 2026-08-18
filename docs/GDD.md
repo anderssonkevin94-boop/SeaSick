@@ -97,6 +97,10 @@ _Append-only._
 - 2026-08-17 — Roster with persistent villagers/traits/breeding planned post-MVP; crew modeled as data (ScriptableObjects) from day one to allow it.
 - 2026-08-17 — Development order: sailing first, work backward to base.
 - 2026-08-17 — Device target: iPhone (iOS first). Default orientation set to Portrait.
+- 2026-08-18 — **Hull works the sea; waves break against it.**
+  - **Six float points instead of three.** With a bow and two stern points the hull was effectively rigid; sampling down the length (stem, fore pair, aft pair, transom) and fitting mean height / fore-aft / port-starboard lets the **bow ride up while midships is still in a trough**. Roll and pitch are clamped (±20° / ±16°) — the raw fit reached nearly 30° beam-on to a swell, which read as capsizing rather than working the sea.
+  - **Impact spray**: `ShipMotor.LateralWaveAccel` exposes the sideways force on the hull, so a sea striking the beam throws a burst of spray **off the correct side**, and a bow slam (surf force reversing hard as the stem drops) throws one forward. Each impact also stamps foam into the wake buffer, so the mark **stays on the water** after the spray has gone.
+  - Measured beam-on to a swell: roll range **39°**, ~15 spray impacts per 30 seconds.
 - 2026-08-18 — **Living water: persistent wake, surface detail, shader-side foam.**
   - **The core problem was that the wake was an analytic shape bolted to the hull** — evaluated relative to the ship's *current* position and heading, so it rotated with the ship instead of being left behind. That's the tell that made the boat read as sliding over a surface.
   - **`WakeTexture`**: a 512² world-anchored RGBA buffer covering 420m around the ship. Each frame it scrolls to compensate for movement (snapped to texel boundaries so it never crawls), decays, and stamps whatever is touching the water. R = displacement, G = foam. The ocean shader samples it for both. **The wake is now history** — it stays where you sailed and curves through your turns. `WakeTexture.Splash()` is the public hook, so **cannonball splashes are essentially free** when combat lands.
