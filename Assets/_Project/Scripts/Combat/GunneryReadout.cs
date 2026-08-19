@@ -48,6 +48,7 @@ namespace SeaSick.Combat
 
         ShipMotor motor;
         CannonBattery battery;
+        IHittable self;
         GUIStyle label;
 
         void Awake()
@@ -95,7 +96,8 @@ namespace SeaSick.Combat
                 $"({GunneryStats.HitRate01:P0})   in air {GunneryStats.InFlight}", label);
             GUI.color = Color.white;
 
-            var target = HitTargets.Nearest(transform.position, out float dist);
+            if (self == null) self = GetComponent<PlayerHull>();
+            var target = HitTargets.Nearest(transform.position, out float dist, self);
             if (target == null)
             {
                 GUI.Label(new Rect(x, y += line, w, line), "no target", label);

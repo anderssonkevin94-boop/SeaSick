@@ -48,6 +48,7 @@ namespace SeaSick.Ship
         readonly List<Cannon> starboard = new List<Cannon>();
         ShipMotor motor;
         CameraRig.ChaseCamera chase;
+        Combat.IHittable self;
 
         public int PortReady => CountReady(port);
         public int StarboardReady => CountReady(starboard);
@@ -159,7 +160,10 @@ namespace SeaSick.Ship
         {
             Vector3? aim = null;
 
-            var target = Combat.HitTargets.Nearest(transform.position, out float dist);
+            // The player's hull is a target now, so every lookup has to say
+            // who is asking or the guns train on their own ship.
+            if (self == null) self = GetComponent<Combat.PlayerHull>();
+            var target = Combat.HitTargets.Nearest(transform.position, out float dist, self);
             if (target != null && dist <= GunRange * 1.4f)
             {
                 Vector3 toTarget = target.HitCentre - transform.position;

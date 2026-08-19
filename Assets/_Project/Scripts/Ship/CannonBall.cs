@@ -16,12 +16,14 @@ namespace SeaSick.Ship
 
         Vector3 velocity;
         float life;
+        IHittable owner;   // never bites the hand that fired it
 
         public static CannonBall Spawn(Vector3 position, Vector3 velocity,
-            float assistWindow = 0f, float assistCap = 0f)
+            float assistWindow = 0f, float assistCap = 0f, IHittable owner = null)
         {
             if (assistCap > 0f)
-                velocity = LayBetter(position, velocity, assistWindow, assistCap);
+                velocity = LayBetter(position, velocity, assistWindow, assistCap, owner);
+
 
             if (ironMat == null)
             {
@@ -40,6 +42,7 @@ namespace SeaSick.Ship
 
             var ball = go.AddComponent<CannonBall>();
             ball.velocity = velocity;
+            ball.owner = owner;
             GunneryStats.RecordShot();
             return ball;
         }
@@ -58,7 +61,8 @@ namespace SeaSick.Ship
         ///
         /// The correction is capped as metres of movement at the target's
         /// range, so a long shot bends no further than a short one.
-        static Vector3 LayBetter(Vector3 from, Vector3 velocity, float window, float cap)
+        static Vector3 LayBetter(Vector3 from, Vector3 velocity, float window, float cap,
+            IHittable owner)
         {
             float g = Mathf.Abs(Physics.gravity.y);
             float speed = velocity.magnitude;
@@ -73,7 +77,7 @@ namespace SeaSick.Ship
 
             foreach (var h in HitTargets.All)
             {
-                if (h == null || !h.Alive) continue;
+                if (h == null || !h.Alive || ReferenceEquals(h, owner)) continue;
 
                 Vector3 to = h.HitCentre - from;
                 Vector3 flat = new Vector3(to.x, 0f, to.z);
@@ -97,6 +101,34 @@ namespace SeaSick.Ship
 
             float step = Mathf.Min(Vector3.Angle(dir, bestIdeal) * Mathf.Deg2Rad, cap / bestRange);
             return Vector3.RotateTowards(dir, bestIdeal, step, 0f) * speed;
+        }
+
+        /// Lay a shot on a point and pull the trigger. Raiders aim at where
+        /// the player will be; the player's own guns deliberately do not aim
+        /// at anything, because "aiming is the tiller" is the whole premise.
+        public static CannonBall FireAt(Vector3 from, Vector3 target, float speed,
+            float spreadDeg, IHittable owner)
+        {
+            Vector3 to = target - from;
+            Vector3 flat = new Vector3(to.x, 0f, to.z);
+            float range = flat.magnitude;
+            float g = Mathf.Abs(Physics.gravity.y);
+
+            Vector3 dir;
+            if (range < 1f || !SolveLaunch(range, to.y, speed, g, flat / range, out dir))
+                dir = to.sqrMagnitude > 1e-4f ? to.normalized : Vector3.forward;
+
+            // Scatter, so a raider is a threat rather than a sniper.
+            if (spreadDeg > 0f)
+            {
+                dir = Quaternion.AngleAxis(Random.Range(-spreadDeg, spreadDeg), Vector3.up) * dir;
+                Vector3 pitchAxis = Vector3.Cross(Vector3.up, dir);
+                if (pitchAxis.sqrMagnitude > 1e-4f)
+                    dir = Quaternion.AngleAxis(
+                        Random.Range(-spreadDeg, spreadDeg) * 0.4f, pitchAxis.normalized) * dir;
+            }
+
+            return Spawn(from, dir * speed, 0f, 0f, owner);
         }
 
         /// The launch direction that carries `speed` through a point `range`
@@ -130,7 +162,7 @@ namespace SeaSick.Ship
             // Targets before the sea: a shot crosses a monster well above the
             // waterline, and at 42 m/s it covers most of a metre per frame, so
             // the test has to be swept or fast shots tunnel clean through.
-            var target = HitTargets.SweepFirst(from, to, Radius, out Vector3 hitPoint);
+            var target = HitTargets.SweepFirst(from, to, Radius, out Vector3 hitPoint, owner);
             if (target != null && target.TakeHit(hitPoint, Damage))
             {
                 GunneryStats.RecordHit();

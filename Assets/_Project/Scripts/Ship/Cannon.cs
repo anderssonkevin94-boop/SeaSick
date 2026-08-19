@@ -37,6 +37,7 @@ namespace SeaSick.Ship
         Transform barrel;
         ParticleSystem smoke;
         Quaternion restLocalRotation = Quaternion.identity;
+        SeaSick.Combat.IHittable owner;
         float trainYaw;
         float recoil;
         float readyAt;
@@ -245,8 +246,14 @@ namespace SeaSick.Ship
             recoil = recoilDistance;
             if (smoke != null) smoke.Emit(28);
 
+            // Resolved lazily, and by interface rather than by type, so the
+            // guns work on anything hittable that carries them.
+            if (owner == null)
+                foreach (var mb in GetComponentsInParent<MonoBehaviour>())
+                    if (mb is SeaSick.Combat.IHittable h) { owner = h; break; }
+
             CannonBall.Spawn(MuzzlePoint, FireDirection * muzzleSpeed + carriedVelocity,
-                aimAssistWindow, aimAssistCap);
+                aimAssistWindow, aimAssistCap, owner);
             return true;
         }
 

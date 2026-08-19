@@ -43,6 +43,21 @@ namespace SeaSick.Combat
         [SerializeField] float chaseRange = 130f;   // this close: go for them
         [SerializeField] float standDownRange = 340f;
 
+        [Header("Guns")]
+        [SerializeField] float gunRange = 60f;
+        [SerializeField] float reloadTime = 5.5f;   // slower than the player's 3.2
+        [SerializeField] float fireArcDeg = 20f;
+        [SerializeField] float muzzleSpeed = 42f;
+        // Scatter, so a raider is a threat rather than a sniper.
+        [SerializeField] float spreadDeg = 3.4f;
+        // Only part of the lead, on purpose: hold a straight course and you get
+        // hit, change course and their shot goes where you were going to be.
+        // That is the dodge, and it costs nothing to implement because the
+        // player is already the one deciding the ship's heading.
+        [Range(0f, 1f)] [SerializeField] float leadFactor = 0.8f;
+        [SerializeField] float engageRange = 150f;
+        [SerializeField] float gunStandoff = 46f;
+
         [Header("Avoidance")]
         [SerializeField] float lookahead = 70f;
         [SerializeField] float clearance = 26f;
@@ -66,6 +81,7 @@ namespace SeaSick.Combat
         float speed;
         float lastHitAt = -99f;
         float bobSeed;
+        float readyAt;
 
         Transform hull;
         readonly List<Renderer> skin = new List<Renderer>();
@@ -264,6 +280,7 @@ namespace SeaSick.Combat
             float desired = Steer(goal);
             SailToward(desired, dt);
             KeepClear();
+            TryFire();
             RideSea(dt);
             Flash();
         }
@@ -287,8 +304,27 @@ namespace SeaSick.Combat
             switch (Current)
             {
                 case Duty.Chase:
-                    // Steer at where the player is going, not where they were.
-                    return player.transform.position + player.Velocity * 1.6f;
+                {
+                    Vector3 pp = player.transform.position;
+                    float range = Flat(pp - pos).magnitude;
+
+                    // Inside gun range, stop charging and start circling. A bow
+                    // carries no guns: to shoot you it has to give you its
+                    // side, which is the same bargain the player is making.
+                    // This is what turns a chase into an engagement.
+                    if (range < engageRange)
+                    {
+                        Vector3 fromPlayer = Flat(pos - pp);
+                        if (fromPlayer.sqrMagnitude < 1f) fromPlayer = -Forward();
+                        float a = Mathf.Atan2(fromPlayer.x, fromPlayer.z) * Mathf.Rad2Deg
+                                  + orbitLeadDeg * patrolSign;
+                        return pp + new Vector3(
+                            Mathf.Sin(a * Mathf.Deg2Rad), 0f, Mathf.Cos(a * Mathf.Deg2Rad)) * gunStandoff;
+                    }
+
+                    // Further out, steer at where they are going.
+                    return pp + player.Velocity * 1.6f;
+                }
 
                 case Duty.Block:
                     // Put the hull between the island and the intruder. That is
@@ -425,6 +461,68 @@ namespace SeaSick.Combat
                 float k = Mathf.Clamp01(speed / maxSpeed);
                 wake.Stamp(new Vector2(p.x, p.z), 5.5f, 0.55f * dt * k, 0.35f * dt * k);
             }
+        }
+
+        /// Fire when a side bears and the player is in reach. Same bargain the
+        /// player has: no firing arc without giving up the bow.
+        void TryFire()
+        {
+            if (player == null || Time.time < readyAt) return;
+
+            Vector3 to = Flat(player.transform.position - transform.position);
+            float dist = to.magnitude;
+            if (dist > gunRange || dist < 1f) return;
+
+            float rel = Vector3.SignedAngle(Forward(), to, Vector3.up);
+            bool starboard = rel >= 0f;
+            if (Mathf.Abs(Mathf.DeltaAngle(rel, starboard ? 90f : -90f)) > fireArcDeg) return;
+
+            readyAt = Time.time + reloadTime;
+
+            Vector3 beam = starboard ? transform.right : -transform.right;
+            Vector3 muzzle = transform.position + beam * 3.4f + Vector3.up * 2.8f;
+
+            // Lead only partly — see leadFactor.
+            float flight = dist / Mathf.Max(1f, muzzleSpeed);
+            Vector3 aim = player.transform.position
+                          + player.Velocity * (leadFactor * flight)
+                          + Vector3.up * 1.6f;
+
+            SeaSick.Ship.CannonBall.FireAt(muzzle, aim, muzzleSpeed, spreadDeg, this);
+            Smoke(muzzle, beam);
+        }
+
+        void Smoke(Vector3 at, Vector3 dir)
+        {
+            var go = new GameObject("MuzzleSmoke");
+            go.transform.position = at;
+            go.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.startSize = new ParticleSystem.MinMaxCurve(0.8f, 2.0f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(3f, 9f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.7f, 1.5f);
+            main.gravityModifier = -0.05f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = 60;
+            main.playOnAwake = false;
+            main.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(0.85f, 0.84f, 0.82f), new Color(0.45f, 0.45f, 0.47f));
+
+            var emission = ps.emission;
+            emission.rateOverTime = 0f;
+
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 16f;
+            shape.radius = 0.2f;
+
+            ps.GetComponent<ParticleSystemRenderer>().sharedMaterial =
+                new Material(Shader.Find("Universal Render Pipeline/Particles/Lit"));
+
+            ps.Emit(22);
+            Destroy(go, 2.5f);
         }
 
         /// The shoreline is solid, not merely discouraged. Islands are not

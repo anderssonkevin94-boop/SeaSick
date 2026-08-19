@@ -26,6 +26,13 @@ namespace SeaSick.Ship
         [SerializeField] float ramDamageScale = 0.55f;
         [SerializeField] float enemyHullRadius = 9f;
 
+        [Header("Under fire")]
+        // ~12 hits to wreck a hull. Deliberately slow: the damage is not what
+        // ends a voyage — the wallow it adds and the crew it terrifies are,
+        // and those compound long before the timber runs out.
+        [SerializeField] float damagePerShot = 0.085f;
+        [SerializeField] float shotShock = 0.10f;
+
         [Header("Repair")]
         [SerializeField] float repairRate = 0.05f;        // hull per second
         [SerializeField] float timberPerHullPoint = 12f;  // timber for a full rebuild
@@ -36,6 +43,7 @@ namespace SeaSick.Ship
         public bool NeedsRepair => integrity < 0.995f;
         public float LastImpactTime { get; private set; } = -99f;
         public float LastImpactSpeed { get; private set; }
+        public float LastShotTime { get; private set; } = -99f;
 
         ShipMotor motor;
         CrewAgent[] crew;
@@ -126,6 +134,55 @@ namespace SeaSick.Ship
             Vector3 d = transform.position - centre;
             d.y = 0f;
             return d.sqrMagnitude < (radius + hullMargin) * (radius + hullMargin);
+        }
+
+        /// A round shot comes aboard. This is the whole point of arming the
+        /// raiders: the damage lands on HullIntegrity, which already costs
+        /// speed and adds wallow, and the shock lands on the crew, who already
+        /// get sicker and angrier for it. A fight therefore spends the voyage
+        /// clock rather than running beside it.
+        public void TakeShot(Vector3 point, float amount)
+        {
+            integrity = Mathf.Clamp01(integrity - damagePerShot * Mathf.Max(0.01f, amount));
+            LastShotTime = Time.time;
+            LastImpactTime = Time.time;
+
+            if (crew == null) crew = GetComponentsInChildren<CrewAgent>(true);
+            foreach (var c in crew) if (c != null) c.Jolt(shotShock);
+
+            Splinters(point);
+        }
+
+        /// Timber off the rail where the shot went in.
+        static void Splinters(Vector3 at)
+        {
+            var go = new GameObject("HullHit");
+            go.transform.position = at;
+
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.startSize = new ParticleSystem.MinMaxCurve(0.15f, 0.6f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(4f, 12f);
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.4f, 1.1f);
+            main.gravityModifier = 2f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = 80;
+            main.playOnAwake = false;
+            main.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(0.62f, 0.48f, 0.30f), new Color(0.30f, 0.24f, 0.18f));
+
+            var emission = ps.emission;
+            emission.rateOverTime = 0f;
+
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = 0.5f;
+
+            ps.GetComponent<ParticleSystemRenderer>().sharedMaterial =
+                new Material(Shader.Find("Universal Render Pipeline/Particles/Lit"));
+
+            ps.Emit(28);
+            Destroy(go, 2.5f);
         }
 
         /// Returns the timber consumed this frame (0 if nothing to do).

@@ -47,13 +47,15 @@ namespace SeaSick.Combat
         public static void Unregister(IHittable t) => All.Remove(t);
 
         /// Nearest living target on the horizontal plane.
-        public static IHittable Nearest(Vector3 pos, out float distance)
+        /// `ignore` keeps a ship from finding itself — now that the player is
+        /// a target too, every lookup has to say who is asking.
+        public static IHittable Nearest(Vector3 pos, out float distance, IHittable ignore = null)
         {
             IHittable best = null;
             float bestSq = float.MaxValue;
             foreach (var t in All)
             {
-                if (t == null || !t.Alive) continue;
+                if (t == null || !t.Alive || ReferenceEquals(t, ignore)) continue;
                 Vector3 d = t.HitCentre - pos;
                 d.y = 0f;
                 float sq = d.sqrMagnitude;
@@ -66,7 +68,8 @@ namespace SeaSick.Combat
         /// Swept test: does the segment a->b clip a target? A round shot covers
         /// most of a metre per frame, so testing the ball's position alone would
         /// let fast shots tunnel straight through a target.
-        public static IHittable SweepFirst(Vector3 a, Vector3 b, float ballRadius, out Vector3 hitPoint)
+        public static IHittable SweepFirst(Vector3 a, Vector3 b, float ballRadius,
+            out Vector3 hitPoint, IHittable ignore = null)
         {
             IHittable best = null;
             float bestT = float.MaxValue;
@@ -74,7 +77,7 @@ namespace SeaSick.Combat
 
             foreach (var t in All)
             {
-                if (t == null || !t.Alive) continue;
+                if (t == null || !t.Alive || ReferenceEquals(t, ignore)) continue;
 
                 float r = t.HitRadius + ballRadius;
                 Vector3 axis = t.HitAxis;
