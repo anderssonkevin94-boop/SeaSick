@@ -34,7 +34,7 @@ namespace SeaSick.Combat
     }
 
     /// Diagnostic overlay for the guns: reach, bearing, and whether the shots
-    /// are landing. F2 toggles it.
+    /// are landing. G toggles it, H resets the tally.
     ///
     /// This exists because "aiming is the tiller" is only a good idea if the
     /// player can tell when a side bears. Everything here is a number the
@@ -60,8 +60,10 @@ namespace SeaSick.Combat
         {
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null) return;
-            if (kb.f2Key.wasPressedThisFrame) visible = !visible;
-            if (visible && kb.f3Key.wasPressedThisFrame) GunneryStats.Reset();
+            // Letter keys, not the function row: laptops without a physical
+            // F-row can't reach F2 without a modifier.
+            if (kb.gKey.wasPressedThisFrame) visible = !visible;
+            if (visible && kb.hKey.wasPressedThisFrame) GunneryStats.Reset();
         }
 
         void OnGUI()
@@ -97,7 +99,7 @@ namespace SeaSick.Combat
             if (target == null)
             {
                 GUI.Label(new Rect(x, y += line, w, line), "no target", label);
-                GUI.Label(new Rect(x, y += line * 2f, w, line), "F3 resets the tally", label);
+                GUI.Label(new Rect(x, y += line * 2f, w, line), "H resets the tally", label);
                 return;
             }
 
@@ -129,7 +131,7 @@ namespace SeaSick.Combat
             float wouldDeflect = Mathf.Atan2(motor.CurrentSpeed, 42f) * Mathf.Rad2Deg;
             GUI.Label(new Rect(x, y += line, w, line),
                 $"speed {motor.CurrentSpeed:F1} m/s   inherit {battery.VelocityInheritance:F2} " +
-                $"→ {battery.DeflectionDeg:F0}° (full would be {wouldDeflect:F0}°)   F3 resets", label);
+                $"→ {battery.DeflectionDeg:F0}° (full would be {wouldDeflect:F0}°)   H resets", label);
         }
     }
 

@@ -17,8 +17,12 @@ namespace SeaSick.Ship
         Vector3 velocity;
         float life;
 
-        public static CannonBall Spawn(Vector3 position, Vector3 velocity)
+        public static CannonBall Spawn(Vector3 position, Vector3 velocity,
+            float assistWindow = 0f, float assistCap = 0f)
         {
+            if (assistCap > 0f)
+                velocity = LayBetter(position, velocity, assistWindow, assistCap);
+
             if (ironMat == null)
             {
                 ironMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
@@ -38,6 +42,78 @@ namespace SeaSick.Ship
             ball.velocity = velocity;
             GunneryStats.RecordShot();
             return ball;
+        }
+
+        /// Nudge the aim so a near miss lands. Applied once, at the muzzle — the
+        /// shot stays a clean parabola and nothing bends in flight, so what you
+        /// see is a gun crew laying slightly better rather than a ball that
+        /// chases people.
+        ///
+        /// The miss is judged at the target's own range, against the launch
+        /// angle that would pass through it. Measuring it at the point where
+        /// the ball reaches the water instead is wrong twice over: the beast
+        /// sits above the waterline and the shot is meant to pass through it on
+        /// the way down, so a perfectly good shot reads as a 20m miss and the
+        /// assist never engages.
+        ///
+        /// The correction is capped as metres of movement at the target's
+        /// range, so a long shot bends no further than a short one.
+        static Vector3 LayBetter(Vector3 from, Vector3 velocity, float window, float cap)
+        {
+            float g = Mathf.Abs(Physics.gravity.y);
+            float speed = velocity.magnitude;
+            if (g < 0.01f || speed < 0.01f) return velocity;
+
+            Vector3 dir = velocity / speed;
+
+            IHittable best = null;
+            Vector3 bestIdeal = Vector3.zero;
+            float bestMiss = float.MaxValue;
+            float bestRange = 0f;
+
+            foreach (var h in HitTargets.All)
+            {
+                if (h == null || !h.Alive) continue;
+
+                Vector3 to = h.HitCentre - from;
+                Vector3 flat = new Vector3(to.x, 0f, to.z);
+                float range = flat.magnitude;
+                if (range < 1f) continue;
+
+                if (!SolveLaunch(range, to.y, speed, g, flat / range, out Vector3 ideal)) continue;
+
+                // Small-angle: the linear miss at the target's range.
+                float miss = Vector3.Angle(dir, ideal) * Mathf.Deg2Rad * range;
+                if (miss < bestMiss)
+                {
+                    bestMiss = miss;
+                    best = h;
+                    bestIdeal = ideal;
+                    bestRange = range;
+                }
+            }
+
+            if (best == null || bestMiss > window) return velocity;
+
+            float step = Mathf.Min(Vector3.Angle(dir, bestIdeal) * Mathf.Deg2Rad, cap / bestRange);
+            return Vector3.RotateTowards(dir, bestIdeal, step, 0f) * speed;
+        }
+
+        /// The launch direction that carries `speed` through a point `range`
+        /// away and `height` above the muzzle. Takes the flat of the two
+        /// solutions — the arcing one would lob the shot over the mast.
+        /// False when the point simply cannot be reached.
+        static bool SolveLaunch(float range, float height, float speed, float g,
+            Vector3 flatDir, out Vector3 dir)
+        {
+            dir = Vector3.zero;
+            float v2 = speed * speed;
+            float disc = v2 * v2 - g * (g * range * range + 2f * height * v2);
+            if (disc < 0f) return false;
+
+            float theta = Mathf.Atan((v2 - Mathf.Sqrt(disc)) / (g * range));
+            dir = (flatDir * Mathf.Cos(theta) + Vector3.up * Mathf.Sin(theta)).normalized;
+            return true;
         }
 
         void Update()

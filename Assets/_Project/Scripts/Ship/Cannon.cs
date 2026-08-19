@@ -13,9 +13,31 @@ namespace SeaSick.Ship
         [SerializeField] float muzzleSpeed = 42f;
         [SerializeField] float elevationDeg = 9f;
 
+        // Roll goes straight into elevation for a gun pointing over the beam,
+        // and measured under sail it swung the barrel between 1° and 15.6° —
+        // landing the shot anywhere from 30m to 102m. That is not a difficulty,
+        // it is a lottery the player cannot see. The crew lay the gun against
+        // the roll; at less than 1 they lay it imperfectly, so a heavy sea
+        // still costs accuracy as a gradient rather than a coin toss.
+        [Range(0f, 1f)] [SerializeField] float rollStabilisation = 0.75f;
+
+        // Guns could be trained with handspikes, so they do. This widens "the
+        // side bears" from a knife-edge into a zone without bending any
+        // physics — the ball still flies exactly where the barrel points.
+        [SerializeField] float maxTraverseDeg = 18f;
+        [SerializeField] float traverseSpeed = 55f;
+
+        // Last-mile help, applied once at the muzzle rather than as steering in
+        // flight: the shot stays a clean parabola, the crew just laid it a
+        // little better. Only rescues shots already close.
+        [SerializeField] float aimAssistWindow = 8f;
+        [SerializeField] float aimAssistCap = 2.5f;
+
         Transform barrelPivot;
         Transform barrel;
         ParticleSystem smoke;
+        Quaternion restLocalRotation = Quaternion.identity;
+        float trainYaw;
         float recoil;
         float readyAt;
 
@@ -25,9 +47,70 @@ namespace SeaSick.Ship
         public Vector3 MuzzlePoint => barrel != null
             ? barrel.position + barrel.forward * 0.9f
             : transform.position;
-        public Vector3 FireDirection => barrelPivot != null
-            ? barrelPivot.forward : transform.forward;
+        public Vector3 FireDirection => AimRotation() * Vector3.forward;
         public float MuzzleSpeed => muzzleSpeed;
+        public float TraverseDeg => trainYaw;
+
+        /// Where the barrel actually points, in world space.
+        ///
+        /// Derived rather than read off the transform so firing and drawing can
+        /// never disagree: Fire() runs in Update and the visual is set in
+        /// LateUpdate, so reading barrelPivot.forward at fire time would use
+        /// last frame's attitude.
+        Quaternion AimRotation()
+        {
+            // What the hull hands us, roll and all.
+            Quaternion raw = transform.rotation * Quaternion.Euler(-elevationDeg, 0f, 0f);
+
+            Vector3 flat = transform.forward;
+            flat.y = 0f;
+            if (flat.sqrMagnitude < 1e-6f) return raw;
+
+            // Same bearing, but pitched off the horizon instead of off the deck.
+            Quaternion level = Quaternion.LookRotation(flat.normalized, Vector3.up)
+                               * Quaternion.Euler(-elevationDeg, 0f, 0f);
+
+            return Quaternion.Slerp(raw, level, rollStabilisation);
+        }
+
+        /// Swing the carriage toward a target, within the traverse limit.
+        /// Pass null to let it drift back to its rest bearing.
+        public void TrainOn(Vector3? worldTarget, float dt)
+        {
+            float desired = 0f;
+
+            if (worldTarget.HasValue && transform.parent != null)
+            {
+                Vector3 toTarget = worldTarget.Value - transform.position;
+                toTarget.y = 0f;
+
+                Vector3 rest = transform.parent.rotation * (restLocalRotation * Vector3.forward);
+                rest.y = 0f;
+
+                if (toTarget.sqrMagnitude > 0.01f && rest.sqrMagnitude > 1e-6f)
+                    desired = Mathf.Clamp(
+                        Vector3.SignedAngle(rest.normalized, toTarget.normalized, Vector3.up),
+                        -maxTraverseDeg, maxTraverseDeg);
+            }
+
+            trainYaw = Mathf.MoveTowards(trainYaw, desired, traverseSpeed * dt);
+
+            // Traverse about *world* up, not the gun's own up. Its own up is
+            // the mast, and the mast leans with the roll — swinging the gun
+            // sideways around a leaning axis also swings it in elevation.
+            // Measured: that drove the barrel to -10.4° and put broadsides
+            // straight into the sea. Stabilisation happens to mask it, which
+            // is worse than it sounding, because it silently couples two
+            // settings that should be independent.
+            if (transform.parent == null)
+            {
+                transform.localRotation = restLocalRotation * Quaternion.Euler(0f, trainYaw, 0f);
+                return;
+            }
+
+            transform.rotation = Quaternion.AngleAxis(trainYaw, Vector3.up)
+                                 * (transform.parent.rotation * restLocalRotation);
+        }
 
         /// How far the shot carries from the muzzle down to flat water.
         /// Computed from the live tuning rather than written down, so it stays
@@ -47,6 +130,10 @@ namespace SeaSick.Ship
 
         public void Build(Material wood, Material iron)
         {
+            // The battery has already set our rest bearing; traverse works
+            // relative to it.
+            restLocalRotation = transform.localRotation;
+
             // Carriage
             var carriage = Prim(PrimitiveType.Cube, transform, new Vector3(0.85f, 0.32f, 1.0f), wood);
             carriage.transform.localPosition = new Vector3(0f, 0.16f, -0.1f);
@@ -158,7 +245,8 @@ namespace SeaSick.Ship
             recoil = recoilDistance;
             if (smoke != null) smoke.Emit(28);
 
-            CannonBall.Spawn(MuzzlePoint, FireDirection * muzzleSpeed + carriedVelocity);
+            CannonBall.Spawn(MuzzlePoint, FireDirection * muzzleSpeed + carriedVelocity,
+                aimAssistWindow, aimAssistCap);
             return true;
         }
 
@@ -167,6 +255,13 @@ namespace SeaSick.Ship
             if (barrel == null) return;
             recoil = Mathf.MoveTowards(recoil, 0f, recoilReturn * Time.deltaTime);
             barrel.localPosition = new Vector3(0f, 0f, -recoil);
+        }
+
+        /// Draw the barrel where it will actually shoot. After the hull has
+        /// settled for the frame, so the laying is against the real attitude.
+        void LateUpdate()
+        {
+            if (barrelPivot != null) barrelPivot.rotation = AimRotation();
         }
     }
 }

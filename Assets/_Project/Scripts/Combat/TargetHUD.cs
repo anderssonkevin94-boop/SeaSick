@@ -1,0 +1,81 @@
+using SeaSick.Ship;
+using SeaSick.UI;
+using UnityEngine;
+
+namespace SeaSick.Combat
+{
+    /// Damage and range, floating over the beast itself rather than buried in a
+    /// diagnostic overlay. Two things are readable at a glance: how hurt it is,
+    /// and whether it is inside the guns' reach — the bar goes live the moment
+    /// the shot could actually get there, so the range envelope is something
+    /// you see on the target instead of a number you convert in your head.
+    [RequireComponent(typeof(CannonBattery))]
+    public class TargetHUD : MonoBehaviour
+    {
+        [SerializeField] float showWithin = 320f;   // don't clutter the horizon
+        [SerializeField] float barWidth = 84f;
+        [SerializeField] float headroom = 9.5f;     // metres above the beast
+
+        CannonBattery battery;
+        Camera cam;
+
+        void Awake() { battery = GetComponent<CannonBattery>(); }
+
+        void OnGUI()
+        {
+            if (cam == null) cam = Camera.main;
+            if (cam == null) return;
+
+            float reach = battery.GunRange;
+            int u = UITheme.Unit;
+
+            foreach (var m in SeaMonster.All)
+            {
+                if (m == null || !m.Alive) continue;
+
+                Vector3 world = m.transform.position + Vector3.up * headroom;
+                float dist = Vector3.Distance(transform.position, m.transform.position);
+                if (dist > showWithin) continue;
+
+                Vector3 sp = cam.WorldToScreenPoint(world);
+                if (sp.z <= 0f) continue;   // behind the camera
+
+                // Shrink with distance so a far beast doesn't shout.
+                float scale = Mathf.Lerp(1f, 0.62f, Mathf.Clamp01(dist / showWithin));
+                float w = barWidth * scale;
+                float h = Mathf.Max(4f, u * 0.42f * scale);
+                float x = sp.x - w * 0.5f;
+                float y = Screen.height - sp.y;
+
+                bool inRange = dist <= reach;
+
+                // Backing plate keeps it legible against bright water.
+                UITheme.Rect(new Rect(x - 2f, y - 2f, w + 4f, h + 4f), UITheme.Panel);
+
+                // Out of reach reads dim and grey: the guns cannot answer yet.
+                Color fill = inRange
+                    ? Color.Lerp(UITheme.Bad, UITheme.Good, m.Health01)
+                    : new Color(0.62f, 0.66f, 0.70f, 0.75f);
+                UITheme.Bar(new Rect(x, y, w, h), m.Health01, fill);
+
+                // A tick per hit point, so damage is countable and not just a
+                // shrinking bar — six guns' worth of work should be legible.
+                int pips = m.HitPoints;
+                if (pips > 1 && scale > 0.75f)
+                    for (int i = 1; i < pips; i++)
+                        UITheme.Rect(new Rect(x + w * i / pips, y, 1f, h),
+                            new Color(0f, 0f, 0f, 0.45f));
+
+                if (scale < 0.75f) continue;
+
+                var style = new GUIStyle(UITheme.Small2Centered);
+                style.normal.textColor = inRange ? UITheme.Text : UITheme.TextDim;
+                GUI.Label(new Rect(x - 20f, y + h + 1f, w + 40f, u * 1.4f),
+                    inRange
+                        ? $"{m.HitPoints - m.DamageTaken}/{m.HitPoints}   {dist:F0} m"
+                        : $"{dist:F0} m — out of reach",
+                    style);
+            }
+        }
+    }
+}

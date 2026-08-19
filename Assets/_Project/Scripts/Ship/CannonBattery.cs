@@ -38,6 +38,12 @@ namespace SeaSick.Ship
         // bears" is a single answer instead of two different ones.
         [SerializeField] float convergeRange = 45f;
 
+        // How far off the beam a target can sit and still have the guns laid on
+        // it. Wider than the traverse limit on purpose: outside the limit the
+        // guns hold hard over, so you can see them reaching for a beast before
+        // the side properly bears.
+        [SerializeField] float trainWithinDeg = 60f;
+
         readonly List<Cannon> port = new List<Cannon>();
         readonly List<Cannon> starboard = new List<Cannon>();
         ShipMotor motor;
@@ -125,10 +131,34 @@ namespace SeaSick.Ship
 
         void Update()
         {
+            float dt = Time.deltaTime;
+            TrainSide(starboard, true, dt);
+            TrainSide(port, false, dt);
+
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null) return;
             if (kb.qKey.wasPressedThisFrame) FireBroadside(false);
             if (kb.eKey.wasPressedThisFrame) FireBroadside(true);
+        }
+
+        /// Lay a side's guns on the nearest beast, if one is anywhere near that
+        /// beam. The gun clamps to its own traverse limit, so this widens the
+        /// window rather than removing the need to steer.
+        void TrainSide(List<Cannon> side, bool starboardSide, float dt)
+        {
+            Vector3? aim = null;
+
+            var target = Combat.HitTargets.Nearest(transform.position, out float dist);
+            if (target != null && dist <= GunRange * 1.4f)
+            {
+                Vector3 toTarget = target.HitCentre - transform.position;
+                toTarget.y = 0f;
+                float rel = Vector3.SignedAngle(transform.forward, toTarget, Vector3.up);
+                if (Mathf.Abs(Mathf.DeltaAngle(rel, starboardSide ? 90f : -90f)) <= trainWithinDeg)
+                    aim = target.HitCentre;
+            }
+
+            foreach (var c in side) if (c != null) c.TrainOn(aim, dt);
         }
 
         void OnGUI()
