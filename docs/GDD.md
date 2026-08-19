@@ -97,6 +97,13 @@ _Append-only._
 - 2026-08-17 — Roster with persistent villagers/traits/breeding planned post-MVP; crew modeled as data (ScriptableObjects) from day one to allow it.
 - 2026-08-17 — Development order: sailing first, work backward to base.
 - 2026-08-17 — Device target: iPhone (iOS first). Default orientation set to Portrait.
+- 2026-08-18 — **Cannons (first pass) + crew of five.**
+  - **Four guns, two a side**, one forward and one aft of the mast at x ±1.45, z +4.8 / −1.2, deck height 2.05. First attempt at the full beam (±2.0) buried the carriages — **the hull tumbles home above the waterline**, so guns have to sit inboard with only the muzzle over the rail.
+  - **Aiming is the tiller.** You steer to bring a side to bear and fire that broadside (`Q` / `E`, or the two buttons bottom-left showing loaded guns and a reload bar). This deliberately keeps combat *inside* the sailing rather than competing for the player's thumb.
+  - Firing gives recoil, muzzle smoke, and a **ballistic `CannonBall`** that arcs, hits the sea, throws a splash and **stamps the wake buffer** — the mark stays on the water afterwards, which is exactly what that buffer was built to make free.
+  - **Crew of five** (Bo, Mara, Pip, Tam, Ola), stations laid out clear of the gun positions.
+  - **The supplied `player_ship_cannon.fbx` is still an empty 4KB file** and was never re-exported, so the guns are built from primitives like the islands, props and cargo. `Cannon.Build()` is the only place to change when a real mesh arrives.
+  - **Not built yet:** nothing to shoot at. Enemy ships / sea monsters, damage on hit, and fleeing-vs-fighting are all still open — see the cannons design discussion earlier in this log.
 - 2026-08-18 — **Landing polish.**
   - **One button.** "Land here" now anchors, warps the ship alongside, runs the plank out and sends the crew down it — the landing completes itself once the plank is actually down. Anchoring and disembarking were two taps for a single intention. Once the crew are back aboard the choice is "cast off" or send them ashore again.
   - **Crew always use the plank.** Trips between ship and shore are routed through waypoints (`PathToShip` / `PathToShore`): shore end → deck end → destination. Previously only the outbound walk used the plank and the return cut straight across open water. Ship-side waypoints are re-read every frame (`RefreshShipWaypoints`) because the ship rides the swell — otherwise the crew walk to where it used to be — and an `onPlank` flag makes them follow the timber's slope instead of the water underneath.
