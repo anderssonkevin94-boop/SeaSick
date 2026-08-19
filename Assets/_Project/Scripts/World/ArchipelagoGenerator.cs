@@ -29,6 +29,14 @@ namespace SeaSick.World
         [SerializeField] Vector2 reefRadiusRange = new Vector2(6f, 13f);
         [SerializeField] float reefMinDistance = 220f;
         [SerializeField] float reefMaxDistance = 1200f;
+        // Test targets. Static monsters parked at a known bearing and distance
+        // so the guns can be worked on without hunting for something to shoot.
+        [Header("Sea monsters (gunnery test targets)")]
+        [SerializeField] int monsterCount = 3;
+        [SerializeField] float monsterDistance = 260f;
+        [SerializeField] float monsterBearingDeg = 0f;   // 0 = due north of home
+        [SerializeField] float monsterSpreadDeg = 26f;   // apart enough to engage one at a time
+
         [SerializeField] Vector2 radiusRange = new Vector2(45f, 200f);
         [SerializeField] float richnessPerRadius = 0.95f;
         [SerializeField] float shelterOnlyBelowRadius = 60f;
@@ -103,7 +111,25 @@ namespace SeaSick.World
             }
 
             RebuildHomeIsland();
+            BuildMonsters();
             BuildReefs();
+        }
+
+        /// Park the test targets before the reefs go down, so BuildReefs can
+        /// keep the water around them clear — a reef hit on the approach would
+        /// muddy exactly the thing these are here to measure.
+        void BuildMonsters()
+        {
+            for (int i = 0; i < monsterCount; i++)
+            {
+                float spread = monsterCount > 1
+                    ? (i / (monsterCount - 1f) - 0.5f) * monsterSpreadDeg
+                    : 0f;
+                float ang = (monsterBearingDeg + spread) * Mathf.Deg2Rad;
+                var pos = new Vector3(
+                    Mathf.Sin(ang) * monsterDistance, 0f, Mathf.Cos(ang) * monsterDistance);
+                Combat.SeaMonster.Spawn(pos, $"SeaMonster_{i}");
+            }
         }
 
         /// The home island was authored as stacked spheres before the mesh
@@ -158,7 +184,8 @@ namespace SeaSick.World
                 float dist = Random.Range(reefMinDistance, reefMaxDistance);
                 var pos = new Vector3(Mathf.Sin(ang) * dist, 0f, Mathf.Cos(ang) * dist);
 
-                // Never plant a reef on top of an island.
+                // Never plant a reef on top of an island, or in the water the
+                // test targets are meant to be approached through.
                 bool clash = false;
                 foreach (var isle in Island.All)
                 {
@@ -166,6 +193,13 @@ namespace SeaSick.World
                     d.y = 0f;
                     if (d.magnitude < isle.MaxRadius + 70f) { clash = true; break; }
                 }
+                if (!clash)
+                    foreach (var monster in Combat.SeaMonster.All)
+                    {
+                        Vector3 d = monster.transform.position - pos;
+                        d.y = 0f;
+                        if (d.magnitude < 120f) { clash = true; break; }
+                    }
                 if (clash) continue;
 
                 float radius = Random.Range(reefRadiusRange.x, reefRadiusRange.y);

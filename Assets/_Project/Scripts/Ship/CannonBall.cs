@@ -1,13 +1,17 @@
+using SeaSick.Combat;
 using SeaSick.Ocean;
 using UnityEngine;
 
 namespace SeaSick.Ship
 {
-    /// A round shot in flight. Ballistic arc, then it hits the sea and throws a
-    /// splash — which stamps straight into the wake buffer, so the disturbance
-    /// stays on the water afterwards.
+    /// A round shot in flight. Ballistic arc, then it either bites a target or
+    /// hits the sea and throws a splash — which stamps straight into the wake
+    /// buffer, so the disturbance stays on the water afterwards.
     public class CannonBall : MonoBehaviour
     {
+        const float Radius = 0.21f;
+        const float Damage = 1f;
+
         static Material ironMat;
 
         Vector3 velocity;
@@ -32,26 +36,41 @@ namespace SeaSick.Ship
 
             var ball = go.AddComponent<CannonBall>();
             ball.velocity = velocity;
+            GunneryStats.RecordShot();
             return ball;
         }
 
         void Update()
         {
             float dt = Time.deltaTime;
+            Vector3 from = transform.position;
             velocity += Physics.gravity * dt;
-            transform.position += velocity * dt;
+            Vector3 to = from + velocity * dt;
+            transform.position = to;
 
             life += dt;
-            if (life > 12f) { Destroy(gameObject); return; }
+            if (life > 12f) { GunneryStats.RecordMiss(); Destroy(gameObject); return; }
+
+            // Targets before the sea: a shot crosses a monster well above the
+            // waterline, and at 42 m/s it covers most of a metre per frame, so
+            // the test has to be swept or fast shots tunnel clean through.
+            var target = HitTargets.SweepFirst(from, to, Radius, out Vector3 hitPoint);
+            if (target != null && target.TakeHit(hitPoint, Damage))
+            {
+                GunneryStats.RecordHit();
+                Destroy(gameObject);
+                return;
+            }
 
             var waves = WaveField.Instance;
             float surface = waves != null
-                ? waves.SampleHeightFast(new Vector2(transform.position.x, transform.position.z), Time.time)
+                ? waves.SampleHeightFast(new Vector2(to.x, to.z), Time.time)
                 : 0f;
 
-            if (transform.position.y <= surface)
+            if (to.y <= surface)
             {
-                Splash(new Vector3(transform.position.x, surface, transform.position.z));
+                Splash(new Vector3(to.x, surface, to.z));
+                GunneryStats.RecordMiss();
                 Destroy(gameObject);
             }
         }

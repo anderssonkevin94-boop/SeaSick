@@ -1,3 +1,4 @@
+using SeaSick.Combat;
 using SeaSick.Ocean;
 using SeaSick.Ship;
 using SeaSick.Voyage;
@@ -119,6 +120,15 @@ namespace SeaSick.UI
                 Vector2 p = MapPoint(centre, shipPos, reef.transform.position, scale);
                 if (p.x < 0f || p.x > size || p.y < 0f || p.y > size) continue;
                 Disc(p, 1.8f, new Color(0.95f, 0.35f, 0.30f, 0.85f));
+            }
+
+            // Monsters get a blip so a test target is findable rather than hunted.
+            foreach (var monster in SeaMonster.All)
+            {
+                if (monster == null || !monster.Alive) continue;
+                Vector2 p = MapPoint(centre, shipPos, monster.transform.position, scale);
+                if (p.x < 0f || p.x > size || p.y < 0f || p.y > size) continue;
+                Disc(p, 3.2f, new Color(0.80f, 0.35f, 0.85f, 0.95f));
             }
 
             // Ship arrow, rotated to heading. North is up.

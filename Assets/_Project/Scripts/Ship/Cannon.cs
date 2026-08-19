@@ -27,6 +27,23 @@ namespace SeaSick.Ship
             : transform.position;
         public Vector3 FireDirection => barrelPivot != null
             ? barrelPivot.forward : transform.forward;
+        public float MuzzleSpeed => muzzleSpeed;
+
+        /// How far the shot carries from the muzzle down to flat water.
+        /// Computed from the live tuning rather than written down, so it stays
+        /// honest when the numbers move.
+        public float FlatRange
+        {
+            get
+            {
+                float g = Mathf.Abs(Physics.gravity.y);
+                float rad = elevationDeg * Mathf.Deg2Rad;
+                float vy = muzzleSpeed * Mathf.Sin(rad);
+                float vx = muzzleSpeed * Mathf.Cos(rad);
+                float h = Mathf.Max(0.5f, MuzzlePoint.y);
+                return vx * (vy + Mathf.Sqrt(vy * vy + 2f * g * h)) / g;
+            }
+        }
 
         public void Build(Material wood, Material iron)
         {
@@ -131,14 +148,17 @@ namespace SeaSick.Ship
             return go;
         }
 
-        public bool Fire()
+        /// `carriedVelocity` is the ship's own motion. Without it a broadside
+        /// fired at speed lands astern of where it was aimed — at 21 m/s over a
+        /// 1.6s flight that is most of the gun's range in lead error.
+        public bool Fire(Vector3 carriedVelocity = default)
         {
             if (!Ready) return false;
             readyAt = Time.time + reloadTime;
             recoil = recoilDistance;
             if (smoke != null) smoke.Emit(28);
 
-            CannonBall.Spawn(MuzzlePoint, FireDirection * muzzleSpeed);
+            CannonBall.Spawn(MuzzlePoint, FireDirection * muzzleSpeed + carriedVelocity);
             return true;
         }
 
