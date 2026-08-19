@@ -37,6 +37,8 @@ namespace SeaSick.Combat
 
         public Vector3 HitCentre => transform.position + Vector3.up * 1.4f;
         public float HitRadius => hitRadius;
+        /// Coils astern, head forward — a long low body, not a ball.
+        public Vector3 HitAxis => transform.forward * 4.5f;
         public bool Alive => diedAt < 0f;
         public int HitPoints => hitPoints;
         public int DamageTaken => damage;

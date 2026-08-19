@@ -1,3 +1,4 @@
+using SeaSick.Combat;
 using SeaSick.Crew;
 using SeaSick.World;
 using UnityEngine;
@@ -20,6 +21,10 @@ namespace SeaSick.Ship
         [SerializeField] float damagePerImpactSpeed = 0.035f;
         [SerializeField] float crewShock = 0.12f;      // sickness/anger jolt on a bad hit
         [SerializeField] float reefDamageScale = 1f; // a full-speed reef hit costs ~37% hull
+        // Another hull gives where rock does not, so ramming costs less than
+        // a reef — but it still costs, and it still stops you dead.
+        [SerializeField] float ramDamageScale = 0.55f;
+        [SerializeField] float enemyHullRadius = 9f;
 
         [Header("Repair")]
         [SerializeField] float repairRate = 0.05f;        // hull per second
@@ -71,6 +76,21 @@ namespace SeaSick.Ship
                 damageScale = reefDamageScale; // jagged rock bites harder
                 intruding = true;
             }
+            // Enemy hulls are solid as well. Without this the player sails
+            // clean through a raider, which reads as the raider having no
+            // hit box at all.
+            if (!intruding)
+                foreach (var raider in EnemyShip.All)
+                {
+                    if (raider == null || !raider.Alive) continue;
+                    if (!Intrudes(raider.transform.position, enemyHullRadius)) continue;
+                    obstaclePos = raider.transform.position;
+                    obstacleRadius = enemyHullRadius;
+                    damageScale = ramDamageScale;
+                    intruding = true;
+                    break;
+                }
+
             if (!intruding) return;
 
             Vector3 toShip = transform.position - obstaclePos;

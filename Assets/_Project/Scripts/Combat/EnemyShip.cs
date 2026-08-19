@@ -27,7 +27,7 @@ namespace SeaSick.Combat
         public enum Duty { Patrol, Block, Chase, Return }
 
         [Header("Hull")]
-        [SerializeField] float hitRadius = 5.5f;
+        [SerializeField] float hitRadius = 4.2f;   // half-beam-ish; length comes from HitAxis
         [SerializeField] int hitPoints = 8;
         [SerializeField] float length = 17f;
 
@@ -52,6 +52,11 @@ namespace SeaSick.Combat
         // shoreline has to be solid as well as avoided, the same way
         // HullIntegrity makes it solid for the player.
         [SerializeField] float hullMargin = 9f;
+        // Hull-to-hull separation. Deliberately smaller than the ship's length
+        // so two vessels can lie alongside for a broadside without being
+        // shoved apart — the point is to stop them merging, not to fend them
+        // off the moment they get interesting.
+        [SerializeField] float hullBeam = 7.5f;
 
         Island home;
         int patrolSign = 1;
@@ -71,6 +76,10 @@ namespace SeaSick.Combat
 
         public Vector3 HitCentre => transform.position + Vector3.up * 2.2f;
         public float HitRadius => hitRadius;
+        /// A 21m hull is not a ball. Without a length here, shots at the bow
+        /// or stern pass straight through and the ship reads as having no
+        /// hit box at all.
+        public Vector3 HitAxis => transform.forward * (length * 0.46f);
         public bool Alive => diedAt < 0f;
         public int HitPoints => hitPoints;
         public int DamageTaken => damage;
@@ -430,6 +439,16 @@ namespace SeaSick.Combat
 
             var reef = Reef.Nearest(pos);
             if (reef != null) Shove(reef.transform.position, reef.Radius, hullMargin * 0.5f);
+
+            // Other hulls are solid too. Raiders share a patrol circle, so
+            // without this they slowly converge and end up sailing as one
+            // ship inside another.
+            if (player != null) Shove(player.transform.position, hullBeam, hullBeam);
+            foreach (var other in All)
+            {
+                if (other == null || other == this || !other.Alive) continue;
+                Shove(other.transform.position, hullBeam, hullBeam);
+            }
         }
 
         void Shove(Vector3 centre, float radius, float margin)

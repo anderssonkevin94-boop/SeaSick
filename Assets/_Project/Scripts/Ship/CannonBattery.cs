@@ -47,6 +47,7 @@ namespace SeaSick.Ship
         readonly List<Cannon> port = new List<Cannon>();
         readonly List<Cannon> starboard = new List<Cannon>();
         ShipMotor motor;
+        CameraRig.ChaseCamera chase;
 
         public int PortReady => CountReady(port);
         public int StarboardReady => CountReady(starboard);
@@ -126,6 +127,16 @@ namespace SeaSick.Ship
             Vector3 carried = motor != null ? motor.Velocity * velocityInheritance : Vector3.zero;
             int fired = 0;
             foreach (var c in side) if (c != null && c.Fire(carried)) fired++;
+
+            // Lean the view out along the side that spoke, so you can watch
+            // where the shot lands instead of guessing.
+            if (fired > 0)
+            {
+                if (chase == null) chase = FindFirstObjectByType<CameraRig.ChaseCamera>();
+                if (chase != null)
+                    chase.WatchBroadside(starboardSide ? transform.right : -transform.right);
+            }
+
             return fired;
         }
 

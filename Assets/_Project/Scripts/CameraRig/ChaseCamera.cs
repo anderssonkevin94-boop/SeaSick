@@ -32,6 +32,21 @@ namespace SeaSick.CameraRig
         [Tooltip("Keeps the camera above island terrain instead of inside it.")]
         [SerializeField] float terrainClearance = 8f;
 
+        // Gunnery framing. A broadside leans the look-point out along the
+        // firing side so the fall of shot is in frame, then drifts back.
+        //
+        // It moves the LOOK POINT, never the camera's anchor, and never
+        // retargets onto a shell: cutting to the shot and back is the thing
+        // that would make this unwatchable. The ship stays in frame the whole
+        // time and the horizon never rolls — the view just leans, the way you
+        // would lean to watch where a stone lands.
+        [Header("Gunnery")]
+        [SerializeField] float gunneryLookShift = 34f;   // metres toward the firing side
+        [SerializeField] float gunneryLift = 5.5f;       // a little more height to see the splash
+        [SerializeField] float gunneryHold = 1.7f;       // ~one shot's time of flight
+        [SerializeField] float gunneryLeanRate = 3.2f;   // ease in
+        [SerializeField] float gunneryReturnRate = 1.1f; // ease out, slower than it leans
+
         public Transform Target { get => target; set => target = value; }
 
         /// When set (e.g. a shore party), the camera backs off and frames both
@@ -40,6 +55,27 @@ namespace SeaSick.CameraRig
 
         Camera cam;
         SeaSick.Ship.ShipMotor motor;
+
+        Vector3 gunneryDir;
+        float gunneryUntil = -1f;
+        float gunneryLean;   // smoothed 0..1, never stepped
+
+        /// Called when a broadside speaks. Firing again simply extends the
+        /// hold, so a rolling engagement leans once and stays leaned instead
+        /// of pumping in and out on every volley.
+        public void WatchBroadside(Vector3 worldDirection)
+        {
+            worldDirection.y = 0f;
+            if (worldDirection.sqrMagnitude < 1e-4f) return;
+
+            worldDirection.Normalize();
+            // Swing between sides rather than snapping, in case the other
+            // battery fires while this lean is still up.
+            gunneryDir = gunneryLean > 0.01f
+                ? Vector3.Slerp(gunneryDir, worldDirection, 0.5f)
+                : worldDirection;
+            gunneryUntil = Time.time + gunneryHold;
+        }
 
         void Start()
         {
@@ -93,6 +129,19 @@ namespace SeaSick.CameraRig
                 anchor = shipFlat;
                 desired = anchor - flatForward * distance + Vector3.up * height;
                 lookPoint = anchor + flatForward * lookAhead + Vector3.up * lookHeight;
+
+                // Lean out along the broadside. Eased both ways, and out more
+                // slowly than in, so it arrives with the shot and forgets
+                // about it gently.
+                float want = Time.time < gunneryUntil ? 1f : 0f;
+                float rate = want > gunneryLean ? gunneryLeanRate : gunneryReturnRate;
+                gunneryLean = Mathf.Lerp(gunneryLean, want, 1f - Mathf.Exp(-rate * dt));
+
+                if (gunneryLean > 0.001f)
+                {
+                    lookPoint += gunneryDir * (gunneryLookShift * gunneryLean);
+                    desired += Vector3.up * (gunneryLift * gunneryLean);
+                }
             }
 
             transform.position = Vector3.Lerp(
