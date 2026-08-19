@@ -53,6 +53,42 @@ namespace SeaSick.Ship
             chaseCam = FindFirstObjectByType<SeaSick.CameraRig.ChaseCamera>();
         }
 
+        /// Space runs whatever the state's own primary button would run, so
+        /// the whole land / cast off / recall cycle is one key. It is only ever
+        /// a shortcut to a command already offered on screen — if the button is
+        /// not there, or is disabled, the key does nothing.
+        void SpacebarCommand()
+        {
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb == null || !kb.spaceKey.wasPressedThisFrame) return;
+
+            switch (CurrentState)
+            {
+                case State.Underway:
+                {
+                    var isle = IslandInRange();
+                    if (isle != null && CanLandHere(isle)
+                        && motor.CurrentSpeed <= approachSpeedLimit)
+                        Land(isle);
+                    break;
+                }
+
+                case State.Anchored:
+                    // Mid-landing the ship is still coming alongside and the
+                    // button is replaced by a status line; don't let the key
+                    // cast off out from under it.
+                    if (!landingPending) WeighAnchor();
+                    break;
+
+                case State.Ashore:
+                    // Recall, even when the repair button is holding the
+                    // primary slot — getting the crew back is the command that
+                    // moves the voyage on.
+                    RecallCrew();
+                    break;
+            }
+        }
+
         Island IslandInRange()
         {
             var isle = Island.Nearest(transform.position);
@@ -73,6 +109,8 @@ namespace SeaSick.Ship
         void Update()
         {
             float dt = Time.deltaTime;
+
+            SpacebarCommand();
 
             switch (CurrentState)
             {
@@ -262,8 +300,8 @@ namespace SeaSick.Ship
                         ? "sheer cliff — find a beach"
                         : slowEnough
                             ? (isle.HasResources
-                                ? $"⚓  Land here — {isle.ResourceName}"
-                                : "⚓  Land here — rest")
+                                ? $"⚓  Land here — {isle.ResourceName}   (space)"
+                                : "⚓  Land here — rest   (space)")
                             : "slow down to land  (S)";
                     UIBlocker.Block(primary);
                     GUI.enabled = slowEnough && beach;
@@ -293,7 +331,7 @@ namespace SeaSick.Ship
                     // Crew are back aboard: cast off, or put them ashore again.
                     UIBlocker.Block(primary);
                     UIBlocker.Block(secondary);
-                    if (GUI.Button(primary, "⚓  Cast off", buttonStyle)) WeighAnchor();
+                    if (GUI.Button(primary, "⚓  Cast off   (space)", buttonStyle)) WeighAnchor();
                     if (CurrentIsland != null && CurrentIsland.HasResources
                         && GUI.Button(secondary, "send crew ashore", buttonStyle)) SendAshore();
                     break;
@@ -317,12 +355,12 @@ namespace SeaSick.Ship
                             ? $"stop repairs — hull {hull.Integrity01:P0}"
                             : $"repair hull ({hull.Integrity01:P0}) — uses timber";
                         if (GUI.Button(primary, repairLabel, buttonStyle)) repairing = !repairing;
-                        if (GUI.Button(secondary, "recall crew aboard", buttonStyle)) RecallCrew();
+                        if (GUI.Button(secondary, "recall crew aboard   (space)", buttonStyle)) RecallCrew();
                     }
                     else
                     {
                         UIBlocker.Block(primary);
-                        if (GUI.Button(primary, "recall crew aboard", buttonStyle)) RecallCrew();
+                        if (GUI.Button(primary, "recall crew aboard   (space)", buttonStyle)) RecallCrew();
                     }
                     break;
                 }

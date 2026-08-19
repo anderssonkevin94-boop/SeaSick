@@ -44,7 +44,7 @@ namespace SeaSick.World
         [SerializeField] int raidersPerIsland = 1;
         [SerializeField] int maxRaiders = 8;
         [SerializeField] float raiderMinIslandRadius = 60f;
-        [SerializeField] float patrolClearance = 55f;   // water between shore and patrol
+        [SerializeField] float patrolClearance = 78f;   // water between shore and patrol
 
         [SerializeField] Vector2 radiusRange = new Vector2(45f, 200f);
         [SerializeField] float richnessPerRadius = 0.95f;

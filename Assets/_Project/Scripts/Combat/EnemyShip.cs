@@ -46,6 +46,12 @@ namespace SeaSick.Combat
         [Header("Avoidance")]
         [SerializeField] float lookahead = 70f;
         [SerializeField] float clearance = 26f;
+        // Steering alone can never guarantee clearance: a raider makes 17 m/s
+        // and turns at 26 deg/s, so its turning circle is ~38m and a big
+        // island is 200m across — it simply cannot always turn in time. The
+        // shoreline has to be solid as well as avoided, the same way
+        // HullIntegrity makes it solid for the player.
+        [SerializeField] float hullMargin = 9f;
 
         Island home;
         int patrolSign = 1;
@@ -85,11 +91,13 @@ namespace SeaSick.Combat
             HitTargets.Unregister(this);
         }
 
+        static readonly Color RaiderRed = new Color(0.62f, 0.12f, 0.10f);
+        bool built;
+
         void Awake()
         {
             bobSeed = Random.Range(0f, 100f);
             mpb = new MaterialPropertyBlock();
-            Build();
         }
 
         public void Configure(Island island, float radius, int direction)
@@ -101,6 +109,63 @@ namespace SeaSick.Combat
 
         // ---------------------------------------------------------------- art
 
+        /// Raiders wear the player's hull, tinted red.
+        ///
+        /// Cloned from the live PlayerShip rather than loaded from a prefab so
+        /// there is no asset to keep in sync — the raider is whatever the
+        /// player's ship currently is. Only the three visual children are
+        /// taken (Hull, MastPivot, RudderPivot); crew are separate children
+        /// and are deliberately left behind.
+        ///
+        /// Deferred to the first Update, not Awake: script order is not
+        /// guaranteed and these spawn from ArchipelagoGenerator.Awake, so the
+        /// player's hull may not be reachable yet.
+        bool BuildFromPlayer()
+        {
+            var ship = FindFirstObjectByType<ShipMotor>();
+            if (ship == null) return false;
+
+            var root = new GameObject("Hull");
+            root.transform.SetParent(transform, false);
+            hull = root.transform;
+
+            bool any = false;
+            foreach (var partName in new[] { "Hull", "MastPivot", "RudderPivot" })
+            {
+                var part = ship.transform.Find(partName);
+                if (part == null) continue;
+
+                var copy = Instantiate(part.gameObject, hull);
+                copy.name = partName;
+                copy.transform.localPosition = part.localPosition;
+                copy.transform.localRotation = part.localRotation;
+                copy.transform.localScale = part.localScale;
+
+                // Strip behaviour and collision: this is scenery hanging off a
+                // raider, and anything live on it would fight EnemyShip.
+                foreach (var mb in copy.GetComponentsInChildren<MonoBehaviour>(true)) Destroy(mb);
+                foreach (var col in copy.GetComponentsInChildren<Collider>(true)) Destroy(col);
+                any = true;
+            }
+
+            if (!any) { Destroy(root); return false; }
+
+            // Tint through property blocks rather than material instances, so
+            // the raiders still batch with the player's hull.
+            GetComponentsInChildren(true, skin);
+            foreach (var r in skin)
+            {
+                Color c = r != null && r.sharedMaterial != null
+                    && r.sharedMaterial.HasProperty("_BaseColor")
+                    ? r.sharedMaterial.GetColor("_BaseColor") : Color.white;
+                skinColor.Add(Color.Lerp(c, RaiderRed, 0.68f));
+            }
+            Tint(c => c);
+            return true;
+        }
+
+        /// Fallback if the player's hull cannot be found — better a visible
+        /// raider built from primitives than an invisible one.
         void Build()
         {
             var timber = Mat(new Color(0.19f, 0.15f, 0.13f), 0.12f);
@@ -176,6 +241,12 @@ namespace SeaSick.Combat
 
             if (!Alive) { Sink(dt); return; }
 
+            if (!built)
+            {
+                built = true;
+                if (!BuildFromPlayer()) Build();
+            }
+
             // Built on demand: script order is not guaranteed, so nothing here
             // trusts that the player existed when this spawned.
             if (player == null) player = FindFirstObjectByType<ShipMotor>();
@@ -183,6 +254,7 @@ namespace SeaSick.Combat
             Vector3 goal = DecideGoal();
             float desired = Steer(goal);
             SailToward(desired, dt);
+            KeepClear();
             RideSea(dt);
             Flash();
         }
@@ -238,7 +310,10 @@ namespace SeaSick.Combat
             if (toGoal.sqrMagnitude < 0.01f) toGoal = Forward();
 
             Vector3 dir = toGoal.normalized;
-            Vector3 probe = pos + dir * lookahead;
+            // Look further ahead the faster we are going — a fixed lookahead
+            // is fine at steerage way and far too short at full speed.
+            float reach = Mathf.Max(lookahead, speed * 5f);
+            Vector3 probe = pos + dir * reach;
 
             // Islands are not circles, so ask for the shoreline distance on the
             // bearing we are actually approaching from. A raider's own island
@@ -341,6 +416,33 @@ namespace SeaSick.Combat
                 float k = Mathf.Clamp01(speed / maxSpeed);
                 wake.Stamp(new Vector2(p.x, p.z), 5.5f, 0.55f * dt * k, 0.35f * dt * k);
             }
+        }
+
+        /// The shoreline is solid, not merely discouraged. Islands are not
+        /// circles, so the radius is taken on the bearing the raider is
+        /// actually sitting on.
+        void KeepClear()
+        {
+            Vector3 pos = transform.position;
+
+            var isle = Island.Nearest(pos);
+            if (isle != null) Shove(isle.transform.position, isle.RadiusToward(pos), hullMargin);
+
+            var reef = Reef.Nearest(pos);
+            if (reef != null) Shove(reef.transform.position, reef.Radius, hullMargin * 0.5f);
+        }
+
+        void Shove(Vector3 centre, float radius, float margin)
+        {
+            Vector3 d = Flat(transform.position - centre);
+            float dist = d.magnitude;
+            float solid = radius + margin;
+            if (dist > solid || dist < 0.01f) return;
+
+            Vector3 outward = d / dist;
+            Vector3 fixedPos = centre + outward * solid;
+            transform.position = new Vector3(fixedPos.x, transform.position.y, fixedPos.z);
+            speed *= 0.55f;   // touching bottom costs way, as it should
         }
 
         Vector3 Forward() =>
