@@ -32,20 +32,26 @@ namespace SeaSick.CameraRig
         [Tooltip("Keeps the camera above island terrain instead of inside it.")]
         [SerializeField] float terrainClearance = 8f;
 
-        // Gunnery framing. A broadside leans the look-point out along the
-        // firing side so the fall of shot is in frame, then drifts back.
+        // Combat framing.
         //
-        // It moves the LOOK POINT, never the camera's anchor, and never
-        // retargets onto a shell: cutting to the shot and back is the thing
-        // that would make this unwatchable. The ship stays in frame the whole
-        // time and the horizon never rolls — the view just leans, the way you
-        // would lean to watch where a stone lands.
-        [Header("Gunnery")]
-        [SerializeField] float gunneryLookShift = 34f;   // metres toward the firing side
-        [SerializeField] float gunneryLift = 5.5f;       // a little more height to see the splash
-        [SerializeField] float gunneryHold = 1.7f;       // ~one shot's time of flight
-        [SerializeField] float gunneryLeanRate = 3.2f;   // ease in
-        [SerializeField] float gunneryReturnRate = 1.1f; // ease out, slower than it leans
+        // The camera backs off and rises while you are engaged; it does NOT
+        // rotate. In a drag-to-steer game the camera is the control frame, so
+        // any yaw re-maps the player's thumb mid-fight — which is exactly what
+        // made the earlier lean-toward-the-broadside version hard to fight
+        // with. Widening the view shows the water on both beams, and where the
+        // shot falls, without touching the mapping between drag and rudder.
+        //
+        // Driven by being ENGAGED, not by firing. One transition per fight
+        // rather than one per volley: re-triggering the framing on every
+        // broadside was half the problem on its own.
+        [Header("Combat framing")]
+        [SerializeField] float combatDistance = 12f;    // extra metres astern
+        [SerializeField] float combatHeight = 5.5f;     // extra metres up
+        [SerializeField] float combatLookAhead = -5f;   // look less far ahead, more abeam
+        [Tooltip("Kept short of the 30-degree tilt where the horizon leaves frame.")]
+        [SerializeField] float combatHold = 2.6f;       // outlasts a shot's time of flight
+        [SerializeField] float combatInRate = 1.6f;
+        [SerializeField] float combatOutRate = 0.9f;
 
         public Transform Target { get => target; set => target = value; }
 
@@ -56,26 +62,12 @@ namespace SeaSick.CameraRig
         Camera cam;
         SeaSick.Ship.ShipMotor motor;
 
-        Vector3 gunneryDir;
-        float gunneryUntil = -1f;
-        float gunneryLean;   // smoothed 0..1, never stepped
+        float combatUntil = -1f;
+        float combatLevel;   // smoothed 0..1, never stepped
 
-        /// Called when a broadside speaks. Firing again simply extends the
-        /// hold, so a rolling engagement leans once and stays leaned instead
-        /// of pumping in and out on every volley.
-        public void WatchBroadside(Vector3 worldDirection)
-        {
-            worldDirection.y = 0f;
-            if (worldDirection.sqrMagnitude < 1e-4f) return;
-
-            worldDirection.Normalize();
-            // Swing between sides rather than snapping, in case the other
-            // battery fires while this lean is still up.
-            gunneryDir = gunneryLean > 0.01f
-                ? Vector3.Slerp(gunneryDir, worldDirection, 0.5f)
-                : worldDirection;
-            gunneryUntil = Time.time + gunneryHold;
-        }
+        /// Call every frame while a target is worth framing for. The hold
+        /// decays on its own, so nothing can leave the camera stuck wide.
+        public void Engaged() => combatUntil = Time.time + combatHold;
 
         void Start()
         {
@@ -126,22 +118,19 @@ namespace SeaSick.CameraRig
                 flatForward.y = 0f;
                 flatForward = flatForward.sqrMagnitude < 0.001f ? Vector3.forward : flatForward.normalized;
 
+                // Widen for a fight. Eased in faster than out, so it opens up
+                // as the action starts and closes slowly once it is over.
+                float want = Time.time < combatUntil ? 1f : 0f;
+                float rate = want > combatLevel ? combatInRate : combatOutRate;
+                combatLevel = Mathf.Lerp(combatLevel, want, 1f - Mathf.Exp(-rate * dt));
+
+                float back = distance + combatDistance * combatLevel;
+                float up = height + combatHeight * combatLevel;
+                float ahead = lookAhead + combatLookAhead * combatLevel;
+
                 anchor = shipFlat;
-                desired = anchor - flatForward * distance + Vector3.up * height;
-                lookPoint = anchor + flatForward * lookAhead + Vector3.up * lookHeight;
-
-                // Lean out along the broadside. Eased both ways, and out more
-                // slowly than in, so it arrives with the shot and forgets
-                // about it gently.
-                float want = Time.time < gunneryUntil ? 1f : 0f;
-                float rate = want > gunneryLean ? gunneryLeanRate : gunneryReturnRate;
-                gunneryLean = Mathf.Lerp(gunneryLean, want, 1f - Mathf.Exp(-rate * dt));
-
-                if (gunneryLean > 0.001f)
-                {
-                    lookPoint += gunneryDir * (gunneryLookShift * gunneryLean);
-                    desired += Vector3.up * (gunneryLift * gunneryLean);
-                }
+                desired = anchor - flatForward * back + Vector3.up * up;
+                lookPoint = anchor + flatForward * ahead + Vector3.up * lookHeight;
             }
 
             transform.position = Vector3.Lerp(

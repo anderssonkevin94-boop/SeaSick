@@ -13,6 +13,7 @@ namespace SeaSick.Ship
         const float Damage = 1f;
 
         static Material ironMat;
+        static Material tracerMat;
 
         Vector3 velocity;
         float life;
@@ -40,11 +41,48 @@ namespace SeaSick.Ship
             go.transform.position = position;
             go.GetComponent<MeshRenderer>().sharedMaterial = ironMat;
 
+            Tracer(go);
+
             var ball = go.AddComponent<CannonBall>();
             ball.velocity = velocity;
             ball.owner = owner;
             GunneryStats.RecordShot();
             return ball;
+        }
+
+        /// A thin smoke trail behind the shot. This is how the fall of shot
+        /// stays readable now that the camera deliberately does not chase it:
+        /// you follow the trail down to the water instead of being shown.
+        static void Tracer(GameObject go)
+        {
+            if (tracerMat == null)
+            {
+                tracerMat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+                tracerMat.SetFloat("_Surface", 1f);
+                tracerMat.SetOverrideTag("RenderType", "Transparent");
+                tracerMat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                tracerMat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                tracerMat.SetInt("_ZWrite", 0);
+                tracerMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                tracerMat.renderQueue = 3000;
+                tracerMat.SetColor("_BaseColor", Color.white);
+            }
+
+            var trail = go.AddComponent<TrailRenderer>();
+            trail.time = 0.5f;
+            trail.startWidth = 0.42f;
+            trail.endWidth = 0.02f;
+            trail.numCapVertices = 2;
+            trail.sharedMaterial = tracerMat;
+            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            trail.receiveShadows = false;
+
+            var grad = new Gradient();
+            grad.SetKeys(
+                new[] { new GradientColorKey(new Color(1f, 0.97f, 0.90f), 0f),
+                        new GradientColorKey(new Color(0.78f, 0.78f, 0.80f), 1f) },
+                new[] { new GradientAlphaKey(0.55f, 0f), new GradientAlphaKey(0f, 1f) });
+            trail.colorGradient = grad;
         }
 
         /// Nudge the aim so a near miss lands. Applied once, at the muzzle — the
