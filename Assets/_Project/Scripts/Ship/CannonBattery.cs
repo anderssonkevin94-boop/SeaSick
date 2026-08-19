@@ -51,7 +51,12 @@ namespace SeaSick.Ship
 
         readonly List<Cannon> port = new List<Cannon>();
         readonly List<Cannon> starboard = new List<Cannon>();
+        // Build order, and therefore the crew assignment order: each gun is
+        // worked by one named hand. A gun goes silent because a person walked
+        // away from it, which is a thing you can watch happen on deck.
+        readonly List<Cannon> allGuns = new List<Cannon>();
         ShipMotor motor;
+        Crew.CrewRoster roster;
         Combat.IHittable self;
 
         public int PortReady => CountReady(port);
@@ -94,6 +99,35 @@ namespace SeaSick.Ship
             Make("CannonPortAft", -aftPosition.x, aftPosition.y, -1f, port, wood, iron);
             Make("CannonStarFore", forePosition.x, forePosition.y, 1f, starboard, wood, iron);
             Make("CannonStarAft", aftPosition.x, aftPosition.y, 1f, starboard, wood, iron);
+
+            PostGunCrews();
+        }
+
+        [Header("Gun crews")]
+        [Tooltip("How far inboard of their gun the gunner stands.")]
+        [SerializeField] float gunnerInboard = 0.72f;
+        [Tooltip("How far outboard of the gun the rail is — a gunner heaves out their own port.")]
+        [SerializeField] float gunportOutboard = 0.55f;
+
+        /// Stand each assigned hand at the gun they work. This is what makes
+        /// the mechanic legible: a silent gun has a visibly empty place behind
+        /// it, and you can watch the person who should be there walk away.
+        void PostGunCrews()
+        {
+            if (roster == null) roster = GetComponent<Crew.CrewRoster>();
+            if (roster == null) return;
+
+            for (int i = 0; i < allGuns.Count; i++)
+            {
+                var hand = roster.GunCrew(i);
+                if (hand == null || allGuns[i] == null) continue;
+
+                Vector3 gun = allGuns[i].transform.localPosition;
+                float side = Mathf.Sign(gun.x);
+                hand.AssignStation(
+                    new Vector3(gun.x - side * gunnerInboard, gun.y - 0.05f, gun.z),
+                    new Vector3(gun.x + side * gunportOutboard, gun.y - 0.05f, gun.z));
+            }
         }
 
         /// Where a side's guns are trained to cross, in ship-local space:
@@ -116,6 +150,7 @@ namespace SeaSick.Ship
             var cannon = go.AddComponent<Cannon>();
             cannon.Build(wood, iron);
             side.Add(cannon);
+            allGuns.Add(cannon);
         }
 
         static int CountReady(List<Cannon> side)
@@ -146,9 +181,36 @@ namespace SeaSick.Ship
             return fired;
         }
 
+        /// Hand each gun to its crew member. A queasy gunner reloads slowly,
+        /// a gunner at the rail doesn't reload at all — the half-worked charge
+        /// is still sitting there when they stagger back.
+        void ServiceGuns()
+        {
+            if (roster == null) roster = GetComponent<Crew.CrewRoster>();
+            for (int i = 0; i < allGuns.Count; i++)
+            {
+                var gun = allGuns[i];
+                if (gun == null) continue;
+                if (roster == null) { gun.Manned = true; gun.ReloadScale = 1f; continue; }
+
+                var hand = roster.GunCrew(i);
+                gun.Manned = hand != null && hand.Available;
+                gun.ReloadScale = hand != null ? hand.WorkRate01 : 0f;
+            }
+        }
+
+        /// How many of a side's guns have someone standing behind them.
+        int MannedOn(List<Cannon> side)
+        {
+            int n = 0;
+            foreach (var c in side) if (c != null && c.Manned) n++;
+            return n;
+        }
+
         void Update()
         {
             float dt = Time.deltaTime;
+            ServiceGuns();
             TrainSide(starboard, true, dt);
             TrainSide(port, false, dt);
 
@@ -199,7 +261,14 @@ namespace SeaSick.Ship
             var style = new GUIStyle(UITheme.Button);
             GUI.enabled = ready > 0;
             var side = starboardSide ? starboard : port;
-            if (GUI.Button(r, $"{label}  {ready}/{side.Count}", style)) FireBroadside(starboardSide);
+            // Say WHY the side is silent. "0/2" reads as a reload; "no crew"
+            // reads as the two people who are supposed to be there being
+            // somewhere else, which is the actual situation.
+            int manned = MannedOn(side);
+            string text = manned == 0
+                ? $"{label}  no crew"
+                : $"{label}  {ready}/{side.Count}";
+            if (GUI.Button(r, text, style)) FireBroadside(starboardSide);
             GUI.enabled = true;
 
             // Reload progress under the button.

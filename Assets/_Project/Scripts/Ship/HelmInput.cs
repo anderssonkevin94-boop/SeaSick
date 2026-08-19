@@ -60,7 +60,9 @@ namespace SeaSick.Ship
                 rudder, steering ? target : 0f,
                 (steering ? engageSpeed : recenterSpeed) * Time.deltaTime);
             motor.Rudder = rudder;
-            motor.SailSetting = SailSteps[sailStep];
+            // An order, not a setting. The tiller is always the captain's;
+            // the canvas belongs to whoever is still on their feet.
+            motor.SailOrder = SailSteps[sailStep];
         }
 
         void StepSail(int delta) => sailStep = Mathf.Clamp(sailStep + delta, 0, SailSteps.Length - 1);
@@ -95,16 +97,27 @@ namespace SeaSick.Ship
             UIBlocker.Block(more);
             if (GUI.Button(less, "▼", UITheme.Button)) StepSail(-1);
             if (GUI.Button(more, "▲", UITheme.Button)) StepSail(1);
+            // The order is what you asked for; the bar under it is what the
+            // crew have actually managed. When they're sick the two disagree,
+            // and that gap IS the mechanic — it has to be on screen.
             GUI.Label(new Rect(px, py + u * 2.9f, panelW, u * 1.2f),
-                SailNames[sailStep], UITheme.Small2Centered);
+                motor.Trimming ? SailNames[sailStep] + " …" : SailNames[sailStep],
+                UITheme.Small2Centered);
+            UITheme.Bar(new Rect(px + u * 0.6f, py + u * 4.25f, panelW - u * 1.2f, u * 0.22f),
+                motor.SailSetting, motor.Trimming ? UITheme.Warn : UITheme.Sea);
 
-            // Oars: always available, always works, wears the crew out.
+            // Oars: wind-independent, but pure labour — a crew at the rail
+            // can't pull, so this stops being the guaranteed way home.
+            float oars = motor.OarPower01;
             var row = new Rect(px, py - u * 2.1f, panelW, u * 1.8f);
             UIBlocker.Block(row);
             var rowStyle = new GUIStyle(UITheme.Button);
             if (motor.Rowing) rowStyle.normal = rowStyle.active;
-            if (GUI.Button(row, motor.Rowing ? "◉  rowing" : "◎  man the oars", rowStyle))
-                motor.Rowing = !motor.Rowing;
+            string oarLabel = oars < 0.02f ? "—  no one at the oars"
+                : motor.Rowing ? "◉  rowing" : "◎  man the oars";
+            GUI.enabled = oars >= 0.02f;
+            if (GUI.Button(row, oarLabel, rowStyle)) motor.Rowing = !motor.Rowing;
+            GUI.enabled = true;
         }
     }
 }

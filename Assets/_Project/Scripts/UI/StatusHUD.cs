@@ -36,7 +36,8 @@ namespace SeaSick.UI
         }
 
         /// Top-left: one slim bar per crew member. Colour is their sickness,
-        /// a red pip warns that they're getting angry.
+        /// and a pip above the bar means that person isn't at their post —
+        /// amber at the rail, red for finished.
         void DrawCrew(float x, float y, int u)
         {
             if (crew == null || crew.Length == 0) return;
@@ -52,9 +53,9 @@ namespace SeaSick.UI
                 if (c == null) continue;
                 var r = new Rect(x + gap + i * (barW + gap), y + gap, barW, barH);
                 UITheme.Bar(r, c.Sickness01, UITheme.Ramp(c.Sickness01), vertical: true);
-                if (c.Anger01 > 0.25f)
+                if (!c.Available && c.IsAboard)
                     UITheme.Rect(new Rect(r.x, r.y - gap * 0.6f, r.width, gap * 0.45f),
-                        Color.Lerp(UITheme.Warn, UITheme.Bad, c.Anger01));
+                        c.Broken ? UITheme.Bad : UITheme.Warn);
             }
         }
 

@@ -40,10 +40,19 @@ namespace SeaSick.Ship
         SeaSick.Combat.IHittable owner;
         float trainYaw;
         float recoil;
-        float readyAt;
+        float reloadLeft;
 
-        public bool Ready => Time.time >= readyAt;
-        public float ReloadFraction => Mathf.Clamp01(1f - (readyAt - Time.time) / reloadTime);
+        /// Who is working this gun, as a rate. The battery sets it from the
+        /// assigned crew member every frame: 1 for a healthy gunner, less for
+        /// a queasy one, 0 when they are at the rail — at which point the
+        /// reload simply stops where it is and waits for them.
+        public float ReloadScale { get; set; } = 1f;
+        /// False when nobody is on the gun. A loaded gun with no one behind it
+        /// is still a silent gun.
+        public bool Manned { get; set; } = true;
+
+        public bool Ready => Manned && reloadLeft <= 0f;
+        public float ReloadFraction => Mathf.Clamp01(1f - reloadLeft / reloadTime);
         /// Straight out of the muzzle, angled up a touch.
         public Vector3 MuzzlePoint => barrel != null
             ? barrel.position + barrel.forward * 0.9f
@@ -242,7 +251,7 @@ namespace SeaSick.Ship
         public bool Fire(Vector3 carriedVelocity = default)
         {
             if (!Ready) return false;
-            readyAt = Time.time + reloadTime;
+            reloadLeft = reloadTime;
             recoil = recoilDistance;
             if (smoke != null) smoke.Emit(28);
 
@@ -269,6 +278,11 @@ namespace SeaSick.Ship
 
         void Update()
         {
+            // Reload is worked, not waited out: it only runs down while there
+            // is someone on the gun to run it down.
+            if (reloadLeft > 0f)
+                reloadLeft = Mathf.Max(0f, reloadLeft - Time.deltaTime * Mathf.Max(0f, ReloadScale));
+
             if (barrel == null) return;
             recoil = Mathf.MoveTowards(recoil, 0f, recoilReturn * Time.deltaTime);
             barrel.localPosition = new Vector3(0f, 0f, -recoil);

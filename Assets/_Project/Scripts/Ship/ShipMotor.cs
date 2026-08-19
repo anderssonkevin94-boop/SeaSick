@@ -65,13 +65,18 @@ namespace SeaSick.Ship
 
         /// -1 (full port) .. 1 (full starboard). Set by HelmInput.
         public float Rudder { get; set; }
-        /// 0 (fully reefed) .. 1 (full canvas). The trim decision: more sail is
-        /// faster but rougher on the crew; easing sail in chop is a skill.
-        public float SailSetting { get; set; } = 1f;
+        /// 0 (fully reefed) .. 1 (full canvas). What is ACTUALLY set on the
+        /// yard right now. The captain does not touch the canvas himself: he
+        /// calls for it with SailOrder and the crew get there when they can.
+        public float SailSetting { get; private set; } = 1f;
+        /// What the captain has called for. Free to set at any time — a crew
+        /// too sick to work simply never arrives at it, and the ship carries
+        /// whatever it was already carrying.
+        public float SailOrder { get; set; } = 1f;
+        /// True while the hands are still working the sheets toward the order.
+        public bool Trimming => !Mathf.Approximately(SailSetting, SailOrder);
         /// 0 empty .. 1 full hold. Loaded ships are slower and turn heavier.
         public float CargoLoad01 { get; set; }
-        /// Mutinous crew won't give you full canvas (set by MutinyController).
-        public float SailCap { get; set; } = 1f;
         /// Anchored: no thrust, no steering, but the hull still rides the waves.
         public bool Anchored { get; set; }
 
@@ -82,8 +87,13 @@ namespace SeaSick.Ship
         /// any direction, which means there is always a way home.
         public bool Rowing { get; set; }
         public float RowSpeed => rowSpeed;
-        /// When set, the crew has seized the helm: rudder input is ignored and
-        /// the ship steers itself toward this point (mutiny stage 3+).
+        /// Oars are pure labour — no wind to borrow. A broken crew takes the
+        /// guaranteed way home away with them, which is exactly when it
+        /// should stop being guaranteed.
+        public float OarPower01 => roster != null ? roster.Labour01 : 1f;
+        /// When set, rudder input is ignored and the ship steers itself toward
+        /// this point, tacking upwind if it has to. Nothing drives it since
+        /// mutiny was removed — kept as the hook for a "set course" order.
         public Vector3? AutopilotTarget { get; set; }
         public float CurrentSpeed => speed;
         public float Heading => heading;
@@ -244,10 +254,31 @@ namespace SeaSick.Ship
             if (mastPivot == null) mastPivot = transform.Find("MastPivot");
         }
 
+        [Header("Crew")]
+        [Tooltip("Sail units per second a FULL, healthy crew can trim. Scales with how much crew is actually working.")]
+        [SerializeField] float sailTrimRate = 0.55f;
+
+        Crew.CrewRoster roster;
+
+        /// Canvas is set by hands, not by the captain's thumb. The order goes
+        /// up instantly; the sail follows at whatever pace the crew can manage,
+        /// and at zero able crew it simply stays where it is. That is the whole
+        /// failure mode: you never lose the ship, you lose the ability to
+        /// change your mind about it.
+        void TrimSails(float dt)
+        {
+            if (roster == null) roster = GetComponent<Crew.CrewRoster>();
+            if (roster == null) { SailSetting = SailOrder; return; }   // raiders, tests
+            SailSetting = Mathf.MoveTowards(
+                SailSetting, SailOrder, sailTrimRate * roster.Labour01 * dt);
+        }
+
         void Update()
         {
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
+
+            TrimSails(dt);
 
             // Damped spring: acceleration back toward level, minus drag.
             recoilRollVel += (-recoilStiffness * recoilRoll - recoilDamping * recoilRollVel) * dt;
@@ -294,13 +325,13 @@ namespace SeaSick.Ship
             PolarEfficiency = SailPolar(WindAngleDeg);
             Luff01 = Mathf.Clamp01(1f - (WindAngleDeg - 12f) / 23f);
 
-            float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(Mathf.Min(SailSetting, SailCap)));
+            float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(SailSetting));
             float targetSpeed = effMaxSpeed * PolarEfficiency * sailPower * WindStrength;
 
             // Oars don't care about the wind. They never beat a good point of
             // sail, but they'll always get you off a lee shore or home.
             if (Rowing && !Anchored)
-                targetSpeed = Mathf.Max(targetSpeed, rowSpeed * (1f - 0.18f * load));
+                targetSpeed = Mathf.Max(targetSpeed, rowSpeed * (1f - 0.18f * load) * OarPower01);
 
             // Sea-of-Thieves-style carve: thrust builds along the hull, but
             // momentum keeps its own direction. Turning converts forward way

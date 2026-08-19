@@ -84,7 +84,7 @@ namespace SeaSick.Dev
                 if (c == null) continue;
                 string who = c.Def != null ? c.Def.displayName : "crew";
                 GUI.Label(new Rect(x, y, w, line),
-                    $"{who}: sick {c.Sickness01:F2}  anger {c.Anger01:F2}  [{c.StateName}]", label);
+                    $"{who}: sick {c.Sickness01:F2}  work {c.WorkRate01:F2}  [{c.StateName}]", label);
                 var sickRect = new Rect(x, y + line, w, line * 0.4f);
                 GUI.color = new Color(0f, 0f, 0f, 0.4f);
                 GUI.DrawTexture(sickRect, Texture2D.whiteTexture);

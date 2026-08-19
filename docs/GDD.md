@@ -17,10 +17,10 @@ A one-handed portrait mobile game. You lead an island tribe that must sail to di
 ## 3. Core gameplay loop
 **Prep** (pick crew, potions, cargo target) → **Sail out** (steer smooth lines through waves, manage sail trim and crew sickness) → **Gather** at the island (simple at MVP) → **Sail home heavier** (worse handling, sicker crew, push-your-luck) → **Spend** on village buildings, ship parts, potions → repeat, farther.
 
-Failure is soft: a too-sick crew mutinies and turns the ship home, ditching cargo to get there faster. You lose loot and time, never your save.
+Failure is soft, and it is a loss of *capability* rather than an event: a crew that gets sick enough stops being able to work the ship. You lose time, cargo-carrying trips and the ability to defend yourself — never your save, and never control of the ship.
 
-### Escalation stages (always visible before mutiny)
-grumbling → refusing stations → someone grabs the wheel and turns for home → cargo goes overboard. The player should always see it coming.
+### Losing the crew (always visible, never a cliff)
+The meter only ever goes up at sea. Past ~80% they start leaving their post to heave over the rail; the episodes get longer and closer together until the rail is all they do. Nothing is announced and nothing is seized — sail changes get slower, the oars weaken, guns fall silent one at a time as their gunner walks away. **The captain always keeps the tiller, and the sail stays wherever it was last set**, so a fully broken crew leaves a ship that still steers and still makes way. You lose your options, not your ship.
 
 ## 4. Platform, player & controls
 - **Platform:** mobile, portrait, one-handed. Sessions = one voyage (target 3–8 min).
@@ -46,8 +46,10 @@ Archipelago seen from the home island outward; farther islands = richer resource
 - A **smoothness metric** computed from hull motion (impact accelerations, roll/pitch spikes) — this is the bridge between sailing skill and sickness rate, and the number we tune until sailing feels fair and fun.
 
 ### Seasickness — MVP
-- Per-crew-member meter. Rate = base (time at sea) + roughness (from smoothness metric) − modifiers (traits, cook, doctor, ship comfort upgrades).
-- Visible stages on the body, not bars-first: green tint → queasy idle → puking (briefly abandons station) → mad (escalation stages above).
+- Per-crew-member meter, **0 → 100 and monotonic at sea**. Rate = base (time at sea) + roughness² (from smoothness metric) − modifiers (traits, cook, doctor, ship comfort upgrades).
+- **Puking does not relieve it.** It is the tax: past the threshold they leave their post for the rail, and the frequency and length of episodes climb with the meter until they never come back from it. "A broken crew stops working" is therefore a duty cycle, not a rule at 100%.
+- **Land is the only cure.** Shore leave drains the meter to zero at a rate, so a real harvest fully settles a crew and a touch-and-go costs you the time it takes. This makes sickness a per-*leg* clock and islands genuine sanctuaries.
+- Visible stages on the body, not bars-first: green tint → queasy sway → walking off to the rail → slumped over it, grey and done.
 - **Potions:** settle (reset a crew member's meter) and endure (slow accumulation for a stretch). Bought/brewed at home; limited cargo slots.
 
 ### Crew & stations — MVP-lite (one crew member), full later
@@ -71,7 +73,7 @@ Each milestone is a committable, testable slice. Sailing first; work backward.
 2. **Wind & trim** — speed from wind angle + trim order; smoothness metric computed and visualized (debug).
 3. **Sickness on one crew member** — meter driven by smoothness + time; green tint + puke-at-railing behavior; potion as a tap order.
 4. **The voyage loop** — depart home dock → reach island anchor → auto-gather → sail home → loot tally screen.
-5. **Mutiny & escalation** — the four visible stages, turn-back, loot ditching.
+5. ~~**Mutiny & escalation**~~ — built 2026-08-17, **removed 2026-08-19**. Replaced by crew-as-labour: sickness costs you the ship's capability instead of triggering a scripted turn-back.
 6. **Crew of three** — stations, orders, per-member sickness; traits as data.
 7. **Home screen economy** — menu-based village: spend loot on 2–3 buildings + a ship upgrade + potions that visibly change the next voyage.
 8. **On-device build** — real phone, portrait, one-handed input polish pass. (Earlier if feel is in doubt — feel can only be judged on the phone.)
@@ -97,6 +99,20 @@ _Append-only._
 - 2026-08-17 — Roster with persistent villagers/traits/breeding planned post-MVP; crew modeled as data (ScriptableObjects) from day one to allow it.
 - 2026-08-17 — Development order: sailing first, work backward to base.
 - 2026-08-17 — Device target: iPhone (iOS first). Default orientation set to Portrait.
+- 2026-08-19 — **Sickness reworked: the meter only goes up, and mutiny is gone.**
+  - **The meter is monotonic at sea.** 0 → 100, and nothing afloat brings it down. Puking used to shave 0.25 off it, which made the whole system a sawtooth: letting the crew heave literally bought off the mutiny, so the "clock" could be paid down with the thing that was supposed to be its symptom.
+  - **Puking is now the tax, not the relief.** Past ~80% (offset per person by `ironStomach` plus a name-seeded jitter, so five people don't hit the rail on the same frame) they leave their post for the rail. Episodes lengthen 3.5s → 9s and close up 30s → 6s as the meter climbs, until at 100% they never come back — `State.Broken`, slumped over the rail, grey. **"A broken crew stops working" is a duty cycle, not a rule at 100%**, so there is no cliff anywhere on the curve.
+  - **Mutiny deleted** (`MutinyController`, `Anger01`, `SailCap`, `VoyageManager.DitchCargo`). It was the *only* wire from sickness to the ship — cannons fired straight off player input and sails were set directly by the player — so removing it meant building the layer that should have been there.
+  - **Crew are labour now** (`CrewRoster`). Every ship system asks it before acting: `Available` (at their post, not at the rail, not ashore) and `WorkRate01` (1 → 0.5 across the meter). Time lost to the rail and the slowness of queasy hands combine into one `Labour01` number.
+    - **Sail is an order, not a setting.** `HelmInput` writes `ShipMotor.SailOrder`; the crew move `SailSetting` toward it at `0.55 × Labour01` per second. Canvas therefore *stays where it was last set* when nobody can work.
+    - **Oars scale with `Labour01`** — the guaranteed way home stops being guaranteed exactly when the crew break, which is the point of having it.
+    - **Guns are worked by named people.** One hand per gun in crew order (Bo→port fore, Mara→port aft, Pip→stbd fore, Tam→stbd aft; Ola is the spare/sail hand). `Cannon` reload is now a serviced countdown (`ReloadScale`, `Manned`) rather than an absolute `readyAt`, so a gunner at the rail leaves a half-rammed charge sitting there. `CannonBattery.PostGunCrews` stands each gunner at their own gun, **derived from the live gun transforms** rather than baked into the scene, so the deck can't drift out of sync with the battery. Their `railLocal` is their own gunport.
+  - **The captain always keeps the tiller.** Verified with every hand at 1.0: guns 0/2 both sides, oar power 0.00, sail refuses to move — and the ship still makes **14.5 m/s** and still steers, on `steerageWay` alone if it has to. **There is no state this system can reach that strands the player**, which was the one thing that had to be true before mutiny could be removed.
+  - **Rates halved** (`baseRate` 0.005→0.002, `roughnessRate` 0.12→0.06, `rowingStrain` 2.1→1.7). Removing puke relief silently *tripled* the effective rate, because the old numbers were balanced against a meter that could be paid down. Measured targets: 0.12 roughness → first puke 5.2 min; 0.25 → 2.6 min; 0.53 (caught in the swell) → 47 s.
+  - **Shore leave is a full reset to zero, at a rate** (`shoreRecoveryRate` 0.045/s, the old 0.2 floor removed) — so a real harvest settles a crew completely and a touch-and-go costs the ~22 s it takes. **This makes sickness a per-*leg* clock rather than a per-voyage one**: with islands 280–1150 m out, only the long outer runs can break anyone, which is "distance is the difficulty curve" doing the work it was always supposed to.
+  - **`crewShock` 0.12→0.06 and `shotShock` 0.10→0.05.** Both were tuned against a recoverable meter; left alone, ~12 hits to wreck the hull would have finished the crew outright before the timber. Caught by a probe that showed sickness jumping +0.146 in 3s under fire.
+  - **The probe trap bit again, fourth time.** The first trim measurement drove `motor.SailOrder` and reported 0.1 s trims — `HelmInput` reasserts `SailOrder` from its own `sailStep` every frame. Drive the owner's state, never the state it owns.
+  - **Still open:** whether a fully-broken crew needs a real fail state or whether "slow and defenceless" is punishment enough — deliberately deferred until it's been played. `ShipMotor.AutopilotTarget` and its hard-won upwind tacking are now unused; kept as the hook for a future "set course home" order.
 - 2026-08-18 — **Cannons (first pass) + crew of five.**
   - **Four guns, two a side**, one forward and one aft of the mast at x ±1.45, z +4.8 / −1.2, deck height 2.05. First attempt at the full beam (±2.0) buried the carriages — **the hull tumbles home above the waterline**, so guns have to sit inboard with only the muzzle over the rail.
   - **Aiming is the tiller.** You steer to bring a side to bear and fire that broadside (`Q` / `E`, or the two buttons bottom-left showing loaded guns and a reload bar). This deliberately keeps combat *inside* the sailing rather than competing for the player's thumb.

@@ -1820,9 +1820,6 @@ PrefabInstance:
       addedObject: {fileID: 2143489884}
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2143489885}
-    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 2143489886}
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
@@ -1857,6 +1854,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489897}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489898}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -1922,6 +1922,7 @@ MonoBehaviour:
   rowSpeed: 9
   recoilStiffness: 34
   recoilDamping: 3.4
+  sailTrimRate: 0.55
 --- !u!114 &2143489883
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1957,24 +1958,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Dev.DevHUD
   visible: 0
---- !u!114 &2143489885
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2143489876}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b4feb9ed0ce554294a3dc9d63977f5e3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Crew.MutinyController
-  grumbleAt: 0.25
-  refuseAt: 0.5
-  mutinyAt: 0.75
-  ditchAt: 0.9
-  ditchInterval: 6
-  ditchAmount: 3
 --- !u!114 &2143489886
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2130,6 +2113,8 @@ MonoBehaviour:
   convergeRange: 45
   trainWithinDeg: 60
   recoilRollPerGun: 14
+  gunnerInboard: 0.72
+  gunportOutboard: 0.55
 --- !u!114 &2143489894
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2189,6 +2174,19 @@ MonoBehaviour:
   lockRange: 150
   breakRange: 200
   breakGrace: 1
+--- !u!114 &2143489898
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f7afcade7e319426e87b6fb82c548432, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Crew.CrewRoster
+  assignGunsInOrder: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

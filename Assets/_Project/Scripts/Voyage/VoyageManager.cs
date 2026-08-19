@@ -36,6 +36,7 @@ namespace SeaSick.Voyage
         int pukesAtStart;
         float completedTime;
         int completedPukes;
+        float completedWorst;
         string completedHaul = "";
 
         GUIStyle centerLabel, cargoLabel;
@@ -94,24 +95,6 @@ namespace SeaSick.Voyage
             return true;
         }
 
-        /// Mutinous crew throwing loot overboard (stage 4). Lightening the
-        /// ship also restores speed — they really do get home faster.
-        public void DitchCargo(int amount)
-        {
-            if (TotalHeld <= 0) return;
-            var keys = new List<string>(held.Keys);
-            foreach (var k in keys)
-            {
-                if (amount <= 0) break;
-                int take = Mathf.Min(amount, held[k]);
-                held[k] -= take;
-                TotalHeld -= take;
-                amount -= take;
-                if (held[k] <= 0) held.Remove(k);
-            }
-            ship.CargoLoad01 = Mathf.Clamp01((float)TotalHeld / holdCapacity);
-        }
-
         void Update()
         {
             if (ship == null || homePoint == null) return;
@@ -138,6 +121,11 @@ namespace SeaSick.Voyage
         {
             completedTime = Time.time - voyageStartTime;
             completedPukes = TotalPukes() - pukesAtStart;
+            // Read the crew BEFORE Rest() wipes them, or the tally always
+            // reports a healthy ship coming home.
+            completedWorst = 0f;
+            foreach (var c in crew)
+                if (c != null && c.Sickness01 > completedWorst) completedWorst = c.Sickness01;
 
             var sb = new StringBuilder();
             var landed = new List<string>();
@@ -200,9 +188,12 @@ namespace SeaSick.Voyage
 
             int m = Mathf.FloorToInt(completedTime / 60f);
             int s = Mathf.FloorToInt(completedTime % 60f);
+            // Trips to the rail alone is a misleading number now that the
+            // meter never falls — a crew can be finished having puked twice,
+            // or fine having puked once. Lead with how bad it got.
             string crewLine = completedPukes == 0
                 ? "the crew kept it together"
-                : $"the crew puked {completedPukes}×";
+                : $"worst {completedWorst:P0} sick   ·   {completedPukes}× to the rail";
             GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
                 $"{m}:{s:00}   ·   {crewLine}", SeaSick.UI.UITheme.Small2Centered);
             y += u * 2.2f;

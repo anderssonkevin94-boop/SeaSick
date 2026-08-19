@@ -19,7 +19,7 @@ namespace SeaSick.Ship
         [SerializeField] float hullMargin = 7f;      // ship half-length-ish clearance
         [SerializeField] float freeImpactSpeed = 2.5f; // gentle nudges cost nothing
         [SerializeField] float damagePerImpactSpeed = 0.035f;
-        [SerializeField] float crewShock = 0.12f;      // sickness/anger jolt on a bad hit
+        [SerializeField] float crewShock = 0.06f;      // permanent sickness jolt on a bad hit
         [SerializeField] float reefDamageScale = 1f; // a full-speed reef hit costs ~37% hull
         // Another hull gives where rock does not, so ramming costs less than
         // a reef — but it still costs, and it still stops you dead.
@@ -31,7 +31,7 @@ namespace SeaSick.Ship
         // ends a voyage — the wallow it adds and the crew it terrifies are,
         // and those compound long before the timber runs out.
         [SerializeField] float damagePerShot = 0.085f;
-        [SerializeField] float shotShock = 0.10f;
+        [SerializeField] float shotShock = 0.05f;
 
         [Header("Repair")]
         [SerializeField] float repairRate = 0.05f;        // hull per second
