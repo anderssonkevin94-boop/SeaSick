@@ -2186,8 +2186,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6f70b3dcd442c49dfa8627a21bba55a1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Combat.CombatLock
-  lockRange: 170
-  breakRange: 260
+  lockRange: 150
+  breakRange: 200
+  breakGrace: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

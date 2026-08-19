@@ -13,13 +13,19 @@ namespace SeaSick.Combat
     /// can drop it with the same key the moment it stops paying.
     public class CombatLock : MonoBehaviour
     {
-        [SerializeField] float lockRange = 170f;
-        /// Hysteresis: once locked, hold on well past the range you could
-        /// acquire at, or the lock drops every time they open the distance.
-        [SerializeField] float breakRange = 260f;
+        [SerializeField] float lockRange = 150f;
+        /// Hysteresis: hold on past the range you could acquire at, or the
+        /// lock drops every time they open the distance a little. But not too
+        /// far past — the guns only reach 67m, so a lock held at 260m was
+        /// paying the camera-swing cost long after the fight was over.
+        [SerializeField] float breakRange = 200f;
+        /// Must be outside breakRange for this long before releasing, so a
+        /// single wave-driven metre over the line does not drop the lock.
+        [SerializeField] float breakGrace = 1f;
 
         ChaseCamera chase;
         IHittable self;
+        float outOfRangeFor;
 
         public IHittable Locked { get; private set; }
 
@@ -35,10 +41,12 @@ namespace SeaSick.Combat
             // Drop a lock that has died, sunk out of the registry, or run.
             if (Locked != null)
             {
-                bool gone = !Locked.Alive
-                            || !HitTargets.All.Contains(Locked)
-                            || Distance(Locked) > breakRange;
-                if (gone) Release();
+                bool dead = !Locked.Alive || !HitTargets.All.Contains(Locked);
+
+                outOfRangeFor = Distance(Locked) > breakRange
+                    ? outOfRangeFor + Time.deltaTime : 0f;
+
+                if (dead || outOfRangeFor >= breakGrace) Release();
             }
 
             var kb = UnityEngine.InputSystem.Keyboard.current;
@@ -57,11 +65,16 @@ namespace SeaSick.Combat
                 chase.LockTarget = Locked is MonoBehaviour mb && mb != null ? mb.transform : null;
         }
 
-        void Take(IHittable t) => Locked = t;
+        void Take(IHittable t)
+        {
+            Locked = t;
+            outOfRangeFor = 0f;
+        }
 
         void Release()
         {
             Locked = null;
+            outOfRangeFor = 0f;
             if (chase != null) chase.LockTarget = null;
         }
 
@@ -106,10 +119,16 @@ namespace SeaSick.Combat
                 if (sp.z > 0f)
                 {
                     float y = Screen.height - sp.y;
-                    float r = Mathf.Lerp(u * 2.6f, u * 1.2f,
-                        Mathf.Clamp01(Distance(Locked) / breakRange));
+                    float d = Distance(Locked);
+                    float r = Mathf.Lerp(u * 2.6f, u * 1.2f, Mathf.Clamp01(d / breakRange));
                     float t = Mathf.Max(2f, u * 0.16f);
-                    var c = new Color(1f, 0.45f, 0.35f, 0.95f);
+
+                    // Fade toward amber over the last quarter of the range, so
+                    // losing the lock is something you watch coming rather
+                    // than something that happens to you.
+                    float slipping = Mathf.InverseLerp(breakRange * 0.75f, breakRange, d);
+                    var c = Color.Lerp(new Color(1f, 0.45f, 0.35f, 0.95f),
+                                       new Color(1f, 0.80f, 0.30f, 0.55f), slipping);
 
                     // Four corners rather than a full box: less to look through.
                     foreach (int sx in new[] { -1, 1 })
@@ -123,9 +142,15 @@ namespace SeaSick.Combat
             }
 
             // Prompt, bottom centre, above the broadside buttons.
-            string msg = Locked != null ? "space  ·  release lock"
-                       : Candidate() != null ? "space  ·  lock on"
-                       : null;
+            string msg;
+            if (Locked != null)
+            {
+                float d = Distance(Locked);
+                msg = d > breakRange
+                    ? $"lock slipping —  {d:F0} m"
+                    : $"space  ·  release lock   ({d:F0} m)";
+            }
+            else msg = Candidate() != null ? "space  ·  lock on" : null;
             if (msg == null) return;
 
             float w = Mathf.Min(Screen.width * 0.6f, u * 18f);
