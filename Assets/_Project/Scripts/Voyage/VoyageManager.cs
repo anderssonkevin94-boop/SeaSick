@@ -16,16 +16,31 @@ namespace SeaSick.Voyage
         [SerializeField] ShipMotor ship;
         [SerializeField] Transform homePoint;
         [SerializeField] float homeRadius = 60f;
+        [Tooltip("The marked line — a full hold. NOT a hard cap: you may load past it.")]
         [SerializeField] int holdCapacity = 40;
+        [Tooltip("How far past the line she'll physically take, as a multiple. The rest rides on deck.")]
+        [SerializeField] float overloadLimit = 1.6f;
 
         enum Phase { AtSea, Tally }
         Phase phase = Phase.AtSea;
 
         public Transform HomePoint => homePoint;
-        public bool HoldFull => TotalHeld >= holdCapacity;
+        /// **The player's decision to be greedy.** Off, the shore party fills
+        /// the hold to the marked line and stops. On, they keep loading and the
+        /// surplus rides on deck, where it costs freeboard, handling, and
+        /// eventually the guns. Nobody overloads by accident.
+        public bool TakeDeckCargo { get; set; }
+
+        /// Where the shore party stops — the line, or the physical limit.
+        public bool HoldFull => TotalHeld >= (TakeDeckCargo ? MaxHold : holdCapacity);
+        /// Genuinely nothing more will fit, on deck or below.
+        public bool HoldStuffed => TotalHeld >= MaxHold;
         public int TotalHeld { get; private set; }
         public int HoldCapacity => holdCapacity;
-        public float HoldFill01 => holdCapacity > 0 ? (float)TotalHeld / holdCapacity : 0f;
+        public int MaxHold => Mathf.RoundToInt(holdCapacity * overloadLimit);
+        /// 1.0 is the marked line. Above that she's carrying deck cargo.
+        public float HoldFill => holdCapacity > 0 ? (float)TotalHeld / holdCapacity : 0f;
+        public bool Overloaded => TotalHeld > holdCapacity;
 
         readonly Dictionary<string, int> held = new Dictionary<string, int>();
         readonly Dictionary<string, int> banked = new Dictionary<string, int>();
@@ -51,12 +66,13 @@ namespace SeaSick.Voyage
         void BeginVoyage()
         {
             phase = Phase.AtSea;
+            TakeDeckCargo = false;
             hasLeftHome = false;
             voyageStartTime = Time.time;
             pukesAtStart = TotalPukes();
             held.Clear();
             TotalHeld = 0;
-            if (ship != null) ship.CargoLoad01 = 0f;
+            if (ship != null) ship.CargoLoad = 0f;
         }
 
         int TotalPukes()
@@ -70,19 +86,48 @@ namespace SeaSick.Voyage
         public void AddLoot(int amount, string resource)
         {
             if (phase == Phase.Tally || amount <= 0) return;
-            int room = holdCapacity - TotalHeld;
+            int room = MaxHold - TotalHeld;
             if (room <= 0) return;
             amount = Mathf.Min(amount, room);
 
             held.TryGetValue(resource, out int cur);
             held[resource] = cur + amount;
             TotalHeld += amount;
-            ship.CargoLoad01 = Mathf.Clamp01((float)TotalHeld / holdCapacity);
+            ship.CargoLoad = HoldFill;
         }
 
         public void AddSalvage(int amount) => AddLoot(amount, "Timber");
 
         public int AmountOf(string resource) => held.TryGetValue(resource, out int n) ? n : 0;
+
+        /// Over the side. The escape valve for a ship that is going under —
+        /// costs you the payoff, buys back freeboard immediately. The player's
+        /// decision, at the helm, in seconds.
+        public int Jettison(int amount)
+        {
+            if (TotalHeld <= 0 || amount <= 0) return 0;
+            int dumped = 0;
+            var keys = new List<string>(held.Keys);
+            foreach (var k in keys)
+            {
+                if (amount <= 0) break;
+                int take = Mathf.Min(amount, held[k]);
+                held[k] -= take;
+                TotalHeld -= take;
+                amount -= take;
+                dumped += take;
+                if (held[k] <= 0) held.Remove(k);
+            }
+            ship.CargoLoad = HoldFill;
+
+            // Take the visible stacks down with it, or the deck keeps looking
+            // loaded after the weight has gone.
+            var shipHold = ship != null ? ship.GetComponent<Ship.ShipHold>() : null;
+            if (shipHold != null)
+                for (int i = 0; i < dumped; i++) shipHold.RemoveVisual();
+
+            return dumped;
+        }
 
         /// Spend cargo (repairs burn timber). False if the hold can't cover it.
         public bool TryConsume(string resource, int amount)
@@ -91,7 +136,7 @@ namespace SeaSick.Voyage
             held[resource] = have - amount;
             if (held[resource] <= 0) held.Remove(resource);
             TotalHeld -= amount;
-            ship.CargoLoad01 = Mathf.Clamp01((float)TotalHeld / holdCapacity);
+            ship.CargoLoad = HoldFill;
             return true;
         }
 
@@ -145,7 +190,7 @@ namespace SeaSick.Voyage
 
             held.Clear();
             TotalHeld = 0;
-            ship.CargoLoad01 = 0f;
+            ship.CargoLoad = 0f;
             foreach (var c in crew) if (c != null) c.Rest();
             phase = Phase.Tally;
         }

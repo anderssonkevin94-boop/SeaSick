@@ -35,9 +35,9 @@ namespace SeaSick.UI
             DrawNav(pad, u);
         }
 
-        /// Top-left: one slim bar per crew member. Colour is their sickness,
-        /// and a pip above the bar means that person isn't at their post —
-        /// amber at the rail, red for finished.
+        /// Top-left: one slim bar per crew member. Colour is how green the sea
+        /// has made them — pure flavour — and a pip above the bar means that
+        /// person is off their post on a bucket, which is not.
         void DrawCrew(float x, float y, int u)
         {
             if (crew == null || crew.Length == 0) return;
@@ -53,9 +53,9 @@ namespace SeaSick.UI
                 if (c == null) continue;
                 var r = new Rect(x + gap + i * (barW + gap), y + gap, barW, barH);
                 UITheme.Bar(r, c.Sickness01, UITheme.Ramp(c.Sickness01), vertical: true);
-                if (!c.Available && c.IsAboard)
+                if (c.IsBailing)
                     UITheme.Rect(new Rect(r.x, r.y - gap * 0.6f, r.width, gap * 0.45f),
-                        c.Broken ? UITheme.Bad : UITheme.Warn);
+                        UITheme.Sea);
             }
         }
 
@@ -78,7 +78,7 @@ namespace SeaSick.UI
             if (voyage != null)
             {
                 var cargoRect = new Rect(x + inner, top + h - inner - u * 0.5f, w - inner * 2f, u * 0.5f);
-                UITheme.Bar(cargoRect, voyage.HoldFill01, UITheme.Cargo);
+                UITheme.Bar(cargoRect, Mathf.Clamp01(voyage.HoldFill), UITheme.Cargo);
             }
         }
 

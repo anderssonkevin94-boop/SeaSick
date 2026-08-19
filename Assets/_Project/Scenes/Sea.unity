@@ -152,6 +152,7 @@ MonoBehaviour:
   homePoint: {fileID: 1901280689}
   homeRadius: 165
   holdCapacity: 24
+  overloadLimit: 1.6
 --- !u!4 &38900269
 Transform:
   m_ObjectHideFlags: 0
@@ -1857,6 +1858,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489898}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489899}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -1919,6 +1923,11 @@ MonoBehaviour:
   rudderPivot: {fileID: 0}
   mastPivot: {fileID: 0}
   rudderVisualAngle: 35
+  sinkAtMarkedLine: 0.5
+  sinkPerOverload: 0.72
+  sinkAtFullBilge: 0.42
+  railHeight: 1.3
+  railHalfBeam: 3.9
   rowSpeed: 9
   recoilStiffness: 34
   recoilDamping: 3.4
@@ -2187,6 +2196,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Crew.CrewRoster
   assignGunsInOrder: 1
+--- !u!114 &2143489899
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b26d9fff21dd1413a9501bfd0f4b87d4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.Bilge
+  ingressPerMetre: 0.28
+  maxEffectiveImmersion: 0.45
+  seepAtFullRoughness: 0.006
+  bailPerHand: 0.021
+  ignoreBelow: 0.06
+  allHandsAt: 0.55
+  maxWallowFromWater: 0.35
+  jettisonPerTap: 5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -75,8 +75,41 @@ namespace SeaSick.Ship
         public float SailOrder { get; set; } = 1f;
         /// True while the hands are still working the sheets toward the order.
         public bool Trimming => !Mathf.Approximately(SailSetting, SailOrder);
-        /// 0 empty .. 1 full hold. Loaded ships are slower and turn heavier.
-        public float CargoLoad01 { get; set; }
+        /// 0 empty, **1 = the marked line** (a full hold), and above that is
+        /// deck cargo. Deliberately NOT clamped: overloading is allowed, and
+        /// everything it costs you gets worse faster past 1.
+        public float CargoLoad { get; set; }
+
+        [Header("Load & freeboard")]
+        [Tooltip("How deep the hull sits at the marked line. The whole ship goes down, so the deck, crew and guns go with it.")]
+        [SerializeField] float sinkAtMarkedLine = 0.50f;
+        [Tooltip("Extra sink per unit of load ABOVE the line. Steeper than below it — that is the gamble.")]
+        [SerializeField] float sinkPerOverload = 0.72f;
+        [Tooltip("How deep a completely swamped bilge pushes her down on its own.")]
+        [SerializeField] float sinkAtFullBilge = 0.42f;
+        // MEASURED, not guessed. At 2.35 (the top of the bulwark) the sea's
+        // closest approach was 1.97m BELOW the rail in a working sea, so green
+        // water could never happen at any load — the deck simply rides too high.
+        // This is the effective waist where she takes it aboard: the low point
+        // by the scuppers, not the cap rail.
+        [Tooltip("Effective height above the ship's origin at which water comes aboard.")]
+        [SerializeField] float railHeight = 1.30f;
+        [Tooltip("Half-beam at the rail. Bigger means heel dips the lee rail further.")]
+        [SerializeField] float railHalfBeam = 3.9f;
+
+        /// How far below her light waterline she is sitting, from cargo and
+        /// from water already aboard. The spiral lives here: water makes her
+        /// sit lower, sitting lower ships more water.
+        public float SinkDepth { get; private set; }
+
+        /// Metres of green water over the rail this frame, 0 when dry. The
+        /// wave crest is sampled at the hull, so this rises with the sea, with
+        /// the load, and with how far the hull is lagging the surface.
+        public float RailImmersion { get; private set; }
+
+        /// Set by Bilge each frame. Kept as a plain field so ShipMotor doesn't
+        /// have to know the component exists.
+        public float BilgeLoad01 { get; set; }
         /// Anchored: no thrust, no steering, but the hull still rides the waves.
         public bool Anchored { get; set; }
 
@@ -234,6 +267,49 @@ namespace SeaSick.Ship
         /// is where the reaction from a starboard broadside actually throws it.
         public void AddRecoilRoll(float degreesPerSecond) => recoilRollVel += degreesPerSecond;
 
+        /// How much sea is standing over the rail right now.
+        ///
+        /// Measured by sampling the water AT the rails, against where those
+        /// rails actually are once the hull has finished moving. That distinction
+        /// matters: a hull that follows the waves quasi-statically never ships
+        /// water at all, because the rail that dips is always the one over the
+        /// lower water. Green water comes from everything that does NOT follow
+        /// the surface — the vertical lag, heel in a turn, a gust laying her
+        /// over, the kick of a broadside — and every one of those is already
+        /// baked into this transform.
+        ///
+        /// Cargo then simply hands the sea a head start: every centimetre she
+        /// has settled is a centimetre of rail she no longer has.
+        void SampleGreenWater()
+        {
+            var field = Ocean.WaveField.Instance;
+            if (field == null || Anchored) { RailImmersion = 0f; return; }
+
+            float t = Time.time;
+            float worst = 0f;
+            for (int i = 0; i < RailPoints.Length; i++)
+            {
+                Vector3 rail = transform.TransformPoint(
+                    new Vector3(RailPoints[i].x * railHalfBeam, railHeight, RailPoints[i].y));
+                // Same solver the buoyancy uses. SampleHeightFast does one
+                // inverse-displacement iteration to SampleHeight's three, and
+                // the two diverge on steep crests — the hull and the test for
+                // water coming over it must agree about where the water is.
+                float h = field.SampleHeight(new Vector2(rail.x, rail.z), t);
+                float over = h - rail.y;
+                if (over > worst) worst = over;
+            }
+            RailImmersion = worst;
+        }
+
+        /// Along both rails: x in units of half-beam, z in metres. Four points
+        /// with the accurate solver costs about what five did with the fast one.
+        static readonly Vector2[] RailPoints =
+        {
+            new Vector2(-1f,  3.5f), new Vector2(1f,  3.5f),   // forward
+            new Vector2(-1f, -2.0f), new Vector2(1f, -2.0f),   // aft
+        };
+
         float heading;   // degrees, 0 = +Z
         float speed;     // |velocity|, for HUD/camera/turn-rate
         Vector3 velocity; // world-space; decoupled from heading so the hull can slide
@@ -285,11 +361,21 @@ namespace SeaSick.Ship
             recoilRoll += recoilRollVel * dt;
 
             // --- Steering & speed ---
-            float load = Mathf.Clamp01(CargoLoad01);
-            float effMaxSpeed = maxSpeed * (1f - 0.18f * load);
+            // A laden ship is not mainly a SLOW ship — she still runs before
+            // the wind. What she loses is willingness: slower to gather way,
+            // slower to shed it, and she carries through a turn instead of
+            // biting. Speed and turn rate take only light penalties so that
+            // sailing loaded stays fun; the weight is felt in the momentum
+            // terms further down.
+            float load = Mathf.Max(0f, CargoLoad);
+            float over = Mathf.Max(0f, load - 1f);      // deck cargo only
+            float laden = Mathf.Min(load, 1f);          // up to the marked line
+
+            float effMaxSpeed = maxSpeed * (1f - 0.10f * laden - 0.14f * over);
             if (hull != null) effMaxSpeed *= hull.SpeedMultiplier;
             float speedFactor = Mathf.Clamp01(speed / maxSpeed);
-            float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor) * (1f - 0.25f * load);
+            float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor)
+                * (1f - 0.15f * laden - 0.20f * over);
 
             // Wind is sampled BEFORE steering: the autopilot needs to know
             // where the wind is to work out whether it has to tack.
@@ -331,7 +417,8 @@ namespace SeaSick.Ship
             // Oars don't care about the wind. They never beat a good point of
             // sail, but they'll always get you off a lee shore or home.
             if (Rowing && !Anchored)
-                targetSpeed = Mathf.Max(targetSpeed, rowSpeed * (1f - 0.18f * load) * OarPower01);
+                targetSpeed = Mathf.Max(targetSpeed,
+                    rowSpeed * (1f - 0.22f * laden - 0.30f * over) * OarPower01);
 
             // Sea-of-Thieves-style carve: thrust builds along the hull, but
             // momentum keeps its own direction. Turning converts forward way
@@ -413,11 +500,17 @@ namespace SeaSick.Ship
             float pull = forwardWay > targetSpeed
                 ? acceleration * overspeedDragScale
                 : acceleration;
+            // Mass. Everything she does, she does more reluctantly — building
+            // way, losing it, and answering the helm.
+            float heaviness = 1f / (1f + 0.55f * laden + 1.05f * over);
             forwardWay = Mathf.MoveTowards(forwardWay, targetSpeed,
-                (Anchored ? acceleration * 2.5f : pull) * dt);
+                (Anchored ? acceleration * 2.5f : pull * heaviness) * dt);
             forwardWay = Mathf.Clamp(forwardWay, -2f, effMaxSpeed * surfOvershoot);
 
-            sideWay *= Mathf.Exp(-(Anchored ? keelGrip * 3f : keelGrip) * dt);
+            // A heavy hull slides. The keel bleeds sideslip more slowly, so the
+            // stern keeps going where it was already going and the ship crabs
+            // through a turn — the single clearest signal that she is loaded.
+            sideWay *= Mathf.Exp(-(Anchored ? keelGrip * 3f : keelGrip * heaviness) * dt);
             velocity = forward * forwardWay + right * sideWay;
 
             // Wave push goes on last, in world space, so the sail-drag solve
@@ -484,7 +577,15 @@ namespace SeaSick.Ship
                 // even when the sea already has the hull hard over.
                 rollDeg = Mathf.Clamp(rollDeg + recoilRoll, -26f, 26f);
 
-                pos.y = Mathf.Lerp(pos.y, hCenter, 1f - Mathf.Exp(-verticalResponse * dt));
+                // Freeboard. Cargo and water aboard both push her down, and the
+                // whole ship goes with it — deck, crew, guns — so a loaded
+                // ship is legible from the chase camera without any UI.
+                SinkDepth = sinkAtMarkedLine * laden
+                    + sinkPerOverload * over
+                    + sinkAtFullBilge * Mathf.Clamp01(BilgeLoad01);
+
+                pos.y = Mathf.Lerp(pos.y, hCenter - SinkDepth,
+                    1f - Mathf.Exp(-verticalResponse * dt));
                 Quaternion targetRot = Quaternion.Euler(pitchDeg, heading, rollDeg);
                 transform.rotation = Quaternion.Slerp(
                     transform.rotation, targetRot, 1f - Mathf.Exp(-angularResponse * dt));
@@ -495,6 +596,8 @@ namespace SeaSick.Ship
             }
 
             transform.position = pos;
+
+            SampleGreenWater();
 
             // --- Visual pivots ---
             if (rudderPivot != null)

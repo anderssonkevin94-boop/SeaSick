@@ -280,6 +280,30 @@ namespace SeaSick.Ship
 
         // --- UI -------------------------------------------------------------
 
+        /// The greed switch. Off, the crew fill her to the marked line and
+        /// stop. On, they keep piling it on deck. Deliberately only reachable
+        /// while anchored: overloading is a decision you make in harbour, and
+        /// then have to live with all the way home.
+        void DrawDeckCargoToggle(Rect anchorRect, int u, float w,
+            GUIStyle buttonStyle, GUIStyle infoStyle)
+        {
+            if (voyage == null) return;
+
+            var r = new Rect(anchorRect.x, anchorRect.y + u * 2.3f, anchorRect.width, u * 1.8f);
+            UIBlocker.Block(r);
+
+            var style = new GUIStyle(buttonStyle);
+            if (voyage.TakeDeckCargo) style.normal = style.active;
+            string label = voyage.TakeDeckCargo
+                ? $"◉  deck cargo — to {voyage.MaxHold}"
+                : $"◎  deck cargo — stop at {voyage.HoldCapacity}";
+            if (GUI.Button(r, label, style)) voyage.TakeDeckCargo = !voyage.TakeDeckCargo;
+
+            if (voyage.TakeDeckCargo)
+                GUI.Label(new Rect(0f, r.yMax, w, u * 1.6f),
+                    "she'll swim low and take water", infoStyle);
+        }
+
         void OnGUI()
         {
             buttonStyle = UITheme.Button;
@@ -341,6 +365,7 @@ namespace SeaSick.Ship
                     if (GUI.Button(primary, "⚓  Cast off   (space)", buttonStyle)) WeighAnchor();
                     if (CurrentIsland != null && CurrentIsland.HasResources
                         && GUI.Button(secondary, "send crew ashore", buttonStyle)) SendAshore();
+                    DrawDeckCargoToggle(secondary, u, w, buttonStyle, infoStyle);
                     break;
                 }
 
@@ -351,6 +376,8 @@ namespace SeaSick.Ship
                         : "the crew rests on solid ground";
                     if (repairing) status += "   ·   repairing hull";
                     GUI.Label(new Rect(0f, secondary.y - u * 2f, w, u * 1.8f), status, infoStyle);
+
+                    DrawDeckCargoToggle(secondary, u, w, buttonStyle, infoStyle);
 
                     bool canRepair = hull != null && hull.NeedsRepair && voyage != null
                         && voyage.AmountOf("Timber") > 0;

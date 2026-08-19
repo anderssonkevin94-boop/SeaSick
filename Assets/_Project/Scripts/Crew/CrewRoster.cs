@@ -87,15 +87,45 @@ namespace SeaSick.Crew
         /// Nobody left who will lift anything.
         public bool AllDown => AbleCount == 0;
 
-        public int BrokenCount
+        public int BailingCount
         {
             get
             {
                 int n = 0;
-                foreach (var c in All) if (c != null && c.Broken) n++;
+                foreach (var c in All) if (c != null && c.IsBailing) n++;
                 return n;
             }
         }
+
+        /// Put `wanted` hands on the buckets and return how many are actually
+        /// there. **Spare hands go first, gun crews last, and the aftmost guns
+        /// before the forward ones** — so a little water costs you nothing, and
+        /// only a serious flood starts silencing the battery. Anyone ashore or
+        /// over the side simply isn't available to ask.
+        public int AssignBailers(int wanted)
+        {
+            var all = All;
+            if (all.Length == 0) return 0;
+
+            int placed = 0;
+            for (int p = 0; p < BailPriority.Length && p < all.Length; p++)
+            {
+                var c = all[BailPriority[p]];
+                if (c == null || !c.IsAboard) continue;
+
+                if (placed < wanted)
+                {
+                    c.StartBailing();
+                    if (c.IsBailing) placed++;
+                }
+                else c.StopBailing();
+            }
+            return placed;
+        }
+
+        /// Order to pull hands in. Index 4 is the spare (no gun), then the two
+        /// aft guns, then the two forward ones.
+        static readonly int[] BailPriority = { 4, 3, 1, 2, 0 };
 
         /// The crew member who works a given gun. Guns are manned by named
         /// people so the loss reads on a body — "that gun is silent because
@@ -120,18 +150,18 @@ namespace SeaSick.Crew
             // One slim line, and only when the crew are genuinely failing —
             // the state has to be legible before the player wonders why the
             // ship stopped answering.
-            int able = AbleCount;
-            if (able == CrewCount || CrewCount == 0) return;
+            int bailing = BailingCount;
+            if (bailing == 0) return;
 
-            string msg = able == 0
-                ? "no one is working the ship"
-                : able == 1
-                    ? "one hand still on their feet"
-                    : $"{able} of {CrewCount} still on their feet";
+            string msg = bailing == CrewCount
+                ? "all hands bailing"
+                : bailing == 1
+                    ? "one hand on the buckets"
+                    : $"{bailing} hands on the buckets";
 
-            float weight = 1f - (float)able / CrewCount;
+            float weight = (float)bailing / Mathf.Max(1, CrewCount);
             UITheme.Banner(0.185f, msg,
-                new Color(0.42f, 0.30f, 0.06f, Mathf.Lerp(0.45f, 0.82f, weight)));
+                new Color(0.10f, 0.30f, 0.42f, Mathf.Lerp(0.45f, 0.85f, weight)));
         }
     }
 }

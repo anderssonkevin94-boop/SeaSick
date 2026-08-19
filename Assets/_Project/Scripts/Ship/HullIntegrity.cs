@@ -39,7 +39,20 @@ namespace SeaSick.Ship
 
         public float Integrity01 => integrity;
         public float SpeedMultiplier => 1f - speedPenaltyAtWreck * (1f - integrity);
-        public float Wallow01 => wallowAtWreck * (1f - integrity);
+        /// Broken timber and water aboard both make her lie over and roll.
+        /// The bilge's share is capped inside Bilge itself, so a flooded ship
+        /// is crippled rather than doomed.
+        public float Wallow01
+        {
+            get
+            {
+                if (bilge == null) bilge = GetComponent<Bilge>();
+                float water = bilge != null ? bilge.WallowFromWater : 0f;
+                return wallowAtWreck * (1f - integrity) + water;
+            }
+        }
+
+        Bilge bilge;
         public bool NeedsRepair => integrity < 0.995f;
         public float LastImpactTime { get; private set; } = -99f;
         public float LastImpactSpeed { get; private set; }
