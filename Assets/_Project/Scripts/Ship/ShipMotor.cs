@@ -211,6 +211,19 @@ namespace SeaSick.Ship
             speed < 0.5f ? 0f : Vector3.SignedAngle(
                 Quaternion.Euler(0f, heading, 0f) * Vector3.forward, velocity, Vector3.up);
 
+        // Firing a broadside shoves the hull. Modelled as a damped spring
+        // rather than a lerp back to level, because a boat does not return to
+        // upright — it rolls past and comes back, once or twice, and that
+        // second little roll is the whole feel of it.
+        [Header("Gun recoil")]
+        [SerializeField] float recoilStiffness = 34f;   // ~1.1s period
+        [SerializeField] float recoilDamping = 3.4f;    // underdamped on purpose
+        float recoilRoll, recoilRollVel;
+
+        /// Positive heels to port — the side away from starboard guns, which
+        /// is where the reaction from a starboard broadside actually throws it.
+        public void AddRecoilRoll(float degreesPerSecond) => recoilRollVel += degreesPerSecond;
+
         float heading;   // degrees, 0 = +Z
         float speed;     // |velocity|, for HUD/camera/turn-rate
         Vector3 velocity; // world-space; decoupled from heading so the hull can slide
@@ -235,6 +248,10 @@ namespace SeaSick.Ship
         {
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
+
+            // Damped spring: acceleration back toward level, minus drag.
+            recoilRollVel += (-recoilStiffness * recoilRoll - recoilDamping * recoilRollVel) * dt;
+            recoilRoll += recoilRollVel * dt;
 
             // --- Steering & speed ---
             float load = Mathf.Clamp01(CargoLoad01);
@@ -431,6 +448,10 @@ namespace SeaSick.Ship
                 // of heel, which reads as capsizing rather than working the sea.
                 pitchDeg = Mathf.Clamp(pitchDeg, -16f, 16f);
                 rollDeg = Mathf.Clamp(rollDeg, -20f, 20f);
+
+                // Added after the swell clamp so a broadside is always felt,
+                // even when the sea already has the hull hard over.
+                rollDeg = Mathf.Clamp(rollDeg + recoilRoll, -26f, 26f);
 
                 pos.y = Mathf.Lerp(pos.y, hCenter, 1f - Mathf.Exp(-verticalResponse * dt));
                 Quaternion targetRot = Quaternion.Euler(pitchDeg, heading, rollDeg);

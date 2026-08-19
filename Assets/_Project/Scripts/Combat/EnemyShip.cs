@@ -57,6 +57,17 @@ namespace SeaSick.Combat
         [Range(0f, 1f)] [SerializeField] float leadFactor = 0.8f;
         [SerializeField] float engageRange = 150f;
         [SerializeField] float gunStandoff = 46f;
+        // Same rail positions as the player's battery, because a raider is
+        // wearing the player's hull — the geometry that fits one fits the other.
+        [SerializeField] Vector2 gunFore = new Vector2(1.45f, 4.8f);
+        [SerializeField] Vector2 gunAft = new Vector2(1.45f, -1.2f);
+        [SerializeField] float gunDeckHeight = 2.05f;
+        [SerializeField] float recoilRoll = 9f;
+        // Oversized on purpose. The player sees their own guns from the deck;
+        // a raider is read at 46m and up, where a correctly-scaled cannon is
+        // three dark pixels. Legibility at engagement range beats accuracy of
+        // proportion.
+        [SerializeField] float gunScale = 1.7f;
 
         [Header("Avoidance")]
         [SerializeField] float lookahead = 70f;
@@ -82,6 +93,10 @@ namespace SeaSick.Combat
         float lastHitAt = -99f;
         float bobSeed;
         float readyAt;
+        float gunHeel, gunHeelVel;
+
+        readonly List<SeaSick.Ship.Cannon> portGuns = new List<SeaSick.Ship.Cannon>();
+        readonly List<SeaSick.Ship.Cannon> starGuns = new List<SeaSick.Ship.Cannon>();
 
         Transform hull;
         readonly List<Renderer> skin = new List<Renderer>();
@@ -186,7 +201,39 @@ namespace SeaSick.Combat
                 skinColor.Add(Color.Lerp(c, RaiderRed, 0.68f));
             }
             Tint(c => c);
+            BuildGuns();
             return true;
+        }
+
+        /// Real guns on the rail, so the thing shooting at you is visible.
+        /// Built from the same Cannon component the player uses: the mesh, the
+        /// recoil and the muzzle smoke all come for free, and only the
+        /// ballistics differ — a raider lays its guns by pointing the ship.
+        void BuildGuns()
+        {
+            // Lighter than the player's iron so the guns separate from a dark
+            // red hull instead of disappearing into it.
+            var wood = Mat(new Color(0.34f, 0.23f, 0.14f), 0.12f);
+            var iron = Mat(new Color(0.30f, 0.31f, 0.34f), 0.55f);
+
+            MakeGun("GunPortFore", -gunFore.x, gunFore.y, -1f, portGuns, wood, iron);
+            MakeGun("GunPortAft", -gunAft.x, gunAft.y, -1f, portGuns, wood, iron);
+            MakeGun("GunStarFore", gunFore.x, gunFore.y, 1f, starGuns, wood, iron);
+            MakeGun("GunStarAft", gunAft.x, gunAft.y, 1f, starGuns, wood, iron);
+        }
+
+        void MakeGun(string name, float x, float z, float sideSign,
+            List<SeaSick.Ship.Cannon> side, Material wood, Material iron)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = new Vector3(x, gunDeckHeight, z);
+            go.transform.localRotation = Quaternion.Euler(0f, sideSign * 90f, 0f);
+            go.transform.localScale = Vector3.one * gunScale;
+
+            var gun = go.AddComponent<SeaSick.Ship.Cannon>();
+            gun.Build(wood, iron);
+            side.Add(gun);
         }
 
         /// Fallback if the player's hull cannot be found — better a visible
@@ -447,7 +494,10 @@ namespace SeaSick.Combat
             transform.position = new Vector3(
                 p.x, Mathf.Lerp(p.y, surface, 1f - Mathf.Exp(-7f * dt)), p.z);
 
-            float lean = Mathf.Sin((Time.time + bobSeed) * 0.8f) * 3.5f;
+            gunHeelVel += (-30f * gunHeel - 3.6f * gunHeelVel) * dt;
+            gunHeel += gunHeelVel * dt;
+
+            float lean = Mathf.Sin((Time.time + bobSeed) * 0.8f) * 3.5f + gunHeel;
             float pitch = Mathf.Sin((Time.time + bobSeed) * 1.1f) * 2.2f;
             transform.rotation = Quaternion.Slerp(
                 transform.rotation, Quaternion.Euler(pitch, heading, lean),
@@ -479,50 +529,35 @@ namespace SeaSick.Combat
 
             readyAt = Time.time + reloadTime;
 
-            Vector3 beam = starboard ? transform.right : -transform.right;
-            Vector3 muzzle = transform.position + beam * 3.4f + Vector3.up * 2.8f;
-
             // Lead only partly — see leadFactor.
             float flight = dist / Mathf.Max(1f, muzzleSpeed);
             Vector3 aim = player.transform.position
                           + player.Velocity * (leadFactor * flight)
                           + Vector3.up * 1.6f;
 
-            SeaSick.Ship.CannonBall.FireAt(muzzle, aim, muzzleSpeed, spreadDeg, this);
-            Smoke(muzzle, beam);
-        }
+            var guns = starboard ? starGuns : portGuns;
+            Vector3 beam = starboard ? transform.right : -transform.right;
 
-        void Smoke(Vector3 at, Vector3 dir)
-        {
-            var go = new GameObject("MuzzleSmoke");
-            go.transform.position = at;
-            go.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+            if (guns.Count == 0)
+            {
+                // No hull to hang guns on: still shoot, so a fallback raider
+                // is not a harmless one.
+                SeaSick.Ship.CannonBall.FireAt(
+                    transform.position + beam * 3.4f + Vector3.up * 2.8f,
+                    aim, muzzleSpeed, spreadDeg, this);
+            }
+            else
+            {
+                foreach (var gun in guns)
+                {
+                    if (gun == null) continue;
+                    SeaSick.Ship.CannonBall.FireAt(gun.MuzzlePoint, aim, muzzleSpeed, spreadDeg, this);
+                    gun.RecoilOnly();
+                }
+            }
 
-            var ps = go.AddComponent<ParticleSystem>();
-            var main = ps.main;
-            main.startSize = new ParticleSystem.MinMaxCurve(0.8f, 2.0f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(3f, 9f);
-            main.startLifetime = new ParticleSystem.MinMaxCurve(0.7f, 1.5f);
-            main.gravityModifier = -0.05f;
-            main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.maxParticles = 60;
-            main.playOnAwake = false;
-            main.startColor = new ParticleSystem.MinMaxGradient(
-                new Color(0.85f, 0.84f, 0.82f), new Color(0.45f, 0.45f, 0.47f));
-
-            var emission = ps.emission;
-            emission.rateOverTime = 0f;
-
-            var shape = ps.shape;
-            shape.shapeType = ParticleSystemShapeType.Cone;
-            shape.angle = 16f;
-            shape.radius = 0.2f;
-
-            ps.GetComponent<ParticleSystemRenderer>().sharedMaterial =
-                new Material(Shader.Find("Universal Render Pipeline/Particles/Lit"));
-
-            ps.Emit(22);
-            Destroy(go, 2.5f);
+            // Her own broadside throws her over too.
+            gunHeelVel += recoilRoll * (starboard ? 1f : -1f);
         }
 
         /// The shoreline is solid, not merely discouraged. Islands are not

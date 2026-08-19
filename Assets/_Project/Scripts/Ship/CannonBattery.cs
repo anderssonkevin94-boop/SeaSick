@@ -44,6 +44,11 @@ namespace SeaSick.Ship
         // the side properly bears.
         [SerializeField] float trainWithinDeg = 60f;
 
+        // Roll kick per gun that speaks. Two guns give ~5 degrees of heel at
+        // the peak — enough to feel the ship answer the broadside, not enough
+        // to spoil the shot that is already in the air.
+        [SerializeField] float recoilRollPerGun = 14f;
+
         readonly List<Cannon> port = new List<Cannon>();
         readonly List<Cannon> starboard = new List<Cannon>();
         ShipMotor motor;
@@ -133,6 +138,10 @@ namespace SeaSick.Ship
             // where the shot lands instead of guessing.
             if (fired > 0)
             {
+                // The hull answers: firing to starboard heels her to port.
+                if (motor != null)
+                    motor.AddRecoilRoll(recoilRollPerGun * fired * (starboardSide ? 1f : -1f));
+
                 if (chase == null) chase = FindFirstObjectByType<CameraRig.ChaseCamera>();
                 if (chase != null)
                     chase.WatchBroadside(starboardSide ? transform.right : -transform.right);

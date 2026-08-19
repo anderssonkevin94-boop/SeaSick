@@ -257,6 +257,16 @@ namespace SeaSick.Ship
             return true;
         }
 
+        /// Kick and smoke without spawning a shot, for guns whose ball is
+        /// fired by something else. Raiders aim as a ship rather than as a
+        /// battery of independently-laid guns, so their guns are worked for
+        /// the look of the thing while EnemyShip does the ballistics.
+        public void RecoilOnly()
+        {
+            recoil = recoilDistance;
+            if (smoke != null) smoke.Emit(28);
+        }
+
         void Update()
         {
             if (barrel == null) return;

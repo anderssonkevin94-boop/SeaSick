@@ -165,6 +165,7 @@ namespace SeaSick.Ship
             var target = HitTargets.SweepFirst(from, to, Radius, out Vector3 hitPoint, owner);
             if (target != null && target.TakeHit(hitPoint, Damage))
             {
+                Impact.Burst(hitPoint);
                 GunneryStats.RecordHit();
                 Destroy(gameObject);
                 return;
