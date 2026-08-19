@@ -131,6 +131,23 @@ namespace SeaSick.UI
                 Disc(p, 3.2f, new Color(0.80f, 0.35f, 0.85f, 0.95f));
             }
 
+            // Raiders, and a faint ring showing the water each one is guarding
+            // — the patrol is the information, not the ship's current position.
+            foreach (var raider in EnemyShip.All)
+            {
+                if (raider == null || !raider.Alive) continue;
+                if (raider.Home != null)
+                {
+                    Vector2 h = MapPoint(centre, shipPos, raider.Home.transform.position, scale);
+                    Ring(h, Mathf.Max(3f, raider.PatrolRadius * scale),
+                        new Color(0.95f, 0.30f, 0.25f, 0.30f));
+                }
+
+                Vector2 p = MapPoint(centre, shipPos, raider.transform.position, scale);
+                if (p.x < 0f || p.x > size || p.y < 0f || p.y > size) continue;
+                Disc(p, 3.0f, new Color(1f, 0.40f, 0.30f, 0.98f));
+            }
+
             // Ship arrow, rotated to heading. North is up.
             float arrow = u * 1.1f;
             var arrowRect = new Rect(centre.x - arrow * 0.5f, centre.y - arrow * 0.5f, arrow, arrow);

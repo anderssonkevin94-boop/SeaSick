@@ -37,6 +37,15 @@ namespace SeaSick.World
         [SerializeField] float monsterBearingDeg = 0f;   // 0 = due north of home
         [SerializeField] float monsterSpreadDeg = 26f;   // apart enough to engage one at a time
 
+        // Raiders. Only the islands actually worth something get guarded —
+        // a bare shelter rock with nothing on it has nothing to defend, and
+        // posting a ship there would just be a toll on safe harbour.
+        [Header("Raiders")]
+        [SerializeField] int raidersPerIsland = 1;
+        [SerializeField] int maxRaiders = 8;
+        [SerializeField] float raiderMinIslandRadius = 60f;
+        [SerializeField] float patrolClearance = 55f;   // water between shore and patrol
+
         [SerializeField] Vector2 radiusRange = new Vector2(45f, 200f);
         [SerializeField] float richnessPerRadius = 0.95f;
         [SerializeField] float shelterOnlyBelowRadius = 60f;
@@ -113,6 +122,36 @@ namespace SeaSick.World
             RebuildHomeIsland();
             BuildMonsters();
             BuildReefs();
+            BuildRaiders();
+        }
+
+        /// Post raiders on the islands worth taking. They orbit at a fixed
+        /// standoff rather than sitting still, so the threat is a patrol you
+        /// have to time rather than a wall you have to grind through — and
+        /// the direction alternates so two raiders on one island sweep
+        /// opposite ways and cover each other's blind side.
+        void BuildRaiders()
+        {
+            if (raidersPerIsland <= 0 || maxRaiders <= 0) return;
+
+            int posted = 0;
+            int n = 0;
+
+            foreach (var isle in Island.All)
+            {
+                if (isle == null || isle.IsHome) continue;
+                if (isle.MaxRadius < raiderMinIslandRadius) continue;
+                if (!isle.HasResources) continue;
+
+                for (int i = 0; i < raidersPerIsland && posted < maxRaiders; i++, posted++)
+                {
+                    float radius = isle.MaxRadius + patrolClearance + i * 26f;
+                    Combat.EnemyShip.Spawn(isle, radius, (n + i) % 2 == 0 ? 1 : -1,
+                        $"Raider_{isle.name}_{i}");
+                }
+                n++;
+                if (posted >= maxRaiders) break;
+            }
         }
 
         /// Park the test targets before the reefs go down, so BuildReefs can

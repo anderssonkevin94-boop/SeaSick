@@ -17,6 +17,12 @@ namespace SeaSick.Combat
         float HitRadius { get; }
         bool Alive { get; }
 
+        /// Enough for a readout to draw a health bar without knowing or caring
+        /// what kind of thing it is looking at.
+        float Health01 { get; }
+        int HitPoints { get; }
+        int DamageTaken { get; }
+
         /// Returns true if the hit counted. A dying target absorbs nothing.
         bool TakeHit(Vector3 point, float damage);
     }
