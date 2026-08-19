@@ -52,7 +52,6 @@ namespace SeaSick.Ship
         readonly List<Cannon> port = new List<Cannon>();
         readonly List<Cannon> starboard = new List<Cannon>();
         ShipMotor motor;
-        CameraRig.ChaseCamera chase;
         Combat.IHittable self;
 
         public int PortReady => CountReady(port);
@@ -142,17 +141,9 @@ namespace SeaSick.Ship
                 if (motor != null)
                     motor.AddRecoilRoll(recoilRollPerGun * fired * (starboardSide ? 1f : -1f));
 
-                // Keep the view wide until the shot has landed.
-                Chase()?.Engaged();
             }
 
             return fired;
-        }
-
-        CameraRig.ChaseCamera Chase()
-        {
-            if (chase == null) chase = FindFirstObjectByType<CameraRig.ChaseCamera>();
-            return chase;
         }
 
         void Update()
@@ -160,13 +151,6 @@ namespace SeaSick.Ship
             float dt = Time.deltaTime;
             TrainSide(starboard, true, dt);
             TrainSide(port, false, dt);
-
-            // Frame for a fight while anything is close enough to shoot at —
-            // entering the engagement, not pulling the trigger, is what should
-            // move the camera.
-            if (self == null) self = GetComponent<Combat.PlayerHull>();
-            Combat.HitTargets.Nearest(transform.position, out float near, self);
-            if (near <= GunRange * 1.25f) Chase()?.Engaged();
 
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null) return;

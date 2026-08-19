@@ -62,6 +62,12 @@ namespace SeaSick.Ship
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null || !kb.spaceKey.wasPressedThisFrame) return;
 
+            // With an enemy alongside, space is for the lock, not the anchor.
+            // You are far more likely to want to hold them in view than to try
+            // to dock in the middle of a fight.
+            if (combatLock == null) combatLock = GetComponent<SeaSick.Combat.CombatLock>();
+            if (combatLock != null && combatLock.WantsSpace) return;
+
             switch (CurrentState)
             {
                 case State.Underway:
@@ -222,6 +228,7 @@ namespace SeaSick.Ship
         // --- Player actions -------------------------------------------------
 
         bool landingPending;
+        SeaSick.Combat.CombatLock combatLock;
 
         /// One press to put a shore party on an island: anchor, warp in
         /// alongside, run the plank out and send the crew down it. Splitting

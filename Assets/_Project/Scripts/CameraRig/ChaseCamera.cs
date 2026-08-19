@@ -32,26 +32,34 @@ namespace SeaSick.CameraRig
         [Tooltip("Keeps the camera above island terrain instead of inside it.")]
         [SerializeField] float terrainClearance = 8f;
 
-        // Combat framing.
+        // Cruise framing.
         //
-        // The camera backs off and rises while you are engaged; it does NOT
-        // rotate. In a drag-to-steer game the camera is the control frame, so
-        // any yaw re-maps the player's thumb mid-fight — which is exactly what
-        // made the earlier lean-toward-the-broadside version hard to fight
-        // with. Widening the view shows the water on both beams, and where the
-        // shot falls, without touching the mapping between drag and rudder.
+        // Settle onto a heading and hold it, and the view eases back and lifts
+        // a little — you are travelling, so you get to see more of where you
+        // are going. Deliberately slow (about three seconds) so it never reads
+        // as a zoom; you should notice the sea got bigger, not the camera
+        // moving. Drops away the moment you slow, turn hard or lock a target.
+        [Header("Cruise framing")]
+        [SerializeField] float cruiseDistance = 10f;
+        [SerializeField] float cruiseHeight = 4.5f;
+        [SerializeField] float cruiseLookAhead = 5f;    // look further ahead, not less
+        [Range(0f, 1f)] [SerializeField] float cruiseSpeed01 = 0.5f;
+        [SerializeField] float cruiseDelay = 6f;        // seconds of making way first
+        [SerializeField] float cruiseInRate = 0.35f;
+        [SerializeField] float cruiseOutRate = 1.4f;
+
+        // Lock framing.
         //
-        // Driven by being ENGAGED, not by firing. One transition per fight
-        // rather than one per volley: re-triggering the framing on every
-        // broadside was half the problem on its own.
-        [Header("Combat framing")]
-        [SerializeField] float combatDistance = 12f;    // extra metres astern
-        [SerializeField] float combatHeight = 5.5f;     // extra metres up
-        [SerializeField] float combatLookAhead = -5f;   // look less far ahead, more abeam
-        [Tooltip("Kept short of the 30-degree tilt where the horizon leaves frame.")]
-        [SerializeField] float combatHold = 2.6f;       // outlasts a shot's time of flight
-        [SerializeField] float combatInRate = 1.6f;
-        [SerializeField] float combatOutRate = 0.9f;
+        // Frames you and the target together. The camera swings toward sitting
+        // opposite the enemy, but the swing is CLAMPED off dead-astern: a
+        // fully free orbit would invert the helm when a target crosses your
+        // stern, and losing the steering is worse than losing sight of them.
+        [Header("Lock framing")]
+        [SerializeField] float lockMaxSwingDeg = 78f;
+        [SerializeField] float lockPullPerMetre = 0.42f;
+        [SerializeField] float lockMaxPull = 34f;
+        [Range(0f, 0.8f)] [SerializeField] float lockBias = 0.34f;  // look point toward the target
+        [SerializeField] float lockResponse = 2.4f;
 
         public Transform Target { get => target; set => target = value; }
 
@@ -62,12 +70,12 @@ namespace SeaSick.CameraRig
         Camera cam;
         SeaSick.Ship.ShipMotor motor;
 
-        float combatUntil = -1f;
-        float combatLevel;   // smoothed 0..1, never stepped
+        float cruiseLevel, atSpeedFor;
+        float lockLevel;
 
-        /// Call every frame while a target is worth framing for. The hold
-        /// decays on its own, so nothing can leave the camera stuck wide.
-        public void Engaged() => combatUntil = Time.time + combatHold;
+        /// The thing to keep in frame, or null for the plain chase view.
+        /// Set by CombatLock; cleared when the target dies or breaks away.
+        public Transform LockTarget { get; set; }
 
         void Start()
         {
@@ -118,19 +126,55 @@ namespace SeaSick.CameraRig
                 flatForward.y = 0f;
                 flatForward = flatForward.sqrMagnitude < 0.001f ? Vector3.forward : flatForward.normalized;
 
-                // Widen for a fight. Eased in faster than out, so it opens up
-                // as the action starts and closes slowly once it is over.
-                float want = Time.time < combatUntil ? 1f : 0f;
-                float rate = want > combatLevel ? combatInRate : combatOutRate;
-                combatLevel = Mathf.Lerp(combatLevel, want, 1f - Mathf.Exp(-rate * dt));
+                bool locked = LockTarget != null;
 
-                float back = distance + combatDistance * combatLevel;
-                float up = height + combatHeight * combatLevel;
-                float ahead = lookAhead + combatLookAhead * combatLevel;
+                // Cruise: only while genuinely making way, and never in a fight.
+                bool making = motor != null && motor.CurrentSpeed >= motor.MaxSpeed * cruiseSpeed01;
+                atSpeedFor = making && !locked ? atSpeedFor + dt : 0f;
+
+                float wantCruise = atSpeedFor > cruiseDelay ? 1f : 0f;
+                cruiseLevel = Mathf.Lerp(cruiseLevel, wantCruise,
+                    1f - Mathf.Exp(-(wantCruise > cruiseLevel ? cruiseInRate : cruiseOutRate) * dt));
+
+                lockLevel = Mathf.Lerp(lockLevel, locked ? 1f : 0f,
+                    1f - Mathf.Exp(-lockResponse * dt));
+
+                float back = distance + cruiseDistance * cruiseLevel;
+                float up = height + cruiseHeight * cruiseLevel;
+                float ahead = lookAhead + cruiseLookAhead * cruiseLevel;
 
                 anchor = shipFlat;
-                desired = anchor - flatForward * back + Vector3.up * up;
-                lookPoint = anchor + flatForward * ahead + Vector3.up * lookHeight;
+                Vector3 sternDir = -flatForward;
+
+                if (lockLevel > 0.001f && LockTarget != null)
+                {
+                    Vector3 tgt = new Vector3(LockTarget.position.x, 0f, LockTarget.position.z);
+                    Vector3 toTarget = tgt - shipFlat;
+                    float sep = toTarget.magnitude;
+                    Vector3 dirToTarget = sep < 0.5f ? flatForward : toTarget / sep;
+
+                    // Swing toward sitting opposite the target, clamped so the
+                    // helm never fully inverts.
+                    float sternAz = Mathf.Atan2(sternDir.x, sternDir.z) * Mathf.Rad2Deg;
+                    float awayAz = Mathf.Atan2(-dirToTarget.x, -dirToTarget.z) * Mathf.Rad2Deg;
+                    float az = sternAz + Mathf.Clamp(
+                        Mathf.DeltaAngle(sternAz, awayAz), -lockMaxSwingDeg, lockMaxSwingDeg);
+
+                    Vector3 swung = new Vector3(
+                        Mathf.Sin(az * Mathf.Deg2Rad), 0f, Mathf.Cos(az * Mathf.Deg2Rad));
+                    sternDir = Vector3.Slerp(sternDir, swung, lockLevel);
+
+                    // Back off enough to hold both hulls, and bias the look
+                    // point toward the enemy — but only partly, so your own
+                    // ship never leaves the frame.
+                    float fit = Mathf.Min(sep * lockPullPerMetre, lockMaxPull) * lockLevel;
+                    back += fit;
+                    up += fit * 0.42f;
+                    anchor = shipFlat + dirToTarget * (sep * lockBias * lockLevel);
+                }
+
+                desired = shipFlat + sternDir * back + Vector3.up * up;
+                lookPoint = anchor + flatForward * (ahead * (1f - lockLevel)) + Vector3.up * lookHeight;
             }
 
             transform.position = Vector3.Lerp(

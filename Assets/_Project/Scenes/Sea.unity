@@ -1559,11 +1559,18 @@ MonoBehaviour:
   fovResponse: 1.1
   minHeightAboveWater: 2.6
   terrainClearance: 8
-  gunneryLookShift: 34
-  gunneryLift: 5.5
-  gunneryHold: 1.7
-  gunneryLeanRate: 3.2
-  gunneryReturnRate: 1.1
+  cruiseDistance: 10
+  cruiseHeight: 4.5
+  cruiseLookAhead: 5
+  cruiseSpeed01: 0.5
+  cruiseDelay: 6
+  cruiseInRate: 0.35
+  cruiseOutRate: 1.4
+  lockMaxSwingDeg: 78
+  lockPullPerMetre: 0.42
+  lockMaxPull: 34
+  lockBias: 0.34
+  lockResponse: 2.4
 --- !u!81 &2086288690
 AudioListener:
   m_ObjectHideFlags: 0
@@ -1847,6 +1854,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489896}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489897}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -1910,6 +1920,8 @@ MonoBehaviour:
   mastPivot: {fileID: 0}
   rudderVisualAngle: 35
   rowSpeed: 9
+  recoilStiffness: 34
+  recoilDamping: 3.4
 --- !u!114 &2143489883
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2117,6 +2129,7 @@ MonoBehaviour:
   velocityInheritance: 0
   convergeRange: 45
   trainWithinDeg: 60
+  recoilRollPerGun: 14
 --- !u!114 &2143489894
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2161,6 +2174,20 @@ MonoBehaviour:
   hitRadius: 4.2
   halfLength: 9.5
   hitPoints: 10
+--- !u!114 &2143489897
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6f70b3dcd442c49dfa8627a21bba55a1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Combat.CombatLock
+  lockRange: 170
+  breakRange: 260
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
