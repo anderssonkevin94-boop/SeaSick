@@ -154,6 +154,18 @@ namespace SeaSick.Ship
         /// speed and adds wallow, and the shock lands on the crew, who already
         /// get sicker and angrier for it. A fight therefore spends the voyage
         /// clock rather than running beside it.
+        /// Direct hull loss as a fraction, for things that are not shot: a
+        /// mountain sea, rocks. **`TakeShot`'s `amount` is a multiplier on
+        /// `damagePerShot`, not a fraction** — passing 0.30 there costs about
+        /// 2.5% hull, not 30%, which is exactly the trap this method exists to
+        /// avoid. No crew jolt: the caller owns that, or it gets applied twice.
+        public void Batter(Vector3 point, float fraction)
+        {
+            integrity = Mathf.Clamp01(integrity - Mathf.Max(0f, fraction));
+            LastImpactTime = Time.time;
+            Splinters(point);
+        }
+
         public void TakeShot(Vector3 point, float amount)
         {
             integrity = Mathf.Clamp01(integrity - damagePerShot * Mathf.Max(0.01f, amount));

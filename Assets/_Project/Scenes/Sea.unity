@@ -961,6 +961,7 @@ GameObject:
   - component: {fileID: 1412075593}
   - component: {fileID: 1412075595}
   - component: {fileID: 1412075596}
+  - component: {fileID: 1412075597}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -1007,6 +1008,10 @@ MonoBehaviour:
   roughCeiling: 1.15
   changeSpeed: 0.011
   shoreFalloff: 60
+  calmRadius: 260
+  wildRadius: 1150
+  nearScale: 0.35
+  farScale: 1.5
 --- !u!23 &1412075586
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -1162,6 +1167,25 @@ MonoBehaviour:
   hullWidth: 7
   hullFoam: 1.5
   hullDisplace: 0.9
+--- !u!114 &1412075597
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412075583}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1f2e76bb7db9548d6bf2a6fa8be7dffd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.MountainSeaDirector
+  regionBearingDeg: 270
+  regionHalfAngle: 62
+  minDistanceFromHome: 700
+  spawnInterval: 55
+  maxAlive: 2
+  spawnLead: 900
+  despawnBehind: 700
 --- !u!1 &1482035839
 GameObject:
   m_ObjectHideFlags: 0
@@ -1929,6 +1953,7 @@ MonoBehaviour:
   railHeight: 1.3
   railHalfBeam: 3.9
   rowSpeed: 9
+  headSeaPenalty: 0.45
   recoilStiffness: 34
   recoilDamping: 3.4
   sailTrimRate: 0.55

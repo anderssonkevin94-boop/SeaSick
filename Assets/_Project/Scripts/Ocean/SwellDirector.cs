@@ -83,6 +83,9 @@ namespace SeaSick.Ocean
 
             bool inside = ShipIntensity > 0.15f;
             if (!inside && SecondsToImpact <= 0f) return;
+            // A mountain sea owns this slot when there is one — it is the far
+            // more urgent thing, and two plates stacked is clutter.
+            if (MountainSeaDirector.WarningShowing) return;
 
             var shelter = Island.Nearest(ship.transform.position);
             string shelterText = shelter != null

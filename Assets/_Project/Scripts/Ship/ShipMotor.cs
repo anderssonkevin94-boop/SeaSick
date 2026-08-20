@@ -180,6 +180,35 @@ namespace SeaSick.Ship
 
         /// Used by grounding: cancel the component of momentum driving the
         /// hull into the rock, keeping whatever slides along the shore.
+        /// Lay her over hard and let her come back up.
+        ///
+        /// Separate from `AddRecoilRoll` on purpose. That feeds a damped spring
+        /// whose peak the rotation smoothing then eats — measured, a broadside
+        /// heels her ~5° and a mountain sea managed 7°, which is not what being
+        /// hit by a mountain looks like. A knockdown is applied AFTER the roll
+        /// clamp and decays on its own, so it can put her rail under.
+        public void Knockdown(float degrees, float seconds = 2.6f)
+        {
+            knockdownRoll = degrees;
+            knockdownDecay = Mathf.Max(0.2f, seconds);
+            knockdownLeft = knockdownDecay;
+        }
+
+        float knockdownRoll;
+        float knockdownDecay = 1f;
+        float knockdownLeft;
+
+        /// How far she is currently laid over by a knockdown, in degrees.
+        public float KnockdownRoll { get; private set; }
+
+        /// Take a fraction of her way off in one go — a wall of water hitting
+        /// her, or anything else that stops a ship rather than slowing one.
+        public void ScrubWay(float fraction01)
+        {
+            velocity *= Mathf.Clamp01(1f - fraction01);
+            speed = velocity.magnitude;
+        }
+
         public void KillVelocityAlong(Vector3 outwardNormal)
         {
             float into = Vector3.Dot(velocity, outwardNormal);
@@ -326,6 +355,17 @@ namespace SeaSick.Ship
             if (dt <= 0f) return;
 
             TrimSails(dt);
+
+            // Eases off along a sine rather than a straight line, so she goes
+            // over hard and rights herself gradually — a ship recovering, not
+            // a value counting down.
+            if (knockdownLeft > 0f)
+            {
+                knockdownLeft = Mathf.Max(0f, knockdownLeft - dt);
+                float t = knockdownLeft / knockdownDecay;
+                KnockdownRoll = knockdownRoll * Mathf.Sin(t * Mathf.PI * 0.5f);
+            }
+            else KnockdownRoll = 0f;
 
             // Damped spring: acceleration back toward level, minus drag.
             recoilRollVel += (-recoilStiffness * recoilRoll - recoilDamping * recoilRollVel) * dt;
@@ -547,6 +587,10 @@ namespace SeaSick.Ship
                 // Added after the swell clamp so a broadside is always felt,
                 // even when the sea already has the hull hard over.
                 rollDeg = Mathf.Clamp(rollDeg + recoilRoll, -26f, 26f);
+
+                // After the clamp, deliberately: a knockdown is allowed to put
+                // her further over than anything the sea can do on its own.
+                rollDeg = Mathf.Clamp(rollDeg + KnockdownRoll, -78f, 78f);
 
                 // Freeboard. Cargo and water aboard both push her down, and the
                 // whole ship goes with it — deck, crew, guns — so a loaded
