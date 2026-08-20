@@ -85,6 +85,40 @@ public static class SetupOceanLab
         var cso = new SerializedObject(clip);
         cso.FindProperty("material").objectReferenceValue = EnsureDebugMaterial();
         cso.ApplyModifiedPropertiesWithoutUndo();
+
+        if (ocean.GetComponent<OceanPhysicsDriver>() == null)
+            ocean.AddComponent<OceanPhysicsDriver>();
+
+        EnsureProxySloop();
+    }
+
+    static void EnsureProxySloop()
+    {
+        var sloop = GameObject.Find("ProxySloop");
+        if (sloop != null)
+        {
+            // Scene serialization beats C# defaults forever; push the current
+            // code values onto the existing instance (the recorded trap).
+            SceneDefaults.ResetToCodeDefaults(sloop.GetComponent<BuoyantBody>());
+            EditorUtility.SetDirty(sloop);
+            return;
+        }
+        sloop = new GameObject("ProxySloop");
+        sloop.transform.position = new Vector3(0f, 0.5f, 0f);
+
+        var hull = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        Object.DestroyImmediate(hull.GetComponent<Collider>());
+        hull.name = "HullVisual";
+        hull.transform.SetParent(sloop.transform, false);
+        hull.transform.localScale = new Vector3(4.4f, 2.6f, 13f);
+        hull.transform.localPosition = new Vector3(0f, 0.1f, 0f);
+
+        var rb = sloop.AddComponent<Rigidbody>();
+        rb.mass = 4000f;
+        var probes = sloop.AddComponent<BuoyancyProbeSet>();
+        probes.SetProbes(BuoyancyProbeSet.SloopLayout(13f, 4.4f, -1.2f, 1.3f));
+        sloop.AddComponent<BuoyantBody>();
+        EditorUtility.SetDirty(sloop);
     }
 
     static OceanSpectrumSettings EnsureTestSeaState()

@@ -104,8 +104,16 @@ namespace SeaSick.Ocean2
             if (velDt > 1e-5f)
             {
                 float4 dPrev = SamplePrevDisp(p);
-                result.velocity = env * new float3(d.x - dPrev.x, d.y - dPrev.y, d.z - dPrev.z)
-                                  / velDt;
+                float3 vel = env * new float3(d.x - dPrev.x, d.y - dPrev.y, d.z - dPrev.z)
+                             / velDt;
+                // A spectrum rebuild between the two readback slots makes the
+                // finite difference read a surface JUMP as motion — hundreds
+                // of m/s for one frame, which quadratic drag turns into a
+                // catapult. Real orbital speeds are pi*Hs/Tp, single digits;
+                // clamp to that scale.
+                float speed = math.length(vel);
+                if (speed > 8f) vel *= 8f / speed;
+                result.velocity = vel;
             }
             return result;
         }
