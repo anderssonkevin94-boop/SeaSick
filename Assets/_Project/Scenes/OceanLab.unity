@@ -227,6 +227,7 @@ GameObject:
   - component: {fileID: 1410391056}
   - component: {fileID: 1410391057}
   - component: {fileID: 1410391058}
+  - component: {fileID: 1410391059}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -279,6 +280,26 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dbf7ddca878fc43f490fc3653e9f0171, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean2.OceanPhysicsDriver
+--- !u!114 &1410391059
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1410391055}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4abaf1ed4ca514dfba012de15c33bc61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean2.SeaStateController
+  calm: {fileID: 11400000, guid: ec4b814f86b2842baaa5f0a37e4f79ae, type: 2}
+  normal: {fileID: 11400000, guid: 79a34835b269b4440b4b48b2f3ec6d88, type: 2}
+  stormy: {fileID: 11400000, guid: f838051a0444b4dfcb080cc59b226f6b, type: 2}
+  follow: {fileID: 1582856048}
+  blendTime: 45
+  rebuildHz: 4
+  wanderAmount: 0.5
+  wanderPeriod: 240
 --- !u!1 &1490182982
 GameObject:
   m_ObjectHideFlags: 0

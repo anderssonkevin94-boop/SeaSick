@@ -90,6 +90,48 @@ public static class SetupOceanLab
             ocean.AddComponent<OceanPhysicsDriver>();
 
         EnsureProxySloop();
+        WireWeather(ocean);
+    }
+
+    static void WireWeather(GameObject ocean)
+    {
+        var ctrl = ocean.GetComponent<SeaStateController>();
+        if (ctrl == null) ctrl = ocean.AddComponent<SeaStateController>();
+        var so = new SerializedObject(ctrl);
+        so.FindProperty("calm").objectReferenceValue = EnsureSeaState("Calm", s =>
+        {
+            s.windSpeed = 5f; s.fetchKm = 50f; s.choppiness = 0.75f;
+            s.swellHeight = 0f; s.foamInjection = 0.15f;
+        });
+        so.FindProperty("normal").objectReferenceValue = EnsureSeaState("Normal", s =>
+        {
+            s.windSpeed = 12f; s.fetchKm = 100f; s.choppiness = 1.0f;
+            s.swellHeight = 0.4f; s.swellWavelength = 180f; s.foamInjection = 0.4f;
+        });
+        so.FindProperty("stormy").objectReferenceValue = EnsureSeaState("Stormy", s =>
+        {
+            s.windSpeed = 22f; s.fetchKm = 200f; s.choppiness = 1.15f;
+            s.swellHeight = 1.6f; s.swellWavelength = 260f; s.swellSharpness = 8f;
+            s.foamInjection = 0.9f; s.foamHalflife = 6f;
+        });
+        var sloop = GameObject.Find("ProxySloop");
+        if (sloop != null)
+            so.FindProperty("follow").objectReferenceValue = sloop.transform;
+        so.ApplyModifiedPropertiesWithoutUndo();
+    }
+
+    static OceanSpectrumSettings EnsureSeaState(string name, System.Action<OceanSpectrumSettings> init)
+    {
+        string path = $"{SettingsDir}/SeaState_{name}.asset";
+        var s = AssetDatabase.LoadAssetAtPath<OceanSpectrumSettings>(path);
+        if (s == null)
+        {
+            s = ScriptableObject.CreateInstance<OceanSpectrumSettings>();
+            init(s);
+            AssetDatabase.CreateAsset(s, path);
+            AssetDatabase.SaveAssets();
+        }
+        return s;
     }
 
     static void EnsureProxySloop()
