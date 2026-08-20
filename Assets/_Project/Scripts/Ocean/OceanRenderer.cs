@@ -17,6 +17,7 @@ namespace SeaSick.Ocean
         [SerializeField] ComputeShader initialSpectrumShader;
         [SerializeField] ComputeShader timeEvolveShader;
         [SerializeField] ComputeShader fftShader;
+        [SerializeField] ComputeShader foamShader;
         [SerializeField] int noiseSeed = 1337;
 
         CascadeSet cascades;
@@ -25,6 +26,8 @@ namespace SeaSick.Ocean
         DisplacementReadback readback;
         int evolveKernel = -1;
         int resolveKernel = -1;
+        int foamKernel = -1;
+        double lastFoamTime;
         bool spectrumDirty = true;
 
         public OceanSpectrumSettings Settings => settings;
@@ -57,6 +60,8 @@ namespace SeaSick.Ocean
             fft = new FFTCompute(fftShader);
             evolveKernel = timeEvolveShader.FindKernel("TimeEvolve");
             resolveKernel = timeEvolveShader.FindKernel("ResolveOutputs");
+            if (foamShader != null) foamKernel = foamShader.FindKernel("FoamAccumulate");
+            lastFoamTime = OceanTime.Now;
             spectrumDirty = true;
 
             readback = new DisplacementReadback(cascades.N);
@@ -113,6 +118,26 @@ namespace SeaSick.Ocean
             timeEvolveShader.SetTexture(resolveKernel, "Derivatives", cascades.Derivatives);
             timeEvolveShader.Dispatch(resolveKernel, groups, groups, CascadeSet.Cascades);
 
+            if (foamKernel >= 0)
+            {
+                float foamDt = Mathf.Max(0f, (float)(OceanTime.Now - lastFoamTime));
+                lastFoamTime = OceanTime.Now;
+                float halflife = Mathf.Max(0.5f, settings.foamHalflife);
+                foamShader.SetInt("_N", n);
+                foamShader.SetFloat("_Dt", foamDt);
+                foamShader.SetFloat("_Threshold", settings.foamThreshold);
+                foamShader.SetFloat("_DecayFactor",
+                    Mathf.Exp(-0.6931472f * foamDt / halflife));
+                foamShader.SetFloat("_Injection", settings.foamInjection);
+                foamShader.SetVector("_PatchSizes", cascades.PatchSizesVec);
+                foamShader.SetTexture(foamKernel, "Displacement", cascades.Displacement);
+                foamShader.SetTexture(foamKernel, "Derivatives", cascades.Derivatives);
+                foamShader.SetTexture(foamKernel, "TurbPrev", cascades.Turbulence);
+                foamShader.SetTexture(foamKernel, "TurbOut", cascades.TurbulencePrev);
+                foamShader.Dispatch(foamKernel, groups, groups, 1);
+                cascades.SwapTurbulence();
+            }
+
             Shader.SetGlobalTexture("_Ocean_Displacement", cascades.Displacement);
             Shader.SetGlobalTexture("_Ocean_Derivatives", cascades.Derivatives);
             Shader.SetGlobalTexture("_Ocean_Turbulence", cascades.Turbulence);
@@ -123,7 +148,8 @@ namespace SeaSick.Ocean
                 new Vector4(fadeEnd * 0.6f, fadeEnd, 0f, 0f));
             RegionField.PublishNeutralIfAbsent();
 
-            readback?.Tick(cascades.Displacement, cascades.Derivatives, OceanTime.Now);
+            readback?.Tick(cascades.Displacement, cascades.Derivatives,
+                cascades.Turbulence, OceanTime.Now);
         }
     }
 }

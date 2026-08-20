@@ -197,8 +197,10 @@ Shader "SeaSick/Ocean"
                 // must produce zero (cross term arrives with the M9 compute).
                 float j = (1.0 + dv.z) * (1.0 + dv.w);
                 float breaking = saturate((_FoamJThreshold - j) * 4.0);
+                // Single combined-J foam layer, tiled with patch 0.
                 float turb = SAMPLE_TEXTURE2D_ARRAY(_Ocean_Turbulence,
-                    sampler_Ocean_Turbulence, xz / _Ocean_PatchSizes[0], 0).r;
+                    sampler_Ocean_Turbulence, xz / _Ocean_PatchSizes[0], 0).r
+                    * _Ocean_CascadeWeights[0];
                 float noise = FoamNoise(xz * _FoamNoiseScale)
                             * FoamNoise(xz * _FoamNoiseScale * 3.7 + 17.0);
                 float foamAmt = saturate((breaking * (0.35 + 0.65 * storm) + turb)

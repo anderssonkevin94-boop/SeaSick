@@ -69,6 +69,8 @@ public static class SetupOceanLab
             AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/_Project/Art/Shaders/Ocean/TimeEvolve.compute");
         so.FindProperty("fftShader").objectReferenceValue =
             AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/_Project/Art/Shaders/Ocean/FFT.compute");
+        so.FindProperty("foamShader").objectReferenceValue =
+            AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/_Project/Art/Shaders/Ocean/FoamAccumulate.compute");
         so.FindProperty("settings").objectReferenceValue = EnsureTestSeaState();
         so.ApplyModifiedPropertiesWithoutUndo();
 

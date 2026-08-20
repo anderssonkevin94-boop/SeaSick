@@ -46,6 +46,8 @@ public static class SetupOceanScene
             AssetDatabase.LoadAssetAtPath<ComputeShader>($"{ShaderDir}/TimeEvolve.compute");
         so.FindProperty("fftShader").objectReferenceValue =
             AssetDatabase.LoadAssetAtPath<ComputeShader>($"{ShaderDir}/FFT.compute");
+        so.FindProperty("foamShader").objectReferenceValue =
+            AssetDatabase.LoadAssetAtPath<ComputeShader>($"{ShaderDir}/FoamAccumulate.compute");
         so.FindProperty("settings").objectReferenceValue =
             AssetDatabase.LoadAssetAtPath<OceanSpectrumSettings>($"{SettingsDir}/SeaState_Normal.asset");
         so.ApplyModifiedPropertiesWithoutUndo();

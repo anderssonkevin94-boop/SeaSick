@@ -22,6 +22,6 @@ MonoBehaviour:
   swellDirectionDeg: -20
   swellSharpness: 6
   choppiness: 1
-  foamThreshold: 0.6
+  foamThreshold: 0.63
   foamHalflife: 4
   foamInjection: 0.4

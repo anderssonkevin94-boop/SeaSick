@@ -1,0 +1,60 @@
+// Persistent foam. The folding Jacobian must be COMBINED across cascades —
+// J = (1 + sum Dxx)(1 + sum Dzz) - (sum Dxz)^2 — because no band folds alone;
+// crests break where the bands conspire. Computed on the cascade-0 grid into
+// a single persistent layer (slice 0) that decays with a progressive 5-tap
+// blur feedback, so foam disperses outward as it fades (Rare's "progressive
+// blur with feedback").
+
+#pragma kernel FoamAccumulate
+
+Texture2DArray<float4> Displacement;  // w = lambda*dDx/dz
+Texture2DArray<float4> Derivatives;   // z = lambda*dDx/dx, w = lambda*dDz/dz
+SamplerState linearRepeatSampler;
+Texture2DArray<float> TurbPrev;
+RWTexture2DArray<float> TurbOut;
+
+cbuffer Params
+{
+    uint _N;
+    float _Dt;
+    float _Threshold;   // J below this is breaking
+    float _DecayFactor; // exp(-ln2 * dt / halflife), precomputed
+    float _Injection;
+    float4 _PatchSizes;
+}
+
+[numthreads(8, 8, 1)]
+void FoamAccumulate(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _N || id.y >= _N) return;
+
+    // This texel's world offset within the cascade-0 patch (the foam layer
+    // tiles with patch 0, exactly like the shader samples it).
+    float2 world = (float2(id.xy) + 0.5) / _N * _PatchSizes[0];
+
+    float dxx = 0, dzz = 0, dxz = 0;
+    [unroll]
+    for (int c = 0; c < 3; c++)
+    {
+        float3 uv = float3(world / _PatchSizes[c], c);
+        dxx += Derivatives.SampleLevel(linearRepeatSampler, uv, 0).z;
+        dzz += Derivatives.SampleLevel(linearRepeatSampler, uv, 0).w;
+        dxz += Displacement.SampleLevel(linearRepeatSampler, uv, 0).w;
+    }
+    float jac = (1.0 + dxx) * (1.0 + dzz) - dxz * dxz;
+    float inj = saturate((_Threshold - jac) * 2.0) * _Injection;
+
+    // 5-tap wrap blur of the previous buffer: the feedback that makes foam
+    // spread as it dies instead of winking out in place.
+    uint xm = (id.x + _N - 1) % _N, xp = (id.x + 1) % _N;
+    uint ym = (id.y + _N - 1) % _N, yp = (id.y + 1) % _N;
+    float prev = TurbPrev[uint3(id.xy, 0)] * 0.52
+               + (TurbPrev[uint3(xm, id.y, 0)] + TurbPrev[uint3(xp, id.y, 0)]
+                + TurbPrev[uint3(id.x, ym, 0)] + TurbPrev[uint3(id.x, yp, 0)]) * 0.12;
+
+    // The half-life owns the fade; the tiny linear drain only stops a floor
+    // of never-quite-zero foam from accumulating (0.02/s was eating the
+    // buffer faster than the exponential and broke the half-life contract).
+    float val = max(prev * _DecayFactor - 0.002 * _Dt, inj);
+    TurbOut[uint3(id.xy, 0)] = saturate(val);
+}

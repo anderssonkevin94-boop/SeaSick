@@ -20,6 +20,7 @@ namespace SeaSick.Ocean
         static float2 invPatch;
         static NativeArray<float4> emptyIslands;
         static NativeArray<half4> emptyTex;
+        static NativeArray<half> emptyTurb;
 
         public static bool Ready =>
             readback != null && readback.Latest != null;
@@ -37,6 +38,8 @@ namespace SeaSick.Ocean
                 emptyIslands = new NativeArray<float4>(RegionField.MaxIslands, Allocator.Persistent);
             if (!emptyTex.IsCreated)
                 emptyTex = new NativeArray<half4>(1, Allocator.Persistent);
+            if (!emptyTurb.IsCreated)
+                emptyTurb = new NativeArray<half>(1, Allocator.Persistent);
         }
 
         public static void Unbind()
@@ -44,6 +47,7 @@ namespace SeaSick.Ocean
             readback = null;
             if (emptyIslands.IsCreated) emptyIslands.Dispose();
             if (emptyTex.IsCreated) emptyTex.Dispose();
+            if (emptyTurb.IsCreated) emptyTurb.Dispose();
         }
 
         public static OceanFieldData CurrentField()
@@ -64,6 +68,7 @@ namespace SeaSick.Ocean
                 deriv1 = valid ? l.deriv[1] : emptyTex,
                 prevDisp0 = prev != null ? prev.disp[0] : (valid ? l.disp[0] : emptyTex),
                 prevDisp1 = prev != null ? prev.disp[1] : (valid ? l.disp[1] : emptyTex),
+                turb0 = valid ? l.turb : emptyTurb,
                 velDt = (latest != null && prev != null) ? (float)(latest.time - prev.time) : 0f,
                 region = region != null ? region.Params : RegionFieldParams.Neutral,
                 islands = region != null ? region.Islands : emptyIslands,

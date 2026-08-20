@@ -29,6 +29,13 @@ namespace SeaSick.Ocean
         public RenderTexture Displacement { get; private set; }
         public RenderTexture Derivatives { get; private set; }
         public RenderTexture Turbulence { get; private set; }
+        public RenderTexture TurbulencePrev { get; private set; }
+
+        /// Foam ping-pong: after the accumulate dispatch the roles swap.
+        public void SwapTurbulence()
+        {
+            (Turbulence, TurbulencePrev) = (TurbulencePrev, Turbulence);
+        }
 
         public void Create(int n, float[] patchSizes, int noiseSeed)
         {
@@ -56,6 +63,7 @@ namespace SeaSick.Ocean
             Displacement = NewArray(n, RenderTextureFormat.ARGBHalf, true);
             Derivatives = NewArray(n, RenderTextureFormat.ARGBHalf, true);
             Turbulence = NewArray(n, RenderTextureFormat.RHalf, true);
+            TurbulencePrev = NewArray(n, RenderTextureFormat.RHalf, true);
 
             Noise = BuildNoise(n, noiseSeed);
         }
@@ -106,10 +114,10 @@ namespace SeaSick.Ocean
 
         public void Release()
         {
-            foreach (var rt in new[] { H0, WaveData, Spec0, Spec1, Scratch, Displacement, Derivatives, Turbulence })
+            foreach (var rt in new[] { H0, WaveData, Spec0, Spec1, Scratch, Displacement, Derivatives, Turbulence, TurbulencePrev })
                 if (rt != null) rt.Release();
             if (Noise != null) Object.DestroyImmediate(Noise);
-            H0 = WaveData = Spec0 = Spec1 = Scratch = Displacement = Derivatives = Turbulence = null;
+            H0 = WaveData = Spec0 = Spec1 = Scratch = Displacement = Derivatives = Turbulence = TurbulencePrev = null;
             Noise = null;
         }
     }

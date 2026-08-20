@@ -923,6 +923,7 @@ MonoBehaviour:
   initialSpectrumShader: {fileID: 7200000, guid: 20a671ceac7e34f7b859395bb30619dd, type: 3}
   timeEvolveShader: {fileID: 7200000, guid: e421b3e68436343f794df4ad4d09814c, type: 3}
   fftShader: {fileID: 7200000, guid: d2463700ed62e4efd9356ac0a8a00e59, type: 3}
+  foamShader: {fileID: 7200000, guid: efbb390d8e1694fc682122f71965cc9d, type: 3}
   noiseSeed: 1337
 --- !u!4 &1016993466
 Transform:

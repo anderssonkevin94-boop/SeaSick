@@ -21,7 +21,8 @@ namespace SeaSick.Ocean
         {
             public NativeArray<half4>[] disp = new NativeArray<half4>[PhysicsCascades];
             public NativeArray<half4>[] deriv = new NativeArray<half4>[PhysicsCascades];
-            public AsyncGPUReadbackRequest[] requests = new AsyncGPUReadbackRequest[PhysicsCascades * 2];
+            public NativeArray<half> turb;   // cascade 0 foam, for OceanSample.foam
+            public AsyncGPUReadbackRequest[] requests = new AsyncGPUReadbackRequest[PhysicsCascades * 2 + 1];
             public double time = -1.0;
             public bool inFlight;
             public bool ready;
@@ -47,12 +48,15 @@ namespace SeaSick.Ocean
                     slots[s].deriv[c] = new NativeArray<half4>(n * n, Allocator.Persistent,
                         NativeArrayOptions.UninitializedMemory);
                 }
+                slots[s].turb = new NativeArray<half>(n * n, Allocator.Persistent,
+                    NativeArrayOptions.UninitializedMemory);
             }
         }
 
         /// Call once per frame right after the simulation dispatches, with the
         /// OceanTime those dispatches used.
-        public void Tick(RenderTexture displacement, RenderTexture derivatives, double simTime)
+        public void Tick(RenderTexture displacement, RenderTexture derivatives,
+            RenderTexture turbulence, double simTime)
         {
             // Retire finished flights.
             foreach (var s in slots)
@@ -94,6 +98,8 @@ namespace SeaSick.Ocean
                         ref s.deriv[c], derivatives, 0, 0, n, 0, n, c, 1,
                         TextureFormat.RGBAHalf);
                 }
+                s.requests[PhysicsCascades * 2] = AsyncGPUReadback.RequestIntoNativeArray(
+                    ref s.turb, turbulence, 0, 0, n, 0, n, 0, 1, TextureFormat.RHalf);
                 s.inFlight = true;
                 break;
             }
@@ -105,11 +111,14 @@ namespace SeaSick.Ocean
             // drain the queue first, always.
             AsyncGPUReadback.WaitAllRequests();
             foreach (var s in slots)
+            {
                 for (int c = 0; c < PhysicsCascades; c++)
                 {
                     if (s.disp[c].IsCreated) s.disp[c].Dispose();
                     if (s.deriv[c].IsCreated) s.deriv[c].Dispose();
                 }
+                if (s.turb.IsCreated) s.turb.Dispose();
+            }
         }
     }
 }

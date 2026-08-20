@@ -26,6 +26,7 @@ namespace SeaSick.Ocean
     {
         [ReadOnly] public NativeArray<half4> disp0, disp1, deriv0, deriv1;
         [ReadOnly] public NativeArray<half4> prevDisp0, prevDisp1;
+        [ReadOnly] public NativeArray<half> turb0;
         [ReadOnly] public NativeArray<float4> islands;
         public RegionFieldParams region;
         public int n;
@@ -100,6 +101,17 @@ namespace SeaSick.Ocean
             float4 derivs = env * SampleDeriv(p);
             float2 slope = derivs.xy / math.max(new float2(1f, 1f) + derivs.zw, 0.1f);
             result.normal = math.normalize(new float3(-slope.x, 1f, -slope.y));
+
+            // Foam from the cascade-0 turbulence readback (nearest texel is
+            // plenty — foam feeds VFX intensity, not geometry).
+            if (turb0.Length > 1)
+            {
+                float2 fuv = p * invPatch.x;
+                float2 fp = fuv * n - 0.5f;
+                int2 fi = (int2)math.floor(fp + 0.5f);
+                fi = ((fi % n) + n) % n;
+                result.foam = turb0[fi.y * n + fi.x];
+            }
 
             if (velDt > 1e-5f)
             {
