@@ -23,6 +23,21 @@ namespace SeaSick.Ocean
         [SerializeField] float forwardDragFactor = 0.005f;
         [SerializeField] float lateralDragFactor = 0.25f;
         [SerializeField] float angularDragTorque = 30000f;
+        // The old model saturated at full probe submersion: driven any deeper,
+        // the hull gained ZERO extra lift (net reserve ~6.5 m/s^2 on the
+        // sloop), so charging a mountainous face buried her to the sails.
+        // Reserve models the sealed hull above the waterline: past full
+        // submersion the restoring force keeps growing with depth, so the
+        // deck shoulders out of a wave instead of plowing under. Zero effect
+        // at the normal float equilibrium.
+        [Tooltip("Extra buoyant capacity per metre past full probe submersion, x that probe's capacity. Linear from the onset on purpose: the shallow band (0-0.5 m over) is what raises her ride height in a storm, and that dynamic freeboard — not the deep response — is what keeps the deck dry (softening the onset measured 4-12% of the run with rails under vs 0%).")]
+        [SerializeField] float reservePerMetre = 1.5f;
+        [Tooltip("Cap on the reserve multiple, x probe capacity.")]
+        [SerializeField] float maxReserve = 2.5f;
+        [Tooltip("Extra forward drag factor per unit of reserve. A deeply buried bow is plowing a wall of water: no plausible lift out-muscles 4 t of way, but shedding the way lets the lift win. This is the wave-slam feel.")]
+        [SerializeField] float plowDragFactor = 0.15f;
+        [Tooltip("Fraction of reserve LIFT kept while the probe rises relative to the water (ramp over 1 m/s). Only the lift bleeds — reserve damping and plow drag stay at full strength, so this is an asymmetric shock absorber: full catch on the way in, no spring-return pogo on the way out (symmetric lift measured 6-9 s calm settle vs 1.75 s baseline).")]
+        [SerializeField, Range(0f, 1f)] float reserveUpwardKeep = 0.3f;
         [Tooltip("Explicit inertia box (m) — a colliderless Rigidbody defaults to unit inertia and spins like a coin.")]
         [SerializeField] Vector3 inertiaBoxDims = new Vector3(4.4f, 3f, 13f);
         [SerializeField] Vector3 centreOfMass = new Vector3(0f, -0.6f, 0f);
@@ -90,8 +105,8 @@ namespace SeaSick.Ocean
             for (int i = 0; i < probes.Length; i++)
             {
                 Vector3 world = transform.TransformPoint(probes[i].localPosition);
-                float sub = Mathf.Clamp01(
-                    (samples[i].height - (world.y + SeatOffset)) / probes[i].radius + 0.5f);
+                float depth = samples[i].height - (world.y + SeatOffset);
+                float sub = Mathf.Clamp01(depth / probes[i].radius + 0.5f);
                 subSum += sub * probes[i].volumeShare;
                 hSum += samples[i].height;
                 if (probes[i].isRail)
@@ -99,12 +114,27 @@ namespace SeaSick.Ocean
 
                 if (sub <= 0f) continue;
 
-                Vector3 buoy = Vector3.up *
-                    (waterDensity * g * totalVolume * probes[i].volumeShare * sub);
-
                 Vector3 vWater = AmbientFlow + new Vector3(
                     samples[i].velocity.x, samples[i].velocity.y, samples[i].velocity.z);
                 Vector3 vRel = rb.GetPointVelocity(world) - vWater;
+
+                // Metres buried past full submersion buy reserve. Linear
+                // from the onset on purpose: the shallow band is what raises
+                // her storm ride height, and every onset softening tried
+                // (deadband, quadratic, knee) put the rails under 4-13% of
+                // the head-seas gate vs 0% for this shape. Lift and damping
+                // bleed on upward relative motion (keeping damping raw
+                // measured 8.7 s calm settle); plow drag keeps the raw value
+                // — an impacting bow moves down relative to the water, so
+                // plow is naturally at full strength exactly when it counts.
+                float over = Mathf.Max(0f, depth - probes[i].radius * 0.5f);
+                float reserve = Mathf.Min(maxReserve, reservePerMetre * over);
+                float reserveLift = reserve *
+                    Mathf.Lerp(1f, reserveUpwardKeep, Mathf.Clamp01(vRel.y));
+                float effSub = sub + reserveLift;
+
+                Vector3 buoy = Vector3.up * (waterDensity * g * totalVolume
+                    * probes[i].volumeShare * (sub + reserveLift));
                 // Anisotropy on WORLD vertical + flattened hull axes. Doing it
                 // in the ship frame turns pitch into a diving plane: forward
                 // speed projects onto local Y, gets the full heave coefficient,
@@ -114,18 +144,22 @@ namespace SeaSick.Ocean
                 fwdFlat = fwdFlat.sqrMagnitude > 1e-4f ? fwdFlat.normalized : Vector3.forward;
                 Vector3 rightFlat = new Vector3(fwdFlat.z, 0f, -fwdFlat.x);
                 Vector3 horiz = new Vector3(vRel.x, 0f, vRel.z);
+                float fwdFactor = forwardDragFactor + plowDragFactor * reserve;
                 Vector3 shaped = Vector3.up * vRel.y
-                    + fwdFlat * (Vector3.Dot(horiz, fwdFlat) * forwardDragFactor)
+                    + fwdFlat * (Vector3.Dot(horiz, fwdFlat) * fwdFactor)
                     + rightFlat * (Vector3.Dot(horiz, rightFlat) * lateralDragFactor);
+                // Drag scales with effSub too: the reserve lift arrives with
+                // matching damping, so a buried bow rises instead of ringing.
                 float coeff = -(linearDrag + quadraticDrag * vRel.magnitude)
-                              * (probes[i].volumeShare * sub);
+                              * (probes[i].volumeShare * effSub);
                 Vector3 drag = coeff * shaped;
                 dbgVert += coeff * (Vector3.up * vRel.y);
-                dbgFwd += coeff * (fwdFlat * (Vector3.Dot(horiz, fwdFlat) * forwardDragFactor));
+                dbgFwd += coeff * (fwdFlat * (Vector3.Dot(horiz, fwdFlat) * fwdFactor));
                 dbgLat += coeff * (rightFlat * (Vector3.Dot(horiz, rightFlat) * lateralDragFactor));
                 // No single probe may out-shove its own buoyant capacity by
                 // much — keeps any velocity transient from launching the hull.
-                float dragCap = 2f * waterDensity * g * totalVolume * probes[i].volumeShare;
+                float dragCap = 2f * waterDensity * g * totalVolume
+                    * probes[i].volumeShare * (1f + reserve);
                 drag = Vector3.ClampMagnitude(drag, dragCap);
 
                 rb.AddForceAtPosition(buoy + drag, world);

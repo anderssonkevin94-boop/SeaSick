@@ -47,6 +47,8 @@ shader property defaults. Re-run these after changing any default.
 | `BuoyProbe.cs` | Proxy sloop: 60 s storm free-float (roll/rails/draft/capsize) + calm 2 m drop settle time. Play mode, OceanLab. | `/tmp/seasick-buoy.txt` |
 | `BlendProbe.cs` | Calm→storm weather ramp smoothness (Hs every second; steps mean rebuild pops). Play mode, OceanLab. | `/tmp/seasick-blend.txt`, `-blend-*.png` |
 | `SailShot.cs` | Sails the western deep in `Sea.unity`: draft statistics, camera clamp rate, camera/hull gap, roll/pitch, speed. Compare `/tmp/seasick-sail-baseline.txt` (the old kinematic system's final run). | `/tmp/seasick-sail.txt`, `-0..4.png` |
+| `BuryProbe.cs` | **Deck-burial gate**: sails hard into head seas at forced severity 1.0, wave phase pinned (`OceanTime.Scrub(500)`), 60 s. Deck must stay dry: poopDeckUnder 0%, deckOverMax < 0. Play mode, Sea.unity. | `/tmp/seasick-bury.txt` |
+| `RippleStressProbe.cs` | Ripple-sim stability under abuse: 30 s of splash spam + hard-turn wake in a storm, GPU readback of the field. max abs offset must stay bounded (< 3 m) with zero non-finite texels. Play mode, Sea.unity. | `/tmp/seasick-ripplestress.txt` |
 | `SprayDebug.cs` | Per-second spindrift emission budget log. | Unity log |
 | `LoadProbe.cs`, `HudShot.cs`, `FogTest.cs`, `WarpOut.cs` | Older, still valid. | `/tmp/seasick-*.txt` |
 
