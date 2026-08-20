@@ -24,9 +24,9 @@ RenderSettings:
   m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
   m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
   m_AmbientIntensity: 1
-  m_AmbientMode: 0
+  m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
-  m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
+  m_SkyboxMaterial: {fileID: 2100000, guid: f729600e10d5142078d5ab510dd66b40, type: 2}
   m_HaloStrength: 0.5
   m_FlareStrength: 1
   m_FlareFadeSpeed: 3
@@ -561,9 +561,82 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 688920549}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &688920548
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 688920549}
+  - component: {fileID: 688920550}
+  m_Layer: 0
+  m_Name: Sky
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &688920549
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 688920548}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 355815509}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &688920550
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 688920548}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8fbfd16635dfc4665b73bf2d0099e734, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.SkyDirector
+  ship: {fileID: 2143489877}
+  sun: {fileID: 1658063630}
+  severityFloor: 0.55
+  severityWeight: 0.5
+  response: 0.35
+  forceStorm: -1
+  clearZenith: {r: 0.17, g: 0.38, b: 0.66, a: 1}
+  clearHorizon: {r: 0.68, g: 0.8, b: 0.88, a: 1}
+  clearGround: {r: 0.22, g: 0.3, b: 0.34, a: 1}
+  clearSun: {r: 1, g: 0.93, b: 0.82, a: 1}
+  clearSunIntensity: 1.15
+  clearOvercast: 0.1
+  clearFogStart: 600
+  clearFogEnd: 1500
+  clearHorizonSharp: 1.6
+  stormZenith: {r: 0.075, g: 0.088, b: 0.105, a: 1}
+  stormHorizon: {r: 0.3, g: 0.325, b: 0.345, a: 1}
+  stormGround: {r: 0.085, g: 0.1, b: 0.11, a: 1}
+  stormSun: {r: 0.66, g: 0.7, b: 0.76, a: 1}
+  stormSunIntensity: 0.34
+  stormOvercast: 1
+  stormFogStart: 70
+  stormFogEnd: 430
+  stormHorizonSharp: 3.4
+  cloudScaleClear: 0.03
+  cloudScaleStorm: 0.019
+  cloudSpeedClear: 0.7
+  cloudSpeedStorm: 3.4
 --- !u!1001 &701636623
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1003,6 +1076,13 @@ MonoBehaviour:
   maxWavelength: 190
   totalSteepness: 0.46
   spectrumWidth: 0.62
+  stormWaveCount: 6
+  stormCrossAngles: {x: 58, y: 124}
+  stormWavelengths: {x: 70, y: 260}
+  stormSteepness: 0.42
+  stormBearing: {x: -1, y: 0}
+  stormNear: 450
+  stormFar: 1250
   seed: 1337
   calmFloor: 0.14
   roughCeiling: 1.15
@@ -1591,6 +1671,11 @@ MonoBehaviour:
   cruiseDelay: 6
   cruiseInRate: 0.35
   cruiseOutRate: 1.4
+  heaveFollow: 1.5
+  heaveShare: 1
+  stormDrop: 9
+  stormPullIn: 6
+  stormResponse: 1.2
   lockMaxSwingDeg: 78
   lockPullPerMetre: 0.42
   lockMaxPull: 34
@@ -1885,6 +1970,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489899}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489900}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -2241,6 +2329,31 @@ MonoBehaviour:
   allHandsAt: 0.55
   maxWallowFromWater: 0.35
   jettisonPerTap: 5
+--- !u!114 &2143489900
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f39712b3d20b54cdf93c5d7321c87327, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.StormSpray
+  samplesPerFrame: 24
+  sampleRadius: 110
+  sampleLead: 35
+  crestFraction: 0.42
+  calibrationRate: 0.7
+  spindriftRate: 110
+  driftSpeed: {x: 9, y: 24}
+  maxSpindrift: 260
+  maxMist: 16
+  mistRate: 4
+  mistAlpha: 0.06
+  threshold: 0.18
+  logDiagnostics: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

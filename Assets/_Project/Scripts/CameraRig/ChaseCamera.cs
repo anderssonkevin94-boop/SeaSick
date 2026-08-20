@@ -54,6 +54,29 @@ namespace SeaSick.CameraRig
         // opposite the enemy, but the swing is CLAMPED off dead-astern: a
         // fully free orbit would invert the helm when a target crosses your
         // stern, and losing the steering is worse than losing sight of them.
+        // Sea response.
+        //
+        // The rig used to be pinned to mean sea level — a fixed world height,
+        // looking at a fixed world height — while a storm threw the ship 23.5m
+        // up and back down through it. The horizon stayed nailed and the BOAT
+        // bobbed, which is exactly backwards: it is the sea that should move.
+        // That single fact was most of why a mountainous sea read as flat.
+        //
+        // Low-passing the ship's height fixes it. The rig follows the long
+        // heave and lets the chop run past — it rides the swell like a second
+        // boat rather than twitching on every wavelet.
+        [Header("Sea response")]
+        [Tooltip("How quickly the rig takes up the ship's heave. Low = only " +
+                 "the long swell; high = every wavelet, which is sickening.")]
+        [SerializeField] float heaveFollow = 1.5f;
+        [Range(0f, 1f)] [SerializeField] float heaveShare = 1f;
+        [Tooltip("Metres the rig drops in a full storm. A low camera is what " +
+                 "makes a sea loom; a high one looks down on it and flattens " +
+                 "it into a bump.")]
+        [SerializeField] float stormDrop = 9f;
+        [SerializeField] float stormPullIn = 6f;
+        [SerializeField] float stormResponse = 1.2f;
+
         [Header("Lock framing")]
         [SerializeField] float lockMaxSwingDeg = 78f;
         [SerializeField] float lockPullPerMetre = 0.42f;
@@ -72,6 +95,13 @@ namespace SeaSick.CameraRig
 
         float cruiseLevel, atSpeedFor;
         float lockLevel;
+        float heaveY;
+        bool heaveSeeded;
+        float stormLevel;
+        // The framing position WITHOUT heave. Heave is added on top of it
+        // rather than folded into the lerp target — see below.
+        Vector3 rigPos;
+        bool rigSeeded;
 
         /// The thing to keep in frame, or null for the plain chase view.
         /// Set by CombatLock; cleared when the target dies or breaks away.
@@ -88,6 +118,18 @@ namespace SeaSick.CameraRig
             if (target == null) return;
             float dt = Time.deltaTime;
 
+            // Ride the swell. Seeded on the first frame so the rig does not
+            // sweep up from zero when the scene starts on a crest.
+            if (!heaveSeeded) { heaveY = target.position.y; heaveSeeded = true; }
+            heaveY = Mathf.Lerp(heaveY, target.position.y, 1f - Mathf.Exp(-heaveFollow * dt));
+            float seaY = heaveY * heaveShare;
+
+            // One weather number, owned by SkyDirector, so the framing builds
+            // with the sky and the spray instead of arguing with them.
+            var sky = SeaSick.World.SkyDirector.Instance;
+            stormLevel = Mathf.Lerp(stormLevel, sky != null ? sky.Storminess01 : 0f,
+                1f - Mathf.Exp(-stormResponse * dt));
+
             // Speed reads in the lens: FOV opens with speed and punches when
             // the hull drops onto a wave face.
             if (cam != null && motor != null)
@@ -103,6 +145,7 @@ namespace SeaSick.CameraRig
 
             if (PointOfInterest.HasValue)
             {
+                seaY = 0f;   // the shore party stand on land, not on the sea
                 // Frame ship + shore party: sit on the far side of the ship
                 // looking past it at the island, pulled back by their spread.
                 Vector3 poi = PointOfInterest.Value;
@@ -139,8 +182,8 @@ namespace SeaSick.CameraRig
                 lockLevel = Mathf.Lerp(lockLevel, locked ? 1f : 0f,
                     1f - Mathf.Exp(-lockResponse * dt));
 
-                float back = distance + cruiseDistance * cruiseLevel;
-                float up = height + cruiseHeight * cruiseLevel;
+                float back = distance + cruiseDistance * cruiseLevel - stormPullIn * stormLevel;
+                float up = height + cruiseHeight * cruiseLevel - stormDrop * stormLevel;
                 float ahead = lookAhead + cruiseLookAhead * cruiseLevel;
 
                 anchor = shipFlat;
@@ -174,11 +217,23 @@ namespace SeaSick.CameraRig
                 }
 
                 desired = shipFlat + sternDir * back + Vector3.up * up;
-                lookPoint = anchor + flatForward * (ahead * (1f - lockLevel)) + Vector3.up * lookHeight;
+                lookPoint = anchor + flatForward * (ahead * (1f - lockLevel))
+                          + Vector3.up * (lookHeight + seaY);
             }
 
-            transform.position = Vector3.Lerp(
-                transform.position, desired, 1f - Mathf.Exp(-positionResponse * dt));
+            if (!rigSeeded) { rigPos = transform.position; rigSeeded = true; }
+            rigPos = Vector3.Lerp(rigPos, desired, 1f - Mathf.Exp(-positionResponse * dt));
+
+            // Heave is added AFTER the framing lerp rather than folded into the
+            // target. Through the lerp it becomes a second low pass stacked on
+            // the one that produced it, and the rig lags the very swell it is
+            // meant to be riding — measured as the ship still swimming a fifth
+            // of the screen height in a storm.
+            //
+            // The clamps below are display-time corrections and deliberately do
+            // NOT feed back into rigPos, so being shoved up by a crest never
+            // drags the framing with it.
+            transform.position = rigPos + Vector3.up * seaY;
 
             // A low camera sells speed, but it must never end up underwater.
             var waves = SeaSick.Ocean.WaveField.Instance;

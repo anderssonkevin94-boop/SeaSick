@@ -4,12 +4,16 @@ _Plan drafted 2026-08-19. Replaces seasickness as the core pressure. Nothing her
 
 ## Where this stands (2026-08-20)
 
-**Done:** milestone 1 (weight, freeboard, green water, bailing, jettison) · wind removed as physics · regional sea state · compass + speed, all banner UI deleted · mountain seas · storm seas with crossing wave trains.
+**Done:** milestone 1 (weight, freeboard, green water, bailing, jettison) · wind removed as physics · regional sea state · compass + speed, all banner UI deleted · mountain seas · storm seas with crossing wave trains · **storm sky and light**.
+
+**Storm sky and light — built 2026-08-20.** `SkyDirector` owns one storminess number and drives a procedural sky (`SeaSick/Sky`), the sun, ambient, fog, the ocean's palette, the spray and the camera framing from it. Measured home vs 1500m west: storminess 0.04 → 1.00, sun 1.12 → 0.43, fog 577–1454m → 128–547m, overcast 0.14 → 0.90. Spindrift is torn off measured crests at 110/s; mist is a low haze.
+
+The camera diagnosis in the old note was **wrong on two counts** and is worth remembering: the rig was at 22°, not 41°, and the tilt was not the problem. `ChaseCamera` forced the ship's y to 0, so the lens was **pinned to mean sea level and never followed the ship vertically** — the horizon stayed nailed and the boat bobbed through the frame. It now rides the swell and drops 9m closer to the water in a storm: ship-in-frame spread 0.0218 → 0.0126 of screen height per metre of heave, lens 8.2m above her instead of 18.1m.
 
 **Next, in order:**
-1. **Storm sky and light.** The simulation is mountainous — 22–26m seas, the hull thrown 23.5m — but the picture is not. A bright blue sky sits over the storm, there is no spray, mist or spindrift, and the chase camera at 19m up / 41° down flattens the perceived wave height. This is the cheapest change with the biggest effect on how the same water reads.
+1. **Playtest the storm by hand.** Everything above is probe-and-screenshot verified; nobody has sailed into it. The remaining questions are aesthetic and are Kevin's to answer — is it dark enough, is the spray enough, does the lower camera help or is it claustrophobic.
 2. **The mountain wave's shape.** Still a smooth swept ridge; it should be a curling wall with an overhanging lip and sections breaking at different times. It *can* overhang, because it is a bespoke mesh — no heightfield ever can.
-3. Man overboard → day/night → settlement demand (the original milestones 2–4).
+3. Man overboard → day/night → settlement demand (the original milestones 2–4). Note that **milestone 3's sky work is now half done**: the dome, the palette lerp and the ambient/fog plumbing all exist and take a single number, so `TimeOfDay01` is a second dial on the same structure rather than a new system.
 
 **Not yet playtested by hand.** Weight, water, no-wind sailing, regional seas, mountain seas and storms have all been verified by probe and screenshot, but nobody has actually sailed a voyage with them.
 

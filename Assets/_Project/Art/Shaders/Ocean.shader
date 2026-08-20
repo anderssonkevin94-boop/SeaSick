@@ -18,6 +18,10 @@ Shader "SeaSick/Ocean"
         _CrestColor     ("Crest Colour",   Color) = (0.62, 0.83, 0.92, 1)
         _SpecColor      ("Specular",       Color) = (1, 1, 1, 1)
         _ShallowWater   ("Shallow Water",  Color) = (0.32, 0.68, 0.72, 1)
+        _StormDeep      ("Storm Deep",     Color) = (0.020, 0.045, 0.055, 1)
+        _StormShallow   ("Storm Shallow",  Color) = (0.105, 0.175, 0.180, 1)
+        _StormCrest     ("Storm Crest",    Color) = (0.86, 0.88, 0.89, 1)
+        _SkyReflect     ("Sky Reflection", Range(0, 1)) = 0.45
         _Smoothness     ("Smoothness",     Range(0, 1)) = 0.85
         _CrestStrength  ("Crest Strength", Range(0, 3)) = 1.1
         _NormalSampleDist ("Normal Sample Distance", Float) = 2.0
@@ -53,6 +57,10 @@ Shader "SeaSick/Ocean"
                 float4 _CrestColor;
                 float4 _SpecColor;
                 float4 _ShallowWater;
+                float4 _StormDeep;
+                float4 _StormShallow;
+                float4 _StormCrest;
+                float  _SkyReflect;
                 float  _Smoothness;
                 float  _CrestStrength;
                 float  _NormalSampleDist;
@@ -61,6 +69,11 @@ Shader "SeaSick/Ocean"
                 float  _ShoreFoamBand;
                 float  _ShallowBand;
             CBUFFER_END
+
+            // What the sky is doing at the skyline, from SkyDirector. Grazing
+            // water mirrors it, so the sea can never stay blue under a black
+            // lid of cloud.
+            float4 _SS_SkyHorizon;
 
             // Set globally each frame by WaveField / HullDisplacement.
             float4 _SS_Waves[MAX_WAVES];
@@ -468,7 +481,20 @@ Shader "SeaSick/Ocean"
                 // looking straight down you see into the water and it darkens.
                 float facing = saturate(dot(n, viewDir));
                 float fresnel = pow(1.0 - facing, 3.0);
-                float3 baseCol = lerp(_DeepColor.rgb, _ShallowColor.rgb, fresnel);
+
+                // The water goes with the weather. A storm sea is slate and
+                // dirty green, never blue. Grading it from the per-vertex storm
+                // term rather than by swapping material colours keeps it
+                // POSITIONAL: standing on the home shelf you can see the dark
+                // water lying out west, which is the whole point of a sea that
+                // gets worse in a direction.
+                float st = saturate(i.storm);
+                float3 deepCol = lerp(_DeepColor.rgb, _StormDeep.rgb, st);
+                float3 shoalCol = lerp(_ShallowColor.rgb, _StormShallow.rgb, st);
+                float3 baseCol = lerp(deepCol, shoalCol, fresnel);
+
+                // Grazing angles take the colour of the actual sky.
+                baseCol = lerp(baseCol, _SS_SkyHorizon.rgb, fresnel * _SkyReflect);
 
                 // Shallows lighten toward the beach, and a foam band breaks
                 // along every shoreline.
@@ -495,7 +521,6 @@ Shader "SeaSick/Ocean"
                 // streaks, spindrift — and the crest term is what paints it.
                 // In calm water this contributes nothing, so the home shelf
                 // stays clean and only the deep turns to milk.
-                float st = saturate(i.storm);
                 float capLow = lerp(0.40, 0.02, st);
                 float capHigh = lerp(0.95, 0.42, st);
                 foam = max(foam, smoothstep(capLow, capHigh, i.crest * _CrestStrength));
@@ -512,13 +537,21 @@ Shader "SeaSick/Ocean"
                 float tear = lerp(1.0, saturate(fn * 1.85 - 0.28), st * 0.92);
                 foam *= tear;
                 foam = max(foam, smoothstep(0.05, 0.55, SampleWake(i.positionWS.xz).g));
-                baseCol = lerp(baseCol, _CrestColor.rgb, saturate(foam));
+                // Calm foam is cyan-white, which is right under a blue sky
+                // and wrong under a black one — it read as a lit ring around
+                // the hull in the first storm shot. Storm foam goes neutral,
+                // and neutral white against slate is what makes it carry.
+                float3 crestCol = lerp(_CrestColor.rgb, _StormCrest.rgb, st);
+                baseCol = lerp(baseCol, crestCol, saturate(foam));
                 baseCol *= 1.0 - gust * 0.28;   // the darker patch of a gust
 
                 float3 h = normalize(main.direction + viewDir);
                 float spec = pow(saturate(dot(n, h)), lerp(8.0, 256.0, _Smoothness));
 
-                float3 ambient = SampleSH(n) * 0.55 + 0.35;
+                // The constant floor kept the sea readable in a bright
+                // scene; under a storm lid it is exactly what stopped the water
+                // going dark. Let it fall with the weather.
+                float3 ambient = SampleSH(n) * 0.55 + lerp(0.35, 0.19, st);
                 float3 col = baseCol * (ambient + main.color * (0.45 + 0.55 * ndotl))
                            + _SpecColor.rgb * spec * _Smoothness * main.color;
 
