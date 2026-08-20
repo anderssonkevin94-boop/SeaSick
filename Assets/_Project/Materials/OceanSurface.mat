@@ -8,7 +8,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: OceanSurface
-  m_Shader: {fileID: 4800000, guid: 44e98f3bfba224b12ba002d2c89aca87, type: 3}
+  m_Shader: {fileID: 4800000, guid: c4e0c3669eef441f7870b6415c2e3c01, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -24,9 +24,22 @@ Material:
     serializedVersion: 3
     m_TexEnvs: []
     m_Ints: []
-    m_Floats: []
+    m_Floats:
+    - _FoamJThreshold: 0.72
+    - _FoamNoiseScale: 0.14
+    - _PeakMaskScale: 0.55
+    - _SpecPowerFar: 48
+    - _SpecPowerNear: 420
+    - _SpecStrength: 0.75
+    - _SubsurfaceStrength: 1.4
     m_Colors:
-    - _DeepColor: {r: 0.02, g: 0.089999996, b: 0.15999997, a: 1}
+    - _DeepColor: {r: 0.028, g: 0.14, b: 0.21, a: 1}
+    - _FoamColor: {r: 0.92, g: 0.96, b: 0.97, a: 1}
     - _LightColor: {r: 0.24999997, g: 0.54999995, b: 0.6, a: 1}
+    - _ShallowColor: {r: 0.09, g: 0.42, b: 0.45, a: 1}
+    - _StormDeep: {r: 0.058, g: 0.086, b: 0.098, a: 1}
+    - _StormShallow: {r: 0.1, g: 0.14, b: 0.15, a: 1}
+    - _StormSubsurface: {r: 0.16, g: 0.3, b: 0.24, a: 1}
+    - _SubsurfaceColor: {r: 0.1, g: 0.65, b: 0.45, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
