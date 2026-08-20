@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace SeaSick.Ocean
+namespace SeaSick.Ocean2
 {
     /// Air full of water.
     ///
@@ -166,20 +166,20 @@ namespace SeaSick.Ocean
             float storm = sky != null ? sky.Storminess01 : 0f;
             if (storm < threshold) return;
 
-            var field = WaveField.Instance;
-            if (field == null) return;
+            if (!OceanSampler.Ready) return;
 
             // Above the threshold, ramp the whole effect in over the next
             // stretch so it arrives with the weather instead of switching on.
             float t = Mathf.InverseLerp(threshold, 1f, storm);
 
-            Vector2 wind = field.WindDirection;
+            Vector2 wind = SeaStateController.Instance != null
+                ? SeaStateController.Instance.WindDirection : Vector2.right;
             Vector3 wind3 = new Vector3(wind.x, 0f, wind.y);
             Vector3 centre = transform.position + transform.forward * sampleLead;
 
             dbgUpdates++;
-            TearCrests(field, centre, wind3, t);
-            DriftMist(field, centre, wind3, t);
+            TearCrests(centre, wind3, t);
+            DriftMist(centre, wind3, t);
 
             if (!logDiagnostics) return;
             dbgClock += Time.deltaTime;
@@ -195,7 +195,7 @@ namespace SeaSick.Ocean
 
         /// Sample the sea around the ship, work out where the tops are from the
         /// samples themselves, and throw the tops downwind.
-        void TearCrests(WaveField field, Vector3 centre, Vector3 wind3, float t)
+        void TearCrests(Vector3 centre, Vector3 wind3, float t)
         {
             int n = samples.Length;
             float sum = 0f, top = -99999f;
@@ -204,7 +204,7 @@ namespace SeaSick.Ocean
             {
                 Vector2 off = Random.insideUnitCircle * sampleRadius;
                 Vector2 p = new Vector2(centre.x + off.x, centre.z + off.y);
-                float h = field.SampleHeightFast(p, Time.time);
+                float h = OceanSampler.SampleImmediate(new Vector3(p.x, 0f, p.y)).height;
                 sum += h;
                 if (h > top) top = h;
                 samples[found++] = new Vector3(p.x, h, p.y);
@@ -253,7 +253,7 @@ namespace SeaSick.Ocean
             }
         }
 
-        void DriftMist(WaveField field, Vector3 centre, Vector3 wind3, float t)
+        void DriftMist(Vector3 centre, Vector3 wind3, float t)
         {
             mistDue += mistRate * t * Time.deltaTime;
             if (mistDue < 1f) return;
@@ -268,7 +268,7 @@ namespace SeaSick.Ocean
                 Vector2 off = Random.insideUnitCircle.normalized
                             * Random.Range(sampleRadius * 0.7f, sampleRadius * 1.7f);
                 Vector2 p = new Vector2(centre.x + off.x, centre.z + off.y);
-                float h = field.SampleHeightFast(p, Time.time);
+                float h = OceanSampler.SampleImmediate(new Vector3(p.x, 0f, p.y)).height;
 
                 ep.position = new Vector3(p.x, h + Random.Range(0f, 9f), p.y);
                 ep.velocity = wind3 * Random.Range(3f, 7f);

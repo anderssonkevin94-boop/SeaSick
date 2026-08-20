@@ -150,16 +150,14 @@ namespace SeaSick.World
 
         float SampleWeather()
         {
-            var field = SeaSick.Ocean.WaveField.Instance;
-            if (field == null || ship == null) return 0f;
+            var ctrl = SeaSick.Ocean2.SeaStateController.Instance;
+            if (ctrl == null || ship == null) return 0f;
 
             Vector2 p = new Vector2(ship.position.x, ship.position.z);
-            float storm = field.StormAmount01(p);
-
-            // A swell front standing over the ship is weather too, even on the
-            // home shelf — it is the thing you are supposed to run from, so it
-            // should look like something rather than only feel like it.
-            float severity = field.SeaSeverity01(p, Time.time);
+            // The weather system itself is the authority now: its storminess
+            // already folds in the storm region the ship is sailing through.
+            float storm = ctrl.Storminess01;
+            float severity = ctrl.SeaSeverityAt(p);
             float lift = Mathf.InverseLerp(severityFloor, 1f, severity) * severityWeight;
 
             return Mathf.Clamp01(Mathf.Max(storm, lift));
@@ -205,8 +203,8 @@ namespace SeaSick.World
             RenderSettings.fogStartDistance = Mathf.Lerp(clearFogStart, stormFogStart, t);
             RenderSettings.fogEndDistance = Mathf.Lerp(clearFogEnd, stormFogEnd, t);
 
-            var wind = SeaSick.Ocean.WaveField.Instance != null
-                ? SeaSick.Ocean.WaveField.Instance.WindDirection : Vector2.right;
+            var wind = SeaSick.Ocean2.SeaStateController.Instance != null
+                ? SeaSick.Ocean2.SeaStateController.Instance.WindDirection : Vector2.right;
             Shader.SetGlobalVector(SkyWindId, new Vector4(wind.x, wind.y, 0f, 0f));
             Shader.SetGlobalVector(SkyHorizonId, horizon);
             Shader.SetGlobalFloat(StorminessId, t);

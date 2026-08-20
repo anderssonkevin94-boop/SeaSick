@@ -209,9 +209,8 @@ namespace SeaSick.Ship
                 return;
             }
 
-            var waves = WaveField.Instance;
-            float surface = waves != null
-                ? waves.SampleHeightFast(new Vector2(to.x, to.z), Time.time)
+            float surface = Ocean2.OceanSampler.Ready
+                ? Ocean2.OceanSampler.SampleImmediate(to).height
                 : 0f;
 
             if (to.y <= surface)
@@ -224,8 +223,8 @@ namespace SeaSick.Ship
 
         void Splash(Vector3 at)
         {
-            // The wake buffer already knows how to hold a mark on the water.
-            WakeTexture.Splash(at, 7f, 1.3f);
+            // The ripple sim knows how to hold a mark on the water.
+            Ocean2.DynamicWaterSim.Splash(at, 7f, 1.3f);
 
             var go = new GameObject("Splash");
             go.transform.position = at;

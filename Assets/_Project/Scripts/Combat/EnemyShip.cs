@@ -472,11 +472,10 @@ namespace SeaSick.Combat
 
         void RideSea(float dt)
         {
-            var waves = WaveField.Instance;
             Vector3 p = transform.position;
 
-            float surface = waves != null
-                ? waves.SampleHeightFast(new Vector2(p.x, p.z), Time.time) : 0f;
+            float surface = Ocean2.OceanSampler.Ready
+                ? Ocean2.OceanSampler.SampleImmediate(p).height : 0f;
             transform.position = new Vector3(
                 p.x, Mathf.Lerp(p.y, surface, 1f - Mathf.Exp(-7f * dt)), p.z);
 
@@ -489,13 +488,13 @@ namespace SeaSick.Combat
                 transform.rotation, Quaternion.Euler(pitch, heading, lean),
                 1f - Mathf.Exp(-6f * dt));
 
-            // A hull moving through water leaves a mark, and the buffer is
+            // A hull moving through water leaves a mark, and the sim is
             // already built for it, so a raider's wake costs nothing extra.
-            var wake = WakeTexture.Instance;
-            if (wake != null && speed > 0.5f)
+            var sim = Ocean2.DynamicWaterSim.Instance;
+            if (sim != null && speed > 0.5f)
             {
                 float k = Mathf.Clamp01(speed / maxSpeed);
-                wake.Stamp(new Vector2(p.x, p.z), 5.5f, 0.55f * dt * k, 0.35f * dt * k);
+                sim.Stamp(new Vector2(p.x, p.z), 5.5f, 0.55f * dt * k, 0.35f * dt * k);
             }
         }
 
@@ -602,7 +601,7 @@ namespace SeaSick.Combat
             {
                 diedAt = Time.time;
                 HitTargets.Unregister(this);
-                WakeTexture.Splash(transform.position, 18f, 2.6f);
+                Ocean2.DynamicWaterSim.Splash(transform.position, 18f, 2.6f);
             }
             return true;
         }

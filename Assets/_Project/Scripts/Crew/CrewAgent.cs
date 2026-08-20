@@ -501,9 +501,8 @@ namespace SeaSick.Crew
                     flat.y = 0f;
                     if (flat.magnitude > isle.Radius)
                     {
-                        var waves = Ocean.WaveField.Instance;
-                        if (waves != null)
-                            y = waves.SampleHeightFast(new Vector2(next.x, next.z), Time.time) + 0.35f;
+                        if (Ocean2.OceanSampler.Ready)
+                            y = Ocean2.OceanSampler.SampleImmediate(next).height + 0.35f;
                     }
                 }
             }

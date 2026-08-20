@@ -66,25 +66,6 @@ namespace SeaSick.UI
 
             DrawPip(tape, Mathf.DeltaAngle(heading, homeBearing), UITheme.Sea, "home", true);
 
-            // Where the swell front is bearing down from, if one is running.
-            var waves = Ocean.WaveField.Instance;
-            if (waves != null && waves.SwellActive)
-            {
-                Vector2 sd = waves.SwellDirection;
-                float swellFrom = Mathf.Atan2(-sd.x, -sd.y) * Mathf.Rad2Deg;
-                DrawPip(tape, Mathf.DeltaAngle(heading, swellFrom), UITheme.Bad, null, false);
-            }
-
-            // A mountain sea, if one is running. Drawn heavier than the swell
-            // because it is the one that can end a voyage's worth of cargo.
-            var mountains = FindFirstObjectByType<Ocean.MountainSeaDirector>();
-            var threat = mountains != null ? mountains.Threat : null;
-            if (threat != null)
-            {
-                float from = Mathf.Atan2(-threat.Travel.x, -threat.Travel.y) * Mathf.Rad2Deg;
-                DrawPip(tape, Mathf.DeltaAngle(heading, from), UITheme.Bad, null, false);
-            }
-
             // Cardinals and their halves. These are the map: north is cold,
             // south is hot, east is dry, west is the open ocean.
             for (int i = 0; i < 8; i++)

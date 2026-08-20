@@ -1,5 +1,4 @@
 using SeaSick.Crew;
-using SeaSick.Ocean;
 using SeaSick.UI;
 using SeaSick.Voyage;
 using SeaSick.World;
@@ -16,7 +15,6 @@ namespace SeaSick.Ship
         // at all, not watching a progress timer tick down.
         [SerializeField] float dropTime = 0f;
         [SerializeField] float weighTime = 0f;
-        [SerializeField] float swellAnchorPenalty = 1f;
         [Tooltip("How far off the shoreline the ship lies when moored.")]
         [SerializeField] float berthDistance = 11f;
         [SerializeField] float berthSpeed = 1.6f;
@@ -32,7 +30,6 @@ namespace SeaSick.Ship
         Gangway gangway;
         CrewAgent[] crew;
         VoyageManager voyage;
-        WaveField waves;
         SeaSick.CameraRig.ChaseCamera chaseCam;
 
         float timer;
@@ -49,7 +46,6 @@ namespace SeaSick.Ship
             gangway = GetComponent<Gangway>();
             crew = GetComponentsInChildren<CrewAgent>(true);
             voyage = FindFirstObjectByType<VoyageManager>();
-            waves = FindFirstObjectByType<WaveField>();
             chaseCam = FindFirstObjectByType<SeaSick.CameraRig.ChaseCamera>();
         }
 
@@ -107,10 +103,6 @@ namespace SeaSick.Ship
         /// You can only put a boat ashore on a beach — cliff faces drop sheer
         /// into the water, so the approach bearing matters.
         bool CanLandHere(Island isle) => isle != null && isle.HasBeachToward(transform.position);
-
-        float SwellHere() => waves != null
-            ? waves.SwellIntensity(new Vector2(transform.position.x, transform.position.z), Time.time)
-            : 0f;
 
         void Update()
         {
@@ -243,7 +235,7 @@ namespace SeaSick.Ship
         {
             CurrentIsland = isle;
             motor.Anchored = true;
-            timer = dropTime * (SwellHere() > 0.25f ? swellAnchorPenalty : 1f);
+            timer = dropTime;
             CurrentState = timer > 0f ? State.Dropping : State.Anchored;
         }
 
@@ -343,9 +335,7 @@ namespace SeaSick.Ship
 
                 case State.Dropping:
                     GUI.Label(new Rect(0f, by, w, bh),
-                        SwellHere() > 0.25f
-                            ? $"dropping anchor in heavy water…  {timer:F1}s"
-                            : $"dropping anchor…  {timer:F1}s", infoStyle);
+$"dropping anchor…  {timer:F1}s", infoStyle);
                     break;
 
                 case State.Weighing:

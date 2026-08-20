@@ -1,5 +1,4 @@
 using SeaSick.Combat;
-using SeaSick.Ocean;
 using SeaSick.Ship;
 using SeaSick.Voyage;
 using SeaSick.World;
@@ -21,7 +20,6 @@ namespace SeaSick.UI
 
         ShipMotor motor;
         VoyageManager voyage;
-        WaveField waves;
 
         Texture2D discTex;
         Texture2D arrowTex;
@@ -30,7 +28,6 @@ namespace SeaSick.UI
         {
             motor = FindFirstObjectByType<ShipMotor>();
             voyage = FindFirstObjectByType<VoyageManager>();
-            waves = FindFirstObjectByType<WaveField>();
             discTex = BuildDisc(48);
             arrowTex = BuildArrow(32);
         }
@@ -98,8 +95,6 @@ namespace SeaSick.UI
             GUI.BeginGroup(box);
             var local = new Rect(0f, 0f, size, size);
             Vector2 centre = new Vector2(size * 0.5f, size * 0.5f);
-
-            DrawSwell(local, centre, shipPos, scale);
 
             foreach (var isle in Island.All)
             {
@@ -188,28 +183,5 @@ namespace SeaSick.UI
             GUI.color = prev;
         }
 
-        /// The storm as a band across the map — the whole point of the swell is
-        /// that you can see it coming and run, so it belongs here.
-        void DrawSwell(Rect local, Vector2 centre, Vector3 shipPos, float scale)
-        {
-            if (waves == null || !waves.SwellActive) return;
-            Vector2 c = waves.SwellCenter(Time.time);
-            Vector2 dir = waves.SwellDirection;
-            float half = waves.SwellHalfWidth * scale;
-
-            // Distance from the ship to the front line, along its travel axis.
-            float along = Vector2.Dot(new Vector2(shipPos.x, shipPos.z) - c, dir);
-            float offsetPx = -along * scale;
-
-            // Draw the band as a rotated strip through the map.
-            float angle = Mathf.Atan2(dir.x, dir.y) * Mathf.Rad2Deg;
-            var prev = GUI.color;
-            GUIUtility.RotateAroundPivot(-angle, centre);
-            GUI.color = new Color(0.85f, 0.35f, 0.12f, 0.30f);
-            GUI.DrawTexture(new Rect(centre.x - local.width, centre.y + offsetPx - half,
-                local.width * 2f, half * 2f), Texture2D.whiteTexture);
-            GUI.matrix = Matrix4x4.identity;
-            GUI.color = prev;
-        }
     }
 }

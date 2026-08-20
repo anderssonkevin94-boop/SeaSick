@@ -236,11 +236,10 @@ namespace SeaSick.CameraRig
             transform.position = rigPos + Vector3.up * seaY;
 
             // A low camera sells speed, but it must never end up underwater.
-            var waves = SeaSick.Ocean.WaveField.Instance;
-            if (waves != null)
+            if (SeaSick.Ocean2.OceanSampler.Ready)
             {
                 Vector3 cp = transform.position;
-                float surface = waves.SampleHeight(new Vector2(cp.x, cp.z), Time.time);
+                float surface = SeaSick.Ocean2.OceanSampler.SampleImmediate(cp).height;
                 if (cp.y < surface + minHeightAboveWater)
                     transform.position = new Vector3(cp.x, surface + minHeightAboveWater, cp.z);
             }

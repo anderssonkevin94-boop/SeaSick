@@ -1,4 +1,4 @@
-using SeaSick.Ocean;
+using SeaSick.Ocean2;
 using SeaSick.Ship;
 using UnityEngine;
 
@@ -22,6 +22,10 @@ namespace SeaSick.Voyage
 
         Transform[] crates;
         Transform[] flotsam;
+        // Persistent registry probes: two dozen floaters bobbing every frame
+        // belong in the one batched ocean query, not in per-object sampling.
+        OceanProbeRegistry.Handle[] crateHandles;
+        OceanProbeRegistry.Handle[] flotsamHandles;
         float messageUntil;
         GUIStyle style;
 
@@ -60,26 +64,42 @@ namespace SeaSick.Voyage
                 flotsam[i] = p.transform;
                 Respawn(flotsam[i]);
             }
+
+            crateHandles = new OceanProbeRegistry.Handle[crateCount];
+            for (int i = 0; i < crateCount; i++)
+                crateHandles[i] = OceanProbeRegistry.Register(crates[i].position);
+            flotsamHandles = new OceanProbeRegistry.Handle[flotsamCount];
+            for (int i = 0; i < flotsamCount; i++)
+                flotsamHandles[i] = OceanProbeRegistry.Register(flotsam[i].position);
+        }
+
+        void OnDestroy()
+        {
+            if (crateHandles != null)
+                foreach (var h in crateHandles) OceanProbeRegistry.Unregister(h);
+            if (flotsamHandles != null)
+                foreach (var h in flotsamHandles) OceanProbeRegistry.Unregister(h);
         }
 
         void Update()
         {
             if (ship == null) return;
-            var waves = WaveField.Instance;
             float t = Time.time;
             Vector3 shipPos = ship.transform.position;
 
             for (int i = 0; i < crates.Length; i++)
-                UpdateFloater(crates[i], shipPos, waves, t, isCrate: true, i);
+                UpdateFloater(crates[i], shipPos, crateHandles[i], t, isCrate: true, i);
             for (int i = 0; i < flotsam.Length; i++)
-                UpdateFloater(flotsam[i], shipPos, waves, t, isCrate: false, i);
+                UpdateFloater(flotsam[i], shipPos, flotsamHandles[i], t, isCrate: false, i);
         }
 
-        void UpdateFloater(Transform f, Vector3 shipPos, WaveField waves, float t, bool isCrate, int seed)
+        void UpdateFloater(Transform f, Vector3 shipPos, OceanProbeRegistry.Handle handle,
+            float t, bool isCrate, int seed)
         {
             Vector3 p = f.position;
-            if (waves != null)
-                p.y = waves.SampleHeightFast(new Vector2(p.x, p.z), t) + 0.15f;
+            handle.position = p;
+            if (OceanSampler.Ready)
+                p.y = handle.sample.height + 0.15f;
             f.position = p;
             f.rotation = Quaternion.Euler(
                 Mathf.Sin(t * 0.9f + seed * 2.1f) * 8f,

@@ -94,7 +94,7 @@ public class StormPicture : MonoBehaviour
         // ---- spray ----
         var spindrift = GameObject.Find("Spindrift")?.GetComponent<ParticleSystem>();
         var mist = GameObject.Find("SeaMist")?.GetComponent<ParticleSystem>();
-        var spray = motor.GetComponent<SeaSick.Ocean.StormSpray>();
+        var spray = motor.GetComponent<SeaSick.Ocean2.StormSpray>();
         sb.AppendLine();
         sb.AppendLine($"SPRAY  spindrift {(spindrift != null ? spindrift.particleCount : -1)} alive  " +
                       $"mist {(mist != null ? mist.particleCount : -1)} alive");

@@ -174,13 +174,11 @@ namespace SeaSick.Combat
         {
             float t = Time.time;
 
-            // Ride the surface. Sample on demand — WaveField may not have been
+            // Ride the surface. Sample on demand — the ocean may not have been
             // ready when this spawned.
-            var waves = WaveField.Instance;
-            if (waves != null)
+            if (Ocean2.OceanSampler.Ready)
             {
-                float surface = waves.SampleHeightFast(
-                    new Vector2(transform.position.x, transform.position.z), t);
+                float surface = Ocean2.OceanSampler.SampleImmediate(transform.position).height;
                 restY = Mathf.Lerp(restY, surface, 1f - Mathf.Exp(-6f * Time.deltaTime));
             }
 
@@ -205,11 +203,11 @@ namespace SeaSick.Combat
                 body.localRotation = Quaternion.Euler(lash * 9f, lash * 14f, lash * 11f);
 
                 // A hurt beast thrashes: the water around it shows it.
-                var wake = WakeTexture.Instance;
-                if (wake != null)
+                var sim = Ocean2.DynamicWaterSim.Instance;
+                if (sim != null)
                 {
                     float agitation = 0.10f + writhe * 1.4f;
-                    wake.Stamp(new Vector2(transform.position.x, transform.position.z),
+                    sim.Stamp(new Vector2(transform.position.x, transform.position.z),
                         hitRadius * 1.5f, agitation * Time.deltaTime * 6f,
                         agitation * Time.deltaTime * 3f);
                 }
@@ -272,7 +270,7 @@ namespace SeaSick.Combat
         {
             diedAt = Time.time;
             HitTargets.Unregister(this);
-            WakeTexture.Splash(transform.position, 16f, 2.4f);
+            Ocean2.DynamicWaterSim.Splash(transform.position, 16f, 2.4f);
         }
 
         /// A puff of dark spray where the shot went in.

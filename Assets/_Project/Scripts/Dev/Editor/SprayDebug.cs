@@ -27,15 +27,15 @@ public class SprayDebug : MonoBehaviour
         hold = home + new Vector3(-1500f, 0f, 0f);
         motor.transform.position = new Vector3(hold.x, motor.transform.position.y, hold.z);
 
-        var spray = motor.GetComponent<SeaSick.Ocean.StormSpray>();
-        int count = motor.GetComponents<SeaSick.Ocean.StormSpray>().Length;
+        var spray = motor.GetComponent<SeaSick.Ocean2.StormSpray>();
+        int count = motor.GetComponents<SeaSick.Ocean2.StormSpray>().Length;
         Debug.Log($"SPRAYDBG components on ship: {count}");
         if (spray != null)
         {
-            var f = typeof(SeaSick.Ocean.StormSpray)
+            var f = typeof(SeaSick.Ocean2.StormSpray)
                 .GetField("logDiagnostics", BindingFlags.Instance | BindingFlags.NonPublic);
             f?.SetValue(spray, true);
-            var rate = typeof(SeaSick.Ocean.StormSpray)
+            var rate = typeof(SeaSick.Ocean2.StormSpray)
                 .GetField("spindriftRate", BindingFlags.Instance | BindingFlags.NonPublic);
             Debug.Log($"SPRAYDBG live spindriftRate = {rate?.GetValue(spray)}");
         }

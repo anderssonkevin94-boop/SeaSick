@@ -95,8 +95,8 @@ public static class SetupStormSky
         // --- StormSpray ------------------------------------------------------
         if (motor != null)
         {
-            var spray = motor.GetComponent<SeaSick.Ocean.StormSpray>();
-            if (spray == null) spray = motor.gameObject.AddComponent<SeaSick.Ocean.StormSpray>();
+            var spray = motor.GetComponent<SeaSick.Ocean2.StormSpray>();
+            if (spray == null) spray = motor.gameObject.AddComponent<SeaSick.Ocean2.StormSpray>();
             SceneDefaults.ResetToCodeDefaults(spray);
         }
 

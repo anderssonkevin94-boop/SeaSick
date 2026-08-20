@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace SeaSick.Ocean
+namespace SeaSick.Ocean2
 {
     /// A round, soft-edged blob, built in code so there is no texture asset.
     ///
