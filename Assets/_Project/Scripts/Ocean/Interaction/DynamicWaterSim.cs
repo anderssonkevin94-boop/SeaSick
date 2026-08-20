@@ -186,11 +186,18 @@ namespace SeaSick.Ocean
             rippleShader.SetFloat("_C2Dt2", Mathf.Min(c2 * c2, 0.45f));
             rippleShader.SetFloat("_Damping", Mathf.Exp(-damping * dt));
             rippleShader.SetFloat("_FoamDecay", Mathf.Exp(-foamDecay * dt));
-            rippleShader.SetTexture(kStep, "Curr", curr);
-            rippleShader.SetTexture(kStep, "Prev", prev);
+            // Ping-pong: Step reads curr+prev, writes scratch, then the three
+            // buffers rotate. Updating curr in place raced neighbour reads
+            // against writes across threads and intermittently blew the field
+            // up into giant surface spikes.
+            rippleShader.SetTexture(kStep, "Src", curr);
+            rippleShader.SetTexture(kStep, "PrevTex", prev);
+            rippleShader.SetTexture(kStep, "Dst", scratch);
             rippleShader.Dispatch(kStep, Mathf.CeilToInt(n / 8f), Mathf.CeilToInt(n / 8f), 1);
-            // Step writes both in place: Curr := new field, Prev := old field.
-            // No swap needed.
+            RenderTexture next = scratch;
+            scratch = prev;
+            prev = curr;
+            curr = next;
 
             Shader.SetGlobalTexture("_Ocean_SimTex", curr);
             Shader.SetGlobalVector("_Ocean_SimRect",

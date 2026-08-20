@@ -11,7 +11,7 @@
 #pragma kernel Clear
 
 RWTexture2D<float2> Curr;
-RWTexture2D<float2> Prev;
+Texture2D<float2> PrevTex;
 Texture2D<float2> Src;
 RWTexture2D<float2> Dst;
 
@@ -28,6 +28,10 @@ cbuffer Params
     int2 _ScrollOffset;
 }
 
+// Reads Src (current field) and PrevTex, writes Dst only — the C# side
+// rotates the three buffers afterwards. Never update Curr in place here: a
+// neighbour read racing another thread's write breaks the leapfrog scheme
+// and the field explodes into metre-tall spikes.
 [numthreads(8, 8, 1)]
 void Step(uint3 id : SV_DispatchThreadID)
 {
@@ -37,20 +41,23 @@ void Step(uint3 id : SV_DispatchThreadID)
     uint ym = id.y == 0 ? 0 : id.y - 1;
     uint yp = min(id.y + 1, _N - 1);
 
-    float h = Curr[id.xy].x;
-    float lap = Curr[uint2(xm, id.y)].x + Curr[uint2(xp, id.y)].x
-              + Curr[uint2(id.x, ym)].x + Curr[uint2(id.x, yp)].x - 4.0 * h;
-    float hPrev = Prev[id.xy].x;
+    float h = Src[id.xy].x;
+    float lap = Src[uint2(xm, id.y)].x + Src[uint2(xp, id.y)].x
+              + Src[uint2(id.x, ym)].x + Src[uint2(id.x, yp)].x - 4.0 * h;
+    float hPrev = PrevTex[id.xy].x;
 
     // Rim damping: fade hard over the outer 12% so the border never reflects.
     float2 centred = (float2(id.xy) + 0.5) / _N - 0.5;
     float rim = smoothstep(0.5, 0.38, max(abs(centred.x), abs(centred.y)));
 
     float hNew = (2.0 * h - hPrev + _C2Dt2 * lap) * _Damping * rim;
-    float foam = Curr[id.xy].y * _FoamDecay * rim;
+    // Backstop: a ripple is decimetres; nothing legitimate reaches this, and
+    // a non-finite texel would otherwise spike the surface mesh forever.
+    hNew = clamp(hNew, -2.0, 2.0);
+    if (!isfinite(hNew)) hNew = 0.0;
+    float foam = Src[id.xy].y * _FoamDecay * rim;
 
-    Prev[id.xy] = float2(h, 0);
-    Curr[id.xy] = float2(hNew, foam);
+    Dst[id.xy] = float2(hNew, foam);
 }
 
 [numthreads(64, 1, 1)]
