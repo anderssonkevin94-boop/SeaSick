@@ -47,9 +47,17 @@ namespace SeaSick.Ocean
             var voyage = FindAnyObjectByType<Voyage.VoyageManager>();
             if (voyage != null) home = voyage.HomePoint;
 
+            // It was rendering as a black slab: a Lit material on a mesh this
+            // steep spends most of its face turned away from the sun, and a
+            // wall of water is not a dark object — it glows where the light
+            // comes through it. Bright, and emissive enough to read as water
+            // against the sky from any angle.
             water = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            water.SetColor("_BaseColor", new Color(0.07f, 0.24f, 0.38f, 1f));
-            water.SetFloat("_Smoothness", 0.72f);
+            water.SetColor("_BaseColor", new Color(0.16f, 0.47f, 0.62f, 1f));
+            water.SetFloat("_Smoothness", 0.62f);
+            water.EnableKeyword("_EMISSION");
+            water.SetColor("_EmissionColor", new Color(0.10f, 0.30f, 0.40f, 1f));
+            water.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
             timer = spawnInterval * 0.4f;
         }
 

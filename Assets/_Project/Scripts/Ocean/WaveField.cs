@@ -39,6 +39,35 @@ namespace SeaSick.Ocean
         [SerializeField] float totalSteepness = 0.46f;
         [Tooltip("Width of the energy peak in log-wavelength space.")]
         [SerializeField] float spectrumWidth = 0.62f;
+
+        [Header("Storm sea (the western deep)")]
+        // A storm sea is not a bigger wind sea — it is several trains
+        // DISAGREEING. Where they add you get a pyramid peak, where they
+        // cancel you get a hole, and that interference is what stops the
+        // ocean looking like a corrugated roof.
+        //
+        // The base spectrum can't provide it: its directional spreading is
+        // peakL/wavelength, which clamps the LONG waves — the ones that give
+        // the sea its shape — to about ±9° of the wind. So they march in rows
+        // by construction. These cross trains are the fix.
+        [Tooltip("Extra wave trains crossing the wind sea. 0 disables the storm.")]
+        [SerializeField] int stormWaveCount = 6;
+        [Tooltip("How far off the wind the cross seas run, in degrees.")]
+        [SerializeField] Vector2 stormCrossAngles = new Vector2(58f, 124f);
+        [Tooltip("Wavelength band for the cross trains — long, so they build real peaks.")]
+        [SerializeField] Vector2 stormWavelengths = new Vector2(70f, 260f);
+        [Tooltip("Total steepness of the cross seas at full storm.")]
+        [SerializeField] float stormSteepness = 0.42f;
+
+        [Header("Where the storm lives")]
+        [Tooltip("Direction the storm lies in, from home. Default is due west.")]
+        [SerializeField] Vector2 stormBearing = new Vector2(-1f, 0f);
+        [Tooltip("Metres in that direction before the storm starts to build.")]
+        [SerializeField] float stormNear = 450f;
+        [Tooltip("Metres before it is in full fury.")]
+        [SerializeField] float stormFar = 1250f;
+
+        int stormStart;   // index of the first cross-train wave
         [SerializeField] int seed = 1337;
 
         [Header("Sea state (drifts over minutes)")]
@@ -116,10 +145,12 @@ namespace SeaSick.Ocean
 
         void LateUpdate() { PushToGpu(Time.time); }
 
-        const int MaxGpuWaves = 16;
+        const int MaxGpuWaves = 24;
         static readonly int WavesId = Shader.PropertyToID("_SS_Waves");
         static readonly int SeaRegionId = Shader.PropertyToID("_SS_SeaRegion");
         static readonly int SeaRegionScaleId = Shader.PropertyToID("_SS_SeaRegionScale");
+        static readonly int StormId = Shader.PropertyToID("_SS_Storm");
+        static readonly int StormStartId = Shader.PropertyToID("_SS_StormStart");
         static readonly int WaveCountId = Shader.PropertyToID("_SS_WaveCount");
         static readonly int SwellId = Shader.PropertyToID("_SS_Swell");
         static readonly int SwellFrontId = Shader.PropertyToID("_SS_SwellFront");
@@ -150,6 +181,11 @@ namespace SeaSick.Ocean
                 new Vector4(home.x, home.y, calmRadius, wildRadius));
             Shader.SetGlobalVector(SeaRegionScaleId,
                 new Vector4(nearScale, farScale, 0f, 0f));
+
+            Vector2 sdir = stormBearing.sqrMagnitude < 0.0001f
+                ? Vector2.left : stormBearing.normalized;
+            Shader.SetGlobalVector(StormId, new Vector4(sdir.x, sdir.y, stormNear, stormFar));
+            Shader.SetGlobalFloat(StormStartId, stormWaveCount > 0 ? stormStart : 9999);
             Shader.SetGlobalInt(WaveCountId, count);
 
             // Shore falloff data, so the shader kills the same waves the
@@ -187,7 +223,10 @@ namespace SeaSick.Ocean
 
         void BuildSpectrum()
         {
-            waves = new GerstnerWave[Mathf.Max(1, waveCount)];
+            int baseCount = Mathf.Max(1, waveCount);
+            int storm = Mathf.Max(0, stormWaveCount);
+            waves = new GerstnerWave[baseCount + storm];
+            stormStart = baseCount;
             var rnd = new System.Random(seed);
 
             // Peak wavelength of a wind-driven sea, roughly 0.6 v² (metres).
@@ -198,9 +237,9 @@ namespace SeaSick.Ocean
             var energies = new float[waves.Length];
             float energySum = 0f;
 
-            for (int i = 0; i < waves.Length; i++)
+            for (int i = 0; i < baseCount; i++)
             {
-                float t = (i + 0.5f) / waves.Length;
+                float t = (i + 0.5f) / baseCount;
                 float wavelength = Mathf.Exp(Mathf.Lerp(
                     Mathf.Log(minWavelength), Mathf.Log(maxWavelength), t));
 
@@ -227,8 +266,45 @@ namespace SeaSick.Ocean
             }
 
             if (energySum <= 0f) energySum = 1f;
-            for (int i = 0; i < waves.Length; i++)
+            for (int i = 0; i < baseCount; i++)
                 waves[i].steepness = totalSteepness * energies[i] / energySum;
+
+            // The cross seas. Long, steep, and running at big angles to the
+            // wind — including some near-opposing, which is what produces the
+            // standing pyramids and sudden holes of a real storm.
+            for (int i = 0; i < storm; i++)
+            {
+                float t = storm > 1 ? i / (float)(storm - 1) : 0.5f;
+                float deg = Mathf.Lerp(stormCrossAngles.x, stormCrossAngles.y, t);
+                // Alternate sides so the trains genuinely cross each other
+                // rather than all fanning the same way.
+                if (i % 2 == 1) deg = -deg;
+                deg += ((float)rnd.NextDouble() * 2f - 1f) * 9f;
+
+                float angle = baseAngle + deg * Mathf.Deg2Rad;
+                float wavelength = Mathf.Lerp(stormWavelengths.x, stormWavelengths.y,
+                    (float)rnd.NextDouble());
+
+                waves[baseCount + i] = new GerstnerWave
+                {
+                    direction = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle)),
+                    wavelength = wavelength,
+                    phase = (float)rnd.NextDouble() * Mathf.PI * 2f,
+                    steepness = stormSteepness / Mathf.Max(1, storm),
+                };
+            }
+        }
+
+        /// How deep into the storm this spot is: 0 in home waters, 1 out in the
+        /// western deep. Measured along the storm bearing rather than by an
+        /// angle, so it is one dot product and one smoothstep — trivial to keep
+        /// identical to StormAmount() in Ocean.shader, which it must be.
+        public float StormAmount01(Vector2 p)
+        {
+            if (stormWaveCount <= 0) return 0f;
+            Vector2 dir = stormBearing.sqrMagnitude < 0.0001f ? Vector2.left : stormBearing.normalized;
+            float along = Vector2.Dot(p - HomeXZ, dir);
+            return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(stormNear, stormFar, along));
         }
 
         // --- Swell front: a band of heavy water sweeping across the world ---
@@ -369,22 +445,52 @@ namespace SeaSick.Ocean
         }
 
         /// Full Gerstner displacement (dx, height, dz) for a rest-position point.
+        /// The Gerstner Jacobian at a point: 1 is undisturbed water, 0 means
+        /// the horizontal displacement has folded the surface over itself,
+        /// which is where a wave genuinely breaks. Mirrors BreakingAmount() in
+        /// Ocean.shader so the foam threshold can be set from measurement
+        /// rather than from a guess.
+        public float JacobianAt(Vector2 p)
+        {
+            EnsureConstants(Time.time);
+            float shore = ShoreAttenuation(p) * RegionScale(p);
+            if (shore <= 0.001f) return 1f;
+            float storm = StormAmount01(p);
+
+            float jxx = 0f, jzz = 0f, jxz = 0f;
+            for (int i = 0; i < constants.Length; i++)
+            {
+                var c = constants[i];
+                float amp = i >= stormStart ? c.amp * storm : c.amp;
+                if (amp == 0f) continue;
+                float k = Mathf.Sqrt(c.kx * c.kx + c.kz * c.kz);
+                float sn = Mathf.Sin(c.kx * p.x + c.kz * p.y + c.phaseOffset) * amp * k * shore;
+                jxx -= c.dirX * c.dirX * sn;
+                jzz -= c.dirZ * c.dirZ * sn;
+                jxz -= c.dirX * c.dirZ * sn;
+            }
+            return (1f + jxx) * (1f + jzz) - jxz * jxz;
+        }
+
         public Vector3 Displace(Vector2 restPos, float time)
         {
             EnsureConstants(time);
             float shore = ShoreAttenuation(restPos) * RegionScale(restPos);
             if (shore <= 0.001f) return Vector3.zero;
             float x = restPos.x, z = restPos.y;
+            float storm = StormAmount01(restPos);
             float dx = 0f, dy = 0f, dz = 0f;
             for (int i = 0; i < constants.Length; i++)
             {
                 var c = constants[i];
+                float amp = i >= stormStart ? c.amp * storm : c.amp;
+                if (amp == 0f) continue;
                 float ph = c.kx * x + c.kz * z + c.phaseOffset;
                 float cos = Mathf.Cos(ph);
-                float ampCos = c.amp * cos;
+                float ampCos = amp * cos;
                 dx += c.dirX * ampCos;
                 dz += c.dirZ * ampCos;
-                dy += c.amp * Mathf.Sin(ph);
+                dy += amp * Mathf.Sin(ph);
             }
             var d = new Vector3(dx, dy, dz);
 

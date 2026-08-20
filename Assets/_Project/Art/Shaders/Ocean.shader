@@ -45,7 +45,7 @@ Shader "SeaSick/Ocean"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-            #define MAX_WAVES 16
+            #define MAX_WAVES 24
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _DeepColor;
@@ -118,6 +118,10 @@ Shader "SeaSick/Ocean"
             float4 _SS_SeaRegion;
             // x = scale on the home shelf, y = scale out in the deep
             float4 _SS_SeaRegionScale;
+            // xy = storm bearing from home, z = where it builds, w = full fury
+            float4 _SS_Storm;
+            // Index of the first cross-train wave in _SS_Waves
+            float  _SS_StormStart;
             int    _SS_IslandCount;
 
             // Ship: xy = position, zw = forward (normalised).
@@ -132,6 +136,26 @@ Shader "SeaSick/Ocean"
             // Fine ripples the vertex grid can never resolve. Analytic gradient
             // of a few directional wavelets, so we get a real normal for a
             // handful of instructions and no texture fetch.
+            // Cheap value noise, for tearing foam into streaks. A uniform
+            // wash of white reads as milk; real storm foam is ragged, stretched
+            // along the wave, and full of holes.
+            float FoamHash(float2 p)
+            {
+                return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+            }
+
+            float FoamNoise(float2 p)
+            {
+                float2 i = floor(p);
+                float2 f = frac(p);
+                f = f * f * (3.0 - 2.0 * f);
+                float a = FoamHash(i);
+                float b = FoamHash(i + float2(1, 0));
+                float c = FoamHash(i + float2(0, 1));
+                float d = FoamHash(i + float2(1, 1));
+                return lerp(lerp(a, b, f.x), lerp(c, d, f.x), f.y);
+            }
+
             float3 RippleNormal(float2 p, float t)
             {
                 float2 grad = 0;
@@ -185,6 +209,8 @@ Shader "SeaSick/Ocean"
                 float3 positionWS : TEXCOORD0;
                 float3 normalWS   : TEXCOORD1;
                 float  crest      : TEXCOORD2;
+                float  breaking   : TEXCOORD5;
+                float  storm      : TEXCOORD6;
                 float  fogCoord   : TEXCOORD3;
             };
 
@@ -220,6 +246,16 @@ Shader "SeaSick/Ocean"
                 return lerp(_SS_SeaRegionScale.x, _SS_SeaRegionScale.y, t);
             }
 
+            // How deep into the storm this spot is. Must match
+            // WaveField.StormAmount01 exactly — the ship is thrown about by the
+            // C# one and the player watches this one.
+            float StormAmount(float2 p)
+            {
+                float along = dot(p - _SS_SeaRegion.xy, _SS_Storm.xy);
+                return smoothstep(0.0, 1.0,
+                    saturate((along - _SS_Storm.z) / max(1.0, _SS_Storm.w - _SS_Storm.z)));
+            }
+
             // Gerstner sum at a world XZ position. Returns (dx, height, dz).
             float3 WaveDisplacement(float2 p)
             {
@@ -227,18 +263,22 @@ Shader "SeaSick/Ocean"
                 float shore = ShoreAttenuation(p) * RegionScale(p);
                 if (shore <= 0.001) return d;
 
+                float storm = StormAmount(p);
+
                 [loop]
                 for (int i = 0; i < _SS_WaveCount; i++)
                 {
                     float4 w = _SS_Waves[i];
                     float k = length(w.xy);
                     if (k < 1e-6) continue;
+                    float amp = (i >= (int)_SS_StormStart) ? w.z * storm : w.z;
+                    if (abs(amp) < 1e-6) continue;
                     float2 dir = w.xy / k;
                     float ph = dot(w.xy, p) + w.w;
                     float s, c;
                     sincos(ph, s, c);
-                    d.xz += dir * (w.z * c);
-                    d.y  += w.z * s;
+                    d.xz += dir * (amp * c);
+                    d.y  += amp * s;
                 }
 
                 // Swell front: a moving band of heavy water.
@@ -263,6 +303,49 @@ Shader "SeaSick/Ocean"
                     }
                 }
                 return d * shore;
+            }
+
+            /// How close the surface is to folding over itself, which is the
+            /// honest definition of a wave breaking. The Jacobian of the
+            /// horizontal Gerstner displacement goes to zero and then negative
+            /// where the crest is outrunning the water under it.
+            ///
+            /// This is a far better foam signal than the surface normal: a
+            /// normal is steep on EVERY crest, so it paints a thin rim on the
+            /// whole sea. This picks out only the waves genuinely pitching,
+            /// which is what makes a storm look violent instead of corrugated.
+            /// Returns 0 (flat water) .. 1 (folding over).
+            float BreakingAmount(float2 p)
+            {
+                float shore = ShoreAttenuation(p) * RegionScale(p);
+                if (shore <= 0.001) return 0.0;
+                float storm = StormAmount(p);
+
+                float jxx = 0, jzz = 0, jxz = 0;
+                [loop]
+                for (int i = 0; i < _SS_WaveCount; i++)
+                {
+                    float4 w = _SS_Waves[i];
+                    float k = length(w.xy);
+                    if (k < 1e-6) continue;
+                    float amp = (i >= (int)_SS_StormStart) ? w.z * storm : w.z;
+                    if (abs(amp) < 1e-6) continue;
+                    float2 dir = w.xy / k;
+                    float sn = sin(dot(w.xy, p) + w.w) * amp * k * shore;
+                    // dir is a float2: .x is world x, .y is world z.
+                    jxx -= dir.x * dir.x * sn;
+                    jzz -= dir.y * dir.y * sn;
+                    jxz -= dir.x * dir.y * sn;
+                }
+
+                float j = (1.0 + jxx) * (1.0 + jzz) - jxz * jxz;
+                // MEASURED across the storm: the Jacobian sits at ~0.99 mean
+                // with a thin tail down to ~0.43 on the steepest crests. A
+                // threshold at 0.62 caught about 1% of the surface, which is
+                // why the sea came back with no white water at all. This picks
+                // up the tail — the genuinely piling water — and saturates
+                // where it is closest to folding.
+                return saturate((0.92 - j) / 0.42);
             }
 
             // The ship's own effect on the surface: trough, bow wave and a
@@ -355,6 +438,9 @@ Shader "SeaSick/Ocean"
                 float lift = saturate((p.y - restWS.y) * 0.22);
                 float steep = saturate((1.0 - n.y) * 1.7);
                 o.crest = saturate(steep * steep + lift * 0.35);
+                // Where the surface is actually folding — the violent stuff.
+                o.breaking = BreakingAmount(rest);
+                o.storm = StormAmount(rest);
                 o.fogCoord = ComputeFogFactor(o.positionCS.z);
                 return o;
             }
@@ -394,6 +480,37 @@ Shader "SeaSick/Ocean"
                 // whatever has churned the water here recently.
                 float foam = smoothstep(0.40, 0.95, i.crest * _CrestStrength);
                 foam = max(foam, smoothstep(0.55, 1.0, shoreFoam));
+
+                // Two kinds of white water, because one is not enough.
+                //
+                // The Jacobian picks out water that is genuinely folding — the
+                // right places, but MEASURED at only about 1% of the surface,
+                // because total steepness is already near the Gerstner limit.
+                // On its own it leaves the sea blue.
+                float breaking = smoothstep(0.10, 0.55, i.breaking);
+                foam = max(foam, breaking);
+
+                // So in a storm the whitecaps come out everywhere as well. That
+                // is not a cheat: a sea this size IS white — torn crests,
+                // streaks, spindrift — and the crest term is what paints it.
+                // In calm water this contributes nothing, so the home shelf
+                // stays clean and only the deep turns to milk.
+                float st = saturate(i.storm);
+                float capLow = lerp(0.40, 0.02, st);
+                float capHigh = lerp(0.95, 0.42, st);
+                foam = max(foam, smoothstep(capLow, capHigh, i.crest * _CrestStrength));
+
+                // Tear it up. Two scales of drifting noise, stretched across
+                // the wind so the foam pulls into streaks rather than sitting
+                // as an even film — and bitten into with holes so the water
+                // shows through. Only in the storm; calm foam stays clean.
+                float2 fp = i.positionWS.xz;
+                float2 drift = float2(_Time.y * 1.7, _Time.y * 0.6);
+                // `n` is already the surface normal in this scope.
+                float fn = FoamNoise(fp * float2(0.055, 0.016) + drift * 0.03);
+                fn = fn * 0.62 + FoamNoise(fp * float2(0.19, 0.07) - drift * 0.05) * 0.38;
+                float tear = lerp(1.0, saturate(fn * 1.85 - 0.28), st * 0.92);
+                foam *= tear;
                 foam = max(foam, smoothstep(0.05, 0.55, SampleWake(i.positionWS.xz).g));
                 baseCol = lerp(baseCol, _CrestColor.rgb, saturate(foam));
                 baseCol *= 1.0 - gust * 0.28;   // the darker patch of a gust
