@@ -54,6 +54,52 @@ namespace SeaSick.Ocean
 
         /// 0.14 ≈ glassy, 1.15 ≈ rough. Everything scales off this.
         public float SeaState01 { get; private set; } = 1f;
+
+        [Header("Regional sea state")]
+        // Distance IS the difficulty, made physical. A calm shelf around home
+        // where the tribe has always fished, then worse and worse water the
+        // further out you go, until the folklore turns out to be true.
+        // The drifting SeaState01 multiplies on top, so the outer waters are
+        // not ALWAYS mountainous — a calm window out there is a real chance.
+        [Tooltip("Out to here the water is home-shelf calm.")]
+        [SerializeField] float calmRadius = 260f;
+        [Tooltip("Past here it is as big as it gets.")]
+        [SerializeField] float wildRadius = 1150f;
+        [Tooltip("Amplitude multiplier on the home shelf.")]
+        [SerializeField] float nearScale = 0.35f;
+        [Tooltip("Amplitude multiplier out in the deep.")]
+        [SerializeField] float farScale = 1.5f;
+
+        Transform homePoint;
+        bool homeSearched;
+
+        Vector2 HomeXZ
+        {
+            get
+            {
+                if (!homeSearched)
+                {
+                    homeSearched = true;
+                    var voyage = FindAnyObjectByType<Voyage.VoyageManager>();
+                    if (voyage != null) homePoint = voyage.HomePoint;
+                }
+                return homePoint != null
+                    ? new Vector2(homePoint.position.x, homePoint.position.z)
+                    : Vector2.zero;
+            }
+        }
+
+        /// How big the sea is allowed to get here, purely from how far out you
+        /// are. **Must stay identical to RegionScale() in Ocean.shader** or the
+        /// ship floats on water that isn't the water you can see.
+        public float RegionScale(Vector2 p)
+        {
+            Vector2 home = HomeXZ;
+            float dist = Vector2.Distance(p, home);
+            float t = Mathf.SmoothStep(0f, 1f,
+                Mathf.InverseLerp(calmRadius, wildRadius, dist));
+            return Mathf.Lerp(nearScale, farScale, t);
+        }
         public Vector2 WindDirection => windDirection.normalized;
 
         void OnEnable() { Instance = this; }
@@ -72,6 +118,8 @@ namespace SeaSick.Ocean
 
         const int MaxGpuWaves = 16;
         static readonly int WavesId = Shader.PropertyToID("_SS_Waves");
+        static readonly int SeaRegionId = Shader.PropertyToID("_SS_SeaRegion");
+        static readonly int SeaRegionScaleId = Shader.PropertyToID("_SS_SeaRegionScale");
         static readonly int WaveCountId = Shader.PropertyToID("_SS_WaveCount");
         static readonly int SwellId = Shader.PropertyToID("_SS_Swell");
         static readonly int SwellFrontId = Shader.PropertyToID("_SS_SwellFront");
@@ -97,6 +145,11 @@ namespace SeaSick.Ocean
             for (int i = count; i < MaxGpuWaves; i++) gpuWaves[i] = Vector4.zero;
 
             Shader.SetGlobalVectorArray(WavesId, gpuWaves);
+            Vector2 home = HomeXZ;
+            Shader.SetGlobalVector(SeaRegionId,
+                new Vector4(home.x, home.y, calmRadius, wildRadius));
+            Shader.SetGlobalVector(SeaRegionScaleId,
+                new Vector4(nearScale, farScale, 0f, 0f));
             Shader.SetGlobalInt(WaveCountId, count);
 
             // Shore falloff data, so the shader kills the same waves the
@@ -193,7 +246,9 @@ namespace SeaSick.Ocean
         /// This is the number a heading now argues with — the ONLY one.
         public float SeaSeverity01(Vector2 pos, float time)
         {
-            float baseSea = Mathf.InverseLerp(0.25f, 1.15f, SeaState01);
+            // Scaled by region so what slows the ship is the water actually
+            // standing around it, not a global average.
+            float baseSea = Mathf.InverseLerp(0.25f, 1.15f, SeaState01 * RegionScale(pos));
             float swell = swellActive ? SwellIntensity(pos, time) : 0f;
             return Mathf.Clamp01(baseSea + swell * 0.85f);
         }
@@ -317,7 +372,7 @@ namespace SeaSick.Ocean
         public Vector3 Displace(Vector2 restPos, float time)
         {
             EnsureConstants(time);
-            float shore = ShoreAttenuation(restPos);
+            float shore = ShoreAttenuation(restPos) * RegionScale(restPos);
             if (shore <= 0.001f) return Vector3.zero;
             float x = restPos.x, z = restPos.y;
             float dx = 0f, dy = 0f, dz = 0f;

@@ -114,6 +114,10 @@ Shader "SeaSick/Ocean"
             // Shore falloff: xy = island centre, z = inner radius, w = outer.
             #define MAX_ISLANDS 24
             float4 _SS_Islands[MAX_ISLANDS];
+            // xy = home position, z = calm radius, w = wild radius
+            float4 _SS_SeaRegion;
+            // x = scale on the home shelf, y = scale out in the deep
+            float4 _SS_SeaRegionScale;
             int    _SS_IslandCount;
 
             // Ship: xy = position, zw = forward (normalised).
@@ -202,11 +206,25 @@ Shader "SeaSick/Ocean"
                 return atten;
             }
 
+            // How big the sea is allowed to get here, from distance out alone.
+            // Must match WaveField.RegionScale exactly, for the same reason
+            // ShoreAttenuation must: the ship floats on the C# version and the
+            // player looks at this one.
+            float RegionScale(float2 p)
+            {
+                float inner = _SS_SeaRegion.z;
+                float outer = _SS_SeaRegion.w;
+                if (outer <= inner) return 1.0;
+                float t = smoothstep(0.0, 1.0,
+                    saturate((distance(p, _SS_SeaRegion.xy) - inner) / (outer - inner)));
+                return lerp(_SS_SeaRegionScale.x, _SS_SeaRegionScale.y, t);
+            }
+
             // Gerstner sum at a world XZ position. Returns (dx, height, dz).
             float3 WaveDisplacement(float2 p)
             {
                 float3 d = 0;
-                float shore = ShoreAttenuation(p);
+                float shore = ShoreAttenuation(p) * RegionScale(p);
                 if (shore <= 0.001) return d;
 
                 [loop]
