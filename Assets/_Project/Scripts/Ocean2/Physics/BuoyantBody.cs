@@ -30,6 +30,14 @@ namespace SeaSick.Ocean2
         public float MeanWaterHeight { get; private set; }
         /// Net wave force applied this step (buoyancy horizontal + drag), N.
         public Vector3 WaveForce { get; private set; }
+        /// Deepest green water over any rail probe this step, metres (can be < 0).
+        public float MaxRailImmersion { get; private set; }
+        /// Extra metres the body should sit below its light waterline (cargo,
+        /// bilge water). Lowers the float equilibrium without touching mass.
+        public float SeatOffset { get; set; }
+        /// Macroscopic water motion (drift/current) added to the orbital
+        /// velocity as the drag reference — the hull is carried, not shoved.
+        public Vector3 AmbientFlow { get; set; }
         public Rigidbody Body => rb;
         public BuoyancyProbeSet Probes => probeSet;
 
@@ -65,21 +73,26 @@ namespace SeaSick.Ocean2
             var probes = probeSet.Probes;
             float g = Physics.gravity.magnitude;
             float subSum = 0f, hSum = 0f;
+            float railWorst = float.MinValue;
             Vector3 waveForce = Vector3.zero;
 
             for (int i = 0; i < probes.Length; i++)
             {
                 Vector3 world = transform.TransformPoint(probes[i].localPosition);
-                float sub = Mathf.Clamp01((samples[i].height - world.y) / probes[i].radius + 0.5f);
+                float sub = Mathf.Clamp01(
+                    (samples[i].height - (world.y + SeatOffset)) / probes[i].radius + 0.5f);
                 subSum += sub * probes[i].volumeShare;
                 hSum += samples[i].height;
+                if (probes[i].isRail)
+                    railWorst = Mathf.Max(railWorst, samples[i].height - world.y);
 
                 if (sub <= 0f) continue;
 
                 Vector3 buoy = Vector3.up *
                     (waterDensity * g * totalVolume * probes[i].volumeShare * sub);
 
-                Vector3 vWater = new Vector3(samples[i].velocity.x, samples[i].velocity.y, samples[i].velocity.z);
+                Vector3 vWater = AmbientFlow + new Vector3(
+                    samples[i].velocity.x, samples[i].velocity.y, samples[i].velocity.z);
                 Vector3 vRel = rb.GetPointVelocity(world) - vWater;
                 Vector3 drag = -(linearDrag + quadraticDrag * vRel.magnitude) * vRel
                                * (probes[i].volumeShare * sub);
@@ -94,6 +107,7 @@ namespace SeaSick.Ocean2
 
             Submersion = subSum;
             MeanWaterHeight = hSum / probes.Length;
+            MaxRailImmersion = railWorst > float.MinValue ? railWorst : 0f;
             WaveForce = waveForce - Vector3.up * Vector3.Dot(waveForce, Vector3.up);
 
             // Submersion-scaled angular damping: a hull in the water settles,

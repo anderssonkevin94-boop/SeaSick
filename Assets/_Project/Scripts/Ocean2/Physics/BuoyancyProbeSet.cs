@@ -15,6 +15,8 @@ namespace SeaSick.Ocean2
             public float radius;
             [Tooltip("Fraction of the body's displaced volume this probe carries.")]
             public float volumeShare;
+            [Tooltip("Rail probes also measure green water coming aboard.")]
+            public bool isRail;
         }
 
         [SerializeField] Probe[] probes;
@@ -37,10 +39,10 @@ namespace SeaSick.Ocean2
                 P(-b2 * 0.7f, keelY + 0.3f, l2 * 0.45f, 1.2f, 0.12f),
                 P(b2 * 0.7f, keelY + 0.3f, -l2 * 0.45f, 1.2f, 0.12f),
                 P(-b2 * 0.7f, keelY + 0.3f, -l2 * 0.45f, 1.2f, 0.12f),
-                P(b2, railY, l2 * 0.35f, 1.0f, 0.04f),     // rails: small share,
-                P(-b2, railY, l2 * 0.35f, 1.0f, 0.04f),    // they mostly measure
-                P(b2, railY, -l2 * 0.35f, 1.0f, 0.04f),    // green water
-                P(-b2, railY, -l2 * 0.35f, 1.0f, 0.04f),
+                R(b2, railY, l2 * 0.35f, 1.0f, 0.04f),     // rails: small share,
+                R(-b2, railY, l2 * 0.35f, 1.0f, 0.04f),    // they mostly measure
+                R(b2, railY, -l2 * 0.35f, 1.0f, 0.04f),    // green water
+                R(-b2, railY, -l2 * 0.35f, 1.0f, 0.04f),
                 P(b2 * 0.9f, keelY + 0.6f, 0f, 1.2f, 0.10f),
                 P(-b2 * 0.9f, keelY + 0.6f, 0f, 1.2f, 0.10f),
             };
@@ -48,6 +50,9 @@ namespace SeaSick.Ocean2
 
         static Probe P(float x, float y, float z, float r, float share) =>
             new Probe { localPosition = new Vector3(x, y, z), radius = r, volumeShare = share };
+
+        static Probe R(float x, float y, float z, float r, float share) =>
+            new Probe { localPosition = new Vector3(x, y, z), radius = r, volumeShare = share, isRail = true };
 
         void OnDrawGizmosSelected()
         {
