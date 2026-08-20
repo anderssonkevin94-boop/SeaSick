@@ -110,6 +110,10 @@ namespace SeaSick.Ocean2
             Shader.SetGlobalTexture("_Ocean_Derivatives", cascades.Derivatives);
             Shader.SetGlobalTexture("_Ocean_Turbulence", cascades.Turbulence);
             Shader.SetGlobalVector("_Ocean_PatchSizes", cascades.PatchSizesVec);
+            var q = OceanQuality.Active;
+            float fadeEnd = q != null ? q.displacementFadeDistance : 500f;
+            Shader.SetGlobalVector("_Ocean_FadeParams",
+                new Vector4(fadeEnd * 0.6f, fadeEnd, 0f, 0f));
         }
     }
 }

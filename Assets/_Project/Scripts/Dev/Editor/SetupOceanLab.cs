@@ -72,16 +72,19 @@ public static class SetupOceanLab
         so.FindProperty("settings").objectReferenceValue = EnsureTestSeaState();
         so.ApplyModifiedPropertiesWithoutUndo();
 
-        var meshGo = GameObject.Find("DebugSea");
-        if (meshGo == null)
+        var old = GameObject.Find("DebugSea");
+        if (old != null) Object.DestroyImmediate(old);
+
+        var clip = ocean.GetComponentInChildren<OceanClipmap>();
+        if (clip == null)
         {
-            meshGo = new GameObject("DebugSea");
-            meshGo.transform.SetParent(ocean.transform, false);
-            meshGo.AddComponent<MeshFilter>();
-            var mr = meshGo.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = EnsureDebugMaterial();
-            meshGo.AddComponent<DebugSeaMesh>();
+            var clipGo = new GameObject("Clipmap");
+            clipGo.transform.SetParent(ocean.transform, false);
+            clip = clipGo.AddComponent<OceanClipmap>();
         }
+        var cso = new SerializedObject(clip);
+        cso.FindProperty("material").objectReferenceValue = EnsureDebugMaterial();
+        cso.ApplyModifiedPropertiesWithoutUndo();
     }
 
     static OceanSpectrumSettings EnsureTestSeaState()

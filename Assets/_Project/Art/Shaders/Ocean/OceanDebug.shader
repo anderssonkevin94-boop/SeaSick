@@ -14,6 +14,7 @@ Shader "SeaSick/OceanDebug"
         Pass
         {
             Tags { "LightMode" = "UniversalForward" }
+            Cull Off
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
@@ -25,6 +26,8 @@ Shader "SeaSick/OceanDebug"
             TEXTURE2D_ARRAY(_Ocean_Derivatives);
             SAMPLER(sampler_Ocean_Derivatives);
             float4 _Ocean_PatchSizes;
+            float4 _Ocean_FadeParams;      // x = fade start, y = fade end
+            float4 _Ocean_CascadeWeights;  // per-ring, via MaterialPropertyBlock
 
             CBUFFER_START(UnityPerMaterial)
             half4 _DeepColor;
@@ -39,17 +42,19 @@ Shader "SeaSick/OceanDebug"
                 float4 derivs : TEXCOORD1; // sx, sz, dxx, dzz summed
             };
 
-            float3 SampleDisplacement(float2 worldXZ, out float4 derivs)
+            float3 SampleDisplacement(float2 worldXZ, float fade, out float4 derivs)
             {
                 float3 d = 0;
                 derivs = 0;
                 [unroll]
                 for (int c = 0; c < 3; c++)
                 {
+                    float w = _Ocean_CascadeWeights[c] * fade;
+                    if (w <= 0.001) continue;
                     float2 uv = worldXZ / _Ocean_PatchSizes[c];
-                    d += SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Displacement,
+                    d += w * SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Displacement,
                         sampler_Ocean_Displacement, uv, c, 0).xyz;
-                    derivs += SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Derivatives,
+                    derivs += w * SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Derivatives,
                         sampler_Ocean_Derivatives, uv, c, 0);
                 }
                 return d;
@@ -59,8 +64,11 @@ Shader "SeaSick/OceanDebug"
             {
                 Varyings o;
                 float3 ws = TransformObjectToWorld(input.positionOS.xyz);
+                // Distance fade keeps the horizon line flat and readable.
+                float dist = distance(ws.xz, GetCameraPositionWS().xz);
+                float fade = 1.0 - smoothstep(_Ocean_FadeParams.x, _Ocean_FadeParams.y, dist);
                 float4 derivs;
-                float3 disp = SampleDisplacement(ws.xz, derivs);
+                float3 disp = SampleDisplacement(ws.xz, fade, derivs);
                 ws += float3(disp.x, disp.y, disp.z);
                 o.positionWS = ws;
                 o.derivs = derivs;
