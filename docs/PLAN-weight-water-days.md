@@ -2,6 +2,17 @@
 
 _Plan drafted 2026-08-19. Replaces seasickness as the core pressure. Nothing here is built yet._
 
+## Where this stands (2026-08-20)
+
+**Done:** milestone 1 (weight, freeboard, green water, bailing, jettison) · wind removed as physics · regional sea state · compass + speed, all banner UI deleted · mountain seas · storm seas with crossing wave trains.
+
+**Next, in order:**
+1. **Storm sky and light.** The simulation is mountainous — 22–26m seas, the hull thrown 23.5m — but the picture is not. A bright blue sky sits over the storm, there is no spray, mist or spindrift, and the chase camera at 19m up / 41° down flattens the perceived wave height. This is the cheapest change with the biggest effect on how the same water reads.
+2. **The mountain wave's shape.** Still a smooth swept ridge; it should be a curling wall with an overhanging lip and sections breaking at different times. It *can* overhang, because it is a bespoke mesh — no heightfield ever can.
+3. Man overboard → day/night → settlement demand (the original milestones 2–4).
+
+**Not yet playtested by hand.** Weight, water, no-wind sailing, regional seas, mountain seas and storms have all been verified by probe and screenshot, but nobody has actually sailed a voyage with them.
+
 ## The change
 
 Seasickness stops being the clock. Three pressures take its place:
