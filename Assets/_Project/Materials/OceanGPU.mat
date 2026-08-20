@@ -32,7 +32,7 @@ Material:
     - _ShallowBand: 55
     - _ShoreFoamBand: 26
     - _SkyReflect: 0.45
-    - _SkySoft: 0.3
+    - _SkySoft: 0.65
     - _Smoothness: 0.86
     m_Colors:
     - _CrestColor: {r: 0.66, g: 0.85, b: 0.93, a: 1}
@@ -41,7 +41,7 @@ Material:
     - _ShallowWater: {r: 0.34, g: 0.72, b: 0.74, a: 1}
     - _SpecColor: {r: 1, g: 1, b: 1, a: 1}
     - _StormCrest: {r: 0.86, g: 0.88, b: 0.89, a: 1}
-    - _StormDeep: {r: 0.058, g: 0.086, b: 0.098, a: 1}
-    - _StormShallow: {r: 0.14, g: 0.205, b: 0.215, a: 1}
+    - _StormDeep: {r: 0.2, g: 0.235, b: 0.245, a: 1}
+    - _StormShallow: {r: 0.26, g: 0.3, b: 0.31, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

@@ -27,6 +27,14 @@ public class SailShot : MonoBehaviour
     float seaAtCamMin = 9999f, seaAtCamMax = -9999f;
     float shipMin = 9999f, shipMax = -9999f;
 
+    // Seating error: where the hull actually is, against where the water says
+    // it should be. Zero means she is sitting ON the sea. Negative means the
+    // deck is under it.
+    float seatMin = 9999f, seatMax = -9999f, seatSumSq, seatAbsSum;
+    int seatN;
+    float prevSurface, surfVelMax;
+    bool prevValid;
+
     public static void Execute()
     {
         if (!Application.isPlaying) { Debug.LogError("SailShot: not in play mode"); return; }
@@ -69,6 +77,13 @@ public class SailShot : MonoBehaviour
         sb.AppendLine($"   sea under the CAMERA: {seaAtCamMin:F1} .. {seaAtCamMax:F1} m");
         sb.AppendLine($"   hull y:               {shipMin:F1} .. {shipMax:F1} m");
         sb.AppendLine($"   sea state {field.SeaState01:F2}");
+        sb.AppendLine();
+        sb.AppendLine("SEATING — hull height minus where the water says it should be");
+        sb.AppendLine($"   error {seatMin:F2} .. {seatMax:F2} m   " +
+                      $"RMS {(seatN > 0 ? Mathf.Sqrt(seatSumSq / seatN) : 0f):F2} m   " +
+                      $"mean |error| {(seatN > 0 ? seatAbsSum / seatN : 0f):F2} m");
+        sb.AppendLine($"   fastest surface under her: {surfVelMax:F1} m/s vertical");
+        sb.AppendLine("   (freeboard is 1.3m to the waist, 2.05m to the deck)");
         System.IO.File.WriteAllText(OutPath, sb.ToString());
         Debug.Log("SailShot done\n" + sb);
     }
@@ -95,5 +110,25 @@ public class SailShot : MonoBehaviour
         if (seaAtCam > seaAtCamMax) seaAtCamMax = seaAtCam;
         if (shipY < shipMin) shipMin = shipY;
         if (shipY > shipMax) shipMax = shipY;
+
+        // Where the water says she should float, by the same numbers the
+        // seating code itself uses.
+        Vector3 sp = motor.transform.position;
+        float surface = field.SampleHeight(new Vector2(sp.x, sp.z), Time.time);
+        float want = surface - motor.SinkDepth;
+        float err = shipY - want;
+        seatN++;
+        seatSumSq += err * err;
+        seatAbsSum += Mathf.Abs(err);
+        if (err < seatMin) seatMin = err;
+        if (err > seatMax) seatMax = err;
+
+        if (prevValid && Time.deltaTime > 0.0001f)
+        {
+            float v = Mathf.Abs(surface - prevSurface) / Time.deltaTime;
+            if (v > surfVelMax) surfVelMax = v;
+        }
+        prevSurface = surface;
+        prevValid = true;
     }
 }

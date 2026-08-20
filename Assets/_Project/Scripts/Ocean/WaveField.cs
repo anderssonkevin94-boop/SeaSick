@@ -550,7 +550,11 @@ namespace SeaSick.Ocean
             // state, so both scale the horizontal steepness that decides
             // folding. Clamp against the deepest water, whether or not we are
             // standing in it — one global value keeps CPU and GPU in step.
-            float worst = sumSteepness * Mathf.Max(nearScale, farScale) * Mathf.Max(0.01f, cachedSea);
+            // The swell front is a wave too, and it was missing from this sum
+            // — so a front standing over the ship could push the surface past
+            // the fold limit the clamp believed it was holding.
+            float total = sumSteepness + (swellActive ? Mathf.Abs(swellSteepness) : 0f);
+            float worst = total * Mathf.Max(nearScale, farScale) * Mathf.Max(0.01f, cachedSea);
             EffectiveChop = Mathf.Min(choppiness, foldLimit / Mathf.Max(0.0001f, worst));
             for (int i = 0; i < waves.Length; i++)
             {

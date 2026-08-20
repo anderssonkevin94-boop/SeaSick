@@ -18,11 +18,11 @@ Shader "SeaSick/Ocean"
         _CrestColor     ("Crest Colour",   Color) = (0.62, 0.83, 0.92, 1)
         _SpecColor      ("Specular",       Color) = (1, 1, 1, 1)
         _ShallowWater   ("Shallow Water",  Color) = (0.32, 0.68, 0.72, 1)
-        _StormDeep      ("Storm Deep",     Color) = (0.058, 0.086, 0.098, 1)
-        _StormShallow   ("Storm Shallow",  Color) = (0.140, 0.205, 0.215, 1)
+        _StormDeep      ("Storm Deep",     Color) = (0.200, 0.235, 0.245, 1)
+        _StormShallow   ("Storm Shallow",  Color) = (0.260, 0.300, 0.310, 1)
         _StormCrest     ("Storm Crest",    Color) = (0.86, 0.88, 0.89, 1)
         _SkyReflect     ("Sky Reflection", Range(0, 1)) = 0.45
-        _SkySoft        ("Sky Scatter",    Range(0, 0.8)) = 0.30
+        _SkySoft        ("Sky Scatter",    Range(0, 0.8)) = 0.65
         _Smoothness     ("Smoothness",     Range(0, 1)) = 0.85
         _CrestStrength  ("Crest Strength", Range(0, 3)) = 1.1
         _NormalSampleDist ("Normal Sample Distance", Float) = 2.0
@@ -40,6 +40,12 @@ Shader "SeaSick/Ocean"
         {
             Name "ForwardLit"
             Tags { "LightMode" = "UniversalForward" }
+
+            // Visible from underneath. Back-face culling made the sea vanish
+            // the instant the camera dipped below it, leaving a hole straight
+            // through to the sky dome's below-horizon colour — a game-breaking
+            // void instead of, at worst, a wet lens.
+            Cull Off
 
             HLSLPROGRAM
             #pragma vertex vert
@@ -466,9 +472,11 @@ Shader "SeaSick/Ocean"
                 return o;
             }
 
-            half4 frag(Varyings i) : SV_Target
+            half4 frag(Varyings i, bool isFront : SV_IsFrontFace) : SV_Target
             {
                 float3 n = normalize(i.normalWS);
+                // Seen from beneath, the surface faces the other way.
+                if (!isFront) n = -n;
 
                 // Blend the fine ripple normal into the wave normal. Without
                 // this the surface is flat-shaded colour and reads as plastic.
@@ -488,7 +496,21 @@ Shader "SeaSick/Ocean"
                 // Fresnel: grazing angles reflect the sky and read bright,
                 // looking straight down you see into the water and it darkens.
                 float facing = saturate(dot(n, viewDir));
-                float fresnel = pow(1.0 - facing, 3.0);
+
+                // How deep into the storm this water is. Needed by the fresnel
+                // shape below as well as the palette, so it is read first.
+                float st = saturate(i.storm);
+
+                // The exponent is the shape of the near-to-far gradient, and
+                // cubing it packs the entire deep-to-sky flip into a narrow
+                // band of viewing angles. On a big sea that band lands as a
+                // RAZOR-SHARP horizontal line across the frame, dark below and
+                // bright above, which reads as a waterline with the ship
+                // underneath it — proved by tinting the two colours and
+                // photographing which pixels each one paints. A storm sea is
+                // churned through and shows no deep clear water anyway, so the
+                // gradient flattens out as the weather builds.
+                float fresnel = pow(1.0 - facing, lerp(3.0, 1.4, st));
 
                 // The water goes with the weather. A storm sea is slate and
                 // dirty green, never blue. Grading it from the per-vertex storm
@@ -496,7 +518,6 @@ Shader "SeaSick/Ocean"
                 // POSITIONAL: standing on the home shelf you can see the dark
                 // water lying out west, which is the whole point of a sea that
                 // gets worse in a direction.
-                float st = saturate(i.storm);
                 float3 deepCol = lerp(_DeepColor.rgb, _StormDeep.rgb, st);
                 float3 shoalCol = lerp(_ShallowColor.rgb, _StormShallow.rgb, st);
                 float3 baseCol = lerp(deepCol, shoalCol, fresnel);
@@ -567,7 +588,11 @@ Shader "SeaSick/Ocean"
                 // The constant floor kept the sea readable in a bright
                 // scene; under a storm lid it is exactly what stopped the water
                 // going dark. Let it fall with the weather.
-                float3 ambient = SampleSH(n) * 0.55 + lerp(0.35, 0.28, st);
+                // A storm sky is a vast bright dome of cloud — a very large
+                // area light — so the water under it is not as dark as the low
+                // directional sun suggests. Without this the near water is lit
+                // at about a third of the fog colour it fades into.
+                float3 ambient = SampleSH(n) * 0.55 + lerp(0.35, 0.40, st);
                 float3 col = baseCol * (ambient + main.color * (0.45 + 0.55 * ndotl))
                            + _SpecColor.rgb * spec * _Smoothness * main.color;
 

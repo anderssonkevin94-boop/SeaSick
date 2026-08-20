@@ -59,11 +59,11 @@ public static class SetupStormSky
             var om = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (om == null || om.shader == null || om.shader.name != "SeaSick/Ocean") continue;
 
-            om.SetColor("_StormDeep", new Color(0.058f, 0.086f, 0.098f));
-            om.SetColor("_StormShallow", new Color(0.140f, 0.205f, 0.215f));
+            om.SetColor("_StormDeep", new Color(0.200f, 0.235f, 0.245f));
+            om.SetColor("_StormShallow", new Color(0.260f, 0.300f, 0.310f));
             om.SetColor("_StormCrest", new Color(0.86f, 0.88f, 0.89f));
             om.SetFloat("_SkyReflect", 0.45f);
-            om.SetFloat("_SkySoft", 0.30f);
+            om.SetFloat("_SkySoft", 0.65f);
             EditorUtility.SetDirty(om);
             Debug.Log($"STORMSKY: ocean palette pushed to {path} — " +
                       $"_StormDeep now {om.GetColor("_StormDeep")}");
@@ -98,6 +98,17 @@ public static class SetupStormSky
             var spray = motor.GetComponent<SeaSick.Ocean.StormSpray>();
             if (spray == null) spray = motor.gameObject.AddComponent<SeaSick.Ocean.StormSpray>();
             SceneDefaults.ResetToCodeDefaults(spray);
+        }
+
+        // --- Hull seating ----------------------------------------------------
+        if (motor != null)
+        {
+            // Targeted, not a reset: ShipMotor is full of hand-tuned scene
+            // values that must survive.
+            var mso = new SerializedObject(motor);
+            SetFloat(mso, "verticalResponse", 10f);
+            SetFloat(mso, "maxSeatError", 0.3f);
+            mso.ApplyModifiedPropertiesWithoutUndo();
         }
 
         // --- SpeedJuice gained a field ---------------------------------------

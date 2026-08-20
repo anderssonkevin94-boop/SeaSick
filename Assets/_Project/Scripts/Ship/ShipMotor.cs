@@ -42,7 +42,26 @@ namespace SeaSick.Ship
         [SerializeField, Range(0f, 0.5f)] float steerageWay = 0.12f; // min drive with sails furled
 
         [Header("Seating on the water")]
-        [SerializeField] float verticalResponse = 4f;  // how quickly the hull follows wave height
+        [SerializeField] float verticalResponse = 10f; // how quickly the hull follows wave height
+        // The hull may lag the surface by at most this, whatever the sea does.
+        //
+        // Softening the hull's height with a plain first-order lag was fine for
+        // years and then put the whole deck under water. A lag's error is
+        // proportional to how fast the surface is MOVING, and that went up an
+        // order of magnitude at once: the western deep got three times taller
+        // and she crosses it at 25 m/s, so the water under her now moves at up
+        // to 19 m/s where it used to manage about one. MEASURED with the plain
+        // lag: she sat between 2.23m under the sea and 3.39m above it, RMS
+        // 1.60m, against 1.3m of freeboard to the waist. A lag also delays and
+        // attenuates every frequency differently, so she traced a genuinely
+        // different curve from the water rather than a delayed copy of it —
+        // which is why it read as the boat following a different set of waves,
+        // and why it was worst in the choppiest water.
+        //
+        // A cap in metres rather than a fraction of the wave height, because
+        // what it has to stay inside is the BOAT's freeboard, not the sea.
+        [Tooltip("Most the hull may ever sit off the true surface, in metres.")]
+        [SerializeField] float maxSeatError = 0.3f;
         [SerializeField] float angularResponse = 2.5f; // how quickly pitch/roll follow the surface
         [SerializeField] float turnHeel = 5f;          // extra roll (deg) at full rudder + speed
         // Six points down the hull rather than three. With only a bow and two
@@ -599,8 +618,16 @@ namespace SeaSick.Ship
                     + sinkPerOverload * over
                     + sinkAtFullBilge * Mathf.Clamp01(BilgeLoad01);
 
-                pos.y = Mathf.Lerp(pos.y, hCenter - SinkDepth,
-                    1f - Mathf.Exp(-verticalResponse * dt));
+                // Ease toward the surface for softness in calm water, then
+                // CLAMP, so she can never be swallowed however fast the sea is
+                // moving. hCenter is already the mean of three float points
+                // spread along the hull, which is the smoothing that stops her
+                // twitching on small chop — the lag was doing that job a second
+                // time, in the one place that guarantees hull and water
+                // disagree.
+                float seat = hCenter - SinkDepth;
+                float eased = Mathf.Lerp(pos.y, seat, 1f - Mathf.Exp(-verticalResponse * dt));
+                pos.y = Mathf.Clamp(eased, seat - maxSeatError, seat + maxSeatError);
                 Quaternion targetRot = Quaternion.Euler(pitchDeg, heading, rollDeg);
                 transform.rotation = Quaternion.Slerp(
                     transform.rotation, targetRot, 1f - Mathf.Exp(-angularResponse * dt));

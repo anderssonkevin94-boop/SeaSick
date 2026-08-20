@@ -2033,7 +2033,8 @@ MonoBehaviour:
   maxTurnRate: 38
   windDirection: {x: 1, y: 0.35}
   steerageWay: 0.15
-  verticalResponse: 5.5
+  verticalResponse: 10
+  maxSeatError: 0.3
   angularResponse: 3.6
   turnHeel: 8
   rudderPivot: {fileID: 0}

@@ -26,6 +26,10 @@ public static class MatCheck
                   $"  _SS_Chop global {Shader.GetGlobalFloat("_SS_Chop"):F3}\n" +
                   $"  EffectiveChop {(f != null ? f.EffectiveChop : -1f):F3}  " +
                   $"seaState {(f != null ? f.SeaState01 : -1f):F2}\n" +
+                  $"  _SS_SkyHorizon {Shader.GetGlobalVector("_SS_SkyHorizon")}\n" +
+                  $"  _SS_Storminess {Shader.GetGlobalFloat("_SS_Storminess"):F2}\n" +
+                  $"  ambientSky {RenderSettings.ambientSkyColor} mode {RenderSettings.ambientMode}\n" +
+                  $"  sun {(RenderSettings.sun != null ? RenderSettings.sun.intensity : -1f):F2}\n" +
                   $"  fog {RenderSettings.fogStartDistance:F0}..{RenderSettings.fogEndDistance:F0} " +
                   $"{RenderSettings.fogColor.ToString("F3")}");
     }
