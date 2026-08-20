@@ -1,0 +1,191 @@
+// Builds h0(k) for all three cascades. Runs once per spectrum-parameter change
+// (SeaStateController throttles rebuilds to ~4 Hz while blending), never per
+// frame. JONSWAP non-directional spectrum x Hasselmann directional spreading
+// (Horvath 2015), plus an independent gaussian swell train. Band-limited per
+// cascade so no wavenumber is ever simulated twice.
+
+#pragma kernel CalcInitialSpectrum
+
+static const float PI = 3.14159265358979f;
+static const float G = 9.81f;
+
+// xy = h0(k), zw = conj(h0(-k)) — TimeEvolve needs both every frame.
+RWTexture2DArray<float4> H0;
+// xy = k vector, z = omega(k), w = |k|
+RWTexture2DArray<float4> WaveData;
+// Fixed gaussian pairs, one slice per cascade. Fixed seed => deterministic sea.
+Texture2DArray<float2> Noise;
+
+cbuffer Params
+{
+    uint _N;
+    float _Depth;
+    float4 _PatchSizes;   // L per cascade
+    float4 _BandLow;      // k >= this per cascade
+    float4 _BandHigh;     // k < this per cascade
+    float _U10;
+    float _FetchMeters;
+    float _Gamma;
+    float2 _WindDir;
+    float _SwellHs;
+    float _SwellK;
+    float2 _SwellDir;
+    float _SwellSharpness;
+}
+
+float JonswapOmegaPeak()
+{
+    return 22.0f * pow(G * G / (_U10 * _FetchMeters), 1.0f / 3.0f);
+}
+
+float Jonswap(float w)
+{
+    float wp = JonswapOmegaPeak();
+    float alpha = 0.076f * pow(_U10 * _U10 / (_FetchMeters * G), 0.22f);
+    float sigma = w <= wp ? 0.07f : 0.09f;
+    float dw = w - wp;
+    float r = exp(-dw * dw / (2.0f * sigma * sigma * wp * wp));
+    float w5 = w * w * w * w * w;
+    return alpha * G * G / w5 * exp(-1.25f * pow(wp / w, 4.0f)) * pow(_Gamma, r);
+}
+
+// Hasselmann frequency-dependent spreading power.
+float SpreadPower(float w, float wp)
+{
+    float s;
+    if (w <= wp)
+        s = 6.97f * pow(max(w / wp, 1e-3f), 4.06f);
+    else
+        s = 9.77f * pow(w / wp, -2.33f - 1.45f * (_U10 * wp / G - 1.17f));
+    return clamp(s, 0.1f, 30.0f);
+}
+
+// Normalization Q(s) for D = Q * cos^{2s}(theta/2), Horvath 2015 polynomial fit.
+float SpreadNormalization(float s)
+{
+    float s2 = s * s;
+    float s3 = s2 * s;
+    float s4 = s3 * s;
+    if (s < 5.0f)
+        return -0.000564f * s4 + 0.00776f * s3 - 0.044f * s2 + 0.192f * s + 0.163f;
+    return -4.80e-08f * s4 + 1.07e-05f * s3 - 9.53e-04f * s2 + 5.90e-02f * s + 3.93e-01f;
+}
+
+float DirectionalSpread(float w, float wp, float2 kdir)
+{
+    float cosT = dot(kdir, _WindDir);
+    float s = SpreadPower(w, wp);
+    // cos^{2s}(theta/2) = ((1+cos theta)/2)^s
+    float halfAngle = max((1.0f + cosT) * 0.5f, 0.0f);
+    return SpreadNormalization(s) * pow(halfAngle, s);
+}
+
+// omega and d omega / dk with finite depth.
+void Dispersion(float k, out float w, out float dwdk)
+{
+    float kd = min(k * _Depth, 20.0f);       // tanh saturates; avoid cosh overflow
+    float th = tanh(kd);
+    w = sqrt(G * k * th);
+    float ch = cosh(kd);
+    float sech2 = 1.0f / (ch * ch);
+    dwdk = (G * th + G * kd * sech2) / max(2.0f * w, 1e-6f);
+}
+
+// Wind-sea 2D spectral density F(k) so that variance = sum F * dk^2.
+float WindSeaDensity(float2 k, float klen)
+{
+    float w, dwdk;
+    Dispersion(klen, w, dwdk);
+    if (w < 1e-4f) return 0.0f;
+    float wp = JonswapOmegaPeak();
+    float S = Jonswap(w);
+    float D = DirectionalSpread(w, wp, k / klen);
+    // S(w) dw dtheta -> F(kx,kz) dkx dkz with dkx dkz = k dk dtheta
+    return S * D * dwdk / klen;
+}
+
+// Swell: an isolated 2D gaussian bump in k-space with total variance (Hs/4)^2.
+float SwellDensity(float2 k)
+{
+    if (_SwellHs <= 0.0f) return 0.0f;
+    float2 ks = _SwellK * _SwellDir;
+    float sigma = _SwellK / (2.0f * _SwellSharpness);
+    float2 d = k - ks;
+    float m0 = (_SwellHs * 0.25f) * (_SwellHs * 0.25f);
+    return m0 / (2.0f * PI * sigma * sigma) * exp(-dot(d, d) / (2.0f * sigma * sigma));
+}
+
+// Bin-integrated spectral amplitude. The JONSWAP peak can be radially narrower
+// than one k-bin (a calm sea's peak is ~0.75 bins in cascade 1), so point
+// sampling the density at bin centres both loses energy and biases the peak;
+// averaging a 4x4 supersample over the cell captures it. The band limit is
+// applied per sub-sample so cascade boundary cells carry partial energy and
+// total variance is conserved across cascades.
+float SpectralAmplitude(float2 kCenter, float dk, float bandLow, float bandHigh)
+{
+    float F = 0.0f;
+    [unroll]
+    for (int sx = 0; sx < 4; sx++)
+    {
+        [unroll]
+        for (int sz = 0; sz < 4; sz++)
+        {
+            float2 k = kCenter + dk * (float2(sx, sz) * 0.25f - 0.375f);
+            float klen = length(k);
+            if (klen < 1e-6f || klen < bandLow || klen >= bandHigh) continue;
+            F += WindSeaDensity(k, klen) + SwellDensity(k);
+        }
+    }
+    F /= 16.0f;
+    // The h(k,t) = h0 e^{iwt} + conj(h0(-k)) e^{-iwt} construction places each
+    // physical wave's energy at both +k and -k, and the complex gaussian xi
+    // carries E|xi|^2 = 2; together they inflate variance 4x unless the bin
+    // amplitude is sqrt(F/2)*dk. Verified against JONSWAP m0 by SpectrumProbe2.
+    return sqrt(0.5f * F) * dk;
+}
+
+[numthreads(8, 8, 1)]
+void CalcInitialSpectrum(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _N || id.y >= _N) return;
+
+    float L = _PatchSizes[id.z];
+    float dk = 2.0f * PI / L;
+    int half_ = int(_N) / 2;
+    int2 nc = int2(id.xy) - half_;
+    float2 k = dk * float2(nc);
+    float klen = length(k);
+
+    float4 h0 = 0;
+    float4 wd = float4(k, 0, klen);
+
+    // Row/column n=0 has no -k partner on the grid; k=0 carries no wave.
+    // The band check moved inside SpectralAmplitude (per sub-sample) so
+    // cascade boundary cells carry their partial energy.
+    bool valid = id.x != 0 && id.y != 0 && klen > 1e-6f;
+
+    if (klen > 1e-6f)
+    {
+        float w, dwdk;
+        Dispersion(klen, w, dwdk);
+        wd.z = w;
+    }
+
+    if (valid)
+    {
+        float2 xiK = Noise[id];
+        uint3 mid = uint3((_N - id.x) % _N, (_N - id.y) % _N, id.z);
+        float2 xiMK = Noise[mid];
+
+        float aK = SpectralAmplitude(k, dk, _BandLow[id.z], _BandHigh[id.z]);
+        float aMK = SpectralAmplitude(-k, dk, _BandLow[id.z], _BandHigh[id.z]);
+
+        // xi is a unit phasor (see CascadeSet.BuildNoise), so |h0| = a exactly.
+        float2 h0k = xiK * aK;
+        float2 h0mk = xiMK * aMK;
+        h0 = float4(h0k, h0mk.x, -h0mk.y); // zw stores conj(h0(-k))
+    }
+
+    H0[id] = h0;
+    WaveData[id] = wd;
+}

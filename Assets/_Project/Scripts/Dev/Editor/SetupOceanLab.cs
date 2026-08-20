@@ -49,11 +49,67 @@ public static class SetupOceanLab
             lightGo.transform.rotation = Quaternion.Euler(35f, -140f, 0f);
         }
 
-        if (GameObject.Find("Ocean") == null)
-            new GameObject("Ocean");
+        var ocean = GameObject.Find("Ocean");
+        if (ocean == null) ocean = new GameObject("Ocean");
+        WireOcean(ocean);
 
         EditorSceneManager.SaveScene(scene, ScenePath);
         return $"OceanLab ready at {ScenePath}; quality assets in {SettingsDir}";
+    }
+
+    static void WireOcean(GameObject ocean)
+    {
+        var renderer = ocean.GetComponent<OceanRenderer>();
+        if (renderer == null) renderer = ocean.AddComponent<OceanRenderer>();
+
+        var so = new SerializedObject(renderer);
+        so.FindProperty("initialSpectrumShader").objectReferenceValue =
+            AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/_Project/Art/Shaders/Ocean/InitialSpectrum.compute");
+        so.FindProperty("timeEvolveShader").objectReferenceValue =
+            AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/_Project/Art/Shaders/Ocean/TimeEvolve.compute");
+        so.FindProperty("fftShader").objectReferenceValue =
+            AssetDatabase.LoadAssetAtPath<ComputeShader>("Assets/_Project/Art/Shaders/Ocean/FFT.compute");
+        so.FindProperty("settings").objectReferenceValue = EnsureTestSeaState();
+        so.ApplyModifiedPropertiesWithoutUndo();
+
+        var meshGo = GameObject.Find("DebugSea");
+        if (meshGo == null)
+        {
+            meshGo = new GameObject("DebugSea");
+            meshGo.transform.SetParent(ocean.transform, false);
+            meshGo.AddComponent<MeshFilter>();
+            var mr = meshGo.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = EnsureDebugMaterial();
+            meshGo.AddComponent<DebugSeaMesh>();
+        }
+    }
+
+    static OceanSpectrumSettings EnsureTestSeaState()
+    {
+        const string path = SettingsDir + "/SeaState_Test.asset";
+        var s = AssetDatabase.LoadAssetAtPath<OceanSpectrumSettings>(path);
+        if (s == null)
+        {
+            s = ScriptableObject.CreateInstance<OceanSpectrumSettings>();
+            s.windSpeed = 12f; s.fetchKm = 100f; // the "Normal" validation triple
+            AssetDatabase.CreateAsset(s, path);
+            AssetDatabase.SaveAssets();
+        }
+        return s;
+    }
+
+    static Material EnsureDebugMaterial()
+    {
+        const string path = "Assets/_Project/Materials/OceanDebug.mat";
+        var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (m == null)
+        {
+            var shader = Shader.Find("SeaSick/OceanDebug");
+            m = new Material(shader);
+            AssetDatabase.CreateAsset(m, path);
+            AssetDatabase.SaveAssets();
+        }
+        return m;
     }
 
     static void EnsureQualityAssets()

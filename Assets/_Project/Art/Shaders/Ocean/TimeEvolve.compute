@@ -1,0 +1,90 @@
+// Per frame: advances h0(k) to h(k,t) and builds every spectral operand the
+// surface needs, packed two-real-fields-per-complex so four IFFTs become two.
+//
+//   Spec0 = (Dx + i*Dz , y + i*dDx/dz)   -> after IFFT: (Dx, Dz, y, dxz)
+//   Spec1 = (sx + i*sz , dDx/dx + i*dDz/dz) -> after IFFT: (sx, sz, dxx, dzz)
+//
+// ResolveOutputs then applies the (-1)^(x+y) centering sign, folds choppiness
+// lambda into the horizontal terms, and writes the final half-precision RTs
+// the shader, the foam kernel and the physics readback all consume.
+
+#pragma kernel TimeEvolve
+#pragma kernel ResolveOutputs
+
+Texture2DArray<float4> H0;
+Texture2DArray<float4> WaveData;
+RWTexture2DArray<float4> Spec0;
+RWTexture2DArray<float4> Spec1;
+
+// ResolveOutputs IO
+Texture2DArray<float4> Spatial0;
+Texture2DArray<float4> Spatial1;
+RWTexture2DArray<float4> Displacement;  // (lambda*Dx, y, lambda*Dz, lambda*dxz)
+RWTexture2DArray<float4> Derivatives;   // (sx, sz, lambda*dxx, lambda*dzz)
+
+cbuffer Params
+{
+    uint _N;
+    float _Time;
+    float _Lambda;
+}
+
+float2 CMul(float2 a, float2 b)
+{
+    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+[numthreads(8, 8, 1)]
+void TimeEvolve(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _N || id.y >= _N) return;
+
+    float4 h0 = H0[id];
+    float4 wd = WaveData[id];
+    float2 k = wd.xy;
+    float klen = wd.w;
+
+    if (klen < 1e-6f)
+    {
+        Spec0[id] = 0;
+        Spec1[id] = 0;
+        return;
+    }
+
+    float s, c;
+    sincos(wd.z * _Time, s, c);
+    float2 e = float2(c, s);
+    // h(k,t) = h0(k) e^{iwt} + conj(h0(-k)) e^{-iwt}
+    float2 h = CMul(h0.xy, e) + CMul(h0.zw, float2(e.x, -e.y));
+    float2 ih = float2(-h.y, h.x);   // i*h
+    float2 nih = float2(h.y, -h.x);  // -i*h
+
+    float kx = k.x, kz = k.y;
+    float rx = kx / klen, rz = kz / klen;
+
+    // C0 = Dx_spec + i*Dz_spec, with Dx_spec = -i*rx*h, Dz_spec = -i*rz*h
+    // i*Dz_spec = rz*h, so C0 = rx*(-i h) + rz*h
+    float2 c0 = rx * nih + rz * h;
+    // C1 = y + i*dxz: h * (1 + i*kx*kz/|k|)
+    float2 c1 = CMul(h, float2(1.0f, kx * kz / klen));
+    // C2 = sx + i*sz = i*kx*h + i*(i*kz*h) = h * (-kz + i*kx)
+    float2 c2 = CMul(h, float2(-kz, kx));
+    // C3 = dxx + i*dzz = h * (kx^2/|k| + i*kz^2/|k|)
+    float2 c3 = CMul(h, float2(kx * kx / klen, kz * kz / klen));
+
+    Spec0[id] = float4(c0, c1);
+    Spec1[id] = float4(c2, c3);
+}
+
+[numthreads(8, 8, 1)]
+void ResolveOutputs(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _N || id.y >= _N) return;
+
+    float sgn = ((id.x + id.y) & 1) ? -1.0f : 1.0f;
+    float4 p0 = Spatial0[id] * sgn; // (Dx, Dz, y, dxz)
+    float4 p1 = Spatial1[id] * sgn; // (sx, sz, dxx, dzz)
+
+    Displacement[id] = float4(_Lambda * p0.x, p0.z, _Lambda * p0.y, _Lambda * p0.w);
+    Derivatives[id] = float4(p1.x, p1.y, _Lambda * p1.z, _Lambda * p1.w);
+}

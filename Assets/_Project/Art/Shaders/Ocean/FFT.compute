@@ -1,0 +1,70 @@
+// Radix-2 Stockham inverse FFT over a Tex2DArray holding two complex fields
+// per texel (xy and zw). Stockham is self-sorting: no bit-reversal pass. The
+// caller runs log2(N) horizontal passes then log2(N) vertical ones, ping-pong
+// swapping Src/Dst each pass with _Ns doubling from 1.
+//
+// Convention: e^{+i...} (inverse transform), NO 1/N^2 normalization — the
+// spectral amplitudes are built for Tessendorf's direct-sum convention.
+
+#pragma kernel FFTHorizontal
+#pragma kernel FFTVertical
+
+static const float PI = 3.14159265358979f;
+
+Texture2DArray<float4> Src;
+RWTexture2DArray<float4> Dst;
+
+cbuffer Params
+{
+    uint _N;
+    uint _Ns; // combined block size before this pass: 1, 2, 4 ... N/2
+}
+
+float2 CMul(float2 a, float2 b)
+{
+    return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+void Butterfly(uint t, out uint i0, out uint i1, out uint o0, out uint o1, out float2 w)
+{
+    uint j = t % _Ns;
+    uint b = (t / _Ns) * (_Ns * 2u) + j;
+    i0 = t;
+    i1 = t + _N / 2u;
+    o0 = b;
+    o1 = b + _Ns;
+    float ang = PI * float(j) / float(_Ns); // +2pi*j/(2Ns): inverse transform
+    sincos(ang, w.y, w.x);
+}
+
+[numthreads(128, 1, 1)]
+void FFTHorizontal(uint3 id : SV_DispatchThreadID)
+{
+    uint t = id.x;
+    if (t >= _N / 2u) return;
+    uint i0, i1, o0, o1;
+    float2 w;
+    Butterfly(t, i0, i1, o0, o1, w);
+
+    float4 a = Src[uint3(i0, id.y, id.z)];
+    float4 b = Src[uint3(i1, id.y, id.z)];
+    float4 wb = float4(CMul(w, b.xy), CMul(w, b.zw));
+    Dst[uint3(o0, id.y, id.z)] = a + wb;
+    Dst[uint3(o1, id.y, id.z)] = a - wb;
+}
+
+[numthreads(128, 1, 1)]
+void FFTVertical(uint3 id : SV_DispatchThreadID)
+{
+    uint t = id.x;
+    if (t >= _N / 2u) return;
+    uint i0, i1, o0, o1;
+    float2 w;
+    Butterfly(t, i0, i1, o0, o1, w);
+
+    float4 a = Src[uint3(id.y, i0, id.z)];
+    float4 b = Src[uint3(id.y, i1, id.z)];
+    float4 wb = float4(CMul(w, b.xy), CMul(w, b.zw));
+    Dst[uint3(id.y, o0, id.z)] = a + wb;
+    Dst[uint3(id.y, o1, id.z)] = a - wb;
+}
