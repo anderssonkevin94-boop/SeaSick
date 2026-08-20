@@ -1,44 +1,42 @@
 using System.Collections;
 using System.Text;
 using UnityEngine;
+using SeaSick.Ocean;
 
-/// Sails the ship through the western deep and watches the RIG rather than the
-/// water: how often the camera's "never go under the surface" clamp fires, and
-/// how far apart the camera and the hull get vertically.
-///
-/// The clamp samples the sea at the CAMERA's position, roughly 20m astern of
-/// the ship. In a big sea that is a different wave from the one the hull is on,
-/// so a crest passing under the lens shoves it up while the ship is still in
-/// the trough — which looks exactly like the boat dropping away underwater.
-/// It barely mattered while the rig sat at a fixed 19m; it matters a great deal
-/// now that a storm pulls it down to about 10m.
-[DefaultExecutionOrder(800)]
+/// Sails the western deep on the live system and watches the things that used
+/// to go wrong: how tightly the hull tracks the surface (draft statistics),
+/// how often the camera's never-go-under clamp fires, and the camera/hull gap.
+/// Compare against /tmp/seasick-sail-baseline.txt (the old kinematic system's
+/// last run — normalise judgements against what changed).
+/// Writes /tmp/seasick-sail.txt and five screenshots. Plain C# on purpose.
 public class SailShot : MonoBehaviour
 {
     public const string OutPath = "/tmp/seasick-sail.txt";
 
     SeaSick.Ship.ShipMotor motor;
-    SeaSick.Ocean.WaveField field;
     Camera cam;
     bool sampling;
 
-    int frames, clamped;
-    float pushMax, gapMin = 9999f, gapMax = -9999f;
-    float seaAtCamMin = 9999f, seaAtCamMax = -9999f;
-    float shipMin = 9999f, shipMax = -9999f;
-
-    // Seating error: where the hull actually is, against where the water says
-    // it should be. Zero means she is sitting ON the sea. Negative means the
-    // deck is under it.
-    float seatMin = 9999f, seatMax = -9999f, seatSumSq, seatAbsSum;
-    int seatN;
-    float prevSurface, surfVelMax;
-    bool prevValid;
+    int frames;
+    int clamped;
+    float gapMin = 9999f;
+    float gapMax = -9999f;
+    float draftSum;
+    float draftSqSum;
+    int draftN;
+    float rollMax;
+    float pitchMax;
+    float speedSum;
+    int shots;
 
     public static void Execute()
     {
-        if (!Application.isPlaying) { Debug.LogError("SailShot: not in play mode"); return; }
-        var old = FindAnyObjectByType<SailShot>();
+        if (!Application.isPlaying)
+        {
+            Debug.LogError("SailShot: not in play mode");
+            return;
+        }
+        SailShot old = FindAnyObjectByType<SailShot>();
         if (old != null) Destroy(old.gameObject);
         new GameObject("SailShot").AddComponent<SailShot>();
     }
@@ -46,89 +44,89 @@ public class SailShot : MonoBehaviour
     IEnumerator Start()
     {
         motor = FindAnyObjectByType<SeaSick.Ship.ShipMotor>();
-        field = SeaSick.Ocean.WaveField.Instance;
         cam = Camera.main;
         var voyage = FindAnyObjectByType<SeaSick.Voyage.VoyageManager>();
         Vector3 home = voyage != null && voyage.HomePoint != null
             ? voyage.HomePoint.position : Vector3.zero;
-        if (motor == null || cam == null || field == null) yield break;
+        if (motor == null || cam == null) yield break;
 
-        // Put her out west and let her sail — no pinning, this is the real case.
-        motor.transform.position = new Vector3(home.x - 1500f, motor.transform.position.y, home.z);
-        yield return new WaitForSeconds(5f);
+        // Out west, seated on the surface, sailing free — the real case.
+        Rigidbody rb = motor.GetComponent<Rigidbody>();
+        Vector3 spot = new Vector3(home.x - 1500f, 0f, home.z);
+        float h0 = OceanSampler.Ready ? OceanSampler.SampleImmediate(spot).height : 0f;
+        if (rb != null)
+        {
+            rb.position = new Vector3(spot.x, h0 + 0.5f, spot.z);
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+        motor.SailOrder = 1f;
+        yield return new WaitForSeconds(6f);
 
         sampling = true;
-        for (int i = 0; i < 5; i++)
+        float t0 = Time.time;
+        while (Time.time - t0 < 40f)
         {
-            yield return new WaitForSeconds(3f);
-            string path = $"/tmp/seasick-sail-{i}.png";
-            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
-            ScreenCapture.CaptureScreenshot(path);
+            yield return null;
+            if (shots < 5 && Time.time - t0 > shots * 8f)
+            {
+                ScreenCapture.CaptureScreenshot("/tmp/seasick-sail-" + shots + ".png");
+                shots++;
+            }
         }
-        sampling = false;
-
-        var sb = new StringBuilder();
-        sb.AppendLine("Sailing free at 1500m west.");
-        sb.AppendLine($"frames {frames}   camera clamped to the surface on " +
-                      $"{(frames > 0 ? 100f * clamped / frames : 0f):F0}% of them");
-        sb.AppendLine($"   worst upward shove from the clamp: {pushMax:F1} m");
-        sb.AppendLine($"   camera above hull:  {gapMin:F1} .. {gapMax:F1} m  " +
-                      $"(swing {(gapMax - gapMin):F1} m)");
-        sb.AppendLine($"   sea under the CAMERA: {seaAtCamMin:F1} .. {seaAtCamMax:F1} m");
-        sb.AppendLine($"   hull y:               {shipMin:F1} .. {shipMax:F1} m");
-        sb.AppendLine($"   sea state {field.SeaState01:F2}");
-        sb.AppendLine();
-        sb.AppendLine("SEATING — hull height minus where the water says it should be");
-        sb.AppendLine($"   error {seatMin:F2} .. {seatMax:F2} m   " +
-                      $"RMS {(seatN > 0 ? Mathf.Sqrt(seatSumSq / seatN) : 0f):F2} m   " +
-                      $"mean |error| {(seatN > 0 ? seatAbsSum / seatN : 0f):F2} m");
-        sb.AppendLine($"   fastest surface under her: {surfVelMax:F1} m/s vertical");
-        sb.AppendLine("   (freeboard is 1.3m to the waist, 2.05m to the deck)");
-        System.IO.File.WriteAllText(OutPath, sb.ToString());
-        Debug.Log("SailShot done\n" + sb);
+        Report();
+        Destroy(gameObject);
     }
 
     void LateUpdate()
     {
-        if (!sampling || cam == null || motor == null || field == null) return;
-        Vector3 cp = cam.transform.position;
-        float seaAtCam = field.SampleHeight(new Vector2(cp.x, cp.z), Time.time);
-        float floor = seaAtCam + 2.6f;   // ChaseCamera.minHeightAboveWater
-
+        if (!sampling || motor == null || !OceanSampler.Ready) return;
         frames++;
-        // Sitting within a few centimetres of the floor means the clamp put it
-        // there this frame rather than the framing.
-        if (cp.y <= floor + 0.05f) clamped++;
-        float shipY = motor.transform.position.y;
-        float push = floor - shipY - 10f;   // how far above a nominal rig the floor sits
-        if (push > pushMax) pushMax = push;
 
-        float gap = cp.y - shipY;
+        Vector3 hp = motor.transform.position;
+        float surface = OceanSampler.SampleImmediate(hp).height;
+        float draft = surface - hp.y;
+        draftSum += draft;
+        draftSqSum += draft * draft;
+        draftN++;
+
+        float roll = Signed(motor.transform.eulerAngles.z);
+        float pitch = Signed(motor.transform.eulerAngles.x);
+        if (Mathf.Abs(roll) > rollMax) rollMax = Mathf.Abs(roll);
+        if (Mathf.Abs(pitch) > pitchMax) pitchMax = Mathf.Abs(pitch);
+        speedSum += motor.CurrentSpeed;
+
+        Vector3 cp = cam.transform.position;
+        float camSurface = OceanSampler.SampleImmediate(cp).height;
+        if (cp.y - camSurface < 2.65f) clamped++;
+        float gap = cp.y - hp.y;
         if (gap < gapMin) gapMin = gap;
         if (gap > gapMax) gapMax = gap;
-        if (seaAtCam < seaAtCamMin) seaAtCamMin = seaAtCam;
-        if (seaAtCam > seaAtCamMax) seaAtCamMax = seaAtCam;
-        if (shipY < shipMin) shipMin = shipY;
-        if (shipY > shipMax) shipMax = shipY;
+    }
 
-        // Where the water says she should float, by the same numbers the
-        // seating code itself uses.
-        Vector3 sp = motor.transform.position;
-        float surface = field.SampleHeight(new Vector2(sp.x, sp.z), Time.time);
-        float want = surface - motor.SinkDepth;
-        float err = shipY - want;
-        seatN++;
-        seatSumSq += err * err;
-        seatAbsSum += Mathf.Abs(err);
-        if (err < seatMin) seatMin = err;
-        if (err > seatMax) seatMax = err;
+    void Report()
+    {
+        float draftMean = draftSum / Mathf.Max(1, draftN);
+        float draftVar = draftSqSum / Mathf.Max(1, draftN) - draftMean * draftMean;
+        float draftRms = Mathf.Sqrt(Mathf.Max(0f, draftVar));
+        StringBuilder sb = new StringBuilder();
+        sb.AppendLine("Sailing free at 1500m west (rigidbody ocean).");
+        sb.AppendLine(string.Format("frames {0}  camera at clamp height on {1:P0} of them",
+            frames, clamped / (float)Mathf.Max(1, frames)));
+        sb.AppendLine(string.Format("   camera above hull: {0:F1} .. {1:F1} m", gapMin, gapMax));
+        sb.AppendLine(string.Format(
+            "   draft: mean {0:F2} m  rms-about-mean {1:F2} m  (hull tracking the surface)",
+            draftMean, draftRms));
+        sb.AppendLine(string.Format("   max roll {0:F1} deg  max pitch {1:F1} deg", rollMax, pitchMax));
+        sb.AppendLine(string.Format("   mean speed {0:F1} m/s", speedSum / Mathf.Max(1, frames)));
+        sb.AppendLine(string.Format("   sea severity {0:F2}  state {1}", motor.SeaSeverity01, motor.SeaStateName));
+        System.IO.File.WriteAllText(OutPath, sb.ToString());
+        Debug.Log("SailShot:\n" + sb);
+    }
 
-        if (prevValid && Time.deltaTime > 0.0001f)
-        {
-            float v = Mathf.Abs(surface - prevSurface) / Time.deltaTime;
-            if (v > surfVelMax) surfVelMax = v;
-        }
-        prevSurface = surface;
-        prevValid = true;
+    static float Signed(float a)
+    {
+        if (a > 180f) return a - 360f;
+        return a;
     }
 }

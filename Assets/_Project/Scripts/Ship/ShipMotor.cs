@@ -1,4 +1,4 @@
-using SeaSick.Ocean2;
+using SeaSick.Ocean;
 using UnityEngine;
 
 namespace SeaSick.Ship
@@ -23,8 +23,8 @@ namespace SeaSick.Ship
         [SerializeField] float minTurnRate = 15f;
         [SerializeField] float maxTurnRate = 34f;
         [SerializeField, Range(0f, 0.5f)] float steerageWay = 0.12f;
-        [Tooltip("Multiplier on the water's own horizontal shove (1 = pure physics).")]
-        [SerializeField] float surfGain = 1.6f;
+        [Tooltip("Surf strength: multiple of gravity's pull along the surface slope. The old kinematic surfPower 22 corresponds to ~2.2 here.")]
+        [SerializeField] float surfGain = 2.2f;
         [SerializeField] float surfResponse = 2.2f;
 
         [Header("Attitude limits (soft)")]
@@ -76,6 +76,10 @@ namespace SeaSick.Ship
         }
         bool anchored;
         Vector3 anchorPoint;
+
+        /// Where the anchor spring pulls. Berthing walks this point toward the
+        /// beach instead of writing the transform — physics does the moving.
+        public Vector3 AnchorPoint { get => anchorPoint; set => anchorPoint = value; }
 
         public bool Rowing { get; set; }
         public float RowSpeed => rowSpeed;
@@ -340,11 +344,25 @@ namespace SeaSick.Ship
             float grip = Anchored ? keelGrip * 3f : keelGrip * heaviness;
             rb.AddForce(-right * (sideWay * grip * mass), ForceMode.Force);
 
-            // --- surf assist: amplify the water's own horizontal shove ---
-            Vector3 waveForce = buoyant.WaveForce;
-            if (!Anchored && surfGain > 1f)
-                rb.AddForce(waveForce * (surfGain - 1f), ForceMode.Force);
-            smoothedWaveForce = Vector3.Lerp(smoothedWaveForce, waveForce * surfGain,
+            // --- surf: gravity pulling the hull along the surface slope ---
+            // Derived from the sampled surface normal, NOT from the buoyancy
+            // drag forces (those read as a brake at speed, and amplifying them
+            // measured as a 4 kN anti-propulsion force). Running down a face
+            // pulls her forward; climbing costs; a beam sea shoves sideways.
+            Vector3 surfForce = Vector3.zero;
+            if (!Anchored && Ocean.OceanSampler.Ready)
+            {
+                Vector3 n = Ocean.OceanSampler.SampleImmediate(transform.position).normal;
+                if (n.y > 0.2f)
+                {
+                    Vector3 downSlope = new Vector3(n.x, 0f, n.z) / n.y;
+                    Vector3 accel = downSlope * surfGain * 9.81f;
+                    accel = Vector3.ClampMagnitude(accel, 4.5f);
+                    surfForce = accel * mass * buoyant.Submersion;
+                    rb.AddForce(surfForce, ForceMode.Force);
+                }
+            }
+            smoothedWaveForce = Vector3.Lerp(smoothedWaveForce, surfForce,
                 1f - Mathf.Exp(-surfResponse * dt));
             SurfAccel = Vector3.Dot(smoothedWaveForce, forward) / mass;
             LateralWaveAccel = Vector3.Dot(smoothedWaveForce, right) / mass;

@@ -3,7 +3,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using SeaSick.Ocean2;
+using SeaSick.Ocean;
 
 /// Builds (or rebuilds) OceanLab.unity — the new ocean stack's home until the
 /// cutover — and the OceanQuality tier assets. The lab has a free camera, a low

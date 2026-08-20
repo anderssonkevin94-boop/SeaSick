@@ -150,7 +150,7 @@ namespace SeaSick.World
 
         float SampleWeather()
         {
-            var ctrl = SeaSick.Ocean2.SeaStateController.Instance;
+            var ctrl = SeaSick.Ocean.SeaStateController.Instance;
             if (ctrl == null || ship == null) return 0f;
 
             Vector2 p = new Vector2(ship.position.x, ship.position.z);
@@ -203,8 +203,8 @@ namespace SeaSick.World
             RenderSettings.fogStartDistance = Mathf.Lerp(clearFogStart, stormFogStart, t);
             RenderSettings.fogEndDistance = Mathf.Lerp(clearFogEnd, stormFogEnd, t);
 
-            var wind = SeaSick.Ocean2.SeaStateController.Instance != null
-                ? SeaSick.Ocean2.SeaStateController.Instance.WindDirection : Vector2.right;
+            var wind = SeaSick.Ocean.SeaStateController.Instance != null
+                ? SeaSick.Ocean.SeaStateController.Instance.WindDirection : Vector2.right;
             Shader.SetGlobalVector(SkyWindId, new Vector4(wind.x, wind.y, 0f, 0f));
             Shader.SetGlobalVector(SkyHorizonId, horizon);
             Shader.SetGlobalFloat(StorminessId, t);

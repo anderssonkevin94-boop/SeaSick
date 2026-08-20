@@ -209,8 +209,8 @@ namespace SeaSick.Ship
                 return;
             }
 
-            float surface = Ocean2.OceanSampler.Ready
-                ? Ocean2.OceanSampler.SampleImmediate(to).height
+            float surface = Ocean.OceanSampler.Ready
+                ? Ocean.OceanSampler.SampleImmediate(to).height
                 : 0f;
 
             if (to.y <= surface)
@@ -224,7 +224,7 @@ namespace SeaSick.Ship
         void Splash(Vector3 at)
         {
             // The ripple sim knows how to hold a mark on the water.
-            Ocean2.DynamicWaterSim.Splash(at, 7f, 1.3f);
+            Ocean.DynamicWaterSim.Splash(at, 7f, 1.3f);
 
             var go = new GameObject("Splash");
             go.transform.position = at;

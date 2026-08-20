@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using Unity.Collections;
 using Unity.Mathematics;
-using SeaSick.Ocean2;
+using SeaSick.Ocean;
 
 /// THE acceptance test of the whole architecture: the surface the player sees
 /// and the surface physics uses must agree to centimetres. A verification

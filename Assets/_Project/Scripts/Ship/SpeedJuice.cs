@@ -61,7 +61,7 @@ namespace SeaSick.Ship
             // small, bright and lit by a strong sun — and filled the screen
             // with grey cardboard the moment the storm sea started throwing
             // them in numbers under a dark sky.
-            solid.SetTexture("_BaseMap", SeaSick.Ocean2.FoamTexture.SoftPuff());
+            solid.SetTexture("_BaseMap", SeaSick.Ocean.FoamTexture.SoftPuff());
             solid.SetFloat("_AlphaClip", 1f);
             solid.SetFloat("_Cutoff", 0.45f);
             solid.EnableKeyword("_ALPHATEST_ON");
@@ -70,7 +70,7 @@ namespace SeaSick.Ship
             // than popping out of existence behind you.
             var mat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
             mat.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.5f));
-            mat.SetTexture("_BaseMap", SeaSick.Ocean2.FoamTexture.SoftPuff());
+            mat.SetTexture("_BaseMap", SeaSick.Ocean.FoamTexture.SoftPuff());
             mat.SetFloat("_Surface", 1f);
             mat.SetOverrideTag("RenderType", "Transparent");
             mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -216,7 +216,7 @@ namespace SeaSick.Ship
                 if (side != null) side.Emit(Mathf.RoundToInt(Mathf.Lerp(10f, 45f, force)));
 
                 Vector3 at = transform.position + transform.right * (lateral > 0f ? 3.5f : -3.5f);
-                Ocean2.DynamicWaterSim.Splash(at, 6f, 0.5f + force);
+                Ocean.DynamicWaterSim.Splash(at, 6f, 0.5f + force);
             }
 
             // Bow slam: the surf pull reversing hard as the stem drops.
@@ -227,7 +227,7 @@ namespace SeaSick.Ship
             {
                 lastSlam = Time.time;
                 if (bowSpray != null) bowSpray.Emit(Mathf.RoundToInt(Mathf.Lerp(14f, 50f, speed01)));
-                Ocean2.DynamicWaterSim.Splash(transform.position + transform.forward * 9f, 7f, 0.8f);
+                Ocean.DynamicWaterSim.Splash(transform.position + transform.forward * 9f, 7f, 0.8f);
             }
         }
 

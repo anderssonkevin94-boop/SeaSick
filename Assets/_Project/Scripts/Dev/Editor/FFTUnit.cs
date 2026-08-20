@@ -2,7 +2,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
-using SeaSick.Ocean2;
+using SeaSick.Ocean;
 
 /// Unit test for the Stockham inverse FFT core: feeds hand-built spectra with
 /// a handful of known modes through FFTCompute and compares the output field

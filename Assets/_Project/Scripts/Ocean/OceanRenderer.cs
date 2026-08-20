@@ -2,77 +2,128 @@ using UnityEngine;
 
 namespace SeaSick.Ocean
 {
-    /// A flat grid that follows the ship. It is built once and never touched
-    /// again — all displacement happens in the SeaSick/Ocean vertex shader
-    /// from the constants WaveField uploads each frame.
-    ///
-    /// This used to rebuild ~5,300 vertices on the CPU every frame at a cost
-    /// of about 8.5 ms. Now the per-frame CPU work is one transform update.
-    [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer), typeof(WaveField))]
+    /// Orchestrator of the whole ocean: advances OceanTime, rebuilds the
+    /// spectrum when told it's dirty, runs the per-frame evolve + IFFT +
+    /// resolve chain, and publishes the result textures as shader globals.
+    /// Plain Dispatch from Update, deliberately not a render-graph pass: the
+    /// simulation has no camera dependency and must run exactly once per frame
+    /// even when no camera happens to render the water.
+    [DefaultExecutionOrder(-100)]
     public class OceanRenderer : MonoBehaviour
     {
-        [Tooltip("Grid resolution. Cheap now that displacement is on the GPU.")]
-        [SerializeField] int gridQuads = 150;
-        [SerializeField] float extent = 620f;
-        [SerializeField] Transform followTarget;
+        public static OceanRenderer Instance { get; private set; }
 
-        Mesh mesh;
+        [SerializeField] OceanSpectrumSettings settings;
+        [SerializeField] ComputeShader initialSpectrumShader;
+        [SerializeField] ComputeShader timeEvolveShader;
+        [SerializeField] ComputeShader fftShader;
+        [SerializeField] int noiseSeed = 1337;
 
-        public Transform FollowTarget { get => followTarget; set => followTarget = value; }
+        CascadeSet cascades;
+        SpectrumGenerator spectrum;
+        FFTCompute fft;
+        DisplacementReadback readback;
+        int evolveKernel = -1;
+        int resolveKernel = -1;
+        bool spectrumDirty = true;
 
-        void Start() { BuildGrid(); }
+        public OceanSpectrumSettings Settings => settings;
+        public CascadeSet Cascades => cascades;
 
-        void BuildGrid()
+        /// Call after mutating settings; the spectrum rebuilds next frame.
+        public void MarkSpectrumDirty() => spectrumDirty = true;
+
+        public void SetSettings(OceanSpectrumSettings s)
         {
-            int n = gridQuads + 1;
-            var verts = new Vector3[n * n];
-            var uvs = new Vector2[n * n];
-            var normals = new Vector3[n * n];
-            float half = extent * 0.5f;
-            float step = extent / gridQuads;
-
-            for (int z = 0, i = 0; z < n; z++)
-                for (int x = 0; x < n; x++, i++)
-                {
-                    verts[i] = new Vector3(x * step - half, 0f, z * step - half);
-                    uvs[i] = new Vector2((float)x / gridQuads, (float)z / gridQuads);
-                    normals[i] = Vector3.up;
-                }
-
-            var tris = new int[gridQuads * gridQuads * 6];
-            for (int z = 0, t = 0; z < gridQuads; z++)
-                for (int x = 0; x < gridQuads; x++)
-                {
-                    int i = z * n + x;
-                    tris[t++] = i; tris[t++] = i + n; tris[t++] = i + 1;
-                    tris[t++] = i + 1; tris[t++] = i + n; tris[t++] = i + n + 1;
-                }
-
-            mesh = new Mesh { name = "OceanTile" };
-            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            mesh.vertices = verts;
-            mesh.uv = uvs;
-            mesh.normals = normals;
-            mesh.triangles = tris;
-            // Vertices move in the shader, so bounds must be generous enough
-            // that culling never clips the tile.
-            // Displacement happens in the vertex shader, so Unity culls
-            // against these bounds and never sees how far the surface actually
-            // moved. 80m of total height (40m either way) was ample for a 5m
-            // swell and would cull the whole ocean out of frame now the western
-            // deep is measured in tens of metres. Bounds are free — be generous.
-            mesh.bounds = new Bounds(Vector3.zero, new Vector3(extent, 600f, extent));
-            GetComponent<MeshFilter>().sharedMesh = mesh;
+            settings = s;
+            spectrumDirty = true;
         }
 
-        void LateUpdate()
+        void OnEnable()
         {
-            if (followTarget == null) return;
-            // Snap to the grid cell so the surface never crawls under the ship.
-            float cell = extent / gridQuads;
-            Vector3 p = followTarget.position;
-            transform.position = new Vector3(
-                Mathf.Round(p.x / cell) * cell, 0f, Mathf.Round(p.z / cell) * cell);
+            Instance = this;
+            if (initialSpectrumShader == null || timeEvolveShader == null || fftShader == null)
+            {
+                Debug.LogError("OceanRenderer: compute shaders not assigned");
+                enabled = false;
+                return;
+            }
+
+            var q = OceanQuality.Active;
+            cascades = new CascadeSet();
+            cascades.Create(q != null ? q.fftSize : 256,
+                q != null ? q.patchSizes : new[] { 512f, 128f, 32f }, noiseSeed);
+            spectrum = new SpectrumGenerator(initialSpectrumShader);
+            fft = new FFTCompute(fftShader);
+            evolveKernel = timeEvolveShader.FindKernel("TimeEvolve");
+            resolveKernel = timeEvolveShader.FindKernel("ResolveOutputs");
+            spectrumDirty = true;
+
+            readback = new DisplacementReadback(cascades.N);
+            OceanSampler.Bind(readback, cascades.PatchSizes);
+        }
+
+        void OnDisable()
+        {
+            if (Instance == this) Instance = null;
+            OceanSampler.Unbind();
+            readback?.Dispose();
+            readback = null;
+            cascades?.Release();
+            cascades = null;
+        }
+
+        void Update()
+        {
+            OceanTime.Advance(Time.deltaTime);
+            StepSimulation();
+        }
+
+        /// One full simulation step at the current OceanTime. Public so probes
+        /// can pause the clock, scrub, and re-step deterministically.
+        public void StepSimulation()
+        {
+            if (settings == null || cascades == null) return;
+
+            if (spectrumDirty)
+            {
+                spectrum.Generate(cascades, settings);
+                spectrumDirty = false;
+            }
+
+            int n = cascades.N;
+            int groups = Mathf.CeilToInt(n / 8f);
+
+            timeEvolveShader.SetInt("_N", n);
+            timeEvolveShader.SetFloat("_Time", (float)OceanTime.Now);
+            timeEvolveShader.SetFloat("_Lambda", settings.choppiness);
+
+            timeEvolveShader.SetTexture(evolveKernel, "H0", cascades.H0);
+            timeEvolveShader.SetTexture(evolveKernel, "WaveData", cascades.WaveData);
+            timeEvolveShader.SetTexture(evolveKernel, "Spec0", cascades.Spec0);
+            timeEvolveShader.SetTexture(evolveKernel, "Spec1", cascades.Spec1);
+            timeEvolveShader.Dispatch(evolveKernel, groups, groups, CascadeSet.Cascades);
+
+            fft.Inverse(cascades.Spec0, cascades.Scratch, n, CascadeSet.Cascades);
+            fft.Inverse(cascades.Spec1, cascades.Scratch, n, CascadeSet.Cascades);
+
+            timeEvolveShader.SetTexture(resolveKernel, "Spatial0", cascades.Spec0);
+            timeEvolveShader.SetTexture(resolveKernel, "Spatial1", cascades.Spec1);
+            timeEvolveShader.SetTexture(resolveKernel, "Displacement", cascades.Displacement);
+            timeEvolveShader.SetTexture(resolveKernel, "Derivatives", cascades.Derivatives);
+            timeEvolveShader.Dispatch(resolveKernel, groups, groups, CascadeSet.Cascades);
+
+            Shader.SetGlobalTexture("_Ocean_Displacement", cascades.Displacement);
+            Shader.SetGlobalTexture("_Ocean_Derivatives", cascades.Derivatives);
+            Shader.SetGlobalTexture("_Ocean_Turbulence", cascades.Turbulence);
+            Shader.SetGlobalVector("_Ocean_PatchSizes", cascades.PatchSizesVec);
+            var q = OceanQuality.Active;
+            float fadeEnd = q != null ? q.displacementFadeDistance : 500f;
+            Shader.SetGlobalVector("_Ocean_FadeParams",
+                new Vector4(fadeEnd * 0.6f, fadeEnd, 0f, 0f));
+            RegionField.PublishNeutralIfAbsent();
+
+            readback?.Tick(cascades.Displacement, cascades.Derivatives, OceanTime.Now);
         }
     }
 }

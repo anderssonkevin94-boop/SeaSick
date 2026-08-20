@@ -236,10 +236,10 @@ namespace SeaSick.CameraRig
             transform.position = rigPos + Vector3.up * seaY;
 
             // A low camera sells speed, but it must never end up underwater.
-            if (SeaSick.Ocean2.OceanSampler.Ready)
+            if (SeaSick.Ocean.OceanSampler.Ready)
             {
                 Vector3 cp = transform.position;
-                float surface = SeaSick.Ocean2.OceanSampler.SampleImmediate(cp).height;
+                float surface = SeaSick.Ocean.OceanSampler.SampleImmediate(cp).height;
                 if (cp.y < surface + minHeightAboveWater)
                     transform.position = new Vector3(cp.x, surface + minHeightAboveWater, cp.z);
             }

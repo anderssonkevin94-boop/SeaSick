@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Text;
 using UnityEngine;
-using SeaSick.Ocean2;
+using SeaSick.Ocean;
 
 /// Weather-blend acceptance: force Calm, then ramp the forced severity to
 /// full Storm over 45 s while measuring Hs at a fixed grid every second.

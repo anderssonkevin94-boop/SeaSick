@@ -821,6 +821,125 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
   m_PrefabInstance: {fileID: 874422979}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1016993460
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1016993466}
+  - component: {fileID: 1016993465}
+  - component: {fileID: 1016993464}
+  - component: {fileID: 1016993463}
+  - component: {fileID: 1016993462}
+  - component: {fileID: 1016993461}
+  m_Layer: 0
+  m_Name: Ocean
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1016993461
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1016993460}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4abaf1ed4ca514dfba012de15c33bc61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.SeaStateController
+  calm: {fileID: 11400000, guid: ec4b814f86b2842baaa5f0a37e4f79ae, type: 2}
+  normal: {fileID: 11400000, guid: 79a34835b269b4440b4b48b2f3ec6d88, type: 2}
+  stormy: {fileID: 11400000, guid: f838051a0444b4dfcb080cc59b226f6b, type: 2}
+  follow: {fileID: 2143489877}
+  blendTime: 45
+  rebuildHz: 4
+  wanderAmount: 0.5
+  wanderPeriod: 240
+--- !u!114 &1016993462
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1016993460}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 57b6b6a2b635b4dde95b90a2d90a5947, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.DynamicWaterSim
+--- !u!114 &1016993463
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1016993460}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbc342d68f7cf4695ad2497bfb0a1e6e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.RegionField
+  calmRadius: 260
+  wildRadius: 1150
+  nearScale: 0.35
+  farScale: 1.5
+  shoreFalloff: 60
+  stormBearing: {x: -1, y: 0}
+  stormNear: 450
+  stormFar: 1250
+  autoBindWorld: 1
+--- !u!114 &1016993464
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1016993460}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dbf7ddca878fc43f490fc3653e9f0171, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanPhysicsDriver
+--- !u!114 &1016993465
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1016993460}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d331e5695a21d47639bf19a32d7024c0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanRenderer
+  settings: {fileID: 11400000, guid: 79a34835b269b4440b4b48b2f3ec6d88, type: 2}
+  initialSpectrumShader: {fileID: 7200000, guid: 20a671ceac7e34f7b859395bb30619dd, type: 3}
+  timeEvolveShader: {fileID: 7200000, guid: e421b3e68436343f794df4ad4d09814c, type: 3}
+  fftShader: {fileID: 7200000, guid: d2463700ed62e4efd9356ac0a8a00e59, type: 3}
+  noiseSeed: 1337
+--- !u!4 &1016993466
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1016993460}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1511588552}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1106370309
 GameObject:
   m_ObjectHideFlags: 0
@@ -1017,259 +1136,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
   m_PrefabInstance: {fileID: 1185681785}
   m_PrefabAsset: {fileID: 0}
---- !u!1 &1412075583
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1412075588}
-  - component: {fileID: 1412075587}
-  - component: {fileID: 1412075586}
-  - component: {fileID: 1412075585}
-  - component: {fileID: 1412075584}
-  - component: {fileID: 1412075591}
-  - component: {fileID: 1412075593}
-  - component: {fileID: 1412075595}
-  - component: {fileID: 1412075596}
-  - component: {fileID: 1412075597}
-  m_Layer: 0
-  m_Name: Ocean
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1412075584
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4ef8ca202df784ddb986875577f262fe, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanRenderer
-  gridQuads: 260
-  extent: 1500
-  followTarget: {fileID: 2143489877}
---- !u!114 &1412075585
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 054c3bac680604658bea84add2b12667, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WaveField
-  waveCount: 14
-  windDirection: {x: 1, y: 0.22}
-  minWavelength: 9
-  maxWavelength: 190
-  baseAmplitude: 3.9
-  ampPower: 1
-  ampJitter: 0.22
-  shortSpreadDegrees: 125
-  longSpreadDegrees: 80
-  choppiness: 0.72
-  foldLimit: 0.85
-  stormWaveCount: 6
-  stormSpreadDegrees: 140
-  stormWavelengths: {x: 120, y: 340}
-  stormAmplitude: 40
-  stormBearing: {x: -1, y: 0}
-  stormNear: 450
-  stormFar: 1250
-  seed: 1337
-  calmFloor: 0.14
-  roughCeiling: 1.15
-  changeSpeed: 0.011
-  shoreFalloff: 60
-  calmRadius: 260
-  wildRadius: 1150
-  nearScale: 0.35
-  farScale: 1.5
---- !u!23 &1412075586
-MeshRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_CastShadows: 1
-  m_ReceiveShadows: 1
-  m_DynamicOccludee: 1
-  m_StaticShadowCaster: 0
-  m_MotionVectors: 1
-  m_LightProbeUsage: 1
-  m_ReflectionProbeUsage: 1
-  m_RayTracingMode: 2
-  m_RayTraceProcedural: 0
-  m_RayTracingAccelStructBuildFlagsOverride: 0
-  m_RayTracingAccelStructBuildFlags: 1
-  m_SmallMeshCulling: 1
-  m_ForceMeshLod: -1
-  m_MeshLodSelectionBias: 0
-  m_RenderingLayerMask: 1
-  m_RendererPriority: 0
-  m_Materials:
-  - {fileID: 2100000, guid: 7fd4f79e0dc044e3ab1438b68b62c1e5, type: 2}
-  m_StaticBatchInfo:
-    firstSubMesh: 0
-    subMeshCount: 0
-  m_StaticBatchRoot: {fileID: 0}
-  m_ProbeAnchor: {fileID: 0}
-  m_LightProbeVolumeOverride: {fileID: 0}
-  m_ScaleInLightmap: 1
-  m_ReceiveGI: 1
-  m_PreserveUVs: 0
-  m_IgnoreNormalsForChartDetection: 0
-  m_ImportantGI: 0
-  m_StitchLightmapSeams: 1
-  m_SelectedEditorRenderState: 3
-  m_MinimumChartSize: 4
-  m_AutoUVMaxDistance: 0.5
-  m_AutoUVMaxAngle: 89
-  m_LightmapParameters: {fileID: 0}
-  m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &1412075587
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Mesh: {fileID: 0}
---- !u!4 &1412075588
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1412075591
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fdf3c53bd4a184f78bb2cd26d56f8c32, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WindField
-  baseAngleDeg: 71
-  wanderDegrees: 62
-  wanderSpeed: 0.01
-  shadowLength: 260
-  shadowStrength: 0.72
-  gustStrength: 1.6
-  gustCount: 6
-  gustRadiusRange: {x: 22, y: 40}
-  gustDriftSpeed: 4.5
-  spawnRingMin: 100
-  spawnRingMax: 320
-  despawnDistance: 420
-  focus: {fileID: 2143489877}
---- !u!114 &1412075593
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 530990476a78240acbf4895ea99a6ac3, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.SwellDirector
-  intervalRange: {x: 70, y: 110}
-  firstSwellDelay: 45
-  spawnDistance: 360
-  frontSpeed: 7.5
-  halfWidth: 250
-  steepness: 0.62
-  wavelength: 72
-  clearBeyond: 520
---- !u!114 &1412075595
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 636c60ac797fd4e4ca189086c38fcd5d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.CurrentField
-  streamCount: 5
-  speedRange: {x: 2.2, y: 4.5}
-  halfWidthRange: {x: 90, y: 190}
-  lengthScale: 900
-  spread: 900
-  seed: 909
---- !u!114 &1412075596
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b79d21191970048519b03150639ba399, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WakeTexture
-  resolution: 512
-  worldSize: 420
-  decayPerSecond: 0.55
-  target: {fileID: 0}
-  hullLength: 20
-  hullWidth: 7
-  hullFoam: 1.5
-  hullDisplace: 0.9
---- !u!114 &1412075597
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1412075583}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1f2e76bb7db9548d6bf2a6fa8be7dffd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.MountainSeaDirector
-  regionBearingDeg: 270
-  regionHalfAngle: 62
-  minDistanceFromHome: 700
-  spawnInterval: 55
-  maxAlive: 2
-  spawnLead: 900
-  despawnBehind: 700
 --- !u!1 &1482035839
 GameObject:
   m_ObjectHideFlags: 0
@@ -1323,6 +1189,53 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1511588551
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1511588552}
+  - component: {fileID: 1511588553}
+  m_Layer: 0
+  m_Name: Clipmap
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1511588552
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1511588551}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1016993466}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1511588553
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1511588551}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b86a8298c1a844e30a755cd622562ffa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanClipmap
+  material: {fileID: 2100000, guid: 1823f9a321d5b4030bbf75d41f054b24, type: 2}
+  followOverride: {fileID: 0}
+  cellsAcross: 128
 --- !u!1 &1658063628
 GameObject:
   m_ObjectHideFlags: 0
@@ -1946,9 +1859,6 @@ PrefabInstance:
       addedObject: {fileID: 2143489889}
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 2143489890}
-    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 2143489892}
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
@@ -1977,6 +1887,15 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2143489900}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489903}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489902}
+    - targetCorrespondingSourceObject: {fileID: 2728483805291004593, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 2143489901}
   m_SourcePrefab: {fileID: 100100000, guid: 34e341a0cafd248ffb429c13d17c477f, type: 3}
 --- !u!1 &2143489876 stripped
 GameObject:
@@ -2019,37 +1938,28 @@ MonoBehaviour:
   maxSpeed: 21
   acceleration: 2.6
   keelGrip: 2.2
-  surfPower: 22
-  surfSampleDistance: 16
-  surfResponse: 2.2
   surfOvershoot: 1.25
   overspeedDragScale: 0.35
   waveDrift: 1.3
-  swellDrift: 5.5
-  lateralWaveScale: 0.4
-  maxWaveAccel: 4.5
-  driftResponse: 1
   minTurnRate: 15
   maxTurnRate: 38
-  windDirection: {x: 1, y: 0.35}
   steerageWay: 0.15
-  verticalResponse: 10
-  maxSeatError: 0.3
-  angularResponse: 3.6
+  surfGain: 1.6
+  surfResponse: 2.2
+  pitchLimit: 16
+  rollLimit: 20
+  limitSpring: 6
   turnHeel: 8
-  rudderPivot: {fileID: 0}
-  mastPivot: {fileID: 0}
-  rudderVisualAngle: 35
   sinkAtMarkedLine: 0.5
   sinkPerOverload: 0.72
   sinkAtFullBilge: 0.42
-  railHeight: 1.3
-  railHalfBeam: 3.9
   rowSpeed: 9
   headSeaPenalty: 0.45
-  recoilStiffness: 34
-  recoilDamping: 3.4
   sailTrimRate: 0.55
+  knockdownTorquePerDeg: 900
+  rudderPivot: {fileID: 0}
+  mastPivot: {fileID: 0}
+  rudderVisualAngle: 35
 --- !u!114 &2143489883
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2136,7 +2046,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.AnchorController
   dropTime: 0
   weighTime: 0
-  swellAnchorPenalty: 1
   berthDistance: 11
   berthSpeed: 1.6
   approachSpeedLimit: 6.5
@@ -2166,29 +2075,6 @@ MonoBehaviour:
   shotShock: 0.1
   repairRate: 0.05
   timberPerHullPoint: 12
---- !u!114 &2143489890
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2143489876}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 128a5ccd4c92c409fa6d9fc44712fe31, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.HullDisplacement
-  hullHalfLength: 11
-  hullHalfWidth: 4.5
-  troughDepth: 1.25
-  troughFalloff: 12
-  bowOffset: 9
-  bowHeight: 1.5
-  bowWidth: 7
-  wakeHalfAngleDeg: 19.47
-  wakeLength: 110
-  wakeCrestHeight: 0.55
-  wakeArmWidth: 5.5
 --- !u!114 &2143489891
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2360,13 +2246,121 @@ MonoBehaviour:
   mistAlpha: 0.06
   threshold: 0.18
   logDiagnostics: 0
+--- !u!114 &2143489901
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6a8fe8b1703f146539061ae31fc51020, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.BuoyantBody
+  waterDensity: 1025
+  totalVolume: 6.5
+  linearDrag: 28000
+  quadraticDrag: 3000
+  forwardDragFactor: 0.005
+  lateralDragFactor: 0.25
+  angularDragTorque: 30000
+  inertiaBoxDims: {x: 4.4, y: 3, z: 13}
+  centreOfMass: {x: 0, y: -0.6, z: 0}
+--- !u!114 &2143489902
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8ac75f6491ae444f39bd469f6c013461, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.BuoyancyProbeSet
+  probes:
+  - localPosition: {x: 0, y: -1.2, z: 7.875}
+    radius: 1.1
+    volumeShare: 0.1
+    isRail: 0
+  - localPosition: {x: 0, y: -1.2, z: -7.875}
+    radius: 1.1
+    volumeShare: 0.1
+    isRail: 0
+  - localPosition: {x: 1.6800001, y: -0.90000004, z: 3.9375}
+    radius: 1.2
+    volumeShare: 0.12
+    isRail: 0
+  - localPosition: {x: -1.6800001, y: -0.90000004, z: 3.9375}
+    radius: 1.2
+    volumeShare: 0.12
+    isRail: 0
+  - localPosition: {x: 1.6800001, y: -0.90000004, z: -3.9375}
+    radius: 1.2
+    volumeShare: 0.12
+    isRail: 0
+  - localPosition: {x: -1.6800001, y: -0.90000004, z: -3.9375}
+    radius: 1.2
+    volumeShare: 0.12
+    isRail: 0
+  - localPosition: {x: 2.4, y: 1.3, z: 3.0625}
+    radius: 1
+    volumeShare: 0.04
+    isRail: 1
+  - localPosition: {x: -2.4, y: 1.3, z: 3.0625}
+    radius: 1
+    volumeShare: 0.04
+    isRail: 1
+  - localPosition: {x: 2.4, y: 1.3, z: -3.0625}
+    radius: 1
+    volumeShare: 0.04
+    isRail: 1
+  - localPosition: {x: -2.4, y: 1.3, z: -3.0625}
+    radius: 1
+    volumeShare: 0.04
+    isRail: 1
+  - localPosition: {x: 2.16, y: -0.6, z: 0}
+    radius: 1.2
+    volumeShare: 0.1
+    isRail: 0
+  - localPosition: {x: -2.16, y: -0.6, z: 0}
+    radius: 1.2
+    volumeShare: 0.1
+    isRail: 0
+--- !u!54 &2143489903
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143489876}
+  serializedVersion: 5
+  m_Mass: 4000
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 1
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 2086288692}
   - {fileID: 1658063631}
-  - {fileID: 1412075588}
   - {fileID: 2143489875}
   - {fileID: 1901280689}
   - {fileID: 38900269}
@@ -2374,3 +2368,4 @@ SceneRoots:
   - {fileID: 355815509}
   - {fileID: 69521651}
   - {fileID: 330744239}
+  - {fileID: 1016993466}

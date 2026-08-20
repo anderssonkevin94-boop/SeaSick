@@ -1,4 +1,4 @@
-using SeaSick.Ocean2;
+using SeaSick.Ocean;
 using SeaSick.Ship;
 using UnityEngine;
 

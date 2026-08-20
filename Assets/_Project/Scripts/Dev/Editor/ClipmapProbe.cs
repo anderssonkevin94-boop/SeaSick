@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Text;
 using UnityEngine;
-using SeaSick.Ocean2;
+using SeaSick.Ocean;
 
 /// Clipmap acceptance: (a) vertex swim — with OceanTime frozen, re-anchoring
 /// every ring must not change the rendered surface except in the thin bands

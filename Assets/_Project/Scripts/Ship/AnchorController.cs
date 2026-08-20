@@ -165,9 +165,11 @@ namespace SeaSick.Ship
             float shore = CurrentIsland.RadiusAt(bearing);
 
             Vector3 berth = c + out2.normalized * (shore + berthDistance);
-            Vector3 pos = transform.position;
-            berth.y = pos.y;
-            transform.position = Vector3.Lerp(pos, berth, 1f - Mathf.Exp(-berthSpeed * dt));
+            berth.y = motor.AnchorPoint.y;
+            // Walk the anchor spring's target rather than the transform: the
+            // rigidbody does the moving, so berthing can't fight the physics.
+            motor.AnchorPoint = Vector3.Lerp(motor.AnchorPoint, berth,
+                1f - Mathf.Exp(-berthSpeed * dt));
 
             if (gangway != null) gangway.Extend(CurrentIsland);
         }

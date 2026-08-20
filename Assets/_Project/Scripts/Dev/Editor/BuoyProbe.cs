@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Text;
 using UnityEngine;
-using SeaSick.Ocean2;
+using SeaSick.Ocean;
 
 /// Buoyancy acceptance on the lab proxy sloop:
 /// (a) 60 s free-float in a storm: no capsize (roll under 45 deg), rails under

@@ -95,20 +95,16 @@ public static class SetupStormSky
         // --- StormSpray ------------------------------------------------------
         if (motor != null)
         {
-            var spray = motor.GetComponent<SeaSick.Ocean2.StormSpray>();
-            if (spray == null) spray = motor.gameObject.AddComponent<SeaSick.Ocean2.StormSpray>();
+            var spray = motor.GetComponent<SeaSick.Ocean.StormSpray>();
+            if (spray == null) spray = motor.gameObject.AddComponent<SeaSick.Ocean.StormSpray>();
             SceneDefaults.ResetToCodeDefaults(spray);
         }
 
         // --- Hull seating ----------------------------------------------------
         if (motor != null)
         {
-            // Targeted, not a reset: ShipMotor is full of hand-tuned scene
-            // values that must survive.
-            var mso = new SerializedObject(motor);
-            SetFloat(mso, "verticalResponse", 10f);
-            SetFloat(mso, "maxSeatError", 0.3f);
-            mso.ApplyModifiedPropertiesWithoutUndo();
+            // (The old kinematic seating pushes are gone with the fields —
+            // the rigidbody hull has no verticalResponse/maxSeatError.)
         }
 
         // --- SpeedJuice gained a field ---------------------------------------

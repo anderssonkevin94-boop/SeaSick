@@ -2,7 +2,7 @@ using System.Text;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
-using SeaSick.Ocean2;
+using SeaSick.Ocean;
 
 /// Validates the GPU ocean against oceanography, not against itself: for the
 /// three canonical (wind, fetch) triples it measures significant wave height

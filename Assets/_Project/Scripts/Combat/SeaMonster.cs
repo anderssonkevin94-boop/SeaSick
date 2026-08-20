@@ -176,9 +176,9 @@ namespace SeaSick.Combat
 
             // Ride the surface. Sample on demand — the ocean may not have been
             // ready when this spawned.
-            if (Ocean2.OceanSampler.Ready)
+            if (Ocean.OceanSampler.Ready)
             {
-                float surface = Ocean2.OceanSampler.SampleImmediate(transform.position).height;
+                float surface = Ocean.OceanSampler.SampleImmediate(transform.position).height;
                 restY = Mathf.Lerp(restY, surface, 1f - Mathf.Exp(-6f * Time.deltaTime));
             }
 
@@ -203,7 +203,7 @@ namespace SeaSick.Combat
                 body.localRotation = Quaternion.Euler(lash * 9f, lash * 14f, lash * 11f);
 
                 // A hurt beast thrashes: the water around it shows it.
-                var sim = Ocean2.DynamicWaterSim.Instance;
+                var sim = Ocean.DynamicWaterSim.Instance;
                 if (sim != null)
                 {
                     float agitation = 0.10f + writhe * 1.4f;
@@ -270,7 +270,7 @@ namespace SeaSick.Combat
         {
             diedAt = Time.time;
             HitTargets.Unregister(this);
-            Ocean2.DynamicWaterSim.Splash(transform.position, 16f, 2.4f);
+            Ocean.DynamicWaterSim.Splash(transform.position, 16f, 2.4f);
         }
 
         /// A puff of dark spray where the shot went in.

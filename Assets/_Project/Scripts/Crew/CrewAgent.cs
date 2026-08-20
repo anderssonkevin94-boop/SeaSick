@@ -501,8 +501,8 @@ namespace SeaSick.Crew
                     flat.y = 0f;
                     if (flat.magnitude > isle.Radius)
                     {
-                        if (Ocean2.OceanSampler.Ready)
-                            y = Ocean2.OceanSampler.SampleImmediate(next).height + 0.35f;
+                        if (Ocean.OceanSampler.Ready)
+                            y = Ocean.OceanSampler.SampleImmediate(next).height + 0.35f;
                     }
                 }
             }
