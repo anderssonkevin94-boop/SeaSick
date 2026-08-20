@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: edb0f6f620b894663a44b848fcf850d2, type: 3}
+  m_Name: OceanQuality_Mobile
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean2.OceanQuality
+  fftSize: 128
+  patchSizes:
+  - 512
+  - 128
+  - 32
+  clipmapRings: 5
+  innerCellSize: 0.5
+  displacementFadeDistance: 350
+  intersectionFoam: 1
+  rippleSimResolution: 256
+  rippleSimExtent: 60
+  readbackCascades: 2
