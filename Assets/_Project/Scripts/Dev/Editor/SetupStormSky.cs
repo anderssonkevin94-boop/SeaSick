@@ -55,7 +55,7 @@ public static class SetupStormSky
 
         var dir = skyGo.GetComponent<SeaSick.World.SkyDirector>();
         if (dir == null) dir = skyGo.AddComponent<SeaSick.World.SkyDirector>();
-        ResetToCodeDefaults(dir);
+        SceneDefaults.ResetToCodeDefaults(dir);
 
         var motor = Object.FindAnyObjectByType<SeaSick.Ship.ShipMotor>();
         Light sun = null;
@@ -72,7 +72,7 @@ public static class SetupStormSky
         {
             var spray = motor.GetComponent<SeaSick.Ocean.StormSpray>();
             if (spray == null) spray = motor.gameObject.AddComponent<SeaSick.Ocean.StormSpray>();
-            ResetToCodeDefaults(spray);
+            SceneDefaults.ResetToCodeDefaults(spray);
         }
 
         // --- ChaseCamera picked up new fields --------------------------------
@@ -108,31 +108,4 @@ public static class SetupStormSky
         else Debug.LogWarning($"SetupStormSky: no property '{path}'");
     }
 
-    /// Copy every serialised value from a freshly constructed instance of the
-    /// same type — i.e. the C# field initialisers — over the scene component.
-    /// Object references are left alone so wiring survives.
-    static void ResetToCodeDefaults(Component target)
-    {
-        var temp = new GameObject("~defaults") { hideFlags = HideFlags.HideAndDontSave };
-        try
-        {
-            var fresh = temp.AddComponent(target.GetType());
-            var src = new SerializedObject(fresh);
-            var dst = new SerializedObject(target);
-            var it = src.GetIterator();
-            bool enter = true;
-            while (it.NextVisible(enter))
-            {
-                enter = false;
-                if (it.propertyPath == "m_Script") continue;
-                if (it.propertyType == SerializedPropertyType.ObjectReference) continue;
-                dst.CopyFromSerializedProperty(it);
-            }
-            dst.ApplyModifiedPropertiesWithoutUndo();
-        }
-        finally
-        {
-            Object.DestroyImmediate(temp);
-        }
-    }
 }

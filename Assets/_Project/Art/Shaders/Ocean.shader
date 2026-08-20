@@ -79,6 +79,12 @@ Shader "SeaSick/Ocean"
             float4 _SS_Waves[MAX_WAVES];
             int    _SS_WaveCount;
 
+            // Horizontal-displacement scale, from WaveField.choppiness. Gerstner's
+            // sharp crest comes from the horizontal term pinching the tops
+            // together; scaling it rounds them without changing wave height.
+            // MUST match WaveField.Displace and JacobianAt.
+            float _SS_Chop;
+
             // Swell front: xy = direction * k, z = amplitude, w = phase offset.
             float4 _SS_Swell;
             // xy = front centre, zw = travel direction.
@@ -290,7 +296,7 @@ Shader "SeaSick/Ocean"
                     float ph = dot(w.xy, p) + w.w;
                     float s, c;
                     sincos(ph, s, c);
-                    d.xz += dir * (amp * c);
+                    d.xz += dir * (amp * c * _SS_Chop);
                     d.y  += amp * s;
                 }
 
@@ -310,7 +316,7 @@ Shader "SeaSick/Ocean"
                             float s, c;
                             sincos(ph, s, c);
                             float amp = _SS_Swell.z * env;
-                            d.xz += dir * (amp * c);
+                            d.xz += dir * (amp * c * _SS_Chop);
                             d.y  += amp * s;
                         }
                     }
@@ -344,7 +350,7 @@ Shader "SeaSick/Ocean"
                     float amp = (i >= (int)_SS_StormStart) ? w.z * storm : w.z;
                     if (abs(amp) < 1e-6) continue;
                     float2 dir = w.xy / k;
-                    float sn = sin(dot(w.xy, p) + w.w) * amp * k * shore;
+                    float sn = sin(dot(w.xy, p) + w.w) * amp * k * shore * _SS_Chop;
                     // dir is a float2: .x is world x, .y is world z.
                     jxx -= dir.x * dir.x * sn;
                     jzz -= dir.y * dir.y * sn;

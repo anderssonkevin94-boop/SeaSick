@@ -26,19 +26,62 @@ namespace SeaSick.Ocean
         const float Gravity = 9.81f;
 
         [Header("Spectrum")]
-        [SerializeField] int waveCount = 10;
-        // Shorter peak wavelength relative to a 21m hull: on 75m swell the ship
-        // barely moved and sat ON the sea like a toy. Around 45m it rides
-        // through the waves instead of over them.
-        [Tooltip("Drives the peak wavelength — bigger wind, longer swell.")]
-        [SerializeField] float windSpeed = 8.5f;
+        [SerializeField] int waveCount = 14;
         [SerializeField] Vector2 windDirection = new Vector2(1f, 0.22f);
         [SerializeField] float minWavelength = 9f;
         [SerializeField] float maxWavelength = 190f;
-        [Tooltip("Total steepness shared across the spectrum. The look dial.")]
-        [SerializeField] float totalSteepness = 0.46f;
-        [Tooltip("Width of the energy peak in log-wavelength space.")]
-        [SerializeField] float spectrumWidth = 0.62f;
+
+        // How big the sea is, in metres of amplitude, at sea state 1 before the
+        // region scale. This replaced a `totalSteepness` dial, which conflated
+        // two things that need separating: how TALL the sea is and how SHARP
+        // it is. Amplitude is the honest size control; steepness now falls out
+        // of the shape below.
+        [Tooltip("Total base amplitude in metres at sea state 1.")]
+        [SerializeField] float baseAmplitude = 3.9f;
+
+        // "The larger a wave, the wider it needs to be."
+        //
+        // In Gerstner that is one identity: amplitude = steepness x wavelength
+        // / 2pi. So if amplitude rises in PROPORTION to wavelength — ampPower 1
+        // — every wave in the set carries the same steepness, and a tall crest
+        // can only ever be a long one.
+        //
+        // The old spectrum did the opposite: it weighted steepness by a
+        // log-normal energy curve around a 45m peak, which decoupled amplitude
+        // from wavelength entirely. MEASURED before the change: the tallest
+        // base wave was 71m and the 170m wave was the SMALLEST in the set at
+        // 0.17m, so mid-length waves came out proportionally the tallest —
+        // exactly the narrow spike the eye picks out.
+        [Tooltip("Amplitude ~ wavelength^this. 1 = every wave equally steep.")]
+        [Range(0.4f, 1.6f)] [SerializeField] float ampPower = 1f;
+        [Tooltip("Per-wave amplitude scatter, so the spectrum is not a ramp.")]
+        [Range(0f, 0.6f)] [SerializeField] float ampJitter = 0.22f;
+
+        // Directional spread, shortest wave .. longest wave.
+        //
+        // The old spreading was peakL/wavelength, which pinned the LONG waves —
+        // the ones that carry the sea's shape — to within about +/-9 degrees of
+        // the wind. Measured: the four longest base waves ran at -1, 4, 11 and
+        // -1 degrees off it. A sea built that way is a set of rows by
+        // construction, and only the storm's cross trains ever broke it up
+        // (row-ness 0.76 inside the storm against 0.35 just outside it).
+        //
+        // There is no longer any reason for it. Wind stopped being physics in
+        // 3fd9309 and is weather flavour now; nothing in the gameplay reads the
+        // spectrum's directions. So the arc opens right out.
+        [Tooltip("Half-arc in degrees for the shortest waves.")]
+        [SerializeField] float shortSpreadDegrees = 125f;
+        [Tooltip("Half-arc in degrees for the longest waves. This is the " +
+                 "row-ness dial: small values put the big waves back in rows.")]
+        [SerializeField] float longSpreadDegrees = 80f;
+
+        // Gerstner's sharp crest comes from the HORIZONTAL part of the
+        // displacement pinching the tops together. Scaling it down rounds the
+        // crests without touching wave height at all, which is the one control
+        // that separates "sharp" from "big".
+        [Tooltip("Horizontal displacement scale. 1 = full Gerstner cusping, " +
+                 "lower = rounder tops at the same wave height.")]
+        [Range(0.15f, 1f)] [SerializeField] float choppiness = 0.72f;
 
         [Header("Storm sea (the western deep)")]
         // A storm sea is not a bigger wind sea — it is several trains
@@ -52,12 +95,25 @@ namespace SeaSick.Ocean
         // by construction. These cross trains are the fix.
         [Tooltip("Extra wave trains crossing the wind sea. 0 disables the storm.")]
         [SerializeField] int stormWaveCount = 6;
-        [Tooltip("How far off the wind the cross seas run, in degrees.")]
-        [SerializeField] Vector2 stormCrossAngles = new Vector2(58f, 124f);
+        // These used to be pinned to a 58-124 degree band off the wind,
+        // because their job was to CROSS a base spectrum that ran in rows. The
+        // base spectrum no longer runs in rows, so a band of six big waves all
+        // travelling within 60 degrees of one bearing just becomes the new
+        // dominant axis: measured row-ness 1.87 in the storm against 1.09 on
+        // the home shelf, from the same spectrum plus these. They now spread
+        // like everything else, and cross each other by covering the fan
+        // rather than by being aimed across it.
+        [Tooltip("Half-arc in degrees for the storm trains.")]
+        [SerializeField] float stormSpreadDegrees = 140f;
         [Tooltip("Wavelength band for the cross trains — long, so they build real peaks.")]
         [SerializeField] Vector2 stormWavelengths = new Vector2(70f, 260f);
-        [Tooltip("Total steepness of the cross seas at full storm.")]
-        [SerializeField] float stormSteepness = 0.42f;
+        // Specified in metres for the same reason the base spectrum is: with
+        // steepness as the dial, the sea's SIZE depended on the wavelength
+        // lottery. Changing the number of random draws in the base loop
+        // silently shrank the storm from 12.7m of amplitude to 9.9m — a 22%
+        // smaller storm, from a change that had nothing to do with the storm.
+        [Tooltip("Total amplitude of the cross seas at full storm, in metres.")]
+        [SerializeField] float stormAmplitude = 12.7f;
 
         [Header("Where the storm lives")]
         [Tooltip("Direction the storm lies in, from home. Default is due west.")]
@@ -151,6 +207,7 @@ namespace SeaSick.Ocean
         static readonly int SeaRegionScaleId = Shader.PropertyToID("_SS_SeaRegionScale");
         static readonly int StormId = Shader.PropertyToID("_SS_Storm");
         static readonly int StormStartId = Shader.PropertyToID("_SS_StormStart");
+        static readonly int ChopId = Shader.PropertyToID("_SS_Chop");
         static readonly int WaveCountId = Shader.PropertyToID("_SS_WaveCount");
         static readonly int SwellId = Shader.PropertyToID("_SS_Swell");
         static readonly int SwellFrontId = Shader.PropertyToID("_SS_SwellFront");
@@ -186,6 +243,7 @@ namespace SeaSick.Ocean
                 ? Vector2.left : stormBearing.normalized;
             Shader.SetGlobalVector(StormId, new Vector4(sdir.x, sdir.y, stormNear, stormFar));
             Shader.SetGlobalFloat(StormStartId, stormWaveCount > 0 ? stormStart : 9999);
+            Shader.SetGlobalFloat(ChopId, choppiness);
             Shader.SetGlobalInt(WaveCountId, count);
 
             // Shore falloff data, so the shader kills the same waves the
@@ -221,6 +279,40 @@ namespace SeaSick.Ocean
             }
         }
 
+        /// Hands out direction strata in mirrored pairs, biggest wave first.
+        ///
+        /// Dividing the arc into strata and using each exactly once beats
+        /// random draws, which cluster and leave holes. But coverage alone is
+        /// not enough: amplitude rises with wavelength, so the few longest
+        /// waves decide what the sea looks like, and a plain shuffle that puts
+        /// three of the four longest on one side simply rebuilds rows on a new
+        /// bearing. Pairing the biggest waves into mirrored strata makes the
+        /// dominant components cancel each other's bearing by construction,
+        /// while WHICH pair each takes stays random so the fan never repeats.
+        ///
+        /// Expects `count` waves ordered smallest to largest.
+        static int[] BalancedStrata(int count, System.Random rnd)
+        {
+            var strata = new int[count];
+            int halves = count / 2;
+            var pairs = new int[Mathf.Max(1, halves)];
+            for (int i = 0; i < halves; i++) pairs[i] = i;
+            for (int i = halves - 1; i > 0; i--)
+            {
+                int j = rnd.Next(i + 1);
+                (pairs[i], pairs[j]) = (pairs[j], pairs[i]);
+            }
+            int cursor = 0;
+            for (int a = count - 1; a >= 0; a -= 2)
+            {
+                if (a - 1 < 0) { strata[a] = count / 2; break; }   // odd one out: centre
+                int pair = pairs[cursor++ % Mathf.Max(1, halves)];
+                strata[a] = pair;
+                strata[a - 1] = count - 1 - pair;
+            }
+            return strata;
+        }
+
         void BuildSpectrum()
         {
             int baseCount = Mathf.Max(1, waveCount);
@@ -228,14 +320,14 @@ namespace SeaSick.Ocean
             waves = new GerstnerWave[baseCount + storm];
             stormStart = baseCount;
             var rnd = new System.Random(seed);
-
-            // Peak wavelength of a wind-driven sea, roughly 0.6 v² (metres).
-            float peakL = Mathf.Clamp(0.62f * windSpeed * windSpeed,
-                minWavelength * 2f, maxWavelength * 0.85f);
             float baseAngle = Mathf.Atan2(windDirection.x, windDirection.y);
 
-            var energies = new float[waves.Length];
-            float energySum = 0f;
+            // Wavelength rises with index, so the array is already ordered
+            // smallest to largest — exactly what BalancedStrata expects.
+            var strata = BalancedStrata(baseCount, rnd);
+
+            var shape = new float[baseCount];
+            float shapeSum = 0f;
 
             for (int i = 0; i < baseCount; i++)
             {
@@ -243,19 +335,16 @@ namespace SeaSick.Ocean
                 float wavelength = Mathf.Exp(Mathf.Lerp(
                     Mathf.Log(minWavelength), Mathf.Log(maxWavelength), t));
 
-                // Energy peaks at the spectral peak and falls off either side.
-                float logRatio = Mathf.Log(wavelength / peakL);
-                float energy = Mathf.Exp(-(logRatio * logRatio) / (2f * spectrumWidth * spectrumWidth));
-                energies[i] = energy;
-                energySum += energy;
+                // Amplitude rises with wavelength: bigger IS wider, by
+                // construction rather than by tuning.
+                float jitter = 1f + ((float)rnd.NextDouble() * 2f - 1f) * ampJitter;
+                shape[i] = Mathf.Pow(wavelength, ampPower) * Mathf.Max(0.1f, jitter);
+                shapeSum += shape[i];
 
-                // Directional spreading: short waves fan out, long swell stays
-                // tight to the wind. This is why a real sea never looks like
-                // one marching set of rollers.
-                float spread = Mathf.Clamp(peakL / wavelength, 0.3f, 3.2f);
-                float offset = ((float)rnd.NextDouble() * 2f - 1f) * 0.5f * spread;
-                offset = Mathf.Clamp(offset, -1.35f, 1.35f);
-                float angle = baseAngle + offset;
+                float arc = Mathf.Lerp(shortSpreadDegrees, longSpreadDegrees, t) * Mathf.Deg2Rad;
+                float frac = (strata[i] + 0.5f) / baseCount * 2f - 1f;          // -1 .. +1
+                frac += ((float)rnd.NextDouble() * 2f - 1f) / baseCount;         // within the stratum
+                float angle = baseAngle + Mathf.Clamp(frac, -1f, 1f) * arc;
 
                 waves[i] = new GerstnerWave
                 {
@@ -265,33 +354,56 @@ namespace SeaSick.Ocean
                 };
             }
 
-            if (energySum <= 0f) energySum = 1f;
+            // Steepness is derived, never dialled: amp = steepness x L / 2pi,
+            // so steepness = amp x k. With ampPower 1 this comes out the same
+            // for every wave in the set.
+            if (shapeSum <= 0f) shapeSum = 1f;
             for (int i = 0; i < baseCount; i++)
-                waves[i].steepness = totalSteepness * energies[i] / energySum;
+            {
+                float amp = baseAmplitude * shape[i] / shapeSum;
+                waves[i].steepness = amp * (2f * Mathf.PI / waves[i].wavelength);
+            }
 
-            // The cross seas. Long, steep, and running at big angles to the
-            // wind — including some near-opposing, which is what produces the
-            // standing pyramids and sudden holes of a real storm.
+            // The storm trains: long, big, and spread right around the fan so
+            // that where they add you get a standing pyramid and where they
+            // cancel you get a hole. That interference is what stops a heavy
+            // sea reading as a corrugated roof — but it comes from the trains
+            // disagreeing with EACH OTHER, which a wide spread gives, not from
+            // aiming them all across one bearing.
+            var stormL = new float[storm];
+            for (int i = 0; i < storm; i++)
+                stormL[i] = Mathf.Lerp(stormWavelengths.x, stormWavelengths.y,
+                    (float)rnd.NextDouble());
+            // BalancedStrata pairs off the biggest first, so it needs them in
+            // size order; the draws above are not.
+            System.Array.Sort(stormL);
+            var stormStrata = BalancedStrata(storm, rnd);
+
+            float stormShapeSum = 0f;
             for (int i = 0; i < storm; i++)
             {
-                float t = storm > 1 ? i / (float)(storm - 1) : 0.5f;
-                float deg = Mathf.Lerp(stormCrossAngles.x, stormCrossAngles.y, t);
-                // Alternate sides so the trains genuinely cross each other
-                // rather than all fanning the same way.
-                if (i % 2 == 1) deg = -deg;
-                deg += ((float)rnd.NextDouble() * 2f - 1f) * 9f;
-
-                float angle = baseAngle + deg * Mathf.Deg2Rad;
-                float wavelength = Mathf.Lerp(stormWavelengths.x, stormWavelengths.y,
-                    (float)rnd.NextDouble());
+                float frac = (stormStrata[i] + 0.5f) / storm * 2f - 1f;          // -1 .. +1
+                frac += ((float)rnd.NextDouble() * 2f - 1f) / storm;              // within the stratum
+                float angle = baseAngle
+                            + Mathf.Clamp(frac, -1f, 1f) * stormSpreadDegrees * Mathf.Deg2Rad;
 
                 waves[baseCount + i] = new GerstnerWave
                 {
                     direction = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle)),
-                    wavelength = wavelength,
+                    wavelength = stormL[i],
                     phase = (float)rnd.NextDouble() * Mathf.PI * 2f,
-                    steepness = stormSteepness / Mathf.Max(1, storm),
                 };
+                stormShapeSum += Mathf.Pow(stormL[i], ampPower);
+            }
+
+            // Same rule as the base spectrum: bigger is wider, and the total
+            // size is fixed in metres so the wavelength draw cannot change it.
+            if (stormShapeSum <= 0f) stormShapeSum = 1f;
+            for (int i = 0; i < storm; i++)
+            {
+                int w = baseCount + i;
+                float amp = stormAmplitude * Mathf.Pow(waves[w].wavelength, ampPower) / stormShapeSum;
+                waves[w].steepness = amp * (2f * Mathf.PI / waves[w].wavelength);
             }
         }
 
@@ -464,7 +576,8 @@ namespace SeaSick.Ocean
                 float amp = i >= stormStart ? c.amp * storm : c.amp;
                 if (amp == 0f) continue;
                 float k = Mathf.Sqrt(c.kx * c.kx + c.kz * c.kz);
-                float sn = Mathf.Sin(c.kx * p.x + c.kz * p.y + c.phaseOffset) * amp * k * shore;
+                float sn = Mathf.Sin(c.kx * p.x + c.kz * p.y + c.phaseOffset)
+                           * amp * k * shore * choppiness;
                 jxx -= c.dirX * c.dirX * sn;
                 jzz -= c.dirZ * c.dirZ * sn;
                 jxz -= c.dirX * c.dirZ * sn;
@@ -487,7 +600,7 @@ namespace SeaSick.Ocean
                 if (amp == 0f) continue;
                 float ph = c.kx * x + c.kz * z + c.phaseOffset;
                 float cos = Mathf.Cos(ph);
-                float ampCos = amp * cos;
+                float ampCos = amp * cos * choppiness;
                 dx += c.dirX * ampCos;
                 dz += c.dirZ * ampCos;
                 dy += amp * Mathf.Sin(ph);
@@ -501,7 +614,7 @@ namespace SeaSick.Ocean
                 float amplitude = (swellSteepness * env) / k;
                 float omega = Mathf.Sqrt(Gravity * k);
                 float ph = k * Vector2.Dot(swellDir, restPos) - omega * time;
-                float cos = Mathf.Cos(ph);
+                float cos = Mathf.Cos(ph) * choppiness;
                 d.x += swellDir.x * amplitude * cos;
                 d.z += swellDir.y * amplitude * cos;
                 d.y += amplitude * Mathf.Sin(ph);

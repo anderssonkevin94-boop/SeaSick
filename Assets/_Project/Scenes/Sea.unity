@@ -1070,16 +1070,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WaveField
   waveCount: 14
-  windSpeed: 8.5
   windDirection: {x: 1, y: 0.22}
   minWavelength: 9
   maxWavelength: 190
-  totalSteepness: 0.46
-  spectrumWidth: 0.62
+  baseAmplitude: 3.9
+  ampPower: 1
+  ampJitter: 0.22
+  shortSpreadDegrees: 125
+  longSpreadDegrees: 80
+  choppiness: 0.72
   stormWaveCount: 6
-  stormCrossAngles: {x: 58, y: 124}
+  stormSpreadDegrees: 140
   stormWavelengths: {x: 70, y: 260}
-  stormSteepness: 0.42
+  stormAmplitude: 12.7
   stormBearing: {x: -1, y: 0}
   stormNear: 450
   stormFar: 1250
