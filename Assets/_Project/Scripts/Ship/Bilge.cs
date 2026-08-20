@@ -112,9 +112,11 @@ namespace SeaSick.Ship
             if (!Flooding && !overloaded) return;
 
             int u = UITheme.Unit;
-            float w = u * 11f;
+            float w = u * 15f;
             float x = (Screen.width - w) * 0.5f;
-            float y = Screen.height * 0.235f;
+            // Low and central: in the thumb's reach on a portrait phone, and
+            // out of the middle of the sea where it was sitting on the horizon.
+            float y = Screen.height * 0.60f;
 
             if (Flooding)
             {
@@ -129,10 +131,10 @@ namespace SeaSick.Ship
 
             if (voyage != null && voyage.TotalHeld > 0)
             {
-                var btn = new Rect(x + u * 1.5f, y, w - u * 3f, u * 1.9f);
+                var btn = new Rect(x + u * 0.5f, y, w - u * 1f, u * 2.1f);
                 UIBlocker.Block(btn);
                 var style = new GUIStyle(UITheme.Button);
-                if (GUI.Button(btn, $"cargo over the side  ({jettisonPerTap})", style))
+                if (GUI.Button(btn, $"over the side  ·  {jettisonPerTap}", style))
                     voyage.Jettison(jettisonPerTap);
             }
         }

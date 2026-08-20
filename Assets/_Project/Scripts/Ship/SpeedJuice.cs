@@ -29,10 +29,17 @@ namespace SeaSick.Ship
         float lastBeamImpact = -99f;
         float lastSlam = -99f;
         float prevSurf;
+        Transform emitterRoot;
 
         void Start()
         {
             motor = GetComponent<ShipMotor>();
+
+            // Every emitter hangs off this rather than off the hull directly,
+            // so the whole rig can be held at the waterline as she settles.
+            var rootGo = new GameObject("FoamEmitters");
+            rootGo.transform.SetParent(transform, false);
+            emitterRoot = rootGo.transform;
 
             // Solid, lit foam. Translucent billboards read as grey squares over
             // dark water; opaque chunks that catch the sun read as real spray
@@ -88,7 +95,7 @@ namespace SeaSick.Ship
             bool solidFoam)
         {
             var go = new GameObject(name);
-            go.transform.SetParent(transform, false);
+            go.transform.SetParent(emitterRoot != null ? emitterRoot : transform, false);
             go.transform.localPosition = localPos;
             go.transform.localRotation = Quaternion.Euler(-15f, 0f, 0f);
 
@@ -141,8 +148,22 @@ namespace SeaSick.Ship
             return ps;
         }
 
+        /// Every emitter is pinned at a fixed height on the hull, which was
+        /// fine while the hull always floated at the same depth. Cargo sinks
+        /// her up to ~0.9m now, which dragged the foam emitters under the
+        /// surface — a loaded ship grew a flat grey sheet through her waist.
+        /// Lift the whole rig by however far she has settled.
+        void HoldAtWaterline()
+        {
+            if (emitterRoot == null) return;
+            float sink = motor != null ? motor.SinkDepth : 0f;
+            var p = emitterRoot.localPosition;
+            emitterRoot.localPosition = new Vector3(p.x, sink, p.z);
+        }
+
         void Update()
         {
+            HoldAtWaterline();
             float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
             // Spray kicks in hard when the bow drops onto a wave face.
             float slam = Mathf.Clamp01(-motor.SurfAccel / 2.5f);

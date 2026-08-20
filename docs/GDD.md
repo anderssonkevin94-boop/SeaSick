@@ -38,6 +38,12 @@ Archipelago seen from the home island outward; farther islands = richer resource
 
 **The premise:** the home island has **never sailed**. Everything they know about the sea is folklore and rumour — waves the size of mountains, creatures nobody can picture, islands with stone people and mushroom trees that contradict their idea of what is real. The player goes and finds out which parts are true. Crew who come back are **heroes**, and the stories of what they survived are the reward the village actually cares about.
 
+**Regions are a compass as well as a ring.** Distance sets *how dangerous*; direction sets *what kind*. North is cold, south is hot, east is dry, west is open ocean with scattered islands. The compass carries the cardinals for exactly this reason — "which way am I pointing" is the same question as "what am I sailing into".
+
+**Mountain seas (planned).** Out west: waves on the order of 100m tall and 30m thick. These are **not waves in the wave field** — Gerstner breaks long before that steepness, and at five times the ship's length tall and narrower than it is high, it is a moving cliff rather than water you ride. They are a separate moving obstacle with their own rules: they roam like a storm system so they can creep up on you or be avoided, they **maul rather than kill**, and the way to survive one is to **meet it bow-on** — taking it on the beam rolls you. `SwellDirector` is the working prototype for the roaming/avoidable half.
+
+**HUD rule: no full-width banners, ever.** A band of colour across the middle of the world is the most immersion-breaking thing a HUD can do. `UITheme.Banner` was deleted outright. Warnings live on the instruments the player is already reading, or on the world itself.
+
 **Art direction:** low poly, stylized, warm and comedic. Body language over facial animation. Sickness reads at gameplay distance: skin tint shifts toward green, posture sags, walk becomes a stagger.
 
 ## 6. Key systems
@@ -101,6 +107,13 @@ _Append-only._
 - 2026-08-17 — Roster with persistent villagers/traits/breeding planned post-MVP; crew modeled as data (ScriptableObjects) from day one to allow it.
 - 2026-08-17 — Development order: sailing first, work backward to base.
 - 2026-08-17 — Device target: iPhone (iOS first). Default orientation set to Portrait.
+- 2026-08-19 — **Compass, speed, and the end of banner UI.**
+  - Reported as: *"no ui as banner modes across the screen it breaks immersion."* `UITheme.Banner` was **deleted outright** so nothing can reach for it again. The crew-bailing banner was simply redundant (the pips, the water panel and five people visibly leaving the guns already say it); the swell warning became a small plate tucked under the compass.
+  - **The bearing tape became a real compass**, carrying N/NE/E/SE/S/SW/W/NW. This is load-bearing now that the world is laid out by direction — "which way am I pointing" is the same question as "what am I sailing into".
+  - **Speed added** to the bottom-left cluster, and an overloaded hold reads `26/24+` rather than a number past the line.
+  - **Three passes to get the compass legible**, each caught by screenshotting the HUD rather than reasoning about it: graduations were running through the letters; then the full-height bow marker sat on whichever cardinal was dead ahead, and the home pip on whichever was abeam; and the slow-arc shading filled the tape as a grey slab. Fixed by construction rather than by tuning fractions — **ticks and pips live in the lower half only, the bow marker became a lubber line *below* the bar, and the slow arc became an underline.** Nothing can cross a letter now regardless of screen size.
+  - **`ScreenCapture.CaptureScreenshot` is the only way to review this**: rendering a camera to a RenderTexture omits IMGUI entirely, and `capture_scene_object` shoots the scene view. `HudShot` in `Dev/Editor` does the warp, load and capture.
+  - Caveat: the editor Game view was **landscape** while the target is portrait, and `UITheme.Unit` scales off the short edge — so some cramping in these shots is an aspect artifact, not a layout bug. Worth a portrait pass on device.
 - 2026-08-19 — **Wind removed as physics; the sea itself became the only thing a heading argues with.**
   - Reported as: wind *"punishes the player for wanting to explore… basically impossible to go in different directions without getting hard stuck."*
   - **The polar was not the culprit** — its floor was already 0.55, so dead upwind was slow, never a wall. The real problem was **multiplicative stacking**: `polar × wind strength × cargo × hull damage` put an upwind leg in light air with a full hold at roughly a quarter of top speed, while the UI shouted `IN IRONS`, painted a red no-go band on the nav tape and turned the wind arrow red — **the game told the player they were stuck at the exact moment they were merely slow.** Fourth instance of the standing lesson that Kevin's feel complaints are rarely the system he names; this time the honest answer was still to remove it, because he'd hit it twice across sessions.

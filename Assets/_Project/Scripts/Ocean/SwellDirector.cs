@@ -82,18 +82,25 @@ namespace SeaSick.Ocean
             if (!field.SwellActive || ship == null) return;
 
             bool inside = ShipIntensity > 0.15f;
+            if (!inside && SecondsToImpact <= 0f) return;
+
             var shelter = Island.Nearest(ship.transform.position);
             string shelterText = shelter != null
-                ? $"nearest shelter {Island.FlatDistance(ship.transform.position, shelter.transform.position):F0} m"
-                : "no shelter in range";
+                ? $"shelter {Island.FlatDistance(ship.transform.position, shelter.transform.position):F0} m"
+                : "no shelter";
+            string head = inside ? "in the swell" : $"swell  {SecondsToImpact:F0}s";
 
-            // Sits below the navigation tape, which owns the top of the screen.
-            if (inside)
-                SeaSick.UI.UITheme.Banner(0.20f, "CAUGHT IN THE SWELL",
-                    new Color(0.62f, 0.08f, 0.06f, 0.80f), shelterText);
-            else if (SecondsToImpact > 0f)
-                SeaSick.UI.UITheme.Banner(0.20f, $"BIG SWELL  ·  {SecondsToImpact:F0}s",
-                    new Color(0.80f, 0.46f, 0.06f, 0.72f), shelterText);
+            // A small plate tucked under the compass, not a band across the
+            // world. You read it the way you read the rest of the instruments.
+            int u = SeaSick.UI.UITheme.Unit;
+            float w = u * 11f;
+            float x = (Screen.width - w) * 0.5f;
+            float y = u * 5.2f;
+            SeaSick.UI.UITheme.Rect(new Rect(x, y, w, u * 3.1f), SeaSick.UI.UITheme.PanelSolid);
+            SeaSick.UI.UITheme.Rect(new Rect(x, y, w, 2f),
+                inside ? SeaSick.UI.UITheme.Bad : SeaSick.UI.UITheme.Warn);
+            GUI.Label(new Rect(x, y + u * 0.25f, w, u * 1.5f), head, SeaSick.UI.UITheme.Small2Centered);
+            GUI.Label(new Rect(x, y + u * 1.6f, w, u * 1.4f), shelterText, SeaSick.UI.UITheme.Small);
         }
     }
 }

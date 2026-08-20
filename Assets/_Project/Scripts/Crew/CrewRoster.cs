@@ -1,4 +1,3 @@
-using SeaSick.UI;
 using UnityEngine;
 
 namespace SeaSick.Crew
@@ -145,23 +144,8 @@ namespace SeaSick.Crew
             return c != null && c.Available;
         }
 
-        void OnGUI()
-        {
-            // One slim line, and only when the crew are genuinely failing —
-            // the state has to be legible before the player wonders why the
-            // ship stopped answering.
-            int bailing = BailingCount;
-            if (bailing == 0) return;
-
-            string msg = bailing == CrewCount
-                ? "all hands bailing"
-                : bailing == 1
-                    ? "one hand on the buckets"
-                    : $"{bailing} hands on the buckets";
-
-            float weight = (float)bailing / Mathf.Max(1, CrewCount);
-            UITheme.Banner(0.185f, msg,
-                new Color(0.10f, 0.30f, 0.42f, Mathf.Lerp(0.45f, 0.85f, weight)));
-        }
+        // No HUD of its own. Who is bailing already reads three ways: the pips
+        // in StatusHUD, the water panel, and five people visibly leaving the
+        // guns to do it.
     }
 }

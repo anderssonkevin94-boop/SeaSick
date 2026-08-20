@@ -82,12 +82,17 @@ namespace SeaSick.UI
             }
         }
 
-        /// Bottom-left: just how far home is, and the hold count.
+        /// Bottom-left: speed, how far home is, and the hold count.
         void DrawNav(float pad, int u)
         {
             if (voyage == null || voyage.HomePoint == null) return;
             float dist = Island.FlatDistance(motor.transform.position, voyage.HomePoint.position);
-            string text = $"home {dist:F0} m    hold {voyage.TotalHeld}/{voyage.HoldCapacity}";
+            // Overload shows as "18/24+" rather than a number past the marked
+            // line, so a loaded ship reads as loaded at a glance.
+            string hold = voyage.Overloaded
+                ? $"{voyage.TotalHeld}/{voyage.HoldCapacity}+"
+                : $"{voyage.TotalHeld}/{voyage.HoldCapacity}";
+            string text = $"{motor.CurrentSpeed:F1} m/s    home {dist:F0} m    hold {hold}";
             var size = UITheme.Small.CalcSize(new GUIContent(text));
             var r = new Rect(pad, Screen.height - pad - u * 1.8f, size.x + u, u * 1.8f);
             UITheme.Rect(r, UITheme.Panel);

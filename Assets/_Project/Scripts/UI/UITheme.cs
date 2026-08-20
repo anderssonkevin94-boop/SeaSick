@@ -100,16 +100,10 @@ namespace SeaSick.UI
         }
 
         /// A banner across the screen — used for warnings, never for chrome.
-        public static void Banner(float yFraction, string text, Color tint, string subtext = null)
-        {
-            Build();
-            float h = Unit * 2.1f;
-            float y = Screen.height * yFraction;
-            Rect(new Rect(0f, y, Screen.width, subtext == null ? h : h + Unit * 1.5f), tint);
-            GUI.Label(new Rect(0f, y, Screen.width, h), text, Strong);
-            if (subtext != null)
-                GUI.Label(new Rect(0f, y + h - Unit * 0.3f, Screen.width, Unit * 1.6f), subtext, Small2Centered);
-        }
+        // Full-width banners are gone on purpose: a band of colour across the
+        // middle of the screen is the single most immersion-breaking thing a
+        // HUD can do. Warnings belong on the instruments, where you're already
+        // looking, or on the water itself.
 
         static GUIStyle small2Centered;
         public static GUIStyle Small2Centered

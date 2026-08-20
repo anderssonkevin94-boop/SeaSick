@@ -247,7 +247,9 @@ namespace SeaSick.Ship
         {
             int u = UITheme.Unit;
             float pad = u * 0.7f;
-            float bw = u * 5.6f;
+            // Wide enough for "stbd ▶ 2/2" and for "no crew" — at 5.6 both
+            // clipped to "port 2/".
+            float bw = u * 7.4f;
             float bh = u * 2.2f;
             float y = Screen.height - pad - u * 2.6f - bh;
 
