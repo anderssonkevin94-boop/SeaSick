@@ -94,6 +94,12 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   Do NOT try to run editor-assembly probes via a launcher: MonoBehaviours in an
   Editor folder cannot be AddComponent'ed; Coplay's fresh-assembly compile is
   precisely what makes probe MonoBehaviours legal at runtime.
+- **Play mode runs the PHONE tier.** The active build target is iOS, and
+  entering play mode applies its per-platform default quality (level 0 =
+  Mobile, so the ocean runs N=128, 5 rings). Edit-mode probes (FFTUnit,
+  SpectrumProbe2) use the editor's current level instead (PC, N=256). This is
+  a feature — gameplay always rehearses the phone — but know which tier the
+  probe you just ran actually measured.
 - **`OceanSampler.SampleImmediate` is for one-shot, low-rate queries** (camera
   clamp, splash tests, random scatter like StormSpray). Anything continuous —
   floaters, enemy hulls, hull probes — belongs in `OceanProbeRegistry` or a

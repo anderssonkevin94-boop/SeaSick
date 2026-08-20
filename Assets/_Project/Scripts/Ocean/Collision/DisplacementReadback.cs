@@ -58,7 +58,10 @@ namespace SeaSick.Ocean
         public void Tick(RenderTexture displacement, RenderTexture derivatives,
             RenderTexture turbulence, double simTime)
         {
-            // Retire finished flights.
+            // Retire finished flights, copying the results into the slot's
+            // persistent arrays. (RequestIntoNativeArray with region overloads
+            // spams "NativeArray should not be undisposable" every frame —
+            // megabytes of Editor.log per minute — so we Request + copy.)
             foreach (var s in slots)
             {
                 if (!s.inFlight) continue;
@@ -71,7 +74,13 @@ namespace SeaSick.Ocean
                 if (!allDone) continue;
                 s.inFlight = false;
                 s.ready = !anyError;
-                if (anyError) s.time = -1.0;
+                if (anyError) { s.time = -1.0; continue; }
+                for (int c = 0; c < PhysicsCascades; c++)
+                {
+                    s.requests[c * 2].GetData<half4>().CopyTo(s.disp[c]);
+                    s.requests[c * 2 + 1].GetData<half4>().CopyTo(s.deriv[c]);
+                }
+                s.requests[PhysicsCascades * 2].GetData<half>().CopyTo(s.turb);
             }
 
             // Track the two newest completed slots.
@@ -91,15 +100,13 @@ namespace SeaSick.Ocean
                 s.time = simTime;
                 for (int c = 0; c < PhysicsCascades; c++)
                 {
-                    s.requests[c * 2] = AsyncGPUReadback.RequestIntoNativeArray(
-                        ref s.disp[c], displacement, 0, 0, n, 0, n, c, 1,
-                        TextureFormat.RGBAHalf);
-                    s.requests[c * 2 + 1] = AsyncGPUReadback.RequestIntoNativeArray(
-                        ref s.deriv[c], derivatives, 0, 0, n, 0, n, c, 1,
-                        TextureFormat.RGBAHalf);
+                    s.requests[c * 2] = AsyncGPUReadback.Request(
+                        displacement, 0, 0, n, 0, n, c, 1, TextureFormat.RGBAHalf);
+                    s.requests[c * 2 + 1] = AsyncGPUReadback.Request(
+                        derivatives, 0, 0, n, 0, n, c, 1, TextureFormat.RGBAHalf);
                 }
-                s.requests[PhysicsCascades * 2] = AsyncGPUReadback.RequestIntoNativeArray(
-                    ref s.turb, turbulence, 0, 0, n, 0, n, 0, 1, TextureFormat.RHalf);
+                s.requests[PhysicsCascades * 2] = AsyncGPUReadback.Request(
+                    turbulence, 0, 0, n, 0, n, 0, 1, TextureFormat.RHalf);
                 s.inFlight = true;
                 break;
             }
