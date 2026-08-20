@@ -1,0 +1,45 @@
+// Verification kernel for the CPU/GPU divergence probe. For each original
+// surface point x it evaluates exactly what the renderer's vertex stage does —
+// bilinear cascade samples, regional envelope — and emits the displaced
+// world position. The CPU sampler must then return that point's height from
+// its own readback data to within the 5 cm gate.
+//
+// Out layout per query: xyz = displaced position using the physics bands
+// (cascades 0-1), w = cascade 2's height contribution (the visual-only chop
+// physics deliberately ignores; reported, not gated).
+
+#pragma kernel VerifySample
+
+#include "RegionField.hlsl"
+
+Texture2DArray<float4> Displacement;
+SamplerState linearRepeatSampler;
+StructuredBuffer<float2> QueryPos;
+RWStructuredBuffer<float4> OutPos;
+
+cbuffer Params
+{
+    float4 _PatchSizes;
+    uint _Count;
+}
+
+[numthreads(64, 1, 1)]
+void VerifySample(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _Count) return;
+    float2 x = QueryPos[id.x];
+    float env = RegionEnvelope(x);
+
+    float3 d01 = 0;
+    [unroll]
+    for (int c = 0; c < 2; c++)
+    {
+        float2 uv = x / _PatchSizes[c];
+        d01 += Displacement.SampleLevel(linearRepeatSampler, float3(uv, c), 0).xyz;
+    }
+    float y2 = Displacement.SampleLevel(linearRepeatSampler,
+        float3(x / _PatchSizes[2], 2), 0).y;
+
+    float3 p = float3(x.x, 0, x.y) + env * float3(d01.x, d01.y, d01.z);
+    OutPos[id.x] = float4(p, env * y2);
+}

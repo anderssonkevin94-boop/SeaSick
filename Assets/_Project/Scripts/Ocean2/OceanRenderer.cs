@@ -22,6 +22,7 @@ namespace SeaSick.Ocean2
         CascadeSet cascades;
         SpectrumGenerator spectrum;
         FFTCompute fft;
+        DisplacementReadback readback;
         int evolveKernel = -1;
         int resolveKernel = -1;
         bool spectrumDirty = true;
@@ -57,11 +58,17 @@ namespace SeaSick.Ocean2
             evolveKernel = timeEvolveShader.FindKernel("TimeEvolve");
             resolveKernel = timeEvolveShader.FindKernel("ResolveOutputs");
             spectrumDirty = true;
+
+            readback = new DisplacementReadback(cascades.N);
+            OceanSampler.Bind(readback, cascades.PatchSizes);
         }
 
         void OnDisable()
         {
             if (Instance == this) Instance = null;
+            OceanSampler.Unbind();
+            readback?.Dispose();
+            readback = null;
             cascades?.Release();
             cascades = null;
         }
@@ -114,6 +121,9 @@ namespace SeaSick.Ocean2
             float fadeEnd = q != null ? q.displacementFadeDistance : 500f;
             Shader.SetGlobalVector("_Ocean_FadeParams",
                 new Vector4(fadeEnd * 0.6f, fadeEnd, 0f, 0f));
+            RegionField.PublishNeutralIfAbsent();
+
+            readback?.Tick(cascades.Displacement, cascades.Derivatives, OceanTime.Now);
         }
     }
 }

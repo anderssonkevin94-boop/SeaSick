@@ -20,6 +20,7 @@ Shader "SeaSick/OceanDebug"
             #pragma fragment Frag
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "RegionField.hlsl"
 
             TEXTURE2D_ARRAY(_Ocean_Displacement);
             SAMPLER(sampler_Ocean_Displacement);
@@ -69,6 +70,9 @@ Shader "SeaSick/OceanDebug"
                 float fade = 1.0 - smoothstep(_Ocean_FadeParams.x, _Ocean_FadeParams.y, dist);
                 float4 derivs;
                 float3 disp = SampleDisplacement(ws.xz, fade, derivs);
+                float env = RegionEnvelope(ws.xz);
+                disp *= env;
+                derivs *= env;
                 ws += float3(disp.x, disp.y, disp.z);
                 o.positionWS = ws;
                 o.derivs = derivs;
