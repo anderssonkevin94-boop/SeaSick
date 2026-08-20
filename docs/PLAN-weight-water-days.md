@@ -1,6 +1,6 @@
 # Weight, Water and Days
 
-_Plan drafted 2026-08-19. Replaces seasickness as the core pressure. Nothing here is built yet._
+_Plan drafted 2026-08-19. Replaces seasickness as the core pressure. Milestone 1 and the whole ocean/weather pass are built; milestones 2–4 are not._
 
 ## Where this stands (2026-08-20)
 
@@ -16,15 +16,27 @@ The camera diagnosis in the old note was **wrong on two counts** and is worth re
 
 `choppiness` is now self-limiting: Gerstner folds on *horizontal* steepness only, so chop is clamped to hold `chop × totalSteepness × farScale × seaState` under `foldLimit`. **Size is therefore free** — raise `stormAmplitude` as far as the design wants and the surface can never turn inside out.
 
+**Hull seating fixed 2026-08-20 (`569b03c`).** Reported as *"sometimes my boat is all the way over the water and sometimes its all the way under ... following a different set of waves ... happens in the choppy waters"* — which was an exact statement of the cause. `ShipMotor` low-passed the hull's height toward the surface with a 0.18s time constant, and a lag's error scales with how fast its target moves: the water under her now runs at **19 m/s vertically**. Measured seating error **−2.23…+3.39 m, RMS 1.60 m** against 1.3m of freeboard. Now eased *then clamped* to `maxSeatError` 0.30m: **−0.64…+0.71 m, RMS 0.32 m**. Also `Cull Off` on the ocean, and the swell front added to the anti-fold clamp.
+
+---
+
+## ⚠ START HERE — the one open bug
+
+**A hard near/far brightness step in the storm reads as a false waterline with the ship beneath it.** Measured **43.6% grey above the edge against 8.8% below**, the near water flat at 8.7% over a large area. This is what makes the ship *look* sunk even now that the seating is correct, and it is what Kevin last saw.
+
+- **Proved it IS the ocean, not a hole:** tinting the water magenta filled the region. No missing geometry, no culling fault.
+- **Did not close it:** `_StormDeep` lifted nearly 4× (0.058 → 0.200), `_SkySoft` 0.30 → 0.65, fresnel exponent flattened from 3.0 to `lerp(3.0, 1.4, storm)`, storm ambient floor raised, fog ramp widened (**reverted** — speculative and changed nothing; storm fog is back at the tuned 70–430m).
+- **Why it stalled:** tint-and-photograph does not work on a moving sea. In one controlled run with the ship pinned, the same far-water patch read 50.8%, 31.5%, 24.5% and 28.1% grey across four frames. That is noise, not signal.
+- **Do this next:** build a harness that **pins the wave phase** (freeze the time the field is sampled at, or step it manually) so two tinted frames are pixel-comparable, then tint one term at a time. Weak signal so far points at the **foam term** — with `_StormCrest` tinted blue the near water came back B=163.8 against R=66.5 — but that is one unrepeatable frame and is not evidence yet.
+- Pixel measurement tool: **`python3 tools/pngprobe.py <shot.png>`** — prints mean sRGB for horizontal bands of a screenshot. Use it instead of arguing about what a compressed PNG looks like; the shading maths predicted 36% grey where the render was delivering 9%.
+
+---
+
 **Still open, and Kevin's call:**
 - Is 40m the right size, or should the deep go further? One number: `WaveField.stormAmplitude`.
 - The chase camera gets as close as **1.7m above the hull** when the ship is on a crest and the lens in a trough. Dramatic, or too close? `ChaseCamera.stormDrop` (currently 9m) is the dial.
 - Green water is now near-constant out west ("water aboard — bailing" most of the time). That is the weight/water loop doing its job in a huge sea, but it has never been balanced against water this big.
-
-**Next, in order:**
-1. **Playtest the storm by hand.** Everything above is probe-and-screenshot verified; nobody has sailed into it. The remaining questions are aesthetic and are Kevin's to answer — is it dark enough, is the spray enough, does the lower camera help or is it claustrophobic, and is the new sea the right size.
-2. **The mountain wave's shape.** Still a smooth swept ridge; it should be a curling wall with an overhanging lip and sections breaking at different times. It *can* overhang, because it is a bespoke mesh — no heightfield ever can.
-3. Man overboard → day/night → settlement demand (the original milestones 2–4). Note that **milestone 3's sky work is now half done**: the dome, the palette lerp and the ambient/fog plumbing all exist and take a single number, so `TimeOfDay01` is a second dial on the same structure rather than a new system.
+- `ShipMotor.angularResponse` (3.6, τ ≈ 0.28s) lags pitch and roll the same way the vertical lag did. Left alone deliberately: the memory records that the rotation Slerp's time constant is load-bearing for `Knockdown` and `AddRecoilRoll` feel, so changing it would disturb tuned combat behaviour.
 
 **Not yet playtested by hand.** Weight, water, no-wind sailing, regional seas, mountain seas and storms have all been verified by probe and screenshot, but nobody has actually sailed a voyage with them.
 

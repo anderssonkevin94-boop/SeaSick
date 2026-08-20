@@ -13,6 +13,7 @@ This project is built with a split AI workflow to conserve credits:
 - **Claude Code:** architecture, C# systems, git, debugging, code review, project infrastructure
 - **Coplay (GPT models) inside Unity:** scene wiring, asset placement, visual/UI iteration, asset generation
 - Coplay MCP tools are available to Claude Code when the Unity Editor is open with the SeaSick project loaded (`check_compile_errors`, `get_unity_logs`, `play_game`, scene/prefab tools, etc.)
+- **`docs/DEV-TOOLS.md`** — index of every probe and setup script, the edit/verify loop, and the measurement traps this project has actually hit. Read it before writing a new probe or trusting a measurement.
 
 ## Folder structure
 All project-authored content lives under `Assets/_Project/`:
