@@ -144,100 +144,38 @@ namespace SeaSick.Ship
         /// beam. Drives which side throws spray when a sea hits.
         public float LateralWaveAccel { get; private set; }
 
-        /// Degrees between the bow and the direction the wind blows FROM.
-        /// 0 = pointing straight into the wind, 180 = dead downwind.
-        public float WindAngleDeg { get; private set; } = 90f;
-        /// How badly the sails are shaking: 1 in irons, 0 once they draw.
-        public float Luff01 { get; private set; }
-        public bool InIrons => WindAngleDeg < NoGoDegrees;
-        /// Drive available from the current heading, before sail setting.
-        public float PolarEfficiency { get; private set; } = 1f;
+        [Header("Head seas")]
+        [Tooltip("Most speed a dead-on head sea can take, in the very worst water. Calm water never costs anything at any heading.")]
+        [SerializeField, Range(0f, 0.8f)] float headSeaPenalty = 0.45f;
 
-        /// Where the slow zone ends. The wind is a GRADIENT, not a gate: you
-        /// can always sail anywhere, it's just slower dead upwind. Catching a
-        /// good angle should feel like a reward, not an escape from a trap.
-        public const float NoGoDegrees = 30f;
+        /// Degrees between the bow and where the seas are coming FROM.
+        /// 0 = punching straight into them, 180 = running with them.
+        public float SeaAngleDeg { get; private set; } = 90f;
+        /// How heavy the water is here: 0 glassy, 1 biblical.
+        public float SeaSeverity01 { get; private set; }
+        /// How much of the sea the bow is taking head-on, 0 (beam or running) to 1.
+        public float HeadSea01 { get; private set; }
+        /// Drive available from the current heading. **The only reason one
+        /// course is slower than another** — and in calm water it is always 1,
+        /// so exploring never costs you anything.
+        public float SeaResistance01 { get; private set; } = 1f;
 
-        public string PointOfSailName =>
-            WindAngleDeg < 30f ? "into the wind"
-            : WindAngleDeg < 60f ? "close hauled"
-            : WindAngleDeg < 105f ? "beam reach"
-            : WindAngleDeg < 150f ? "broad reach"
-            : "running";
+        public string SeaStateName =>
+            SeaSeverity01 < 0.2f ? "calm"
+            : SeaSeverity01 < 0.45f ? "lively"
+            : SeaSeverity01 < 0.7f ? "heavy"
+            : SeaSeverity01 < 0.9f ? "wild"
+            : "mountainous";
 
-        static float bestUpwindAngle = -1f;
-
-        /// The heading that makes the most ground to windward — fast enough to
-        /// matter, close enough to the wind to gain. Shared by the autopilot
-        /// and the navigation tape so both give the same advice.
-        public static float BestUpwindAngle
-        {
-            get
-            {
-                if (bestUpwindAngle < 0f)
-                {
-                    float best = -999f;
-                    for (float a = 20f; a <= 90f; a += 1f)
-                    {
-                        float vmg = SailPolar(a) * Mathf.Cos(a * Mathf.Deg2Rad);
-                        if (vmg > best) { best = vmg; bestUpwindAngle = a; }
-                    }
-                }
-                return bestUpwindAngle;
-            }
-        }
-
-        int autopilotTack = 1;
-        bool beating;
-
-        /// Heading to steer to actually REACH a point. Sails straight at it
-        /// when it can, and beats to windward in tacks when it can't. Without
-        /// this an autopilot aimed at an upwind target parks itself in the
-        /// no-go zone and never arrives — which is what stranded mutinies.
+        /// Heading to steer to actually REACH a point. There is no no-go zone
+        /// any more, so this is simply the bearing: every course is sailable,
+        /// and heavy water makes some of them slower rather than forbidden.
         public float CourseFor(Vector3 target, Vector2 wind)
         {
             Vector3 toTarget = target - transform.position;
             toTarget.y = 0f;
             if (toTarget.sqrMagnitude < 1f) return heading;
-
-            float targetBearing = Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
-            float windFrom = Mathf.Atan2(-wind.x, -wind.y) * Mathf.Rad2Deg;
-            float offWind = Mathf.Abs(Mathf.DeltaAngle(targetBearing, windFrom));
-
-            // Hysteresis: start beating once the target is inside the no-go
-            // zone, and only stop once it's comfortably clear. Without the gap
-            // the autopilot flickers between beating and steering direct.
-            if (!beating && offWind < NoGoDegrees + 3f) beating = true;
-            else if (beating && offWind > NoGoDegrees + 14f) beating = false;
-
-            if (!beating) return targetBearing;
-
-            // Cross-track measured against the UPWIND CORRIDOR through the
-            // target — not against the ship-to-target line, which is trivially
-            // always perpendicular to its own normal and therefore always zero.
-            Vector3 upwindAxis = new Vector3(-wind.x, 0f, -wind.y).normalized;
-            Vector3 across = new Vector3(upwindAxis.z, 0f, -upwindAxis.x); // right of upwind
-            float crossTrack = Vector3.Dot(transform.position - target, across);
-            float limit = Mathf.Clamp(toTarget.magnitude * 0.32f, 35f, 220f);
-            if (Mathf.Abs(crossTrack) > limit) autopilotTack = crossTrack > 0f ? -1 : 1;
-
-            return windFrom + BestUpwindAngle * autopilotTack;
-        }
-
-        /// Sailing polar. Upwind is genuinely slow and worth tacking out of,
-        /// but never a trap: even head-to-wind you keep enough drive to steer
-        /// out and get home. Peak is on a beam-to-broad reach.
-        public static float SailPolar(float thetaDeg)
-        {
-            // Floor is high enough that heading straight into the wind is
-            // merely slow, never a wall. The payoff for a good angle is the
-            // top of the curve, not escape from the bottom.
-            if (thetaDeg < 25f) return 0.55f;
-            if (thetaDeg < 45f) return Mathf.Lerp(0.55f, 0.80f, (thetaDeg - 25f) / 20f);
-            if (thetaDeg < 70f) return Mathf.Lerp(0.80f, 0.95f, (thetaDeg - 45f) / 25f);
-            if (thetaDeg < 115f) return Mathf.Lerp(0.95f, 1.00f, (thetaDeg - 70f) / 45f);
-            if (thetaDeg < 150f) return Mathf.Lerp(1.00f, 0.95f, (thetaDeg - 115f) / 35f);
-            return Mathf.Lerp(0.95f, 0.86f, (thetaDeg - 150f) / 30f);
+            return Mathf.Atan2(toTarget.x, toTarget.z) * Mathf.Rad2Deg;
         }
 
         /// Used by grounding: cancel the component of momentum driving the
@@ -266,6 +204,39 @@ namespace SeaSick.Ship
         /// Positive heels to port — the side away from starboard guns, which
         /// is where the reaction from a starboard broadside actually throws it.
         public void AddRecoilRoll(float degreesPerSecond) => recoilRollVel += degreesPerSecond;
+
+        /// Resistance from the water itself. Zero cost in calm water at any
+        /// heading; in the worst seas, punching dead into them costs
+        /// `headSeaPenalty`. Beam-on and running are always free — and running
+        /// down a big sea is actively FASTER, because the surf term pays out.
+        /// The whole model, in one place, so raiders sail exactly the sea the
+        /// player does. Returns 1 (free) through 1-penalty (dead into the worst
+        /// water there is).
+        public static float SeaResistanceAt(Vector2 pos, Vector3 forward, float penalty,
+            out float severity, out float headSea, out float angleDeg)
+        {
+            severity = 0f; headSea = 0f; angleDeg = 90f;
+            var field = Ocean.WaveField.Instance;
+            if (field == null) return 1f;
+
+            float t = Time.time;
+            severity = field.SeaSeverity01(pos, t);
+            Vector2 run = field.SeaRunDirection(pos, t);
+            Vector3 seasFrom = new Vector3(-run.x, 0f, -run.y);
+            angleDeg = Vector3.Angle(new Vector3(forward.x, 0f, forward.z), seasFrom);
+            headSea = Mathf.Clamp01(Mathf.Cos(angleDeg * Mathf.Deg2Rad));
+            return 1f - penalty * headSea * severity;
+        }
+
+        void SampleSeaResistance(Vector3 forward)
+        {
+            SeaResistance01 = SeaResistanceAt(
+                new Vector2(transform.position.x, transform.position.z), forward, headSeaPenalty,
+                out float sev, out float head, out float angle);
+            SeaSeverity01 = sev;
+            HeadSea01 = head;
+            SeaAngleDeg = angle;
+        }
 
         /// How much sea is standing over the rail right now.
         ///
@@ -405,14 +376,14 @@ namespace SeaSick.Ship
 
             Vector3 forward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
 
-            // Points of sail: measure the bow against where the wind comes FROM.
-            Vector3 windFromWorld = new Vector3(-wind.x, 0f, -wind.y);
-            WindAngleDeg = Vector3.Angle(new Vector3(forward.x, 0f, forward.z), windFromWorld);
-            PolarEfficiency = SailPolar(WindAngleDeg);
-            Luff01 = Mathf.Clamp01(1f - (WindAngleDeg - 12f) / 23f);
+            // The sea, not the wind, is the only thing that argues with a
+            // heading now — and only when it is big. Every course is equally
+            // fast in calm water, so exploring is never punished; driving into
+            // mountains is slow because they are mountains.
+            SampleSeaResistance(forward);
 
             float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(SailSetting));
-            float targetSpeed = effMaxSpeed * PolarEfficiency * sailPower * WindStrength;
+            float targetSpeed = effMaxSpeed * sailPower * SeaResistance01;
 
             // Oars don't care about the wind. They never beat a good point of
             // sail, but they'll always get you off a lee shore or home.
@@ -606,21 +577,13 @@ namespace SeaSick.Ship
             {
                 Vector3 windWorld = new Vector3(wind.x, 0f, wind.y);
                 float windYaw = Vector3.SignedAngle(forward, windWorld, Vector3.up);
-                float trim;
-                float blend;
-                if (Luff01 > 0.35f)
-                {
-                    // Luffing: the yards weathervane and the canvas shakes —
-                    // the clearest possible signal that you're pinching.
-                    trim = Mathf.Clamp(windYaw, -80f, 80f)
-                           + Mathf.Sin(Time.time * 16f) * 14f * Luff01;
-                    blend = 1f - Mathf.Exp(-7f * dt);
-                }
-                else
-                {
-                    trim = Mathf.Clamp(windYaw * 0.5f, -70f, 70f);
-                    blend = 1f - Mathf.Exp(-2f * dt);
-                }
+                // No no-go zone means no luffing. The canvas still shakes, but
+                // now it shakes when she's driving into a heavy sea — which is
+                // the thing that actually costs you speed.
+                float strain = HeadSea01 * SeaSeverity01;
+                float trim = Mathf.Clamp(windYaw * 0.5f, -70f, 70f)
+                             + Mathf.Sin(Time.time * 16f) * 10f * strain;
+                float blend = 1f - Mathf.Exp(-(strain > 0.35f ? 7f : 2f) * dt);
                 mastPivot.localRotation = Quaternion.Slerp(
                     mastPivot.localRotation, Quaternion.Euler(0f, trim, 0f), blend);
             }

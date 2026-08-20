@@ -79,15 +79,16 @@ namespace SeaSick.Ship
             float py = Screen.height - panelH - pad;
             UITheme.Rect(new Rect(px, py, panelW, panelH), UITheme.Panel);
 
-            bool bad = motor.WindAngleDeg < ShipMotor.NoGoDegrees;
-            var nameColour = bad ? UITheme.Bad : UITheme.Text;
+            // What the water is doing, and how much of it you're taking on the
+            // bow. No point of sail, no no-go: this reads "the sea is heavy and
+            // you're driving into it", which is the only heading cost left.
+            float strain = motor.HeadSea01 * motor.SeaSeverity01;
+            var nameColour = strain > 0.4f ? UITheme.Warn : UITheme.Text;
             var nameStyle = new GUIStyle(UITheme.Small2Centered) { normal = { textColor = nameColour } };
-            GUI.Label(new Rect(px, py + u * 0.2f, panelW, u * 1.6f), motor.PointOfSailName, nameStyle);
+            GUI.Label(new Rect(px, py + u * 0.2f, panelW, u * 1.6f), motor.SeaStateName, nameStyle);
 
-            // Efficiency of the current heading — this is what tacking chases.
             var effRect = new Rect(px + u * 0.6f, py + u * 1.9f, panelW - u * 1.2f, u * 0.5f);
-            UITheme.Bar(effRect, motor.PolarEfficiency,
-                bad ? UITheme.Bad : UITheme.Ramp(1f - motor.PolarEfficiency));
+            UITheme.Bar(effRect, motor.SeaResistance01, UITheme.Ramp(1f - motor.SeaResistance01));
 
             // --- Sail control ---
             float bw = (panelW - u * 1.8f) * 0.5f;

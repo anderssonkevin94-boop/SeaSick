@@ -67,10 +67,11 @@ namespace SeaSick.Ship
 
             float gust = motor.GustFactor01;
             arrow.localScale = new Vector3(1f, 1f, 1f + gust * 0.5f);
-            // Flashes red the moment you point into the no-go zone.
+            // Warms up when she's driving into a heavy sea — the only heading
+            // that costs anything now, and only while the water is big.
             Color c = Color.Lerp(calmColor, gustColor, gust);
-            if (motor.Luff01 > 0.01f)
-                c = Color.Lerp(c, noGoColor, Mathf.Clamp01(motor.Luff01 * 1.5f));
+            float strain = motor.HeadSea01 * motor.SeaSeverity01;
+            if (strain > 0.01f) c = Color.Lerp(c, noGoColor, Mathf.Clamp01(strain * 1.3f));
             mat.SetColor(BaseColorId, c);
         }
     }

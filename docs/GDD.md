@@ -28,13 +28,15 @@ The meter only ever goes up at sea. Past ~80% they start leaving their post to h
 - **Camera:** third-person chase, ~10–15 m behind/above the ship; close enough to read whole-body acting. Automatic brief push-ins on notable events (imminent puke, mutiny stage change). No manual camera.
 - **Controls (one thumb):**
   - Drag on lower screen = rudder / heading
-  - Speed emerges from wind angle + sail trim (not a throttle)
+  - Speed emerges from sail trim and the state of the water (**not** from heading — see the 2026-08-19 wind removal)
   - Tap crew/station = small contextual order menu (trim, hold, potion, treat)
   - Tap-and-hold (tentative) = precision/zoom view
 - **Input tech:** Unity Input System, touch; pointer simulation in editor.
 
 ## 5. World & setting
-Archipelago seen from the home island outward; farther islands = richer resources = longer, sicker voyages. **Distance is the difficulty curve.**
+Archipelago seen from the home island outward; farther islands = richer resources = longer, harder voyages. **Distance is the difficulty curve**, and it is now *physical*: sea state is regional, so the water itself gets worse the further out you go — a calm shelf near home, lively water in the middle, mountainous seas at the edge.
+
+**The premise:** the home island has **never sailed**. Everything they know about the sea is folklore and rumour — waves the size of mountains, creatures nobody can picture, islands with stone people and mushroom trees that contradict their idea of what is real. The player goes and finds out which parts are true. Crew who come back are **heroes**, and the stories of what they survived are the reward the village actually cares about.
 
 **Art direction:** low poly, stylized, warm and comedic. Body language over facial animation. Sickness reads at gameplay distance: skin tint shifts toward green, posture sags, walk becomes a stagger.
 

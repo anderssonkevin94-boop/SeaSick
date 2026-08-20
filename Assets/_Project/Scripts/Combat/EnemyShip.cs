@@ -451,33 +451,19 @@ namespace SeaSick.Combat
         /// raider beats instead, picking the tack that makes ground.
         void SailToward(float wantedHeading, float dt)
         {
-            Vector2 wind = WindField.Instance != null
-                ? WindField.Instance.BaseDir
-                : new Vector2(0.95f, 0.33f);
-
-            // Bearing the wind blows FROM, matching ShipMotor's convention.
-            float windFrom = Mathf.Atan2(-wind.x, -wind.y) * Mathf.Rad2Deg;
-
-            if (Mathf.Abs(Mathf.DeltaAngle(wantedHeading, windFrom)) < ShipMotor.NoGoDegrees)
-            {
-                float best = ShipMotor.BestUpwindAngle;
-                float a = windFrom + best;
-                float b = windFrom - best;
-                wantedHeading = Mathf.Abs(Mathf.DeltaAngle(heading, a)) <
-                                Mathf.Abs(Mathf.DeltaAngle(heading, b)) ? a : b;
-            }
-
+            // Raiders sail exactly the sea the player does: no polar, no no-go,
+            // no tacking. They can steer anywhere, and heavy water on the bow
+            // slows them by the same rule and the same amount.
             float turn = turnRate * Mathf.Lerp(0.45f, 1f, Mathf.Clamp01(speed / maxSpeed));
             float delta = Mathf.DeltaAngle(heading, wantedHeading);
             heading += Mathf.Clamp(delta, -turn * dt, turn * dt);
 
-            float offWind = Mathf.Abs(Mathf.DeltaAngle(heading, windFrom));
-            float strength = WindField.Instance != null
-                ? WindField.Instance.SampleStrength(new Vector2(transform.position.x, transform.position.z))
-                : 1f;
+            float sea = ShipMotor.SeaResistanceAt(
+                new Vector2(transform.position.x, transform.position.z),
+                Forward(), 0.45f, out _, out _, out _);
 
             // Hard turns cost way, same as the player's hull.
-            float target = maxSpeed * ShipMotor.SailPolar(offWind) * strength
+            float target = maxSpeed * sea
                            * Mathf.Lerp(1f, 0.72f, Mathf.Clamp01(Mathf.Abs(delta) / 60f));
 
             speed = Mathf.MoveTowards(speed, target, acceleration * dt);

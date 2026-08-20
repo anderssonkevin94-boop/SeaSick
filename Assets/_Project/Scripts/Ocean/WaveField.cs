@@ -188,6 +188,25 @@ namespace SeaSick.Ocean
         float swellWavelength;
         bool swellActive;
 
+        /// How heavy the sea is here, 0 glassy .. 1 biblical. Combines the
+        /// drifting sea state with any swell front standing over this spot.
+        /// This is the number a heading now argues with — the ONLY one.
+        public float SeaSeverity01(Vector2 pos, float time)
+        {
+            float baseSea = Mathf.InverseLerp(0.25f, 1.15f, SeaState01);
+            float swell = swellActive ? SwellIntensity(pos, time) : 0f;
+            return Mathf.Clamp01(baseSea + swell * 0.85f);
+        }
+
+        /// Which way the dominant seas are RUNNING here. A swell front standing
+        /// over the ship overrules the ordinary wind sea, because that is what
+        /// the hull is actually climbing.
+        public Vector2 SeaRunDirection(Vector2 pos, float time)
+        {
+            if (swellActive && SwellIntensity(pos, time) > 0.4f) return swellDir.normalized;
+            return WindDirection;
+        }
+
         public bool SwellActive => swellActive;
         public Vector2 SwellDirection => swellDir;
         public float SwellSpeed => swellSpeed;

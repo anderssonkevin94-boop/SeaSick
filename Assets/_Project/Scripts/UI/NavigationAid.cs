@@ -6,12 +6,12 @@ using UnityEngine;
 namespace SeaSick.UI
 {
     /// A bearing tape across the top of the screen: where you're pointed, where
-    /// home is, where the wind comes from, and — crucially — the best course to
-    /// actually make ground toward your target.
+    /// home is, and where the seas are running.
     ///
-    /// Without this the game gives you a no-go zone but no way to know that the
-    /// answer to "home is upwind" is "steer 50 degrees off the wind and zigzag".
-    /// The physics always allowed it; nothing communicated it.
+    /// There is no no-go zone any more and no laylines to compute — every
+    /// course is sailable, so the tape's job shrank to orientation. The sea
+    /// mark is advisory, not a wall: crossing it costs speed in heavy water and
+    /// nothing at all in calm.
     public class NavigationAid : MonoBehaviour
     {
         [SerializeField] float visibleSpan = 90f;   // degrees either side of the bow
@@ -19,32 +19,10 @@ namespace SeaSick.UI
         ShipMotor motor;
         VoyageManager voyage;
 
-        float bestUpwindAngle = 50f;
-        float recomputeTimer;
-
         void Start()
         {
             motor = FindFirstObjectByType<ShipMotor>();
             voyage = FindFirstObjectByType<VoyageManager>();
-            RecomputeBestAngle();
-        }
-
-        /// The angle off the wind that maximises velocity made good upwind —
-        /// fast enough to matter, close enough to the wind to gain ground.
-        void RecomputeBestAngle()
-        {
-            float best = -999f;
-            for (float a = 20f; a <= 90f; a += 2f)
-            {
-                float vmg = ShipMotor.SailPolar(a) * Mathf.Cos(a * Mathf.Deg2Rad);
-                if (vmg > best) { best = vmg; bestUpwindAngle = a; }
-            }
-        }
-
-        void Update()
-        {
-            recomputeTimer -= Time.deltaTime;
-            if (recomputeTimer <= 0f) { recomputeTimer = 5f; RecomputeBestAngle(); }
         }
 
         static float BearingTo(Vector3 from, Vector3 to)
@@ -67,50 +45,24 @@ namespace SeaSick.UI
             UITheme.Rect(tape, UITheme.Panel);
 
             float heading = motor.Heading;
-            Vector2 wind = motor.WindDirection;
-            float windFrom = Mathf.Atan2(-wind.x, -wind.y) * Mathf.Rad2Deg;
+            float seasFrom = heading + Mathf.DeltaAngle(0f, motor.SeaAngleDeg);
             float homeBearing = BearingTo(motor.transform.position, voyage.HomePoint.position);
 
-            // Shade the no-go zone so the wall is visible, not just felt.
-            float noGoCentre = Mathf.DeltaAngle(heading, windFrom);
-            DrawSpan(tape, noGoCentre - ShipMotor.NoGoDegrees, noGoCentre + ShipMotor.NoGoDegrees,
-                new Color(0.85f, 0.22f, 0.18f, 0.28f));
-
-            // Is home inside the no-go zone? Then we must beat up to it.
-            float homeOffWind = Mathf.Abs(Mathf.DeltaAngle(homeBearing, windFrom));
-            bool homeUpwind = homeOffWind < ShipMotor.NoGoDegrees + 4f;
-
-            float course;
-            if (homeUpwind)
+            // Shade where the seas are coming from, weighted by how heavy they
+            // are — a hint about the slow direction, not a forbidden zone. In
+            // calm water it fades out entirely, because then it costs nothing.
+            float sev = motor.SeaSeverity01;
+            if (sev > 0.15f)
             {
-                // Two laylines either side of the wind; take whichever is the
-                // smaller turn from where the bow already points.
-                float a = windFrom + bestUpwindAngle;
-                float b = windFrom - bestUpwindAngle;
-                course = Mathf.Abs(Mathf.DeltaAngle(heading, a)) <= Mathf.Abs(Mathf.DeltaAngle(heading, b)) ? a : b;
-            }
-            else
-            {
-                course = homeBearing;
+                float rel = Mathf.DeltaAngle(heading, seasFrom);
+                DrawSpan(tape, rel - 35f, rel + 35f,
+                    new Color(0.85f, 0.55f, 0.18f, 0.10f + 0.20f * sev));
             }
 
-            // The red band already says where the wind is, so that pip goes
-            // unlabelled; home and steer sit on opposite sides of the tape so
-            // their labels can never collide when the marks converge.
-            DrawPip(tape, Mathf.DeltaAngle(heading, windFrom), UITheme.Warn, null, false);
             DrawPip(tape, Mathf.DeltaAngle(heading, homeBearing), UITheme.Sea, "home", true);
-            DrawPip(tape, Mathf.DeltaAngle(heading, course), UITheme.Good, "steer", false);
 
             // Bow marker.
             UITheme.Rect(new Rect(tape.center.x - 1f, tape.y, 2f, tape.height), UITheme.Text);
-
-            if (homeUpwind)
-            {
-                float dist = Island.FlatDistance(motor.transform.position, voyage.HomePoint.position);
-                GUI.Label(new Rect(tape.x, tape.yMax + u * 1.4f, tape.width, u * 1.5f),
-                    $"home is upwind ({dist:F0} m) — follow the green mark, then swap sides",
-                    UITheme.Small2Centered);
-            }
         }
 
         void DrawPip(Rect tape, float relativeBearing, Color colour, string label, bool labelAbove)
