@@ -1079,10 +1079,11 @@ MonoBehaviour:
   shortSpreadDegrees: 125
   longSpreadDegrees: 80
   choppiness: 0.72
+  foldLimit: 0.85
   stormWaveCount: 6
   stormSpreadDegrees: 140
-  stormWavelengths: {x: 70, y: 260}
-  stormAmplitude: 12.7
+  stormWavelengths: {x: 120, y: 340}
+  stormAmplitude: 40
   stormBearing: {x: -1, y: 0}
   stormNear: 450
   stormFar: 1250
@@ -2102,6 +2103,7 @@ MonoBehaviour:
   beamImpactCooldown: 0.45
   slamThreshold: 1.9
   slamCooldown: 0.5
+  seaThresholdScale: 3.5
 --- !u!114 &2143489887
 MonoBehaviour:
   m_ObjectHideFlags: 0

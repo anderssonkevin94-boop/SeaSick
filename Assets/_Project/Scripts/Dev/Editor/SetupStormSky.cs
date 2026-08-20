@@ -44,6 +44,31 @@ public static class SetupStormSky
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Linear;
 
+        // --- The ocean's own storm palette ------------------------------
+        //
+        // A material asset snapshots a shader property's default at the moment
+        // the property is created, and changing that default later does NOT
+        // reach materials that already exist. Verified by reading the material
+        // back at runtime: _StormDeep still returned (0.020, 0.045, 0.055) long
+        // after the shader said (0.058, 0.086, 0.098), and the near water was
+        // rendering black in a steep sea because of it. Same trap the scene
+        // plays with serialized fields; push the values explicitly.
+        foreach (var guid in AssetDatabase.FindAssets("t:Material"))
+        {
+            var path = AssetDatabase.GUIDToAssetPath(guid);
+            var om = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (om == null || om.shader == null || om.shader.name != "SeaSick/Ocean") continue;
+
+            om.SetColor("_StormDeep", new Color(0.058f, 0.086f, 0.098f));
+            om.SetColor("_StormShallow", new Color(0.140f, 0.205f, 0.215f));
+            om.SetColor("_StormCrest", new Color(0.86f, 0.88f, 0.89f));
+            om.SetFloat("_SkyReflect", 0.45f);
+            om.SetFloat("_SkySoft", 0.30f);
+            EditorUtility.SetDirty(om);
+            Debug.Log($"STORMSKY: ocean palette pushed to {path} — " +
+                      $"_StormDeep now {om.GetColor("_StormDeep")}");
+        }
+
         // --- SkyDirector ---------------------------------------------------
         var world = GameObject.Find("World");
         var skyGo = GameObject.Find("Sky");
@@ -73,6 +98,21 @@ public static class SetupStormSky
             var spray = motor.GetComponent<SeaSick.Ocean.StormSpray>();
             if (spray == null) spray = motor.gameObject.AddComponent<SeaSick.Ocean.StormSpray>();
             SceneDefaults.ResetToCodeDefaults(spray);
+        }
+
+        // --- SpeedJuice gained a field ---------------------------------------
+        if (motor != null)
+        {
+            var juice = motor.GetComponent<SeaSick.Ship.SpeedJuice>();
+            if (juice != null)
+            {
+                // Only the new field. sprayFullRate and wakeFullRate were tuned
+                // by hand in the scene (55 and 30 against 130 and 85 in code)
+                // and a blanket reset would quietly throw that away.
+                var jso = new SerializedObject(juice);
+                SetFloat(jso, "seaThresholdScale", 3.5f);
+                jso.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         // --- ChaseCamera picked up new fields --------------------------------

@@ -25,6 +25,7 @@ namespace SeaSick.Ocean
             waves = GetComponent<WaveField>();
 
             mat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            mat.SetTexture("_BaseMap", FoamTexture.SoftPuff());
             mat.SetFloat("_Surface", 1f); // transparent
             mat.SetOverrideTag("RenderType", "Transparent");
             mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -68,9 +69,16 @@ namespace SeaSick.Ocean
                 {
                     int i = g * quadsPerGust + k;
                     Vector2 p = gust.pos + localOffsets[i] * gust.radius;
-                    float y = waves.SampleHeightFast(p, t) + 0.10f;
-                    quads[i].position = new Vector3(p.x, y, p.y);
-                    quads[i].rotation = Quaternion.Euler(90f, 0f, 0f);
+                    float h = waves.SampleHeightFast(p, t);
+                    // Cat's paws sit on the surface. Pinned dead flat they cut
+                    // through the face of a big sea and read as grey plates.
+                    const float e = 2.5f;
+                    float hx = waves.SampleHeightFast(p + new Vector2(e, 0f), t);
+                    float hz = waves.SampleHeightFast(p + new Vector2(0f, e), t);
+                    Vector3 nrm = new Vector3(h - hx, e, h - hz).normalized;
+                    quads[i].position = new Vector3(p.x, h + 0.2f, p.y);
+                    quads[i].rotation = Quaternion.FromToRotation(Vector3.up, nrm)
+                                      * Quaternion.Euler(90f, 0f, 0f);
                     quads[i].localScale = Vector3.one * quadSize;
                 }
             }

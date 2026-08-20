@@ -34,6 +34,8 @@ namespace SeaSick.Ocean
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             mat.renderQueue = 3010;
             mat.SetColor("_BaseColor", foamColor);
+            // Soft-edged, or these are literally grey rectangles on the water.
+            mat.SetTexture("_BaseMap", FoamTexture.SoftPuff());
 
             streaks = new Transform[streakCount];
             widths = new float[streakCount];
@@ -111,8 +113,22 @@ namespace SeaSick.Ocean
                 }
 
                 float h = waves != null ? waves.SampleHeightFast(new Vector2(p.x, p.z), t) : 0f;
-                streaks[i].position = new Vector3(p.x, h + 0.08f, p.z);
-                streaks[i].rotation = Quaternion.Euler(90f, 0f, 0f);
+
+                // Lie ON the surface, not in a horizontal plane through it.
+                // Pinned dead flat these were fine on a gentle sea and cut
+                // straight through the face of a 40m one, showing as plates
+                // sticking out of the water.
+                Vector3 nrm = Vector3.up;
+                if (waves != null)
+                {
+                    const float e = 2.5f;
+                    float hx = waves.SampleHeightFast(new Vector2(p.x + e, p.z), t);
+                    float hz = waves.SampleHeightFast(new Vector2(p.x, p.z + e), t);
+                    nrm = new Vector3(h - hx, e, h - hz).normalized;
+                }
+                streaks[i].position = new Vector3(p.x, h + 0.25f, p.z);
+                streaks[i].rotation = Quaternion.FromToRotation(Vector3.up, nrm)
+                                    * Quaternion.Euler(90f, 0f, 0f);
             }
         }
     }

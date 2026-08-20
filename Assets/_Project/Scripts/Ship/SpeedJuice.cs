@@ -20,11 +20,20 @@ namespace SeaSick.Ship
         ParticleSystem beamPort;
         ParticleSystem beamStar;
 
+        // Impact thresholds are RELATIVE to the sea she is in.
+        //
+        // As absolutes these meant "a hard knock" in the water they were tuned
+        // in, and "every other frame" once the western deep started throwing
+        // 40m of heave — the same mistake the spindrift crest threshold made.
+        // A burst should mark an unusual blow, not the ambient state.
         [Header("Wave impacts")]
         [SerializeField] float beamImpactThreshold = 1.5f;
         [SerializeField] float beamImpactCooldown = 0.45f;
         [SerializeField] float slamThreshold = 1.9f;
         [SerializeField] float slamCooldown = 0.5f;
+        [Tooltip("How much rougher the sea has to hit before a burst counts, " +
+                 "scaled by the sea it is standing in.")]
+        [SerializeField] float seaThresholdScale = 3.5f;
 
         float lastBeamImpact = -99f;
         float lastSlam = -99f;
@@ -47,11 +56,21 @@ namespace SeaSick.Ship
             var solid = new Material(Shader.Find("Universal Render Pipeline/Particles/Lit"));
             solid.SetColor("_BaseColor", new Color(0.97f, 0.99f, 1f, 1f));
             solid.SetFloat("_Smoothness", 0.35f);
+            // Opaque cannot fade, but it CAN be clipped to a disc. Without
+            // this the bursts are square, which went unnoticed while they were
+            // small, bright and lit by a strong sun — and filled the screen
+            // with grey cardboard the moment the storm sea started throwing
+            // them in numbers under a dark sky.
+            solid.SetTexture("_BaseMap", SeaSick.Ocean.FoamTexture.SoftPuff());
+            solid.SetFloat("_AlphaClip", 1f);
+            solid.SetFloat("_Cutoff", 0.45f);
+            solid.EnableKeyword("_ALPHATEST_ON");
 
             // The long wake still fades, so it dissolves into the sea rather
             // than popping out of existence behind you.
             var mat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
             mat.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.5f));
+            mat.SetTexture("_BaseMap", SeaSick.Ocean.FoamTexture.SoftPuff());
             mat.SetFloat("_Surface", 1f);
             mat.SetOverrideTag("RenderType", "Transparent");
             mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -182,12 +201,17 @@ namespace SeaSick.Ship
         /// the mark stays on the water after the spray itself has gone.
         void WaveImpacts(float speed01)
         {
+            // In a big sea everything is a heavy blow, so the bar has to rise
+            // with the water or the effect becomes the weather.
+            float bar = 1f + motor.SeaSeverity01 * seaThresholdScale;
+            float beamBar = beamImpactThreshold * bar;
+
             float lateral = motor.LateralWaveAccel;
-            if (Mathf.Abs(lateral) > beamImpactThreshold
+            if (Mathf.Abs(lateral) > beamBar
                 && Time.time - lastBeamImpact > beamImpactCooldown)
             {
                 lastBeamImpact = Time.time;
-                float force = Mathf.Clamp01((Mathf.Abs(lateral) - beamImpactThreshold) / 2.5f);
+                float force = Mathf.Clamp01((Mathf.Abs(lateral) - beamBar) / (2.5f * bar));
                 var side = lateral > 0f ? beamStar : beamPort;
                 if (side != null) side.Emit(Mathf.RoundToInt(Mathf.Lerp(10f, 45f, force)));
 
@@ -198,7 +222,7 @@ namespace SeaSick.Ship
             // Bow slam: the surf pull reversing hard as the stem drops.
             float dSurf = (motor.SurfAccel - prevSurf) / Mathf.Max(0.0001f, Time.deltaTime);
             prevSurf = motor.SurfAccel;
-            if (dSurf < -slamThreshold * 4f && speed01 > 0.25f
+            if (dSurf < -slamThreshold * 4f * bar && speed01 > 0.25f
                 && Time.time - lastSlam > slamCooldown)
             {
                 lastSlam = Time.time;

@@ -84,7 +84,7 @@ namespace SeaSick.Ocean
             // reads as a streak of torn water rather than a snowflake.
             var streak = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
             streak.SetColor("_BaseColor", new Color(1f, 1f, 1f, 1f));
-            streak.SetTexture("_BaseMap", SoftPuff());
+            streak.SetTexture("_BaseMap", FoamTexture.SoftPuff());
             MakeTransparent(streak, 3010);
 
             var go = new GameObject("Spindrift");
@@ -121,7 +121,7 @@ namespace SeaSick.Ocean
             // is what puts distance between the ship and the next wave.
             var haze = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
             haze.SetColor("_BaseColor", new Color(0.86f, 0.89f, 0.91f, 1f));
-            haze.SetTexture("_BaseMap", SoftPuff());
+            haze.SetTexture("_BaseMap", FoamTexture.SoftPuff());
             MakeTransparent(haze, 3005);
 
             var mgo = new GameObject("SeaMist");
@@ -147,36 +147,6 @@ namespace SeaSick.Ocean
             var mr = mist.GetComponent<ParticleSystemRenderer>();
             mr.sharedMaterial = haze;
             mr.renderMode = ParticleSystemRenderMode.Billboard;
-        }
-
-        /// A round, soft-edged blob. Untextured particle quads have a hard
-        /// rim, and the first storm shot was full of grey RECTANGLES sliding
-        /// over the sea — the same mistake the bow foam made before it was
-        /// turned solid. Built in code so there is no texture asset to import.
-        static Texture2D softPuff;
-        static Texture2D SoftPuff()
-        {
-            if (softPuff != null) return softPuff;
-            const int R = 64;
-            var tex = new Texture2D(R, R, TextureFormat.RGBA32, true)
-            {
-                wrapMode = TextureWrapMode.Clamp,
-                name = "SS_SoftPuff"
-            };
-            var px = new Color[R * R];
-            for (int y = 0; y < R; y++)
-                for (int x = 0; x < R; x++)
-                {
-                    float dx = (x + 0.5f) / R * 2f - 1f;
-                    float dy = (y + 0.5f) / R * 2f - 1f;
-                    float a = Mathf.Clamp01(1f - Mathf.Sqrt(dx * dx + dy * dy));
-                    a = a * a * (3f - 2f * a);   // smooth all the way to nothing
-                    px[y * R + x] = new Color(1f, 1f, 1f, a);
-                }
-            tex.SetPixels(px);
-            tex.Apply(true);
-            softPuff = tex;
-            return tex;
         }
 
         static void MakeTransparent(Material m, int queue)

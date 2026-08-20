@@ -18,10 +18,11 @@ Shader "SeaSick/Ocean"
         _CrestColor     ("Crest Colour",   Color) = (0.62, 0.83, 0.92, 1)
         _SpecColor      ("Specular",       Color) = (1, 1, 1, 1)
         _ShallowWater   ("Shallow Water",  Color) = (0.32, 0.68, 0.72, 1)
-        _StormDeep      ("Storm Deep",     Color) = (0.020, 0.045, 0.055, 1)
-        _StormShallow   ("Storm Shallow",  Color) = (0.105, 0.175, 0.180, 1)
+        _StormDeep      ("Storm Deep",     Color) = (0.058, 0.086, 0.098, 1)
+        _StormShallow   ("Storm Shallow",  Color) = (0.140, 0.205, 0.215, 1)
         _StormCrest     ("Storm Crest",    Color) = (0.86, 0.88, 0.89, 1)
         _SkyReflect     ("Sky Reflection", Range(0, 1)) = 0.45
+        _SkySoft        ("Sky Scatter",    Range(0, 0.8)) = 0.30
         _Smoothness     ("Smoothness",     Range(0, 1)) = 0.85
         _CrestStrength  ("Crest Strength", Range(0, 3)) = 1.1
         _NormalSampleDist ("Normal Sample Distance", Float) = 2.0
@@ -61,6 +62,7 @@ Shader "SeaSick/Ocean"
                 float4 _StormShallow;
                 float4 _StormCrest;
                 float  _SkyReflect;
+                float  _SkySoft;
                 float  _Smoothness;
                 float  _CrestStrength;
                 float  _NormalSampleDist;
@@ -499,8 +501,16 @@ Shader "SeaSick/Ocean"
                 float3 shoalCol = lerp(_ShallowColor.rgb, _StormShallow.rgb, st);
                 float3 baseCol = lerp(deepCol, shoalCol, fresnel);
 
-                // Grazing angles take the colour of the actual sky.
-                baseCol = lerp(baseCol, _SS_SkyHorizon.rgb, fresnel * _SkyReflect);
+                // Grazing angles take the colour of the actual sky — but a
+                // fresnel-only term vanishes at normal incidence, and a big sea
+                // shows the camera its wave FACES rather than a grazing plane.
+                // Once the waves got mountainous the near water went black,
+                // because the only thing lifting it was an angle that no longer
+                // occurred. A rough surface scatters sky light off its faces
+                // too, so add a term that does not depend on the angle; it
+                // grows with the storm, which is when the faces are steepest.
+                float skyMix = saturate(fresnel * _SkyReflect + _SkySoft * st);
+                baseCol = lerp(baseCol, _SS_SkyHorizon.rgb, skyMix);
 
                 // Shallows lighten toward the beach, and a foam band breaks
                 // along every shoreline.
@@ -557,7 +567,7 @@ Shader "SeaSick/Ocean"
                 // The constant floor kept the sea readable in a bright
                 // scene; under a storm lid it is exactly what stopped the water
                 // going dark. Let it fall with the weather.
-                float3 ambient = SampleSH(n) * 0.55 + lerp(0.35, 0.19, st);
+                float3 ambient = SampleSH(n) * 0.55 + lerp(0.35, 0.28, st);
                 float3 col = baseCol * (ambient + main.color * (0.45 + 0.55 * ndotl))
                            + _SpecColor.rgb * spec * _Smoothness * main.color;
 

@@ -83,6 +83,23 @@ namespace SeaSick.Ocean
                  "lower = rounder tops at the same wave height.")]
         [Range(0.15f, 1f)] [SerializeField] float choppiness = 0.72f;
 
+        // A Gerstner surface folds through itself once the HORIZONTAL
+        // steepness sums past 1 — and only the horizontal part, which is what
+        // makes this safe. Vertical height is not constrained by it at all.
+        //
+        // So choppiness is also the safety valve: hold `chop x total steepness`
+        // under the limit and the sea can be made as tall as the design wants
+        // without ever turning inside out. Computed against the WORST case
+        // (farthest region, current sea state) and uploaded as one uniform, so
+        // the CPU and the shader cannot disagree about it.
+        [Tooltip("Ceiling on chop x total steepness. Under 1 or the sea folds.")]
+        [Range(0.3f, 0.95f)] [SerializeField] float foldLimit = 0.85f;
+
+        float sumSteepness = 1f;
+
+        /// The choppiness actually in force, after the anti-fold clamp.
+        public float EffectiveChop { get; private set; } = 1f;
+
         [Header("Storm sea (the western deep)")]
         // A storm sea is not a bigger wind sea — it is several trains
         // DISAGREEING. Where they add you get a pyramid peak, where they
@@ -105,15 +122,23 @@ namespace SeaSick.Ocean
         // rather than by being aimed across it.
         [Tooltip("Half-arc in degrees for the storm trains.")]
         [SerializeField] float stormSpreadDegrees = 140f;
-        [Tooltip("Wavelength band for the cross trains — long, so they build real peaks.")]
-        [SerializeField] Vector2 stormWavelengths = new Vector2(70f, 260f);
+        [Tooltip("Wavelength band for the storm trains — long, so they build real peaks.")]
+        [SerializeField] Vector2 stormWavelengths = new Vector2(120f, 340f);
         // Specified in metres for the same reason the base spectrum is: with
         // steepness as the dial, the sea's SIZE depended on the wavelength
         // lottery. Changing the number of random draws in the base loop
         // silently shrank the storm from 12.7m of amplitude to 9.9m — a 22%
         // smaller storm, from a change that had nothing to do with the storm.
-        [Tooltip("Total amplitude of the cross seas at full storm, in metres.")]
-        [SerializeField] float stormAmplitude = 12.7f;
+        // This is the "section of the sea that is a large epic ocean" dial.
+        //
+        // Storm waves are gated by StormAmount01, which is zero on the home
+        // shelf, so raising this makes the western deep enormous WITHOUT
+        // touching the calm water the village fishes in. At 12.7m the storm
+        // waves ran amp/L around 0.011 — a 0.6 degree face, which is a gentle
+        // swell no matter how tall the numbers say it is, and read as a flat
+        // sheet on screen even with the fog opened right up to see it.
+        [Tooltip("Total amplitude of the storm trains at full storm, in metres.")]
+        [SerializeField] float stormAmplitude = 40f;
 
         [Header("Where the storm lives")]
         [Tooltip("Direction the storm lies in, from home. Default is due west.")]
@@ -243,7 +268,7 @@ namespace SeaSick.Ocean
                 ? Vector2.left : stormBearing.normalized;
             Shader.SetGlobalVector(StormId, new Vector4(sdir.x, sdir.y, stormNear, stormFar));
             Shader.SetGlobalFloat(StormStartId, stormWaveCount > 0 ? stormStart : 9999);
-            Shader.SetGlobalFloat(ChopId, choppiness);
+            Shader.SetGlobalFloat(ChopId, EffectiveChop);
             Shader.SetGlobalInt(WaveCountId, count);
 
             // Shore falloff data, so the shader kills the same waves the
@@ -405,6 +430,10 @@ namespace SeaSick.Ocean
                 float amp = stormAmplitude * Mathf.Pow(waves[w].wavelength, ampPower) / stormShapeSum;
                 waves[w].steepness = amp * (2f * Mathf.PI / waves[w].wavelength);
             }
+
+            // Worst case for the fold clamp: every wave present at full storm.
+            sumSteepness = 0f;
+            for (int i = 0; i < waves.Length; i++) sumSteepness += waves[i].steepness;
         }
 
         /// How deep into the storm this spot is: 0 in home waters, 1 out in the
@@ -516,6 +545,13 @@ namespace SeaSick.Ocean
 
             cachedTime = time;
             cachedSea = SeaState01;
+
+            // Displace multiplies the whole thing by RegionScale and by the sea
+            // state, so both scale the horizontal steepness that decides
+            // folding. Clamp against the deepest water, whether or not we are
+            // standing in it — one global value keeps CPU and GPU in step.
+            float worst = sumSteepness * Mathf.Max(nearScale, farScale) * Mathf.Max(0.01f, cachedSea);
+            EffectiveChop = Mathf.Min(choppiness, foldLimit / Mathf.Max(0.0001f, worst));
             for (int i = 0; i < waves.Length; i++)
             {
                 var w = waves[i];
@@ -577,7 +613,7 @@ namespace SeaSick.Ocean
                 if (amp == 0f) continue;
                 float k = Mathf.Sqrt(c.kx * c.kx + c.kz * c.kz);
                 float sn = Mathf.Sin(c.kx * p.x + c.kz * p.y + c.phaseOffset)
-                           * amp * k * shore * choppiness;
+                           * amp * k * shore * EffectiveChop;
                 jxx -= c.dirX * c.dirX * sn;
                 jzz -= c.dirZ * c.dirZ * sn;
                 jxz -= c.dirX * c.dirZ * sn;
@@ -600,7 +636,7 @@ namespace SeaSick.Ocean
                 if (amp == 0f) continue;
                 float ph = c.kx * x + c.kz * z + c.phaseOffset;
                 float cos = Mathf.Cos(ph);
-                float ampCos = amp * cos * choppiness;
+                float ampCos = amp * cos * EffectiveChop;
                 dx += c.dirX * ampCos;
                 dz += c.dirZ * ampCos;
                 dy += amp * Mathf.Sin(ph);
@@ -614,7 +650,7 @@ namespace SeaSick.Ocean
                 float amplitude = (swellSteepness * env) / k;
                 float omega = Mathf.Sqrt(Gravity * k);
                 float ph = k * Vector2.Dot(swellDir, restPos) - omega * time;
-                float cos = Mathf.Cos(ph) * choppiness;
+                float cos = Mathf.Cos(ph) * EffectiveChop;
                 d.x += swellDir.x * amplitude * cos;
                 d.z += swellDir.y * amplitude * cos;
                 d.y += amplitude * Mathf.Sin(ph);

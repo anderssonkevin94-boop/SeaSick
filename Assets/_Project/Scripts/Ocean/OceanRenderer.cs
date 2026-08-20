@@ -56,7 +56,12 @@ namespace SeaSick.Ocean
             mesh.triangles = tris;
             // Vertices move in the shader, so bounds must be generous enough
             // that culling never clips the tile.
-            mesh.bounds = new Bounds(Vector3.zero, new Vector3(extent, 80f, extent));
+            // Displacement happens in the vertex shader, so Unity culls
+            // against these bounds and never sees how far the surface actually
+            // moved. 80m of total height (40m either way) was ample for a 5m
+            // swell and would cull the whole ocean out of frame now the western
+            // deep is measured in tens of metres. Bounds are free — be generous.
+            mesh.bounds = new Bounds(Vector3.zero, new Vector3(extent, 600f, extent));
             GetComponent<MeshFilter>().sharedMesh = mesh;
         }
 

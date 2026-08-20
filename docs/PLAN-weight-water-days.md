@@ -12,7 +12,14 @@ The camera diagnosis in the old note was **wrong on two counts** and is worth re
 
 **Wave shape reworked 2026-08-20.** Feedback: sharp, unison crests, and *"the larger a wave, the wider it needs to be ... more like a noise map than a row of waves going by."* The base spectrum's directional spread was `peakL/wavelength`, pinning the longest waves to ±9° of the wind; amplitude was weighted by an energy curve that made 71m waves the tallest and 170m waves the smallest. Now amplitude rises in proportion to wavelength (so every wave is equally steep and a tall crest must be a long one), directions are stratified in mirrored pairs across a wide arc, and a `choppiness` factor scales only the horizontal displacement so crests round off at unchanged height. Row-ness 0.35–0.76 → **1.07 everywhere**; crest skew 0.34 → 0.06.
 
-**Open question for Kevin:** a spread sea does not stack its peaks like a marching one. At a pinned sea state, heave at 1600m west is **15.2m against 23.5m before, with pitch 16° → 9° and roll 10° → 18°** — she pitches less and rolls a lot more. Amplitude was left alone so only the shape changed. If the storm should hit harder again, `baseAmplitude` and `stormAmplitude` on `WaveField` are single numbers in metres.
+**The western deep made epic 2026-08-20.** The sea read flat because the storm waves ran `amp/L` around 0.011 — a 0.6° face, which no amount of amplitude spread over 250m can make dramatic. `stormAmplitude` 12.7 → **40m** with wavelengths 120–340m, giving **40m of measured hull heave** at 1500m west. Storm trains are gated by `StormAmount01` so the home shelf is untouched — this is the "section of the sea" that is a large epic ocean.
+
+`choppiness` is now self-limiting: Gerstner folds on *horizontal* steepness only, so chop is clamped to hold `chop × totalSteepness × farScale × seaState` under `foldLimit`. **Size is therefore free** — raise `stormAmplitude` as far as the design wants and the surface can never turn inside out.
+
+**Still open, and Kevin's call:**
+- Is 40m the right size, or should the deep go further? One number: `WaveField.stormAmplitude`.
+- The chase camera gets as close as **1.7m above the hull** when the ship is on a crest and the lens in a trough. Dramatic, or too close? `ChaseCamera.stormDrop` (currently 9m) is the dial.
+- Green water is now near-constant out west ("water aboard — bailing" most of the time). That is the weight/water loop doing its job in a huge sea, but it has never been balanced against water this big.
 
 **Next, in order:**
 1. **Playtest the storm by hand.** Everything above is probe-and-screenshot verified; nobody has sailed into it. The remaining questions are aesthetic and are Kevin's to answer — is it dark enough, is the spray enough, does the lower camera help or is it claustrophobic, and is the new sea the right size.
