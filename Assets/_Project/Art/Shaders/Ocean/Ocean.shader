@@ -48,8 +48,19 @@ Shader "SeaSick/Ocean"
             float4 _Ocean_PatchSizes;
             float4 _Ocean_FadeParams;
             float4 _Ocean_CascadeWeights;   // per-ring MaterialPropertyBlock
+            TEXTURE2D(_Ocean_SimTex);       // ripple sim: R offset, G foam
+            SAMPLER(sampler_Ocean_SimTex);
+            float4 _Ocean_SimRect;          // anchor.xy, extent, texel
             float4 _SS_SkyHorizon;
             float _SS_Storminess;
+
+            float2 SampleSim(float2 xz)
+            {
+                if (_Ocean_SimRect.z <= 0.0) return float2(0, 0);
+                float2 uv = (xz - _Ocean_SimRect.xy) / _Ocean_SimRect.z;
+                if (any(uv < 0.0) || any(uv > 1.0)) return float2(0, 0);
+                return SAMPLE_TEXTURE2D_LOD(_Ocean_SimTex, sampler_Ocean_SimTex, uv, 0).rg;
+            }
 
             CBUFFER_START(UnityPerMaterial)
             half4 _DeepColor, _ShallowColor, _SubsurfaceColor;
@@ -129,7 +140,7 @@ Shader "SeaSick/Ocean"
                 float env = RegionEnvelope(ws.xz);
                 float dispLen;
                 float3 disp = env * SampleDisplacement(ws.xz, fade, dispLen);
-                float2 srcXZ = ws.xz;
+                disp.y += SampleSim(ws.xz).r; // wakes & splash rings
                 ws += disp;
                 o.positionWS = ws;
                 o.heightY = disp.y;
@@ -149,6 +160,13 @@ Shader "SeaSick/Ocean"
                 // squeeze term keeps crests sharp instead of shaded like domes.
                 float4 dv = env * SampleDerivs(xz, fade);
                 float2 slope = dv.xy / max(float2(1.0, 1.0) + dv.zw, 0.15);
+                // Ripple sim contributes slope by finite difference + foam.
+                float2 sim = SampleSim(xz);
+                float simTexel = max(_Ocean_SimRect.w, 0.01);
+                float2 simSlope = float2(
+                    SampleSim(xz + float2(simTexel, 0)).r - sim.r,
+                    SampleSim(xz + float2(0, simTexel)).r - sim.r) / simTexel;
+                slope += simSlope;
                 float3 n = normalize(float3(-slope.x, 1.0, -slope.y));
 
                 Light sun = GetMainLight();
@@ -205,6 +223,7 @@ Shader "SeaSick/Ocean"
                             * FoamNoise(xz * _FoamNoiseScale * 3.7 + 17.0);
                 float foamAmt = saturate((breaking * (0.35 + 0.65 * storm) + turb)
                                 * (0.4 + 1.5 * noise)) * env;
+                foamAmt = saturate(foamAmt + sim.g * (0.5 + 0.8 * noise));
 
                 half3 col = lerp(body, sky, fresnel * (1.0 - foamAmt));
                 col += spec * sun.color;

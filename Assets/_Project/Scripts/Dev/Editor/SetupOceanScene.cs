@@ -54,7 +54,11 @@ public static class SetupOceanScene
 
         Ensure<OceanPhysicsDriver>(ocean);
         Ensure<RegionField>(ocean);
-        Ensure<DynamicWaterSim>(ocean);
+        var sim = Ensure<DynamicWaterSim>(ocean);
+        var simSo = new SerializedObject(sim);
+        simSo.FindProperty("rippleShader").objectReferenceValue =
+            AssetDatabase.LoadAssetAtPath<ComputeShader>($"{ShaderDir}/RippleSim.compute");
+        simSo.ApplyModifiedPropertiesWithoutUndo();
 
         var ship = FindShip();
         var ctrl = Ensure<SeaStateController>(ocean);

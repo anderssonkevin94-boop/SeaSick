@@ -874,6 +874,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 57b6b6a2b635b4dde95b90a2d90a5947, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.DynamicWaterSim
+  rippleShader: {fileID: 7200000, guid: aaf0eeb99ead445c1ab2528f6fa6d6f0, type: 3}
+  waveSpeed: 6.5
+  damping: 3.5
+  foamDecay: 1.4
+  hullFoamRate: 1.6
+  hullDisplaceRate: 0.9
 --- !u!114 &1016993463
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -1,0 +1,89 @@
+// Ship-following 2D wave-equation ripple sim. R = surface offset, G = contact
+// foam. Classic leapfrog: h' = 2h - h_prev + c^2 dt^2 laplacian(h), damped,
+// with rim damping so waves die before they hit the buffer edge instead of
+// reflecting. Impulses (hull footprint, splashes, monster thrash) arrive as a
+// small buffer of gaussian stamps. Scroll shifts content when the follow
+// anchor snaps to a new texel.
+
+#pragma kernel Step
+#pragma kernel Inject
+#pragma kernel Scroll
+#pragma kernel Clear
+
+RWTexture2D<float2> Curr;
+RWTexture2D<float2> Prev;
+Texture2D<float2> Src;
+RWTexture2D<float2> Dst;
+
+struct Impulse { float2 uv; float radius; float height; float foam; };
+StructuredBuffer<Impulse> Impulses;
+
+cbuffer Params
+{
+    uint _N;
+    float _C2Dt2;      // (c * dt / texel)^2, clamped for stability
+    float _Damping;    // per-step amplitude keep (e.g. 0.995)
+    float _FoamDecay;  // per-step foam keep
+    uint _ImpulseCount;
+    int2 _ScrollOffset;
+}
+
+[numthreads(8, 8, 1)]
+void Step(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _N || id.y >= _N) return;
+    uint xm = id.x == 0 ? 0 : id.x - 1;
+    uint xp = min(id.x + 1, _N - 1);
+    uint ym = id.y == 0 ? 0 : id.y - 1;
+    uint yp = min(id.y + 1, _N - 1);
+
+    float h = Curr[id.xy].x;
+    float lap = Curr[uint2(xm, id.y)].x + Curr[uint2(xp, id.y)].x
+              + Curr[uint2(id.x, ym)].x + Curr[uint2(id.x, yp)].x - 4.0 * h;
+    float hPrev = Prev[id.xy].x;
+
+    // Rim damping: fade hard over the outer 12% so the border never reflects.
+    float2 centred = (float2(id.xy) + 0.5) / _N - 0.5;
+    float rim = smoothstep(0.5, 0.38, max(abs(centred.x), abs(centred.y)));
+
+    float hNew = (2.0 * h - hPrev + _C2Dt2 * lap) * _Damping * rim;
+    float foam = Curr[id.xy].y * _FoamDecay * rim;
+
+    Prev[id.xy] = float2(h, 0);
+    Curr[id.xy] = float2(hNew, foam);
+}
+
+[numthreads(64, 1, 1)]
+void Inject(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ImpulseCount) return;
+    Impulse imp = Impulses[id.x];
+    int2 c = int2(imp.uv * _N);
+    int r = max(1, (int)(imp.radius * _N));
+    for (int dy = -r; dy <= r; dy++)
+        for (int dx = -r; dx <= r; dx++)
+        {
+            int2 p = c + int2(dx, dy);
+            if (p.x < 0 || p.y < 0 || p.x >= (int)_N || p.y >= (int)_N) continue;
+            float fall = saturate(1.0 - length(float2(dx, dy)) / r);
+            fall = fall * fall * (3.0 - 2.0 * fall);
+            float2 v = Curr[p];
+            Curr[p] = float2(v.x + imp.height * fall, saturate(v.y + imp.foam * fall));
+        }
+}
+
+[numthreads(8, 8, 1)]
+void Scroll(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _N || id.y >= _N) return;
+    int2 src = int2(id.xy) + _ScrollOffset;
+    bool inside = src.x >= 0 && src.y >= 0 && src.x < (int)_N && src.y < (int)_N;
+    Dst[id.xy] = inside ? Src[src] : float2(0, 0);
+}
+
+[numthreads(8, 8, 1)]
+void Clear(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _N || id.y >= _N) return;
+    Dst[id.xy] = float2(0, 0);
+}
