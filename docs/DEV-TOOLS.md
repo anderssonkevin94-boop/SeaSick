@@ -44,10 +44,12 @@ shader property defaults. Re-run these after changing any default.
 | `SpectrumProbe2.cs` | The GPU sea against **oceanography**: Hs from field variance and Tp from a temporal PSD vs analytic JONSWAP integrals, for the three canonical (wind, fetch) triples. Edit mode. Slow (~2 min). | `/tmp/seasick-spectrum2.txt` |
 | `ClipmapProbe.cs` | Vertex swim (re-anchors every ring under a frozen sea; pixels must not move) and altitude tiling shots. Play mode, OceanLab. | `/tmp/seasick-clipmap.txt`, `-tiling-*.png` |
 | `DivergenceProbe.cs` | **The load-bearing gate**: rendered surface vs CPU sampler at 1000 points, five frozen instants, storm λ=1.2 — must be < 5 cm (measured 0.23). Also batch cost. Play mode, OceanLab. | `/tmp/seasick-divergence.txt` |
-| `BuoyProbe.cs` | Proxy sloop: 60 s storm free-float (roll/rails/draft/capsize) + calm 2 m drop settle time. Play mode, OceanLab. | `/tmp/seasick-buoy.txt` |
+| `BuoyProbe.cs` | Proxy sloop: 60 s storm free-float (roll/rails/draft/capsize) + three calm 2 m drops from pinned phases, scored on draft **overshoot** and **late ringing RMS**. The old "settle time" criterion was replaced 2026-08-21 — see the traps below. Play mode, OceanLab. | `/tmp/seasick-buoy.txt` |
 | `BlendProbe.cs` | Calm→storm weather ramp smoothness (Hs every second; steps mean rebuild pops). Play mode, OceanLab. | `/tmp/seasick-blend.txt`, `-blend-*.png` |
 | `SailShot.cs` | Sails the western deep in `Sea.unity`: draft statistics, camera clamp rate, camera/hull gap, roll/pitch, speed. Compare `/tmp/seasick-sail-baseline.txt` (the old kinematic system's final run). | `/tmp/seasick-sail.txt`, `-0..4.png` |
 | `BuryProbe.cs` | **Deck-burial gate**: sails hard into head seas at forced severity 1.0, wave phase pinned (`OceanTime.Scrub(500)`), 60 s. Deck must stay dry: poopDeckUnder 0%, deckOverMax < 0. Play mode, Sea.unity. | `/tmp/seasick-bury.txt` |
+| `StallProbe.cs` | **Sailing-speed gate**: head seas at severity 0.40 and 0.75, plow drag toggled ON/OFF over the same water. Reports mean way vs target, distance made good, stalls/min, recovery time, and peak plow against the sail's authority. Also a calm sails-furled leg that checks plow really is silent at rest. Play mode, Sea.unity. | `/tmp/seasick-stall.txt` |
+| `BuryTrace.cs` | BuryProbe's run as a time series instead of a verdict — ship y, sampled surface, batched surface, draft, submersion, reserve, plow, speed, pitch, roll. The sampler-vs-batch column is the one that says whether a wild draft number is a sinking ship or a lying instrument. Play mode, Sea.unity. | `/tmp/seasick-burytrace.txt` |
 | `RippleStressProbe.cs` | Ripple-sim stability under abuse: 30 s of splash spam + hard-turn wake in a storm, GPU readback of the field. max abs offset must stay bounded (< 3 m) with zero non-finite texels. Play mode, Sea.unity. | `/tmp/seasick-ripplestress.txt` |
 | `SprayDebug.cs` | Per-second spindrift emission budget log. | Unity log |
 | `LoadProbe.cs`, `HudShot.cs`, `FogTest.cs`, `WarpOut.cs` | Older, still valid. | `/tmp/seasick-*.txt` |
@@ -102,6 +104,29 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   SpectrumProbe2) use the editor's current level instead (PC, N=256). This is
   a feature — gameplay always rehearses the phone — but know which tier the
   probe you just ran actually measured.
+- **"Past full probe submersion" is not "deeply buried".** A keel-line
+  buoyancy probe is ~96% submerged just floating: on the sloop the stem sits
+  **4 cm** from its own full-submersion depth at the float equilibrium
+  (`radius*0.5` = 0.55 m against a resting depth of 0.508 m), load-invariant,
+  because `SeatOffset` moves the waterline too. Any term keyed on that
+  threshold fires in flat water — reserve was measured active on 38% of steps
+  at anchor in a calm. Solve the static float before choosing an onset.
+- **A velocity threshold on a live sea measures the sea.** BuoyProbe scored
+  the calm drop as "|vy| < 0.12 m/s for 0.5 s"; the calm sea's own orbital
+  motion is that same order, so one unchanged build returned 1.04 s, 2.49 s,
+  5.93 s and never-settled — and a FAIL from it sent this session hunting a
+  regression that did not exist. Score transients on a quantity that
+  subtracts the water (draft = surface − hull), pin the phase, repeat the
+  drop, and gate on an average (RMS) rather than a threshold crossing.
+  Overshoot repeated to ±0.02 m where settle time ranged over 8 s.
+- **Run acceptance probes in a FRESH play session.** BuryProbe run straight
+  after StallProbe inherited a ship 8 km away in a forced sea state and
+  reported nonsense. One probe per session, or reset everything the previous
+  one touched.
+- **Two probes disagreeing is data.** When BuryProbe said 44 m of draft and
+  BuryTrace said 1.8 m under the same setup, the difference was BuryProbe's
+  extra 8 s settle — it was measuring 8 s further into the run. Diff the
+  setups before believing either.
 - **`OceanSampler.SampleImmediate` is for one-shot, low-rate queries** (camera
   clamp, splash tests, random scatter like StormSpray). Anything continuous —
   floaters, enemy hulls, hull probes — belongs in `OceanProbeRegistry` or a

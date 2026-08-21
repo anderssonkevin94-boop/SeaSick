@@ -34,8 +34,12 @@ namespace SeaSick.Ocean
         [SerializeField] float reservePerMetre = 1.5f;
         [Tooltip("Cap on the reserve multiple, x probe capacity.")]
         [SerializeField] float maxReserve = 2.5f;
-        [Tooltip("Extra forward drag factor per unit of reserve. A deeply buried bow is plowing a wall of water: no plausible lift out-muscles 4 t of way, but shedding the way lets the lift win. This is the wave-slam feel.")]
+        [Tooltip("Extra forward drag factor per unit of PLOW reserve. A deeply buried bow is plowing a wall of water: no plausible lift out-muscles 4 t of way, but shedding the way lets the lift win. This is the wave-slam feel.")]
         [SerializeField] float plowDragFactor = 0.15f;
+        [Tooltip("Metres of bury past full probe submersion before plow drag starts — its own onset, separate from the lift's. The lift must ramp from zero (that band IS the storm freeboard), but a keel-line probe is ~96% submerged just floating: the stem sits 4 cm from full submersion at rest, so a shared onset put the brake on in flat water (measured: reserve active on 38% of steps at anchor in a calm) and cost 95% of her distance made good in a lively sea.")]
+        [SerializeField] float plowOnset = 0.6f;
+        [Tooltip("Ceiling on total plow deceleration, m/s^2. Propulsion is a rate-limited servo (ShipMotor.acceleration, 2.6 m/s^2), so an uncapped brake wins outright and never gives the sail a way back — and because plow is applied at the stem, below and forward of the CoM, it pitches her bow-down into more bury and runs away. At 4.0 a slam sheds the intended ~2 m/s over half a second and she works back up.")]
+        [SerializeField] float maxPlowDecel = 6f;
         [Tooltip("Fraction of reserve LIFT kept while the probe rises relative to the water (ramp over 1 m/s). Only the lift bleeds — reserve damping and plow drag stay at full strength, so this is an asymmetric shock absorber: full catch on the way in, no spring-return pogo on the way out (symmetric lift measured 6-9 s calm settle vs 1.75 s baseline).")]
         [SerializeField, Range(0f, 1f)] float reserveUpwardKeep = 0.3f;
         [Tooltip("Explicit inertia box (m) — a colliderless Rigidbody defaults to unit inertia and spins like a coin.")]
@@ -44,6 +48,10 @@ namespace SeaSick.Ocean
 
         Rigidbody rb;
         BuoyancyProbeSet probeSet;
+        // Plow is clamped against a total, so it is applied in a second pass.
+        // Preallocated: this runs every FixedUpdate.
+        Vector3[] plowScratch;
+        Vector3[] plowAt;
 
         /// Share-weighted submersion this step, 0..1.
         public float Submersion { get; private set; }
@@ -57,6 +65,15 @@ namespace SeaSick.Ocean
         public Vector3 DebugDragForward { get; private set; }
         public Vector3 DebugDragLateral { get; private set; }
         public Vector3 DebugDragVertical { get; private set; }
+        /// The plow-drag share of DebugDragForward this step (world space, N),
+        /// and the deepest reserve any probe reached. Diagnostic only.
+        public Vector3 DebugPlowForward { get; private set; }
+        public float DebugMaxReserve { get; private set; }
+        /// Live tuning surface for A/B probes — set plow to 0 to isolate it.
+        public float PlowDragFactor { get => plowDragFactor; set => plowDragFactor = value; }
+        public float ReservePerMetre { get => reservePerMetre; set => reservePerMetre = value; }
+        public float PlowOnset { get => plowOnset; set => plowOnset = value; }
+        public float MaxPlowDecel { get => maxPlowDecel; set => maxPlowDecel = value; }
         /// Extra metres the body should sit below its light waterline (cargo,
         /// bilge water). Lowers the float equilibrium without touching mass.
         public float SeatOffset { get; set; }
@@ -101,6 +118,17 @@ namespace SeaSick.Ocean
             float railWorst = float.MinValue;
             Vector3 waveForce = Vector3.zero;
             Vector3 dbgFwd = Vector3.zero, dbgLat = Vector3.zero, dbgVert = Vector3.zero;
+            float reserveWorst = 0f;
+            Vector3 plowTotal = Vector3.zero;
+
+            if (plowScratch == null || plowScratch.Length != probes.Length)
+            {
+                plowScratch = new Vector3[probes.Length];
+                plowAt = new Vector3[probes.Length];
+            }
+            // Cleared every step: a probe that leaves the water skips the body
+            // of the loop, and a stale plow vector would keep braking her.
+            for (int i = 0; i < probes.Length; i++) plowScratch[i] = Vector3.zero;
 
             for (int i = 0; i < probes.Length; i++)
             {
@@ -124,14 +152,26 @@ namespace SeaSick.Ocean
                 // (deadband, quadratic, knee) put the rails under 4-13% of
                 // the head-seas gate vs 0% for this shape. Lift and damping
                 // bleed on upward relative motion (keeping damping raw
-                // measured 8.7 s calm settle); plow drag keeps the raw value
-                // — an impacting bow moves down relative to the water, so
-                // plow is naturally at full strength exactly when it counts.
+                // measured 8.7 s calm settle). Plow drag reads the SAME depth
+                // through its own, later onset below — it wants "the bow is
+                // buried in a wall of water", not "she is floating".
                 float over = Mathf.Max(0f, depth - probes[i].radius * 0.5f);
                 float reserve = Mathf.Min(maxReserve, reservePerMetre * over);
                 float reserveLift = reserve *
                     Mathf.Lerp(1f, reserveUpwardKeep, Mathf.Clamp01(vRel.y));
                 float effSub = sub + reserveLift;
+                // Plow has its own, later onset. Lift must ramp from the first
+                // millimetre past full submersion or the rails go under, but a
+                // keel-line probe is already ~96% submerged at her float
+                // equilibrium, so sharing that onset made the brake permanent.
+                // Gating plow on VERTICAL closing speed was tried and reverted:
+                // it switched the term off almost entirely (0.0 kN through a
+                // whole storm run), she charged the faces at 10 m/s and
+                // pitchpoled — plow is what stops that. The physical term is
+                // about driving HORIZONTALLY into a wall of water, which the
+                // forward-velocity factor below already carries.
+                float overPlow = Mathf.Max(0f, over - plowOnset);
+                float plowReserve = Mathf.Min(maxReserve, reservePerMetre * overPlow);
 
                 Vector3 buoy = Vector3.up * (waterDensity * g * totalVolume
                     * probes[i].volumeShare * (sub + reserveLift));
@@ -144,9 +184,8 @@ namespace SeaSick.Ocean
                 fwdFlat = fwdFlat.sqrMagnitude > 1e-4f ? fwdFlat.normalized : Vector3.forward;
                 Vector3 rightFlat = new Vector3(fwdFlat.z, 0f, -fwdFlat.x);
                 Vector3 horiz = new Vector3(vRel.x, 0f, vRel.z);
-                float fwdFactor = forwardDragFactor + plowDragFactor * reserve;
                 Vector3 shaped = Vector3.up * vRel.y
-                    + fwdFlat * (Vector3.Dot(horiz, fwdFlat) * fwdFactor)
+                    + fwdFlat * (Vector3.Dot(horiz, fwdFlat) * forwardDragFactor)
                     + rightFlat * (Vector3.Dot(horiz, rightFlat) * lateralDragFactor);
                 // Drag scales with effSub too: the reserve lift arrives with
                 // matching damping, so a buried bow rises instead of ringing.
@@ -154,17 +193,45 @@ namespace SeaSick.Ocean
                               * (probes[i].volumeShare * effSub);
                 Vector3 drag = coeff * shaped;
                 dbgVert += coeff * (Vector3.up * vRel.y);
-                dbgFwd += coeff * (fwdFlat * (Vector3.Dot(horiz, fwdFlat) * fwdFactor));
+                dbgFwd += coeff * (fwdFlat * (Vector3.Dot(horiz, fwdFlat) * forwardDragFactor));
                 dbgLat += coeff * (rightFlat * (Vector3.Dot(horiz, rightFlat) * lateralDragFactor));
+                if (reserve > reserveWorst) reserveWorst = reserve;
                 // No single probe may out-shove its own buoyant capacity by
                 // much — keeps any velocity transient from launching the hull.
                 float dragCap = 2f * waterDensity * g * totalVolume
                     * probes[i].volumeShare * (1f + reserve);
                 drag = Vector3.ClampMagnitude(drag, dragCap);
 
+                // Plow held back for pass 2: it is clamped against a TOTAL, so
+                // no single probe can decide it.
+                plowScratch[i] = coeff *
+                    (fwdFlat * (Vector3.Dot(horiz, fwdFlat) * (plowDragFactor * plowReserve)));
+                plowAt[i] = world;
+                plowTotal += plowScratch[i];
+
                 rb.AddForceAtPosition(buoy + drag, world);
                 waveForce += buoy + drag;
             }
+
+            // Pass 2 — plow drag, clamped as a total. Scaling every probe by
+            // the same factor keeps the bow-down couple's SHAPE (a slam still
+            // pitches her) while bounding it, which is what stops the
+            // bury -> more plow -> more bury runaway.
+            float plowMax = maxPlowDecel * rb.mass;
+            float plowMag = plowTotal.magnitude;
+            float plowScale = plowMag > plowMax && plowMag > 1e-3f
+                ? plowMax / plowMag : 1f;
+            if (plowMag > 1e-3f)
+            {
+                for (int i = 0; i < probes.Length; i++)
+                {
+                    if (plowScratch[i].sqrMagnitude <= 0f) continue;
+                    Vector3 f = plowScratch[i] * plowScale;
+                    rb.AddForceAtPosition(f, plowAt[i]);
+                    waveForce += f;
+                }
+            }
+            DebugPlowForward = plowTotal * plowScale;
 
             Submersion = subSum;
             MeanWaterHeight = hSum / probes.Length;
@@ -172,6 +239,7 @@ namespace SeaSick.Ocean
             DebugDragForward = dbgFwd;
             DebugDragLateral = dbgLat;
             DebugDragVertical = dbgVert;
+            DebugMaxReserve = reserveWorst;
             WaveForce = waveForce - Vector3.up * Vector3.Dot(waveForce, Vector3.up);
 
             // Submersion-scaled angular damping: a hull in the water settles,
