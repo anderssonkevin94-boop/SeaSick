@@ -91,6 +91,9 @@ namespace SeaSick.Ship
         public float WindStrength { get; private set; } = 1f;
         public float GustFactor01 { get; private set; }
         public float MaxSpeed => maxSpeed;
+        /// The whole propulsion budget: x mass is the most force the sail can
+        /// ever apply, and any water force above that wins outright.
+        public float Acceleration => acceleration;
         public Vector3 Velocity => rb != null ? rb.linearVelocity : Vector3.zero;
         public float SurfAccel { get; private set; }
         public float SurfBoost01 => Mathf.Clamp01(SurfAccel / 3.5f);

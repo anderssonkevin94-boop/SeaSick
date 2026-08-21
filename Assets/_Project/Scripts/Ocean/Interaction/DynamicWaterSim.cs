@@ -12,12 +12,17 @@ namespace SeaSick.Ocean
     public class DynamicWaterSim : MonoBehaviour
     {
         const int MaxImpulses = 64;
+        /// Courant number each sub-step is held to. The hard 2D limit is
+        /// sqrt(0.5) ~ 0.707; 0.5 leaves real margin for the damping, rim and
+        /// impulse terms rather than the 0.67-0.71 the old clamp allowed.
+        const float SafeCourant = 0.5f;
 
         public static DynamicWaterSim Instance { get; private set; }
 
         /// Probe access to the live field (R = offset, G = foam).
         public RenderTexture SimTexture => curr;
         public int Resolution => n;
+        public float Extent => extent;
 
         [SerializeField] ComputeShader rippleShader;
         [Tooltip("Wave speed of the ripples, m/s.")]
@@ -30,7 +35,7 @@ namespace SeaSick.Ocean
 
         struct Impulse { public Vector2 uv; public float radius, height, foam; }
 
-        RenderTexture curr, prev, scratch;
+        RenderTexture curr, prev, scratch, scrollTmp;
         ComputeBuffer impulseBuffer;
         readonly List<Impulse> queue = new List<Impulse>();
         readonly Impulse[] uploadScratch = new Impulse[MaxImpulses];
@@ -57,7 +62,7 @@ namespace SeaSick.Ocean
             kScroll = rippleShader.FindKernel("Scroll");
             kClear = rippleShader.FindKernel("Clear");
 
-            curr = NewRT(); prev = NewRT(); scratch = NewRT();
+            curr = NewRT(); prev = NewRT(); scratch = NewRT(); scrollTmp = NewRT();
             impulseBuffer = new ComputeBuffer(MaxImpulses, sizeof(float) * 5);
             ClearAll();
         }
@@ -68,6 +73,7 @@ namespace SeaSick.Ocean
             if (curr != null) curr.Release();
             if (prev != null) prev.Release();
             if (scratch != null) scratch.Release();
+            if (scrollTmp != null) scrollTmp.Release();
             impulseBuffer?.Dispose();
             impulseBuffer = null;
         }
@@ -87,7 +93,7 @@ namespace SeaSick.Ocean
 
         void ClearAll()
         {
-            foreach (var rt in new[] { curr, prev, scratch })
+            foreach (var rt in new[] { curr, prev, scratch, scrollTmp })
             {
                 rippleShader.SetInt("_N", n);
                 rippleShader.SetTexture(kClear, "Dst", rt);
@@ -179,39 +185,60 @@ namespace SeaSick.Ocean
                 rippleShader.SetInt("_ImpulseCount", count);
                 rippleShader.SetBuffer(kInject, "Impulses", impulseBuffer);
                 rippleShader.SetTexture(kInject, "Curr", curr);
-                rippleShader.Dispatch(kInject, Mathf.CeilToInt(count / 64f), 1, 1);
+                rippleShader.SetTexture(kInject, "InjectPrev", prev);
+                // Per-texel now, so this dispatches over the field rather than
+                // over the impulse list.
+                int injGroups = Mathf.CeilToInt(n / 8f);
+                rippleShader.Dispatch(kInject, injGroups, injGroups, 1);
             }
 
-            float c2 = waveSpeed * dt / texel;
-            rippleShader.SetFloat("_C2Dt2", Mathf.Min(c2 * c2, 0.45f));
-            rippleShader.SetFloat("_Damping", Mathf.Exp(-damping * dt));
-            rippleShader.SetFloat("_FoamDecay", Mathf.Exp(-foamDecay * dt));
+            // CFL: the explicit 2D wave scheme is unstable past (c dt/dx)^2 = 0.5.
+            // This used to run one step and CLAMP at 0.45 — 90% of the limit,
+            // and on both tiers it sat there every frame. Marginal stability
+            // plus impulse forcing is what produced the needles. Sub-step
+            // instead, so the authored wave speed is preserved and each step
+            // is comfortably inside the limit.
+            float courant = waveSpeed * dt / texel;
+            int steps = Mathf.Clamp(Mathf.CeilToInt(courant / SafeCourant), 1, 4);
+            float dtSub = dt / steps;
+            float cSub = waveSpeed * dtSub / texel;
+            rippleShader.SetFloat("_C2Dt2", Mathf.Min(cSub * cSub, SafeCourant * SafeCourant));
+            rippleShader.SetFloat("_Damping", Mathf.Exp(-damping * dtSub));
+            rippleShader.SetFloat("_FoamDecay", Mathf.Exp(-foamDecay * dtSub));
             // Ping-pong: Step reads curr+prev, writes scratch, then the three
             // buffers rotate. Updating curr in place raced neighbour reads
             // against writes across threads and intermittently blew the field
             // up into giant surface spikes.
-            rippleShader.SetTexture(kStep, "Src", curr);
-            rippleShader.SetTexture(kStep, "PrevTex", prev);
-            rippleShader.SetTexture(kStep, "Dst", scratch);
-            rippleShader.Dispatch(kStep, Mathf.CeilToInt(n / 8f), Mathf.CeilToInt(n / 8f), 1);
-            RenderTexture next = scratch;
-            scratch = prev;
-            prev = curr;
-            curr = next;
+            int groups = Mathf.CeilToInt(n / 8f);
+            for (int i = 0; i < steps; i++)
+            {
+                rippleShader.SetTexture(kStep, "Src", curr);
+                rippleShader.SetTexture(kStep, "PrevTex", prev);
+                rippleShader.SetTexture(kStep, "Dst", scratch);
+                rippleShader.Dispatch(kStep, groups, groups, 1);
+                RenderTexture next = scratch;
+                scratch = prev;
+                prev = curr;
+                curr = next;
+            }
 
             Shader.SetGlobalTexture("_Ocean_SimTex", curr);
             Shader.SetGlobalVector("_Ocean_SimRect",
                 new Vector4(anchor.x, anchor.y, extent, texel));
         }
 
+        /// Uses a dedicated buffer rather than `scratch`: this is called twice
+        /// back to back (curr, then prev) and `scratch` is also the Step
+        /// kernel's write target, so the old version chained
+        /// dispatch -> CopyTexture -> dispatch -> CopyTexture through one
+        /// resource for no reason.
         void ScrollRT(RenderTexture rt, int ox, int oy)
         {
             rippleShader.SetInts("_ScrollOffset", ox, oy);
             rippleShader.SetTexture(kScroll, "Src", rt);
-            rippleShader.SetTexture(kScroll, "Dst", scratch);
+            rippleShader.SetTexture(kScroll, "Dst", scrollTmp);
             rippleShader.Dispatch(kScroll, Mathf.CeilToInt(n / 8f), Mathf.CeilToInt(n / 8f), 1);
-            // Copy back.
-            Graphics.CopyTexture(scratch, rt);
+            Graphics.CopyTexture(scrollTmp, rt);
         }
     }
 }

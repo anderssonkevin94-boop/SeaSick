@@ -1597,8 +1597,8 @@ MonoBehaviour:
   cruiseOutRate: 1.4
   heaveFollow: 1.5
   heaveShare: 1
-  stormDrop: 9
-  stormPullIn: 6
+  stormDrop: 4
+  stormPullIn: 3
   stormResponse: 1.2
   lockMaxSwingDeg: 78
   lockPullPerMetre: 0.42
@@ -2272,6 +2272,13 @@ MonoBehaviour:
   forwardDragFactor: 0.005
   lateralDragFactor: 0.25
   angularDragTorque: 30000
+  reservePerMetre: 1.5
+  maxReserve: 2.5
+  plowDragFactor: 0.15
+  plowOnset: 0.6
+  plowSpeedFloor: 4.5
+  maxPlowDecel: 6
+  reserveUpwardKeep: 0.3
   inertiaBoxDims: {x: 4.4, y: 3, z: 13}
   centreOfMass: {x: 0, y: -0.6, z: 0}
 --- !u!114 &2143489902

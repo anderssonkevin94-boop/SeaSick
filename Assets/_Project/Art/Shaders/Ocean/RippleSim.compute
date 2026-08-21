@@ -11,6 +11,7 @@
 #pragma kernel Clear
 
 RWTexture2D<float2> Curr;
+RWTexture2D<float2> InjectPrev;   // same texel one step back, for Inject
 Texture2D<float2> PrevTex;
 Texture2D<float2> Src;
 RWTexture2D<float2> Dst;
@@ -53,30 +54,51 @@ void Step(uint3 id : SV_DispatchThreadID)
     float hNew = (2.0 * h - hPrev + _C2Dt2 * lap) * _Damping * rim;
     // Backstop: a ripple is decimetres; nothing legitimate reaches this, and
     // a non-finite texel would otherwise spike the surface mesh forever.
-    hNew = clamp(hNew, -2.0, 2.0);
+    hNew = clamp(hNew, -1.2, 1.2);
     if (!isfinite(hNew)) hNew = 0.0;
     float foam = Src[id.xy].y * _FoamDecay * rim;
 
     Dst[id.xy] = float2(hNew, foam);
 }
 
-[numthreads(64, 1, 1)]
+// Impulses are injected as a DISPLACEMENT: the same delta goes into the
+// current level AND the previous one, so the leapfrog sees a shape with zero
+// initial velocity. Writing only Curr (what this did before) hands the scheme
+// a velocity kick instead, and against a CFL number already near the 2D limit
+// that rings up into single-texel needles — measured 0.392 m of step between
+// neighbouring texels, with offsets reaching 1.71 m against the 2 m clamp.
+// One thread per TEXEL, looping the impulses — not one thread per impulse
+// looping its neighbourhood. The old shape had every impulse thread do a
+// read-modify-write over its own footprint, so two overlapping impulses raced
+// and one texel could silently lose a whole impulse its neighbour received.
+// That is a single-texel cliff, and it is what survived the amplitude fixes:
+// 0.456 m of step between neighbours in a field peaking at 0.77 m. Per-texel
+// accumulation also sums overlapping impulses correctly instead of racing.
+[numthreads(8, 8, 1)]
 void Inject(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= _ImpulseCount) return;
-    Impulse imp = Impulses[id.x];
-    int2 c = int2(imp.uv * _N);
-    int r = max(1, (int)(imp.radius * _N));
-    for (int dy = -r; dy <= r; dy++)
-        for (int dx = -r; dx <= r; dx++)
-        {
-            int2 p = c + int2(dx, dy);
-            if (p.x < 0 || p.y < 0 || p.x >= (int)_N || p.y >= (int)_N) continue;
-            float fall = saturate(1.0 - length(float2(dx, dy)) / r);
-            fall = fall * fall * (3.0 - 2.0 * fall);
-            float2 v = Curr[p];
-            Curr[p] = float2(v.x + imp.height * fall, saturate(v.y + imp.foam * fall));
-        }
+    if (id.x >= _N || id.y >= _N) return;
+
+    float addH = 0.0;
+    float addF = 0.0;
+    for (uint i = 0; i < _ImpulseCount; i++)
+    {
+        Impulse imp = Impulses[i];
+        float2 c = imp.uv * float(_N);
+        float r = max(1.0, imp.radius * float(_N));
+        float dist = length(float2(id.xy) - c);
+        if (dist > r) continue;
+        float fall = saturate(1.0 - dist / r);
+        fall = fall * fall * (3.0 - 2.0 * fall);
+        addH += imp.height * fall;
+        addF += imp.foam * fall;
+    }
+    if (addH == 0.0 && addF == 0.0) return;
+
+    float2 v = Curr[id.xy];
+    float2 w = InjectPrev[id.xy];
+    Curr[id.xy] = float2(clamp(v.x + addH, -1.2, 1.2), saturate(v.y + addF));
+    InjectPrev[id.xy] = float2(clamp(w.x + addH, -1.2, 1.2), w.y);
 }
 
 [numthreads(8, 8, 1)]

@@ -38,6 +38,8 @@ namespace SeaSick.Ocean
         [SerializeField] float plowDragFactor = 0.15f;
         [Tooltip("Metres of bury past full probe submersion before plow drag starts — its own onset, separate from the lift's. The lift must ramp from zero (that band IS the storm freeboard), but a keel-line probe is ~96% submerged just floating: the stem sits 4 cm from full submersion at rest, so a shared onset put the brake on in flat water (measured: reserve active on 38% of steps at anchor in a calm) and cost 95% of her distance made good in a lively sea.")]
         [SerializeField] float plowOnset = 0.6f;
+        [Tooltip("Forward way (m/s through the water) below which plow drag stops acting; it fades in over the same span again above it. Plow exists to stop a hull CHARGING into a wall of water, and that is a fast-ship problem — but keyed on depth alone it kept pulling once she was already stopped, and in mountainous seas that pinned her at 1.4 m/s making 11 m in 40 s (against 381 m with plow off). The floor lets a slam take her from 20 down to single figures and no further, which is the cost the design wants without the handbrake it did not.")]
+        [SerializeField] float plowSpeedFloor = 4.5f;
         [Tooltip("Ceiling on total plow deceleration, m/s^2. Propulsion is a rate-limited servo (ShipMotor.acceleration, 2.6 m/s^2), so an uncapped brake wins outright and never gives the sail a way back — and because plow is applied at the stem, below and forward of the CoM, it pitches her bow-down into more bury and runs away. At 4.0 a slam sheds the intended ~2 m/s over half a second and she works back up.")]
         [SerializeField] float maxPlowDecel = 6f;
         [Tooltip("Fraction of reserve LIFT kept while the probe rises relative to the water (ramp over 1 m/s). Only the lift bleeds — reserve damping and plow drag stay at full strength, so this is an asymmetric shock absorber: full catch on the way in, no spring-return pogo on the way out (symmetric lift measured 6-9 s calm settle vs 1.75 s baseline).")]
@@ -120,6 +122,14 @@ namespace SeaSick.Ocean
             Vector3 dbgFwd = Vector3.zero, dbgLat = Vector3.zero, dbgVert = Vector3.zero;
             float reserveWorst = 0f;
             Vector3 plowTotal = Vector3.zero;
+
+            // Plow fades out as she loses way: see plowSpeedFloor.
+            Vector3 hullFwd = transform.forward;
+            hullFwd.y = 0f;
+            hullFwd = hullFwd.sqrMagnitude > 1e-4f ? hullFwd.normalized : Vector3.forward;
+            float forwardWay = Vector3.Dot(rb.linearVelocity - AmbientFlow, hullFwd);
+            float wayFactor = Mathf.Clamp01(
+                (forwardWay - plowSpeedFloor) / Mathf.Max(0.01f, plowSpeedFloor));
 
             if (plowScratch == null || plowScratch.Length != probes.Length)
             {
@@ -205,7 +215,8 @@ namespace SeaSick.Ocean
                 // Plow held back for pass 2: it is clamped against a TOTAL, so
                 // no single probe can decide it.
                 plowScratch[i] = coeff *
-                    (fwdFlat * (Vector3.Dot(horiz, fwdFlat) * (plowDragFactor * plowReserve)));
+                    (fwdFlat * (Vector3.Dot(horiz, fwdFlat)
+                        * (plowDragFactor * plowReserve * wayFactor)));
                 plowAt[i] = world;
                 plowTotal += plowScratch[i];
 

@@ -131,8 +131,10 @@ public static class SetupStormSky
             var cso = new SerializedObject(cam);
             SetFloat(cso, "heaveFollow", 1.5f);
             SetFloat(cso, "heaveShare", 1f);
-            SetFloat(cso, "stormDrop", 9f);
-            SetFloat(cso, "stormPullIn", 6f);
+            // Halved 2026-08-21: the scene frames at height 13, so a drop of 9
+            // put the lens 4 m above a ship in 20 m seas. See TuneStormFeel.
+            SetFloat(cso, "stormDrop", 4f);
+            SetFloat(cso, "stormPullIn", 3f);
             SetFloat(cso, "stormResponse", 1.2f);
             cso.ApplyModifiedPropertiesWithoutUndo();
         }

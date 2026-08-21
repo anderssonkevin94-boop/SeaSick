@@ -60,14 +60,15 @@ public class StallProbe : MonoBehaviour
 
         sb.AppendLine(string.Format(
             "mass={0:F0}kg   sail authority={1:F1}kN ({2:F2} m/s^2)   plowDragFactor default={3:F3}",
-            rb.mass, 2.6f * rb.mass / 1000f, 2.6f, plowDefault));
+            rb.mass, motor.Acceleration * rb.mass / 1000f, motor.Acceleration, plowDefault));
         sb.AppendLine("");
 
         yield return Float("calm float, sails furled", 0.05f);
-        yield return Leg("lively  plow ON ", 0.40f, plowDefault);
-        yield return Leg("lively  plow OFF", 0.40f, 0f);
-        yield return Leg("heavy   plow ON ", 0.75f, plowDefault);
-        yield return Leg("heavy   plow OFF", 0.75f, 0f);
+        yield return Leg("lively    plow ON ", 0.40f, plowDefault);
+        yield return Leg("heavy     plow ON ", 0.75f, plowDefault);
+        // Mountainous is where the player actually reported "20 down to 2".
+        yield return Leg("mountain  plow ON ", 1.00f, plowDefault);
+        yield return Leg("mountain  plow OFF", 1.00f, 0f);
 
         body.PlowDragFactor = plowDefault;
         SeaStateController.Instance.ReleaseForce();
@@ -256,7 +257,7 @@ public class StallProbe : MonoBehaviour
         sb.AppendLine(string.Format(
             "  plow: mean={0:F1} kN  peak={1:F1} kN ({2:F1} m/s^2, {3:F1}x sail)   totalFwdBrake peak={4:F1} kN",
             plowSum / Mathf.Max(1, n) / 1000f, peakPlow / 1000f, peakPlow / rb.mass,
-            peakPlow / (2.6f * rb.mass), peakBrake / 1000f));
+            peakPlow / (motor.Acceleration * rb.mass), peakBrake / 1000f));
         sb.AppendLine(string.Format(
             "  reserve: mean={0:F2} peak={1:F2}   attitude: maxRoll={2:F0} deg maxPitch={3:F0} deg   meanSub={4:F2}   hullSpeedMul={5:F2}",
             reserveSum / Mathf.Max(1, n), peakReserve, maxRoll, maxPitch,

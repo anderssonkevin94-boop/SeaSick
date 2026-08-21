@@ -73,8 +73,8 @@ namespace SeaSick.CameraRig
         [Tooltip("Metres the rig drops in a full storm. A low camera is what " +
                  "makes a sea loom; a high one looks down on it and flattens " +
                  "it into a bump.")]
-        [SerializeField] float stormDrop = 9f;
-        [SerializeField] float stormPullIn = 6f;
+        [SerializeField] float stormDrop = 4f;
+        [SerializeField] float stormPullIn = 3f;
         [SerializeField] float stormResponse = 1.2f;
 
         [Header("Lock framing")]

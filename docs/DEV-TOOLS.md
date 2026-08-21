@@ -35,6 +35,7 @@ shader property defaults. Re-run these after changing any default.
 | `SetupOceanScene.cs` | **The cutover scene surgery on `Sea.unity`**: builds the new Ocean root (renderer + clipmap + physics driver + region field + weather + ripple stub), strips missing-script stubs, gives the ship its Rigidbody/probe set, and resets `BuoyantBody` to code defaults. Re-run after changing any BuoyantBody default. |
 | `SetupOceanLab.cs` | Builds `OceanLab.unity` (the ocean stack's test scene: free camera, proxy sloop, weather controller) and the OceanQuality/SeaState assets. |
 | `SetupAndroidGraphics.cs` | Locks Android to Vulkan only (the FFT is compute; GLES3.0 has none). |
+| `TuneStormFeel.cs` | Storm-feel values that are **scene-serialised** and therefore unreachable from C# defaults: `ChaseCamera.stormDrop`/`stormPullIn` and `ShipMotor.acceleration`. Note the scene frames the camera at distance 20 / height 13, not the code defaults 25/19 — subtract the storm values from those, not from the defaults. |
 
 ## Probes
 
@@ -50,7 +51,7 @@ shader property defaults. Re-run these after changing any default.
 | `BuryProbe.cs` | **Deck-burial gate**: sails hard into head seas at forced severity 1.0, wave phase pinned (`OceanTime.Scrub(500)`), 60 s. Deck must stay dry: poopDeckUnder 0%, deckOverMax < 0. Play mode, Sea.unity. | `/tmp/seasick-bury.txt` |
 | `StallProbe.cs` | **Sailing-speed gate**: head seas at severity 0.40 and 0.75, plow drag toggled ON/OFF over the same water. Reports mean way vs target, distance made good, stalls/min, recovery time, and peak plow against the sail's authority. Also a calm sails-furled leg that checks plow really is silent at rest. Play mode, Sea.unity. | `/tmp/seasick-stall.txt` |
 | `BuryTrace.cs` | BuryProbe's run as a time series instead of a verdict — ship y, sampled surface, batched surface, draft, submersion, reserve, plow, speed, pitch, roll. The sampler-vs-batch column is the one that says whether a wild draft number is a sinking ship or a lying instrument. Play mode, Sea.unity. | `/tmp/seasick-burytrace.txt` |
-| `RippleStressProbe.cs` | Ripple-sim stability under abuse: 30 s of splash spam + hard-turn wake in a storm, GPU readback of the field. max abs offset must stay bounded (< 3 m) with zero non-finite texels. Play mode, Sea.unity. | `/tmp/seasick-ripplestress.txt` |
+| `RippleStressProbe.cs` | **Ripple-needle gate**: two legs (driving + splash spam, and stalled in a storm), GPU readback scored on **neighbour gradient** and texels riding the clamp — not magnitude, which the Step clamp makes unfalsifiable. Gate: gradient < 0.35 m/texel, zero at clamp, zero non-finite. Play mode, Sea.unity. | `/tmp/seasick-ripplestress.txt` |
 | `SprayDebug.cs` | Per-second spindrift emission budget log. | Unity log |
 | `LoadProbe.cs`, `HudShot.cs`, `FogTest.cs`, `WarpOut.cs` | Older, still valid. | `/tmp/seasick-*.txt` |
 
@@ -127,6 +128,30 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   BuryTrace said 1.8 m under the same setup, the difference was BuryProbe's
   extra 8 s settle — it was measuring 8 s further into the run. Diff the
   setups before believing either.
+- **A clamp in the code can make a gate unfalsifiable.** RippleStressProbe
+  asserted `max|offset| < 3 m` while the Step kernel clamped every texel to
+  ±2 m: the assertion could not fail, and it reported PASS through a bug the
+  player could see. When writing a gate, check that the thing being asserted
+  is not already guaranteed by a clamp, saturate or Clamp01 upstream — and
+  measure the shape of the artifact (here a gradient: a needle is steepness,
+  not height), not just its size.
+- **Read-modify-write across compute threads is the default hazard here.**
+  Two ripple-sim bugs in two sessions were both this: the leapfrog Step
+  updating `Curr` in place, then `Inject` running one thread per IMPULSE doing
+  read-modify-write over its own footprint, so overlapping impulses raced and
+  a texel could silently lose a whole impulse its neighbour got — a
+  single-texel cliff. Dispatch one thread per **destination texel** and loop
+  the sources; then every texel has exactly one writer.
+- **Explicit schemes need real CFL margin, not a clamp at the limit.** The
+  ripple sim ran `(c dt/dx)^2` clamped at 0.45 against a hard 2D limit of 0.5,
+  and both quality tiers sat there every frame. Sub-step to hold the Courant
+  number at 0.5 instead — it preserves the authored wave speed where lowering
+  the speed or the clamp would not.
+- **Severity 1.0 runs are chaotic and stop being an A/B.** At mountainous sea
+  states StallProbe returned the same number with the variable ON and OFF
+  (2.9 m/s, 66 m both) in one run and 2.9 vs 10.4 in the next. Before tuning
+  against a high-severity number, check the OFF leg still differs from the ON
+  leg — if it does not, the run is measuring chaos, not the change.
 - **`OceanSampler.SampleImmediate` is for one-shot, low-rate queries** (camera
   clamp, splash tests, random scatter like StormSpray). Anything continuous —
   floaters, enemy hulls, hull probes — belongs in `OceanProbeRegistry` or a

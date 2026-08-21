@@ -37,21 +37,59 @@ public class RippleStressProbe : MonoBehaviour
         var helm = FindAnyObjectByType<SeaSick.Ship.HelmInput>();
         if (helm != null) helm.enabled = false;
 
-        SeaStateController.Instance.ForceSeverity(1f);
-        motor.SailOrder = 1f;
-        motor.Rudder = 0.4f;   // constant turn keeps the wake stamping hard
-        yield return new WaitForSeconds(4f);
+        bool ok = true;
+        yield return Leg("A driving + splash spam", sim, motor, 1f, 0.4f, true, sb);
+        if (worstGrad > 0.35f) ok = false;
+        if (worstBad > 0) ok = false;
+        if (worstClamped > 0) ok = false;
+        yield return Leg("B stalled in a storm ", sim, motor, 0.12f, 0f, false, sb);
+        if (worstGrad > 0.35f) ok = false;
+        if (worstBad > 0) ok = false;
+        if (worstClamped > 0) ok = false;
 
-        float maxAbs = 0f;
-        int badTexels = 0;
+        sb.AppendLine("");
+        sb.AppendLine("gates: maxGradient < 0.35 m/texel, texelsAtClamp 0, nonFinite 0");
+        sb.AppendLine(ok ? "PASS" : "FAIL");
+
+        SeaStateController.Instance.ReleaseForce();
+        motor.Rudder = 0f;
+        motor.SailOrder = 1f;
+        if (helm != null) helm.enabled = true;
+        System.IO.File.WriteAllText("/tmp/seasick-ripplestress.txt", sb.ToString());
+        Debug.Log("RippleStressProbe:\n" + sb);
+        Destroy(gameObject);
+    }
+
+    float worstGrad;
+    int worstClamped;
+    int worstBad;
+    float worstAbs;
+
+    IEnumerator Leg(string label, DynamicWaterSim sim, SeaSick.Ship.ShipMotor motor,
+                    float sail, float rudder, bool splash, StringBuilder sb)
+    {
+        worstGrad = 0f;
+        worstClamped = 0;
+        worstBad = 0;
+        worstAbs = 0f;
+
+        SeaStateController.Instance.ForceSeverity(1f);
+        motor.SailOrder = sail;
+        motor.Rudder = rudder;
+        yield return new WaitForSeconds(6f);
+
         float t0 = Time.time;
         float nextSplash = 0f;
         float nextRead = 2f;
+        float speedSum = 0f;
+        int speedN = 0;
         while (Time.time - t0 < 30f)
         {
             yield return null;
             float t = Time.time - t0;
-            if (t >= nextSplash)
+            speedSum += motor.CurrentSpeed;
+            speedN++;
+            if (splash && t >= nextSplash)
             {
                 nextSplash = t + 0.15f;
                 Vector3 off = new Vector3(
@@ -62,42 +100,44 @@ public class RippleStressProbe : MonoBehaviour
             if (t >= nextRead)
             {
                 nextRead = t + 2f;
-                float m = MaxAbs(sim, ref badTexels);
-                if (m > maxAbs) maxAbs = m;
+                Scan(sim);
             }
         }
-        float finalMax = MaxAbs(sim, ref badTexels);
-        if (finalMax > maxAbs) maxAbs = finalMax;
+        Scan(sim);
 
+        float meanSpeed = speedSum / Mathf.Max(1, speedN);
         sb.AppendLine(string.Format(
-            "30s splash+wake storm stress: max|offset|={0:F2}m  nonFiniteTexels={1}",
-            maxAbs, badTexels));
-        bool pass = badTexels == 0 && maxAbs < 3f;
-        sb.AppendLine(pass ? "PASS" : "FAIL");
-
-        SeaStateController.Instance.ReleaseForce();
-        motor.Rudder = 0f;
-        if (helm != null) helm.enabled = true;
-        System.IO.File.WriteAllText("/tmp/seasick-ripplestress.txt", sb.ToString());
-        Debug.Log("RippleStressProbe:\n" + sb);
-        Destroy(gameObject);
+            "{0}: meanSpeed={1:F1}m/s  max|offset|={2:F2}m  maxGradient={3:F3}m/texel  atClamp={4}  nonFinite={5}",
+            label, meanSpeed, worstAbs, worstGrad, worstClamped, worstBad));
     }
 
-    static float MaxAbs(DynamicWaterSim sim, ref int badTexels)
+    void Scan(DynamicWaterSim sim)
     {
         int n = sim.Resolution;
         AsyncGPUReadbackRequest req = AsyncGPUReadback.Request(
             sim.SimTexture, 0, 0, n, 0, n, 0, 1, TextureFormat.RGHalf);
         req.WaitForCompletion();
         var d = req.GetData<half2>();
-        float m = 0f;
-        for (int i = 0; i < d.Length; i++)
+        for (int y = 0; y < n; y++)
         {
-            float x = (float)d[i].x;
-            if (float.IsNaN(x) || float.IsInfinity(x)) { badTexels++; continue; }
-            float a = Mathf.Abs(x);
-            if (a > m) m = a;
+            for (int x = 0; x < n; x++)
+            {
+                float h = (float)d[y * n + x].x;
+                if (float.IsNaN(h) || float.IsInfinity(h)) { worstBad++; continue; }
+                float a = Mathf.Abs(h);
+                if (a > worstAbs) worstAbs = a;
+                if (a >= 1.99f) worstClamped++;
+                if (x + 1 < n)
+                {
+                    float g = Mathf.Abs((float)d[y * n + x + 1].x - h);
+                    if (g > worstGrad) worstGrad = g;
+                }
+                if (y + 1 < n)
+                {
+                    float g = Mathf.Abs((float)d[(y + 1) * n + x].x - h);
+                    if (g > worstGrad) worstGrad = g;
+                }
+            }
         }
-        return m;
     }
 }
