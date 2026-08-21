@@ -35,6 +35,8 @@ shader property defaults. Re-run these after changing any default.
 | `SetupOceanScene.cs` | **The cutover scene surgery on `Sea.unity`**: builds the new Ocean root (renderer + clipmap + physics driver + region field + weather + ripple stub), strips missing-script stubs, gives the ship its Rigidbody/probe set, and resets `BuoyantBody` to code defaults. Re-run after changing any BuoyantBody default. |
 | `SetupOceanLab.cs` | Builds `OceanLab.unity` (the ocean stack's test scene: free camera, proxy sloop, weather controller) and the OceanQuality/SeaState assets. |
 | `SetupAndroidGraphics.cs` | Locks Android to Vulkan only (the FFT is compute; GLES3.0 has none). |
+| `WestTrace.cs` | Sails due west into the deep and decomposes every retarding force per second — sail budget vs surf, base hull drag and plow — plus the metric the player actually feels: **what fraction of her speed a wave costs and how long she needs to get it back**. The instrument for "she goes from 30 m/s to 5". | `/tmp/seasick-westtrace.txt` |
+| `SetMaxSpeed.cs` | One-off push of `ShipMotor.maxSpeed` (scene-serialised) and nothing else. Edit the constant, run it. | — |
 | `TuneStormFeel.cs` | Storm-feel values that are **scene-serialised** and therefore unreachable from C# defaults: `ChaseCamera.stormDrop`/`stormPullIn` and `ShipMotor.acceleration`. Note the scene frames the camera at distance 20 / height 13, not the code defaults 25/19 — subtract the storm values from those, not from the defaults. |
 
 ## Probes
@@ -152,6 +154,14 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   (2.9 m/s, 66 m both) in one run and 2.9 vs 10.4 in the next. Before tuning
   against a high-severity number, check the OFF leg still differs from the ON
   leg — if it does not, the run is measuring chaos, not the change.
+- **Saving the scene freezes EVERY field on a component, including ones you
+  just added.** Three tuning runs were wasted to this: `Sea.unity` held
+  `maxPlowDecel 6` / `dynamicLiftCoeff 0.04` while the source said 2.5 / 0.12,
+  because an unrelated `SaveScene` had snapshotted the new fields at their
+  first values. The differences "measured" between those runs were noise. Any
+  session that adds a `[SerializeField]` must push it with
+  `SceneDefaults.ResetToCodeDefaults` (TuneStormFeel now does) before
+  believing a single measurement.
 - **`OceanSampler.SampleImmediate` is for one-shot, low-rate queries** (camera
   clamp, splash tests, random scatter like StormSpray). Anything continuous —
   floaters, enemy hulls, hull probes — belongs in `OceanProbeRegistry` or a

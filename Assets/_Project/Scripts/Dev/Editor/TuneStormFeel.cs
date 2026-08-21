@@ -52,6 +52,23 @@ public static class TuneStormFeel
         }
         else report.AppendLine("WARNING: no ChaseCamera");
 
+        // BuoyantBody: blanket reset to the C# defaults. Every field on it is
+        // baked into Sea.unity — saving the scene for ANY reason snapshots the
+        // lot, so new fields silently freeze at whatever they were the first
+        // time someone hit save, and later code edits never reach the game.
+        // This cost three tuning runs on 2026-08-21: the scene held
+        // maxPlowDecel 6 and dynamicLiftCoeff 0.04 while the source said 2.5
+        // and 0.12, and the "differences" measured were run-to-run noise.
+        var buoy = Object.FindAnyObjectByType<SeaSick.Ocean.BuoyantBody>();
+        if (buoy != null)
+        {
+            SceneDefaults.ResetToCodeDefaults(buoy);
+            report.AppendLine(string.Format(
+                "  BuoyantBody reset to code defaults: plowCap={0:F2} liftCoeff={1:F3} plowFactor={2:F3}",
+                buoy.MaxPlowDecel, buoy.DynamicLiftCoeff, buoy.PlowDragFactor));
+        }
+        else report.AppendLine("WARNING: no BuoyantBody");
+
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
         report.AppendLine("Sea.unity saved");

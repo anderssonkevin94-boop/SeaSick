@@ -41,7 +41,24 @@ namespace SeaSick.Ocean
         [Tooltip("Forward way (m/s through the water) below which plow drag stops acting; it fades in over the same span again above it. Plow exists to stop a hull CHARGING into a wall of water, and that is a fast-ship problem — but keyed on depth alone it kept pulling once she was already stopped, and in mountainous seas that pinned her at 1.4 m/s making 11 m in 40 s (against 381 m with plow off). The floor lets a slam take her from 20 down to single figures and no further, which is the cost the design wants without the handbrake it did not.")]
         [SerializeField] float plowSpeedFloor = 4.5f;
         [Tooltip("Ceiling on total plow deceleration, m/s^2. Propulsion is a rate-limited servo (ShipMotor.acceleration, 2.6 m/s^2), so an uncapped brake wins outright and never gives the sail a way back — and because plow is applied at the stem, below and forward of the CoM, it pitches her bow-down into more bury and runs away. At 4.0 a slam sheds the intended ~2 m/s over half a second and she works back up.")]
-        [SerializeField] float maxPlowDecel = 6f;
+        [SerializeField] float maxPlowDecel = 4f;
+        // Dynamic (planing) lift. Reserve buoyancy resists burial with DEPTH;
+        // this resists it with SPEED, which is what a real hull does — water a
+        // moving bow deflects pushes back, and on angled bow sections most of
+        // that push is upward. It matters because the previous answer to
+        // burial was plow drag, a BRAKE, so going faster cost speed to stay
+        // dry. Lift inverts that: faster means more lift means drier, and she
+        // keeps the speed. Measured at maxSpeed 40 in severity-1.0 head seas:
+        // without it 23.0% of the run had the deck under with 6.47 m over it
+        // and the rails swamped 38.5% of the time; with it, 0.0% and 0.0%.
+        [Tooltip("Lift coefficient in 1/2 rho v^2 A Cl on the area proxy pi*r^2. Acts only where the hull is driven PAST its static waterline, so it is exactly zero at rest and the calm float equilibrium is untouched.")]
+        [SerializeField] float dynamicLiftCoeff = 0.12f;
+        [Tooltip("Metres of bury past full probe submersion at which dynamic lift reaches full strength.")]
+        [SerializeField] float dynamicLiftDepth = 1f;
+        [Tooltip("Ceiling on total dynamic lift, m/s^2 — bounded so a fast bow is held up, never thrown clear. The failure mode this guards is porpoising.")]
+        [SerializeField] float maxDynamicLiftAccel = 10f;
+        [Tooltip("Weight applied to lift on probes AFT of midships. Planing lift is generated where the hull meets oncoming flow, not where flow leaves it. Applying it at every immersed probe was measured and reverted: with the stern deep and the bow up, lift at the sternpost pitches her nose DOWN and the deck got wetter than with no lift at all (deckOverMax -1.00 m -> +0.75 m).")]
+        [SerializeField, Range(0f, 1f)] float dynamicLiftAftWeight = 0f;
         [Tooltip("Fraction of reserve LIFT kept while the probe rises relative to the water (ramp over 1 m/s). Only the lift bleeds — reserve damping and plow drag stay at full strength, so this is an asymmetric shock absorber: full catch on the way in, no spring-return pogo on the way out (symmetric lift measured 6-9 s calm settle vs 1.75 s baseline).")]
         [SerializeField, Range(0f, 1f)] float reserveUpwardKeep = 0.3f;
         [Tooltip("Explicit inertia box (m) — a colliderless Rigidbody defaults to unit inertia and spins like a coin.")]
@@ -54,6 +71,8 @@ namespace SeaSick.Ocean
         // Preallocated: this runs every FixedUpdate.
         Vector3[] plowScratch;
         Vector3[] plowAt;
+        Vector3[] liftScratch;
+        float probeHalfLength;
 
         /// Share-weighted submersion this step, 0..1.
         public float Submersion { get; private set; }
@@ -71,11 +90,14 @@ namespace SeaSick.Ocean
         /// and the deepest reserve any probe reached. Diagnostic only.
         public Vector3 DebugPlowForward { get; private set; }
         public float DebugMaxReserve { get; private set; }
+        /// Dynamic (planing) lift actually applied this step, N.
+        public Vector3 DebugDynamicLift { get; private set; }
         /// Live tuning surface for A/B probes — set plow to 0 to isolate it.
         public float PlowDragFactor { get => plowDragFactor; set => plowDragFactor = value; }
         public float ReservePerMetre { get => reservePerMetre; set => reservePerMetre = value; }
         public float PlowOnset { get => plowOnset; set => plowOnset = value; }
         public float MaxPlowDecel { get => maxPlowDecel; set => maxPlowDecel = value; }
+        public float DynamicLiftCoeff { get => dynamicLiftCoeff; set => dynamicLiftCoeff = value; }
         /// Extra metres the body should sit below its light waterline (cargo,
         /// bilge water). Lowers the float equilibrium without touching mass.
         public float SeatOffset { get; set; }
@@ -122,6 +144,7 @@ namespace SeaSick.Ocean
             Vector3 dbgFwd = Vector3.zero, dbgLat = Vector3.zero, dbgVert = Vector3.zero;
             float reserveWorst = 0f;
             Vector3 plowTotal = Vector3.zero;
+            Vector3 liftTotal = Vector3.zero;
 
             // Plow fades out as she loses way: see plowSpeedFloor.
             Vector3 hullFwd = transform.forward;
@@ -135,10 +158,21 @@ namespace SeaSick.Ocean
             {
                 plowScratch = new Vector3[probes.Length];
                 plowAt = new Vector3[probes.Length];
+                liftScratch = new Vector3[probes.Length];
+                probeHalfLength = 0f;
+                for (int i = 0; i < probes.Length; i++)
+                {
+                    float az = Mathf.Abs(probes[i].localPosition.z);
+                    if (az > probeHalfLength) probeHalfLength = az;
+                }
             }
             // Cleared every step: a probe that leaves the water skips the body
             // of the loop, and a stale plow vector would keep braking her.
-            for (int i = 0; i < probes.Length; i++) plowScratch[i] = Vector3.zero;
+            for (int i = 0; i < probes.Length; i++)
+            {
+                plowScratch[i] = Vector3.zero;
+                liftScratch[i] = Vector3.zero;
+            }
 
             for (int i = 0; i < probes.Length; i++)
             {
@@ -220,6 +254,27 @@ namespace SeaSick.Ocean
                 plowAt[i] = world;
                 plowTotal += plowScratch[i];
 
+                // Dynamic lift, weighted forward: full at the stem, zero at
+                // midships, none aft. Deferred to pass 2 like plow, because it
+                // is capped against a total.
+                if (over > 0f && forwardWay > 0f)
+                {
+                    float fore = probeHalfLength > 0.01f
+                        ? probes[i].localPosition.z / probeHalfLength : 0f;
+                    float foreWeight = Mathf.Clamp01(
+                        fore >= 0f ? fore : -fore * dynamicLiftAftWeight);
+                    if (foreWeight > 0f)
+                    {
+                        float liftDepth = Mathf.Clamp01(
+                            over / Mathf.Max(0.01f, dynamicLiftDepth));
+                        float area = Mathf.PI * probes[i].radius * probes[i].radius;
+                        float lift = 0.5f * waterDensity * forwardWay * forwardWay
+                                     * area * dynamicLiftCoeff * liftDepth * foreWeight;
+                        liftScratch[i] = Vector3.up * lift;
+                        liftTotal += liftScratch[i];
+                    }
+                }
+
                 rb.AddForceAtPosition(buoy + drag, world);
                 waveForce += buoy + drag;
             }
@@ -243,6 +298,22 @@ namespace SeaSick.Ocean
                 }
             }
             DebugPlowForward = plowTotal * plowScale;
+
+            // Dynamic lift, capped as a total and applied at the probes so a
+            // buried bow gets a bow-UP couple — the opposite sign to plow's.
+            float liftMax = maxDynamicLiftAccel * rb.mass;
+            float liftMag = liftTotal.magnitude;
+            float liftScale = liftMag > liftMax && liftMag > 1e-3f
+                ? liftMax / liftMag : 1f;
+            if (liftMag > 1e-3f)
+            {
+                for (int i = 0; i < probes.Length; i++)
+                {
+                    if (liftScratch[i].sqrMagnitude <= 0f) continue;
+                    rb.AddForceAtPosition(liftScratch[i] * liftScale, plowAt[i]);
+                }
+            }
+            DebugDynamicLift = liftTotal * liftScale;
 
             Submersion = subSum;
             MeanWaterHeight = hSum / probes.Length;

@@ -2277,7 +2277,11 @@ MonoBehaviour:
   plowDragFactor: 0.15
   plowOnset: 0.6
   plowSpeedFloor: 4.5
-  maxPlowDecel: 6
+  maxPlowDecel: 4
+  dynamicLiftCoeff: 0.12
+  dynamicLiftDepth: 1
+  maxDynamicLiftAccel: 10
+  dynamicLiftAftWeight: 0
   reserveUpwardKeep: 0.3
   inertiaBoxDims: {x: 4.4, y: 3, z: 13}
   centreOfMass: {x: 0, y: -0.6, z: 0}
