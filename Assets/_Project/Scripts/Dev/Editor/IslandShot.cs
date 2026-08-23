@@ -28,9 +28,16 @@ public class IslandShot : MonoBehaviour
         Vector3[] at = { shore, shore + new Vector3(40f, 15f, -120f), shore + new Vector3(0f, 0f, -200f), shore };
         for (int i = 0; i < from.Length; i++)
         {
+            if (motor != null)
+            {
+                // She sails herself; keep the streamer centred on home for the shots.
+                var rb = motor.GetComponent<Rigidbody>();
+                motor.transform.position = new Vector3(0f, motor.transform.position.y, 40f);
+                if (rb != null) rb.linearVelocity = Vector3.zero;
+            }
             cam.transform.position = from[i];
             cam.transform.LookAt(at[i]);
-            yield return new WaitForSeconds(i == 0 ? 5f : 1.5f);
+            yield return new WaitForSeconds(i == 0 ? 6f : 3f);
             sb.AppendLine("shot " + i + " from " + from[i] + ": loaded=" + (st != null ? st.LoadedCount : -1) + " pending=" + (st != null ? st.PendingCount : -1)
                 + " shipPos=" + (motor != null ? motor.transform.position.ToString("F0") : "?"));
             ScreenCapture.CaptureScreenshot("/tmp/seasick-island-" + i + ".png");

@@ -30,6 +30,15 @@ namespace SeaSick.World
         IslandMeshBuilder.Profile profile;
         bool hasProfile;
 
+        /// Terrain-backed islands: the world height function (x, z) → y.
+        /// When set, SurfacePoint follows the real ground instead of the
+        /// radial mesh model. Set by the terrain populator.
+        public static System.Func<float, float, float> TerrainHeight;
+        /// Max rise per metre over the 12 m inland of the waterline for a
+        /// landing to count as a beach (terrain-backed islands).
+        public static float BeachMaxSlope = 0.7f;
+        int beachCacheFrame = -1; Vector3 beachCachePos; bool beachCache;
+
         /// True only when the profile is fully populated. The arrays are what
         /// every query below indexes into, so a half-built profile must fall
         /// back to the plain radius rather than throwing mid-frame.
@@ -42,6 +51,14 @@ namespace SeaSick.World
             profile = p;
             hasProfile = p.outline != null && p.outline.Length > 0;
             radius = p.radius;
+        }
+
+        /// Outline + beach flags per sector, measured off the terrain.
+        public void SetTerrainProfile(float[] outline, bool[] hasBeach, float meanRadius)
+        {
+            profile = new IslandMeshBuilder.Profile { outline = outline, hasBeach = hasBeach, radius = meanRadius };
+            hasProfile = true;
+            radius = meanRadius;
         }
 
         static int SectorOf(float angleRad)
@@ -70,6 +87,47 @@ namespace SeaSick.World
         public bool HasBeachToward(Vector3 worldPos)
         {
             if (!HasProfile) return true;
+            if (TerrainHeight != null)
+            {
+                // Judge the NEAREST shore within ±60° of the line to the centre:
+                // on a big island the centre line can hit a cliff while the
+                // beach the ship is actually facing is 20 m away.
+                if (beachCacheFrame == Time.frameCount && (worldPos - beachCachePos).sqrMagnitude < 4f) return beachCache;
+                Vector3 c = transform.position;
+                Vector3 d = c - worldPos; d.y = 0f;
+                float len = d.magnitude;
+                bool result = false;
+                if (len < 1f) result = profile.hasBeach[0];
+                else
+                {
+                    float baseAng = Mathf.Atan2(d.x, d.z);
+                    // Any beach within a short walk (25 m) of the nearest shore
+                    // point counts: the crew can land beside a bank.
+                    float nearest = float.MaxValue;
+                    var hits = new System.Collections.Generic.List<(float t, float rise)>(13);
+                    for (int k = -6; k <= 6; k++)
+                    {
+                        float a = baseAng + k * 10f * Mathf.Deg2Rad;
+                        Vector3 dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                        float maxT = Mathf.Min(len + 50f, nearest + 25f);
+                        for (float t = 0f; t < maxT; t += 2f)
+                        {
+                            Vector3 p = worldPos + dir * t;
+                            if (TerrainHeight(p.x, p.z) > -0.3f)
+                            {
+                                Vector3 q = p + dir * 12f;
+                                hits.Add((t, TerrainHeight(q.x, q.z) - TerrainHeight(p.x, p.z)));
+                                nearest = Mathf.Min(nearest, t);
+                                break;
+                            }
+                        }
+                    }
+                    foreach (var (t, rise) in hits)
+                        if (t <= nearest + 25f && rise / 12f < BeachMaxSlope) { result = true; break; }
+                }
+                beachCacheFrame = Time.frameCount; beachCachePos = worldPos; beachCache = result;
+                return result;
+            }
             return profile.hasBeach[SectorOf(BearingTo(worldPos, transform.position))];
         }
 
@@ -136,6 +194,14 @@ namespace SeaSick.World
         /// when there is one, so props sit on the ground instead of inside it.
         public Vector3 SurfacePoint(float angleRad, float distFromCentre)
         {
+            if (TerrainHeight != null && HasProfile)
+            {
+                int s = SectorOf(angleRad);
+                float d = Mathf.Min(distFromCentre, profile.outline[s] * 0.96f);
+                float x = transform.position.x + Mathf.Sin(angleRad) * d;
+                float z = transform.position.z + Mathf.Cos(angleRad) * d;
+                return new Vector3(x, TerrainHeight(x, z), z);
+            }
             if (HasProfile)
             {
                 int s = SectorOf(angleRad);

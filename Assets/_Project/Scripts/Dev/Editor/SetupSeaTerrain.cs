@@ -6,6 +6,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using SeaSick.Terrain;
 using SeaSick.World;
+using SeaSick.Voyage;
 
 /// Puts the procedural islands into Sea.unity (visual-first cutover):
 /// - ArchipelagoGenerator disabled, Island_Home's authored meshes and Island
@@ -19,6 +20,7 @@ public static class SetupSeaTerrain
     const string ScenePath = "Assets/_Project/Scenes/Sea.unity";
     const string SettingsPath = "Assets/_Project/Settings/Terrain/TerrainSettings.asset";
     const string MaterialPath = "Assets/_Project/Materials/TerrainVertexColor.mat";
+    const string WorldPath = "Assets/_Project/Settings/Terrain/WorldSettings.asset";
 
     public static string Execute()
     {
@@ -29,18 +31,28 @@ public static class SetupSeaTerrain
         var mat = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
         if (settings == null || mat == null) return "run SetupTerrainLab first (settings/material missing)";
 
-        // enabled=false is not enough: ArchipelagoGenerator does all its work in
-        // Awake(), which runs on disabled components. The World object holds
-        // nothing else, so switch the object off.
-        var gen = Object.FindFirstObjectByType<ArchipelagoGenerator>(FindObjectsInactive.Include);
-        if (gen != null) gen.gameObject.SetActive(false);
+        // The legacy World object (ArchipelagoGenerator, now deleted) goes.
+        var legacyWorld = GameObject.Find("World");
+        if (legacyWorld != null && legacyWorld.GetComponent<TerrainStreamer>() == null) Object.DestroyImmediate(legacyWorld);
 
+        // The authored home island becomes just the HomePoint transform that
+        // VoyageManager/RegionField reference; the populator makes the real
+        // home Island (with Stockpile) on the terrain.
         var home = GameObject.Find("Island_Home");
         if (home != null)
         {
             var isle = home.GetComponent<Island>();
-            if (isle != null) isle.enabled = false;
-            foreach (var r in home.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+            if (isle != null) Object.DestroyImmediate(isle);
+            var pile = home.GetComponent<Stockpile>();
+            if (pile != null) Object.DestroyImmediate(pile);
+            for (int i = home.transform.childCount - 1; i >= 0; i--) Object.DestroyImmediate(home.transform.GetChild(i).gameObject);
+            home.name = "HomePoint";
+        }
+        var worldSettings = AssetDatabase.LoadAssetAtPath<WorldSettings>(WorldPath);
+        if (worldSettings == null)
+        {
+            worldSettings = ScriptableObject.CreateInstance<WorldSettings>();
+            AssetDatabase.CreateAsset(worldSettings, WorldPath);
         }
 
         var ship = Object.FindFirstObjectByType<SeaSick.Ship.ShipMotor>();
@@ -56,6 +68,13 @@ public static class SetupSeaTerrain
         if (shoreField == null) shoreField = streamer.gameObject.AddComponent<TerrainShoreField>();
         shoreField.settings = settings;
         shoreField.target = streamer.target;
+
+        var populator = streamer.GetComponent<TerrainWorldPopulator>();
+        if (populator == null) populator = streamer.gameObject.AddComponent<TerrainWorldPopulator>();
+        populator.terrain = settings;
+        populator.world = worldSettings;
+        var voyage = Object.FindFirstObjectByType<VoyageManager>();
+        populator.homePoint = voyage != null ? voyage.HomePoint : (home != null ? home.transform : null);
 
         string offsetNote = ChooseHomeOffset(settings, home != null ? home.transform.position : new Vector3(0f, 0f, -75f));
         EditorUtility.SetDirty(settings);

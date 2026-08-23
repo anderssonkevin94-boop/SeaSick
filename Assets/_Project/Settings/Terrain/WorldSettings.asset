@@ -1,0 +1,47 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 789d8ff4cb7e743e3965c42c1516e78b, type: 3}
+  m_Name: WorldSettings
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.WorldSettings
+  discoveryRadius: 3000
+  scanCell: 24
+  minIslandArea: 3000
+  shelterOnlyBelowRadius: 60
+  beachMaxSlope: 0.7
+  kinds:
+  - name: Timber
+    beaconColor: {r: 0.55, g: 0.85, b: 0.4, a: 1}
+    minRing: 0
+  - name: Stone
+    beaconColor: {r: 0.75, g: 0.78, b: 0.85, a: 1}
+    minRing: 0.3
+  - name: Ore
+    beaconColor: {r: 1, g: 0.85, b: 0.35, a: 1}
+    minRing: 0.55
+  - name: Spice
+    beaconColor: {r: 0.95, g: 0.45, b: 0.75, a: 1}
+    minRing: 0.78
+  propsPerRadius: 0.13
+  reefCount: 24
+  reefRadiusRange: {x: 6, y: 13}
+  reefMinDistance: 220
+  reefMaxDistance: 1200
+  reefMinDepth: 4
+  monsterCount: 3
+  monsterDistance: 260
+  monsterBearingDeg: 0
+  monsterSpreadDeg: 26
+  raidersPerIsland: 1
+  maxRaiders: 8
+  raiderMinIslandRadius: 60
+  patrolClearance: 78
+  seed: 0
