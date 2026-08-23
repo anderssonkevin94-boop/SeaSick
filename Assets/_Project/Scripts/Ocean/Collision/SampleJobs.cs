@@ -28,6 +28,7 @@ namespace SeaSick.Ocean
         [ReadOnly] public NativeArray<half4> prevDisp0, prevDisp1;
         [ReadOnly] public NativeArray<half> turb0;
         [ReadOnly] public NativeArray<float4> islands;
+        [ReadOnly] public NativeArray<float> shore;
         public RegionFieldParams region;
         public int n;
         public float2 invPatch;   // 1/L0, 1/L1
@@ -76,7 +77,7 @@ namespace SeaSick.Ocean
             float4 d = float4.zero;
             for (int i = 0; i < 3; i++)
             {
-                env = region.Evaluate(p, islands);
+                env = region.Evaluate(p, islands, shore);
                 d = SampleDisp(p);
                 float4 dv = SampleDeriv(p);
                 float2 r = p + env * d.xz - q;
@@ -93,7 +94,7 @@ namespace SeaSick.Ocean
                 p -= step;
             }
 
-            env = region.Evaluate(p, islands);
+            env = region.Evaluate(p, islands, shore);
             d = SampleDisp(p);
             result.height = env * d.y;
             result.displacement = new float3(env * d.x, env * d.y, env * d.z);

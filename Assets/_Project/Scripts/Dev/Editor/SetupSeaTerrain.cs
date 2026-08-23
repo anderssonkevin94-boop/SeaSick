@@ -52,6 +52,11 @@ public static class SetupSeaTerrain
         streamer.material = mat;
         streamer.target = ship != null ? ship.transform : null;
 
+        var shoreField = streamer.GetComponent<TerrainShoreField>();
+        if (shoreField == null) shoreField = streamer.gameObject.AddComponent<TerrainShoreField>();
+        shoreField.settings = settings;
+        shoreField.target = streamer.target;
+
         string offsetNote = ChooseHomeOffset(settings, home != null ? home.transform.position : new Vector3(0f, 0f, -75f));
         EditorUtility.SetDirty(settings);
         AssetDatabase.SaveAssets();

@@ -901,6 +901,8 @@ MonoBehaviour:
   stormNear: 450
   stormFar: 1250
   autoBindWorld: 1
+  shoalDepthFull: 8
+  shoalDepthZero: 0.5
 --- !u!114 &1016993464
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1380,6 +1382,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1749557478}
   - component: {fileID: 1749557479}
+  - component: {fileID: 1749557480}
   m_Layer: 0
   m_Name: TerrainStreamer
   m_TagString: Untagged
@@ -1430,6 +1433,23 @@ MonoBehaviour:
   WorstReplanDropped: 0
   WorstReplanQueued: 0
   WorstScanMs: 0
+--- !u!114 &1749557480
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1749557477}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4171d5b68d76a4bf597a767ec1eec6f9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.TerrainShoreField
+  settings: {fileID: 11400000, guid: 389a672c67e1d4140a08d081a4dc5698, type: 2}
+  target: {fileID: 2143489877}
+  extent: 4096
+  resolution: 256
+  recentreDistance: 512
 --- !u!1001 &1842535512
 PrefabInstance:
   m_ObjectHideFlags: 0

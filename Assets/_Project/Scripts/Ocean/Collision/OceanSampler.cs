@@ -20,6 +20,7 @@ namespace SeaSick.Ocean
         static float2 invPatch;
         static NativeArray<float4> emptyIslands;
         static NativeArray<half4> emptyTex;
+        static NativeArray<float> emptyShore;
         static NativeArray<half> emptyTurb;
 
         public static bool Ready =>
@@ -36,6 +37,8 @@ namespace SeaSick.Ocean
             invPatch = new float2(1f / patchSizes[0], 1f / patchSizes[1]);
             if (!emptyIslands.IsCreated)
                 emptyIslands = new NativeArray<float4>(RegionField.MaxIslands, Allocator.Persistent);
+            if (!emptyShore.IsCreated)
+                emptyShore = new NativeArray<float>(1, Allocator.Persistent);
             if (!emptyTex.IsCreated)
                 emptyTex = new NativeArray<half4>(1, Allocator.Persistent);
             if (!emptyTurb.IsCreated)
@@ -46,6 +49,7 @@ namespace SeaSick.Ocean
         {
             readback = null;
             if (emptyIslands.IsCreated) emptyIslands.Dispose();
+            if (emptyShore.IsCreated) emptyShore.Dispose();
             if (emptyTex.IsCreated) emptyTex.Dispose();
             if (emptyTurb.IsCreated) emptyTurb.Dispose();
         }
@@ -72,6 +76,7 @@ namespace SeaSick.Ocean
                 velDt = (latest != null && prev != null) ? (float)(latest.time - prev.time) : 0f,
                 region = region != null ? region.Params : RegionFieldParams.Neutral,
                 islands = region != null ? region.Islands : emptyIslands,
+                shore = region != null && region.Shore.IsCreated ? region.Shore : emptyShore,
             };
         }
 

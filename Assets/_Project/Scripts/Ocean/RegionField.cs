@@ -12,6 +12,12 @@ namespace SeaSick.Ocean
         public float2 home;
         public float calmRadius, wildRadius, nearScale, farScale, shoreFalloff;
         public int islandCount;
+        // Shore grid: world-anchored terrain heights, bilinear, 1 outside the rect.
+        public float2 shoreOrigin;
+        public float shoreInvSize;   // 1 / (metres covered by the grid)
+        public int shoreN;           // texels per edge, 0 = no grid
+        public float shoalDepthFull; // depth (m) at and below which waves are untouched
+        public float shoalDepthZero; // depth (m) at and above which waves are gone (shoreline)
 
         public static RegionFieldParams Neutral => new RegionFieldParams
         {
@@ -22,20 +28,42 @@ namespace SeaSick.Ocean
             farScale = 1f,
             shoreFalloff = 1f,
             islandCount = 0,
+            shoreN = 0,
+            shoalDepthFull = 8f,
+            shoalDepthZero = 0.5f,
         };
 
-        /// islands: xy = centre, z = radius. MUST match RegionField.hlsl.
-        public float Evaluate(float2 p, NativeArray<float4> islands)
+        /// islands: xy = centre, z = radius. shore: terrain heights on the
+        /// shore grid (length shoreN*shoreN; ignored when shoreN == 0).
+        /// MUST match RegionField.hlsl.
+        public float Evaluate(float2 p, NativeArray<float4> islands, NativeArray<float> shore)
         {
             float d = math.distance(p, home);
             float t = math.smoothstep(calmRadius, wildRadius, d);
             float env = math.lerp(nearScale, farScale, t);
             for (int i = 0; i < islandCount; i++)
             {
-                float shore = math.distance(p, islands[i].xy) - islands[i].z;
-                env *= math.smoothstep(0f, shoreFalloff, shore);
+                float s = math.distance(p, islands[i].xy) - islands[i].z;
+                env *= math.smoothstep(0f, shoreFalloff, s);
             }
+            if (shoreN > 0) env *= ShoreFactor(p, shore);
             return env;
+        }
+
+        /// 1 in deep water, 0 at the shoreline and over land. Bilinear over the
+        /// grid with clamped edges; outside the rect the sea is untouched.
+        public float ShoreFactor(float2 p, NativeArray<float> shore)
+        {
+            float2 uv = (p - shoreOrigin) * shoreInvSize;
+            if (uv.x < 0f || uv.y < 0f || uv.x > 1f || uv.y > 1f) return 1f;
+            float2 f = uv * shoreN - 0.5f;
+            int2 i0 = math.clamp((int2)math.floor(f), 0, shoreN - 1);
+            int2 i1 = math.min(i0 + 1, shoreN - 1);
+            float2 w = math.saturate(f - i0);
+            float a = shore[i0.y * shoreN + i0.x], b = shore[i0.y * shoreN + i1.x];
+            float c = shore[i1.y * shoreN + i0.x], e = shore[i1.y * shoreN + i1.x];
+            float h = math.lerp(math.lerp(a, b, w.x), math.lerp(c, e, w.x), w.y);
+            return math.smoothstep(shoalDepthZero, shoalDepthFull, -h);
         }
     }
 
@@ -67,12 +95,50 @@ namespace SeaSick.Ocean
         bool manualBound;
         bool worldBound;
 
+        [Header("Shore grid (fed by the terrain)")]
+        [Tooltip("Depth at and below which waves are untouched.")]
+        [SerializeField] float shoalDepthFull = 8f;
+        [Tooltip("Depth at and above which waves are gone — the shoreline.")]
+        [SerializeField] float shoalDepthZero = 0.5f;
+
         Vector2 home;
         readonly Vector4[] islandsGpu = new Vector4[MaxIslands];
         NativeArray<float4> islands;
         int islandCount;
 
+        NativeArray<float> shore;      // heights, shoreN² (a 1-element dummy when absent)
+        Texture2D shoreTex;
+        float2 shoreOrigin; float shoreSize; int shoreN;
+
         public NativeArray<float4> Islands => islands;
+        public NativeArray<float> Shore => shore;
+        public int ShoreN => shoreN;
+
+        /// The terrain hands over a world-anchored grid of heights (length n*n,
+        /// row-major, x fastest) covering [origin, origin + size). Copied; the
+        /// caller keeps ownership of its array.
+        public void SetShore(NativeArray<float> heights, float2 origin, float size, int n)
+        {
+            if (!shore.IsCreated || shore.Length != n * n)
+            {
+                if (shore.IsCreated) shore.Dispose();
+                shore = new NativeArray<float>(n * n, Allocator.Persistent);
+            }
+            shore.CopyFrom(heights);
+            shoreOrigin = origin; shoreSize = size; shoreN = n;
+            if (shoreTex == null || shoreTex.width != n)
+            {
+                if (shoreTex != null) Destroy(shoreTex);
+                shoreTex = new Texture2D(n, n, TextureFormat.RFloat, false, true)
+                {
+                    name = "OceanShore", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear,
+                };
+            }
+            shoreTex.SetPixelData(heights, 0);
+            shoreTex.Apply(false);
+        }
+
+        public void ClearShore() { shoreN = 0; }
 
         public RegionFieldParams Params => new RegionFieldParams
         {
@@ -83,18 +149,27 @@ namespace SeaSick.Ocean
             farScale = farScale,
             shoreFalloff = shoreFalloff,
             islandCount = islandCount,
+            shoreOrigin = shoreOrigin,
+            shoreInvSize = shoreSize > 0f ? 1f / shoreSize : 0f,
+            shoreN = shoreN,
+            shoalDepthFull = shoalDepthFull,
+            shoalDepthZero = shoalDepthZero,
         };
 
         void OnEnable()
         {
             Instance = this;
             islands = new NativeArray<float4>(MaxIslands, Allocator.Persistent);
+            shore = new NativeArray<float>(1, Allocator.Persistent);
+            shoreN = 0;
         }
 
         void OnDisable()
         {
             if (Instance == this) Instance = null;
             if (islands.IsCreated) islands.Dispose();
+            if (shore.IsCreated) shore.Dispose();
+            if (shoreTex != null) Destroy(shoreTex);
         }
 
         public void SetHome(Vector2 xz)
@@ -121,7 +196,7 @@ namespace SeaSick.Ocean
         }
 
         public float Evaluate(Vector2 p) =>
-            Params.Evaluate(new float2(p.x, p.y), islands);
+            Params.Evaluate(new float2(p.x, p.y), islands, shore);
 
         /// 0 at/inside stormNear along the storm bearing, 1 beyond stormFar.
         public float StormWeight(Vector2 p)
@@ -164,6 +239,10 @@ namespace SeaSick.Ocean
             Shader.SetGlobalVector("_Ocean_RegionScale",
                 new Vector4(nearScale, farScale, shoreFalloff, islandCount));
             Shader.SetGlobalVectorArray("_Ocean_Islands", islandsGpu);
+            Shader.SetGlobalVector("_Ocean_ShoreRect",
+                new Vector4(shoreOrigin.x, shoreOrigin.y, shoreSize > 0f ? 1f / shoreSize : 0f, shoreN));
+            Shader.SetGlobalVector("_Ocean_Shoal", new Vector4(shoalDepthZero, shoalDepthFull, 0f, 0f));
+            if (shoreTex != null) Shader.SetGlobalTexture("_Ocean_ShoreTex", shoreTex);
         }
 
         /// When no RegionField exists (early lab scenes), the shader still
@@ -173,6 +252,7 @@ namespace SeaSick.Ocean
             if (Instance != null) return;
             Shader.SetGlobalVector("_Ocean_Region", new Vector4(0f, 0f, 0f, 1f));
             Shader.SetGlobalVector("_Ocean_RegionScale", new Vector4(1f, 1f, 1f, 0f));
+            Shader.SetGlobalVector("_Ocean_ShoreRect", Vector4.zero);
         }
     }
 }
