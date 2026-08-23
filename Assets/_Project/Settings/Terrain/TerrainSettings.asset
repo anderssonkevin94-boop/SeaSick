@@ -15,31 +15,88 @@ MonoBehaviour:
   seed: 1337
   seaLevel: 0
   worldRadius: 0
+  worldEdgeFalloff: 500
   octaves: 5
   baseFrequency: 0.0025
   lacunarity: 2
   gain: 0.5
   maskFrequency: 0.0004
+  maskOctaves: 3
   landRatio: 0.15
   maskFalloff: 0.1
+  seabedDepth: -12
   terraceCurve:
     serializedVersion: 2
     m_Curve:
     - serializedVersion: 3
       time: 0
-      value: -12
+      value: 3
       inSlope: 0
-      outSlope: 72
-      tangentMode: 0
+      outSlope: 0
+      tangentMode: 1
       weightedMode: 0
       inWeight: 0
       outWeight: 0
     - serializedVersion: 3
-      time: 1
-      value: 60
-      inSlope: 72
+      time: 0.2125
+      value: 3
+      inSlope: 0
       outSlope: 0
-      tangentMode: 0
+      tangentMode: 1
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.25
+      value: 22
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 1
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.4625
+      value: 22
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 1
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.5
+      value: 41
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 1
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.7125
+      value: 41
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 1
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.75
+      value: 60
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 1
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 0.9625
+      value: 60
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 1
       weightedMode: 0
       inWeight: 0
       outWeight: 0
@@ -47,8 +104,9 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   detailFrequency: 0.04
+  detailOctaves: 2
   detailAmplitude: 1.5
   beachHeight: 6
-  beachBlendSharpness: 2
+  beachBlendWidth: 4
   chunkSize: 128
   chunkResolution: 65
