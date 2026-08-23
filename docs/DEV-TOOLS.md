@@ -35,6 +35,7 @@ shader property defaults. Re-run these after changing any default.
 | `SetupOceanScene.cs` | **The cutover scene surgery on `Sea.unity`**: builds the new Ocean root (renderer + clipmap + physics driver + region field + weather + ripple stub), strips missing-script stubs, gives the ship its Rigidbody/probe set, and resets `BuoyantBody` to code defaults. Re-run after changing any BuoyantBody default. |
 | `SetupOceanLab.cs` | Builds `OceanLab.unity` (the ocean stack's test scene: free camera, proxy sloop, weather controller) and the OceanQuality/SeaState assets. |
 | `SetupAndroidGraphics.cs` | Locks Android to Vulkan only (the FFT is compute; GLES3.0 has none). |
+| `SetupSeaTerrain.cs` | **The island cutover on `Sea.unity`**: deletes the legacy World object, turns `Island_Home` into the bare `HomePoint`, adds the `Terrain` object (`TerrainStreamer` + `TerrainShoreField` + `TerrainWorldPopulator`) on the ship, creates `WorldSettings`, and picks `TerrainSettings.worldOffset` so real land sits under the old home position with water at the spawn. Re-run after changing terrain defaults. |
 | `SetupTerrainLab.cs` | Builds `TerrainLab.unity` (the island generator's test scene): the `TerrainSettings` asset, the 2D map visualiser quad (doubles as a water stand-in at y=0), a 7×7 main-thread `TerrainChunkPreview` over the western island, the runtime `TerrainStreamer`, sun and camera. Also pushes the terrain material. |
 | `WestTrace.cs` | Sails due west into the deep and decomposes every retarding force per second — sail budget vs surf, base hull drag and plow — plus the metric the player actually feels: **what fraction of her speed a wave costs and how long she needs to get it back**. The instrument for "she goes from 30 m/s to 5". | `/tmp/seasick-westtrace.txt` |
 | `SetMaxSpeed.cs` | One-off push of `ShipMotor.maxSpeed` (scene-serialised) and nothing else. Edit the constant, run it. | — |
@@ -60,6 +61,9 @@ shader property defaults. Re-run these after changing any default.
 | `HeightProbe.cs` | **Height pipeline gate** (edit mode): land ratio vs `landRatio`, open ocean always on a seabed below 0, beach band walkable (≤1.5 m/m), blend adds no discontinuities, `worldRadius` clamp drowns everything outside. Exports all four visualiser stages. | `/tmp/seasick-height.txt`, `-height-*.png` |
 | `ChunkProbe.cs` | **Chunk mesh gate** (edit mode): vertex heights equal the height function exactly, normals unit, +X/+Z shared edges bit-identical in position AND normal, LOD-2 vertices a subset of LOD-1. Renders the lab camera to PNG without play mode. | `/tmp/seasick-chunk.txt`, `-chunk.png` |
 | `StreamProbe.cs` | **Streaming gate** (play mode, TerrainLab): 2 km sail at 12 m/s, then coverage, unload band, collider ring, LOD assignment, pool bound, seams over every loaded same-LOD pair, and steady-state main-thread cost (< 10 ms worst). ~3 min. | `/tmp/seasick-stream.txt`, `-stream.png` |
+| `ShoreProbe.cs` | **Terrain→ocean gate** (play mode, Sea.unity): severity forced to 1.0; surface RMS at deep water / shoreline / land must be intact / <10 % / 0; CPU shore factor vs exact height. Shot of the beach. | `/tmp/seasick-shore.txt`, `-shore.png` |
+| `WorldProbe.cs` | **Populator gate** (play mode, Sea.unity): islands found, home + Stockpile, centres on land, outline at the waterline, beaches, props grounded, reefs/monsters in water, raiders, spawn landable. | `/tmp/seasick-world.txt` |
+| `IslandShot.cs` | Look shots of the home island from the sea, the beach, overhead and 900 m east, with the ship pinned so the streamer stays centred. Play mode, Sea.unity. | `/tmp/seasick-island-0..3.png` |
 | `CrossingProbe.cs` | 40 chunk crossings in 20 s with per-crossing replan breakdown — the quick way to tell a one-off first-use cost from a systemic one (it's what found the 10 ms first-release lazy init). Play mode, TerrainLab. | `/tmp/seasick-crossing.txt` |
 | `LoadProbe.cs`, `HudShot.cs`, `FogTest.cs`, `WarpOut.cs` | Older, still valid. | `/tmp/seasick-*.txt` |
 
@@ -72,6 +76,15 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 
 ## Measurement traps this project has actually hit
 
+- **`check_compile_errors` does not see Burst errors.** A method-level
+  `[BurstCompile]` on a struct-returning static made Burst treat it as an entry
+  point (BC1064) and silently dropped every job that called it to Mono — for
+  two steps of work. Grep the console for "Burst error" after touching job
+  code; the class-level attribute is all a job needs for inlining.
+- **`enabled = false` does not stop `Awake()`.** Disabling the old
+  `ArchipelagoGenerator` component left the whole legacy archipelago alive
+  (minimap dots, hull damage, intersecting meshes) until the GameObject itself
+  was deactivated. Only Start/Update are gated by `enabled`.
 - **Coplay's script compiler dies on any diagnostic, including XML-doc
   warnings.** A `<stage>` or `<octaves>` inside a `///` comment produces the
   opaque "CSharpResources.resources" failure. No angle brackets in probe doc
