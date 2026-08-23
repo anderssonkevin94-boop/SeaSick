@@ -1,16 +1,24 @@
+using Unity.Burst;
 using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace SeaSick.Terrain
 {
-    /// Builds the mesh for one chunk of terrain. Vertices live on a GLOBAL
-    /// integer lattice (vertex index * spacing) so two chunks that share an
-    /// edge compute bit-identical positions; heights are sampled one ring
-    /// beyond the chunk so edge normals see the neighbour's slope and match
-    /// across the seam. Main-thread for now (step 5 moves this into a job);
-    /// the sampling is already job-shaped — flat NativeArrays, no managed
-    /// access inside the loops.
+    /// Builds the mesh for one chunk of terrain, entirely in Burst jobs that
+    /// write straight into Mesh.MeshData. Vertices live on a GLOBAL integer
+    /// lattice (vertex index * spacing) so two chunks that share an edge
+    /// compute bit-identical positions; heights are sampled one ring beyond
+    /// the chunk so edge normals see the neighbour's slope and match across
+    /// the seam. LOD is a vertex stride; chunks of different LOD meet with a
+    /// skirt (edge vertices duplicated and dropped by skirtDepth) so they
+    /// never depend on each other and never need a rebuild when a neighbour
+    /// changes LOD.
+    ///
+    /// Vertex layout: first n*n are the grid (index j*n+i), then 4*n skirt
+    /// vertices (west, east, south, north edges in that order).
     public static class TerrainChunkMesher
     {
         public struct ChunkDesc
@@ -21,21 +29,34 @@ namespace SeaSick.Terrain
             public int lodStep;      // 1 = full density, 2 = every other vertex, ...
         }
 
-        /// Heights on the (n+2)² bordered grid for a chunk. Index (i+1, j+1) is
-        /// local vertex (i, j); the ring outside is only used for normals.
-        public static NativeArray<float> SampleHeights(in ChunkDesc d, in TerrainParams prm, in NativeArray<float> lut, Allocator alloc)
+        /// Blittable look parameters for the vertex colour bake.
+        public struct ColourParams
         {
-            int n = VertsPerEdge(d);
-            int bn = n + 2;
-            var h = new NativeArray<float>(bn * bn, alloc, NativeArrayOptions.UninitializedMemory);
-            for (int j = 0; j < bn; j++)
-                for (int i = 0; i < bn; i++)
-                    h[j * bn + i] = TerrainHeight.Height(VertexWorldXZ(d, i - 1, j - 1), prm, lut);
-            return h;
+            public float seaLevel, beachHeight, snowHeight;
+            public static ColourParams From(TerrainSettings s) =>
+                new ColourParams { seaLevel = s.seaLevel, beachHeight = s.beachHeight, snowHeight = s.snowHeight };
         }
+
+        public struct Vertex
+        {
+            public float3 position;
+            public float3 normal;
+            public Color32 colour;
+            public float2 uv;
+        }
+
+        static readonly VertexAttributeDescriptor[] Layout =
+        {
+            new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
+            new VertexAttributeDescriptor(VertexAttribute.Normal, VertexAttributeFormat.Float32, 3),
+            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+        };
 
         public static int VertsPerEdge(in ChunkDesc d) => (d.resolution - 1) / d.lodStep + 1;
         public static float Spacing(in ChunkDesc d) => d.size / (d.resolution - 1) * d.lodStep;
+        public static int VertexCount(in ChunkDesc d) { int n = VertsPerEdge(d); return n * n + 4 * n; }
+        public static int IndexCount(in ChunkDesc d) { int n = VertsPerEdge(d); return (n - 1) * (n - 1) * 6 + 4 * (n - 1) * 6; }
 
         /// World XZ of local vertex (i, j) — via the global integer lattice.
         public static float2 VertexWorldXZ(in ChunkDesc d, int i, int j)
@@ -49,75 +70,170 @@ namespace SeaSick.Terrain
 
         public static float2 ChunkOrigin(in ChunkDesc d) => new float2(d.coord.x, d.coord.y) * d.size;
 
-        /// Fills a Mesh (positions relative to the chunk origin, normals,
-        /// vertex colours, world-space UVs) from the bordered height grid.
-        public static void Build(Mesh mesh, in ChunkDesc d, in NativeArray<float> heights, in TerrainParams prm, TerrainSettings colours)
+        /// Heights on the (n+2)² bordered grid. Index (i+1, j+1) is local vertex (i, j).
+        [BurstCompile]
+        public struct HeightJob : IJobParallelFor
         {
-            int n = VertsPerEdge(d);
-            int bn = n + 2;
-            float spacing = Spacing(d);
-            float2 origin = ChunkOrigin(d);
+            public ChunkDesc desc;
+            public TerrainParams prm;
+            [ReadOnly] public NativeArray<float> lut;
+            [WriteOnly] public NativeArray<float> heights;
+            public int borderedN;
 
-            var verts = new Vector3[n * n];
-            var normals = new Vector3[n * n];
-            var cols = new Color32[n * n];
-            var uvs = new Vector2[n * n];
-            for (int j = 0; j < n; j++)
+            public void Execute(int index)
             {
-                for (int i = 0; i < n; i++)
+                int x = index % borderedN - 1, y = index / borderedN - 1;
+                heights[index] = TerrainHeight.Height(VertexWorldXZ(desc, x, y), prm, lut);
+            }
+        }
+
+        /// Fills the MeshData vertex and index buffers; bounds out as (minY, maxY).
+        [BurstCompile]
+        public struct MeshJob : IJob
+        {
+            public ChunkDesc desc;
+            public ColourParams colours;
+            public float skirtDepth;
+            [ReadOnly] public NativeArray<float> heights;
+            public Mesh.MeshData mesh;
+            [WriteOnly] public NativeArray<float> yRange;
+
+            public void Execute()
+            {
+                int n = VertsPerEdge(desc);
+                int bn = n + 2;
+                float spacing = Spacing(desc);
+                float2 origin = ChunkOrigin(desc);
+                var verts = mesh.GetVertexData<Vertex>();
+                var tris = mesh.GetIndexData<ushort>();
+
+                float minY = float.MaxValue, maxY = float.MinValue;
+                for (int j = 0; j < n; j++)
                 {
-                    int bi = (j + 1) * bn + (i + 1);
-                    float h = heights[bi];
-                    float2 w = VertexWorldXZ(d, i, j);
-                    verts[j * n + i] = new Vector3(w.x - origin.x, h, w.y - origin.y);
-                    // Central differences on the bordered grid — valid on the edge too.
-                    float dx = (heights[bi + 1] - heights[bi - 1]) / (2f * spacing);
-                    float dz = (heights[bi + bn] - heights[bi - bn]) / (2f * spacing);
-                    var nrm = new Vector3(-dx, 1f, -dz).normalized;
-                    normals[j * n + i] = nrm;
-                    cols[j * n + i] = VertexColour(h - prm.seaLevel, nrm.y, colours);
-                    uvs[j * n + i] = new Vector2(w.x, w.y) * 0.05f;
+                    for (int i = 0; i < n; i++)
+                    {
+                        int bi = (j + 1) * bn + (i + 1);
+                        float h = heights[bi];
+                        float2 w = VertexWorldXZ(desc, i, j);
+                        float dx = (heights[bi + 1] - heights[bi - 1]) / (2f * spacing);
+                        float dz = (heights[bi + bn] - heights[bi - bn]) / (2f * spacing);
+                        float3 nrm = math.normalize(new float3(-dx, 1f, -dz));
+                        Vertex v;
+                        v.position = new float3(w.x - origin.x, h, w.y - origin.y);
+                        v.normal = nrm;
+                        v.colour = VertexColour(h - colours.seaLevel, nrm.y, colours);
+                        v.uv = w * 0.05f;
+                        verts[j * n + i] = v;
+                        minY = math.min(minY, h); maxY = math.max(maxY, h);
+                    }
+                }
+
+                // Skirts: copies of the edge vertices dropped by skirtDepth.
+                int sw = n * n, se = sw + n, ss = se + n, sn = ss + n;
+                for (int k = 0; k < n; k++)
+                {
+                    verts[sw + k] = Dropped(verts[k * n + 0]);
+                    verts[se + k] = Dropped(verts[k * n + (n - 1)]);
+                    verts[ss + k] = Dropped(verts[0 * n + k]);
+                    verts[sn + k] = Dropped(verts[(n - 1) * n + k]);
+                }
+                yRange[0] = minY - skirtDepth; yRange[1] = maxY;
+
+                int t = 0;
+                for (int j = 0; j < n - 1; j++)
+                {
+                    for (int i = 0; i < n - 1; i++)
+                    {
+                        int a = j * n + i, b = a + 1, c = a + n, e = c + 1;
+                        tris[t++] = (ushort)a; tris[t++] = (ushort)c; tris[t++] = (ushort)b;
+                        tris[t++] = (ushort)b; tris[t++] = (ushort)c; tris[t++] = (ushort)e;
+                    }
+                }
+                // Skirt quads, wound to face outward (Unity: clockwise = front).
+                for (int k = 0; k < n - 1; k++)
+                {
+                    // West (x = 0), seen from -X: +Z runs left.
+                    int e0 = k * n, e1 = (k + 1) * n, s0 = sw + k, s1 = sw + k + 1;
+                    Quad(tris, ref t, e1, e0, s1, s0);
+                    // East (x = max), seen from +X: +Z runs right.
+                    e0 = k * n + (n - 1); e1 = (k + 1) * n + (n - 1); s0 = se + k; s1 = se + k + 1;
+                    Quad(tris, ref t, e0, e1, s0, s1);
+                    // South (z = 0), seen from -Z: +X runs right.
+                    e0 = k; e1 = k + 1; s0 = ss + k; s1 = ss + k + 1;
+                    Quad(tris, ref t, e0, e1, s0, s1);
+                    // North (z = max), seen from +Z: +X runs left.
+                    e0 = (n - 1) * n + k; e1 = (n - 1) * n + k + 1; s0 = sn + k; s1 = sn + k + 1;
+                    Quad(tris, ref t, e1, e0, s1, s0);
                 }
             }
 
-            int quads = (n - 1) * (n - 1);
-            var tris = new int[quads * 6];
-            int t = 0;
-            for (int j = 0; j < n - 1; j++)
+            /// topLeft/topRight are edge vertices, bottomLeft/bottomRight the
+            /// dropped copies, as seen from outside the chunk.
+            static void Quad(NativeArray<ushort> tris, ref int t, int topLeft, int topRight, int bottomLeft, int bottomRight)
             {
-                for (int i = 0; i < n - 1; i++)
-                {
-                    int a = j * n + i, b = a + 1, c = a + n, e = c + 1;
-                    tris[t++] = a; tris[t++] = c; tris[t++] = b;
-                    tris[t++] = b; tris[t++] = c; tris[t++] = e;
-                }
+                tris[t++] = (ushort)topLeft; tris[t++] = (ushort)topRight; tris[t++] = (ushort)bottomLeft;
+                tris[t++] = (ushort)topRight; tris[t++] = (ushort)bottomRight; tris[t++] = (ushort)bottomLeft;
             }
 
-            mesh.Clear();
-            mesh.indexFormat = n * n > 65000 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
-            mesh.vertices = verts;
-            mesh.normals = normals;
-            mesh.colors32 = cols;
-            mesh.uv = uvs;
-            mesh.triangles = tris;
-            mesh.RecalculateBounds();
+            Vertex Dropped(Vertex v) { v.position.y -= skirtDepth; return v; }
         }
 
         /// Sand in the beach band, grass above, rock where steep, snow high.
-        static Color32 VertexColour(float hAboveSea, float up, TerrainSettings s)
+        static Color32 VertexColour(float hAboveSea, float up, in ColourParams s)
         {
-            Color sand = new Color(0.86f, 0.78f, 0.55f), grass = new Color(0.30f, 0.55f, 0.22f),
-                  rock = new Color(0.42f, 0.38f, 0.34f), snow = new Color(0.95f, 0.95f, 0.97f),
-                  seabed = new Color(0.45f, 0.5f, 0.4f);
-            Color c;
-            if (hAboveSea < 0f) c = Color.Lerp(sand, seabed, math.saturate(-hAboveSea / 6f));
+            float3 sand = new float3(0.86f, 0.78f, 0.55f), grass = new float3(0.30f, 0.55f, 0.22f),
+                   rock = new float3(0.42f, 0.38f, 0.34f), snow = new float3(0.95f, 0.95f, 0.97f),
+                   seabed = new float3(0.45f, 0.5f, 0.4f);
+            float3 c;
+            if (hAboveSea < 0f) c = math.lerp(sand, seabed, math.saturate(-hAboveSea / 6f));
             else if (hAboveSea < s.beachHeight) c = sand;
-            else c = Color.Lerp(sand, grass, math.saturate((hAboveSea - s.beachHeight) / 3f));
-            float snowT = math.saturate((hAboveSea - s.snowHeight) / 8f);
-            c = Color.Lerp(c, snow, snowT);
-            float slopeT = math.saturate((0.8f - up) / 0.25f); // up < 0.8 (~37°) starts rock
-            c = Color.Lerp(c, rock, slopeT);
-            return c;
+            else c = math.lerp(sand, grass, math.saturate((hAboveSea - s.beachHeight) / 3f));
+            c = math.lerp(c, snow, math.saturate((hAboveSea - s.snowHeight) / 8f));
+            c = math.lerp(c, rock, math.saturate((0.8f - up) / 0.25f)); // up < 0.8 (~37°) starts rock
+            return new Color32((byte)(c.x * 255f), (byte)(c.y * 255f), (byte)(c.z * 255f), 255);
+        }
+
+        /// Sizes a writable MeshData for this chunk (main thread, before scheduling).
+        public static void Prepare(Mesh.MeshData md, in ChunkDesc d)
+        {
+            md.SetVertexBufferParams(VertexCount(d), Layout);
+            md.SetIndexBufferParams(IndexCount(d), IndexFormat.UInt16);
+        }
+
+        /// Schedules height sampling then mesh assembly. Caller owns heights
+        /// and yRange (dispose after Complete) and the MeshDataArray.
+        public static JobHandle Schedule(in ChunkDesc d, in TerrainParams prm, NativeArray<float> lut, in ColourParams colours,
+            float skirtDepth, NativeArray<float> heights, Mesh.MeshData md, NativeArray<float> yRange, JobHandle deps = default)
+        {
+            int bn = VertsPerEdge(d) + 2;
+            var hj = new HeightJob { desc = d, prm = prm, lut = lut, heights = heights, borderedN = bn }
+                .Schedule(bn * bn, 64, deps);
+            return new MeshJob { desc = d, colours = colours, skirtDepth = skirtDepth, heights = heights, mesh = md, yRange = yRange }
+                .Schedule(hj);
+        }
+
+        /// Finishes a prepared MeshData into the Mesh (main thread).
+        public static void Apply(Mesh.MeshDataArray mda, Mesh mesh, in ChunkDesc d, NativeArray<float> yRange)
+        {
+            var md = mda[0];
+            md.subMeshCount = 1;
+            md.SetSubMesh(0, new SubMeshDescriptor(0, IndexCount(d)), MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
+            Mesh.ApplyAndDisposeWritableMeshData(mda, mesh, MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
+            float lo = yRange[0], hi = yRange[1];
+            mesh.bounds = new Bounds(new Vector3(d.size * 0.5f, (lo + hi) * 0.5f, d.size * 0.5f), new Vector3(d.size, hi - lo + 0.01f, d.size));
+        }
+
+        /// Synchronous build for edit-mode tools and probes.
+        public static void BuildSync(Mesh mesh, in ChunkDesc d, in TerrainParams prm, NativeArray<float> lut, in ColourParams colours, float skirtDepth)
+        {
+            int bn = VertsPerEdge(d) + 2;
+            var heights = new NativeArray<float>(bn * bn, Allocator.TempJob);
+            var yRange = new NativeArray<float>(2, Allocator.TempJob);
+            var mda = Mesh.AllocateWritableMeshData(1);
+            Prepare(mda[0], d);
+            Schedule(d, prm, lut, colours, skirtDepth, heights, mda[0], yRange).Complete();
+            Apply(mda, mesh, d, yRange);
+            heights.Dispose(); yRange.Dispose();
         }
     }
 }

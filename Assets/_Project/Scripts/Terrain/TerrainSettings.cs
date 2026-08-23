@@ -57,7 +57,29 @@ namespace SeaSick.Terrain
 
         [Header("Chunks")]
         public float chunkSize = 128f;
-        [Tooltip("Vertices per chunk edge at LOD 0.")]
+        [Tooltip("Vertices per chunk edge at LOD 0. (2^k)+1 so LOD strides divide evenly; max 129 for 16-bit indices.")]
         public int chunkResolution = 65;
+        [Tooltip("Edge skirt drop, metres. Must exceed the largest LOD height error so no cracks show between LODs.")]
+        public float skirtDepth = 6f;
+
+        [Header("Streaming / LOD")]
+        [Tooltip("Chunks loaded in every direction from the target's chunk.")]
+        public int viewRadius = 8;
+        [Tooltip("Chunks (Chebyshev distance) at full density.")]
+        public int lod0Radius = 2;
+        [Tooltip("Chunks at half density; beyond this, quarter density.")]
+        public int lod1Radius = 4;
+        [Tooltip("Mesh colliders only within this many chunks of the target.")]
+        public int colliderRadius = 1;
+        [Tooltip("Chunk builds in flight on worker threads at once.")]
+        public int jobsInFlight = 2;
+
+        void OnValidate()
+        {
+            chunkResolution = Mathf.Clamp(chunkResolution, 5, 129);
+            // Force (2^k)+1 so lodStep 2 and 4 divide the cell count.
+            int cells = Mathf.ClosestPowerOfTwo(chunkResolution - 1);
+            chunkResolution = cells + 1;
+        }
     }
 }

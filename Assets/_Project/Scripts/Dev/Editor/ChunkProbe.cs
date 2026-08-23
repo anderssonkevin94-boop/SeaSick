@@ -25,10 +25,8 @@ public static class ChunkProbe
     {
         TerrainChunkMesher.ChunkDesc d = new TerrainChunkMesher.ChunkDesc();
         d.coord = new int2(cx, cz); d.size = s.chunkSize; d.resolution = s.chunkResolution; d.lodStep = lod;
-        NativeArray<float> h = TerrainChunkMesher.SampleHeights(d, prm, lut, Allocator.Temp);
         Mesh m = new Mesh();
-        TerrainChunkMesher.Build(m, d, h, prm, s);
-        h.Dispose();
+        TerrainChunkMesher.BuildSync(m, d, prm, lut, TerrainChunkMesher.ColourParams.From(s), s.skirtDepth);
         return m;
     }
 
@@ -39,7 +37,7 @@ public static class ChunkProbe
         TerrainSettings s = AssetDatabase.LoadAssetAtPath<TerrainSettings>("Assets/_Project/Settings/Terrain/TerrainSettings.asset");
         if (s == null) return "no TerrainSettings asset; run SetupTerrainLab";
         TerrainParams prm = TerrainParams.From(s);
-        NativeArray<float> lut = TerrainCurveLut.Bake(s.terraceCurve, Allocator.Temp);
+        NativeArray<float> lut = TerrainCurveLut.Bake(s.terraceCurve, Allocator.TempJob);
 
         // Chunk under the preview island.
         int cx = -13, cz = 4;
@@ -47,13 +45,13 @@ public static class ChunkProbe
         Mesh bx = BuildChunk(cx + 1, cz, 1, s, prm, lut);
         Mesh bz = BuildChunk(cx, cz + 1, 1, s, prm, lut);
         int n = s.chunkResolution;
-        Gate("vertex-count", a.vertexCount == n * n, a.vertexCount + " == " + (n * n));
+        Gate("vertex-count", a.vertexCount == n * n + 4 * n, a.vertexCount + " == " + (n * n + 4 * n) + " (grid + skirts)");
 
         // Heights match the function at the vertex's world position.
         Vector3[] va = a.vertices; Vector3[] na = a.normals;
         float2 oa = new float2(cx, cz) * s.chunkSize;
         float worstH = 0f;
-        for (int i = 0; i < va.Length; i += 97)
+        for (int i = 0; i < n * n; i += 97)
         {
             float2 w = oa + new float2(va[i].x, va[i].z);
             float h = TerrainHeight.Height(w, prm, lut);
@@ -63,7 +61,7 @@ public static class ChunkProbe
 
         // Normals unit and upward-ish.
         float worstLen = 0f; float minUp = 1f;
-        for (int i = 0; i < na.Length; i++) { worstLen = math.max(worstLen, math.abs(na[i].magnitude - 1f)); minUp = math.min(minUp, na[i].y); }
+        for (int i = 0; i < n * n; i++) { worstLen = math.max(worstLen, math.abs(na[i].magnitude - 1f)); minUp = math.min(minUp, na[i].y); }
         Gate("normals-unit", worstLen < 1e-4f, "worst |len-1|=" + worstLen + " minUp=" + minUp.ToString("F3"));
 
         // Shared edge with +X neighbour: a's column n-1 vs bx's column 0.

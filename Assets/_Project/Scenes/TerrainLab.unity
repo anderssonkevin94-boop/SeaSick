@@ -312,10 +312,7 @@ MonoBehaviour:
   settings: {fileID: 11400000, guid: 389a672c67e1d4140a08d081a4dc5698, type: 2}
   material: {fileID: 2100000, guid: 8aaa155f0136e427982c61ccc4fd9576, type: 2}
   target: {fileID: 0}
-  viewRadius: 6
   unloadHysteresis: 1
-  colliderRadius: 1
-  buildsPerFrame: 2
 --- !u!4 &853897727
 Transform:
   m_ObjectHideFlags: 0

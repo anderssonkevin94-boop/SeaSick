@@ -27,7 +27,8 @@ namespace SeaSick.Terrain
             Clear();
             if (settings == null) return;
             var prm = TerrainParams.From(settings);
-            var lut = TerrainCurveLut.Bake(settings.terraceCurve, Allocator.Temp);
+            var lut = TerrainCurveLut.Bake(settings.terraceCurve, Allocator.TempJob);
+            var colours = TerrainChunkMesher.ColourParams.From(settings);
             int2 c0 = (int2)math.floor(new float2(centre.x, centre.y) / settings.chunkSize);
             int half = chunksPerSide / 2;
             VertexCount = 0;
@@ -39,10 +40,8 @@ namespace SeaSick.Terrain
                         coord = c0 + new int2(x, z), size = settings.chunkSize,
                         resolution = settings.chunkResolution, lodStep = lodStep,
                     };
-                    var h = TerrainChunkMesher.SampleHeights(d, prm, lut, Allocator.Temp);
                     var mesh = new Mesh { name = "Chunk " + d.coord.x + "," + d.coord.y };
-                    TerrainChunkMesher.Build(mesh, d, h, prm, settings);
-                    h.Dispose();
+                    TerrainChunkMesher.BuildSync(mesh, d, prm, lut, colours, settings.skirtDepth);
                     VertexCount += mesh.vertexCount;
 
                     var go = new GameObject(mesh.name) { hideFlags = HideFlags.DontSave };
