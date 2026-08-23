@@ -51,7 +51,11 @@ namespace SeaSick.Terrain
         [Tooltip("Metres above beachHeight over which smooth blends into terraced. Smaller = sharper.")]
         public float beachBlendWidth = 4f;
 
-        [Header("Chunks (step 3+)")]
+        [Header("Look")]
+        [Tooltip("Vertex colour turns to snow above this height.")]
+        public float snowHeight = 45f;
+
+        [Header("Chunks")]
         public float chunkSize = 128f;
         [Tooltip("Vertices per chunk edge at LOD 0.")]
         public int chunkResolution = 65;

@@ -10,6 +10,7 @@ public static class SetupTerrainLab
 {
     const string ScenePath = "Assets/_Project/Scenes/TerrainLab.unity";
     const string SettingsPath = "Assets/_Project/Settings/Terrain/TerrainSettings.asset";
+    const string MaterialPath = "Assets/_Project/Materials/TerrainVertexColor.mat";
 
     public static string Execute()
     {
@@ -31,25 +32,56 @@ public static class SetupTerrainLab
             vis.settings = settings;
         }
 
+        // Material for the chunk meshes.
+        var mat = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
+        if (mat == null)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(MaterialPath));
+            mat = new Material(Shader.Find("SeaSick/Terrain Vertex Color"));
+            AssetDatabase.CreateAsset(mat, MaterialPath);
+        }
+
+        var preview = Object.FindFirstObjectByType<TerrainChunkPreview>();
+        if (preview == null)
+        {
+            preview = new GameObject("TerrainChunks").AddComponent<TerrainChunkPreview>();
+            preview.settings = settings;
+        }
+        preview.material = mat;
+        preview.chunksPerSide = 7;
+
+        var sun = Object.FindFirstObjectByType<Light>();
+        if (sun == null)
+        {
+            sun = new GameObject("Sun").AddComponent<Light>();
+            sun.type = LightType.Directional;
+            sun.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            sun.shadows = LightShadows.Soft;
+        }
+
+        // Perspective camera looking at the preview island; the map quad at
+        // y=0 doubles as a stand-in water plane.
         var cam = Object.FindFirstObjectByType<Camera>();
         if (cam == null)
         {
             var go = new GameObject("LabCamera");
             cam = go.AddComponent<Camera>();
             go.tag = "MainCamera";
-            cam.orthographic = true;
-            cam.farClipPlane = 1000f;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.08f, 0.1f, 0.14f);
+            cam.backgroundColor = new Color(0.55f, 0.7f, 0.9f);
         }
-        cam.transform.position = new Vector3(vis.centre.x, 200f, vis.centre.y);
-        cam.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        cam.orthographicSize = vis.extent;
+        cam.orthographic = false;
+        cam.fieldOfView = 50f;
+        cam.farClipPlane = 6000f;
+        cam.transform.position = new Vector3(preview.centre.x - 500f, 260f, preview.centre.y - 650f);
+        cam.transform.LookAt(new Vector3(preview.centre.x, 10f, preview.centre.y));
+        vis.stage = TerrainMapStage.FinalHeight;
 
+        preview.Rebuild();
         vis.Regenerate();
         EditorSceneManager.SaveScene(SceneManager(), ScenePath);
         AssetDatabase.SaveAssets();
-        return "TerrainLab ready; range [" + vis.LastMin + ", " + vis.LastMax + "]";
+        return "TerrainLab ready; map range [" + vis.LastMin + ", " + vis.LastMax + "], chunk verts=" + preview.VertexCount;
     }
 
     static UnityEngine.SceneManagement.Scene SceneManager() => EditorSceneManager.GetActiveScene();
