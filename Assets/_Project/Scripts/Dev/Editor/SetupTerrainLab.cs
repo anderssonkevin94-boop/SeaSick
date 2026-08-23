@@ -50,6 +50,19 @@ public static class SetupTerrainLab
         preview.material = mat;
         preview.chunksPerSide = 7;
 
+        // Runtime streamer (play mode); the preview serves edit mode.
+        var streamer = Object.FindFirstObjectByType<TerrainStreamer>();
+        if (streamer == null)
+        {
+            streamer = new GameObject("TerrainStreamer").AddComponent<TerrainStreamer>();
+            streamer.settings = settings;
+        }
+        streamer.material = mat;
+        streamer.viewRadius = 6;
+        streamer.unloadHysteresis = 1;
+        streamer.colliderRadius = 1;
+        streamer.buildsPerFrame = 2;
+
         var sun = Object.FindFirstObjectByType<Light>();
         if (sun == null)
         {
