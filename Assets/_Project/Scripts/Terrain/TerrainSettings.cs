@@ -17,6 +17,8 @@ namespace SeaSick.Terrain
         public float worldRadius = 0f;
         [Tooltip("Land fades out over this many metres inside worldRadius.")]
         public float worldEdgeFalloff = 500f;
+        [Tooltip("Added to world XZ before sampling, so a chosen island can be slid under the home position without changing the seed.")]
+        public Vector2 worldOffset = Vector2.zero;
 
         [Header("Noise (fBm)")]
         [Range(1, 8)] public int octaves = 5;

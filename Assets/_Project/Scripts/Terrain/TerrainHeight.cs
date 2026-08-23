@@ -10,6 +10,7 @@ namespace SeaSick.Terrain
     {
         public int seed;
         public float seaLevel, worldRadius, worldEdgeFalloff;
+        public float2 worldOffset;
         public int octaves; public float baseFrequency, lacunarity, gain;
         public int maskOctaves; public float maskFrequency, maskThreshold, maskFalloff;
         public float seabedDepth;
@@ -24,6 +25,7 @@ namespace SeaSick.Terrain
             var p = new TerrainParams
             {
                 seed = s.seed, seaLevel = s.seaLevel, worldRadius = s.worldRadius, worldEdgeFalloff = s.worldEdgeFalloff,
+                worldOffset = new float2(s.worldOffset.x, s.worldOffset.y),
                 octaves = s.octaves, baseFrequency = s.baseFrequency, lacunarity = s.lacunarity, gain = s.gain,
                 maskOctaves = s.maskOctaves, maskFrequency = s.maskFrequency, maskFalloff = s.maskFalloff,
                 maskThreshold = TerrainHeight.ThresholdForLandRatio(s.landRatio, s.maskOctaves),
@@ -56,13 +58,13 @@ namespace SeaSick.Terrain
 
         /// Stage 1. Normalised fBm in [0, 1].
         public static float Noise01(in float2 p, in TerrainParams prm)
-            => TerrainNoise.Fbm01(p, prm.seed, prm.octaves, prm.baseFrequency, prm.lacunarity, prm.gain);
+            => TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed, prm.octaves, prm.baseFrequency, prm.lacunarity, prm.gain);
 
         /// Stage 2. Continentalness: low-frequency fBm thresholded with a soft
         /// edge, then clamped by the optional world radius.
         public static float Mask(in float2 p, in TerrainParams prm)
         {
-            float c = TerrainNoise.Fbm01(p, prm.seed + TerrainParams.MaskSeedOffset, prm.maskOctaves,
+            float c = TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed + TerrainParams.MaskSeedOffset, prm.maskOctaves,
                 prm.maskFrequency, 2f, 0.5f);
             float m = math.smoothstep(prm.maskThreshold, prm.maskThreshold + prm.maskFalloff, c);
             if (prm.worldRadius > 0f)
@@ -88,7 +90,7 @@ namespace SeaSick.Terrain
 
         /// Stage 4. High-frequency relief so plateaus aren't dead flat.
         public static float Detail(in float2 p, in TerrainParams prm)
-            => prm.detailAmplitude * TerrainNoise.Fbm(p, prm.seed + TerrainParams.DetailSeedOffset,
+            => prm.detailAmplitude * TerrainNoise.Fbm(p + prm.worldOffset, prm.seed + TerrainParams.DetailSeedOffset,
                 prm.detailOctaves, prm.detailFrequency, 2f, 0.5f);
 
         /// Stage 5. Smooth below the beach height, terraced above, blended over
@@ -110,7 +112,6 @@ namespace SeaSick.Terrain
         /// applied BEFORE the beach blend so the blend sees real altitudes —
         /// every shoreline climbs from the seabed through the 0..beachHeight
         /// band, and that band is guaranteed smooth whatever the curve does.
-        [BurstCompile]
         public static TerrainSample Evaluate(in float2 p, in TerrainParams prm, in NativeArray<float> lut)
         {
             TerrainSample s;

@@ -53,7 +53,6 @@ namespace SeaSick.Terrain
         }
 
         /// Single-octave 2D simplex noise in [-1, 1]. p is already frequency-scaled.
-        [BurstCompile]
         public static float Simplex(in float2 p, int seed)
         {
             float s = (p.x + p.y) * F2;
@@ -88,7 +87,6 @@ namespace SeaSick.Terrain
         /// baseFrequency * lacunarity^i, amplitude gain^i; the sum is divided by
         /// the total amplitude so the range is independent of octave count.
         /// Each octave uses a different derived seed so they decorrelate.
-        [BurstCompile]
         public static float Fbm(in float2 worldXZ, int seed, int octaves, float baseFrequency,
             float lacunarity, float gain)
         {

@@ -16,6 +16,7 @@ MonoBehaviour:
   seaLevel: 0
   worldRadius: 0
   worldEdgeFalloff: 500
+  worldOffset: {x: -288, y: 23}
   octaves: 5
   baseFrequency: 0.0025
   lacunarity: 2
@@ -108,5 +109,12 @@ MonoBehaviour:
   detailAmplitude: 1.5
   beachHeight: 6
   beachBlendWidth: 4
+  snowHeight: 45
   chunkSize: 128
   chunkResolution: 65
+  skirtDepth: 6
+  viewRadius: 8
+  lod0Radius: 2
+  lod1Radius: 4
+  colliderRadius: 1
+  jobsInFlight: 2
