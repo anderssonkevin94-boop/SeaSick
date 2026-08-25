@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean2.OceanQuality
   fftSize: 128
   patchSizes:
-  - 512
+  - 2048
   - 128
   - 32
   clipmapRings: 5

@@ -45,7 +45,9 @@ namespace SeaSick.Ocean
             float[] patches = q != null ? q.patchSizes : new[] { 512f, 128f, 32f };
 
             // Wavelength range per cascade, for the per-ring weights.
-            // Cascade bands: c0 (64..512), c1 (16..64), c2 (min..16) by design.
+            // Cascade bands: c0 (64..patch0), c1 (16..64), c2 (min..16) by
+            // design. patch0 is 2048 m so the storm swell's 400-900 m rollers
+            // have somewhere to live; 512 m held exactly one of them.
             var lamMin = new float[] { patches[1] * 0.5f, patches[2] * 0.5f, 1f };
             var lamMax = new float[] { patches[0], patches[1] * 0.5f, patches[2] * 0.5f };
 
