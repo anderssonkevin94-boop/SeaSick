@@ -21,6 +21,12 @@ namespace SeaSick.Ocean
         [Tooltip("Cells across the centre block; also cells across each ring annulus.")]
         [SerializeField] int cellsAcross = 128;
 
+        /// Vertical half-extent of every ring's bounds, metres. Bounds only
+        /// drive culling, so generous is free and mean is a bug: at storm
+        /// amplitudes a 120 m box (the old value, +-60 m) starts culling rings
+        /// that are still on screen, and the sea flickers out in patches.
+        const float BoundsHeight = 800f;
+
         readonly List<Transform> rings = new List<Transform>();
         readonly List<float> cellSizes = new List<float>();
 
@@ -164,7 +170,7 @@ namespace SeaSick.Ocean
             mesh.SetVertices(verts);
             mesh.SetTriangles(tris, 0);
             float bound = outermost ? outerHalf * 51f : outerHalf;
-            mesh.bounds = new Bounds(Vector3.zero, new Vector3(bound * 2f, 120f, bound * 2f));
+            mesh.bounds = new Bounds(Vector3.zero, new Vector3(bound * 2f, BoundsHeight, bound * 2f));
             return mesh;
         }
 
@@ -187,7 +193,7 @@ namespace SeaSick.Ocean
             mesh.vertices = verts;
             mesh.triangles = tris;
             float half = Mathf.Max(cx, cz) * cell * 0.5f;
-            mesh.bounds = new Bounds(Vector3.zero, new Vector3(half * 2f, 120f, half * 2f));
+            mesh.bounds = new Bounds(Vector3.zero, new Vector3(half * 2f, BoundsHeight, half * 2f));
             return mesh;
         }
 
