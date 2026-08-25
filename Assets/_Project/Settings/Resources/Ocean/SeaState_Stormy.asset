@@ -17,17 +17,17 @@ MonoBehaviour:
   gamma: 3.3
   windDirectionDeg: 15
   depth: 30
-  swellHeight: 72.79791
-  swellWavelength: 299
+  swellHeight: 64
+  swellWavelength: 470
   swellDirectionDeg: 0
-  swellSharpness: 3.9812
-  swell2Height: 22.173717
-  swell2Wavelength: 132.29555
-  swell2DirectionDeg: 31.98
-  swell2Sharpness: 3.2076
-  nominalHs: 76.1
-  choppiness: 0.45
-  detailGain: 9.81
+  swellSharpness: 3.2
+  swell2Height: 24
+  swell2Wavelength: 170
+  swell2DirectionDeg: 45
+  swell2Sharpness: 2.5
+  nominalHs: 65
+  choppiness: 1
+  detailGain: 6
   detailWavelength: 40
   foamThreshold: 0.3
   foamHalflife: 4.5

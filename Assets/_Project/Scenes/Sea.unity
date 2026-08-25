@@ -1116,6 +1116,8 @@ MonoBehaviour:
   wanderAmount: 0.5
   wanderPeriod: 240
   warmStart: 1
+  setDepth: 0.1
+  setPeriod: 70
 --- !u!114 &1016993462
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1171,6 +1173,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dbf7ddca878fc43f490fc3653e9f0171, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanPhysicsDriver
+  hullFeelsCascade1: 0.3
+  hullFeelsCascade0: 1
 --- !u!114 &1016993465
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2934,6 +2938,8 @@ MonoBehaviour:
   ingressPerMetre: 0.28
   maxEffectiveImmersion: 0.45
   seepAtFullRoughness: 0.006
+  ingressPerMetreBuried: 0.42
+  maxEffectiveBurial: 1.5
   bailPerHand: 0.021
   ignoreBelow: 0.06
   allHandsAt: 0.55
@@ -2994,6 +3000,9 @@ MonoBehaviour:
   maxDynamicLiftAccel: 10
   dynamicLiftAftWeight: 0
   reserveUpwardKeep: 0.3
+  burialDepth: 1.2
+  burialRecovery: 0.45
+  maxBurialAccel: 14
   inertiaBoxDims: {x: 4.4, y: 3, z: 13}
   centreOfMass: {x: 0, y: -0.6, z: 0}
 --- !u!114 &2143489902

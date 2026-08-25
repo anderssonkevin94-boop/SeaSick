@@ -32,8 +32,8 @@ namespace SeaSick.Ocean
         [SerializeField] bool warmStart = true;
 
         [Header("Sets and lulls")]
-        [Tooltip("How deeply the storm breathes, 0..1. A storm held at a constant maximum is a TEXTURE, not weather: the old target formula pinned severity at exactly 1.0 the moment storm weight came up, so the sea out west never let up for a second and there was nothing to time a run against. Real seas arrive in sets with lulls between them, and the lull is what makes the set read as big.")]
-        [Range(0f, 0.6f)] [SerializeField] float setDepth = 0.32f;
+        [Tooltip("How deeply the storm breathes, as a fraction of SEVERITY -- and severity is NOT wave height. The blend runs normal->stormy across severity 0.5..1.0, and normal is Hs 3.5 against stormy's 65, so the mapping is brutally nonlinear at the top: severity 1.00 is Hs 65, 0.90 is Hs 53, 0.70 is Hs 28. A setDepth of 0.32 therefore does NOT take 32% off the waves, it takes 57% off them, and the first version of this shipped exactly that -- the storm spent most of its life at 'heavy' instead of 'mountainous' and the whole ocean read as flat. 0.10 is about a 19% swing in height, which is what a set actually looks like, and it also keeps the state name from flickering between heavy and storm.")]
+        [Range(0f, 0.6f)] [SerializeField] float setDepth = 0.10f;
         [Tooltip("Seconds per set cycle. Long swell arrives in groups on this sort of period; short enough to feel while sailing, long enough not to read as a pulsing effect.")]
         [SerializeField] float setPeriod = 70f;
 
@@ -136,6 +136,10 @@ namespace SeaSick.Ocean
                 sets = Mathf.Clamp01((sets - 0.5f) * 2f + 0.5f);   // Perlin rarely reaches its ends
                 float breathe = setDepth * storm;
                 severity = Mathf.Clamp01(baseSeverity * (1f - breathe * (1f - sets)));
+                // Never let a lull drop the storm out of its own weather band:
+                // the point is a sea that eases and gathers, not one that stops
+                // being a storm every ninety seconds.
+                if (storm > 0.5f) severity = Mathf.Max(severity, baseSeverity * 0.85f);
 
                 if (justWarmed)
                 {
