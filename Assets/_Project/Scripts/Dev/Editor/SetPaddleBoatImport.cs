@@ -1,0 +1,31 @@
+using UnityEditor;
+using UnityEngine;
+
+/// Import settings for the paddle boat FBX. The model is authored at 7.1 m
+/// overall; the game wants a boat that reads correctly against 1.6 m crew,
+/// which means waist-to-chest-high railings rather than knee-high ones. At
+/// 1.7 the railing lands at 1.04 m and she comes out 12.1 m overall.
+public static class SetPaddleBoatImport
+{
+    const string Path = "Assets/_Project/Art/Ship/paddle_boat.fbx";
+    const float Scale = 1.7f;
+
+    public static string Execute()
+    {
+        var mi = AssetImporter.GetAtPath(Path) as ModelImporter;
+        if (mi == null) return "no ModelImporter at " + Path;
+        mi.useFileScale = true;
+        mi.globalScale = Scale;
+        mi.importNormals = ModelImporterNormals.Import;
+        mi.importCameras = false;
+        mi.importLights = false;
+        mi.importAnimation = false;
+        mi.isReadable = false;
+        mi.materialImportMode = ModelImporterMaterialImportMode.ImportStandard;
+        mi.materialLocation = ModelImporterMaterialLocation.InPrefab;
+        mi.meshCompression = ModelImporterMeshCompression.Off;
+        EditorUtility.SetDirty(mi);
+        mi.SaveAndReimport();
+        return "paddle_boat import scale -> " + Scale;
+    }
+}

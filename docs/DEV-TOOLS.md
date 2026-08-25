@@ -39,6 +39,8 @@ shader property defaults. Re-run these after changing any default.
 | `SetupTerrainLab.cs` | Builds `TerrainLab.unity` (the island generator's test scene): the `TerrainSettings` asset, the 2D map visualiser quad (doubles as a water stand-in at y=0), a 7×7 main-thread `TerrainChunkPreview` over the western island, the runtime `TerrainStreamer`, sun and camera. Also pushes the terrain material. |
 | `WestTrace.cs` | Sails due west into the deep and decomposes every retarding force per second — sail budget vs surf, base hull drag and plow — plus the metric the player actually feels: **what fraction of her speed a wave costs and how long she needs to get it back**. The instrument for "she goes from 30 m/s to 5". | `/tmp/seasick-westtrace.txt` |
 | `SetMaxSpeed.cs` | One-off push of `ShipMotor.maxSpeed` (scene-serialised) and nothing else. Edit the constant, run it. | — |
+| `SetupPaddleBoat.cs` | **The paddle boat cutover on `Sea.unity`**: strips the sloop's hull/sail/rudder, drops the new boat in at the measured waterline offset, corrects the FBX grandchild axes, binds the wheels by measured position, hangs the lanterns on pivots, turns `windDriven` off, reshapes the buoyancy probes and mass for this hull, rescales speed/freeboard/camera, moves cargo amidships and stands a helmsman at the wheel. Idempotent — re-run after changing any constant in it. |
+| `SetPaddleBoatImport.cs` | Import scale for `paddle_boat.fbx` (1.7 = 12.1 m overall). |
 | `SetBeachSlope.cs` | One-off push of `WorldSettings.beachMaxSlope` into the asset. Edit the constant, run it. The value comes off `BeachProbe`'s distribution. | — |
 | `TuneStormFeel.cs` | Storm-feel values that are **scene-serialised** and therefore unreachable from C# defaults: `ChaseCamera.stormDrop`/`stormPullIn` and `ShipMotor.acceleration`. Note the scene frames the camera at distance 20 / height 13, not the code defaults 25/19 — subtract the storm values from those, not from the defaults. |
 
@@ -65,6 +67,8 @@ shader property defaults. Re-run these after changing any default.
 | `ShoreProbe.cs` | **Terrain→ocean gate** (play mode, Sea.unity): severity forced to 1.0; surface RMS at deep water / shoreline / land must be intact / <10 % / 0; CPU shore factor vs exact height. Shot of the beach. | `/tmp/seasick-shore.txt`, `-shore.png` |
 | `WorldProbe.cs` | **Populator gate** (play mode, Sea.unity): islands found, home + Stockpile, centres on land, outline at the waterline, beaches, props grounded, reefs/monsters in water, raiders, spawn landable. | `/tmp/seasick-world.txt` |
 | `IslandShot.cs` | Look shots of the home island from the sea, the beach, overhead and 900 m east, with the ship pinned so the streamer stays centred. Play mode, Sea.unity. | `/tmp/seasick-island-0..3.png` |
+| `PaddleProbe.cs` | **The paddle boat's gate**: resting draft and freeboard light and laden in a pinned calm; that she makes way and the wheel rim speed matches it; that the wheels are genuinely differential at helm; and that with the throttle shut and the helm over they counter-rotate and she comes round on the spot. Play mode, Sea.unity. | `/tmp/seasick-paddle.txt` |
+| `InspectPaddleBoat.cs` | Dumps what Unity actually made of an imported FBX — hierarchy, local transforms, per-part world bounds, and which way the bow points. `Execute` for the boat, `ExecuteCannon` for the gun. Edit mode. | `/tmp/seasick-paddleboat.txt` |
 | `BeachProbe.cs` | **Beach-slope tuning instrument**: re-measures the shore rise per metre over 12 m inland on all 46 bearings of every discovered island, and reports the landable fraction and the count of unlandable islands at five candidate `beachMaxSlope` values, plus the full percentile distribution. Choose the threshold by reading it once instead of rebuilding the world per candidate. Play mode, Sea.unity. | `/tmp/seasick-beach.txt` |
 | `TerrainPerfProbe.cs` | **Terrain cost ledger**: loaded vs portrait-frustum-visible chunks/verts/tris, shadow-pass load, collider tris, mesh memory, and the streamer's main-thread cost over 24 chunk crossings with the per-crossing distribution. Only device-independent quantities — GPU ms stays a device measurement, like `PerfProbe`. Play mode, Sea.unity. | `/tmp/seasick-terrainperf.txt` |
 | `CrossingProbe.cs` | 40 chunk crossings in 20 s with per-crossing replan breakdown — the quick way to tell a one-off first-use cost from a systemic one (it's what found the 10 ms first-release lazy init). Play mode, TerrainLab. | `/tmp/seasick-crossing.txt` |
@@ -111,6 +115,24 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   would have been a real 60 fps blocker; the identical run minutes later put
   the same call at **1.07 ms**. Never accept a single worst-frame sample from
   the editor as a finding — run it twice and compare the distributions.
+- **Blender's FBX export converts axes for top-level objects but not for
+  GRANDCHILDREN.** With `bake_space_transform=True`, `PaddleWheel` (a direct
+  child) came out correctly at `(-Xb, Zb, -Yb)`, while `HelmWheel` and both
+  lanterns (children of a child) came out at `(-Xb, Yb, Zb)` — Y and Z never
+  swapped. Visually this is not an obvious rotation, it is a part sitting at
+  deck level and offset sideways: the helm wheel was 0.84 m out to starboard
+  instead of 0.84 m up on its stand. `SetupPaddleBoat` corrects any part at
+  depth 2 or more. **Dump the hierarchy and read the numbers after any FBX
+  import** — `InspectPaddleBoat` exists for exactly this, and it caught both
+  this and a separate 1/100 scale error on the first import.
+- **Ship tuning authored as ABSOLUTE METRES does not survive a change of
+  hull.** Swapping the 21 m sloop for a 12 m paddle boat carried over
+  `sinkAtMarkedLine` 0.50 / `sinkPerOverload` 0.72 (authored against ~2 m of
+  freeboard) and `maxSpeed` 18 — which is 35 knots. The first run measured her
+  at 20.4 m/s with her deck buried in her own bow wave. Anything in metres or
+  m/s on the ship — freeboard sinks, camera distance and height, camera storm
+  offsets, gun positions, crew stations, cargo stack origin — has to be
+  rescaled with the hull, and every one of them is scene-serialised.
 - **`QualitySettings.names` is not indexed by quality level.** TerrainPerfProbe
   printed `names[GetQualityLevel()]` and reported "PC" while play mode was
   genuinely on the Mobile tier (level 0, shadowDistance 40, 2 cascades — the

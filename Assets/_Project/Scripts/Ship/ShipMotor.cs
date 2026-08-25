@@ -47,6 +47,10 @@ namespace SeaSick.Ship
         [Header("Crew")]
         [SerializeField] float sailTrimRate = 0.55f;
 
+        [Header("Propulsion source")]
+        [Tooltip("Off for the paddle boat: she carries no sail, so the wind must not push her or drift her. The head-sea penalty stays either way — that is the WAVES, and a paddle steamer still loses way charging a sea.")]
+        [SerializeField] bool windDriven = true;
+
         [Header("Gun recoil / knockdown")]
         [SerializeField] float knockdownTorquePerDeg = 900f;
 
@@ -91,6 +95,9 @@ namespace SeaSick.Ship
         public float WindStrength { get; private set; } = 1f;
         public float GustFactor01 { get; private set; }
         public float MaxSpeed => maxSpeed;
+        /// False on the paddle boat: wind still exists in the world and still
+        /// drives the sea state, it just does not act on this hull.
+        public bool WindDriven => windDriven;
         /// The whole propulsion budget: x mass is the most force the sail can
         /// ever apply, and any water force above that wins outright.
         public float Acceleration => acceleration;
@@ -246,8 +253,11 @@ namespace SeaSick.Ship
             RailImmersion = Anchored ? 0f : Mathf.Max(0f, buoyant.MaxRailImmersion);
 
             // Drift: the water mass itself moving (Stokes drift scaled by sea).
-            WaterVelocity = new Vector3(WindDirection.x, 0f, WindDirection.y)
-                * (waveDrift * SeaSeverity01);
+            // A hull with no sail still sits in moving water, but this term is
+            // the wind's push on the ship and the paddle boat is exempt.
+            WaterVelocity = windDriven
+                ? new Vector3(WindDirection.x, 0f, WindDirection.y) * (waveDrift * SeaSeverity01)
+                : Vector3.zero;
             buoyant.AmbientFlow = Anchored ? Vector3.zero : WaterVelocity;
 
             CurrentSpeed = Flat3(rb.linearVelocity).magnitude;
@@ -261,7 +271,7 @@ namespace SeaSick.Ship
             float effectiveRudder = EffectiveRudder();
             if (rudderPivot != null)
                 rudderPivot.localRotation = Quaternion.Euler(0f, -effectiveRudder * rudderVisualAngle, 0f);
-            if (mastPivot != null)
+            if (mastPivot != null && windDriven)
             {
                 Vector3 windWorld = new Vector3(WindDirection.x, 0f, WindDirection.y);
                 float windYaw = Vector3.SignedAngle(Flat(transform.forward), windWorld, Vector3.up);

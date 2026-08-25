@@ -177,7 +177,8 @@ namespace SeaSick.UI
             float pad = u * 0.7f;
             float size = Mathf.Min(Screen.width * 0.34f, u * 12f);
             var box = new Rect(Screen.width - size - pad, pad, size, size);
-            ReservedHeight = size + pad;
+            float windRow = u * 1.6f;
+            ReservedHeight = size + pad + windRow + pad * 0.5f;
 
             UITheme.Rect(box, UITheme.PanelSolid);
 
@@ -266,6 +267,40 @@ namespace SeaSick.UI
 
             // North tick outside the clip group.
             GUI.Label(new Rect(box.x, box.y - u * 0.1f, box.width, u * 1.2f), "N", UITheme.Small2Centered);
+
+            DrawWind(new Rect(box.x, box.yMax + pad * 0.5f, box.width, windRow), u);
+        }
+
+        static readonly string[] Points =
+            { "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+              "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW" };
+
+        /// Wind, under the map. The paddle boat is not driven by it, but it
+        /// still sets the sea she has to cross and still carries the raiders
+        /// who do have sails — so it stays information, it just stops being a
+        /// thing floating over the ship. (It replaced WindArrow.)
+        void DrawWind(Rect r, int u)
+        {
+            UITheme.Rect(r, UITheme.PanelSolid);
+
+            Vector2 w = motor.WindDirection;
+            if (w.sqrMagnitude < 1e-4f) return;
+            float bearing = Mathf.Repeat(Mathf.Atan2(w.x, w.y) * Mathf.Rad2Deg, 360f);
+            string point = Points[Mathf.RoundToInt(bearing / 22.5f) % 16];
+
+            // The arrow points the way the wind is going, matching the map's
+            // north-up frame rather than the ship's heading.
+            float glyph = u * 1.1f;
+            var centre = new Vector2(r.x + glyph * 0.9f, r.y + r.height * 0.5f);
+            var prev = GUI.color;
+            GUIUtility.RotateAroundPivot(bearing + 180f, centre);
+            GUI.color = new Color(0.85f, 0.92f, 1f, 0.9f);
+            GUI.DrawTexture(new Rect(centre.x - glyph * 0.5f, centre.y - glyph * 0.5f, glyph, glyph), arrowTex);
+            GUI.matrix = Matrix4x4.identity;
+            GUI.color = prev;
+
+            var text = new Rect(r.x + glyph * 1.7f, r.y, r.width - glyph * 1.7f - u * 0.3f, r.height);
+            GUI.Label(text, "wind " + point, UITheme.Small);
         }
 
         /// World position -> map pixel. Note z maps to -y: screen y grows down.
