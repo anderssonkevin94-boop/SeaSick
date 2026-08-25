@@ -61,6 +61,16 @@ namespace SeaSick.Ocean
         float4 SamplePrevDisp(float2 xz) =>
             Bilinear(prevDisp0, xz * invPatch.x) + Bilinear(prevDisp1, xz * invPatch.y);
 
+        /// Diagnostic only. The raw cascade 0+1 displacement at a SOURCE
+        /// point, with no envelope and no Newton inversion -- the same
+        /// SampleDisp the real path uses, exposed so DivergenceProbe can split
+        /// a parity failure into its envelope, readback and inversion parts
+        /// instead of reporting one number that could be any of the three.
+        public float4 SourceDisp(float2 p) => SampleDisp(p);
+
+        /// Diagnostic only. The regional envelope at a source point.
+        public float SourceEnv(float2 p) => region.Evaluate(p, islands, shore);
+
         public OceanSample Sample(float3 worldPos)
         {
             var result = new OceanSample { normal = math.up() };

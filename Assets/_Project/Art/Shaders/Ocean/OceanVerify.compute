@@ -6,7 +6,8 @@
 //
 // Out layout per query: xyz = displaced position using the physics bands
 // (cascades 0-1), w = cascade 2's height contribution (the visual-only chop
-// physics deliberately ignores; reported, not gated).
+// physics deliberately ignores; reported, not gated). OutDiag carries the
+// envelope and the raw displacement for the probe's three-way error split.
 
 #pragma kernel VerifySample
 
@@ -16,6 +17,11 @@ Texture2DArray<float4> Displacement;
 SamplerState linearRepeatSampler;
 StructuredBuffer<float2> QueryPos;
 RWStructuredBuffer<float4> OutPos;
+// Diagnostic split: x = envelope at the source point, yzw = the RAW
+// un-enveloped cascade 0+1 displacement there. Lets the probe separate a
+// RegionField parity drift from a readback/texture mismatch from a Newton
+// inversion failure, instead of reporting one number that could be any.
+RWStructuredBuffer<float4> OutDiag;
 
 cbuffer Params
 {
@@ -42,4 +48,5 @@ void VerifySample(uint3 id : SV_DispatchThreadID)
 
     float3 p = float3(x.x, 0, x.y) + env * float3(d01.x, d01.y, d01.z);
     OutPos[id.x] = float4(p, env * y2);
+    OutDiag[id.x] = float4(env, d01.x, d01.y, d01.z);
 }

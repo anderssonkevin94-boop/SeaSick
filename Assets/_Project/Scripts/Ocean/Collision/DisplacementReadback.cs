@@ -24,12 +24,15 @@ namespace SeaSick.Ocean
             public NativeArray<half> turb;   // cascade 0 foam, for OceanSample.foam
             public AsyncGPUReadbackRequest[] requests = new AsyncGPUReadbackRequest[PhysicsCascades * 2 + 1];
             public double time = -1.0;
+            /// Completion order, not sim time. See the Latest/Previous note.
+            public long seq;
             public bool inFlight;
             public bool ready;
         }
 
         readonly Slot[] slots = new Slot[Slots];
         readonly int n;
+        long nextSeq;
 
         public int N => n;
         public Slot Latest { get; private set; }
@@ -81,15 +84,25 @@ namespace SeaSick.Ocean
                     s.requests[c * 2 + 1].GetData<half4>().CopyTo(s.deriv[c]);
                 }
                 s.requests[PhysicsCascades * 2].GetData<half>().CopyTo(s.turb);
+                s.seq = ++nextSeq;
             }
 
-            // Track the two newest completed slots.
+            // Track the two most recently COMPLETED slots, by completion order
+            // and never by s.time. Ranking by timestamp looks equivalent while
+            // OceanTime only ever advances, and wedges the ring solid the
+            // moment anything scrubs BACKWARDS: the fresh slot's time is lower
+            // than the stale ones, so it never becomes Latest, so it is free,
+            // so the next Tick recycles it -- forever. Physics then rides a
+            // surface frozen at the highest time the ring ever saw. Probes
+            // scrub backwards constantly (OceanTime.Scrub exists for it), and
+            // this is what made DivergenceProbe return 26 cm, then no samples
+            // at all, then 147 cm, from identical code.
             Latest = Previous = null;
             foreach (var s in slots)
             {
                 if (!s.ready) continue;
-                if (Latest == null || s.time > Latest.time) { Previous = Latest; Latest = s; }
-                else if (Previous == null || s.time > Previous.time) Previous = s;
+                if (Latest == null || s.seq > Latest.seq) { Previous = Latest; Latest = s; }
+                else if (Previous == null || s.seq > Previous.seq) Previous = s;
             }
 
             // Launch into a free slot that physics isn't reading.

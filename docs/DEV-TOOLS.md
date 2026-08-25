@@ -51,7 +51,7 @@ shader property defaults. Re-run these after changing any default.
 | `FFTUnit.cs` | The Stockham IFFT core against analytic sinusoids (known modes in, sinusoid out to 1e-5). Edit mode, no play needed. | `/tmp/seasick-fftunit.txt` |
 | `SpectrumProbe2.cs` | The GPU sea against **oceanography**: Hs from field variance and Tp from a temporal PSD vs analytic JONSWAP integrals, for the three canonical (wind, fetch) triples. Edit mode. Slow (~2 min). | `/tmp/seasick-spectrum2.txt` |
 | `ClipmapProbe.cs` | Vertex swim (re-anchors every ring under a frozen sea; pixels must not move) and altitude tiling shots. Play mode, OceanLab. | `/tmp/seasick-clipmap.txt`, `-tiling-*.png` |
-| `DivergenceProbe.cs` | **The load-bearing gate**: rendered surface vs CPU sampler at 1000 points, five frozen instants, storm λ=1.2 — must be < 5 cm (measured 0.23). Also batch cost. Play mode, OceanLab. | `/tmp/seasick-divergence.txt` |
+| `DivergenceProbe.cs` | **The load-bearing gate**: rendered surface vs CPU sampler at 1000 points, five frozen instants, storm λ=1.2 — must be < 5 cm (measured 0.23). Reports a **three-way split** — `env` (RegionField C# vs HLSL), `disp` (readback vs live texture) and `total` (adds the Newton inversion) — because one number could be any of the three and was read as the wrong one for a fortnight. Disables `SeaStateController` for the run; `ForceSeverity` does NOT stop it reaching `SetSettings`. Fails loudly on a readback stall instead of skipping the instant. Play mode, OceanLab. | `/tmp/seasick-divergence.txt` |
 | `BuoyProbe.cs` | Proxy sloop: 60 s storm free-float (roll/rails/draft/capsize) + three calm 2 m drops from pinned phases, scored on draft **overshoot** and **late ringing RMS**. The old "settle time" criterion was replaced 2026-08-21 — see the traps below. Play mode, OceanLab. | `/tmp/seasick-buoy.txt` |
 | `BlendProbe.cs` | Calm→storm weather ramp smoothness (Hs every second; steps mean rebuild pops). Play mode, OceanLab. | `/tmp/seasick-blend.txt`, `-blend-*.png` |
 | `SailShot.cs` | Sails the western deep in `Sea.unity`: draft statistics, camera clamp rate, camera/hull gap, roll/pitch, speed. Compare `/tmp/seasick-sail-baseline.txt` (the old kinematic system's final run). | `/tmp/seasick-sail.txt`, `-0..4.png` |
@@ -60,6 +60,7 @@ shader property defaults. Re-run these after changing any default.
 | `BuryTrace.cs` | BuryProbe's run as a time series instead of a verdict — ship y, sampled surface, batched surface, draft, submersion, reserve, plow, speed, pitch, roll. The sampler-vs-batch column is the one that says whether a wild draft number is a sinking ship or a lying instrument. Play mode, Sea.unity. | `/tmp/seasick-burytrace.txt` |
 | `RippleStressProbe.cs` | **Ripple-needle gate**: two legs (driving + splash spam, and stalled in a storm), GPU readback scored on **neighbour gradient** and texels riding the clamp — not magnitude, which the Step clamp makes unfalsifiable. Gate: gradient < 0.35 m/texel, zero at clamp, zero non-finite. Play mode, Sea.unity. | `/tmp/seasick-ripplestress.txt` |
 | `SprayDebug.cs` | Per-second spindrift emission budget log. | Unity log |
+| `ReadbackDiag.cs` | The clock against the readback ring: `OceanTime.Now` vs `OceanSampler.SurfaceTime` per frame across a deliberate BACKWARD scrub and a forward one, plus whether the loaded assembly actually has the fix in it. The instrument for "the stamp is not following the scrub". Play mode, OceanLab. | `/tmp/seasick-readbackdiag.txt` |
 | `NoiseProbe.cs` | **Terrain noise gate** (edit mode): deterministic, seed-sensitive, no mirroring across the origin, fBm range/mean at 1/3/8 octaves, continuity at 80 km. Exports the map quad at 1 and N octaves. | `/tmp/seasick-noise.txt`, `-noise-*.png` |
 | `HeightProbe.cs` | **Height pipeline gate** (edit mode): land ratio vs `landRatio`, open ocean always on a seabed below 0, beach band walkable (≤1.5 m/m), blend adds no discontinuities, `worldRadius` clamp drowns everything outside. Exports all four visualiser stages. | `/tmp/seasick-height.txt`, `-height-*.png` |
 | `ChunkProbe.cs` | **Chunk mesh gate** (edit mode): vertex heights equal the height function exactly, normals unit, +X/+Z shared edges bit-identical in position AND normal, LOD-2 vertices a subset of LOD-1. Renders the lab camera to PNG without play mode. | `/tmp/seasick-chunk.txt`, `-chunk.png` |
@@ -119,16 +120,41 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   would have been a real 60 fps blocker; the identical run minutes later put
   the same call at **1.07 ms**. Never accept a single worst-frame sample from
   the editor as a finding — run it twice and compare the distributions.
-- **`DivergenceProbe` is currently RED, and was red before the paddle boat.**
-  Measured 2026-08-25: **26.32 cm max / 15.40 cm mean** on a tree with the
-  ocean changes stashed, against **26.43 / 13.07** with them — statistically
-  the same, so the chop floor is not the cause. The documented baseline was
-  **0.23 cm**, so something between then and now broke it and it is not the
-  boat. Symptoms point at readback lag rather than a formula mismatch: the
-  first timestamp of every run reports "readback never caught up", and repeat
-  runs of identical code scatter (26 cm, then zero samples, then 147 cm) where
-  a real formula divergence would be consistent. **Bisect before trusting any
-  ocean parity result, and do not read a single run as a finding.**
+- **An unbound texture SILENTLY SKIPS A WHOLE COMPUTE DISPATCH.** This is what
+  turned `DivergenceProbe` red for a fortnight, and it was never an ocean bug.
+  `RegionField.Publish` bound `_Ocean_ShoreTex` only when a shore grid existed,
+  and OceanLab has no terrain. A fragment shader tolerates that — the
+  `_Ocean_ShoreRect.w` guard means it never samples the texture — but a
+  compute dispatch validates every declared resource up front, refuses, and
+  writes NOTHING. The verify kernel returned zeros for every query, so the
+  probe was comparing the CPU sampler against an empty buffer and reporting the
+  difference as an ocean parity failure. The tell is in `Editor.log`, never in
+  the probe: `Compute shader (OceanVerify): Property (_Ocean_ShoreTex) at
+  kernel index (0) is not set`. **Bind every resource an .hlsl declares, even
+  the ones a guard stops you sampling**, and grep the log for "is not set"
+  whenever a compute result is suspiciously zero or constant.
+- **The readback ring ranked its slots by TIMESTAMP, so a backward scrub wedged
+  it forever.** `DisplacementReadback` picked `Latest`/`Previous` as the two
+  largest `s.time`. That is indistinguishable from correct while OceanTime only
+  advances — and permanently broken the moment anything scrubs backwards: the
+  fresh slot's time is lower than the stale ones, so it never becomes Latest,
+  so it counts as free, so the next Tick recycles it. Physics then rides a
+  surface frozen at the highest time the ring ever saw. Probes scrub backwards
+  constantly. This is the whole explanation of the famous scatter — a run whose
+  targets happened to be forward passed, one starting past the last target gave
+  zero samples, one landing mid-range gave a partial nonsense number. Slots are
+  now ranked by **completion order** (`seq`). Ranking anything by a clock a
+  probe is allowed to rewind is a bug waiting for a probe.
+- **A probe that "skips" a bad instant reports a passing average.** The old
+  DivergenceProbe printed "readback never caught up" and carried on, so a run
+  that measured nothing at all still produced a summary line and a verdict.
+  Any instant a probe cannot measure must make the run FAIL, loudly, and say
+  it is an instrument failure rather than a sea state.
+- **`SeaStateController.ForceSeverity` does not stop it writing settings.**
+  It pins severity, but `Update` still reaches `ocean.SetSettings(blend)` on
+  every rebuild and hands the renderer its own drifting blend — so a probe that
+  calls `SetSettings` itself is overwritten within a frame and measures a sea
+  nobody chose. Disable the component for the run, then restore it.
 - **Unity refuses to reparent a child out of a prefab instance, and
   `SetParent` fails SILENTLY.** Both lantern pivots spent a whole build
   rotating empty GameObjects while the lanterns sat unmoved under `Details`,

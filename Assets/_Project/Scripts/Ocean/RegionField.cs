@@ -274,7 +274,15 @@ namespace SeaSick.Ocean
                 new Vector4(shoreOrigin.x, shoreOrigin.y, shoreSize > 0f ? 1f / shoreSize : 0f, shoreN));
             Shader.SetGlobalVector("_Ocean_Shoal",
                 new Vector4(shoalDepthZero, shoalDepthFull, chopFloor, 0f));
-            if (shoreTex != null) Shader.SetGlobalTexture("_Ocean_ShoreTex", shoreTex);
+            // ALWAYS bind, even with no shore grid. A fragment shader tolerates
+            // an unbound texture it never samples (the _Ocean_ShoreRect.w guard
+            // sees to that), but a COMPUTE dispatch does not: Metal validates
+            // every declared resource up front and silently skips the whole
+            // dispatch, writing nothing. That is what killed DivergenceProbe --
+            // its verify kernel returned zeros for a fortnight and the failure
+            // read as an ocean parity drift. Costs one global set per frame.
+            Shader.SetGlobalTexture("_Ocean_ShoreTex",
+                shoreTex != null ? (Texture)shoreTex : Texture2D.blackTexture);
         }
 
         /// When no RegionField exists (early lab scenes), the shader still
@@ -285,6 +293,12 @@ namespace SeaSick.Ocean
             Shader.SetGlobalVector("_Ocean_Region", new Vector4(0f, 0f, 0f, 1f));
             Shader.SetGlobalVector("_Ocean_RegionScale", new Vector4(1f, 1f, 1f, 0f));
             Shader.SetGlobalVector("_Ocean_ShoreRect", Vector4.zero);
+            // The rest of the contract, for the same compute-dispatch reason:
+            // every resource RegionField.hlsl declares must be bound or a
+            // kernel including it does nothing at all.
+            Shader.SetGlobalVector("_Ocean_Shoal", Vector4.zero);
+            Shader.SetGlobalVectorArray("_Ocean_Islands", new Vector4[MaxIslands]);
+            Shader.SetGlobalTexture("_Ocean_ShoreTex", Texture2D.blackTexture);
         }
     }
 }

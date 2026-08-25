@@ -15,13 +15,22 @@ SamplerState sampler_Ocean_ShoreTex;
 
 // 1 in deep water, 0 at the shoreline and over land. Twin of
 // RegionFieldParams.ShoreFactor: bilinear with clamped edges, 1 outside.
+// Single-return rather than early-out: the early-out form makes Metal's
+// compute codegen warn "potentially uninitialized variable" on every import.
+// Identical arithmetic and identical branches -- the C# twin is unchanged.
 float ShoreFactor(float2 p)
 {
-    if (_Ocean_ShoreRect.w < 1.0) return 1.0;
-    float2 uv = (p - _Ocean_ShoreRect.xy) * _Ocean_ShoreRect.z;
-    if (any(uv < 0.0) || any(uv > 1.0)) return 1.0;
-    float h = _Ocean_ShoreTex.SampleLevel(sampler_Ocean_ShoreTex, uv, 0).r;
-    return smoothstep(_Ocean_Shoal.x, _Ocean_Shoal.y, -h);
+    float result = 1.0;
+    if (_Ocean_ShoreRect.w >= 1.0)
+    {
+        float2 uv = (p - _Ocean_ShoreRect.xy) * _Ocean_ShoreRect.z;
+        if (!any(uv < 0.0) && !any(uv > 1.0))
+        {
+            float h = _Ocean_ShoreTex.SampleLevel(sampler_Ocean_ShoreTex, uv, 0).r;
+            result = smoothstep(_Ocean_Shoal.x, _Ocean_Shoal.y, -h);
+        }
+    }
+    return result;
 }
 
 // Shoal factor AND "is there water here at all", from one sample. The chop
@@ -29,12 +38,18 @@ float ShoreFactor(float2 p)
 // but must still be perfectly gone over land.
 float2 ShoreAndWet(float2 p)
 {
-    if (_Ocean_ShoreRect.w < 1.0) return float2(1.0, 1.0);
-    float2 uv = (p - _Ocean_ShoreRect.xy) * _Ocean_ShoreRect.z;
-    if (any(uv < 0.0) || any(uv > 1.0)) return float2(1.0, 1.0);
-    float h = _Ocean_ShoreTex.SampleLevel(sampler_Ocean_ShoreTex, uv, 0).r;
-    return float2(smoothstep(_Ocean_Shoal.x, _Ocean_Shoal.y, -h),
-                  smoothstep(0.0, 0.5, -h));
+    float2 result = float2(1.0, 1.0);
+    if (_Ocean_ShoreRect.w >= 1.0)
+    {
+        float2 uv = (p - _Ocean_ShoreRect.xy) * _Ocean_ShoreRect.z;
+        if (!any(uv < 0.0) && !any(uv > 1.0))
+        {
+            float h = _Ocean_ShoreTex.SampleLevel(sampler_Ocean_ShoreTex, uv, 0).r;
+            result = float2(smoothstep(_Ocean_Shoal.x, _Ocean_Shoal.y, -h),
+                            smoothstep(0.0, 0.5, -h));
+        }
+    }
+    return result;
 }
 
 float RegionEnvelope(float2 p)
