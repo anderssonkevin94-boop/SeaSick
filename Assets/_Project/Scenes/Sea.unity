@@ -2672,7 +2672,7 @@ MonoBehaviour:
   steerageWay: 0.15
   surfGain: 1.6
   surfResponse: 2.2
-  pitchLimit: 16
+  pitchLimit: 26
   rollLimit: 20
   limitSpring: 6
   turnHeel: 8
