@@ -203,8 +203,22 @@ Shader "SeaSick/Ocean"
                 half3 shallow = lerp(_ShallowColor.rgb, _StormShallow.rgb, storm);
                 half3 subsurf = lerp(_SubsurfaceColor.rgb, _StormSubsurface.rgb, storm);
 
-                // Body colour: deep in troughs, lifted on crests.
-                float heightLift = saturate(input.heightY * 0.18 + 0.35);
+                // Body colour: deep in troughs, lifted on crests. The scale
+                // is the SEA'S OWN, not an absolute count of metres. At a
+                // fixed 0.18/m this pegged at the shallow colour 3.6 m above
+                // mean water, which was reasonable on the 9 m sea it was
+                // authored against and turns a 62 m storm into two flat bands
+                // of colour: measured on the shipped storm, 45% of the surface
+                // sat at the shallow colour and 36% at the deep one, leaving
+                // 19% inside the gradient at all. Dividing by the LOCAL Hs
+                // (the declared open-sea height, scaled by the same envelope
+                // the displacement uses, so sheltered water keeps its own
+                // range) puts about +-2 sigma across the ramp at every sea
+                // state. Same rule the spindrift threshold had to learn: a
+                // threshold into the sea is a fraction of the sea's own
+                // spread, never a number of metres.
+                float localHs = max(env * _Ocean_DepthLimit.y, 0.5);
+                float heightLift = saturate(0.38 + input.heightY / localHs);
                 half3 body = lerp(deep, shallow, heightLift);
 
                 // The signature: sun behind a steep, choppy crest glows jade

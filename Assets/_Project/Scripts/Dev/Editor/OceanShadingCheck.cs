@@ -72,10 +72,17 @@ public class OceanShadingCheck : MonoBehaviour
         sb.AppendLine();
 
         // --- 2. is the deep/shallow blend saturated? ----------------------
-        // The shader does heightLift = saturate(heightY * 0.18 + 0.35), which
-        // reaches 1.0 at 3.6 m above mean and 0.0 at -1.9 m. Those numbers were
-        // chosen for a sea a few metres tall. Measure the sea we HAVE.
-        const float Gain = 0.18f, Bias = 0.35f;
+        // MUST mirror Ocean.shader's heightLift. It used to be an absolute
+        // saturate(h * 0.18 + 0.35) -- full shallow 3.6 m above mean water,
+        // which is a sensible ramp on a 9 m sea and two flat bands of colour
+        // on a 62 m one. It is now scaled by the sea's own declared Hs. This
+        // probe is the twin of that line and has to be edited with it; the
+        // first version of this check kept the old constants and cheerfully
+        // reported the old failure after the shader was fixed.
+        const float Bias = 0.38f;
+        float waveHs = Shader.GetGlobalVector("_Ocean_DepthLimit").y;
+        sb.AppendLine("shipped formula: saturate(" + Bias + " + h / max(env * Hs, 0.5))"
+            + "   with Hs = " + waveHs.ToString("F1") + " m");
         int n = 0, atTop = 0, atBottom = 0;
         float minH = float.MaxValue, maxH = float.MinValue, sum = 0f, sumSq = 0f;
         if (OceanSampler.Ready)
@@ -85,7 +92,9 @@ public class OceanShadingCheck : MonoBehaviour
                 {
                     var p = new Vector3(shipPos.x + (i - 20) * 40f, 0f, shipPos.z + (j - 20) * 40f);
                     float h = OceanSampler.SampleImmediate(p).height;
-                    float lift = Mathf.Clamp01(h * Gain + Bias);
+                    float env = RegionField.Instance != null
+                        ? Mathf.Clamp01(RegionField.Instance.Evaluate(new Vector2(p.x, p.z))) : 1f;
+                    float lift = Mathf.Clamp01(Bias + h / Mathf.Max(env * waveHs, 0.5f));
                     if (lift >= 0.999f) atTop++;
                     if (lift <= 0.001f) atBottom++;
                     minH = Mathf.Min(minH, h); maxH = Mathf.Max(maxH, h);
@@ -99,11 +108,12 @@ public class OceanShadingCheck : MonoBehaviour
             float rms = Mathf.Sqrt(Mathf.Max(0f, sumSq / n - mean * mean));
             sb.AppendLine($"surface over a 1600 m square, {n} samples:");
             sb.AppendLine($"  height min {minH:F1} m, max {maxH:F1} m, RMS {rms:F1} m, Hs(4xRMS) {4f * rms:F1} m");
-            sb.AppendLine($"  heightLift = saturate(h * {Gain} + {Bias})  ->  saturates high above "
-                + $"{(1f - Bias) / Gain:F1} m and low below {-Bias / Gain:F1} m");
+            sb.AppendLine($"  ramp spans h = {-Bias * waveHs:F1} m to {(1f - Bias) * waveHs:F1} m"
+                + $"  (sea RMS is {rms:F1} m, so +-{(1f - Bias) * waveHs / Mathf.Max(rms, 0.01f):F1} sigma)");
             sb.AppendLine($"  PEGGED AT SHALLOW COLOUR: {100f * atTop / n:F0}% of samples");
             sb.AppendLine($"  pegged at deep colour:    {100f * atBottom / n:F0}% of samples");
-            sb.AppendLine($"  -> only {100f * (n - atTop - atBottom) / n:F0}% of the sea is inside the gradient at all");
+            sb.AppendLine($"  -> {100f * (n - atTop - atBottom) / n:F0}% of the sea is inside the gradient"
+                + " (was 19% with the old absolute ramp)");
         }
         else sb.AppendLine("OceanSampler not ready — no surface stats");
 

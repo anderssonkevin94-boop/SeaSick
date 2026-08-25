@@ -28,7 +28,18 @@ namespace SeaSick.Ocean
         /// Three was ample while crests were metres; a 60 m sea puts far more
         /// query points on or near a folding crest, where convergence is slow
         /// and the inverse may not be unique at all.
-        const int NewtonIterations = 5;
+        ///
+        /// Five, then SIX. The count tracks the surface's steepness, not its
+        /// height: splitting the storm into two crossing trains doubled the
+        /// median face angle (7.7 -> 15.4 deg) at an unchanged Hs, and the
+        /// parity gate promptly failed at 6.79 cm with 2 of 5000 points over
+        /// the 5 cm bar -- a handful of outliers on the sharpest crests, which
+        /// is the signature of non-convergence rather than a wrong formula.
+        /// The envelope term was untouched throughout (0.000267), which is how
+        /// the three-way split identified it.
+        ///
+        /// If the sea is ever made steeper again, expect to pay another step.
+        const int NewtonIterations = 6;
 
         [ReadOnly] public NativeArray<half4> disp0, disp1, deriv0, deriv1;
         [ReadOnly] public NativeArray<half4> prevDisp0, prevDisp1;

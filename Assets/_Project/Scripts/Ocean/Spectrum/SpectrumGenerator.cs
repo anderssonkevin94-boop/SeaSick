@@ -34,6 +34,12 @@ namespace SeaSick.Ocean
             shader.SetFloat("_SwellK", 2f * Mathf.PI / Mathf.Max(s.swellWavelength, 10f));
             shader.SetVector("_SwellDir", s.SwellDir);
             shader.SetFloat("_SwellSharpness", s.swellSharpness);
+            shader.SetFloat("_Swell2Hs", s.swell2Height);
+            shader.SetFloat("_Swell2K", 2f * Mathf.PI / Mathf.Max(s.swell2Wavelength, 10f));
+            shader.SetVector("_Swell2Dir", s.Swell2Dir);
+            shader.SetFloat("_Swell2Sharpness", s.swell2Sharpness);
+            shader.SetFloat("_DetailGain", s.detailGain);
+            shader.SetFloat("_DetailLambda", s.detailWavelength);
             shader.SetTexture(kernel, "Noise", cascades.Noise);
             shader.SetTexture(kernel, "H0", cascades.H0);
             shader.SetTexture(kernel, "WaveData", cascades.WaveData);

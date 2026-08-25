@@ -20,9 +20,15 @@ MonoBehaviour:
   swellHeight: 0.4
   swellWavelength: 180
   swellDirectionDeg: -20
-  swellSharpness: 6
+  swellSharpness: 4
+  swell2Height: 1.2
+  swell2Wavelength: 120
+  swell2DirectionDeg: 50
+  swell2Sharpness: 3
   nominalHs: 3.5
   choppiness: 1
+  detailGain: 5
+  detailWavelength: 30
   foamThreshold: 0.63
   foamHalflife: 4
   foamInjection: 0.4

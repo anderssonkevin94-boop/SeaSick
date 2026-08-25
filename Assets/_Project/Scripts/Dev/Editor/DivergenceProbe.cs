@@ -59,17 +59,34 @@ public class DivergenceProbe : MonoBehaviour
         // the depth-limited envelope actually BITES over the synthetic shore
         // below -- a gate that never reaches the term it is gating is not a
         // gate.
-        // These are the SHIPPED storm values, not a generic rough sea. The
-        // parity gate has to run at the amplitudes the game actually produces:
+        // The gate has to run at the amplitudes the game actually produces:
         // the displacement textures are half precision, whose quantum grows
         // with magnitude, so a gate exercised at 2 m proves nothing about a
         // sea whose crests are 40 m up.
+        //
+        // LOADED from the shipped asset rather than retyped here. This block
+        // used to carry a hand-copied duplicate of the storm values under a
+        // comment claiming they were the shipped ones, and the moment the sea
+        // was retuned -- one narrow 70 m train became a 64 m train crossed
+        // with a 24 m one, plus a short-wave detail gain -- the gate went on
+        // certifying a sea that no longer existed. A duplicated constant is a
+        // gate that silently stops gating.
         var storm = ScriptableObject.CreateInstance<OceanSpectrumSettings>();
-        storm.windSpeed = 22f; storm.fetchKm = 200f; storm.choppiness = 1.2f;
-        storm.depth = 30f;
-        storm.swellHeight = 70f; storm.swellWavelength = 470f;
-        storm.swellSharpness = 5f; storm.swellDirectionDeg = 0f;
-        storm.nominalHs = 65f;
+        var shipped = Resources.Load<OceanSpectrumSettings>("Ocean/SeaState_Stormy");
+        if (shipped != null) storm.CopyFrom(shipped);
+        else
+        {
+            Debug.LogWarning("DivergenceProbe: SeaState_Stormy not found in Resources — "
+                + "falling back to hardcoded values, which may be stale.");
+            storm.windSpeed = 22f; storm.fetchKm = 200f; storm.depth = 30f;
+            storm.swellHeight = 64f; storm.swellWavelength = 470f;
+            storm.swellSharpness = 3.2f; storm.swellDirectionDeg = 0f;
+            storm.nominalHs = 65f;
+        }
+        // The one deliberate departure: spec-worst choppiness, because the
+        // sampler's Newton inversion is hardest on the sharpest crests and the
+        // gate should meet the worst case, not the authored one.
+        storm.choppiness = Mathf.Max(storm.choppiness, 1.2f);
         ocean.SetSettings(storm);
 
         // A regional field that varies hard across the sample disc.

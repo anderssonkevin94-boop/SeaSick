@@ -31,6 +31,17 @@ cbuffer Params
     float _SwellK;
     float2 _SwellDir;
     float _SwellSharpness;
+    // Second swell train. A real storm sea is two or three trains crossing at
+    // an angle; ONE narrow train, however tall, is parallel corduroy and reads
+    // as a hillside rather than a sea.
+    float _Swell2Hs;
+    float _Swell2K;
+    float2 _Swell2Dir;
+    float _Swell2Sharpness;
+    // Short-wave detail gain, an art knob over the physical tail. See
+    // DetailBoost.
+    float _DetailGain;
+    float _DetailLambda;
 }
 
 float JonswapOmegaPeak()
@@ -91,6 +102,27 @@ void Dispersion(float k, out float w, out float dwdk)
     dwdk = (G * th + G * kd * sech2) / max(2.0f * w, 1e-6f);
 }
 
+// Short-wave detail gain: an ART knob that over-drives the spectrum's tail.
+//
+// JONSWAP's w^-5 tail is physically right and visually thin. At storm wind
+// speeds the wind sea's own peak sits out past 150 m, so almost none of the
+// spectrum's energy lands at the 2-40 m scales the eye reads as "rough" --
+// which is why a 62 m sea can look like a smooth hillside. This lifts the
+// short end without touching the long waves that carry the ship, so wave SIZE
+// and surface TEXTURE become separate knobs. Same separation as amplitude vs
+// choppiness: one control doing two jobs is how the old sea got stuck.
+//
+// Ramps in over three octaves below _DetailLambda so there is no edge in the
+// spectrum, and it is a multiplier on DENSITY, so amplitude goes as its
+// square root -- a gain of 9 makes the short waves three times taller.
+float DetailBoost(float klen)
+{
+    if (_DetailGain <= 1.0f || klen <= 1e-6f) return 1.0f;
+    float lam = 2.0f * PI / klen;
+    float t = saturate((log2(max(_DetailLambda, 1.0f)) - log2(max(lam, 0.01f))) / 3.0f);
+    return lerp(1.0f, _DetailGain, t);
+}
+
 // Wind-sea 2D spectral density F(k) so that variance = sum F * dk^2.
 float WindSeaDensity(float2 k, float klen)
 {
@@ -101,7 +133,7 @@ float WindSeaDensity(float2 k, float klen)
     float S = Jonswap(w);
     float D = DirectionalSpread(w, wp, k / klen);
     // S(w) dw dtheta -> F(kx,kz) dkx dkz with dkx dkz = k dk dtheta
-    return S * D * dwdk / klen;
+    return S * D * dwdk / klen * DetailBoost(klen);
 }
 
 // Abramowitz and Stegun 7.1.26, max error 1.5e-7. HLSL has no erf and the
@@ -131,15 +163,16 @@ float Erf(float x)
 //
 // Returns the MEAN density over the bin, so the caller's sqrt(0.5*F)*dk
 // accounting is unchanged.
-float SwellBinMeanDensity(float2 kCenter, float dk)
+float SwellBinMeanDensity(float2 kCenter, float dk,
+                          float hs, float kMag, float2 kDir, float sharpness)
 {
-    if (_SwellHs <= 0.0f) return 0.0f;
-    float2 ks = _SwellK * _SwellDir;
-    float sigma = max(_SwellK / (2.0f * _SwellSharpness), 1e-6f);
+    if (hs <= 0.0f) return 0.0f;
+    float2 ks = kMag * kDir;
+    float sigma = max(kMag / (2.0f * max(sharpness, 0.1f)), 1e-6f);
     float s2 = sigma * 1.41421356f;            // sigma * sqrt(2)
     float2 lo = (kCenter - 0.5f * dk - ks) / s2;
     float2 hi = (kCenter + 0.5f * dk - ks) / s2;
-    float m0 = (_SwellHs * 0.25f) * (_SwellHs * 0.25f);
+    float m0 = (hs * 0.25f) * (hs * 0.25f);
     float integral = m0 * 0.25f * (Erf(hi.x) - Erf(lo.x)) * (Erf(hi.y) - Erf(lo.y));
     return integral / (dk * dk);
 }
@@ -172,7 +205,10 @@ float SpectralAmplitude(float2 kCenter, float dk, float bandLow, float bandHigh)
     // impossible for two cascades to simulate the same rollers twice, which
     // is the shimmer bug the band limits exist to prevent.
     if (_SwellK >= bandLow && _SwellK < bandHigh)
-        F += SwellBinMeanDensity(kCenter, dk);
+        F += SwellBinMeanDensity(kCenter, dk, _SwellHs, _SwellK, _SwellDir, _SwellSharpness);
+    // The second train gets the same treatment and the same one-cascade gate.
+    if (_Swell2K >= bandLow && _Swell2K < bandHigh)
+        F += SwellBinMeanDensity(kCenter, dk, _Swell2Hs, _Swell2K, _Swell2Dir, _Swell2Sharpness);
     // The h(k,t) = h0 e^{iwt} + conj(h0(-k)) e^{-iwt} construction places each
     // physical wave's energy at both +k and -k, and the complex gaussian xi
     // carries E|xi|^2 = 2; together they inflate variance 4x unless the bin
