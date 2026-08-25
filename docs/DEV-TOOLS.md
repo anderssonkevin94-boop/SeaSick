@@ -61,6 +61,7 @@ shader property defaults. Re-run these after changing any default.
 | `BuryTrace.cs` | BuryProbe's run as a time series instead of a verdict — ship y, sampled surface, batched surface, draft, submersion, reserve, plow, speed, pitch, roll. The sampler-vs-batch column is the one that says whether a wild draft number is a sinking ship or a lying instrument. Play mode, Sea.unity. | `/tmp/seasick-burytrace.txt` |
 | `RippleStressProbe.cs` | **Ripple-needle gate**: two legs (driving + splash spam, and stalled in a storm), GPU readback scored on **neighbour gradient** and texels riding the clamp — not magnitude, which the Step clamp makes unfalsifiable. Gate: gradient < 0.35 m/texel, zero at clamp, zero non-finite. Play mode, Sea.unity. | `/tmp/seasick-ripplestress.txt` |
 | `WaveSizeProbe.cs` | **How big, and CAN SHE CLIMB IT.** Per sea state over a verified deep-water patch: Hs from **20 km of pooled transects** (the trustworthy one) and from the 1600 m patch (kept for continuity, +-25%); **face angle** from the surface normal; then the same wavelength / height / face-angle analysis again on a **low-passed profile with the chop below 121 m filtered out** -- the mountain alone, which is what "can she climb it" is actually about. Reports **face length in boat lengths** and **seabed clearance**. Hunts genuinely deep water down a ladder from -110 m and reports the seabed it found. Forces the PC ocean tier. Play mode, Sea.unity. | `/tmp/seasick-wavesize.txt` |
+| `SeaProfileProbe.cs` | **Where the sea is mountainous, and where it lies down.** Walks west from home in 400 m steps to 9 km with severity forced to 1.0, moving the ship to each station (the shore grid and the terrain streamer both follow it), and reports seabed, envelope, measured Hs and **which term is binding** — depth limit, shore falloff, region, or nothing. Every other probe measures one spot; "mountainous seas out west only" is a claim about geography. It is also the standing check that the depth limit is not quietly flattening water the player sails through. Play mode, Sea.unity. | `/tmp/seasick-seaprofile.txt` |
 | `WaveShot.cs` | Five sea-level looks at ONE pinned instant of the storm sea with the ship in frame for scale: astern, from the deepest trough toward the highest crest, from that crest, beam-on, and a high three-quarter that shows the wavelength pattern and where the displacement fade cuts in. Phase pinned so a re-run shoots the same water. Forces the PC ocean tier. Play mode, Sea.unity. | `/tmp/seasick-wave-0..4.png`, `-waveshot.txt` |
 | `SprayDebug.cs` | Per-second spindrift emission budget log. | Unity log |
 | `ReadbackDiag.cs` | The clock against the readback ring: `OceanTime.Now` vs `OceanSampler.SurfaceTime` per frame across a deliberate BACKWARD scrub and a forward one, plus whether the loaded assembly actually has the fix in it. The instrument for "the stamp is not following the scrub". Play mode, OceanLab. | `/tmp/seasick-readbackdiag.txt` |
@@ -90,6 +91,15 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 `python3 tools/pngprobe.py /tmp/seasick-sail-2.png`. Pure stdlib.
 
 ## Measurement traps this project has actually hit
+
+- **`StallProbe` warps to a HARDCODED (-1500, 0, 0)** and is therefore not
+  measuring a sea anybody chose — the same fault WaveSizeProbe's own comment
+  records from its first run. Against the storm sea it returned `maxRoll=0
+  maxPitch=0` at every severity and plow-ON identical to plow-OFF within
+  0.1 m, which is not chaos, it is a ship that is not in the waves. Any probe
+  that needs open water must FIND it (see WaveSizeProbe's depth ladder), and
+  any probe that reports an attitude of exactly zero in a storm is reporting
+  its own setup, not the sea.
 
 - **A metric that does not separate the thing you are claiming is a lying
   metric.** The storm sea measured "face angle median 8.7 deg, wavelength
