@@ -57,7 +57,16 @@ public static class ChunkProbe
             float h = TerrainHeight.Height(w, prm, lut);
             worstH = math.max(worstH, math.abs(h - va[i].y));
         }
-        Gate("height-matches-function", worstH < 1e-4f, "worst |dh|=" + worstH);
+        // Tolerance 1e-3 m, not 1e-4: the mesher runs Burst and this check
+        // recomputes in Mono, and the shelf-to-deep ramp amplifies the ~3e-7
+        // difference between them by its own derivative -- about 2700 m per
+        // unit of mask noise at shelfBand 0.10. Verified by halving the
+        // amplifier: shelfBand 0.06 -> 0.12 moved worst |dh| 8.01e-4 -> 4.35e-4,
+        // a factor of 1.84 against a predicted 2. What this gate is for is a
+        // mesher that has drifted from the height function -- wrong world
+        // offset, wrong LOD stride -- and that is metres, so 1e-3 is still
+        // three orders of magnitude tighter than any real fault.
+        Gate("height-matches-function", worstH < 1e-3f, "worst |dh|=" + worstH);
 
         // Normals unit and upward-ish.
         float worstLen = 0f; float minUp = 1f;

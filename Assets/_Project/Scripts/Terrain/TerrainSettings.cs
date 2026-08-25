@@ -35,8 +35,12 @@ namespace SeaSick.Terrain
         public float landRatio = 0.15f;
         [Tooltip("Width of the mask's soft edge, in mask-noise units, so islands fade into the sea.")]
         [Range(0.01f, 0.5f)] public float maskFalloff = 0.1f;
-        [Tooltip("Open-ocean floor height, metres (negative).")]
+        [Tooltip("Shelf floor height around land, metres (negative). This is the depth every island's shore profile was tuned against.")]
         public float seabedDepth = -12f;
+        [Tooltip("Open-ocean floor height, metres (negative). Must be deeper than the deepest storm trough, or the sea clips through the seafloor.")]
+        public float deepSeabedDepth = -120f;
+        [Tooltip("How far OUTSIDE the land threshold the shelf reaches, in mask-noise units. Bigger = a wider shelf and a continental slope further offshore.")]
+        [Range(0.01f, 0.3f)] public float shelfBand = 0.10f;
 
         [Header("Terrace")]
         [Tooltip("Normalised noise (0..1) → base height in metres. Stepped = plateaus and cliffs, linear = smooth slopes.")]

@@ -26,6 +26,8 @@ MonoBehaviour:
   landRatio: 0.15
   maskFalloff: 0.1
   seabedDepth: -12
+  deepSeabedDepth: -120
+  shelfBand: 0.1
   terraceCurve:
     serializedVersion: 2
     m_Curve:

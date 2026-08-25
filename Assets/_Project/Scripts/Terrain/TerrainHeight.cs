@@ -13,7 +13,7 @@ namespace SeaSick.Terrain
         public float2 worldOffset;
         public int octaves; public float baseFrequency, lacunarity, gain;
         public int maskOctaves; public float maskFrequency, maskThreshold, maskFalloff;
-        public float seabedDepth;
+        public float seabedDepth, deepSeabedDepth, shelfBand;
         public float curveMin, curveMax; // endpoints of the terrace curve = the smooth (linear) height map
         public int detailOctaves; public float detailFrequency, detailAmplitude;
         public float beachHeight, beachBlendWidth;
@@ -30,6 +30,8 @@ namespace SeaSick.Terrain
                 maskOctaves = s.maskOctaves, maskFrequency = s.maskFrequency, maskFalloff = s.maskFalloff,
                 maskThreshold = TerrainHeight.ThresholdForLandRatio(s.landRatio, s.maskOctaves),
                 seabedDepth = s.seabedDepth,
+                deepSeabedDepth = s.deepSeabedDepth,
+                shelfBand = math.max(0.001f, s.shelfBand),
                 curveMin = s.terraceCurve.Evaluate(0f), curveMax = s.terraceCurve.Evaluate(1f),
                 detailOctaves = s.detailOctaves, detailFrequency = s.detailFrequency, detailAmplitude = s.detailAmplitude,
                 beachHeight = s.beachHeight, beachBlendWidth = math.max(0.01f, s.beachBlendWidth),
@@ -60,12 +62,22 @@ namespace SeaSick.Terrain
         public static float Noise01(in float2 p, in TerrainParams prm)
             => TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed, prm.octaves, prm.baseFrequency, prm.lacunarity, prm.gain);
 
+        /// Stage 2a. The raw continentalness noise, BEFORE thresholding.
+        /// The seabed needs this rather than the mask: the mask is exactly
+        /// zero across the entire open ocean, so it cannot say how far from
+        /// land you are, while the noise it is built from varies smoothly
+        /// everywhere and can.
+        public static float MaskNoise(in float2 p, in TerrainParams prm)
+            => TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed + TerrainParams.MaskSeedOffset,
+                prm.maskOctaves, prm.maskFrequency, 2f, 0.5f);
+
         /// Stage 2. Continentalness: low-frequency fBm thresholded with a soft
         /// edge, then clamped by the optional world radius.
         public static float Mask(in float2 p, in TerrainParams prm)
+            => MaskFromNoise(MaskNoise(p, prm), p, prm);
+
+        public static float MaskFromNoise(float c, in float2 p, in TerrainParams prm)
         {
-            float c = TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed + TerrainParams.MaskSeedOffset, prm.maskOctaves,
-                prm.maskFrequency, 2f, 0.5f);
             float m = math.smoothstep(prm.maskThreshold, prm.maskThreshold + prm.maskFalloff, c);
             if (prm.worldRadius > 0f)
             {
@@ -102,11 +114,41 @@ namespace SeaSick.Terrain
             return math.lerp(smooth, terraced, w);
         }
 
+        /// The floor under open water: deep offshore, the old shelf near land.
+        ///
+        /// A single global seabed cannot serve both jobs any more. Storm
+        /// troughs run tens of metres below mean, so the open ocean has to be
+        /// deeper than they reach or the sea clips straight through the
+        /// seafloor -- but simply lowering seabedDepth would drag every
+        /// island's shore down with it (the mask lerps land TOWARDS the floor)
+        /// and turn the archipelago into spires, destroying the shore-slope
+        /// distribution BeachProbe was tuned against.
+        ///
+        /// So the floor is driven by the island mask instead. Wherever the
+        /// mask is meaningfully above zero the floor is exactly the shelf
+        /// depth it has always been, so every shoreline profile is unchanged;
+        /// only true open ocean drops away, down a continental slope nobody
+        /// can see.
+        /// Keyed on the mask NOISE, not the mask. The shoreline sits where
+        /// lerp(floor, land, mask) crosses zero, which for a -12 m shelf under
+        /// 40 m hills is mask ~= 0.23 -- so any transition keyed on the mask
+        /// and wide enough to be a shelf is still steepening the beach when it
+        /// gets there. Measured: HeightProbe's beach-walkable went from clean
+        /// to 57 samples over 1 m per metre, worst 4.22. Keyed on the noise,
+        /// the ramp finishes AT the land threshold, so every shoreline profile
+        /// is bit-identical to before and the slope lives offshore where it
+        /// belongs -- and the shelf can extend past the coast, which is what
+        /// keeps storm seas off the beach once the envelope is depth-limited.
+        public static float Seabed(float maskNoise, in TerrainParams prm)
+            => math.lerp(prm.deepSeabedDepth, prm.seabedDepth,
+                         math.smoothstep(prm.maskThreshold - prm.shelfBand,
+                                         prm.maskThreshold, maskNoise));
+
         /// Stage 6. Mask multiplies the land relief over the seabed so islands
         /// fade into shallows instead of ending in a wall. The seabed keeps a
         /// little of the detail so it isn't a plane.
-        public static float OverSeabed(float land, float mask, float detail, in TerrainParams prm)
-            => math.lerp(prm.seabedDepth + detail * 0.5f, land, mask) + prm.seaLevel;
+        public static float OverSeabed(float land, float mask, float detail, float maskNoise, in TerrainParams prm)
+            => math.lerp(Seabed(maskNoise, prm) + detail * 0.5f, land, mask) + prm.seaLevel;
 
         /// Full pipeline with all intermediates. Order matters: the mask is
         /// applied BEFORE the beach blend so the blend sees real altitudes —
@@ -116,10 +158,11 @@ namespace SeaSick.Terrain
         {
             TerrainSample s;
             s.noise01 = Noise01(p, prm);
-            s.mask = Mask(p, prm);
+            float c = MaskNoise(p, prm);
+            s.mask = MaskFromNoise(c, p, prm);
             float detail = Detail(p, prm);
-            s.terraced = OverSeabed(Terrace(s.noise01, lut) + detail, s.mask, detail, prm);
-            s.smooth = OverSeabed(Smooth(s.noise01, prm) + detail, s.mask, detail, prm);
+            s.terraced = OverSeabed(Terrace(s.noise01, lut) + detail, s.mask, detail, c, prm);
+            s.smooth = OverSeabed(Smooth(s.noise01, prm) + detail, s.mask, detail, c, prm);
             s.height = BeachBlend(s.terraced, s.smooth, prm);
             return s;
         }
