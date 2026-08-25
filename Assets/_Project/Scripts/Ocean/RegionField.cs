@@ -150,7 +150,7 @@ namespace SeaSick.Ocean
         [Tooltip("The envelope never falls below this in water, so sheltered anchorages keep some chop instead of turning to glass. Land is still perfectly flat.")]
         [Range(0f, 0.4f)] [SerializeField] float chopFloor = 0.12f;
         [Tooltip("A wave may not be taller than this fraction of the water under it. The real breaking index is about 0.78; below that leaves margin for the hull and the camera.")]
-        [Range(0.1f, 0.8f)] [SerializeField] float breakFraction = 0.45f;
+        [Range(0.1f, 0.8f)] [SerializeField] float breakFraction = 0.55f;
 
         // Pulled from the renderer each frame rather than pushed, so the data
         // flows one way and nothing has to remember to call a setter.

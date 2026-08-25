@@ -23,7 +23,10 @@ using SeaSick.World;
 public class WaveShot : MonoBehaviour
 {
     const float PatchHalf = 800f;
-    const float DeepEnough = -9f;
+    // Must match WaveSizeProbe: at -9 m this finds SHELF water, where the
+    // depth-limited envelope caps the sea and the shots would show a
+    // storm that does not exist out where the mountains are.
+    static readonly float[] DepthLadder = { -110f, -60f, -30f, -9f };
     const float PinnedTime = 137.0f;
 
     public static void Execute()
@@ -32,13 +35,13 @@ public class WaveShot : MonoBehaviour
         new GameObject("WaveShot").AddComponent<WaveShot>();
     }
 
-    static bool DeepEverywhere(Vector3 centre, float half)
+    static bool DeepEverywhere(Vector3 centre, float half, float need)
     {
         var h = Island.TerrainHeight;
         if (h == null) return false;
         for (int i = -2; i <= 2; i++)
             for (int j = -2; j <= 2; j++)
-                if (h(centre.x + i * half * 0.5f, centre.z + j * half * 0.5f) > DeepEnough) return false;
+                if (h(centre.x + i * half * 0.5f, centre.z + j * half * 0.5f) > need) return false;
         return true;
     }
 
@@ -71,13 +74,18 @@ public class WaveShot : MonoBehaviour
 
         Vector3 spot = Vector3.zero;
         bool found = false;
-        for (float dist = 2000f; dist <= 20000f && !found; dist += 250f)
-            for (int b = 0; b < 16 && !found; b++)
-            {
-                float ang = b / 16f * Mathf.PI * 2f;
-                Vector3 c = new Vector3(Mathf.Sin(ang) * dist, 0f, Mathf.Cos(ang) * dist);
-                if (DeepEverywhere(c, PatchHalf)) { spot = c; found = true; }
-            }
+        float need = 0f;
+        for (int d = 0; d < DepthLadder.Length && !found; d++)
+        {
+            need = DepthLadder[d];
+            for (float dist = 2000f; dist <= 20000f && !found; dist += 250f)
+                for (int b = 0; b < 16 && !found; b++)
+                {
+                    float ang = b / 16f * Mathf.PI * 2f;
+                    Vector3 c = new Vector3(Mathf.Sin(ang) * dist, 0f, Mathf.Cos(ang) * dist);
+                    if (DeepEverywhere(c, PatchHalf, need)) { spot = c; found = true; }
+                }
+        }
         if (!found) { Debug.LogError("WaveShot: no deep-water patch found"); yield break; }
 
         if (rb != null)
@@ -96,8 +104,8 @@ public class WaveShot : MonoBehaviour
         for (int f = 0; f < 8; f++) yield return null;
 
         // Find the highest crest and deepest trough near her.
-        int side = 81;
-        float step = 15f;
+        int side = 121;
+        float step = 20f;
         var qa = new NativeArray<float3>(side * side, Allocator.TempJob);
         var ra = new NativeArray<OceanSample>(side * side, Allocator.TempJob);
         for (int i = 0; i < side; i++)
@@ -123,6 +131,16 @@ public class WaveShot : MonoBehaviour
         if (main != null) cam.CopyFrom(main);
         cam.depth = 100f;
         cam.farClipPlane = 6000f;
+
+        // The clipmap follows Camera.main, which is the chase cam still sitting
+        // on the boat. Shooting from a crest 900 m away then puts the shot
+        // camera out in the coarse rings with a ring boundary and its skirt
+        // right across the view -- the hard diagonal edge in the first run's
+        // crest shot was that, not an ocean fault. Point the rings at the
+        // camera actually doing the looking.
+        var clip = FindAnyObjectByType<OceanClipmap>();
+        Transform prevFollow = clip != null ? clip.FollowOverride : null;
+        if (clip != null) clip.FollowOverride = cam.transform;
 
         Vector3 toCrest = crest - ship; toCrest.y = 0f;
         if (toCrest.sqrMagnitude < 1f) toCrest = Vector3.forward;
@@ -151,12 +169,13 @@ public class WaveShot : MonoBehaviour
         sb.AppendLine("ocean quality FORCED to " + tier + ": patch0 "
             + q.patchSizes[0].ToString("F0") + " m, rings " + q.clipmapRings
             + ", displacement fade " + q.displacementFadeDistance.ToString("F0") + " m");
-        sb.AppendLine("spot " + spot.ToString("F0") + "   severity forced 1.00   phase pinned at t="
+        sb.AppendLine("spot " + spot.ToString("F0") + " (seabed below " + need.ToString("F0")
+            + " m)   severity forced 1.00   phase pinned at t="
             + PinnedTime.ToString("F0"));
         sb.AppendLine("boat 24.2 m long, sitting at y=" + shipY.ToString("F2"));
         sb.AppendLine("highest crest " + hiY.ToString("F2") + " m at " + crest.ToString("F0"));
         sb.AppendLine("deepest trough " + loY.ToString("F2") + " m at " + trough.ToString("F0"));
-        sb.AppendLine("crest-to-trough across the 1200 m search: " + (hiY - loY).ToString("F2") + " m");
+        sb.AppendLine("crest-to-trough across the 2400 m search: " + (hiY - loY).ToString("F2") + " m");
         sb.AppendLine("NOTE: the editor Game view is LANDSCAPE; the shipping target is portrait.");
         sb.AppendLine();
 
@@ -164,13 +183,14 @@ public class WaveShot : MonoBehaviour
         {
             cam.transform.position = from[i];
             cam.transform.LookAt(at[i]);
-            for (int f = 0; f < 3; f++) yield return null;
+            for (int f = 0; f < 5; f++) yield return null;
             ScreenCapture.CaptureScreenshot("/tmp/seasick-wave-" + i + ".png");
             for (int f = 0; f < 3; f++) yield return null;
             sb.AppendLine("shot " + i + ": " + label[i]);
             sb.AppendLine("   camera " + from[i].ToString("F0") + " looking at " + at[i].ToString("F0"));
         }
 
+        if (clip != null) clip.FollowOverride = prevFollow;
         Destroy(cam.gameObject);
         OceanTime.Paused = false;
         if (sea != null) sea.ReleaseForce();

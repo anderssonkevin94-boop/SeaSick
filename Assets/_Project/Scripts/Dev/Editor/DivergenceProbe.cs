@@ -59,9 +59,17 @@ public class DivergenceProbe : MonoBehaviour
         // the depth-limited envelope actually BITES over the synthetic shore
         // below -- a gate that never reaches the term it is gating is not a
         // gate.
+        // These are the SHIPPED storm values, not a generic rough sea. The
+        // parity gate has to run at the amplitudes the game actually produces:
+        // the displacement textures are half precision, whose quantum grows
+        // with magnitude, so a gate exercised at 2 m proves nothing about a
+        // sea whose crests are 40 m up.
         var storm = ScriptableObject.CreateInstance<OceanSpectrumSettings>();
         storm.windSpeed = 22f; storm.fetchKm = 200f; storm.choppiness = 1.2f;
-        storm.nominalHs = 45f;
+        storm.depth = 30f;
+        storm.swellHeight = 70f; storm.swellWavelength = 470f;
+        storm.swellSharpness = 5f; storm.swellDirectionDeg = 0f;
+        storm.nominalHs = 65f;
         ocean.SetSettings(storm);
 
         // A regional field that varies hard across the sample disc.
@@ -126,7 +134,8 @@ public class DivergenceProbe : MonoBehaviour
 
         float maxTotal = 0f, maxEnv = 0f, maxDisp = 0f;
         double sumTotal = 0, sumEnv = 0, sumDisp = 0, sumC2Sq = 0, sumD01Sq = 0;
-        int samples = 0, stalled = 0, capped = 0;
+        int samples = 0, stalled = 0, capped = 0, overGate = 0;
+        var allErr = new System.Collections.Generic.List<float>();
         float envLo = 9999f, envHi = -9999f;
 
         foreach (float t in new[] { 41f, 97f, 158f, 233f, 301f })
@@ -188,6 +197,8 @@ public class DivergenceProbe : MonoBehaviour
                 fEnv = Mathf.Max(fEnv, envErr);
                 fDisp = Mathf.Max(fDisp, dispErr);
                 sumTotal += totalErr; sumEnv += envErr; sumDisp += dispErr;
+                allErr.Add(totalErr);
+                if (totalErr >= 0.05f) overGate++;
                 sumC2Sq += gpu[i].w * gpu[i].w;
                 sumD01Sq += diag[i].z * diag[i].z;
                 samples++;
@@ -233,9 +244,20 @@ public class DivergenceProbe : MonoBehaviour
         {
             float c2Rms = Mathf.Sqrt((float)(sumC2Sq / samples)) * 100f;
             float d01Rms = Mathf.Sqrt((float)(sumD01Sq / samples));
+            // The distribution, not just the max. "max 101 cm" is a completely
+            // different finding depending on whether it is one point in five
+            // thousand (a folding crest, where the surface genuinely has no
+            // unique inverse) or five hundred (a broken sampler).
+            var errA = allErr.ToArray(); System.Array.Sort(errA);
             sb.AppendLine(string.Format(
-                "total : max {0,7:F2} cm   mean {1,7:F3} cm      <- the gate, must be under 5 cm",
-                maxTotal * 100f, sumTotal / samples * 100f));
+                "total : max {0,7:F2} cm   mean {1,7:F3} cm   p50 {2,6:F3}   p99 {3,6:F2}   p99.9 {4,6:F2} cm",
+                maxTotal * 100f, sumTotal / samples * 100f,
+                errA[errA.Length / 2] * 100f,
+                errA[(int)(errA.Length * 0.99f)] * 100f,
+                errA[(int)(errA.Length * 0.999f)] * 100f));
+            sb.AppendLine(string.Format(
+                "        {0} of {1} points over the 5 cm gate ({2:F3}%)  <- the gate",
+                overGate, samples, 100.0 * overGate / samples));
             sb.AppendLine(string.Format(
                 "env   : max {0,7:F6}    mean {1,7:F6}       <- RegionField C# vs HLSL, must be ~0",
                 maxEnv, sumEnv / samples));
@@ -252,7 +274,13 @@ public class DivergenceProbe : MonoBehaviour
         }
         sb.AppendLine(string.Format("SampleBatch 1000 queries: {0:F3} ms (median of 20)", medianMs));
 
-        bool pass = samples > 0 && stalled == 0 && maxTotal < 0.05f && medianMs < 0.3f;
+        // Batch budget 0.4 ms, not 0.3: the inversion deliberately went from 3
+        // Newton steps to 5 (three no longer converge on a 40 m crest), which
+        // measured 0.219 -> 0.275-0.290 ms. Raised to match the change that was
+        // made on purpose, rather than left to flicker red on editor noise --
+        // what it is guarding is the sampler quietly becoming expensive, and
+        // 0.4 ms still catches that with room to spare.
+        bool pass = samples > 0 && stalled == 0 && maxTotal < 0.05f && medianMs < 0.4f;
         sb.AppendLine(pass ? "PASS" : "FAIL");
 
         System.IO.File.WriteAllText("/tmp/seasick-divergence.txt", sb.ToString());

@@ -1141,7 +1141,7 @@ MonoBehaviour:
   calmRadius: 260
   wildRadius: 1150
   nearScale: 0.35
-  farScale: 1.5
+  farScale: 1
   shoreFalloff: 60
   stormBearing: {x: -1, y: 0}
   stormNear: 450
@@ -1150,6 +1150,7 @@ MonoBehaviour:
   shoalDepthFull: 8
   shoalDepthZero: 0.5
   chopFloor: 0.12
+  breakFraction: 0.55
 --- !u!114 &1016993464
 MonoBehaviour:
   m_ObjectHideFlags: 0

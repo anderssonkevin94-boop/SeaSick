@@ -24,6 +24,12 @@ namespace SeaSick.Ocean
     /// horizontal choppiness displacement (the sea is not a heightfield).
     public struct OceanFieldData
     {
+        /// Newton steps used to invert the horizontal choppiness displacement.
+        /// Three was ample while crests were metres; a 60 m sea puts far more
+        /// query points on or near a folding crest, where convergence is slow
+        /// and the inverse may not be unique at all.
+        const int NewtonIterations = 5;
+
         [ReadOnly] public NativeArray<half4> disp0, disp1, deriv0, deriv1;
         [ReadOnly] public NativeArray<half4> prevDisp0, prevDisp1;
         [ReadOnly] public NativeArray<half> turb0;
@@ -85,7 +91,7 @@ namespace SeaSick.Ocean
             float2 p = q;
             float env = 1f;
             float4 d = float4.zero;
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < NewtonIterations; i++)
             {
                 env = region.Evaluate(p, islands, shore);
                 d = SampleDisp(p);

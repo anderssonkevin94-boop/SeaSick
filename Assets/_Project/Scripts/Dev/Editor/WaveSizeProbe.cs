@@ -34,8 +34,16 @@ public class WaveSizeProbe : MonoBehaviour
     const float BoatLength = 24.2f;
     const float PatchHalf = 800f;      // 1600 m patch
     const float PatchStep = 20f;
-    const float TransectLen = 3000f;
+    const float TransectLen = 4000f;
     const float TransectStep = 5f;
+    const int TransectLines = 5;      // parallel lines, pooled, for enough waves
+    const float TransectSpacing = 200f;
+    // Boxcar half-width in samples. A boxcar of full width (2W+1)*step has its
+    // first zero at that wavelength, so W=12 at 5 m steps erases everything
+    // below ~121 m -- the wind sea -- and leaves the 500 m rollers untouched.
+    // Without this the zero-upcrossing counts every ripple riding on a
+    // mountain and reports the mountain as 275 m long.
+    const int SmoothW = 12;
     // The patch must be in water deep enough that the depth-limited envelope
     // is NOT capping it, or this measures the cap instead of the spectrum.
     // The cap releases at depth = Hs / breakFraction, about 100 m for the
@@ -81,6 +89,30 @@ public class WaveSizeProbe : MonoBehaviour
                 lo = math.min(lo, v); hi = math.max(hi, v);
             }
         return new float2(lo, hi);
+    }
+
+    /// Zero-upcrossing wave counting on one profile: each pair of upward
+    /// mean-crossings is one wave, giving its length and its crest-to-trough.
+    static void Upcross(float[] h, int n,
+        System.Collections.Generic.List<float> lens,
+        System.Collections.Generic.List<float> hts)
+    {
+        double sum = 0;
+        for (int i = 0; i < n; i++) sum += h[i];
+        float mean = (float)(sum / n);
+        int lastUp = -1;
+        float lo = 9999f, hi = -9999f;
+        for (int i = 1; i < n; i++)
+        {
+            if (h[i] < lo) lo = h[i];
+            if (h[i] > hi) hi = h[i];
+            if (h[i - 1] - mean <= 0f && h[i] - mean > 0f)
+            {
+                if (lastUp >= 0) { lens.Add((i - lastUp) * TransectStep); hts.Add(hi - lo); }
+                lastUp = i;
+                lo = 9999f; hi = -9999f;
+            }
+        }
     }
 
     static float Pct(float[] sorted, float p)
@@ -241,42 +273,89 @@ public class WaveSizeProbe : MonoBehaviour
             }
             float bestDeg = best / (float)dirs * 180f;
 
-            // Zero-upcrossing on the chosen transect: each crossing pair is one
-            // wave, giving its length and its true crest-to-trough.
-            var lens = new System.Collections.Generic.List<float>();
-            var hts = new System.Collections.Generic.List<float>();
-            double tsum = 0;
-            for (int i = 0; i < tSteps; i++) tsum += tr[best * tSteps + i].height;
-            float tmean = (float)(tsum / tSteps);
-            int lastUp = -1;
-            float wLo = 9999f, wHi = -9999f;
-            for (int i = 1; i < tSteps; i++)
+            tq.Dispose(); tr.Dispose();
+
+            // Now measure properly along that direction: several parallel
+            // lines pooled, so there are enough waves for a median to mean
+            // something (one 3 km line across 500 m rollers gave seven).
+            float bdx = Mathf.Cos(bestDeg * Mathf.Deg2Rad);
+            float bdz = Mathf.Sin(bestDeg * Mathf.Deg2Rad);
+            float pdx = -bdz, pdz = bdx;
+            int lSteps = Mathf.RoundToInt(TransectLen / TransectStep);
+            var lq = new NativeArray<float3>(lSteps * TransectLines, Allocator.TempJob);
+            var lr = new NativeArray<OceanSample>(lSteps * TransectLines, Allocator.TempJob);
+            for (int L = 0; L < TransectLines; L++)
             {
-                float a0 = tr[best * tSteps + i - 1].height - tmean;
-                float a1 = tr[best * tSteps + i].height - tmean;
-                float hh = tr[best * tSteps + i].height;
-                if (hh < wLo) wLo = hh;
-                if (hh > wHi) wHi = hh;
-                if (a0 <= 0f && a1 > 0f)
+                float off = (L - (TransectLines - 1) * 0.5f) * TransectSpacing;
+                for (int i = 0; i < lSteps; i++)
                 {
-                    if (lastUp >= 0)
-                    {
-                        lens.Add((i - lastUp) * TransectStep);
-                        hts.Add(wHi - wLo);
-                    }
-                    lastUp = i;
-                    wLo = 9999f; wHi = -9999f;
+                    float t = (i - lSteps * 0.5f) * TransectStep;
+                    lq[L * lSteps + i] = new float3(
+                        spot.x + bdx * t + pdx * off, 0f, spot.z + bdz * t + pdz * off);
                 }
             }
-            tq.Dispose(); tr.Dispose();
+            OceanSampler.SampleBatch(lq, lr, default).Complete();
+
+            // Hs from the pooled transects, not from the patch. A 1600 m patch
+            // holds barely three wavelengths of a 500 m sea, so its RMS has a
+            // standard error around 25% -- two runs of identical code returned
+            // Hs 47.78 and 37.20 and neither was wrong. Five 4 km lines are
+            // 20 km of profile, about forty wavelengths, and settle it.
+            double lsum = 0, lsumSq = 0;
+            for (int i = 0; i < lq.Length; i++)
+            {
+                float h = lr[i].height;
+                lsum += h; lsumSq += (double)h * h;
+            }
+            float lmean = (float)(lsum / lq.Length);
+            float hsLine = 4f * Mathf.Sqrt(Mathf.Max(0f,
+                (float)(lsumSq / lq.Length) - lmean * lmean));
+
+            var lens = new System.Collections.Generic.List<float>();
+            var hts = new System.Collections.Generic.List<float>();
+            var sLens = new System.Collections.Generic.List<float>();
+            var sHts = new System.Collections.Generic.List<float>();
+            var sFaces = new System.Collections.Generic.List<float>();
+            var prof = new float[lSteps];
+            var smoo = new float[lSteps];
+            for (int L = 0; L < TransectLines; L++)
+            {
+                for (int i = 0; i < lSteps; i++) prof[i] = lr[L * lSteps + i].height;
+                // Boxcar low-pass: the mountain without the chop on it.
+                for (int i = 0; i < lSteps; i++)
+                {
+                    float acc = 0f; int cnt = 0;
+                    for (int k = -SmoothW; k <= SmoothW; k++)
+                    {
+                        int j = i + k;
+                        if (j < 0 || j >= lSteps) continue;
+                        acc += prof[j]; cnt++;
+                    }
+                    smoo[i] = acc / cnt;
+                }
+                Upcross(prof, lSteps, lens, hts);
+                Upcross(smoo, lSteps, sLens, sHts);
+                // Face angle of the smoothed profile, central difference over
+                // 20 m -- the slope the hull actually climbs.
+                for (int i = 4; i < lSteps - 4; i++)
+                    sFaces.Add(Mathf.Atan(Mathf.Abs(smoo[i + 4] - smoo[i - 4])
+                        / (8f * TransectStep)) * Mathf.Rad2Deg);
+            }
+            lq.Dispose(); lr.Dispose();
 
             var lenA = lens.ToArray(); System.Array.Sort(lenA);
             var htA = hts.ToArray(); System.Array.Sort(htA);
             float medLen = Pct(lenA, 0.5f), medHt = Pct(htA, 0.5f);
             float worstHt = htA.Length > 0 ? htA[htA.Length - 1] : 0f;
-            float faceLen = medLen * 0.5f;
-            float geoAngle = medLen > 1f
-                ? Mathf.Atan(Mathf.PI * medHt / medLen) * Mathf.Rad2Deg : 0f;
+
+            var sLenA = sLens.ToArray(); System.Array.Sort(sLenA);
+            var sHtA = sHts.ToArray(); System.Array.Sort(sHtA);
+            var sFaceA = sFaces.ToArray(); System.Array.Sort(sFaceA);
+            float sMedLen = Pct(sLenA, 0.5f), sMedHt = Pct(sHtA, 0.5f);
+            float sWorstHt = sHtA.Length > 0 ? sHtA[sHtA.Length - 1] : 0f;
+            float faceLen = sMedLen * 0.5f;
+            float geoAngle = sMedLen > 1f
+                ? Mathf.Atan(Mathf.PI * sMedHt / sMedLen) * Mathf.Rad2Deg : 0f;
 
             float local = sea != null ? sea.SeaSeverityAt(new Vector2(spot.x, spot.z)) : 0f;
             string name = motor != null ? motor.SeaStateName : "?";
@@ -285,18 +364,25 @@ public class WaveSizeProbe : MonoBehaviour
             if (local < Severities[s] * 0.9f)
                 sb.AppendLine("   WARNING: local severity " + local.ToString("F2")
                     + " below the forced " + Severities[s].ToString("F2") + " -- patch is damped, row is void");
-            sb.AppendLine(string.Format("  Hs (4 x RMS)                {0,8:F2} m", hs));
+            sb.AppendLine(string.Format("  Hs (4 x RMS, 20 km transects) {0,6:F2} m   <- the trustworthy one", hsLine));
+            sb.AppendLine(string.Format("  Hs (4 x RMS, 1600 m patch)  {0,8:F2} m   (+-25%, too few wavelengths)", hs));
             sb.AppendLine(string.Format("  patch max-min               {0,8:F2} m", hi - lo));
             sb.AppendLine(string.Format("  face angle   median {0,5:F1}   p90 {1,5:F1}   p99 {2,5:F1}   max {3,5:F1}  deg",
                 Pct(faces, 0.5f), Pct(faces, 0.9f), Pct(faces, 0.99f), faces[faces.Length - 1]));
             sb.AppendLine(string.Format("  travel direction            {0,8:F0} deg (steepest of {1} transects)",
                 bestDeg, dirs));
-            sb.AppendLine(string.Format("  wavelength   median {0,6:F0} m   p10 {1,5:F0}   p90 {2,5:F0}   ({3} waves)",
+            sb.AppendLine(string.Format("  wavelength   median {0,6:F0} m   p10 {1,5:F0}   p90 {2,5:F0}   ({3} waves, chop included)",
                 medLen, Pct(lenA, 0.1f), Pct(lenA, 0.9f), lenA.Length));
             sb.AppendLine(string.Format("  per-wave height  median {0,6:F2} m   worst {1,6:F2} m", medHt, worstHt));
+            sb.AppendLine("  -- the MOUNTAIN alone, chop below 121 m filtered out --");
+            sb.AppendLine(string.Format("  swell wavelength median {0,6:F0} m   p10 {1,5:F0}   p90 {2,5:F0}   ({3} waves)",
+                sMedLen, Pct(sLenA, 0.1f), Pct(sLenA, 0.9f), sLenA.Length));
+            sb.AppendLine(string.Format("  swell height     median {0,6:F2} m   worst {1,6:F2} m", sMedHt, sWorstHt));
+            sb.AppendLine(string.Format("  SWELL FACE ANGLE median {0,5:F1}   p90 {1,5:F1}   max {2,5:F1}  deg",
+                Pct(sFaceA, 0.5f), Pct(sFaceA, 0.9f), sFaceA.Length > 0 ? sFaceA[sFaceA.Length - 1] : 0f));
             sb.AppendLine(string.Format("  FACE LENGTH                 {0,8:F0} m  = {1,5:F1} boat lengths",
                 faceLen, faceLen / BoatLength));
-            sb.AppendLine(string.Format("  face angle from H,lambda    {0,8:F1} deg (cross-check on the normals)",
+            sb.AppendLine(string.Format("  face angle from H,lambda    {0,8:F1} deg (cross-check)",
                 geoAngle));
             sb.AppendLine(string.Format("  SEABED CLEARANCE (min)      {0,8:F2} m  {1}",
                 clearance, clearance < 0f ? "<-- TROUGH IS UNDER THE SEAFLOOR" : ""));

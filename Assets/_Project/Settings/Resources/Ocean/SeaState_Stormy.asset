@@ -16,13 +16,13 @@ MonoBehaviour:
   fetchKm: 200
   gamma: 3.3
   windDirectionDeg: 15
-  depth: 200
-  swellHeight: 1.6
-  swellWavelength: 260
-  swellDirectionDeg: -20
-  swellSharpness: 8
-  nominalHs: 9.1
-  choppiness: 1.25
-  foamThreshold: 0.68
+  depth: 30
+  swellHeight: 70
+  swellWavelength: 470
+  swellDirectionDeg: 0
+  swellSharpness: 5
+  nominalHs: 65
+  choppiness: 1
+  foamThreshold: 0.3
   foamHalflife: 4.5
-  foamInjection: 0.9
+  foamInjection: 0.45

@@ -42,6 +42,7 @@ shader property defaults. Re-run these after changing any default.
 | `SetupPaddleBoat.cs` | **The paddle boat cutover on `Sea.unity`**: strips the sloop's hull/sail/rudder, drops the new boat in at the measured waterline offset, corrects the FBX grandchild axes, binds the wheels by measured position, hangs the lanterns on pivots, turns `windDriven` off, reshapes the buoyancy probes and mass for this hull, rescales speed/freeboard/camera, moves cargo amidships and stands a helmsman at the wheel. Idempotent — re-run after changing any constant in it. |
 | `SetPaddleBoatImport.cs` | Import scale for `paddle_boat.fbx` (1.7 = 12.1 m overall). |
 | `SetBeachSlope.cs` | One-off push of `WorldSettings.beachMaxSlope` into the asset. Edit the constant, run it. The value comes off `BeachProbe`'s distribution. | — |
+| `TuneStormSea.cs` | The storm-sea values that are **scene-serialised**: `RegionField.farScale` (1.5 -> 1.0, because a post-hoc amplitude gain is the wrong instrument once the west has a storm spectrum of its own -- multiplying an authored 45 m sea by 1.5 asks for 67 m, which needs 150 m of water before the depth limit allows it) and `breakFraction`, written explicitly rather than left to a C# initialiser. Saves the scene. |
 | `TuneStormFeel.cs` | Storm-feel values that are **scene-serialised** and therefore unreachable from C# defaults: `ChaseCamera.stormDrop`/`stormPullIn` and `ShipMotor.acceleration`. Note the scene frames the camera at distance 20 / height 13, not the code defaults 25/19 — subtract the storm values from those, not from the defaults. |
 
 ## Probes
@@ -59,7 +60,7 @@ shader property defaults. Re-run these after changing any default.
 | `StallProbe.cs` | **Sailing-speed gate**: head seas at severity 0.40 and 0.75, plow drag toggled ON/OFF over the same water. Reports mean way vs target, distance made good, stalls/min, recovery time, and peak plow against the sail's authority. Also a calm sails-furled leg that checks plow really is silent at rest. Play mode, Sea.unity. | `/tmp/seasick-stall.txt` |
 | `BuryTrace.cs` | BuryProbe's run as a time series instead of a verdict — ship y, sampled surface, batched surface, draft, submersion, reserve, plow, speed, pitch, roll. The sampler-vs-batch column is the one that says whether a wild draft number is a sinking ship or a lying instrument. Play mode, Sea.unity. | `/tmp/seasick-burytrace.txt` |
 | `RippleStressProbe.cs` | **Ripple-needle gate**: two legs (driving + splash spam, and stalled in a storm), GPU readback scored on **neighbour gradient** and texels riding the clamp — not magnitude, which the Step clamp makes unfalsifiable. Gate: gradient < 0.35 m/texel, zero at clamp, zero non-finite. Play mode, Sea.unity. | `/tmp/seasick-ripplestress.txt` |
-| `WaveSizeProbe.cs` | **How big, and CAN SHE CLIMB IT.** Per sea state over a 1600 m patch of verified deep water: Hs, patch max-min, **face angle** from the surface normal (median/p90/p99/max), wavelength and per-wave height by zero-upcrossing along the direction the waves actually travel (found by steepest transect, not assumed from the wind), **face length in boat lengths**, and **seabed clearance** (surface minus terrain; negative means the trough is under the seafloor). Face angle is the acceptance criterion — height alone shipped a sheet once. Forces the PC ocean tier. Play mode, Sea.unity. | `/tmp/seasick-wavesize.txt` |
+| `WaveSizeProbe.cs` | **How big, and CAN SHE CLIMB IT.** Per sea state over a verified deep-water patch: Hs from **20 km of pooled transects** (the trustworthy one) and from the 1600 m patch (kept for continuity, +-25%); **face angle** from the surface normal; then the same wavelength / height / face-angle analysis again on a **low-passed profile with the chop below 121 m filtered out** -- the mountain alone, which is what "can she climb it" is actually about. Reports **face length in boat lengths** and **seabed clearance**. Hunts genuinely deep water down a ladder from -110 m and reports the seabed it found. Forces the PC ocean tier. Play mode, Sea.unity. | `/tmp/seasick-wavesize.txt` |
 | `WaveShot.cs` | Five sea-level looks at ONE pinned instant of the storm sea with the ship in frame for scale: astern, from the deepest trough toward the highest crest, from that crest, beam-on, and a high three-quarter that shows the wavelength pattern and where the displacement fade cuts in. Phase pinned so a re-run shoots the same water. Forces the PC ocean tier. Play mode, Sea.unity. | `/tmp/seasick-wave-0..4.png`, `-waveshot.txt` |
 | `SprayDebug.cs` | Per-second spindrift emission budget log. | Unity log |
 | `ReadbackDiag.cs` | The clock against the readback ring: `OceanTime.Now` vs `OceanSampler.SurfaceTime` per frame across a deliberate BACKWARD scrub and a forward one, plus whether the loaded assembly actually has the fix in it. The instrument for "the stamp is not following the scrub". Play mode, OceanLab. | `/tmp/seasick-readbackdiag.txt` |
@@ -89,6 +90,35 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 `python3 tools/pngprobe.py /tmp/seasick-sail-2.png`. Pure stdlib.
 
 ## Measurement traps this project has actually hit
+
+- **A metric that does not separate the thing you are claiming is a lying
+  metric.** The storm sea measured "face angle median 8.7 deg, wavelength
+  275 m" while it was in fact 485 m rollers with wind chop riding on them:
+  zero-upcrossing counts every ripple on the side of a mountain, and the
+  median slope is dominated by the chop because the chop covers most of the
+  AREA. The mountain was visible only in the p90. Low-pass the profile to the
+  band you are actually talking about (WaveSizeProbe filters below 121 m) and
+  report both, or the number will describe the texture and be read as the
+  shape.
+- **A patch a few wavelengths across cannot measure Hs.** Two runs of
+  identical code returned Hs 47.78 and 37.20 over a 1600 m patch, because a
+  500 m sea puts only about three wavelengths across it and the RMS estimator
+  has a ~25% standard error there. Neither run was wrong and chasing the
+  difference would have been chasing noise. Pool long transects instead --
+  five 4 km lines is forty wavelengths.
+- **Rayleigh spread means the TYPICAL wave is nothing like Hs.** A broad-band
+  sea's median wave height is about 0.59 x Hs, so an Hs 40 m sea at 485 m has
+  17 m typical waves (a 6 degree face) and rare 64 m monsters (23 degrees).
+  Quoting Hs and then reasoning about "the wave" as if it were that tall
+  overestimates the typical face by nearly a factor of two. Narrowing the
+  spectral band moves the median toward 0.71 x Hs and makes the rollers
+  uniform; that is a look decision as much as a numbers one.
+- **The clipmap follows `Camera.main`, not whatever camera you just made.**
+  A screenshot probe that spawns its own camera 900 m from the ship leaves the
+  rings centred on the ship, so the shot looks out through a ring boundary and
+  its skirt -- which reads as a hard diagonal seam across the water and looks
+  exactly like an ocean bug. Set `OceanClipmap.FollowOverride` to the shot
+  camera and restore it after.
 
 - **`check_compile_errors` does not see Burst errors.** A method-level
   `[BurstCompile]` on a struct-returning static made Burst treat it as an entry
