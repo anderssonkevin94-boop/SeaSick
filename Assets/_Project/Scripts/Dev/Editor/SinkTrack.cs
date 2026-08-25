@@ -35,10 +35,19 @@ public class SinkTrack : MonoBehaviour
         yield return new WaitForSeconds(4f);
         if (motor != null) { motor.SailOrder = 1f; motor.Rudder = 0f; }
 
+        var buoy = motor != null ? motor.GetComponent<SeaSick.Ocean.BuoyantBody>() : null;
+        var bilge = motor != null ? motor.GetComponent<Bilge>() : null;
+
         var sb = new StringBuilder();
         sb.AppendLine("SinkTrack — full throttle, rudder amidships");
-        sb.AppendLine("    t      x        z       ship_y   surface   gap     speed   vy");
+        sb.AppendLine("rail = green water over the deepest rail probe (the real 'is she under'");
+        sb.AppendLine("number); gap is against the UNFILTERED surface, so a small offset is");
+        sb.AppendLine("expected and correct now that the hull feels a hull-length-filtered sea.");
+        sb.AppendLine();
+        sb.AppendLine("    t      x        z       ship_y   surface   gap     speed   vy    rail   buried  bilge");
         float worstGap = float.MaxValue; float tWorst = 0f;
+        float worstRail = float.MinValue; float tRail = 0f;
+        int buriedSteps = 0, steps = 0;
 
         float t = 0f;
         while (t < Seconds)
@@ -49,8 +58,16 @@ public class SinkTrack : MonoBehaviour
             float vy = rb != null ? rb.linearVelocity.y : 0f;
             if (gap < worstGap) { worstGap = gap; tWorst = t; }
 
+            float rail = buoy != null ? buoy.MaxRailImmersion : 0f;
+            bool buried = buoy != null && buoy.Buried;
+            float bilge01 = bilge != null ? bilge.Bilge01 : 0f;
+            if (rail > worstRail) { worstRail = rail; tRail = t; }
+            if (buried) buriedSteps++;
+            steps++;
+
             sb.AppendLine($"  {t,4:F0}  {p.x,8:F0} {p.z,8:F0}  {p.y,8:F1}  {surface,8:F1}  "
-                        + $"{gap,6:F1}  {motor.CurrentSpeed,6:F1}  {vy,6:F1}");
+                        + $"{gap,6:F1}  {motor.CurrentSpeed,6:F1}  {vy,6:F1}"
+                        + $"  {rail,6:F2}  {(buried ? "  YES" : "    -"),6}  {bilge01,5:F2}");
 
             yield return new WaitForSeconds(2f);
             t += 2f;
@@ -58,9 +75,15 @@ public class SinkTrack : MonoBehaviour
 
         sb.AppendLine();
         sb.AppendLine($"worst hull-below-surface gap {worstGap:F1} m at t={tWorst:F0}s");
-        sb.AppendLine(worstGap < -5f
-            ? "VERDICT: she goes under and does not come back — this is a sinking, not a trough."
-            : "VERDICT: she stays with the surface.");
+        sb.AppendLine($"worst green water over the rail {worstRail:F2} m at t={tRail:F0}s");
+        sb.AppendLine($"burial clamp engaged on {(steps > 0 ? 100f * buriedSteps / steps : 0f):F0}% of samples"
+            + $"  ({buriedSteps}/{steps})");
+        sb.AppendLine($"bilge at the end {(bilge != null ? bilge.Bilge01 : 0f):F2}");
+        sb.AppendLine(worstRail > 2f
+            ? "VERDICT: she is still being buried deeply — the clamp is not holding her."
+            : worstRail > 0.4f
+                ? "VERDICT: she takes green water aboard but is not swimming. That is the intent."
+                : "VERDICT: dry. If the sea is genuinely mountainous this may be TOO dry.");
 
         System.IO.File.WriteAllText("Temp/sink-track.txt", sb.ToString());
         Debug.Log("SinkTrack: done — Temp/sink-track.txt");

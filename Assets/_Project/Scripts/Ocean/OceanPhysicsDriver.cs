@@ -31,6 +31,14 @@ namespace SeaSick.Ocean
             if (results.IsCreated) results.Dispose();
         }
 
+        [Header("Hull-length filtering")]
+        [Tooltip("How much of cascade 1 (16-64 m waves) the hull feels. A ship of length L averages a wave of length lambda over her waterline, which multiplies the heave force by roughly sin(pi L/lambda)/(pi L/lambda) -- about 0.29 for a 24 m hull against this band. 1 = the raw surface (what is drawn), 0 = the hull ignores that band entirely.")]
+        [SerializeField, Range(0f, 1f)] float hullFeelsCascade1 = 0.3f;
+        [Tooltip("Same for the long swell. A 280 m roller is nearly flat under 24 m of hull, so this should stay at 1 -- the swell is what she is supposed to ride.")]
+        [SerializeField, Range(0f, 1f)] float hullFeelsCascade0 = 1f;
+
+        float2 HullFilter() => new float2(hullFeelsCascade0, hullFeelsCascade1);
+
         void FixedUpdate()
         {
             if (!OceanSampler.Ready) return;
@@ -60,7 +68,29 @@ namespace SeaSick.Ocean
             for (int i = 0; i < registry.Count; i++)
                 queries[cursor + i] = registry[i].position;
 
-            OceanSampler.SampleBatch(queries, results, default).Complete();
+            // TWO jobs over one array, split at the boundary between hull
+            // probes and everything else.
+            //
+            // The hull gets the wave field FILTERED to what a 24 m ship can
+            // actually feel: a hull spans most of a 30 m wave, so the crest
+            // lifting the bow is largely cancelled by the trough under the
+            // stern, and feeding probe points the raw surface hands her
+            // short-wave forces a real hull averages away. At storm steepness
+            // that is what drives her under. Flotsam and crates are small
+            // enough to ride the chop and keep the raw field -- filtering a
+            // floating crate would be wrong in the other direction.
+            int hullCount = cursor;
+            if (hullCount > 0)
+                OceanSampler.SampleBatch(
+                    queries.GetSubArray(0, hullCount),
+                    results.GetSubArray(0, hullCount),
+                    default, HullFilter()).Complete();
+            int restCount = count - hullCount;
+            if (restCount > 0)
+                OceanSampler.SampleBatch(
+                    queries.GetSubArray(hullCount, restCount),
+                    results.GetSubArray(hullCount, restCount),
+                    default).Complete();
 
             cursor = 0;
             var span = results.AsReadOnlySpan();

@@ -21,6 +21,10 @@ namespace SeaSick.Ship
         [SerializeField] float maxEffectiveImmersion = 0.45f;
         [Tooltip("Slow seep once she's working hard, even when nothing green comes over.")]
         [SerializeField] float seepAtFullRoughness = 0.006f;
+        [Tooltip("Bilge filled per second per metre she is BURIED past the rail cap. Green-water ingress is capped at maxEffectiveImmersion so a swell cannot swamp her in a second -- but that cap also means going completely under costs exactly as much as a 45 cm splash, which is why burying her had no consequences at all. This is the separate, steeper channel for actually going under.")]
+        [SerializeField] float ingressPerMetreBuried = 0.42f;
+        [Tooltip("Ceiling on the burial channel, metres. Uncapped, a freak wave ends the voyage outright.")]
+        [SerializeField] float maxEffectiveBurial = 1.5f;
 
         [Header("Getting it out")]
         [Tooltip("Bilge emptied per second by one healthy hand on a bucket.")]
@@ -46,12 +50,14 @@ namespace SeaSick.Ship
         ShipMotor motor;
         SmoothnessMeter meter;
         Crew.CrewRoster roster;
+        SeaSick.Ocean.BuoyantBody buoyancy;
 
         void Awake()
         {
             motor = GetComponent<ShipMotor>();
             meter = GetComponent<SmoothnessMeter>();
             roster = GetComponent<Crew.CrewRoster>();
+            buoyancy = GetComponent<SeaSick.Ocean.BuoyantBody>();
         }
 
         void Update()
@@ -66,7 +72,13 @@ namespace SeaSick.Ship
             // ceiling five hands bailing still lose ground slowly — you have to
             // jettison or find shelter, which is the intended emergency.
             float green = Mathf.Min(motor.RailImmersion, maxEffectiveImmersion);
+            // Burying her is now the storm's one real consequence, so it has to
+            // cost something the green-water cap cannot express. Past the cap
+            // the water comes aboard faster, not at the same rate forever.
+            float buried = buoyancy != null
+                ? Mathf.Min(buoyancy.BurialDepth, maxEffectiveBurial) : 0f;
             float gained = green * ingressPerMetre
+                + buried * ingressPerMetreBuried
                 + seepAtFullRoughness * rough * rough;
 
             // --- out ---

@@ -40,7 +40,15 @@ public static class ApplyTunedStorm
             wavelength = 299f,
             chaos = 0.283f,
             texture = 9.81f,
-            choppiness = 0.195f,
+            // 0.195 -> 0.70. Three things wanted this at once: foam is injected
+            // where the surface FOLDS and folding is what choppiness does, so at
+            // 0.195 there was almost none; a near-sinusoidal sea has troughs as
+            // deep as its crests are tall, where a real one has sharp crests over
+            // broad flat troughs, so she sat lower and had further to come up;
+            // and the deep symmetric troughs are part of why she was going under.
+            // Not back to the old 1.0 -- Kevin liked the rounder crests, and this
+            // keeps most of that while restoring the asymmetry.
+            choppiness = 0.45f,
         };
 
         Undo.RecordObject(s, "Apply tuned storm");

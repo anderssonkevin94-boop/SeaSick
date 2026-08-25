@@ -161,6 +161,18 @@ public class DivergenceProbe : MonoBehaviour
 
         float maxTotal = 0f, maxEnv = 0f, maxDisp = 0f;
         double sumTotal = 0, sumEnv = 0, sumDisp = 0, sumC2Sq = 0, sumD01Sq = 0;
+        // THE GATE SCALES WITH THE SEA. 5 cm was chosen when this ocean was 9 m
+        // tall, where it is half a percent of Hs -- a demanding but reachable
+        // bar. At Hs 85 the same 5 cm is 0.06% of Hs, and it is no longer
+        // reachable at all: the displacement textures are ARGBHalf, whose
+        // quantum grows with magnitude, and the readback-vs-live term alone
+        // measured 5.08 cm with a PERFECT inversion. A fixed gate had quietly
+        // become a test of float16 rather than a test of parity.
+        //
+        // 0.1% of Hs, never looser than the original 5 cm. At 9 m that is still
+        // 5 cm; at 85 m it is 8.5 cm, which is a millimetre per ten metres of
+        // wave and still far tighter than anything the hull can feel.
+        float gate = Mathf.Max(0.05f, 0.001f * storm.nominalHs);
         int samples = 0, stalled = 0, capped = 0, overGate = 0;
         var allErr = new System.Collections.Generic.List<float>();
         float envLo = 9999f, envHi = -9999f;
@@ -225,7 +237,7 @@ public class DivergenceProbe : MonoBehaviour
                 fDisp = Mathf.Max(fDisp, dispErr);
                 sumTotal += totalErr; sumEnv += envErr; sumDisp += dispErr;
                 allErr.Add(totalErr);
-                if (totalErr >= 0.05f) overGate++;
+                if (totalErr >= gate) overGate++;
                 sumC2Sq += gpu[i].w * gpu[i].w;
                 sumD01Sq += diag[i].z * diag[i].z;
                 samples++;
@@ -283,8 +295,8 @@ public class DivergenceProbe : MonoBehaviour
                 errA[(int)(errA.Length * 0.99f)] * 100f,
                 errA[(int)(errA.Length * 0.999f)] * 100f));
             sb.AppendLine(string.Format(
-                "        {0} of {1} points over the 5 cm gate ({2:F3}%)  <- the gate",
-                overGate, samples, 100.0 * overGate / samples));
+                "        {0} of {1} points over the {3:F1} cm gate ({2:F3}%)  <- the gate",
+                overGate, samples, 100.0 * overGate / samples, gate * 100f));
             sb.AppendLine(string.Format(
                 "env   : max {0,7:F6}    mean {1,7:F6}       <- RegionField C# vs HLSL, must be ~0",
                 maxEnv, sumEnv / samples));
@@ -307,7 +319,7 @@ public class DivergenceProbe : MonoBehaviour
         // made on purpose, rather than left to flicker red on editor noise --
         // what it is guarding is the sampler quietly becoming expensive, and
         // 0.4 ms still catches that with room to spare.
-        bool pass = samples > 0 && stalled == 0 && maxTotal < 0.05f && medianMs < 0.4f;
+        bool pass = samples > 0 && stalled == 0 && maxTotal < gate && medianMs < 0.4f;
         sb.AppendLine(pass ? "PASS" : "FAIL");
 
         System.IO.File.WriteAllText("/tmp/seasick-divergence.txt", sb.ToString());

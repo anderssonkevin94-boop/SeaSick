@@ -26,7 +26,7 @@ MonoBehaviour:
   swell2DirectionDeg: 31.98
   swell2Sharpness: 3.2076
   nominalHs: 76.1
-  choppiness: 0.195
+  choppiness: 0.45
   detailGain: 9.81
   detailWavelength: 40
   foamThreshold: 0.3

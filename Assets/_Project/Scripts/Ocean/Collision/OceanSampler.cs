@@ -54,7 +54,13 @@ namespace SeaSick.Ocean
             if (emptyTurb.IsCreated) emptyTurb.Dispose();
         }
 
-        public static OceanFieldData CurrentField()
+        /// The raw surface: what is drawn. Everything that MEASURES the sea
+        /// wants this, which is why it is the default.
+        public static readonly float2 NoHullFilter = new float2(1f, 1f);
+
+        public static OceanFieldData CurrentField() => CurrentField(NoHullFilter);
+
+        public static OceanFieldData CurrentField(float2 hullFilter)
         {
             var region = RegionField.Instance;
             var latest = readback?.Latest;
@@ -74,6 +80,7 @@ namespace SeaSick.Ocean
                 prevDisp1 = prev != null ? prev.disp[1] : (valid ? l.disp[1] : emptyTex),
                 turb0 = valid ? l.turb : emptyTurb,
                 velDt = (latest != null && prev != null) ? (float)(latest.time - prev.time) : 0f,
+                hullFilter = hullFilter,
                 region = region != null ? region.Params : RegionFieldParams.Neutral,
                 islands = region != null ? region.Islands : emptyIslands,
                 shore = region != null && region.Shore.IsCreated ? region.Shore : emptyShore,
@@ -88,11 +95,17 @@ namespace SeaSick.Ocean
         public static JobHandle SampleBatch(
             NativeArray<float3> queries,
             NativeArray<OceanSample> results,
-            JobHandle dependency)
+            JobHandle dependency) => SampleBatch(queries, results, dependency, NoHullFilter);
+
+        public static JobHandle SampleBatch(
+            NativeArray<float3> queries,
+            NativeArray<OceanSample> results,
+            JobHandle dependency,
+            float2 hullFilter)
         {
             var job = new OceanSampleJob
             {
-                field = CurrentField(),
+                field = CurrentField(hullFilter),
                 queries = queries,
                 results = results,
             };

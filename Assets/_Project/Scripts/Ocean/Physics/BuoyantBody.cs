@@ -61,6 +61,14 @@ namespace SeaSick.Ocean
         [SerializeField, Range(0f, 1f)] float dynamicLiftAftWeight = 0f;
         [Tooltip("Fraction of reserve LIFT kept while the probe rises relative to the water (ramp over 1 m/s). Only the lift bleeds — reserve damping and plow drag stay at full strength, so this is an asymmetric shock absorber: full catch on the way in, no spring-return pogo on the way out (symmetric lift measured 6-9 s calm settle vs 1.75 s baseline).")]
         [SerializeField, Range(0f, 1f)] float reserveUpwardKeep = 0.3f;
+        [Header("Burial clamp — the floor under everything else")]
+        [Tooltip("Metres of green water over the deepest rail probe past which the hull is treated as BURIED and pulled back out. Buoyancy is a force and forces lose races: on the worst waves this sea produces, the surface accelerates downward at 0.8 g, and no floating body can follow that -- the crest simply passes over her. Reserve buoyancy, plow drag and dynamic lift all push the right way and can still be outrun. This is the bound that cannot be.")]
+        [SerializeField] float burialDepth = 1.2f;
+        [Tooltip("Seconds to pull her back to the burial depth once past it. Fast enough that she never swims, slow enough that it reads as the sea letting go of her rather than a hand lifting her out.")]
+        [SerializeField] float burialRecovery = 0.45f;
+        [Tooltip("Ceiling on the clamp's acceleration, m/s^2. Bounded so a freak wave cannot fire her out of the water — the failure this guards against is a hull popping up like a beach ball, which reads far worse than the burial did.")]
+        [SerializeField] float maxBurialAccel = 14f;
+
         [Tooltip("Explicit inertia box (m) — a colliderless Rigidbody defaults to unit inertia and spins like a coin.")]
         [SerializeField] Vector3 inertiaBoxDims = new Vector3(4.4f, 3f, 13f);
         [SerializeField] Vector3 centreOfMass = new Vector3(0f, -0.6f, 0f);
@@ -82,6 +90,14 @@ namespace SeaSick.Ocean
         public Vector3 WaveForce { get; private set; }
         /// Deepest green water over any rail probe this step, metres (can be < 0).
         public float MaxRailImmersion { get; private set; }
+        /// True while the burial clamp is holding her out of the sea.
+        public bool Buried { get; private set; }
+        /// Metres past the burial threshold this step. Bilge reads it: going
+        /// under should cost more water than a wetting, and the green-water
+        /// ingress alone is capped and cannot express the difference.
+        public float BurialDepth { get; private set; }
+        /// Clamp acceleration applied this step, m/s^2. Diagnostic.
+        public float DebugBurialAccel { get; private set; }
         /// Debug decomposition of this step's drag (world space, N).
         public Vector3 DebugDragForward { get; private set; }
         public Vector3 DebugDragLateral { get; private set; }
@@ -327,6 +343,48 @@ namespace SeaSick.Ocean
             // Submersion-scaled angular damping: a hull in the water settles,
             // a hull thrown clear of it doesn't get magic air brakes.
             rb.AddTorque(-rb.angularVelocity * (angularDragTorque * Mathf.Clamp01(subSum)));
+
+            ApplyBurialClamp(Time.fixedDeltaTime);
+        }
+
+        /// EASE, THEN CLAMP. The pattern this project already had to learn once,
+        /// for the vertical lag: bound the error in metres against the boat's
+        /// own freeboard, so it cannot be swallowed whatever the sea does.
+        ///
+        /// Everything above this line is a FORCE, and a force can be outrun. At
+        /// 0.8 g of downward surface acceleration -- which the worst waves in
+        /// this sea genuinely reach -- buoyancy is not merely losing, it is
+        /// physically incapable of keeping up, because the water is falling away
+        /// nearly as fast as gravity pulls her down into it. No amount of
+        /// reserve buoyancy fixes that; it is a race that cannot be won.
+        ///
+        /// So this is not physics and does not pretend to be. It is a bound,
+        /// deliberately: past `burialDepth` she is pulled back toward it on a
+        /// fixed time constant, capped, and acting ONLY on the way down. Above
+        /// the threshold it contributes exactly nothing, so the float
+        /// equilibrium, the gates and every measured value are untouched.
+        void ApplyBurialClamp(float dt)
+        {
+            Buried = false;
+            BurialDepth = 0f;
+            if (dt <= 0f || rb == null) return;
+
+            float over = MaxRailImmersion - burialDepth;
+            if (over <= 0f) return;
+
+            Buried = true;
+            BurialDepth = over;
+
+            // Only ever upward, and only while she is still going down or
+            // rising too slowly to clear it. Pushing on a hull that is already
+            // on her way out is what turns a clamp into a trampoline.
+            float want = over / Mathf.Max(burialRecovery, 0.05f);
+            float have = rb.linearVelocity.y;
+            if (have >= want) return;
+
+            float accel = Mathf.Min((want - have) / Mathf.Max(dt, 1e-4f), maxBurialAccel);
+            rb.AddForce(Vector3.up * (accel * rb.mass), ForceMode.Force);
+            DebugBurialAccel = accel;
         }
     }
 }

@@ -38,8 +38,17 @@ namespace SeaSick.Ocean
         /// The envelope term was untouched throughout (0.000267), which is how
         /// the three-way split identified it.
         ///
-        /// If the sea is ever made steeper again, expect to pay another step.
-        const int NewtonIterations = 6;
+        /// Six, then SEVEN, when choppiness went 0.195 -> 0.70. Choppiness IS
+        /// the horizontal displacement this loop inverts, so it is the single
+        /// most direct control on how hard the inversion is: the gate went to
+        /// 74 cm with 24 of 5000 over, again as a handful of outliers on the
+        /// sharpest crests rather than a shifted distribution, and again with
+        /// the envelope term unmoved at 0.000228.
+        ///
+        /// If the sea is ever made steeper again, expect to pay another step --
+        /// and note the budget is nearly spent: 0.4 ms per 1000 queries is the
+        /// ceiling and seven steps sit at about 0.35.
+        const int NewtonIterations = 7;
 
         [ReadOnly] public NativeArray<half4> disp0, disp1, deriv0, deriv1;
         [ReadOnly] public NativeArray<half4> prevDisp0, prevDisp1;
@@ -47,6 +56,24 @@ namespace SeaSick.Ocean
         [ReadOnly] public NativeArray<float4> islands;
         [ReadOnly] public NativeArray<float> shore;
         public RegionFieldParams region;
+
+        /// Per-cascade weight for what the HULL feels, cascades 0 and 1.
+        /// (1,1) is the raw surface -- what is drawn, and what every probe
+        /// measuring "the sea" wants.
+        ///
+        /// A 24 m hull does not respond to a 30 m wave the way a point does:
+        /// it spans most of one, and the crest lifting the bow is cancelled by
+        /// the trough under the stern. The classic result is that the heave
+        /// force carries a sinc factor, sin(pi L / lambda) / (pi L / lambda) --
+        /// about 0.29 for this hull against cascade 1's 16-64 m band, and 0.99
+        /// against cascade 0's swell. Sampling the raw surface at probe points
+        /// hands the hull short-wave forces a real ship would average away, and
+        /// at storm steepness that is what drives her under.
+        ///
+        /// Applied ONLY on the physics batch (OceanPhysicsDriver passes it).
+        /// SampleImmediate and every measuring probe keep (1,1), so the gate
+        /// still compares the sampler against what is actually rendered.
+        public float2 hullFilter;
         public int n;
         public float2 invPatch;   // 1/L0, 1/L1
         public float velDt;       // tLatest - tPrevious (0 = no velocity yet)
@@ -77,14 +104,27 @@ namespace SeaSick.Ocean
         // sum rather than multiplying the total: cascade 1's chop survives
         // shallow water that flattens cascade 0's swell. See
         // RegionFieldParams.BottomCoupling.
-        float4 SampleDisp(float2 xz, float2 e) =>
-            e.x * Bilinear(disp0, xz * invPatch.x) + e.y * Bilinear(disp1, xz * invPatch.y);
+        // The envelope and the hull filter both multiply per cascade, so they
+        // fold into one weight per band.
+        float2 W(float2 e) => e * hullFilter;
 
-        float4 SampleDeriv(float2 xz, float2 e) =>
-            e.x * Bilinear(deriv0, xz * invPatch.x) + e.y * Bilinear(deriv1, xz * invPatch.y);
+        float4 SampleDisp(float2 xz, float2 e)
+        {
+            float2 w = W(e);
+            return w.x * Bilinear(disp0, xz * invPatch.x) + w.y * Bilinear(disp1, xz * invPatch.y);
+        }
 
-        float4 SamplePrevDisp(float2 xz, float2 e) =>
-            e.x * Bilinear(prevDisp0, xz * invPatch.x) + e.y * Bilinear(prevDisp1, xz * invPatch.y);
+        float4 SampleDeriv(float2 xz, float2 e)
+        {
+            float2 w = W(e);
+            return w.x * Bilinear(deriv0, xz * invPatch.x) + w.y * Bilinear(deriv1, xz * invPatch.y);
+        }
+
+        float4 SamplePrevDisp(float2 xz, float2 e)
+        {
+            float2 w = W(e);
+            return w.x * Bilinear(prevDisp0, xz * invPatch.x) + w.y * Bilinear(prevDisp1, xz * invPatch.y);
+        }
 
         /// Diagnostic only. The raw cascade 0+1 displacement at a SOURCE
         /// point, with no envelope and no Newton inversion -- the same
