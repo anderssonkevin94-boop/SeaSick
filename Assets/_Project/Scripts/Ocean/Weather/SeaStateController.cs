@@ -23,6 +23,8 @@ namespace SeaSick.Ocean
         [SerializeField] float blendTime = 45f;
         [Tooltip("Spectrum rebuild throttle while blending, Hz.")]
         [SerializeField] float rebuildHz = 4f;
+        [Tooltip("The calmest the open sea ever gets. Below about 0.2 it reads as a mirror rather than water.")]
+        [Range(0f, 0.5f)] [SerializeField] float calmFloor = 0.22f;
         [Tooltip("How far the open-sea wander swings between calm and normal, 0..1.")]
         [SerializeField] float wanderAmount = 0.5f;
         [SerializeField] float wanderPeriod = 240f;
@@ -88,7 +90,10 @@ namespace SeaSick.Ocean
                     ? RegionField.Instance.StormWeight(pos) : 0f;
                 // Open-sea wander breathes between calm and normal on OceanTime.
                 float wander = Mathf.PerlinNoise1D((float)(OceanTime.Now / wanderPeriod) + 13.7f);
-                float baseline = 0.15f + wanderAmount * 0.5f * wander;
+                // Floored so the open sea never goes to glass either. The
+                // wander used to bottom out around 0.14, which reads as a
+                // mirror; the water should always have some texture.
+                float baseline = Mathf.Max(calmFloor, 0.15f + wanderAmount * 0.5f * wander);
                 float target = Mathf.Max(baseline, Mathf.Lerp(baseline, 1f, storm));
                 severity = Mathf.Lerp(severity, target,
                     1f - Mathf.Exp(-Time.deltaTime * 3f / Mathf.Max(blendTime, 1f)));

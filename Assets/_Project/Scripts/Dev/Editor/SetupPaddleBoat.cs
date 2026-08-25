@@ -22,27 +22,39 @@ public static class SetupPaddleBoat
 {
     const string FbxPath = "Assets/_Project/Art/Ship/paddle_boat.fbx";
 
-    const float VisualYOffset = 0.55f;   // model waterline to ship origin
+    /// Import scale, and the ONE number that changes the boat's size.
+    /// Everything below was measured off the model at ReferenceScale and is
+    /// derived from it, so doubling this doubles the hull, the probes, the
+    /// mass, the camera and the freeboard together instead of leaving half of
+    /// them behind in metres (which is exactly how the first cutover shipped
+    /// a 12 m boat doing 35 knots).
+    public const float Scale = 3.4f;
+    const float ReferenceScale = 1.7f;
+    static float K { get { return Scale / ReferenceScale; } }
+
+    static float VisualYOffset { get { return 0.55f * K; } }
     const float VisualYaw = 90f;         // bow was -X in model space, wants +Z
 
-    const float HullLength = 10.43f;
-    const float HullBeam = 4.22f;
-    const float KeelY = -0.51f;
-    const float RailY = 1.10f;
-    const float DeckY = 1.23f;
+    static float HullLength { get { return 10.43f * K; } }
+    static float HullBeam { get { return 4.22f * K; } }
+    static float KeelY { get { return -0.51f * K; } }
+    static float RailY { get { return 1.10f * K; } }
+    static float DeckY { get { return 1.23f * K; } }
+    static float RailTopY { get { return 2.11f * K; } }
 
-    const float StemRadius = 0.50f;
-    const float BodyRadius = 0.55f;
-    const float RailRadius = 0.45f;
+    static float StemRadius { get { return 0.50f * K; } }
+    static float BodyRadius { get { return 0.55f * K; } }
+    static float RailRadius { get { return 0.45f * K; } }
 
-    // Float equilibrium is held at the sloop's ratio: mass / (density x
-    // volume) = 0.60, so she sits at the same relative submersion as the hull
-    // every buoyancy gate was tuned against.
-    const float Mass = 2400f;
-    const float TotalVolume = 3.90f;
+    // Displacement goes with volume, so mass is a cube law. The float ratio
+    // mass / (density x volume) stays at the sloop's 0.60 either way.
+    static float Mass { get { return 2400f * K * K * K; } }
+    static float TotalVolume { get { return 3.90f * K * K * K; } }
 
-    const float WheelRadius = 1.265f;
-    const float MaxSpeed = 7.5f;
+    static float WheelRadius { get { return 1.265f * K; } }
+    // Hull speed goes with the square root of waterline length.
+    static float MaxSpeed { get { return 7.5f * Mathf.Sqrt(K); } }
+
     /// How far inboard of the deck edge a gun's centre sits.
     const float GunInset = 0.45f;
 
@@ -66,6 +78,14 @@ public static class SetupPaddleBoat
 
         // --- drop the boat in ----------------------------------------------
         GameObject visual = (GameObject)PrefabUtility.InstantiatePrefab(fbx);
+        // Unpack, or nothing below can restructure it: Unity refuses to
+        // reparent a child out of a prefab instance, and SetParent fails
+        // SILENTLY. That is how the lantern pivots ended up rotating empty
+        // GameObjects while the lanterns stayed under Details, rigid. The
+        // script rebuilds this whole visual from the FBX on every run, so
+        // there is nothing to gain from keeping the prefab link.
+        PrefabUtility.UnpackPrefabInstance(visual, PrefabUnpackMode.Completely,
+            InteractionMode.AutomatedAction);
         visual.name = "PaddleBoatVisual";
         visual.transform.SetParent(ship.transform, false);
         visual.transform.localPosition = new Vector3(0f, VisualYOffset, 0f);
@@ -113,7 +133,17 @@ public static class SetupPaddleBoat
         sb.AppendLine("port wheel = " + portWheel.name + " (local x " + Mathf.Min(ax, bx).ToString("F2")
             + "), starboard = " + stbdWheel.name + " (local x " + Mathf.Max(ax, bx).ToString("F2") + ")");
 
+        // The wheel is a thing a person's hands go on, so it does NOT scale
+        // with the hull — counter-scale it back to its reference size. Guns
+        // and crew are separate objects and were never affected.
         Transform helm = FindDeep(visual.transform, "HelmWheel");
+        // Only the wheel. Counter-scaling HelmStand as well was wrong twice
+        // over: it halves its CHILD's local position (the wheel jumped from
+        // z -6.36 to -3.18, taking the helmsman with it), and the stand's own
+        // mesh is offset from its origin in vertex data, so scaling about that
+        // origin walks the pedestal up the deck. The pedestal grows with the
+        // boat; only the thing hands go on stays human-sized.
+        if (helm != null) helm.localScale = Vector3.one / K;
 
         // --- the drive ------------------------------------------------------
         PaddleDrive drive = ship.GetComponent<PaddleDrive>();
@@ -174,14 +204,14 @@ public static class SetupPaddleBoat
             // deck buried in her own bow wave. Paddle propulsion tops out
             // where the rim speed does; 7.5 m/s is already a fast steamer.
             mso.FindProperty("maxSpeed").floatValue = MaxSpeed;
-            mso.FindProperty("rowSpeed").floatValue = 4f;
+            mso.FindProperty("rowSpeed").floatValue = 4f * Mathf.Sqrt(K);
 
             // Freeboard. These sink amounts were authored against the sloop's
             // ~2 m of freeboard; carried over unscaled onto 1.37 m they put
             // the deck under as soon as she is loaded.
-            mso.FindProperty("sinkAtMarkedLine").floatValue = 0.30f;
-            mso.FindProperty("sinkPerOverload").floatValue = 0.44f;
-            mso.FindProperty("sinkAtFullBilge").floatValue = 0.26f;
+            mso.FindProperty("sinkAtMarkedLine").floatValue = 0.30f * K;
+            mso.FindProperty("sinkPerOverload").floatValue = 0.44f * K;
+            mso.FindProperty("sinkAtFullBilge").floatValue = 0.26f * K;
             mso.ApplyModifiedPropertiesWithoutUndo();
             sb.AppendLine("ShipMotor: windDriven off, pivots cleared, maxSpeed " + MaxSpeed
                 + ", freeboard sinks scaled to this hull");
@@ -228,7 +258,7 @@ public static class SetupPaddleBoat
         {
             var hso = new SerializedObject(hold);
             hso.FindProperty("stackOrigin").vector3Value =
-                new Vector3(0f, DeckYAt(0f, -0.6f, DeckY), -0.6f);
+                new Vector3(0f, DeckYAt(0f, -0.6f * K, DeckY), -0.6f * K);
             hso.ApplyModifiedPropertiesWithoutUndo();
             sb.AppendLine("cargo stack origin amidships");
         }
@@ -241,9 +271,9 @@ public static class SetupPaddleBoat
             // Inboard of where the planking actually ends at each station —
             // at the bow the deck narrows, and a fixed offset put the fore
             // guns out through the railing.
-            float foreZ = 3.40f, aftZ = 1.20f;
-            float foreX = Mathf.Max(0.55f, DeckHalfWidthAt(foreZ, 1.61f) - GunInset);
-            float aftX = Mathf.Max(0.55f, DeckHalfWidthAt(aftZ, 1.61f) - GunInset);
+            float foreZ = 3.40f * K, aftZ = 1.20f * K;
+            float foreX = Mathf.Max(0.55f, DeckHalfWidthAt(foreZ, 1.61f * K) - GunInset);
+            float aftX = Mathf.Max(0.55f, DeckHalfWidthAt(aftZ, 1.61f * K) - GunInset);
             // One deck height for the battery, taken where the guns are.
             float gunDeck = Mathf.Min(DeckYAt(foreX, foreZ, DeckY), DeckYAt(aftX, aftZ, DeckY));
             gso.FindProperty("forePosition").vector2Value = new Vector2(foreX, foreZ);
@@ -263,14 +293,15 @@ public static class SetupPaddleBoat
         if (clip == null) clip = ship.AddComponent<HullWaterClip>();
         {
             float deckLo = DeckYAt(0f, 0f, DeckY);
-            float railTop = 2.11f;
-            float halfH = (railTop - (deckLo - 0.25f)) * 0.5f;
-            float midY = (railTop + (deckLo - 0.25f)) * 0.5f;
+            float railTop = RailTopY;
+            float slack = 0.25f * K;
+            float halfH = (railTop - (deckLo - slack)) * 0.5f;
+            float midY = (railTop + (deckLo - slack)) * 0.5f;
             // Inboard of the planking, and short of the stem and transom, so
             // the ellipse stays strictly inside the hull.
-            float axisX = Mathf.Max(0.5f, DeckHalfWidthAt(0f, 1.61f) - 0.10f);
-            float axisZ = 4.9f;
-            clip.Configure(new Vector3(0f, midY, 0.25f), new Vector2(axisX, axisZ), halfH);
+            float axisX = Mathf.Max(0.5f, DeckHalfWidthAt(0f, 1.61f * K) - 0.10f * K);
+            float axisZ = 4.9f * K;
+            clip.Configure(new Vector3(0f, midY, 0.25f * K), new Vector2(axisX, axisZ), halfH);
             EditorUtility.SetDirty(clip);
             sb.AppendLine("hull water clip: centre y " + midY.ToString("F2")
                 + ", axes " + axisX.ToString("F2") + " x " + axisZ.ToString("F2")
@@ -286,16 +317,16 @@ public static class SetupPaddleBoat
         if (cam != null)
         {
             var cso2 = new SerializedObject(cam);
-            SetF(cso2, "distance", 12f);
-            SetF(cso2, "height", 8f);
-            SetF(cso2, "lookAhead", 12f);
-            SetF(cso2, "cruiseDistance", 6.5f);
-            SetF(cso2, "cruiseHeight", 3.0f);
-            SetF(cso2, "cruiseLookAhead", 3.5f);
-            SetF(cso2, "stormDrop", 2.4f);
-            SetF(cso2, "stormPullIn", 1.8f);
+            SetF(cso2, "distance", 12f * K);
+            SetF(cso2, "height", 8f * K);
+            SetF(cso2, "lookAhead", 12f * K);
+            SetF(cso2, "cruiseDistance", 6.5f * K);
+            SetF(cso2, "cruiseHeight", 3.0f * K);
+            SetF(cso2, "cruiseLookAhead", 3.5f * K);
+            SetF(cso2, "stormDrop", 2.4f * K);
+            SetF(cso2, "stormPullIn", 1.8f * K);
             cso2.ApplyModifiedPropertiesWithoutUndo();
-            sb.AppendLine("ChaseCamera reframed for a 12 m boat (20/13 -> 12/8)");
+            sb.AppendLine("ChaseCamera reframed: distance " + (12f * K).ToString("F1") + ", height " + (8f * K).ToString("F1"));
         }
 
         // --- a body at the wheel, always ------------------------------------
@@ -320,11 +351,11 @@ public static class SetupPaddleBoat
         // mode shows.
         Vector2[] spots =
         {
-            new Vector2(-1.05f,  3.20f),
-            new Vector2( 1.05f,  3.20f),
-            new Vector2(-1.05f,  1.00f),
-            new Vector2( 1.05f,  1.00f),
-            new Vector2( 0.00f, -1.60f),
+            new Vector2(-1.05f * K,  3.20f * K),
+            new Vector2( 1.05f * K,  3.20f * K),
+            new Vector2(-1.05f * K,  1.00f * K),
+            new Vector2( 1.05f * K,  1.00f * K),
+            new Vector2( 0.00f,      -1.60f * K),
         };
         Vector3[] stations = new Vector3[spots.Length];
         for (int i = 0; i < spots.Length; i++)
@@ -434,8 +465,17 @@ public static class SetupPaddleBoat
         if (ext.x >= ext.y && ext.x >= ext.z) longAxis = Vector3.right;
         else if (ext.y >= ext.z) longAxis = Vector3.up;
 
+        // The thinnest axis is the flat of the ring and the lantern's glass,
+        // and it wants to face athwartships so the ring hangs fore-and-aft
+        // through its bracket. FromToRotation alone only pins the long axis
+        // and leaves the roll about it arbitrary, which is why the ring came
+        // out flat and sticking out sideways from the beam.
+        Vector3 thinAxis = Vector3.forward;
+        if (ext.x <= ext.y && ext.x <= ext.z) thinAxis = Vector3.right;
+        else if (ext.y <= ext.z) thinAxis = Vector3.up;
+
         lamp.localPosition = Vector3.zero;
-        lamp.localRotation = Quaternion.FromToRotation(longAxis, Vector3.down);
+        lamp.localRotation = Aim(longAxis, thinAxis, Vector3.down, Vector3.right);
 
         // Which end is the chain? Compare how far the mesh spreads sideways
         // in each half along the long axis; the chain is the thin end.
@@ -458,12 +498,23 @@ public static class SetupPaddleBoat
             // end belongs up, so flip when the thin end is the one facing down.
             bool thinEndIsDown = spreadHi < spreadLo;
             if (thinEndIsDown)
-                lamp.localRotation = Quaternion.FromToRotation(longAxis, Vector3.up);
+                lamp.localRotation = Aim(longAxis, thinAxis, Vector3.up, Vector3.right);
         }
 
         // Slide it so the top of the chain meets the pivot.
         Vector3 top = r.bounds.center + Vector3.up * r.bounds.extents.y;
         lamp.position += pivot.position - top;
+    }
+
+    /// A rotation taking local axis a onto world axis A and local b onto B.
+    /// Two constraints, so nothing is left arbitrary — which is the whole
+    /// point: one constraint fixes which way a thing points and says nothing
+    /// about how it is rolled around that direction.
+    static Quaternion Aim(Vector3 a, Vector3 b, Vector3 A, Vector3 B)
+    {
+        Quaternion from = Quaternion.LookRotation(a, b);
+        Quaternion to = Quaternion.LookRotation(A, B);
+        return to * Quaternion.Inverse(from);
     }
 
     // ---- the deck is not flat -------------------------------------------
@@ -498,7 +549,7 @@ public static class SetupPaddleBoat
         {
             Vector3 p = deckVerts[i];
             float dx = p.x - x, dz = p.z - z;
-            if (dx * dx + dz * dz > 0.36f) continue;
+            if (dx * dx + dz * dz > 0.36f * K * K) continue;
             if (p.y > best) best = p.y;
         }
         return best > float.MinValue ? best : fallback;
@@ -514,7 +565,7 @@ public static class SetupPaddleBoat
         for (int i = 0; i < deckVerts.Length; i++)
         {
             Vector3 p = deckVerts[i];
-            if (Mathf.Abs(p.z - z) > 0.5f) continue;
+            if (Mathf.Abs(p.z - z) > 0.5f * K) continue;
             float ax = Mathf.Abs(p.x);
             if (ax > best) best = ax;
         }

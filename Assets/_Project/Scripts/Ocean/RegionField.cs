@@ -18,6 +18,7 @@ namespace SeaSick.Ocean
         public int shoreN;           // texels per edge, 0 = no grid
         public float shoalDepthFull; // depth (m) at and below which waves are untouched
         public float shoalDepthZero; // depth (m) at and above which waves are gone (shoreline)
+        public float chopFloor;      // envelope never falls below this in water
 
         public static RegionFieldParams Neutral => new RegionFieldParams
         {
@@ -31,6 +32,7 @@ namespace SeaSick.Ocean
             shoreN = 0,
             shoalDepthFull = 8f,
             shoalDepthZero = 0.5f,
+            chopFloor = 0f,
         };
 
         /// islands: xy = centre, z = radius. shore: terrain heights on the
@@ -46,8 +48,34 @@ namespace SeaSick.Ocean
                 float s = math.distance(p, islands[i].xy) - islands[i].z;
                 env *= math.smoothstep(0f, shoreFalloff, s);
             }
-            if (shoreN > 0) env *= ShoreFactor(p, shore);
-            return env;
+            float wet = 1f;
+            if (shoreN > 0)
+            {
+                float2 sw = ShoreAndWet(p, shore);
+                env *= sw.x;
+                wet = sw.y;
+            }
+            // Never dead flat. Sheltered water still has chop; only land is
+            // glass. Twin of RegionEnvelope's max() in RegionField.hlsl.
+            return math.max(env, chopFloor * wet);
+        }
+
+        /// Shoal factor AND "is there water here at all", from one lookup.
+        /// The chop floor needs the second: the sea keeps texture in sheltered
+        /// water but must still be perfectly gone over land.
+        public float2 ShoreAndWet(float2 p, NativeArray<float> shore)
+        {
+            float2 uv = (p - shoreOrigin) * shoreInvSize;
+            if (uv.x < 0f || uv.y < 0f || uv.x > 1f || uv.y > 1f) return new float2(1f, 1f);
+            float2 f = uv * shoreN - 0.5f;
+            int2 i0 = math.clamp((int2)math.floor(f), 0, shoreN - 1);
+            int2 i1 = math.min(i0 + 1, shoreN - 1);
+            float2 w = math.saturate(f - i0);
+            float a = shore[i0.y * shoreN + i0.x], b = shore[i0.y * shoreN + i1.x];
+            float c = shore[i1.y * shoreN + i0.x], e = shore[i1.y * shoreN + i1.x];
+            float h = math.lerp(math.lerp(a, b, w.x), math.lerp(c, e, w.x), w.y);
+            return new float2(math.smoothstep(shoalDepthZero, shoalDepthFull, -h),
+                              math.smoothstep(0f, 0.5f, -h));
         }
 
         /// 1 in deep water, 0 at the shoreline and over land. Bilinear over the
@@ -100,6 +128,8 @@ namespace SeaSick.Ocean
         [SerializeField] float shoalDepthFull = 8f;
         [Tooltip("Depth at and above which waves are gone — the shoreline.")]
         [SerializeField] float shoalDepthZero = 0.5f;
+        [Tooltip("The envelope never falls below this in water, so sheltered anchorages keep some chop instead of turning to glass. Land is still perfectly flat.")]
+        [Range(0f, 0.4f)] [SerializeField] float chopFloor = 0.12f;
 
         Vector2 home;
         readonly Vector4[] islandsGpu = new Vector4[MaxIslands];
@@ -154,6 +184,7 @@ namespace SeaSick.Ocean
             shoreN = shoreN,
             shoalDepthFull = shoalDepthFull,
             shoalDepthZero = shoalDepthZero,
+            chopFloor = chopFloor,
         };
 
         void OnEnable()
@@ -241,7 +272,8 @@ namespace SeaSick.Ocean
             Shader.SetGlobalVectorArray("_Ocean_Islands", islandsGpu);
             Shader.SetGlobalVector("_Ocean_ShoreRect",
                 new Vector4(shoreOrigin.x, shoreOrigin.y, shoreSize > 0f ? 1f / shoreSize : 0f, shoreN));
-            Shader.SetGlobalVector("_Ocean_Shoal", new Vector4(shoalDepthZero, shoalDepthFull, 0f, 0f));
+            Shader.SetGlobalVector("_Ocean_Shoal",
+                new Vector4(shoalDepthZero, shoalDepthFull, chopFloor, 0f));
             if (shoreTex != null) Shader.SetGlobalTexture("_Ocean_ShoreTex", shoreTex);
         }
 

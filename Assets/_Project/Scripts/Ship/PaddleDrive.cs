@@ -57,6 +57,9 @@ namespace SeaSick.Ship
         public float StarboardRate { get; private set; }
         /// How hard the wheels are working against each other, 0..1.
         public float Differential01 { get; private set; }
+        /// Exposed so probes read the real radius instead of a copy that goes
+        /// stale the moment the boat is rescaled.
+        public float WheelRadius { get { return wheelRadius; } }
 
         void Awake()
         {

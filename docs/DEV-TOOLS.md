@@ -67,6 +67,8 @@ shader property defaults. Re-run these after changing any default.
 | `ShoreProbe.cs` | **Terrain→ocean gate** (play mode, Sea.unity): severity forced to 1.0; surface RMS at deep water / shoreline / land must be intact / <10 % / 0; CPU shore factor vs exact height. Shot of the beach. | `/tmp/seasick-shore.txt`, `-shore.png` |
 | `WorldProbe.cs` | **Populator gate** (play mode, Sea.unity): islands found, home + Stockpile, centres on land, outline at the waterline, beaches, props grounded, reefs/monsters in water, raiders, spawn landable. | `/tmp/seasick-world.txt` |
 | `IslandShot.cs` | Look shots of the home island from the sea, the beach, overhead and 900 m east, with the ship pinned so the streamer stays centred. Play mode, Sea.unity. | `/tmp/seasick-island-0..3.png` |
+| `CalmWaterShot.cs` | **Chop-floor gate**: forces the gentlest weather the game produces and measures surface RMS inshore against deep water. Sheltered water must still move (RMS > 2 cm) while staying a real shelter. | `/tmp/seasick-calm.txt`, `-calm-inshore.png` |
+| `ResetOceanTime.cs` | Undoes what the last probe pinned — `OceanTime.Paused`, `OceanTime.Scale`, a forced sea state. All static, all survive leaving play mode. Run between probes. | — |
 | `StormDeckShot.cs` | **Hull-water-clip A/B**: freezes her kinematic at a pinned wave phase with the sea held 0.50 m over the deck, then shoots the same frame with the clip on and off. The rig exists because the first version *waited for a natural crest* and fired when the water was 0.47 m BELOW the deck — an A/B on a condition that never happened. | `/tmp/seasick-deck-clip-on.png`, `-off.png` |
 | `InspectBoatParts.cs` | What the boat's parts are doing in the scene: local rotation, **bounds size** and ship-local centre. Bounds size is what tells a lantern hanging down from one lying sideways — a position dump cannot see a rotation fault. | `/tmp/seasick-boatparts.txt` |
 | `PaddleProbe.cs` | **The paddle boat's gate**: resting draft and freeboard light and laden in a pinned calm; that she makes way and the wheel rim speed matches it; that the wheels are genuinely differential at helm; and that with the throttle shut and the helm over they counter-rotate and she comes round on the spot. Play mode, Sea.unity. | `/tmp/seasick-paddle.txt` |
@@ -117,6 +119,30 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   would have been a real 60 fps blocker; the identical run minutes later put
   the same call at **1.07 ms**. Never accept a single worst-frame sample from
   the editor as a finding — run it twice and compare the distributions.
+- **`DivergenceProbe` is currently RED, and was red before the paddle boat.**
+  Measured 2026-08-25: **26.32 cm max / 15.40 cm mean** on a tree with the
+  ocean changes stashed, against **26.43 / 13.07** with them — statistically
+  the same, so the chop floor is not the cause. The documented baseline was
+  **0.23 cm**, so something between then and now broke it and it is not the
+  boat. Symptoms point at readback lag rather than a formula mismatch: the
+  first timestamp of every run reports "readback never caught up", and repeat
+  runs of identical code scatter (26 cm, then zero samples, then 147 cm) where
+  a real formula divergence would be consistent. **Bisect before trusting any
+  ocean parity result, and do not read a single run as a finding.**
+- **Unity refuses to reparent a child out of a prefab instance, and
+  `SetParent` fails SILENTLY.** Both lantern pivots spent a whole build
+  rotating empty GameObjects while the lanterns sat unmoved under `Details`,
+  looking rigid. `PrefabUtility.UnpackPrefabInstance` first if a setup script
+  is going to restructure an imported model.
+- **`Quaternion.FromToRotation` leaves the roll arbitrary.** Aiming a
+  lantern's long axis down says nothing about how it is rolled about that
+  axis, which is why the chain ring came out flat and sticking sideways out
+  of its bracket. Constrain two axes, not one (`SetupPaddleBoat.Aim`).
+- **Counter-scaling a parent to keep a child's size also scales the child's
+  POSITION.** Shrinking `HelmStand` to keep the wheel human-sized moved the
+  wheel from z -6.36 to -3.18 and dragged the helmsman with it. Scale the
+  thing itself, never its parent — and remember a mesh offset from its own
+  origin walks across the deck when scaled about that origin.
 - **A single deck height is a lie on any real hull.** The paddle boat's deck
   has camber and sheer and spans 0.67 m; crew, guns and cargo were all placed
   at its maximum and floated by up to half a metre. Sample the deck mesh under

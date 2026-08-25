@@ -26,10 +26,12 @@ public class PaddleProbe : MonoBehaviour
         new GameObject("PaddleProbe").AddComponent<PaddleProbe>();
     }
 
-    // Measured off the model at import scale 1.7, relative to the ship origin.
-    const float DeckY = 1.23f;
-    const float RailTopY = 2.11f;
-    const float KeelY = -0.51f;
+    // Measured off the model at import scale 3.4, relative to the ship
+    // origin: deck amidships, rail top, keel. Re-measure these with
+    // InspectBoatParts whenever SetupPaddleBoat.Scale changes.
+    const float DeckY = 1.34f;
+    const float RailTopY = 4.22f;
+    const float KeelY = -1.02f;
 
     IEnumerator Start()
     {
@@ -105,8 +107,10 @@ public class PaddleProbe : MonoBehaviour
         sb.AppendLine("DRIVE (throttle open, helm amidships)");
         sb.AppendLine("  way " + speed.ToString("F2") + " m/s");
         sb.AppendLine("  wheel rates port " + pr.ToString("F2") + " stbd " + sr.ToString("F2") + " rad/s");
-        sb.AppendLine("  rim speed " + (pr * 1.265f).ToString("F2")
-            + " m/s against " + speed.ToString("F2") + " m/s of way");
+        float radius = drive != null ? drive.WheelRadius : 1f;
+        sb.AppendLine("  rim speed " + (pr * radius).ToString("F2")
+            + " m/s against " + speed.ToString("F2") + " m/s of way (radius "
+            + radius.ToString("F2") + " m)");
 
         // ---- leg 4: helm ----
         motor.Rudder = 1f;

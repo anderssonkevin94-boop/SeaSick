@@ -8,7 +8,8 @@ using UnityEngine;
 public static class SetPaddleBoatImport
 {
     const string Path = "Assets/_Project/Art/Ship/paddle_boat.fbx";
-    const float Scale = 1.7f;
+    /// Owned by SetupPaddleBoat so the boat has exactly one size constant.
+    static float Scale { get { return SetupPaddleBoat.Scale; } }
 
     public static string Execute()
     {
