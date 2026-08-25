@@ -32,7 +32,7 @@ namespace SeaSick.Combat
         [SerializeField] float length = 17f;
 
         [Header("Sailing")]
-        [SerializeField] float maxSpeed = 17f;      // a touch slower than the player's 21
+        [SerializeField] float maxSpeed = 17f;      // raiders keep the old sloop's legs; the paddle boat's 20 outruns them on purpose
         [SerializeField] float acceleration = 2.2f;
         [SerializeField] float turnRate = 26f;      // deg/sec at speed
 

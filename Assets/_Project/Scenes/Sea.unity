@@ -376,6 +376,58 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
   m_PrefabInstance: {fileID: 265543509}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &270415271
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 270415273}
+  - component: {fileID: 270415272}
+  m_Layer: 0
+  m_Name: PlaytestStart
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &270415272
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 270415271}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 291c53b7c0fce4f34adaafcb7e4e7133, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Dev.PlaytestStart
+  active: 1
+  bearing: {x: -1, y: 0}
+  minDistance: 1300
+  maxDistance: 6000
+  requiredDepth: 130
+  clearRadius: 800
+  maxLateral: 1600
+  faceOutward: 1
+--- !u!4 &270415273
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 270415271}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &323194068
 GameObject:
   m_ObjectHideFlags: 0
@@ -538,51 +590,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.MiniMap
   range: 1500
---- !u!1 &355815507
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 355815509}
-  - component: {fileID: 355815508}
-  m_Layer: 0
-  m_Name: World
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!114 &355815508
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 355815507}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4fb04dd1c181e44af9386612b44e538d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.ArchipelagoGenerator
---- !u!4 &355815509
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 355815507}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 688920549}
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &371285089
 GameObject:
   m_ObjectHideFlags: 0
@@ -698,12 +705,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 688920548}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 355815509}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &688920550
 MonoBehaviour:
@@ -1108,6 +1115,7 @@ MonoBehaviour:
   calmFloor: 0.22
   wanderAmount: 0.5
   wanderPeriod: 240
+  warmStart: 1
 --- !u!114 &1016993462
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2661,7 +2669,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cdb2b2664dcc442c0a9eb54073eec039, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.ShipMotor
-  maxSpeed: 10.606602
+  maxSpeed: 19.99698
   acceleration: 2.6
   keelGrip: 2.2
   surfOvershoot: 1.25
@@ -4638,8 +4646,9 @@ SceneRoots:
   - {fileID: 1901280689}
   - {fileID: 38900269}
   - {fileID: 1482035841}
-  - {fileID: 355815509}
   - {fileID: 69521651}
   - {fileID: 330744239}
   - {fileID: 1016993466}
   - {fileID: 1749557478}
+  - {fileID: 270415273}
+  - {fileID: 688920549}

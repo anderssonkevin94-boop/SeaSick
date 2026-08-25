@@ -161,7 +161,12 @@ namespace SeaSick.Ocean
             if (follow != null)
             {
                 var motor = follow.GetComponent<Ship.ShipMotor>();
-                float k = motor != null ? Mathf.Clamp01(motor.CurrentSpeed / 12f) : 0f;
+                // Normalised against the ship's own top speed, not an absolute
+                // 12 m/s: that constant was the old hull's flat-out and pinned
+                // the wake at maximum for the whole voyage the moment she got
+                // faster than it.
+                float k = motor != null
+                    ? Mathf.Clamp01(motor.CurrentSpeed / Mathf.Max(motor.MaxSpeed, 1f)) : 0f;
                 if (k > 0.05f)
                 {
                     Vector3 fwd = follow.forward; fwd.y = 0f; fwd = fwd.normalized;

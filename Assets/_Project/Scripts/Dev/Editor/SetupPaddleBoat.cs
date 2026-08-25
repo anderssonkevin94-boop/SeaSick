@@ -52,8 +52,12 @@ public static class SetupPaddleBoat
     static float TotalVolume { get { return 3.90f * K * K * K; } }
 
     static float WheelRadius { get { return 1.265f * K; } }
-    // Hull speed goes with the square root of waterline length.
-    static float MaxSpeed { get { return 7.5f * Mathf.Sqrt(K); } }
+    // Hull speed goes with the square root of waterline length. The constant
+    // is a game number, not a physical one -- 7.5 gave a displacement hull's
+    // honest 10.6 m/s at Scale 3.4, and on a 515 m storm roller that is a boat
+    // being overtaken rather than a boat working a face. 14.14 puts her at a
+    // round 20 m/s. The root law stays so Scale is still the one knob.
+    public static float MaxSpeed { get { return 14.14f * Mathf.Sqrt(K); } }
 
     /// How far inboard of the deck edge a gun's centre sits.
     const float GunInset = 0.45f;

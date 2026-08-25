@@ -28,9 +28,12 @@ namespace SeaSick.Ocean
         [Tooltip("How far the open-sea wander swings between calm and normal, 0..1.")]
         [SerializeField] float wanderAmount = 0.5f;
         [SerializeField] float wanderPeriod = 240f;
+        [Tooltip("On the first frame, jump straight to the weather the ship's position asks for instead of easing into it over blendTime. Pressing play in storm water otherwise buys you the better part of a minute watching the sea grow -- and every probe and playtest that warps somewhere starts in the wrong sea.")]
+        [SerializeField] bool warmStart = true;
 
         OceanSpectrumSettings blend;
         float severity;          // 0 = calm, 0.5 = normal, 1 = stormy
+        bool warmed;             // the first-frame jump has happened
         float lastRebuildSeverity = -1f;
         double lastRebuildTime = -999.0;
 
@@ -95,8 +98,24 @@ namespace SeaSick.Ocean
                 // mirror; the water should always have some texture.
                 float baseline = Mathf.Max(calmFloor, 0.15f + wanderAmount * 0.5f * wander);
                 float target = Mathf.Max(baseline, Mathf.Lerp(baseline, 1f, storm));
-                severity = Mathf.Lerp(severity, target,
-                    1f - Mathf.Exp(-Time.deltaTime * 3f / Mathf.Max(blendTime, 1f)));
+                // Wait for RegionField before snapping: with no region there is
+                // no storm weight, so a frame-one jump would land on the calm
+                // baseline and then have to ease up anyway -- which is the
+                // thing this exists to avoid.
+                if (warmStart && !warmed && RegionField.Instance != null)
+                {
+                    severity = target;
+                    warmed = true;
+                    // Said out loud because "the sea looked wrong at the start"
+                    // is otherwise indistinguishable from the ease still
+                    // running, and the two want opposite fixes.
+                    Debug.Log($"SeaStateController: warm start at severity {severity:F2} ({CurrentStateName})");
+                }
+                else
+                {
+                    severity = Mathf.Lerp(severity, target,
+                        1f - Mathf.Exp(-Time.deltaTime * 3f / Mathf.Max(blendTime, 1f)));
+                }
             }
 
             // Throttled rebuild, and only when the state actually moved.
