@@ -19,6 +19,8 @@ namespace SeaSick.Ocean
         public float shoalDepthFull; // depth (m) at and below which waves are untouched
         public float shoalDepthZero; // depth (m) at and above which waves are gone (shoreline)
         public float chopFloor;      // envelope never falls below this in water
+        public float breakFraction;  // a wave may not exceed this x the water depth
+        public float waveHs;         // the open-sea Hs the spectrum is producing, m
 
         public static RegionFieldParams Neutral => new RegionFieldParams
         {
@@ -33,6 +35,8 @@ namespace SeaSick.Ocean
             shoalDepthFull = 8f,
             shoalDepthZero = 0.5f,
             chopFloor = 0f,
+            breakFraction = 0f,
+            waveHs = 0f,
         };
 
         /// islands: xy = centre, z = radius. shore: terrain heights on the
@@ -49,24 +53,39 @@ namespace SeaSick.Ocean
                 env *= math.smoothstep(0f, shoreFalloff, s);
             }
             float wet = 1f;
+            float cap = float.MaxValue;
             if (shoreN > 0)
             {
-                float2 sw = ShoreAndWet(p, shore);
-                env *= sw.x;
-                wet = sw.y;
+                float3 swd = ShoreWetDepth(p, shore);
+                env *= swd.x;
+                wet = swd.y;
+                // Depth limit: no wave taller than a fraction of the water
+                // under it. This is the shoaling/breaking rule, and it is what
+                // makes seabed clipping structurally impossible at ANY wave
+                // size rather than something to re-tune every time the sea
+                // grows. It also reads as gameplay for free -- the sea visibly
+                // lies down as you come in off the deep, and gets up again as
+                // the bottom falls away.
+                if (waveHs > 0.01f)
+                    cap = math.max(0f, breakFraction * swd.z / waveHs);
             }
             // Never dead flat. Sheltered water still has chop; only land is
             // glass. Twin of RegionEnvelope's max() in RegionField.hlsl.
-            return math.max(env, chopFloor * wet);
+            // The cap is applied last so it beats the chop floor: in half a
+            // metre of water there is no chop to have.
+            return math.min(math.max(env, chopFloor * wet), cap);
         }
 
-        /// Shoal factor AND "is there water here at all", from one lookup.
-        /// The chop floor needs the second: the sea keeps texture in sheltered
-        /// water but must still be perfectly gone over land.
-        public float2 ShoreAndWet(float2 p, NativeArray<float> shore)
+        /// Shoal factor, "is there water here at all", and the depth itself,
+        /// from one lookup. The chop floor needs the second (the sea keeps
+        /// texture in sheltered water but must be perfectly gone over land)
+        /// and the depth limit needs the third. Outside the grid the sea is
+        /// untouched and nominally bottomless.
+        public float3 ShoreWetDepth(float2 p, NativeArray<float> shore)
         {
             float2 uv = (p - shoreOrigin) * shoreInvSize;
-            if (uv.x < 0f || uv.y < 0f || uv.x > 1f || uv.y > 1f) return new float2(1f, 1f);
+            if (uv.x < 0f || uv.y < 0f || uv.x > 1f || uv.y > 1f)
+                return new float3(1f, 1f, 1e9f);
             float2 f = uv * shoreN - 0.5f;
             int2 i0 = math.clamp((int2)math.floor(f), 0, shoreN - 1);
             int2 i1 = math.min(i0 + 1, shoreN - 1);
@@ -74,8 +93,8 @@ namespace SeaSick.Ocean
             float a = shore[i0.y * shoreN + i0.x], b = shore[i0.y * shoreN + i1.x];
             float c = shore[i1.y * shoreN + i0.x], e = shore[i1.y * shoreN + i1.x];
             float h = math.lerp(math.lerp(a, b, w.x), math.lerp(c, e, w.x), w.y);
-            return new float2(math.smoothstep(shoalDepthZero, shoalDepthFull, -h),
-                              math.smoothstep(0f, 0.5f, -h));
+            return new float3(math.smoothstep(shoalDepthZero, shoalDepthFull, -h),
+                              math.smoothstep(0f, 0.5f, -h), -h);
         }
 
         /// 1 in deep water, 0 at the shoreline and over land. Bilinear over the
@@ -130,6 +149,12 @@ namespace SeaSick.Ocean
         [SerializeField] float shoalDepthZero = 0.5f;
         [Tooltip("The envelope never falls below this in water, so sheltered anchorages keep some chop instead of turning to glass. Land is still perfectly flat.")]
         [Range(0f, 0.4f)] [SerializeField] float chopFloor = 0.12f;
+        [Tooltip("A wave may not be taller than this fraction of the water under it. The real breaking index is about 0.78; below that leaves margin for the hull and the camera.")]
+        [Range(0.1f, 0.8f)] [SerializeField] float breakFraction = 0.45f;
+
+        // Pulled from the renderer each frame rather than pushed, so the data
+        // flows one way and nothing has to remember to call a setter.
+        float waveHs;
 
         Vector2 home;
         readonly Vector4[] islandsGpu = new Vector4[MaxIslands];
@@ -185,6 +210,8 @@ namespace SeaSick.Ocean
             shoalDepthFull = shoalDepthFull,
             shoalDepthZero = shoalDepthZero,
             chopFloor = chopFloor,
+            breakFraction = breakFraction,
+            waveHs = waveHs,
         };
 
         void OnEnable()
@@ -238,6 +265,12 @@ namespace SeaSick.Ocean
 
         void LateUpdate()
         {
+            // How tall the open sea currently is, so the depth limit knows what
+            // it is capping. Declared by the sea-state asset and checked
+            // against the measured Hs by WaveSizeProbe.
+            var ocean = OceanRenderer.Instance;
+            waveHs = ocean != null && ocean.Settings != null ? ocean.Settings.nominalHs : 0f;
+
             // The world is generated at runtime, so home and islands can only
             // be picked up once they exist. One-shot; probes that set their own
             // geography (SetHome/AddIsland) win and this never fires.
@@ -274,6 +307,8 @@ namespace SeaSick.Ocean
                 new Vector4(shoreOrigin.x, shoreOrigin.y, shoreSize > 0f ? 1f / shoreSize : 0f, shoreN));
             Shader.SetGlobalVector("_Ocean_Shoal",
                 new Vector4(shoalDepthZero, shoalDepthFull, chopFloor, 0f));
+            Shader.SetGlobalVector("_Ocean_DepthLimit",
+                new Vector4(breakFraction, waveHs, 0f, 0f));
             // ALWAYS bind, even with no shore grid. A fragment shader tolerates
             // an unbound texture it never samples (the _Ocean_ShoreRect.w guard
             // sees to that), but a COMPUTE dispatch does not: Metal validates
@@ -297,6 +332,7 @@ namespace SeaSick.Ocean
             // every resource RegionField.hlsl declares must be bound or a
             // kernel including it does nothing at all.
             Shader.SetGlobalVector("_Ocean_Shoal", Vector4.zero);
+            Shader.SetGlobalVector("_Ocean_DepthLimit", Vector4.zero);
             Shader.SetGlobalVectorArray("_Ocean_Islands", new Vector4[MaxIslands]);
             Shader.SetGlobalTexture("_Ocean_ShoreTex", Texture2D.blackTexture);
         }

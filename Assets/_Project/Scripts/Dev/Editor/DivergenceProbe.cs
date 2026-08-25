@@ -55,9 +55,13 @@ public class DivergenceProbe : MonoBehaviour
         bool ctrlWas = false;
         if (ctrl != null) { ctrlWas = ctrl.enabled; ctrl.enabled = false; }
 
-        // Storm at spec-worst choppiness.
+        // Storm at spec-worst choppiness. nominalHs is deliberately large so
+        // the depth-limited envelope actually BITES over the synthetic shore
+        // below -- a gate that never reaches the term it is gating is not a
+        // gate.
         var storm = ScriptableObject.CreateInstance<OceanSpectrumSettings>();
         storm.windSpeed = 22f; storm.fetchKm = 200f; storm.choppiness = 1.2f;
+        storm.nominalHs = 45f;
         ocean.SetSettings(storm);
 
         // A regional field that varies hard across the sample disc.
@@ -68,6 +72,27 @@ public class DivergenceProbe : MonoBehaviour
         region.ClearIslands();
         region.AddIsland(new Vector2(80f, 60f), 25f);
         region.AddIsland(new Vector2(-40f, -90f), 30f);
+
+        // A synthetic shore grid, because OceanLab has no terrain and the
+        // depth-dependent half of the envelope -- shoal factor, wet gate and
+        // the depth limit -- is otherwise never evaluated at all. One gaussian
+        // hill puts land, beach, shallows and 130 m of deep water inside the
+        // sample disc, so every branch of both twins runs on real numbers.
+        const int ShoreN = 64;
+        const float ShoreSize = 600f;
+        var heights = new NativeArray<float>(ShoreN * ShoreN, Allocator.Temp);
+        for (int gz = 0; gz < ShoreN; gz++)
+            for (int gx = 0; gx < ShoreN; gx++)
+            {
+                float wx = -ShoreSize * 0.5f + (gx + 0.5f) * ShoreSize / ShoreN;
+                float wz = -ShoreSize * 0.5f + (gz + 0.5f) * ShoreSize / ShoreN;
+                float dx = wx - 60f, dz = wz - 60f;
+                heights[gz * ShoreN + gx] =
+                    -180f + 200f * Mathf.Exp(-(dx * dx + dz * dz) / (2f * 90f * 90f));
+            }
+        region.SetShore(heights, new float2(-ShoreSize * 0.5f, -ShoreSize * 0.5f),
+            ShoreSize, ShoreN);
+        heights.Dispose();
 
         // Let the rebuild land and the readback ring refill before measuring.
         for (int f = 0; f < 12; f++) yield return null;
@@ -101,7 +126,8 @@ public class DivergenceProbe : MonoBehaviour
 
         float maxTotal = 0f, maxEnv = 0f, maxDisp = 0f;
         double sumTotal = 0, sumEnv = 0, sumDisp = 0, sumC2Sq = 0, sumD01Sq = 0;
-        int samples = 0, stalled = 0;
+        int samples = 0, stalled = 0, capped = 0;
+        float envLo = 9999f, envHi = -9999f;
 
         foreach (float t in new[] { 41f, 97f, 158f, 233f, 301f })
         {
@@ -140,6 +166,7 @@ public class DivergenceProbe : MonoBehaviour
 
             var field = OceanSampler.CurrentField();
             float fTotal = 0f, fEnv = 0f, fDisp = 0f;
+            var rp = field.region;
             for (int i = 0; i < Points; i++)
             {
                 float2 x = new float2(queryXZ[i].x, queryXZ[i].y);
@@ -164,6 +191,13 @@ public class DivergenceProbe : MonoBehaviour
                 sumC2Sq += gpu[i].w * gpu[i].w;
                 sumD01Sq += diag[i].z * diag[i].z;
                 samples++;
+
+                // Coverage: is the depth limit actually the binding term here?
+                float3 swd = rp.ShoreWetDepth(x, field.shore);
+                if (rp.waveHs > 0.01f
+                    && math.max(0f, rp.breakFraction * swd.z / rp.waveHs) < 1f) capped++;
+                if (diag[i].x < envLo) envLo = diag[i].x;
+                if (diag[i].x > envHi) envHi = diag[i].x;
             }
             maxTotal = Mathf.Max(maxTotal, fTotal);
             maxEnv = Mathf.Max(maxEnv, fEnv);
@@ -212,6 +246,9 @@ public class DivergenceProbe : MonoBehaviour
                 "sea measured: cascade 0+1 height RMS {0:F2} m, cascade 2 RMS {1:F1} cm",
                 d01Rms, c2Rms));
             sb.AppendLine(string.Format("instants used {0} of 5, stalled {1}", samples / Points, stalled));
+            sb.AppendLine(string.Format(
+                "coverage: envelope spanned {0:F3}..{1:F3}; the depth limit was the binding term at {2:F0}% of points",
+                envLo, envHi, 100.0 * capped / samples));
         }
         sb.AppendLine(string.Format("SampleBatch 1000 queries: {0:F3} ms (median of 20)", medianMs));
 

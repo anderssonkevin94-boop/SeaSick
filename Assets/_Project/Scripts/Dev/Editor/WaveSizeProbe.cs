@@ -36,7 +36,12 @@ public class WaveSizeProbe : MonoBehaviour
     const float PatchStep = 20f;
     const float TransectLen = 3000f;
     const float TransectStep = 5f;
-    const float DeepEnough = -9f;      // open-ocean floor is -12 m by design
+    // The patch must be in water deep enough that the depth-limited envelope
+    // is NOT capping it, or this measures the cap instead of the spectrum.
+    // The cap releases at depth = Hs / breakFraction, about 100 m for the
+    // storm sea, so -9 m (which was right when the whole seabed was -12) now
+    // reliably finds SHELF water and would read a damped sea as a broken one.
+    static readonly float[] DepthLadder = { -110f, -60f, -30f, -9f };
 
     public static void Execute()
     {
@@ -49,7 +54,7 @@ public class WaveSizeProbe : MonoBehaviour
     /// Is the WHOLE patch in undamped water? The first version of this probe
     /// warped to a hardcoded spot that turned out to be an island and measured
     /// damped water at every sea state.
-    static bool DeepEverywhere(Vector3 centre, float half)
+    static bool DeepEverywhere(Vector3 centre, float half, float need)
     {
         var h = Island.TerrainHeight;
         if (h == null) return false;
@@ -57,9 +62,25 @@ public class WaveSizeProbe : MonoBehaviour
             for (int j = -2; j <= 2; j++)
             {
                 float x = centre.x + i * half * 0.5f, z = centre.z + j * half * 0.5f;
-                if (h(x, z) > DeepEnough) return false;
+                if (h(x, z) > need) return false;
             }
         return true;
+    }
+
+    /// Shallowest and deepest seabed under the patch, so the report says what
+    /// water was actually measured instead of leaving it to be assumed.
+    static float2 SeabedRange(Vector3 centre, float half)
+    {
+        var h = Island.TerrainHeight;
+        float lo = 9999f, hi = -9999f;
+        if (h == null) return new float2(0f, 0f);
+        for (int i = -4; i <= 4; i++)
+            for (int j = -4; j <= 4; j++)
+            {
+                float v = h(centre.x + i * half * 0.25f, centre.z + j * half * 0.25f);
+                lo = math.min(lo, v); hi = math.max(hi, v);
+            }
+        return new float2(lo, hi);
     }
 
     static float Pct(float[] sorted, float p)
@@ -102,16 +123,20 @@ public class WaveSizeProbe : MonoBehaviour
         // FIND deep water, do not assume it.
         Vector3 spot = Vector3.zero;
         bool found = false;
-        for (float dist = 2000f; dist <= 20000f && !found; dist += 250f)
+        float need = 0f;
+        for (int d = 0; d < DepthLadder.Length && !found; d++)
         {
-            for (int b = 0; b < 16 && !found; b++)
-            {
-                float ang = b / 16f * Mathf.PI * 2f;
-                Vector3 c = new Vector3(Mathf.Sin(ang) * dist, 0f, Mathf.Cos(ang) * dist);
-                if (DeepEverywhere(c, PatchHalf)) { spot = c; found = true; }
-            }
+            need = DepthLadder[d];
+            for (float dist = 2000f; dist <= 20000f && !found; dist += 250f)
+                for (int b = 0; b < 16 && !found; b++)
+                {
+                    float ang = b / 16f * Mathf.PI * 2f;
+                    Vector3 c = new Vector3(Mathf.Sin(ang) * dist, 0f, Mathf.Cos(ang) * dist);
+                    if (DeepEverywhere(c, PatchHalf, need)) { spot = c; found = true; }
+                }
         }
         if (!found) { Debug.LogError("WaveSizeProbe: no deep-water patch found"); yield break; }
+        float2 bedRange = SeabedRange(spot, PatchHalf);
         if (rb != null)
         {
             rb.position = new Vector3(spot.x, 2f, spot.z);
@@ -128,8 +153,14 @@ public class WaveSizeProbe : MonoBehaviour
         sb.AppendLine("deep-water patch at " + spot.ToString("F0") + ", "
             + spot.magnitude.ToString("F0") + " m from origin");
         sb.AppendLine("whole " + (PatchHalf * 2f).ToString("F0")
-            + " m patch is over seabed below " + DeepEnough.ToString("F0")
-            + " m (checked, not assumed); boat " + BoatLength.ToString("F1") + " m");
+            + " m patch is over seabed below " + need.ToString("F0")
+            + " m (checked, not assumed). Seabed under it runs "
+            + bedRange.x.ToString("F0") + " to " + bedRange.y.ToString("F0") + " m");
+        if (need > -100f)
+            sb.AppendLine("   WARNING: no patch deeper than -110 m existed, so the depth-limited");
+        if (need > -100f)
+            sb.AppendLine("   envelope may be capping these numbers. Read them as the CAP, not the spectrum.");
+        sb.AppendLine("boat " + BoatLength.ToString("F1") + " m");
         sb.AppendLine();
 
         int side = Mathf.RoundToInt(PatchHalf * 2f / PatchStep) + 1;

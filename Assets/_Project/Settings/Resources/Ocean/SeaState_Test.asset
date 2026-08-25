@@ -21,6 +21,7 @@ MonoBehaviour:
   swellWavelength: 220
   swellDirectionDeg: -20
   swellSharpness: 6
+  nominalHs: 3.0
   choppiness: 1
   foamThreshold: 0.6
   foamHalflife: 4

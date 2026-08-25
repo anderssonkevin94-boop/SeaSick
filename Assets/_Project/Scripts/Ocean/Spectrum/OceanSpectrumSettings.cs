@@ -30,6 +30,10 @@ namespace SeaSick.Ocean
         [Tooltip("How tight the swell is around its wavelength/direction. Higher = cleaner rollers.")]
         [Range(1f, 16f)] public float swellSharpness = 6f;
 
+        [Header("Scale (declared, then verified)")]
+        [Tooltip("The significant wave height this state is expected to produce, metres. NOT an input to the simulation -- the spectrum decides the real Hs. It exists so the depth-limited envelope knows how tall the sea is without measuring it every frame, and WaveSizeProbe checks the two agree.")]
+        public float nominalHs = 3f;
+
         [Header("Shape")]
         [Tooltip("Horizontal displacement scale (lambda). Sharpens crests; too high folds the surface.")]
         [Range(0f, 2f)] public float choppiness = 1f;
@@ -57,7 +61,7 @@ namespace SeaSick.Ocean
             windDirectionDeg = s.windDirectionDeg; depth = s.depth;
             swellHeight = s.swellHeight; swellWavelength = s.swellWavelength;
             swellDirectionDeg = s.swellDirectionDeg; swellSharpness = s.swellSharpness;
-            choppiness = s.choppiness;
+            choppiness = s.choppiness; nominalHs = s.nominalHs;
             foamThreshold = s.foamThreshold; foamHalflife = s.foamHalflife;
             foamInjection = s.foamInjection;
         }
@@ -75,6 +79,7 @@ namespace SeaSick.Ocean
             swellDirectionDeg = Mathf.LerpAngle(a.swellDirectionDeg, b.swellDirectionDeg, t);
             swellSharpness = Mathf.Lerp(a.swellSharpness, b.swellSharpness, t);
             choppiness = Mathf.Lerp(a.choppiness, b.choppiness, t);
+            nominalHs = Mathf.Lerp(a.nominalHs, b.nominalHs, t);
             foamThreshold = Mathf.Lerp(a.foamThreshold, b.foamThreshold, t);
             foamHalflife = Mathf.Lerp(a.foamHalflife, b.foamHalflife, t);
             foamInjection = Mathf.Lerp(a.foamInjection, b.foamInjection, t);
