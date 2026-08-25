@@ -62,6 +62,19 @@ Shader "SeaSick/Ocean"
                 return SAMPLE_TEXTURE2D_LOD(_Ocean_SimTex, sampler_Ocean_SimTex, uv, 0).rg;
             }
 
+            // ---- hull water clip -------------------------------------------
+            // In mountainous seas the surface rises above the deck and renders
+            // straight through it, so you see the sea inside the boat. Rather
+            // than a stencil pass (which needs an extra draw and gets the
+            // near-field wrong — ocean BETWEEN the camera and the boat lands in
+            // the same screen pixels), the ocean simply refuses to exist inside
+            // the hull's inboard volume. One matrix and two vectors, an ellipse
+            // in plan because a hull is not a box, four instructions a pixel,
+            // no draw call and no render-order rules to get wrong.
+            float4x4 _HullClipWorldToLocal;
+            float4 _HullClipCentre;    // xyz centre in ship space, w unused
+            float4 _HullClipSize;      // x,z semi-axes, y half-height, w on/off
+
             CBUFFER_START(UnityPerMaterial)
             half4 _DeepColor, _ShallowColor, _SubsurfaceColor;
             half4 _StormDeep, _StormShallow, _StormSubsurface;
@@ -152,6 +165,16 @@ Shader "SeaSick/Ocean"
 
             half4 Frag(Varyings input) : SV_Target
             {
+                if (_HullClipSize.w > 0.5)
+                {
+                    float3 hp = mul(_HullClipWorldToLocal,
+                                    float4(input.positionWS, 1.0)).xyz - _HullClipCentre.xyz;
+                    float plan = (hp.x * hp.x) / (_HullClipSize.x * _HullClipSize.x)
+                               + (hp.z * hp.z) / (_HullClipSize.z * _HullClipSize.z);
+                    // Inside the plan ellipse AND within the deck-to-rail band.
+                    clip(max(plan - 1.0, abs(hp.y) - _HullClipSize.y));
+                }
+
                 float env = input.data.x;
                 float fade = input.data.y;
                 float2 xz = input.positionWS.xz;

@@ -20,7 +20,10 @@ public static class SetPaddleBoatImport
         mi.importCameras = false;
         mi.importLights = false;
         mi.importAnimation = false;
-        mi.isReadable = false;
+        // Readable: SetupPaddleBoat samples the deck mesh to stand the crew
+        // and guns on the actual planking. The deck has camber and sheer and
+        // spans 0.67 m in height, so one deck constant floats them amidships.
+        mi.isReadable = true;
         mi.materialImportMode = ModelImporterMaterialImportMode.ImportStandard;
         mi.materialLocation = ModelImporterMaterialLocation.InPrefab;
         mi.meshCompression = ModelImporterMeshCompression.Off;

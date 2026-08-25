@@ -43,6 +43,8 @@ public static class SetupPaddleBoat
 
     const float WheelRadius = 1.265f;
     const float MaxSpeed = 7.5f;
+    /// How far inboard of the deck edge a gun's centre sits.
+    const float GunInset = 0.45f;
 
     public static string Execute()
     {
@@ -92,6 +94,13 @@ public static class SetupPaddleBoat
         }
         sb.AppendLine("grandchild transforms corrected: " + fixedUp);
 
+        LoadDeck(ship.transform, visual.transform);
+        sb.AppendLine(deckVerts != null
+            ? "deck sampled: " + deckVerts.Length + " verts, y "
+                + DeckYAt(0f, 0f, DeckY).ToString("F2") + " amidships, "
+                + DeckYAt(0f, 4f, DeckY).ToString("F2") + " forward"
+            : "DECK NOT READABLE — everything will stand at the flat fallback");
+
         // --- wheels, bound by where they actually are -----------------------
         Transform wheelA = FindDeep(visual.transform, "PaddleWheel_Port");
         Transform wheelB = FindDeep(visual.transform, "PaddleWheel_Stbd");
@@ -118,6 +127,12 @@ public static class SetupPaddleBoat
         sb.AppendLine("PaddleDrive wired, wheel radius " + WheelRadius);
 
         // --- lanterns swing on their chains ---------------------------------
+        // The pivot is parented to the SHIP, not to the model: LanternSwing
+        // does its pendulum in hull axes, and the visual root carries a 90
+        // degree yaw that would otherwise swap fore-and-aft for athwartships.
+        // It also keeps the pivot's rest pose identity, which is what the
+        // first attempt got wrong — pivot at (90,0,0) on top of a lamp at
+        // (89.98,0,0) is 180 degrees out, and both lanterns hung sideways.
         int lanterns = 0;
         string[] lampNames = { "LanternBow", "LanternStern" };
         for (int i = 0; i < lampNames.Length; i++)
@@ -127,13 +142,15 @@ public static class SetupPaddleBoat
             Renderer r = lamp.GetComponent<Renderer>();
             if (r == null) continue;
 
-            // The pivot is the top of the chain. Placed in WORLD space so the
-            // model's axis convention never has to be reasoned about.
+            Vector3 chainTop = r.bounds.center + Vector3.up * r.bounds.extents.y;
+
             GameObject pivot = new GameObject(lampNames[i] + "_Pivot");
-            pivot.transform.SetParent(lamp.parent, false);
-            pivot.transform.position = r.bounds.center + Vector3.up * r.bounds.extents.y;
-            pivot.transform.rotation = lamp.rotation;
+            pivot.transform.SetParent(ship.transform, false);
+            pivot.transform.localPosition = ship.transform.InverseTransformPoint(chainTop);
+            pivot.transform.localRotation = Quaternion.identity;
+
             lamp.SetParent(pivot.transform, true);
+            HangFromChain(lamp, pivot.transform);
 
             LanternSwing swing = pivot.AddComponent<LanternSwing>();
             var lso = new SerializedObject(swing);
@@ -210,7 +227,8 @@ public static class SetupPaddleBoat
         if (hold != null)
         {
             var hso = new SerializedObject(hold);
-            hso.FindProperty("stackOrigin").vector3Value = new Vector3(0f, DeckY, -0.6f);
+            hso.FindProperty("stackOrigin").vector3Value =
+                new Vector3(0f, DeckYAt(0f, -0.6f, DeckY), -0.6f);
             hso.ApplyModifiedPropertiesWithoutUndo();
             sb.AppendLine("cargo stack origin amidships");
         }
@@ -220,11 +238,43 @@ public static class SetupPaddleBoat
         if (guns != null)
         {
             var gso = new SerializedObject(guns);
-            gso.FindProperty("forePosition").vector2Value = new Vector2(1.30f, 3.40f);
-            gso.FindProperty("aftPosition").vector2Value = new Vector2(1.30f, 1.20f);
-            gso.FindProperty("deckHeight").floatValue = DeckY;
+            // Inboard of where the planking actually ends at each station —
+            // at the bow the deck narrows, and a fixed offset put the fore
+            // guns out through the railing.
+            float foreZ = 3.40f, aftZ = 1.20f;
+            float foreX = Mathf.Max(0.55f, DeckHalfWidthAt(foreZ, 1.61f) - GunInset);
+            float aftX = Mathf.Max(0.55f, DeckHalfWidthAt(aftZ, 1.61f) - GunInset);
+            // One deck height for the battery, taken where the guns are.
+            float gunDeck = Mathf.Min(DeckYAt(foreX, foreZ, DeckY), DeckYAt(aftX, aftZ, DeckY));
+            gso.FindProperty("forePosition").vector2Value = new Vector2(foreX, foreZ);
+            gso.FindProperty("aftPosition").vector2Value = new Vector2(aftX, aftZ);
+            gso.FindProperty("deckHeight").floatValue = gunDeck;
+            sb.AppendLine("guns at x " + foreX.ToString("F2") + "/" + aftX.ToString("F2")
+                + ", deck " + gunDeck.ToString("F2"));
             gso.ApplyModifiedPropertiesWithoutUndo();
-            sb.AppendLine("guns repositioned for the 10.4 m deck");
+
+        }
+
+        // --- keep the sea out of the boat -----------------------------------
+        // Sized off the real deck: the volume runs from just under the
+        // planking up past the rail, and is kept inside the deck's own plan so
+        // it can never cut into the sea outside the hull.
+        HullWaterClip clip = ship.GetComponent<HullWaterClip>();
+        if (clip == null) clip = ship.AddComponent<HullWaterClip>();
+        {
+            float deckLo = DeckYAt(0f, 0f, DeckY);
+            float railTop = 2.11f;
+            float halfH = (railTop - (deckLo - 0.25f)) * 0.5f;
+            float midY = (railTop + (deckLo - 0.25f)) * 0.5f;
+            // Inboard of the planking, and short of the stem and transom, so
+            // the ellipse stays strictly inside the hull.
+            float axisX = Mathf.Max(0.5f, DeckHalfWidthAt(0f, 1.61f) - 0.10f);
+            float axisZ = 4.9f;
+            clip.Configure(new Vector3(0f, midY, 0.25f), new Vector2(axisX, axisZ), halfH);
+            EditorUtility.SetDirty(clip);
+            sb.AppendLine("hull water clip: centre y " + midY.ToString("F2")
+                + ", axes " + axisX.ToString("F2") + " x " + axisZ.ToString("F2")
+                + ", half-height " + halfH.ToString("F2"));
         }
 
         // --- the camera frames a 12 m boat, not a 21 m one -------------------
@@ -258,22 +308,27 @@ public static class SetupPaddleBoat
         Vector3 helmLocal = new Vector3(0f, DeckY, -3.0f);
         Renderer helmR = helm != null ? helm.GetComponent<Renderer>() : null;
         if (helmR != null) helmLocal = ship.transform.InverseTransformPoint(helmR.bounds.center);
-        BuildHand(ship.transform, new Vector3(0f, DeckY, helmLocal.z - 0.75f));
-        sb.AppendLine("helmsman standing at z " + (helmLocal.z - 0.75f).ToString("F2"));
+        float handZ = helmLocal.z - 0.75f;
+        float handY = DeckYAt(0f, handZ, DeckY);
+        BuildHand(ship.transform, new Vector3(0f, handY, handZ));
+        sb.AppendLine("helmsman standing at z " + handZ.ToString("F2") + ", deck y " + handY.ToString("F2"));
 
         // --- crew stand on THIS deck ----------------------------------------
         // Their stations are scene-serialised from the 21 m sloop, so without
         // this they hang in the air off the bow. CannonBattery re-posts the
         // gunners at runtime; these are the resting positions and what edit
         // mode shows.
-        Vector3[] stations =
+        Vector2[] spots =
         {
-            new Vector3(-1.20f, DeckY,  3.20f),
-            new Vector3( 1.20f, DeckY,  3.20f),
-            new Vector3(-1.20f, DeckY,  1.00f),
-            new Vector3( 1.20f, DeckY,  1.00f),
-            new Vector3( 0.00f, DeckY, -1.60f),
+            new Vector2(-1.05f,  3.20f),
+            new Vector2( 1.05f,  3.20f),
+            new Vector2(-1.05f,  1.00f),
+            new Vector2( 1.05f,  1.00f),
+            new Vector2( 0.00f, -1.60f),
         };
+        Vector3[] stations = new Vector3[spots.Length];
+        for (int i = 0; i < spots.Length; i++)
+            stations[i] = new Vector3(spots[i].x, DeckYAt(spots[i].x, spots[i].y, DeckY), spots[i].y);
         var hands = ship.GetComponentsInChildren<SeaSick.Crew.CrewAgent>(true);
         for (int i = 0; i < hands.Length; i++)
         {
@@ -360,6 +415,110 @@ public static class SetupPaddleBoat
             ? ship.InverseTransformPoint(r.bounds.center)
             : ship.InverseTransformPoint(part.position);
         return string.Format("({0:F2}, {1:F2}, {2:F2})", p.x, p.y, p.z);
+    }
+
+    /// Hang a lantern properly, by MEASURING it rather than deriving Euler
+    /// angles through an axis conversion that has already been wrong twice.
+    /// Point the mesh's longest axis straight down, work out which end is the
+    /// chain (it is the thinner one) and put that end up, then slide the lamp
+    /// so the top of the chain sits on the pivot.
+    static void HangFromChain(Transform lamp, Transform pivot)
+    {
+        MeshFilter mf = lamp.GetComponent<MeshFilter>();
+        Renderer r = lamp.GetComponent<Renderer>();
+        if (mf == null || mf.sharedMesh == null || r == null) return;
+        Mesh m = mf.sharedMesh;
+
+        Vector3 ext = m.bounds.size;
+        Vector3 longAxis = Vector3.forward;
+        if (ext.x >= ext.y && ext.x >= ext.z) longAxis = Vector3.right;
+        else if (ext.y >= ext.z) longAxis = Vector3.up;
+
+        lamp.localPosition = Vector3.zero;
+        lamp.localRotation = Quaternion.FromToRotation(longAxis, Vector3.down);
+
+        // Which end is the chain? Compare how far the mesh spreads sideways
+        // in each half along the long axis; the chain is the thin end.
+        if (m.isReadable)
+        {
+            Vector3[] v = m.vertices;
+            float mid = Vector3.Dot(m.bounds.center, longAxis);
+            float spreadHi = 0f, spreadLo = 0f;
+            int nHi = 0, nLo = 0;
+            for (int i = 0; i < v.Length; i++)
+            {
+                float along = Vector3.Dot(v[i], longAxis);
+                Vector3 side = v[i] - longAxis * along;
+                if (along >= mid) { spreadHi += side.magnitude; nHi++; }
+                else { spreadLo += side.magnitude; nLo++; }
+            }
+            if (nHi > 0) spreadHi /= nHi;
+            if (nLo > 0) spreadLo /= nLo;
+            // After FromToRotation the +longAxis end points DOWN. The thin
+            // end belongs up, so flip when the thin end is the one facing down.
+            bool thinEndIsDown = spreadHi < spreadLo;
+            if (thinEndIsDown)
+                lamp.localRotation = Quaternion.FromToRotation(longAxis, Vector3.up);
+        }
+
+        // Slide it so the top of the chain meets the pivot.
+        Vector3 top = r.bounds.center + Vector3.up * r.bounds.extents.y;
+        lamp.position += pivot.position - top;
+    }
+
+    // ---- the deck is not flat -------------------------------------------
+    // It has camber and sheer and spans 0.67 m in height, so one deck
+    // constant leaves everything amidships standing in the air. These sample
+    // the real planking.
+    static Vector3[] deckVerts;
+    static Transform deckT, shipT;
+
+    static void LoadDeck(Transform ship, Transform visual)
+    {
+        deckVerts = null; deckT = null; shipT = ship;
+        Transform d = FindDeep(visual, "DeckPlanks");
+        if (d == null) return;
+        MeshFilter mf = d.GetComponent<MeshFilter>();
+        if (mf == null || mf.sharedMesh == null || !mf.sharedMesh.isReadable) return;
+        Mesh m = mf.sharedMesh;
+        Vector3[] v = m.vertices;
+        Vector3[] local = new Vector3[v.Length];
+        for (int i = 0; i < v.Length; i++)
+            local[i] = ship.InverseTransformPoint(d.TransformPoint(v[i]));
+        deckVerts = local;
+        deckT = d;
+    }
+
+    /// Highest deck vertex near this spot, in ship-local metres.
+    static float DeckYAt(float x, float z, float fallback)
+    {
+        if (deckVerts == null) return fallback;
+        float best = float.MinValue;
+        for (int i = 0; i < deckVerts.Length; i++)
+        {
+            Vector3 p = deckVerts[i];
+            float dx = p.x - x, dz = p.z - z;
+            if (dx * dx + dz * dz > 0.36f) continue;
+            if (p.y > best) best = p.y;
+        }
+        return best > float.MinValue ? best : fallback;
+    }
+
+    /// How far out the planking reaches at this station, so a gun is placed
+    /// inboard of the deck edge instead of hanging through the railing where
+    /// the hull narrows toward the bow.
+    static float DeckHalfWidthAt(float z, float fallback)
+    {
+        if (deckVerts == null) return fallback;
+        float best = 0f;
+        for (int i = 0; i < deckVerts.Length; i++)
+        {
+            Vector3 p = deckVerts[i];
+            if (Mathf.Abs(p.z - z) > 0.5f) continue;
+            float ax = Mathf.Abs(p.x);
+            if (ax > best) best = ax;
+        }
+        return best > 0.1f ? best : fallback;
     }
 
     static Transform FindDeep(Transform root, string name)

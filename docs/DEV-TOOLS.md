@@ -67,6 +67,8 @@ shader property defaults. Re-run these after changing any default.
 | `ShoreProbe.cs` | **Terrain→ocean gate** (play mode, Sea.unity): severity forced to 1.0; surface RMS at deep water / shoreline / land must be intact / <10 % / 0; CPU shore factor vs exact height. Shot of the beach. | `/tmp/seasick-shore.txt`, `-shore.png` |
 | `WorldProbe.cs` | **Populator gate** (play mode, Sea.unity): islands found, home + Stockpile, centres on land, outline at the waterline, beaches, props grounded, reefs/monsters in water, raiders, spawn landable. | `/tmp/seasick-world.txt` |
 | `IslandShot.cs` | Look shots of the home island from the sea, the beach, overhead and 900 m east, with the ship pinned so the streamer stays centred. Play mode, Sea.unity. | `/tmp/seasick-island-0..3.png` |
+| `StormDeckShot.cs` | **Hull-water-clip A/B**: freezes her kinematic at a pinned wave phase with the sea held 0.50 m over the deck, then shoots the same frame with the clip on and off. The rig exists because the first version *waited for a natural crest* and fired when the water was 0.47 m BELOW the deck — an A/B on a condition that never happened. | `/tmp/seasick-deck-clip-on.png`, `-off.png` |
+| `InspectBoatParts.cs` | What the boat's parts are doing in the scene: local rotation, **bounds size** and ship-local centre. Bounds size is what tells a lantern hanging down from one lying sideways — a position dump cannot see a rotation fault. | `/tmp/seasick-boatparts.txt` |
 | `PaddleProbe.cs` | **The paddle boat's gate**: resting draft and freeboard light and laden in a pinned calm; that she makes way and the wheel rim speed matches it; that the wheels are genuinely differential at helm; and that with the throttle shut and the helm over they counter-rotate and she comes round on the spot. Play mode, Sea.unity. | `/tmp/seasick-paddle.txt` |
 | `InspectPaddleBoat.cs` | Dumps what Unity actually made of an imported FBX — hierarchy, local transforms, per-part world bounds, and which way the bow points. `Execute` for the boat, `ExecuteCannon` for the gun. Edit mode. | `/tmp/seasick-paddleboat.txt` |
 | `BeachProbe.cs` | **Beach-slope tuning instrument**: re-measures the shore rise per metre over 12 m inland on all 46 bearings of every discovered island, and reports the landable fraction and the count of unlandable islands at five candidate `beachMaxSlope` values, plus the full percentile distribution. Choose the threshold by reading it once instead of rebuilding the world per candidate. Play mode, Sea.unity. | `/tmp/seasick-beach.txt` |
@@ -115,6 +117,11 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   would have been a real 60 fps blocker; the identical run minutes later put
   the same call at **1.07 ms**. Never accept a single worst-frame sample from
   the editor as a finding — run it twice and compare the distributions.
+- **A single deck height is a lie on any real hull.** The paddle boat's deck
+  has camber and sheer and spans 0.67 m; crew, guns and cargo were all placed
+  at its maximum and floated by up to half a metre. Sample the deck mesh under
+  each thing's own feet. The same applies sideways — the deck narrows toward
+  the bow, so a fixed inboard offset put the fore guns out through the railing.
 - **Blender's FBX export converts axes for top-level objects but not for
   GRANDCHILDREN.** With `bake_space_transform=True`, `PaddleWheel` (a direct
   child) came out correctly at `(-Xb, Zb, -Yb)`, while `HelmWheel` and both

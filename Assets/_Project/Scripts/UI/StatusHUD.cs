@@ -13,6 +13,7 @@ namespace SeaSick.UI
     {
         ShipMotor motor;
         HullIntegrity hull;
+        Bilge bilge;
         CrewAgent[] crew;
         VoyageManager voyage;
 
@@ -20,6 +21,7 @@ namespace SeaSick.UI
         {
             motor = FindFirstObjectByType<ShipMotor>();
             hull = motor != null ? motor.GetComponent<HullIntegrity>() : null;
+            bilge = motor != null ? motor.GetComponent<Bilge>() : null;
             crew = motor != null ? motor.GetComponentsInChildren<CrewAgent>(true) : new CrewAgent[0];
             voyage = FindFirstObjectByType<VoyageManager>();
         }
@@ -63,7 +65,10 @@ namespace SeaSick.UI
         void DrawShip(float pad, int u)
         {
             float w = u * 7.5f;
-            float h = u * 3.6f;
+            // Water aboard reads here, under the hull bar, rather than as a
+            // panel over the boat. The row only exists when there is water.
+            bool wet = bilge != null && bilge.Flooding;
+            float h = u * (wet ? 5.3f : 3.6f);
             float x = Screen.width - w - pad;
             float top = pad + MiniMap.ReservedHeight;
             UITheme.Rect(new Rect(x, top, w, h), UITheme.Panel);
@@ -74,6 +79,17 @@ namespace SeaSick.UI
             UITheme.Bar(hullRect, integrity, UITheme.Ramp(1f - integrity));
             GUI.Label(new Rect(x + inner, hullRect.yMax, w, u * 1.2f),
                 $"hull {integrity:P0}", UITheme.Small);
+
+            if (wet)
+            {
+                float wy = hullRect.yMax + u * 1.25f;
+                var waterRect = new Rect(x + inner, wy, w - inner * 2f, u * 0.5f);
+                UITheme.Bar(waterRect, bilge.Bilge01, UITheme.Ramp(bilge.Bilge01));
+                string label = bilge.Bailers > 0
+                    ? $"water {bilge.Bilge01:P0} — {bilge.Bailers} bailing"
+                    : $"water {bilge.Bilge01:P0}";
+                GUI.Label(new Rect(x + inner, waterRect.yMax, w, u * 1.2f), label, UITheme.Small);
+            }
 
             if (voyage != null)
             {

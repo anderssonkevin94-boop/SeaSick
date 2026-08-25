@@ -24,6 +24,7 @@ namespace SeaSick.Ship
         Rigidbody hull;
         Transform hullT;
         Vector3 lastHullVel;
+        Quaternion rest = Quaternion.identity;
 
         // Two independent pendulums: across the ship, and fore and aft.
         float angleX, velX;   // swing fore/aft (rotation about local X)
@@ -33,6 +34,9 @@ namespace SeaSick.Ship
         {
             hull = GetComponentInParent<Rigidbody>();
             hullT = hull != null ? hull.transform : transform.root;
+            // Swing FROM the rest pose. Writing localRotation outright wiped
+            // the pivot's orientation and left both lanterns hanging sideways.
+            rest = transform.localRotation;
             if (hull != null) lastHullVel = hull.linearVelocity;
         }
 
@@ -62,7 +66,7 @@ namespace SeaSick.Ship
             Step(ref angleX, ref velX, restX, omega, dt);
             Step(ref angleZ, ref velZ, restZ, omega, dt);
 
-            transform.localRotation = Quaternion.Euler(angleX, 0f, angleZ);
+            transform.localRotation = rest * Quaternion.Euler(angleX, 0f, angleZ);
         }
 
         void Step(ref float angle, ref float vel, float rest, float omega, float dt)

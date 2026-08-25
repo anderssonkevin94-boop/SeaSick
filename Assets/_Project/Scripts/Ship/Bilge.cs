@@ -103,8 +103,11 @@ namespace SeaSick.Ship
 
         Voyage.VoyageManager voyage;
 
-        /// Contextual, like the rest of this game's HUD: the water level and
-        /// the way out of it only appear once there is water to worry about.
+        /// Contextual, like the rest of this game's HUD. The water level
+        /// itself now reads on the ship panel under the hull bar (StatusHUD) —
+        /// a panel appearing over the boat mid-storm is the thing you are
+        /// trying to look past. What stays here is the jettison BUTTON, which
+        /// has to be under a thumb.
         void OnGUI()
         {
             if (voyage == null) voyage = FindAnyObjectByType<Voyage.VoyageManager>();
@@ -117,17 +120,6 @@ namespace SeaSick.Ship
             // Low and central: in the thumb's reach on a portrait phone, and
             // out of the middle of the sea where it was sitting on the horizon.
             float y = Screen.height * 0.60f;
-
-            if (Flooding)
-            {
-                UITheme.Rect(new Rect(x, y, w, u * 1.9f), UITheme.Panel);
-                var bar = new Rect(x + u * 0.5f, y + u * 0.45f, w - u * 1f, u * 0.5f);
-                UITheme.Bar(bar, Bilge01, UITheme.Ramp(Bilge01));
-                GUI.Label(new Rect(x, y + u * 0.95f, w, u * 1.2f),
-                    Bailers > 0 ? $"water aboard — {Bailers} bailing" : "water aboard",
-                    UITheme.Small2Centered);
-                y += u * 2.3f;
-            }
 
             if (voyage != null && voyage.TotalHeld > 0)
             {
