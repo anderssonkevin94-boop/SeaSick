@@ -69,21 +69,29 @@ namespace SeaSick.Ocean
             return math.lerp(math.lerp(a, b, f.x), math.lerp(c, d, f.x), f.y);
         }
 
-        float4 SampleDisp(float2 xz) =>
+        // Raw, un-enveloped. Kept for the probe's diagnostic split.
+        float4 SampleDispRaw(float2 xz) =>
             Bilinear(disp0, xz * invPatch.x) + Bilinear(disp1, xz * invPatch.y);
 
-        float4 SampleDeriv(float2 xz) =>
-            Bilinear(deriv0, xz * invPatch.x) + Bilinear(deriv1, xz * invPatch.y);
+        // The envelope is now applied PER CASCADE, so it has to go inside the
+        // sum rather than multiplying the total: cascade 1's chop survives
+        // shallow water that flattens cascade 0's swell. See
+        // RegionFieldParams.BottomCoupling.
+        float4 SampleDisp(float2 xz, float2 e) =>
+            e.x * Bilinear(disp0, xz * invPatch.x) + e.y * Bilinear(disp1, xz * invPatch.y);
 
-        float4 SamplePrevDisp(float2 xz) =>
-            Bilinear(prevDisp0, xz * invPatch.x) + Bilinear(prevDisp1, xz * invPatch.y);
+        float4 SampleDeriv(float2 xz, float2 e) =>
+            e.x * Bilinear(deriv0, xz * invPatch.x) + e.y * Bilinear(deriv1, xz * invPatch.y);
+
+        float4 SamplePrevDisp(float2 xz, float2 e) =>
+            e.x * Bilinear(prevDisp0, xz * invPatch.x) + e.y * Bilinear(prevDisp1, xz * invPatch.y);
 
         /// Diagnostic only. The raw cascade 0+1 displacement at a SOURCE
         /// point, with no envelope and no Newton inversion -- the same
         /// SampleDisp the real path uses, exposed so DivergenceProbe can split
         /// a parity failure into its envelope, readback and inversion parts
         /// instead of reporting one number that could be any of the three.
-        public float4 SourceDisp(float2 p) => SampleDisp(p);
+        public float4 SourceDisp(float2 p) => SampleDispRaw(p);
 
         /// Diagnostic only. The regional envelope at a source point.
         public float SourceEnv(float2 p) => region.Evaluate(p, islands, shore);
@@ -100,17 +108,19 @@ namespace SeaSick.Ocean
             // dDz/dx == dDx/dz (both come from kx*kz/|k| h), so J is symmetric
             // with the cross term stored in Displacement.w.
             float2 p = q;
-            float env = 1f;
+            float3 envC = new float3(1f, 1f, 1f);
             float4 d = float4.zero;
             for (int i = 0; i < NewtonIterations; i++)
             {
-                env = region.Evaluate(p, islands, shore);
-                d = SampleDisp(p);
-                float4 dv = SampleDeriv(p);
-                float2 r = p + env * d.xz - q;
-                float j00 = 1f + env * dv.z;
-                float j11 = 1f + env * dv.w;
-                float j01 = env * d.w;
+                envC = region.EvaluateCascades(p, islands, shore);
+                // d and dv arrive already enveloped, per cascade, so the
+                // Jacobian below carries no separate env factor.
+                d = SampleDisp(p, envC.xy);
+                float4 dv = SampleDeriv(p, envC.xy);
+                float2 r = p + d.xz - q;
+                float j00 = 1f + dv.z;
+                float j11 = 1f + dv.w;
+                float j01 = d.w;
                 float det = j00 * j11 - j01 * j01;
                 // det <= 0 is a folding crest: the surface self-intersects and
                 // has no unique inverse there. Clamp and let the residual ride.
@@ -121,12 +131,12 @@ namespace SeaSick.Ocean
                 p -= step;
             }
 
-            env = region.Evaluate(p, islands, shore);
-            d = SampleDisp(p);
-            result.height = env * d.y;
-            result.displacement = new float3(env * d.x, env * d.y, env * d.z);
+            envC = region.EvaluateCascades(p, islands, shore);
+            d = SampleDisp(p, envC.xy);
+            result.height = d.y;
+            result.displacement = new float3(d.x, d.y, d.z);
 
-            float4 derivs = env * SampleDeriv(p);
+            float4 derivs = SampleDeriv(p, envC.xy);
             float2 slope = derivs.xy / math.max(new float2(1f, 1f) + derivs.zw, 0.1f);
             result.normal = math.normalize(new float3(-slope.x, 1f, -slope.y));
 
@@ -143,8 +153,8 @@ namespace SeaSick.Ocean
 
             if (velDt > 1e-5f)
             {
-                float4 dPrev = SamplePrevDisp(p);
-                float3 vel = env * new float3(d.x - dPrev.x, d.y - dPrev.y, d.z - dPrev.z)
+                float4 dPrev = SamplePrevDisp(p, envC.xy);
+                float3 vel = new float3(d.x - dPrev.x, d.y - dPrev.y, d.z - dPrev.z)
                              / velDt;
                 // A spectrum rebuild between the two readback slots makes the
                 // finite difference read a surface JUMP as motion — hundreds

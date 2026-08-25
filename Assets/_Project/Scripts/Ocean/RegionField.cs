@@ -42,39 +42,78 @@ namespace SeaSick.Ocean
         /// islands: xy = centre, z = radius. shore: terrain heights on the
         /// shore grid (length shoreN*shoreN; ignored when shoreN == 0).
         /// MUST match RegionField.hlsl.
-        public float Evaluate(float2 p, NativeArray<float4> islands, NativeArray<float> shore)
+        /// How strongly each cascade's waves feel the sea bed.
+        /// MUST match SS_BottomCoupling in RegionField.hlsl.
+        ///
+        /// SHOALING IS A WAVELENGTH EFFECT, and treating it as a single scalar
+        /// was wrong. A wave feels the bottom when kd is small -- when its
+        /// wavelength is comparable to the depth. In 10 m of water a 300 m
+        /// swell is fully shallow-water, a 30 m wave feels it partly, and a
+        /// 3 m ripple does not feel it at all. Scaling every cascade by one
+        /// factor made inshore water a 300 m swell shrunk to a couple of
+        /// metres: amp/L about 0.005, which is precisely the "flat sheet"
+        /// failure this project already shipped once. The water near the
+        /// islands was not too SMALL, it was too FLAT.
+        ///
+        /// Cascade 0 stays exactly 1.0, so everything already measured and
+        /// gated against the long swell is untouched.
+        ///
+        /// Bands: c0 >= 64 m, c1 16-64 m, c2 0.5-16 m.
+        public static float BottomCoupling(int cascade) =>
+            cascade == 0 ? 1f : cascade == 1 ? 0.40f : 0.12f;
+
+        /// Per-cascade envelope. Only the DEPTH terms differ between cascades;
+        /// distance from home and the island falloff are wavelength-independent.
+        /// MUST match RegionEnvelopeCascades in RegionField.hlsl.
+        public float3 EvaluateCascades(float2 p, NativeArray<float4> islands, NativeArray<float> shore)
         {
             float d = math.distance(p, home);
             float t = math.smoothstep(calmRadius, wildRadius, d);
-            float env = math.lerp(nearScale, farScale, t);
+            float baseEnv = math.lerp(nearScale, farScale, t);
             for (int i = 0; i < islandCount; i++)
             {
                 float s = math.distance(p, islands[i].xy) - islands[i].z;
-                env *= math.smoothstep(0f, shoreFalloff, s);
+                baseEnv *= math.smoothstep(0f, shoreFalloff, s);
             }
-            float wet = 1f;
-            float cap = float.MaxValue;
+
+            float shoal = 1f, wet = 1f, depth = 1e9f;
             if (shoreN > 0)
             {
                 float3 swd = ShoreWetDepth(p, shore);
-                env *= swd.x;
-                wet = swd.y;
-                // Depth limit: no wave taller than a fraction of the water
-                // under it. This is the shoaling/breaking rule, and it is what
-                // makes seabed clipping structurally impossible at ANY wave
-                // size rather than something to re-tune every time the sea
-                // grows. It also reads as gameplay for free -- the sea visibly
-                // lies down as you come in off the deep, and gets up again as
-                // the bottom falls away.
-                if (waveHs > 0.01f)
-                    cap = math.max(0f, breakFraction * swd.z / waveHs);
+                shoal = swd.x; wet = swd.y; depth = swd.z;
             }
             // Never dead flat. Sheltered water still has chop; only land is
-            // glass. Twin of RegionEnvelope's max() in RegionField.hlsl.
-            // The cap is applied last so it beats the chop floor: in half a
-            // metre of water there is no chop to have.
-            return math.min(math.max(env, chopFloor * wet), cap);
+            // glass. Twin of the max() in RegionField.hlsl.
+            float floorTerm = chopFloor * wet;
+
+            float3 result = default;
+            for (int c = 0; c < 3; c++)
+            {
+                float bw = BottomCoupling(c);
+                float env = baseEnv * math.lerp(1f, shoal, bw);
+                // Depth limit: no wave taller than a fraction of the water
+                // under it -- the shoaling/breaking rule, which makes seabed
+                // clipping structurally impossible at ANY wave size rather
+                // than something to re-tune every time the sea grows. Capped
+                // against the height THIS cascade carries, not the whole sea:
+                // 5 m of chop in 10 m of water is not breaking just because a
+                // 70 m swell would be.
+                //
+                // The cap is applied last so it beats the chop floor: in half
+                // a metre of water there is no chop to have.
+                float cap = float.MaxValue;
+                if (shoreN > 0 && waveHs > 0.01f)
+                    cap = math.max(0f, breakFraction * depth / (waveHs * bw));
+                result[c] = math.min(math.max(env, floorTerm), cap);
+            }
+            return result;
         }
+
+        /// Cascade 0's envelope: the long swell, and what every gameplay reader
+        /// means by "how big is the sea here". Identical to the pre-cascade
+        /// version because BottomCoupling(0) is exactly 1.
+        public float Evaluate(float2 p, NativeArray<float4> islands, NativeArray<float> shore)
+            => EvaluateCascades(p, islands, shore).x;
 
         /// Shoal factor, "is there water here at all", and the depth itself,
         /// from one lookup. The chop floor needs the second (the sea keeps

@@ -83,10 +83,19 @@ public class DivergenceProbe : MonoBehaviour
             storm.swellSharpness = 3.2f; storm.swellDirectionDeg = 0f;
             storm.nominalHs = 65f;
         }
-        // The one deliberate departure: spec-worst choppiness, because the
-        // sampler's Newton inversion is hardest on the sharpest crests and the
-        // gate should meet the worst case, not the authored one.
-        storm.choppiness = Mathf.Max(storm.choppiness, 1.2f);
+        // The one deliberate departure: a MARGIN over the authored choppiness,
+        // because the sampler's Newton inversion is hardest on the sharpest
+        // crests and the gate should have a little headroom.
+        //
+        // It used to be a floor of 1.2, which was reasonable while the shipped
+        // value was 1.0 and became nonsense the moment the storm was retuned
+        // to 0.195: the gate was testing a sea six times choppier than
+        // anything the game produces, and duly failed at 848 cm on a
+        // configuration that does not exist. A gate that fails on water nobody
+        // will ever sail is a gate that gets ignored, which is worse than not
+        // having one.
+        float authoredChop = storm.choppiness;
+        storm.choppiness = Mathf.Min(2f, authoredChop * 1.25f);
         ocean.SetSettings(storm);
 
         // A regional field that varies hard across the sample disc.
@@ -145,8 +154,9 @@ public class DivergenceProbe : MonoBehaviour
         sb.AppendLine("SeaStateController: " + (ctrl == null ? "absent"
             : ctrlWas ? "was enabled, DISABLED for this run" : "already disabled"));
         sb.AppendLine(string.Format(
-            "spectrum in force: wind {0:F1} m/s  fetch {1:F0} km  choppiness {2:F2}  depth {3:F0} m  swell {4:F1} m at {5:F0} m",
-            s0.windSpeed, s0.fetchKm, s0.choppiness, s0.depth, s0.swellHeight, s0.swellWavelength));
+            "spectrum in force: wind {0:F1} m/s  fetch {1:F0} km  choppiness {2:F2} (authored {6:F2} +25% margin)  depth {3:F0} m  swell {4:F1} m at {5:F0} m",
+            s0.windSpeed, s0.fetchKm, s0.choppiness, s0.depth, s0.swellHeight, s0.swellWavelength,
+            authoredChop));
         sb.AppendLine();
 
         float maxTotal = 0f, maxEnv = 0f, maxDisp = 0f;

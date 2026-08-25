@@ -29,7 +29,21 @@ namespace SeaSick.Voyage
         float messageUntil;
         GUIStyle style;
 
+        bool warnedNotBuilt;
+
         void Start()
+        {
+            try { Build(); }
+            catch (System.Exception e)
+            {
+                // Swallowed deliberately, and REPORTED. An exception escaping
+                // Start leaves the arrays null and the only visible symptom is
+                // Update throwing forever, which says nothing about the cause.
+                Debug.LogError("SalvageSpawner: Start failed, no salvage this session -- " + e);
+            }
+        }
+
+        void Build()
         {
             if (ship == null) ship = FindFirstObjectByType<ShipMotor>();
             if (voyage == null) voyage = FindFirstObjectByType<VoyageManager>();
@@ -84,6 +98,21 @@ namespace SeaSick.Voyage
         void Update()
         {
             if (ship == null) return;
+            // Start builds these. If it threw partway they stay null and this
+            // used to throw a NullReferenceException EVERY FRAME, for the whole
+            // session -- thousands of identical lines burying anything useful
+            // in the console. One line, then silence.
+            if (crates == null || flotsam == null)
+            {
+                if (!warnedNotBuilt)
+                {
+                    warnedNotBuilt = true;
+                    Debug.LogWarning("SalvageSpawner: Start did not finish building its "
+                        + "floaters, so there is no salvage this session. See the error "
+                        + "logged by Start above for the cause.");
+                }
+                return;
+            }
             float t = Time.time;
             Vector3 shipPos = ship.transform.position;
 

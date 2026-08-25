@@ -89,18 +89,26 @@ Shader "SeaSick/Ocean"
             {
                 float4 positionHCS : SV_POSITION;
                 float3 positionWS : TEXCOORD0;
-                float4 data : TEXCOORD1;   // x = env, y = fade, z = |dispXZ|, w = fog
+                float4 data : TEXCOORD1;   // x = env(cascade 0), y = fade, z = |dispXZ|, w = fog
                 float heightY : TEXCOORD2;
+                // Interpolated rather than recomputed in the fragment: the
+                // envelope needs a shore-texture fetch, and paying that per
+                // pixel to get a value that varies over hundreds of metres
+                // would be silly.
+                float3 envC : TEXCOORD3;   // per-cascade envelope
             };
 
-            float3 SampleDisplacement(float2 worldXZ, float fade, out float dispLen)
+            // The envelope multiplies INSIDE the cascade sum now, because it is
+            // per cascade: shallow water flattens the long swell while leaving
+            // the short chop alone, which is what a real shoreline does.
+            float3 SampleDisplacement(float2 worldXZ, float fade, float3 envC, out float dispLen)
             {
                 float3 d = 0;
                 dispLen = 0;
                 [unroll]
                 for (int c = 0; c < 3; c++)
                 {
-                    float w = _Ocean_CascadeWeights[c] * fade;
+                    float w = _Ocean_CascadeWeights[c] * fade * envC[c];
                     if (w <= 0.001) continue;
                     float2 uv = worldXZ / _Ocean_PatchSizes[c];
                     float4 s = SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Displacement,
@@ -111,13 +119,13 @@ Shader "SeaSick/Ocean"
                 return d;
             }
 
-            float4 SampleDerivs(float2 worldXZ, float fade)
+            float4 SampleDerivs(float2 worldXZ, float fade, float3 envC)
             {
                 float4 dv = 0;
                 [unroll]
                 for (int c = 0; c < 3; c++)
                 {
-                    float w = _Ocean_CascadeWeights[c] * fade;
+                    float w = _Ocean_CascadeWeights[c] * fade * envC[c];
                     if (w <= 0.001) continue;
                     float2 uv = worldXZ / _Ocean_PatchSizes[c];
                     dv += w * SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Derivatives,
@@ -150,15 +158,17 @@ Shader "SeaSick/Ocean"
                 float3 ws = TransformObjectToWorld(input.positionOS.xyz);
                 float dist = distance(ws.xz, GetCameraPositionWS().xz);
                 float fade = 1.0 - smoothstep(_Ocean_FadeParams.x, _Ocean_FadeParams.y, dist);
-                float env = RegionEnvelope(ws.xz);
+                float3 envC = RegionEnvelopeCascades(ws.xz);
                 float dispLen;
-                float3 disp = env * SampleDisplacement(ws.xz, fade, dispLen);
+                float3 disp = SampleDisplacement(ws.xz, fade, envC, dispLen);
                 disp.y += SampleSim(ws.xz).r; // wakes & splash rings
                 ws += disp;
                 o.positionWS = ws;
                 o.heightY = disp.y;
                 o.positionHCS = TransformWorldToHClip(ws);
-                o.data = float4(env, fade, dispLen * env,
+                o.envC = envC;
+                // dispLen already carries the envelope, per cascade.
+                o.data = float4(envC.x, fade, dispLen,
                     ComputeFogFactor(o.positionHCS.z));
                 return o;
             }
@@ -181,7 +191,7 @@ Shader "SeaSick/Ocean"
 
                 // Per-pixel normals from the derivative bands. The horizontal
                 // squeeze term keeps crests sharp instead of shaded like domes.
-                float4 dv = env * SampleDerivs(xz, fade);
+                float4 dv = SampleDerivs(xz, fade, input.envC);
                 float2 slope = dv.xy / max(float2(1.0, 1.0) + dv.zw, 0.15);
                 // Ripple sim contributes slope by finite difference + foam.
                 float2 sim = SampleSim(xz);

@@ -34,19 +34,23 @@ void VerifySample(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= _Count) return;
     float2 x = QueryPos[id.x];
-    float env = RegionEnvelope(x);
+    // Per-cascade now, matching the renderer and the Burst sampler.
+    float3 envC = RegionEnvelopeCascades(x);
 
-    float3 d01 = 0;
+    float3 raw01 = 0;      // un-enveloped, for the probe's three-way split
+    float3 d01 = 0;        // enveloped, what the renderer actually displaces by
     [unroll]
     for (int c = 0; c < 2; c++)
     {
         float2 uv = x / _PatchSizes[c];
-        d01 += Displacement.SampleLevel(linearRepeatSampler, float3(uv, c), 0).xyz;
+        float3 s = Displacement.SampleLevel(linearRepeatSampler, float3(uv, c), 0).xyz;
+        raw01 += s;
+        d01 += envC[c] * s;
     }
-    float y2 = Displacement.SampleLevel(linearRepeatSampler,
+    float y2 = envC.z * Displacement.SampleLevel(linearRepeatSampler,
         float3(x / _PatchSizes[2], 2), 0).y;
 
-    float3 p = float3(x.x, 0, x.y) + env * float3(d01.x, d01.y, d01.z);
-    OutPos[id.x] = float4(p, env * y2);
-    OutDiag[id.x] = float4(env, d01.x, d01.y, d01.z);
+    float3 p = float3(x.x, 0, x.y) + d01;
+    OutPos[id.x] = float4(p, y2);
+    OutDiag[id.x] = float4(envC.x, raw01.x, raw01.y, raw01.z);
 }
