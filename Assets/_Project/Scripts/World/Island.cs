@@ -10,6 +10,21 @@ namespace SeaSick.World
     {
         public static readonly List<Island> All = new List<Island>();
 
+        /// Bearings the shoreline is measured on. This outlived the radial
+        /// mesher it came from: the terrain populator marches out on these
+        /// bearings, and every query below indexes by sector.
+        public const int Sectors = 46;
+
+        /// The measured shape of one island — how far the shore is on each
+        /// bearing, and whether that bearing can be landed on. Measured off
+        /// the terrain height field, never authored.
+        public struct Profile
+        {
+            public float radius;       // mean shoreline distance
+            public float[] outline;    // shoreline distance per sector
+            public bool[] hasBeach;    // can the ship land on this bearing?
+        }
+
         [SerializeField] string resourceName = "Timber";
         [SerializeField] float remaining;
         [SerializeField] float radius = 40f;
@@ -27,7 +42,7 @@ namespace SeaSick.World
         bool hasHill;
         readonly List<GameObject> props = new List<GameObject>();
 
-        IslandMeshBuilder.Profile profile;
+        Profile profile;
         bool hasProfile;
 
         /// Terrain-backed islands: the world height function (x, z) → y.
@@ -36,7 +51,7 @@ namespace SeaSick.World
         public static System.Func<float, float, float> TerrainHeight;
         /// Max rise per metre over the 12 m inland of the waterline for a
         /// landing to count as a beach (terrain-backed islands).
-        public static float BeachMaxSlope = 0.7f;
+        public static float BeachMaxSlope = 0.5f;
         int beachCacheFrame = -1; Vector3 beachCachePos; bool beachCache;
 
         /// True only when the profile is fully populated. The arrays are what
@@ -46,25 +61,18 @@ namespace SeaSick.World
             && profile.outline != null && profile.outline.Length > 0
             && profile.hasBeach != null && profile.hasBeach.Length > 0;
 
-        public void SetProfile(IslandMeshBuilder.Profile p)
-        {
-            profile = p;
-            hasProfile = p.outline != null && p.outline.Length > 0;
-            radius = p.radius;
-        }
-
         /// Outline + beach flags per sector, measured off the terrain.
         public void SetTerrainProfile(float[] outline, bool[] hasBeach, float meanRadius)
         {
-            profile = new IslandMeshBuilder.Profile { outline = outline, hasBeach = hasBeach, radius = meanRadius };
+            profile = new Profile { outline = outline, hasBeach = hasBeach, radius = meanRadius };
             hasProfile = true;
             radius = meanRadius;
         }
 
         static int SectorOf(float angleRad)
         {
-            int s = Mathf.RoundToInt(angleRad / (Mathf.PI * 2f) * IslandMeshBuilder.Sectors);
-            return ((s % IslandMeshBuilder.Sectors) + IslandMeshBuilder.Sectors) % IslandMeshBuilder.Sectors;
+            int s = Mathf.RoundToInt(angleRad / (Mathf.PI * 2f) * Sectors);
+            return ((s % Sectors) + Sectors) % Sectors;
         }
 
         static float BearingTo(Vector3 from, Vector3 to)
@@ -202,15 +210,6 @@ namespace SeaSick.World
                 float z = transform.position.z + Mathf.Cos(angleRad) * d;
                 return new Vector3(x, TerrainHeight(x, z), z);
             }
-            if (HasProfile)
-            {
-                int s = SectorOf(angleRad);
-                float outR = profile.outline[s];
-                float d = Mathf.Min(distFromCentre, outR * 0.96f);
-                float y = IslandMeshBuilder.HeightAt(profile, s, d / Mathf.Max(0.001f, outR));
-                return transform.position + new Vector3(Mathf.Sin(angleRad) * d, y, Mathf.Cos(angleRad) * d);
-            }
-
             // Legacy dome shape (the authored home island).
             float dd = Mathf.Min(distFromCentre, radius * 0.97f);
             float t = dd / radius;

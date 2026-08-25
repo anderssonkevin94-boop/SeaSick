@@ -25,6 +25,25 @@ namespace SeaSick.Terrain
         public Island Home { get; private set; }
         public bool Done { get; private set; }
 
+        /// The flood-fill grid, kept rather than thrown away: 0 = water,
+        /// -1 = land too small to be an island, k > 0 = component k-1. The
+        /// minimap draws this instead of a circle per island, because a
+        /// radius cannot describe a crescent (see MiniMap).
+        public int[] LandMask { get; private set; }
+        public int MaskSize { get; private set; }
+        public float MaskCell { get; private set; }
+        public Vector2 MaskOrigin { get; private set; }
+
+        Island[] byComponent;
+
+        /// The island a LandMask value belongs to, or null for water and for
+        /// land that never became an island.
+        public Island IslandForMask(int maskValue)
+        {
+            if (maskValue <= 0 || byComponent == null || maskValue > byComponent.Length) return null;
+            return byComponent[maskValue - 1];
+        }
+
         TerrainParams prm;
         NativeArray<float> lut;
 
@@ -41,8 +60,12 @@ namespace SeaSick.Terrain
 
             Vector3 home = homePoint != null ? homePoint.position : Vector3.zero;
             var islands = Discover(new float2(home.x, home.z));
+            // Sorting reorders the list but not the mask's component ids, so
+            // the mapping is rebuilt by id, not by position in the list.
             islands.Sort((a, b) => a.distToHome.CompareTo(b.distToHome));
-            for (int i = 0; i < islands.Count; i++) BuildIsland(islands[i], i == 0, i, islands.Count);
+            byComponent = new Island[islands.Count];
+            for (int i = 0; i < islands.Count; i++)
+                byComponent[islands[i].id] = BuildIsland(islands[i], i == 0, i, islands.Count);
             IslandCount = islands.Count;
 
             BuildMonsters(home);
@@ -62,6 +85,7 @@ namespace SeaSick.Terrain
             public float2 centre;
             public float area;
             public float distToHome;
+            public int id;        // component index, indexes LandMask values
         }
 
         /// Flood-fill land cells (height > 0.5 m) on a grid; one component =
@@ -81,6 +105,7 @@ namespace SeaSick.Terrain
                 }
 
             var seen = new bool[n * n];
+            var mask = new int[n * n];
             var result = new List<Found>();
             var stack = new Stack<int>();
             var cells = new List<int>();
@@ -100,7 +125,14 @@ namespace SeaSick.Terrain
                     if (cy < n - 1 && land[c + n] && !seen[c + n]) { seen[c + n] = true; stack.Push(c + n); }
                 }
                 float area = cells.Count * cell * cell;
-                if (area < world.minIslandArea) continue;
+                if (area < world.minIslandArea)
+                {
+                    // Real land, just not an island: draw it, don't populate it.
+                    foreach (int c in cells) mask[c] = -1;
+                    continue;
+                }
+                int id = result.Count;
+                foreach (int c in cells) mask[c] = id + 1;
                 float2 sum = float2.zero;
                 foreach (int c in cells) sum += origin + (new float2(c % n, c / n) + 0.5f) * cell;
                 float2 centroid = sum / cells.Count;
@@ -118,8 +150,13 @@ namespace SeaSick.Terrain
                     float d = math.distancesq(p, home);
                     if (d < nd) { nd = d; nearestToHome = p; }
                 }
-                result.Add(new Found { centre = best, area = area, distToHome = math.sqrt(nd) });
+                result.Add(new Found { centre = best, area = area, distToHome = math.sqrt(nd), id = id });
             }
+
+            LandMask = mask;
+            MaskSize = n;
+            MaskCell = cell;
+            MaskOrigin = new Vector2(origin.x, origin.y);
             return result;
         }
 
@@ -128,7 +165,7 @@ namespace SeaSick.Terrain
         /// inland of that point rises gently.
         void MeasureProfile(float2 centre, out float[] outline, out bool[] hasBeach, out float meanRadius)
         {
-            int sectors = IslandMeshBuilder.Sectors;
+            int sectors = Island.Sectors;
             outline = new float[sectors];
             hasBeach = new bool[sectors];
             float sum = 0f;
@@ -152,7 +189,7 @@ namespace SeaSick.Terrain
             meanRadius = sum / sectors;
         }
 
-        void BuildIsland(Found f, bool isHome, int index, int total)
+        Island BuildIsland(Found f, bool isHome, int index, int total)
         {
             MeasureProfile(f.centre, out var outline, out var beach, out float meanR);
             float ring = Mathf.Clamp01(f.distToHome / world.discoveryRadius);
@@ -170,11 +207,11 @@ namespace SeaSick.Terrain
                 var beacon = IslandPropFactory.MakeBeacon(new Color(1f, 0.55f, 0.25f), 46f, 2.6f);
                 beacon.transform.SetParent(root.transform, false);
                 beacon.transform.localPosition = new Vector3(0f, Height(f.centre.x, f.centre.y) + 34f, 0f);
-                return;
+                return island;
             }
 
             bool shelterOnly = meanR < world.shelterOnlyBelowRadius;
-            if (shelterOnly) { island.Configure("—", 0f, meanR, false, false); return; }
+            if (shelterOnly) { island.Configure("—", 0f, meanR, false, false); return island; }
 
             var kind = PickKind(ring);
             float beaconH = Mathf.Lerp(26f, 60f, Mathf.Clamp01(meanR / 200f));
@@ -185,6 +222,7 @@ namespace SeaSick.Terrain
             var props = BuildProps(root.transform, island, kind.name, meanR);
             island.RegisterProps(props);
             island.Configure(kind.name, props.Count, meanR, false, false);
+            return island;
         }
 
         WorldSettings.ResourceKind PickKind(float ring)

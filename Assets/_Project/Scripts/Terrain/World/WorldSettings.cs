@@ -25,8 +25,8 @@ namespace SeaSick.Terrain
         public float minIslandArea = 3000f;
         [Tooltip("Islands with a mean shoreline radius below this are shelter only — no resources, no raiders.")]
         public float shelterOnlyBelowRadius = 60f;
-        [Tooltip("Max rise per metre over the first 12 m inland for a bearing to count as a beach.")]
-        public float beachMaxSlope = 0.7f;
+        [Tooltip("Max rise per metre over the first 12 m inland for a bearing to count as a beach. 0.70 left 93% of all shore landable; see BeachProbe.")]
+        public float beachMaxSlope = 0.5f;
 
         [Header("Resources")]
         public ResourceKind[] kinds =

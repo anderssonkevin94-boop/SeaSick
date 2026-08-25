@@ -36,9 +36,9 @@ public class WorldProbe : MonoBehaviour
         {
             Vector3 c = isle.transform.position;
             if (h(c.x, c.z) <= 0f) centreWet++;
-            for (int s = 0; s < IslandMeshBuilder.Sectors; s += 3)
+            for (int s = 0; s < Island.Sectors; s += 3)
             {
-                float ang = s / (float)IslandMeshBuilder.Sectors * Mathf.PI * 2f;
+                float ang = s / (float)Island.Sectors * Mathf.PI * 2f;
                 float r = isle.RadiusAt(ang);
                 Vector3 dir = new Vector3(Mathf.Sin(ang), 0f, Mathf.Cos(ang));
                 float hOut = h(c.x + dir.x * (r + 3f), c.z + dir.z * (r + 3f));

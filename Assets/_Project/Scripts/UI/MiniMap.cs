@@ -1,4 +1,5 @@
 using SeaSick.Combat;
+using SeaSick.Terrain;
 using SeaSick.Ship;
 using SeaSick.Voyage;
 using SeaSick.World;
@@ -6,10 +7,15 @@ using UnityEngine;
 
 namespace SeaSick.UI
 {
-    /// North-up minimap: islands coloured by what they carry, reefs, the storm
+    /// North-up minimap: land coloured by what it carries, reefs, the storm
     /// front, and your ship as an arrow showing heading. North-up (rather than
     /// ship-up) because it pairs with the bearing tape — the tape tells you
     /// where to point, the map tells you what's out there.
+    ///
+    /// Land is drawn from the populator's flood-fill mask, not as a circle per
+    /// island. A circle of MaxRadius is a lie about a crescent or a long spit:
+    /// it swallowed whole bays the ship can actually sail into, and on the big
+    /// concave islands it covered more water than land.
     public class MiniMap : MonoBehaviour
     {
         [SerializeField] float range = 1500f;  // half-extent in metres
@@ -20,15 +26,22 @@ namespace SeaSick.UI
 
         ShipMotor motor;
         VoyageManager voyage;
+        TerrainWorldPopulator populator;
 
         Texture2D discTex;
         Texture2D arrowTex;
+        Texture2D ringTex;
+        Texture2D maskTex;
+        Color32[] maskPixels;
+        int maskStamp = int.MinValue;   // island colour state the texture holds
 
         void Start()
         {
             motor = FindFirstObjectByType<ShipMotor>();
             voyage = FindFirstObjectByType<VoyageManager>();
+            populator = FindFirstObjectByType<TerrainWorldPopulator>();
             discTex = BuildDisc(48);
+            ringTex = BuildRing(64);
             arrowTex = BuildArrow(32);
         }
 
@@ -47,6 +60,86 @@ namespace SeaSick.UI
             tex.Apply();
             tex.hideFlags = HideFlags.HideAndDontSave;
             return tex;
+        }
+
+        /// An outline, not a disc. Ring() used to draw discTex at half alpha,
+        /// which was survivable when islands were flat circles too — over the
+        /// land mask a filled patrol circle covers the coast it is about.
+        static Texture2D BuildRing(int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            float r = size * 0.5f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
+                    float a = Mathf.Clamp01((1.6f - Mathf.Abs(d - (r - 1.6f))) / 1.2f);
+                    tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                }
+            tex.Apply();
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            return tex;
+        }
+
+        void OnDestroy()
+        {
+            if (maskTex != null) Destroy(maskTex);
+        }
+
+        /// What the land layer currently looks like: which islands still have
+        /// resources. Cheap to compute every frame, and it changes only when
+        /// the crew strip an island, so the texture is rebuilt almost never.
+        static int ColourStamp()
+        {
+            int h = 17;
+            foreach (var isle in Island.All)
+            {
+                if (isle == null) continue;
+                h = h * 31 + isle.GetInstanceID();
+                h = h * 31 + (isle.HasResources ? 1 : 0);
+            }
+            return h;
+        }
+
+        /// Paint the flood-fill mask into a texture, one texel per scan cell,
+        /// coloured by what that land carries.
+        void BuildMask()
+        {
+            int n = populator.MaskSize;
+            if (maskTex == null || maskTex.width != n)
+            {
+                if (maskTex != null) Destroy(maskTex);
+                maskTex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+                // Point, not bilinear: a scan cell is about a pixel wide at
+                // this range, and bilinear would bleed the transparent water
+                // texels' colour into every coastline.
+                maskTex.filterMode = FilterMode.Point;
+                maskTex.wrapMode = TextureWrapMode.Clamp;
+                maskTex.hideFlags = HideFlags.HideAndDontSave;
+                maskPixels = new Color32[n * n];
+            }
+
+            var mask = populator.LandMask;
+            var water = new Color32(0, 0, 0, 0);
+            var rock = ResourceColour("");
+            rock.a = 0.85f;
+            for (int i = 0; i < mask.Length; i++)
+            {
+                int v = mask[i];
+                if (v == 0) { maskPixels[i] = water; continue; }
+                if (v < 0) { maskPixels[i] = rock; continue; }
+
+                var isle = populator.IslandForMask(v);
+                Color c;
+                if (isle == null) c = rock;
+                else if (isle.IsHome) c = ResourceColour("Home");
+                else if (!isle.HasResources) c = ResourceColour("");
+                else c = ResourceColour(isle.ResourceName);
+                c.a = 0.95f;
+                maskPixels[i] = c;
+            }
+            maskTex.SetPixels32(maskPixels);
+            maskTex.Apply(false);
         }
 
         static Texture2D BuildArrow(int size)
@@ -96,17 +189,33 @@ namespace SeaSick.UI
             var local = new Rect(0f, 0f, size, size);
             Vector2 centre = new Vector2(size * 0.5f, size * 0.5f);
 
+            // Land, as the shape it actually is.
+            if (populator != null && populator.Done && populator.LandMask != null)
+            {
+                int stamp = ColourStamp();
+                if (maskTex == null || stamp != maskStamp) { BuildMask(); maskStamp = stamp; }
+
+                // The window of the mask under the map box. North (+z) is up,
+                // and v grows the same way, so z maps to v directly.
+                float extent = populator.MaskSize * populator.MaskCell;
+                Vector2 o = populator.MaskOrigin;
+                var uv = new Rect(
+                    (shipPos.x - range - o.x) / extent,
+                    (shipPos.z - range - o.y) / extent,
+                    2f * range / extent,
+                    2f * range / extent);
+                GUI.DrawTextureWithTexCoords(local, maskTex, uv, true);
+            }
+
+            // Home gets a fixed marker rather than a ring at its radius: the
+            // point is "this is home", and a radius ring on a concave island
+            // is the same lie the discs were.
             foreach (var isle in Island.All)
             {
-                if (isle == null) continue;
+                if (isle == null || !isle.IsHome) continue;
                 Vector2 p = MapPoint(centre, shipPos, isle.transform.position, scale);
-                float r = Mathf.Max(2.5f, isle.MaxRadius * scale);
-                if (p.x < -r || p.x > size + r || p.y < -r || p.y > size + r) continue;
-
-                var c = ResourceColour(isle.IsHome ? "Home" : isle.ResourceName);
-                if (!isle.IsHome && !isle.HasResources) c = ResourceColour("");
-                Disc(p, r, c);
-                if (isle.IsHome) Ring(p, r + 3f, ResourceColour("Home"));
+                if (p.x < -8f || p.x > size + 8f || p.y < -8f || p.y > size + 8f) continue;
+                Ring(p, 6f, ResourceColour("Home"));
             }
 
             foreach (var reef in Reef.All)
@@ -135,7 +244,7 @@ namespace SeaSick.UI
                 {
                     Vector2 h = MapPoint(centre, shipPos, raider.Home.transform.position, scale);
                     Ring(h, Mathf.Max(3f, raider.PatrolRadius * scale),
-                        new Color(0.95f, 0.30f, 0.25f, 0.30f));
+                        new Color(0.95f, 0.30f, 0.25f, 0.55f));
                 }
 
                 Vector2 p = MapPoint(centre, shipPos, raider.transform.position, scale);
@@ -178,8 +287,8 @@ namespace SeaSick.UI
         void Ring(Vector2 p, float radius, Color c)
         {
             var prev = GUI.color;
-            GUI.color = new Color(c.r, c.g, c.b, 0.5f);
-            GUI.DrawTexture(new Rect(p.x - radius, p.y - radius, radius * 2f, radius * 2f), discTex);
+            GUI.color = new Color(c.r, c.g, c.b, c.a >= 1f ? 0.75f : c.a);
+            GUI.DrawTexture(new Rect(p.x - radius, p.y - radius, radius * 2f, radius * 2f), ringTex);
             GUI.color = prev;
         }
 

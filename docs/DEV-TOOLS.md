@@ -39,6 +39,7 @@ shader property defaults. Re-run these after changing any default.
 | `SetupTerrainLab.cs` | Builds `TerrainLab.unity` (the island generator's test scene): the `TerrainSettings` asset, the 2D map visualiser quad (doubles as a water stand-in at y=0), a 7×7 main-thread `TerrainChunkPreview` over the western island, the runtime `TerrainStreamer`, sun and camera. Also pushes the terrain material. |
 | `WestTrace.cs` | Sails due west into the deep and decomposes every retarding force per second — sail budget vs surf, base hull drag and plow — plus the metric the player actually feels: **what fraction of her speed a wave costs and how long she needs to get it back**. The instrument for "she goes from 30 m/s to 5". | `/tmp/seasick-westtrace.txt` |
 | `SetMaxSpeed.cs` | One-off push of `ShipMotor.maxSpeed` (scene-serialised) and nothing else. Edit the constant, run it. | — |
+| `SetBeachSlope.cs` | One-off push of `WorldSettings.beachMaxSlope` into the asset. Edit the constant, run it. The value comes off `BeachProbe`'s distribution. | — |
 | `TuneStormFeel.cs` | Storm-feel values that are **scene-serialised** and therefore unreachable from C# defaults: `ChaseCamera.stormDrop`/`stormPullIn` and `ShipMotor.acceleration`. Note the scene frames the camera at distance 20 / height 13, not the code defaults 25/19 — subtract the storm values from those, not from the defaults. |
 
 ## Probes
@@ -64,6 +65,8 @@ shader property defaults. Re-run these after changing any default.
 | `ShoreProbe.cs` | **Terrain→ocean gate** (play mode, Sea.unity): severity forced to 1.0; surface RMS at deep water / shoreline / land must be intact / <10 % / 0; CPU shore factor vs exact height. Shot of the beach. | `/tmp/seasick-shore.txt`, `-shore.png` |
 | `WorldProbe.cs` | **Populator gate** (play mode, Sea.unity): islands found, home + Stockpile, centres on land, outline at the waterline, beaches, props grounded, reefs/monsters in water, raiders, spawn landable. | `/tmp/seasick-world.txt` |
 | `IslandShot.cs` | Look shots of the home island from the sea, the beach, overhead and 900 m east, with the ship pinned so the streamer stays centred. Play mode, Sea.unity. | `/tmp/seasick-island-0..3.png` |
+| `BeachProbe.cs` | **Beach-slope tuning instrument**: re-measures the shore rise per metre over 12 m inland on all 46 bearings of every discovered island, and reports the landable fraction and the count of unlandable islands at five candidate `beachMaxSlope` values, plus the full percentile distribution. Choose the threshold by reading it once instead of rebuilding the world per candidate. Play mode, Sea.unity. | `/tmp/seasick-beach.txt` |
+| `TerrainPerfProbe.cs` | **Terrain cost ledger**: loaded vs portrait-frustum-visible chunks/verts/tris, shadow-pass load, collider tris, mesh memory, and the streamer's main-thread cost over 24 chunk crossings with the per-crossing distribution. Only device-independent quantities — GPU ms stays a device measurement, like `PerfProbe`. Play mode, Sea.unity. | `/tmp/seasick-terrainperf.txt` |
 | `CrossingProbe.cs` | 40 chunk crossings in 20 s with per-crossing replan breakdown — the quick way to tell a one-off first-use cost from a systemic one (it's what found the 10 ms first-release lazy init). Play mode, TerrainLab. | `/tmp/seasick-crossing.txt` |
 | `LoadProbe.cs`, `HudShot.cs`, `FogTest.cs`, `WarpOut.cs` | Older, still valid. | `/tmp/seasick-*.txt` |
 
@@ -103,7 +106,16 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 - **The editor steals the main thread when job workers saturate the cores.**
   With 4 height jobs + collider bakes in flight on an 8-core Mac, spikes of
   10–20 ms attach to trivial code. Keep `jobsInFlight` small (2) and measure
-  steady state, not warm-up.
+  steady state, not warm-up. Concretely, 2026-08-25: one TerrainPerfProbe run
+  charged **9.28 ms to a single `Mesh.ApplyAndDisposeWritableMeshData`**, which
+  would have been a real 60 fps blocker; the identical run minutes later put
+  the same call at **1.07 ms**. Never accept a single worst-frame sample from
+  the editor as a finding — run it twice and compare the distributions.
+- **`QualitySettings.names` is not indexed by quality level.** TerrainPerfProbe
+  printed `names[GetQualityLevel()]` and reported "PC" while play mode was
+  genuinely on the Mobile tier (level 0, shadowDistance 40, 2 cascades — the
+  Mobile row's values, not the PC row's). Identify the tier by a setting that
+  actually differs between the tiers, never by the name lookup.
 
 - **Pin the sea state.** `SeaState01` drifts 0.14–1.15 over minutes and scales
   every amplitude. The same build gave 23.5m and 8.4m of storm heave.
