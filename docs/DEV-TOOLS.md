@@ -44,6 +44,7 @@ shader property defaults. Re-run these after changing any default.
 | `SetBeachSlope.cs` | One-off push of `WorldSettings.beachMaxSlope` into the asset. Edit the constant, run it. The value comes off `BeachProbe`'s distribution. | — |
 | `TuneStormSea.cs` | The storm-sea values that are **scene-serialised**: `RegionField.farScale` (1.5 -> 1.0, because a post-hoc amplitude gain is the wrong instrument once the west has a storm spectrum of its own -- multiplying an authored 45 m sea by 1.5 asks for 67 m, which needs 150 m of water before the depth limit allows it) and `breakFraction`, written explicitly rather than left to a C# initialiser. Saves the scene. |
 | `TuneLivingSea.cs` | **The living-sea weather values, all scene-serialised**: wires `SeaState_Rough` into `SeaStateController`, pushes the Hs-space knobs (`shelfCalmHs`/`shelfLivelyHs`/`setDepth`/`setPeriod`/`wanderPeriod`/`skyHsStart`/`skyHsFull`/`squallHs`/`stormSteady`/`cellShape`), widens `RegionField.stormNear`/`stormFar` to 500/2800, adds `WeatherField` if absent and pushes every one of its values too. Reads all of it back off a fresh `SerializedObject` and prints the severity→Hs ladder. Re-run after changing any weather default — this bit twice in one session: `tileMetres` and `driftSpeed` stayed at the values the component was added with through two rounds of retuning, and only the octave periods (a local inside `Bake()`) actually moved. |
+| `TuneWaterline.cs` | The two scene-serialised values behind "she floats above the water and the wheels spin like a food processor": re-pushes the buoyancy probe rig via `SetupPaddleBoat.PushProbes` (so the `ProbeLift` constant reaches the scene) and `PaddleDrive.maxVisualRate`. Targeted rather than a full `SetupPaddleBoat` re-run, which would also push `maxSpeed`, the camera and the freeboard back to that file's constants. |
 | `TuneStormFeel.cs` | Storm-feel values that are **scene-serialised** and therefore unreachable from C# defaults: `ChaseCamera.stormDrop`/`stormPullIn` and `ShipMotor.acceleration`. Note the scene frames the camera at distance 20 / height 13, not the code defaults 25/19 — subtract the storm values from those, not from the defaults. |
 
 ## Probes
@@ -59,6 +60,7 @@ shader property defaults. Re-run these after changing any default.
 | `BlendProbe.cs` | Calm→storm weather ramp smoothness (Hs every second; steps mean rebuild pops). Play mode, OceanLab. | `/tmp/seasick-blend.txt`, `-blend-*.png` |
 | `SailShot.cs` | Sails the western deep in `Sea.unity`: draft statistics, camera clamp rate, camera/hull gap, roll/pitch, speed. Compare `/tmp/seasick-sail-baseline.txt` (the old kinematic system's final run). | `/tmp/seasick-sail.txt`, `-0..4.png` |
 | `BuryProbe.cs` | **Deck-burial gate**: sails hard into head seas at forced severity 1.0, wave phase pinned (`OceanTime.Scrub(500)`), 60 s. Deck must stay dry: poopDeckUnder 0%, deckOverMax < 0. Play mode, Sea.unity. | `/tmp/seasick-bury.txt` |
+| `WaterlineProbe.cs` | **Where she actually sits**, in metres against the landmarks that make "she floats on top of the water" checkable: designed waterline above water (the ship origin *is* the designed waterline), keel depth, deck height, the paddle-wheel axle, and the blades' bite depth against the drawn 1.32 m. Measured **at rest and at full throttle**, because the two answers want opposite fixes — a static offset is displacement, a speed-dependent one is dynamic lift. Sea pinned with `ForceHs`, averaged over several seconds, and it ends on a screenshot of the pinned calm because the complaint is visual. Play mode, Sea.unity. | `/tmp/seasick-waterline.txt`, `-.png` |
 | `StallProbe.cs` | **Sailing-speed gate**: head seas at severity 0.40 and 0.75, plow drag toggled ON/OFF over the same water. Reports mean way vs target, distance made good, stalls/min, recovery time, and peak plow against the sail's authority. Also a calm sails-furled leg that checks plow really is silent at rest. Play mode, Sea.unity. | `/tmp/seasick-stall.txt` |
 | `BuryTrace.cs` | BuryProbe's run as a time series instead of a verdict — ship y, sampled surface, batched surface, draft, submersion, reserve, plow, speed, pitch, roll. The sampler-vs-batch column is the one that says whether a wild draft number is a sinking ship or a lying instrument. Play mode, Sea.unity. | `/tmp/seasick-burytrace.txt` |
 | `RippleStressProbe.cs` | **Ripple-needle gate**: two legs (driving + splash spam, and stalled in a storm), GPU readback scored on **neighbour gradient** and texels riding the clamp — not magnitude, which the Step clamp makes unfalsifiable. Gate: gradient < 0.35 m/texel, zero at clamp, zero non-finite. Play mode, Sea.unity. | `/tmp/seasick-ripplestress.txt` |
@@ -94,6 +96,19 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 `python3 tools/pngprobe.py /tmp/seasick-sail-2.png`. Pure stdlib.
 
 ## Measurement traps this project has actually hit
+
+- **Lowering a buoyancy probe rig makes the hull float HIGHER, not lower.** The
+  probes sit deeper for a given hull position, so they make more lift, so the
+  equilibrium moves up — measured at almost exactly 1:1 in the wrong direction
+  (−0.57 m of rig gave +0.59 m of hull). The rig goes **up** for her to settle
+  **down**. Worth a five-minute measurement before reasoning about which way any
+  buoyancy geometry should move.
+
+- **"It only looks wrong at speed" is not evidence that speed causes it.** She
+  looked like she was planing on her own bow lift in a 20 m/s calm-water
+  screenshot. `WaterlineProbe` measured 0.57 m high at rest and 0.55 m at
+  19.7 m/s: a static displacement error the whole time. Measure the at-rest case
+  before blaming the dynamic term.
 
 - **A threshold in a metric goes stale the moment the thing it measures is
   re-centred.** `LivingSeaTrace` counted crossings of 0.5 to time how fast
