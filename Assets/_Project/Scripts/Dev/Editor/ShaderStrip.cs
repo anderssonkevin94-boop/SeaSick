@@ -38,12 +38,32 @@ public class ShaderStrip : MonoBehaviour
         new Vector4(0, 0, 0, 0),   // + foam: the shipped shader
     };
 
+    /// Sun elevations, degrees above the horizon. The scene ships at 50, which
+    /// a chase camera looking at the skyline never sees -- it shows about 25
+    /// degrees of sky, so the sun disc has always been above the frame. A long
+    /// glitter track on water is a LOW-sun phenomenon besides: at 50 degrees
+    /// the specular is a compact patch beside the boat however it is tuned.
+    static readonly float[] SunElevations = { 8f, 16f, 28f, 50f };
+
+    bool sunMode;
+
     public static void Execute()
     {
         if (!Application.isPlaying) { Debug.LogError("ShaderStrip: not in play mode"); return; }
         var old = FindAnyObjectByType<ShaderStrip>();
         if (old != null) Destroy(old.gameObject);
         new GameObject("ShaderStrip").AddComponent<ShaderStrip>();
+    }
+
+    /// Just the sun-elevation sheet.
+    public static void SunAngles()
+    {
+        if (!Application.isPlaying) { Debug.LogError("ShaderStrip: not in play mode"); return; }
+        var old = FindAnyObjectByType<ShaderStrip>();
+        if (old != null) Destroy(old.gameObject);
+        var go = new GameObject("ShaderStrip");
+        var c = go.AddComponent<ShaderStrip>();
+        c.sunMode = true;
     }
 
     bool pin; Vector3 pinAt; ShipMotor motor;
@@ -78,6 +98,49 @@ public class ShaderStrip : MonoBehaviour
 
         var rt = new RenderTexture(TileW, TileH, 24, RenderTextureFormat.ARGB32);
         var tile = new Texture2D(TileW, TileH, TextureFormat.RGB24, false);
+
+        if (sunMode)
+        {
+            // Put the sun on the CAMERA's azimuth rather than turning the boat
+            // to face it -- "can you see the sun" is not a question you can
+            // answer with the camera pointed somewhere else, and the chase
+            // camera is not ours to aim. Same azimuth for all four tiles, so
+            // only elevation differs.
+            var suns = new Texture2D(TileW * SunElevations.Length, TileH, TextureFormat.RGB24, false);
+            var light = FindSunTransform();
+            Quaternion savedSun = light != null ? light.rotation : Quaternion.identity;
+            // +180, and it is not a fudge: a directional light TRAVELS along
+            // its forward vector, so the sun sits at the OPPOSITE azimuth to
+            // the light's yaw. Setting the yaw to the camera's heading puts
+            // the sun squarely behind the camera, which is exactly the sheet
+            // this first produced -- four identical tiles and no sun in any of
+            // them.
+            float azimuth = cam.transform.eulerAngles.y + 180f;
+
+            yield return SetSea(ctrl, 3.5f, rb);      // a calm-ish sea: glitter reads best on it
+            for (int i = 0; i < SunElevations.Length; i++)
+            {
+                if (light != null) light.rotation = Quaternion.Euler(SunElevations[i], azimuth, 0f);
+                yield return null; yield return null; yield return null;
+                Capture(cam, rt, tile);
+                suns.SetPixels(i * TileW, 0, TileW, TileH, tile.GetPixels());
+                Debug.Log($"ShaderStrip: sun tile {i} at {SunElevations[i]} deg");
+            }
+            suns.Apply();
+            System.IO.File.WriteAllBytes("/tmp/seasick-shader-suns.png", suns.EncodeToPNG());
+            if (light != null) light.rotation = savedSun;   // put the scene back
+
+            OceanTime.Paused = false;
+            ctrl.ReleaseForce();
+            if (responseField != null && savedResponse != null)
+                responseField.SetValue(sky, savedResponse);
+            pin = false;
+            Destroy(rt); Destroy(tile); Destroy(suns);
+            Debug.Log("ShaderStrip: wrote /tmp/seasick-shader-suns.png");
+            Destroy(gameObject);
+            yield break;
+        }
+
         var states = new Texture2D(TileW * StateHs.Length, TileH, TextureFormat.RGB24, false);
         var layers = new Texture2D(TileW * LayerOff.Length, TileH, TextureFormat.RGB24, false);
 
@@ -139,6 +202,13 @@ public class ShaderStrip : MonoBehaviour
         OceanTime.Paused = true;
         if (rb != null) { rb.linearVelocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
         yield return new WaitForSeconds(1.5f);        // let her settle on the frozen surface
+    }
+
+    static Transform FindSunTransform()
+    {
+        foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None))
+            if (l.type == LightType.Directional) return l.transform;
+        return null;
     }
 
     static void Capture(Camera cam, RenderTexture rt, Texture2D tile)
