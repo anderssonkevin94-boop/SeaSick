@@ -134,6 +134,49 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   an hour earlier, so the machine drifts and only a same-session A/B is worth
   anything.
 
+- **A probe that measures where the SHIP ISN'T measures nothing, and it fails
+  green as often as red.** `ShoreProbe` and `CalmWaterShot` were both written
+  when the ship spawned at home, and `PlaytestStart` now puts her at
+  (-2400, 725) in 180 m of water. The shore grid follows the ship, so
+  ShoreProbe's test points south of the WORLD ORIGIN had no grid over them at
+  all: `ShoreFactor` returned "outside, sea untouched" and it reported three red
+  gates -- worst grid error 1.000, 1.14 m of waves on dry land -- with nothing
+  wrong with the ocean. CalmWaterShot was worse, because it PASSED: it called
+  wherever the ship was "inshore" and so compared open water with open water,
+  ratio 0.795 where the number it was written to catch was 0.24. **Fixed
+  2026-08-29**: both now FIND what they need (nearest island, then walk the
+  bearing to the ship for a real shoreline / the shallowest anchorage), WARP the
+  ship there so the grid follows, wait for the streamer, and **assert coverage
+  before believing a measurement** -- ShoreProbe's first gate is now
+  `grid-covers-the-test-points`, checking the 1e9 "no seabed known" sentinel at
+  all three stations. Results after: grid error 1.000 -> 0.019, and the calm
+  ratio 0.795 -> 0.270. CalmWaterShot also gained a second gate, because
+  "inshore RMS > 0.02" alone cannot tell shelter from open water.
+
+- **`Allocator.Temp` is valid for ONE FRAME, so it dies the moment a probe
+  learns to wait.** `TerrainCurveLut.Bake(..., Allocator.Temp)` was fine in the
+  old ShoreProbe, which never yielded between baking the curve and using it. Add
+  a `WaitForSeconds` for the streamer and you get an `ObjectDisposedException`
+  from inside the height function seconds later, which reads like a corrupted
+  terrain rather than an allocator lifetime. Use `Allocator.Persistent` and
+  dispose it on every exit path.
+
+- **Indexing a `float3` inside a Burst hot path costs a factor of four, and
+  only `DivergenceProbe`'s timing line says so.** `RegionFieldParams.
+  EvaluateCascades` used to loop `for (int c = 0; c < 3; c++)` and index
+  `patchCoupling[c]` / `result[c]`. Taking the address of a float3 to index it
+  spills it to the stack and stops Burst vectorising everything around it, and
+  this function runs EIGHT TIMES PER QUERY inside the sampler's Newton loop.
+  Measured on the shipped storm: `SampleBatch` **0.38 -> 1.72 ms** per 1000
+  queries against a 0.4 ms budget, from nothing but the indexing — while the
+  accuracy gate stayed green at 2.49 cm with 0 of 5000 over, so the only red
+  thing was the millisecond count. Rewritten as three-wide arithmetic with no
+  `[c]` anywhere it came back at **0.305 ms**, faster than the loop version had
+  ever been. **Bisect a red timing line the same way you would a red error
+  line** — the baseline was reading 0.38 ms that session where it had read 0.26
+  an hour earlier, so the machine drifts and only a same-session A/B is worth
+  anything.
+
 - **`ShoreProbe` and `CalmWaterShot` are both mis-sited, and have been since
   the spawn moved.** Both were written when the ship started at home:
   `ShoreProbe` looks for the shoreline along the line south of the world
