@@ -53,6 +53,13 @@ Shader "SeaSick/Ocean"
             float4 _Ocean_SimRect;          // anchor.xy, extent, texel
             float4 _SS_SkyHorizon;
             float _SS_Storminess;
+            // Dev only: which shading layers to SUPPRESS (subsurface, sky
+            // reflection, sun glitter, foam). Phrased as "off" and not "on"
+            // deliberately -- an unset global reads as ZERO, so the shipped
+            // look is the one you get when nothing binds this, and a probe
+            // that forgets to reset it can only ever fail loudly rather than
+            // silently ship a shader with its reflections switched off.
+            float4 _SS_LayerOff;
 
             float2 SampleSim(float2 xz)
             {
@@ -238,7 +245,7 @@ Shader "SeaSick/Ocean"
                 float towardSun = pow(saturate(dot(Vf, -L) * 0.5 + 0.5), 3.0);
                 float sss = towardSun * (0.35 + 0.65 * peakMask) * (0.4 + 0.6 * steep)
                             * _SubsurfaceStrength;
-                body += subsurf * sss * sun.color;
+                body += subsurf * sss * sun.color * (1.0 - _SS_LayerOff.x);
 
                 // Fresnel sky reflection: cheap probe + authored horizon mix.
                 float fresnel = 0.02 + 0.98 * pow(1.0 - saturate(dot(n, Vf)), 5.0);
@@ -254,7 +261,7 @@ Shader "SeaSick/Ocean"
                 float specPow = lerp(_SpecPowerNear, _SpecPowerFar, rough);
                 float3 H = normalize(L + Vf);
                 float spec = pow(saturate(dot(n, H)), specPow) * _SpecStrength
-                             * (1.0 - 0.6 * storm);
+                             * (1.0 - 0.6 * storm) * (1.0 - _SS_LayerOff.z);
 
                 // Foam: instant Jacobian whitecaps + the persistent buffer,
                 // torn by two octaves of world noise.
@@ -270,9 +277,10 @@ Shader "SeaSick/Ocean"
                             * FoamNoise(xz * _FoamNoiseScale * 3.7 + 17.0);
                 float foamAmt = saturate((breaking * (0.35 + 0.65 * storm) + turb)
                                 * (0.4 + 1.5 * noise)) * env;
-                foamAmt = saturate(foamAmt + sim.g * (0.5 + 0.8 * noise));
+                foamAmt = saturate(foamAmt + sim.g * (0.5 + 0.8 * noise))
+                        * (1.0 - _SS_LayerOff.w);
 
-                half3 col = lerp(body, sky, fresnel * (1.0 - foamAmt));
+                half3 col = lerp(body, sky, fresnel * (1.0 - foamAmt) * (1.0 - _SS_LayerOff.y));
                 col += spec * sun.color;
                 col = lerp(col, _FoamColor.rgb * (0.55 + 0.45 * sun.color), foamAmt);
 

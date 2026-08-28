@@ -61,6 +61,7 @@ shader property defaults. Re-run these after changing any default.
 | `SailShot.cs` | Sails the western deep in `Sea.unity`: draft statistics, camera clamp rate, camera/hull gap, roll/pitch, speed. Compare `/tmp/seasick-sail-baseline.txt` (the old kinematic system's final run). | `/tmp/seasick-sail.txt`, `-0..4.png` |
 | `BuryProbe.cs` | **Deck-burial gate**: sails hard into head seas at forced severity 1.0, wave phase pinned (`OceanTime.Scrub(500)`), 60 s. Deck must stay dry: poopDeckUnder 0%, deckOverMax < 0. Play mode, Sea.unity. | `/tmp/seasick-bury.txt` |
 | `WaterlineProbe.cs` | **Where she actually sits**, in metres against the landmarks that make "she floats on top of the water" checkable: designed waterline above water (the ship origin *is* the designed waterline), keel depth, deck height, the paddle-wheel axle, and the blades' bite depth against the drawn 1.32 m. Measured **at rest and at full throttle**, because the two answers want opposite fixes — a static offset is displacement, a speed-dependent one is dynamic lift. Sea pinned with `ForceHs`, averaged over several seconds, and it ends on a screenshot of the pinned calm because the complaint is visual. Play mode, Sea.unity. | `/tmp/seasick-waterline.txt`, `-.png` |
+| `ShaderStrip.cs` | **Two contact sheets of the water shader**, because it will not assemble in your head while the sea drifts and you cannot hold two states side by side. `states.png`: calm/rough/heavy/mountainous at the SAME pinned wave phase, seed, camera and sun — only the spectrum differs. `layers.png`: one sea with the shading stacked a term at a time (body, +subsurface, +sky/glitter, +foam) via the `_SS_LayerOff` dev global. Ship stays in frame on purpose — a 1.6 m sea and a 65 m sea look identical without something of known size in the picture. Rendered through the MAIN camera into a RenderTexture, which is also what drops the HUD. Play mode, Sea.unity. | `/tmp/seasick-shader-states.png`, `-layers.png` |
 | `StallProbe.cs` | **Sailing-speed gate**: head seas at severity 0.40 and 0.75, plow drag toggled ON/OFF over the same water. Reports mean way vs target, distance made good, stalls/min, recovery time, and peak plow against the sail's authority. Also a calm sails-furled leg that checks plow really is silent at rest. Play mode, Sea.unity. | `/tmp/seasick-stall.txt` |
 | `BuryTrace.cs` | BuryProbe's run as a time series instead of a verdict — ship y, sampled surface, batched surface, draft, submersion, reserve, plow, speed, pitch, roll. The sampler-vs-batch column is the one that says whether a wild draft number is a sinking ship or a lying instrument. Play mode, Sea.unity. | `/tmp/seasick-burytrace.txt` |
 | `RippleStressProbe.cs` | **Ripple-needle gate**: two legs (driving + splash spam, and stalled in a storm), GPU readback scored on **neighbour gradient** and texels riding the clamp — not magnitude, which the Step clamp makes unfalsifiable. Gate: gradient < 0.35 m/texel, zero at clamp, zero non-finite. Play mode, Sea.unity. | `/tmp/seasick-ripplestress.txt` |
@@ -96,6 +97,19 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 `python3 tools/pngprobe.py /tmp/seasick-sail-2.png`. Pure stdlib.
 
 ## Measurement traps this project has actually hit
+
+- **Pausing `OceanTime` silently freezes the SPECTRUM as well as the waves.**
+  `SeaStateController` throttles its rebuild on `OceanTime.Now -
+  lastRebuildTime`; with the clock paused that difference stays zero forever
+  and a forced sea state never reaches the water. Any probe that wants several
+  sea states at one pinned phase must unpause, change the state, let it land,
+  and only then scrub and freeze — in that order.
+
+- **A dev shader global must be phrased as what it turns OFF.** An unset global
+  reads as ZERO, so `_SS_LayerOff` gives the shipped look when nothing binds it
+  and a probe that forgets to reset can only fail loudly. Phrased as
+  `_SS_LayerOn` the same forgetfulness would ship an ocean with its reflections
+  switched off and nothing would say so.
 
 - **Lowering a buoyancy probe rig makes the hull float HIGHER, not lower.** The
   probes sit deeper for a given hull position, so they make more lift, so the
