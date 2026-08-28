@@ -67,9 +67,18 @@ public class CascadeFadeProbe : MonoBehaviour
     public static void Execute() => Spawn("Ocean/OceanQuality_PC", "pc");
     public static void ExecuteMobile() => Spawn("Ocean/OceanQuality_Mobile", "mobile");
 
+    // A second instance is not a second run, it is a corrupted one: both
+    // fight over the forced sea state and the quality tier, and the output
+    // looks plausible. `execute_script` times out constantly and the script
+    // usually ran anyway, so double-spawning is the normal accident, not an
+    // exotic one.
+    static bool running;
+
     static void Spawn(string asset, string tag)
     {
         if (!Application.isPlaying) { Debug.LogError("CascadeFadeProbe: not in play mode"); return; }
+        if (running) { Debug.LogError("CascadeFadeProbe: already running -- refusing to start a second"); return; }
+        running = true;
         var p = new GameObject("CascadeFadeProbe").AddComponent<CascadeFadeProbe>();
         p.tierAsset = asset;
         p.outFile = $"/tmp/seasick-cascadefade-{tag}.txt";
@@ -96,6 +105,7 @@ public class CascadeFadeProbe : MonoBehaviour
         {
             sb.AppendLine($"ABORT cam={cam != null} clipmap={clip != null} ocean={ocean != null}");
             System.IO.File.WriteAllText(outFile, sb.ToString());
+            running = false;
             yield break;
         }
 
@@ -106,6 +116,7 @@ public class CascadeFadeProbe : MonoBehaviour
         {
             sb.AppendLine($"ABORT: Resources/{tierAsset} not found");
             System.IO.File.WriteAllText(outFile, sb.ToString());
+            running = false;
             yield break;
         }
         OceanQuality.Override(tier);
@@ -128,6 +139,7 @@ public class CascadeFadeProbe : MonoBehaviour
         {
             sb.AppendLine("ABORT: Resources/Ocean/SeaState_Stormy not found");
             System.IO.File.WriteAllText(outFile, sb.ToString());
+            running = false;
             yield break;
         }
         // Pausing OceanTime freezes the SPECTRUM too, so land the state first
@@ -393,6 +405,7 @@ public class CascadeFadeProbe : MonoBehaviour
 
         System.IO.File.WriteAllText(outFile, sb.ToString());
         Debug.Log("CascadeFadeProbe: wrote " + outFile);
+        running = false;
         Destroy(tex);
         Destroy(follow.gameObject);
         Destroy(gameObject);

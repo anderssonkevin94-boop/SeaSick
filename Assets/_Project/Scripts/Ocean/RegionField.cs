@@ -73,8 +73,39 @@ namespace SeaSick.Ocean
         public static float BottomCoupling(int cascade) =>
             cascade == 0 ? 1f : cascade == 1 ? 0.40f : 0.12f;
 
-        /// Per-cascade envelope. Only the DEPTH terms differ between cascades;
-        /// distance from home and the island falloff are wavelength-independent.
+        /// How strongly each cascade feels an island's RADIAL falloff.
+        /// MUST match SS_IslandCoupling in RegionField.hlsl.
+        ///
+        /// This term is not the depth terms and does not do their job. It is a
+        /// disc — a centre, a radius and 60 m of smoothstep — that knows
+        /// nothing about the seabed, the wavelength, or which side of the
+        /// island you are on. On the generated world an island's `MaxRadius`
+        /// is its outer bound and not its beach: measured on Island_1, the
+        /// land stops 330 m from the centre and the disc goes on to 1130,
+        /// so it was flattening an 800 m ANNULUS OF 180 m DEEP WATER to the
+        /// chop floor. That is the pond, and it is 800 m out from any shore.
+        ///
+        /// Swell does not stop at a circle. It wraps round an island and rolls
+        /// onto the beach; what dies in an island's lee is the WIND SEA, the
+        /// short stuff, because a lee is a wind shadow. So the disc now reads
+        /// as shelter from short waves: nothing on the swell, about half on
+        /// the mid band, all of it on the chop.
+        ///
+        /// Cascade 0 losing this term costs no safety, because the terms that
+        /// actually keep the swell off the seabed are the depth ones and they
+        /// are untouched: measured at storm on the same island, the swell in
+        /// 11.6 m of water is on the depth cap (0.098) and in 3.6 m it is on
+        /// the cap again (0.030), with the island falloff nowhere near
+        /// binding. What changes is only the deep water offshore.
+        ///
+        /// Bands: c0 >= 64 m, c1 16-64 m, c2 0.5-16 m.
+        public static float IslandCoupling(int cascade) =>
+            cascade == 0 ? 0f : cascade == 1 ? 0.55f : 1f;
+
+        /// Per-cascade envelope. Distance from home is the only
+        /// wavelength-independent term; the depth terms and the island falloff
+        /// both differ between cascades, and in opposite directions — shoaling
+        /// is a LONG-wave effect and shelter is a SHORT-wave one.
         /// MUST match RegionEnvelopeCascades in RegionField.hlsl.
         public float3 EvaluateCascades(float2 p, NativeArray<float4> islands,
                                        NativeArray<float> shore, NativeArray<float> weather)
@@ -82,10 +113,13 @@ namespace SeaSick.Ocean
             float d = math.distance(p, home);
             float t = math.smoothstep(calmRadius, wildRadius, d);
             float baseEnv = math.lerp(nearScale, farScale, t);
+            // Kept out of baseEnv: each cascade feels it differently. See
+            // IslandCoupling.
+            float isle = 1f;
             for (int i = 0; i < islandCount; i++)
             {
                 float s = math.distance(p, islands[i].xy) - islands[i].z;
-                baseEnv *= math.smoothstep(0f, shoreFalloff, s);
+                isle *= math.smoothstep(0f, shoreFalloff, s);
             }
 
             float shoal = 1f, wet = 1f, depth = 1e9f;
@@ -119,7 +153,8 @@ namespace SeaSick.Ocean
                 // it. That is what the sea does, and it also keeps patches
                 // clear of everything that has been measured -- cascade 0
                 // carries nearly all of Hs.
-                float env = baseEnv * math.lerp(1f, shoal, bw)
+                float env = baseEnv * math.lerp(1f, isle, IslandCoupling(c))
+                                    * math.lerp(1f, shoal, bw)
                                     * math.lerp(1f, patch, patchCoupling[c]);
                 // Depth limit: no wave taller than a fraction of the water
                 // under it -- the shoaling/breaking rule, which makes seabed
@@ -140,8 +175,9 @@ namespace SeaSick.Ocean
         }
 
         /// Cascade 0's envelope: the long swell, and what every gameplay reader
-        /// means by "how big is the sea here". Identical to the pre-cascade
-        /// version because BottomCoupling(0) is exactly 1.
+        /// means by "how big is the sea here". BottomCoupling(0) is exactly 1,
+        /// so the depth terms reach it in full; IslandCoupling(0) is exactly 0,
+        /// so the radial disc does not reach it at all.
         public float Evaluate(float2 p, NativeArray<float4> islands,
                               NativeArray<float> shore, NativeArray<float> weather)
             => EvaluateCascades(p, islands, shore, weather).x;

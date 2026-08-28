@@ -92,18 +92,42 @@ float3 ShoreWetDepth(float2 p)
 // Bands: c0 >= 64 m, c1 16-64 m, c2 0.5-16 m.
 static const float3 SS_BottomCoupling = float3(1.0, 0.40, 0.12);
 
-// Per-cascade envelope. Only the DEPTH terms differ between cascades; distance
-// from home and the island falloff are wavelength-independent.
+// How strongly each cascade feels an island's RADIAL falloff. Twin of
+// RegionFieldParams.IslandCoupling.
+//
+// This term is not the depth terms and does not do their job. It is a disc --
+// a centre, a radius and 60 m of smoothstep -- that knows nothing about the
+// seabed, the wavelength, or which side of the island you are on. On the
+// generated world an island's MaxRadius is its outer bound and not its beach:
+// measured on Island_1, the land stops 330 m from the centre and the disc goes
+// on to 1130, so it was flattening an 800 m ANNULUS OF 180 m DEEP WATER to the
+// chop floor. That is the pond, and it is 800 m out from any shore.
+//
+// Swell does not stop at a circle. It wraps round an island and rolls onto the
+// beach; what dies in an island's lee is the WIND SEA, because a lee is a wind
+// shadow. So the disc now reads as shelter from short waves: nothing on the
+// swell, about half on the mid band, all of it on the chop. Cascade 0 losing
+// it costs no safety -- the terms that keep the swell off the seabed are the
+// depth ones, and they are untouched.
+static const float3 SS_IslandCoupling = float3(0.0, 0.55, 1.0);
+
+// Per-cascade envelope. Distance from home is the only wavelength-independent
+// term; the depth terms and the island falloff both differ between cascades,
+// and in opposite directions -- shoaling is a LONG-wave effect and shelter is
+// a SHORT-wave one.
 float3 RegionEnvelopeCascades(float2 p)
 {
     float d = distance(p, _Ocean_Region.xy);
     float t = smoothstep(_Ocean_Region.z, _Ocean_Region.w, d);
     float baseEnv = lerp(_Ocean_RegionScale.x, _Ocean_RegionScale.y, t);
     int count = (int)_Ocean_RegionScale.w;
+    // Kept out of baseEnv: each cascade feels it differently. See
+    // SS_IslandCoupling.
+    float isle = 1.0;
     for (int i = 0; i < count; i++)
     {
         float shore = distance(p, _Ocean_Islands[i].xy) - _Ocean_Islands[i].z;
-        baseEnv *= smoothstep(0.0, _Ocean_RegionScale.z, shore);
+        isle *= smoothstep(0.0, _Ocean_RegionScale.z, shore);
     }
     float3 swd = ShoreWetDepth(p);
     // Never dead flat. Sheltered water still has chop; only land is glass.
@@ -125,7 +149,8 @@ float3 RegionEnvelopeCascades(float2 p)
         float bw = SS_BottomCoupling[c];
         // Weak on the swell, strong on the chop: a roughness patch is
         // short-wave energy and the long swell rolls straight through it.
-        float env = baseEnv * lerp(1.0, swd.x, bw)
+        float env = baseEnv * lerp(1.0, isle, SS_IslandCoupling[c])
+                            * lerp(1.0, swd.x, bw)
                             * lerp(1.0, patch, _Ocean_WeatherPatch[c + 1]);
         // Depth limit: no wave taller than a fraction of the water under it.
         // Capped against the height THIS cascade carries, not the whole sea --
@@ -141,9 +166,10 @@ float3 RegionEnvelopeCascades(float2 p)
 }
 
 // Cascade 0's envelope: the long swell, and what every gameplay reader means
-// by "how big is the sea here". Bit-identical to the pre-cascade version
-// because SS_BottomCoupling.x is exactly 1.0 -- lerp(1, swd.x, 1) == swd.x and
-// the cap divides by Hs * 1.
+// by "how big is the sea here". SS_BottomCoupling.x is exactly 1.0, so the
+// depth terms reach it in full -- lerp(1, swd.x, 1) == swd.x and the cap
+// divides by Hs * 1 -- and SS_IslandCoupling.x is exactly 0.0, so the radial
+// disc does not reach it at all.
 float RegionEnvelope(float2 p)
 {
     return RegionEnvelopeCascades(p).x;

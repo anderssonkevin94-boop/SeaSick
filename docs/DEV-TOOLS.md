@@ -76,6 +76,7 @@ shader property defaults. Re-run these after changing any default.
 | `HeightProbe.cs` | **Height pipeline gate** (edit mode): land ratio vs `landRatio`, open ocean always on a seabed below 0, beach band walkable (≤1.5 m/m), blend adds no discontinuities, `worldRadius` clamp drowns everything outside. Exports all four visualiser stages. | `/tmp/seasick-height.txt`, `-height-*.png` |
 | `ChunkProbe.cs` | **Chunk mesh gate** (edit mode): vertex heights equal the height function exactly, normals unit, +X/+Z shared edges bit-identical in position AND normal, LOD-2 vertices a subset of LOD-1. Renders the lab camera to PNG without play mode. | `/tmp/seasick-chunk.txt`, `-chunk.png` |
 | `StreamProbe.cs` | **Streaming gate** (play mode, TerrainLab): 2 km sail at 12 m/s, then coverage, unload band, collider ring, LOD assignment, pool bound, seams over every loaded same-LOD pair, and steady-state main-thread cost (< 10 ms worst). ~3 min. | `/tmp/seasick-stream.txt`, `-stream.png` |
+| `LeeProbe.cs` (`Scripts/Dev/`) | **What the sea does as you come in on an island.** A transect from open water to the beach: at every station the depth, the envelope EACH CASCADE gets, and what that leaves of each band in metres. Exists to separate the envelope's two quite different reasons to flatten the sea near land — the per-island radial DISC (`MaxRadius` + 60 m, which knows nothing about the seabed) and the DEPTH terms (which are the physical ones) — so you can see which is doing it. Built round three traps it hit first time: the shore grid only covers the SHIP (so it runs the transect toward her and every station says whether it was in the grid — outside, depth is a 1e9 sentinel that must never be averaged in); a 14 m patch cannot see a 515 m swell (band heights come from per-cascade RMS read off the displacement textures, the patch RMS is kept and labelled as the chop measurement it is); and a probe that assumes a coordinate lands on an island. Ends with a walk into genuinely shallow water reporting the envelope at 12/8/4/2/1 m depth against the breaking cap. Play mode, Sea.unity. | `/tmp/seasick-lee.txt` |
 | `ShoreProbe.cs` | **Terrain→ocean gate** (play mode, Sea.unity): severity forced to 1.0; surface RMS at deep water / shoreline / land must be intact / <10 % / 0; CPU shore factor vs exact height. Shot of the beach. | `/tmp/seasick-shore.txt`, `-shore.png` |
 | `WorldProbe.cs` | **Populator gate** (play mode, Sea.unity): islands found, home + Stockpile, centres on land, outline at the waterline, beaches, props grounded, reefs/monsters in water, raiders, spawn landable. | `/tmp/seasick-world.txt` |
 | `IslandShot.cs` | Look shots of the home island from the sea, the beach, overhead and 900 m east, with the ship pinned so the streamer stays centred. Play mode, Sea.unity. | `/tmp/seasick-island-0..3.png` |
@@ -98,6 +99,20 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 `python3 tools/pngprobe.py /tmp/seasick-sail-2.png`. Pure stdlib.
 
 ## Measurement traps this project has actually hit
+
+- **`ShoreProbe` and `CalmWaterShot` are both mis-sited, and have been since
+  the spawn moved.** Both were written when the ship started at home:
+  `ShoreProbe` looks for the shoreline along the line south of the world
+  ORIGIN, and `CalmWaterShot` calls wherever the ship happens to be "inshore".
+  `PlaytestStart` now spawns her at (-2400, 725) in 180 m of water, so the
+  shore grid — which follows the ship — never covers ShoreProbe's test points
+  (measured 2026-08-28: `shore-factor-grid` worst error 1.000, `land-flat` rms
+  1.14 m, three of its gates red with nothing wrong with the ocean), and
+  CalmWaterShot compares open water against open water (inshore/offshore ratio
+  0.795, where the number it was written to catch was 0.24). **Both are red or
+  meaningless for reasons that predate any ocean change** — bisect before
+  believing either. The fix in each is to warp the ship to the water under
+  test and let the streamer catch up, the way `SeaProfileProbe` already does.
 
 - **A directional light's yaw is the direction the light TRAVELS, so the sun is
   at the opposite azimuth.** `ShaderStrip.SunAngles` set the light's yaw to the
