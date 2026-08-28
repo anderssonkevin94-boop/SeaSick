@@ -146,6 +146,10 @@ namespace SeaSick.World
         [SerializeField] float stormFogStart = 70f;
         [SerializeField] float stormFogEnd = 430f;
         [SerializeField] float stormHorizonSharp = 3.4f;
+        [Tooltip("What the storm sky's own colours are scaled to at full " +
+                 "night. The storm palette is an absolute grey, so without " +
+                 "this a midnight storm renders BRIGHTER than a clear night.")]
+        [Range(0.02f, 1f)] [SerializeField] float stormNightScale = 0.12f;
 
         [Header("Cloud")]
         [SerializeField] float cloudScaleClear = 0.030f;
@@ -248,7 +252,13 @@ namespace SeaSick.World
             TimeOfDay.DayLength = dayLength;
             TimeOfDay.Scale = 1.0;
             TimeOfDay.Paused = false;
-            TimeOfDay.SetTime01(startTime01);
+            // Scrub rather than SetTime01: SetTime01 preserves the day
+            // number, and TimeOfDay is a static that survives leaving play
+            // mode, so the counter climbed across sessions (measured: Day=3 on
+            // what should have been a first run). The moon's bearing and its
+            // phase both hang off `day / synodicDays`, so every play session
+            // was getting a different moon with nothing saying so.
+            TimeOfDay.Scrub(startTime01 * (double)dayLength);
 
             // Work on a copy: play-mode tuning must never write back into the
             // material asset on disk.
@@ -373,9 +383,25 @@ namespace SeaSick.World
                             * Mathf.Clamp01(moonDir.y / 0.12f);
 
             var p = ClearPalette(sunDir.y, moonLight);
+            // The storm palette is authored as absolute colours, so blending
+            // toward it discards the hour completely: at storminess 0.84 —
+            // which is simply what the western deep reads — about four fifths
+            // of the sky came from a fixed grey and the whole day/night cycle
+            // was invisible to anyone sailing where the game actually starts
+            // them. At full storm it was worse than invisible: stormHorizon is
+            // 30% grey against a clear night's 5.5%, so midnight in a storm
+            // rendered BRIGHTER than midnight in fair weather.
+            //
+            // The fix is the same shape as the one the key light already
+            // needed: scale by the day's light level rather than replacing.
+            // Hue stays the storm's — a storm at noon is exactly what it was —
+            // and only the luminance follows the sun down.
+            float stormLevel = Mathf.Lerp(1f, stormNightScale, Night01);
             var storm = new Palette
             {
-                zenith = stormZenith, horizon = stormHorizon, ground = stormGround,
+                zenith = stormZenith * stormLevel,
+                horizon = stormHorizon * stormLevel,
+                ground = stormGround * stormLevel,
                 light = stormSun, intensity = p.intensity,
                 overcast = stormOvercast, horizonSharp = stormHorizonSharp,
                 fogStart = stormFogStart, fogEnd = stormFogEnd,
