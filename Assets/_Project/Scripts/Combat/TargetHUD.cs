@@ -27,6 +27,10 @@ namespace SeaSick.Combat
 
         void OnGUI()
         {
+            // Draw-only panel: skip the non-Repaint events. See StatusHUD for
+            // the measurement — IMGUI runs OnGUI once per event, and the
+            // discarded passes were the game's biggest source of GC garbage.
+            if (Event.current.type != EventType.Repaint) return;
             if (cam == null) cam = Camera.main;
             if (cam == null) return;
 

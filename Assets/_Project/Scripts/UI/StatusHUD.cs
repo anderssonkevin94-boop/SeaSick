@@ -28,6 +28,21 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
+            // IMGUI calls OnGUI once per EVENT, not once per frame: Layout,
+            // Repaint, and one more for every MouseMove the editor or the
+            // player generates. This panel only draws, so everything it does
+            // on a non-Repaint event is computed and then thrown away — and
+            // the interpolated strings and GUIContent it builds on the way are
+            // garbage that has to be collected.
+            //
+            // Measured on 2026-08-28, before this guard: GUI.Repaint was 70.46
+            // of a 72.97 ms frame, StatusHUD.OnGUI alone cost 6.04 ms and
+            // allocated 14.4 KB EVERY FRAME — the largest single allocator in
+            // the game. That is what the jerky waves were: a GC pause drops a
+            // whole frame, and the water is the fastest-moving thing on screen
+            // so it shows it first. It also explains why the stutter was
+            // irregular rather than steady — it tracked the mouse moving.
+            if (Event.current.type != EventType.Repaint) return;
             if (motor == null) return;
             int u = UITheme.Unit;
             float pad = u * 0.7f;

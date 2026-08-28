@@ -235,6 +235,10 @@ namespace SeaSick.Voyage
 
         void OnGUI()
         {
+            // Draw-only panel: skip the non-Repaint events. See StatusHUD for
+            // the measurement — IMGUI runs OnGUI once per event, and the
+            // discarded passes were the game's biggest source of GC garbage.
+            if (Event.current.type != EventType.Repaint) return;
             if (Time.time > messageUntil) return;
             var r = new Rect(0f, Screen.height * 0.62f, Screen.width, SeaSick.UI.UITheme.Unit * 2f);
             GUI.Label(r, $"+{salvageValue} timber", SeaSick.UI.UITheme.Toast);

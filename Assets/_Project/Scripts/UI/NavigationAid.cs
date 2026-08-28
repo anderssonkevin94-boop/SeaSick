@@ -34,6 +34,10 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
+            // Draw-only panel: skip the non-Repaint events. See StatusHUD for
+            // the measurement — IMGUI runs OnGUI once per event, and the
+            // discarded passes were the game's biggest source of GC garbage.
+            if (Event.current.type != EventType.Repaint) return;
             if (motor == null || voyage == null || voyage.HomePoint == null) return;
 
             int u = UITheme.Unit;
