@@ -2,13 +2,20 @@ using UnityEngine;
 
 namespace SeaSick.Ocean
 {
-    /// Weather: Calm / Normal / Stormy as spectrum-parameter assets, blended
-    /// by lerping the PARAMETERS and rebuilding h0 on a throttle — never by
-    /// cross-fading two simulations (that ghosts). The blend target follows
-    /// the ship's position through the storm region (sail west and the
+    /// Weather: Calm / Normal / Rough / Stormy as spectrum-parameter assets,
+    /// blended by lerping the PARAMETERS and rebuilding h0 on a throttle —
+    /// never by cross-fading two simulations (that ghosts). The blend target
+    /// follows the ship's position through the storm region (sail west and the
     /// weather itself turns), plus a slow global wander so the sea near home
-    /// breathes between calm and normal. The seed never changes, so rebuilds
-    /// move amplitudes only and the phase field stays continuous.
+    /// breathes. The seed never changes, so rebuilds move amplitudes only and
+    /// the phase field stays continuous.
+    ///
+    /// EVERYTHING HERE IS AUTHORED IN METRES OF Hs, not in severity. Severity
+    /// is a blend coordinate, and it is not a unit: the whole ocean shipped
+    /// flat once because `setDepth 0.32` looked like "the storm eases by a
+    /// third" and actually took 57 % off the waves. Every knob below that
+    /// describes how big the sea is says so in metres, or as a fraction of
+    /// metres, and is converted through SeverityForHs at the last moment.
     [DefaultExecutionOrder(-95)]
     public class SeaStateController : MonoBehaviour
     {
@@ -16,60 +23,170 @@ namespace SeaSick.Ocean
 
         [SerializeField] OceanSpectrumSettings calm;
         [SerializeField] OceanSpectrumSettings normal;
+        [Tooltip("The middle of the ocean's range, and the reason it can now be gradual. Without it the blend ran Normal (Hs 3.5) straight into Stormy (Hs 65) — an 18x gap — so every sea worth sailing lived in a 0.07-wide sliver of severity and there was nowhere to sit between a pond and the apocalypse. It also fixes the SHAPE of the ramp: the two-anchor version smeared wavelength 180 -> 470 m linearly, which is not a sea, it is a straight line through a hole.")]
+        [SerializeField] OceanSpectrumSettings rough;
         [SerializeField] OceanSpectrumSettings stormy;
         [Tooltip("Whose position drives the weather target (the player ship). Falls back to the main camera.")]
         [SerializeField] Transform follow;
-        [Tooltip("Seconds for the sea to move most of the way to a new target state.")]
+
+        /// Where each authored state sits on the 0..1 severity axis. Spaced so
+        /// severity is roughly LOGARITHMIC in wave height (the log-rate per
+        /// unit severity runs 2.5 / 4.6 / 5.1 across the three segments,
+        /// against 20:1 for the old two-anchor blend), because equal steps in
+        /// severity should look like equal steps to the eye.
+        public const float SevNormal = 0.40f;
+        public const float SevRough = 0.70f;
+
+        [Header("Weather, in metres of Hs")]
+        [Tooltip("The calmest the open sea ever gets, metres of Hs. Below about 1 m it reads as a mirror rather than water.")]
+        [SerializeField] float shelfCalmHs = 1.6f;
+        [Tooltip("The top of the open sea's own slow breathing, metres of Hs — a lively day on the home shelf with no storm anywhere near it.")]
+        [SerializeField] float shelfLivelyHs = 4.5f;
+        [Tooltip("Seconds for the sea to move most of the way to a new target state. The ease runs in LOG Hs, so a climb from 3 m to 65 m spends its time evenly in ratio rather than dumping 50 m in the last few seconds.")]
         [SerializeField] float blendTime = 45f;
         [Tooltip("Spectrum rebuild throttle while blending, Hz.")]
         [SerializeField] float rebuildHz = 4f;
-        [Tooltip("The calmest the open sea ever gets. Below about 0.2 it reads as a mirror rather than water.")]
-        [Range(0f, 0.5f)] [SerializeField] float calmFloor = 0.22f;
-        [Tooltip("How far the open-sea wander swings between calm and normal, 0..1.")]
-        [SerializeField] float wanderAmount = 0.5f;
-        [SerializeField] float wanderPeriod = 240f;
+        [Tooltip("Seconds for the slow open-sea wander. A second, shorter octave rides on it at an incommensurate period so the breathing never settles into a rhythm the player can learn.")]
+        [SerializeField] float wanderPeriod = 620f;
         [Tooltip("On the first frame, jump straight to the weather the ship's position asks for instead of easing into it over blendTime. Pressing play in storm water otherwise buys you the better part of a minute watching the sea grow -- and every probe and playtest that warps somewhere starts in the wrong sea.")]
         [SerializeField] bool warmStart = true;
 
         [Header("Sets and lulls")]
-        [Tooltip("How deeply the storm breathes, as a fraction of SEVERITY -- and severity is NOT wave height. The blend runs normal->stormy across severity 0.5..1.0, and normal is Hs 3.5 against stormy's 65, so the mapping is brutally nonlinear at the top: severity 1.00 is Hs 65, 0.90 is Hs 53, 0.70 is Hs 28. A setDepth of 0.32 therefore does NOT take 32% off the waves, it takes 57% off them, and the first version of this shipped exactly that -- the storm spent most of its life at 'heavy' instead of 'mountainous' and the whole ocean read as flat. 0.10 is about a 19% swing in height, which is what a set actually looks like, and it also keeps the state name from flickering between heavy and storm.")]
-        [Range(0f, 0.6f)] [SerializeField] float setDepth = 0.10f;
-        [Tooltip("Seconds per set cycle. Long swell arrives in groups on this sort of period; short enough to feel while sailing, long enough not to read as a pulsing effect.")]
-        [SerializeField] float setPeriod = 70f;
+        [Tooltip("How deeply the sea breathes in groups, AS A FRACTION OF Hs — 0.16 really is a 16 % swing in wave height, because this is applied in metres and converted to severity afterwards. The old version of this knob was a fraction of SEVERITY and 0.32 of it took 57 % off the waves; that is the bug this whole file is arranged to make impossible.")]
+        [Range(0f, 0.4f)] [SerializeField] float setDepth = 0.16f;
+        [Tooltip("Seconds per set cycle. Long swell arrives in groups on this sort of period; short enough to feel while sailing, long enough not to read as a pulsing effect. A second octave rides on it at an incommensurate period.")]
+        [SerializeField] float setPeriod = 95f;
+
+        [Header("Sky coupling")]
+        [Tooltip("Hs at which the sky starts to turn, metres.")]
+        [SerializeField] float skyHsStart = 8f;
+        [Tooltip("Hs at which the sky is fully stormy, metres. The ramp between the two is geometric, so the sky darkens with the RATIO of wave height rather than snapping at the top of the range.")]
+        [SerializeField] float skyHsFull = 55f;
 
         OceanSpectrumSettings blend;
-        float severity;          // 0 = calm, 0.5 = normal, 1 = stormy
-        float baseSeverity;      // the slow weather, before sets ride on it
+        float severity;          // 0 = calm, blend coordinate only — NOT a height
+        float baseHs;            // the slow weather in metres, before sets ride on it
         bool warmed;             // the first-frame jump has happened
         bool justWarmed;         // log it once severity has been computed
+        int nameBand;            // hysteresis state for CurrentStateName
         float lastRebuildSeverity = -1f;
         double lastRebuildTime = -999.0;
 
+        /// What the open sea is doing right now, metres of Hs. This is the
+        /// number every other system should reason about.
+        public float CurrentHs { get; private set; }
+
         /// 0..1, drives sky, spray, camera storm response (SkyDirector).
-        public float Storminess01 => Mathf.Clamp01((severity - 0.5f) * 2f);
+        /// Expressed in Hs so it survives any re-spacing of the anchors.
+        public float Storminess01 => LogInverseLerp(skyHsStart, skyHsFull, CurrentHs);
         public float Severity01 => severity;
         public Vector2 WindDirection => blend != null ? blend.WindDir : Vector2.right;
-        public string CurrentStateName =>
-            severity < 0.25f ? "calm" : severity < 0.55f ? "lively" :
-            severity < 0.8f ? "heavy" : "storm";
+        public string CurrentStateName => NameForHs(CurrentHs, ref nameBand);
 
         public Transform Follow { get => follow; set => follow = value; }
 
-        /// Severity the gameplay math sees at a position: the global weather
-        /// scaled by the local envelope (calm shelf stays calm in a storm).
-        public float SeaSeverityAt(Vector2 p)
+        // ---- Hs <-> severity -------------------------------------------------
+        // These two MUST agree with what LerpFrom actually produces, which
+        // lerps nominalHs LINEARLY inside each segment. The perceptual
+        // evenness comes from where the anchors sit, not from bending the
+        // curve here: the depth limit caps against the blended nominalHs, so a
+        // mapping that flattered the numbers would quietly mis-cap the sea.
+
+        float HsCalm => calm != null ? calm.nominalHs : 1.3f;
+        float HsNormal => normal != null ? normal.nominalHs : 3.5f;
+        float HsRough => rough != null ? rough.nominalHs : 14f;
+        float HsStorm => stormy != null ? stormy.nominalHs : 65f;
+
+        /// Metres of Hs the blend produces at this severity.
+        public float HsAt(float s)
+        {
+            s = Mathf.Clamp01(s);
+            if (rough == null)   // pre-wiring fallback: the old three-anchor blend
+                return s <= 0.5f ? Mathf.Lerp(HsCalm, HsNormal, s * 2f)
+                                 : Mathf.Lerp(HsNormal, HsStorm, (s - 0.5f) * 2f);
+            if (s <= SevNormal) return Mathf.Lerp(HsCalm, HsNormal, s / SevNormal);
+            if (s <= SevRough) return Mathf.Lerp(HsNormal, HsRough, (s - SevNormal) / (SevRough - SevNormal));
+            return Mathf.Lerp(HsRough, HsStorm, (s - SevRough) / (1f - SevRough));
+        }
+
+        /// The exact inverse of HsAt. Everything that wants to say "make the
+        /// sea four metres" goes through here.
+        public float SeverityForHs(float hs)
+        {
+            if (rough == null)
+                return hs <= HsNormal
+                    ? 0.5f * Mathf.InverseLerp(HsCalm, HsNormal, hs)
+                    : 0.5f + 0.5f * Mathf.InverseLerp(HsNormal, HsStorm, hs);
+            if (hs <= HsNormal) return SevNormal * Mathf.InverseLerp(HsCalm, HsNormal, hs);
+            if (hs <= HsRough) return SevNormal + (SevRough - SevNormal) * Mathf.InverseLerp(HsNormal, HsRough, hs);
+            return SevRough + (1f - SevRough) * Mathf.InverseLerp(HsRough, HsStorm, hs);
+        }
+
+        /// Geometric interpolation. Wave height is read as a ratio, not a
+        /// difference — 3 m to 6 m is the same step to the eye as 30 m to
+        /// 60 m — so every gradient in this file runs in log Hs. A linear one
+        /// spends most of its distance in seas that all look the same and then
+        /// delivers the entire storm in the last stretch.
+        public static float LogLerp(float a, float b, float t)
+        {
+            a = Mathf.Max(a, 0.01f); b = Mathf.Max(b, 0.01f);
+            return a * Mathf.Pow(b / a, Mathf.Clamp01(t));
+        }
+
+        public static float LogInverseLerp(float a, float b, float x)
+        {
+            a = Mathf.Max(a, 0.01f); b = Mathf.Max(b, a * 1.001f);
+            return Mathf.Clamp01(Mathf.Log(Mathf.Max(x, 0.01f) / a) / Mathf.Log(b / a));
+        }
+
+        // Upper bound of each band, metres of Hs, and the name below it.
+        static readonly float[] BandHs = { 2.0f, 5.5f, 16f, 32f, 50f };
+        static readonly string[] BandNames = { "calm", "lively", "rough", "heavy", "wild", "mountainous" };
+
+        /// Names a sea by its height, with 6 % hysteresis so a set or a lull
+        /// cannot make the label flicker across a boundary. The caller owns
+        /// the band state, so the global weather and the ship's local water
+        /// can be named independently without duplicating the thresholds.
+        public static string NameForHs(float hs, ref int band)
+        {
+            band = Mathf.Clamp(band, 0, BandNames.Length - 1);
+            while (band < BandHs.Length && hs > BandHs[band] * 1.06f) band++;
+            while (band > 0 && hs < BandHs[band - 1] * 0.94f) band--;
+            return BandNames[band];
+        }
+
+        // ---- Local water -----------------------------------------------------
+
+        /// How big the sea actually is at a position, metres of Hs: the global
+        /// weather scaled by the local envelope.
+        ///
+        /// This used to scale SEVERITY by the envelope, which was wrong in the
+        /// direction that matters most. Half the severity of a 65 m storm is a
+        /// 7 m sea; half its ENVELOPE is a 32 m one. Every gameplay reader —
+        /// sickness roughness, the sky lift, the nav tape — was being told the
+        /// water beside an island in a storm was nearly flat.
+        public float SeaHsAt(Vector2 p)
         {
             float env = RegionField.Instance != null
                 ? Mathf.Clamp01(RegionField.Instance.Evaluate(p)) : 1f;
-            return Mathf.Clamp01(severity * env);
+            return CurrentHs * env;
         }
+
+        /// The same thing as a 0..1 blend coordinate, for callers that want a
+        /// scalar rather than metres.
+        public float SeaSeverityAt(Vector2 p) => SeverityForHs(SeaHsAt(p));
 
         /// Probes pin the weather with this; wander and region stop moving it.
         public void ForceSeverity(float s)
         {
             forced = true;
             severity = Mathf.Clamp01(s);
+            CurrentHs = HsAt(severity);
+            baseHs = CurrentHs;
         }
+
+        /// The same pin, said in metres.
+        public void ForceHs(float hs) => ForceSeverity(SeverityForHs(hs));
 
         public void ReleaseForce() => forced = false;
         bool forced;
@@ -79,7 +196,9 @@ namespace SeaSick.Ocean
             Instance = this;
             blend = ScriptableObject.CreateInstance<OceanSpectrumSettings>();
             if (normal != null) blend.CopyFrom(normal);
-            severity = baseSeverity = 0.4f;
+            baseHs = HsNormal;
+            severity = SeverityForHs(baseHs);
+            CurrentHs = baseHs;
         }
 
         void OnDisable()
@@ -87,6 +206,40 @@ namespace SeaSick.Ocean
             if (Instance == this) Instance = null;
             if (blend != null) Destroy(blend);
         }
+
+        /// Two Perlin octaves at incommensurate periods, stretched to actually
+        /// reach 0 and 1. Perlin alone sits near its midpoint most of the time,
+        /// and a single period is a rhythm the player learns.
+        static float Wave01(double t, float slow, float fastRatio, float fastWeight, float seed)
+        {
+            float a = Mathf.PerlinNoise1D((float)(t / Mathf.Max(slow, 1f)) + seed);
+            float b = Mathf.PerlinNoise1D((float)(t / Mathf.Max(slow * fastRatio, 1f)) + seed + 57.13f);
+            float v = Mathf.Lerp(a, b, fastWeight);
+            return Mathf.Clamp01((v - 0.5f) * 1.9f + 0.5f);
+        }
+
+        /// The weather a position asks for at a time, metres of Hs, before the
+        /// ease and before sets. Update calls it and so does LivingSeaTrace --
+        /// one implementation, so the probe measures the shipped rule rather
+        /// than a hand-copy of it that stops matching and stops gating.
+        public float TargetHsAt(Vector2 p, double t)
+        {
+            float storm = RegionField.Instance != null
+                ? RegionField.Instance.StormWeight(p) : 0f;
+            // The open sea's own slow breathing, in metres.
+            float w = Wave01(t, wanderPeriod, 0.376f, 0.35f, 13.7f);
+            float shelfHs = LogLerp(shelfCalmHs, shelfLivelyHs, w);
+            // Toward the storm GEOMETRICALLY: equal distances sailed buy equal
+            // ratios of wave height. The linear version spent the first two
+            // thirds of a crossing looking like nothing had changed and then
+            // delivered 40 m in the last stretch, which is the "abrupt"
+            // everyone was reading.
+            return LogLerp(shelfHs, HsStorm, storm);
+        }
+
+        /// Sets and lulls as a multiplier on Hs at a time.
+        public float SetFactor(double t) =>
+            1f + setDepth * (Wave01(t, setPeriod, 0.43f, 0.40f, 41.3f) * 2f - 1f);
 
         void Update()
         {
@@ -97,63 +250,49 @@ namespace SeaSick.Ocean
             if (!forced)
             {
                 Vector2 pos = FollowXZ();
-                float storm = RegionField.Instance != null
-                    ? RegionField.Instance.StormWeight(pos) : 0f;
-                // Open-sea wander breathes between calm and normal on OceanTime.
-                float wander = Mathf.PerlinNoise1D((float)(OceanTime.Now / wanderPeriod) + 13.7f);
-                // Floored so the open sea never goes to glass either. The
-                // wander used to bottom out around 0.14, which reads as a
-                // mirror; the water should always have some texture.
-                float baseline = Mathf.Max(calmFloor, 0.15f + wanderAmount * 0.5f * wander);
-                float target = Mathf.Max(baseline, Mathf.Lerp(baseline, 1f, storm));
+                float targetHs = TargetHsAt(pos, OceanTime.Now);
+
                 // Wait for RegionField before snapping: with no region there is
                 // no storm weight, so a frame-one jump would land on the calm
                 // baseline and then have to ease up anyway -- which is the
                 // thing this exists to avoid.
                 if (warmStart && !warmed && RegionField.Instance != null)
                 {
-                    baseSeverity = target;
+                    baseHs = targetHs;
                     warmed = true;
                     justWarmed = true;   // logged below, once severity is real
                 }
                 else
                 {
-                    baseSeverity = Mathf.Lerp(baseSeverity, target,
+                    // Exponential ease, run in log Hs so it is even in ratio.
+                    baseHs = LogLerp(baseHs, targetHs,
                         1f - Mathf.Exp(-Time.deltaTime * 3f / Mathf.Max(blendTime, 1f)));
                 }
 
                 // Sets and lulls ride ON TOP of the smoothed weather rather
                 // than being folded into its target, deliberately. blendTime's
-                // 15 s time constant is there to stop the weather flickering,
-                // and it would eat most of a 70 s modulation before it ever
-                // reached the water -- the sea would breathe on paper and look
-                // constant.
+                // time constant is there to stop the weather flickering, and it
+                // would eat most of a 95 s modulation before it ever reached
+                // the water -- the sea would breathe on paper and look constant.
                 //
-                // Scaled by storm weight, so the calm shelf near home does not
-                // develop a pulse it has no reason to have. The wander already
-                // gives the open sea its slow breathing.
-                float sets = Mathf.PerlinNoise1D((float)(OceanTime.Now / Mathf.Max(setPeriod, 1f)) + 41.3f);
-                sets = Mathf.Clamp01((sets - 0.5f) * 2f + 0.5f);   // Perlin rarely reaches its ends
-                float breathe = setDepth * storm;
-                severity = Mathf.Clamp01(baseSeverity * (1f - breathe * (1f - sets)));
-                // Never let a lull drop the storm out of its own weather band:
-                // the point is a sea that eases and gathers, not one that stops
-                // being a storm every ninety seconds.
-                if (storm > 0.5f) severity = Mathf.Max(severity, baseSeverity * 0.85f);
+                // No longer gated to storm water. As a fraction of Hs it is
+                // self-scaling: 16 % of a 3.5 m shelf sea is 56 cm, which is
+                // exactly the subtle, always-there variation the open sea wants,
+                // and 16 % of the storm is 10 m without ever dropping it out of
+                // its own weather band.
+                severity = SeverityForHs(baseHs * SetFactor(OceanTime.Now));
 
                 if (justWarmed)
                 {
                     justWarmed = false;
                     // Said out loud because "the sea looked wrong at the start"
                     // is otherwise indistinguishable from the ease still
-                    // running, and the two want opposite fixes. Logged HERE
-                    // rather than at the jump, because CurrentStateName reads
-                    // `severity` and the jump only sets `baseSeverity` -- the
-                    // first version cheerfully reported "severity 1.00
-                    // (lively)".
-                    Debug.Log($"SeaStateController: warm start at severity {severity:F2} ({CurrentStateName})");
+                    // running, and the two want opposite fixes.
+                    Debug.Log($"SeaStateController: warm start at Hs {HsAt(severity):F1} m, severity {severity:F2} ({CurrentStateName})");
                 }
             }
+
+            CurrentHs = HsAt(severity);
 
             // Throttled rebuild, and only when the state actually moved.
             if (OceanTime.Now - lastRebuildTime < 1.0 / rebuildHz) return;
@@ -161,8 +300,20 @@ namespace SeaSick.Ocean
             lastRebuildTime = OceanTime.Now;
             lastRebuildSeverity = severity;
 
-            if (severity <= 0.5f) blend.LerpFrom(calm, normal, severity * 2f);
-            else blend.LerpFrom(normal, stormy, (severity - 0.5f) * 2f);
+            if (rough == null)
+            {
+                // Pre-wiring fallback, so a scene that has not had the fourth
+                // asset pushed into it still runs the sea it always ran.
+                if (severity <= 0.5f) blend.LerpFrom(calm, normal, severity * 2f);
+                else blend.LerpFrom(normal, stormy, (severity - 0.5f) * 2f);
+            }
+            else if (severity <= SevNormal)
+                blend.LerpFrom(calm, normal, severity / SevNormal);
+            else if (severity <= SevRough)
+                blend.LerpFrom(normal, rough, (severity - SevNormal) / (SevRough - SevNormal));
+            else
+                blend.LerpFrom(rough, stormy, (severity - SevRough) / (1f - SevRough));
+
             ocean.SetSettings(blend);
         }
 

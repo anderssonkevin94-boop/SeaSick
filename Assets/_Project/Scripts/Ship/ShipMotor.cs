@@ -112,12 +112,17 @@ namespace SeaSick.Ship
         public Vector3 WaterVelocity { get; private set; }
         public float KnockdownRoll { get; private set; }
 
-        public string SeaStateName =>
-            SeaSeverity01 < 0.2f ? "calm"
-            : SeaSeverity01 < 0.45f ? "lively"
-            : SeaSeverity01 < 0.7f ? "heavy"
-            : SeaSeverity01 < 0.9f ? "wild"
-            : "mountainous";
+        /// How big the water under her actually is, metres of Hs.
+        public float SeaHs { get; private set; }
+
+        // Named from METRES, not from severity: severity is a blend
+        // coordinate whose relation to wave height depends on where the
+        // authored states sit, so a threshold in it silently changes meaning
+        // every time a sea state is retuned. SeaStateController owns the
+        // bands and the hysteresis; this holds its own band so the ship's
+        // local water can be named independently of the global weather.
+        int nameBand;
+        public string SeaStateName => SeaStateController.NameForHs(SeaHs, ref nameBand);
 
         public float DriftAngleDeg =>
             CurrentSpeed < 0.5f ? 0f : Vector3.SignedAngle(
@@ -236,6 +241,7 @@ namespace SeaSick.Ship
             SeaResistance01 = SeaResistanceAt(posXZ, transform.forward, headSeaPenalty,
                 out float sev, out float head, out float angle);
             SeaSeverity01 = sev;
+            SeaHs = ctrl != null ? ctrl.SeaHsAt(posXZ) : 0f;
             HeadSea01 = head;
             SeaAngleDeg = angle;
 

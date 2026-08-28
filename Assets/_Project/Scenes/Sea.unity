@@ -1108,16 +1108,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.SeaStateController
   calm: {fileID: 11400000, guid: ec4b814f86b2842baaa5f0a37e4f79ae, type: 2}
   normal: {fileID: 11400000, guid: 79a34835b269b4440b4b48b2f3ec6d88, type: 2}
+  rough: {fileID: 11400000, guid: a7c31f9e5b6d4428ab0e7c15d3f28c40, type: 2}
   stormy: {fileID: 11400000, guid: f838051a0444b4dfcb080cc59b226f6b, type: 2}
   follow: {fileID: 2143489877}
+  shelfCalmHs: 1.6
+  shelfLivelyHs: 4.5
   blendTime: 45
   rebuildHz: 4
-  calmFloor: 0.22
-  wanderAmount: 0.5
-  wanderPeriod: 240
+  wanderPeriod: 620
   warmStart: 1
-  setDepth: 0.1
-  setPeriod: 70
+  setDepth: 0.16
+  setPeriod: 95
+  skyHsStart: 8
+  skyHsFull: 55
 --- !u!114 &1016993462
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1154,8 +1157,8 @@ MonoBehaviour:
   farScale: 1
   shoreFalloff: 60
   stormBearing: {x: -1, y: 0}
-  stormNear: 450
-  stormFar: 1250
+  stormNear: 500
+  stormFar: 2800
   autoBindWorld: 1
   shoalDepthFull: 8
   shoalDepthZero: 0.5
