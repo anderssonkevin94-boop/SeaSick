@@ -84,6 +84,7 @@ namespace SeaSick.Ocean
                 region = region != null ? region.Params : RegionFieldParams.Neutral,
                 islands = region != null ? region.Islands : emptyIslands,
                 shore = region != null && region.Shore.IsCreated ? region.Shore : emptyShore,
+                weather = region != null && region.Weather.IsCreated ? region.Weather : emptyShore,
             };
         }
 

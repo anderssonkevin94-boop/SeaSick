@@ -21,6 +21,12 @@ namespace SeaSick.Ocean
         public float chopFloor;      // envelope never falls below this in water
         public float breakFraction;  // a wave may not exceed this x the water depth
         public float waveHs;         // the open-sea Hs the spectrum is producing, m
+        // Drifting roughness patches (WeatherField). Tile is sampled with WRAP.
+        public float weatherInvTile; // 1 / metres the tile covers
+        public float2 weatherOffset; // drift, in tile units
+        public int weatherN;         // texels per edge, 0 = no field
+        public float patchLo;        // the most a patch takes off the sea
+        public float3 patchCoupling; // how much each cascade feels a patch
 
         public static RegionFieldParams Neutral => new RegionFieldParams
         {
@@ -37,6 +43,11 @@ namespace SeaSick.Ocean
             chopFloor = 0f,
             breakFraction = 0f,
             waveHs = 0f,
+            weatherInvTile = 0f,
+            weatherOffset = float2.zero,
+            weatherN = 0,
+            patchLo = 1f,
+            patchCoupling = float3.zero,
         };
 
         /// islands: xy = centre, z = radius. shore: terrain heights on the
@@ -65,7 +76,8 @@ namespace SeaSick.Ocean
         /// Per-cascade envelope. Only the DEPTH terms differ between cascades;
         /// distance from home and the island falloff are wavelength-independent.
         /// MUST match RegionEnvelopeCascades in RegionField.hlsl.
-        public float3 EvaluateCascades(float2 p, NativeArray<float4> islands, NativeArray<float> shore)
+        public float3 EvaluateCascades(float2 p, NativeArray<float4> islands,
+                                       NativeArray<float> shore, NativeArray<float> weather)
         {
             float d = math.distance(p, home);
             float t = math.smoothstep(calmRadius, wildRadius, d);
@@ -86,11 +98,29 @@ namespace SeaSick.Ocean
             // glass. Twin of the max() in RegionField.hlsl.
             float floorTerm = chopFloor * wet;
 
+            // Drifting roughness patches. Hoisted out of the cascade loop --
+            // it does not depend on the cascade, and this runs inside the
+            // sampler's Newton loop eight times per query against a batch
+            // budget that is nearly spent.
+            //
+            // Patches only ever REDUCE. An envelope above 1 asks for waves the
+            // depth limit and the seabed cannot hold, and steeper water costs
+            // another Newton step there is no budget for.
+            float patch = 1f;
+            if (weatherN > 0)
+                patch = math.lerp(patchLo, 1f, WeatherAt(p, weather));
+
             float3 result = default;
             for (int c = 0; c < 3; c++)
             {
                 float bw = BottomCoupling(c);
-                float env = baseEnv * math.lerp(1f, shoal, bw);
+                // Weak on the swell, strong on the chop: a roughness patch is
+                // short-wave energy and the long swell rolls straight through
+                // it. That is what the sea does, and it also keeps patches
+                // clear of everything that has been measured -- cascade 0
+                // carries nearly all of Hs.
+                float env = baseEnv * math.lerp(1f, shoal, bw)
+                                    * math.lerp(1f, patch, patchCoupling[c]);
                 // Depth limit: no wave taller than a fraction of the water
                 // under it -- the shoaling/breaking rule, which makes seabed
                 // clipping structurally impossible at ANY wave size rather
@@ -112,8 +142,30 @@ namespace SeaSick.Ocean
         /// Cascade 0's envelope: the long swell, and what every gameplay reader
         /// means by "how big is the sea here". Identical to the pre-cascade
         /// version because BottomCoupling(0) is exactly 1.
-        public float Evaluate(float2 p, NativeArray<float4> islands, NativeArray<float> shore)
-            => EvaluateCascades(p, islands, shore).x;
+        public float Evaluate(float2 p, NativeArray<float4> islands,
+                              NativeArray<float> shore, NativeArray<float> weather)
+            => EvaluateCascades(p, islands, shore, weather).x;
+
+        /// Wrapped bilinear over the weather tile. MUST match WeatherAt in
+        /// RegionField.hlsl, which is hardware Repeat filtering: texel centres
+        /// at (i + 0.5)/N, and a POSITIVE modulo, because world positions west
+        /// of home make these coordinates negative and C#'s % does not.
+        public float WeatherAt(float2 p, NativeArray<float> weather)
+        {
+            if (weatherN <= 0 || weather.Length < weatherN * weatherN) return 1f;
+            int n = weatherN;
+            float2 uv = p * weatherInvTile + weatherOffset;
+            float2 f = uv * n - 0.5f;
+            int2 i0 = (int2)math.floor(f);
+            float2 w = f - i0;
+            int x0 = WrapIndex(i0.x, n), y0 = WrapIndex(i0.y, n);
+            int x1 = WrapIndex(i0.x + 1, n), y1 = WrapIndex(i0.y + 1, n);
+            float a = weather[y0 * n + x0], b = weather[y0 * n + x1];
+            float c = weather[y1 * n + x0], d = weather[y1 * n + x1];
+            return math.lerp(math.lerp(a, b, w.x), math.lerp(c, d, w.x), w.y);
+        }
+
+        static int WrapIndex(int a, int n) { int r = a % n; return r < 0 ? r + n : r; }
 
         /// Shoal factor, "is there water here at all", and the depth itself,
         /// from one lookup. The chop floor needs the second (the sea keeps
@@ -191,9 +243,14 @@ namespace SeaSick.Ocean
         [Tooltip("A wave may not be taller than this fraction of the water under it. The real breaking index is about 0.78; below that leaves margin for the hull and the camera.")]
         [Range(0.1f, 0.8f)] [SerializeField] float breakFraction = 0.55f;
 
-        // Pulled from the renderer each frame rather than pushed, so the data
-        // flows one way and nothing has to remember to call a setter.
+        // Pulled from the renderer and the weather field each frame rather
+        // than pushed, so the data flows one way and nothing has to remember
+        // to call a setter.
         float waveHs;
+        float weatherInvTile; float2 weatherOffset; int weatherN;
+        float patchLo = 1f; float3 patchCoupling;
+        NativeArray<float> weather;    // borrowed from WeatherField, never owned
+        Texture2D weatherTex;
 
         Vector2 home;
         readonly Vector4[] islandsGpu = new Vector4[MaxIslands];
@@ -207,6 +264,7 @@ namespace SeaSick.Ocean
         public NativeArray<float4> Islands => islands;
         public NativeArray<float> Shore => shore;
         public int ShoreN => shoreN;
+        public NativeArray<float> Weather => weather;
 
         /// The terrain hands over a world-anchored grid of heights (length n*n,
         /// row-major, x fastest) covering [origin, origin + size). Copied; the
@@ -251,6 +309,11 @@ namespace SeaSick.Ocean
             chopFloor = chopFloor,
             breakFraction = breakFraction,
             waveHs = waveHs,
+            weatherInvTile = weatherInvTile,
+            weatherOffset = weatherOffset,
+            weatherN = weatherN,
+            patchLo = patchLo,
+            patchCoupling = patchCoupling,
         };
 
         void OnEnable()
@@ -293,7 +356,7 @@ namespace SeaSick.Ocean
         }
 
         public float Evaluate(Vector2 p) =>
-            Params.Evaluate(new float2(p.x, p.y), islands, shore);
+            Params.Evaluate(new float2(p.x, p.y), islands, shore, weather);
 
         /// 0 at/inside stormNear along the storm bearing, 1 beyond stormFar.
         public float StormWeight(Vector2 p)
@@ -309,6 +372,25 @@ namespace SeaSick.Ocean
             // against the measured Hs by WaveSizeProbe.
             var ocean = OceanRenderer.Instance;
             waveHs = ocean != null && ocean.Settings != null ? ocean.Settings.nominalHs : 0f;
+
+            // Drifting roughness patches, if there is a weather field in the
+            // scene. Borrowed, never owned: WeatherField bakes the tile once
+            // and this only carries it to the shader and the jobs.
+            var wf = WeatherField.Instance;
+            if (wf != null && wf.Tile.IsCreated)
+            {
+                weather = wf.Tile;
+                weatherTex = wf.TileTexture;
+                weatherN = wf.TileTexels;
+                weatherInvTile = wf.InvTileMetres;
+                weatherOffset = wf.PatchOffset;
+                patchLo = wf.PatchLo;
+                patchCoupling = wf.PatchCoupling;
+            }
+            else
+            {
+                weatherN = 0; patchLo = 1f; patchCoupling = float3.zero;
+            }
 
             // The world is generated at runtime, so home and islands can only
             // be picked up once they exist. One-shot; probes that set their own
@@ -348,6 +430,12 @@ namespace SeaSick.Ocean
                 new Vector4(shoalDepthZero, shoalDepthFull, chopFloor, 0f));
             Shader.SetGlobalVector("_Ocean_DepthLimit",
                 new Vector4(breakFraction, waveHs, 0f, 0f));
+            Shader.SetGlobalVector("_Ocean_Weather",
+                new Vector4(weatherInvTile, weatherOffset.x, weatherOffset.y, weatherN));
+            Shader.SetGlobalVector("_Ocean_WeatherPatch",
+                new Vector4(patchLo, patchCoupling.x, patchCoupling.y, patchCoupling.z));
+            Shader.SetGlobalTexture("_Ocean_WeatherTex",
+                weatherTex != null ? (Texture)weatherTex : Texture2D.whiteTexture);
             // ALWAYS bind, even with no shore grid. A fragment shader tolerates
             // an unbound texture it never samples (the _Ocean_ShoreRect.w guard
             // sees to that), but a COMPUTE dispatch does not: Metal validates
@@ -372,6 +460,9 @@ namespace SeaSick.Ocean
             // kernel including it does nothing at all.
             Shader.SetGlobalVector("_Ocean_Shoal", Vector4.zero);
             Shader.SetGlobalVector("_Ocean_DepthLimit", Vector4.zero);
+            Shader.SetGlobalVector("_Ocean_Weather", Vector4.zero);
+            Shader.SetGlobalVector("_Ocean_WeatherPatch", new Vector4(1f, 0f, 0f, 0f));
+            Shader.SetGlobalTexture("_Ocean_WeatherTex", Texture2D.whiteTexture);
             Shader.SetGlobalVectorArray("_Ocean_Islands", new Vector4[MaxIslands]);
             Shader.SetGlobalTexture("_Ocean_ShoreTex", Texture2D.blackTexture);
         }

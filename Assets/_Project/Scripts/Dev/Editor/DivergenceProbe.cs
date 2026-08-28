@@ -107,6 +107,17 @@ public class DivergenceProbe : MonoBehaviour
         region.AddIsland(new Vector2(80f, 60f), 25f);
         region.AddIsland(new Vector2(-40f, -90f), 30f);
 
+        // A weather field with a DELIBERATELY TINY tile, so the drifting
+        // roughness patches vary hard across the 600 m sample disc instead of
+        // being a near-constant the twins would agree on for free. Same
+        // formula, harsher parameter -- the same reason choppiness is
+        // over-driven above. Without this the newest term in the envelope
+        // would be certified by a gate that never exercised it, which is how
+        // this probe spent a fortnight certifying a sea that did not exist.
+        var weather = ocean.GetComponent<WeatherField>();
+        if (weather == null) weather = ocean.gameObject.AddComponent<WeatherField>();
+        weather.ConfigureForTest(220f, 64);
+
         // A synthetic shore grid, because OceanLab has no terrain and the
         // depth-dependent half of the envelope -- shoal factor, wet gate and
         // the depth limit -- is otherwise never evaluated at all. One gaussian
@@ -176,6 +187,7 @@ public class DivergenceProbe : MonoBehaviour
         int samples = 0, stalled = 0, capped = 0, overGate = 0;
         var allErr = new System.Collections.Generic.List<float>();
         float envLo = 9999f, envHi = -9999f;
+        float patchLo = 9999f, patchHi = -9999f;
 
         foreach (float t in new[] { 41f, 97f, 158f, 233f, 301f })
         {
@@ -248,6 +260,9 @@ public class DivergenceProbe : MonoBehaviour
                     && math.max(0f, rp.breakFraction * swd.z / rp.waveHs) < 1f) capped++;
                 if (diag[i].x < envLo) envLo = diag[i].x;
                 if (diag[i].x > envHi) envHi = diag[i].x;
+                float pv = rp.WeatherAt(x, field.weather);
+                if (pv < patchLo) patchLo = pv;
+                if (pv > patchHi) patchHi = pv;
             }
             maxTotal = Mathf.Max(maxTotal, fTotal);
             maxEnv = Mathf.Max(maxEnv, fEnv);
@@ -310,6 +325,13 @@ public class DivergenceProbe : MonoBehaviour
             sb.AppendLine(string.Format(
                 "coverage: envelope spanned {0:F3}..{1:F3}; the depth limit was the binding term at {2:F0}% of points",
                 envLo, envHi, 100.0 * capped / samples));
+            // A term the disc never varies is a term this gate is not
+            // gating. The patch field is on a 220 m test tile precisely so
+            // this line reads as a real spread.
+            sb.AppendLine(string.Format(
+                "coverage: weather patch field spanned {0:F3}..{1:F3}{2}",
+                patchLo, patchHi,
+                (patchHi - patchLo) < 0.25f ? "   <-- TOO FLAT TO GATE" : ""));
         }
         sb.AppendLine(string.Format("SampleBatch 1000 queries: {0:F3} ms (median of 20)", medianMs));
 

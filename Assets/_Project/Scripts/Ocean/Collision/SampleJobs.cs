@@ -55,6 +55,7 @@ namespace SeaSick.Ocean
         [ReadOnly] public NativeArray<half> turb0;
         [ReadOnly] public NativeArray<float4> islands;
         [ReadOnly] public NativeArray<float> shore;
+        [ReadOnly] public NativeArray<float> weather;
         public RegionFieldParams region;
 
         /// Per-cascade weight for what the HULL feels, cascades 0 and 1.
@@ -134,7 +135,7 @@ namespace SeaSick.Ocean
         public float4 SourceDisp(float2 p) => SampleDispRaw(p);
 
         /// Diagnostic only. The regional envelope at a source point.
-        public float SourceEnv(float2 p) => region.Evaluate(p, islands, shore);
+        public float SourceEnv(float2 p) => region.Evaluate(p, islands, shore, weather);
 
         public OceanSample Sample(float3 worldPos)
         {
@@ -152,7 +153,7 @@ namespace SeaSick.Ocean
             float4 d = float4.zero;
             for (int i = 0; i < NewtonIterations; i++)
             {
-                envC = region.EvaluateCascades(p, islands, shore);
+                envC = region.EvaluateCascades(p, islands, shore, weather);
                 // d and dv arrive already enveloped, per cascade, so the
                 // Jacobian below carries no separate env factor.
                 d = SampleDisp(p, envC.xy);
@@ -171,7 +172,7 @@ namespace SeaSick.Ocean
                 p -= step;
             }
 
-            envC = region.EvaluateCascades(p, islands, shore);
+            envC = region.EvaluateCascades(p, islands, shore, weather);
             d = SampleDisp(p, envC.xy);
             result.height = d.y;
             result.displacement = new float3(d.x, d.y, d.z);

@@ -57,6 +57,14 @@ namespace SeaSick.Ocean
         [Tooltip("Seconds per set cycle. Long swell arrives in groups on this sort of period; short enough to feel while sailing, long enough not to read as a pulsing effect. A second octave rides on it at an incommensurate period.")]
         [SerializeField] float setPeriod = 95f;
 
+        [Header("Storm cells")]
+        [Tooltip("The most a squall brings on the home shelf, metres of Hs, and the bottom of the storm ceiling. Distance sets the CEILING; the drifting cells decide where under it the water actually is. That is how GDD 5's \"distance is the difficulty curve\" survives a sea that also has weather: out west a cell can reach full mountainous, on the shelf the same cell tops out here.")]
+        [SerializeField] float squallHs = 9f;
+        [Tooltip("How much of the lull is squeezed out of a full storm, 0..1. At 0.88 the deep west runs about 45-65 m instead of dropping to 26 -- the storm eases and gathers without ever stopping being a storm, which is the failure 05a30d0 shipped.")]
+        [Range(0f, 1f)] [SerializeField] float stormSteady = 0.88f;
+        [Tooltip("Raises the cell field to this power. Above 1, high values are rare, so a squall is an event rather than the normal condition: at 1.6 the shelf sits near 4 m and reaches 9 only occasionally.")]
+        [Range(0.5f, 4f)] [SerializeField] float cellShape = 1.6f;
+
         [Header("Sky coupling")]
         [Tooltip("Hs at which the sky starts to turn, metres.")]
         [SerializeField] float skyHsStart = 8f;
@@ -226,15 +234,38 @@ namespace SeaSick.Ocean
         {
             float storm = RegionField.Instance != null
                 ? RegionField.Instance.StormWeight(p) : 0f;
-            // The open sea's own slow breathing, in metres.
+
+            // The open sea's own slow breathing, in metres. This is the quiet
+            // level -- the bottom a lull can reach, not the sea itself.
             float w = Wave01(t, wanderPeriod, 0.376f, 0.35f, 13.7f);
-            float shelfHs = LogLerp(shelfCalmHs, shelfLivelyHs, w);
-            // Toward the storm GEOMETRICALLY: equal distances sailed buy equal
-            // ratios of wave height. The linear version spent the first two
-            // thirds of a crossing looking like nothing had changed and then
-            // delivered 40 m in the last stretch, which is the "abrupt"
-            // everyone was reading.
-            return LogLerp(shelfHs, HsStorm, storm);
+            float floorHs = LogLerp(shelfCalmHs, shelfLivelyHs, w);
+
+            var wf = WeatherField.Instance;
+            if (wf == null)
+            {
+                // No weather field (lab scenes): the plain distance ramp.
+                // Toward the storm GEOMETRICALLY, because the eye reads wave
+                // height as a ratio. A linear ramp spends two thirds of a
+                // crossing looking like nothing has changed and then delivers
+                // 40 m in the last stretch, which is the "abrupt" complaint.
+                return LogLerp(floorHs, HsStorm, storm);
+            }
+
+            // DISTANCE SETS THE CEILING, NOT THE SEA. Out west a cell can
+            // reach full mountainous; on the home shelf the same cell tops out
+            // at a squall. Difficulty is still a function of how far you sail,
+            // but the water is no longer a function of where you are standing.
+            float ceilingHs = LogLerp(squallHs, HsStorm, storm);
+            floorHs = Mathf.Min(floorHs, ceilingHs);
+
+            // Where under the ceiling the drifting cells put it. Raised to a
+            // power so high values are rare and a squall is an event rather
+            // than the normal condition, and the lull is squeezed out of a
+            // real storm so it eases and gathers without ever stopping being
+            // a storm.
+            float cell = Mathf.Clamp01(wf.Cell01(new Unity.Mathematics.float2(p.x, p.y), t));
+            float lull = (1f - stormSteady * storm) * (1f - Mathf.Pow(cell, cellShape));
+            return LogLerp(ceilingHs, floorHs, lull);
         }
 
         /// Sets and lulls as a multiplier on Hs at a time.

@@ -34,14 +34,52 @@ public static class TuneLivingSea
         so.FindProperty("setPeriod").floatValue = 95f;
         so.FindProperty("skyHsStart").floatValue = 8f;
         so.FindProperty("skyHsFull").floatValue = 55f;
+        so.FindProperty("squallHs").floatValue = 9f;
+        so.FindProperty("stormSteady").floatValue = 0.88f;
+        so.FindProperty("cellShape").floatValue = 1.6f;
         so.ApplyModifiedPropertiesWithoutUndo();
+
+        // The weather field itself. Lives beside the RegionField that carries
+        // it to the shader and the jobs.
+        var region0 = Object.FindFirstObjectByType<RegionField>(FindObjectsInactive.Include);
+        if (region0 != null && region0.GetComponent<WeatherField>() == null)
+        {
+            Undo.AddComponent<WeatherField>(region0.gameObject);
+            Debug.Log("TuneLivingSea: added WeatherField to " + region0.gameObject.name);
+        }
+
+        // The weather field's own values, for the same reason everything else
+        // here goes through SerializedObject: the component was added to the
+        // scene with one set of defaults and has kept them ever since. This
+        // bit already: the tile stayed 6144 m and the drift 2.7 m/s through
+        // two rounds of retuning, and only the values that live in code (the
+        // octave periods) actually moved.
+        var wf = region0 != null ? region0.GetComponent<WeatherField>() : null;
+        if (wf != null)
+        {
+            var wso = new SerializedObject(wf);
+            wso.FindProperty("tileTexels").intValue = 256;
+            wso.FindProperty("tileMetres").floatValue = 4096f;
+            wso.FindProperty("driftSpeed").floatValue = 4.2f;
+            wso.FindProperty("driftHeadingDeg").floatValue = 200f;
+            wso.FindProperty("meanderMetres").floatValue = 350f;
+            wso.FindProperty("meanderPeriod").floatValue = 430f;
+            wso.FindProperty("patchLo").floatValue = 0.55f;
+            wso.FindProperty("patchCoupling").vector3Value = new Vector3(0.35f, 0.85f, 1f);
+            wso.FindProperty("cellMetres").floatValue = 20000f;
+            wso.FindProperty("cellDriftSpeed").floatValue = 5f;
+            wso.FindProperty("cellHeadingDeg").floatValue = 195f;
+            wso.FindProperty("contrast").floatValue = 1.7f;
+            wso.FindProperty("patchBias").floatValue = 0.42f;
+            wso.ApplyModifiedPropertiesWithoutUndo();
+        }
 
         // The storm ramp. 450 -> 1250 m made the sea grow by x1.82 every 100 m
         // sailed (LivingSeaTrace) and then pinned it at 65 m for the rest of
         // the world: 800 m is not a gradient, it is a doorway. Widened until
         // the steepest step is about x1.2 per 100 m, which reads as water
         // building rather than a wall arriving.
-        var rf = Object.FindFirstObjectByType<RegionField>(FindObjectsInactive.Include);
+        var rf = region0;
         if (rf != null)
         {
             var rso = new SerializedObject(rf);
@@ -59,7 +97,8 @@ public static class TuneLivingSea
         var sb = new System.Text.StringBuilder("TuneLivingSea, read back from the scene:\n");
         foreach (var n in new[] { "shelfCalmHs", "shelfLivelyHs", "blendTime",
                                   "wanderPeriod", "setDepth", "setPeriod",
-                                  "skyHsStart", "skyHsFull" })
+                                  "skyHsStart", "skyHsFull",
+                                  "squallHs", "stormSteady", "cellShape" })
             sb.AppendLine($"  {n,-16} {check.FindProperty(n).floatValue}");
         var r = check.FindProperty("rough").objectReferenceValue;
         sb.AppendLine($"  rough            {(r != null ? r.name : "NULL")}");
@@ -68,6 +107,17 @@ public static class TuneLivingSea
             var rcheck = new SerializedObject(rf);
             sb.AppendLine($"  stormNear        {rcheck.FindProperty("stormNear").floatValue}");
             sb.AppendLine($"  stormFar         {rcheck.FindProperty("stormFar").floatValue}");
+            sb.AppendLine($"  WeatherField     {(wf != null ? "present" : "MISSING")}");
+            if (wf != null)
+            {
+                var wcheck = new SerializedObject(wf);
+                foreach (var n in new[] { "tileTexels", "tileMetres", "driftSpeed",
+                                          "patchLo", "patchBias", "cellMetres", "cellDriftSpeed" })
+                {
+                    var pr = wcheck.FindProperty(n);
+                    sb.AppendLine($"    {n,-16} {(pr.propertyType == SerializedPropertyType.Integer ? pr.intValue.ToString() : pr.floatValue.ToString())}");
+                }
+            }
         }
 
         // And the ladder the whole design turns on, so it is in the log next

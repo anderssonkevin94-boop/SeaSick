@@ -23,6 +23,25 @@ using SeaSick.Ocean;
 /// Writes /tmp/seasick-livingsea.txt.
 public class LivingSeaTrace : MonoBehaviour
 {
+    /// A slick is a contiguous stretch where the field drops below 0.55 --
+    /// the chop down to about x0.75, which is the point it reads as visibly
+    /// smoother water rather than as noise.
+    static string Slicks(float[] series, string label)
+    {
+        const float Thresh = 0.55f;
+        int events = 0, inside = 0; bool was = false;
+        foreach (var v in series)
+        {
+            bool now = v < Thresh;
+            if (now) { inside++; if (!was) events++; }
+            was = now;
+        }
+        float pct = 100f * inside / series.Length;
+        string every = events > 0 ? (series.Length / (float)events).ToString("F0") + " s apart" : "none";
+        string len = events > 0 ? (inside / (float)events).ToString("F0") + " s long" : "-";
+        return $"{label}: {events} slicks, {every}, {len}, {pct:F0}% of the time";
+    }
+
     public static void Execute()
     {
         if (!Application.isPlaying) { Debug.LogError("LivingSeaTrace: not in play mode"); return; }
@@ -118,6 +137,85 @@ public class LivingSeaTrace : MonoBehaviour
         sb.AppendLine($"  set factor ranges x{sfMin:F3} .. x{sfMax:F3}");
         foreach (float baseHs in new[] { 3.5f, 14f, 65f })
             sb.AppendLine($"  a {baseHs,5:F1} m sea breathes {baseHs * sfMin,6:F2} .. {baseHs * sfMax,6:F2} m");
+
+        // 4. The drifting patch field: what the envelope actually does to the
+        // water across the view, and how long a patch takes to pass.
+        var wf = WeatherField.Instance;
+        if (wf == null) sb.AppendLine("\n-- NO WeatherField in the scene: no patches, no cells --");
+        else
+        {
+            sb.AppendLine("\n-- roughness patches (envelope) --");
+            // Spread of the field over a 4 km square, which is more than the
+            // eye can see: if this is flat the whole layer is doing nothing.
+            float lo = 1f, hi = 0f, mean = 0f; int nn = 0;
+            for (float z = -2000f; z <= 2000f; z += 50f)
+                for (float x = -2000f; x <= 2000f; x += 50f)
+                {
+                    float r = wf.Patch01(new Unity.Mathematics.float2(home.x + x, home.y + z));
+                    lo = Mathf.Min(lo, r); hi = Mathf.Max(hi, r); mean += r; nn++;
+                }
+            sb.AppendLine($"  field over 4 km: {lo:F3} .. {hi:F3}, mean {mean / nn:F3}");
+            float chopLo = Mathf.Lerp(wf.PatchLo, 1f, lo);
+            float chopHi = Mathf.Lerp(wf.PatchLo, 1f, hi);
+            sb.AppendLine($"  chop cascade sees x{chopLo:F2} .. x{chopHi:F2} across the view");
+            sb.AppendLine($"  swell cascade sees x{Mathf.Lerp(1f, chopLo, wf.PatchCoupling.x):F2} .. " +
+                          $"x{Mathf.Lerp(1f, chopHi, wf.PatchCoupling.x):F2} (weak on purpose)");
+
+            // How long a patch takes to cross a fixed spot: the time for the
+            // field at one point to swing from one extreme to the other.
+            var fixedP = new Unity.Mathematics.float2(home.x - 800f, home.y);
+            double t0 = OceanTime.Now;
+            const int Secs = 600;
+            var series = new float[Secs];
+            for (int i = 0; i < Secs; i++)   // 10 min at 1 s, using the shipped drift
+            {
+                OceanTime.Scrub(t0 + i);
+                series[i] = wf.Patch01(fixedP);
+            }
+            OceanTime.Scrub(t0);
+            float pLo = 1f, pHi = 0f, pMean = 0f;
+            foreach (var v in series) { pLo = Mathf.Min(pLo, v); pHi = Mathf.Max(pHi, v); pMean += v; }
+            pMean /= Secs;
+            // Slick EVENTS, not crossings of a mean. The bake bias puts the
+            // field high most of the time on purpose -- the default state of
+            // the water is the sea as authored and a patch is a slick passing
+            // through it -- so "how often does it cross its average" counts
+            // the wrong thing twice over. What the player sees is a stretch of
+            // visibly smoother water arriving and leaving.
+            sb.AppendLine($"  at one spot over 10 min: {pLo:F3} .. {pHi:F3}, mean {pMean:F3}");
+            sb.AppendLine("  " + Slicks(series, "becalmed"));
+
+            // And the case that actually matters: she is making way, so her
+            // own speed carries her through patches far faster than they
+            // drift. The becalmed line above is the worst case, not the
+            // normal one.
+            for (int i = 0; i < Secs; i++)
+            {
+                OceanTime.Scrub(t0 + i);
+                series[i] = wf.Patch01(new Unity.Mathematics.float2(
+                    fixedP.x - 10f * i, fixedP.y));   // 10 m/s westward cruise
+            }
+            OceanTime.Scrub(t0);
+            sb.AppendLine("  " + Slicks(series, "under way at 10 m/s"));
+
+            sb.AppendLine("\n-- storm cells (spectrum) --");
+            sb.AppendLine("   m west       Hs    cell");
+            for (float d = 0f; d <= 3000f; d += 500f)
+            {
+                Vector2 q = home + new Vector2(-d, 0f);
+                float cell = wf.Cell01(new Unity.Mathematics.float2(q.x, q.y), tFixed);
+                sb.AppendLine($"  {d,7:F0}   {ctrl.TargetHsAt(q, tFixed),6:F1}   {cell:F3}");
+            }
+            // The same spot, an hour apart, to show the cells actually move.
+            Vector2 west = home + new Vector2(-2000f, 0f);
+            sb.AppendLine("  2 km west over an hour (cells drifting):");
+            for (double tt = 0; tt <= 3600; tt += 600)
+            {
+                int band = 0;
+                float h = ctrl.TargetHsAt(west, tt);
+                sb.AppendLine($"    t={tt,5:F0}s  {h,6:F1} m  {SeaStateController.NameForHs(h, ref band)}");
+            }
+        }
 
         System.IO.File.WriteAllText("/tmp/seasick-livingsea.txt", sb.ToString());
         Debug.Log("LivingSeaTrace: wrote /tmp/seasick-livingsea.txt");

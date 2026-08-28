@@ -13,6 +13,25 @@ float4 _Ocean_Shoal;        // depthZero, depthFull, chopFloor, unused
 float4 _Ocean_DepthLimit;   // breakFraction, waveHs, unused, unused
 Texture2D _Ocean_ShoreTex;  // terrain height, RFloat, clamp, bilinear
 SamplerState sampler_Ocean_ShoreTex;
+float4 _Ocean_Weather;      // 1/tileMetres, driftOffset.xy, texels per edge (0 = none)
+float4 _Ocean_WeatherPatch; // patchLo, coupling per cascade (swell, mid, chop)
+Texture2D _Ocean_WeatherTex;// roughness tile, RFloat, REPEAT, bilinear
+SamplerState sampler_Ocean_WeatherTex;
+
+// Drifting roughness patches. Twin of RegionFieldParams.WeatherAt, which is
+// an explicit wrapped bilinear -- so this uses hardware Repeat filtering,
+// which is the same arithmetic: texel centres at (i + 0.5)/N, wrap on the
+// lattice index. Returns 1 (no patch) when there is no field.
+float WeatherAt(float2 p)
+{
+    float result = 1.0;
+    if (_Ocean_Weather.w >= 1.0)
+    {
+        float2 uv = p * _Ocean_Weather.x + _Ocean_Weather.yz;
+        result = _Ocean_WeatherTex.SampleLevel(sampler_Ocean_WeatherTex, uv, 0).r;
+    }
+    return result;
+}
 
 // 1 in deep water, 0 at the shoreline and over land. Twin of
 // RegionFieldParams.ShoreFactor: bilinear with clamped edges, 1 outside.
@@ -90,12 +109,24 @@ float3 RegionEnvelopeCascades(float2 p)
     // Never dead flat. Sheltered water still has chop; only land is glass.
     float floorTerm = _Ocean_Shoal.z * swd.y;
 
+    // Drifting roughness patches, hoisted out of the cascade loop: it does not
+    // depend on the cascade, and the Burst twin runs this inside the sampler's
+    // Newton loop eight times per query. Patches only ever REDUCE -- an
+    // envelope above 1 asks for waves the depth limit and the seabed cannot
+    // hold, which is why farScale went 1.5 -> 1.0.
+    float patch = 1.0;
+    if (_Ocean_Weather.w >= 1.0)
+        patch = lerp(_Ocean_WeatherPatch.x, 1.0, WeatherAt(p));
+
     float3 result = 0;
     [unroll]
     for (int c = 0; c < 3; c++)
     {
         float bw = SS_BottomCoupling[c];
-        float env = baseEnv * lerp(1.0, swd.x, bw);
+        // Weak on the swell, strong on the chop: a roughness patch is
+        // short-wave energy and the long swell rolls straight through it.
+        float env = baseEnv * lerp(1.0, swd.x, bw)
+                            * lerp(1.0, patch, _Ocean_WeatherPatch[c + 1]);
         // Depth limit: no wave taller than a fraction of the water under it.
         // Capped against the height THIS cascade carries, not the whole sea --
         // 5 m of chop in 10 m of water is not breaking just because a 70 m

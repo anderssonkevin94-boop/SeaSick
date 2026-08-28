@@ -1087,6 +1087,7 @@ GameObject:
   - component: {fileID: 1016993463}
   - component: {fileID: 1016993462}
   - component: {fileID: 1016993461}
+  - component: {fileID: 1016993467}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -1119,6 +1120,9 @@ MonoBehaviour:
   warmStart: 1
   setDepth: 0.16
   setPeriod: 95
+  squallHs: 9
+  stormSteady: 0.88
+  cellShape: 1.6
   skyHsStart: 8
   skyHsFull: 55
 --- !u!114 &1016993462
@@ -1212,6 +1216,32 @@ Transform:
   - {fileID: 1511588552}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1016993467
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1016993460}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e1b93c72af84d6ea31c7048b9f26d3a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WeatherField
+  tileTexels: 256
+  tileMetres: 4096
+  driftSpeed: 4.2
+  driftHeadingDeg: 200
+  meanderMetres: 350
+  meanderPeriod: 430
+  patchLo: 0.55
+  patchCoupling: {x: 0.35, y: 0.85, z: 1}
+  cellMetres: 20000
+  cellDriftSpeed: 5
+  cellHeadingDeg: 195
+  seed: 20260828
+  contrast: 1.7
+  patchBias: 0.42
 --- !u!1 &1111268499
 GameObject:
   m_ObjectHideFlags: 0
