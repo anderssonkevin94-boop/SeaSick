@@ -137,8 +137,7 @@ namespace SeaSick.Ship
             {
                 var btn = new Rect(x + u * 0.5f, y, w - u * 1f, u * 2.1f);
                 UIBlocker.Block(btn);
-                var style = new GUIStyle(UITheme.Button);
-                if (GUI.Button(btn, $"over the side  ·  {jettisonPerTap}", style))
+                if (GUI.Button(btn, $"over the side  ·  {jettisonPerTap}", UITheme.Button))
                     voyage.Jettison(jettisonPerTap);
             }
         }

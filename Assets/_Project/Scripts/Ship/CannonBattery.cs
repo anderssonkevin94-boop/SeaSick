@@ -260,7 +260,7 @@ namespace SeaSick.Ship
         void DrawSide(Rect r, bool starboardSide, int ready, string label)
         {
             UIBlocker.Block(r);
-            var style = new GUIStyle(UITheme.Button);
+            var style = UITheme.Button;   // cached; copying it per frame bought nothing
             GUI.enabled = ready > 0;
             var side = starboardSide ? starboard : port;
             // Say WHY the side is silent. "0/2" reads as a reload; "no crew"

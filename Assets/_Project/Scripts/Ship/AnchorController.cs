@@ -286,8 +286,7 @@ namespace SeaSick.Ship
             var r = new Rect(anchorRect.x, anchorRect.y + u * 2.3f, anchorRect.width, u * 1.8f);
             UIBlocker.Block(r);
 
-            var style = new GUIStyle(buttonStyle);
-            if (voyage.TakeDeckCargo) style.normal = style.active;
+            var style = voyage.TakeDeckCargo ? UITheme.ButtonPressed : buttonStyle;
             string label = voyage.TakeDeckCargo
                 ? $"◉  deck cargo — to {voyage.MaxHold}"
                 : $"◎  deck cargo — stop at {voyage.HoldCapacity}";

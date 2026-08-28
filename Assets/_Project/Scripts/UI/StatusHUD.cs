@@ -17,6 +17,13 @@ namespace SeaSick.UI
         CrewAgent[] crew;
         VoyageManager voyage;
 
+        // Cached readouts. Formatting these every frame was 3.62 KB of text
+        // mesh regeneration per frame — the HUD's remaining allocation once
+        // the per-frame GUIStyles were gone.
+        readonly HudLabel hullText = new HudLabel();
+        readonly HudLabel waterText = new HudLabel();
+        readonly HudLabel navText = new HudLabel();
+
         void Start()
         {
             motor = FindFirstObjectByType<ShipMotor>();
@@ -92,18 +99,25 @@ namespace SeaSick.UI
             var hullRect = new Rect(x + inner, top + inner, w - inner * 2f, u * 0.5f);
             float integrity = hull != null ? hull.Integrity01 : 1f;
             UITheme.Bar(hullRect, integrity, UITheme.Ramp(1f - integrity));
+            // Keyed on the whole percent the label actually shows, so a hull
+            // sitting at 87 % costs nothing however much the float twitches.
+            if (hullText.Changed(Mathf.RoundToInt(integrity * 100f)))
+                hullText.Set($"hull {integrity:P0}");
             GUI.Label(new Rect(x + inner, hullRect.yMax, w, u * 1.2f),
-                $"hull {integrity:P0}", UITheme.Small);
+                hullText.Content, UITheme.Small);
 
             if (wet)
             {
                 float wy = hullRect.yMax + u * 1.25f;
                 var waterRect = new Rect(x + inner, wy, w - inner * 2f, u * 0.5f);
                 UITheme.Bar(waterRect, bilge.Bilge01, UITheme.Ramp(bilge.Bilge01));
-                string label = bilge.Bailers > 0
-                    ? $"water {bilge.Bilge01:P0} — {bilge.Bailers} bailing"
-                    : $"water {bilge.Bilge01:P0}";
-                GUI.Label(new Rect(x + inner, waterRect.yMax, w, u * 1.2f), label, UITheme.Small);
+                if (waterText.Changed(HudLabel.Key(
+                        Mathf.RoundToInt(bilge.Bilge01 * 100f), bilge.Bailers)))
+                    waterText.Set(bilge.Bailers > 0
+                        ? $"water {bilge.Bilge01:P0} — {bilge.Bailers} bailing"
+                        : $"water {bilge.Bilge01:P0}");
+                GUI.Label(new Rect(x + inner, waterRect.yMax, w, u * 1.2f),
+                    waterText.Content, UITheme.Small);
             }
 
             if (voyage != null)
@@ -120,14 +134,26 @@ namespace SeaSick.UI
             float dist = Island.FlatDistance(motor.transform.position, voyage.HomePoint.position);
             // Overload shows as "18/24+" rather than a number past the marked
             // line, so a loaded ship reads as loaded at a glance.
-            string hold = voyage.Overloaded
-                ? $"{voyage.TotalHeld}/{voyage.HoldCapacity}+"
-                : $"{voyage.TotalHeld}/{voyage.HoldCapacity}";
-            string text = $"{motor.CurrentSpeed:F1} m/s    home {dist:F0} m    hold {hold}";
-            var size = UITheme.Small.CalcSize(new GUIContent(text));
+            // Keyed on exactly what is printed: speed to a tenth, distance to
+            // the metre, the hold counts. Sailing at a steady speed the line
+            // now rebuilds only when the metre ticks over, instead of sixty
+            // times a second.
+            if (navText.Changed(HudLabel.Key(
+                    Mathf.RoundToInt(motor.CurrentSpeed * 10f),
+                    Mathf.RoundToInt(dist),
+                    voyage.TotalHeld,
+                    voyage.HoldCapacity * (voyage.Overloaded ? -1 : 1))))
+            {
+                string hold = voyage.Overloaded
+                    ? $"{voyage.TotalHeld}/{voyage.HoldCapacity}+"
+                    : $"{voyage.TotalHeld}/{voyage.HoldCapacity}";
+                navText.Set($"{motor.CurrentSpeed:F1} m/s    home {dist:F0} m    hold {hold}");
+            }
+            var size = navText.Size(UITheme.Small);
             var r = new Rect(pad, Screen.height - pad - u * 1.8f, size.x + u, u * 1.8f);
             UITheme.Rect(r, UITheme.Panel);
-            GUI.Label(new Rect(r.x + u * 0.5f, r.y, r.width, r.height), text, UITheme.Small);
+            GUI.Label(new Rect(r.x + u * 0.5f, r.y, r.width, r.height),
+                navText.Content, UITheme.Small);
         }
     }
 }

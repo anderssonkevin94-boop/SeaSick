@@ -84,8 +84,14 @@ namespace SeaSick.Ship
             // you're driving into it", which is the only heading cost left.
             float strain = motor.HeadSea01 * motor.SeaSeverity01;
             var nameColour = strain > 0.4f ? UITheme.Warn : UITheme.Text;
-            var nameStyle = new GUIStyle(UITheme.Small2Centered) { normal = { textColor = nameColour } };
-            GUI.Label(new Rect(px, py + u * 0.2f, panelW, u * 1.6f), motor.SeaStateName, nameStyle);
+            // GUI.contentColor tints the text without building a style. A
+            // per-frame `new GUIStyle` allocates AND invalidates IMGUI's
+            // cached text mesh for everything drawn with it.
+            var prevContent = GUI.contentColor;
+            GUI.contentColor = nameColour;
+            GUI.Label(new Rect(px, py + u * 0.2f, panelW, u * 1.6f),
+                motor.SeaStateName, UITheme.Small2Centered);
+            GUI.contentColor = prevContent;
 
             var effRect = new Rect(px + u * 0.6f, py + u * 1.9f, panelW - u * 1.2f, u * 0.5f);
             UITheme.Bar(effRect, motor.SeaResistance01, UITheme.Ramp(1f - motor.SeaResistance01));
@@ -112,8 +118,7 @@ namespace SeaSick.Ship
             float oars = motor.OarPower01;
             var row = new Rect(px, py - u * 2.1f, panelW, u * 1.8f);
             UIBlocker.Block(row);
-            var rowStyle = new GUIStyle(UITheme.Button);
-            if (motor.Rowing) rowStyle.normal = rowStyle.active;
+            var rowStyle = motor.Rowing ? UITheme.ButtonPressed : UITheme.Button;
             string oarLabel = oars < 0.02f ? "—  no one at the oars"
                 : motor.Rowing ? "◉  rowing" : "◎  man the oars";
             GUI.enabled = oars >= 0.02f;

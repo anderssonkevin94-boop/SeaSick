@@ -77,13 +77,14 @@ namespace SeaSick.Combat
 
                 if (scale < 0.75f) continue;
 
-                var style = new GUIStyle(UITheme.Small2Centered);
-                style.normal.textColor = inRange ? UITheme.Text : UITheme.TextDim;
+                var prev = GUI.contentColor;
+                GUI.contentColor = inRange ? UITheme.Text : UITheme.TextDim;
                 GUI.Label(new Rect(x - 24f, y + h + 1f, w + 48f, u * 1.4f),
                     inRange
                         ? $"{Label(t)}{t.HitPoints - t.DamageTaken}/{t.HitPoints}   {dist:F0} m"
                         : $"{Label(t)}{dist:F0} m — out of reach",
-                    style);
+                    UITheme.Small2Centered);
+                GUI.contentColor = prev;
             }
         }
 

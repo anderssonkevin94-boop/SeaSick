@@ -105,9 +105,14 @@ namespace SeaSick.UI
             if (!major) return;
 
             int u = UITheme.Unit;
-            var style = new GUIStyle(UITheme.Small2Centered) { normal = { textColor = colour } };
+            // GUI.contentColor tints the text without building a style. A
+            // per-frame `new GUIStyle` allocates AND invalidates IMGUI's
+            // cached text mesh for everything drawn with it.
+            var prev = GUI.contentColor;
+            GUI.contentColor = colour;
             GUI.Label(new Rect(px - u * 2f, tape.y + tape.height * 0.02f, u * 4f, u * 1.4f),
-                label, style);
+                label, UITheme.Small2Centered);
+            GUI.contentColor = prev;
         }
 
         void DrawPip(Rect tape, float relativeBearing, Color colour, string label, bool labelAbove)
@@ -124,12 +129,14 @@ namespace SeaSick.UI
             if (string.IsNullOrEmpty(label)) return;
 
             int u = UITheme.Unit;
-            var style = new GUIStyle(UITheme.Small2Centered) { normal = { textColor = colour } };
+            var prev = GUI.contentColor;
+            GUI.contentColor = colour;
             // An arrow when the mark is behind you — otherwise it silently pins
             // to the edge and reads as though it's dead ahead.
             string text = offScreen ? (relativeBearing > 0 ? label + " ▸" : "◂ " + label) : label;
             float ly = labelAbove ? tape.y - u * 1.25f : tape.yMax + 1f;
-            GUI.Label(new Rect(px - u * 2.2f, ly, u * 4.4f, u * 1.3f), text, style);
+            GUI.Label(new Rect(px - u * 2.2f, ly, u * 4.4f, u * 1.3f), text, UITheme.Small2Centered);
+            GUI.contentColor = prev;
         }
 
         void DrawSpan(Rect tape, float fromDeg, float toDeg, Color colour)

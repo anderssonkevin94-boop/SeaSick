@@ -19,6 +19,7 @@ namespace SeaSick.UI
         public static readonly Color Cargo = new Color(0.85f, 0.68f, 0.38f);
 
         static GUIStyle small, body, strong, title, button, toast;
+        static GUIStyle buttonPressed;
         static int builtFor = -1;
 
         /// Type scale derived from the shorter screen edge so it reads the
@@ -52,8 +53,18 @@ namespace SeaSick.UI
                 border = new RectOffset(2, 2, 2, 2),
                 padding = new RectOffset(10, 10, 8, 8),
             };
+
+            // A latched button, drawn as though held down. Built ONCE here
+            // rather than as `new GUIStyle(Button) { normal = active }` at the
+            // call site every frame: IMGUI keys its cached text meshes on the
+            // style INSTANCE, so a style rebuilt per frame silently forces
+            // every label and button drawn with it to regenerate its mesh.
+            // That is why HelmInput allocated 5.99 KB a frame while drawing
+            // almost nothing but two arrows and a fixed caption.
+            buttonPressed = new GUIStyle(button) { normal = button.active };
         }
 
+        public static GUIStyle ButtonPressed { get { Build(); return buttonPressed; } }
         public static GUIStyle Small { get { Build(); return small; } }
         public static GUIStyle Body { get { Build(); return body; } }
         public static GUIStyle Strong { get { Build(); return strong; } }
