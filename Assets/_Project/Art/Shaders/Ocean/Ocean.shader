@@ -53,6 +53,21 @@ Shader "SeaSick/Ocean"
             float4 _Ocean_SimRect;          // anchor.xy, extent, texel
             float4 _SS_SkyHorizon;
             float _SS_Storminess;
+            // 0 = broad daylight, 1 = full night. Pushed by SkyDirector.
+            // Both night terms below are phrased so that an UNSET global (0)
+            // reproduces exactly what this shader rendered before night
+            // existed — the _SS_LayerOff rule.
+            float _SS_Night;
+            // How far the body colour is dimmed, and how far the sky mix
+            // leans on the authored horizon, at full night. Globals rather
+            // than material properties on purpose: night belongs to the world,
+            // SkyDirector is its single owner, and a material would have
+            // snapshotted these defaults the moment the properties were
+            // created and never seen them again. They travel with _SS_Night
+            // from the same writer, so either all three arrive or none do —
+            // and none means _SS_Night is 0, which is broad daylight.
+            float _SS_NightBodyDim;
+            float _SS_NightSkyMix;
             // Dev only: which shading layers to SUPPRESS (subsurface, sky
             // reflection, sun glitter, foam). Phrased as "off" and not "on"
             // deliberately -- an unset global reads as ZERO, so the shipped
@@ -238,6 +253,14 @@ Shader "SeaSick/Ocean"
                 float heightLift = saturate(0.38 + input.heightY / localHs);
                 half3 body = lerp(deep, shallow, heightLift);
 
+                // The body colour carries no diffuse and no normal term — it
+                // is authored, not lit — so unlike the specular and the
+                // subsurface (which ride sun.color and dim by themselves once
+                // the moon takes over the key light) nothing about it knows
+                // the sun has set. Without this the sea keeps its daylight
+                // turquoise under a black sky.
+                body *= lerp(1.0, _SS_NightBodyDim, saturate(_SS_Night));
+
                 // The signature: sun behind a steep, choppy crest glows jade
                 // through the water toward the camera.
                 float peakMask = saturate(input.data.z * _PeakMaskScale);
@@ -252,7 +275,15 @@ Shader "SeaSick/Ocean"
                 float3 r = reflect(-Vf, n);
                 half3 sky = GlossyEnvironmentReflection(r, input.positionWS,
                     0.15 + 0.35 * storm, 1.0);
-                sky = lerp(sky, _SS_SkyHorizon.rgb, 0.55);
+                // The reflection probe is deliberately never refreshed —
+                // SkyDirector skips DynamicGI.UpdateEnvironment because it
+                // costs milliseconds on a phone — so at night the probe is
+                // still a daylight sky and would keep the water lit from
+                // above. _SS_SkyHorizon is pushed every frame and IS correct
+                // after dark, so lean on it almost entirely once the sun is
+                // down and let the stale probe fade out.
+                sky = lerp(sky, _SS_SkyHorizon.rgb,
+                           lerp(0.55, _SS_NightSkyMix, saturate(_SS_Night)));
 
                 // Sun glitter, softened with distance so the far field never
                 // sparkles (a variance -> roughness stand-in).
@@ -282,7 +313,16 @@ Shader "SeaSick/Ocean"
 
                 half3 col = lerp(body, sky, fresnel * (1.0 - foamAmt) * (1.0 - _SS_LayerOff.y));
                 col += spec * sun.color;
-                col = lerp(col, _FoamColor.rgb * (0.55 + 0.45 * sun.color), foamAmt);
+                // The 0.45 term rides sun.color and so dims itself once the
+                // moon takes over the key light, but the 0.55 is flat ambient
+                // and knows nothing about the sun having set -- the same fault
+                // the body colour had. Left alone it leaves every whitecap
+                // burning at 55% white on a 4%-grey night sky, which reads as
+                // snow rather than water.
+                float3 foamCol = _FoamColor.rgb
+                    * (0.55 * lerp(1.0, _SS_NightBodyDim, saturate(_SS_Night))
+                       + 0.45 * sun.color);
+                col = lerp(col, foamCol, foamAmt);
 
                 col = MixFog(col, input.data.w);
                 return half4(col, 1);
