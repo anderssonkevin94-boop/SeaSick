@@ -14,7 +14,8 @@ float4 _Ocean_DepthLimit;   // breakFraction, waveHs, unused, unused
 Texture2D _Ocean_ShoreTex;  // terrain height, RFloat, clamp, bilinear
 SamplerState sampler_Ocean_ShoreTex;
 float4 _Ocean_Weather;      // 1/tileMetres, driftOffset.xy, texels per edge (0 = none)
-float4 _Ocean_WeatherPatch; // patchLo, coupling per cascade (swell, mid, chop)
+float4 _Ocean_PatchLo;      // what the field's low end multiplies each cascade by
+float4 _Ocean_PatchHi;      // and its high end. .x MUST stay 1 -- see the C# twin.
 Texture2D _Ocean_WeatherTex;// roughness tile, RFloat, REPEAT, bilinear
 SamplerState sampler_Ocean_WeatherTex;
 
@@ -115,6 +116,13 @@ static const float3 SS_IslandCoupling = float3(0.0, 0.55, 1.0);
 // term; the depth terms and the island falloff both differ between cascades,
 // and in opposite directions -- shoaling is a LONG-wave effect and shelter is
 // a SHORT-wave one.
+//
+// Three-wide arithmetic and no `[c]` anywhere, matching the C# twin line for
+// line. There it is load-bearing rather than tidy: indexing a float3 in the
+// Burst job spills it to the stack and stops the function vectorising, and
+// this runs eight times per query inside the sampler's Newton loop -- measured
+// on the shipped storm, the per-cascade loop form cost SampleBatch 0.38 ->
+// 1.72 ms per 1000 queries against a 0.4 ms budget.
 float3 RegionEnvelopeCascades(float2 p)
 {
     float d = distance(p, _Ocean_Region.xy);
@@ -133,36 +141,30 @@ float3 RegionEnvelopeCascades(float2 p)
     // Never dead flat. Sheltered water still has chop; only land is glass.
     float floorTerm = _Ocean_Shoal.z * swd.y;
 
-    // Drifting roughness patches, hoisted out of the cascade loop: it does not
-    // depend on the cascade, and the Burst twin runs this inside the sampler's
-    // Newton loop eight times per query. Patches only ever REDUCE -- an
-    // envelope above 1 asks for waves the depth limit and the seabed cannot
-    // hold, which is why farScale went 1.5 -> 1.0.
-    float patch = 1.0;
+    // Drifting roughness patches. The FIELD LOOKUP does not depend on the
+    // cascade; the RESPONSE to it does, and that is what makes a patch a kind
+    // of water rather than a volume knob. A patch may go EITHER WAY about 1 at
+    // the price of one rule: _Ocean_PatchHi.x is 1, so cascade 0 is never
+    // lifted, because it is the swell that carries the height and an envelope
+    // above 1 on it asks for waves the seabed cannot hold.
+    float3 patch = float3(1.0, 1.0, 1.0);
     if (_Ocean_Weather.w >= 1.0)
-        patch = lerp(_Ocean_WeatherPatch.x, 1.0, WeatherAt(p));
+        patch = lerp(_Ocean_PatchLo.xyz, _Ocean_PatchHi.xyz, WeatherAt(p));
 
-    float3 result = 0;
-    [unroll]
-    for (int c = 0; c < 3; c++)
-    {
-        float bw = SS_BottomCoupling[c];
-        // Weak on the swell, strong on the chop: a roughness patch is
-        // short-wave energy and the long swell rolls straight through it.
-        float env = baseEnv * lerp(1.0, isle, SS_IslandCoupling[c])
-                            * lerp(1.0, swd.x, bw)
-                            * lerp(1.0, patch, _Ocean_WeatherPatch[c + 1]);
-        // Depth limit: no wave taller than a fraction of the water under it.
-        // Capped against the height THIS cascade carries, not the whole sea --
-        // 5 m of chop in 10 m of water is not breaking just because a 70 m
-        // swell would be. The cap goes last so it beats the chop floor: in
-        // half a metre of water there is no chop to have.
-        float cap = 3.402823e38;
-        if (_Ocean_DepthLimit.y > 0.01)
-            cap = max(0.0, _Ocean_DepthLimit.x * swd.z / (_Ocean_DepthLimit.y * bw));
-        result[c] = min(max(env, floorTerm), cap);
-    }
-    return result;
+    float3 bw = SS_BottomCoupling;
+    float3 env = baseEnv * lerp(1.0, isle, SS_IslandCoupling)
+                         * lerp(1.0, swd.x, bw)
+                         * patch;
+
+    // Depth limit: no wave taller than a fraction of the water under it.
+    // Capped against the height THIS cascade carries, not the whole sea --
+    // 5 m of chop in 10 m of water is not breaking just because a 70 m swell
+    // would be. The cap goes last so it beats the chop floor: in half a metre
+    // of water there is no chop to have.
+    float3 cap = 3.402823e38;
+    if (_Ocean_DepthLimit.y > 0.01)
+        cap = max(0.0, _Ocean_DepthLimit.x * swd.z / (_Ocean_DepthLimit.y * bw));
+    return min(max(env, floorTerm), cap);
 }
 
 // Cascade 0's envelope: the long swell, and what every gameplay reader means

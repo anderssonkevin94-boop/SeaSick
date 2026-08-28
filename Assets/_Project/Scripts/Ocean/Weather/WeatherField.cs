@@ -20,11 +20,18 @@ namespace SeaSick.Ocean
     ///   half a minute instead of arriving.
     ///
     ///   PATCHES (hundreds of metres, GPU + Burst) drive the ENVELOPE, and
-    ///   mostly the SHORT cascades -- patchCoupling is weak on the swell and
-    ///   strong on the chop. That is what real roughness patches are: a slick
-    ///   or a cat's-paw changes the texture of the water, and the swell rolls
-    ///   straight through it. It also means patches cost nothing that has been
-    ///   measured, because cascade 0 carries nearly all of Hs.
+    ///   mostly the SHORT cascades. That is what real roughness patches are: a
+    ///   slick or a cat's-paw changes the TEXTURE of the water, and the swell
+    ///   rolls straight through it. It also means patches cost nothing that has
+    ///   been measured, because cascade 0 carries nearly all of Hs.
+    ///
+    ///   Each cascade has its own range for the same field, and they are what
+    ///   makes a patch a KIND of water rather than a volume knob. At the
+    ///   field's low end the chop nearly vanishes while the swell is barely
+    ///   touched -- a slick, a glassy roller. At its high end the chop is half
+    ///   again as big under an unchanged swell -- a dark ruffled band. One
+    ///   field, three responses; the alternative (one multiplier for
+    ///   everything) can only ever produce the same water, quieter.
     ///
     /// ONE BAKED TILE, SAMPLED BY BOTH TWINS. The field is periodic value
     /// noise baked to a texture once, and the GPU and the Burst job both read
@@ -55,10 +62,12 @@ namespace SeaSick.Ocean
         [Tooltip("How far the drift wanders off a straight line, metres. Without it the tile would translate exactly and a fixed spot would see the same pattern return every tileMetres/driftSpeed -- 38 minutes. With it the path through the tile is a curve and never closes.")]
         [SerializeField] float meanderMetres = 350f;
         [SerializeField] float meanderPeriod = 430f;
-        [Tooltip("The most a patch takes off the sea. Patches only ever REDUCE: an envelope above 1 asks for waves the depth limit and the seabed cannot hold (this is why farScale went 1.5 -> 1.0), and steeper water buys another Newton step, of which there is no budget left.")]
-        [Range(0.2f, 1f)] [SerializeField] float patchLo = 0.55f;
-        [Tooltip("How much each cascade feels a patch: swell, mid, chop. Weak on the swell on purpose -- a roughness patch is short-wave energy and the long swell rolls through it, which is both what the sea does and what keeps patches away from everything that has been measured and gated.")]
-        [SerializeField] Vector3 patchCoupling = new Vector3(0.35f, 0.85f, 1f);
+        [Tooltip("What the field's LOW end multiplies each cascade by: swell, mid, chop. The chop nearly going out while the swell holds is a slick.")]
+        [SerializeField] Vector3 patchRangeLo = new Vector3(0.90f, 0.55f, 0.25f);
+        [Tooltip("What the field's HIGH end multiplies each cascade by: swell, mid, chop. THE SWELL'S MUST STAY AT 1. Lifting cascade 0 asks for waves the depth limit and the seabed cannot hold -- it is why farScale went 1.5 -> 1.0 -- and cascade 0 carries nearly all of Hs, so a patch that lifted it would change the sea's SIZE where the point is to change its CHARACTER. The short cascades may go above 1: between them they carry 0.65 m of RMS against the swell's 17, so lifting the chop half again is texture, not height.")]
+        [SerializeField] Vector3 patchRangeHi = new Vector3(1.00f, 1.30f, 1.55f);
+        [Tooltip("The mean multiplier the CHOP is to see, averaged over the whole tile. The bake solves its own bias to hit this, so 1 really is 'the authored sea is the default and a patch goes either way about it'. The previous version could only reduce, and its mean of 0.66 took a third off the chop EVERYWHERE, which quietly undid most of the texture pass.")]
+        [Range(0.5f, 1.4f)] [SerializeField] float chopMeanTarget = 1f;
 
         [Header("Storm cells (the spectrum)")]
         [Tooltip("Metres across which a storm cell varies. The same baked tile read at a much larger scale, so there is still only one field to keep honest.")]
@@ -71,8 +80,16 @@ namespace SeaSick.Ocean
         [SerializeField] int seed = 20260828;
         [Tooltip("Contrast applied after the octaves are summed. Summed noise piles up around its midpoint; without this the field would be a permanent grey 0.5 and nothing would ever be a patch.")]
         [SerializeField] float contrast = 1.7f;
-        [Tooltip("Bias applied at bake time, below 1 to push the field toward its top. Patches can only REDUCE, so a field centred on 0.5 costs the chop a quarter of its amplitude EVERYWHERE -- which would quietly undo the whole texture pass of 2026-08-25. Biased to about 0.72 mean, the default state of the water is the sea as authored and a patch is a slick passing through it, which is also what slicks actually are. Baked in rather than applied at sample time: this runs eight times per query inside the sampler's Newton loop and a pow there is not free.")]
-        [Range(0.2f, 2f)] [SerializeField] float patchBias = 0.42f;
+        // The bias that puts the field's mean where chopMeanTarget asks for
+        // it. SOLVED at bake time rather than hand-tuned, because it is not
+        // independent of anything else here: change contrast, the octave
+        // gains, or either end of patchRange and the hand-tuned number is
+        // silently wrong and the sea is quietly smaller or bigger than
+        // authored everywhere. Applied in the bake and not at sample time --
+        // this field is read eight times per query inside the sampler's Newton
+        // loop and a pow there is not free.
+        float solvedBias = 1f;
+        float bakedMean = 0.5f;
 
         NativeArray<float> tile;
         Texture2D tileTex;
@@ -81,8 +98,11 @@ namespace SeaSick.Ocean
         public int TileTexels => tileTexels;
         public Texture2D TileTexture => tileTex;
         public float InvTileMetres => tileMetres > 0f ? 1f / tileMetres : 0f;
-        public float PatchLo => patchLo;
-        public float3 PatchCoupling => new float3(patchCoupling.x, patchCoupling.y, patchCoupling.z);
+        public float3 PatchRangeLo => new float3(patchRangeLo.x, patchRangeLo.y, patchRangeLo.z);
+        public float3 PatchRangeHi => new float3(patchRangeHi.x, patchRangeHi.y, patchRangeHi.z);
+        /// What the bake had to do to hit chopMeanTarget, and what it got.
+        public float SolvedBias => solvedBias;
+        public float BakedMean => bakedMean;
 
         /// Tile-space offset for the patch field at the current OceanTime.
         public float2 PatchOffset => MeanderedOffset(OceanTime.Now, driftSpeed,
@@ -193,9 +213,26 @@ namespace SeaSick.Ocean
                     float acc = 0f;
                     for (int o = 0; o < periods.Length; o++)
                         acc += gains[o] * Periodic(new float2(u, v) * periods[o], periods[o], seed + o * 7919);
-                    float val = Mathf.Clamp01((acc * norm - 0.5f) * contrast + 0.5f);
-                    tile[y * n + x] = Mathf.Pow(val, Mathf.Max(patchBias, 0.01f));
+                    tile[y * n + x] = Mathf.Clamp01((acc * norm - 0.5f) * contrast + 0.5f);
                 }
+
+            // Solve the bias for the mean the chop is asked to average.
+            // mean(val^b) falls monotonically in b, so twenty bisections over
+            // a generous bracket land it exactly, and it costs nothing: this
+            // runs once, at bake.
+            float span = Mathf.Max(patchRangeHi.z - patchRangeLo.z, 1e-4f);
+            float wantMean = Mathf.Clamp01((chopMeanTarget - patchRangeLo.z) / span);
+            float lo = 0.05f, hi = 8f;
+            for (int it = 0; it < 24; it++)
+            {
+                float mid = 0.5f * (lo + hi);
+                if (MeanPow(tile, mid) > wantMean) lo = mid; else hi = mid;
+            }
+            solvedBias = 0.5f * (lo + hi);
+            for (int i = 0; i < tile.Length; i++) tile[i] = Mathf.Pow(tile[i], solvedBias);
+            bakedMean = MeanPow(tile, 1f);
+            Debug.Log($"WeatherField: baked mean {bakedMean:F3} (wanted {wantMean:F3} " +
+                      $"for a chop mean of {chopMeanTarget:F2}), bias {solvedBias:F3}");
 
             if (tileTex == null || tileTex.width != n)
             {
@@ -209,6 +246,13 @@ namespace SeaSick.Ocean
             }
             tileTex.SetPixelData(tile, 0);
             tileTex.Apply(false);
+        }
+
+        static float MeanPow(NativeArray<float> a, float b)
+        {
+            double sum = 0;
+            for (int i = 0; i < a.Length; i++) sum += Mathf.Pow(a[i], b);
+            return (float)(sum / a.Length);
         }
 
         /// Periodic value noise with a quintic fade. Value rather than

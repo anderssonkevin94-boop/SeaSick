@@ -100,6 +100,22 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 
 ## Measurement traps this project has actually hit
 
+- **Indexing a `float3` inside a Burst hot path costs a factor of four, and
+  only `DivergenceProbe`'s timing line says so.** `RegionFieldParams.
+  EvaluateCascades` used to loop `for (int c = 0; c < 3; c++)` and index
+  `patchCoupling[c]` / `result[c]`. Taking the address of a float3 to index it
+  spills it to the stack and stops Burst vectorising everything around it, and
+  this function runs EIGHT TIMES PER QUERY inside the sampler's Newton loop.
+  Measured on the shipped storm: `SampleBatch` **0.38 -> 1.72 ms** per 1000
+  queries against a 0.4 ms budget, from nothing but the indexing — while the
+  accuracy gate stayed green at 2.49 cm with 0 of 5000 over, so the only red
+  thing was the millisecond count. Rewritten as three-wide arithmetic with no
+  `[c]` anywhere it came back at **0.305 ms**, faster than the loop version had
+  ever been. **Bisect a red timing line the same way you would a red error
+  line** — the baseline was reading 0.38 ms that session where it had read 0.26
+  an hour earlier, so the machine drifts and only a same-session A/B is worth
+  anything.
+
 - **`ShoreProbe` and `CalmWaterShot` are both mis-sited, and have been since
   the spawn moved.** Both were written when the ship started at home:
   `ShoreProbe` looks for the shoreline along the line south of the world

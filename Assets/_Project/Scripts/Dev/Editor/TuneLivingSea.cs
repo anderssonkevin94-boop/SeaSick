@@ -64,13 +64,17 @@ public static class TuneLivingSea
             wso.FindProperty("driftHeadingDeg").floatValue = 200f;
             wso.FindProperty("meanderMetres").floatValue = 350f;
             wso.FindProperty("meanderPeriod").floatValue = 430f;
-            wso.FindProperty("patchLo").floatValue = 0.55f;
-            wso.FindProperty("patchCoupling").vector3Value = new Vector3(0.35f, 0.85f, 1f);
+            // Per-cascade patch ranges. The swell's high end is 1 and must
+            // stay 1; everything else is character. Note these REPLACE the old
+            // float patchLo / Vector3 patchCoupling -- the scene's values for
+            // those are dead weight in the .unity file and are not read.
+            wso.FindProperty("patchRangeLo").vector3Value = new Vector3(0.90f, 0.55f, 0.25f);
+            wso.FindProperty("patchRangeHi").vector3Value = new Vector3(1.00f, 1.30f, 1.55f);
+            wso.FindProperty("chopMeanTarget").floatValue = 1f;
             wso.FindProperty("cellMetres").floatValue = 20000f;
             wso.FindProperty("cellDriftSpeed").floatValue = 5f;
             wso.FindProperty("cellHeadingDeg").floatValue = 195f;
             wso.FindProperty("contrast").floatValue = 1.7f;
-            wso.FindProperty("patchBias").floatValue = 0.42f;
             wso.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -112,11 +116,13 @@ public static class TuneLivingSea
             {
                 var wcheck = new SerializedObject(wf);
                 foreach (var n in new[] { "tileTexels", "tileMetres", "driftSpeed",
-                                          "patchLo", "patchBias", "cellMetres", "cellDriftSpeed" })
+                                          "chopMeanTarget", "contrast", "cellMetres", "cellDriftSpeed" })
                 {
                     var pr = wcheck.FindProperty(n);
                     sb.AppendLine($"    {n,-16} {(pr.propertyType == SerializedPropertyType.Integer ? pr.intValue.ToString() : pr.floatValue.ToString())}");
                 }
+                foreach (var n in new[] { "patchRangeLo", "patchRangeHi" })
+                    sb.AppendLine($"    {n,-16} {wcheck.FindProperty(n).vector3Value}");
             }
         }
 

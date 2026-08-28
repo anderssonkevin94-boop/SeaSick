@@ -155,11 +155,26 @@ public class LivingSeaTrace : MonoBehaviour
                     lo = Mathf.Min(lo, r); hi = Mathf.Max(hi, r); mean += r; nn++;
                 }
             sb.AppendLine($"  field over 4 km: {lo:F3} .. {hi:F3}, mean {mean / nn:F3}");
-            float chopLo = Mathf.Lerp(wf.PatchLo, 1f, lo);
-            float chopHi = Mathf.Lerp(wf.PatchLo, 1f, hi);
-            sb.AppendLine($"  chop cascade sees x{chopLo:F2} .. x{chopHi:F2} across the view");
-            sb.AppendLine($"  swell cascade sees x{Mathf.Lerp(1f, chopLo, wf.PatchCoupling.x):F2} .. " +
-                          $"x{Mathf.Lerp(1f, chopHi, wf.PatchCoupling.x):F2} (weak on purpose)");
+            sb.AppendLine($"  bake solved its bias to {wf.SolvedBias:F3} for a tile mean of {wf.BakedMean:F3}");
+            // Each cascade's own response to that one field. The three lines
+            // together are the whole point: if they only ever run below x1.00
+            // the layer is a volume knob and every patch is the same water,
+            // quieter. What says "character" is the SPREAD BETWEEN them at
+            // each end -- the low end wants the swell held while the chop goes
+            // out (a slick), the high end wants the chop lifted under an
+            // unmoved swell (a ruffled band).
+            var pl = wf.PatchRangeLo; var ph = wf.PatchRangeHi;
+            string[] bandName = { "swell", "mid  ", "chop " };
+            for (int c = 0; c < 3; c++)
+            {
+                float cl = Mathf.Lerp(pl[c], ph[c], lo);
+                float ch = Mathf.Lerp(pl[c], ph[c], hi);
+                float cm = Mathf.Lerp(pl[c], ph[c], mean / nn);
+                sb.AppendLine($"  {bandName[c]} cascade sees x{cl:F2} .. x{ch:F2} across the view, mean x{cm:F2}"
+                    + (c == 0 && ch > 1.001f ? "   <-- SWELL LIFTED ABOVE 1, the seabed rule says no" : ""));
+            }
+            sb.AppendLine($"  slick end  swell x{Mathf.Lerp(pl[0], ph[0], lo):F2} against chop x{Mathf.Lerp(pl[2], ph[2], lo):F2}");
+            sb.AppendLine($"  ruffle end swell x{Mathf.Lerp(pl[0], ph[0], hi):F2} against chop x{Mathf.Lerp(pl[2], ph[2], hi):F2}");
 
             // How long a patch takes to cross a fixed spot: the time for the
             // field at one point to swing from one extreme to the other.
