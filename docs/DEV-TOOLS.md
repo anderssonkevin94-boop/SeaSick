@@ -43,6 +43,7 @@ shader property defaults. Re-run these after changing any default.
 | `SetPaddleBoatImport.cs` | Import scale for `paddle_boat.fbx` (1.7 = 12.1 m overall). |
 | `SetBeachSlope.cs` | One-off push of `WorldSettings.beachMaxSlope` into the asset. Edit the constant, run it. The value comes off `BeachProbe`'s distribution. | — |
 | `TuneStormSea.cs` | The storm-sea values that are **scene-serialised**: `RegionField.farScale` (1.5 -> 1.0, because a post-hoc amplitude gain is the wrong instrument once the west has a storm spectrum of its own -- multiplying an authored 45 m sea by 1.5 asks for 67 m, which needs 150 m of water before the depth limit allows it) and `breakFraction`, written explicitly rather than left to a C# initialiser. Saves the scene. |
+| `TuneLivingSea.cs` | **The living-sea weather values, all scene-serialised**: wires `SeaState_Rough` into `SeaStateController`, pushes the Hs-space knobs (`shelfCalmHs`/`shelfLivelyHs`/`setDepth`/`setPeriod`/`wanderPeriod`/`skyHsStart`/`skyHsFull`/`squallHs`/`stormSteady`/`cellShape`), widens `RegionField.stormNear`/`stormFar` to 500/2800, adds `WeatherField` if absent and pushes every one of its values too. Reads all of it back off a fresh `SerializedObject` and prints the severity→Hs ladder. Re-run after changing any weather default — this bit twice in one session: `tileMetres` and `driftSpeed` stayed at the values the component was added with through two rounds of retuning, and only the octave periods (a local inside `Bake()`) actually moved. |
 | `TuneStormFeel.cs` | Storm-feel values that are **scene-serialised** and therefore unreachable from C# defaults: `ChaseCamera.stormDrop`/`stormPullIn` and `ShipMotor.acceleration`. Note the scene frames the camera at distance 20 / height 13, not the code defaults 25/19 — subtract the storm values from those, not from the defaults. |
 
 ## Probes
@@ -53,6 +54,7 @@ shader property defaults. Re-run these after changing any default.
 | `SpectrumProbe2.cs` | The GPU sea against **oceanography**: Hs from field variance and Tp from a temporal PSD vs analytic JONSWAP integrals, for the three canonical (wind, fetch) triples. Edit mode. Slow (~2 min). | `/tmp/seasick-spectrum2.txt` |
 | `ClipmapProbe.cs` | Vertex swim (re-anchors every ring under a frozen sea; pixels must not move) and altitude tiling shots. Play mode, OceanLab. | `/tmp/seasick-clipmap.txt`, `-tiling-*.png` |
 | `DivergenceProbe.cs` | **The load-bearing gate**: rendered surface vs CPU sampler at 1000 points, five frozen instants, storm λ=1.2 — must be < 5 cm (measured 0.23). Reports a **three-way split** — `env` (RegionField C# vs HLSL), `disp` (readback vs live texture) and `total` (adds the Newton inversion) — because one number could be any of the three and was read as the wrong one for a fortnight. Disables `SeaStateController` for the run; `ForceSeverity` does NOT stop it reaching `SetSettings`. Fails loudly on a readback stall instead of skipping the instant. Play mode, OceanLab. | `/tmp/seasick-divergence.txt` |
+| `LivingSeaTrace.cs` | Measures the two things "the ocean feels alive" means, **both invisible to a screenshot**. (1) *Gradual over distance*: sweeps west and reports the **ratio of wave height gained per 100 m**, because the eye reads height as a ratio — a sea that doubles every 200 m is a wall however smooth its curve. (2) *Never static, never repeating*: scrubs `OceanTime` over half an hour at one spot and reports the spread, the drift rate and the closest the trace comes to repeating itself. Also the patch field's span, its slick events (count, spacing, duration, % of time) becalmed **and under way at 10 m/s**, and the storm cells across distance and across an hour. Reads the shipped rule through `SeaStateController.TargetHsAt`/`SetFactor` rather than re-deriving it. Play mode, Sea.unity. | `/tmp/seasick-livingsea.txt` |
 | `BuoyProbe.cs` | Proxy sloop: 60 s storm free-float (roll/rails/draft/capsize) + three calm 2 m drops from pinned phases, scored on draft **overshoot** and **late ringing RMS**. The old "settle time" criterion was replaced 2026-08-21 — see the traps below. Play mode, OceanLab. | `/tmp/seasick-buoy.txt` |
 | `BlendProbe.cs` | Calm→storm weather ramp smoothness (Hs every second; steps mean rebuild pops). Play mode, OceanLab. | `/tmp/seasick-blend.txt`, `-blend-*.png` |
 | `SailShot.cs` | Sails the western deep in `Sea.unity`: draft statistics, camera clamp rate, camera/hull gap, roll/pitch, speed. Compare `/tmp/seasick-sail-baseline.txt` (the old kinematic system's final run). | `/tmp/seasick-sail.txt`, `-0..4.png` |
@@ -92,6 +94,25 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 `python3 tools/pngprobe.py /tmp/seasick-sail-2.png`. Pure stdlib.
 
 ## Measurement traps this project has actually hit
+
+- **A threshold in a metric goes stale the moment the thing it measures is
+  re-centred.** `LivingSeaTrace` counted crossings of 0.5 to time how fast
+  roughness patches pass. Then the bake was biased so the field sits near 0.72
+  — the water's default state is the sea as authored and a patch is a slick
+  passing through it — and the probe promptly reported "one patch every ten
+  minutes" for a field turning over every three. Counting crossings of the
+  trace's *own mean* fixed the units and was still wrong in kind: what a player
+  sees is a slick **arriving and leaving**, so the probe counts events, their
+  length and what fraction of the time they cover. **Measure the event, not the
+  statistic that happened to correlate with it.**
+
+- **A new envelope term is certified for free unless the probe makes it vary.**
+  `DivergenceProbe`'s sample disc is 600 m and the shipped weather tile is
+  4096 m, so the patch field was very nearly constant across it and both twins
+  would have agreed on it whatever the formula said. The probe now builds its
+  own field on a **220 m** tile and prints the field's span, flagging it when
+  the spread is too small to gate — the same reason it over-drives choppiness
+  by 1.25.
 
 - **A probe that hardcodes the value it is checking against reports on the
   code it was WRITTEN against, not the code being measured.** RideProbe baked
