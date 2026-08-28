@@ -28,7 +28,18 @@ Shader "SeaSick/OceanDebug"
             SAMPLER(sampler_Ocean_Derivatives);
             float4 _Ocean_PatchSizes;
             float4 _Ocean_FadeParams;      // x = fade start, y = fade end
-            float4 _Ocean_CascadeWeights;  // per-ring, via MaterialPropertyBlock
+            // Cascade fade schedule; see Ocean.shader and OceanClipmap.
+            float4 _Ocean_FadeLamMin;
+            float4 _Ocean_FadeLamMax;
+            float4 _Ocean_CascadeFade;
+
+            float3 CascadeWeightsAt(float dist)
+            {
+                float lamRes = max(_Ocean_CascadeFade.y, dist * _Ocean_CascadeFade.x);
+                float3 t = saturate((lamRes - _Ocean_FadeLamMin.xyz)
+                    / max(_Ocean_FadeLamMax.xyz - _Ocean_FadeLamMin.xyz, 1e-4));
+                return 1.0 - t * t * (3.0 - 2.0 * t);
+            }
 
             CBUFFER_START(UnityPerMaterial)
             half4 _DeepColor;
@@ -43,14 +54,14 @@ Shader "SeaSick/OceanDebug"
                 float4 derivs : TEXCOORD1; // sx, sz, dxx, dzz summed
             };
 
-            float3 SampleDisplacement(float2 worldXZ, float fade, out float4 derivs)
+            float3 SampleDisplacement(float2 worldXZ, float fade, float3 wC, out float4 derivs)
             {
                 float3 d = 0;
                 derivs = 0;
                 [unroll]
                 for (int c = 0; c < 3; c++)
                 {
-                    float w = _Ocean_CascadeWeights[c] * fade;
+                    float w = wC[c] * fade;
                     if (w <= 0.001) continue;
                     float2 uv = worldXZ / _Ocean_PatchSizes[c];
                     d += w * SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Displacement,
@@ -69,7 +80,7 @@ Shader "SeaSick/OceanDebug"
                 float dist = distance(ws.xz, GetCameraPositionWS().xz);
                 float fade = 1.0 - smoothstep(_Ocean_FadeParams.x, _Ocean_FadeParams.y, dist);
                 float4 derivs;
-                float3 disp = SampleDisplacement(ws.xz, fade, derivs);
+                float3 disp = SampleDisplacement(ws.xz, fade, CascadeWeightsAt(dist), derivs);
                 float env = RegionEnvelope(ws.xz);
                 disp *= env;
                 derivs *= env;

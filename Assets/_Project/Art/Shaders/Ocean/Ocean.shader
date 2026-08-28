@@ -47,7 +47,16 @@ Shader "SeaSick/Ocean"
             SAMPLER(sampler_Ocean_Turbulence);
             float4 _Ocean_PatchSizes;
             float4 _Ocean_FadeParams;
-            float4 _Ocean_CascadeWeights;   // per-ring MaterialPropertyBlock
+            // The cascade fade schedule, pushed once by OceanClipmap.Build.
+            // xyz = the shortest wavelength each cascade holds, and the
+            // longest; _Ocean_CascadeFade.x = resolvable metres of wavelength
+            // per metre of distance, .y = the floor set by the innermost cells.
+            // Unset these read as zero, which gives every cascade full weight
+            // everywhere -- a boiling horizon, loud and obvious, rather than a
+            // sea that silently flattens.
+            float4 _Ocean_FadeLamMin;
+            float4 _Ocean_FadeLamMax;
+            float4 _Ocean_CascadeFade;
             TEXTURE2D(_Ocean_SimTex);       // ripple sim: R offset, G foam
             SAMPLER(sampler_Ocean_SimTex);
             float4 _Ocean_SimRect;          // anchor.xy, extent, texel
@@ -75,6 +84,17 @@ Shader "SeaSick/Ocean"
             // that forgets to reset it can only ever fail loudly rather than
             // silently ship a shader with its reflections switched off.
             float4 _SS_LayerOff;
+
+            // How much of each cascade the mesh under this vertex can carry.
+            // KEEP IDENTICAL to OceanClipmap.WeightsAt -- see the CascadeFade
+            // note there for why the schedule is what it is.
+            float3 CascadeWeightsAt(float dist)
+            {
+                float lamRes = max(_Ocean_CascadeFade.y, dist * _Ocean_CascadeFade.x);
+                float3 t = saturate((lamRes - _Ocean_FadeLamMin.xyz)
+                    / max(_Ocean_FadeLamMax.xyz - _Ocean_FadeLamMin.xyz, 1e-4));
+                return 1.0 - t * t * (3.0 - 2.0 * t);
+            }
 
             float2 SampleSim(float2 xz)
             {
@@ -118,19 +138,25 @@ Shader "SeaSick/Ocean"
                 // pixel to get a value that varies over hundreds of metres
                 // would be silly.
                 float3 envC : TEXCOORD3;   // per-cascade envelope
+                // Interpolated rather than recomputed per pixel so the normals
+                // and the foam ride exactly the weights the geometry was built
+                // with. The curve is smooth in distance, so interpolating it
+                // across a cell is exact to well under a percent.
+                float3 wC : TEXCOORD4;     // per-cascade clipmap weight
             };
 
             // The envelope multiplies INSIDE the cascade sum now, because it is
             // per cascade: shallow water flattens the long swell while leaving
             // the short chop alone, which is what a real shoreline does.
-            float3 SampleDisplacement(float2 worldXZ, float fade, float3 envC, out float dispLen)
+            float3 SampleDisplacement(float2 worldXZ, float fade, float3 envC,
+                float3 wC, out float dispLen)
             {
                 float3 d = 0;
                 dispLen = 0;
                 [unroll]
                 for (int c = 0; c < 3; c++)
                 {
-                    float w = _Ocean_CascadeWeights[c] * fade * envC[c];
+                    float w = wC[c] * fade * envC[c];
                     if (w <= 0.001) continue;
                     float2 uv = worldXZ / _Ocean_PatchSizes[c];
                     float4 s = SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Displacement,
@@ -141,13 +167,13 @@ Shader "SeaSick/Ocean"
                 return d;
             }
 
-            float4 SampleDerivs(float2 worldXZ, float fade, float3 envC)
+            float4 SampleDerivs(float2 worldXZ, float fade, float3 envC, float3 wC)
             {
                 float4 dv = 0;
                 [unroll]
                 for (int c = 0; c < 3; c++)
                 {
-                    float w = _Ocean_CascadeWeights[c] * fade * envC[c];
+                    float w = wC[c] * fade * envC[c];
                     if (w <= 0.001) continue;
                     float2 uv = worldXZ / _Ocean_PatchSizes[c];
                     dv += w * SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Derivatives,
@@ -181,14 +207,16 @@ Shader "SeaSick/Ocean"
                 float dist = distance(ws.xz, GetCameraPositionWS().xz);
                 float fade = 1.0 - smoothstep(_Ocean_FadeParams.x, _Ocean_FadeParams.y, dist);
                 float3 envC = RegionEnvelopeCascades(ws.xz);
+                float3 wC = CascadeWeightsAt(dist);
                 float dispLen;
-                float3 disp = SampleDisplacement(ws.xz, fade, envC, dispLen);
+                float3 disp = SampleDisplacement(ws.xz, fade, envC, wC, dispLen);
                 disp.y += SampleSim(ws.xz).r; // wakes & splash rings
                 ws += disp;
                 o.positionWS = ws;
                 o.heightY = disp.y;
                 o.positionHCS = TransformWorldToHClip(ws);
                 o.envC = envC;
+                o.wC = wC;
                 // dispLen already carries the envelope, per cascade.
                 o.data = float4(envC.x, fade, dispLen,
                     ComputeFogFactor(o.positionHCS.z));
@@ -213,7 +241,7 @@ Shader "SeaSick/Ocean"
 
                 // Per-pixel normals from the derivative bands. The horizontal
                 // squeeze term keeps crests sharp instead of shaded like domes.
-                float4 dv = SampleDerivs(xz, fade, input.envC);
+                float4 dv = SampleDerivs(xz, fade, input.envC, input.wC);
                 float2 slope = dv.xy / max(float2(1.0, 1.0) + dv.zw, 0.15);
                 // Ripple sim contributes slope by finite difference + foam.
                 float2 sim = SampleSim(xz);
@@ -303,7 +331,7 @@ Shader "SeaSick/Ocean"
                 // Single combined-J foam layer, tiled with patch 0.
                 float turb = SAMPLE_TEXTURE2D_ARRAY(_Ocean_Turbulence,
                     sampler_Ocean_Turbulence, xz / _Ocean_PatchSizes[0], 0).r
-                    * _Ocean_CascadeWeights[0];
+                    * input.wC.x;
                 float noise = FoamNoise(xz * _FoamNoiseScale)
                             * FoamNoise(xz * _FoamNoiseScale * 3.7 + 17.0);
                 float foamAmt = saturate((breaking * (0.35 + 0.65 * storm) + turb)

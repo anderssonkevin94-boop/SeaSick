@@ -9,9 +9,16 @@ namespace SeaSick.Ocean
     /// frame — the surface never crawls under a moving camera. Ring boundaries
     /// overlap by two coarse cells and carry small downward skirts to hide the
     /// 2:1 T-junctions; the outermost ring adds a wide horizon flange.
-    /// Per-ring cascade weights fade high-frequency cascades out before the
-    /// ring's vertex density stops resolving them (a boiling horizon is the
-    /// alternative).
+    /// Cascade weights fade the high-frequency cascades out before the mesh's
+    /// vertex density stops resolving them (a boiling horizon is the
+    /// alternative), but they are computed per VERTEX from its distance to the
+    /// camera, not per ring. Per ring they cannot be: rings double in cell
+    /// size, so a weight curve sampled once per ring is sampled at eight
+    /// points that jump 2x each, and the chop went 0.78 -> 0.00 between two
+    /// neighbouring rings. That is a hard, camera-locked circle drawn on the
+    /// water at ~128 m, and a second at ~512 m where the mid band did the
+    /// same. Ramped per metre the same schedule reads as waves getting
+    /// smaller. See CascadeFade below for why this costs no resolution.
     public class OceanClipmap : MonoBehaviour
     {
         [SerializeField] Material material;
@@ -50,12 +57,7 @@ namespace SeaSick.Ocean
             int ringCount = q != null ? q.clipmapRings : 7;
             float[] patches = q != null ? q.patchSizes : new[] { 512f, 128f, 32f };
 
-            // Wavelength range per cascade, for the per-ring weights.
-            // Cascade bands: c0 (64..patch0), c1 (16..64), c2 (min..16) by
-            // design. patch0 is 2048 m so the storm swell's 400-900 m rollers
-            // have somewhere to live; 512 m held exactly one of them.
-            var lamMin = new float[] { patches[1] * 0.5f, patches[2] * 0.5f, 1f };
-            var lamMax = new float[] { patches[0], patches[1] * 0.5f, patches[2] * 0.5f };
+            PublishCascadeFade(c0, cellsAcross, patches);
 
             for (int r = 0; r < ringCount; r++)
             {
@@ -71,22 +73,75 @@ namespace SeaSick.Ocean
                 mr.sharedMaterial = material;
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-                // Cascade weight: fraction of the cascade's wavelength range
-                // this ring's vertex density resolves (4 verts per wavelength).
-                float lamResolvable = 4f * cell;
-                var weights = Vector4.zero;
-                for (int c = 0; c < 3; c++)
-                {
-                    float t = Mathf.InverseLerp(lamMin[c], lamMax[c], lamResolvable);
-                    weights[c] = 1f - Mathf.Clamp01(t) * Mathf.Clamp01(t);
-                }
-                var mpb = new MaterialPropertyBlock();
-                mpb.SetVector("_Ocean_CascadeWeights", weights);
-                mr.SetPropertyBlock(mpb);
-
                 rings.Add(go.transform);
                 cellSizes.Add(cell);
             }
+        }
+
+        // ---- CascadeFade ---------------------------------------------------
+        // THE RULE LIVES IN TWO PLACES AND MUST MATCH: here, and
+        // `CascadeWeightsAt` in Ocean.shader / OceanDebug.shader. Only the
+        // three lines of curve are duplicated -- every parameter is computed
+        // once, here, and pushed as a global, so the two cannot drift apart on
+        // a retune. The same contract RegionField.cs / RegionField.hlsl have.
+        //
+        // A cascade may be drawn as long as the mesh under it has enough
+        // vertices for the cascade's waves. The mesh's cell size at a given
+        // distance is not a free choice -- ring r spans 14.5*2^r to 32*2^r
+        // metres with cells of 0.5*2^r, so the cell a vertex sits on is
+        // between d/64 and d/29. Taking the OUTER end, `cell = d / 64`, is
+        // what makes this safe: the region a ring actually owns starts where
+        // the finer ring stops, at d = 16*2^r, and there the rule asks for
+        // 4*d/64 = 2^r metres of wavelength, which is exactly two vertices per
+        // wave on that ring's cells. So nothing below the ring's own Nyquist
+        // is ever requested in the water that ring is responsible for --
+        // the fade is smooth in distance AND no coarser than the old per-ring
+        // one where it counts. The only place it asks for more is the sliver
+        // at each ring's inner edge, which the finer ring is drawn over.
+        //
+        // It also makes the OVERLAP consistent, which the per-ring rule never
+        // was: two rings covering the same water now compute the same weight
+        // there instead of differing by a factor of two.
+        const float VertsPerWave = 4f;
+
+        static Vector4 fadeLamMin, fadeLamMax, fadeCell;
+
+        static void PublishCascadeFade(float innerCell, int cellsAcross, float[] patches)
+        {
+            // Wavelength range each cascade covers. Cascade 0 (64..patch0),
+            // 1 (16..64), 2 (min..16) by design. patch0 is 2048 m so the storm
+            // swell's 400-900 m rollers have somewhere to live; 512 m held
+            // exactly one of them.
+            fadeLamMin = new Vector4(patches[1] * 0.5f, patches[2] * 0.5f, 1f, 0f);
+            fadeLamMax = new Vector4(patches[0], patches[1] * 0.5f, patches[2] * 0.5f, 0f);
+            // x: metres of resolvable wavelength gained per metre of distance.
+            // y: the floor, from the innermost cells -- inside the centre block
+            // there is no more detail to be had however close you stand.
+            fadeCell = new Vector4(VertsPerWave * 2f / Mathf.Max(cellsAcross, 1),
+                                   VertsPerWave * innerCell, 0f, 0f);
+            Shader.SetGlobalVector("_Ocean_FadeLamMin", fadeLamMin);
+            Shader.SetGlobalVector("_Ocean_FadeLamMax", fadeLamMax);
+            Shader.SetGlobalVector("_Ocean_CascadeFade", fadeCell);
+        }
+
+        /// What a vertex this far from the camera gets, per cascade. The C#
+        /// twin of `CascadeWeightsAt` in the shaders; probes read the schedule
+        /// through this rather than restating it.
+        public static Vector4 WeightsAt(float distance)
+        {
+            float lamRes = Mathf.Max(fadeCell.y, distance * fadeCell.x);
+            var w = Vector4.zero;
+            for (int c = 0; c < 3; c++)
+            {
+                float t = Mathf.Clamp01((lamRes - fadeLamMin[c])
+                    / Mathf.Max(fadeLamMax[c] - fadeLamMin[c], 1e-4f));
+                // smoothstep, not the old 1 - t*t: it leaves the curve flat at
+                // both ends, so the cascade neither snaps away from full
+                // strength nor arrives at zero still falling. A ramp with a
+                // corner in it is a fainter version of the same line.
+                w[c] = 1f - t * t * (3f - 2f * t);
+            }
+            return w;
         }
 
         void LateUpdate()
