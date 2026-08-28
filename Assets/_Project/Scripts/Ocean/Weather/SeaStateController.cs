@@ -65,6 +65,44 @@ namespace SeaSick.Ocean
         [Tooltip("Raises the cell field to this power. Above 1, high values are rare, so a squall is an event rather than the normal condition: at 1.6 the shelf sits near 4 m and reaches 9 only occasionally.")]
         [Range(0.5f, 4f)] [SerializeField] float cellShape = 1.6f;
 
+        [Header("Two axes: the wind sea and the swell")]
+        // THE SEA USED TO HAVE EXACTLY ONE DEGREE OF FREEDOM. Wind speed,
+        // fetch, both swell heights, BOTH SWELL DIRECTIONS, choppiness,
+        // detailGain and dispersion depth were all a single lerp along
+        // severity between four anchors, so two seas at the same Hs were
+        // byte-identical and there was no way to have an old south-westerly
+        // swell under a fresh north-easterly wind: swell direction was welded
+        // to wind direction by the blend. No amount of retuning the anchors
+        // fixes that, because it is not a tuning problem.
+        //
+        // So the anchors now set the sea's SIZE and its base directions, and
+        // two wanders on top of them turn the wind sea and the swell
+        // SEPARATELY. What the player reads is the RELATIONSHIP between them:
+        // wind with swell is long ordered rollers, wind against swell is
+        // short, steep and dangerous, and an old swell under a new cross wind
+        // is confused pyramidal water. One sea state, three different days.
+        //
+        // Nothing here changes how BIG the sea is. That is deliberate and it
+        // is a hard constraint, not a preference: NewtonIterations is 7
+        // against a 0.4 ms budget with no headroom, so this layer may only
+        // ever move character. The swell split below is variance-preserving
+        // for exactly that reason.
+        [Tooltip("Seconds for the wind to back and veer through its range. The local wind is the fast axis -- it is weather happening HERE. A day is 180 s, so 300 s is a wind that changes over a day and a half.")]
+        [SerializeField] float windTurnPeriod = 300f;
+        [Tooltip("Degrees the wind wanders either side of the direction the sea state authored.")]
+        [Range(0f, 180f)] [SerializeField] float windTurnRange = 150f;
+        [Tooltip("Seconds for the swell to turn. LONG, and that is the whole point: swell is made by weather that was somewhere else, hours ago, and it keeps coming after that weather has gone. A swell that turned with the wind would just be the wind again.")]
+        [SerializeField] float swellTurnPeriod = 1600f;
+        [Tooltip("Degrees the swell wanders either side of the direction the sea state authored.")]
+        [Range(0f, 180f)] [SerializeField] float swellTurnRange = 150f;
+        [Tooltip("Metres over which each axis also varies in PLACE. Sailing twenty kilometres should find a different wind, not just a later one.")]
+        [SerializeField] float windTurnMetres = 6000f;
+        [SerializeField] float swellTurnMetres = 30000f;
+        [Tooltip("How far either way the crossing angle between the two swell trains swings AROUND the angle the sea state authored. Around it, never through zero: the authored 45 degrees is the sea that has been measured and gated, and a crossing near zero is two trains lying on each other, which is the parallel corduroy a single narrow train gives at any height. 30 degrees puts the storm's trains between 15 and 75 degrees apart -- always a crossing sea, never a sheet.")]
+        [Range(0f, 60f)] [SerializeField] float crossSwingDeg = 30f;
+        [Tooltip("How far the JONSWAP peak enhancement swings either side of the value the sea state authored -- the wind sea's AGE. A young sea under a rising wind is peaky and organised; an old one that has been blowing for days is broad and mixed. Small, and relative to the asset rather than absolute, because gamma moves the spectrum's total energy a little and the depth cap is written against the DECLARED Hs.")]
+        [Range(0f, 1.5f)] [SerializeField] float gammaSwing = 0.5f;
+
         [Header("Sky coupling")]
         [Tooltip("Hs at which the sky starts to turn, metres.")]
         [SerializeField] float skyHsStart = 8f;
@@ -79,6 +117,7 @@ namespace SeaSick.Ocean
         int nameBand;            // hysteresis state for CurrentStateName
         float lastRebuildSeverity = -1f;
         double lastRebuildTime = -999.0;
+        float lastWindOffset = -999f, lastSwellOffset = -999f;
 
         /// What the open sea is doing right now, metres of Hs. This is the
         /// number every other system should reason about.
@@ -89,6 +128,18 @@ namespace SeaSick.Ocean
         public float Storminess01 => LogInverseLerp(skyHsStart, skyHsFull, CurrentHs);
         public float Severity01 => severity;
         public Vector2 WindDirection => blend != null ? blend.WindDir : Vector2.right;
+        /// The wind sea's and the swell's headings, and the angle between
+        /// them, which is the number that describes the DAY: near 0 the wind
+        /// runs with the swell and the sea is long and ordered, near 180 it
+        /// runs against it and the sea is short and steep, and in between it
+        /// is confused. Probes and the HUD read these rather than
+        /// re-deriving them.
+        public float WindDirectionDeg => blend != null ? blend.windDirectionDeg : 0f;
+        public float SwellDirectionDeg => blend != null ? blend.swellDirectionDeg : 0f;
+        public float WindAgainstSwellDeg => blend != null
+            ? Mathf.Abs(Mathf.DeltaAngle(blend.windDirectionDeg, blend.swellDirectionDeg)) : 0f;
+        public float SwellCrossingDeg => blend != null
+            ? Mathf.Abs(Mathf.DeltaAngle(blend.swellDirectionDeg, blend.swell2DirectionDeg)) : 0f;
         public string CurrentStateName => NameForHs(CurrentHs, ref nameBand);
 
         public Transform Follow { get => follow; set => follow = value; }
@@ -279,6 +330,99 @@ namespace SeaSick.Ocean
             return LogLerp(ceilingHs, floorHs, lull);
         }
 
+        /// A 0..1 wander that varies in TIME and in PLACE, and is a pure
+        /// function of both so OceanTime.Scrub still makes probes repeatable.
+        /// Offset well away from the origin: Mathf.PerlinNoise is zero on the
+        /// integer lattice and symmetric about it, which is the mirroring
+        /// NoiseProbe exists to catch, and the origin is exactly where the
+        /// home island sits.
+        static float Field01(Vector2 p, double t, float period, float metres, float seed)
+        {
+            float u = (float)(t / Mathf.Max(period, 1f)) + p.x / Mathf.Max(metres, 1f) + seed + 137.5f;
+            float v = p.y / Mathf.Max(metres, 1f) + seed * 0.37f + 219.7f;
+            float a = Mathf.PerlinNoise(u, v);
+            float b = Mathf.PerlinNoise(u * 2.37f + 11.3f, v * 2.37f + 5.1f);
+            // Perlin sits near its midpoint most of the time; stretch it so
+            // the wind actually reaches the ends of its range.
+            return Mathf.Clamp01((Mathf.Lerp(a, b, 0.3f) - 0.5f) * 1.9f + 0.5f);
+        }
+
+        /// The wind-sea axis, 0..1: local weather, the fast one.
+        public float WindAxis(Vector2 p, double t) =>
+            Field01(p, t, windTurnPeriod, windTurnMetres, 3.1f);
+
+        /// The swell axis, 0..1: distant weather, slow and with memory. A
+        /// different period, a different seed AND a five times larger spatial
+        /// scale, so it cannot track the wind by accident.
+        public float SwellAxis(Vector2 p, double t) =>
+            Field01(p, t, swellTurnPeriod, swellTurnMetres, 61.7f);
+
+        /// Turns the wind sea and the swell separately on the blended state.
+        /// Called after LerpFrom, so the anchors still author the sea's size
+        /// and its base headings and this only ever moves the RELATIONSHIP.
+        /// Public so LivingSeaTrace and TwoAxisTrace measure the shipped rule
+        /// instead of a hand-copy of it that stops matching and stops gating.
+        public void ApplyAxes(OceanSpectrumSettings s, Vector2 p, double t)
+        {
+            if (s == null) return;
+            // Read the authored crossing angle BEFORE turning the main train,
+            // or it is lost.
+            float authoredCross = Mathf.DeltaAngle(s.swellDirectionDeg, s.swell2DirectionDeg);
+
+            s.windDirectionDeg += (WindAxis(p, t) * 2f - 1f) * windTurnRange;
+            s.swellDirectionDeg += (SwellAxis(p, t) * 2f - 1f) * swellTurnRange;
+
+            // The crossing angle wanders AROUND the authored one, and this is
+            // the third time the same rule has had to be learnt on this pass:
+            // swing about what the asset authored, never replace it. Swinging
+            // about ZERO instead looks reasonable and is not, because Perlin
+            // spends most of its time near its middle -- so the two trains
+            // averaged 28 degrees apart against an authored 45, the sea got
+            // directionally NARROWER, and a long-crested sea reads high on a
+            // one-dimensional transect. Measured: WaveSizeProbe's storm Hs
+            // went 60 -> 77 m against a declared 65, which is the number the
+            // depth cap is written against. Total variance never moved; the
+            // sea had just stopped being spread out.
+            float u = Field01(p, t, swellTurnPeriod * 0.61f, swellTurnMetres, 23.3f) * 2f - 1f;
+            s.swell2DirectionDeg = s.swellDirectionDeg + authoredCross + u * crossSwingDeg;
+
+            // THE ENERGY SPLIT BETWEEN THE TWO TRAINS IS DELIBERATELY LEFT
+            // ALONE, and it was tried twice. It is variance-preserving on
+            // paper -- independent trains add in variance, so holding the sum
+            // of the squares holds Hs exactly, and TwoAxisTrace measured the
+            // drift at 0.0000% -- and it still failed both ways round:
+            //
+            //   Toward the SECOND train. That train is the SHORT one (170 m
+            //   against the main train's 470 in the storm), so energy moved
+            //   into it is energy moved into steeper water. The authored storm
+            //   puts 12.3% of the swell's variance there, which at 24 m over
+            //   170 m is H/lambda 0.14, already sitting on the 1/7 breaking
+            //   limit. Letting the split reach 45% took WaveSizeProbe's median
+            //   face angle 15.1 -> 18.0 deg, p99 40.9 -> 49.6, worst face 56.6
+            //   -> 78.0, and halved the median wavelength from 340 m to 185.
+            //   The SWELL-ONLY face angle barely moved, which is the tell: the
+            //   mountain was not steeper, energy had slid down into the short
+            //   train. NewtonIterations is 7 with no headroom; that is not
+            //   affordable.
+            //
+            //   Toward the FIRST train. Safe for steepness (median face came
+            //   back to 14.5 deg) and wrong for a different reason: 98% in one
+            //   train IS the single narrow train, which is parallel corduroy at
+            //   any height, and a long-crested sea reads high on a transect --
+            //   measured Hs went 60 -> 77 m against a declared 65, which is the
+            //   number the depth cap is written against.
+            //
+            // The crossing ANGLE below already changes the sea's character far
+            // more than the split ever did, and it is bounded by what has been
+            // gated. So the split stays where the asset put it.
+
+            // The wind sea's age. Peaky and organised under a rising wind,
+            // broad and mixed after days of it. Relative to what the asset
+            // authored and deliberately small: gamma reshapes the spectrum,
+            // and the sea has no steepness budget to spend.
+            s.gamma = Mathf.Max(1f, s.gamma + (WindAxis(p, t + 311.0) * 2f - 1f) * gammaSwing);
+        }
+
         /// Sets and lulls as a multiplier on Hs at a time.
         public float SetFactor(double t) =>
             1f + setDepth * (Wave01(t, setPeriod, 0.43f, 0.40f, 41.3f) * 2f - 1f);
@@ -336,27 +480,57 @@ namespace SeaSick.Ocean
 
             CurrentHs = HsAt(severity);
 
-            // Throttled rebuild, and only when the state actually moved.
+            // Throttled rebuild, and only when the state actually moved --
+            // where "the state" now includes WHICH WAY the two seas are
+            // running, not only how big they are. Without the second test the
+            // wind and the swell would be frozen for as long as Hs happened to
+            // sit still, which on a steady day is the whole voyage.
+            // Compare the OFFSETS the axes are asking for, never the angles
+            // on `blend` -- those already carry the last rebuild's offset, so
+            // testing them would add this turn's offset to the last one's and
+            // measure a drift that is not happening.
+            Vector2 axisP = FollowXZ();
+            float windOffset = (WindAxis(axisP, OceanTime.Now) * 2f - 1f) * windTurnRange;
+            float swellOffset = (SwellAxis(axisP, OceanTime.Now) * 2f - 1f) * swellTurnRange;
+            bool axesMoved = Mathf.Abs(windOffset - lastWindOffset) > 1.5f
+                          || Mathf.Abs(swellOffset - lastSwellOffset) > 1.5f;
             if (OceanTime.Now - lastRebuildTime < 1.0 / rebuildHz) return;
-            if (Mathf.Abs(severity - lastRebuildSeverity) < 0.002f) return;
+            if (Mathf.Abs(severity - lastRebuildSeverity) < 0.002f && !axesMoved) return;
             lastRebuildTime = OceanTime.Now;
             lastRebuildSeverity = severity;
 
+            BlendAt(severity, blend);
+
+            // The anchors have authored the size and the base headings; now
+            // turn the two seas separately on top of them.
+            ApplyAxes(blend, axisP, OceanTime.Now);
+            lastWindOffset = windOffset;
+            lastSwellOffset = swellOffset;
+
+            ocean.SetSettings(blend);
+        }
+
+        /// The anchor blend at a severity, with no axes applied -- the sea as
+        /// the four assets author it, and exactly what the sea WAS before the
+        /// two axes existed. Update calls it, and so does TwoAxisTrace, which
+        /// is how the probe can show the before and the after in one run
+        /// without a hand-copy of the anchor chain going stale.
+        public void BlendAt(float s, OceanSpectrumSettings into)
+        {
+            if (into == null || calm == null || normal == null || stormy == null) return;
             if (rough == null)
             {
                 // Pre-wiring fallback, so a scene that has not had the fourth
                 // asset pushed into it still runs the sea it always ran.
-                if (severity <= 0.5f) blend.LerpFrom(calm, normal, severity * 2f);
-                else blend.LerpFrom(normal, stormy, (severity - 0.5f) * 2f);
+                if (s <= 0.5f) into.LerpFrom(calm, normal, s * 2f);
+                else into.LerpFrom(normal, stormy, (s - 0.5f) * 2f);
             }
-            else if (severity <= SevNormal)
-                blend.LerpFrom(calm, normal, severity / SevNormal);
-            else if (severity <= SevRough)
-                blend.LerpFrom(normal, rough, (severity - SevNormal) / (SevRough - SevNormal));
+            else if (s <= SevNormal)
+                into.LerpFrom(calm, normal, s / SevNormal);
+            else if (s <= SevRough)
+                into.LerpFrom(normal, rough, (s - SevNormal) / (SevRough - SevNormal));
             else
-                blend.LerpFrom(rough, stormy, (severity - SevRough) / (1f - SevRough));
-
-            ocean.SetSettings(blend);
+                into.LerpFrom(rough, stormy, (s - SevRough) / (1f - SevRough));
         }
 
         Vector2 FollowXZ()

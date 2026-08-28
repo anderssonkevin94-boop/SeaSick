@@ -1159,6 +1159,14 @@ MonoBehaviour:
   squallHs: 9
   stormSteady: 0.88
   cellShape: 1.6
+  windTurnPeriod: 300
+  windTurnRange: 150
+  swellTurnPeriod: 1600
+  swellTurnRange: 150
+  windTurnMetres: 6000
+  swellTurnMetres: 30000
+  crossSwingDeg: 30
+  gammaSwing: 0.5
   skyHsStart: 8
   skyHsFull: 55
 --- !u!114 &1016993462

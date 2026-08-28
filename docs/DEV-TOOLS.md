@@ -56,6 +56,7 @@ shader property defaults. Re-run these after changing any default.
 | `CascadeFadeProbe.cs` (`Scripts/Dev/`) | **How the sea thins with distance.** Reads per-cascade RMS straight off the displacement textures, then walks outward a metre at a time asking the SHIPPED rule what a vertex there is weighted, and reports surface RMS against distance plus **the biggest single-metre fall in it** — a step function has one, a ramp has none. Backed by a photograph: one sea-level frame with the phase pinned, scored for high-frequency contrast row by row, every row a known ground distance. Never restates the rule: it calls `OceanClipmap.WeightsAt` if that exists and otherwise reads each ring's `_Ocean_CascadeWeights` off the live MaterialPropertyBlock, so one file measures the old scheme and the new one. `Execute` = PC tier, `ExecuteMobile` = phone; **run them one at a time**, two instances at once fight over the clipmap. Play mode, OceanLab. | `/tmp/seasick-cascadefade-<tier>.txt`, `-<tier>.png` |
 | `ClipmapProbe.cs` | Vertex swim (re-anchors every ring under a frozen sea; pixels must not move) and altitude tiling shots. Play mode, OceanLab. | `/tmp/seasick-clipmap.txt`, `-tiling-*.png` |
 | `DivergenceProbe.cs` | **The load-bearing gate**: rendered surface vs CPU sampler at 1000 points, five frozen instants, storm λ=1.2 — must be < 5 cm (measured 0.23). Reports a **three-way split** — `env` (RegionField C# vs HLSL), `disp` (readback vs live texture) and `total` (adds the Newton inversion) — because one number could be any of the three and was read as the wrong one for a fortnight. Disables `SeaStateController` for the run; `ForceSeverity` does NOT stop it reaching `SetSettings`. Fails loudly on a readback stall instead of skipping the instant. Play mode, OceanLab. | `/tmp/seasick-divergence.txt` |
+| `TwoAxisTrace.cs` (`Scripts/Dev/`) | **Is the sea more than one number?** Scrubs `OceanTime` over six hours and asks the SHIPPED rule (`SeaStateController.BlendAt` for the anchor sea, `ApplyAxes` for the two axes -- never a copy of either) what the sea is at each moment. The headline is the one number that matters: samples bucketed by Hs to a couple of per cent, and **the spread of wind-against-swell angle inside a bucket**, which with one degree of freedom is zero by construction. Also the correlation between the two axes (two axes that track each other are one axis in a hat), how much of the time the wind runs with / across / against the swell, that the axes move CHARACTER and not size (total swell variance at a fixed severity must not drift), and purity -- the same (place, time) twice must give the same sea or `Scrub` has stopped making probes repeatable. Play mode, Sea.unity. | `/tmp/seasick-twoaxis.txt` |
 | `LivingSeaTrace.cs` | Measures the two things "the ocean feels alive" means, **both invisible to a screenshot**. (1) *Gradual over distance*: sweeps west and reports the **ratio of wave height gained per 100 m**, because the eye reads height as a ratio — a sea that doubles every 200 m is a wall however smooth its curve. (2) *Never static, never repeating*: scrubs `OceanTime` over half an hour at one spot and reports the spread, the drift rate and the closest the trace comes to repeating itself. Also the patch field's span, its slick events (count, spacing, duration, % of time) becalmed **and under way at 10 m/s**, and the storm cells across distance and across an hour. Reads the shipped rule through `SeaStateController.TargetHsAt`/`SetFactor` rather than re-deriving it. Play mode, Sea.unity. | `/tmp/seasick-livingsea.txt` |
 | `BuoyProbe.cs` | Proxy sloop: 60 s storm free-float (roll/rails/draft/capsize) + three calm 2 m drops from pinned phases, scored on draft **overshoot** and **late ringing RMS**. The old "settle time" criterion was replaced 2026-08-21 — see the traps below. Play mode, OceanLab. | `/tmp/seasick-buoy.txt` |
 | `BlendProbe.cs` | Calm→storm weather ramp smoothness (Hs every second; steps mean rebuild pops). Play mode, OceanLab. | `/tmp/seasick-blend.txt`, `-blend-*.png` |
@@ -99,6 +100,23 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
 `python3 tools/pngprobe.py /tmp/seasick-sail-2.png`. Pure stdlib.
 
 ## Measurement traps this project has actually hit
+
+- **Swing a weather knob ABOUT what the asset authored; never replace it.**
+  This rule had to be learnt three times in one afternoon on the two-axis
+  pass, and each time it presented as a different bug. Letting the swell's
+  energy split run to 45 % in the SHORT train took WaveSizeProbe's storm face
+  angle from 15.1 to 18.0 deg median and 56.6 to 78.0 worst, while the
+  SWELL-ONLY face angle barely moved -- the tell that the mountain was fine
+  and energy had slid down into the short train. Letting it run the other way,
+  to 98 % in one train, was safe for steepness and made the sea long-crested,
+  which reads HIGH on a one-dimensional transect: measured Hs 60 -> 77 m
+  against a declared 65, the number the depth cap is written against. And
+  swinging the two swell trains' crossing angle about ZERO rather than about
+  the authored 45 deg did the same thing for a subtler reason -- Perlin spends
+  most of its time near its middle, so the trains averaged 28 deg apart, the
+  sea narrowed, and Hs read 77 m again with total variance never having moved.
+  **A measured Hs that rises while total variance is constant is a directional
+  spread problem, not an energy one.**
 
 - **Indexing a `float3` inside a Burst hot path costs a factor of four, and
   only `DivergenceProbe`'s timing line says so.** `RegionFieldParams.

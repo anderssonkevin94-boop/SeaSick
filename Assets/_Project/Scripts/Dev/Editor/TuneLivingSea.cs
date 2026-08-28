@@ -78,6 +78,24 @@ public static class TuneLivingSea
             wso.ApplyModifiedPropertiesWithoutUndo();
         }
 
+        // The two axes. Serialised on SeaStateController, so a scene saved
+        // before they existed would hold whatever the component was added
+        // with -- which for a brand new field is the code default today and
+        // whatever anyone types tomorrow. Written explicitly for the same
+        // reason everything else in this file is.
+        {
+            var aso = new SerializedObject(ctrl);
+            aso.FindProperty("windTurnPeriod").floatValue = 300f;
+            aso.FindProperty("windTurnRange").floatValue = 150f;
+            aso.FindProperty("windTurnMetres").floatValue = 6000f;
+            aso.FindProperty("swellTurnPeriod").floatValue = 1600f;
+            aso.FindProperty("swellTurnRange").floatValue = 150f;
+            aso.FindProperty("swellTurnMetres").floatValue = 30000f;
+            aso.FindProperty("crossSwingDeg").floatValue = 30f;
+            aso.FindProperty("gammaSwing").floatValue = 0.5f;
+            aso.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         // The storm ramp. 450 -> 1250 m made the sea grow by x1.82 every 100 m
         // sailed (LivingSeaTrace) and then pinned it at 65 m for the rest of
         // the world: 800 m is not a gradient, it is a doorway. Widened until
@@ -102,7 +120,10 @@ public static class TuneLivingSea
         foreach (var n in new[] { "shelfCalmHs", "shelfLivelyHs", "blendTime",
                                   "wanderPeriod", "setDepth", "setPeriod",
                                   "skyHsStart", "skyHsFull",
-                                  "squallHs", "stormSteady", "cellShape" })
+                                  "squallHs", "stormSteady", "cellShape",
+                                  "windTurnPeriod", "windTurnRange", "windTurnMetres",
+                                  "swellTurnPeriod", "swellTurnRange", "swellTurnMetres",
+                                  "crossSwingDeg", "gammaSwing" })
             sb.AppendLine($"  {n,-16} {check.FindProperty(n).floatValue}");
         var r = check.FindProperty("rough").objectReferenceValue;
         sb.AppendLine($"  rough            {(r != null ? r.name : "NULL")}");
