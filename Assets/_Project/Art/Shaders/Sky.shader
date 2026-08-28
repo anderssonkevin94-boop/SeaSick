@@ -97,6 +97,20 @@ Shader "SeaSick/Sky"
             // this, so they hold station against each other while the whole
             // sky wheels — which is the thing that reads as a night passing.
             float4 _SS_StarRot;
+            // Storminess along eight compass bearings a few km out — A is
+            // N/NE/E/SE, B is S/SW/W/NW — plus the two ends the skyline
+            // blends between. _SS_RoseStrength is 0 when nothing is pushing a
+            // rose, and the horizon then stays the single uniform colour this
+            // shader has always drawn.
+            float4 _SS_SkyRoseA;
+            float4 _SS_SkyRoseB;
+            float  _SS_RoseStrength;
+            float4 _SS_HorizonClear;
+            float4 _SS_HorizonStorm;
+            // How bad it is HERE. The rose is a contrast cue, so it needs both
+            // ends: "clear that way" only means something measured against
+            // what you are sitting in.
+            float  _SS_Storminess;
             // xy = wind direction on the water plane; the cloud deck runs with it.
             float4 _SS_SkyWind;
 
@@ -109,6 +123,36 @@ Shader "SeaSick/Sky"
                 o.positionCS = TransformObjectToHClip(v.positionOS.xyz);
                 o.dir = v.positionOS.xyz;
                 return o;
+            }
+
+            // The weather along the bearing a pixel is looking down.
+            //
+            // Linear between the two nearest of the eight samples: eight is
+            // enough because a storm edge is hundreds of metres of gradient,
+            // not a line, and any sharper would read as facets on the skyline.
+            float RoseAt(float3 dir)
+            {
+                // Bearing 0 = north (+Z), clockwise toward east (+X) — the
+                // same convention SkyDirector fills the array in.
+                float az = atan2(dir.x, dir.z);              // -PI..PI
+                float f = az * (8.0 / 6.2831853) + 8.0;      // wrap negatives
+                float i0 = floor(f);
+                float frac0 = f - i0;
+
+                // Gathered with dot products rather than by indexing a local
+                // array: dynamic indexing is not dependable at target 3.0, and
+                // this is eight multiply-adds on a shader that is already
+                // running four octaves of fbm.
+                float ia = fmod(i0, 8.0);
+                float ib = fmod(i0 + 1.0, 8.0);
+
+                float4 sel = float4(0, 1, 2, 3);
+                float4 wa0 = step(abs(sel - ia), 0.5), wb0 = step(abs(sel + 4.0 - ia), 0.5);
+                float4 wa1 = step(abs(sel - ib), 0.5), wb1 = step(abs(sel + 4.0 - ib), 0.5);
+
+                float va = dot(_SS_SkyRoseA, wa0) + dot(_SS_SkyRoseB, wb0);
+                float vb = dot(_SS_SkyRoseA, wa1) + dot(_SS_SkyRoseB, wb1);
+                return lerp(va, vb, frac0);
             }
 
             float SkyHash(float2 p)
@@ -200,7 +244,45 @@ Shader "SeaSick/Sky"
 
                 // --- Gradient -------------------------------------------------
                 float up = saturate(dir.y);
-                float3 col = lerp(_HorizonColor.rgb, _ZenithColor.rgb,
+
+                // The skyline is coloured by what is out THAT way, not by what
+                // is overhead here. This is the only cue that tells you which
+                // direction leads out of a storm — without it the sky is one
+                // colour all round and every heading looks identical.
+                //
+                // Only the band near the horizon takes the directional colour:
+                // the zenith is the weather you are actually under, and it has
+                // no bearing to belong to.
+                float roseS = 0.0;      // storminess along this bearing
+                float roseClear = 0.0;  // how much of a CLEARING this way, masked to the lower sky
+                float3 horizonCol = _HorizonColor.rgb;
+                if (_SS_RoseStrength > 0.001)
+                {
+                    roseS = saturate(RoseAt(dir));
+                    float3 there = lerp(_SS_HorizonClear.rgb, _SS_HorizonStorm.rgb, roseS);
+                    float band = 1.0 - smoothstep(0.0, 0.42, up);
+                    horizonCol = lerp(horizonCol, there, band * _SS_RoseStrength);
+
+                    // Weighted toward the lower sky but far wider than the
+                    // gradient band: in a storm the cloud deck owns everything
+                    // above about 8 degrees, so a cue confined to the skyline
+                    // is painted over before it is ever seen. Measured on the
+                    // first attempt: the clear bearing came back 6.7% brighter
+                    // than the stormy one, and a fully stormy bearing was the
+                    // brightest tile of the four.
+                    // How much BETTER it is that way than here — not how
+                    // clear it is in absolute terms. Phrased as a difference
+                    // because the absolute form thinned the cloud deck over
+                    // the whole sky in fair weather, where every bearing is
+                    // clear and there is nothing to point at: a cue that fires
+                    // everywhere points nowhere, and it would have quietly
+                    // rewritten the fair-weather sky the feature was never
+                    // meant to touch.
+                    roseClear = saturate(_SS_Storminess - roseS) * _SS_RoseStrength
+                              * (1.0 - smoothstep(0.0, 0.55, up));
+                }
+
+                float3 col = lerp(horizonCol, _ZenithColor.rgb,
                                   pow(up, 1.0 / max(0.2, _HorizonSharp)));
                 col = lerp(_GroundColor.rgb, col, smoothstep(-0.05, 0.02, dir.y));
 
@@ -267,9 +349,17 @@ Shader "SeaSick/Sky"
                 density = density * density * (3.0 - 2.0 * density);
 
                 // Thick cloud is dark underneath; its edges catch the light.
+                // A clearing on this bearing thins the lid and lights what is
+                // left of it. This is the cue you actually steer by — the lid
+                // breaking up over there — and it is the only part of the sky
+                // with enough of the frame to be legible from the deck when
+                // the sea is running 40 m.
+                density *= lerp(1.0, 0.22, roseClear);
+
                 float3 cloudCol = lerp(_CloudLit.rgb, _CloudDark.rgb,
                                        saturate(density * lerp(0.65, 1.35, _Overcast)));
                 cloudCol += _SunColor.rgb * pow(sd, 24.0) * (1.0 - density) * 0.5 * clear;
+                cloudCol = lerp(cloudCol, _SS_HorizonClear.rgb, roseClear * 0.75);
 
                 // Fade the deck out at the skyline so the sea meets the sky in
                 // fog, not in an aliasing mess of stretched noise.
@@ -286,8 +376,10 @@ Shader "SeaSick/Sky"
                     float sn = SkyFbm(suv);
                     float sdens = saturate((sn - 0.42) / 0.58);
                     sdens *= sdens;
+                    // Scud tears out over the clearing too, or the ragged
+                    // low cloud simply redraws the lid you just thinned.
                     col = lerp(col, _CloudDark.rgb * 0.82,
-                               saturate(sdens * _Scud * lift * 0.85));
+                               saturate(sdens * _Scud * lift * 0.85) * lerp(1.0, 0.25, roseClear));
                 }
 
                 return half4(col * _Exposure, 1);

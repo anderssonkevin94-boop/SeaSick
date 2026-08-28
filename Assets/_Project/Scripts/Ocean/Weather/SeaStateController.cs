@@ -184,6 +184,17 @@ namespace SeaSick.Ocean
         /// scalar rather than metres.
         public float SeaSeverityAt(Vector2 p) => SeverityForHs(SeaHsAt(p));
 
+        /// What the SKY would read at a point that is not where the ship is.
+        ///
+        /// Same mapping as Storminess01, deliberately in one place: the sky
+        /// rose asks this eight times a frame along eight bearings, and a
+        /// hand-copied `LogInverseLerp(8, 55, ...)` in SkyDirector would be a
+        /// duplicated constant that stops agreeing with this one the first
+        /// time the anchors move — which is exactly how DivergenceProbe spent
+        /// a fortnight certifying a sea that no longer existed.
+        public float SkyStorminessAt(Vector2 p) =>
+            LogInverseLerp(skyHsStart, skyHsFull, SeaHsAt(p));
+
         /// Probes pin the weather with this; wander and region stop moving it.
         public void ForceSeverity(float s)
         {

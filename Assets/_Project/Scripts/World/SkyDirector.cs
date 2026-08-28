@@ -151,6 +151,19 @@ namespace SeaSick.World
                  "this a midnight storm renders BRIGHTER than a clear night.")]
         [Range(0.02f, 1f)] [SerializeField] float stormNightScale = 0.12f;
 
+        [Header("Weather on the horizon")]
+        [Tooltip("Telegraph what you are sailing TOWARD. Eight bearings are " +
+                 "sampled this far ahead and the skyline is coloured by what " +
+                 "is out that way, so a clearing to the east reads as a " +
+                 "brighter horizon on that side. 0 disables it.")]
+        [Range(0f, 1f)] [SerializeField] float horizonRoseStrength = 1f;
+        [Tooltip("How far ahead each bearing is sampled, in metres. The storm " +
+                 "ramp runs 500-2800 m, so a few km is the scale at which the " +
+                 "weather actually differs by direction.")]
+        [SerializeField] float horizonRoseDistance = 3000f;
+        [Tooltip("Seconds-ish. The rose must not shimmer as the ship yaws.")]
+        [SerializeField] float horizonRoseResponse = 0.5f;
+
         [Header("Cloud")]
         [SerializeField] float cloudScaleClear = 0.030f;
         [SerializeField] float cloudScaleStorm = 0.019f;
@@ -200,6 +213,17 @@ namespace SeaSick.World
         static readonly int StarRotId   = Shader.PropertyToID("_SS_StarRot");
         static readonly int NightSeaDimId = Shader.PropertyToID("_SS_NightBodyDim");
         static readonly int NightSeaMixId = Shader.PropertyToID("_SS_NightSkyMix");
+        static readonly int RoseAId      = Shader.PropertyToID("_SS_SkyRoseA");
+        static readonly int RoseBId      = Shader.PropertyToID("_SS_SkyRoseB");
+        static readonly int RoseStrengthId = Shader.PropertyToID("_SS_RoseStrength");
+        static readonly int HorizonClearId = Shader.PropertyToID("_SS_HorizonClear");
+        static readonly int HorizonStormId = Shader.PropertyToID("_SS_HorizonStorm");
+
+        /// Storminess along eight compass bearings, a few km out. Index 0 is
+        /// due north (+Z) and they run clockwise through east (+X), which is
+        /// the order the sky shader unpacks them in.
+        readonly float[] rose = new float[8];
+        bool roseWarm;
         static readonly int SkyWindId   = Shader.PropertyToID("_SS_SkyWind");
         static readonly int SkyHorizonId = Shader.PropertyToID("_SS_SkyHorizon");
         static readonly int StorminessId = Shader.PropertyToID("_SS_Storminess");
@@ -302,6 +326,7 @@ namespace SeaSick.World
             float want = forceStorm >= 0f ? Mathf.Clamp01(forceStorm) : SampleWeather();
             Storminess01 = Mathf.Lerp(Storminess01, want,
                 1f - Mathf.Exp(-response * Time.deltaTime));
+            SampleRose();
             Apply(Storminess01);
         }
 
@@ -361,6 +386,32 @@ namespace SeaSick.World
             return Palette.Lerp(Palette.Lerp(night, day, dayness), dusk, glow);
         }
 
+        /// Ask the weather what is out along each bearing.
+        ///
+        /// This exists because a storm you cannot see the edge of is not
+        /// weather, it is a wall: the sky was one colour in every direction,
+        /// so there was no way to tell which way led out and sailing east —
+        /// the way home — looked exactly like sailing further west. Regions
+        /// are already a compass (GDD §5); this is the compass being visible
+        /// from the deck rather than only in the numbers.
+        void SampleRose()
+        {
+            var ctrl = SeaSick.Ocean.SeaStateController.Instance;
+            if (ctrl == null || ship == null || horizonRoseStrength <= 0f) return;
+
+            Vector2 here = new Vector2(ship.position.x, ship.position.z);
+            float k = roseWarm ? 1f - Mathf.Exp(-horizonRoseResponse * Time.deltaTime) : 1f;
+
+            for (int i = 0; i < rose.Length; i++)
+            {
+                // Bearing 0 = north (+Z), running clockwise toward east (+X).
+                float a = i * (2f * Mathf.PI / rose.Length);
+                Vector2 at = here + new Vector2(Mathf.Sin(a), Mathf.Cos(a)) * horizonRoseDistance;
+                rose[i] = Mathf.Lerp(rose[i], Mathf.Clamp01(ctrl.SkyStorminessAt(at)), k);
+            }
+            roseWarm = true;
+        }
+
         void Apply(float t)
         {
             float time01 = TimeOfDay.Time01;
@@ -383,6 +434,10 @@ namespace SeaSick.World
                             * Mathf.Clamp01(moonDir.y / 0.12f);
 
             var p = ClearPalette(sunDir.y, moonLight);
+            // Held before the storm blend overwrites it: the horizon rose
+            // blends per DIRECTION between fair weather at this hour and the
+            // storm, so it needs both ends, not the already-mixed result.
+            Color clearHorizonNow = p.horizon;
             // The storm palette is authored as absolute colours, so blending
             // toward it discards the hour completely: at storminess 0.84 —
             // which is simply what the western deep reads — about four fifths
@@ -495,6 +550,17 @@ namespace SeaSick.World
             // three or none, and none means daylight.
             Shader.SetGlobalFloat(NightSeaDimId, nightSeaDim);
             Shader.SetGlobalFloat(NightSeaMixId, nightSeaSkyMix);
+
+            // The two ends the skyline blends between, per direction. Sending
+            // the endpoints and letting the shader do the lerp costs two
+            // colours instead of eight, and keeps the palette maths here.
+            Shader.SetGlobalVector(HorizonClearId, clearHorizonNow);
+            Shader.SetGlobalVector(HorizonStormId, stormHorizon * stormLevel);
+            Shader.SetGlobalVector(RoseAId, new Vector4(rose[0], rose[1], rose[2], rose[3]));
+            Shader.SetGlobalVector(RoseBId, new Vector4(rose[4], rose[5], rose[6], rose[7]));
+            // 0 means "no rose", and the shader then keeps the single uniform
+            // horizon it has always drawn.
+            Shader.SetGlobalFloat(RoseStrengthId, roseWarm ? horizonRoseStrength : 0f);
 
             // Where the stars turn. The sun arc is a rotation in the plane
             // spanned by east (1,0,0) and (0, cos lat, -sin lat), so its axis —
