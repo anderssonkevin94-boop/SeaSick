@@ -3051,27 +3051,27 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.BuoyancyProbeSet
   probes:
-  - localPosition: {x: 0, y: -1.02, z: 9.387}
+  - localPosition: {x: 0, y: -0.46999997, z: 9.387}
     radius: 1
     volumeShare: 0.1
     isRail: 0
-  - localPosition: {x: 0, y: -1.02, z: -9.387}
+  - localPosition: {x: 0, y: -0.46999997, z: -9.387}
     radius: 1
     volumeShare: 0.1
     isRail: 0
-  - localPosition: {x: 2.9539998, y: -0.71999997, z: 4.6935}
+  - localPosition: {x: 2.9539998, y: -0.16999996, z: 4.6935}
     radius: 1.1
     volumeShare: 0.12
     isRail: 0
-  - localPosition: {x: -2.9539998, y: -0.71999997, z: 4.6935}
+  - localPosition: {x: -2.9539998, y: -0.16999996, z: 4.6935}
     radius: 1.1
     volumeShare: 0.12
     isRail: 0
-  - localPosition: {x: 2.9539998, y: -0.71999997, z: -4.6935}
+  - localPosition: {x: 2.9539998, y: -0.16999996, z: -4.6935}
     radius: 1.1
     volumeShare: 0.12
     isRail: 0
-  - localPosition: {x: -2.9539998, y: -0.71999997, z: -4.6935}
+  - localPosition: {x: -2.9539998, y: -0.16999996, z: -4.6935}
     radius: 1.1
     volumeShare: 0.12
     isRail: 0
@@ -3091,11 +3091,11 @@ MonoBehaviour:
     radius: 0.9
     volumeShare: 0.04
     isRail: 1
-  - localPosition: {x: 3.7979996, y: -0.41999996, z: 0}
+  - localPosition: {x: 3.7979996, y: 0.13000005, z: 0}
     radius: 1.1
     volumeShare: 0.1
     isRail: 0
-  - localPosition: {x: -3.7979996, y: -0.41999996, z: 0}
+  - localPosition: {x: -3.7979996, y: 0.13000005, z: 0}
     radius: 1.1
     volumeShare: 0.1
     isRail: 0
@@ -3146,6 +3146,7 @@ MonoBehaviour:
   differential: 0.85
   spinAssist: 12
   stallRate: 3.2
+  maxVisualRate: 3.6
   helmWheel: {fileID: 5205638067987609001}
   helmAxis: {x: 1, y: 0, z: 0}
   helmVisualAngle: 450

@@ -38,6 +38,31 @@ public static class SetupPaddleBoat
     static float HullLength { get { return 10.43f * K; } }
     static float HullBeam { get { return 4.22f * K; } }
     static float KeelY { get { return -0.51f * K; } }
+
+    /// How far ABOVE the drawn keel the hull buoyancy probes sit.
+    ///
+    /// The probe rig is a stand-in for the hull's underwater volume, not an
+    /// outline of it, and where it sits is chosen by one criterion: she must
+    /// float where she was DRAWN to float. She did not. WaterlineProbe measured
+    /// her resting 0.57 m above her designed waterline in calm water and the
+    /// same 0.55 m at 19.7 m/s -- so it was never dynamic lift, it was
+    /// displacement. The visible cost was the paddle wheels, which bit 0.75 m
+    /// where the model draws them biting 1.32 m: a paddle steamer whose blades
+    /// barely dip.
+    ///
+    /// The sign is the opposite of the intuition and cost a measurement to
+    /// learn. Lowering the rig does NOT sink her: the probes are deeper for a
+    /// given hull position, so they make more lift, so she rides HIGHER
+    /// (measured, -0.57 of rig gave +0.59 of hull). The rig has to go UP for
+    /// her to settle DOWN, which is also the honest reading of the fault --
+    /// the rig represents less volume than the drawn hull has at the drawn
+    /// waterline, so it must sit higher to reach equilibrium there.
+    ///
+    /// Applied to the HULL probes only. The rail probes stay on the actual
+    /// rails, because their job is to measure green water over them and that
+    /// is a real height on the model.
+    static float ProbeLift { get { return 0.55f; } }
+    static float ProbeKeelY { get { return KeelY + ProbeLift; } }
     static float RailY { get { return 1.10f * K; } }
     static float DeckY { get { return 1.23f * K; } }
     static float RailTopY { get { return 2.11f * K; } }
@@ -61,6 +86,22 @@ public static class SetupPaddleBoat
 
     /// How far inboard of the deck edge a gun's centre sits.
     const float GunInset = 0.45f;
+
+    /// The buoyancy probe rig, on its own, so a waterline change does not
+    /// have to re-run the whole cutover (which would also push maxSpeed, the
+    /// camera and the freeboard back to the values in this file).
+    public static string PushProbes(GameObject ship)
+    {
+        BuoyancyProbeSet probes = ship != null ? ship.GetComponent<BuoyancyProbeSet>() : null;
+        if (probes == null) return "no BuoyancyProbeSet on the ship";
+        probes.SetProbes(BuoyancyProbeSet.HullLayout(
+            HullLength, HullBeam, ProbeKeelY, RailY, StemRadius, BodyRadius, RailRadius));
+        EditorUtility.SetDirty(probes);
+        return "probes: " + HullLength + " x " + HullBeam
+            + ", probe keel " + ProbeKeelY + " (drawn keel " + KeelY
+            + " lifted " + ProbeLift + "), rail " + RailY
+            + ", radii " + StemRadius + "/" + BodyRadius + "/" + RailRadius;
+    }
 
     public static string Execute()
     {
@@ -235,16 +276,7 @@ public static class SetupPaddleBoat
         Rigidbody rb = ship.GetComponent<Rigidbody>();
         if (rb != null) { rb.mass = Mass; sb.AppendLine("mass " + Mass + " kg"); }
 
-        BuoyancyProbeSet probes = ship.GetComponent<BuoyancyProbeSet>();
-        if (probes != null)
-        {
-            probes.SetProbes(BuoyancyProbeSet.HullLayout(
-                HullLength, HullBeam, KeelY, RailY, StemRadius, BodyRadius, RailRadius));
-            EditorUtility.SetDirty(probes);
-            sb.AppendLine("probes: " + HullLength + " x " + HullBeam
-                + ", keel " + KeelY + ", rail " + RailY
-                + ", radii " + StemRadius + "/" + BodyRadius + "/" + RailRadius);
-        }
+        sb.AppendLine(PushProbes(ship));
 
         BuoyantBody buoy = ship.GetComponent<BuoyantBody>();
         if (buoy != null)

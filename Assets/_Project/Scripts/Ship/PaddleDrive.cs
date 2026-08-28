@@ -37,6 +37,8 @@ namespace SeaSick.Ship
         [SerializeField] float spinAssist = 12f;
         [Tooltip("Wheel rate (rad/s) at full throttle standing still — the slip that gets her moving.")]
         [SerializeField] float stallRate = 3.2f;
+        [Tooltip("Ceiling on the rate the wheels are DRAWN at, rad/s. The physical rate is honest -- rolling without slip at her 20 m/s on a 2.53 m wheel is 7.9 rad/s, which is 75 rpm, and with eight blades that is ten blade-passes a second: a strobe against the frame rate, not a paddle wheel. Real paddle steamers turn at 25-35 rpm (Waverley does about 32 at fourteen knots), and her 20 m/s is a game number, not a ship's speed. 3.6 rad/s is 34 rpm.")]
+        [SerializeField] float maxVisualRate = 3.6f;
 
         [Header("Helm wheel")]
         [SerializeField] Transform helmWheel;
@@ -67,6 +69,15 @@ namespace SeaSick.Ship
             rb = GetComponent<Rigidbody>();
         }
 
+        /// Soft ceiling on the drawn rate: linear at low rates, asymptotic to
+        /// maxVisualRate. Signed, so a wheel driven astern compresses the same
+        /// way.
+        float Gear(float rate)
+        {
+            float m = Mathf.Max(maxVisualRate, 0.01f);
+            return m * (float)System.Math.Tanh(rate / m);
+        }
+
         void Update()
         {
             if (motor == null) return;
@@ -90,9 +101,15 @@ namespace SeaSick.Ship
             StarboardRate = common - diff;
             Differential01 = Mathf.Clamp01(Mathf.Abs(diff) / Mathf.Max(0.01f, stallRate));
 
+            // A visual gearbox on the way to the mesh, NOT on PortRate /
+            // StarboardRate -- spray, audio and the probes want the real
+            // number. tanh is exactly linear near zero, so at manoeuvring
+            // speeds the wheels still turn at the honest rate and reading them
+            // tells you what she is doing; it only compresses as the rate
+            // climbs, and it never has a corner to snap at.
             float sign = invertWheels ? -1f : 1f;
-            portAngle += PortRate * sign * Mathf.Rad2Deg * dt;
-            stbdAngle += StarboardRate * sign * Mathf.Rad2Deg * dt;
+            portAngle += Gear(PortRate) * sign * Mathf.Rad2Deg * dt;
+            stbdAngle += Gear(StarboardRate) * sign * Mathf.Rad2Deg * dt;
             portAngle = Mathf.Repeat(portAngle, 360f);
             stbdAngle = Mathf.Repeat(stbdAngle, 360f);
 
