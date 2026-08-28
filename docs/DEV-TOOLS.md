@@ -413,3 +413,16 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   floaters, enemy hulls, hull probes — belongs in `OceanProbeRegistry` or a
   `BuoyancyProbeSet`, which the physics driver folds into ONE batched Burst
   query per FixedUpdate.
+- **A domain reload mid-play restores UnityEngine.Object fields and drops
+  everything else, and `Start` does not run again.** Anything under `Assets/`
+  changing while you are playing recompiles and reloads the domain — the same
+  event that kills a running probe coroutine. What comes back is asymmetric:
+  `Transform[]` survives (object references), a plain C# array like
+  `OceanProbeRegistry.Handle[]` comes back **null**, and every `static`
+  collection — the registry's own list included — is emptied. `SalvageSpawner`
+  spent a session throwing a NullReferenceException on EVERY frame from this:
+  it guarded on the half that survives, passed, and dereferenced the half that
+  did not, spamming ~2000 lines/second and growing `Editor.log` to 1.2 GB. A
+  component that builds runtime state in `Start` must ask **"is my state whole
+  now?"** in `Update` and rebind if it is not — "did `Start` finish?" is only
+  true of the first frame.

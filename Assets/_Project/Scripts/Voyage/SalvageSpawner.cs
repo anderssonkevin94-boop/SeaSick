@@ -20,16 +20,22 @@ namespace SeaSick.Voyage
         [SerializeField] float spawnRingMax = 320f;
         [SerializeField] float despawnDistance = 450f;
 
+        static readonly Vector3 CrateShape = Vector3.one * 1.1f;
+        static readonly Vector3 PlankShape = new Vector3(0.35f, 0.15f, 2.2f);
+
         Transform[] crates;
         Transform[] flotsam;
         // Persistent registry probes: two dozen floaters bobbing every frame
         // belong in the one batched ocean query, not in per-object sampling.
         OceanProbeRegistry.Handle[] crateHandles;
         OceanProbeRegistry.Handle[] flotsamHandles;
+        Material crateMat;
+        Material plankMat;
         float messageUntil;
         GUIStyle style;
 
         bool warnedNotBuilt;
+        int rebuilt;
 
         void Start()
         {
@@ -48,60 +54,112 @@ namespace SeaSick.Voyage
             if (ship == null) ship = FindFirstObjectByType<ShipMotor>();
             if (voyage == null) voyage = FindFirstObjectByType<VoyageManager>();
 
-            var crateMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            crateMat.SetColor("_BaseColor", new Color(0.72f, 0.52f, 0.28f));
-            var plankMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            plankMat.SetColor("_BaseColor", new Color(0.42f, 0.32f, 0.22f));
-
             crates = new Transform[crateCount];
-            for (int i = 0; i < crateCount; i++)
-            {
-                var c = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                c.name = "SalvageCrate";
-                Object.Destroy(c.GetComponent<Collider>());
-                c.transform.localScale = Vector3.one * 1.1f;
-                c.GetComponent<MeshRenderer>().sharedMaterial = crateMat;
-                c.transform.SetParent(transform, true);
-                crates[i] = c.transform;
-                Respawn(crates[i]);
-            }
-
             flotsam = new Transform[flotsamCount];
-            for (int i = 0; i < flotsamCount; i++)
-            {
-                var p = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                p.name = "Flotsam";
-                Object.Destroy(p.GetComponent<Collider>());
-                p.transform.localScale = new Vector3(0.35f, 0.15f, 2.2f);
-                p.GetComponent<MeshRenderer>().sharedMaterial = plankMat;
-                p.transform.SetParent(transform, true);
-                flotsam[i] = p.transform;
-                Respawn(flotsam[i]);
-            }
-
-            crateHandles = new OceanProbeRegistry.Handle[crateCount];
-            for (int i = 0; i < crateCount; i++)
-                crateHandles[i] = OceanProbeRegistry.Register(crates[i].position);
-            flotsamHandles = new OceanProbeRegistry.Handle[flotsamCount];
-            for (int i = 0; i < flotsamCount; i++)
-                flotsamHandles[i] = OceanProbeRegistry.Register(flotsam[i].position);
+            Bind();
         }
 
-        void OnDestroy()
+        /// Makes the floater set whole: creates whatever GameObject is missing
+        /// and registers a fresh ocean handle for every one of them. Safe to
+        /// call again at any point — it only builds what is not already there,
+        /// which is what makes recovering from a domain reload a rebind rather
+        /// than a second set of crates.
+        void Bind()
+        {
+            EnsureMaterials();
+            // Anything we still hold is an orphan by the time we get here: a
+            // domain reload takes the registry's static list with it.
+            Release();
+            crateHandles = BindSet(crates, "SalvageCrate", CrateShape, crateMat);
+            flotsamHandles = BindSet(flotsam, "Flotsam", PlankShape, plankMat);
+        }
+
+        OceanProbeRegistry.Handle[] BindSet(Transform[] set, string name, Vector3 shape, Material mat)
+        {
+            var handles = new OceanProbeRegistry.Handle[set.Length];
+            for (int i = 0; i < set.Length; i++)
+            {
+                if (set[i] == null)
+                {
+                    var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    go.name = name;
+                    Object.Destroy(go.GetComponent<Collider>());
+                    go.transform.localScale = shape;
+                    go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+                    go.transform.SetParent(transform, true);
+                    set[i] = go.transform;
+                    Respawn(set[i]);
+                    rebuilt++;
+                }
+                handles[i] = OceanProbeRegistry.Register(set[i].position);
+            }
+            return handles;
+        }
+
+        void EnsureMaterials()
+        {
+            if (crateMat == null)
+            {
+                crateMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                crateMat.SetColor("_BaseColor", new Color(0.72f, 0.52f, 0.28f));
+            }
+            if (plankMat == null)
+            {
+                plankMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                plankMat.SetColor("_BaseColor", new Color(0.42f, 0.32f, 0.22f));
+            }
+        }
+
+        void Release()
         {
             if (crateHandles != null)
                 foreach (var h in crateHandles) OceanProbeRegistry.Unregister(h);
             if (flotsamHandles != null)
                 foreach (var h in flotsamHandles) OceanProbeRegistry.Unregister(h);
+            crateHandles = null;
+            flotsamHandles = null;
+        }
+
+        void OnDestroy()
+        {
+            Release();
+            if (crateMat != null) Object.Destroy(crateMat);
+            if (plankMat != null) Object.Destroy(plankMat);
         }
 
         void Update()
         {
             if (ship == null) return;
-            // Start builds these. If it threw partway they stay null and this
-            // used to throw a NullReferenceException EVERY FRAME, for the whole
-            // session -- thousands of identical lines burying anything useful
-            // in the console. One line, then silence.
+            if (!EnsureFloaters()) return;
+
+            float t = Time.time;
+            Vector3 shipPos = ship.transform.position;
+
+            for (int i = 0; i < crates.Length; i++)
+                UpdateFloater(crates[i], shipPos, crateHandles[i], t, isCrate: true, i);
+            for (int i = 0; i < flotsam.Length; i++)
+                UpdateFloater(flotsam[i], shipPos, flotsamHandles[i], t, isCrate: false, i);
+        }
+
+        /// True when there is a complete set of floaters to update.
+        ///
+        /// Start builds two halves of one state and only one half survives a
+        /// domain reload — which happens mid-play every time anything under
+        /// Assets/ changes while you are playing, the same event that kills a
+        /// running probe (docs/DEV-TOOLS.md). The Transform arrays are
+        /// UnityEngine.Object references and Unity's backup restores them; the
+        /// handle arrays are plain C# objects it cannot serialise and come back
+        /// NULL, and OceanProbeRegistry's static list is emptied outright.
+        /// Start is not called again.
+        ///
+        /// So "did Start finish?" — which is all the arrays used to be asked —
+        /// is the wrong question every frame after the first: it reads the half
+        /// that survives, passes, and the next line dereferences the half that
+        /// did not. The right question is whether the state is whole NOW, and
+        /// the right answer to a reload is to rebind, not to give up: it is a
+        /// normal editor event here, not a broken session.
+        bool EnsureFloaters()
+        {
             if (crates == null || flotsam == null)
             {
                 if (!warnedNotBuilt)
@@ -111,16 +169,30 @@ namespace SeaSick.Voyage
                         + "floaters, so there is no salvage this session. See the error "
                         + "logged by Start above for the cause.");
                 }
-                return;
+                return false;
             }
-            float t = Time.time;
-            Vector3 shipPos = ship.transform.position;
 
-            for (int i = 0; i < crates.Length; i++)
-                UpdateFloater(crates[i], shipPos, crateHandles[i], t, isCrate: true, i);
-            for (int i = 0; i < flotsam.Length; i++)
-                UpdateFloater(flotsam[i], shipPos, flotsamHandles[i], t, isCrate: false, i);
+            if (Bound(crateHandles, crates) && Bound(flotsamHandles, flotsam)) return true;
+
+            rebuilt = 0;
+            try { Bind(); }
+            catch (System.Exception e)
+            {
+                // Into the warn-once path above rather than round this branch
+                // every frame, which is the failure this whole method is here
+                // to stop happening.
+                crates = null;
+                flotsam = null;
+                Debug.LogError("SalvageSpawner: could not rebind its floaters -- " + e);
+                return false;
+            }
+            Debug.Log($"SalvageSpawner: rebound {crates.Length + flotsam.Length} floaters to "
+                + $"the ocean registry after a domain reload ({rebuilt} had to be rebuilt).");
+            return true;
         }
+
+        static bool Bound(OceanProbeRegistry.Handle[] handles, Transform[] set)
+            => handles != null && handles.Length == set.Length;
 
         void UpdateFloater(Transform f, Vector3 shipPos, OceanProbeRegistry.Handle handle,
             float t, bool isCrate, int seed)
