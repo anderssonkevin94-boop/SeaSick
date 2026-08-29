@@ -22,7 +22,8 @@ namespace SeaSick.Ship
         [SerializeField] float waveDrift = 1f;
         [SerializeField] float minTurnRate = 15f;
         [SerializeField] float maxTurnRate = 34f;
-        [SerializeField, Range(0f, 0.5f)] float steerageWay = 0.12f;
+        [Tooltip("Top speed astern as a fraction of ahead. Paddle wheels back badly -- the blades are shaped for one direction and the hull is not.")]
+        [SerializeField, Range(0.1f, 0.8f)] float asternFraction = 0.35f;
         [Tooltip("Surf strength: multiple of gravity's pull along the surface slope. The old kinematic surfPower 22 corresponds to ~2.2 here.")]
         [SerializeField] float surfGain = 2.2f;
         [SerializeField] float surfResponse = 2.2f;
@@ -61,9 +62,19 @@ namespace SeaSick.Ship
 
         // ------- public API (kept compatible with the kinematic motor) -------
         public float Rudder { get; set; }
-        public float SailSetting { get; private set; } = 1f;
-        public float SailOrder { get; set; } = 1f;
-        public bool Trimming => !Mathf.Approximately(SailSetting, SailOrder);
+        /// Engine order and what the engine has actually reached, -1 (full
+        /// astern) through 0 (stopped) to 1 (full ahead).
+        ///
+        /// This was SailSetting/SailOrder, furled-half-full, which never
+        /// matched the boat: she is a paddle steamer with no sail and
+        /// windDriven has been off in the scene all along -- PaddleDrive was
+        /// already reading the "sail" as a throttle to decide how fast to
+        /// turn the wheels. Renaming it is the honest half; astern is the
+        /// half that adds something, because a sail cannot back up and a
+        /// paddle wheel can, which is what makes coming off a beach possible.
+        public float Throttle { get; private set; }
+        public float ThrottleOrder { get; set; }
+        public bool ThrottleMoving => !Mathf.Approximately(Throttle, ThrottleOrder);
         public float CargoLoad { get; set; }
         public float SinkDepth { get; private set; }
         public float RailImmersion { get; private set; }
@@ -217,9 +228,10 @@ namespace SeaSick.Ship
 
         void TrimSails(float dt)
         {
-            if (roster == null) { SailSetting = SailOrder; return; }
-            SailSetting = Mathf.MoveTowards(
-                SailSetting, SailOrder, sailTrimRate * roster.Labour01 * dt);
+            ThrottleOrder = Mathf.Clamp(ThrottleOrder, -1f, 1f);
+            if (roster == null) { Throttle = ThrottleOrder; return; }
+            Throttle = Mathf.MoveTowards(
+                Throttle, ThrottleOrder, sailTrimRate * roster.Labour01 * dt);
         }
 
         void Update()
@@ -338,10 +350,16 @@ namespace SeaSick.Ship
             rb.AddTorque(forward * (-effectiveRudder * speedFactor * turnHeel
                 * 0.15f * RollInertia()), ForceMode.Force);
 
-            // --- propulsion toward the sail-set target speed ---
-            float sailPower = Mathf.Lerp(steerageWay, 1f, Mathf.Clamp01(SailSetting));
-            float targetSpeed = effMaxSpeed * sailPower * SeaResistance01;
-            if (Rowing && !Anchored)
+            // --- propulsion toward the engine's target speed ---
+            //
+            // No steerage-way floor any more. A furled sail still let her
+            // ghost along at steerageWay of full, which is right for canvas
+            // and wrong for an engine: stop has to mean stop, or she cannot
+            // be held off a beach.
+            float demand = Mathf.Clamp(Throttle, -1f, 1f);
+            float power = demand >= 0f ? demand : demand * asternFraction;
+            float targetSpeed = effMaxSpeed * power * SeaResistance01;
+            if (Rowing && !Anchored && demand >= 0f)
                 targetSpeed = Mathf.Max(targetSpeed,
                     rowSpeed * (1f - 0.22f * laden - 0.30f * over) * OarPower01);
             if (Anchored) targetSpeed = 0f;

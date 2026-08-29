@@ -92,7 +92,7 @@ namespace SeaSick.Ship
             float forwardWay = Vector3.Dot(
                 rb != null ? rb.linearVelocity : Vector3.zero, transform.forward);
             float rollRate = forwardWay / Mathf.Max(0.05f, wheelRadius);
-            float demand = motor.Anchored ? 0f : motor.SailSetting * stallRate;
+            float demand = motor.Anchored ? 0f : motor.Throttle * stallRate;
             float common = Mathf.Abs(demand) > Mathf.Abs(rollRate) ? demand : rollRate;
 
             // Differential: to turn to starboard the PORT wheel drives harder.
