@@ -24,17 +24,21 @@ public static class ApplyShipSpeed
 
         var so = new SerializedObject(motor);
         var prop = so.FindProperty("maxSpeed");
-        float was = prop.floatValue;
+        var oars = so.FindProperty("rowSpeed");
+        float was = prop.floatValue, wasOars = oars.floatValue;
         prop.floatValue = SetupPaddleBoat.MaxSpeed;
+        oars.floatValue = SetupPaddleBoat.OarSpeed;
         so.ApplyModifiedPropertiesWithoutUndo();
 
         // Read it back. A push that silently did nothing is the whole reason
         // this project distrusts serialised tuning values.
         var check = new SerializedObject(motor);
         float now = check.FindProperty("maxSpeed").floatValue;
+        float nowOars = check.FindProperty("rowSpeed").floatValue;
 
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, ScenePath);
-        return $"ShipMotor.maxSpeed {was:F2} -> {now:F2} m/s (wanted {SetupPaddleBoat.MaxSpeed:F2})";
+        return $"ShipMotor.maxSpeed {was:F2} -> {now:F2} m/s ({now * 1.94384f:F1} knots), "
+             + $"rowSpeed {wasOars:F2} -> {nowOars:F2} m/s ({nowOars * 1.94384f:F1} knots)";
     }
 }

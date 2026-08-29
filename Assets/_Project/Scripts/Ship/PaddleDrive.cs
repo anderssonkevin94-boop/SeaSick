@@ -37,8 +37,8 @@ namespace SeaSick.Ship
         [SerializeField] float spinAssist = 12f;
         [Tooltip("Wheel rate (rad/s) at full throttle standing still — the slip that gets her moving.")]
         [SerializeField] float stallRate = 3.2f;
-        [Tooltip("Ceiling on the rate the wheels are DRAWN at, rad/s. The physical rate is honest -- rolling without slip at her 20 m/s on a 2.53 m wheel is 7.9 rad/s, which is 75 rpm, and with eight blades that is ten blade-passes a second: a strobe against the frame rate, not a paddle wheel. Real paddle steamers turn at 25-35 rpm (Waverley does about 32 at fourteen knots), and her 20 m/s is a game number, not a ship's speed. 3.6 rad/s is 34 rpm.")]
-        [SerializeField] float maxVisualRate = 3.6f;
+        [Tooltip("Ceiling on the rate the wheels are DRAWN at, rad/s. This used to be a cover-up: at her old 20 m/s the wheels needed 151 rpm, which strobes, so they were held at 34 rpm and the only moving part that shows a player their speed was turning at a rate meaning 4.5 m/s. She now does 7 m/s, where no-slip on a 2.53 m wheel is 5.5 rad/s = 53 rpm and eight blades pass seven times a second -- fast, but drawable. 6 rad/s leaves headroom for surfing without ever needing to lie.")]
+        [SerializeField] float maxVisualRate = 6f;
 
         [Header("Helm wheel")]
         [SerializeField] Transform helmWheel;

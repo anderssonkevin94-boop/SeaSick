@@ -276,15 +276,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.x
-      value: 1.05
+      value: 1.1409397
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.y
-      value: 1.05
+      value: 1.1409397
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.z
-      value: 1.05
+      value: 1.1409397
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalPosition.x
@@ -797,6 +797,18 @@ PrefabInstance:
     m_TransformParent: {fileID: 2143489877}
     m_Modifications:
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1.1409397
+      objectReference: {fileID: 0}
+    - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1.1409397
+      objectReference: {fileID: 0}
+    - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1.1409397
+      objectReference: {fileID: 0}
+    - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalPosition.x
       value: -2.1
       objectReference: {fileID: 0}
@@ -944,7 +956,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 1.4837508, z: -7.111617}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.1724138, y: 1.1724138, z: 1.1724138}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 371285090}
@@ -961,15 +973,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.97
+      value: 1.1409397
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.97
+      value: 1.1409397
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.97
+      value: 1.1409397
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1344,15 +1356,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.x
-      value: 1.02
+      value: 1.1409395
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.y
-      value: 1.02
+      value: 1.1409395
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.z
-      value: 1.02
+      value: 1.1409395
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2209,15 +2221,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.x
-      value: 0.88
+      value: 1.1409397
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.y
-      value: 0.88
+      value: 1.1409397
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalScale.z
-      value: 0.88
+      value: 1.1409397
       objectReference: {fileID: 0}
     - target: {fileID: 288366516874501926, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2750,7 +2762,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cdb2b2664dcc442c0a9eb54073eec039, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.ShipMotor
-  maxSpeed: 19.99698
+  maxSpeed: 7.0003567
   acceleration: 2.6
   keelGrip: 2.2
   surfOvershoot: 1.25
@@ -2768,7 +2780,7 @@ MonoBehaviour:
   sinkAtMarkedLine: 0.6
   sinkPerOverload: 0.88
   sinkAtFullBilge: 0.52
-  rowSpeed: 5.656854
+  rowSpeed: 2.5455842
   headSeaPenalty: 0.45
   sailTrimRate: 0.55
   windDriven: 0

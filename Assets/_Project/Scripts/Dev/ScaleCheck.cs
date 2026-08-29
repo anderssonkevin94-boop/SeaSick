@@ -32,6 +32,28 @@ public class ScaleCheck : MonoBehaviour
                     + $"(hull is authored 20.9 x 8.4 m, 24.2 m overall)");
         }
 
+        // --- the crew, who are the unit everything else is judged in ---
+        //
+        // Measured off their renderers, not read off the builder: they are
+        // parented into the ship's hierarchy, and a scale anywhere above them
+        // would silently multiply through.
+        if (motor != null)
+        {
+            foreach (var t in motor.GetComponentsInChildren<Transform>())
+            {
+                if (t.name != "Helmsman" && t.GetComponent<SeaSick.Crew.CrewAgent>() == null) continue;
+                var rs = t.GetComponentsInChildren<Renderer>();
+                if (rs.Length == 0) continue;
+                Bounds b = rs[0].bounds;
+                foreach (var r in rs) b.Encapsulate(r.bounds);
+                sb.AppendLine($"crew '{t.name}': {b.size.y:F2} m tall  "
+                    + $"(lossy scale {t.lossyScale.x:F2}) -- she is {24.2f / Mathf.Max(b.size.y, 0.01f):F1} of them long");
+                break;
+            }
+            int hands = motor.GetComponentsInChildren<SeaSick.Crew.CrewAgent>(true).Length;
+            sb.AppendLine($"crew aboard: {hands}");
+        }
+
         // --- the trees, from the scenery mesh ---
         Island target = null; float best = float.MaxValue;
         Vector3 ship = motor != null ? motor.transform.position : Vector3.zero;

@@ -77,12 +77,24 @@ public static class SetupPaddleBoat
     static float TotalVolume { get { return 3.90f * K * K * K; } }
 
     static float WheelRadius { get { return 1.265f * K; } }
-    // Hull speed goes with the square root of waterline length. The constant
-    // is a game number, not a physical one -- 7.5 gave a displacement hull's
-    // honest 10.6 m/s at Scale 3.4, and on a 515 m storm roller that is a boat
-    // being overtaken rather than a boat working a face. 14.14 puts her at a
-    // round 20 m/s. The root law stays so Scale is still the one knob.
-    public static float MaxSpeed { get { return 14.14f * Mathf.Sqrt(K); } }
+    // Hull speed goes with the square root of waterline length, and she now
+    // gets to keep that honestly: WorldScale.ShipTopSpeed is 7 m/s, which is
+    // 14 knots, 1.23x the 11.1 knots her 20.9 m waterline gives -- what a
+    // paddle steamer her size actually does.
+    //
+    // It was 20 m/s, and that number was the loudest scale lie in the
+    // project. Her wheels would need 151 rpm to make it and were DRAWN at 34,
+    // because 151 strobes -- so the only moving part that tells a player how
+    // fast they are going was turning at a rate meaning 4.5 m/s. Kevin: "i
+    // feel like im moving a lot slower than 20m per second". He was reading
+    // the wheels, and the wheels were right.
+    //
+    // The root law stays, so Scale is still the one knob that resizes her:
+    // 4.95 x sqrt(2) is the 7.0 m/s the charter asks for at Scale 3.4.
+    public static float MaxSpeed { get { return 4.95f * Mathf.Sqrt(K); } }
+
+    /// Under oar. 4 x sqrt(K) was 5.7 m/s -- 11 knots, rowing.
+    public static float OarSpeed { get { return 1.8f * Mathf.Sqrt(K); } }
 
     /// How far inboard of the deck edge a gun's centre sits.
     const float GunInset = 0.45f;
@@ -244,12 +256,11 @@ public static class SetupPaddleBoat
             mso.FindProperty("mastPivot").objectReferenceValue = null;
             mso.FindProperty("rudderPivot").objectReferenceValue = null;
 
-            // Speed. The sloop's 18 m/s is 35 knots, and on a 12 m paddle
-            // boat the first probe run measured her doing 20.4 m/s with her
-            // deck buried in her own bow wave. Paddle propulsion tops out
-            // where the rim speed does; 7.5 m/s is already a fast steamer.
+            // Speed. See MaxSpeed: she does what her waterline allows now,
+            // and the wheels can be drawn turning at their true rate instead
+            // of a quarter of it.
             mso.FindProperty("maxSpeed").floatValue = MaxSpeed;
-            mso.FindProperty("rowSpeed").floatValue = 4f * Mathf.Sqrt(K);
+            mso.FindProperty("rowSpeed").floatValue = OarSpeed;
 
             // Freeboard. These sink amounts were authored against the sloop's
             // ~2 m of freeboard; carried over unscaled onto 1.37 m they put

@@ -23,8 +23,11 @@ namespace SeaSick.Terrain
     /// island.
     public static class IslandScenery
     {
-        /// A tree is 11-26 m. That is the ruler, and it only works if it is
-        /// honest -- these must NOT scale with the island.
+        /// Tree height comes off the charter in WorldScale, not from a
+        /// number typed here -- which is how it ended up at 5.2-8.6 m and
+        /// then at 11-26 m, each time chosen against whatever was on screen
+        /// rather than against the crew, the buildings and the giants it has
+        /// to be seen beside. These must NOT scale with the island.
         ///
         /// The first pass built them 5.2-8.6 m, which measured correctly and
         /// looked wrong, and the reason is worth keeping: the ship is 24.3 m
@@ -33,7 +36,8 @@ namespace SeaSick.Terrain
         /// is long or taller, so the undersized trees did not read as small
         /// trees -- they read as a small ISLAND, a model of a place rather
         /// than a place. Scale cues only work in the direction of the truth.
-        const float TreeMinH = 11f, TreeMaxH = 26f;
+        static float TreeMinH => SeaSick.World.WorldScale.TreeMin;
+        static float TreeMaxH => SeaSick.World.WorldScale.TreeMax;
 
         /// Bias on the height roll. Below 1 puts most trees in the upper half
         /// of the range, which is what a stand of mature conifers looks like;
@@ -201,7 +205,8 @@ namespace SeaSick.Terrain
         static void AddBoulder(List<Vector3> v, List<Vector3> n, List<Color32> c, List<int> t,
             Vector3 at, System.Random rng)
         {
-            float s = 0.9f + (float)rng.NextDouble() * 2.4f;
+            float s = Mathf.Lerp(SeaSick.World.WorldScale.BoulderMin,
+                                 SeaSick.World.WorldScale.BoulderMax, (float)rng.NextDouble());
             byte grey = (byte)(96 + rng.Next(0, 40));
             var col = new Color32(grey, (byte)(grey + 4), (byte)(grey + 10), 255);
             Cone(v, n, c, t, at + new Vector3(0f, -s * 0.25f, 0f), s, s * 1.5f,
