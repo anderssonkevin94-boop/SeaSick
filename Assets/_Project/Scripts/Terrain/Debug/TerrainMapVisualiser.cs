@@ -77,7 +77,7 @@ namespace SeaSick.Terrain
             int size = Mathf.Clamp(textureSize, 16, 2048);
             var values = new NativeArray<float>(size * size, Allocator.TempJob);
             var heights = new NativeArray<float>(size * size, Allocator.TempJob);
-            var lut = TerrainCurveLut.Bake(settings.terraceCurve, Allocator.TempJob);
+            var lut = TerrainCurveLut.Bake(settings.profileCurve, Allocator.TempJob);
             new SampleJob
             {
                 size = size, centre = centre, extent = extent, stage = (int)stage,

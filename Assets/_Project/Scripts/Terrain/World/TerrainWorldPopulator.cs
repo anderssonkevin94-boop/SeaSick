@@ -54,7 +54,7 @@ namespace SeaSick.Terrain
             if (terrain == null || world == null) { Debug.LogError("TerrainWorldPopulator: missing settings"); return; }
             if (world.seed != 0) Random.InitState(world.seed);
             prm = TerrainParams.From(terrain);
-            lut = TerrainCurveLut.Bake(terrain.terraceCurve, Allocator.Persistent);
+            lut = TerrainCurveLut.Bake(terrain.profileCurve, Allocator.Persistent);
             Island.TerrainHeight = Height;
             Island.BeachMaxSlope = world.beachMaxSlope;
 

@@ -88,7 +88,7 @@ namespace SeaSick.Terrain
             if (!math.any(math.isnan(builtCentre)) && math.distance(c, builtCentre) < recentreDistance) return;
 
             if (!heights.IsCreated) heights = new NativeArray<float>(resolution * resolution, Allocator.Persistent);
-            if (!lut.IsCreated) lut = TerrainCurveLut.Bake(settings.terraceCurve, Allocator.Persistent);
+            if (!lut.IsCreated) lut = TerrainCurveLut.Bake(settings.profileCurve, Allocator.Persistent);
             handle = new ShoreJob
             {
                 n = resolution, origin = origin, texel = texel, prm = TerrainParams.From(settings), lut = lut, heights = heights,

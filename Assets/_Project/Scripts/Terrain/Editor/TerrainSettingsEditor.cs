@@ -23,8 +23,8 @@ namespace SeaSick.Terrain
             steps = EditorGUILayout.IntSlider("Plateaus", steps, 2, 8);
             using (new GUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Stepped")) { Undo.RecordObject(s, "Stepped curve"); s.terraceCurve = Stepped(s.terraceCurve, steps); EditorUtility.SetDirty(s); RegenerateAll(); }
-                if (GUILayout.Button("Linear")) { Undo.RecordObject(s, "Linear curve"); s.terraceCurve = AnimationCurve.Linear(0f, s.terraceCurve.Evaluate(0f), 1f, s.terraceCurve.Evaluate(1f)); EditorUtility.SetDirty(s); RegenerateAll(); }
+                if (GUILayout.Button("Stepped")) { Undo.RecordObject(s, "Stepped curve"); s.profileCurve = Stepped(s.profileCurve, steps); EditorUtility.SetDirty(s); RegenerateAll(); }
+                if (GUILayout.Button("Linear")) { Undo.RecordObject(s, "Linear curve"); s.profileCurve = AnimationCurve.Linear(0f, s.profileCurve.Evaluate(0f), 1f, s.profileCurve.Evaluate(1f)); EditorUtility.SetDirty(s); RegenerateAll(); }
             }
         }
 

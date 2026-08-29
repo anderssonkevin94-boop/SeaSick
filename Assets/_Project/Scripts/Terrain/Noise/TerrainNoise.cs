@@ -113,6 +113,51 @@ namespace SeaSick.Terrain
             return norm > 0f ? sum / norm : 0f;
         }
 
+        /// Ridged fBm, raw. See TerrainHeight.RidgeShaped for the remap that
+        /// makes this comparable to Fbm01 -- the raw distribution here is
+        /// nothing like Gaussian and must not be mixed with fBm untreated.
+        ///
+        /// Where fBm makes rounded hills, this makes RIDGES. Folding each
+        /// octave about zero (1 - |n|) turns the noise's zero crossings --
+        /// which are dense, connected CURVES through the plane, not points --
+        /// into sharp maxima, so the field grows crest lines with valleys
+        /// between them instead of blobs. That is the whole difference
+        /// between terrain that reads as rock and terrain that reads as
+        /// dough, and no amount of extra octaves gets there: octaves of
+        /// ordinary fBm add smaller blobs to bigger blobs.
+        ///
+        /// Each octave is weighted by the previous one (the classic ridged
+        /// multifractal), so fine detail only appears where a ridge already
+        /// is: crests get rough, valleys stay smooth. That is roughly how
+        /// erosion distributes roughness in the real world, and it is also
+        /// why the result cannot be normalised analytically -- the weighting
+        /// makes the octave sum signal-dependent.
+        public static float RidgedRaw(in float2 worldXZ, int seed, int octaves, float baseFrequency,
+            float lacunarity, float gain)
+        {
+            float freq = baseFrequency;
+            float amp = 1f;
+            float sum = 0f;
+            float norm = 0f;
+            float weight = 1f;
+            float2 p = worldXZ;
+            float2 rot = new float2(math.cos(OctaveRotation), math.sin(OctaveRotation));
+            p = new float2(p.x * BaseRotC - p.y * BaseRotS, p.x * BaseRotS + p.y * BaseRotC);
+            for (int o = 0; o < octaves; o++)
+            {
+                float n = 1f - math.abs(Simplex(p * freq, seed + o * OctaveSeedStride));
+                n *= n;                             // sharpen the crest
+                n *= weight;                        // detail rides on the ridge below it
+                weight = math.saturate(n * 2f);
+                sum += amp * n;
+                norm += amp;
+                p = new float2(p.x * rot.x - p.y * rot.y, p.x * rot.y + p.y * rot.x);
+                freq *= lacunarity;
+                amp *= gain;
+            }
+            return norm > 0f ? sum / norm : 0f;
+        }
+
         /// Fbm remapped to [0, 1].
         public static float Fbm01(in float2 worldXZ, int seed, int octaves, float baseFrequency,
             float lacunarity, float gain)

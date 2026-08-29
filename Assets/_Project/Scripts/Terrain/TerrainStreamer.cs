@@ -133,7 +133,7 @@ namespace SeaSick.Terrain
             prm = TerrainParams.From(settings);
             colours = TerrainChunkMesher.ColourParams.From(settings);
             if (lut.IsCreated) lut.Dispose();
-            lut = TerrainCurveLut.Bake(settings.terraceCurve, Allocator.Persistent);
+            lut = TerrainCurveLut.Bake(settings.profileCurve, Allocator.Persistent);
             paramsDirty = false;
             // Dry-run the whole create → drop → release → pool cycle once. The
             // first real release costs ~10 ms of one-off lazy initialisation

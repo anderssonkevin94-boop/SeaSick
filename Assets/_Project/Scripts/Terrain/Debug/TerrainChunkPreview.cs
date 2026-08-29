@@ -27,7 +27,7 @@ namespace SeaSick.Terrain
             Clear();
             if (settings == null) return;
             var prm = TerrainParams.From(settings);
-            var lut = TerrainCurveLut.Bake(settings.terraceCurve, Allocator.TempJob);
+            var lut = TerrainCurveLut.Bake(settings.profileCurve, Allocator.TempJob);
             var colours = TerrainChunkMesher.ColourParams.From(settings);
             int2 c0 = (int2)math.floor(new float2(centre.x, centre.y) / settings.chunkSize);
             int half = chunksPerSide / 2;

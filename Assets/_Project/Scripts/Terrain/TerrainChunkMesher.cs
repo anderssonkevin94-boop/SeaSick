@@ -32,9 +32,10 @@ namespace SeaSick.Terrain
         /// Blittable look parameters for the vertex colour bake.
         public struct ColourParams
         {
-            public float seaLevel, beachHeight, snowHeight;
+            public float seaLevel, beachHeight, snowHeight, sandHeight;
             public static ColourParams From(TerrainSettings s) =>
-                new ColourParams { seaLevel = s.seaLevel, beachHeight = s.beachHeight, snowHeight = s.snowHeight };
+                new ColourParams { seaLevel = s.seaLevel, beachHeight = s.beachHeight,
+                                   snowHeight = s.snowHeight, sandHeight = s.sandHeight };
         }
 
         public struct Vertex
@@ -186,8 +187,12 @@ namespace SeaSick.Terrain
                    seabed = new float3(0.45f, 0.5f, 0.4f);
             float3 c;
             if (hAboveSea < 0f) c = math.lerp(sand, seabed, math.saturate(-hAboveSea / 6f));
-            else if (hAboveSea < s.beachHeight) c = sand;
-            else c = math.lerp(sand, grass, math.saturate((hAboveSea - s.beachHeight) / 3f));
+            // Sand stops at the BERM, not at the blend band. Painting it all
+            // the way to beachHeight put a yellow stripe up the hillside
+            // behind every beach, which is half of why the shore read as a
+            // mountainside with sand on it rather than as a beach.
+            else if (hAboveSea < s.sandHeight) c = sand;
+            else c = math.lerp(sand, grass, math.saturate((hAboveSea - s.sandHeight) / 2.5f));
             c = math.lerp(c, snow, math.saturate((hAboveSea - s.snowHeight) / 8f));
             c = math.lerp(c, rock, math.saturate((0.8f - up) / 0.25f)); // up < 0.8 (~37°) starts rock
             return new Color32((byte)(c.x * 255f), (byte)(c.y * 255f), (byte)(c.z * 255f), 255);
