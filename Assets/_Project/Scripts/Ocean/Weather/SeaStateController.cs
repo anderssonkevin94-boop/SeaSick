@@ -471,10 +471,19 @@ namespace SeaSick.Ocean
                 if (justWarmed)
                 {
                     justWarmed = false;
+                    // Publish the warm-started height BEFORE naming it. The
+                    // assignment below this block is what normally sets
+                    // CurrentHs, so a name read here would come from last
+                    // frame's value -- at warm start that is still OnEnable's
+                    // HsNormal, and the line reported a 43 m sea as "lively".
+                    // Doing it through CurrentHs rather than a second
+                    // NameForHs call keeps the hysteresis band advancing
+                    // exactly once per frame.
+                    CurrentHs = HsAt(severity);
                     // Said out loud because "the sea looked wrong at the start"
                     // is otherwise indistinguishable from the ease still
                     // running, and the two want opposite fixes.
-                    Debug.Log($"SeaStateController: warm start at Hs {HsAt(severity):F1} m, severity {severity:F2} ({CurrentStateName})");
+                    Debug.Log($"SeaStateController: warm start at Hs {CurrentHs:F1} m, severity {severity:F2} ({CurrentStateName})");
                 }
             }
 
