@@ -39,8 +39,26 @@ public class DriveProbe : MonoBehaviour
             + "(the old furled sail still made about 2.4 m/s here)");
 
         motor.ThrottleOrder = 1f;
-        yield return new WaitForSeconds(14f);
-        sb.AppendLine($"full ahead 14 s   -> {Fwd(motor, rb):F2} m/s   engine at {motor.Throttle:F2}");
+        yield return new WaitForSeconds(16f);
+        float v = Fwd(motor, rb);
+        sb.AppendLine($"full ahead 16 s   -> {v:F2} m/s = {v * 1.94384f:F1} knots   engine at {motor.Throttle:F2}");
+
+        // Do the WHEELS agree with her speed? This is the check that matters:
+        // the old 20 m/s was drawn at a rate meaning 9.1 m/s, and a player
+        // reads the wheels, not the number.
+        var drive = motor.GetComponent<PaddleDrive>();
+        if (drive != null)
+        {
+            const float WheelRadius = 2.53f;         // SetupPaddleBoat: 1.265 * K
+            float honest = v / WheelRadius;
+            float drawn = Mathf.Abs(drive.PortRate);
+            sb.AppendLine($"wheels: drawn {drawn:F2} rad/s ({drawn * 60f / (2f * Mathf.PI):F0} rpm), "
+                + $"no-slip for {v:F1} m/s would be {honest:F2} rad/s "
+                + $"({honest * 60f / (2f * Mathf.PI):F0} rpm)");
+            sb.AppendLine(drawn > honest * 0.85f
+                ? "WHEELS TELL THE TRUTH"
+                : $"WHEELS UNDERSTATE HER by {honest / Mathf.Max(drawn, 0.01f):F1}x — they read as {drawn * WheelRadius:F1} m/s");
+        }
 
         motor.ThrottleOrder = -1f;
         float t = 0f; float minSpeed = 999f;

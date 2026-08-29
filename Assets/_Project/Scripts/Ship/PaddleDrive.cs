@@ -37,8 +37,8 @@ namespace SeaSick.Ship
         [SerializeField] float spinAssist = 12f;
         [Tooltip("Wheel rate (rad/s) at full throttle standing still — the slip that gets her moving.")]
         [SerializeField] float stallRate = 3.2f;
-        [Tooltip("Ceiling on the rate the wheels are DRAWN at, rad/s. This used to be a cover-up: at her old 20 m/s the wheels needed 151 rpm, which strobes, so they were held at 34 rpm and the only moving part that shows a player their speed was turning at a rate meaning 4.5 m/s. She now does 7 m/s, where no-slip on a 2.53 m wheel is 5.5 rad/s = 53 rpm and eight blades pass seven times a second -- fast, but drawable. 6 rad/s leaves headroom for surfing without ever needing to lie.")]
-        [SerializeField] float maxVisualRate = 6f;
+        [Tooltip("Ceiling on the rate the wheels are DRAWN at, rad/s. This used to be a cover-up: at her old 20 m/s the wheels needed 151 rpm, which strobes, so they were held at 34 rpm and the only moving part that shows a player their speed was turning at a rate meaning 4.5 m/s. She now does 15 m/s, where no-slip on the 2.53 m wheel RADIUS is 5.9 rad/s = 57 rpm and eight blades pass 7.6 times a second -- fast, but just under eight frames per blade at 60 fps, so it reads as a turning wheel. 7.5 rad/s leaves headroom for a surf run without ever needing to lie again.")]
+        [SerializeField] float maxVisualRate = 7.5f;
 
         [Header("Helm wheel")]
         [SerializeField] Transform helmWheel;

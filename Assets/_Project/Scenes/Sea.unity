@@ -2762,7 +2762,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cdb2b2664dcc442c0a9eb54073eec039, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.ShipMotor
-  maxSpeed: 7.0003567
+  maxSpeed: 14.9906645
   acceleration: 2.6
   keelGrip: 2.2
   surfOvershoot: 1.25

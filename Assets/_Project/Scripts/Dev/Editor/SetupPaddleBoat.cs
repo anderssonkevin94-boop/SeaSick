@@ -77,21 +77,28 @@ public static class SetupPaddleBoat
     static float TotalVolume { get { return 3.90f * K * K * K; } }
 
     static float WheelRadius { get { return 1.265f * K; } }
-    // Hull speed goes with the square root of waterline length, and she now
-    // gets to keep that honestly: WorldScale.ShipTopSpeed is 7 m/s, which is
-    // 14 knots, 1.23x the 11.1 knots her 20.9 m waterline gives -- what a
-    // paddle steamer her size actually does.
+    // Her top speed is set by what the WHEELS can honestly be drawn at, not
+    // by hull-speed physics, and that is a deliberate choice.
     //
-    // It was 20 m/s, and that number was the loudest scale lie in the
-    // project. Her wheels would need 151 rpm to make it and were DRAWN at 34,
-    // because 151 strobes -- so the only moving part that tells a player how
-    // fast they are going was turning at a rate meaning 4.5 m/s. Kevin: "i
-    // feel like im moving a lot slower than 20m per second". He was reading
-    // the wheels, and the wheels were right.
+    // The 20 m/s she had was a lie the picture could not tell: 2.53 m is the
+    // wheel RADIUS, so 20 m/s needs 7.9 rad/s = 75 rpm, which with eight
+    // blades is ten blade-passes a second -- six frames per blade at 60 fps,
+    // a strobe. They were therefore DRAWN at 34 rpm, the rate that means
+    // 9.1 m/s. Kevin: "i feel like im moving a lot slower than 20m per
+    // second". He was reading the wheels, and the wheels were right.
     //
-    // The root law stays, so Scale is still the one knob that resizes her:
-    // 4.95 x sqrt(2) is the 7.0 m/s the charter asks for at Scale 3.4.
-    public static float MaxSpeed { get { return 4.95f * Mathf.Sqrt(K); } }
+    // 7 m/s was then tried, which is the honest hull speed for a 20.9 m
+    // waterline and, in his words, "insufferably slow".
+    //
+    // 15 m/s is where the two constraints meet. It is 29 knots -- not a
+    // displacement hull's speed, so this is a game number and openly so --
+    // but 5.9 rad/s is 57 rpm, just under eight frames per blade, which
+    // means the wheels can turn at the rate the speed actually implies. The
+    // number and the picture agree, which is the thing that was broken; that
+    // they agree on a fast boat is a choice about what game this is.
+    //
+    // The root law stays, so Scale is still the one knob that resizes her.
+    public static float MaxSpeed { get { return 10.6f * Mathf.Sqrt(K); } }
 
     /// Under oar. 4 x sqrt(K) was 5.7 m/s -- 11 knots, rowing.
     public static float OarSpeed { get { return 1.8f * Mathf.Sqrt(K); } }

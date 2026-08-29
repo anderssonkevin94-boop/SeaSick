@@ -59,15 +59,19 @@ namespace SeaSick.World
         /// be compared against it without importing an editor script.
         public const float ShipLength = 24.2f;
 
-        /// What a hull this long can actually make.
+        /// Set by what her WHEELS can be drawn at, not by hull physics.
         ///
-        /// Displacement hull speed is 1.34 x sqrt(waterline in feet) knots,
-        /// which for her 20.9 m waterline is 11.1 knots -- 5.7 m/s. She is
-        /// allowed a modest 1.23x of that, 14 knots, which is what a real
-        /// paddle steamer of her size does (Waverley makes 14). At the 20 m/s
-        /// she had, her wheels needed 151 rpm and were drawn at 34, so the
-        /// picture disagreed with the number by a factor of four.
-        public const float ShipTopSpeed = 7.0f;
+        /// Displacement hull speed for her 20.9 m waterline is 11.1 knots --
+        /// 5.7 m/s -- and 7 m/s was tried and is, in the captain's words,
+        /// insufferably slow. 15 m/s is 29 knots, which no hull that shape
+        /// makes, so this is a game number and the file says so. What it is
+        /// NOT is a lie the player can see: 15 m/s needs 57 rpm of a 2.53 m
+        /// wheel, just under eight frames per blade at 60 fps, so the wheels
+        /// turn at the rate the speed implies instead of at a third of it.
+        ///
+        /// The rule this encodes: a number may be generous, but nothing on
+        /// screen may contradict it.
+        public const float ShipTopSpeed = 15.0f;
 
         /// Oars. Rowing a loaded boat is 1.5-2.5 m/s and always has been;
         /// hers were set to 5.7, which is 11 knots under oar.
