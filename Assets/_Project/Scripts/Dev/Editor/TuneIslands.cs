@@ -106,6 +106,12 @@ public static class TuneIslands
         so.FindProperty("massifMax").floatValue = 5.5f;
         so.FindProperty("massifBias").floatValue = 1.5f;
         so.FindProperty("massifMaskStart").floatValue = 0.35f;
+        so.FindProperty("uplandFrequency").floatValue = 1f / 700f;
+        so.FindProperty("uplandStart").floatValue = 0.53f;
+        so.FindProperty("uplandFull").floatValue = 0.78f;
+        so.FindProperty("plainRelief").floatValue = 26f;
+        so.FindProperty("lowlandDetail").floatValue = 0.25f;
+        so.FindProperty("detailAmplitude").floatValue = 0.5f;
         so.FindProperty("ridgeAmount").floatValue = 0.85f;
         so.FindProperty("ridgeLow").floatValue = 0.42f;
         so.FindProperty("ridgeHigh").floatValue = 0.62f;
@@ -139,6 +145,9 @@ public static class TuneIslands
         sb.AppendLine("shore slope x" + check.shoreSlopeMin + ".." + check.shoreSlopeMax
             + " over " + check.shoreFrequency + "/m, identity by +" + check.shoreTop
             + " m (flat to " + check.shoreFlat + " m) and -" + check.shoreBottom + " m; sand to " + check.sandHeight + " m");
+        sb.AppendLine("upland 1/" + (1f / check.uplandFrequency).ToString("F0") + " m, upland band " + check.uplandStart + ".." + check.uplandFull
+            + ", plain relief " + check.plainRelief + " m detail x" + check.lowlandDetail
+            + " (detail amp " + check.detailAmplitude + ")");
         sb.AppendLine("ridge " + check.ridgeAmount + " over " + check.ridgeLow + ".." + check.ridgeHigh
             + "   snow " + check.snowHeight + "   skirt " + check.skirtDepth);
 
@@ -397,6 +406,71 @@ public static class TuneIslands
         sb.AppendLine("skirtDepth is " + s.skirtDepth + " m; it needs to clear the max, and every metre "
             + "beyond that is curtain hanging in view at the edge of the loaded region");
         System.IO.File.WriteAllText("/tmp/seasick-skirt.txt", sb.ToString());
+        return sb.ToString();
+    }
+
+    /// What the land is like UNDERFOOT, which is a different question from
+    /// what it looks like from the water.
+    ///
+    /// Kevin: "the people who leave my boat need to be able to traverse the
+    /// land... i like the mountains, but its way too much and way too often".
+    /// Outposts and walled sections need ground you can walk, stand a
+    /// building on, and run a wall across. So the measure is not height or
+    /// drama, it is the DISTRIBUTION OF SLOPE over island area:
+    ///
+    ///   under 1:6  (about 10 deg) -- you can put a building on it
+    ///   under 1:3  (about 18 deg) -- you can walk it carrying something
+    ///   over  1:1.4 (about 36 deg) -- that is climbing, not walking
+    ///
+    /// Sampled over dry land only, area-weighted, so it answers "how much of
+    /// the island is usable" rather than "how steep is the steepest bit".
+    public static string Walkable()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+        if (s == null) return "no TerrainSettings asset at " + Path;
+        var prm = TerrainParams.From(s);
+        var lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
+
+        int land = 0, build = 0, walk = 0, climb = 0, sandFlat = 0;
+        var slopes = new System.Collections.Generic.List<float>();
+        var rng = new System.Random(8080);
+        const float e = 3f;
+        for (int k = 0; k < 260000 && land < 60000; k++)
+        {
+            float x = (float)(rng.NextDouble() * 24000.0 - 12000.0);
+            float z = (float)(rng.NextDouble() * 24000.0 - 12000.0);
+            var p0 = new float2(x, z);
+            float h = TerrainHeight.Height(p0, prm, lut);
+            if (h <= 0.5f) continue;                     // dry land only
+            land++;
+            float dx = (TerrainHeight.Height(p0 + new float2(e, 0f), prm, lut)
+                      - TerrainHeight.Height(p0 - new float2(e, 0f), prm, lut)) / (2f * e);
+            float dz = (TerrainHeight.Height(p0 + new float2(0f, e), prm, lut)
+                      - TerrainHeight.Height(p0 - new float2(0f, e), prm, lut)) / (2f * e);
+            float slope = math.sqrt(dx * dx + dz * dz);
+            slopes.Add(slope);
+            if (h < s.sandHeight) sandFlat++;
+            if (slope < 0.176f) build++;
+            if (slope < 0.325f) walk++;
+            if (slope > 0.727f) climb++;
+        }
+        lut.Dispose();
+        if (land < 500) return "not enough land sampled (" + land + ")";
+        slopes.Sort();
+        var sb = new StringBuilder();
+        sb.AppendLine(land + " samples of dry land");
+        sb.AppendLine("buildable (under 10 deg): " + (100f * build / land).ToString("F1") + "%");
+        sb.AppendLine("walkable  (under 18 deg): " + (100f * walk / land).ToString("F1") + "%");
+        sb.AppendLine("climbing  (over  36 deg): " + (100f * climb / land).ToString("F1") + "%");
+        // How much of the island is painted as BEACH. Flattening the
+        // interior without lifting it put a low island's whole surface under
+        // the sand line and rendered it as one enormous sand flat: the land
+        // was flat, which was wanted, but flat at the wrong ALTITUDE.
+        sb.AppendLine("under the sand line (reads as beach): " + (100f * sandFlat / land).ToString("F1")
+            + "% of dry land");
+        sb.AppendLine("slope p50 1:" + (1f / math.max(slopes[land / 2], 1e-4f)).ToString("F1")
+            + "   p90 1:" + (1f / math.max(slopes[land * 9 / 10], 1e-4f)).ToString("F1"));
+        System.IO.File.WriteAllText("/tmp/seasick-walkable.txt", sb.ToString());
         return sb.ToString();
     }
 }

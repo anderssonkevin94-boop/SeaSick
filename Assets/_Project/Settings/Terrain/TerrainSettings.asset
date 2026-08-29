@@ -410,12 +410,17 @@ MonoBehaviour:
   massifMax: 5.5
   massifBias: 1.5
   massifMaskStart: 0.35
+  uplandFrequency: 0.0014285714
+  uplandStart: 0.53
+  uplandFull: 0.78
+  plainRelief: 26
+  lowlandDetail: 0.25
   ridgeAmount: 0.85
   ridgeLow: 0.42
   ridgeHigh: 0.62
   detailFrequency: 0.04
   detailOctaves: 2
-  detailAmplitude: 1.5
+  detailAmplitude: 0.5
   shoreSlopeMin: 0.032
   shoreSlopeMax: 0.45
   shoreSlopeBias: 2.5

@@ -17,13 +17,14 @@ namespace SeaSick.Terrain
         public float baseHeight, reliefHeight;
         public float massifFrequency, massifMin, massifMax, massifBias, massifMaskStart;
         public float ridgeAmount, ridgeLow, ridgeHigh;
+        public float uplandFrequency, uplandStart, uplandFull, plainRelief, lowlandDetail;
         public float shoreSlopeMin, shoreSlopeMax, shoreSlopeBias, shoreFrequency, shoreFlat, shoreTop, shoreBottom;
         public int detailOctaves; public float detailFrequency, detailAmplitude;
         public float beachHeight, beachBlendWidth;
 
         public const int MaskSeedOffset = 7919, DetailSeedOffset = 104729,
                          MassifSeedOffset = 15485863, RidgeSeedOffset = 4241,
-                         ShoreSeedOffset = 611953;
+                         ShoreSeedOffset = 611953, UplandSeedOffset = 2750159;
 
         public static TerrainParams From(TerrainSettings s)
         {
@@ -44,6 +45,9 @@ namespace SeaSick.Terrain
                 shoreSlopeBias = math.max(0.05f, s.shoreSlopeBias),
                 shoreFrequency = s.shoreFrequency, shoreFlat = math.max(0f, s.shoreFlat),
                 shoreTop = math.max(1f, s.shoreTop), shoreBottom = math.max(1f, s.shoreBottom),
+                uplandFrequency = s.uplandFrequency, uplandStart = s.uplandStart,
+                uplandFull = math.max(s.uplandStart + 0.01f, s.uplandFull),
+                plainRelief = s.plainRelief, lowlandDetail = s.lowlandDetail,
                 ridgeAmount = s.ridgeAmount, ridgeLow = s.ridgeLow,
                 ridgeHigh = math.max(s.ridgeLow + 0.01f, s.ridgeHigh),
                 detailOctaves = s.detailOctaves, detailFrequency = s.detailFrequency, detailAmplitude = s.detailAmplitude,
@@ -188,6 +192,23 @@ namespace SeaSick.Terrain
             return m;
         }
 
+        /// Where the mountains are WITHIN an island, in [0, 1]: 0 is plain,
+        /// 1 is full relief.
+        ///
+        /// The massif decides how tall an island is allowed to be. This
+        /// decides how much of it actually is, and it exists because the land
+        /// has to be lived on: measured before it, 45.9% of dry land was
+        /// steeper than 36 degrees and only 17.7% was flat enough to stand a
+        /// building on. That is a mountain range with a beach around it, not
+        /// somewhere to put an outpost and run a wall.
+        ///
+        /// Biased hard toward lowland, so a mountain is an event on an island
+        /// rather than the island's default state.
+        public static float Upland01(in float2 p, in TerrainParams prm)
+            => math.smoothstep(prm.uplandStart, prm.uplandFull,
+                TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed + TerrainParams.UplandSeedOffset,
+                    3, prm.uplandFrequency, 2f, 0.5f));
+
         /// Per-island height character, in [0, 1].
         public static float Massif01(in float2 p, in TerrainParams prm)
             => TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed + TerrainParams.MassifSeedOffset,
@@ -210,11 +231,26 @@ namespace SeaSick.Terrain
         /// unchanged. The mountain grows inland, where the mask is 1, which
         /// is also how real islands are shaped: you do not meet the summit at
         /// the waterline.
-        public static float Amplitude(in float2 p, float interior, in TerrainParams prm)
+        public static float Amplitude(in float2 p, float interior, float upland, in TerrainParams prm)
         {
             float m = math.pow(Massif01(p, prm), prm.massifBias);
             float scale = math.lerp(prm.massifMin, prm.massifMax, m);
-            return prm.reliefHeight * math.lerp(1f, scale, interior);
+            // Relief is collapsed toward the lowland fraction away from the
+            // uplands, and slope scales with relief -- which is the whole
+            // point: this is the lever on how much of an island is usable.
+            float mountain = prm.reliefHeight * math.lerp(1f, scale, interior);
+
+            // The plain's relief is an ABSOLUTE height, not a fraction of the
+            // mountain's. As a fraction it scaled with the massif, so a low
+            // island's whole interior collapsed to within a couple of metres
+            // of sea level and rendered as one enormous sand flat -- the land
+            // was flat, which was the point, but it was flat at the wrong
+            // ALTITUDE.
+            //
+            // Faded in by interior like everything else, so the fringe keeps
+            // the amplitude the coastline position depends on.
+            float plain = math.lerp(prm.reliefHeight, prm.plainRelief, interior);
+            return math.lerp(plain, mountain, upland);
         }
 
         /// Stage 3. Profile curve via LUT (linear interpolation between samples).
@@ -315,11 +351,22 @@ namespace SeaSick.Terrain
         /// depth-limited against that shelf, so the transform has to be
         /// exactly identity by the time it reaches it. Deep water never sees
         /// this at all.
-        public static float ShoreTerrace(float h, in float2 p, in TerrainParams prm)
+        public static float ShoreTerrace(float h, in float2 p, float interior, in TerrainParams prm)
         {
             float a = h - prm.seaLevel;
             if (a >= prm.shoreTop || a <= -prm.shoreBottom) return h;
-            float k = ShoreSlope(p, prm);
+
+            // Gated by how far inland this is, not by height alone.
+            //
+            // A beach is a COASTAL feature. Keyed purely on height it also
+            // flattened every low inland acre, and once the interior was
+            // flattened for building that was a third of all dry land sitting
+            // under the sand line -- whole islands rendering as one sand
+            // flat. Fading the compression out with the same interior weight
+            // the massif uses confines the foreshore to the coastal ring,
+            // where it belongs.
+            float k = math.lerp(ShoreSlope(p, prm), 1f, interior);
+            if (k >= 0.999f) return h;
             // The foreshore holds its gentle slope out to shoreFlat before
             // the land starts taking its own slope back. Starting the
             // recovery at the waterline instead let the factor double within
@@ -346,13 +393,22 @@ namespace SeaSick.Terrain
             float c = MaskNoise(p, prm);
             s.mask = MaskFromNoise(c, p, prm);
             float interior = Interior(s.mask, prm);
-            s.noise01 = Noise01(p, prm, interior);
-            float detail = Detail(p, prm);
-            float amp = Amplitude(p, interior, prm);
+            float upland = Upland01(p, prm);
+            // Ridges are an upland feature too. Carving crest lines across a
+            // plain would put back exactly the slope the plain exists to
+            // remove.
+            s.noise01 = Noise01(p, prm, interior * upland);
+            // The 25 m detail layer is damped on the lowlands. On its own it
+            // carries a slope of about 0.24 -- steeper than the 0.176 a
+            // building needs -- so no amount of flattening the landform makes
+            // ground buildable while this is running at full amplitude over
+            // the top of it.
+            float detail = Detail(p, prm) * math.lerp(prm.lowlandDetail, 1f, upland);
+            float amp = Amplitude(p, interior, upland, prm);
             float land = prm.baseHeight + Terrace(s.noise01, lut) * amp;
             s.terraced = OverSeabed(land + detail, s.mask, detail, c, prm);
             s.smooth = OverSeabed(Smooth(s.noise01, amp, prm) + detail, s.mask, detail, c, prm);
-            s.height = ShoreTerrace(BeachBlend(s.terraced, s.smooth, prm), p, prm);
+            s.height = ShoreTerrace(BeachBlend(s.terraced, s.smooth, prm), p, interior, prm);
             return s;
         }
 

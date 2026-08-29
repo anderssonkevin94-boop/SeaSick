@@ -63,6 +63,18 @@ namespace SeaSick.Terrain
         [Tooltip("Island mask value at which the interior starts growing. Below this the coast keeps reliefHeight exactly, so the shore profile is untouched.")]
         [Range(0.1f, 0.9f)] public float massifMaskStart = 0.35f;
 
+        [Header("Upland / lowland")]
+        [Tooltip("Where the mountains ARE, within an island. Low = plains and valleys, high = full relief. 1/700 m so a peak is a few hundred metres across and an island has room for both.")]
+        public float uplandFrequency = 1f / 700f;
+        [Tooltip("Noise value where ground starts becoming upland. Below it, pure lowland.")]
+        public float uplandStart = 0.46f;
+        [Tooltip("Noise value where relief is at FULL height. A power bias was tried first and was wrong: it shaved a bit off everywhere, so mountains lost half their height (median island peak 107 m -> 50 m) while the plains were still not properly flat. A band makes the choice binary — mountains are rare AND full size, plains are properly plains.")]
+        public float uplandFull = 0.72f;
+        [Tooltip("Relief on the lowlands, in METRES — the vertical range a plain spreads over. Absolute, not a fraction of the mountain: as a fraction it scaled with the massif, so a small island's interior collapsed below the sand line and the whole island rendered as beach. Slopes scale with this, so it is the main lever on how much of an island can be walked and built on.")]
+        public float plainRelief = 45f;
+        [Tooltip("Detail-noise multiplier on the lowlands. The 25 m bump layer alone puts a slope of about 0.24 on flat ground — steeper than the 10 degrees a building needs — so it has to be damped where people are meant to live.")]
+        [Range(0f, 1f)] public float lowlandDetail = 0.25f;
+
         [Header("Ridges")]
         [Tooltip("How much of the highland relief comes from ridged noise instead of fBm. 0 = the old rounded blobs, 1 = fully ridged.")]
         [Range(0f, 1f)] public float ridgeAmount = 0.85f;
@@ -74,7 +86,7 @@ namespace SeaSick.Terrain
         [Header("Detail")]
         public float detailFrequency = 1f / 25f;
         [Range(1, 4)] public int detailOctaves = 2;
-        public float detailAmplitude = 1.5f;
+        public float detailAmplitude = 0.5f;
 
         [Header("Shore")]
         [Tooltip("Foreshore slope as a fraction of what the raw terrain gives, at the FLATTEST coasts. 0.08 turns a measured 1:3 into about 1:37.")]
