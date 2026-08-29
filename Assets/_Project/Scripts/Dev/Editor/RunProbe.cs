@@ -18,6 +18,7 @@ public static class RunProbe
     public static void Look() => Call("IslandLook");
     public static void Peek() => Call("ChunkPeek");
     public static void Drive() => Call("DriveProbe");
+    public static void Scale() => Call("ScaleCheck");
     public static void HitchStorm() => Call("HitchProbe", "Storm");
     public static void Hitch() => Call("HitchProbe");
     public static void WeatherAxes() => Call("WeatherSheet", "Axes");

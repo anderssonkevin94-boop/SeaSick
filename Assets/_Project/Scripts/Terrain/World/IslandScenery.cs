@@ -23,9 +23,22 @@ namespace SeaSick.Terrain
     /// island.
     public static class IslandScenery
     {
-        /// A tree is 5-9 m. That is the ruler, and it only works if it is
+        /// A tree is 11-26 m. That is the ruler, and it only works if it is
         /// honest -- these must NOT scale with the island.
-        const float TreeMinH = 5.2f, TreeMaxH = 8.6f;
+        ///
+        /// The first pass built them 5.2-8.6 m, which measured correctly and
+        /// looked wrong, and the reason is worth keeping: the ship is 24.3 m
+        /// overall, so the tallest tree on an island stood barely a third of
+        /// her length. Conifers beside a vessel that size are as tall as she
+        /// is long or taller, so the undersized trees did not read as small
+        /// trees -- they read as a small ISLAND, a model of a place rather
+        /// than a place. Scale cues only work in the direction of the truth.
+        const float TreeMinH = 11f, TreeMaxH = 26f;
+
+        /// Bias on the height roll. Below 1 puts most trees in the upper half
+        /// of the range, which is what a stand of mature conifers looks like;
+        /// an even spread reads as a nursery.
+        const float HeightBias = 0.75f;
 
         public static GameObject Build(Transform parent, Vector3 centre, float meanR,
             System.Func<float, float, float> height, TerrainSettings terrain,
@@ -56,13 +69,40 @@ namespace SeaSick.Terrain
 
             // Jittered grid, so the spacing reads as a wood rather than as a
             // scatter with clumps and bald patches.
-            float step = Mathf.Clamp(meanR * 0.035f, 9f, 22f);
-            int trees = 0, rocks = 0;
-            const int MaxTrees = 520, MaxRocks = 140;
+            //
+            // Spacing has to be read against tree HEIGHT, not chosen on its
+            // own: at 12 m apart and 8 m tall the gaps were wider than the
+            // trees, which is an orchard on a lawn. A 20 m conifer here
+            // carries a canopy about 10 m across, so 7-12 m spacing puts the
+            // canopies in contact and the stand closes up into woodland.
+            // The scatter box has to cover the island's REACH, not its mean
+            // radius. Islands are lobed -- the mean is an average over
+            // bearings, so a headland running out past it fell outside the
+            // loop altogether and came back bare, which read as a wood
+            // planted in a band across the middle of the island.
+            float maxR = meanR;
+            if (radiusAt != null)
+                for (int a = 0; a < 48; a++)
+                    maxR = Mathf.Max(maxR, radiusAt(a / 48f * Mathf.PI * 2f));
+            maxR = Mathf.Min(maxR, meanR * 3f);   // guard against a bad sector
 
-            for (float z = -meanR; z <= meanR && trees < MaxTrees; z += step)
+            float step = Mathf.Clamp(meanR * 0.02f, 7f, 12f);
+            int trees = 0, rocks = 0;
+            const int MaxTrees = 3000, MaxRocks = 300;
+
+            // Thin UNIFORMLY to the budget rather than filling until it runs
+            // out. The scatter walks the grid in order, so a hard cap dresses
+            // one band of the island and leaves the rest bare -- which is
+            // exactly how it looked: a dense wood across the middle and a
+            // clean green slope beside it. Estimating the eligible cells up
+            // front and keeping that fraction spreads the same number of
+            // trees over the whole island.
+            float cells = Mathf.PI * maxR * maxR / (step * step);
+            float keep = Mathf.Clamp01(MaxTrees / Mathf.Max(1f, cells * 0.45f));
+
+            for (float z = -maxR; z <= maxR && trees < MaxTrees; z += step)
             {
-                for (float x = -meanR; x <= meanR && trees < MaxTrees; x += step)
+                for (float x = -maxR; x <= maxR && trees < MaxTrees; x += step)
                 {
                     float jx = (float)(rng.NextDouble() - 0.5) * step * 0.9f;
                     float jz = (float)(rng.NextDouble() - 0.5) * step * 0.9f;
@@ -91,7 +131,7 @@ namespace SeaSick.Terrain
                     // Thin the wood out near the tree line so it has an edge
                     // instead of stopping on a contour like a mown lawn.
                     float t = Mathf.InverseLerp(treeLine, treeLine * 0.72f, h);
-                    if (rng.NextDouble() > Mathf.Clamp01(0.25f + t * 0.75f)) continue;
+                    if (rng.NextDouble() > Mathf.Clamp01(0.25f + t * 0.75f) * keep) continue;
 
                     AddTree(verts, norms, cols, tris, new Vector3(wx, h, wz), rng);
                     trees++;
@@ -135,16 +175,19 @@ namespace SeaSick.Terrain
         static void AddTree(List<Vector3> v, List<Vector3> n, List<Color32> c, List<int> t,
             Vector3 at, System.Random rng)
         {
-            float h = Mathf.Lerp(TreeMinH, TreeMaxH, (float)rng.NextDouble());
+            float h = Mathf.Lerp(TreeMinH, TreeMaxH, Mathf.Pow((float)rng.NextDouble(), HeightBias));
             float trunkH = h * 0.34f;
             float trunkR = h * 0.035f;
-            float canopyR = h * 0.24f;
+            // Crown width varies independently of height: a wood of
+            // identically-proportioned cones reads as one tree stamped out
+            // repeatedly, however much the heights differ.
+            float canopyR = h * Mathf.Lerp(0.19f, 0.29f, (float)rng.NextDouble());
             float lean = (float)(rng.NextDouble() - 0.5) * 0.12f;
             var leanV = new Vector3(lean, 0f, (float)(rng.NextDouble() - 0.5) * 0.12f);
 
             var trunk = new Color32(92, 64, 40, 255);
-            byte g = (byte)(96 + rng.Next(0, 46));
-            var leaf = new Color32((byte)(30 + rng.Next(0, 22)), g, (byte)(38 + rng.Next(0, 18)), 255);
+            byte g = (byte)(74 + rng.Next(0, 58));
+            var leaf = new Color32((byte)(24 + rng.Next(0, 26)), g, (byte)(34 + rng.Next(0, 26)), 255);
 
             Prism(v, n, c, t, at, trunkR, trunkH, leanV, trunk);
             // Two stacked cones read as a conifer from any angle and cost 12
