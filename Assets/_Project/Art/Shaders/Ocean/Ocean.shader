@@ -20,6 +20,9 @@ Shader "SeaSick/Ocean"
         _PeakMaskScale ("Peak Mask Scale", Range(0, 2)) = 0.55
         _FoamJThreshold ("Foam Jacobian Threshold", Range(0, 1)) = 0.72
         _FoamNoiseScale ("Foam Noise Scale", Float) = 0.14
+        _SurfStrength ("Surf Strength", Range(0, 2)) = 0.95
+        _SurfBreakFrac ("Surf Break Onset (x breakFraction)", Range(0.2, 1)) = 0.78
+        _SurfSwashDepth ("Surf Swash Depth (m)", Range(0, 12)) = 3
         _SpecPowerNear ("Spec Power Near", Float) = 420
         _SpecPowerFar ("Spec Power Far", Float) = 48
         _SpecStrength ("Spec Strength", Range(0, 2)) = 0.75
@@ -91,6 +94,12 @@ Shader "SeaSick/Ocean"
             // zero, which is the shipped look, so forgetting to reset it can
             // only fail loudly.
             float _SS_FoamOnly;
+            // Dev only: 1 suppresses the surf term below, so SurfProbe can
+            // shoot the shore with and without it in ONE run at one wave
+            // phase, instead of the before and the after being two builds an
+            // hour apart with a different sea in each. Unset reads as zero,
+            // which is the shipped look.
+            float _SS_SurfOff;
 
             // How much of each cascade the mesh under this vertex can carry.
             // KEEP IDENTICAL to OceanClipmap.WeightsAt -- see the CascadeFade
@@ -130,6 +139,7 @@ Shader "SeaSick/Ocean"
             half4 _FoamColor;
             half _SubsurfaceStrength, _PeakMaskScale;
             half _FoamJThreshold, _FoamNoiseScale;
+            half _SurfStrength, _SurfBreakFrac, _SurfSwashDepth;
             half _SpecPowerNear, _SpecPowerFar, _SpecStrength;
             CBUFFER_END
 
@@ -343,8 +353,76 @@ Shader "SeaSick/Ocean"
                             * FoamNoise(xz * _FoamNoiseScale * 3.7 + 17.0);
                 float foamAmt = saturate((breaking * (0.35 + 0.65 * storm) + turb)
                                 * (0.4 + 1.5 * noise)) * env;
-                foamAmt = saturate(foamAmt + sim.g * (0.5 + 0.8 * noise))
-                        * (1.0 - _SS_LayerOff.w);
+                foamAmt = saturate(foamAmt + sim.g * (0.5 + 0.8 * noise));
+
+                // ---- surf ------------------------------------------------
+                // The shoreline should be the foamiest water in the world and
+                // was measurably the least: SurfProbe read foam falling 23x on
+                // the way in, 0.106 in 32-64 m of water down to 0.005 in the
+                // last metre. The cause is the `* env` on the line above.
+                // Near a beach `env` IS the depth cap -- breakFraction * depth
+                // / Hs, which in 8 m of water under a 62 m sea is 0.07 -- so
+                // the term that correctly lies the sea DOWN also takes the
+                // whitewater away with it. The cap is right; multiplying the
+                // foam by it is the sign error.
+                //
+                // The fix is a term ADDED off the same depth lookup rather
+                // than a suppression, and it is deliberately fragment-side:
+                // NewtonIterations is 7 against a 0.4 ms budget with nothing
+                // left, so anything touching wave SHAPE costs a step there is
+                // no room for. Foam is free. This is one texture fetch and a
+                // dozen ALU per water pixel, and the sampler never sees it.
+                //
+                // Two parts, both physical:
+                //
+                //   BREAKERS -- a wave breaks when its height approaches the
+                //   water under it. `localHs` is already the local wave height
+                //   and the depth is one fetch, so the ratio costs nothing --
+                //   and it is SELF-CALIBRATING, which is the whole reason to
+                //   drive it this way. Wherever the depth cap binds,
+                //   env * Hs == breakFraction * depth exactly (cascade 0's
+                //   BottomCoupling is 1), so the ratio pins to breakFraction
+                //   and the term saturates. The break line therefore lands
+                //   where the physics puts it at every sea state, and the surf
+                //   zone widens by itself as the sea grows -- with nothing to
+                //   re-tune when it does. Same rule as the colour ramp and the
+                //   spindrift threshold: a threshold into the sea is a
+                //   fraction of the sea's own scale, never a count of metres.
+                //
+                //   SWASH -- inshore of the breakers the water is white
+                //   whatever the sea is doing: run-up, backwash, the last of
+                //   the bore. This one IS a count of metres, and correctly so,
+                //   because it is set by the beach and not by the sea.
+                //
+                // swd.y is the wet mask (0 over land), so no whitewater ever
+                // appears on dry ground. Outside the shore grid the depth is a
+                // 1e9 sentinel: relH goes to zero and swash goes to zero, so
+                // the open sea is untouched by construction rather than by a
+                // threshold that has to be got right.
+                float3 swd = ShoreWetDepth(xz);
+                float bf = max(_Ocean_DepthLimit.x, 0.05);
+                float relH = localHs / max(swd.z, 0.25);
+                float breakers = smoothstep(bf * _SurfBreakFrac, bf, relH);
+                float swash = 1.0 - smoothstep(_SurfSwashDepth * 0.2, _SurfSwashDepth, swd.z);
+                // Whitewater rides the crest and the bore behind it, not the
+                // trough. Leaning GENTLY on height (0.30 + 0.70 * heightLift)
+                // was measurably right and visually wrong: it whitened the
+                // whole surf zone evenly, so from above it read as a slab of
+                // paint laid along the beach rather than as water breaking.
+                // Surf is LINES -- one per crest -- so the breaker term wants
+                // a hard threshold on the wave's own normalised height rather
+                // than a gentle ramp. The SWASH does not: right at the beach
+                // the water is white in the trough too, which is what run-up
+                // and backwash are, so it is deliberately left out of this and
+                // kept at full strength.
+                //
+                // Torn by the same noise as the rest of the foam, because an
+                // untorn breaker line reads as a painted stripe.
+                float crest = smoothstep(0.30, 0.72, heightLift);
+                float surf = max(breakers * (0.20 + 0.80 * crest), swash)
+                           * (0.45 + 0.90 * noise) * swd.y * _SurfStrength
+                           * (1.0 - saturate(_SS_SurfOff));
+                foamAmt = saturate(foamAmt + surf) * (1.0 - _SS_LayerOff.w);
 
                 half3 col = lerp(body, sky, fresnel * (1.0 - foamAmt) * (1.0 - _SS_LayerOff.y));
                 col += spec * sun.color;

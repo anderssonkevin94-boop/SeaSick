@@ -32,6 +32,9 @@ Material:
     - _SpecPowerNear: 420
     - _SpecStrength: 0.75
     - _SubsurfaceStrength: 1.4
+    - _SurfBreakFrac: 0.78
+    - _SurfStrength: 0.95
+    - _SurfSwashDepth: 3
     m_Colors:
     - _DeepColor: {r: 0.028, g: 0.14, b: 0.21, a: 1}
     - _FoamColor: {r: 0.92, g: 0.96, b: 0.97, a: 1}

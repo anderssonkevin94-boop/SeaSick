@@ -183,6 +183,37 @@ public class SurfProbe : MonoBehaviour
                       (outside > probes / 3 ? "   *** most of the frame has no seabed; every number below is about nothing ***" : ""));
         sb.AppendLine();
 
+        // Pin the hour at noon and make the sky snap rather than ease over
+        // its 3 s time constant. The look shots are the whole point of the
+        // exercise being visual, and the first run of them came back at NIGHT
+        // -- a 180 s day means "whenever the probe happened to start" is a
+        // coin toss. Driven through SkyDirector's OWN pinTime by reflection,
+        // because it reasserts the light's rotation from TimeOfDay every
+        // LateUpdate, so writing the light lasts exactly one frame.
+        var sky = FindAnyObjectByType<SkyDirector>();
+        var pinField = sky != null ? typeof(SkyDirector).GetField("pinTime",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) : null;
+        var respField = sky != null ? typeof(SkyDirector).GetField("response",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance) : null;
+        object savedPin = pinField != null ? pinField.GetValue(sky) : null;
+        object savedResp = respField != null ? respField.GetValue(sky) : null;
+        if (pinField != null) pinField.SetValue(sky, 0.5f);
+        if (respField != null) respField.SetValue(sky, 25f);
+        sb.AppendLine(pinField != null ? "hour pinned to noon for the look shots"
+                                       : "*** could not pin the hour -- look shots are at whatever time it is ***");
+        sb.AppendLine();
+
+        // A deck-level look at the same beach, because the complaint is
+        // visual and an orthographic plan view flatters a surf zone: from
+        // 500 m up a band of white is obviously a band, and the question is
+        // what it looks like from a boat.
+        var eye = new GameObject("SurfProbeEyeCam").AddComponent<Camera>();
+        eye.CopyFrom(cam);
+        eye.depth = cam.depth + 11f;
+        eye.transform.position = new Vector3(park.x, 9f, park.y);
+        eye.transform.rotation = Quaternion.LookRotation(
+            new Vector3(shoreline.x, 3f, shoreline.y) - eye.transform.position, Vector3.up);
+
         var rt = new RenderTexture(ShotW, ShotH, 24, RenderTextureFormat.ARGB32);
         var shot = new Texture2D(ShotW, ShotH, TextureFormat.RGB24, false);
 
@@ -200,22 +231,59 @@ public class SurfProbe : MonoBehaviour
                 dist[y * ShotW + x] = Vector2.Distance(new Vector2(wx, wz), look);
             }
 
-        foreach (float hs in StateHs)
+        float lastNominal = -1f;
+        for (int pass = 0; pass < StateHs.Length; pass++)
         {
-            // Same order ShaderStrip needs: the rebuild throttle runs on
-            // OceanTime, so with the clock already paused the spectrum
-            // silently never updates. Unpause, force, land, scrub, freeze.
+            float hs = StateHs[pass];
+            // EACH PASS PINS AT A LATER INSTANT, and that is not cosmetic.
+            // SeaStateController throttles its rebuild on
+            // `OceanTime.Now - lastRebuildTime`, so a probe that pins every
+            // pass at the SAME instant scrubs the clock BACKWARDS relative to
+            // the rebuild it just caused -- the difference goes negative and
+            // the controller returns early for the rest of the run. The second
+            // sea state then silently never arrives and the probe measures the
+            // first one twice, reporting it under the second one's name. It
+            // did exactly that, and only "declared nominalHs 4" under a
+            // heading that said Hs 14 gave it away. Same family as the
+            // readback ring that ranked slots by timestamp and wedged on any
+            // backward scrub; probes scrub backwards constantly.
+            double pinT = PinT + pass * 600.0;
+            OceanTime.Scrub(pinT);
             OceanTime.Paused = false;
             sea.ForceHs(hs);
             yield return new WaitForSeconds(3f);
-            OceanTime.Scrub(PinT);
+            OceanTime.Scrub(pinT);
             OceanTime.Paused = true;
             yield return new WaitForSeconds(1.5f);
+
+            // AND CHECK IT ARRIVED. A gate that fails green is worse than no
+            // gate: the numbers above were produced by a run where this had
+            // not arrived, and they looked perfectly plausible.
+            float nominal = OceanRenderer.Instance.Settings != null
+                ? OceanRenderer.Instance.Settings.nominalHs : 0f;
+            float measured = 4f * RmsAround(new Vector3(park.x, 0f, park.y), 60);
+            bool arrived = Mathf.Abs(nominal - lastNominal) > 0.01f;
+            if (!arrived)
+                sb.AppendLine($"*** THE SPECTRUM DID NOT REBUILD for Hs {hs:F1}: declared nominalHs is " +
+                              $"still {nominal:F1}. Everything below is the PREVIOUS sea. ***");
+            lastNominal = nominal;
 
             Shader.SetGlobalFloat("_SS_FoamOnly", 1f);
             down.cullingMask = 1 << oceanLayer;
             down.clearFlags = CameraClearFlags.SolidColor;
             down.backgroundColor = new Color(0f, 0f, 1f);
+
+            // The BEFORE and the AFTER, one wave phase apart from each other
+            // by nothing at all. _SS_SurfOff takes the new term out of the
+            // shipped shader, so both halves of the comparison come off the
+            // same frame of the same sea instead of two builds an hour apart.
+            Shader.SetGlobalFloat("_SS_SurfOff", 1f);
+            yield return null; yield return null;
+            Capture(down, rt, shot);
+            var plain = shot.GetPixels();
+            System.IO.File.WriteAllBytes($"/tmp/seasick-surf-{hs:F1}-nosurf.png", shot.EncodeToPNG());
+
+            Shader.SetGlobalFloat("_SS_SurfOff", 0f);
             yield return null; yield return null;
             Capture(down, rt, shot);
             var foam = shot.GetPixels();
@@ -229,26 +297,29 @@ public class SurfProbe : MonoBehaviour
             yield return null; yield return null;
             Capture(down, rt, shot);
             System.IO.File.WriteAllBytes($"/tmp/seasick-surf-{hs:F1}-shaded.png", shot.EncodeToPNG());
+            Capture(eye, rt, shot);
+            System.IO.File.WriteAllBytes($"/tmp/seasick-surf-{hs:F1}-deck.png", shot.EncodeToPNG());
 
-            sb.AppendLine($"=== Hs {hs:F1} m ({sea.CurrentStateName}), declared nominalHs " +
-                          $"{(OceanRenderer.Instance.Settings != null ? OceanRenderer.Instance.Settings.nominalHs : 0f):F0} ===");
-            sb.AppendLine("  water depth        pixels   mean foam   max foam   mean dist from cam");
-            float shallowest = -1f, deepest = -1f;
+            sb.AppendLine($"=== Hs {hs:F1} m ({sea.CurrentStateName}), declared nominalHs {nominal:F0}, " +
+                          $"measured 4xRMS {measured:F1} m at the ship ===");
+            sb.AppendLine("  water depth        pixels   foam BEFORE   foam AFTER   max after   mean dist");
+            float shallowest = -1f, deepest = -1f, shallowBefore = -1f, deepBefore = -1f;
             for (int b = 0; b + 1 < Bins.Length; b++)
             {
-                double sf = 0, sd = 0; float mx = 0f; int n = 0;
+                double sf = 0, sp = 0, sd = 0; float mx = 0f; int n = 0;
                 for (int k = 0; k < foam.Length; k++)
                 {
                     float d = depth[k];
                     if (d > 1e8f || d < Bins[b] || d >= Bins[b + 1]) continue;
-                    if (!IsWater(foam[k])) continue;
-                    float f = foam[k].r; sf += f; sd += dist[k]; mx = Mathf.Max(mx, f); n++;
+                    if (!IsWater(foam[k]) || !IsWater(plain[k])) continue;
+                    float f = foam[k].r; sf += f; sp += plain[k].r; sd += dist[k]; mx = Mathf.Max(mx, f); n++;
                 }
-                if (n == 0) { sb.AppendLine($"  {Bins[b],5:F0}-{(Bins[b+1] > 1e7f ? "  deep" : Bins[b+1].ToString("F0").PadLeft(6))} m        0          --         --"); continue; }
-                float mf = (float)(sf / n);
-                if (b == 0) shallowest = mf;
-                if (Bins[b + 1] > 1e7f) deepest = mf;
-                sb.AppendLine($"  {Bins[b],5:F0}-{(Bins[b+1] > 1e7f ? "  deep" : Bins[b+1].ToString("F0").PadLeft(6))} m {n,8}   {mf,9:F4}  {mx,9:F4}   {sd / n,10:F0} m");
+                string label = $"  {Bins[b],5:F0}-{(Bins[b + 1] > 1e7f ? "  deep" : Bins[b + 1].ToString("F0").PadLeft(6))} m";
+                if (n == 0) { sb.AppendLine(label + "        0            --           --          --"); continue; }
+                float mf = (float)(sf / n), mp = (float)(sp / n);
+                if (b == 0) { shallowest = mf; shallowBefore = mp; }
+                if (Bins[b + 1] > 1e7f) { deepest = mf; deepBefore = mp; }
+                sb.AppendLine(label + $" {n,8}   {mp,11:F4}   {mf,10:F4}  {mx,10:F4}  {sd / n,8:F0} m");
             }
             // Land, and water the grid does not know about, both stated so a
             // reader can see they were kept out rather than averaged in.
@@ -261,15 +332,24 @@ public class SurfProbe : MonoBehaviour
             sb.AppendLine($"  (land {land} px by depth, outside the grid {off} px, " +
                           $"no ocean drawn {notWater} px -- all excluded above)");
             sb.AppendLine();
-            sb.AppendLine($"  THE SHAPE: shallowest bin {shallowest:F4} vs deepest {deepest:F4}  ->  " +
-                          (shallowest > deepest ? "foam RISES into the shallows" : "foam FALLS into the shallows (the sign error)"));
+            sb.AppendLine($"  THE SHAPE, before: shallowest bin {shallowBefore:F4} vs deepest {deepBefore:F4}  ->  " +
+                          (shallowBefore > deepBefore ? "foam RISES into the shallows"
+                                                      : $"foam FALLS into the shallows by {(deepBefore / Mathf.Max(shallowBefore, 1e-4f)):F1}x (the sign error)"));
+            sb.AppendLine($"  THE SHAPE, after:  shallowest bin {shallowest:F4} vs deepest {deepest:F4}  ->  " +
+                          (shallowest > deepest ? $"foam RISES into the shallows by {(shallowest / Mathf.Max(deepest, 1e-4f)):F1}x"
+                                                : "foam FALLS into the shallows (the sign error)"));
+            sb.AppendLine("  (framebuffer values, so sRGB-encoded -- a monotone transform of foamAmt,");
+            sb.AppendLine("   which is all the SHAPE of the curve needs; do not read them as amounts)");
             sb.AppendLine();
         }
 
         Shader.SetGlobalFloat("_SS_FoamOnly", 0f);
+        Shader.SetGlobalFloat("_SS_SurfOff", 0f);
         OceanTime.Paused = false;
         sea.ReleaseForce();
-        Destroy(down.gameObject); Destroy(rt); Destroy(shot);
+        if (pinField != null) pinField.SetValue(sky, savedPin);
+        if (respField != null) respField.SetValue(sky, savedResp);
+        Destroy(down.gameObject); Destroy(eye.gameObject); Destroy(rt); Destroy(shot);
         Finish(sb, null);
     }
 
@@ -277,6 +357,27 @@ public class SurfProbe : MonoBehaviour
     /// water is exactly grey and the blue clear colour never is.
     static bool IsWater(Color c) =>
         Mathf.Abs(c.r - c.b) < 0.004f && Mathf.Abs(c.r - c.g) < 0.004f;
+
+    /// Surface RMS on a ring grid about a point. Sampling one point over time
+    /// would measure the swell PERIOD as much as its height.
+    static float RmsAround(Vector3 centre, int n)
+    {
+        if (!OceanSampler.Ready) return 0f;
+        float sum = 0f, sumSq = 0f; int count = 0;
+        for (int i = 0; i < n; i++)
+        {
+            float a = i / (float)n * Mathf.PI * 2f;
+            for (int r = 1; r <= 5; r++)
+            {
+                Vector3 q = centre + new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * (r * 12f);
+                float h = OceanSampler.SampleImmediate(q).height;
+                sum += h; sumSq += h * h; count++;
+            }
+        }
+        if (count == 0) return 0f;
+        float mean = sum / count;
+        return Mathf.Sqrt(Mathf.Max(0f, sumSq / count - mean * mean));
+    }
 
     static void Capture(Camera cam, RenderTexture rt, Texture2D shot)
     {
@@ -295,6 +396,7 @@ public class SurfProbe : MonoBehaviour
     {
         running = false;
         Shader.SetGlobalFloat("_SS_FoamOnly", 0f);
+        Shader.SetGlobalFloat("_SS_SurfOff", 0f);
         OceanTime.Paused = false;
         if (err != null) sb.AppendLine(err);
         System.IO.File.WriteAllText("/tmp/seasick-surf.txt", sb.ToString());
