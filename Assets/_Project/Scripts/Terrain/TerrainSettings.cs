@@ -108,8 +108,8 @@ namespace SeaSick.Terrain
         public float chunkSize = 128f;
         [Tooltip("Vertices per chunk edge at LOD 0. (2^k)+1 so LOD strides divide evenly; max 129 for 16-bit indices.")]
         public int chunkResolution = 65;
-        [Tooltip("Edge skirt drop, metres. Must exceed the largest LOD height error so no cracks show between LODs — and that error scales with relief, so this grew with the massifs.")]
-        public float skirtDepth = 24f;
+        [Tooltip("Edge skirt drop, metres. Must clear the worst LOD crack and not one metre more: past that it is a curtain of edge-coloured geometry hanging in view at the boundary of the loaded region. Measured by TuneIslands.Skirt — worst crack 11.9 m at stride 4.")]
+        public float skirtDepth = 14f;
 
         [Header("Streaming / LOD")]
         [Tooltip("Chunks loaded in every direction from the target's chunk.")]

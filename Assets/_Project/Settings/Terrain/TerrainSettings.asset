@@ -429,7 +429,7 @@ MonoBehaviour:
   snowHeight: 165
   chunkSize: 128
   chunkResolution: 65
-  skirtDepth: 24
+  skirtDepth: 14
   viewRadius: 8
   lod0Radius: 2
   lod1Radius: 4

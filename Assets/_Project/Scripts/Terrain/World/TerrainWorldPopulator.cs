@@ -207,11 +207,17 @@ namespace SeaSick.Terrain
                 var beacon = IslandPropFactory.MakeBeacon(new Color(1f, 0.55f, 0.25f), 46f, 2.6f);
                 beacon.transform.SetParent(root.transform, false);
                 beacon.transform.localPosition = new Vector3(0f, Height(f.centre.x, f.centre.y) + 34f, 0f);
+                Dress(root.transform, root.transform.position, meanR, island, index);
                 return island;
             }
 
             bool shelterOnly = meanR < world.shelterOnlyBelowRadius;
-            if (shelterOnly) { island.Configure("—", 0f, meanR, false, false); return island; }
+            if (shelterOnly)
+            {
+                island.Configure("—", 0f, meanR, false, false);
+                Dress(root.transform, root.transform.position, meanR, island, index);
+                return island;
+            }
 
             var kind = PickKind(ring);
             float beaconH = Mathf.Lerp(26f, 60f, Mathf.Clamp01(meanR / 200f));
@@ -222,7 +228,18 @@ namespace SeaSick.Terrain
             var props = BuildProps(root.transform, island, kind.name, meanR);
             island.RegisterProps(props);
             island.Configure(kind.name, props.Count, meanR, false, false);
+            Dress(root.transform, root.transform.position, meanR, island, index);
             return island;
+        }
+
+        /// Trees and scree, baked into one mesh. Scenery only -- the
+        /// harvestable props are BuildProps and stay capped, because the eye
+        /// needs hundreds of known-size objects to judge an island by and the
+        /// economy does not.
+        void Dress(Transform parent, Vector3 centre, float meanR, Island island, int index)
+        {
+            IslandScenery.Build(parent, centre, meanR, Height, terrain,
+                ang => island.RadiusAt(ang), terrain.seed * 7919 + index);
         }
 
         WorldSettings.ResourceKind PickKind(float ring)

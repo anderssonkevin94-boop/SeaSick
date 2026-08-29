@@ -1,11 +1,32 @@
-// Minimal URP lit shader driven by vertex colour — the island mesher bakes
-// sand/grass/rock/snow per vertex from height and slope, so the terrain reads
-// correctly in 3D before any texturing work. Main light + SH ambient, fog.
+// URP lit terrain driven by vertex colour, with PROCEDURAL surface detail.
+//
+// The mesher bakes sand/grass/rock/snow per vertex from height and slope.
+// That was the whole surface for a long time, and it is why the islands read
+// as "weird low poly" even at 2 m vertex spacing: with no albedo, no normal
+// map and no texture of any kind, the polygon shading IS the highest-frequency
+// information in the image, so the eye has nothing to measure the land
+// against and every slope becomes a smooth painted ramp.
+//
+// The detail here is generated, not sampled -- no texture assets, nothing to
+// import, no UV seams on a streamed heightfield, and it costs a handful of
+// hashes. Three things ride on it:
+//   albedo break-up, so a hillside is not one flat green;
+//   a perturbed normal, so light catches surface roughness the mesh does not
+//     have and cannot afford to have at 2 m vertices;
+//   vertical striation on steep faces, because rock erodes downhill and
+//     stretching the noise along gravity is most of what reads as "cliff".
+// All of it fades out with distance, or it aliases into shimmer on the
+// horizon and undoes the silhouette work.
 Shader "SeaSick/Terrain Vertex Color"
 {
     Properties
     {
         _Tint ("Tint", Color) = (1,1,1,1)
+        _DetailScale ("Detail scale (m)", Float) = 3.5
+        _DetailStrength ("Albedo break-up", Range(0,0.6)) = 0.22
+        _NormalStrength ("Surface roughness", Range(0,1.5)) = 0.55
+        _StriationStrength ("Rock striation", Range(0,3)) = 1.4
+        _DetailFade ("Detail fade distance (m)", Float) = 260
     }
     SubShader
     {
@@ -24,7 +45,56 @@ Shader "SeaSick/Terrain Vertex Color"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _Tint;
+                float _DetailScale;
+                float _DetailStrength;
+                float _NormalStrength;
+                float _StriationStrength;
+                float _DetailFade;
             CBUFFER_END
+
+            // --- procedural value noise -------------------------------------
+            float hash13(float3 p)
+            {
+                p = frac(p * 0.1031);
+                p += dot(p, p.yzx + 33.33);
+                return frac((p.x + p.y) * p.z);
+            }
+
+            float vnoise(float3 p)
+            {
+                float3 i = floor(p);
+                float3 f = frac(p);
+                f = f * f * (3.0 - 2.0 * f);
+                float n000 = hash13(i + float3(0, 0, 0));
+                float n100 = hash13(i + float3(1, 0, 0));
+                float n010 = hash13(i + float3(0, 1, 0));
+                float n110 = hash13(i + float3(1, 1, 0));
+                float n001 = hash13(i + float3(0, 0, 1));
+                float n101 = hash13(i + float3(1, 0, 1));
+                float n011 = hash13(i + float3(0, 1, 1));
+                float n111 = hash13(i + float3(1, 1, 1));
+                float nx00 = lerp(n000, n100, f.x);
+                float nx10 = lerp(n010, n110, f.x);
+                float nx01 = lerp(n001, n101, f.x);
+                float nx11 = lerp(n011, n111, f.x);
+                return lerp(lerp(nx00, nx10, f.y), lerp(nx01, nx11, f.y), f.z);
+            }
+
+            // Two octaves is enough: this is surface texture, not landform.
+            float surfaceNoise(float3 p)
+            {
+                return vnoise(p) * 0.65 + vnoise(p * 2.7) * 0.35;
+            }
+
+            // Steep ground gets the noise STRETCHED along Y, which is what
+            // makes a face read as bedded rock running downhill rather than
+            // as gravel sprayed on a ramp.
+            float3 detailCoords(float3 wp, float steep)
+            {
+                float3 q = wp / max(_DetailScale, 0.01);
+                q.y *= lerp(1.0, 0.18, steep);
+                return q;
+            }
 
             struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; };
             struct Varyings
@@ -50,12 +120,46 @@ Shader "SeaSick/Terrain Vertex Color"
             half4 frag(Varyings i) : SV_Target
             {
                 float3 n = normalize(i.normalWS);
+                float3 albedo = i.color.rgb * _Tint.rgb;
+
+                // Fade the whole detail layer out with distance. Without this
+                // it turns into per-pixel noise on the horizon -- shimmer that
+                // reads as a rendering fault and eats the silhouette.
+                float dist = distance(i.positionWS, GetCameraPositionWS());
+                float fade = saturate(1.0 - dist / max(_DetailFade, 1.0));
+                fade *= fade;
+
+                if (fade > 0.001)
+                {
+                    float steep = saturate((1.0 - n.y) * 1.8);
+                    float3 q = detailCoords(i.positionWS, steep);
+
+                    // Gradient by finite difference, in the same stretched
+                    // space, so the perturbation agrees with what the albedo
+                    // break-up is doing instead of fighting it.
+                    float e = 0.35;
+                    float c = surfaceNoise(q);
+                    float dx = surfaceNoise(q + float3(e, 0, 0)) - c;
+                    float dz = surfaceNoise(q + float3(0, 0, e)) - c;
+                    float dy = surfaceNoise(q + float3(0, e, 0)) - c;
+
+                    float3 g = float3(dx, dy, dz) / e;
+                    // Only the part across the surface tilts it.
+                    g -= n * dot(g, n);
+                    n = normalize(n - g * _NormalStrength * fade
+                                        * lerp(1.0, 1.0 + _StriationStrength, steep));
+
+                    // Albedo break-up, stronger on rock than on sand: a beach
+                    // is genuinely uniform and mottling it looks like dirt.
+                    float rocky = lerp(0.45, 1.0, steep);
+                    albedo *= 1.0 + (c - 0.5) * 2.0 * _DetailStrength * fade * rocky;
+                }
+
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
                 Light light = GetMainLight(shadowCoord);
                 float ndl = saturate(dot(n, light.direction));
                 float3 diffuse = light.color * light.shadowAttenuation * ndl;
                 float3 ambient = SampleSH(n);
-                float3 albedo = i.color.rgb * _Tint.rgb;
                 float3 col = albedo * (diffuse + ambient);
                 col = MixFog(col, i.fog);
                 return half4(col, 1);

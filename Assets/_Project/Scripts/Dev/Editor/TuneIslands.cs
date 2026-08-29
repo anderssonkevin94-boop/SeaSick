@@ -118,7 +118,7 @@ public static class TuneIslands
         so.FindProperty("shoreBottom").floatValue = 12f;
         so.FindProperty("sandHeight").floatValue = 3.2f;
         so.FindProperty("snowHeight").floatValue = 165f;
-        so.FindProperty("skirtDepth").floatValue = 24f;
+        so.FindProperty("skirtDepth").floatValue = 14f;
         so.ApplyModifiedPropertiesWithoutUndo();
         EditorUtility.SetDirty(s);
         AssetDatabase.SaveAssets();
@@ -323,6 +323,80 @@ public static class TuneIslands
         sb.AppendLine("coasts steeper than 1:5 (a yellow mountainside): "
             + (100f * steep / found).ToString("F0") + "%");
         System.IO.File.WriteAllText("/tmp/seasick-beaches.txt", sb.ToString());
+        return sb.ToString();
+    }
+
+    /// How deep the LOD skirts actually need to be.
+    ///
+    /// A skirt hides the crack where a full-density chunk meets a strided
+    /// one: it must be deeper than the worst height the coarse edge misses.
+    /// That error scales with RELIEF, so raising the massifs meant the old
+    /// 6 m was no longer safe -- but 24 m was a guess in the other
+    /// direction, and a skirt is a vertical curtain of edge-coloured
+    /// geometry that hangs in plain sight at the edge of the loaded region.
+    /// Too deep is a visible wall; too shallow is a crack you can see the
+    /// sky through. So measure it.
+    ///
+    /// Walks chunk edges at full density and compares each vertex against
+    /// the straight line a strided edge would draw between the samples it
+    /// keeps -- which IS the crack.
+    public static string Skirt()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+        if (s == null) return "no TerrainSettings asset at " + Path;
+        var prm = TerrainParams.From(s);
+        var lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
+
+        int cells = s.chunkResolution - 1;
+        float spacing = s.chunkSize / cells;
+        var worst = new System.Collections.Generic.List<float>();
+        float globalWorst = 0f; int worstLod = 0;
+        var rng = new System.Random(31337);
+
+        for (int trial = 0; trial < 1400; trial++)
+        {
+            // A chunk edge somewhere in the archipelago.
+            float x0 = (float)(rng.NextDouble() * 20000.0 - 10000.0);
+            float z0 = (float)(rng.NextDouble() * 20000.0 - 10000.0);
+            bool alongX = rng.Next(2) == 0;
+
+            // Only edges with land on them matter.
+            if (TerrainHeight.Height(new float2(x0, z0), prm, lut) < -2f) continue;
+
+            foreach (int stride in new[] { 2, 4 })
+            {
+                float local = 0f;
+                for (int k = 0; k <= cells; k++)
+                {
+                    int lo = (k / stride) * stride;
+                    int hi = math.min(lo + stride, cells);
+                    float t = hi > lo ? (k - lo) / (float)(hi - lo) : 0f;
+
+                    float2 P(int idx) => alongX
+                        ? new float2(x0 + idx * spacing, z0)
+                        : new float2(x0, z0 + idx * spacing);
+
+                    float fine = TerrainHeight.Height(P(k), prm, lut);
+                    float coarse = math.lerp(TerrainHeight.Height(P(lo), prm, lut),
+                                             TerrainHeight.Height(P(hi), prm, lut), t);
+                    local = math.max(local, math.abs(fine - coarse));
+                }
+                worst.Add(local);
+                if (local > globalWorst) { globalWorst = local; worstLod = stride; }
+            }
+        }
+        lut.Dispose();
+        worst.Sort();
+        var sb = new StringBuilder();
+        int n = worst.Count;
+        sb.AppendLine(n + " chunk edges over land, strides 2 and 4, " + spacing.ToString("F1") + " m vertices");
+        sb.AppendLine("LOD crack depth (m):  p50 " + worst[n / 2].ToString("F2")
+            + "   p90 " + worst[n * 9 / 10].ToString("F2")
+            + "   p99 " + worst[n - n / 100].ToString("F2")
+            + "   max " + globalWorst.ToString("F2") + " (at stride " + worstLod + ")");
+        sb.AppendLine("skirtDepth is " + s.skirtDepth + " m; it needs to clear the max, and every metre "
+            + "beyond that is curtain hanging in view at the edge of the loaded region");
+        System.IO.File.WriteAllText("/tmp/seasick-skirt.txt", sb.ToString());
         return sb.ToString();
     }
 }

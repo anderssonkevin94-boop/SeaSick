@@ -81,9 +81,32 @@ public class IslandLook : MonoBehaviour
         float r = Mathf.Max(target.Radius, 60f);
         sb.AppendLine($"island at {c:F0}, radius {r:F0} m, {best:F0} m from the ship");
 
-        Vector3 approach = shipAt - c; approach.y = 0f;
-        if (approach.sqrMagnitude < 1f) approach = Vector3.forward;
-        approach.Normalize();
+        // The seaward bearing has to be SEARCHED for, not assumed.
+        //
+        // It used to be "the direction of the ship", which held only while
+        // she spawned offshore. She now starts at her home mooring, which is
+        // itself an island, so the offshore vantage was placed 615 m along a
+        // bearing that ran straight into home and the sheet came back as a
+        // close-up of the inside of a hill. Sample bearings and take the one
+        // with the most open water behind it -- the same lesson as the
+        // hardcoded coordinates that used to land probes on islands.
+        Vector3 approach = Vector3.forward;
+        float bestOpen = float.MinValue;
+        for (int b = 0; b < 24; b++)
+        {
+            float ang = b / 24f * Mathf.PI * 2f;
+            var dir = new Vector3(Mathf.Sin(ang), 0f, Mathf.Cos(ang));
+            // Deepest-water bearing, judged over the stretch the cameras use.
+            float open = 0f;
+            for (float d = r + 60f; d <= r + 700f; d += 40f)
+            {
+                float g = Ground(c + dir * d);
+                open += Mathf.Min(g, 0f);          // land contributes nothing
+                if (g > -1f) open -= 400f;         // and a shoal is disqualifying
+            }
+            if (open > bestOpen) { bestOpen = open; approach = dir; }
+        }
+        sb.AppendLine($"seaward bearing {approach:F2} (openness {bestOpen:F0})");
 
         // Highest ground within the island, sampled on a coarse polar grid.
         // The camera aims here so a peak, if there is one, is in frame -- and
@@ -130,12 +153,16 @@ public class IslandLook : MonoBehaviour
             c + seaward * (r + 260f) + Vector3.up * 9f,     // offshore, deck height
             c + seaward * (r + 55f) + Vector3.up * 16f,     // close in on the shore
             c + seaward * (r + 380f) + Vector3.up * 260f,   // high and back
+            c + seaward * (r - 30f) + Vector3.up * 6f,      // ashore, eye height
         };
         Vector3[] at =
         {
             new Vector3(peak.x, Mathf.Max(peakY * 0.55f, 12f), peak.z),
             c + seaward * r * 0.86f + Vector3.up * 3f,
             new Vector3(c.x, peakY * 0.4f, c.z),
+            // Up the slope from the back of the beach: the vantage where a
+            // surface with no texture on it gives itself away.
+            c + seaward * (r * 0.55f) + Vector3.up * 22f,
         };
 
         for (int i = 0; i < from.Length; i++)
