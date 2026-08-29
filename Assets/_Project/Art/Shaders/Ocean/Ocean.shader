@@ -84,6 +84,13 @@ Shader "SeaSick/Ocean"
             // that forgets to reset it can only ever fail loudly rather than
             // silently ship a shader with its reflections switched off.
             float4 _SS_LayerOff;
+            // Dev only: 1 outputs foamAmt itself as luminance instead of the
+            // shaded water, so a probe can read the foam field directly off
+            // the framebuffer rather than guessing at it from a photograph of
+            // the sea. Same rule as _SS_LayerOff -- an unset global reads as
+            // zero, which is the shipped look, so forgetting to reset it can
+            // only fail loudly.
+            float _SS_FoamOnly;
 
             // How much of each cascade the mesh under this vertex can carry.
             // KEEP IDENTICAL to OceanClipmap.WeightsAt -- see the CascadeFade
@@ -353,6 +360,9 @@ Shader "SeaSick/Ocean"
                 col = lerp(col, foamCol, foamAmt);
 
                 col = MixFog(col, input.data.w);
+                // After the fog, deliberately: the probe wants the foam the
+                // shader computed, not the foam the weather let you see.
+                if (_SS_FoamOnly > 0.5) col = foamAmt.xxx;
                 return half4(col, 1);
             }
             ENDHLSL
