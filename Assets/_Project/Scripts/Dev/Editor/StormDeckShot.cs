@@ -41,7 +41,7 @@ public class StormDeckShot : MonoBehaviour
         }
         if (motor != null)
         {
-            motor.SailOrder = 1f;
+            motor.ThrottleOrder = 1f;
             motor.Rudder = 0f;
             // Straight into the seas, which is where water comes aboard.
             Vector2 w = sea != null ? sea.WindDirection : new Vector2(1f, 0f);
@@ -58,7 +58,7 @@ public class StormDeckShot : MonoBehaviour
         // sea is unambiguously above the planking. This tests the RENDERER,
         // which is the thing being claimed, and nothing else.
         HullWaterClip clip = FindAnyObjectByType<HullWaterClip>();
-        if (motor != null) motor.SailOrder = 0f;
+        if (motor != null) motor.ThrottleOrder = 0f;
         if (motor != null) motor.AutopilotTarget = null;
 
         OceanTime.Paused = true;

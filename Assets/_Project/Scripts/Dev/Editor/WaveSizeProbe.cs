@@ -175,7 +175,7 @@ public class WaveSizeProbe : MonoBehaviour
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
-        if (motor != null) { motor.SailOrder = 0f; motor.Rudder = 0f; }
+        if (motor != null) { motor.ThrottleOrder = 0f; motor.Rudder = 0f; }
         yield return new WaitForSeconds(8f);
 
         sb.AppendLine("WaveSizeProbe -- how big, and can she climb it");

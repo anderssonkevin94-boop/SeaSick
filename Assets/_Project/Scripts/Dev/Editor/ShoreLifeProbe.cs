@@ -53,7 +53,7 @@ public class ShoreLifeProbe : MonoBehaviour
         // PERSISTENT, not Temp. A Temp allocation is valid for one frame, and
         // this coroutine yields between rungs -- the first version duly threw
         // ObjectDisposedException on rung two. Disposed by hand below.
-        var lut = TerrainCurveLut.Bake(settings.terraceCurve, Allocator.Persistent);
+        var lut = TerrainCurveLut.Bake(settings.profileCurve, Allocator.Persistent);
 
         var sb = new StringBuilder();
         sb.AppendLine("ShoreLifeProbe — does the sea keep its TEXTURE as the bottom comes up");

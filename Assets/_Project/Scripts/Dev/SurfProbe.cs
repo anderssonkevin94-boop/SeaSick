@@ -77,7 +77,7 @@ public class SurfProbe : MonoBehaviour
         var region = RegionField.Instance;
         var cam = Camera.main;
         if (helm != null) helm.enabled = false;
-        if (motor != null) { motor.SailOrder = 0f; motor.Rudder = 0f; }
+        if (motor != null) { motor.ThrottleOrder = 0f; motor.Rudder = 0f; }
         if (field == null || s == null || motor == null || sea == null || region == null || cam == null)
         { Finish(sb, "ABORT: no shore field / ship / controller / region / camera"); yield break; }
         var rb = motor.GetComponent<Rigidbody>();
@@ -106,7 +106,7 @@ public class SurfProbe : MonoBehaviour
         // PERSISTENT, not Temp: this yields between baking the curve and using
         // it, and a Temp allocation is valid for exactly one frame.
         var prm = TerrainParams.From(s);
-        NativeArray<float> lut = TerrainCurveLut.Bake(s.terraceCurve, Allocator.Persistent);
+        NativeArray<float> lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Persistent);
         Vector2 shoreline = Vector2.zero; bool foundShore = false;
         for (float r = isle.MaxRadius + 400f; r > 5f; r -= 4f)
         {

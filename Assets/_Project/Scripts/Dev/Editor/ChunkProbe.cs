@@ -37,7 +37,7 @@ public static class ChunkProbe
         TerrainSettings s = AssetDatabase.LoadAssetAtPath<TerrainSettings>("Assets/_Project/Settings/Terrain/TerrainSettings.asset");
         if (s == null) return "no TerrainSettings asset; run SetupTerrainLab";
         TerrainParams prm = TerrainParams.From(s);
-        NativeArray<float> lut = TerrainCurveLut.Bake(s.terraceCurve, Allocator.TempJob);
+        NativeArray<float> lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.TempJob);
 
         // Chunk under the preview island.
         int cx = -13, cz = 4;

@@ -106,7 +106,7 @@ public class RideProbe : MonoBehaviour
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
         if (sea != null) sea.ForceSeverity(1f);
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
         yield return new WaitForSeconds(14f);          // let the storm land
 
         // Head west, into the swell (it travels +X, so west is bow-on).

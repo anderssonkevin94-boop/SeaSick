@@ -94,7 +94,7 @@ public class WaveShot : MonoBehaviour
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
-        if (motor != null) { motor.SailOrder = 0f; motor.Rudder = 0f; }
+        if (motor != null) { motor.ThrottleOrder = 0f; motor.Rudder = 0f; }
         if (sea != null) sea.ForceSeverity(1f);
         yield return new WaitForSeconds(16f);   // let the storm spectrum land
 

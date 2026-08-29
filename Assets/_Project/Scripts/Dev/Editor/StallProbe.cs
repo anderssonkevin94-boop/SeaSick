@@ -109,7 +109,7 @@ public class StallProbe : MonoBehaviour
     {
         body.PlowDragFactor = plowDefault;
         yield return Reset(severity);
-        motor.SailOrder = 0f;
+        motor.ThrottleOrder = 0f;
         yield return new WaitForSeconds(8f);      // let her settle
 
         float reserveSum = 0f, reserveMax = 0f, plowSum = 0f, plowMax = 0f;
@@ -138,7 +138,7 @@ public class StallProbe : MonoBehaviour
             "  plow drag: mean={0:F2} kN  max={1:F2} kN   (design intent: zero at rest)",
             plowSum / Mathf.Max(1, n) / 1000f, plowMax / 1000f));
         sb.AppendLine("");
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
     }
 
     IEnumerator Leg(string label, float severity, float plow)
@@ -150,7 +150,7 @@ public class StallProbe : MonoBehaviour
         Vector2 w = SeaStateController.Instance.WindDirection;
         Vector3 seasFrom = new Vector3(-w.x, 0f, -w.y).normalized;
         Vector3 startPos = rb.position;
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
         motor.AutopilotTarget = startPos + seasFrom * 8000f;
         yield return new WaitForSeconds(10f);     // work up to speed
 

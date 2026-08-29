@@ -92,4 +92,50 @@ public static class NoiseProbe
         System.IO.File.WriteAllText("/tmp/seasick-noise.txt", sb.ToString());
         return sb.ToString();
     }
+
+    /// What RidgedRaw's distribution actually IS, so the blend against fBm
+    /// can be mean- and spread-matched instead of guessed.
+    ///
+    /// This matters more than it sounds. The land/sea threshold is computed
+    /// from an assumed Gaussian (ThresholdForLandRatio), and the profile
+    /// curve is authored against a field that sits around 0.5. Dropping a
+    /// raw ridged field -- which is skewed hard toward zero by the octave
+    /// weighting -- into either would quietly move every coastline and
+    /// flatten every island, and it would look like a bug in the curve.
+    public static string Ridge()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>("Assets/_Project/Settings/Terrain/TerrainSettings.asset");
+        if (s == null) return "no TerrainSettings asset";
+        var sb2 = new StringBuilder();
+        int n = 240000;
+        var vals = new float[n];
+        var fbm = new float[n];
+        var rng = new System.Random(12345);
+        double mean = 0.0, fmean = 0.0;
+        for (int i = 0; i < n; i++)
+        {
+            float x = (float)(rng.NextDouble() * 60000.0 - 30000.0);
+            float y = (float)(rng.NextDouble() * 60000.0 - 30000.0);
+            var p = new float2(x, y);
+            vals[i] = TerrainNoise.RidgedRaw(p, s.seed + 4241, s.octaves, s.baseFrequency, s.lacunarity, s.gain);
+            fbm[i] = TerrainNoise.Fbm01(p, s.seed, s.octaves, s.baseFrequency, s.lacunarity, s.gain);
+            mean += vals[i]; fmean += fbm[i];
+        }
+        mean /= n; fmean /= n;
+        double sd = 0.0, fsd = 0.0;
+        for (int i = 0; i < n; i++) { sd += (vals[i] - mean) * (vals[i] - mean); fsd += (fbm[i] - fmean) * (fbm[i] - fmean); }
+        sd = System.Math.Sqrt(sd / n); fsd = System.Math.Sqrt(fsd / n);
+        System.Array.Sort(vals); System.Array.Sort(fbm);
+        sb2.AppendLine("octaves " + s.octaves + " freq " + s.baseFrequency + " lac " + s.lacunarity + " gain " + s.gain);
+        sb2.AppendLine("RidgedRaw  mean " + mean.ToString("F4") + "  sd " + sd.ToString("F4")
+            + "  p01 " + vals[n / 100].ToString("F4") + "  p50 " + vals[n / 2].ToString("F4")
+            + "  p99 " + vals[n - n / 100].ToString("F4") + "  max " + vals[n - 1].ToString("F4"));
+        sb2.AppendLine("Fbm01      mean " + fmean.ToString("F4") + "  sd " + fsd.ToString("F4")
+            + "  p01 " + fbm[n / 100].ToString("F4") + "  p50 " + fbm[n / 2].ToString("F4")
+            + "  p99 " + fbm[n - n / 100].ToString("F4") + "  max " + fbm[n - 1].ToString("F4"));
+        sb2.AppendLine("=> to match fBm: shaped = (raw - " + mean.ToString("F4") + ") * "
+            + (fsd / sd).ToString("F4") + " + 0.5");
+        System.IO.File.WriteAllText("/tmp/seasick-ridge.txt", sb2.ToString());
+        return sb2.ToString();
+    }
 }

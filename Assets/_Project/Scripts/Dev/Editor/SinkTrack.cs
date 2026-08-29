@@ -33,7 +33,7 @@ public class SinkTrack : MonoBehaviour
         if (helm != null) helm.enabled = false;   // nothing steers but this probe
 
         yield return new WaitForSeconds(4f);
-        if (motor != null) { motor.SailOrder = 1f; motor.Rudder = 0f; }
+        if (motor != null) { motor.ThrottleOrder = 1f; motor.Rudder = 0f; }
 
         var buoy = motor != null ? motor.GetComponent<SeaSick.Ocean.BuoyantBody>() : null;
         var bilge = motor != null ? motor.GetComponent<Bilge>() : null;

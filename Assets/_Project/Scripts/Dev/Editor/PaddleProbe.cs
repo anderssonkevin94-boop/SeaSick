@@ -42,7 +42,7 @@ public class PaddleProbe : MonoBehaviour
         if (motor == null) { Debug.LogError("PaddleProbe: no ShipMotor"); yield break; }
         Rigidbody rb = motor.GetComponent<Rigidbody>();
 
-        // HelmInput reasserts Rudder and SailOrder every frame (the recorded
+        // HelmInput reasserts Rudder and ThrottleOrder every frame (the recorded
         // trap). The first run of this probe measured a differential of
         // exactly 0.00 and a yaw of exactly 0.0 for that reason alone — the
         // probe was setting the helm and HelmInput was putting it straight
@@ -65,7 +65,7 @@ public class PaddleProbe : MonoBehaviour
         // ---- leg 1: floating light ----
         motor.CargoLoad = 0f;
         motor.BilgeLoad01 = 0f;
-        motor.SailOrder = 0f;
+        motor.ThrottleOrder = 0f;
         yield return new WaitForSeconds(6f);
         float lightY = 0f, lightSub = 0f;
         for (int i = 0; i < 60; i++)
@@ -97,7 +97,7 @@ public class PaddleProbe : MonoBehaviour
 
         // ---- leg 3: the wheels drive her ----
         OceanTime.Paused = false;
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
         motor.Rudder = 0f;
         yield return new WaitForSeconds(14f);
         float speed = motor.CurrentSpeed;
@@ -125,7 +125,7 @@ public class PaddleProbe : MonoBehaviour
         sb.AppendLine("  yaw " + yawUnder.ToString("F1") + " deg/s");
 
         // Throttle shut, helm still hard over: she should turn in her length.
-        motor.SailOrder = 0f;
+        motor.ThrottleOrder = 0f;
         yield return new WaitForSeconds(10f);
         float spinPort = drive != null ? drive.PortRate : 0f;
         float spinStbd = drive != null ? drive.StarboardRate : 0f;

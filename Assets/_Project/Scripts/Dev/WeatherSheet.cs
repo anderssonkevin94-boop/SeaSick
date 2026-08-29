@@ -116,7 +116,7 @@ public class WeatherSheet : MonoBehaviour
         var ocean = OceanRenderer.Instance;
         if (motor == null || ctrl == null || cam == null || ocean == null || !OceanSampler.Ready)
         { Finish(sb, outTxt, "ABORT: no ship / controller / camera / renderer / sampler"); yield break; }
-        if (motor != null) { motor.SailOrder = 0f; motor.Rudder = 0f; }
+        if (motor != null) { motor.ThrottleOrder = 0f; motor.Rudder = 0f; }
 
         var rb = motor.GetComponent<Rigidbody>();
 

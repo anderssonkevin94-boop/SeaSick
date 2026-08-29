@@ -60,7 +60,7 @@ public class WestTrace : MonoBehaviour
         rb.rotation = Quaternion.Euler(0f, 270f, 0f);   // due west
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
         motor.AutopilotTarget = rb.position + Vector3.left * 9000f;
         yield return new WaitForSeconds(12f);           // work up to speed
 

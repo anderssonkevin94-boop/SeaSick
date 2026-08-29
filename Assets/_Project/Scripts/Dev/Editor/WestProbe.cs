@@ -50,7 +50,7 @@ public static class WestProbe
         if (s == null) return "no TerrainSettings at " + SettingsPath;
 
         var prm = TerrainParams.From(s);
-        var lut = TerrainCurveLut.Bake(s.terraceCurve, Allocator.Temp);
+        var lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
 
         float needDepth = StormHs / BreakFraction;
 

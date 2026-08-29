@@ -130,7 +130,7 @@ namespace SeaSick.Dev
             }
 
             var prm = TerrainParams.From(settings);
-            var lut = TerrainCurveLut.Bake(settings.terraceCurve, Allocator.Temp);
+            var lut = TerrainCurveLut.Bake(settings.profileCurve, Allocator.Temp);
             try
             {
                 for (float lat = 0f; lat <= maxLateral; lat += 200f)

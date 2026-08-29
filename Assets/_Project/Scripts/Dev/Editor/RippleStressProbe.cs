@@ -53,7 +53,7 @@ public class RippleStressProbe : MonoBehaviour
 
         SeaStateController.Instance.ReleaseForce();
         motor.Rudder = 0f;
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
         if (helm != null) helm.enabled = true;
         System.IO.File.WriteAllText("/tmp/seasick-ripplestress.txt", sb.ToString());
         Debug.Log("RippleStressProbe:\n" + sb);
@@ -74,7 +74,7 @@ public class RippleStressProbe : MonoBehaviour
         worstAbs = 0f;
 
         SeaStateController.Instance.ForceSeverity(1f);
-        motor.SailOrder = sail;
+        motor.ThrottleOrder = sail;
         motor.Rudder = rudder;
         yield return new WaitForSeconds(6f);
 

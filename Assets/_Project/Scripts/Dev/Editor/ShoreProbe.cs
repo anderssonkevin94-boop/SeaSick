@@ -54,7 +54,7 @@ public class ShoreProbe : MonoBehaviour
         var helm = FindAnyObjectByType<SeaSick.Ship.HelmInput>();
         if (helm != null) helm.enabled = false;
         var rb = motor != null ? motor.GetComponent<Rigidbody>() : null;
-        if (motor != null) { motor.SailOrder = 0f; motor.Rudder = 0f; }
+        if (motor != null) { motor.ThrottleOrder = 0f; motor.Rudder = 0f; }
 
         float wait = 0f;
         while ((!field.Ready || Island.All.Count == 0) && wait < 20f) { wait += Time.deltaTime; yield return null; }
@@ -86,7 +86,7 @@ public class ShoreProbe : MonoBehaviour
         // because it never yielded in between; the symptom is an
         // ObjectDisposedException from inside the height function, several
         // seconds after the array was made.
-        NativeArray<float> lut = TerrainCurveLut.Bake(s.terraceCurve, Allocator.Persistent);
+        NativeArray<float> lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Persistent);
         float2 shoreline = default, land = default;
         bool foundShore = false, foundLand = false;
         for (float r = isle.MaxRadius + 400f; r > 5f; r -= 4f)

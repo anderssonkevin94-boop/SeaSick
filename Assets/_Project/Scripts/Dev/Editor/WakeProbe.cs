@@ -33,14 +33,14 @@ public class WakeProbe : MonoBehaviour
             yield break;
         }
         Rigidbody rb = motor.GetComponent<Rigidbody>();
-        // HelmInput reasserts SailOrder every frame (the recorded trap):
+        // HelmInput reasserts ThrottleOrder every frame (the recorded trap):
         // silence it while the probe owns the ship.
         var helm = FindAnyObjectByType<SeaSick.Ship.HelmInput>();
         if (helm != null) helm.enabled = false;
 
         // Park the ship in calm water.
         SeaStateController.Instance.ForceSeverity(0f);
-        motor.SailOrder = 0f;
+        motor.ThrottleOrder = 0f;
         motor.Rudder = 0f;
         rb.linearVelocity = Vector3.zero;
         yield return new WaitForSeconds(10f);
@@ -54,7 +54,7 @@ public class WakeProbe : MonoBehaviour
         float decayed = Energy(sim);
 
         // (b) wake under way.
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
         yield return new WaitForSeconds(14f);
         float sailing = Energy(sim);
         ScreenCapture.CaptureScreenshot("/tmp/seasick-wake.png");

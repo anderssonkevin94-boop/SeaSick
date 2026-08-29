@@ -51,7 +51,7 @@ public class SeaProfileProbe : MonoBehaviour
         var helm = FindAnyObjectByType<SeaSick.Ship.HelmInput>();
         if (helm != null) helm.enabled = false;
         var rb = motor != null ? motor.GetComponent<Rigidbody>() : null;
-        if (motor != null) { motor.SailOrder = 0f; motor.Rudder = 0f; }
+        if (motor != null) { motor.ThrottleOrder = 0f; motor.Rudder = 0f; }
         if (sea != null) sea.ForceSeverity(1f);
 
         var terrain = Island.TerrainHeight;

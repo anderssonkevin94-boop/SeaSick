@@ -60,7 +60,7 @@ public class SailShot : MonoBehaviour
             rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
         yield return new WaitForSeconds(6f);
 
         sampling = true;

@@ -30,7 +30,7 @@ public class SpawnShot : MonoBehaviour
         // A shot taken before that is a photograph of a loading screen.
         yield return new WaitForSeconds(6f);
 
-        if (motor != null) { motor.SailOrder = 1f; motor.Rudder = 0f; }
+        if (motor != null) { motor.ThrottleOrder = 1f; motor.Rudder = 0f; }
 
         for (int i = 0; i < 3; i++)
         {

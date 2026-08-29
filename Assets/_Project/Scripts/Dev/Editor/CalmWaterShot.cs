@@ -50,7 +50,7 @@ public class CalmWaterShot : MonoBehaviour
         SeaStateController sea = SeaStateController.Instance;
         RegionField region = RegionField.Instance;
         Rigidbody rb = motor != null ? motor.GetComponent<Rigidbody>() : null;
-        if (motor != null) { motor.SailOrder = 0f; motor.Rudder = 0f; }
+        if (motor != null) { motor.ThrottleOrder = 0f; motor.Rudder = 0f; }
         if (region == null || sea == null) { Finish(sb, "ABORT: no RegionField / SeaStateController"); yield break; }
 
         // The gentlest weather the game ever produces.

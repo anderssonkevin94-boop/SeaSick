@@ -29,7 +29,7 @@ public static class HeightProbe
         TerrainSettings s = AssetDatabase.LoadAssetAtPath<TerrainSettings>("Assets/_Project/Settings/Terrain/TerrainSettings.asset");
         if (s == null) return "no TerrainSettings asset; run SetupTerrainLab";
         TerrainParams prm = TerrainParams.From(s);
-        NativeArray<float> lut = TerrainCurveLut.Bake(s.terraceCurve, Allocator.Temp);
+        NativeArray<float> lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
 
         float2 p = new float2(812.5f, -1530.25f);
         float a = TerrainHeight.Height(p, prm, lut);

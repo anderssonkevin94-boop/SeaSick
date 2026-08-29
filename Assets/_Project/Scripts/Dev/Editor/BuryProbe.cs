@@ -55,7 +55,7 @@ public class BuryProbe : MonoBehaviour
         // Full sail, dead into the seas — the burial case from the field.
         Vector2 w = SeaStateController.Instance.WindDirection;
         Vector3 seasFrom = new Vector3(-w.x, 0f, -w.y).normalized;
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
         motor.AutopilotTarget = rb.position + seasFrom * 5000f;
         yield return new WaitForSeconds(8f);
 

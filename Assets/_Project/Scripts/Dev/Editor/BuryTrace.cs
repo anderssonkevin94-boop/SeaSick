@@ -52,7 +52,7 @@ public class BuryTrace : MonoBehaviour
 
         Vector2 w = SeaStateController.Instance.WindDirection;
         Vector3 seasFrom = new Vector3(-w.x, 0f, -w.y).normalized;
-        motor.SailOrder = 1f;
+        motor.ThrottleOrder = 1f;
         motor.AutopilotTarget = rb.position + seasFrom * 5000f;
 
         sb.AppendLine("t     shipY   sampleH  batchH  draft   sub   reserve  plowkN  speed  pitch  roll");

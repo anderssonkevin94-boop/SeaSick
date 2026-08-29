@@ -91,7 +91,7 @@ public static class SetupSeaTerrain
     {
         s.worldOffset = Vector2.zero;
         var prm = TerrainParams.From(s);
-        var lut = TerrainCurveLut.Bake(s.terraceCurve, Allocator.Temp);
+        var lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
         float2 spawn = float2.zero;
         float2 want = new float2(homePos.x, homePos.z) + new float2(0f, -140f);
 
