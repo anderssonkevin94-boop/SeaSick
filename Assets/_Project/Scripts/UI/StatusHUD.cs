@@ -24,6 +24,18 @@ namespace SeaSick.UI
         readonly HudLabel waterText = new HudLabel();
         readonly HudLabel navText = new HudLabel();
 
+        /// The ship panel's height in UITheme units at its TALLEST — the
+        /// flooding layout, which is the one anything stacked underneath has
+        /// to clear. Public so PerfHUD measures off it rather than
+        /// hand-copying the number and quietly overlapping the day this panel
+        /// grows another row.
+        public const float ShipPanelUnitsMax = 5.3f;
+
+        /// Bottom edge of the right-hand column (minimap + ship panel), in
+        /// pixels, for anything stacking below it.
+        public static float RightColumnBottom(int u, float pad) =>
+            pad + MiniMap.ReservedHeight + u * ShipPanelUnitsMax;
+
         void Start()
         {
             motor = FindFirstObjectByType<ShipMotor>();
@@ -90,7 +102,7 @@ namespace SeaSick.UI
             // Water aboard reads here, under the hull bar, rather than as a
             // panel over the boat. The row only exists when there is water.
             bool wet = bilge != null && bilge.Flooding;
-            float h = u * (wet ? 5.3f : 3.6f);
+            float h = u * (wet ? ShipPanelUnitsMax : 3.6f);
             float x = Screen.width - w - pad;
             float top = pad + MiniMap.ReservedHeight;
             UITheme.Rect(new Rect(x, top, w, h), UITheme.Panel);

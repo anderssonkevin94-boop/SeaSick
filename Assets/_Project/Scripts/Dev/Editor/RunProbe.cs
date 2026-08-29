@@ -15,6 +15,8 @@ using UnityEngine;
 public static class RunProbe
 {
     public static void Surf() => Call("SurfProbe");
+    public static void HitchStorm() => Call("HitchProbe", "Storm");
+    public static void Hitch() => Call("HitchProbe");
     public static void WeatherAxes() => Call("WeatherSheet", "Axes");
     public static void WeatherAxesLively() => Call("WeatherSheet", "AxesLively");
     public static void WeatherPatches() => Call("WeatherSheet", "Patches");
