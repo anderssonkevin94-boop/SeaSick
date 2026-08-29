@@ -405,7 +405,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 291c53b7c0fce4f34adaafcb7e4e7133, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Dev.PlaytestStart
-  active: 1
+  active: 0
   bearing: {x: -1, y: 0}
   minDistance: 1300
   maxDistance: 6000
@@ -2758,7 +2758,7 @@ MonoBehaviour:
   waveDrift: 1.3
   minTurnRate: 15
   maxTurnRate: 38
-  steerageWay: 0.15
+  asternFraction: 0.35
   surfGain: 1.6
   surfResponse: 2.2
   pitchLimit: 26
