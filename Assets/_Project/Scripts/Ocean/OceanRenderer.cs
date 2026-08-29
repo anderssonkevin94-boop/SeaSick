@@ -31,6 +31,13 @@ namespace SeaSick.Ocean
         bool spectrumDirty = true;
 
         public OceanSpectrumSettings Settings => settings;
+
+        /// How many times h0 has been regenerated this session. A rebuild
+        /// changes the surface DISCONTINUOUSLY — amplitudes step and, when the
+        /// weather axes have drifted past their threshold, the whole field
+        /// rotates — so anything investigating a jolt in the water wants to
+        /// know whether one landed on the same frame. PerfHUD reads it.
+        public int SpectrumRebuilds { get; private set; }
         public CascadeSet Cascades => cascades;
 
         /// Call after mutating settings; the spectrum rebuilds next frame.
@@ -94,6 +101,7 @@ namespace SeaSick.Ocean
             {
                 spectrum.Generate(cascades, settings);
                 spectrumDirty = false;
+                SpectrumRebuilds++;
             }
 
             int n = cascades.N;

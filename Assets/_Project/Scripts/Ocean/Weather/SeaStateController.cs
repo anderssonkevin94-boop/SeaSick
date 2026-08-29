@@ -46,6 +46,38 @@ namespace SeaSick.Ocean
         [SerializeField] float blendTime = 45f;
         [Tooltip("Spectrum rebuild throttle while blending, Hz.")]
         [SerializeField] float rebuildHz = 4f;
+
+        /// How far an axis must have turned before a rebuild is worth doing.
+        ///
+        /// THIS IS A STEP SIZE, NOT A DEADBAND. A rebuild applies the WHOLE
+        /// accumulated offset at once, so whatever this number is, it is the
+        /// smallest jolt the sea can give you -- the gate does not damp the
+        /// turn, it batches it up and delivers it in one piece.
+        ///
+        /// It was 1.5 degrees, and that is the bug behind "I'm sitting on a
+        /// wave and suddenly it drops out from under me". The swell wanders
+        /// +/-150 degrees on a 1600 s period -- about 0.4 deg/s -- so a 1.5 deg
+        /// gate fired roughly every four seconds and rotated the 62 m rollers
+        /// a degree and a half INSTANTLY. Rotating the directional spread
+        /// reassigns energy across k, so the surface under the hull does not
+        /// slide, it changes shape: metres of height, in one frame, on a sea
+        /// whose measured margin to the rail was under two metres. The picture
+        /// stays smooth throughout, which is exactly why it reads as the ocean
+        /// skipping rather than the game stuttering.
+        ///
+        /// At 0.1 deg the throttle above does the rate limiting instead, which
+        /// is what it was always for, and the step becomes whatever the axes
+        /// genuinely drifted in a quarter second -- 0.1 deg for the swell,
+        /// about 0.5 for the faster wind. A rebuild is one compute dispatch
+        /// over n^2 x 3, so paying it at the full 4 Hz instead of sporadically
+        /// costs nothing measurable.
+        ///
+        /// Lower is smoother right up until it stops mattering: past the point
+        /// where every throttle tick rebuilds anyway, this does nothing at all
+        /// and `rebuildHz` becomes the only lever. That lever is SERIALIZED
+        /// into Sea.unity at 4, so raising it needs a SerializedObject push,
+        /// not an edit here.
+        const float AxisRebuildDeg = 0.1f;
         [Tooltip("Seconds for the slow open-sea wander. A second, shorter octave rides on it at an incommensurate period so the breathing never settles into a rhythm the player can learn.")]
         [SerializeField] float wanderPeriod = 620f;
         [Tooltip("On the first frame, jump straight to the weather the ship's position asks for instead of easing into it over blendTime. Pressing play in storm water otherwise buys you the better part of a minute watching the sea grow -- and every probe and playtest that warps somewhere starts in the wrong sea.")]
@@ -501,8 +533,8 @@ namespace SeaSick.Ocean
             Vector2 axisP = FollowXZ();
             float windOffset = (WindAxis(axisP, OceanTime.Now) * 2f - 1f) * windTurnRange;
             float swellOffset = (SwellAxis(axisP, OceanTime.Now) * 2f - 1f) * swellTurnRange;
-            bool axesMoved = Mathf.Abs(windOffset - lastWindOffset) > 1.5f
-                          || Mathf.Abs(swellOffset - lastSwellOffset) > 1.5f;
+            bool axesMoved = Mathf.Abs(windOffset - lastWindOffset) > AxisRebuildDeg
+                          || Mathf.Abs(swellOffset - lastSwellOffset) > AxisRebuildDeg;
             if (OceanTime.Now - lastRebuildTime < 1.0 / rebuildHz) return;
             if (Mathf.Abs(severity - lastRebuildSeverity) < 0.002f && !axesMoved) return;
             lastRebuildTime = OceanTime.Now;
