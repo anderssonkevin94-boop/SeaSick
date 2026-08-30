@@ -158,6 +158,118 @@ namespace SeaSick.Terrain
             return norm > 0f ? sum / norm : 0f;
         }
 
+        /// The gradient vector `Grad` dots against. Same eight gradients, so
+        /// `dot(GradVec(...), d)` is `Grad(..., d.x, d.y)` exactly.
+        static float2 GradVec(int ix, int iy, int seed)
+        {
+            switch (Hash(ix, iy, seed) & 7u)
+            {
+                case 0: return new float2( 1f,  1f);
+                case 1: return new float2(-1f,  1f);
+                case 2: return new float2( 1f, -1f);
+                case 3: return new float2(-1f, -1f);
+                case 4: return new float2( 1.41421356f, 0f);
+                case 5: return new float2(-1.41421356f, 0f);
+                case 6: return new float2(0f,  1.41421356f);
+                default: return new float2(0f, -1.41421356f);
+            }
+        }
+
+        static void Corner(int ix, int iy, int seed, float dx, float dy, ref float n, ref float2 d)
+        {
+            float t = 0.5f - dx * dx - dy * dy;
+            if (t <= 0f) return;
+            float2 g = GradVec(ix, iy, seed);
+            float gd = g.x * dx + g.y * dy;
+            float t2 = t * t, t4 = t2 * t2;
+            n += t4 * gd;
+            // d/dd [ t^4 (g.d) ] with t = 0.5 - |d|^2, so dt/dd = -2d:
+            //   -8 t^3 (g.d) d  +  t^4 g
+            d += t4 * g - 8f * t2 * t * gd * new float2(dx, dy);
+        }
+
+        /// Simplex with its analytic derivative. Exact, not a finite
+        /// difference: within one simplex cell the corner offsets are the
+        /// sample point minus a constant, so the derivative is just the sum
+        /// of the three corners' own derivatives and no chain rule through
+        /// the skew is needed.
+        public static float SimplexD(in float2 p, int seed, out float2 deriv)
+        {
+            float s = (p.x + p.y) * F2;
+            int i = (int)math.floor(p.x + s);
+            int j = (int)math.floor(p.y + s);
+            float t = (i + j) * G2;
+            float x0 = p.x - (i - t);
+            float y0 = p.y - (j - t);
+
+            int i1 = x0 > y0 ? 1 : 0;
+            int j1 = 1 - i1;
+            float x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+            float x2 = x0 - 1f + 2f * G2, y2 = y0 - 1f + 2f * G2;
+
+            float n = 0f;
+            float2 d = float2.zero;
+            Corner(i, j, seed, x0, y0, ref n, ref d);
+            Corner(i + i1, j + j1, seed, x1, y1, ref n, ref d);
+            Corner(i + 1, j + 1, seed, x2, y2, ref n, ref d);
+            deriv = 70f * d;
+            return 70f * n;
+        }
+
+        /// **fBm that carves valleys instead of stacking blobs.**
+        ///
+        /// Each octave is damped by how steep the COARSER octaves already
+        /// are: `n / (1 + erosion * |grad|^2)`. Fine detail therefore
+        /// survives on flats and shoulders and is suppressed on steep faces,
+        /// which is what real erosion does to roughness — material will not
+        /// stay on a slope. What comes out is spurs with smooth flanks
+        /// running down to V-shaped hollows between them, which is the
+        /// structure the reference boards are made of and the one thing plain
+        /// fBm and ridged noise both cannot produce: octaves of fBm add
+        /// smaller blobs to bigger ones, and ridged noise makes crests
+        /// without ever making a drainage.
+        ///
+        /// It is an approximation of erosion, not a simulation — real
+        /// hydraulic erosion is a stateful sweep over a finite grid, and this
+        /// height function is a pure function of world position running in
+        /// Burst on streamed chunks. There is no water and nothing moves.
+        /// What it reproduces is the *statistical* signature.
+        ///
+        /// The gradient is accumulated WITHOUT the frequency scaling, on
+        /// purpose: with a base frequency of 1/400 the true gradient is
+        /// ~1e-3 and `erosion` would have to be ~1e5 to bite, which is not a
+        /// number anyone can tune. Accumulated scale-free, `erosion` is O(1).
+        /// Each octave's derivative is rotated back out of that octave's own
+        /// rotated domain first, or the sum would be of vectors in different
+        /// frames.
+        ///
+        /// At erosion = 0 this is `Fbm` exactly, term for term.
+        public static float ErodedRaw(in float2 worldXZ, int seed, int octaves, float baseFrequency,
+            float lacunarity, float gain, float erosion)
+        {
+            float freq = baseFrequency;
+            float amp = 1f, sum = 0f, norm = 0f;
+            float2 grad = float2.zero;
+            float2 p = worldXZ;
+            float2 rot = new float2(math.cos(OctaveRotation), math.sin(OctaveRotation));
+            p = new float2(p.x * BaseRotC - p.y * BaseRotS, p.x * BaseRotS + p.y * BaseRotC);
+            float rc = BaseRotC, rs = BaseRotS;   // cumulative rotation
+            for (int o = 0; o < octaves; o++)
+            {
+                float n = SimplexD(p * freq, seed + o * OctaveSeedStride, out float2 dq);
+                sum += amp * n / (1f + erosion * math.lengthsq(grad));
+                norm += amp;
+                // Rotation transpose: back into the common frame.
+                grad += amp * new float2(rc * dq.x + rs * dq.y, -rs * dq.x + rc * dq.y);
+                p = new float2(p.x * rot.x - p.y * rot.y, p.x * rot.y + p.y * rot.x);
+                float nc = rc * rot.x - rs * rot.y, ns = rs * rot.x + rc * rot.y;
+                rc = nc; rs = ns;
+                freq *= lacunarity;
+                amp *= gain;
+            }
+            return norm > 0f ? sum / norm : 0f;
+        }
+
         /// Fbm remapped to [0, 1].
         public static float Fbm01(in float2 worldXZ, int seed, int octaves, float baseFrequency,
             float lacunarity, float gain)

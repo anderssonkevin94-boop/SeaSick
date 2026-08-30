@@ -27,6 +27,12 @@ namespace SeaSick.Terrain
         public float lacunarity = 2f;
         [Range(0f, 1f)] public float gain = 0.5f;
 
+        [Header("Erosion")]
+        [Tooltip("How hard each octave is damped by the steepness of the coarser ones. This is what carves spurs and gullies instead of stacking blobs. 0 = plain fBm, bit for bit.")]
+        public float erosion = 2f;
+        [Tooltip("How much of it reaches the terrain, faded in by how far inland a spot is. At the shore the field is EXACTLY plain fBm, so every beach slope and coastline measurement is untouched.")]
+        [Range(0f, 1f)] public float erosionAmount = 1f;
+
         [Header("Island mask")]
         [Tooltip("Continentalness frequency, much lower than the base noise.")]
         public float maskFrequency = 1f / 2500f;

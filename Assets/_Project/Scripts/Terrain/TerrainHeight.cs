@@ -12,6 +12,7 @@ namespace SeaSick.Terrain
         public float seaLevel, worldRadius, worldEdgeFalloff;
         public float2 worldOffset;
         public int octaves; public float baseFrequency, lacunarity, gain;
+        public float erosion, erosionAmount;
         public int maskOctaves; public float maskFrequency, maskThreshold, maskFalloff;
         public float seabedDepth, deepSeabedDepth, shelfBand;
         public float baseHeight, reliefHeight;
@@ -41,6 +42,7 @@ namespace SeaSick.Terrain
                 seed = s.seed, seaLevel = s.seaLevel, worldRadius = s.worldRadius, worldEdgeFalloff = s.worldEdgeFalloff,
                 worldOffset = new float2(s.worldOffset.x, s.worldOffset.y),
                 octaves = s.octaves, baseFrequency = s.baseFrequency, lacunarity = s.lacunarity, gain = s.gain,
+                erosion = math.max(0f, s.erosion), erosionAmount = math.saturate(s.erosionAmount),
                 maskOctaves = s.maskOctaves, maskFrequency = s.maskFrequency, maskFalloff = s.maskFalloff,
                 maskThreshold = TerrainHeight.ThresholdForLandRatio(s.landRatio, s.maskOctaves),
                 seabedDepth = s.seabedDepth,
@@ -115,6 +117,36 @@ namespace SeaSick.Terrain
         /// everywhere are scenery; peaks you see occasionally are landmarks.
         const float RidgeRawMean = 0.2586f, RidgeToFbmScale = 0.7630f;
 
+        /// Measured by NoiseCheck at the shipped 5 octaves, 60k samples:
+        /// erosion leaves the MEAN alone (0.4995 against Fbm01's 0.4998 —
+        /// unlike the ridged field, which shifted it by a quarter of the
+        /// range and flattened every island) but takes about 13% off the
+        /// SPREAD, 0.1604 down to 0.1396. Left unremapped that is 13% less
+        /// relief everywhere, which would read as the profile curve being
+        /// wrong rather than as the noise being different.
+        ///
+        /// The spread saturates almost immediately — 0.1411 at erosion 0.5
+        /// and still 0.1392 at erosion 8 — so the remap fades in over the
+        /// first half unit and is constant after it.
+        const float ErodedMean = 0.4995f, ErodedToFbmScale = 1.1490f,
+                    ErodedSaturatesAt = 0.5f, FbmMean = 0.4998f;
+
+        /// The eroded field, put back on Fbm01's mean and spread.
+        ///
+        /// `e` is the erosion actually applied at this point, which is faded
+        /// by how far inland it is — so at the shoreline `e` is 0, the field
+        /// is plain fBm bit for bit, the remap is the identity, and every
+        /// coastline and beach slope this project has measured is untouched.
+        public static float ErodedShaped(in float2 p, in TerrainParams prm, float e)
+        {
+            float raw = TerrainNoise.ErodedRaw(p, prm.seed, prm.octaves,
+                prm.baseFrequency, prm.lacunarity, prm.gain, e) * 0.5f + 0.5f;
+            float t = math.saturate(e / ErodedSaturatesAt);
+            float mean = math.lerp(FbmMean, ErodedMean, t);
+            float scale = math.lerp(1f, ErodedToFbmScale, t);
+            return (raw - mean) * scale + FbmMean;
+        }
+
         public static float RidgeShaped(in float2 p, in TerrainParams prm)
             => math.saturate((TerrainNoise.RidgedRaw(p + prm.worldOffset, prm.seed + TerrainParams.RidgeSeedOffset,
                     prm.octaves, prm.baseFrequency, prm.lacunarity, prm.gain) - RidgeRawMean)
@@ -139,7 +171,13 @@ namespace SeaSick.Terrain
 
         public static float Noise01(in float2 p, in TerrainParams prm, float interior)
         {
-            float n = TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed, prm.octaves, prm.baseFrequency, prm.lacunarity, prm.gain);
+            // ONE evaluation, not two. `ErodedRaw` at erosion 0 is `Fbm`
+            // term for term (NoiseCheck: worst difference 1.8e-7), so fading
+            // the EROSION by how far inland we are gives the coast its
+            // untouched fBm for free, instead of computing both fields and
+            // lerping between them.
+            float n = ErodedShaped(p + prm.worldOffset, prm,
+                prm.erosion * prm.erosionAmount * interior);
             if (prm.ridgeAmount <= 0f) return n;
 
             // Weighted by how far INLAND this is, not only by how high.
