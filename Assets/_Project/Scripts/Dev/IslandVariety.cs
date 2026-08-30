@@ -32,13 +32,15 @@ public class IslandVariety : MonoBehaviour
         // fooled by that number before (the "355 m island" that was really
         // 900-2000 m of land), and the first version of this probe reported
         // a 3684 m island that has 47 ha in it.
-        sb.AppendLine("island           area ha  r_eff  home m   peak  peak/r_eff  rocky%  walk%  rockiness");
+        sb.AppendLine("island           area ha  r_eff  home m   peak  peak/r_eff  rocky%  walk%  rock  green  trees");
         var ratios = new System.Collections.Generic.List<float>();
         var rockies = new System.Collections.Generic.List<float>();
         var walks = new System.Collections.Generic.List<float>();
         var sizes = new System.Collections.Generic.List<float>();
         var peaks = new System.Collections.Generic.List<float>();
         var areas = new System.Collections.Generic.List<float>();
+        var greens = new System.Collections.Generic.List<float>();
+        var treeCounts = new System.Collections.Generic.List<float>();
         var home = Island.All.Find(i => i != null && i.IsHome);
         Vector3 homePos = home != null ? home.transform.position : Vector3.zero;
 
@@ -76,14 +78,21 @@ public class IslandVariety : MonoBehaviour
             sizes.Add(rEff); peaks.Add(peak);
             float fromHome = Island.FlatDistance(c, homePos);
             areas.Add(areaHa);
+            float verdancy = TerrainHeight.Verdancy01(new float2(c.x, c.z), prm);
+            // Trees counted off the BAKED MESH by trunk colour, not off the
+            // scatter rule that wrote it -- the same reason WoodProbe does.
+            int trees = CountTrees(isle);
+            greens.Add(verdancy); treeCounts.Add(trees);
             sb.AppendLine($"{isle.name,-14} {areaHa,8:F1} {rEff,6:F0} {fromHome,7:F0} {peak,6:F0} "
-                + $"{ratio,11:F3} {rockPct,7:F1} {walkPct,6:F1} {rockiness,10:F2}");
+                + $"{ratio,11:F3} {rockPct,7:F1} {walkPct,6:F1} {rockiness,5:F2} {verdancy,6:F2} {trees,6}");
         }
 
         sb.AppendLine();
         sb.AppendLine($"peak/r_eff  {Spread(ratios)}   (references read 0.30-0.45)");
         sb.AppendLine($"rocky %     {Spread(rockies)}");
         sb.AppendLine($"walkable %  {Spread(walks)}");
+        sb.AppendLine($"verdancy    {Spread(greens)}");
+        sb.AppendLine($"trees       {Spread(treeCounts)}   (off the baked mesh, not the scatter rule)");
         sb.AppendLine();
         // The band Kevin picked out by eye, so "a few more of those" has a
         // number attached and can be checked rather than eyeballed again.
@@ -103,6 +112,28 @@ public class IslandVariety : MonoBehaviour
 
         Debug.Log("ISLAND VARIETY\n" + sb);
         System.IO.File.WriteAllText("/tmp/island-variety.txt", sb.ToString());
+    }
+
+    /// Every tree in an island's baked scenery mesh, by runs of the one
+    /// flat trunk brown IslandScenery writes.
+    static int CountTrees(Island isle)
+    {
+        int n = 0;
+        foreach (var t in isle.GetComponentsInChildren<Transform>())
+        {
+            if (t.name != "Scenery") continue;
+            var mf = t.GetComponent<MeshFilter>();
+            if (mf == null || mf.sharedMesh == null) continue;
+            var cols = mf.sharedMesh.colors32;
+            bool run = false;
+            for (int i = 0; i < cols.Length; i++)
+            {
+                bool brown = cols[i].r == 92 && cols[i].g == 64 && cols[i].b == 40;
+                if (brown && !run) { n++; run = true; }
+                else if (!brown) run = false;
+            }
+        }
+        return n;
     }
 
     /// Pearson correlation. The lists stay in island order, which is why

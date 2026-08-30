@@ -73,7 +73,7 @@ public class VillageProbe : MonoBehaviour
         }
         var probe = IslandScenery.Build(island.transform, island.transform.position, island.Radius,
             (x, z) => Island.TerrainHeight(x, z), pop.terrain, island.RadiusAt,
-            pop.terrain.seed * 7919 + 0, null);
+            pop.terrain.seed * 7919 + 0, TerrainParams.From(pop.terrain), null);
         if (probe == null) { sb.AppendLine("re-bake produced nothing"); Report(sb.ToString()); return; }
         var bare = Trunks(probe.GetComponent<MeshFilter>().sharedMesh);
         probe.SetActive(false);

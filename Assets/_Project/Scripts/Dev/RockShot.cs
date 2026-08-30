@@ -33,6 +33,10 @@ public class RockShot : MonoBehaviour
         }
         Debug.Log($"RockShot: {best.name}, rockiness {bestRock:F2}");
 
+        // Pinned mid-morning. An unpinned shot came back a black rectangle
+        // once already; the day/night cycle is short enough to roll over
+        // inside one probe.
+        SeaSick.World.TimeOfDay.SetTime01(0.36f);
         if (anchor != null) anchor.CastOff();
         yield return null;
 
@@ -53,6 +57,7 @@ public class RockShot : MonoBehaviour
         if (rb != null) { rb.position = at; rb.linearVelocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
         ship.AnchorPoint = at;
         yield return new WaitForSeconds(6f);
+        SeaSick.World.TimeOfDay.SetTime01(0.36f);
 
         Shoot("/tmp/rock-before.png", ship, best, bestH);
 
@@ -63,6 +68,7 @@ public class RockShot : MonoBehaviour
         streamer.MarkDirty();
         Debug.Log("RockShot: cranked rock and marked the streamer dirty");
         yield return new WaitForSeconds(8f);
+        SeaSick.World.TimeOfDay.SetTime01(0.36f);
 
         Shoot("/tmp/rock-after.png", ship, best, bestH);
         Destroy(gameObject);
@@ -70,9 +76,18 @@ public class RockShot : MonoBehaviour
 
     static void Shoot(string path, SeaSick.Ship.ShipMotor ship, Island isle, float peak)
     {
+        // Camera.main is null whenever the chase rig is inactive or
+        // untagged, which is exactly what happens after a probe has warped
+        // the ship about. Copying from it then throws, and the shot comes
+        // back as an empty blue frame with a NullReferenceException nobody
+        // reads. Fall back to any camera in the scene.
+        var src = Camera.main;
+        if (src == null) foreach (var c in Camera.allCameras) { src = c; break; }
+        if (src == null) { Debug.LogError("RockShot: no camera to copy from"); return; }
+
         var go = new GameObject("RockCam");
         var cam = go.AddComponent<Camera>();
-        cam.CopyFrom(Camera.main);
+        cam.CopyFrom(src);
         cam.fieldOfView = 40f;
         cam.farClipPlane = 8000f;
         Vector3 look = isle.transform.position; look.y = peak * 0.45f;

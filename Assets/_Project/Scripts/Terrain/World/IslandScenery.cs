@@ -55,7 +55,7 @@ namespace SeaSick.Terrain
         /// they stood before there was one.
         public static GameObject Build(Transform parent, Vector3 centre, float meanR,
             System.Func<float, float, float> height, TerrainSettings terrain,
-            System.Func<float, float> radiusAt, int seed,
+            System.Func<float, float> radiusAt, int seed, TerrainParams prm,
             System.Func<float, float, bool> keepOut = null)
         {
             var rng = new System.Random(seed);
@@ -78,8 +78,25 @@ namespace SeaSick.Terrain
                                                   centre.z + Mathf.Cos(ang) * d));
                 }
             }
-            float treeLine = Mathf.Max(18f, peak * 0.62f);
             float sand = terrain != null ? terrain.sandHeight : 3.2f;
+
+            // **There is no tree line.** It used to be
+            // `max(18, peak * 0.62)` — a horizontal contour, which is the
+            // single most artificial thing about these islands and which
+            // appears nowhere in the reference boards. There, green climbs
+            // nearly to the summit up gentle spurs and bare stone reaches
+            // the water on steep faces: cover is a function of SLOPE and of
+            // what the ground is made of, and altitude barely enters into
+            // it. Only the very top thins, for exposure, and that is a
+            // summit rather than a line.
+            //
+            // The two island-scale character fields are read ONCE, at the
+            // centre: they are slow enough that one landmass sits inside one
+            // value of each, which is the whole point of them (sample per
+            // cell and a sandbank blends into a crag across one beach).
+            var c2 = new Unity.Mathematics.float2(centre.x, centre.z);
+            float verdancy = TerrainHeight.Verdancy01(c2, prm);
+            float rockiness = TerrainHeight.Rock01(c2, prm);
 
             // Jittered grid, so the spacing reads as a wood rather than as a
             // scatter with clumps and bald patches.
@@ -102,7 +119,10 @@ namespace SeaSick.Terrain
 
             float step = Mathf.Clamp(meanR * 0.02f, 7f, 12f);
             int trees = 0, rocks = 0;
-            const int MaxTrees = 3000, MaxRocks = 300;
+            const int MaxTrees = 3000, MaxRocks = 900;
+
+            /// Below this peak an island has no exposed summit to thin.
+            const float ExposedAbove = 60f;
 
             // Thin UNIFORMLY to the budget rather than filling until it runs
             // out. The scatter walks the grid in order, so a hard cap dresses
@@ -111,8 +131,21 @@ namespace SeaSick.Terrain
             // clean green slope beside it. Estimating the eligible cells up
             // front and keeping that fraction spreads the same number of
             // trees over the whole island.
+            // **The budget has to know what the rule will accept.**
+            //
+            // `keep` thins uniformly to the tree cap. It was calibrated
+            // against the OLD acceptance rate, and the new cover rule
+            // multiplies by verdancy, slope and exposure on top of it — so
+            // it double-counted and the wood collapsed by about five times,
+            // worst on the big islands where `keep` was already small: a
+            // 314 m island came back with 152 trees on it. The expected
+            // acceptance now includes verdancy, and the budget itself scales
+            // with it, so a bare island is bare because it is BARE and not
+            // because it is large.
             float cells = Mathf.PI * maxR * maxR / (step * step);
-            float keep = Mathf.Clamp01(MaxTrees / Mathf.Max(1f, cells * 0.45f));
+            float budget = MaxTrees * Mathf.Lerp(0.3f, 1f, verdancy);
+            float expected = cells * 0.45f * verdancy;
+            float keep = Mathf.Clamp01(budget / Mathf.Max(1f, expected));
 
             for (float z = -maxR; z <= maxR && trees < MaxTrees; z += step)
             {
@@ -132,10 +165,37 @@ namespace SeaSick.Terrain
                     float sz = (height(wx, wz + 3f) - height(wx, wz - 3f)) / 6f;
                     float slope = Mathf.Sqrt(sx * sx + sz * sz);
 
-                    if (h > treeLine || slope > 0.62f)
+                    // Rock that has broken through the soil is stone, and
+                    // nothing roots in it.
+                    float proud = TerrainHeight.RockBreak(
+                        new Unity.Mathematics.float2(wx, wz), rockiness, prm);
+
+                    float slopeTerm = 1f - Mathf.SmoothStep(0f, 1f,
+                        Mathf.InverseLerp(prm.vegSlopeSoft, prm.vegSlopeHard, slope));
+                    float rockTerm = proud > 0.4f ? 1f - prm.vegRockSuppress : 1f;
+                    // Exposure is a MOUNTAIN phenomenon and has to be gated
+                    // on the island being one. Keyed to `peak` alone it broke
+                    // completely on flat land: a 5 m sandbank put its
+                    // exposure band at 4.0-5.1 m, which is the whole island
+                    // above the beach, so every tree on it was refused and a
+                    // 10,000-cell island came back with zero.
+                    float exposure = peak < ExposedAbove ? 1f
+                        : 1f - Mathf.SmoothStep(0f, 1f,
+                            Mathf.InverseLerp(peak * 0.80f, peak * 1.02f, h));
+                    float chance = verdancy * slopeTerm * rockTerm * exposure * keep;
+
+                    if (rng.NextDouble() > chance)
                     {
-                        // Above the trees, or too steep for them: scree.
-                        if (rocks < MaxRocks && rng.NextDouble() < 0.16)
+                        // Scree where a tree could not hold: steep ground, or
+                        // rock that has already surfaced.
+                        bool stony = slope > prm.vegSlopeSoft || proud > 0.4f;
+                        // Thinned by `keep` like the trees are. Un-thinned, a
+                        // big island spent its whole rock budget on the first
+                        // band the scan reached and came back with 300
+                        // boulders in a stripe and bare ground beyond it —
+                        // the same failure the tree budget already carries a
+                        // comment about.
+                        if (rocks < MaxRocks && stony && rng.NextDouble() < 0.16 * keep)
                         {
                             AddBoulder(verts, norms, cols, tris, new Vector3(wx, h, wz), rng,
                                 keepOut == null || !keepOut(wx, wz));
@@ -143,10 +203,6 @@ namespace SeaSick.Terrain
                         }
                         continue;
                     }
-                    // Thin the wood out near the tree line so it has an edge
-                    // instead of stopping on a contour like a mown lawn.
-                    float t = Mathf.InverseLerp(treeLine, treeLine * 0.72f, h);
-                    if (rng.NextDouble() > Mathf.Clamp01(0.25f + t * 0.75f) * keep) continue;
 
                     AddTree(verts, norms, cols, tris, new Vector3(wx, h, wz), rng,
                         keepOut == null || !keepOut(wx, wz));
@@ -155,6 +211,10 @@ namespace SeaSick.Terrain
                     trees++;
                 }
             }
+
+            Debug.Log($"IslandScenery: r{meanR:F0} peak {peak:F0} verdancy {verdancy:F2} "
+                + $"rockiness {rockiness:F2} keep {keep:F3} cells {cells:F0} step {step:F1} "
+                + $"-> {trees} trees, {rocks} rocks");
 
             if (verts.Count == 0) return null;
 

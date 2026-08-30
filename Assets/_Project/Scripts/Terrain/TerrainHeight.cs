@@ -25,12 +25,14 @@ namespace SeaSick.Terrain
         public float rockCharacterFrequency, rockBias, rockFrequency, rockRelief,
                      rockThresholdSoft, rockThresholdHard;
         public int rockOctaves;
+        public float verdancyFrequency, verdancyBias, verdancyFloor, verdancyRockSuppress,
+                     vegSlopeSoft, vegSlopeHard, vegRockSuppress;
 
         public const int MaskSeedOffset = 7919, DetailSeedOffset = 104729,
                          MassifSeedOffset = 15485863, RidgeSeedOffset = 4241,
                          ShoreSeedOffset = 611953, UplandSeedOffset = 2750159,
                          RockSeedOffset = 32452843, CragSeedOffset = 49979687,
-                         SkerrySeedOffset = 86028121;
+                         SkerrySeedOffset = 86028121, VerdancySeedOffset = 22801763;
 
         public static TerrainParams From(TerrainSettings s)
         {
@@ -67,6 +69,13 @@ namespace SeaSick.Terrain
                 rockRelief = math.max(0f, s.rockRelief),
                 rockThresholdSoft = s.rockThresholdSoft,
                 rockThresholdHard = math.min(s.rockThresholdHard, s.rockThresholdSoft),
+                verdancyFrequency = s.verdancyFrequency,
+                verdancyBias = math.max(0.05f, s.verdancyBias),
+                verdancyFloor = s.verdancyFloor,
+                verdancyRockSuppress = s.verdancyRockSuppress,
+                vegSlopeSoft = s.vegSlopeSoft,
+                vegSlopeHard = math.max(s.vegSlopeSoft + 0.01f, s.vegSlopeHard),
+                vegRockSuppress = s.vegRockSuppress,
             };
             return p;
         }
@@ -289,6 +298,26 @@ namespace SeaSick.Terrain
             => math.pow(TerrainNoise.Fbm01(p + prm.worldOffset,
                 prm.seed + TerrainParams.RockSeedOffset, 2,
                 prm.rockCharacterFrequency, 2f, 0.5f), prm.rockBias);
+
+        /// **How green this island is**, in [0, 1].
+        ///
+        /// The third character axis, and the one that makes the others read
+        /// as a KIND rather than as independent dice. Rock and soil are
+        /// opposites — a crag island is not a wood — so verdancy is its own
+        /// island-scale field *suppressed by rockiness*. Roll them
+        /// independently and you get lush crags and bare downs, which is
+        /// noise; correlate them and low-rock-lush and high-rock-bare emerge
+        /// as recognisable island kinds without anything having to enumerate
+        /// a list of them.
+        public static float Verdancy01(in float2 p, in TerrainParams prm)
+        {
+            float v = math.pow(TerrainNoise.Fbm01(p + prm.worldOffset,
+                prm.seed + TerrainParams.VerdancySeedOffset, 2,
+                prm.verdancyFrequency, 2f, 0.5f), prm.verdancyBias);
+            float rocky = Rock01(p, prm);
+            return math.lerp(prm.verdancyFloor, 1f,
+                math.saturate(v * (1f - prm.verdancyRockSuppress * rocky)));
+        }
 
         /// **Metres of rock standing PROUD of the soil here.** Zero almost
         /// everywhere.

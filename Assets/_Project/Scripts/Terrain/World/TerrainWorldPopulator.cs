@@ -286,7 +286,7 @@ namespace SeaSick.Terrain
             Village village = null)
         {
             IslandScenery.Build(parent, centre, meanR, Height, terrain,
-                ang => island.RadiusAt(ang), terrain.seed * 7919 + index,
+                ang => island.RadiusAt(ang), terrain.seed * 7919 + index, prm,
                 village != null ? (System.Func<float, float, bool>)village.KeepOut : null);
         }
 

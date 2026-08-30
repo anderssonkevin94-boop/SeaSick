@@ -110,6 +110,22 @@ namespace SeaSick.Terrain
         [Tooltip("And on the rockiest. Lower means rock breaks out more often.")]
         [Range(0f, 1f)] public float rockThresholdHard = 0.44f;
 
+        [Header("Vegetation character")]
+        [Tooltip("Island-scale: how GREEN an island is. Same reasoning as rockiness -- slow enough that one landmass sits inside one value.")]
+        public float verdancyFrequency = 1f / 5800f;
+        [Tooltip("Bias on verdancy. 1 is an even spread of lush and bare islands.")]
+        public float verdancyBias = 1f;
+        [Tooltip("Even the barest island keeps this much scrub, so nothing comes out as a dead grey disc.")]
+        [Range(0f, 1f)] public float verdancyFloor = 0.10f;
+        [Tooltip("How strongly rockiness suppresses green. A crag island is not a wood -- this is what makes the two character axes agree instead of rolling independent dice.")]
+        [Range(0f, 1f)] public float verdancyRockSuppress = 0.65f;
+        [Tooltip("Slope where the wood starts thinning. NOT an altitude: the references have green nearly to the summit on gentle ground and bare stone at the waterline on a steep face.")]
+        public float vegSlopeSoft = 0.34f;
+        [Tooltip("Slope where nothing grows at all.")]
+        public float vegSlopeHard = 0.70f;
+        [Tooltip("How much PROUD ROCK kills trees. Rock that has broken through is stone, not soil.")]
+        [Range(0f, 1f)] public float vegRockSuppress = 0.88f;
+
         [Header("Detail")]
         public float detailFrequency = 1f / 25f;
         [Range(1, 4)] public int detailOctaves = 2;
