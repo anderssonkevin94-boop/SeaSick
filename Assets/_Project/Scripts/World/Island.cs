@@ -227,18 +227,32 @@ namespace SeaSick.World
             return transform.position + new Vector3(Mathf.Sin(angleRad) * dd, ly, Mathf.Cos(angleRad) * dd);
         }
 
+        /// The island whose SHORE is nearest -- not whose centre is.
+        ///
+        /// Centre distance is the wrong question in a world of lobed islands
+        /// 900-2000 m across: a ship lying 20 m off a small island's beach is
+        /// routinely nearer the CENTRE of a big one several hundred metres
+        /// away, and then everything that asks this -- the landing prompt,
+        /// the grounding check, the camera's hill clamp, the crew's pathing
+        /// -- answers about an island the ship is nowhere near. Measured on
+        /// the shipped world it cost **12 of Island_1's 34 approach bearings
+        /// their landing prompt outright**, on the island whose shore lies
+        /// closest to home and which the player therefore meets first.
+        ///
+        /// The gap goes negative inside an island, which is what the
+        /// grounding check wants anyway.
         public static Island Nearest(Vector3 pos, bool requireResources = false)
         {
             Island best = null;
-            float bestSq = float.MaxValue;
+            float bestGap = float.MaxValue;
             foreach (var isle in All)
             {
                 if (isle == null) continue;
                 if (requireResources && !isle.HasResources) continue;
                 Vector3 d = isle.transform.position - pos;
                 d.y = 0f;
-                float sq = d.sqrMagnitude;
-                if (sq < bestSq) { bestSq = sq; best = isle; }
+                float gap = d.magnitude - isle.RadiusToward(pos);
+                if (gap < bestGap) { bestGap = gap; best = isle; }
             }
             return best;
         }

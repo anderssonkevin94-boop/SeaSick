@@ -198,14 +198,7 @@ namespace SeaSick.Ship
 
                 case State.Weighing:
                     timer -= dt;
-                    if (timer <= 0f)
-                    {
-                        motor.Anchored = false;
-                        motor.MooringHeading = null;
-                        CurrentIsland = null;
-                        CurrentDock = null;
-                        CurrentState = State.Underway;
-                    }
+                    if (timer <= 0f) GetUnderway();
                     break;
 
                 case State.Ashore:
@@ -374,6 +367,23 @@ namespace SeaSick.Ship
         /// One press to put a shore party on an island: anchor, warp in
         /// alongside, run the plank out and send the crew down it. Splitting
         /// this into "anchor" then "go ashore" was two taps for one intention.
+        /// Put a shore party on an island, from outside -- what the button
+        /// and the spacebar both do. False with the reason left in `why`, so
+        /// a probe can tell "no prompt was offered" from "the prompt was
+        /// there and refused", which look identical from the deck.
+        public bool TryLand(out string why)
+        {
+            if (CurrentState != State.Underway) { why = $"not underway ({CurrentState})"; return false; }
+            var isle = IslandInRange();
+            if (isle == null) { why = "no island in range"; return false; }
+            if (!CanLandHere(isle)) { why = $"{isle.name}: sheer cliff on this bearing"; return false; }
+            if (motor.CurrentSpeed > approachSpeedLimit)
+            { why = $"too fast ({motor.CurrentSpeed:F1} > {approachSpeedLimit})"; return false; }
+            Land(isle);
+            why = isle.name;
+            return true;
+        }
+
         void Land(Island isle)
         {
             DropAnchor(isle);
@@ -423,8 +433,29 @@ namespace SeaSick.Ship
         {
             timer = weighTime;
             if (timer > 0f) { CurrentState = State.Weighing; return; }
+            GetUnderway();
+        }
+
+        /// Everything she has to let go of, in ONE place.
+        ///
+        /// It was two, and they had drifted. `weighTime` is 0, so weighing
+        /// takes the instant path every single time and the timed branch in
+        /// `Update` — the one that also cleared `CurrentDock` and the forced
+        /// mooring heading — was dead code. So **casting off from the pier
+        /// left `CurrentDock` pointing at home for the rest of the voyage**,
+        /// and `MoorAlongside` takes its pier branch whenever that is set:
+        /// the plank stayed inboard at every island the crew ever landed on,
+        /// `landingPending` never resolved, nobody went ashore, and the
+        /// anchor spring was quietly easing her back toward the home berth
+        /// from a thousand metres away. Every voyage now starts tied up, so
+        /// this was on the only path there is.
+        void GetUnderway()
+        {
             motor.Anchored = false;
+            motor.MooringHeading = null;
             CurrentIsland = null;
+            CurrentDock = null;
+            landingPending = false;
             CurrentState = State.Underway;
         }
 

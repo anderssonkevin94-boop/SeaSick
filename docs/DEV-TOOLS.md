@@ -651,3 +651,19 @@ a target texture.
   of the frame centre instead of the measured 42 m half-width sounded harmless
   and picked a clearing that holds exactly one building. Measure the real
   constraint; a guessed one is wrong in both directions at once.
+
+### `LandProbe` (`RunProbe.Land` and `RunProbe.LandSail`)
+`Land` stands a virtual ship 20 m off every island on 36 bearings and asks the
+**same three questions `AnchorController` asks, in that order** — which island
+does it think it is beside, is the ship inside that island's reach, does that
+island have a beach here. Reporting only the last would say "beach: yes" on a
+shore where no prompt ever appears, because the first question already picked a
+different island. It also measures the shore slope straight off the height
+field, so the island's own `hasBeach` has something independent to disagree
+with.
+
+`LandSail` sails the gathering half for real: cast off, stand off the nearest
+island with resources, press LAND, and watch for thirty seconds. It presses the
+same buttons the player presses and never calls `SendAshore` itself — which is
+the only reason it caught the failure below, where the prompt worked perfectly
+and nothing happened afterwards.
