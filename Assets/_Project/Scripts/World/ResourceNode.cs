@@ -43,6 +43,25 @@ namespace SeaSick.World
             hitsToHarvest = Mathf.Max(1, hits);
         }
 
+        // --- trees that live in the baked scenery mesh --------------------
+
+        Terrain.SceneryWood wood;
+        int treeIndex = -1;
+
+        /// A node standing on a real tree in the island's scenery mesh.
+        ///
+        /// It has no renderer of its own — the tree is already drawn, as part
+        /// of the one welded mesh — so this is a transform, a claim and a hit
+        /// count. Harvesting it tells the mesh to drop that tree.
+        public void ConfigureScenery(Island island, Terrain.SceneryWood w, int index)
+        {
+            resource = "Timber";
+            Home = island;
+            hitsToHarvest = 3;
+            wood = w;
+            treeIndex = index;
+        }
+
         public bool TryClaim(Object owner)
         {
             if (Harvested || Claim.Held) return false;
@@ -66,11 +85,22 @@ namespace SeaSick.World
         {
             Harvested = true;
             Claim = default;
+            // A scenery tree has to come down in the MESH -- there is nothing
+            // to deactivate, because this object was never what was drawn.
+            if (wood != null && treeIndex >= 0)
+            {
+                wood.NodeHarvested(treeIndex);
+                Destroy(gameObject);
+                return;
+            }
             gameObject.SetActive(false);
         }
 
         void Update()
         {
+            // A scenery node draws nothing of its own, so there is no shake
+            // to animate -- the strike reads on the crew, not on the tree.
+            if (wood != null) return;
             if (Time.time > shakeUntil)
             {
                 if (shakeStrength > 0f)

@@ -56,9 +56,15 @@ namespace SeaSick.Terrain
         public static GameObject Build(Transform parent, Vector3 centre, float meanR,
             System.Func<float, float, float> height, TerrainSettings terrain,
             System.Func<float, float> radiusAt, int seed, TerrainParams prm,
+            SeaSick.World.Island isle = null,
             System.Func<float, float, bool> keepOut = null)
         {
             var rng = new System.Random(seed);
+            // Where every tree's vertices live, recorded as they are written.
+            // Reconstructing this afterwards by trunk colour is possible (the
+            // probes do it) but it is a guess about a run of bytes; this is
+            // the builder saying what it built.
+            var index = new List<SceneryWood.Tree>();
             var verts = new List<Vector3>();
             var norms = new List<Vector3>();
             var cols = new List<Color32>();
@@ -204,8 +210,16 @@ namespace SeaSick.Terrain
                         continue;
                     }
 
+                    int vStart = verts.Count;
                     AddTree(verts, norms, cols, tris, new Vector3(wx, h, wz), rng,
                         keepOut == null || !keepOut(wx, wz));
+                    if (verts.Count > vStart)
+                        index.Add(new SceneryWood.Tree
+                        {
+                            baseAt = new Vector3(wx, h, wz),
+                            vertStart = vStart,
+                            vertCount = verts.Count - vStart,
+                        });
                     // Counted whether or not it was placed, so the budget and
                     // the loop's exit are the same with a clearing as without.
                     trees++;
@@ -230,6 +244,7 @@ namespace SeaSick.Terrain
             mesh.RecalculateBounds();
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             go.AddComponent<MeshRenderer>().sharedMaterial = SceneryMaterial();
+            go.AddComponent<SceneryWood>().Configure(mesh, index, isle);
             return go;
         }
 

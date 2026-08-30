@@ -19,6 +19,8 @@ namespace SeaSick.Ship
         [SerializeField] float berthDistance = 11f;
         [Tooltip("How close to her berth she has to be before the dock will take her. About two ship lengths.")]
         [SerializeField] float dockRange = 55f;
+        [Tooltip("How far from the shore party real scenery trees are stood up as harvestable.")]
+        [SerializeField] float woodReach = 130f;
         [Tooltip("Start the voyage tied up at home, rather than adrift off the beach.")]
         [SerializeField] bool startAtHomeDock = true;
         bool startedDocked;
@@ -203,6 +205,17 @@ namespace SeaSick.Ship
 
                 case State.Ashore:
                     Repair(dt);
+                    // Top up as they work inland and fell what they were
+                    // given; the wood is capped at a few dozen live nodes.
+                    restockIn -= dt;
+                    if (restockIn <= 0f)
+                    {
+                        restockIn = 3f;
+                        Vector3 at = Vector3.zero; int n = 0;
+                        foreach (var c in crew)
+                            if (c != null && !c.IsAboard) { at += c.transform.position; n++; }
+                        if (n > 0) StockTheWood(at / n);
+                    }
                     if (AllAboard()) { CurrentState = State.Anchored; repairing = false; }
                     break;
             }
@@ -406,6 +419,12 @@ namespace SeaSick.Ship
                 ? gangway.LandingPoint
                 : CurrentIsland.ShorePoint(0, 1, transform.position);
 
+            // Stand harvest nodes on the real trees around the landing, so
+            // the crew cut the wood that is actually drawn rather than the
+            // handful of prop trees. 1.9% of an island's trees used to be
+            // cuttable; see SceneryWood.
+            StockTheWood(landing);
+
             for (int i = 0; i < crew.Length; i++)
             {
                 if (crew[i] == null) continue;
@@ -413,6 +432,16 @@ namespace SeaSick.Ship
                 crew[i].GoAshore(landing + spread, CurrentIsland, hold, gangway, voyage);
             }
             CurrentState = State.Ashore;
+        }
+
+        float restockIn;
+
+        /// Materialise harvest nodes on the scenery trees around a point.
+        void StockTheWood(Vector3 near)
+        {
+            if (CurrentIsland == null) return;
+            var wood = CurrentIsland.GetComponentInChildren<SeaSick.Terrain.SceneryWood>();
+            if (wood != null) wood.Populate(near, woodReach);
         }
 
         void RecallCrew()

@@ -147,8 +147,52 @@ public class LandProbe : MonoBehaviour
         }
         sb.AppendLine($"gathered in 30 s: {voyage.TotalHeld - held0}");
 
+        // How much of the wood is workable, and did any of it come down?
+        // Felled trees are counted off the BAKED MESH -- trunk runs whose
+        // vertices have all collapsed onto one point -- rather than off the
+        // bookkeeping that felled them.
+        var wood = target.GetComponentInChildren<SeaSick.Terrain.SceneryWood>();
+        int scenery = wood != null ? wood.TreeCount : 0;
+        int standing = ResourceNode.CountFree(target);
+        int felled = FelledInMesh(target);
+        sb.AppendLine($"wood: {scenery} scenery trees, {standing} standing as harvestable, "
+            + $"{felled} felled in the mesh");
+        sb.AppendLine($"  workable at once: {(scenery > 0 ? 100f * standing / scenery : 0f):F1}% "
+            + "(the whole island used to offer 1.9%, prop trees only)");
+        sb.AppendLine($"  island stock left: {target.Remaining:F0} — the economy is unchanged; "
+            + "the trees are where the timber comes from, not how much there is");
+
         Debug.Log("LAND PROBE — SAIL\n" + sb);
         System.IO.File.WriteAllText("/tmp/land-sail.txt", sb.ToString());
         Destroy(gameObject);
+    }
+
+    /// Trunk runs whose vertices have all collapsed to a single point.
+    static int FelledInMesh(Island isle)
+    {
+        int n = 0;
+        foreach (var t in isle.GetComponentsInChildren<Transform>())
+        {
+            if (t.name != "Scenery") continue;
+            var mf = t.GetComponent<MeshFilter>();
+            if (mf == null || mf.sharedMesh == null) continue;
+            var v = mf.sharedMesh.vertices;
+            var c = mf.sharedMesh.colors32;
+            int start = -1;
+            for (int i = 0; i <= c.Length; i++)
+            {
+                bool brown = i < c.Length && c[i].r == 92 && c[i].g == 64 && c[i].b == 40;
+                if (brown && start < 0) start = i;
+                else if (!brown && start >= 0)
+                {
+                    bool collapsed = true;
+                    for (int k = start + 1; k < i; k++)
+                        if ((v[k] - v[start]).sqrMagnitude > 1e-6f) { collapsed = false; break; }
+                    if (collapsed) n++;
+                    start = -1;
+                }
+            }
+        }
+        return n;
     }
 }
