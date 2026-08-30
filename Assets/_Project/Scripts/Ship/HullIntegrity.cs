@@ -69,8 +69,6 @@ namespace SeaSick.Ship
 
         void Update()
         {
-            // Whichever obstacle we're actually inside — island or reef.
-            var isle = Island.Nearest(transform.position);
             var reef = Reef.Nearest(transform.position);
 
             Vector3 obstaclePos = Vector3.zero;
@@ -78,19 +76,32 @@ namespace SeaSick.Ship
             float damageScale = 1f;
             bool intruding = false;
 
-            // Islands aren't circles any more — use the shoreline distance on
-            // the bearing the ship is actually approaching from.
-            if (isle != null)
+            // **Land is the height field, not a radius.**
+            //
+            // This used to be `Island.RadiusToward` — a 46-sector radial
+            // profile that was the hull's ONLY collision boundary. It cannot
+            // describe a bay or a lobe: measured against the real waterline
+            // on 360 bearings, it was out by a mean of 1–23 m and a worst of
+            // **934 m out to sea** on the biggest island, with stretches of
+            // real land **690 m inside it** that you could sail straight
+            // through. Invisible walls and phantom water.
+            //
+            // The height field has no such problem: it is what the coastline
+            // is drawn FROM, and it agrees with the rendered mesh to 7 mm.
+            // The push-off direction comes from its gradient — downhill is
+            // deeper water — which needs no centre and so does not care what
+            // shape the island is.
+            //
+            // Skipped while she is anchored: deliberately putting her ashore
+            // is not running aground, and the shore party moors her 11 m off
+            // a beach where the water is inches deep.
+            if (!motor.Anchored && GroundedOnLand(out Vector3 landOut, out Vector3 landFix))
             {
-                float shoreRadius = isle.RadiusToward(transform.position);
-                if (Intrudes(isle.transform.position, shoreRadius))
-                {
-                    obstaclePos = isle.transform.position;
-                    obstacleRadius = shoreRadius;
-                    intruding = true;
-                }
+                Aground(landOut, landFix, 1f);
+                return;
             }
-            if (!intruding && reef != null && Intrudes(reef.transform.position, reef.Radius))
+
+            if (reef != null && Intrudes(reef.transform.position, reef.Radius))
             {
                 obstaclePos = reef.transform.position;
                 obstacleRadius = reef.Radius;
@@ -120,10 +131,57 @@ namespace SeaSick.Ship
             float solidRadius = obstacleRadius + hullMargin;
             if (dist < 0.01f) return;
 
-            // Aground: shove the hull back out to the shoreline.
-            Vector3 outward = toShip / dist;
+            Aground(toShip / dist, obstaclePos + (toShip / dist) * solidRadius, damageScale);
+        }
+
+        static float Ground(Vector3 p)
+            => Island.TerrainHeight != null ? Island.TerrainHeight(p.x, p.z) : -999f;
+
+        /// Is there ground under her, and which way is deep water?
+        ///
+        /// `outward` is straight downhill on the height field. `fixedPos` is
+        /// the first place along it with enough water under the keel, found
+        /// by walking out — a single step would leave her still aground on
+        /// anything steeper than the step size.
+        bool GroundedOnLand(out Vector3 outward, out Vector3 fixedPos)
+        {
+            outward = Vector3.zero;
+            fixedPos = transform.position;
+            if (Island.TerrainHeight == null) return false;
+
+            Vector3 p = transform.position;
+            float need = -groundingDraft;
+            if (Ground(p) <= need) return false;
+
+            const float E = 4f;
+            float gx = Ground(p + Vector3.right * E) - Ground(p - Vector3.right * E);
+            float gz = Ground(p + Vector3.forward * E) - Ground(p - Vector3.forward * E);
+            Vector3 down = new Vector3(-gx, 0f, -gz);
+            if (down.sqrMagnitude < 1e-6f)
+            {
+                // Flat shallows: no gradient to follow, so fall back to away
+                // from the nearest island's centre.
+                var isle = Island.Nearest(p);
+                down = isle != null ? p - isle.transform.position : Vector3.forward;
+                down.y = 0f;
+                if (down.sqrMagnitude < 1e-6f) down = Vector3.forward;
+            }
+            outward = down.normalized;
+
+            Vector3 q = p;
+            for (int i = 0; i < 24; i++)
+            {
+                q += outward * 4f;
+                if (Ground(q) <= need) break;
+            }
+            fixedPos = q;
+            return true;
+        }
+
+        /// Shove her clear, kill the closing speed, and bill the hull for it.
+        void Aground(Vector3 outward, Vector3 fixedPos, float damageScale)
+        {
             Vector3 pos = transform.position;
-            Vector3 fixedPos = obstaclePos + outward * solidRadius;
             transform.position = new Vector3(fixedPos.x, pos.y, fixedPos.z);
 
             float closingSpeed = -Vector3.Dot(motor.Velocity, outward);
@@ -141,6 +199,33 @@ namespace SeaSick.Ship
                 foreach (var c in crew) if (c != null) c.Jolt(shock);
             }
         }
+
+        /// Metres of water she needs under her before she touches.
+        ///
+        /// **Deliberately tiny — it is a waterline, not a draft.** At a
+        /// realistic 1.0 m the depth contour she is stopped at sits a mean of
+        /// 55 m off the home island's visible shore and 798 m off it at
+        /// worst, because these islands have broad shallow aprons. That is
+        /// honest water and a dishonest game: the landing prompt only reaches
+        /// 30 m past the shoreline, so she would be walled out of her own
+        /// beaches on most bearings — the same symptom as the bug this
+        /// replaced, arrived at from the opposite direction.
+        ///
+        /// The defect actually being fixed is sailing THROUGH LAND and
+        /// hitting walls in deep water. Stopping her essentially at the
+        /// waterline fixes both and leaves the shallows navigable, which is
+        /// what a shallow-draught paddle steamer should do anyway.
+        ///
+        /// **A const, not a `[SerializeField]`.** As a serialized field it
+        /// never took the value written here: the scene has no entry for it,
+        /// yet the component kept reporting the old 1.0 through recompiles
+        /// AND through fresh play sessions, because Unity restores a
+        /// component's serialized state over a changed initializer. That is
+        /// the same trap `SetupStormSky.ResetToCodeDefaults` exists for, and
+        /// it cost two byte-identical measurement runs that I nearly
+        /// believed. Nothing needs to tune this per scene, so the safest
+        /// thing is for it not to be tunable per scene.
+        const float groundingDraft = 0.3f;
 
         bool Intrudes(Vector3 centre, float radius)
         {
