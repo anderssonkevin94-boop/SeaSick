@@ -522,3 +522,82 @@ ApplyWaveShape, AddMountainSeas — died with the Gerstner stack.)
   component that builds runtime state in `Start` must ask **"is my state whole
   now?"** in `Update` and rebind if it is not — "did `Start` finish?" is only
   true of the first frame.
+
+---
+
+## 2026-08-30 — deck, land, harbour and the docked view
+
+### `DeckStandProbe` (`RunProbe.Stand`, works in edit mode too)
+Signed gap between each crew body's lowest vertex and the planking under it,
+in SHIP-LOCAL space from mesh vertices — world bounds are axis-aligned, so a
+heeled ship reports a phantom sink that is really just roll. Also reports the
+gap in the bailing pose, which keeps the station's `y` while stepping inboard
+onto a cambered deck.
+
+**Its first version was circular and read 0.000 m everywhere.** It asked the
+deck for its highest vertex within 1.2 m — the same rule `SetupPaddleBoat`
+placed the crew by — so it could only agree with itself. Interpolating the
+actual triangle under the boot showed three of six standing 7.1 cm in the air.
+**A gap of exactly zero is a symptom, not a pass.**
+
+### `TuneIslands.Flats`
+Largest CONTIGUOUS buildable area per island: 25 m pass to find islands, 4 m
+raster each, 4-connected labels, exact Euclidean distance transform inside the
+biggest patch. Reports area AND inscribed circle, because they are not
+interchangeable — a contour-following ribbon carries hectares and holds no
+compound anywhere along it.
+
+Percentages from a dart-thrower cannot answer this at all: one field and a
+thousand patches give the same number.
+
+### `TuneIslands.HomeCandidates`
+Ranks islands to be home on three things that pull against each other: small
+enough to see whole (the chase camera's far clip is 600 m, so anything over
+about 185 m in radius cannot be framed), big enough to settle, and in
+possession of a harbour. Prints the `worldOffset` that makes one home —
+sampling is `noise(p + worldOffset)`, so `newOffset = centre + oldOffset`.
+
+### `WoodProbe` (`RunProbe.Wood`)
+Reads the BAKED scenery mesh — trees found by trunk colour, a run of
+consecutive trunk-brown vertices being one tree. Density in rings, spacing,
+and the tree line. **Never re-run the placement rules to check placement.**
+Note the tree line is the highest trunk BASE; the highest trunk VERTEX is the
+top of a trunk and reads ~4.5 m high.
+
+### `HarbourProbe` (`RunProbe.Harbour`)
+Reports the dock site from the SAME `HarbourSite` finder the populator builds
+from, then measures the dock as built: deck height, pile feet, ground
+clearance under the decking, water under her whole hull box, daylight to the
+pier, face-normal direction, and whether the dock is even on the home island.
+Also gates the docked camera against the framing Kevin flew by hand
+(azimuth / centre / span / lens).
+
+### `DockCamTuner` (scene object, `active` off)
+Fly the docked overview by hand: right-drag swing/tilt, scroll zoom, IJKL pan,
+U/O lens, P saves the numbers, backspace resets. The readout is drawn ON
+SCREEN so a screenshot carries every number needed to reproduce the shot.
+
+**Kept on purpose.** Composition is a judgement, not a measurement. Three
+rounds of choosing a tilt and framing radius by arithmetic produced three
+defensible views and none of them the wanted one; one round of Kevin flying it
+settled it. For a look-or-feel question, build the tuner and hand it over.
+
+### Traps this session added to the pile
+- **Winding and normals are two separate decisions.** Every dock face drew
+  correctly and was lit from behind — ambient-only near-black. `Cross(b-a,e-a)`
+  on a deck top is X×Z = −Y. A screenshot only says "dark".
+- **`Camera.main` is the MINIMAP camera**, 120 m up looking straight down.
+- **`Screen.height` inside `LateUpdate` is the Game view** (422 px here); an
+  editor-context probe reads something else entirely (937). Never key framing
+  to it — use a FRACTION of screen height.
+- **`ScreenCapture` is not in the runtime Dev assembly**, and an Editor-
+  assembly MonoBehaviour cannot be `AddComponent`ed at play time. Render the
+  camera to a RenderTexture synchronously instead.
+- **A square raster with a radius test** reaches 1.41× the radius at its
+  corners — that is how a 322 m harbour search from a 151 m island built the
+  home dock on the neighbour.
+- **The serialization trap again, twice, and worse than documented:**
+  `overviewTilt` read 56 in a running build whose source said 38, and the
+  field appears NOWHERE in `Sea.unity` — grepping the scene said "absent"
+  while the live component said 56. Only the running object knows. Push with
+  `SerializedObject` and read back.
