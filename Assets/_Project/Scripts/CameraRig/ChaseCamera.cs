@@ -121,20 +121,36 @@ namespace SeaSick.CameraRig
             public Vector3 centre;
             public float radius;     // what has to fit in frame
             public Vector3 from;     // horizontal direction the camera sits in
+
+            /// Explicit framing, for the tuner. Zero means "work it out":
+            /// `tiltDeg` falls back to the rig's own tilt, `span` to the
+            /// distance that fits `radius` with the legibility clamp applied.
+            public float tiltDeg;
+            public float span;
         }
 
         public IslandShot? Overview { get; set; }
 
+        /// Set by the dev camera tuner. Takes priority over `Overview` so the
+        /// tuner and the game can both write every frame without racing on
+        /// script execution order.
+        public IslandShot? OverviewOverride { get; set; }
+
+        /// What the overview is actually doing right now, for the tuner's
+        /// readout and for the probe.
+        public float CurrentTilt { get; private set; }
+        public float CurrentSpan { get; private set; }
+
         [Header("Island overview (at a dock)")]
-        [Tooltip("Degrees above the horizon. 90 is a map; this is high enough to read the whole island and low enough to keep the sky.")]
-        [SerializeField] float overviewTilt = 56f;
+        [Tooltip("Degrees above the horizon. 90 is a map, 56 still read as one; 38 is a three-quarter view, where a building shows its WALLS and not just its roof.")]
+        [SerializeField] float overviewTilt = 38f;
         [Tooltip("How much wider than the island to frame, so it isn't jammed against the edges.")]
         [SerializeField] float overviewMargin = 1.3f;
         [Tooltip("Seconds-ish to rise into the overview and to come back down.")]
         [SerializeField] float overviewResponse = 0.7f;
 
-        [Tooltip("How tall a 1.7 m crew member must be, as a FRACTION of screen height. 0.0075 is about 8 px on a 1080-tall screen and 17 on a phone. This is what stops the overview backing off to a pretty landform nobody can read: the point of it is watching people move between buildings.")]
-        [SerializeField] float minPersonScreenFraction = 0.0075f;
+        [Tooltip("How tall a 1.7 m crew member must be, as a FRACTION of screen height. 0.0055 is about 13 px on a phone. This is what stops the overview backing off to a pretty landform nobody can read; it is set as low as it is because the frame also has to hold the pier, and the pier is a village-width away from the village.")]
+        [SerializeField] float minPersonScreenFraction = 0.0055f;
         float overviewLevel;
         float baseFarClip = -1f;
 
@@ -287,12 +303,13 @@ namespace SeaSick.CameraRig
             }
 
             // --- the island overview, blended over whatever was framed ----
-            float wantOverview = Overview.HasValue ? 1f : 0f;
+            var shot = OverviewOverride ?? Overview;
+            float wantOverview = shot.HasValue ? 1f : 0f;
             overviewLevel = Mathf.Lerp(overviewLevel, wantOverview,
                 1f - Mathf.Exp(-overviewResponse * dt));
-            if (overviewLevel > 0.001f && Overview.HasValue)
+            if (overviewLevel > 0.001f && shot.HasValue)
             {
-                var ov = Overview.Value;
+                var ov = shot.Value;
                 float vfov = cam != null ? cam.fieldOfView : 60f;
                 // Far enough back that a circle of `radius` fills the frame...
                 float span = ov.radius * overviewMargin
@@ -303,11 +320,15 @@ namespace SeaSick.CameraRig
                 // overview you cannot pick a person out of is a map, and the
                 // player already has a minimap.
                 span = Mathf.Min(span, ReadableDistance(vfov));
+                if (ov.span > 0.01f) span = ov.span;          // the tuner says exactly
                 LastOverviewSpan = span;
+                CurrentSpan = span;
                 Vector3 dir = ov.from;
                 dir.y = 0f;
                 dir = dir.sqrMagnitude < 0.01f ? Vector3.back : dir.normalized;
-                float tilt = overviewTilt * Mathf.Deg2Rad;
+                float tiltDeg = ov.tiltDeg > 0.01f ? ov.tiltDeg : overviewTilt;
+                CurrentTilt = tiltDeg;
+                float tilt = tiltDeg * Mathf.Deg2Rad;
                 Vector3 seat = ov.centre
                              + dir * (span * Mathf.Cos(tilt))
                              + Vector3.up * (span * Mathf.Sin(tilt));

@@ -34,6 +34,22 @@ namespace SeaSick.World
 
         public float AreaHectares => areaHa;
 
+        /// How many buildings this ground holds at a given plot size.
+        ///
+        /// A village is not its footprints, it is its plots: a hut is 3 m
+        /// tall and perhaps 5 m across, but nobody builds them touching, and
+        /// the gaps are where the people walk. A 15 m plot is a building with
+        /// room to pass round it, which is what a village looks like from
+        /// above.
+        public int Capacity(float plotMetres = 15f)
+            => Mathf.FloorToInt(areaHa * 10000f / Mathf.Max(1f, plotMetres * plotMetres));
+
+        /// The radius the buildings themselves would occupy, given how many
+        /// of them there are -- so the camera frames a VILLAGE rather than
+        /// all the ground a village could theoretically sprawl across.
+        public float VillageRadius(int buildings = 20, float plotMetres = 15f)
+            => Mathf.Min(core, Mathf.Sqrt(buildings * plotMetres * plotMetres / Mathf.PI));
+
         /// What the camera should hold, which is NOT the same as where you
         /// can build.
         ///

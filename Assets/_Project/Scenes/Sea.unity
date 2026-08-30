@@ -998,6 +998,55 @@ MonoBehaviour:
   damping: 0.14
   maxAngle: 34
   drive: 1
+--- !u!1 &919732238
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 919732240}
+  - component: {fileID: 919732239}
+  m_Layer: 0
+  m_Name: DockCamTuner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &919732239
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919732238}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8eca3ee572aef4519818bbd41f92d143, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DockCamTuner
+  active: 1
+  orbitPerPixel: 0.25
+  tiltPerPixel: 0.18
+  zoomPerNotch: 0.08
+  panSpeed: 34
+--- !u!4 &919732240
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 919732238}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &928279740
 GameObject:
   m_ObjectHideFlags: 0
@@ -2469,6 +2518,10 @@ MonoBehaviour:
   lockMaxPull: 34
   lockBias: 0.34
   lockResponse: 2.4
+  overviewTilt: 38
+  overviewMargin: 1.3
+  overviewResponse: 0.7
+  minPersonScreenFraction: 0.0055
 --- !u!81 &2086288690
 AudioListener:
   m_ObjectHideFlags: 0
@@ -2962,6 +3015,8 @@ MonoBehaviour:
   dropTime: 0
   weighTime: 0
   berthDistance: 11
+  dockRange: 55
+  startAtHomeDock: 1
   berthSpeed: 1.6
   approachSpeedLimit: 6.5
 --- !u!114 &2143489889
@@ -5037,3 +5092,4 @@ SceneRoots:
   - {fileID: 1749557478}
   - {fileID: 270415273}
   - {fileID: 688920549}
+  - {fileID: 919732240}

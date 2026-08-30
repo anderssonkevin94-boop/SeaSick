@@ -280,15 +280,26 @@ namespace SeaSick.Ship
                 Vector3 berth = CurrentDock.Berth;
                 var village = CurrentIsland.GetComponent<Settlement>();
 
-                Vector3 centre = village != null ? village.Centre : c;
-                centre.y = 0f;
-                float reach = village != null
-                    ? village.ViewRadius
-                    : Mathf.Max(120f, CurrentIsland.MaxRadius);
+                // The frame has to hold two things: the village, and your
+                // own ship at the pier -- which are a village-width apart, so
+                // neither can be the centre. Put the centre between them,
+                // biased to the village because that is the subject, and size
+                // the radius to reach whichever is further.
+                Vector3 seat = village != null ? village.Centre : c;
+                seat.y = 0f;
+                Vector3 flatBerth = new Vector3(berth.x, 0f, berth.z);
+                Vector3 centre = Vector3.Lerp(seat, flatBerth, 0.42f);
 
-                // Look in from the water, so the pier and the boat sit at the
-                // near edge and the village faces you.
-                Vector3 from = berth - centre;
+                float villageR = village != null ? village.VillageRadius() : 60f;
+                float reach = Mathf.Max(
+                    Vector3.Distance(centre, seat) + villageR,
+                    Vector3.Distance(centre, flatBerth) + WorldScale.ShipLength * 0.6f);
+
+                // Sit INLAND and look seaward, so the village is in the
+                // foreground and the pier and ship lie beyond it against the
+                // water. From the seaward side the pier is behind the lens --
+                // which is where it was, and why the ship could not be seen.
+                Vector3 from = centre - flatBerth;
                 from.y = 0f;
                 chaseCam.Overview = new SeaSick.CameraRig.ChaseCamera.IslandShot
                 {

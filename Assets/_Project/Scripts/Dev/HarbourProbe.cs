@@ -229,6 +229,40 @@ public class HarbourProbe : MonoBehaviour
                 + $"watchtower {onPhone * WorldScale.WatchTower / WorldScale.Person:F0} px,  "
                 + $"the ship {onPhone * WorldScale.ShipLength / WorldScale.Person:F0} px long");
             sb.AppendLine($"   ground in frame: about {2f * dist * Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad):F0} m tall");
+            sb.AppendLine($"   tilt {Mathf.Asin(Mathf.Clamp01(-ccam.transform.forward.y)) * Mathf.Rad2Deg:F0} deg above the horizon");
+
+            // "Can I see my ship" is a frustum question, not an opinion.
+            // Tested against the real camera's planes, on her actual hull
+            // corners rather than her centre -- a 24 m boat can have her
+            // middle in frame and her bow out of it.
+            if (motor != null)
+            {
+                var planes = GeometryUtility.CalculateFrustumPlanes(ccam);
+                Vector3 f2 = motor.transform.forward, r2 = motor.transform.right;
+                int seen = 0, corners = 0;
+                for (float t4 = -0.5f; t4 <= 0.5f; t4 += 1f)
+                    for (float b4 = -0.5f; b4 <= 0.5f; b4 += 1f)
+                    {
+                        Vector3 p = motor.transform.position
+                                  + f2 * (t4 * WorldScale.ShipLength) + r2 * (b4 * 8.44f);
+                        corners++;
+                        if (GeometryUtility.TestPlanesAABB(planes, new Bounds(p, Vector3.one * 2f))) seen++;
+                    }
+                bool dockSeen = GeometryUtility.TestPlanesAABB(planes,
+                    new Bounds(dock.Head, Vector3.one * 8f));
+                sb.AppendLine($"   the ship: {seen} of {corners} hull corners in frame"
+                    + (seen == corners ? " -- fully in shot" : seen == 0 ? " -- NOT VISIBLE" : " -- clipped"));
+                sb.AppendLine($"   the pier head: {(dockSeen ? "in frame" : "NOT VISIBLE")}");
+            }
+
+            // And does the ground on show actually suit a village?
+            if (village != null)
+            {
+                int cap = village.Capacity();
+                sb.AppendLine($"   the settlement holds about {cap} buildings on 15 m plots "
+                    + $"(village radius {village.VillageRadius():F0} m)"
+                    + (cap < 15 ? "   -- FEWER THAN THE 15-20 ASKED FOR" : ""));
+            }
         }
 
         Report(sb.ToString());
