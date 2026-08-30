@@ -132,8 +132,45 @@ namespace SeaSick.CameraRig
         [SerializeField] float overviewMargin = 1.3f;
         [Tooltip("Seconds-ish to rise into the overview and to come back down.")]
         [SerializeField] float overviewResponse = 0.7f;
+
+        [Tooltip("How tall a 1.7 m crew member must be, as a FRACTION of screen height. 0.0075 is about 8 px on a 1080-tall screen and 17 on a phone. This is what stops the overview backing off to a pretty landform nobody can read: the point of it is watching people move between buildings.")]
+        [SerializeField] float minPersonScreenFraction = 0.0075f;
         float overviewLevel;
         float baseFarClip = -1f;
+
+        /// Diagnostic only: the distance the overview last asked for.
+        public float LastOverviewSpan { get; private set; }
+        public Vector3 LastOverviewSeat { get; private set; }
+        public Vector3 LastDesired { get; private set; }
+
+        /// How far back the rig may sit and still draw a person big enough to
+        /// see.
+        ///
+        /// A camera D metres away sees 2 D tan(fov/2) metres up the frame, so
+        /// a person of height P covers P / (2 D tan(fov/2)) of the screen's
+        /// height. Holding that at or above the floor gives the distance.
+        ///
+        /// **A FRACTION, not a pixel count.** Keying this to Screen.height
+        /// made the framing depend on the size of the window it happened to
+        /// be running in: the editor Game view is 422 px tall here and the
+        /// phone is 2340, so the same code framed a 78 m view in one and a
+        /// 430 m view in the other, and neither was a decision anybody made.
+        /// A fraction of screen height is the same picture everywhere.
+        public float ReadableDistance(float fov)
+        {
+            float t = Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
+            return SeaSick.World.WorldScale.Person
+                 / Mathf.Max(1e-4f, minPersonScreenFraction * 2f * t);
+        }
+
+        /// What a person actually measures from where the rig is now, as a
+        /// fraction of screen height -- the number the probe reports, so this
+        /// is never a guess.
+        public float PersonScreenFraction(float distance, float fov)
+        {
+            float t = Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
+            return SeaSick.World.WorldScale.Person / Mathf.Max(0.01f, 2f * distance * t);
+        }
 
         void Start()
         {
@@ -257,9 +294,16 @@ namespace SeaSick.CameraRig
             {
                 var ov = Overview.Value;
                 float vfov = cam != null ? cam.fieldOfView : 60f;
-                // Far enough back that a circle of `radius` fills the frame.
+                // Far enough back that a circle of `radius` fills the frame...
                 float span = ov.radius * overviewMargin
                            / Mathf.Tan(vfov * 0.5f * Mathf.Deg2Rad);
+                // ...but never so far that the people stop reading. When the
+                // ground to cover is bigger than legibility allows,
+                // legibility wins and the frame holds the middle of it: an
+                // overview you cannot pick a person out of is a map, and the
+                // player already has a minimap.
+                span = Mathf.Min(span, ReadableDistance(vfov));
+                LastOverviewSpan = span;
                 Vector3 dir = ov.from;
                 dir.y = 0f;
                 dir = dir.sqrMagnitude < 0.01f ? Vector3.back : dir.normalized;
@@ -267,7 +311,9 @@ namespace SeaSick.CameraRig
                 Vector3 seat = ov.centre
                              + dir * (span * Mathf.Cos(tilt))
                              + Vector3.up * (span * Mathf.Sin(tilt));
+                LastOverviewSeat = seat;
                 desired = Vector3.Lerp(desired, seat, overviewLevel);
+                LastDesired = desired;
                 lookPoint = Vector3.Lerp(lookPoint, ov.centre, overviewLevel);
                 // Nothing up there rides the swell.
                 seaY *= 1f - overviewLevel;

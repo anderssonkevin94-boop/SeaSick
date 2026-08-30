@@ -189,11 +189,47 @@ public class HarbourProbe : MonoBehaviour
             sb.AppendLine($"   state {anchor.CurrentState}, "
                 + (anchor.CurrentDock != null ? "at the dock" : "not at a dock"));
 
+        // ---- can you actually SEE anything from up there? ----------------
+        //
+        // The whole point of the overview is watching people move between
+        // buildings, and "is the island in frame" does not answer that. A
+        // 1.7 m crew member has an on-screen height in PIXELS and that is the
+        // number to report, because it is the one that decides whether the
+        // view works.
+        var village = home.GetComponent<Settlement>();
+        sb.AppendLine();
+        sb.AppendLine("THE SETTLEMENT");
+        if (village == null) sb.AppendLine("   none measured on this island");
+        else
+            sb.AppendLine($"   {village.AreaHectares:F2} ha of joined-up buildable ground, "
+                + $"core {village.Core:F0} m, framed at {village.ViewRadius:F0} m (extent {village.Extent:F0} m -- tendrils), compound "
+                + $"{village.Inscribed * 2f:F0} m across, centred "
+                + $"({village.Centre.x:F0}, {village.Centre.z:F0}) at {village.Centre.y:F0} m");
+
         var chase = FindAnyObjectByType<SeaSick.CameraRig.ChaseCamera>();
         if (chase != null)
-            sb.AppendLine($"   camera overview {(chase.Overview.HasValue ? "ON" : "off")}, "
-                + $"standing {chase.transform.position.y:F0} m up, "
-                + $"{Vector3.Distance(chase.transform.position, home.transform.position):F0} m from the island");
+        {
+            var ccam = chase.GetComponent<Camera>();
+            float fov = ccam != null ? ccam.fieldOfView : 60f;
+            Vector3 look = village != null ? village.Centre : home.transform.position;
+            float dist = Vector3.Distance(chase.transform.position, look);
+            float frac = chase.PersonScreenFraction(dist, fov);
+            float px = frac * Screen.height;
+            float onPhone = frac * 2340f;
+            sb.AppendLine();
+            sb.AppendLine("THE VIEW");
+            sb.AppendLine($"   overview {(chase.Overview.HasValue ? "ON" : "off")}, "
+                + $"{chase.transform.position.y:F0} m up, {dist:F0} m from what it is framing, "
+                + $"far clip {(ccam != null ? ccam.farClipPlane : 0f):F0} m, screen {Screen.width}x{Screen.height}");
+            sb.AppendLine($"   a crew member is {frac * 100f:F2}% of screen height = "
+                + $"{px:F0} px in this window, {onPhone:F0} px on a 2340-tall phone"
+                + (frac < 0.005f ? "   -- TOO SMALL TO READ" : ""));
+            sb.AppendLine($"   on a phone: hut {onPhone * WorldScale.Hut / WorldScale.Person:F0} px,  "
+                + $"longhouse {onPhone * WorldScale.Longhouse / WorldScale.Person:F0} px,  "
+                + $"watchtower {onPhone * WorldScale.WatchTower / WorldScale.Person:F0} px,  "
+                + $"the ship {onPhone * WorldScale.ShipLength / WorldScale.Person:F0} px long");
+            sb.AppendLine($"   ground in frame: about {2f * dist * Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad):F0} m tall");
+        }
 
         Report(sb.ToString());
     }

@@ -266,26 +266,34 @@ namespace SeaSick.Ship
                 && CurrentDock.DistanceFrom(transform.position) < dockRange;
             if (atDock && CurrentIsland != null)
             {
-                // Framed on the island's centre alone, the dock sat on the
-                // very bottom edge with the ship half out of frame -- the
-                // dock is on a shore, so it is always at the limit of a
-                // circle drawn round the middle. Biasing the centre toward
-                // the berth puts your own boat comfortably in the picture,
-                // which is the thing in it whose size you know.
+                // Frame the SETTLEMENT, not the island.
+                //
+                // Framing the whole island was the obvious thing and it put a
+                // crew member at under four pixels: correct, pretty, and
+                // useless for the one thing this view is for -- watching
+                // people move between buildings and seeing which of them have
+                // been upgraded. The buildable ground is where all of that
+                // will be, so that is what the camera holds; the island's
+                // edges fall outside the frame and the minimap already covers
+                // the shape of the place.
                 Vector3 c = CurrentIsland.transform.position;
                 Vector3 berth = CurrentDock.Berth;
-                Vector3 centre = Vector3.Lerp(c, berth, 0.3f);
+                var village = CurrentIsland.GetComponent<Settlement>();
+
+                Vector3 centre = village != null ? village.Centre : c;
                 centre.y = 0f;
-                Vector3 from = berth - c;
+                float reach = village != null
+                    ? village.ViewRadius
+                    : Mathf.Max(120f, CurrentIsland.MaxRadius);
+
+                // Look in from the water, so the pier and the boat sit at the
+                // near edge and the village faces you.
+                Vector3 from = berth - centre;
                 from.y = 0f;
-                float reach = Mathf.Max(120f, CurrentIsland.MaxRadius);
                 chaseCam.Overview = new SeaSick.CameraRig.ChaseCamera.IslandShot
                 {
                     centre = centre,
-                    // Everything that must fit: the island from the shifted
-                    // centre, and the berth itself.
-                    radius = Mathf.Max(reach * 0.8f,
-                        Vector3.Distance(centre, berth) + WorldScale.ShipLength),
+                    radius = reach,
                     from = from,
                 };
             }

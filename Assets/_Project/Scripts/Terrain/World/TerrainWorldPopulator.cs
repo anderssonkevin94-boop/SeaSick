@@ -217,6 +217,14 @@ namespace SeaSick.Terrain
                     HarbourSite.SearchRadiusFor(meanR), Height);
                 if (site.found) DockBuilder.Build(root.transform, site, Height);
 
+                // Where the village will stand. Measured once, here, so the
+                // camera, the keep-out and anything placed later all frame
+                // and site against the same ground.
+                var flat = SettlementSite.Find(root.transform.position,
+                    HarbourSite.SearchRadiusFor(meanR), Height,
+                    4f, terrain != null ? terrain.sandHeight + 0.5f : 3.7f);
+                if (flat.found) root.AddComponent<Settlement>().Configure(flat);
+
                 Dress(root.transform, root.transform.position, meanR, island, index);
                 return island;
             }
