@@ -83,6 +83,21 @@ namespace SeaSick.Terrain
         [Tooltip("Normalised height where ridges are at full strength.")]
         public float ridgeHigh = 0.62f;
 
+        [Header("Rock")]
+        [Tooltip("Island-scale: how ROCKY an island is. Low frequency so it is near-constant across one landmass and only changes out in the water between them.")]
+        public float rockCharacterFrequency = 1f / 6000f;
+        [Tooltip("Bias on rockiness. Above 1 makes most islands soft ground and a rocky one an event -- the same rule the massif uses about peaks.")]
+        public float rockBias = 2.2f;
+        [Tooltip("Crag scale, metres between outcrops. Ridged noise, so this is the size of the shapes that break out.")]
+        public float rockFrequency = 1f / 140f;
+        [Range(1, 5)] public int rockOctaves = 3;
+        [Tooltip("Metres of rock standing PROUD of the soil at full protrusion.")]
+        public float rockRelief = 34f;
+        [Tooltip("On the softest islands, how high the ridged field must climb before rock breaks the surface at all. RidgedRaw has mean 0.26, sd 0.21 -- so 0.80 is rare.")]
+        [Range(0f, 1f)] public float rockThresholdSoft = 0.80f;
+        [Tooltip("And on the rockiest. Lower means rock breaks out more often.")]
+        [Range(0f, 1f)] public float rockThresholdHard = 0.44f;
+
         [Header("Detail")]
         public float detailFrequency = 1f / 25f;
         [Range(1, 4)] public int detailOctaves = 2;

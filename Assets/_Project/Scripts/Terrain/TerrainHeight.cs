@@ -21,10 +21,14 @@ namespace SeaSick.Terrain
         public float shoreSlopeMin, shoreSlopeMax, shoreSlopeBias, shoreFrequency, shoreFlat, shoreTop, shoreBottom;
         public int detailOctaves; public float detailFrequency, detailAmplitude;
         public float beachHeight, beachBlendWidth;
+        public float rockCharacterFrequency, rockBias, rockFrequency, rockRelief,
+                     rockThresholdSoft, rockThresholdHard;
+        public int rockOctaves;
 
         public const int MaskSeedOffset = 7919, DetailSeedOffset = 104729,
                          MassifSeedOffset = 15485863, RidgeSeedOffset = 4241,
-                         ShoreSeedOffset = 611953, UplandSeedOffset = 2750159;
+                         ShoreSeedOffset = 611953, UplandSeedOffset = 2750159,
+                         RockSeedOffset = 32452843, CragSeedOffset = 49979687;
 
         public static TerrainParams From(TerrainSettings s)
         {
@@ -52,6 +56,12 @@ namespace SeaSick.Terrain
                 ridgeHigh = math.max(s.ridgeLow + 0.01f, s.ridgeHigh),
                 detailOctaves = s.detailOctaves, detailFrequency = s.detailFrequency, detailAmplitude = s.detailAmplitude,
                 beachHeight = s.beachHeight, beachBlendWidth = math.max(0.01f, s.beachBlendWidth),
+                rockCharacterFrequency = s.rockCharacterFrequency,
+                rockBias = math.max(0.05f, s.rockBias),
+                rockFrequency = s.rockFrequency, rockOctaves = s.rockOctaves,
+                rockRelief = math.max(0f, s.rockRelief),
+                rockThresholdSoft = s.rockThresholdSoft,
+                rockThresholdHard = math.min(s.rockThresholdHard, s.rockThresholdSoft),
             };
             return p;
         }
@@ -65,6 +75,7 @@ namespace SeaSick.Terrain
         public float terraced;  // stage 3+4(+6): curve(noise) + detail over the seabed, metres
         public float smooth;    // un-terraced linear height + detail over the seabed, metres
         public float height;    // final, metres, sea level = 0
+        public float rock;      // metres of rock standing proud of the soil, 0 = none
     }
 
     /// The height pipeline, stage by stage. Every function is pure and samples
@@ -213,6 +224,58 @@ namespace SeaSick.Terrain
         public static float Massif01(in float2 p, in TerrainParams prm)
             => TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed + TerrainParams.MassifSeedOffset,
                 2, prm.massifFrequency, 2f, 0.5f);
+
+        /// **How rocky this island is**, in [0, 1].
+        ///
+        /// Island-scale and near-constant across one landmass, for the same
+        /// reason the massif is: the height function is a pure function of
+        /// world position running in Burst on streamed chunks, so an
+        /// island's character cannot be a lookup -- it has to be a field
+        /// slow enough that one landmass sits inside one value of it, and
+        /// only changes out in the water between islands. Sample it any
+        /// faster and a sandbank blends into a crag across the same beach,
+        /// which is the one-shape problem wearing a costume.
+        ///
+        /// Biased so most islands are soft ground and a rocky one is an
+        /// event -- the same rule this file already applies to peaks.
+        public static float Rock01(in float2 p, in TerrainParams prm)
+            => math.pow(TerrainNoise.Fbm01(p + prm.worldOffset,
+                prm.seed + TerrainParams.RockSeedOffset, 2,
+                prm.rockCharacterFrequency, 2f, 0.5f), prm.rockBias);
+
+        /// **Metres of rock standing PROUD of the soil here.** Zero almost
+        /// everywhere.
+        ///
+        /// This is the difference between rock that is *revealed* and rock
+        /// that *protrudes*, and it is the only place in this pipeline that
+        /// is not a lerp, an add or a multiply of one smooth field. Those can
+        /// only ever produce rounded ground with a grey shading rule on the
+        /// steep parts -- rock as a colour. What the eye reads as a different
+        /// material pushing through is the CREASE where two surfaces cross,
+        /// and a crease is what `max` makes and `+` does not.
+        ///
+        /// The rock's own surface is the soil landform offset by a sharp
+        /// ridged field: `max(soil, soil + relief*(ridge - threshold))`,
+        /// which reduces to soil plus this. So soil buries rock in the
+        /// hollows and rock breaks out on the shoulders on its own, and the
+        /// threshold is the whole story -- high and only the sharpest ridges
+        /// surface, low and the island is a crag.
+        ///
+        /// Gated by rockiness alone and NOT by `interior`, deliberately: a
+        /// rocky island is supposed to be rocky down to the water, and a
+        /// stack standing off its shore is this field surfacing where the
+        /// soil is already below sea level. A soft island returns exactly
+        /// zero, so every shore profile BeachProbe was tuned against is
+        /// untouched on the islands that are meant to have beaches.
+        public static float RockBreak(in float2 p, float rockiness, in TerrainParams prm)
+        {
+            if (prm.rockRelief <= 0f || rockiness <= 0.001f) return 0f;
+            float rf = TerrainNoise.RidgedRaw(p + prm.worldOffset,
+                prm.seed + TerrainParams.CragSeedOffset, prm.rockOctaves,
+                prm.rockFrequency, 2.3f, 0.55f);
+            float thr = math.lerp(prm.rockThresholdSoft, prm.rockThresholdHard, rockiness);
+            return math.max(0f, prm.rockRelief * rockiness * (rf - thr));
+        }
 
         /// How many metres of relief this spot gets, and the reason islands
         /// stopped being interchangeable.
@@ -406,8 +469,16 @@ namespace SeaSick.Terrain
             float detail = Detail(p, prm) * math.lerp(prm.lowlandDetail, 1f, upland);
             float amp = Amplitude(p, interior, upland, prm);
             float land = prm.baseHeight + Terrace(s.noise01, lut) * amp;
-            s.terraced = OverSeabed(land + detail, s.mask, detail, c, prm);
-            s.smooth = OverSeabed(Smooth(s.noise01, amp, prm) + detail, s.mask, detail, c, prm);
+
+            // Rock goes on BOTH paths, exactly as detail does. The beach
+            // blend crossfades the two, so anything added to one and not the
+            // other is a step in the shoreline -- the same trap the smooth
+            // path's amplitude comment already warns about. It stays off the
+            // seabed term: the ocean's storm envelope is depth-limited
+            // against that shelf and reefs are placed against it.
+            s.rock = RockBreak(p, Rock01(p, prm), prm);
+            s.terraced = OverSeabed(land + detail + s.rock, s.mask, detail, c, prm);
+            s.smooth = OverSeabed(Smooth(s.noise01, amp, prm) + detail + s.rock, s.mask, detail, c, prm);
             s.height = ShoreTerrace(BeachBlend(s.terraced, s.smooth, prm), p, interior, prm);
             return s;
         }
