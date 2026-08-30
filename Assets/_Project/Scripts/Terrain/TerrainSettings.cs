@@ -42,6 +42,18 @@ namespace SeaSick.Terrain
         [Tooltip("How far OUTSIDE the land threshold the shelf reaches, in mask-noise units. Bigger = a wider shelf and a continental slope further offshore.")]
         [Range(0.01f, 0.3f)] public float shelfBand = 0.12f;
 
+        [Header("Skerries")]
+        [Tooltip("Extra small islands scattered through open water. 0 = off. This is a LIFT on the continentalness noise, so everything downstream -- shelf depth, shoreline position, beach profile -- stays consistent; raising the mask alone would have put spires straight up out of deep ocean.")]
+        [Range(0f, 1f)] public float skerryAmount = 0.30f;
+        [Tooltip("Feature scale. Smaller number = larger, rarer islets.")]
+        public float skerryFrequency = 1f / 620f;
+        [Tooltip("How far up its own distribution the field has to climb before it lifts anything. Higher = fewer islets.")]
+        [Range(0f, 1f)] public float skerryThreshold = 0.72f;
+        [Tooltip("Skerries fade out this far (in mask units) below the land threshold, so they never fuse onto an existing coast.")]
+        [Range(0.01f, 0.4f)] public float skerryClearance = 0.12f;
+        [Tooltip("Metres of relief an islet gets. An islet is a SANDBANK, not a sea stack: left on the world's normal relief a 50 m islet came out as a 100 m needle at 5% walkable, because nothing in the pipeline knows a landmass is small.")]
+        public float skerryRelief = 14f;
+
         [Header("Relief")]
         [Tooltip("Normalised noise (0..1) → normalised relief (0..1). This is the island's PROFILE, not its height: metres come from baseHeight + reliefHeight * massif. Steps in it read as benches and cliffs; the overall climb is what gives an island a peak instead of a tabletop.")]
         public AnimationCurve profileCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);

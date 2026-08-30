@@ -32,12 +32,15 @@ public class IslandVariety : MonoBehaviour
         // fooled by that number before (the "355 m island" that was really
         // 900-2000 m of land), and the first version of this probe reported
         // a 3684 m island that has 47 ha in it.
-        sb.AppendLine("island           area ha  r_eff  r_max   peak  peak/r_eff  rocky%  walk%  rockiness");
+        sb.AppendLine("island           area ha  r_eff  home m   peak  peak/r_eff  rocky%  walk%  rockiness");
         var ratios = new System.Collections.Generic.List<float>();
         var rockies = new System.Collections.Generic.List<float>();
         var walks = new System.Collections.Generic.List<float>();
         var sizes = new System.Collections.Generic.List<float>();
         var peaks = new System.Collections.Generic.List<float>();
+        var areas = new System.Collections.Generic.List<float>();
+        var home = Island.All.Find(i => i != null && i.IsHome);
+        Vector3 homePos = home != null ? home.transform.position : Vector3.zero;
 
         foreach (var isle in Island.All)
         {
@@ -71,7 +74,9 @@ public class IslandVariety : MonoBehaviour
             float rockiness = TerrainHeight.Rock01(new float2(c.x, c.z), prm);
             ratios.Add(ratio); rockies.Add(rockPct); walks.Add(walkPct);
             sizes.Add(rEff); peaks.Add(peak);
-            sb.AppendLine($"{isle.name,-14} {areaHa,8:F1} {rEff,6:F0} {reach,6:F0} {peak,6:F0} "
+            float fromHome = Island.FlatDistance(c, homePos);
+            areas.Add(areaHa);
+            sb.AppendLine($"{isle.name,-14} {areaHa,8:F1} {rEff,6:F0} {fromHome,7:F0} {peak,6:F0} "
                 + $"{ratio,11:F3} {rockPct,7:F1} {walkPct,6:F1} {rockiness,10:F2}");
         }
 
@@ -79,6 +84,13 @@ public class IslandVariety : MonoBehaviour
         sb.AppendLine($"peak/r_eff  {Spread(ratios)}   (references read 0.30-0.45)");
         sb.AppendLine($"rocky %     {Spread(rockies)}");
         sb.AppendLine($"walkable %  {Spread(walks)}");
+        sb.AppendLine();
+        // The band Kevin picked out by eye, so "a few more of those" has a
+        // number attached and can be checked rather than eyeballed again.
+        int small = 0, mid = 0, big = 0;
+        foreach (var a in areas) { if (a < 8f) small++; else if (a < 40f) mid++; else big++; }
+        sb.AppendLine($"islands under 8 ha (the size Kevin liked): {small} of {areas.Count}"
+            + $"   8-40 ha: {mid}   over 40 ha: {big}");
         sb.AppendLine();
         // Does size predict height? In the references the big island IS the
         // dramatic one, so a strong POSITIVE correlation is the target and a

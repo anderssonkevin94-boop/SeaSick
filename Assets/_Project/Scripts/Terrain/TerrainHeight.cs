@@ -15,6 +15,7 @@ namespace SeaSick.Terrain
         public int maskOctaves; public float maskFrequency, maskThreshold, maskFalloff;
         public float seabedDepth, deepSeabedDepth, shelfBand;
         public float baseHeight, reliefHeight;
+        public float skerryAmount, skerryFrequency, skerryThreshold, skerryClearance, skerryRelief;
         public float massifFrequency, massifMin, massifMax, massifBias, massifMaskStart;
         public float ridgeAmount, ridgeLow, ridgeHigh;
         public float uplandFrequency, uplandStart, uplandFull, plainRelief, lowlandDetail;
@@ -28,7 +29,8 @@ namespace SeaSick.Terrain
         public const int MaskSeedOffset = 7919, DetailSeedOffset = 104729,
                          MassifSeedOffset = 15485863, RidgeSeedOffset = 4241,
                          ShoreSeedOffset = 611953, UplandSeedOffset = 2750159,
-                         RockSeedOffset = 32452843, CragSeedOffset = 49979687;
+                         RockSeedOffset = 32452843, CragSeedOffset = 49979687,
+                         SkerrySeedOffset = 86028121;
 
         public static TerrainParams From(TerrainSettings s)
         {
@@ -43,6 +45,9 @@ namespace SeaSick.Terrain
                 deepSeabedDepth = s.deepSeabedDepth,
                 shelfBand = math.max(0.001f, s.shelfBand),
                 baseHeight = s.baseHeight, reliefHeight = s.reliefHeight,
+                skerryAmount = s.skerryAmount, skerryFrequency = s.skerryFrequency,
+                skerryThreshold = s.skerryThreshold, skerryClearance = s.skerryClearance,
+                skerryRelief = math.max(1f, s.skerryRelief),
                 massifFrequency = s.massifFrequency, massifMin = s.massifMin, massifMax = s.massifMax,
                 massifBias = math.max(0.05f, s.massifBias), massifMaskStart = s.massifMaskStart,
                 shoreSlopeMin = s.shoreSlopeMin, shoreSlopeMax = s.shoreSlopeMax,
@@ -183,9 +188,51 @@ namespace SeaSick.Terrain
         /// zero across the entire open ocean, so it cannot say how far from
         /// land you are, while the noise it is built from varies smoothly
         /// everywhere and can.
-        public static float MaskNoise(in float2 p, in TerrainParams prm)
+        /// **Extra small islands, added to the continentalness noise itself.**
+        ///
+        /// Kevin, looking at a 2.7 ha islet: *"i really like this size of
+        /// islands. throw in a few more of those."*
+        ///
+        /// The lift goes on the NOISE, before the threshold -- not on the
+        /// mask afterwards. `Seabed` is keyed on this same noise, and
+        /// `OverSeabed` lerps from the seabed to the land BY the mask, so
+        /// raising the mask on its own would have left deep-ocean floor under
+        /// a new island and drawn a spire from -180 m straight up to the
+        /// beach. Lifting the noise moves the shelf, the shoreline and the
+        /// beach profile together, exactly as they move for any other island.
+        ///
+        /// Gated to open water by `away`, so an islet can never fuse onto an
+        /// existing coast and quietly reshape an island the rest of the world
+        /// has already been sited against.
+        public static float Skerry(in float2 p, float c, in TerrainParams prm)
+        {
+            if (prm.skerryAmount <= 0f) return 0f;
+            float sRaw = TerrainNoise.Fbm01(p + prm.worldOffset,
+                prm.seed + TerrainParams.SkerrySeedOffset, 2, prm.skerryFrequency, 2f, 0.5f);
+            float peak = math.saturate((sRaw - prm.skerryThreshold)
+                / math.max(0.01f, 1f - prm.skerryThreshold));
+            float away = 1f - math.smoothstep(prm.maskThreshold - prm.skerryClearance,
+                                              prm.maskThreshold, c);
+            return prm.skerryAmount * peak * away;
+        }
+
+        /// The continentalness field before any islets are added to it.
+        public static float MaskNoiseBase(in float2 p, in TerrainParams prm)
             => TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed + TerrainParams.MaskSeedOffset,
                 prm.maskOctaves, prm.maskFrequency, 2f, 0.5f);
+
+        public static float MaskNoise(in float2 p, in TerrainParams prm)
+        {
+            float c = MaskNoiseBase(p, prm);
+            return c + Skerry(p, c, prm);
+        }
+
+        /// How much of this spot's existence it owes to the islet field, in
+        /// [0, 1]. The lever that keeps an islet a sandbank instead of a
+        /// spire -- see `skerryRelief`.
+        public static float SkerryShare(float skerryLift, in TerrainParams prm)
+            => prm.skerryAmount <= 0f ? 0f
+             : math.saturate(skerryLift / math.max(0.01f, prm.skerryAmount));
 
         /// Stage 2. Continentalness: low-frequency fBm thresholded with a soft
         /// edge, then clamped by the optional world radius.
@@ -453,10 +500,21 @@ namespace SeaSick.Terrain
             // The mask comes FIRST now: both the ridges and the massif are
             // faded in by how far inland the spot is, so the shape field
             // cannot be computed before we know that.
-            float c = MaskNoise(p, prm);
+            float cBase = MaskNoiseBase(p, prm);
+            float lift = Skerry(p, cBase, prm);
+            float c = cBase + lift;
             s.mask = MaskFromNoise(c, p, prm);
             float interior = Interior(s.mask, prm);
             float upland = Upland01(p, prm);
+
+            // **An islet is a sandbank, not a sea stack.** Nothing else in
+            // this pipeline knows how big a landmass is -- relief comes from
+            // fields sampled per point -- so a 50 m islet was handed the same
+            // mountain amplitude as a 500 m island and came out a 100 m
+            // needle at 5% walkable. The islet field is the one place that
+            // DOES know, because its own lift says so.
+            float islet = SkerryShare(lift, prm);
+            upland *= 1f - islet;
             // Ridges are an upland feature too. Carving crest lines across a
             // plain would put back exactly the slope the plain exists to
             // remove.
@@ -467,7 +525,7 @@ namespace SeaSick.Terrain
             // ground buildable while this is running at full amplitude over
             // the top of it.
             float detail = Detail(p, prm) * math.lerp(prm.lowlandDetail, 1f, upland);
-            float amp = Amplitude(p, interior, upland, prm);
+            float amp = math.lerp(Amplitude(p, interior, upland, prm), prm.skerryRelief, islet);
             float land = prm.baseHeight + Terrace(s.noise01, lut) * amp;
 
             // Rock goes on BOTH paths, exactly as detail does. The beach
