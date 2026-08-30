@@ -1,0 +1,164 @@
+using System.Collections.Generic;
+using System.Text;
+using UnityEngine;
+using SeaSick.World;
+using SeaSick.Terrain;
+
+/// Where the home island's dock goes, reported from the SAME finder the
+/// populator builds from.
+///
+/// Runs in play mode against the real Island_Home rather than working out
+/// which island is home for itself. The first version of this hill-climbed
+/// to its own idea of the island centre and landed 500 m from the one the
+/// populator had already found -- two answers to a question with one right
+/// answer, which is the failure this project keeps paying for.
+public class HarbourProbe : MonoBehaviour
+{
+    public static void Execute()
+    {
+        if (!Application.isPlaying) { Debug.LogError("HarbourProbe: not in play mode"); return; }
+        var sb = new StringBuilder();
+
+        Island home = null;
+        foreach (var i in Island.All) if (i.IsHome) home = i;
+        if (home == null) { Report("no home island\n"); return; }
+        if (Island.TerrainHeight == null) { Report("no terrain height function\n"); return; }
+
+        var H = Island.TerrainHeight;
+        Vector3 centre = home.transform.position;
+        sb.AppendLine($"'{home.name}' centre ({centre.x:F0}, {centre.z:F0}), mean radius {home.Radius:F0} m");
+
+        var all = new List<HarbourSite.Site>();
+        var best = HarbourSite.Find(centre, 700f, (x, z) => H(x, z), all);
+        sb.AppendLine($"{all.Count} shore cells passed all four tests (depth, approach, backshore, land)");
+        if (!best.found) { Report(sb + "no site met them\n"); return; }
+
+        all.Sort((a, b) => b.score.CompareTo(a.score));
+        sb.AppendLine();
+        sb.AppendLine("best candidates (score = pier + backshore + flat behind + shelter):");
+        sb.AppendLine("   score   pier  depth  backslope  flat-behind  shelter   at");
+        var shown = new List<HarbourSite.Site>();
+        foreach (var c in all)
+        {
+            bool near = false;
+            foreach (var d in shown)
+                if ((d.root - c.root).sqrMagnitude < 120f * 120f) { near = true; break; }
+            if (near) continue;                       // one row per stretch of coast
+            shown.Add(c);
+            sb.AppendLine($"   {c.score,5:F2}  {c.pierLength,4:F0}m {c.berthDepth,5:F1}m "
+                + $"{Mathf.Atan(c.backSlope) * Mathf.Rad2Deg,7:F0} deg {c.flatBehind,10:F2} ha "
+                + $"{c.shelter * 100f,7:F0}%   ({c.root.x:F0}, {c.root.z:F0})");
+            if (shown.Count >= 6) break;
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("CHOSEN:");
+        sb.AppendLine($"   root  ({best.root.x:F0}, {best.root.z:F0}) standing {best.root.y:F1} m above the water");
+        sb.AppendLine($"   head  ({best.head.x:F0}, {best.head.z:F0})");
+        sb.AppendLine($"   berth ({best.berth.x:F0}, {best.berth.z:F0})");
+        sb.AppendLine($"   pier {best.pierLength:F0} m = {best.pierLength / WorldScale.ShipLength:F1} ship lengths, "
+            + $"{best.berthDepth:F1} m under her at the head");
+        sb.AppendLine($"   backshore {Mathf.Atan(best.backSlope) * Mathf.Rad2Deg:F0} deg, "
+            + $"{best.flatBehind:F2} ha buildable within {HarbourSite.Hinterland} m, "
+            + $"shelter {best.shelter * 100f:F0}%");
+
+        sb.AppendLine("   depth from the root, seaward:");
+        for (float d = 0f; d <= best.pierLength + HarbourSite.ApproachRun; d += 20f)
+            sb.AppendLine($"      {d,4:F0} m: {H(best.root.x + best.seaward.x * d, best.root.z + best.seaward.y * d),6:F1} m");
+
+        // How far she has to come from the spawn, and whether anything is in
+        // the way on the straight line -- a berth she cannot reach is not one.
+        var motor = FindAnyObjectByType<SeaSick.Ship.ShipMotor>();
+        if (motor != null)
+        {
+            Vector3 from = motor.transform.position;
+            float run = Vector3.Distance(new Vector3(from.x, 0f, from.z), best.berth);
+            float shallowest = -999f;
+            for (float t = 0.05f; t < 1f; t += 0.01f)
+            {
+                Vector3 p = Vector3.Lerp(new Vector3(from.x, 0f, from.z), best.berth, t);
+                shallowest = Mathf.Max(shallowest, H(p.x, p.z));
+            }
+            sb.AppendLine($"   from the ship's spawn: {run:F0} m, shallowest water on the straight "
+                + $"line {shallowest:F1} m " + (shallowest > -HarbourSite.ApproachDepth
+                    ? "-- SHE WOULD GROUND, the approach needs a dogleg" : "-- clear"));
+        }
+        // ---- what actually got BUILT -------------------------------------
+        // Everything above is the site finder describing its own intentions.
+        // These read the dock in the scene: its mesh, its piles, and the
+        // water under the ship-sized box where she is supposed to lie.
+        var dock = Dock.Home;
+        sb.AppendLine();
+        if (dock == null) { sb.AppendLine("NO DOCK BUILT"); Report(sb.ToString()); return; }
+
+        var mf = dock.GetComponent<MeshFilter>();
+        var verts = mf.sharedMesh.vertices;
+        float deckTop = -999f, lowest = 999f;
+        foreach (var lv in verts)
+        {
+            Vector3 w = dock.transform.TransformPoint(lv);
+            if (w.y > deckTop) deckTop = w.y;
+            if (w.y < lowest) lowest = w.y;
+        }
+        sb.AppendLine("DOCK AS BUILT");
+        sb.AppendLine($"   {verts.Length} verts, {mf.sharedMesh.triangles.Length / 3} tris");
+        sb.AppendLine($"   highest point {deckTop:F2} m above sea level "
+            + $"(bollards stand on decking at {dock.DeckY:F2})");
+        sb.AppendLine($"   deepest pile foot {lowest:F1} m");
+
+        // Which way the faces are lit. A mesh can have correct winding and
+        // inverted normals at the same time -- it draws, and every surface
+        // renders ambient-only near-black. Nothing else in the scene would
+        // have said so, and a screenshot only says "dark", which on a
+        // weathered timber pier under a northern sky is not obviously wrong.
+        var norms = mf.sharedMesh.normals;
+        int topV = 0;
+        for (int i = 0; i < verts.Length; i++) if (verts[i].y > verts[topV].y) topV = i;
+        int upN = 0, downN = 0;
+        foreach (var nn in norms) { if (nn.y > 0.7f) upN++; else if (nn.y < -0.7f) downN++; }
+        sb.AppendLine($"   highest vertex normal {norms[topV]:F2} "
+            + (norms[topV].y > 0.5f ? "-- facing the sky" : "-- INVERTED, the decking is lit from below")
+            + $"   ({upN} up / {downN} down)");
+
+        // Is the walkway clear of the ground it crosses, or buried in the
+        // beach? Sampled along the centreline from root to head.
+        float worstBury = -999f; float buryAt = 0f;
+        for (float d = 0f; d <= best.pierLength + HarbourSite.BerthOffset; d += 1f)
+        {
+            float px = best.root.x + best.seaward.x * d, pz = best.root.z + best.seaward.y * d;
+            float ground = H(px, pz);
+            float under = dock.DeckY - 0.35f;
+            if (d < 7f) continue;                    // the ramp is meant to touch
+            if (ground - under > worstBury) { worstBury = ground - under; buryAt = d; }
+        }
+        sb.AppendLine($"   ground under the decking: worst is {worstBury:+0.00;-0.00} m at {buryAt:F0} m out "
+            + (worstBury > 0f ? "-- BURIED, the walkway runs through the beach" : "-- clear"));
+
+        // Does she fit? Her whole box, at the berth, in the water, without
+        // touching the pier.
+        float shallow = 999f;
+        for (float t2 = -0.5f; t2 <= 0.5f; t2 += 0.05f)
+            for (float b2 = -0.5f; b2 <= 0.5f; b2 += 0.25f)
+            {
+                float px = dock.Berth.x + best.seaward.x * t2 * WorldScale.ShipLength
+                         + -best.seaward.y * b2 * 8.44f;
+                float pz = dock.Berth.z + best.seaward.y * t2 * WorldScale.ShipLength
+                         + best.seaward.x * b2 * 8.44f;
+                shallow = Mathf.Min(shallow, -H(px, pz));
+            }
+        sb.AppendLine($"   water under her whole 24.2 x 8.4 m box: {shallow:F1} m at its shallowest "
+            + (shallow < 2.0f ? "-- SHE TOUCHES" : "-- afloat"));
+
+        float sideGap = HarbourSite.BerthOffset - DockBuilder.HeadWidth * 0.5f - 8.44f * 0.5f;
+        sb.AppendLine($"   daylight between her side and the pier head: {sideGap:F2} m "
+            + (sideGap < 0.3f ? "-- SHE IS INSIDE THE PIER" : ""));
+
+        Report(sb.ToString());
+    }
+
+    static void Report(string s)
+    {
+        System.IO.File.WriteAllText("/tmp/seasick-harbour.txt", s);
+        Debug.Log("HarbourProbe\n" + s);
+    }
+}

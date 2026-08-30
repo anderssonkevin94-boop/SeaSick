@@ -207,6 +207,15 @@ namespace SeaSick.Terrain
                 var beacon = IslandPropFactory.MakeBeacon(new Color(1f, 0.55f, 0.25f), 46f, 2.6f);
                 beacon.transform.SetParent(root.transform, false);
                 beacon.transform.localPosition = new Vector3(0f, Height(f.centre.x, f.centre.y) + 34f, 0f);
+
+                // The dock goes in BEFORE the scenery, because the scenery
+                // bake is what a keep-out would have to be handed -- and
+                // because a pier with trees growing through it is exactly the
+                // sort of thing that only shows up once it is too late to
+                // pass anything down.
+                var site = HarbourSite.Find(root.transform.position, 700f, Height);
+                if (site.found) DockBuilder.Build(root.transform, site, Height);
+
                 Dress(root.transform, root.transform.position, meanR, island, index);
                 return island;
             }
