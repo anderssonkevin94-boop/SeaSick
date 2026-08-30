@@ -32,6 +32,7 @@ public static class RunProbe
     public static void Truth() => Call("IslandTruthProbe");
     public static void Variety() => Call("IslandVariety");
     public static void Tune() => Call("IslandTuner");
+    public static void TerrainPerf() => Call("TerrainPerfProbe");
     public static void HitchStorm() => Call("HitchProbe", "Storm");
     public static void Hitch() => Call("HitchProbe");
     public static void WeatherAxes() => Call("WeatherSheet", "Axes");

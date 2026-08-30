@@ -18,6 +18,14 @@ using SeaSick.Terrain;
 /// streaming numbers are the streamer's own phase timers, not frame time.
 ///
 /// Play mode, Sea.unity. Writes /tmp/seasick-terrainperf.txt.
+///
+/// **Lives in Dev/, not Dev/Editor/.** It sat in the Editor folder and was
+/// therefore dead: a MonoBehaviour there cannot be AddComponent-ed, so every
+/// attempt to run it logged "Can't add script behaviour ... because it is an
+/// editor script" and returned nothing. It has no UnityEditor dependency and
+/// never did. `IslandLook` carries the same warning for the same reason.
+/// Discovered the day erosion made the terrain's hottest function ~1.5x more
+/// expensive and there was no way to measure it.
 public class TerrainPerfProbe : MonoBehaviour
 {
     // The 60 fps budget this is gated against. 16.6 ms a frame total; terrain

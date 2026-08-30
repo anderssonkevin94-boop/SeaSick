@@ -42,6 +42,7 @@ namespace SeaSick.Terrain
             public TerrainChunkMesher.ChunkDesc desc;
             public JobHandle handle;
             public NativeArray<float> heights;
+            public NativeArray<float> rock;
             public NativeArray<float> yRange;
             public Mesh.MeshDataArray mda;
         }
@@ -116,7 +117,7 @@ namespace SeaSick.Terrain
 
         void OnDisable()
         {
-            foreach (var f in inFlight) { f.handle.Complete(); f.heights.Dispose(); f.yRange.Dispose(); f.mda.Dispose(); }
+            foreach (var f in inFlight) { f.handle.Complete(); f.heights.Dispose(); f.rock.Dispose(); f.yRange.Dispose(); f.mda.Dispose(); }
             inFlight.Clear();
             foreach (var b in baking) b.handle.Complete();
             baking.Clear();
@@ -272,11 +273,12 @@ namespace SeaSick.Terrain
                 {
                     chunk = ch, desc = desc,
                     heights = new NativeArray<float>(bn * bn, Allocator.Persistent, NativeArrayOptions.UninitializedMemory),
+                    rock = new NativeArray<float>(bn * bn, Allocator.Persistent, NativeArrayOptions.UninitializedMemory),
                     yRange = new NativeArray<float>(2, Allocator.Persistent),
                     mda = Mesh.AllocateWritableMeshData(1),
                 };
                 TerrainChunkMesher.Prepare(f.mda[0], desc);
-                f.handle = TerrainChunkMesher.Schedule(desc, prm, lut, colours, settings.skirtDepth, f.heights, f.mda[0], f.yRange);
+                f.handle = TerrainChunkMesher.Schedule(desc, prm, lut, colours, settings.skirtDepth, f.heights, f.rock, f.mda[0], f.yRange);
                 ch.building = true;
                 inFlight.Add(f);
             }
@@ -294,7 +296,7 @@ namespace SeaSick.Terrain
                 Lap();
                 TerrainChunkMesher.Apply(f.mda, f.chunk.mesh, f.desc, f.yRange);
                 WorstApplyMs = math.max(WorstApplyMs, Lap());
-                f.heights.Dispose(); f.yRange.Dispose();
+                f.heights.Dispose(); f.rock.Dispose(); f.yRange.Dispose();
                 f.chunk.lod = f.desc.lodStep;
                 f.chunk.building = false;
                 f.chunk.renderer.enabled = true;
@@ -336,7 +338,7 @@ namespace SeaSick.Terrain
 
         void CompleteAll()
         {
-            foreach (var f in inFlight) { f.handle.Complete(); f.heights.Dispose(); f.yRange.Dispose(); f.mda.Dispose(); f.chunk.building = false; }
+            foreach (var f in inFlight) { f.handle.Complete(); f.heights.Dispose(); f.rock.Dispose(); f.yRange.Dispose(); f.mda.Dispose(); f.chunk.building = false; }
             inFlight.Clear();
             foreach (var b in baking) { b.handle.Complete(); b.chunk.building = false; }
             baking.Clear();

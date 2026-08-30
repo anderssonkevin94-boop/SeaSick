@@ -164,6 +164,12 @@ namespace SeaSick.Terrain
         public float sandHeight = 3.2f;
         [Tooltip("Vertex colour turns to snow above this height. Sits above most islands on purpose: a snow cap should mark the one massif worth steering by, not every hill.")]
         public float snowHeight = 165f;
+        [Tooltip("Metres of PROUD rock at which ground is fully stone-coloured. Rock is now a fact about the geometry -- RockBreak knows exactly where rock won -- rather than a guess from the gradient.")]
+        public float rockShowsAt = 0.6f;
+        [Tooltip("Normal.y where slope alone starts reading as rock. This used to be 0.80 (37 degrees), which is ordinary hillside, and painted broad brown smears across every green flank.")]
+        [Range(0.1f, 1f)] public float cliffRockStart = 0.62f;
+        [Tooltip("...and where slope alone is fully rock. A genuine cliff.")]
+        [Range(0.1f, 1f)] public float cliffRockFull = 0.40f;
 
         [Header("Chunks")]
         public float chunkSize = 128f;

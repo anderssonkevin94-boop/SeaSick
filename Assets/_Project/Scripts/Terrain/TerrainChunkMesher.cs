@@ -33,9 +33,13 @@ namespace SeaSick.Terrain
         public struct ColourParams
         {
             public float seaLevel, beachHeight, snowHeight, sandHeight;
+            public float rockShowsAt, cliffRockStart, cliffRockFull;
             public static ColourParams From(TerrainSettings s) =>
                 new ColourParams { seaLevel = s.seaLevel, beachHeight = s.beachHeight,
-                                   snowHeight = s.snowHeight, sandHeight = s.sandHeight };
+                                   snowHeight = s.snowHeight, sandHeight = s.sandHeight,
+                                   rockShowsAt = math.max(0.05f, s.rockShowsAt),
+                                   cliffRockStart = s.cliffRockStart,
+                                   cliffRockFull = math.min(s.cliffRockFull, s.cliffRockStart - 0.01f) };
         }
 
         public struct Vertex
@@ -79,12 +83,19 @@ namespace SeaSick.Terrain
             public TerrainParams prm;
             [ReadOnly] public NativeArray<float> lut;
             [WriteOnly] public NativeArray<float> heights;
+            [WriteOnly] public NativeArray<float> rock;
             public int borderedN;
 
             public void Execute(int index)
             {
                 int x = index % borderedN - 1, y = index / borderedN - 1;
-                heights[index] = TerrainHeight.Height(VertexWorldXZ(desc, x, y), prm, lut);
+                // Evaluate, not Height: `Height` IS `Evaluate(...).height`, so
+                // taking the whole sample costs nothing and carries the metres
+                // of proud rock out with it. Recomputing it in the mesh job
+                // would have meant a second pass over the entire pipeline.
+                var s = TerrainHeight.Evaluate(VertexWorldXZ(desc, x, y), prm, lut);
+                heights[index] = s.height;
+                rock[index] = s.rock;
             }
         }
 
@@ -96,6 +107,7 @@ namespace SeaSick.Terrain
             public ColourParams colours;
             public float skirtDepth;
             [ReadOnly] public NativeArray<float> heights;
+            [ReadOnly] public NativeArray<float> rock;
             public Mesh.MeshData mesh;
             [WriteOnly] public NativeArray<float> yRange;
 
@@ -122,7 +134,7 @@ namespace SeaSick.Terrain
                         Vertex v;
                         v.position = new float3(w.x - origin.x, h, w.y - origin.y);
                         v.normal = nrm;
-                        v.colour = VertexColour(h - colours.seaLevel, nrm.y, colours);
+                        v.colour = VertexColour(h - colours.seaLevel, nrm.y, rock[bi], colours);
                         v.uv = w * 0.05f;
                         verts[j * n + i] = v;
                         minY = math.min(minY, h); maxY = math.max(maxY, h);
@@ -179,8 +191,21 @@ namespace SeaSick.Terrain
             Vertex Dropped(Vertex v) { v.position.y -= skirtDepth; return v; }
         }
 
-        /// Sand in the beach band, grass above, rock where steep, snow high.
-        static Color32 VertexColour(float hAboveSea, float up, in ColourParams s)
+        /// Sand in the beach band, grass above, snow high — and rock where
+        /// rock actually IS.
+        ///
+        /// `proud` is metres of rock standing above the soil, straight out of
+        /// the height pipeline. It used to be inferred entirely from the
+        /// gradient (`up < 0.8`, i.e. 37 degrees, which is ordinary
+        /// hillside), and that is what put broad brown smears across every
+        /// green flank: the shader was guessing at rock because there was no
+        /// rock in the geometry to ask about. There is now, so the material
+        /// is a fact rather than an inference.
+        ///
+        /// The slope term stays, moved out to genuine cliffs: a sheer face
+        /// is stone whether or not a crag happens to have broken out on it,
+        /// because soil does not stay on one.
+        static Color32 VertexColour(float hAboveSea, float up, float proud, in ColourParams s)
         {
             float3 sand = new float3(0.86f, 0.78f, 0.55f), grass = new float3(0.30f, 0.55f, 0.22f),
                    rock = new float3(0.42f, 0.38f, 0.34f), snow = new float3(0.95f, 0.95f, 0.97f),
@@ -194,7 +219,10 @@ namespace SeaSick.Terrain
             else if (hAboveSea < s.sandHeight) c = sand;
             else c = math.lerp(sand, grass, math.saturate((hAboveSea - s.sandHeight) / 2.5f));
             c = math.lerp(c, snow, math.saturate((hAboveSea - s.snowHeight) / 8f));
-            c = math.lerp(c, rock, math.saturate((0.8f - up) / 0.25f)); // up < 0.8 (~37°) starts rock
+            float wonHere = math.saturate(proud / s.rockShowsAt);
+            float cliff = math.saturate((s.cliffRockStart - up)
+                                        / math.max(0.01f, s.cliffRockStart - s.cliffRockFull));
+            c = math.lerp(c, rock, math.max(wonHere, cliff));
             return new Color32((byte)(c.x * 255f), (byte)(c.y * 255f), (byte)(c.z * 255f), 255);
         }
 
@@ -208,12 +236,13 @@ namespace SeaSick.Terrain
         /// Schedules height sampling then mesh assembly. Caller owns heights
         /// and yRange (dispose after Complete) and the MeshDataArray.
         public static JobHandle Schedule(in ChunkDesc d, in TerrainParams prm, NativeArray<float> lut, in ColourParams colours,
-            float skirtDepth, NativeArray<float> heights, Mesh.MeshData md, NativeArray<float> yRange, JobHandle deps = default)
+            float skirtDepth, NativeArray<float> heights, NativeArray<float> rock,
+            Mesh.MeshData md, NativeArray<float> yRange, JobHandle deps = default)
         {
             int bn = VertsPerEdge(d) + 2;
-            var hj = new HeightJob { desc = d, prm = prm, lut = lut, heights = heights, borderedN = bn }
+            var hj = new HeightJob { desc = d, prm = prm, lut = lut, heights = heights, rock = rock, borderedN = bn }
                 .Schedule(bn * bn, 64, deps);
-            return new MeshJob { desc = d, colours = colours, skirtDepth = skirtDepth, heights = heights, mesh = md, yRange = yRange }
+            return new MeshJob { desc = d, colours = colours, skirtDepth = skirtDepth, heights = heights, rock = rock, mesh = md, yRange = yRange }
                 .Schedule(hj);
         }
 
@@ -233,12 +262,13 @@ namespace SeaSick.Terrain
         {
             int bn = VertsPerEdge(d) + 2;
             var heights = new NativeArray<float>(bn * bn, Allocator.TempJob);
+            var rock = new NativeArray<float>(bn * bn, Allocator.TempJob);
             var yRange = new NativeArray<float>(2, Allocator.TempJob);
             var mda = Mesh.AllocateWritableMeshData(1);
             Prepare(mda[0], d);
-            Schedule(d, prm, lut, colours, skirtDepth, heights, mda[0], yRange).Complete();
+            Schedule(d, prm, lut, colours, skirtDepth, heights, rock, mda[0], yRange).Complete();
             Apply(mda, mesh, d, yRange);
-            heights.Dispose(); yRange.Dispose();
+            heights.Dispose(); rock.Dispose(); yRange.Dispose();
         }
     }
 }
