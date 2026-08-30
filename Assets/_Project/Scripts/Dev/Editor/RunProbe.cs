@@ -20,6 +20,7 @@ public static class RunProbe
     public static void Drive() => Call("DriveProbe");
     public static void Scale() => Call("ScaleCheck");
     public static void Ruler() => Call("ScaleRuler");
+    public static void Stand() => Call("DeckStandProbe");
     public static void HitchStorm() => Call("HitchProbe", "Storm");
     public static void Hitch() => Call("HitchProbe");
     public static void WeatherAxes() => Call("WeatherSheet", "Axes");

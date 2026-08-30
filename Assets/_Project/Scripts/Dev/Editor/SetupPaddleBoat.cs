@@ -449,9 +449,25 @@ public static class SetupPaddleBoat
     /// sphere head, the shared CrewSkin material. This is the player character
     /// later, so it gets its own object rather than a CrewAgent that could
     /// wander off to bail.
+    ///
+    /// **He is built to the charter, not to a number typed here.** The
+    /// proportions below were authored against a figure 1.45 m tall, which is
+    /// not a height anyone chose -- it is what the primitives happened to add
+    /// up to. So the whole set is scaled to WorldScale.Person on the way out.
+    /// Without that, re-running this script silently shrank the helmsman back
+    /// to 1.45 m and undid ApplyCrewScale, and the only trace was his root
+    /// scale reading 1.172 where every other hand read 1.141.
+    ///
+    /// His lowest point stays at his own pivot, which is what makes scaling a
+    /// crew body by its root safe: the figure grows upward and the feet do
+    /// not move. Anything built here later has to keep that property.
     static GameObject BuildHand(Transform parent, Vector3 localPos)
     {
         Material skin = AssetDatabase.LoadAssetAtPath<Material>("Assets/_Project/Materials/CrewSkin.mat");
+
+        // What the primitives below draw, head to heel, before the charter.
+        const float AsDrawn = 1.45f;
+        float f = SeaSick.World.WorldScale.Person / AsDrawn;
 
         GameObject root = new GameObject("Helmsman");
         root.transform.SetParent(parent, false);
@@ -462,16 +478,16 @@ public static class SetupPaddleBoat
         body.name = "Body";
         Object.DestroyImmediate(body.GetComponent<Collider>());
         body.transform.SetParent(root.transform, false);
-        body.transform.localPosition = new Vector3(0f, 0.55f, 0f);
-        body.transform.localScale = new Vector3(0.5f, 0.55f, 0.5f);
+        body.transform.localPosition = new Vector3(0f, 0.55f * f, 0f);
+        body.transform.localScale = new Vector3(0.5f * f, 0.55f * f, 0.5f * f);
         if (skin != null) body.GetComponent<MeshRenderer>().sharedMaterial = skin;
 
         GameObject head = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         head.name = "Head";
         Object.DestroyImmediate(head.GetComponent<Collider>());
         head.transform.SetParent(root.transform, false);
-        head.transform.localPosition = new Vector3(0f, 1.24f, 0f);
-        head.transform.localScale = Vector3.one * 0.42f;
+        head.transform.localPosition = new Vector3(0f, 1.24f * f, 0f);
+        head.transform.localScale = Vector3.one * 0.42f * f;
         if (skin != null) head.GetComponent<MeshRenderer>().sharedMaterial = skin;
 
         return root;
@@ -576,11 +592,12 @@ public static class SetupPaddleBoat
     // constant leaves everything amidships standing in the air. These sample
     // the real planking.
     static Vector3[] deckVerts;
+    static int[] deckTris;
     static Transform deckT, shipT;
 
     static void LoadDeck(Transform ship, Transform visual)
     {
-        deckVerts = null; deckT = null; shipT = ship;
+        deckVerts = null; deckTris = null; deckT = null; shipT = ship;
         Transform d = FindDeep(visual, "DeckPlanks");
         if (d == null) return;
         MeshFilter mf = d.GetComponent<MeshFilter>();
@@ -591,13 +608,46 @@ public static class SetupPaddleBoat
         for (int i = 0; i < v.Length; i++)
             local[i] = ship.InverseTransformPoint(d.TransformPoint(v[i]));
         deckVerts = local;
+        deckTris = m.triangles;
         deckT = d;
     }
 
-    /// Highest deck vertex near this spot, in ship-local metres.
+    /// The planking directly under this spot, in ship-local metres.
+    ///
+    /// This used to answer with the highest deck VERTEX within 1.2 m, and on
+    /// a deck with 1.35 m of camber and sheer that is a nearby high point
+    /// rather than the board under the boot: DeckStandProbe measured the two
+    /// bow hands and the helmsman standing 7.1 cm in the air, because the
+    /// deck rises inside the search radius and the rule walked up the slope.
+    /// Everything placed by this script inherited it -- crew, guns, the
+    /// helmsman -- and nothing could see it, because the only check anyone
+    /// had ALSO asked for the highest vertex nearby and so agreed with itself.
+    ///
+    /// Interpolating the triangle the spot lands in cannot do that. The
+    /// nearest-vertex search stays as the fallback for a spot that is off the
+    /// planking altogether, where there is no board to interpolate.
     static float DeckYAt(float x, float z, float fallback)
     {
         if (deckVerts == null) return fallback;
+
+        float surface = float.MinValue;
+        if (deckTris != null)
+        {
+            for (int i = 0; i < deckTris.Length; i += 3)
+            {
+                Vector3 a = deckVerts[deckTris[i]], b = deckVerts[deckTris[i + 1]], c = deckVerts[deckTris[i + 2]];
+                float det = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+                if (Mathf.Abs(det) < 1e-9f) continue;         // edge-on seen from above
+                float w0 = ((b.z - c.z) * (x - c.x) + (c.x - b.x) * (z - c.z)) / det;
+                float w1 = ((c.z - a.z) * (x - c.x) + (a.x - c.x) * (z - c.z)) / det;
+                float w2 = 1f - w0 - w1;
+                if (w0 < -1e-4f || w1 < -1e-4f || w2 < -1e-4f) continue;
+                float y = w0 * a.y + w1 * b.y + w2 * c.y;
+                if (y > surface) surface = y;                 // the board you stand on, not the one under it
+            }
+        }
+        if (surface > float.MinValue) return surface;
+
         float best = float.MinValue;
         for (int i = 0; i < deckVerts.Length; i++)
         {
