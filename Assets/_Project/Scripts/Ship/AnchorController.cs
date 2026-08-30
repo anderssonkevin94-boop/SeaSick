@@ -288,8 +288,16 @@ namespace SeaSick.Ship
                 Vector3 seat = village != null ? village.Centre : c;
                 seat.y = 0f;
                 Vector3 flatBerth = new Vector3(berth.x, 0f, berth.z);
-                Vector3 centre = Vector3.Lerp(seat, flatBerth, 0.42f);
+                // Halfway between the village and the boat. Fitted from the
+                // framing Kevin flew to by hand: his centre projected onto
+                // the village-to-berth line at 0.52 of the way along it, so
+                // the frame sits midway and both ends of it are in shot.
+                Vector3 centre = Vector3.Lerp(seat, flatBerth, 0.52f);
 
+                // The zoom no longer comes from here -- ChaseCamera holds it
+                // as metres of ground up the frame, so the buildings are the
+                // same size at every dock. This radius is only the fallback
+                // for an island with no settlement measured on it.
                 float villageR = village != null ? village.VillageRadius() : 60f;
                 float reach = Mathf.Max(
                     Vector3.Distance(centre, seat) + villageR,

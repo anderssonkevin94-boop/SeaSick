@@ -211,8 +211,15 @@ public class HarbourProbe : MonoBehaviour
         {
             var ccam = chase.GetComponent<Camera>();
             float fov = ccam != null ? ccam.fieldOfView : 60f;
-            Vector3 look = village != null ? village.Centre : home.transform.position;
-            float dist = Vector3.Distance(chase.transform.position, look);
+            // The framing distance is the rig's SPAN -- how far it sits from
+            // the point it is framing -- not the distance to the village.
+            // The frame is centred between the village and the boat, so
+            // measuring to the village alone under-reports the zoom: it said
+            // 112 m of ground where the rig was drawing 165.
+            float dist = chase.CurrentSpan > 0.01f
+                ? chase.CurrentSpan
+                : Vector3.Distance(chase.transform.position,
+                    village != null ? village.Centre : home.transform.position);
             float frac = chase.PersonScreenFraction(dist, fov);
             float px = frac * Screen.height;
             float onPhone = frac * 2340f;

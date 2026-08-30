@@ -142,10 +142,16 @@ namespace SeaSick.CameraRig
         public float CurrentSpan { get; private set; }
 
         [Header("Island overview (at a dock)")]
-        [Tooltip("Degrees above the horizon. 90 is a map, 56 still read as one; 38 is a three-quarter view, where a building shows its WALLS and not just its roof.")]
-        [SerializeField] float overviewTilt = 38f;
-        [Tooltip("How much wider than the island to frame, so it isn't jammed against the edges.")]
+        [Tooltip("Degrees above the horizon. 90 is a map and 56 still reads as one; 32 is the three-quarter angle Kevin flew to with DockCamTuner, low enough that a building shows its WALLS and not just its roof.")]
+        [SerializeField] float overviewTilt = 32f;
+        [Tooltip("How much wider than the island to frame, so it isn't jammed against the edges. Only used when no explicit ground coverage is set.")]
         [SerializeField] float overviewMargin = 1.3f;
+
+        [Tooltip("Lens for the overview. Narrow on purpose: at 36 degrees the perspective flattens toward isometric, which is what makes a cluster of buildings read as a plan you can act on rather than a photograph of a hillside. Chosen by hand with DockCamTuner.")]
+        [SerializeField] float overviewFov = 36f;
+
+        [Tooltip("Metres of ground across the frame's HEIGHT. This is the zoom, expressed so it stays the same picture whatever the lens and the screen are: 165 m puts a crew member at about 1% of screen height. Chosen by hand with DockCamTuner.")]
+        [SerializeField] float overviewGroundMetres = 165f;
         [Tooltip("Seconds-ish to rise into the overview and to come back down.")]
         [SerializeField] float overviewResponse = 0.7f;
 
@@ -153,6 +159,7 @@ namespace SeaSick.CameraRig
         [SerializeField] float minPersonScreenFraction = 0.0055f;
         float overviewLevel;
         float baseFarClip = -1f;
+        float sailFov = -1f;
 
         /// Diagnostic only: the distance the overview last asked for.
         public float LastOverviewSpan { get; private set; }
@@ -213,13 +220,20 @@ namespace SeaSick.CameraRig
 
             // Speed reads in the lens: FOV opens with speed and punches when
             // the hull drops onto a wave face.
-            if (cam != null && motor != null)
+            // The sailing lens is tracked in a FIELD rather than written
+            // straight to the camera, because the overview needs a different
+            // one. Writing both to cam.fieldOfView made each frame's lerp
+            // start from the other's answer, so the two fought and settled
+            // somewhere neither had asked for.
+            if (motor != null)
             {
                 float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
                 float targetFov = fovBase + fovSpeedBoost * s01 * s01
                                   + fovSurfPunch * motor.SurfBoost01;
-                cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 1f - Mathf.Exp(-fovResponse * dt));
+                sailFov = Mathf.Lerp(sailFov <= 0f ? targetFov : sailFov, targetFov,
+                    1f - Mathf.Exp(-fovResponse * dt));
             }
+            else if (sailFov <= 0f) sailFov = fovBase;
 
             Vector3 shipFlat = new Vector3(target.position.x, 0f, target.position.z);
             Vector3 anchor, desired, lookPoint;
@@ -310,16 +324,24 @@ namespace SeaSick.CameraRig
             if (overviewLevel > 0.001f && shot.HasValue)
             {
                 var ov = shot.Value;
-                float vfov = cam != null ? cam.fieldOfView : 60f;
-                // Far enough back that a circle of `radius` fills the frame...
-                float span = ov.radius * overviewMargin
-                           / Mathf.Tan(vfov * 0.5f * Mathf.Deg2Rad);
+                float vfov = Mathf.Lerp(sailFov > 0f ? sailFov : fovBase, overviewFov, overviewLevel);
+                float tanHalf = Mathf.Tan(vfov * 0.5f * Mathf.Deg2Rad);
+
+                // The zoom is authored as METRES OF GROUND up the frame, not
+                // as a distance: distance means nothing without the lens, and
+                // the lens changed. Falls back to fitting `radius` when no
+                // coverage is set.
+                float span = overviewGroundMetres > 0.01f
+                    ? overviewGroundMetres / (2f * tanHalf)
+                    : ov.radius * overviewMargin / tanHalf;
                 // ...but never so far that the people stop reading. When the
                 // ground to cover is bigger than legibility allows,
                 // legibility wins and the frame holds the middle of it: an
                 // overview you cannot pick a person out of is a map, and the
                 // player already has a minimap.
                 span = Mathf.Min(span, ReadableDistance(vfov));
+                // Never so far back that the far clip cannot draw the ground.
+                
                 if (ov.span > 0.01f) span = ov.span;          // the tuner says exactly
                 LastOverviewSpan = span;
                 CurrentSpan = span;
@@ -355,6 +377,10 @@ namespace SeaSick.CameraRig
             }
             else if (cam != null && baseFarClip > 0f && cam.farClipPlane != baseFarClip)
                 cam.farClipPlane = baseFarClip;
+
+            if (cam != null)
+                cam.fieldOfView = Mathf.Lerp(sailFov > 0f ? sailFov : fovBase,
+                    overviewFov, overviewLevel);
 
             if (!rigSeeded) { rigPos = transform.position; rigSeeded = true; }
             rigPos = Vector3.Lerp(rigPos, desired, 1f - Mathf.Exp(-positionResponse * dt));

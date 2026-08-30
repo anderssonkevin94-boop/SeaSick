@@ -25,8 +25,13 @@ using SeaSick.World;
 ///   backspace         back to the shipped framing
 public class DockCamTuner : MonoBehaviour
 {
-    [Tooltip("Off = the game's own framing, untouched.")]
-    [SerializeField] bool active = true;
+    /// **Kept deliberately, switched off.** The framing it produced is
+    /// shipped in ChaseCamera (tilt 32, fov 36, 165 m of ground up the
+    /// frame); this stays in the scene so the next question about an angle
+    /// can be answered the same way instead of by me guessing again. Tick
+    /// `active` in the Inspector to take the camera back.
+    [Tooltip("Off = the game's own framing, untouched. Tick to fly the docked camera by hand.")]
+    [SerializeField] bool active = false;
 
     [Header("Feel")]
     [SerializeField] float orbitPerPixel = 0.25f;
