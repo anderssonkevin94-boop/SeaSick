@@ -21,6 +21,7 @@ public static class RunProbe
     public static void Scale() => Call("ScaleCheck");
     public static void Ruler() => Call("ScaleRuler");
     public static void Stand() => Call("DeckStandProbe");
+    public static void Wood() => Call("WoodProbe");
     public static void HitchStorm() => Call("HitchProbe", "Storm");
     public static void Hitch() => Call("HitchProbe");
     public static void WeatherAxes() => Call("WeatherSheet", "Axes");
