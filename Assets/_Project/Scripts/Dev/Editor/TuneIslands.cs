@@ -473,4 +473,440 @@ public static class TuneIslands
         System.IO.File.WriteAllText("/tmp/seasick-walkable.txt", sb.ToString());
         return sb.ToString();
     }
+
+    // ================= CONTIGUOUS BUILDABLE GROUND ========================
+    //
+    // `Walkable` above answers "what fraction of the land is under 10 deg"
+    // by throwing darts at the world, and 41.5 % is a true answer to a
+    // question nobody is going to build on. A settlement needs ground that is
+    // flat AND JOINED UP: a thousand flat patches a boat-length across add up
+    // to the same percentage as one field you could put a walled compound in,
+    // and a dart-throwing sampler cannot tell those apart even in principle.
+    //
+    // So: rasterise, label, and measure the biggest piece.
+    //
+    // Two numbers come out of it and they are not interchangeable. AREA says
+    // how much flat ground is joined together; the INSCRIBED CIRCLE says how
+    // big a thing fits inside it. A ribbon of flat ground following a contour
+    // can carry hectares and not hold a 40 m palisade anywhere along its
+    // length, and that ribbon is exactly what a terraced island produces --
+    // the benches ARE contour-following ribbons. Area alone would have
+    // reported this island as ready to build on.
+
+    /// Cell size of the fine raster, in metres. Small enough to resolve a
+    /// hut's footprint; the slope it reports is therefore a slope over 8 m,
+    /// against the 6 m `Walkable` uses, and the two are cross-checked below
+    /// rather than assumed to agree.
+    const float FineCell = 4f;
+
+    /// Coarse cell for finding the islands in the first place.
+    const float CoarseCell = 25f;
+
+    /// How far out to look for islands, in metres from home.
+    const float SearchExtent = 8000f;
+
+    /// How many of the nearest islands to raster in full.
+    const int IslandsMeasured = 8;
+
+    struct Patch
+    {
+        public int cells;
+        public float insetCells;     // radius of the largest inscribed circle
+        public float2 insetAt;
+        public float loY, hiY;
+    }
+
+    public static string Flats()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+        if (s == null) return "no TerrainSettings asset at " + Path;
+        var prm = TerrainParams.From(s);
+        var lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
+        var sb = new StringBuilder();
+
+        // --- stage 1: where are the islands ------------------------------
+        int cn = (int)(2f * SearchExtent / CoarseCell);
+        var coarseLand = new bool[cn * cn];
+        for (int j = 0; j < cn; j++)
+        {
+            float z = -SearchExtent + (j + 0.5f) * CoarseCell;
+            for (int i = 0; i < cn; i++)
+            {
+                float x = -SearchExtent + (i + 0.5f) * CoarseCell;
+                coarseLand[j * cn + i] = TerrainHeight.Height(new float2(x, z), prm, lut) > 0.5f;
+            }
+        }
+        var coarseId = Label(coarseLand, cn, cn);
+        int nIslands = 0;
+        foreach (var v in coarseId) if (v > nIslands) nIslands = v;
+
+        var area = new int[nIslands + 1];
+        var sumX = new double[nIslands + 1];
+        var sumZ = new double[nIslands + 1];
+        for (int j = 0; j < cn; j++)
+            for (int i = 0; i < cn; i++)
+            {
+                int id = coarseId[j * cn + i];
+                if (id == 0) continue;
+                area[id]++;
+                sumX[id] += -SearchExtent + (i + 0.5f) * CoarseCell;
+                sumZ[id] += -SearchExtent + (j + 0.5f) * CoarseCell;
+            }
+
+        var order = new System.Collections.Generic.List<int>();
+        for (int id = 1; id <= nIslands; id++)
+            if (area[id] * CoarseCell * CoarseCell > 20000f) order.Add(id);   // 2 ha or bigger
+        order.Sort((a, b) =>
+        {
+            double da = sumX[a] * sumX[a] + sumZ[a] * sumZ[a], db = sumX[b] * sumX[b] + sumZ[b] * sumZ[b];
+            return (da / (area[a] * (double)area[a])).CompareTo(db / (area[b] * (double)area[b]));
+        });
+
+        sb.AppendLine(order.Count + " islands over 2 ha within " + (SearchExtent / 1000f) + " km of home"
+            + " (coarse pass " + CoarseCell + " m); measuring the nearest " + IslandsMeasured);
+        sb.AppendLine("fine raster " + FineCell + " m, land = height > 0.5 m, 4-connected");
+        sb.AppendLine("buildable = slope < 10 deg (0.176), walkable = slope < 18 deg (0.325)");
+        sb.AppendLine();
+
+        float bigFlatBest = 0f, insetBest = 0f;
+        var insetAll = new System.Collections.Generic.List<float>();
+        var flatFracAll = new System.Collections.Generic.List<float>();
+        int shown = 0;
+
+        foreach (int id in order)
+        {
+            if (shown >= IslandsMeasured) break;
+            shown++;
+
+            // bbox of this island in world metres, padded clear of it
+            float minX = 9e9f, maxX = -9e9f, minZ = 9e9f, maxZ = -9e9f;
+            for (int j = 0; j < cn; j++)
+                for (int i = 0; i < cn; i++)
+                {
+                    if (coarseId[j * cn + i] != id) continue;
+                    float x = -SearchExtent + (i + 0.5f) * CoarseCell;
+                    float z = -SearchExtent + (j + 0.5f) * CoarseCell;
+                    if (x < minX) minX = x; if (x > maxX) maxX = x;
+                    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+                }
+            float pad = CoarseCell * 3f;
+            minX -= pad; maxX += pad; minZ -= pad; maxZ += pad;
+
+            int w = Mathf.CeilToInt((maxX - minX) / FineCell);
+            int h = Mathf.CeilToInt((maxZ - minZ) / FineCell);
+
+            var hgt = new float[w * h];
+            for (int j = 0; j < h; j++)
+            {
+                float z = minZ + (j + 0.5f) * FineCell;
+                for (int i = 0; i < w; i++)
+                {
+                    float x = minX + (i + 0.5f) * FineCell;
+                    hgt[j * w + i] = TerrainHeight.Height(new float2(x, z), prm, lut);
+                }
+            }
+
+            // Land of THIS island only: flood from its coarse cells, so a
+            // neighbour sharing the bounding box is not counted as part of it.
+            var landM = new bool[w * h];
+            for (int k = 0; k < landM.Length; k++) landM[k] = hgt[k] > 0.5f;
+            var seeds = new System.Collections.Generic.List<int>();
+            for (int j = 0; j < cn; j++)
+                for (int i = 0; i < cn; i++)
+                {
+                    if (coarseId[j * cn + i] != id) continue;
+                    float x = -SearchExtent + (i + 0.5f) * CoarseCell;
+                    float z = -SearchExtent + (j + 0.5f) * CoarseCell;
+                    int fi = (int)((x - minX) / FineCell), fj = (int)((z - minZ) / FineCell);
+                    if (fi < 0 || fj < 0 || fi >= w || fj >= h) continue;
+                    if (landM[fj * w + fi]) seeds.Add(fj * w + fi);
+                }
+            var mine = Flood(landM, w, h, seeds);
+
+            // Is this ONE island? The coarse pass groups land at 25 m, so a
+            // strait narrower than that reads as solid ground and two islands
+            // arrive as one -- which would leave every percentage below with
+            // the wrong denominator. Re-labelling the flooded land at 4 m
+            // says how many pieces it really is. (Only the denominators are
+            // at risk: the buildable and walkable components are labelled on
+            // this same fine grid, so a compound never spans a strait.)
+            float cellArea = FineCell * FineCell;
+            var landPieces = Label(mine, w, h);
+            var pieceCount = new System.Collections.Generic.Dictionary<int, int>();
+            foreach (var pv in landPieces)
+            {
+                if (pv == 0) continue;
+                pieceCount.TryGetValue(pv, out int pc);
+                pieceCount[pv] = pc + 1;
+            }
+            int biggestPiece = 0, piecesOver1Ha = 0;
+            foreach (var kv in pieceCount)
+            {
+                if (kv.Value > biggestPiece) biggestPiece = kv.Value;
+                if (kv.Value * FineCell * FineCell > 10000f) piecesOver1Ha++;
+            }
+
+            // Slope from the raster itself: one height evaluation per cell
+            // instead of five, and a slope over 8 m is a fairer question to
+            // ask on behalf of a building than a slope at a point.
+            var build = new bool[w * h];
+            var walk = new bool[w * h];
+            int landCells = 0, buildCells = 0, walkCells = 0;
+            for (int j = 1; j < h - 1; j++)
+                for (int i = 1; i < w - 1; i++)
+                {
+                    int k = j * w + i;
+                    if (!mine[k]) continue;
+                    landCells++;
+                    float dx = (hgt[k + 1] - hgt[k - 1]) / (2f * FineCell);
+                    float dz = (hgt[k + w] - hgt[k - w]) / (2f * FineCell);
+                    float sl = Mathf.Sqrt(dx * dx + dz * dz);
+                    if (sl < 0.176f) { build[k] = true; buildCells++; }
+                    if (sl < 0.325f) { walk[k] = true; walkCells++; }
+                }
+            if (landCells < 50) continue;
+
+            var bigBuild = Biggest(build, w, h, hgt, minX, minZ);
+            var bigWalk = Biggest(walk, w, h, hgt, minX, minZ);
+
+            float landHa = landCells * cellArea / 10000f;
+            float flatHa = bigBuild.cells * cellArea / 10000f;
+            float inset = bigBuild.insetCells * FineCell;
+            float cx = (float)(sumX[id] / area[id]), cz = (float)(sumZ[id] / area[id]);
+
+            insetAll.Add(inset);
+            flatFracAll.Add(100f * bigBuild.cells / Mathf.Max(1, landCells));
+            if (flatHa > bigFlatBest) bigFlatBest = flatHa;
+            if (inset > insetBest) insetBest = inset;
+
+            sb.AppendLine("island at (" + cx.ToString("F0") + ", " + cz.ToString("F0") + "), "
+                + (Mathf.Sqrt(cx * cx + cz * cz) / 1000f).ToString("F1") + " km from home");
+            sb.AppendLine("   land " + landHa.ToString("F1") + " ha, "
+                + (maxX - minX).ToString("F0") + " x " + (maxZ - minZ).ToString("F0") + " m across"
+                + " -- at 4 m it is " + pieceCount.Count + " piece(s), "
+                + piecesOver1Ha + " over 1 ha, biggest "
+                + (biggestPiece * cellArea / 10000f).ToString("F1") + " ha");
+            sb.AppendLine("   buildable " + (100f * buildCells / landCells).ToString("F1")
+                + "%, walkable " + (100f * walkCells / landCells).ToString("F1") + "%");
+            sb.AppendLine("   LARGEST CONTIGUOUS BUILDABLE: " + flatHa.ToString("F2") + " ha = "
+                + (100f * bigBuild.cells / Mathf.Max(1, buildCells)).ToString("F0") + "% of the island's flat ground, "
+                + "y " + bigBuild.loY.ToString("F0") + "-" + bigBuild.hiY.ToString("F0") + " m");
+            // How far the crew walk from the water to reach it. A compound
+            // they cannot land beside is a compound in the wrong place, and
+            // "buildable" says nothing at all about that.
+            float toShore = ShoreRun(landM, w, h, bigBuild.insetAt, minX, minZ);
+            sb.AppendLine("      biggest thing that fits inside it: " + (2f * inset).ToString("F0")
+                + " m across, at (" + bigBuild.insetAt.x.ToString("F0") + ", " + bigBuild.insetAt.y.ToString("F0") + ")"
+                + ", " + toShore.ToString("F0") + " m from the water");
+            sb.AppendLine("   largest contiguous WALKABLE: "
+                + (bigWalk.cells * cellArea / 10000f).ToString("F1") + " ha = "
+                + (100f * bigWalk.cells / Mathf.Max(1, walkCells)).ToString("F0")
+                + "% of the walkable ground (crew traversing it stay on one piece)");
+        }
+
+        // --- the instrument, checked against the one we already had -------
+        //
+        // This raster reads slope over 8 m; Walkable reads it over 6 m at a
+        // point. If the two disagree badly then one of them is measuring the
+        // 25 m detail layer and the other is stepping over it, and the
+        // buildable fraction here would be a property of the cell size
+        // rather than of the terrain.
+        {
+            int a = 0, b = 0, n2 = 0;
+            var rng = new System.Random(5150);
+            const float e = 3f;
+            for (int k = 0; k < 400000 && n2 < 20000; k++)
+            {
+                float x = (float)(rng.NextDouble() * 16000.0 - 8000.0);
+                float z = (float)(rng.NextDouble() * 16000.0 - 8000.0);
+                var p0 = new float2(x, z);
+                if (TerrainHeight.Height(p0, prm, lut) <= 0.5f) continue;
+                n2++;
+                float dx6 = (TerrainHeight.Height(p0 + new float2(e, 0f), prm, lut)
+                           - TerrainHeight.Height(p0 - new float2(e, 0f), prm, lut)) / (2f * e);
+                float dz6 = (TerrainHeight.Height(p0 + new float2(0f, e), prm, lut)
+                           - TerrainHeight.Height(p0 - new float2(0f, e), prm, lut)) / (2f * e);
+                if (Mathf.Sqrt(dx6 * dx6 + dz6 * dz6) < 0.176f) a++;
+                float g = FineCell;
+                float dx8 = (TerrainHeight.Height(p0 + new float2(g, 0f), prm, lut)
+                           - TerrainHeight.Height(p0 - new float2(g, 0f), prm, lut)) / (2f * g);
+                float dz8 = (TerrainHeight.Height(p0 + new float2(0f, g), prm, lut)
+                           - TerrainHeight.Height(p0 - new float2(0f, g), prm, lut)) / (2f * g);
+                if (Mathf.Sqrt(dx8 * dx8 + dz8 * dz8) < 0.176f) b++;
+            }
+            sb.AppendLine();
+            sb.AppendLine("instrument check on " + n2 + " land points: buildable reads "
+                + (100f * a / Mathf.Max(1, n2)).ToString("F1") + "% over a 6 m baseline, "
+                + (100f * b / Mathf.Max(1, n2)).ToString("F1") + "% over the raster's 8 m");
+        }
+
+        insetAll.Sort();
+        if (insetAll.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("across the " + insetAll.Count + " islands measured:");
+            sb.AppendLine("   biggest contiguous flat: " + bigFlatBest.ToString("F2") + " ha");
+            sb.AppendLine("   compound that fits, p50 " + (2f * insetAll[insetAll.Count / 2]).ToString("F0")
+                + " m across, best " + (2f * insetBest).ToString("F0") + " m");
+            sb.AppendLine("   for scale: palisade " + SeaSick.World.WorldScale.Palisade
+                + " m tall, longhouse " + SeaSick.World.WorldScale.Longhouse
+                + " m, the ship is " + SeaSick.World.WorldScale.ShipLength + " m long");
+        }
+
+        lut.Dispose();
+        System.IO.File.WriteAllText("/tmp/seasick-flats.txt", sb.ToString());
+        return sb.ToString();
+    }
+
+    /// Straight-line distance from a spot to the nearest water, in metres.
+    /// A ring search outward, so it stops at the first hit rather than
+    /// scanning the whole raster.
+    static float ShoreRun(bool[] land, int w, int h, float2 at, float minX, float minZ)
+    {
+        int ci = (int)((at.x - minX) / FineCell), cj = (int)((at.y - minZ) / FineCell);
+        for (int r = 1; r < Mathf.Max(w, h); r++)
+        {
+            for (int j = cj - r; j <= cj + r; j++)
+                for (int i = ci - r; i <= ci + r; i++)
+                {
+                    if (Mathf.Max(Mathf.Abs(i - ci), Mathf.Abs(j - cj)) != r) continue;
+                    if (i < 0 || j < 0 || i >= w || j >= h) return r * FineCell;
+                    if (!land[j * w + i])
+                    {
+                        float di = i - ci, dj = j - cj;
+                        return Mathf.Sqrt(di * di + dj * dj) * FineCell;
+                    }
+                }
+        }
+        return -1f;
+    }
+
+    /// 4-connected component labels, 1-based; 0 is not-set.
+    static int[] Label(bool[] m, int w, int h)
+    {
+        var id = new int[w * h];
+        var stack = new System.Collections.Generic.Stack<int>();
+        int next = 0;
+        for (int start = 0; start < m.Length; start++)
+        {
+            if (!m[start] || id[start] != 0) continue;
+            next++;
+            stack.Push(start); id[start] = next;
+            while (stack.Count > 0)
+            {
+                int k = stack.Pop();
+                int i = k % w, j = k / w;
+                if (i > 0 && m[k - 1] && id[k - 1] == 0) { id[k - 1] = next; stack.Push(k - 1); }
+                if (i < w - 1 && m[k + 1] && id[k + 1] == 0) { id[k + 1] = next; stack.Push(k + 1); }
+                if (j > 0 && m[k - w] && id[k - w] == 0) { id[k - w] = next; stack.Push(k - w); }
+                if (j < h - 1 && m[k + w] && id[k + w] == 0) { id[k + w] = next; stack.Push(k + w); }
+            }
+        }
+        return id;
+    }
+
+    /// Everything reachable from any seed, 4-connected.
+    static bool[] Flood(bool[] m, int w, int h, System.Collections.Generic.List<int> seeds)
+    {
+        var got = new bool[w * h];
+        var stack = new System.Collections.Generic.Stack<int>();
+        foreach (int sd in seeds) if (!got[sd]) { got[sd] = true; stack.Push(sd); }
+        while (stack.Count > 0)
+        {
+            int k = stack.Pop();
+            int i = k % w, j = k / w;
+            if (i > 0 && m[k - 1] && !got[k - 1]) { got[k - 1] = true; stack.Push(k - 1); }
+            if (i < w - 1 && m[k + 1] && !got[k + 1]) { got[k + 1] = true; stack.Push(k + 1); }
+            if (j > 0 && m[k - w] && !got[k - w]) { got[k - w] = true; stack.Push(k - w); }
+            if (j < h - 1 && m[k + w] && !got[k + w]) { got[k + w] = true; stack.Push(k + w); }
+        }
+        return got;
+    }
+
+    /// The biggest connected piece of a mask, and the largest circle that
+    /// fits inside it -- which is the number a walled compound actually
+    /// cares about, and the one that area cannot substitute for.
+    static Patch Biggest(bool[] mask, int w, int h, float[] hgt, float minX, float minZ)
+    {
+        var id = Label(mask, w, h);
+        int best = 0, bestId = 0;
+        var count = new System.Collections.Generic.Dictionary<int, int>();
+        foreach (var v in id)
+        {
+            if (v == 0) continue;
+            count.TryGetValue(v, out int c);
+            count[v] = c + 1;
+            if (c + 1 > best) { best = c + 1; bestId = v; }
+        }
+        var p = new Patch { cells = best, loY = 9e9f, hiY = -9e9f };
+        if (bestId == 0) { p.loY = p.hiY = 0f; return p; }
+
+        var inside = new bool[w * h];
+        for (int k = 0; k < id.Length; k++)
+            if (id[k] == bestId)
+            {
+                inside[k] = true;
+                if (hgt[k] < p.loY) p.loY = hgt[k];
+                if (hgt[k] > p.hiY) p.hiY = hgt[k];
+            }
+
+        var d2 = Edt(inside, w, h);
+        float bestD = -1f; int bestK = 0;
+        for (int k = 0; k < d2.Length; k++)
+            if (inside[k] && d2[k] > bestD) { bestD = d2[k]; bestK = k; }
+        p.insetCells = Mathf.Sqrt(Mathf.Max(0f, bestD));
+        p.insetAt = new float2(minX + (bestK % w + 0.5f) * FineCell, minZ + (bestK / w + 0.5f) * FineCell);
+        return p;
+    }
+
+    /// Exact squared Euclidean distance to the nearest cell OUTSIDE the mask
+    /// (Felzenszwalb & Huttenlocher, two separable passes of a lower
+    /// envelope). Exact rather than a chamfer approximation because the
+    /// answer is a building size and a few per cent is a wall.
+    static float[] Edt(bool[] inside, int w, int h)
+    {
+        const float INF = 1e20f;
+        var f = new float[w * h];
+        for (int k = 0; k < f.Length; k++) f[k] = inside[k] ? INF : 0f;
+
+        int n = Mathf.Max(w, h);
+        var d = new float[n]; var v = new int[n]; var zb = new float[n + 1]; var col = new float[n];
+
+        for (int j = 0; j < h; j++)                     // rows
+        {
+            for (int i = 0; i < w; i++) col[i] = f[j * w + i];
+            Env1D(col, d, v, zb, w);
+            for (int i = 0; i < w; i++) f[j * w + i] = d[i];
+        }
+        for (int i = 0; i < w; i++)                     // columns
+        {
+            for (int j = 0; j < h; j++) col[j] = f[j * w + i];
+            Env1D(col, d, v, zb, h);
+            for (int j = 0; j < h; j++) f[j * w + i] = d[j];
+        }
+        return f;
+    }
+
+    static void Env1D(float[] f, float[] d, int[] v, float[] z, int n)
+    {
+        const float INF = 1e20f;
+        int k = 0; v[0] = 0; z[0] = -INF; z[1] = INF;
+        for (int q = 1; q < n; q++)
+        {
+            float s;
+            while (true)
+            {
+                s = ((f[q] + q * q) - (f[v[k]] + v[k] * (float)v[k])) / (2f * q - 2f * v[k]);
+                if (s <= z[k] && k > 0) k--; else break;
+            }
+            k++; v[k] = q; z[k] = s; z[k + 1] = INF;
+        }
+        k = 0;
+        for (int q = 0; q < n; q++)
+        {
+            while (z[k + 1] < q) k++;
+            float dq = q - v[k];
+            d[q] = dq * dq + f[v[k]];
+        }
+    }
 }
