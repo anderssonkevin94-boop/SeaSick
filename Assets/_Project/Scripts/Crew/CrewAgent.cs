@@ -493,16 +493,39 @@ namespace SeaSick.Crew
             }
             else
             {
+                // **Follow the ground under their FEET, not the height of
+                // wherever they are going.**
+                //
+                // This was `y = target.y`, held for the whole walk: a crew
+                // member setting off for a tree sixty metres up the hill
+                // popped to sixty metres on the first step and glided there
+                // through the air, then sank into the slope on the way back
+                // down with the ship's height. Measured across a shore party
+                // on Island_1, against a raycast onto the drawn mesh: **mean
+                // 30 m off the ground, worst 94 m.**
+                //
+                // Sampled, not smoothed. The height field is continuous and
+                // they walk at a couple of metres a second, so following it
+                // exactly cannot jitter — and a lag here would trade a fixed
+                // error for one that grows with the slope they are crossing.
                 y = target.y;
                 var isle = World.Island.Nearest(next);
                 if (isle != null)
                 {
                     Vector3 flat = next - isle.transform.position;
                     flat.y = 0f;
-                    if (flat.magnitude > isle.Radius)
+                    // Against the shoreline on THIS bearing. The mean radius
+                    // called half a lobed island "sea" and floated them home
+                    // on the swell across dry land.
+                    float shore = isle.RadiusAt(Mathf.Atan2(flat.x, flat.z));
+                    if (flat.magnitude > shore)
                     {
                         if (Ocean.OceanSampler.Ready)
                             y = Ocean.OceanSampler.SampleImmediate(next).height + 0.35f;
+                    }
+                    else if (World.Island.TerrainHeight != null)
+                    {
+                        y = World.Island.TerrainHeight(next.x, next.z);
                     }
                 }
             }

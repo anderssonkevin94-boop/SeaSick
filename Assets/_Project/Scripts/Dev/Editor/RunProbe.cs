@@ -29,6 +29,7 @@ public static class RunProbe
     public static void Loop() => Call("LoopProbe");
     public static void Land() => Call("LandProbe");
     public static void LandSail() => Call("LandProbe", "Sail");
+    public static void Truth() => Call("IslandTruthProbe");
     public static void HitchStorm() => Call("HitchProbe", "Storm");
     public static void Hitch() => Call("HitchProbe");
     public static void WeatherAxes() => Call("WeatherSheet", "Axes");
