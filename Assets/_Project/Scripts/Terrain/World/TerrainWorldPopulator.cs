@@ -213,7 +213,8 @@ namespace SeaSick.Terrain
                 // because a pier with trees growing through it is exactly the
                 // sort of thing that only shows up once it is too late to
                 // pass anything down.
-                var site = HarbourSite.Find(root.transform.position, 700f, Height);
+                var site = HarbourSite.Find(root.transform.position,
+                    HarbourSite.SearchRadiusFor(meanR), Height);
                 if (site.found) DockBuilder.Build(root.transform, site, Height);
 
                 Dress(root.transform, root.transform.position, meanR, island, index);

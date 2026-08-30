@@ -107,6 +107,34 @@ namespace SeaSick.CameraRig
         /// Set by CombatLock; cleared when the target dies or breaks away.
         public Transform LockTarget { get; set; }
 
+        /// A high, steeply-tilted look at a whole island, used when she is
+        /// lying at a dock.
+        ///
+        /// Not a straight overhead: 90 degrees is a map, and a map has no
+        /// horizon, no sky and no sense of how tall anything is -- which is
+        /// most of what there is to see on an island with a 266 m massif on
+        /// it. Tilted, the land still reads as land, the ship stays in the
+        /// frame as the thing you know the size of, and the sea and sky give
+        /// it somewhere to be.
+        public struct IslandShot
+        {
+            public Vector3 centre;
+            public float radius;     // what has to fit in frame
+            public Vector3 from;     // horizontal direction the camera sits in
+        }
+
+        public IslandShot? Overview { get; set; }
+
+        [Header("Island overview (at a dock)")]
+        [Tooltip("Degrees above the horizon. 90 is a map; this is high enough to read the whole island and low enough to keep the sky.")]
+        [SerializeField] float overviewTilt = 56f;
+        [Tooltip("How much wider than the island to frame, so it isn't jammed against the edges.")]
+        [SerializeField] float overviewMargin = 1.3f;
+        [Tooltip("Seconds-ish to rise into the overview and to come back down.")]
+        [SerializeField] float overviewResponse = 0.7f;
+        float overviewLevel;
+        float baseFarClip = -1f;
+
         void Start()
         {
             cam = GetComponent<Camera>();
@@ -220,6 +248,46 @@ namespace SeaSick.CameraRig
                 lookPoint = anchor + flatForward * (ahead * (1f - lockLevel))
                           + Vector3.up * (lookHeight + seaY);
             }
+
+            // --- the island overview, blended over whatever was framed ----
+            float wantOverview = Overview.HasValue ? 1f : 0f;
+            overviewLevel = Mathf.Lerp(overviewLevel, wantOverview,
+                1f - Mathf.Exp(-overviewResponse * dt));
+            if (overviewLevel > 0.001f && Overview.HasValue)
+            {
+                var ov = Overview.Value;
+                float vfov = cam != null ? cam.fieldOfView : 60f;
+                // Far enough back that a circle of `radius` fills the frame.
+                float span = ov.radius * overviewMargin
+                           / Mathf.Tan(vfov * 0.5f * Mathf.Deg2Rad);
+                Vector3 dir = ov.from;
+                dir.y = 0f;
+                dir = dir.sqrMagnitude < 0.01f ? Vector3.back : dir.normalized;
+                float tilt = overviewTilt * Mathf.Deg2Rad;
+                Vector3 seat = ov.centre
+                             + dir * (span * Mathf.Cos(tilt))
+                             + Vector3.up * (span * Mathf.Sin(tilt));
+                desired = Vector3.Lerp(desired, seat, overviewLevel);
+                lookPoint = Vector3.Lerp(lookPoint, ov.centre, overviewLevel);
+                // Nothing up there rides the swell.
+                seaY *= 1f - overviewLevel;
+
+                // The far clip is 600 m, which is right for a camera sitting
+                // twenty metres above the water and wrong for one three
+                // hundred metres up: the first overview rendered the island
+                // correctly and cut the sky off into a flat grey band across
+                // the top of the frame, because the sky dome is further away
+                // than the water ever is.
+                if (cam != null)
+                {
+                    if (baseFarClip < 0f) baseFarClip = cam.farClipPlane;
+                    float need = span + ov.radius * 2f + 900f;
+                    cam.farClipPlane = Mathf.Lerp(baseFarClip, Mathf.Max(baseFarClip, need),
+                        overviewLevel);
+                }
+            }
+            else if (cam != null && baseFarClip > 0f && cam.farClipPlane != baseFarClip)
+                cam.farClipPlane = baseFarClip;
 
             if (!rigSeeded) { rigPos = transform.position; rigSeeded = true; }
             rigPos = Vector3.Lerp(rigPos, desired, 1f - Mathf.Exp(-positionResponse * dt));

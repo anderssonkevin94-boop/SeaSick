@@ -60,6 +60,17 @@ namespace SeaSick.Terrain
         /// How far back from the root the land has to be worth arriving at.
         public const float Hinterland = 90f;
 
+        /// How far out to look for a berth, given an island's mean radius.
+        ///
+        /// It has to come from the ISLAND. A fixed radius was used first and
+        /// it reached 700 m from a 151 m island, found a better shore on the
+        /// NEIGHBOUR, and built the home dock over there -- and because the
+        /// camera frames whichever island the dock belongs to, the overview
+        /// then framed the wrong island too. One constant, two wrong answers,
+        /// and both of them looked like plausible pictures.
+        public static float SearchRadiusFor(float meanRadius)
+            => Mathf.Clamp(meanRadius * 1.6f + 80f, 200f, 900f);
+
         /// Finds the best site around a centre. `height` is the world height
         /// function; sea level is zero.
         public static Site Find(Vector3 centre, float searchRadius,
@@ -80,6 +91,14 @@ namespace SeaSick.Terrain
                 {
                     int k = j * n + i;
                     if (h[k] <= 0.2f || h[k] > 6f) continue;      // a shore, not a hill
+
+                    // The raster is a SQUARE and the search is a RADIUS, so
+                    // without this the corners reach 1.41 x further than the
+                    // radius allows -- which is exactly how a 322 m search
+                    // from a 151 m island reached a neighbour 420 m away and
+                    // built the home dock on it.
+                    float ddx = x0 + i * cell - centre.x, ddz = z0 + j * cell - centre.z;
+                    if (ddx * ddx + ddz * ddz > searchRadius * searchRadius) continue;
                     bool touchesWater = h[k - 1] <= 0f || h[k + 1] <= 0f
                                      || h[k - n] <= 0f || h[k + n] <= 0f;
                     if (!touchesWater) continue;

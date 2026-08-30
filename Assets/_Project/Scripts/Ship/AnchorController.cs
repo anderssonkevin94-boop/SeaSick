@@ -17,12 +17,20 @@ namespace SeaSick.Ship
         [SerializeField] float weighTime = 0f;
         [Tooltip("How far off the shoreline the ship lies when moored.")]
         [SerializeField] float berthDistance = 11f;
+        [Tooltip("How close to her berth she has to be before the dock will take her. About two ship lengths.")]
+        [SerializeField] float dockRange = 55f;
+        [Tooltip("Start the voyage tied up at home, rather than adrift off the beach.")]
+        [SerializeField] bool startAtHomeDock = true;
+        bool startedDocked;
         [SerializeField] float berthSpeed = 1.6f;
         [SerializeField] float approachSpeedLimit = 6.5f; // must slow down to anchor
 
         public enum State { Underway, Dropping, Anchored, Ashore, Weighing }
         public State CurrentState { get; private set; } = State.Underway;
         public Island CurrentIsland { get; private set; }
+
+        /// The dock she is lying at, or null if she is anchored off a beach.
+        public Dock CurrentDock { get; private set; }
 
         ShipMotor motor;
         HullIntegrity hull;
@@ -68,6 +76,15 @@ namespace SeaSick.Ship
             {
                 case State.Underway:
                 {
+                    // A dock beats a beach. If you have brought her within
+                    // reach of her berth, coming alongside is what you meant;
+                    // running her up the sand thirty metres away is not.
+                    var d = DockInRange();
+                    if (d != null && motor.CurrentSpeed <= approachSpeedLimit)
+                    {
+                        ComeAlongside(d);
+                        break;
+                    }
                     var isle = IslandInRange();
                     if (isle != null && CanLandHere(isle)
                         && motor.CurrentSpeed <= approachSpeedLimit)
@@ -104,9 +121,47 @@ namespace SeaSick.Ship
         /// into the water, so the approach bearing matters.
         bool CanLandHere(Island isle) => isle != null && isle.HasBeachToward(transform.position);
 
+        /// Her own berth, if she is close enough to take it.
+        public Dock DockInRange()
+        {
+            var d = Dock.Home;
+            return d != null && d.DistanceFrom(transform.position) <= dockRange ? d : null;
+        }
+
+        void ComeAlongside(Dock d)
+        {
+            CurrentDock = d;
+            CurrentIsland = Island.Nearest(d.Berth);
+            motor.Anchored = true;
+            CurrentState = State.Anchored;
+        }
+
         void Update()
         {
             float dt = Time.deltaTime;
+
+            // Home is where the dock is, so that is where a voyage starts.
+            // Done here rather than in a spawner because the dock does not
+            // exist until the populator has found the island and built it,
+            // which is a frame after anything in Awake could ask.
+            if (startAtHomeDock && !startedDocked && Dock.Home != null)
+            {
+                startedDocked = true;
+                var d = Dock.Home;
+                Vector3 p = d.Berth;
+                p.y = transform.position.y;
+                var rb = GetComponent<Rigidbody>();
+                transform.SetPositionAndRotation(p, d.Heading);
+                if (rb != null)
+                {
+                    rb.position = p;
+                    rb.rotation = d.Heading;
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+                motor.AnchorPoint = p;
+                ComeAlongside(d);
+            }
 
             SpacebarCommand();
 
@@ -122,7 +177,9 @@ namespace SeaSick.Ship
                     if (timer <= 0f)
                     {
                         motor.Anchored = false;
+                        motor.MooringHeading = null;
                         CurrentIsland = null;
+                        CurrentDock = null;
                         CurrentState = State.Underway;
                     }
                     break;
@@ -154,8 +211,29 @@ namespace SeaSick.Ship
             if (!moored || CurrentIsland == null)
             {
                 if (gangway != null) gangway.Withdraw();
+                motor.MooringHeading = null;
                 return;
             }
+
+            // At a pier the berth is a PLACE with a HEADING, not an offset
+            // from an island centre. The radial mooring below is right for
+            // running her onto a beach and wrong here: it would walk her off
+            // the berth toward whatever bearing she happens to lie on and
+            // leave her athwart the pier.
+            if (CurrentDock != null)
+            {
+                Vector3 target = CurrentDock.Berth;
+                target.y = motor.AnchorPoint.y;
+                motor.AnchorPoint = Vector3.Lerp(motor.AnchorPoint, target,
+                    1f - Mathf.Exp(-berthSpeed * dt));
+                motor.MooringHeading = CurrentDock.Heading.eulerAngles.y;
+                // The plank reaches the pier, not the island — until it knows
+                // how to do that, it stays inboard rather than stabbing at a
+                // beach thirty metres away.
+                if (gangway != null) gangway.Withdraw();
+                return;
+            }
+            motor.MooringHeading = null;
 
             Vector3 c = CurrentIsland.transform.position;
             Vector3 out2 = transform.position - c;
@@ -179,6 +257,40 @@ namespace SeaSick.Ship
         void UpdateCameraFocus()
         {
             if (chaseCam == null) return;
+
+            // Lying at the dock is the one moment the player is not steering,
+            // so it is the one moment the camera can leave the water and show
+            // them what they came home to.
+            bool atDock = CurrentDock != null
+                && (CurrentState == State.Anchored || CurrentState == State.Ashore)
+                && CurrentDock.DistanceFrom(transform.position) < dockRange;
+            if (atDock && CurrentIsland != null)
+            {
+                // Framed on the island's centre alone, the dock sat on the
+                // very bottom edge with the ship half out of frame -- the
+                // dock is on a shore, so it is always at the limit of a
+                // circle drawn round the middle. Biasing the centre toward
+                // the berth puts your own boat comfortably in the picture,
+                // which is the thing in it whose size you know.
+                Vector3 c = CurrentIsland.transform.position;
+                Vector3 berth = CurrentDock.Berth;
+                Vector3 centre = Vector3.Lerp(c, berth, 0.3f);
+                centre.y = 0f;
+                Vector3 from = berth - c;
+                from.y = 0f;
+                float reach = Mathf.Max(120f, CurrentIsland.MaxRadius);
+                chaseCam.Overview = new SeaSick.CameraRig.ChaseCamera.IslandShot
+                {
+                    centre = centre,
+                    // Everything that must fit: the island from the shifted
+                    // centre, and the berth itself.
+                    radius = Mathf.Max(reach * 0.8f,
+                        Vector3.Distance(centre, berth) + WorldScale.ShipLength),
+                    from = from,
+                };
+            }
+            else chaseCam.Overview = null;
+
             if (CurrentState != State.Ashore) { chaseCam.PointOfInterest = null; return; }
 
             Vector3 sum = Vector3.zero;
@@ -316,6 +428,23 @@ namespace SeaSick.Ship
             {
                 case State.Underway:
                 {
+                    // The dock's own prompt, which replaces the beach one
+                    // rather than sitting beside it -- two ways to stop in
+                    // the same thirty metres is a choice nobody wants to make.
+                    var d = DockInRange();
+                    if (d != null)
+                    {
+                        bool slow = motor.CurrentSpeed <= approachSpeedLimit;
+                        UIBlocker.Block(primary);
+                        GUI.enabled = slow;
+                        if (GUI.Button(primary, slow
+                                ? "⚓  Come alongside   (space)"
+                                : "slow down to come alongside  (S)", buttonStyle))
+                            ComeAlongside(d);
+                        GUI.enabled = true;
+                        return;
+                    }
+
                     var isle = IslandInRange();
                     if (isle == null) return;
                     bool beach = CanLandHere(isle);

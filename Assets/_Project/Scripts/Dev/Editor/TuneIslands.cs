@@ -910,4 +910,191 @@ public static class TuneIslands
         }
     }
 
+
+    // ================= CHOOSING A HOME ISLAND =============================
+    //
+    // The home island is not authored: it is whichever land `worldOffset`
+    // slides under the spawn. So making home SMALLER does not mean retuning
+    // the world -- islands come in every size already, 2.7 to 126 ha within
+    // 8 km -- it means picking a different one and moving the offset. Nothing
+    // about the terrain changes, no coastline moves, and every number
+    // measured about the world stays true.
+    //
+    // Sampling is `noise(p + worldOffset)`, so to bring the island currently
+    // centred at C to the spawn: newOffset = C + oldOffset.
+    //
+    // A home island has to satisfy three things that pull against each other:
+    //
+    //   SMALL ENOUGH TO SEE. The chase camera's far clip is 600 m. Framing a
+    //   circle of radius R at 60 degrees puts the camera about 2.25 R away,
+    //   and the far side of the island is R beyond that -- so an island you
+    //   can take in whole from above is about 185 m in radius, and the
+    //   current home is over 500. This is the constraint that a screenshot
+    //   would have shown as an empty grey frame and nothing else.
+    //
+    //   BIG ENOUGH TO LIVE ON. A walled compound needs contiguous ground
+    //   under 10 degrees; the survey says the median island offers 96 m of it
+    //   and the smallest 29 m, which is not a settlement.
+    //
+    //   IT NEEDS A HARBOUR. Deep water within a short pier, a clear approach,
+    //   land behind it. Plenty of coast fails this.
+    public static string HomeCandidates()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+        if (s == null) return "no TerrainSettings asset at " + Path;
+        var prm = TerrainParams.From(s);
+        var lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
+        System.Func<float, float, float> H = (x, z) => TerrainHeight.Height(new float2(x, z), prm, lut);
+        var sb = new StringBuilder();
+
+        const float Far = 600f;      // the chase camera's far clip
+        const float Fov = 60f;
+        float framingFactor = 1.3f / Mathf.Tan(Fov * 0.5f * Mathf.Deg2Rad);   // ~2.25
+
+        int cn = (int)(2f * SearchExtent / CoarseCell);
+        var coarseLand = new bool[cn * cn];
+        for (int j = 0; j < cn; j++)
+            for (int i = 0; i < cn; i++)
+                coarseLand[j * cn + i] = H(-SearchExtent + (i + 0.5f) * CoarseCell,
+                                           -SearchExtent + (j + 0.5f) * CoarseCell) > 0.5f;
+        var id = Label(coarseLand, cn, cn);
+        int nIsl = 0; foreach (var v in id) if (v > nIsl) nIsl = v;
+
+        var cells = new int[nIsl + 1];
+        var sx = new double[nIsl + 1];
+        var sz = new double[nIsl + 1];
+        for (int j = 0; j < cn; j++)
+            for (int i = 0; i < cn; i++)
+            {
+                int k = id[j * cn + i];
+                if (k == 0) continue;
+                cells[k]++;
+                sx[k] += -SearchExtent + (i + 0.5f) * CoarseCell;
+                sz[k] += -SearchExtent + (j + 0.5f) * CoarseCell;
+            }
+
+        sb.AppendLine("far clip " + Far + " m, so an island readable whole from above is about "
+            + (Far / (framingFactor + 1f)).ToString("F0") + " m in radius");
+        sb.AppendLine("candidates, nearest first (only those that could BE a home):");
+        sb.AppendLine("  reach peak  land    flat-patch  compound  pier  shelter   camera  at");
+
+        var rows = new System.Collections.Generic.List<(float score, string line, Vector2 at, float reach)>();
+        for (int k = 1; k <= nIsl; k++)
+        {
+            float ha0 = cells[k] * CoarseCell * CoarseCell / 10000f;
+            if (ha0 < 2f || ha0 > 30f) continue;          // too small to live on, too big to see
+            var c = new Vector2((float)(sx[k] / cells[k]), (float)(sz[k] / cells[k]));
+            if (c.magnitude > 5000f) continue;             // keep the world's shape near home
+
+            // Fine raster of just this island.
+            float minX = 9e9f, maxX = -9e9f, minZ = 9e9f, maxZ = -9e9f;
+            for (int j = 0; j < cn; j++)
+                for (int i = 0; i < cn; i++)
+                {
+                    if (id[j * cn + i] != k) continue;
+                    float x = -SearchExtent + (i + 0.5f) * CoarseCell;
+                    float z = -SearchExtent + (j + 0.5f) * CoarseCell;
+                    if (x < minX) minX = x; if (x > maxX) maxX = x;
+                    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+                }
+            minX -= 60f; maxX += 60f; minZ -= 60f; maxZ += 60f;
+            int w = Mathf.CeilToInt((maxX - minX) / FineCell), h = Mathf.CeilToInt((maxZ - minZ) / FineCell);
+            if (w < 4 || h < 4 || w * h > 400000) continue;
+
+            var hgt = new float[w * h];
+            for (int j = 0; j < h; j++)
+                for (int i = 0; i < w; i++)
+                    hgt[j * w + i] = H(minX + (i + 0.5f) * FineCell, minZ + (j + 0.5f) * FineCell);
+
+            var landM = new bool[w * h];
+            for (int q = 0; q < landM.Length; q++) landM[q] = hgt[q] > 0.5f;
+            var seeds = new System.Collections.Generic.List<int>();
+            for (int j = 0; j < cn; j++)
+                for (int i = 0; i < cn; i++)
+                {
+                    if (id[j * cn + i] != k) continue;
+                    int fi = (int)((-SearchExtent + (i + 0.5f) * CoarseCell - minX) / FineCell);
+                    int fj = (int)((-SearchExtent + (j + 0.5f) * CoarseCell - minZ) / FineCell);
+                    if (fi < 0 || fj < 0 || fi >= w || fj >= h) continue;
+                    if (landM[fj * w + fi]) seeds.Add(fj * w + fi);
+                }
+            var mine = Flood(landM, w, h, seeds);
+
+            var build = new bool[w * h];
+            int landN = 0;
+            float reach = 0f, peak = 0f;
+            for (int j = 1; j < h - 1; j++)
+                for (int i = 1; i < w - 1; i++)
+                {
+                    int q = j * w + i;
+                    if (!mine[q]) continue;
+                    landN++;
+                    float px = minX + (i + 0.5f) * FineCell, pz = minZ + (j + 0.5f) * FineCell;
+                    reach = Mathf.Max(reach, Vector2.Distance(new Vector2(px, pz), c));
+                    if (hgt[q] > peak) peak = hgt[q];
+                    float dx = (hgt[q + 1] - hgt[q - 1]) / (2f * FineCell);
+                    float dz = (hgt[q + w] - hgt[q - w]) / (2f * FineCell);
+                    if (Mathf.Sqrt(dx * dx + dz * dz) < 0.176f) build[q] = true;
+                }
+            if (landN < 100) continue;
+
+            var patch = Biggest(build, w, h, hgt, minX, minZ);
+            float compound = 2f * patch.insetCells * FineCell;
+            float ha = landN * FineCell * FineCell / 10000f;
+
+            var site = HarbourSite.Find(new Vector3(c.x, 0f, c.y), HarbourSite.SearchRadiusFor(reach * 0.75f), H);
+
+            // Distance the camera would sit at, and whether the far side of
+            // the island is still inside the far clip from there.
+            float camDist = reach * framingFactor;
+            bool seesAll = camDist + reach <= Far;
+
+            // An island that is 98 % under ten degrees is not a gentle
+            // island, it is a sandbar -- flat at the wrong ALTITUDE renders
+            // as one enormous beach, which this project has shipped once
+            // already. Peak height is what separates the two.
+            string line = "  " + reach.ToString("F0").PadLeft(5) + "m "
+                + peak.ToString("F0").PadLeft(4) + "m "
+                + ha.ToString("F1").PadLeft(5) + "ha "
+                + (patch.cells * FineCell * FineCell / 10000f).ToString("F2").PadLeft(9) + "ha "
+                + compound.ToString("F0").PadLeft(8) + "m "
+                + (site.found ? site.pierLength.ToString("F0").PadLeft(4) + "m" : "  none")
+                + (site.found ? (site.shelter * 100f).ToString("F0").PadLeft(7) + "%" : "       -")
+                + camDist.ToString("F0").PadLeft(8) + "m" + (seesAll ? " ok " : " CUT")
+                + "  (" + c.x.ToString("F0") + ", " + c.y.ToString("F0") + ")";
+
+            // Rank: it must be seeable, it must hold a compound, it must have
+            // a harbour. Within that, bigger is better -- Kevin wants smaller
+            // than the current home, not the smallest rock in the sea.
+            float flatShare = patch.cells * FineCell * FineCell / 10000f / Mathf.Max(0.01f, ha);
+            float score = (seesAll ? 3f : 0f)
+                        - (flatShare > 0.8f ? 3f : 0f)          // a pancake reads as a sandbar
+                        - (peak < 12f ? 2f : 0f)
+                        + Mathf.Clamp01(compound / 80f) * 3f
+                        + (site.found ? 2f + site.shelter : 0f)
+                        + Mathf.Clamp01(ha / 14f);
+            rows.Add((score, line, c, reach));
+        }
+
+        rows.Sort((a, b) => b.score.CompareTo(a.score));
+        for (int i = 0; i < Mathf.Min(10, rows.Count); i++) sb.AppendLine(rows[i].line);
+
+        if (rows.Count > 0)
+        {
+            var best = rows[0];
+            var off = new Vector2(best.at.x + s.worldOffset.x, best.at.y + s.worldOffset.y);
+            sb.AppendLine();
+            sb.AppendLine("BEST: the island at (" + best.at.x.ToString("F0") + ", " + best.at.y.ToString("F0")
+                + "), reach " + best.reach.ToString("F0") + " m");
+            sb.AppendLine("   to make it home:  worldOffset = (" + off.x.ToString("F0") + ", " + off.y.ToString("F0") + ")");
+            sb.AppendLine("   (sampling is noise(p + worldOffset), so newOffset = centre + oldOffset = "
+                + best.at.x.ToString("F0") + " + " + s.worldOffset.x.ToString("F0") + ", "
+                + best.at.y.ToString("F0") + " + " + s.worldOffset.y.ToString("F0") + ")");
+        }
+        else sb.AppendLine("no island in range met all three");
+
+        lut.Dispose();
+        System.IO.File.WriteAllText("/tmp/seasick-home.txt", sb.ToString());
+        return sb.ToString();
+    }
 }

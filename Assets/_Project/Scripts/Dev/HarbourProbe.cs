@@ -29,7 +29,7 @@ public class HarbourProbe : MonoBehaviour
         sb.AppendLine($"'{home.name}' centre ({centre.x:F0}, {centre.z:F0}), mean radius {home.Radius:F0} m");
 
         var all = new List<HarbourSite.Site>();
-        var best = HarbourSite.Find(centre, 700f, (x, z) => H(x, z), all);
+        var best = HarbourSite.Find(centre, HarbourSite.SearchRadiusFor(home.Radius), (x, z) => H(x, z), all);
         sb.AppendLine($"{all.Count} shore cells passed all four tests (depth, approach, backshore, land)");
         if (!best.found) { Report(sb + "no site met them\n"); return; }
 
@@ -90,6 +90,14 @@ public class HarbourProbe : MonoBehaviour
         var dock = Dock.Home;
         sb.AppendLine();
         if (dock == null) { sb.AppendLine("NO DOCK BUILT"); Report(sb.ToString()); return; }
+
+        // Whose island is this dock actually on? The search radius used to be
+        // a constant and put the home dock on the neighbour, which every
+        // other number then reported perfectly correctly about the wrong
+        // island.
+        var owner = Island.Nearest(dock.Root);
+        sb.AppendLine($"   the dock stands on '{(owner != null ? owner.name : "nothing")}'"
+            + (owner == home ? " -- home" : " -- NOT THE HOME ISLAND"));
 
         var mf = dock.GetComponent<MeshFilter>();
         var verts = mf.sharedMesh.vertices;
@@ -152,6 +160,40 @@ public class HarbourProbe : MonoBehaviour
         float sideGap = HarbourSite.BerthOffset - DockBuilder.HeadWidth * 0.5f - 8.44f * 0.5f;
         sb.AppendLine($"   daylight between her side and the pier head: {sideGap:F2} m "
             + (sideGap < 0.3f ? "-- SHE IS INSIDE THE PIER" : ""));
+
+        // ---- and where SHE actually is ----------------------------------
+        sb.AppendLine();
+        if (motor == null) { Report(sb.ToString()); return; }
+        Vector3 at = motor.transform.position;
+        float off = dock.DistanceFrom(at);
+        float headErr = Mathf.Abs(Mathf.DeltaAngle(motor.transform.eulerAngles.y,
+            dock.Heading.eulerAngles.y));
+        sb.AppendLine("THE SHIP");
+        sb.AppendLine($"   {off:F1} m off her berth, heading {headErr:F0} deg from parallel");
+
+        // Aground? Her own box against the seabed, in her CURRENT attitude,
+        // not the berth's.
+        Vector3 fwd = motor.transform.forward, rgt = motor.transform.right;
+        float clear = 999f;
+        for (float t3 = -0.5f; t3 <= 0.5f; t3 += 0.05f)
+            for (float b3 = -0.5f; b3 <= 0.5f; b3 += 0.25f)
+            {
+                Vector3 p = at + fwd * (t3 * WorldScale.ShipLength) + rgt * (b3 * 8.44f);
+                clear = Mathf.Min(clear, -H(p.x, p.z));
+            }
+        sb.AppendLine($"   {clear:F1} m of water under her, shallowest "
+            + (clear < 1.5f ? "-- AGROUND" : "-- afloat"));
+
+        var anchor = motor.GetComponent<SeaSick.Ship.AnchorController>();
+        if (anchor != null)
+            sb.AppendLine($"   state {anchor.CurrentState}, "
+                + (anchor.CurrentDock != null ? "at the dock" : "not at a dock"));
+
+        var chase = FindAnyObjectByType<SeaSick.CameraRig.ChaseCamera>();
+        if (chase != null)
+            sb.AppendLine($"   camera overview {(chase.Overview.HasValue ? "ON" : "off")}, "
+                + $"standing {chase.transform.position.y:F0} m up, "
+                + $"{Vector3.Distance(chase.transform.position, home.transform.position):F0} m from the island");
 
         Report(sb.ToString());
     }

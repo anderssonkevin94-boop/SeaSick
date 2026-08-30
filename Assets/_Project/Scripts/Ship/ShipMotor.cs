@@ -96,6 +96,13 @@ namespace SeaSick.Ship
         /// beach instead of writing the transform — physics does the moving.
         public Vector3 AnchorPoint { get => anchorPoint; set => anchorPoint = value; }
 
+        /// Which way she lies while moored, in degrees, or null to let her
+        /// swing. Anchoring off a beach leaves her free to lie however the
+        /// water puts her, which is right; lying against a PIER does not —
+        /// a boat at a dock is parallel to it or she is fouling it. The
+        /// anchor spring only ever pulled position, so heading needs its own.
+        public float? MooringHeading { get; set; }
+
         public bool Rowing { get; set; }
         public float RowSpeed => rowSpeed;
         public float OarPower01 => roster != null ? roster.Labour01 : 1f;
@@ -410,6 +417,17 @@ namespace SeaSick.Ship
                 Vector3 toAnchor = Flat3(anchorPoint - transform.position);
                 rb.AddForce(toAnchor * (mass * 0.4f) - Flat3(rb.linearVelocity) * (mass * 0.8f),
                     ForceMode.Force);
+
+                // Spring her head round to the berth's heading, damped on her
+                // actual yaw rate. Critically damped-ish rather than snapped:
+                // she is a floating body and a mooring line pulls, it does not
+                // teleport.
+                if (MooringHeading.HasValue)
+                {
+                    float err = Mathf.DeltaAngle(transform.eulerAngles.y, MooringHeading.Value);
+                    rb.AddTorque(Vector3.up * ((err * Mathf.Deg2Rad * 0.9f
+                        - rb.angularVelocity.y * 1.6f) * RollInertia()), ForceMode.Force);
+                }
             }
 
             // --- soft attitude limits (replace the old hard clamps) ---
