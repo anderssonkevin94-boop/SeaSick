@@ -601,3 +601,53 @@ settled it. For a look-or-feel question, build the tuner and hand it over.
   field appears NOWHERE in `Sea.unity` — grepping the scene said "absent"
   while the live component said 56. Only the running object knows. Push with
   `SerializedObject` and read back.
+
+## 2026-08-30 (later) — the voyage loop and the first buildings
+
+### `VillageProbe` (`RunProbe.Village`)
+Where the village clearing is, whether it is empty, and — the half worth
+having — **whether reserving it moved the rest of the wood**. Trees are found
+by trunk colour off the BAKED mesh, exactly as `WoodProbe` finds them. Then it
+bakes the same island a second time with no keep-out at all and matches the two
+trunk sets: every tree outside the clearing must be in both, at the same place.
+`IslandScenery` walks one `System.Random` through the grid in order, so this is
+the only way to know a keep-out did not reshuffle the forest. Last run: 267/267
+matched at 0.000 m, clearing cost 31 trees.
+
+### `VillageProbe.Build` (`RunProbe.VillageBuild`) and `.Shot` (`RunProbe.VillageShot`)
+`Build` raises storehouses until the clearing refuses one and reports, for each,
+its distance from the clearing centre and the **drop between its highest and
+lowest footprint corner** — the gap the footing has to bridge, because nothing
+here flattens ground. `Shot` writes `/tmp/village-dock.png` (the game's own
+docked camera) and `/tmp/village-plan.png` (straight down on the clearing).
+
+### `LoopProbe` (`RunProbe.Loop`)
+One whole voyage in ten seconds: cast off, warp out, load past capacity, warp
+back, come alongside, land the haul, build. **It moves the ship and lets the
+real systems run** — it never calls `CompleteVoyage` or sets a phase itself. A
+check that drove the state machine by hand would prove only that the state
+machine can be driven by hand. It is what caught the frame-one voyage.
+
+### `HomePanelShot`
+A real screen grab of the home panel. In the **editor** assembly on purpose:
+`ScreenCapture` lives in a module this project does not give the runtime
+assembly (which is why every other shot renders a camera to a RenderTexture),
+and a camera is no use here anyway — the panel is IMGUI and IMGUI never reaches
+a target texture.
+
+### Traps this session added to the pile
+- **The editor's Game view is landscape and this game is not.** Ground projected
+  through the live camera put the village at viewport x 0.18 — comfortably in
+  frame — and at the shipping 900×1500 the same point is at **x −0.26, off the
+  left edge**. Force `cam.aspect` before judging any framing, and remember the
+  docked shot in portrait is a narrow wedge: ±43 m across the pier axis against
+  252 m inland.
+- **A distance test cannot tell "not yet arrived" from "not yet placed."** The
+  voyage completed on frame one because the ship sits at her scene position for
+  the frames before the populator has built the dock and moved her onto it —
+  483 m from a berth that does not exist, which is indistinguishable from a ship
+  that has sailed. Gate on having *been* somewhere, not on being far from it.
+- **A "safe" bound is not free.** Siting the village within a conservative 70 m
+  of the frame centre instead of the measured 42 m half-width sounded harmless
+  and picked a clearing that holds exactly one building. Measure the real
+  constraint; a guessed one is wrong in both directions at once.

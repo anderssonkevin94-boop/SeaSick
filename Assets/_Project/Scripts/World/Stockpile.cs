@@ -13,7 +13,8 @@ namespace SeaSick.World
         [SerializeField] int perRow = 4;
         [SerializeField] float spacing = 1.7f;
         [SerializeField] float layerHeight = 0.9f;
-        [SerializeField] int maxPerResource = 40;
+        [Tooltip("Visual ceiling only -- how many objects one pile will ever build. What home can KEEP is Village.StoreCapacity, and the ledger is VoyageManager's.")]
+        [SerializeField] int maxPerResource = 160;
 
         readonly Dictionary<string, List<GameObject>> piles = new Dictionary<string, List<GameObject>>();
         readonly Dictionary<string, Transform> roots = new Dictionary<string, Transform>();
@@ -63,6 +64,23 @@ namespace SeaSick.World
                 CargoVisual.StackSlot(list.Count, perRow, spacing, layerHeight);
             item.transform.localRotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
             list.Add(item);
+        }
+
+        /// Taken off the beach again -- spent on a building. The pile has to
+        /// come down with it, or the stores read as spent in the panel and
+        /// untouched on the ground two metres away.
+        public int Withdraw(string resource, int amount)
+        {
+            if (!piles.TryGetValue(resource, out var list)) return 0;
+            int took = 0;
+            while (took < amount && list.Count > 0)
+            {
+                int last = list.Count - 1;
+                if (list[last] != null) Destroy(list[last]);
+                list.RemoveAt(last);
+                took++;
+            }
+            return took;
         }
 
         public int CountOf(string resource) =>

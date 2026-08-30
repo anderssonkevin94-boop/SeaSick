@@ -26,18 +26,35 @@ namespace SeaSick.Terrain
             public float areaHa;
             public float inscribed;     // radius of the largest circle inside it
             public Vector3 inscribedAt;
+            public float villageClearing;   // the same, but where `preferNear` asked for it
+            public Vector3 villageAt;
         }
 
         /// Under ten degrees. Same threshold the world survey uses.
         public const float BuildableSlope = 0.176f;
+
+        /// Below this an in-frame clearing is not worth having -- a
+        /// storehouse is 8 m by 5 m, so anything under about two of them
+        /// side by side is a yard, not a village.
+        public const float MinVillageClearing = 12f;
 
         /// `minHeight` keeps the village off the beach. Sand is FLAT, so it
         /// passes a slope test with room to spare and drags the settlement's
         /// centre down onto the foreshore -- which is both the wrong place to
         /// build and the wrong place to point a camera. Pass sandHeight and
         /// the patch becomes ground you would actually put a longhouse on.
+        /// `preferNear` / `preferRadius` ask a second question of the same
+        /// patch: where is the best clearing WITHIN REACH OF A GIVEN POINT.
+        ///
+        /// The largest circle on the island and the place a village belongs
+        /// are not the same spot. Home's biggest inscribed circle is 130 m
+        /// from the head of its pier, which is outside the frame the docked
+        /// camera holds -- so a village sited there is a village the player
+        /// never sees, in a game whose whole homecoming is that one shot.
+        /// Pass the camera's frame and the village is sited into it.
         public static Site Find(Vector3 islandCentre, float searchRadius,
-            System.Func<float, float, float> height, float cell = 4f, float minHeight = 0.5f)
+            System.Func<float, float, float> height, float cell = 4f, float minHeight = 0.5f,
+            Vector3 preferNear = default, float preferRadius = 0f)
         {
             var s = new Site();
             int n = Mathf.Clamp(Mathf.CeilToInt(searchRadius * 2f / cell), 8, 500);
@@ -125,6 +142,31 @@ namespace SeaSick.Terrain
                 if (inside[k] && d2[k] > bd) { bd = d2[k]; bk = k; }
             s.inscribed = Mathf.Sqrt(Mathf.Max(0f, bd)) * cell;
             s.inscribedAt = new Vector3(x0 + (bk % n) * cell, 0f, z0 + (bk / n) * cell);
+
+            // Same clearance field, asked about a smaller area. Falls back to
+            // the island's best if nothing in reach is big enough to stand a
+            // village in -- a village you cannot see beats no village at all.
+            s.villageClearing = s.inscribed;
+            s.villageAt = s.inscribedAt;
+            if (preferRadius > 0f)
+            {
+                float pr2 = preferRadius * preferRadius;
+                float pd = -1f; int pk = -1;
+                for (int k = 0; k < d2.Length; k++)
+                {
+                    if (!inside[k]) continue;
+                    float px = x0 + (k % n) * cell, pz = z0 + (k / n) * cell;
+                    float dx = px - preferNear.x, dz = pz - preferNear.z;
+                    if (dx * dx + dz * dz > pr2) continue;
+                    if (d2[k] > pd) { pd = d2[k]; pk = k; }
+                }
+                float r = pk >= 0 ? Mathf.Sqrt(Mathf.Max(0f, pd)) * cell : 0f;
+                if (r >= MinVillageClearing)
+                {
+                    s.villageClearing = r;
+                    s.villageAt = new Vector3(x0 + (pk % n) * cell, 0f, z0 + (pk / n) * cell);
+                }
+            }
             s.centre.y = height(s.centre.x, s.centre.z);
             s.found = true;
             return s;

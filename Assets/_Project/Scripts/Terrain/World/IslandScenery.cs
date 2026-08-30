@@ -44,9 +44,19 @@ namespace SeaSick.Terrain
         /// an even spread reads as a nursery.
         const float HeightBias = 0.75f;
 
+        /// `keepOut` is where nothing may stand -- the village clearing.
+        ///
+        /// **It suppresses the geometry, never the draws.** This walks ONE
+        /// `System.Random` through the grid in order, so a `continue` here
+        /// removes rolls and reshuffles every tree after it: nudge a clearing
+        /// five metres and the whole wood moves. Every candidate therefore
+        /// takes exactly the same numbers out of the stream whether it is
+        /// built or not, and the trees outside a clearing stand exactly where
+        /// they stood before there was one.
         public static GameObject Build(Transform parent, Vector3 centre, float meanR,
             System.Func<float, float, float> height, TerrainSettings terrain,
-            System.Func<float, float> radiusAt, int seed)
+            System.Func<float, float> radiusAt, int seed,
+            System.Func<float, float, bool> keepOut = null)
         {
             var rng = new System.Random(seed);
             var verts = new List<Vector3>();
@@ -127,7 +137,8 @@ namespace SeaSick.Terrain
                         // Above the trees, or too steep for them: scree.
                         if (rocks < MaxRocks && rng.NextDouble() < 0.16)
                         {
-                            AddBoulder(verts, norms, cols, tris, new Vector3(wx, h, wz), rng);
+                            AddBoulder(verts, norms, cols, tris, new Vector3(wx, h, wz), rng,
+                                keepOut == null || !keepOut(wx, wz));
                             rocks++;
                         }
                         continue;
@@ -137,7 +148,10 @@ namespace SeaSick.Terrain
                     float t = Mathf.InverseLerp(treeLine, treeLine * 0.72f, h);
                     if (rng.NextDouble() > Mathf.Clamp01(0.25f + t * 0.75f) * keep) continue;
 
-                    AddTree(verts, norms, cols, tris, new Vector3(wx, h, wz), rng);
+                    AddTree(verts, norms, cols, tris, new Vector3(wx, h, wz), rng,
+                        keepOut == null || !keepOut(wx, wz));
+                    // Counted whether or not it was placed, so the budget and
+                    // the loop's exit are the same with a clearing as without.
                     trees++;
                 }
             }
@@ -176,8 +190,10 @@ namespace SeaSick.Terrain
             return scenery;
         }
 
+        /// `place` false still draws every random number this tree would
+        /// have used and then writes nothing -- see the note on `keepOut`.
         static void AddTree(List<Vector3> v, List<Vector3> n, List<Color32> c, List<int> t,
-            Vector3 at, System.Random rng)
+            Vector3 at, System.Random rng, bool place = true)
         {
             float h = Mathf.Lerp(TreeMinH, TreeMaxH, Mathf.Pow((float)rng.NextDouble(), HeightBias));
             float trunkH = h * 0.34f;
@@ -193,6 +209,8 @@ namespace SeaSick.Terrain
             byte g = (byte)(74 + rng.Next(0, 58));
             var leaf = new Color32((byte)(24 + rng.Next(0, 26)), g, (byte)(34 + rng.Next(0, 26)), 255);
 
+            if (!place) return;
+
             Prism(v, n, c, t, at, trunkR, trunkH, leanV, trunk);
             // Two stacked cones read as a conifer from any angle and cost 12
             // triangles; a sphere canopy costs 500 and reads as a lollipop.
@@ -203,15 +221,16 @@ namespace SeaSick.Terrain
         }
 
         static void AddBoulder(List<Vector3> v, List<Vector3> n, List<Color32> c, List<int> t,
-            Vector3 at, System.Random rng)
+            Vector3 at, System.Random rng, bool place = true)
         {
             float s = Mathf.Lerp(SeaSick.World.WorldScale.BoulderMin,
                                  SeaSick.World.WorldScale.BoulderMax, (float)rng.NextDouble());
             byte grey = (byte)(96 + rng.Next(0, 40));
             var col = new Color32(grey, (byte)(grey + 4), (byte)(grey + 10), 255);
-            Cone(v, n, c, t, at + new Vector3(0f, -s * 0.25f, 0f), s, s * 1.5f,
-                new Vector3((float)(rng.NextDouble() - 0.5) * 0.5f, 0f,
-                            (float)(rng.NextDouble() - 0.5) * 0.5f), col, 5);
+            var lean = new Vector3((float)(rng.NextDouble() - 0.5) * 0.5f, 0f,
+                                   (float)(rng.NextDouble() - 0.5) * 0.5f);
+            if (!place) return;
+            Cone(v, n, c, t, at + new Vector3(0f, -s * 0.25f, 0f), s, s * 1.5f, lean, col, 5);
         }
 
         /// Four-sided prism for a trunk. Flat-shaded: normals per face.

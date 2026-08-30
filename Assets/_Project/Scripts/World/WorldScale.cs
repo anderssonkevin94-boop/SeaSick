@@ -42,6 +42,11 @@ namespace SeaSick.World
         public const float Hut = 3.0f;          // one storey, a door and a roof
         public const float Palisade = 2.5f;     // a wall you cannot see over
         public const float Longhouse = 7.0f;    // ridge height; the hall of an outpost
+        /// A store shed. Above a hut, because it has to read as a
+        /// working building from the deck of a ship at the pier; well
+        /// under the longhouse, because the hall is still the biggest
+        /// thing anyone here has built.
+        public const float Storehouse = 4.4f;
         public const float WatchTower = 11.0f;  // sees over the trees, just
 
         // --- what grows ---------------------------------------------------

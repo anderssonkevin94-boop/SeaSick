@@ -19,6 +19,8 @@ namespace SeaSick.World
         [SerializeField] float areaHa;
         [SerializeField] float inscribed;
         [SerializeField] Vector3 inscribedAt;
+        [SerializeField] float villageClearing;
+        [SerializeField] Vector3 villageAt;
 
         /// Middle of the buildable ground.
         public Vector3 Centre => centre;
@@ -67,6 +69,12 @@ namespace SeaSick.World
         public float Inscribed => inscribed;
         public Vector3 InscribedAt => inscribedAt;
 
+        /// Where the village actually goes, and how much room it has: the
+        /// best clearing inside the frame the docked camera holds, which is
+        /// not the island's biggest one. See SettlementSite.Find.
+        public float VillageClearing => villageClearing;
+        public Vector3 VillageAt => villageAt;
+
         public void Configure(Terrain.SettlementSite.Site s)
         {
             centre = s.centre;
@@ -75,6 +83,8 @@ namespace SeaSick.World
             areaHa = s.areaHa;
             inscribed = s.inscribed;
             inscribedAt = s.inscribedAt;
+            villageClearing = s.villageClearing;
+            villageAt = s.villageAt;
         }
 
         void OnEnable() { if (Home == null) Home = this; }

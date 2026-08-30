@@ -19,15 +19,6 @@ namespace SeaSick.Ship
         [SerializeField] float berthDistance = 11f;
         [Tooltip("How close to her berth she has to be before the dock will take her. About two ship lengths.")]
         [SerializeField] float dockRange = 55f;
-        // --- the docked shot, fitted from the framing Kevin flew by hand ---
-        /// How far inland of the pier root the frame is centred.
-        const float CentreInlandOfRoot = 41f;
-        /// And how far to starboard of the pier's axis.
-        const float CentreOffPierAxis = 22f;
-        /// Where the camera sits, as a bearing off the pier's seaward
-        /// direction. Near enough zero: it looks straight back down the pier.
-        const float CameraOffSeaward = 5f;
-
         [Tooltip("Start the voyage tied up at home, rather than adrift off the beach.")]
         [SerializeField] bool startAtHomeDock = true;
         bool startedDocked;
@@ -40,6 +31,15 @@ namespace SeaSick.Ship
 
         /// The dock she is lying at, or null if she is anchored off a beach.
         public Dock CurrentDock { get; private set; }
+
+        /// Lying at her own pier. **This is what "home" means to the voyage
+        /// now**: an arrival is a berth you took, not a radius you drifted
+        /// across. The old test could not be used once she started the game
+        /// tied up -- she is already well outside the home island's centre
+        /// at the end of a 46 m pier, so a distance check called the voyage
+        /// finished on the first frame.
+        public bool AtHomeDock => CurrentDock != null && !landingPending
+            && (CurrentState == State.Anchored || CurrentState == State.Ashore);
 
         ShipMotor motor;
         HullIntegrity hull;
@@ -74,6 +74,9 @@ namespace SeaSick.Ship
         {
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null || !kb.spaceKey.wasPressedThisFrame) return;
+            // The home panel owns both the screen and the spacebar while it
+            // is up; its "set sail" is the cast-off.
+            if (voyage != null && voyage.AtHome) return;
 
             // With an enemy alongside, space is for the lock, not the anchor.
             // You are far more likely to want to hold them in view than to try
@@ -135,6 +138,18 @@ namespace SeaSick.Ship
         {
             var d = Dock.Home;
             return d != null && d.DistanceFrom(transform.position) <= dockRange ? d : null;
+        }
+
+        /// Take her berth, from outside — what the button and the spacebar
+        /// both do. False if she is not near enough or is still carrying too
+        /// much way to be taken alongside.
+        public bool TryComeAlongside()
+        {
+            if (CurrentState != State.Underway) return false;
+            var d = DockInRange();
+            if (d == null || motor.CurrentSpeed > approachSpeedLimit) return false;
+            ComeAlongside(d);
+            return true;
         }
 
         void ComeAlongside(Dock d)
@@ -292,19 +307,11 @@ namespace SeaSick.Ship
                 // lens. Both readings are "the village in front, the sea
                 // behind"; only one of them is the picture he wanted, and no
                 // amount of reasoning was going to pick it.
+                // The framing itself lives on the Dock now: the village is
+                // sited against the same two numbers, so a second copy of
+                // them here would be a gate that stops gating the moment one
+                // is retuned.
                 var village = CurrentIsland.GetComponent<Settlement>();
-                Vector3 sea = CurrentDock.Heading * Vector3.forward;
-                sea.y = 0f;
-                sea = sea.sqrMagnitude < 1e-4f ? Vector3.forward : sea.normalized;
-                Vector3 starboard = new Vector3(sea.z, 0f, -sea.x);
-
-                Vector3 centre = CurrentDock.Root
-                               - sea * CentreInlandOfRoot
-                               + starboard * CentreOffPierAxis;
-                centre.y = 0f;
-
-                float az = Mathf.Atan2(sea.x, sea.z) * Mathf.Rad2Deg + CameraOffSeaward;
-                Vector3 from = new Vector3(Mathf.Sin(az * Mathf.Deg2Rad), 0f, Mathf.Cos(az * Mathf.Deg2Rad));
 
                 // Only the fallback for a dock with no settlement measured;
                 // the zoom itself is ChaseCamera's, in metres of ground.
@@ -312,9 +319,9 @@ namespace SeaSick.Ship
 
                 chaseCam.Overview = new SeaSick.CameraRig.ChaseCamera.IslandShot
                 {
-                    centre = centre,
+                    centre = CurrentDock.ViewCentre,
                     radius = reach,
-                    from = from,
+                    from = CurrentDock.ViewFrom,
                 };
             }
             else chaseCam.Overview = null;
@@ -403,6 +410,15 @@ namespace SeaSick.Ship
             foreach (var c in crew) if (c != null) c.ReturnAboard();
         }
 
+        /// Let go and get her underway, from outside. The home panel's
+        /// "set sail" runs this so one button both closes the tally and
+        /// casts off -- splitting it in two is the same mistake `Land`
+        /// already fixed in the other direction.
+        public void CastOff()
+        {
+            if (CurrentState == State.Anchored && !landingPending) WeighAnchor();
+        }
+
         void WeighAnchor()
         {
             timer = weighTime;
@@ -439,6 +455,11 @@ namespace SeaSick.Ship
 
         void OnGUI()
         {
+            // Two panels offering to cast off in the same corner of the
+            // screen is a choice nobody wants to make -- the same rule the
+            // dock prompt already applies against the beach one.
+            if (voyage != null && voyage.AtHome) return;
+
             buttonStyle = UITheme.Button;
             infoStyle = UITheme.Small2Centered;
 

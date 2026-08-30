@@ -23,6 +23,10 @@ public static class RunProbe
     public static void Stand() => Call("DeckStandProbe");
     public static void Wood() => Call("WoodProbe");
     public static void Harbour() => Call("HarbourProbe");
+    public static void Village() => Call("VillageProbe");
+    public static void VillageBuild() => Call("VillageProbe", "Build");
+    public static void VillageShot() => Call("VillageProbe", "Shot");
+    public static void Loop() => Call("LoopProbe");
     public static void HitchStorm() => Call("HitchProbe", "Storm");
     public static void Hitch() => Call("HitchProbe");
     public static void WeatherAxes() => Call("WeatherSheet", "Axes");

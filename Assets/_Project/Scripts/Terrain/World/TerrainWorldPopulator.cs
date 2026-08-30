@@ -215,17 +215,45 @@ namespace SeaSick.Terrain
                 // pass anything down.
                 var site = HarbourSite.Find(root.transform.position,
                     HarbourSite.SearchRadiusFor(meanR), Height);
-                if (site.found) DockBuilder.Build(root.transform, site, Height);
+                Dock dock = null;
+                if (site.found)
+                {
+                    var dockGo = DockBuilder.Build(root.transform, site, Height);
+                    if (dockGo != null) dock = dockGo.GetComponent<Dock>();
+                }
 
                 // Where the village will stand. Measured once, here, so the
                 // camera, the keep-out and anything placed later all frame
                 // and site against the same ground.
+                // Sited into the shot the player comes home to. The reach is
+                // the shot's own measured half-width in portrait, which is
+                // the tight axis by a factor of six -- a village that clears
+                // it sideways clears it in every direction.
                 var flat = SettlementSite.Find(root.transform.position,
                     HarbourSite.SearchRadiusFor(meanR), Height,
-                    4f, terrain != null ? terrain.sandHeight + 0.5f : 3.7f);
-                if (flat.found) root.AddComponent<Settlement>().Configure(flat);
+                    4f, terrain != null ? terrain.sandHeight + 0.5f : 3.7f,
+                    dock != null ? dock.ViewCentre : default,
+                    dock != null ? Dock.ViewHalfWidth : 0f);
+                Village village = null;
+                if (flat.found)
+                {
+                    var settlement = root.AddComponent<Settlement>();
+                    settlement.Configure(flat);
 
-                Dress(root.transform, root.transform.position, meanR, island, index);
+                    // The village goes in before the trees for the same
+                    // reason the dock did: the scenery is one baked mesh, so
+                    // a clearing is something you reserve beforehand or never
+                    // get. What is reserved is the CLEARING, not the
+                    // buildings -- they are raised across a session, long
+                    // after this mesh is welded shut.
+                    village = root.AddComponent<Village>();
+                    village.Configure(settlement, Height,
+                        terrain != null ? terrain.sandHeight + 1.2f : 4.4f);
+                    village.Reserve(root.transform.position, 8f);      // the beacon
+                    if (site.found) village.Reserve(site.root, 14f);   // the head of the pier
+                }
+
+                Dress(root.transform, root.transform.position, meanR, island, index, village);
                 return island;
             }
 
@@ -254,10 +282,12 @@ namespace SeaSick.Terrain
         /// harvestable props are BuildProps and stay capped, because the eye
         /// needs hundreds of known-size objects to judge an island by and the
         /// economy does not.
-        void Dress(Transform parent, Vector3 centre, float meanR, Island island, int index)
+        void Dress(Transform parent, Vector3 centre, float meanR, Island island, int index,
+            Village village = null)
         {
             IslandScenery.Build(parent, centre, meanR, Height, terrain,
-                ang => island.RadiusAt(ang), terrain.seed * 7919 + index);
+                ang => island.RadiusAt(ang), terrain.seed * 7919 + index,
+                village != null ? (System.Func<float, float, bool>)village.KeepOut : null);
         }
 
         WorldSettings.ResourceKind PickKind(float ring)
