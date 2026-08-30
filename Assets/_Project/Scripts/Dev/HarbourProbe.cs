@@ -238,6 +238,25 @@ public class HarbourProbe : MonoBehaviour
             sb.AppendLine($"   ground in frame: about {2f * dist * Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad):F0} m tall");
             sb.AppendLine($"   tilt {Mathf.Asin(Mathf.Clamp01(-ccam.transform.forward.y)) * Mathf.Rad2Deg:F0} deg above the horizon");
 
+            // Against the framing Kevin flew to by hand. Azimuth is the one
+            // that went wrong: my derivation sat the camera INLAND looking
+            // seaward, 136 degrees from his, and every other number in this
+            // report was correct while the picture was of the wrong side.
+            Vector3 rel = chase.transform.position - (dock != null ? dock.Root : home.transform.position);
+            if (chase.Overview.HasValue)
+            {
+                Vector3 f3 = chase.Overview.Value.from; f3.y = 0f;
+                float az = Mathf.Atan2(f3.x, f3.z) * Mathf.Rad2Deg;
+                Vector3 c3 = chase.Overview.Value.centre;
+                sb.AppendLine($"   azimuth {az:F0} deg (his -14), "
+                    + $"centre ({c3.x:F0}, {c3.z:F0}) (his -95, 82), "
+                    + $"span {chase.CurrentSpan:F0} m (his 254), fov {fov:F0} (his 36)");
+                float azErr = Mathf.Abs(Mathf.DeltaAngle(az, -14f));
+                float cErr = Vector2.Distance(new Vector2(c3.x, c3.z), new Vector2(-95f, 82f));
+                sb.AppendLine($"   off his framing by {azErr:F0} deg and {cErr:F0} m"
+                    + (azErr < 8f && cErr < 15f ? "   -- matches" : "   -- DOES NOT MATCH"));
+            }
+
             // "Can I see my ship" is a frustum question, not an opinion.
             // Tested against the real camera's planes, on her actual hull
             // corners rather than her centre -- a 24 m boat can have her

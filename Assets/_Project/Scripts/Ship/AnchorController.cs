@@ -19,6 +19,15 @@ namespace SeaSick.Ship
         [SerializeField] float berthDistance = 11f;
         [Tooltip("How close to her berth she has to be before the dock will take her. About two ship lengths.")]
         [SerializeField] float dockRange = 55f;
+        // --- the docked shot, fitted from the framing Kevin flew by hand ---
+        /// How far inland of the pier root the frame is centred.
+        const float CentreInlandOfRoot = 41f;
+        /// And how far to starboard of the pier's axis.
+        const float CentreOffPierAxis = 22f;
+        /// Where the camera sits, as a bearing off the pier's seaward
+        /// direction. Near enough zero: it looks straight back down the pier.
+        const float CameraOffSeaward = 5f;
+
         [Tooltip("Start the voyage tied up at home, rather than adrift off the beach.")]
         [SerializeField] bool startAtHomeDock = true;
         bool startedDocked;
@@ -266,49 +275,41 @@ namespace SeaSick.Ship
                 && CurrentDock.DistanceFrom(transform.position) < dockRange;
             if (atDock && CurrentIsland != null)
             {
-                // Frame the SETTLEMENT, not the island.
+                // The shot Kevin flew to, expressed in the DOCK's own frame
+                // so it is the same shot at any pier rather than one
+                // island's coordinates.
                 //
-                // Framing the whole island was the obvious thing and it put a
-                // crew member at under four pixels: correct, pretty, and
-                // useless for the one thing this view is for -- watching
-                // people move between buildings and seeing which of them have
-                // been upgraded. The buildable ground is where all of that
-                // will be, so that is what the camera holds; the island's
-                // edges fall outside the frame and the minimap already covers
-                // the shape of the place.
-                Vector3 c = CurrentIsland.transform.position;
-                Vector3 berth = CurrentDock.Berth;
+                // Fitted from his readout, and the fit is what makes it
+                // meaningful: the camera sits essentially straight out to sea
+                // from the pier -- 4.8 degrees off its seaward bearing --
+                // looking back down the pier at the land, with the frame
+                // centred 41 m inland of the pier root and 22 m to starboard.
+                // So the pier runs INTO the shot from the near edge with the
+                // ship on it, and the village lies beyond.
+                //
+                // My own derivation put the camera INLAND looking seaward,
+                // which is 136 degrees away and puts the pier behind the
+                // lens. Both readings are "the village in front, the sea
+                // behind"; only one of them is the picture he wanted, and no
+                // amount of reasoning was going to pick it.
                 var village = CurrentIsland.GetComponent<Settlement>();
+                Vector3 sea = CurrentDock.Heading * Vector3.forward;
+                sea.y = 0f;
+                sea = sea.sqrMagnitude < 1e-4f ? Vector3.forward : sea.normalized;
+                Vector3 starboard = new Vector3(sea.z, 0f, -sea.x);
 
-                // The frame has to hold two things: the village, and your
-                // own ship at the pier -- which are a village-width apart, so
-                // neither can be the centre. Put the centre between them,
-                // biased to the village because that is the subject, and size
-                // the radius to reach whichever is further.
-                Vector3 seat = village != null ? village.Centre : c;
-                seat.y = 0f;
-                Vector3 flatBerth = new Vector3(berth.x, 0f, berth.z);
-                // Halfway between the village and the boat. Fitted from the
-                // framing Kevin flew to by hand: his centre projected onto
-                // the village-to-berth line at 0.52 of the way along it, so
-                // the frame sits midway and both ends of it are in shot.
-                Vector3 centre = Vector3.Lerp(seat, flatBerth, 0.52f);
+                Vector3 centre = CurrentDock.Root
+                               - sea * CentreInlandOfRoot
+                               + starboard * CentreOffPierAxis;
+                centre.y = 0f;
 
-                // The zoom no longer comes from here -- ChaseCamera holds it
-                // as metres of ground up the frame, so the buildings are the
-                // same size at every dock. This radius is only the fallback
-                // for an island with no settlement measured on it.
-                float villageR = village != null ? village.VillageRadius() : 60f;
-                float reach = Mathf.Max(
-                    Vector3.Distance(centre, seat) + villageR,
-                    Vector3.Distance(centre, flatBerth) + WorldScale.ShipLength * 0.6f);
+                float az = Mathf.Atan2(sea.x, sea.z) * Mathf.Rad2Deg + CameraOffSeaward;
+                Vector3 from = new Vector3(Mathf.Sin(az * Mathf.Deg2Rad), 0f, Mathf.Cos(az * Mathf.Deg2Rad));
 
-                // Sit INLAND and look seaward, so the village is in the
-                // foreground and the pier and ship lie beyond it against the
-                // water. From the seaward side the pier is behind the lens --
-                // which is where it was, and why the ship could not be seen.
-                Vector3 from = centre - flatBerth;
-                from.y = 0f;
+                // Only the fallback for a dock with no settlement measured;
+                // the zoom itself is ChaseCamera's, in metres of ground.
+                float reach = village != null ? village.ViewRadius : 120f;
+
                 chaseCam.Overview = new SeaSick.CameraRig.ChaseCamera.IslandShot
                 {
                     centre = centre,
