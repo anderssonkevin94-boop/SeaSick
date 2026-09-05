@@ -82,6 +82,74 @@ namespace SeaSick.World
         /// hers were set to 5.7, which is 11 knots under oar.
         public const float ShipOarSpeed = 2.5f;
 
+        // --- the fleet ------------------------------------------------------
+        /// The build-and-upgrade progression: five hulls, each about 1.7x the
+        /// last. Sizes are the AUTHORED hull dimensions -- the same numbers
+        /// the Blender generator lofts from
+        /// (~/blender_objects/seasick_hulls.py), measured off the imported
+        /// meshes by `HullLab`, so a hull that drifts from its number is a
+        /// failing check and not a shrug.
+        ///
+        /// Loa is overall hull length with the stem and counter rake, no
+        /// bowsprit. Depth is keel to rail top AMIDSHIPS -- the ends stand
+        /// higher, because every hull has sheer.
+        ///
+        /// Why these numbers and not others: the ratio between rungs is what
+        /// the player feels, and it has to stay roughly constant or the
+        /// middle of the progression goes flat. Cargo goes as the cube of
+        /// length, so 5.6 m to 46 m is a 550x hold -- the whole arc of the
+        /// game -- while each single upgrade is a believable 4-5x.
+        public static class Fleet
+        {
+            // T1 -- lashed logs. Three crew long. Nothing below deck, because
+            // there is no deck; the sea washes over it.
+            public const float RaftLoa = 5.65f;
+            public const float RaftBeam = 3.40f;
+            public const float RaftDraft = 0.29f;
+
+            // T2 -- an open boat. One sail, oars, a fish hold you can see the
+            // bottom of.
+            public const float SkiffLoa = 9.0f;
+            public const float SkiffBeam = 2.90f;
+            public const float SkiffDraft = 0.55f;
+            public const float SkiffDepth = 1.45f;
+
+            // T3 -- the first decked vessel: bulwarks, a hold, swivel guns.
+            public const float SloopLoa = 15.0f;
+            public const float SloopBeam = 4.80f;
+            public const float SloopDraft = 1.35f;
+            public const float SloopDepth = 2.55f;
+            public const float SloopDeck = 0.75f;   // above the waterline
+
+            // T4 -- one gun deck and a real hold. This is the rung the
+            // current paddle steamer (24.2 m) already stands on.
+            public const float BrigLoa = 26.0f;
+            public const float BrigBeam = 7.80f;
+            public const float BrigDraft = 2.50f;
+            public const float BrigDepth = 5.20f;
+            public const float BrigDeck = 1.25f;
+            public const float BrigGunPortSill = 1.95f;
+
+            // T5 -- the three-decker. The hull is built ONCE at full height;
+            // the progression is fitting out its batteries, lower then middle
+            // then upper, so the last three upgrades cost guns and crew
+            // rather than another hull.
+            public const float ShipLoa = 46.0f;
+            public const float ShipBeam = 13.0f;
+            public const float ShipDraft = 5.40f;
+            public const float ShipDepth = 12.40f;
+            public const float ShipHoldFloor = -4.60f;   // relative to the waterline
+            public const float ShipLowerDeck = 0.55f;
+            public const float ShipMiddleDeck = 2.85f;
+            public const float ShipUpperDeck = 5.15f;
+            /// Gun port sills, one per battery. 0.75 m above each deck, and
+            /// the topmost is 1.1 m under the rail -- which is what leaves a
+            /// three-decker with almost no side above her upper battery.
+            public const float ShipGunPort1 = 1.30f;
+            public const float ShipGunPort2 = 3.60f;
+            public const float ShipGunPort3 = 5.90f;
+        }
+
         /// How many crew tall (or long) something is — the sanity check.
         public static float InCrew(float metres) => metres / Person;
     }

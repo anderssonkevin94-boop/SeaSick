@@ -22,6 +22,8 @@ namespace SeaSick.Ship
         [SerializeField] float waveDrift = 1f;
         [SerializeField] float minTurnRate = 15f;
         [SerializeField] float maxTurnRate = 34f;
+        [Tooltip("How fast she BUILDS a turn, rad/s per second. A big ship does not just turn slower, she takes longer to start.")]
+        [SerializeField] float yawResponse = 4f;
         [Tooltip("Top speed astern as a fraction of ahead. Paddle wheels back badly -- the blades are shaped for one direction and the hull is not.")]
         [SerializeField, Range(0.1f, 0.8f)] float asternFraction = 0.35f;
         [Tooltip("Surf strength: multiple of gravity's pull along the surface slope. The old kinematic surfPower 22 corresponds to ~2.2 here.")]
@@ -35,9 +37,6 @@ namespace SeaSick.Ship
         [SerializeField] float turnHeel = 5f;
 
         [Header("Load & freeboard")]
-        [SerializeField] float sinkAtMarkedLine = 0.50f;
-        [SerializeField] float sinkPerOverload = 0.72f;
-        [SerializeField] float sinkAtFullBilge = 0.42f;
 
         [Header("Oars")]
         [SerializeField] float rowSpeed = 9f;
@@ -58,9 +57,114 @@ namespace SeaSick.Ship
         [Header("Visual pivots")]
         [SerializeField] Transform rudderPivot;
         [SerializeField] Transform mastPivot;
+
+        /// Re-fit the drive to a different hull, at runtime -- the ladder
+        /// swaps hulls mid-game and every number here scales with her.
+        ///
+        /// Top speed is deliberately NOT physics: displacement hull speed for
+        /// a 46 m waterline is about 16 knots and for a 9 m boat about 7, a
+        /// range of barely two. The ladder scales the steamer's authored
+        /// 15 m/s by sqrt(LOA/24.2) instead, which keeps her the reference and
+        /// still moves in the right direction. Same rule as WorldScale: a
+        /// number may be generous, but nothing on screen may contradict it.
+        public void ConfigureForHull(float loa, float railY, bool underSail,
+                                     Transform sail)
+        {
+            HullLength = Mathf.Max(1f, loa);
+            baseMaxSpeed = 15f * Mathf.Sqrt(HullLength / TunedLoa);
+            windDriven = underSail;
+            mastPivot = sail;
+
+            // --- how she HANDLES, which was the same for every hull ----------
+            //
+            // Turn rate and acceleration were fixed constants, so a 46 m
+            // first-rate came about as briskly as a 9 m fishing boat.
+            //
+            // **Turn rate is DERIVED, not scaled.** The first attempt scaled
+            // the authored 34 deg/s by 24.2/L and gave the skiff 91 deg/s —
+            // a full circle in four seconds, which is not a boat. A hull's
+            // turning circle is a few times her own length, so the honest
+            // quantity is the RADIUS: at speed V on a circle of radius kL she
+            // turns at V/(kL). That couples her helm to her size and her speed
+            // the way a real hull does, and it cannot produce a nonsense number
+            // because it is a geometry, not a multiplier.
+            //
+            // k = 2.2 puts her turning circle at about 4.4 lengths across,
+            // which is what a real sailing hull does. Measured across the
+            // ladder that is 26 deg/s for the skiff down to 12 for the
+            // three-decker — a spread you feel on the tiller without either
+            // end being absurd.
+            float L = Mathf.Max(1f, loa);
+            float turnRadius = TurnCircleLengths * L;
+            baseMaxTurn = baseMaxSpeed / turnRadius * Mathf.Rad2Deg;
+            // With no way on she has no steerage; the rate at rest is a
+            // fraction of the rate at speed, and ShipMotor already lerps
+            // between them with speed.
+            baseMinTurn = baseMaxTurn * 0.35f;
+
+            // **Acceleration so that TIME to top speed grows with length.**
+            // a goes as 1/sqrt(L) against the steamer, which makes V/a — the
+            // number actually felt — proportional to L: about 2 s for the
+            // skiff, 6 for the brig, 11 for the three-decker.
+            accelScale = Mathf.Clamp(Mathf.Sqrt(TunedLoa / L), 0.6f, 2.0f);
+            // She takes longer to BUILD a turn as well as to hold a smaller one.
+            hullScale = accelScale;
+            ApplyFit(1f, 1f, 1f);
+        }
+
+        /// Turning-circle radius in ship lengths. 2.2 means a circle 4.4
+        /// lengths across, which is a real hull's.
+        const float TurnCircleLengths = 2.2f;
+
+        /// The hull every constant in this file was authored and tuned
+        /// against: the paddle steamer, 24.2 m overall. One public copy,
+        /// because the yard and the chase camera both need to know what the
+        /// numbers were anchored to and a second private 24.2 is exactly how
+        /// the steamer once ended up at a sixth of her displacement.
+        public const float TunedLoa = 24.2f;
+
+        /// Her length overall. Anything that has to FRAME or scale to the ship
+        /// reads it here rather than reaching into the ladder, because a ship
+        /// that never went through the yard still has a length. Defaults to
+        /// the hull the numbers were tuned on.
+        public float HullLength { get; private set; } = TunedLoa;
+        float baseMinTurn = 15f, baseMaxTurn = 34f, accelScale = 1f;
+
+        float baseMaxSpeed = 15f, hullScale = 1f;
+        const float BaseAccel = 2.6f, BaseYawResponse = 4f;
+
+        /// Multipliers from the FITTINGS, applied on top of the hull.
+        ///
+        /// Kept as a separate call so the two things stay separable: the hull
+        /// decides what she can never escape being, the fittings decide what
+        /// has been done about it. A bigger rudder does not make her shorter.
+        public void ApplyFit(float speedMul, float turnMul, float accelMul)
+        {
+            maxSpeed = baseMaxSpeed * speedMul;
+            rowSpeed = Mathf.Min(2.5f, maxSpeed * 0.35f);
+            minTurnRate = baseMinTurn * turnMul;
+            maxTurnRate = baseMaxTurn * turnMul;
+            acceleration = BaseAccel * accelScale * accelMul;
+            yawResponse = BaseYawResponse * hullScale;
+        }
+
+        /// What the helm actually has, for the panel to report. `MaxSpeed`
+        /// already exists further down and is the same field.
+        public float MaxTurnRate => maxTurnRate;
+        public float AccelerationNow => acceleration;
         [SerializeField] float rudderVisualAngle = 35f;
 
         // ------- public API (kept compatible with the kinematic motor) -------
+        /// Where the sails want to lie, and how fast they get there. Public so
+        /// every mast can be trimmed from one calculation.
+        /// How far below her marks she is riding, metres. Set by the yard
+        /// from the loading; a MEASUREMENT now rather than three constants.
+        public float SinkDepth { get; set; }
+
+        public float SailTrimDeg { get; private set; }
+        public float SailTrimBlend { get; private set; }
+        public bool UnderSail => windDriven;
+
         public float Rudder { get; set; }
         /// Engine order and what the engine has actually reached, -1 (full
         /// astern) through 0 (stopped) to 1 (full ahead).
@@ -76,7 +180,6 @@ namespace SeaSick.Ship
         public float ThrottleOrder { get; set; }
         public bool ThrottleMoving => !Mathf.Approximately(Throttle, ThrottleOrder);
         public float CargoLoad { get; set; }
-        public float SinkDepth { get; private set; }
         public float RailImmersion { get; private set; }
         public float BilgeLoad01 { get; set; }
 
@@ -268,10 +371,13 @@ namespace SeaSick.Ship
             float load = Mathf.Max(0f, CargoLoad);
             float over = Mathf.Max(0f, load - 1f);
             float laden = Mathf.Min(load, 1f);
-            SinkDepth = sinkAtMarkedLine * laden
-                + sinkPerOverload * over
-                + sinkAtFullBilge * Mathf.Clamp01(BilgeLoad01);
-            buoyant.SeatOffset = SinkDepth;
+            // SinkDepth is no longer AUTHORED and no longer shoves the hull
+            // down. She is heavier, so she floats lower — `ShipLoad` puts real
+            // mass on the rigidbody and `BuoyantBody` settles her until she
+            // displaces her own weight. What is left here is the reporting
+            // number, which the yard sets from the loading, and a seat offset
+            // of zero because nothing needs faking any more.
+            buoyant.SeatOffset = 0f;
 
             // Green water: rails are buoyancy probes; their submersion is
             // already measured every physics step.
@@ -296,16 +402,22 @@ namespace SeaSick.Ship
             float effectiveRudder = EffectiveRudder();
             if (rudderPivot != null)
                 rudderPivot.localRotation = Quaternion.Euler(0f, -effectiveRudder * rudderVisualAngle, 0f);
-            if (mastPivot != null && windDriven)
+            if (windDriven)
             {
+                // Computed whether or not there is a pivot here to apply it to.
+                // A ship with three masts has three sails, each of which turns
+                // about its OWN mast — one Transform field cannot express that,
+                // so `SailRig` reads these two numbers and drives them all.
                 Vector3 windWorld = new Vector3(WindDirection.x, 0f, WindDirection.y);
                 float windYaw = Vector3.SignedAngle(Flat(transform.forward), windWorld, Vector3.up);
                 float strain = HeadSea01 * SeaSeverity01;
-                float trim = Mathf.Clamp(windYaw * 0.5f, -70f, 70f)
-                             + Mathf.Sin(Time.time * 16f) * 10f * strain;
-                float blend = 1f - Mathf.Exp(-(strain > 0.35f ? 7f : 2f) * dt);
-                mastPivot.localRotation = Quaternion.Slerp(
-                    mastPivot.localRotation, Quaternion.Euler(0f, trim, 0f), blend);
+                SailTrimDeg = Mathf.Clamp(windYaw * 0.5f, -70f, 70f)
+                              + Mathf.Sin(Time.time * 16f) * 10f * strain;
+                SailTrimBlend = 1f - Mathf.Exp(-(strain > 0.35f ? 7f : 2f) * dt);
+                if (mastPivot != null)
+                    mastPivot.localRotation = Quaternion.Slerp(
+                        mastPivot.localRotation,
+                        Quaternion.Euler(0f, SailTrimDeg, 0f), SailTrimBlend);
             }
         }
 
@@ -350,7 +462,7 @@ namespace SeaSick.Ship
                 * (1f - 0.15f * laden - 0.20f * over);
             Vector3 av = rb.angularVelocity;
             float targetYawRate = effectiveRudder * turnRate * Mathf.Deg2Rad;
-            av.y = Mathf.MoveTowards(av.y, targetYawRate, 4f * dt);
+            av.y = Mathf.MoveTowards(av.y, targetYawRate, yawResponse * dt);
             rb.angularVelocity = av;
 
             // Turn heel: rudder + speed lays her over into the turn.

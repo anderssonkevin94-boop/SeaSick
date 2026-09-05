@@ -188,7 +188,32 @@ namespace SeaSick.Terrain
                 tris[t++] = (ushort)topRight; tris[t++] = (ushort)bottomRight; tris[t++] = (ushort)bottomLeft;
             }
 
-            Vertex Dropped(Vertex v) { v.position.y -= skirtDepth; return v; }
+            /// A skirt vertex: the edge vertex dropped, and DARKENED.
+            ///
+            /// It used to be an exact copy, colour included, and that is what
+            /// made it read as a fault instead of as shadow. A skirt is only
+            /// ever seen where it was not meant to be seen -- an outward-facing
+            /// chunk edge at the boundary of the loaded region, or an LOD
+            /// transition that opened wider than it should. At a shoreline the
+            /// edge vertex is beach sand, so what hung there was a 14 m curtain
+            /// of bright cream, fanning into triangles wherever the edge was
+            /// uneven. Exactly what the tooltip on `skirtDepth` warned about.
+            ///
+            /// Darkening does not hide a crack -- the skirt still fills it --
+            /// it changes what an exposed one LOOKS like: an undercut in
+            /// shadow, which is what the underside of ground should look like,
+            /// rather than a beach standing on its end. Cheaper and safer than
+            /// trimming skirtDepth, which was measured at 14 m against a worst
+            /// crack of 11.9 m and has little room in it.
+            Vertex Dropped(Vertex v)
+            {
+                v.position.y -= skirtDepth;
+                v.colour = new Color32((byte)(v.colour.r * 0.30f),
+                                       (byte)(v.colour.g * 0.30f),
+                                       (byte)(v.colour.b * 0.32f),
+                                       v.colour.a);
+                return v;
+            }
         }
 
         /// Sand in the beach band, grass above, snow high — and rock where

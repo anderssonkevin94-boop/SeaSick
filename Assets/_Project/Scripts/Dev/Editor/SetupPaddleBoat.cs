@@ -71,10 +71,85 @@ public static class SetupPaddleBoat
     static float BodyRadius { get { return 0.55f * K; } }
     static float RailRadius { get { return 0.45f * K; } }
 
-    // Displacement goes with volume, so mass is a cube law. The float ratio
-    // mass / (density x volume) stays at the sloop's 0.60 either way.
-    static float Mass { get { return 2400f * K * K * K; } }
-    static float TotalVolume { get { return 3.90f * K * K * K; } }
+    /// Her overall length and her depth amidships, so the fleet's laws can be
+    /// applied to her with her own numbers rather than a hull's she is not.
+    /// Loa is 24.2 m at the current Scale, which is `WorldScale.ShipLength`.
+    static float Loa { get { return 12.10f * K; } }
+    static float Draft { get { return -KeelY; } }               // 1.02 m
+    static float HullDepth { get { return RailY - KeelY; } }    // 3.22 m, keel to rail
+
+    /// **What her hull actually displaces at the waterline she is drawn at.**
+    ///
+    /// Measured 2026-09-02, not assumed: the underside of `paddle_boat.glb`
+    /// ray-cast on a 500x500 grid against the plane at ship-root y = 0, which
+    /// is model z -0.3235 once the 3.4 import scale and the +1.10 visual
+    /// offset are accounted for. That gives Lwl 18.86, Bwl 6.89, T 1.02,
+    /// Cb 0.43 and **57.0 m3 -- 58.5 t**.
+    ///
+    /// Two things confirm the measurement rather than the arithmetic. Her
+    /// planking keel lands at -1.024 m, which is `KeelY` to the centimetre;
+    /// and at the 19.2 t she used to carry, an honest buoyancy solve floats
+    /// her 0.448 m ABOVE her drawn waterline -- the same 0.57 m `WaterlineProbe`
+    /// measured on the water and that `ProbeLift` was raised to cancel. The
+    /// fudge and the fault agree, which is how you know both were read right.
+    ///
+    /// The number this replaces was 19.2 t, and the note beside it in HULLS.md
+    /// said that was "a thirteenth of what her shape displaces". It was a
+    /// third. She was light, but nothing like as light as the file claimed --
+    /// and the brig's 270 t, which was the other candidate for her, would put
+    /// her water 1.62 m above the drawn line and leave 0.58 m to the rail.
+    /// A hull gets its own displacement or somebody else's freeboard.
+    static float DisplacedVolume { get { return 7.13f * K * K * K; } }
+    static float Mass { get { return WaterDensity * DisplacedVolume; } }
+
+    const float WaterDensity = 1025f;
+    /// mass / (rho x totalVolume). The buoyancy model keys on this ratio, not
+    /// on the absolute volume, so holding it is what keeps her floating where
+    /// she is drawn while the mass underneath it triples. Same 0.60 the probe
+    /// rig was tuned at and the same one `HullFloatProbe` gives the fleet.
+    const float FloatRatio = 0.60f;
+    static float TotalVolume { get { return DisplacedVolume / FloatRatio; } }
+
+    // --- damping, on the fleet's law ------------------------------------
+    /// The drag coefficients below were tuned on a body of this mass. That is
+    /// a fact about the TUNING, not about her -- she is 58.5 t now -- so the
+    /// anchor stays put and everything scales off it. `HullFloatProbe.RefMass`
+    /// is the same anchor and must not drift from this one.
+    const float TunedMass = 19200f;
+    const float TunedLoa = 24.2f;
+    /// Damping has to scale with the body or it means nothing: held at this
+    /// ratio, her velocity time constant stays 0.686 s through the re-mass,
+    /// so acceleration, top speed and stopping distance do not move. This is
+    /// the whole reason the re-mass is safe to make -- and `ShipMotor` already
+    /// multiplies its drive by `rb.mass`, so the engine side is mass-invariant
+    /// on its own.
+    static float DampingK { get { return Mass / TunedMass; } }
+    static float LinearDrag { get { return 28000f * DampingK; } }
+    static float QuadraticDrag { get { return 3000f * DampingK; } }
+    static float AngularDragTorque
+    {
+        get { return 30000f * DampingK * (Loa / TunedLoa) * (Loa / TunedLoa); }
+    }
+
+    /// Gyradii from her real hull instead of the (4.4, 3, 13) box she carried,
+    /// which was smaller than she is in every axis -- 13 m of length on a
+    /// 24.2 m boat. The fleet's law: (beam, depth, 0.9 x LOA), which the box
+    /// formula turns into 0.26 L in pitch and 0.32-0.40 B in roll.
+    static Vector3 InertiaBoxDims
+    {
+        get { return new Vector3(HullBeam, HullDepth, Loa * 0.9f); }
+    }
+
+    /// KG at 0.38 of the depth above the keel, the fleet's well-ballasted
+    /// assumption. On her shallow 3.22 m depth that is 1.22 m above the keel,
+    /// which lands 0.20 m ABOVE the waterline rather than the 0.6 m below it
+    /// she had. That is not tender: her waterplane is 6.89 m wide on 57 m3, so
+    /// BM is about 6.3 m and she stays very stiff -- a quick, short-period
+    /// roll, which is what a beamy shallow-draft steamer should have.
+    static Vector3 CentreOfMass
+    {
+        get { return new Vector3(0f, HullDepth * 0.38f - Draft, 0f); }
+    }
 
     static float WheelRadius { get { return 1.265f * K; } }
     // Her top speed is set by what the WHEELS can honestly be drawn at, not
@@ -120,6 +195,53 @@ public static class SetupPaddleBoat
             + ", probe keel " + ProbeKeelY + " (drawn keel " + KeelY
             + " lifted " + ProbeLift + "), rail " + RailY
             + ", radii " + StemRadius + "/" + BodyRadius + "/" + RailRadius;
+    }
+
+    /// Mass, buoyancy and damping ONLY, for the same reason `PushProbes` exists:
+    /// re-running the whole cutover would also push maxSpeed, the camera and
+    /// the freeboard back to the values in this file, and those have been
+    /// tuned on the water since. Called by `RunProbe.Remass()`.
+    public static string PushPhysics(GameObject ship)
+    {
+        if (ship == null) return "no ship";
+        var sb = new StringBuilder();
+
+        Rigidbody rb = ship.GetComponent<Rigidbody>();
+        if (rb == null) return "no Rigidbody on the ship";
+        float was = rb.mass;
+        rb.mass = Mass;
+        EditorUtility.SetDirty(rb);
+        sb.AppendLine("mass " + (was / 1000f).ToString("F1") + " t -> "
+            + (Mass / 1000f).ToString("F1") + " t (x" + DampingK.ToString("F2") + ")");
+
+        BuoyantBody buoy = ship.GetComponent<BuoyantBody>();
+        if (buoy == null) return sb + "no BuoyantBody on the ship";
+        var bso = new SerializedObject(buoy);
+        bso.FindProperty("totalVolume").floatValue = TotalVolume;
+        bso.FindProperty("linearDrag").floatValue = LinearDrag;
+        bso.FindProperty("quadraticDrag").floatValue = QuadraticDrag;
+        bso.FindProperty("angularDragTorque").floatValue = AngularDragTorque;
+        bso.FindProperty("inertiaBoxDims").vector3Value = InertiaBoxDims;
+        bso.FindProperty("centreOfMass").vector3Value = CentreOfMass;
+        bso.ApplyModifiedPropertiesWithoutUndo();
+        EditorUtility.SetDirty(buoy);
+
+        sb.AppendLine("displaced " + DisplacedVolume.ToString("F1") + " m3, totalVolume "
+            + TotalVolume.ToString("F1") + " m3 (float ratio "
+            + (Mass / (WaterDensity * TotalVolume)).ToString("F2") + ")");
+        sb.AppendLine("linearDrag " + LinearDrag.ToString("F0")
+            + ", quadraticDrag " + QuadraticDrag.ToString("F0")
+            + ", angularDragTorque " + AngularDragTorque.ToString("F0"));
+        sb.AppendLine("velocity tau " + (Mass / LinearDrag).ToString("F3")
+            + " s (was " + (was / 28000f).ToString("F3") + " s -- unchanged is the point)");
+        sb.AppendLine("inertia box " + InertiaBoxDims + " (was 4.4, 3, 13)");
+        sb.AppendLine("centreOfMass " + CentreOfMass + " (was 0, -0.6, 0)");
+
+        float Izz = Mass / 12f * (InertiaBoxDims.x * InertiaBoxDims.x
+                                + InertiaBoxDims.y * InertiaBoxDims.y);
+        sb.AppendLine("roll tau " + (Izz / AngularDragTorque).ToString("F2")
+            + " s (was 1.51 s; the brig reads 4.06 s)");
+        return sb.ToString();
     }
 
     public static string Execute()
@@ -301,9 +423,20 @@ public static class SetupPaddleBoat
         {
             var bso = new SerializedObject(buoy);
             bso.FindProperty("totalVolume").floatValue = TotalVolume;
+            // Damping and gyradii on the fleet's law, so she is measured by the
+            // same rules as the hulls she is standing in a row beside.
+            bso.FindProperty("linearDrag").floatValue = LinearDrag;
+            bso.FindProperty("quadraticDrag").floatValue = QuadraticDrag;
+            bso.FindProperty("angularDragTorque").floatValue = AngularDragTorque;
+            bso.FindProperty("inertiaBoxDims").vector3Value = InertiaBoxDims;
+            bso.FindProperty("centreOfMass").vector3Value = CentreOfMass;
             bso.ApplyModifiedPropertiesWithoutUndo();
             sb.AppendLine("totalVolume " + TotalVolume + " m3 (float ratio "
-                + (Mass / (1025f * TotalVolume)).ToString("F2") + ")");
+                + (Mass / (WaterDensity * TotalVolume)).ToString("F2") + ")");
+            sb.AppendLine("damping x" + DampingK.ToString("F2") + ": linear " + LinearDrag
+                + ", quadratic " + QuadraticDrag + ", angular " + AngularDragTorque
+                + " (velocity tau " + (Mass / LinearDrag).ToString("F3") + " s)");
+            sb.AppendLine("inertia box " + InertiaBoxDims + ", CoM " + CentreOfMass);
         }
 
         // --- cargo stacks amidships, not over the transom -------------------

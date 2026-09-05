@@ -25,9 +25,12 @@ MonoBehaviour:
   swell2Wavelength: 70
   swell2DirectionDeg: 55
   swell2Sharpness: 3
+  windSeaHeight: 0.4
+  windSeaWavelength: 18
+  windSeaSharpness: 2.6
   nominalHs: 1.3
   choppiness: 0.75
-  detailGain: 8
+  detailGain: 10
   detailWavelength: 20
   foamThreshold: 0.58
   foamHalflife: 3

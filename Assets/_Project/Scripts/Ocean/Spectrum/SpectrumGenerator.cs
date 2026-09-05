@@ -38,6 +38,12 @@ namespace SeaSick.Ocean
             shader.SetFloat("_Swell2K", 2f * Mathf.PI / Mathf.Max(s.swell2Wavelength, 10f));
             shader.SetVector("_Swell2Dir", s.Swell2Dir);
             shader.SetFloat("_Swell2Sharpness", s.swell2Sharpness);
+            shader.SetFloat("_WindSeaHs", s.windSeaHeight);
+            shader.SetFloat("_WindSeaK", 2f * Mathf.PI / Mathf.Max(s.windSeaWavelength, 4f));
+            // It IS the wind sea, so it runs with the wind — no separate
+            // direction to author, and it crosses both swells by construction.
+            shader.SetVector("_WindSeaDir", s.WindDir);
+            shader.SetFloat("_WindSeaSharpness", s.windSeaSharpness);
             shader.SetFloat("_DetailGain", s.detailGain);
             shader.SetFloat("_DetailLambda", s.detailWavelength);
             shader.SetTexture(kernel, "Noise", cascades.Noise);

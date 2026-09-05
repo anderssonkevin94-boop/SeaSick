@@ -47,7 +47,27 @@ namespace SeaSick.Ship
         // Roll kick per gun that speaks. Two guns give ~5 degrees of heel at
         // the peak — enough to feel the ship answer the broadside, not enough
         // to spoil the shot that is already in the air.
-        [SerializeField] float recoilRollPerGun = 14f;
+        /// **Recoil is an impulse now, not an angle.**
+        ///
+        /// It used to be `AddRecoilRoll(14 x guns)` — the same formula for a
+        /// sloop's two guns and a three-decker's twelve, with no reference to
+        /// what the ship weighs or how hard she is to heel. Now each gun that
+        /// speaks returns real momentum: shot mass x muzzle speed, plus about
+        /// half again for the propellant gas, applied outboard at the gun's own
+        /// position. The heel that follows is whatever her mass and her righting
+        /// moment allow, which is the point.
+        ///
+        /// Shot weights are the calibres they are named for: a 4-pounder throws
+        /// 1.8 kg, an 18-pounder 8.2.
+        static readonly float[] ShotKg = { 0.5f, 1.8f, 4.1f, 8.2f };
+        const float MuzzleSpeed = 400f;
+        const float GasFactor = 1.5f;
+
+        [Tooltip("Multiplies the real recoil impulse. 1 is physics. Real ships barely heel to a broadside, so this exists to be turned up deliberately rather than by tuning something else until it looks right.")]
+        [SerializeField] float recoilExaggeration = 1f;
+
+        /// Which calibre she is fitted with, set by the yard from ShipFit.
+        public int CalibreLevel { get; set; }
 
         readonly List<Cannon> port = new List<Cannon>();
         readonly List<Cannon> starboard = new List<Cannon>();
@@ -86,22 +106,88 @@ namespace SeaSick.Ship
         void Start()
         {
             motor = GetComponent<ShipMotor>();
+            // Only the authored four. A ship with a Shipyard on her calls
+            // `Fit` instead, from the bays the player assigned to a battery,
+            // and this default never runs.
+            if (built) return;
+            Fit(null);
+        }
 
-            var wood = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            wood.SetColor("_BaseColor", new Color(0.38f, 0.24f, 0.14f));
-            wood.SetFloat("_Smoothness", 0.12f);
+        bool built;
 
-            var iron = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            iron.SetColor("_BaseColor", new Color(0.15f, 0.15f, 0.17f));
-            iron.SetFloat("_Smoothness", 0.45f);
+        Material MakeWood()
+        {
+            var m = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            m.SetColor("_BaseColor", new Color(0.38f, 0.24f, 0.14f));
+            m.SetFloat("_Smoothness", 0.12f);
+            return m;
+        }
 
-            Make("CannonPortFore", -forePosition.x, forePosition.y, -1f, port, wood, iron);
-            Make("CannonPortAft", -aftPosition.x, aftPosition.y, -1f, port, wood, iron);
-            Make("CannonStarFore", forePosition.x, forePosition.y, 1f, starboard, wood, iron);
-            Make("CannonStarAft", aftPosition.x, aftPosition.y, 1f, starboard, wood, iron);
+        Material MakeIron()
+        {
+            var m = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            m.SetColor("_BaseColor", new Color(0.15f, 0.15f, 0.17f));
+            m.SetFloat("_Smoothness", 0.45f);
+            return m;
+        }
 
+        /// Fit the battery to a set of measured gun positions, in ship-local
+        /// space, one per gun on the STARBOARD side; the port side is mirrored.
+        ///
+        /// This is what makes a battery a consequence of the ship rather than a
+        /// constant: the positions come from the bays the player gave to guns,
+        /// which come from the gun-port stations the hull was lofted with. Pass
+        /// null to get the authored four, which is what a ship with no
+        /// Shipyard on her still wants.
+        public void Fit(IList<Vector3> starboardLocal)
+        {
+            foreach (var c in allGuns)
+                if (c != null) Destroy(c.gameObject);
+            port.Clear(); starboard.Clear(); allGuns.Clear();
+
+            var wood = MakeWood();
+            var iron = MakeIron();
+
+            // NULL means "use the authored pair fore and aft" — a ship with no
+            // Shipyard on her. An EMPTY LIST means she has no battery at all,
+            // which is a real answer and not the same thing: a 9 m open fishing
+            // skiff came out of the yard carrying two guns because the two
+            // cases were folded together.
+            if (starboardLocal == null)
+            {
+                Make("CannonPortFore", -forePosition.x, forePosition.y, -1f, port, wood, iron);
+                Make("CannonPortAft", -aftPosition.x, aftPosition.y, -1f, port, wood, iron);
+                Make("CannonStarFore", forePosition.x, forePosition.y, 1f, starboard, wood, iron);
+                Make("CannonStarAft", aftPosition.x, aftPosition.y, 1f, starboard, wood, iron);
+            }
+            else
+            {
+                hasFittedMid = false;
+                for (int i = 0; i < starboardLocal.Count; i++)
+                {
+                    Vector3 g = starboardLocal[i];
+                    MakeAt($"CannonStar{i}", new Vector3(Mathf.Abs(g.x), g.y, g.z),
+                           1f, starboard, wood, iron);
+                    MakeAt($"CannonPort{i}", new Vector3(-Mathf.Abs(g.x), g.y, g.z),
+                           -1f, port, wood, iron);
+                }
+                // The convergence mark is the middle of the battery she
+                // actually has, not of the two positions in the inspector.
+                if (starboardLocal.Count > 0)
+                {
+                    float zSum = 0f;
+                    foreach (var g in starboardLocal) zSum += g.z;
+                    fittedMidZ = zSum / starboardLocal.Count;
+                    hasFittedMid = true;
+                }
+            }
+
+            built = true;
             PostGunCrews();
         }
+
+        float fittedMidZ;
+        bool hasFittedMid;
 
         [Header("Gun crews")]
         [Tooltip("How far inboard of their gun the gunner stands.")]
@@ -132,14 +218,20 @@ namespace SeaSick.Ship
 
         /// Where a side's guns are trained to cross, in ship-local space:
         /// straight out on the beam, level with the middle of the battery.
-        float BatteryMidZ => (forePosition.y + aftPosition.y) * 0.5f;
+        float BatteryMidZ => hasFittedMid
+            ? fittedMidZ : (forePosition.y + aftPosition.y) * 0.5f;
 
         void Make(string name, float x, float z, float sideSign, List<Cannon> side,
+            Material wood, Material iron)
+            => MakeAt(name, new Vector3(x, deckHeight, z), sideSign, side, wood, iron);
+
+        void MakeAt(string name, Vector3 local, float sideSign, List<Cannon> side,
             Material wood, Material iron)
         {
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
-            go.transform.localPosition = new Vector3(x, deckHeight, z);
+            go.transform.localPosition = local;
+            float deckHeight = local.y;
 
             // Point the gun at the convergence mark rather than square out.
             Vector3 aim = new Vector3(sideSign * convergeRange, deckHeight, BatteryMidZ);
@@ -173,9 +265,28 @@ namespace SeaSick.Ship
             if (fired > 0)
             {
                 // The hull answers: firing to starboard heels her to port.
-                if (motor != null)
-                    motor.AddRecoilRoll(recoilRollPerGun * fired * (starboardSide ? 1f : -1f));
-
+                // Applied at each gun, so the lever arm is the real height of
+                // that gun above her centre of gravity — an upper-deck battery
+                // heels her far harder than the same guns in the hold would.
+                var rb = GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    float shot = ShotKg[Mathf.Clamp(CalibreLevel, 0, 3)];
+                    float perGun = shot * MuzzleSpeed * GasFactor * recoilExaggeration;
+                    var firing = starboardSide ? starboard : port;
+                    int spoke = 0;
+                    foreach (var c in firing)
+                    {
+                        if (c == null || spoke >= fired) continue;
+                        spoke++;
+                        // Reaction is opposite the shot: outboard becomes inboard.
+                        Vector3 outward = transform.TransformDirection(
+                            new Vector3(starboardSide ? 1f : -1f, 0f, 0f));
+                        rb.AddForceAtPosition(-outward * perGun,
+                                              c.transform.position,
+                                              ForceMode.Impulse);
+                    }
+                }
             }
 
             return fired;

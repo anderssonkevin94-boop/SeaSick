@@ -139,6 +139,42 @@ namespace SeaSick.Ocean
             rb.interpolation = RigidbodyInterpolation.Interpolate;
         }
 
+        /// Re-fit this body to a different hull, at runtime.
+        ///
+        /// Exists because the modular ladder swaps hulls while the game is
+        /// running and every one of these numbers is a property of the HULL,
+        /// not of the ship object. The rules are the fleet's own, unchanged:
+        /// displaced volume from the hull's stations, damping scaled by the
+        /// mass ratio against what the coefficients were tuned at, and angular
+        /// damping additionally by (LOA/tuned)^2.
+        ///
+        /// It re-does the rigidbody work `Awake` does, because the inertia
+        /// tensor is derived from `rb.mass` and a hull swap changes the mass by
+        /// up to 360x across the ladder. Setting the fields alone leaves a
+        /// three-decker turning on a skiff's inertia.
+        public void ConfigureForHull(float displacedVolume, float floatRatio,
+                                     float dampingScale, float loaScale,
+                                     Vector3 boxDims, Vector3 com)
+        {
+            totalVolume = displacedVolume / Mathf.Max(0.01f, floatRatio);
+            linearDrag = 28000f * dampingScale;
+            quadraticDrag = 3000f * dampingScale;
+            angularDragTorque = 30000f * dampingScale * loaScale * loaScale;
+            inertiaBoxDims = boxDims;
+            centreOfMass = com;
+
+            if (rb == null) rb = GetComponent<Rigidbody>();
+            if (rb == null) return;
+            rb.centerOfMass = centreOfMass;
+            var d = inertiaBoxDims;
+            float m = rb.mass / 12f;
+            rb.inertiaTensor = new Vector3(
+                m * (d.y * d.y + d.z * d.z),
+                m * (d.x * d.x + d.z * d.z),
+                m * (d.x * d.x + d.y * d.y));
+            rb.inertiaTensorRotation = Quaternion.identity;
+        }
+
         void OnEnable() => OceanPhysicsDriver.Register(this);
         void OnDisable() => OceanPhysicsDriver.Unregister(this);
 

@@ -7,6 +7,23 @@ namespace SeaSick.Ocean
     /// swell is a separate long-period train, choppiness sharpens crests.
     /// Calm/Normal/Stormy are three of these assets; SeaStateController lerps
     /// between them and rebuilds the initial spectrum on a throttle.
+    ///
+    /// **A hull averages a wave over her own length, so what separates a big
+    /// ship from a small one is WAVELENGTH — not height, and not steepness.**
+    /// That is the reason the wind-sea band below exists, and it was measured
+    /// before it was added: floating the whole ship progression through five sea
+    /// states (`HullFloatProbe`, 2026-09-01) found every hull from a 5.65 m
+    /// raft to a 46 m three-decker rolling the same 14-17 degrees, because
+    /// every scrap of this sea's energy sat in two narrow trains at 150-470 m
+    /// and at those lengths a ship is a cork whatever her size. LOA over
+    /// wavelength ran 0.02 to 0.21 across the fleet; a hull only begins to
+    /// bridge and resist a sea as that ratio approaches 1.
+    ///
+    /// The long trains could not simply be shortened. The storm swell is
+    /// 64 m at 470 m, which is already steepness 0.136 — the breaking limit —
+    /// so shortening it means lowering the wave height this game is built
+    /// around. The fix is therefore additive: put energy in the band that was
+    /// empty, and leave the mountains alone.
     [CreateAssetMenu(menuName = "SeaSick/Ocean Spectrum", fileName = "SeaState")]
     public class OceanSpectrumSettings : ScriptableObject
     {
@@ -37,6 +54,14 @@ namespace SeaSick.Ocean
         [Tooltip("Degrees. What matters is the ANGLE to the main train -- 30-60 degrees gives interference you can see without destroying the rideable face.")]
         public float swell2DirectionDeg = 45f;
         [Range(1f, 16f)] public float swell2Sharpness = 3f;
+
+        [Header("Wind sea band — the short steep waves a hull actually feels")]
+        [Tooltip("Significant height of the short wind-sea train alone, metres. 0 = none.")]
+        public float windSeaHeight = 0f;
+        [Tooltip("Its wavelength, metres. Keep it inside cascade 1 (16-64 m): that is the band no other component of this sea puts energy in, and the band every hull in the fleet is comparable to.")]
+        public float windSeaWavelength = 32f;
+        [Tooltip("Broad on purpose. Above about 4 a narrow train reads as corduroy; the wind sea is the least organised water in the spectrum and should look it.")]
+        [Range(1f, 8f)] public float windSeaSharpness = 2.5f;
 
         [Header("Scale (declared, then verified)")]
         [Tooltip("The significant wave height this state is expected to produce, metres. NOT an input to the simulation -- the spectrum decides the real Hs. It exists so the depth-limited envelope knows how tall the sea is without measuring it every frame, and WaveSizeProbe checks the two agree.")]
@@ -80,6 +105,8 @@ namespace SeaSick.Ocean
             swellDirectionDeg = s.swellDirectionDeg; swellSharpness = s.swellSharpness;
             swell2Height = s.swell2Height; swell2Wavelength = s.swell2Wavelength;
             swell2DirectionDeg = s.swell2DirectionDeg; swell2Sharpness = s.swell2Sharpness;
+            windSeaHeight = s.windSeaHeight; windSeaWavelength = s.windSeaWavelength;
+            windSeaSharpness = s.windSeaSharpness;
             detailGain = s.detailGain; detailWavelength = s.detailWavelength;
             choppiness = s.choppiness; nominalHs = s.nominalHs;
             foamThreshold = s.foamThreshold; foamHalflife = s.foamHalflife;
@@ -102,6 +129,9 @@ namespace SeaSick.Ocean
             swell2Wavelength = Mathf.Lerp(a.swell2Wavelength, b.swell2Wavelength, t);
             swell2DirectionDeg = Mathf.LerpAngle(a.swell2DirectionDeg, b.swell2DirectionDeg, t);
             swell2Sharpness = Mathf.Lerp(a.swell2Sharpness, b.swell2Sharpness, t);
+            windSeaHeight = Mathf.Lerp(a.windSeaHeight, b.windSeaHeight, t);
+            windSeaWavelength = Mathf.Lerp(a.windSeaWavelength, b.windSeaWavelength, t);
+            windSeaSharpness = Mathf.Lerp(a.windSeaSharpness, b.windSeaSharpness, t);
             detailGain = Mathf.Lerp(a.detailGain, b.detailGain, t);
             detailWavelength = Mathf.Lerp(a.detailWavelength, b.detailWavelength, t);
             choppiness = Mathf.Lerp(a.choppiness, b.choppiness, t);

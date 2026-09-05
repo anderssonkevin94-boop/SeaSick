@@ -48,6 +48,21 @@ namespace SeaSick.Voyage
         public bool HoldStuffed => TotalHeld >= MaxHold;
         public int TotalHeld { get; private set; }
         public int HoldCapacity => holdCapacity;
+
+        /// Set by the ship, not by the scene, once she has bays.
+        ///
+        /// `holdCapacity` was a hand-tuned 40 against a home that keeps 30 --
+        /// a full voyage landing 8 short, which is the gap the first storehouse
+        /// exists to close. A hull whose hold is DECIDED, bay by bay, has to
+        /// drive this number instead, or the panel says one thing and the
+        /// shore party does another. The floor keeps a ship with no hold bays
+        /// able to carry something home rather than nothing at all.
+        public void SetHoldCapacity(int cells, int minimum = 4)
+        {
+            int want = Mathf.Max(minimum, cells);
+            if (want == holdCapacity) return;
+            holdCapacity = want;
+        }
         public int MaxHold => Mathf.RoundToInt(holdCapacity * overloadLimit);
         /// 1.0 is the marked line. Above that she's carrying deck cargo.
         public float HoldFill => holdCapacity > 0 ? (float)TotalHeld / holdCapacity : 0f;

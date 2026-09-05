@@ -21,6 +21,8 @@ MonoBehaviour:
   baseFrequency: 0.0025
   lacunarity: 2
   gain: 0.5
+  erosion: 2
+  erosionAmount: 1
   maskFrequency: 0.0004
   maskOctaves: 3
   landRatio: 0.15
@@ -28,6 +30,11 @@ MonoBehaviour:
   seabedDepth: -12
   deepSeabedDepth: -180
   shelfBand: 0.12
+  skerryAmount: 0.3
+  skerryFrequency: 0.0016129032
+  skerryThreshold: 0.72
+  skerryClearance: 0.12
+  skerryRelief: 14
   profileCurve:
     serializedVersion: 2
     m_Curve:
@@ -418,6 +425,20 @@ MonoBehaviour:
   ridgeAmount: 0.85
   ridgeLow: 0.42
   ridgeHigh: 0.62
+  rockCharacterFrequency: 0.00016666666
+  rockBias: 2.2
+  rockFrequency: 0.007142857
+  rockOctaves: 3
+  rockRelief: 34
+  rockThresholdSoft: 0.8
+  rockThresholdHard: 0.44
+  verdancyFrequency: 0.0001724138
+  verdancyBias: 1
+  verdancyFloor: 0.1
+  verdancyRockSuppress: 0.65
+  vegSlopeSoft: 0.34
+  vegSlopeHard: 0.7
+  vegRockSuppress: 0.88
   detailFrequency: 0.04
   detailOctaves: 2
   detailAmplitude: 0.5
@@ -432,6 +453,9 @@ MonoBehaviour:
   beachBlendWidth: 4
   sandHeight: 3.2
   snowHeight: 165
+  rockShowsAt: 0.6
+  cliffRockStart: 0.62
+  cliffRockFull: 0.4
   chunkSize: 128
   chunkResolution: 65
   skirtDepth: 14

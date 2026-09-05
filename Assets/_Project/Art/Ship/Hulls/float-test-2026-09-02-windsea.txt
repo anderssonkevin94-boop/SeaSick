@@ -1,0 +1,72 @@
+=== HullFloatProbe ===
+site 2600,-75 — 2600 m from home, region envelope 0.95 (1.00 = full open sea)
+baseline: paddle steamer 19.2 t
+  T1 raft             4.4 t  disp     4.3 m3  capacity     7.2 m3  keel -0.13  rail  0.32
+  T2 skiff            5.3 t  disp     5.2 m3  capacity     8.7 m3  keel -0.25  rail  0.90
+  T3 sloop           45.6 t  disp    44.5 m3  capacity    74.1 m3  keel -0.61  rail  1.20
+  T4 brig           270.4 t  disp   263.8 m3  capacity   439.7 m3  keel -1.13  rail  2.70
+  T5 3-decker      1881.0 t  disp  1835.1 m3  capacity  3058.5 m3  keel -2.43  rail  7.00
+
+--- resting waterline solve (calm) ---
+  pass 0: -- paddle  -0.02  T1 raft  -0.01  T2 skiff  -0.01  T3 sloop  -0.02  T4 brig  -0.01  T5 3-deck   0.04  
+  pass 1: -- paddle  -0.02  T1 raft  -0.01  T2 skiff  -0.01  T3 sloop   0.00  T4 brig   0.01  T5 3-deck  -0.01  
+  T1 raft        probe keel  -0.14 m (drawn keel -0.29, lift  0.15)
+  T2 skiff       probe keel  -0.26 m (drawn keel -0.55, lift  0.29)
+  T3 sloop       probe keel  -0.63 m (drawn keel -1.35, lift  0.72)
+  T4 brig        probe keel  -1.13 m (drawn keel -2.50, lift  1.37)
+  T5 3-decker    probe keel  -2.41 m (drawn keel -5.40, lift  2.99)
+
+--- calm: Hs 1.3 m (calm), wind 58°, swell -170° (hulls all head +Z) ---
+  hull              sits m   heave   roll°  rollMax  pitch°  pitchMx  rail%  deck%  bury%   accG
+  -- paddle steamer (in game)   -0.02    0.00     0.1      0.2     0.1      0.2      0      0      0    0.0
+  T1 raft             0.00    0.01     0.6      1.3     1.1      2.5      0      0      0    0.1
+  T2 skiff            0.00    0.01     0.4      1.0     1.2      2.6      0      0      0    0.1
+  T3 sloop            0.00    0.01     0.8      2.0     0.5      1.1      0      0      0    0.0
+  T4 brig            -0.01    0.03     0.7      1.9     0.5      1.0      0      0      0    0.0
+  T5 3-decker         0.01    0.04     0.6      1.4     0.3      0.6      0      0      0    0.0
+  sea: Hs(measured) 1.1 m, crest-trough 1.4 m, mean wavelength 29 m, steepness 0.037
+  LOA/wavelength: T1 0.20  T2 0.31  T3 0.52  T4 0.90  T5 1.59  
+
+--- lively: Hs 3.5 m (lively), wind 13°, swell -170° (hulls all head +Z) ---
+  hull              sits m   heave   roll°  rollMax  pitch°  pitchMx  rail%  deck%  bury%   accG
+  -- paddle steamer (in game)   -0.02    0.01     0.5      1.1     0.3      0.9      0      0      0    0.0
+  T1 raft             0.00    0.02     2.6      5.0     2.1      4.8      0      0      0    0.5
+  T2 skiff            0.00    0.03     2.5      5.2     2.4      5.5      0      0      0    0.2
+  T3 sloop            0.00    0.05     2.8      5.3     1.7      3.1      0      0      0    0.2
+  T4 brig             0.00    0.06     3.6      8.7     1.8      4.9      0      0      0    0.2
+  T5 3-decker         0.01    0.12     2.6      5.4     1.3      2.8      0      0      0    0.1
+  sea: Hs(measured) 2.7 m, crest-trough 3.6 m, mean wavelength 56 m, steepness 0.049
+  LOA/wavelength: T1 0.10  T2 0.16  T3 0.27  T4 0.47  T5 0.83  
+
+--- rough: Hs 9.0 m (rough), wind -34°, swell -164° (hulls all head +Z) ---
+  hull              sits m   heave   roll°  rollMax  pitch°  pitchMx  rail%  deck%  bury%   accG
+  -- paddle steamer (in game)   -0.02    0.02     1.8      3.4     1.6      3.4      0      0      0    0.1
+  T1 raft             0.00    0.03     2.8      6.6     1.9      5.7      0      0      0    0.6
+  T2 skiff            0.00    0.04     3.6      8.1     1.8      6.3      0      0      0    0.4
+  T3 sloop            0.00    0.05     3.7      8.0     1.9      6.0      0      0      0    0.3
+  T4 brig             0.00    0.07     4.1      9.5     2.2      5.8      0      0      0    0.1
+  T5 3-decker         0.02    0.14     3.5      7.2     1.5      3.4      0      0      0    0.2
+  sea: Hs(measured) 7.1 m, crest-trough 8.7 m, mean wavelength 100 m, steepness 0.071
+  LOA/wavelength: T1 0.06  T2 0.09  T3 0.15  T4 0.26  T5 0.46  
+
+--- heavy: Hs 20.0 m (heavy), wind -79°, swell -157° (hulls all head +Z) ---
+  hull              sits m   heave   roll°  rollMax  pitch°  pitchMx  rail%  deck%  bury%   accG
+  -- paddle steamer (in game)   -0.02    0.03     2.0      3.4     1.9      3.7      0      0      0    0.1
+  T1 raft             0.00    0.04     3.5      6.7     3.5      7.7      0      0      0    0.5
+  T2 skiff            0.00    0.05     3.9      7.9     3.7      9.1      0      0      0    0.4
+  T3 sloop            0.01    0.07     4.4     10.4     3.6      7.2      0      0      0    0.3
+  T4 brig             0.03    0.13     4.9     10.2     3.9     11.3      0      0      0    0.3
+  T5 3-decker         0.15    0.28     7.6     15.1     3.8      8.3      0      0      0    0.4
+  sea: Hs(measured) 15.4 m, crest-trough 16.4 m, mean wavelength 150 m, steepness 0.103
+  LOA/wavelength: T1 0.04  T2 0.06  T3 0.10  T4 0.17  T5 0.31  
+
+--- wild: Hs 40.0 m (wild), wind -90°, swell -154° (hulls all head +Z) ---
+  hull              sits m   heave   roll°  rollMax  pitch°  pitchMx  rail%  deck%  bury%   accG
+  -- paddle steamer (in game)   -0.02    0.02     2.0      3.9     1.8      3.6      0      0      0    0.1
+  T1 raft            -0.06    0.37    16.5     35.1     4.8     15.0     16     21      2    3.5
+  T2 skiff           -0.06    0.37    15.1     30.7    10.3     24.5     11     10      0    2.7
+  T3 sloop           -0.02    0.39    15.9     29.3     6.2     20.6      8      9      0    2.5
+  T4 brig             0.04    0.50    16.6     29.1     5.7     15.4      0      0      0    1.6
+  T5 3-decker         0.24    0.72    17.8     34.3     6.8     14.3      0      0      0    1.3
+  sea: Hs(measured) 27.7 m, crest-trough 31.7 m, mean wavelength 188 m, steepness 0.148
+  LOA/wavelength: T1 0.03  T2 0.05  T3 0.08  T4 0.14  T5 0.25  

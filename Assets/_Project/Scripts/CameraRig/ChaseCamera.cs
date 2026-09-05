@@ -20,6 +20,47 @@ namespace SeaSick.CameraRig
         [SerializeField] float positionResponse = 2.2f;
         [SerializeField] float rotationResponse = 3f;
 
+        // Framing follows the hull.
+        //
+        // Every number above was authored on the paddle steamer, 24.2 m
+        // overall, and then the ladder arrived and the same rig had to hold a
+        // 9 m skiff and a 46 m three-decker. Held fixed, the first-rate fills
+        // most of the frame and you steer a wall of hull with no sea around
+        // it, while the skiff is a speck.
+        //
+        // The fix is similar triangles and nothing cleverer: scale the seat
+        // and the height by the SAME factor and the tilt is unchanged, so the
+        // composition is identical on every rung and the ship covers the same
+        // fraction of the screen. That is the whole idea — it is a camera
+        // distance, not a look-and-feel constant, and a camera distance is
+        // decided by what has to fit in the frame.
+        //
+        // What is NOT scaled: anything measured against the SEA. The storm
+        // drop, the minimum height above water and the terrain clearance are
+        // metres of water and rock, and water does not get bigger because the
+        // ship did.
+        [Header("Hull framing")]
+        [Tooltip("The hull the framing above was authored on. Not a hull she has to be; the hull she is measured against.")]
+        [SerializeField] float framingLoa = SeaSick.Ship.ShipMotor.TunedLoa;
+        [Tooltip("1 = the ship covers the same slice of screen on every rung. Lower lets a big ship read big: 0.85 gives the three-decker about 10% more of the frame than the steamer, 0 is the old fixed camera.")]
+        [Range(0f, 1f)] [SerializeField] float framingPower = 1f;
+        [Tooltip("How fast the framing eases to a new hull. The yard swaps her in one frame; the camera should not.")]
+        [SerializeField] float framingResponse = 1.6f;
+
+        // How much room she gets around her, on top of the scaling.
+        //
+        // Scaling alone equalised the rungs at the framing the brig already
+        // had — and MEASURED on a portrait frame that framing put her at 87%
+        // of the screen's height and 115% of its width. She was wider than
+        // the phone. The Game view is landscape and the game is not, so this
+        // had been invisible: the same lens is a third as wide held upright.
+        //
+        // 1.5 was chosen off that measurement and re-measured, not guessed:
+        // it puts her at about 58% of the height and 77% of the width, which
+        // leaves sea on both sides and sky above her on every rung.
+        [Tooltip("Room around the ship, on top of the per-hull scaling. 1 is the old framing, which measured wider than a portrait screen. Turn it down to sit closer.")]
+        [SerializeField] float framingMargin = 1.5f;
+
         // FOV motion is the main cause of simulator sickness in a chase cam.
         // Keep the total swing small (a few degrees) and ease it slowly.
         [SerializeField] float fovBase = 58f;
@@ -92,6 +133,12 @@ namespace SeaSick.CameraRig
 
         Camera cam;
         SeaSick.Ship.ShipMotor motor;
+        Transform motorFor;
+        float frameK = 1f;
+        bool frameSeeded;
+
+        /// What the framing is currently multiplying the rig by, for the probe.
+        public float FramingScale => frameK;
 
         float cruiseLevel, atSpeedFor;
         float lockLevel;
@@ -198,13 +245,34 @@ namespace SeaSick.CameraRig
         void Start()
         {
             cam = GetComponent<Camera>();
-            if (target != null) motor = target.GetComponent<SeaSick.Ship.ShipMotor>();
+            Resolve();
+        }
+
+        /// The motor was fetched once in Start, which was fine while there was
+        /// one ship. The yard never changes the target, but a shore boat or a
+        /// dev rig can, and a stale motor means a stale hull length.
+        void Resolve()
+        {
+            if (target == motorFor) return;
+            motorFor = target;
+            motor = target != null
+                ? target.GetComponent<SeaSick.Ship.ShipMotor>() : null;
         }
 
         void LateUpdate()
         {
             if (target == null) return;
             float dt = Time.deltaTime;
+            Resolve();
+
+            // How much bigger she is than the hull the framing was written
+            // for. Clamped only as a guard against a garbage length — at
+            // framingPower 1 the ladder's own ends are 0.37 and 1.90.
+            float loa = motor != null ? motor.HullLength : framingLoa;
+            float wantK = framingMargin * Mathf.Clamp(
+                Mathf.Pow(loa / Mathf.Max(1f, framingLoa), framingPower), 0.25f, 3f);
+            if (!frameSeeded) { frameK = wantK; frameSeeded = true; }
+            frameK = Mathf.Lerp(frameK, wantK, 1f - Mathf.Exp(-framingResponse * dt));
 
             // Ride the swell. Seeded on the first frame so the rig does not
             // sweep up from zero when the scene starts on a crest.
@@ -254,9 +322,13 @@ namespace SeaSick.CameraRig
                 // chase-cam height, which is deliberately high and would
                 // otherwise leave the crew as specks.
                 anchor = Vector3.Lerp(poi, shipFlat, 0.38f);
-                float back = 18f + separation * 0.55f;
-                desired = anchor + axis * back + Vector3.up * (14f + separation * 0.35f);
-                lookPoint = anchor + Vector3.up * 1.5f;
+                // The constants frame the SHIP and scale with her; the terms
+                // in `separation` frame the ground between her and the party,
+                // which is metres of island either way.
+                float back = 18f * frameK + separation * 0.55f;
+                desired = anchor + axis * back
+                        + Vector3.up * (14f * frameK + separation * 0.35f);
+                lookPoint = anchor + Vector3.up * (1.5f * frameK);
             }
             else
             {
@@ -277,9 +349,11 @@ namespace SeaSick.CameraRig
                 lockLevel = Mathf.Lerp(lockLevel, locked ? 1f : 0f,
                     1f - Mathf.Exp(-lockResponse * dt));
 
-                float back = distance + cruiseDistance * cruiseLevel - stormPullIn * stormLevel;
-                float up = height + cruiseHeight * cruiseLevel - stormDrop * stormLevel;
-                float ahead = lookAhead + cruiseLookAhead * cruiseLevel;
+                float back = (distance + cruiseDistance * cruiseLevel) * frameK
+                           - stormPullIn * stormLevel;
+                float up = (height + cruiseHeight * cruiseLevel) * frameK
+                         - stormDrop * stormLevel;
+                float ahead = (lookAhead + cruiseLookAhead * cruiseLevel) * frameK;
 
                 anchor = shipFlat;
                 Vector3 sternDir = -flatForward;
@@ -305,7 +379,8 @@ namespace SeaSick.CameraRig
                     // Back off enough to hold both hulls, and bias the look
                     // point toward the enemy — but only partly, so your own
                     // ship never leaves the frame.
-                    float fit = Mathf.Min(sep * lockPullPerMetre, lockMaxPull) * lockLevel;
+                    float fit = Mathf.Min(sep * lockPullPerMetre,
+                                          lockMaxPull * frameK) * lockLevel;
                     back += fit;
                     up += fit * 0.42f;
                     anchor = shipFlat + dirToTarget * (sep * lockBias * lockLevel);
@@ -313,7 +388,7 @@ namespace SeaSick.CameraRig
 
                 desired = shipFlat + sternDir * back + Vector3.up * up;
                 lookPoint = anchor + flatForward * (ahead * (1f - lockLevel))
-                          + Vector3.up * (lookHeight + seaY);
+                          + Vector3.up * (lookHeight * frameK + seaY);
             }
 
             // --- the island overview, blended over whatever was framed ----

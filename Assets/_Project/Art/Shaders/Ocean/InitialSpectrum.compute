@@ -38,6 +38,22 @@ cbuffer Params
     float _Swell2K;
     float2 _Swell2Dir;
     float _Swell2Sharpness;
+    // The wind-sea band. A third train, deliberately SHORT, sitting in
+    // cascade 1 (16-64 m) -- the band the two swells and the JONSWAP peak all
+    // leave empty at this game's wave heights.
+    //
+    // It is here because a hull averages a wave over her OWN LENGTH, so what
+    // separates a big ship from a small one is wavelength, not wave height and
+    // not steepness. The storm swell is 64 m over 470 m -- steeper, at 23
+    // degrees, than anything this band adds -- but every hull in the fleet
+    // spans a tenth of it or less, so all of them sit on one uniform tilt and
+    // follow it identically. A 3.4 m train at 38 m is only 16 degrees, and
+    // that is the point: the three-decker spans 1.2 of those wavelengths and
+    // averages them away, the raft spans 0.15 and takes the whole ride.
+    float _WindSeaHs;
+    float _WindSeaK;
+    float2 _WindSeaDir;
+    float _WindSeaSharpness;
     // Short-wave detail gain, an art knob over the physical tail. See
     // DetailBoost.
     float _DetailGain;
@@ -209,6 +225,13 @@ float SpectralAmplitude(float2 kCenter, float dk, float bandLow, float bandHigh)
     // The second train gets the same treatment and the same one-cascade gate.
     if (_Swell2K >= bandLow && _Swell2K < bandHigh)
         F += SwellBinMeanDensity(kCenter, dk, _Swell2Hs, _Swell2K, _Swell2Dir, _Swell2Sharpness);
+    // And the wind sea, same machinery, same gate. Its wavelength is authored
+    // to land near the middle of cascade 1 in log-k so its gaussian fits
+    // inside that cascade's band -- a bump straddling a band edge loses the
+    // energy that falls outside, and the realised height stops being the
+    // authored one.
+    if (_WindSeaK >= bandLow && _WindSeaK < bandHigh)
+        F += SwellBinMeanDensity(kCenter, dk, _WindSeaHs, _WindSeaK, _WindSeaDir, _WindSeaSharpness);
     // The h(k,t) = h0 e^{iwt} + conj(h0(-k)) e^{-iwt} construction places each
     // physical wave's energy at both +k and -k, and the complex gaussian xi
     // carries E|xi|^2 = 2; together they inflate variance 4x unless the bin

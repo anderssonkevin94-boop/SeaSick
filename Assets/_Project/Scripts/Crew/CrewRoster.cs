@@ -34,6 +34,16 @@ namespace SeaSick.Crew
 
         public int CrewCount => All.Length;
 
+        /// Forget the cached roster and count again.
+        ///
+        /// `All` caches on first access and never looked again, which was right
+        /// while the crew were a fixed set placed in the scene. Once the ship
+        /// can be given more berths mid-voyage, a roster that answers from a
+        /// cache reports the crew she had when somebody first asked — and the
+        /// guns are assigned FROM that list, so new hands would never be given
+        /// a gun to work.
+        public void Refresh() => crew = null;
+
         /// Standing at a post and able to work it.
         public int AbleCount
         {
