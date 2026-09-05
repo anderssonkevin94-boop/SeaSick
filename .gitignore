@@ -38,3 +38,6 @@
 sysinfo.txt
 *.stackdump
 crashlytics-build.properties
+
+# Blender autosave backups
+*.blend1
