@@ -898,6 +898,10 @@ def node_params(i, g=None):
             p = dict(next(a for a in anchors if a["name"] == nm))
             p["name"] = "N%02d_%s" % (i, nm.split("_", 1)[1])
             p["node"], p["move"], p["label"] = i, move, label
+            # Her authored `mast_x` is a leftover -- `plan_rig` restates it
+            # against the built hull -- so the count the manifest ships comes
+            # from the same rule the other sixteen rungs use.
+            p["masts"] = g["mast_count"](L)
             return p
 
     a, b, t = _bracket(L, anchors)
@@ -984,13 +988,13 @@ def node_params(i, g=None):
         p["port_x"] = []
 
     # --- rig -----------------------------------------------------------------
-    masts = 1 if L < 16.0 else (2 if L < 30.0 else 3)
-    p["mast_x"] = [round(L * f, 2) for f in
-                   ([0.04] if masts == 1 else
-                    [-0.18, 0.16] if masts == 2 else [-0.24, 0.02, 0.29])]
-    p["mast_height"] = [round(D * h, 2) for h in
-                        ([4.5] if masts == 1 else
-                         [2.60, 2.98] if masts == 2 else [1.94, 2.26, 1.77])]
+    # Only the COUNT here, and only because `ladder.json` has to carry it for
+    # `ShipFit`'s sail-plan gate. Where the masts stand and how tall they are
+    # is `plan_rig`, which is run against the hull once she is lofted -- a mast
+    # is stepped in a ship, so it is placed off the ship and not off a fraction
+    # of LOA. Two tables for one rig is exactly how the paddle steamer ended up
+    # at a third of her displacement.
+    p["masts"] = g["mast_count"](L)
     p["bowsprit"] = L >= 13.0
     p["rudder"] = True
     p["keel_batten"] = True
@@ -1033,6 +1037,11 @@ def build_ladder(nodes=None, gate=True, lay_out=True):
         p = node_params(i, g)
         c = g["get_collection"](p["name"])
         hull, stations, tags = g["build_hull"](p, c)
+        # Step her masts against the hull that was just lofted, before
+        # anything asks where they are. See `plan_rig`: this is Kevin's brig
+        # rig, stated as a rule, and it is what makes twenty rungs read as one
+        # ship instead of as one hand-arranged ship and nineteen strangers.
+        g["plan_rig"](p, stations, tags)
         objs = [hull]
         if p.get("deck_z") is not None:
             objs.append(g["build_deck"](p, stations, c, p["deck_z"], tags))
@@ -1199,7 +1208,7 @@ def write_manifest(path=MANIFEST):
             "tier_ceiling": [round(t[2], 3) for t in tiers],
             "gun_rows": len(p.get("gun_decks") or []),
             "ports_per_side": len(p.get("port_x") or []),
-            "masts": len(p.get("mast_x") or []),
+            "masts": p.get("masts") or len(p.get("mast_x") or []),
         })
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:

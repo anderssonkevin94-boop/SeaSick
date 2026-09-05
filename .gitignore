@@ -41,3 +41,7 @@ crashlytics-build.properties
 
 # Blender autosave backups
 *.blend1
+
+# Blender scripts are exec-loaded and imported; the bytecode cache is noise.
+__pycache__/
+*.pyc

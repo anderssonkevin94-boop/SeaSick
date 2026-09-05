@@ -832,7 +832,15 @@ def build_fittings(p, stations, coll, tags=None):
 
     # --- backbone: stern rail -> down -> along the keel -> up the stem ------
     if p.get("keel_batten"):
-        raw = ([(stations[0][j][0], stations[0][j][2]) for j in range(j_rail, -1, -1)]
+        # She is walked from the stern DOWN to the keel and up the stem -- but
+        # only to the DECK at the stern on a hull that carries a transom.
+        # Above that the transom is the surface, and the sternpost was being
+        # swept up the outside of it: a near-black timber standing proud
+        # straight up the middle of the great cabin's windows.
+        j_stern = j_rail
+        if tags and "deck" in tags and p.get("deck_z") is not None:
+            j_stern = tags.index("deck")
+        raw = ([(stations[0][j][0], stations[0][j][2]) for j in range(j_stern, -1, -1)]
                + [(r[0][0], r[0][2]) for r in stations]
                + [(stations[-1][j][0], stations[-1][j][2]) for j in range(j_rail + 1)])
         path, last = [], None
@@ -874,14 +882,21 @@ def build_fittings(p, stations, coll, tags=None):
         out.append(make_object(p["name"] + "_Rudder", verts, faces, coll, smooth=False))
 
     # --- lower masts and channels ------------------------------------------
+    # A lesser mast is the main spar cut shorter, so everything about it is
+    # cut shorter with it: it is thinner, its top is smaller and its channel
+    # is narrower. Scaling only the HEIGHT is what makes a small mast read as
+    # a distant big one instead of as a small one. See `plan_rig`.
+    scales = p.get("mast_scale") or [1.0] * len(p.get("mast_x", []))
+    heels = p.get("mast_heel") or [-D * 0.85] * len(p.get("mast_x", []))
     for k, mx in enumerate(p.get("mast_x", [])):
         ring = min(stations, key=lambda r: abs(r[0][0] - mx))
         h = p["mast_height"][k]
-        r_b = p["beam"] * 0.042
+        s = scales[k]
+        r_b = p["beam"] * 0.042 * s
         out.extend(_mast(p["name"] + "_Mast%d" % (k + 1), coll,
-                         mx, -D * 0.85, h, r_b))
+                         mx, heels[k], h, r_b))
         y_rail = ring[j_rail][1]
-        cl, cw = p["length"] * 0.10, p["beam"] * 0.055
+        cl, cw = p["length"] * 0.10 * s, p["beam"] * 0.055 * s
         z_ch = ring[j_rail][2] - p["depth"] * 0.05
         top = [(mx - cl * 0.5, y_rail, z_ch), (mx + cl * 0.5, y_rail, z_ch),
                (mx + cl * 0.4, y_rail + cw, z_ch), (mx - cl * 0.4, y_rail + cw, z_ch)]
@@ -1050,6 +1065,139 @@ def scantling(p):
     return p["beam"] * 0.017
 
 
+def quarterdeck_rise(depth):
+    """How far the quarterdeck stands above the weather deck.
+
+    Its own function because TWO things read it and they must not drift:
+    `build_stern`, which builds the platform and the cabin under it, and
+    `build_sails`, which stands the helmsman ON that platform to derive how
+    low a course may be cut. They disagreed by 0.64 m on the small rungs the
+    moment the floor below was added, and a sail foot solved against the wrong
+    eye height is exactly the fault the derived foot exists to prevent.
+
+    It is also the great cabin's HEADROOM, which is what floors it: at
+    `depth * 0.16` alone a 19.5 m hull got 0.41 m -- not a deck you raise, a
+    step you trip on. Nothing from the brig upward moves; depth alone already
+    gives more there."""
+    return max(depth * 0.16, PERSON * 0.45)
+
+
+# ---------------------------------------------------------------- the rig ---
+#
+# Kevin arranged the brig's rig by hand on 2026-09-05 and said to leave it
+# alone. What follows is that arrangement MEASURED off his objects and stated
+# as a rule, so the whole ladder wears his rig instead of one rung wearing it
+# and the other nineteen wearing the generator's. Every number below is either
+# his, or a consequence of his:
+#
+#   * He deleted the generator's aftmost mast, moved the survivor to x 1.66
+#     and duplicated it forward at x 8.60, scale 0.65, lifted 1.37.
+#   * **1.37 is not a free number.** It is exactly what brings the scaled
+#     mast's heel from -1.38 back up to the waterline. So a lesser mast is not
+#     a small mast: it is THE SAME SPAR CUT SHORTER and stepped on deck
+#     instead of on the keelson -- 0.65 of the main's length, which puts its
+#     truck at 0.74 of her height. That is a shipwright's statement and it
+#     survives being scaled to a 9 m boat or a 46 m first-rate; "0.74 as tall"
+#     does not, because it says nothing about where the heel goes.
+#   * Both of his masts cross a course. The generator's rule stripped the
+#     course off the aftmost of any two, which is why his main -- the aftmost
+#     of his two -- had to be a duplicate of the forward one to keep hers.
+#
+# Positions are fractions of the RAIL, resolved against the hull actually
+# built, not against LOA. That is joinery rule 1: the mast is stepped in the
+# ship, so it is placed off the ship. On the brig the two resolve to x 1.66
+# and 8.58 against his 1.655 and 8.60.
+
+RIG_MAIN_AFT = 0.486         # the main, as a fraction of the rail abaft the bow
+RIG_GAP = 0.266              # mast to mast, in the same units
+RIG_LESSER = 0.65            # a lesser spar, as a fraction of the main's LENGTH
+
+
+def main_truck(z_rail, L):
+    """How high the main's truck stands, from her RAIL and her LENGTH.
+
+    Two things this is deliberately NOT measured from:
+
+    **Not depth.** Depth runs from 0.16 of length on the skiff to 0.27 on the
+    three-decker, so a rig keyed to it grows in lurches -- and the old rule
+    papered over that with a different multiplier per mast COUNT, which made
+    the rig get SHORTER at the moment she grew her second mast: 8.78 m of stick
+    on 15 m of hull, 7.60 m on 19.5 m.
+
+    **Not the water.** A mast is stepped on the keelson but it is SEEN from the
+    rail, and every third rung of this ladder is a RAISE -- freeboard added
+    with no length added. Measured from the water, a raise leaves the truck
+    exactly where it was and the hull simply swallows a metre of rig, so the
+    ship looks worse at the moment the player pays to improve her. Measured
+    from the rail she gains a metre of mast with her metre of topside, and the
+    three-decker stops looking under-sparred for her freeboard.
+
+    The fraction of LENGTH standing above the rail eases off with size because
+    a small boat really does carry a relatively taller stick than a ship. It
+    reproduces every mast that was ever drawn by hand -- skiff 6.66 against
+    6.5, sloop 10.80 against 11.0, three-decker 29.7 against 28.0 -- and
+    Kevin's brig to the centimetre, 15.50."""
+    if L <= 15.0:
+        f = 0.640
+    elif L >= 26.0:
+        f = 0.4923
+    else:
+        f = lerp(0.640, 0.4923, (L - 15.0) / 11.0)
+    return z_rail + L * f
+
+
+def mast_count(L):
+    """How many masts a hull of this length steps.
+
+    Its own function because TWO things need it and they must not disagree:
+    the asset, which builds them, and `ladder.json`, which is what `ShipFit`
+    reads to decide whether the yard will sell her another tier of sail. The
+    thresholds are unchanged -- moving them would move a gate the player has
+    already been quoted a price against."""
+    return 1 if L < 16.0 else (2 if L < 30.0 else 3)
+
+
+def plan_rig(p, stations, tags=None):
+    """Step her masts. Writes `mast_x`, `mast_height`, `mast_scale`,
+    `mast_heel` into `p`, so everything downstream reads one plan.
+
+    Called once per hull, straight after the loft and before anything that
+    needs to know where a mast is -- `build_fittings` steps them, `build_sails`
+    hangs canvas on them, and both were reading an authored list that only four
+    of the twenty rungs ever had."""
+    L = p["length"]
+    per = len(stations[0])
+    j_rail = tags.index("rail") if tags and "rail" in tags else per - 1
+    x_bow = stations[-1][j_rail][0]
+    x_stern = stations[0][j_rail][0]
+    rail = x_bow - x_stern
+
+    n = mast_count(L)
+    # Fore, main, mizzen -- built in that order so index 0 is always the
+    # forwardmost, which is what the old authored lists were.
+    fracs = {1: [RIG_MAIN_AFT],
+             2: [RIG_MAIN_AFT - RIG_GAP, RIG_MAIN_AFT],
+             3: [RIG_MAIN_AFT - RIG_GAP, RIG_MAIN_AFT,
+                 RIG_MAIN_AFT + RIG_GAP]}[n]
+    main_i = 0 if n == 1 else 1
+
+    h_main = main_truck(p["depth"] - p["draft"], L)
+    heel_main = -p["draft"] * 0.85
+    span_main = h_main - heel_main
+
+    p["mast_x"] = [round(x_bow - f * rail, 2) for f in fracs]
+    p["mast_scale"] = [1.0 if k == main_i else RIG_LESSER for k in range(n)]
+    # The main is stepped on the keelson; a lesser spar is short enough to be
+    # stepped on deck, which is why Kevin's fore mast ends up taller than 0.65
+    # of the main without being any longer than 0.65 of her.
+    p["mast_heel"] = [heel_main if k == main_i else 0.0 for k in range(n)]
+    p["mast_height"] = [round(p["mast_heel"][k] + p["mast_scale"][k] * span_main, 2)
+                        for k in range(n)]
+    p["main_mast"] = main_i
+    p["masts"] = n
+    return p
+
+
 def _ring_at_z(ring, z, j_max):
     """Where a station's section crosses a height. The hull rakes, so this
     has to interpolate x as well as y -- a strake drawn at constant x would
@@ -1201,7 +1349,13 @@ def build_trim(p, stations, coll, tags=None, hull=None):
     per = len(stations[0])
     j_rail = tags.index("rail") if tags and "rail" in tags else per - 1
 
-    n_want = p.get("trim_sections", 22)
+    # Sections along the ship, not sections per ship. Twenty-two was the brig's
+    # number and it was being handed to a 9 m boat and a 46 m first-rate alike,
+    # so the three-decker's caprail turned a corner every 2.1 m and visibly
+    # faceted where her sheer sweeps up aft. One section per 1.2 m holds the
+    # brig at the 22 she was tuned with and gives the big hulls the run they
+    # need; a few hundred triangles on the largest rung.
+    n_want = p.get("trim_sections", max(16, int(round(p["length"] / 1.2))))
     step = max(1, (len(stations) - 1) // (n_want - 1))
     idx = list(range(0, len(stations), step))
     if idx[-1] != len(stations) - 1:
@@ -1284,7 +1438,16 @@ def build_trim(p, stations, coll, tags=None, hull=None):
     if p.get("timberheads", True):
         path = [stations[i][j_rail] for i in idx]
         n = len(path)
-        every = max(2, n // p.get("timberhead_count", 9))
+        # A timberhead is a FRAME TOP, and frames do not get further apart
+        # because the ship got longer. Nine of them was a constant, so the
+        # skiff wore them 1.0 m apart and the three-decker 5.1 m -- the one
+        # piece of trim that most says "wooden ship" was a different size of
+        # thing on every rung. Kevin's brig spaces them 2.9 m; so does
+        # everything else now, with a floor so the smallest boat still reads
+        # as framed rather than as a tub with four posts.
+        want = p.get("timberhead_count",
+                     max(4, int(round(p["length"] / 2.9))))
+        every = max(2, n // want)
         w = scantling(p) * 1.30            # the same stick the rail is cut from
         rise = depth * 0.075
         for k in range(1, n - 1, every):
@@ -1381,32 +1544,107 @@ def build_port_lids(p, hull, coll):
 
 
 def build_stern(p, stations, coll, tags=None):
-    """Close the back of her, and give the helm somewhere to stand.
+    """Close the back of her, stand the helm somewhere, and make the stern the
+    piece of the ship you can tell her by.
 
-    **Why the back was open.** The loft closes an end onto a centreline column
-    and tiles the end plane -- but only as a single skin BELOW the deck. Above
-    it there is just the wall's end grain, the cross-section of each bulwark,
-    and nothing at all spanning between them. At the bow that is invisible,
-    because the planking has closed to a point by then: the brig's forward
-    station is 0.25 m wide at the rail. Her AFTMOST station is 1.615 m, so the
-    same rule leaves a 3.2 m by 2 m hole across her stern that you can see the
-    deck through. It was never a bug in the tiling; it is a stern that is
-    wide, being closed by a rule written for an end that is narrow."""
+    **The back was open twice, for the same reason.** The loft closes an end
+    onto a centreline column and tiles the end plane -- but only as a single
+    skin BELOW the deck; above it there is just each bulwark's end grain. At
+    the bow that is invisible (the brig's forward station is 0.25 m wide at the
+    rail); her aftmost is 1.615 m, so the same rule left a hole you could see
+    the deck through. That was closed with a transom running deck to RAIL --
+    and then the quarterdeck was laid at a flat height which on the
+    three-decker stands 0.13 m ABOVE that rail. So the hole came straight back,
+    thinner, in the slot the platform pokes through, and the platform itself
+    had nothing outboard of it to stop a man walking off.
+
+    **A raised deck is a raised SHIP, and that is the whole fix.** Her side
+    goes up with the platform, the transom closes to the top of THAT, and the
+    space underneath stops being a shelf with daylight under it and becomes
+    what it actually is -- the great cabin, with a bulkhead across its front
+    and its windows in the stern.
+
+    Two things had to become honest first:
+
+    * **The platform carries the SHEER**, like the deck it is raised off. It
+      was flat, and the rail beside it is not, so the gap between them opened
+      and closed along her: 0.87 m of bulwark at one station and -1.36 m at
+      another, on the same ship. Sheered, deck and rail carry the same curve,
+      so the gap is ONE NUMBER per hull and the side that closes it is a
+      constant height. Nothing downstream has to ask where along her it is.
+    * **The quarterdeck's side stands `PERSON * 0.56` above her platform** --
+      the same number `build_companion` uses for the rail across the break, so
+      the rail and the bulwark are one line running right round the
+      quarterdeck rather than two heights that happen to meet. Where the ship's
+      own bulwark is already that generous (rungs 9-11, deep bulwarks and a
+      shallow rise) the wall would vanish, so it is floored at a visible step:
+      every rung gets a poop you can see, none gets a lip."""
     out = []
     if tags is None or "rail" not in tags or "deck" not in tags:
         return out
     j_rail, j_deck = tags.index("rail"), tags.index("deck")
     j_in = tags.index("rail_in") if "rail_in" in tags else j_rail
     aft = stations[0]
+    per = len(aft)
     L, B, depth = p["length"], p["beam"], p["depth"]
     z_deck = aft[j_deck][2]
+    sc = scantling(p)
+
+    # --- does she carry a quarterdeck, and how high does her side go? -------
+    qd_rise = quarterdeck_rise(depth)
+    cap_lift = depth * 0.026            # the main caprail's own top, above the rail
+    x_end = aft[0][0] + L * p.get("quarterdeck_frac", 0.26)
+    ring_idx = [i for i, r in enumerate(stations) if r[j_rail][0] <= x_end]
+    has_qd = (p.get("deck_z") is not None and L >= 18.0 and len(ring_idx) >= 3)
+
+    def z_q_at(r):
+        """The platform's height at one station. It carries the sheer."""
+        return r[j_deck][2] + qd_rise
+
+    # Constant along her, because deck and rail carry the same sheer -- so this
+    # is solved once, at the stern, and holds at every station of the run.
+    side_h = max(qd_rise + PERSON * 0.56 - (aft[j_rail][2] - z_deck) - cap_lift,
+                 PERSON * 0.20)
+
+    def z_side_at(r):
+        """The top of the quarterdeck's own bulwark at one station."""
+        return r[j_rail][2] + cap_lift + side_h
+
+    z_top_aft = z_side_at(aft) if has_qd else aft[j_rail][2]
 
     # --- the transom --------------------------------------------------------
-    # Follows the outer profile from the deck up to the rail rather than being
-    # one flat plate, so it keeps whatever flare or tumblehome she has back
-    # there. Spans both sides itself, so it is NOT mirrored -- a face in the
-    # mirror plane comes back with four faces on every edge.
-    prof = [aft[k] for k in range(j_deck, j_rail + 1)]
+    # Follows the outer profile rather than being one flat plate, so it keeps
+    # whatever flare or tumblehome she has back there. It is flat ATHWART,
+    # which is what lets the windows and mouldings below be simple boxes.
+    # Spans both sides itself, so it is NOT mirrored -- a face in the mirror
+    # plane comes back with four faces on every edge.
+    #
+    # **It starts at the INNER FLOOR, not at the deck, and that is the whole
+    # reason the five largest were still open at the back.** The loft closes
+    # the end plane as a single skin only BELOW the inner chain; from there up
+    # she is a wall, and the slot between the two inner faces is deliberately
+    # left open (closing it is a T-junction). At the stem that slot is 0.23 m
+    # wide and the backbone covers it. At the STERN it is nearly her full
+    # breadth -- which is what the transom is for. On the brig the inner chain
+    # begins at her deck, so a transom starting at the deck closed all of it;
+    # on a hull with a battery BELOW her weather deck it begins far lower
+    # (0.55 m against a deck at 5.15 on the three-decker), and everything
+    # between was a 2.30 m hole on the two-deckers and a 4.60 m hole on her.
+    # The rule looked right on every hull it had been checked against, and
+    # only tiers >= 3 puts a deck between the two.
+    n_inner = per - 1 - j_rail
+    j_low = min(j_deck, j_rail - n_inner + 1 if n_inner > 0 else j_rail)
+    prof = []
+    for k in range(j_low, j_rail + 1):
+        q = tuple(aft[k])
+        # A repeated level makes a zero-area quad, which is a gate failure.
+        if not prof or abs(q[1] - prof[-1][1]) > 1e-6 or abs(q[2] - prof[-1][2]) > 1e-6:
+            prof.append(q)
+    if has_qd:
+        # Up the back of the poop, vertical above the counter, which is what a
+        # real stern does and what makes the taffrail sit over the transom
+        # instead of in front of a gap.
+        prof.append((aft[j_rail][0], aft[j_rail][1], z_top_aft))
     t = B * 0.030
     verts, faces = [], []
     n = len(prof)
@@ -1427,66 +1665,451 @@ def build_stern(p, stations, coll, tags=None):
                            smooth=False, mirror=False))
 
     # --- the taffrail: the caprail carried across the stern -------------------
-    y_r, z_r, x_r = aft[j_rail][1], aft[j_rail][2], aft[j_rail][0]
+    # On the TOP of the stern, whatever that now is -- the poop's cap on a hull
+    # that has one, her own rail on a hull that does not.
+    # Cut from the SAME stick as the caprail it continues -- 0.39 by 0.40 on
+    # the three-decker, not the 1.25 by 0.79 slab it was. That section was
+    # invisible while the taffrail sat down at her rail; carried up to the top
+    # of the poop it became the largest single timber on the ship and read as
+    # a packing case laid across her stern.
+    y_r, x_r = aft[j_rail][1], aft[j_rail][0]
     hw, hh = B * 0.030, depth * 0.032
-    verts = [(x_r - hw, -y_r - hw, z_r - hh), (x_r + hw * 2.2, -y_r - hw, z_r - hh),
-             (x_r + hw * 2.2, y_r + hw, z_r - hh), (x_r - hw, y_r + hw, z_r - hh)]
-    verts += [(x, y, z + hh * 2.0) for (x, y, z) in verts]
+    z_r = z_top_aft + hh * 0.5 - depth * 0.010
+    verts = [(x_r - hw * 0.35, -y_r - hw, z_r - hh * 0.5),
+             (x_r + hw * 0.65, -y_r - hw, z_r - hh * 0.5),
+             (x_r + hw * 0.65, y_r + hw, z_r - hh * 0.5),
+             (x_r - hw * 0.35, y_r + hw, z_r - hh * 0.5)]
+    verts += [(x, y, z + hh) for (x, y, z) in verts]
     faces = [[3, 2, 1, 0], [4, 5, 6, 7],
              [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]
     out.append(make_object(p["name"] + "_Taffrail", verts, faces, coll,
                            smooth=False, mirror=False))
 
+    if p.get("deck_z") is None:
+        return out
+    if not has_qd:
+        # No quarterdeck -- but she may still be long enough to carry a wheel,
+        # and three rungs of the ladder sat in that gap: `ShipFit` sold them a
+        # wheel and quadrant at 15 m while the asset gated the HELM on the
+        # platform at 18, so they got neither. A wheel with no quarterdeck
+        # stands on the weather deck, right aft, which is where it stands on
+        # every small vessel that has one.
+        if L >= 15.0:
+            out.extend(_helm(p, coll, aft[0][0] + L * 0.075, z_deck))
+        return out
+
     # --- the quarterdeck ------------------------------------------------------
     # A raised deck aft is where the helm belongs, and it is also what gives
-    # the after end of a ship its mass. Only on hulls that HAVE a deck to
-    # raise, and long enough for a quarter of her to be worth walking up onto.
-    if p.get("deck_z") is None or L < 18.0:
-        return out
-    z_q = z_deck + depth * 0.16
-    x_end = stations[0][0][0] + L * p.get("quarterdeck_frac", 0.26)
-    ring_idx = [i for i, r in enumerate(stations) if r[j_rail][0] <= x_end]
-    if len(ring_idx) >= 3:
-        # Six planks across, not one.
-        #
-        # Built two points wide, every face on the platform touched a boundary
-        # edge -- so the deck's margin-plank rule, which finds the edge from
-        # the topology, correctly decided the WHOLE quarterdeck was margin and
-        # painted it dark. A strip one quad wide has no interior to be the
-        # middle of. Giving it some also lets the plank variation show.
-        nq = 6
-        verts, faces = [], []
-        for i in ring_idx:
-            r = stations[i]
-            # INTO the bulwark, not up to it. At 0.97 the platform stopped
-            # 0.10 m short of the inner face and there was a slot of daylight
-            # down each side of it.
-            y_in = r[j_in][1] * 1.02
-            for k in range(nq + 1):
-                verts.append((r[j_rail][0], lerp(-y_in, y_in, k / nq), z_q))
-        for c_i in range(len(ring_idx) - 1):
-            for k in range(nq):
-                a = c_i * (nq + 1) + k
-                b = a + nq + 1
-                faces.append([a, a + 1, b + 1, b])
-        out.append(make_object(p["name"] + "_Quarterdeck", verts, faces, coll,
-                               smooth=False, mirror=False, solidify=depth * 0.022))
+    # the after end of a ship its mass.
+    #
+    # Six planks across, not one. Built two points wide, every face on the
+    # platform touched a boundary edge -- so the deck's margin-plank rule,
+    # which finds the edge from the topology, correctly decided the WHOLE
+    # quarterdeck was margin and painted it dark. A strip one quad wide has no
+    # interior to be the middle of.
+    nq = 6
+    verts, faces = [], []
+    for i in ring_idx:
+        r = stations[i]
+        # INTO the bulwark, not up to it. At 0.97 the platform stopped 0.10 m
+        # short of the inner face and there was a slot of daylight down each
+        # side of it.
+        y_in = r[j_in][1] * 1.02
+        zq = z_q_at(r)
+        for k in range(nq + 1):
+            verts.append((r[j_rail][0], lerp(-y_in, y_in, k / nq), zq))
+    for c_i in range(len(ring_idx) - 1):
+        for k in range(nq):
+            a = c_i * (nq + 1) + k
+            b = a + nq + 1
+            faces.append([a, a + 1, b + 1, b])
+    out.append(make_object(p["name"] + "_Quarterdeck", verts, faces, coll,
+                           smooth=False, mirror=False, solidify=depth * 0.022))
 
-        # --- the wheel ------------------------------------------------------
-        # Gated at 15 m, which is not a number picked for the look: it is the
-        # SAME length `ShipFit.Blocked` uses to refuse a wheel and quadrant to
-        # a small hull. Below it she is steered by a tiller, and the asset
-        # should not contradict what the yard says she can carry.
-        if L >= 15.0:
-            # Right aft, just forward of the taffrail -- which is where a
-            # wheel actually is, and which is what puts air between the
-            # helmsman and the mast. At `x_end - 0.10L` he stood 1.45 m abaft
-            # the mizzen with its sail in his face.
-            out.extend(_helm(p, coll, stations[0][0][0] + L * 0.075, z_q))
-        # The platform's REAL forward edge -- the last station it actually
-        # used -- not the nominal break that chose it.
-        x_edge = stations[ring_idx[-1]][j_rail][0]
-        out.extend(build_companion(p, stations, coll, tags, z_q, x_edge))
+    # --- her side, carried up round the quarterdeck --------------------------
+    # This is the piece that was missing. A dozen sections is plenty for a
+    # timber running fore and aft -- the backbone and the trim learned the same
+    # lesson -- and it is a quarter of the platform's station count.
+    want = min(len(ring_idx), 12)
+    step = max(1, (len(ring_idx) - 1) // max(1, want - 1))
+    run = [stations[i] for i in ring_idx[::step]]
+    if run[-1] is not stations[ring_idx[-1]]:
+        run.append(stations[ring_idx[-1]])
+    wall_t = B * 0.024
+    # Path set INBOARD by its own thickness, so the wall's outer face lands
+    # flush with the ship's side instead of standing proud of it.
+    path = [(r[j_rail][0], r[j_rail][1] - wall_t,
+             r[j_rail][2] + cap_lift + side_h * 0.5) for r in run]
+    out.append(_sweep_strake(path, wall_t, side_h,
+                             p["name"] + "_QdSide", coll))
+    # ...and the caprail on top of it, the same section as her own, so the two
+    # read as one timber stepping up at the break.
+    cap_path = [(r[j_rail][0], r[j_rail][1], z_side_at(r)) for r in run]
+    out.append(_sweep_strake(cap_path, B * 0.030, depth * 0.032,
+                             p["name"] + "_QdCap", coll, drop=-depth * 0.010,
+                             taper=0.10))
+
+    # The platform's REAL forward edge -- the last station it actually used --
+    # not the nominal break that chose it.
+    edge_ring = stations[ring_idx[-1]]
+    x_edge = edge_ring[j_rail][0]
+    z_q_edge = z_q_at(edge_ring)
+
+    # --- the bulkhead across the break ---------------------------------------
+    # What was under the quarterdeck was daylight. What is under a quarterdeck
+    # is the great cabin, and a cabin has a front to it. Spans both sides
+    # itself for the same reason the transom does.
+    y_b = edge_ring[j_in][1] * 1.02
+    z_b0 = edge_ring[j_deck][2]
+    if z_q_edge - z_b0 > sc * 1.5:
+        bt = sc * 1.2
+        verts, faces = [], []
+        for layer in (0.0, bt):
+            for (yy, zz) in ((-y_b, z_b0), (y_b, z_b0), (y_b, z_q_edge),
+                             (-y_b, z_q_edge)):
+                verts.append((x_edge + layer, yy, zz))
+        faces = [[0, 1, 2, 3], [7, 6, 5, 4],
+                 [4, 5, 1, 0], [5, 6, 2, 1], [6, 7, 3, 2], [7, 4, 0, 3]]
+        out.append(make_object(p["name"] + "_QdBreak", verts, faces, coll,
+                               smooth=False, mirror=False))
+        # A door each side of the companion, so the bulkhead reads as a front
+        # and not as a board. Sized off PERSON, like everything a hand opens.
+        dh = min(PERSON * 0.92, (z_q_edge - z_b0) * 0.86)
+        dw = PERSON * 0.24
+        y_gap = PERSON * 0.34 + sc * 2.0           # clear of the ladder
+        if y_b - y_gap > dw * 2.2 and dh > PERSON * 0.30:
+            yc = (y_gap + y_b) * 0.5
+            # On the FORWARD face of the bulkhead, which is the side anyone
+            # walking her deck can see. Hung on the after side they were doors
+            # into the cabin from inside the cabin, and invisible.
+            verts = []
+            for layer in (bt, bt + sc * 0.5):
+                for (yy, zz) in ((yc - dw, z_b0), (yc + dw, z_b0),
+                                 (yc + dw, z_b0 + dh), (yc - dw, z_b0 + dh)):
+                    verts.append((x_edge + layer, yy, zz))
+            faces = [[3, 2, 1, 0], [4, 5, 6, 7],
+                     [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]
+            out.append(make_object(p["name"] + "_QdDoor", verts, faces, coll,
+                                   smooth=False))
+
+    # --- the fancy back ------------------------------------------------------
+    # Where the cabin stops and the poop begins. The transom is ONE mesh but
+    # two different things: below this line it is the great cabin's painted
+    # stern, above it, it is simply her side carried round the back. Painted
+    # as one, the three-decker wore a metre and a half of flat port-lining red
+    # above her windows, which is the largest single surface on the ship.
+    p["stern_cabin_top"] = z_q_at(aft)
+    p["stern_cabin_bottom"] = z_deck
+    out.extend(_stern_face(p, coll, prof, z_deck, z_q_at(aft), z_top_aft,
+                           gun_rows=len(p.get("gun_decks") or [])))
+    out.extend(_cabin_side(p, stations, coll, tags, ring_idx, qd_rise))
+
+    # --- the wheel ------------------------------------------------------------
+    # Right aft, just forward of the taffrail -- which is where a wheel
+    # actually is, and which is what puts air between the helmsman and the
+    # mast. At `x_end - 0.10L` he stood 1.45 m abaft the mizzen with its sail
+    # in his face. Stood on the platform AT HIS OWN STATION, now that it
+    # carries sheer.
+    x_helm = aft[0][0] + L * 0.075
+    helm_ring = min(stations, key=lambda r: abs(r[j_rail][0] - x_helm))
+    out.extend(_helm(p, coll, x_helm, z_q_at(helm_ring)))
+    out.extend(build_companion(p, stations, coll, tags, z_q_edge, x_edge))
+    return out
+
+
+def _cabin_band(p, rise):
+    """The great cabin's band of light, as offsets above her own deck.
+
+    Defined once because the STERN reads it and so do her SIDES, and a band
+    that steps where it turns the corner is worse than no band at all."""
+    mh = scantling(p) * 0.85
+    return rise * 0.26, rise - mh * 1.30
+
+
+def _box(x0, x1, y0, y1, z0, z1, name, coll, mirror=False):
+    """An axis-aligned solid. The gallery hangs in air off the stern, so it
+    does not have to follow anything and a box is the honest shape."""
+    q = [(y0, z0), (y1, z0), (y1, z1), (y0, z1)]
+    verts = [(x0, yy, zz) for (yy, zz) in q] + [(x1, yy, zz) for (yy, zz) in q]
+    faces = [[3, 2, 1, 0], [4, 5, 6, 7],
+             [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]
+    return make_object(name, verts, faces, coll, smooth=False, mirror=mirror)
+
+
+def _cabin_side(p, stations, coll, tags, ring_idx, rise):
+    """Her quarter lights: the great cabin's windows in the SIDE of the hull.
+
+    The cabin runs forward under the quarterdeck, so its stern lights are only
+    half the story -- what makes the after end of a real ship read as somewhere
+    people live is the row of small windows down each quarter, above the wale
+    and under the poop. They are laid on the planking the way the gun-port lids
+    are, and they run in the SAME band as the stern's lights, off `_cabin_band`,
+    so the glass turns the corner at the same height it left.
+
+    They stop short of the aftmost gun port. A window where a gun runs out is
+    not a window, and on a hull with a battery the two bands are within half a
+    metre of each other."""
+    out = []
+    if not ring_idx or len(ring_idx) < 3:
+        return out
+    j_rail, j_deck = tags.index("rail"), tags.index("deck")
+    sc = scantling(p)
+    lo, hi = _cabin_band(p, rise)
+    if hi - lo < sc * 1.2:
+        return out
+
+    # How far forward the cabin's side may be lit.
+    x_edge = stations[ring_idx[-1]][j_rail][0]
+    if p.get("port_x"):
+        # Clear of the port's EDGE, not of its centre by a whole port width.
+        # The generous version left rung 9 with 1.43 m of quarter to light and
+        # a 1.70 m minimum, so the one hull on the ladder that first mounts
+        # guns was also the only one with a blind cabin.
+        x_edge = min(x_edge, min(p["port_x"]) - p.get("port_width", 0.7) * 0.75)
+    x_aft = stations[0][j_rail][0]
+    run = [stations[i] for i in ring_idx if stations[i][j_rail][0] <= x_edge]
+    if len(run) < 3 or run[-1][j_rail][0] - x_aft < PERSON * 0.8:
+        return out
+
+    def band_path(frac):
+        pts = []
+        for r in run:
+            z = r[j_deck][2] + lerp(lo, hi, frac)
+            q = _ring_at_z(r, z, j_rail)
+            if q is not None:
+                pts.append(q)
+        return pts
+
+    # Two mouldings, over and under -- the same pair that frames the stern,
+    # carried round the quarter, which is what joins the two into one band.
+    mh = sc * 0.85
+    for k, (frac, nudge) in enumerate(((0.0, -mh * 0.9), (1.0, mh * 0.9))):
+        pts = [(x, y, z + nudge) for (x, y, z) in band_path(frac)]
+        if len(pts) > 2:
+            out.append(_sweep_strake(pts, sc * 0.45, mh,
+                                     "%s_CabinMoulding%d" % (p["name"], k),
+                                     coll, taper=0.18))
+
+    # The lights themselves, pitched off PERSON like every other opening.
+    #
+    # **Sampled along the band, not FILTERED out of it.** Picking the stations
+    # that fall inside a window let the window be as wide as whatever happened
+    # to be there -- and with one light over a 2.6 m run that came out 1.45 m
+    # long by 0.51 m high, which is not a window, it is a blue stripe painted
+    # down her quarter. Interpolating the two ends gives every light the width
+    # it was asked for on any station spacing.
+    mid = band_path(0.5)
+    if len(mid) < 3:
+        return out
+    span = mid[-1][0] - mid[0][0]
+    if span < PERSON * 0.5:
+        return out
+
+    def sample(t):
+        xt = mid[0][0] + span * t
+        for k in range(len(mid) - 1):
+            if mid[k][0] <= xt <= mid[k + 1][0]:
+                f = (xt - mid[k][0]) / max(1e-9, mid[k + 1][0] - mid[k][0])
+                return tuple(lerp(mid[k][j], mid[k + 1][j], f) for j in range(3))
+        return tuple(mid[-1])
+
+    n = max(1, int(round(span / (PERSON * 0.72))))
+    h = (hi - lo) * 0.80
+    for i in range(n):
+        t0, t1 = (i + 0.21) / n, (i + 0.79) / n
+        if (t1 - t0) * span < sc:
+            continue
+        out.append(_sweep_strake([sample(t0), sample(t1)], sc * 0.30, h,
+                                 "%s_CabinLight%d" % (p["name"], i), coll))
+    return out
+
+
+def _stern_face(p, coll, prof, z_deck, z_q, z_top, gun_rows=0):
+    """The great cabin's windows, her mouldings and her quarter pieces.
+
+    This is the one place on the ship where the eye is invited to linger, and
+    on every real vessel of this kind it is where the money went. It costs
+    about 250 triangles and no new mesh idea: the transom is FLAT athwart --
+    only its x rises and falls with the counter -- so everything here is a box
+    laid on a flat face, exactly the way the gun-port lids are.
+
+    Nothing here is placed at a number. The window band fills the space
+    between the deck and the platform, because that space IS the cabin; the
+    lights are spaced off PERSON like every other opening; and the mouldings
+    land on the band rather than at a height chosen to look right."""
+    out = []
+    B, depth = p["beam"], p["depth"]
+    sc = scantling(p)
+    name = p["name"]
+
+    def at(z):
+        """Where the stern's outer face sits at a height -- it leans."""
+        for k in range(len(prof) - 1):
+            z0, z1 = prof[k][2], prof[k + 1][2]
+            if (z0 - z) * (z1 - z) <= 0.0 and abs(z1 - z0) > 1e-9:
+                t = (z - z0) / (z1 - z0)
+                return (lerp(prof[k][0], prof[k + 1][0], t),
+                        lerp(prof[k][1], prof[k + 1][1], t))
+        return (prof[-1][0], prof[-1][1])
+
+    def plate(z0, z1, y0, y1, proud, thick, nm):
+        """A box laid ON the leaning stern face, between two heights.
+
+        `proud` is how far it stands off her; `thick` runs FORWARD from there,
+        far enough to bury its back inside the transom. A piece of trim that
+        floats a centimetre off the surface it decorates is the thing you see
+        first, and the transom leans, so the offset has to be taken at each
+        end's own height rather than once."""
+        x0, _ = at(z0)
+        x1, _ = at(z1)
+        q = [(x0 - proud, z0), (x1 - proud, z1)]
+        verts = []
+        for d in (0.0, thick):
+            for (xx, zz) in q:
+                verts += [(xx + d, y0, zz), (xx + d, y1, zz)]
+        faces = [[0, 1, 3, 2], [6, 7, 5, 4],
+                 [4, 5, 1, 0], [5, 7, 3, 1], [7, 6, 2, 3], [6, 4, 0, 2]]
+        out.append(make_object(nm, verts, faces, coll, smooth=False,
+                               mirror=False))
+
+    rise = z_q - z_deck
+    if rise < sc * 4.0:
+        return out
+
+    # The upper moulding lands ON the break -- the quarterdeck's own level,
+    # which is the real line between the cabin and the poop above it -- rather
+    # than at a height picked to sit over the glass. The band of light then
+    # fills what is left of the cabin under it, and it is the SAME band her
+    # quarter lights run in, so the glass turns the corner at the height it
+    # left. See `_cabin_band`.
+    mh = sc * 0.85
+    lo, hi = _cabin_band(p, rise)
+    zb, zt = z_deck + lo, z_deck + hi
+    y_edge = at((zb + zt) * 0.5)[1]
+    y_half = y_edge * 0.74
+    if zt - zb < sc * 1.5 or y_half < PERSON * 0.30:
+        return out
+
+    # One light per PERSON-and-a-bit of stern, the same pitch her rail
+    # stanchions stand at -- so the windows are the size of the openings a
+    # person makes, and the count falls out of how wide her stern is.
+    n_win = max(2, int(round(2.0 * y_half / (PERSON * 0.62))))
+    pier = min(sc * 1.6, (2.0 * y_half) / (n_win * 3.0))
+    w = (2.0 * y_half - pier * (n_win + 1)) / n_win
+    if w > sc:
+        for i in range(n_win):
+            y0 = -y_half + pier * (i + 1) + w * i
+            plate(zb, zt, y0, y0 + w, sc * 0.10, sc * 0.55,
+                  "%s_SternLight%d" % (name, i))
+
+    # Two mouldings, over and under the lights. One alone reads as a shelf;
+    # the pair frames the band and is what says "this was built by somebody" at
+    # the stern the way the stem head says it at the bow. They run out to the
+    # quarter pieces, not to the edge of the glass.
+    y_mould = y_edge * 0.90
+    for k, zc in ((0, zb - mh * 0.9), (1, z_q)):
+        plate(zc - mh * 0.5, zc + mh * 0.5, -y_mould, y_mould,
+              sc * 0.45, sc * 0.85, "%s_SternMoulding%d" % (name, k))
+
+    # Quarter pieces: the uprights that finish her CORNERS, deck to taffrail.
+    # Beside the glass they were a window frame; at the corners they are what
+    # turns a flat plate into a stern, and they are the piece the eye reads
+    # her width by.
+    qw = sc * 1.15
+    for k, yc in ((0, -y_edge * 0.90), (1, y_edge * 0.90)):
+        plate(z_deck + sc * 0.5, z_top - sc * 0.5, yc - qw, yc + qw,
+              sc * 0.55, sc * 1.00, "%s_QuarterPiece%d" % (name, k))
+
+    # --- the stern gallery ---------------------------------------------------
+    # The balcony off the great cabin, and it is not decoration: it is the
+    # thing that says a person lives behind that glass. Gated on her carrying
+    # TWO batteries or more, which is the same test as "her cabin has a deck
+    # under it and another over it" -- so it appears exactly on the hulls big
+    # enough to have somewhere to put it, and it appears at the moment she
+    # becomes a two-decker rather than at a length nobody can see.
+    #
+    # It hangs in air off the transom, so unlike everything else here it does
+    # not have to follow the lean and a box is the honest shape. The floor is
+    # laid AT THE SILL, so the lights are the doors onto it -- which is what
+    # they are on a real ship, and it means the two pieces are joined by a
+    # number they already share instead of by one chosen to look right.
+    if gun_rows >= 2:
+        # **The floor goes at the cabin's SOLE, not at the window sill.** Laid
+        # at the sill it was level with the glass, so a chest-high rail stood
+        # straight across the lights and the whole thing read as a cage bolted
+        # over her windows. On her own deck the rail tops out at about the
+        # sill, crosses only the bottom of the glass, and the balcony reads as
+        # something you step out ONTO -- which is the whole point of it.
+        zf = z_deck + sc * 0.60
+        dep = PERSON * 0.34
+        yg = y_edge * 0.78
+        x_face = at(zf)[0]
+        rail_h = PERSON * 0.56
+        post = sc * 0.42
+        out.append(_box(x_face - dep, x_face + sc * 0.5, -yg, yg,
+                        zf - sc * 0.85, zf, "%s_Gallery" % name, coll))
+        # Rail: two horizontals, and it RETURNS to the ship's side at both
+        # ends, because a rail that stops in mid-air is a diving board.
+        for k, zc in ((0, rail_h), (1, rail_h * 0.48)):
+            out.append(_box(x_face - dep, x_face - dep + post * 2.0, -yg, yg,
+                            zf + zc - post * 0.7, zf + zc + post * 0.7,
+                            "%s_GalleryRail%d" % (name, k), coll))
+            for m, ys in ((0, -yg), (1, yg - post * 2.0)):
+                out.append(_box(x_face - dep, x_face + sc * 0.5,
+                                ys, ys + post * 2.0,
+                                zf + zc - post * 0.7, zf + zc + post * 0.7,
+                                "%s_GalleryRail%d%d" % (name, k, m), coll))
+        # Stanchions at the same pitch her quarterdeck rail stands at, and cut
+        # thinner than that rail's -- this one is seen against the sky and the
+        # glass, and at the deck's own section it closed the stern up like a
+        # grating.
+        n_post = max(2, int(round(2.0 * yg / (PERSON * 0.95))))
+        for i in range(n_post + 1):
+            y = lerp(-yg, yg - post * 2.0, i / n_post)
+            out.append(_box(x_face - dep, x_face - dep + post * 2.0,
+                            y, y + post * 2.0, zf, zf + rail_h,
+                            "%s_GalleryPost%d" % (name, i), coll))
+
+    # --- the board across the poop's stern face -------------------------------
+    # The panel between the upper moulding and the taffrail was the one large
+    # blank left on her. Every ship of this kind carries carved work there --
+    # her name, an escutcheon, a bit of gilt -- and it is the cheapest
+    # character on the whole stern: one plate, twelve triangles, in the place
+    # the eye already goes.
+    board = z_top - z_q - mh * 2.6
+    if board > sc * 1.2:
+        plate(z_q + mh * 1.3, z_top - mh * 1.3, -y_edge * 0.46, y_edge * 0.46,
+              sc * 0.50, sc * 0.90, "%s_SternBoard" % name)
+
+    # --- the great lanterns ---------------------------------------------------
+    # The single most recognisable thing on the stern of a ship of the line,
+    # and the reason to look at her from astern at night. Same gate as the
+    # gallery: she carries them once she is a two-decker. Three on a hull wide
+    # enough to space them, one on a hull that is not -- decided by her stern's
+    # own width against a PERSON, like every other count on the ship.
+    if gun_rows >= 2:
+        lh = PERSON * 0.72
+        lw = PERSON * 0.20
+        x_l = at(z_top)[0]
+        z0 = z_top + depth * 0.030
+        # Three on a first-rate, one on a two-decker -- off her GUN ROWS,
+        # which only ever goes up. Off the stern's own breadth it did not:
+        # the counter's width at the window band is a shape, not a size, so
+        # rung 17 came out with three lanterns and rung 19 with one.
+        ys = ([-y_edge * 0.72, 0.0, y_edge * 0.72]
+              if gun_rows >= 3 else [0.0])
+        for i, yc in enumerate(ys):
+            # base, glass body, cap -- the three pieces that make a lantern
+            # read as a lantern rather than as a post.
+            out.append(_box(x_l - lw * 0.9, x_l + lw * 0.9, yc - lw * 0.9,
+                            yc + lw * 0.9, z0, z0 + lh * 0.16,
+                            "%s_LanternFoot%d" % (name, i), coll))
+            out.append(_box(x_l - lw, x_l + lw, yc - lw, yc + lw,
+                            z0 + lh * 0.16, z0 + lh * 0.78,
+                            "%s_LanternGlass%d" % (name, i), coll))
+            out.append(_box(x_l - lw * 1.35, x_l + lw * 1.35, yc - lw * 1.35,
+                            yc + lw * 1.35, z0 + lh * 0.78, z0 + lh,
+                            "%s_LanternCap%d" % (name, i), coll))
     return out
 
 
@@ -1692,6 +2315,7 @@ def build_sails(p, coll):
     # Tied to LENGTH rather than to a rung number, so an interpolated hull
     # gets the rig its size earns without anything being authored for it.
     tiers = 2 if p["length"] >= 22.0 else 1
+    scales = p.get("mast_scale") or [1.0] * len(p["mast_x"])
 
     # --- the sight line, which is what actually sizes the rig ---------------
     #
@@ -1706,29 +2330,51 @@ def build_sails(p, coll):
     # height plus a clear margin. It cannot drift out of true by a tuning
     # mistake because it is not tuned, and every hull on the ladder gets a
     # helm that can see, whatever her freeboard.
-    z_helm = (p["deck_z"] if p.get("deck_z") is not None else z_rail) + depth * 0.16
-    z_eye = z_helm + 1.55                              # a 1.7 m helmsman
+    # An open boat has no deck, and the old fallback stood her helmsman on the
+    # RAIL -- the highest thing on her -- which pushed the foot of a 9 m boat's
+    # only sail to 2.89 m on a 6.5 m mast. He sits on a thwart with his feet on
+    # the bottom boards, which is about the waterline on every boat this small,
+    # so that is where he is stood from here.
+    # Stood where `build_stern` actually stands him: on the quarterdeck if she
+    # is long enough to have one, on her weather deck if she only has a wheel,
+    # and on the bottom boards if she is an open boat.
+    if p.get("deck_z") is None:
+        z_stand = 0.0
+    elif p["length"] >= 18.0:
+        z_stand = p["deck_z"] + quarterdeck_rise(depth)
+    else:
+        z_stand = p["deck_z"]
+    z_eye = z_stand + 1.55                             # a 1.7 m helmsman
     foot0 = max(z_rail + depth * 0.10, z_eye + depth * 0.14)
 
-    # The AFTMOST mast crosses no course.
+    # EVERY mast crosses a course, and the rule that said otherwise is gone.
     #
-    # Even with the foot raised, a square sail on the mast immediately ahead
-    # of the wheel is a wall across the one direction the helm has to look.
-    # Real brigs set a fore-and-aft spanker back there for exactly this
-    # reason: nothing square on the aftermost mast.
-    aft_mast = min(range(len(p["mast_x"])), key=lambda i: p["mast_x"][i]) \
-        if len(p["mast_x"]) >= 2 else -1
-
+    # It used to strip the course off the aftmost mast, because a square sail
+    # on the mast in front of the wheel is a wall across the one direction the
+    # helm has to look. That was a real fault, and it is now fixed somewhere
+    # else and better: `foot0` is DERIVED from the helmsman's eye, so no course
+    # on any mast can sit lower than he does, on any rung -- the margin runs
+    # from 0.20 m on the skiff to 1.74 m on the three-decker and cannot go
+    # negative. Keeping the old rule as well was keeping a workaround beside
+    # the fix, and it cost twice over: on a two-master it stripped the course
+    # off the MAIN, which is exactly what Kevin undid by hand; on a
+    # three-master it left the mizzen carrying one small topsail alone at the
+    # top of a bare pole, in the gap where a real ship's spanker would be and
+    # with no spanker to put there.
     for k, mx in enumerate(p["mast_x"]):
         h = p["mast_height"][k]
+        s = scales[k]
         span = max(depth * 0.6, h * 0.94 - foot0)      # hoist available
         # Course takes a little over half of it, topsail most of the rest,
         # with a gap between them for the top.
-        cuts = [(0.00, 0.48), (0.56, 0.88)][:tiers]
-        if k == aft_mast and len(cuts) > 1:
-            cuts = cuts[1:]                            # topsail only
-        for t_i_raw, (a, b) in enumerate(cuts):
-            t_i = t_i_raw + (1 if (k == aft_mast and tiers > 1) else 0)
+        #
+        # A hull too small to cross a topsail sets ONE sail, and it has to use
+        # the hoist -- cut at 0.48 it left the top half of her mast bare, so
+        # every rung below 22 m carried a postage stamp up a bare pole while
+        # the brig carried a suit of canvas. Same rig, grown, not a different
+        # idea of what a sail is.
+        cuts = [(0.00, 0.48), (0.56, 0.88)] if tiers > 1 else [(0.00, 0.86)]
+        for t_i, (a, b) in enumerate(cuts):
             z_bot, z_top = foot0 + span * a, foot0 + span * b
             # Narrower aloft, and wider at the foot than at the head, which is
             # what a square sail actually is.
@@ -1736,12 +2382,18 @@ def build_sails(p, coll):
             # a 3.90 m half-beam -- the canvas was 23% wider than the ship, so
             # from astern it hid the water down both sides and left nothing to
             # read her heading against.
-            head = B * (0.42 if t_i == 0 else 0.34)
+            #
+            # And a lesser mast's canvas is cut to the SPAR, not to the ship:
+            # Kevin's fore sail measures 0.65 of his main's across, exactly the
+            # scale he cut the spar to. Width taken off the beam alone put the
+            # same sail on a mast two thirds the size, which reads as a big
+            # ship's sail hung on a boat's mast.
+            head = B * (0.42 if t_i == 0 else 0.34) * s
             foot = head * 1.10
             # A sail full of wind, not a sheet hung up to dry. The belly is
             # the whole character of the thing and it was set at a tenth of
             # the beam, which at this size is a crease.
-            belly = B * (0.26 if t_i == 0 else 0.20)
+            belly = B * (0.26 if t_i == 0 else 0.20) * s
             hoist = z_top - z_bot
             verts, faces = [], []
             for j in range(nv + 1):
@@ -1775,13 +2427,13 @@ def build_sails(p, coll):
             # largest thing in her silhouette and it was not attached to the
             # ship. Forty-four triangles for the biggest gain in the rig.
             out.append(_spar_athwart(p["name"] + "_Yard" + tag, coll,
-                                     mx, z_top, head * 1.08, B * 0.020))
+                                     mx, z_top, head * 1.08, B * 0.020 * s))
         # A boom under the course, so the canvas is held at BOTH edges and
         # stops reading as a sheet pinned at the top only. No course, no boom.
-        if p.get("boom", True) and k != aft_mast:
+        if p.get("boom", True):
             out.append(_spar_athwart(p["name"] + "_Boom%d" % (k + 1), coll,
-                                     mx, foot0, B * 0.42 * 1.10 * 1.04,
-                                     B * 0.016))
+                                     mx, foot0, B * 0.42 * 1.10 * 1.04 * s,
+                                     B * 0.016 * s))
     return out
 
 
@@ -1882,7 +2534,7 @@ FLEET = [
       # her bottom boards would sit.
       inner_floor=-0.30,
       rudder=True, keel_batten=True,
-      mast_x=[-0.3], mast_height=[6.5]),
+      ),
 
  dict(name="T3_Sloop", tier=3, label="Coastal sloop",
       length=15.0, beam=4.8, draft=1.35, depth=2.55, midship=0.46,
@@ -1893,7 +2545,7 @@ FLEET = [
       rake_fwd=1.70, rake_aft=0.90, rake_k=2.0, planking=0.08,
       deck_z=0.75, gun_decks=[], plank_t=0.08,
       rudder=True, keel_batten=True, deck_spans=3,
-      mast_x=[0.6], mast_height=[11.0], bowsprit=True),
+      bowsprit=True),
 
  dict(name="T4_Brig", tier=4, label="Brig",
       length=26.0, beam=7.8, draft=2.50, depth=5.20, midship=0.47,
@@ -1915,7 +2567,6 @@ FLEET = [
       # Centres are BUILT x, evenly spaced 3.0 m, which is a gun's recoil room.
       port_height=0.58, port_width=0.68,
       port_x=[-8.6, -5.6, -2.6, 0.4, 3.4, 6.4, 9.4],
-      mast_x=[-4.6, 4.2], mast_height=[13.5, 15.5],
       bowsprit=True, rudder=True, keel_batten=True),
 
  dict(name="T5_ShipOfTheLine", tier=5, label="Three-decker",
@@ -1939,7 +2590,6 @@ FLEET = [
       inner_floor=0.55,
       station_end=0.80, station_mid=1.45, deck_spans=4,
       rudder=True, keel_batten=True,
-      mast_x=[-11.0, 1.0, 13.5], mast_height=[24.0, 28.0, 22.0],
       bowsprit=True,
       deck_levels=[("Hold", -4.60), ("LowerGunDeck", 0.55),
                    ("MiddleGunDeck", 2.85), ("UpperGunDeck", 5.15)]),
@@ -2010,7 +2660,9 @@ SWATCH = [
     (0.21, 0.20, 0.20),   # 19 iron band, for mast hoops and gammoning
     (0.60, 0.45, 0.29),   # 20 spar, shaded
     (0.72, 0.58, 0.30),   # 21 gilt on carved work
-    (0.50, 0.34, 0.21),   # 22 spare
+    (0.27, 0.32, 0.36),   # 22 glass, the great cabin's lights -- cool and
+                          #    dark, so a window reads as a hole full of sky
+                          #    against warm timber rather than as a panel
     (0.55, 0.50, 0.44),   # 23 spare
     (0.66, 0.47, 0.29),   # 24 spare
 ]
@@ -2020,7 +2672,7 @@ SW = {"plank_l": 0, "plank_m": 1, "plank_d": 2, "plank_w": 3,
       "boot": 9, "spar": 10, "canvas": 11, "rope": 12, "lining": 13,
       "iron": 14, "carved": 15,
       "cloth_a": 16, "cloth_b": 17, "rigging": 18, "band": 19,
-      "spar_d": 20, "gilt": 21}
+      "spar_d": 20, "gilt": 21, "glass": 22}
 
 CLOTHS = [11, 16, 17]
 
@@ -2176,6 +2828,14 @@ def paint(ob, p, kind="hull"):
     # goes flat -- no change to the loft, and no second list to keep in step.
     linings = {i for i, pg in enumerate(me.polygons) if not pg.use_smooth} \
         if kind == "hull" else set()
+    # ...which is why the TRANSOM must not be a hull. It is built flat-shaded
+    # all through, so that test called every one of its faces a gun-port
+    # lining and painted the whole stern port red. It has been that way since
+    # the art pass and it is in the look Kevin set, on every rung -- a painted
+    # stern is a real thing and it reads as one. So the colour stays and only
+    # the REASON changes: it is a decision now, not a heuristic that happens to
+    # land there, and tightening the lining test can no longer repaint twenty
+    # sterns without anyone touching a stern.
 
     # The deck's MARGIN PLANK: the dark board that runs round the edge of a
     # laid deck, against which every other plank is cut. It is the cheapest
@@ -2220,6 +2880,29 @@ def paint(ob, p, kind="hull"):
                 i = (SW["deck_l"] if _shuffle(c[1] / width) % 2 else SW["deck_m"])
         elif kind == "lid":
             i = SW["wale"]
+        elif kind == "bulwark":
+            # Her side, above the caprail, round the quarterdeck. Planking,
+            # not trim -- and the top strake dark, exactly as `_hull_swatch`
+            # darkens the sheer strake, so the poop's side is visibly the
+            # ship's side carried up and not a fence standing on her.
+            t = ((c[2] - z_lo) / span_z) if span_z > 1e-6 else 0.0
+            i = SW["wale"] if t >= 0.68 else PLANKS[-1]
+        elif kind == "glass":
+            i = SW["glass"]
+        elif kind == "gilt":
+            i = SW["gilt"]
+        elif kind == "stern":
+            # The transom is HER PLANKING, painted only across the cabin it
+            # closes -- so it darkens toward the water and carries her sheer
+            # strake exactly like the topside it is continuous with. Painted
+            # red all over, the three-decker wore a metre and a half of flat
+            # port-lining above her windows and another four metres of it
+            # below, which between them are the largest surface on the ship.
+            top, bot = p.get("stern_cabin_top"), p.get("stern_cabin_bottom")
+            if top is not None and bot is not None and bot <= c[2] <= top:
+                i = SW["lining"]
+            else:
+                i = _hull_swatch(p, c, nrm.z, z_rail, False)
         elif kind == "ladder":
             # Darker than the deck it stands on, or the treads disappear into
             # it -- which is exactly what happened when they were painted as
@@ -2264,7 +2947,7 @@ def paint(ob, p, kind="hull"):
     # flat by nature -- a plank is a plank and the next one is a different
     # plank. This costs no triangles at all; it splits vertices on export.
     if kind in ("hull", "deck", "trim", "caprail", "wale", "carved",
-                "lid", "band", "ladder"):
+                "lid", "band", "ladder", "stern", "bulwark", "glass", "gilt"):
         for pg in me.polygons:
             pg.use_smooth = False
     me.update()
@@ -2278,21 +2961,41 @@ KIND_BY_SUFFIX = [
     ("_Sail", "canvas"),
     ("_Caprail", "caprail"), ("_Wale", "wale"), ("_StemHead", "carved"),
     ("_PortLid", "lid"), ("_Boom", "spar"), ("_Timberhead", "caprail"),
-    ("_Transom", "hull"), ("_Taffrail", "caprail"), ("_Quarterdeck", "deck"),
+    ("_Transom", "stern"), ("_Taffrail", "caprail"), ("_Quarterdeck", "deck"),
     ("_HelmWheel", "trim"), ("_HelmSpokes", "spar"), ("_HelmPost", "trim"),
     ("Top", "trim"),
     ("_Band", "band"), ("_Knighthead", "trim"), ("_DolphinStriker", "trim"),
     ("_BowspritKnee", "trim"),
     ("_QdStanchion", "caprail"), ("_QdRail", "caprail"),
+    ("_QdSide", "bulwark"), ("_QdBreak", "bulwark"), ("_QdCap", "caprail"),
+    ("_QdDoor", "trim"),
+    ("_SternLight", "glass"), ("_SternMoulding", "gilt"),
+    ("_CabinLight", "glass"), ("_CabinMoulding", "gilt"),
+    ("_QuarterPiece", "carved"),
+    ("_GalleryRail", "caprail"), ("_GalleryPost", "caprail"),
+    ("_Gallery", "deck"), ("_SternBoard", "carved"),
+    ("_LanternGlass", "glass"), ("_LanternCap", "iron"),
+    ("_LanternFoot", "iron"),
     ("_Tread", "ladder"), ("_Stringer", "ladder"),
     ("_Mast", "mast"), ("_Bowsprit", "mast"), ("_Yard", "spar"),
     ("_Backbone", "trim"), ("_Rudder", "trim"), ("_Channel", "trim"),
 ]
 
 
-def paint_kind(name):
+def paint_kind(name, prefix=None):
     """What a built object is, from what the generator called it. The names
-    are already a taxonomy; this reads it rather than inventing a second one."""
+    are already a taxonomy; this reads it rather than inventing a second one.
+
+    **The taxonomy lives in the SUFFIX, so only the suffix may be read.**
+    Rung 3 of the ladder is labelled "Decked boat", which makes her objects
+    `N03_Deckedboat_Hull`, `N03_Deckedboat_Sail1` and so on -- and every one of
+    them contains the string `_Deck`. The whole ship came out painted as deck
+    planking: a bleached hull with no strakes, and a SAIL cut from floorboards
+    with a dark margin round its edge. One rung in twenty, wrong in every
+    surface, from a label. Strip the hull's own name first and the ship's parts
+    are the only thing left to read."""
+    if prefix and name.startswith(prefix):
+        name = name[len(prefix):]
     for suffix, kind in KIND_BY_SUFFIX:
         if suffix in name:
             return kind
@@ -2310,7 +3013,7 @@ def dress(objs, p):
             o.data.materials.append(mat)
         else:
             o.data.materials[0] = mat
-        paint(o, p, paint_kind(o.name))
+        paint(o, p, paint_kind(o.name, p.get("name")))
     return objs
 
 # ---------------------------------------------------------------- build -----
@@ -2333,6 +3036,7 @@ def build_all():
     for p in FLEET:
         c = get_collection(p["name"])
         hull, stations, tags = build_hull(p, c)
+        plan_rig(p, stations, tags)      # her masts, off the hull she has
         objs = [hull]
         if p.get("deck_z") is not None:
             objs.append(build_deck(p, stations, c, p["deck_z"], tags))
