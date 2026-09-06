@@ -206,6 +206,24 @@ def _port_rows(p):
     return [(z, z + p["port_height"]) for z in sorted(p["gun_decks"])]
 
 
+def port_columns(p):
+    """Built-x of every gun port, PER ROW, lowest row first.
+
+    A hull does not have to carry the same number of ports on every deck, and
+    the ones on this ladder do not: her battery is capped by the hands she can
+    berth, so a three-decker who can man twenty guns spreads them 4/3/3 rather
+    than cutting thirty-six holes a side she can never run a carriage out of.
+    `port_rows_x` says so per deck; `port_x` alone means every deck the same,
+    which is what the four authored hulls are."""
+    rows = _port_rows(p)
+    if not rows:
+        return []
+    cols = p.get("port_rows_x")
+    if cols:
+        return [list(c) for c in cols]
+    return [list(p.get("port_x") or []) for _ in rows]
+
+
 def _inner_floor(p):
     """How far DOWN the inner planking runs.
 
@@ -321,7 +339,7 @@ def build_hull(p, coll):
         return p["sheer_fwd"] * min(1.0, x / x_fwd) ** 2.0
 
     # --- gun ports: solve each jamb in BUILT x, iterating on the sheer ------
-    ports = []
+    ports_by_row, ports = [], []
     rows = _port_rows(p)
     floor = _inner_floor(p)
     if rows:
@@ -339,8 +357,16 @@ def build_hull(p, coll):
                 zn = min(1.0, max(0.0, (ref + sheer_at(x) + D) / depth))
                 x = _loft_x_for_built_x(p, x_built, zn, x_aft, x_fwd)
             return x
-        for xc in p["port_x"]:
-            ports.append((jamb(xc - hw), jamb(xc + hw)))
+        # Solved once per row, but every row's centres come off the same bay
+        # grid, so two rows either share a column exactly or are a whole bay
+        # apart -- there is no way for one deck's jamb to land inside another
+        # deck's port. `ports` is the UNION, because a station is a station for
+        # the whole ring however few decks actually open there.
+        for cols in port_columns(p):
+            row = [(jamb(xc - hw), jamb(xc + hw)) for xc in cols]
+            ports_by_row.append(row)
+            ports.extend(row)
+        ports = sorted(set(ports))
 
     # --- stations: the jambs ARE stations, they are not extra ---------------
     # Every loop has to earn its place. A cosine station that lands inside a
@@ -503,7 +529,7 @@ def build_hull(p, coll):
     if plank_t <= 0.0:
         return _weld_old(p, stations, coll) + (None,)
 
-    return _weld_bulwark(p, stations, ring_tags, xs, ports, coll) + (ring_tags,)
+    return _weld_bulwark(p, stations, ring_tags, xs, ports_by_row, coll) + (ring_tags,)
 
 
 def _weld_old(p, stations, coll):
@@ -540,7 +566,7 @@ def _poly_area(pts):
     return 0.5 * math.sqrt(ax * ax + ay * ay + az * az)
 
 
-def _weld_bulwark(p, stations, tags, xs, ports, coll):
+def _weld_bulwark(p, stations, tags, xs, ports_by_row, coll):
     """Sweep the J-section, cut the ports, line them, and close both ends.
 
     Both ends close onto a CENTRELINE column rather than an n-gon cap: the bow
@@ -571,38 +597,45 @@ def _weld_bulwark(p, stations, tags, xs, ports, coll):
         rowj.append((js, jh, 2 * j_rail + 1 - js, 2 * j_rail + 1 - jh))
         ri += 1
 
-    def port_span(i):
+    def port_span(ri, i):
+        """Does gun row `ri` open between stations i and i+1?
+
+        Asked per ROW, not per hull. The decks do not all carry the same
+        number of guns, so a station gap that is an opening on the lower deck
+        is plain planking two decks up -- and cutting every row wherever any
+        row opened is what left a first-rate with thirty-six ports a side and
+        ten guns to put in them."""
         xc = 0.5 * (xs[i] + xs[i + 1])
-        return any(x0 - 1e-6 <= xc <= x1 + 1e-6 for (x0, x1) in ports)
+        return any(x0 - 1e-6 <= xc <= x1 + 1e-6 for (x0, x1) in ports_by_row[ri])
 
     # A port is a hole through a WALL, so both skins have to go. Removing only
     # the outer row left the inner bulwark face running behind the opening --
     # which is not a gun port, it is a recess, and it put three faces on every
     # lining edge (28 non-manifold edges, 4 a port).
-    skip = set()
-    for (js, jh, jsi, jhi) in rowj:
-        skip.add(js)          # outer face row, sill -> head
-        skip.add(jhi)         # inner face row, head_in -> sill_in
+    owner = {}
+    for ri, (js, jh, jsi, jhi) in enumerate(rowj):
+        owner[js] = ri        # outer face row, sill -> head
+        owner[jhi] = ri       # inner face row, head_in -> sill_in
     for i in range(len(stations) - 1):
-        cut = port_span(i)
         for j in range(per - 1):
-            if cut and j in skip:
+            ri = owner.get(j)
+            if ri is not None and port_span(ri, i):
                 continue                                  # the opening itself
             a0, b0 = i * per + j, (i + 1) * per + j
             faces.append([a0, a0 + 1, b0 + 1, b0])
 
     # --- port linings: sill, head and the two jambs, all quads -------------
     lining = set()
-    for (j_sill, j_head, j_si, j_hi) in rowj:
+    for ri, (j_sill, j_head, j_si, j_hi) in enumerate(rowj):
         for i in range(len(stations) - 1):
-            if not port_span(i):
+            if not port_span(ri, i):
                 continue
             a, b = i * per, (i + 1) * per
             for q in ([a + j_si, b + j_si, b + j_sill, a + j_sill],      # sill
                       [a + j_head, b + j_head, b + j_hi, a + j_hi]):     # head
                 faces.append(q)
                 lining.add(frozenset(q))
-        for (x0, x1) in ports:
+        for (x0, x1) in ports_by_row[ri]:
             for x, flip in ((x0, True), (x1, False)):
                 k = min(range(len(xs)), key=lambda n: abs(xs[n] - x))
                 a = k * per
@@ -1469,7 +1502,7 @@ def build_trim(p, stations, coll, tags=None, hull=None):
 
 
 def build_port_lids(p, hull, coll):
-    """A hinged lid over every gun port, swung open, found from the HOLES.
+    """A hinged lid over every gun port, baked SHUT, found from the HOLES.
 
     The first version placed each lid from `p["port_x"]`, which is where the
     port was ASKED for -- and that is not where it ends up. The loft solves
@@ -1483,9 +1516,9 @@ def build_port_lids(p, hull, coll):
     exactly one cluster per port, and its bounds give the hole. Nothing to keep
     in step, and it cannot drift when the loft changes.
 
-    Twelve triangles each and mirrored, so the brig's fourteen ports cost 168
-    and the three-decker's seventy-two cost 864 -- the only trim on the ship
-    that scales with how heavily armed she is, which is the right thing for it
+    Twelve triangles a side, so the brig's fourteen ports cost 168 and the
+    three-decker's seventy-two cost 864 -- the only trim on the ship that
+    scales with how many guns she could carry, which is the right thing for it
     to scale with."""
     out = []
     me = hull.data
@@ -1517,7 +1550,27 @@ def build_port_lids(p, hull, coll):
                         stack.append(nb)
         groups.append(comp)
 
-    lift = math.radians(p.get("port_lid_deg", 84.0))      # out, barely rising
+    # **Baked SHUT, and one object per side.**
+    #
+    # They used to be baked at 84 degrees -- every lid on the ship swung open,
+    # which is why a first-rate read as seventy-two guns whatever she actually
+    # carried. A lid that is shut is the ship saying she has no gun there, and
+    # it costs nothing to say it: the geometry is the same four quads either
+    # way. `PortLids` in Unity swings open the ones with a gun behind them, so
+    # the number of guns showing is the number she has, and clearing for
+    # action is something you can watch happen.
+    #
+    # **`mirror=False`, deliberately.** A mirrored lid is one object holding
+    # both sides, and a Mirror modifier mirrors in OBJECT space -- so rotating
+    # it about the fore-and-aft hinge tilts the mirror plane and swings the
+    # port-side lid inboard, through her own planking. Two objects is the only
+    # arrangement in which each lid can open. It costs no triangles: the same
+    # twelve a side either way.
+    #
+    # Each lid is authored about its own HINGE, with the object origin on that
+    # line, so a lid is a thing that opens rather than a shape at the ship's
+    # centre -- the fault `SailRig` had to fix at runtime for the sails.
+    lift = math.radians(p.get("port_lid_deg", 0.0))
     for gi, comp in enumerate(groups):
         vids = {v for fi in comp for v in faces_by_index[fi].vertices}
         co = [me.vertices[v].co for v in vids]
@@ -1531,15 +1584,33 @@ def build_port_lids(p, hull, coll):
         # Hinged along the HEAD of the port, a line running fore and aft, so
         # the lid swings in the Y-Z plane about that line.
         dy, dz = math.sin(lift), -math.cos(lift)
-        fy, fz = y_out + ph * dy, z1 + ph * dz
+        fy, fz = ph * dy, ph * dz
         ty, tz = -dz * th, dy * th
-        quad = [(y_out, z1), (fy, fz), (fy + ty, fz + tz), (y_out + ty, z1 + tz)]
-        verts = [(xc - hw, qy, qz) for (qy, qz) in quad] + \
-                [(xc + hw, qy, qz) for (qy, qz) in quad]
+        quad = [(0.0, 0.0), (fy, fz), (fy + ty, fz + tz), (ty, tz)]
         faces = [[3, 2, 1, 0], [4, 5, 6, 7],
                  [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]
-        out.append(make_object("%s_PortLid%02d" % (p["name"], gi),
-                               verts, faces, coll, smooth=False))
+        for side, tag in ((1.0, "S"), (-1.0, "P")):
+            verts = [(-hw, side * qy, qz) for (qy, qz) in quad] + \
+                    [(hw, side * qy, qz) for (qy, qz) in quad]
+            # Negating y mirrors the box, which turns it inside out. The port
+            # side is wound the other way round so both lids face outboard.
+            wound = faces if side > 0 else [f[::-1] for f in faces]
+            o = make_object("%s_PortLid%02d%s" % (p["name"], gi, tag),
+                            verts, wound, coll, smooth=False, mirror=False)
+            # The hinge: on the centre of the port head, at the outer skin.
+            #
+            # PARENTED to the hull, and that is not decoration. A lid is the
+            # only object on the ship whose origin is not the ship's origin,
+            # and two things flatten root origins: `build_ladder` lays the
+            # rungs out along y, and `export_ladder` zeroes every root and
+            # yaws it -90 so the bow points +Z in Unity. Either one would put
+            # all seventy-two lids at the centre of the ship. As a CHILD the
+            # lid is carried by the hull through both, exactly the way the gun
+            # port anchors already are.
+            o.location = (xc, side * y_out, z1)
+            o.parent = hull
+            o.matrix_parent_inverse = hull.matrix_world.inverted()
+            out.append(o)
     return out
 
 
@@ -1865,7 +1936,8 @@ def _cabin_side(p, stations, coll, tags, ring_idx, rise):
         # The generous version left rung 9 with 1.43 m of quarter to light and
         # a 1.70 m minimum, so the one hull on the ladder that first mounts
         # guns was also the only one with a blind cabin.
-        x_edge = min(x_edge, min(p["port_x"]) - p.get("port_width", 0.7) * 0.75)
+        aftmost = min(x for c in port_columns(p) for x in c)
+        x_edge = min(x_edge, aftmost - p.get("port_width", 0.7) * 0.75)
     x_aft = stations[0][j_rail][0]
     run = [stations[i] for i in ring_idx if stations[i][j_rail][0] <= x_edge]
     if len(run) < 3 or run[-1][j_rail][0] - x_aft < PERSON * 0.8:
@@ -2281,6 +2353,82 @@ def _helm(p, coll, x, z_deck, seg=10, spokes=8):
     return out
 
 
+# ------------------------------------------------------------- the cut -----
+#
+# **A sail is cut to an ASPECT; it is not whatever hoist happens to be left.**
+#
+# The first rule stretched one or two sails across a fixed 88% of the mast,
+# which works on a ship and fails on a boat: span comes off a mast keyed to
+# LENGTH and width comes off the BEAM, and those two ratios are not the same
+# at 9 m as they are at 46 m. Measured across the ladder the courses ran from
+# 1.47 times as wide as they were tall on the brig down to **0.53 on the long
+# boat** -- a portrait sail, twice as tall as it was broad, which is a banner
+# and not a square sail. Every rung below the first battery was one.
+#
+# So the hoist is DERIVED from the width, at the aspect a square sail actually
+# has, and the mast then takes as many of them as it has room for. The
+# constants are read off the brig -- the hull the style was set on -- so she
+# comes out with exactly the suit she has today and the boats are re-cut
+# around her.
+#
+# Widths are 10% up on the old ones, because "narrow" was the complaint and
+# the yards had headroom: at 0.46 the foot measures 1.01 of the beam against
+# the 1.23 that once hid the water down both sides from astern.
+SAIL_HEAD = (0.46, 0.372, 0.30)     # half-width at the head, fraction of beam
+SAIL_ASPECT = (1.464, 1.775, 2.10)  # width at the head / hoist; wider aloft
+SAIL_GAP = 0.17                     # the top, as a fraction of the sail below
+SAIL_BELLY = 0.62                   # how full she stands, against her head
+# A boat with a tall stick would otherwise carry her canvas at the heel and
+# leave a third of the mast bare. Spare hoist is shared out among the sails --
+# but only so far, because past this the aspect goes back to portrait, which
+# is the fault being fixed. 1.25 puts the worst rung on the ladder at 1.29
+# wide-to-tall, still landscape.
+SAIL_STRETCH = 1.25
+# and the canvas stops short of the masthead, because the topmast above the
+# highest yard is what a mast looks like. 0.92 is read off the brig.
+SAIL_FILL = 0.92
+
+
+def sail_tiers(L):
+    """How many yards a hull of this length crosses.
+
+    **By LENGTH, so it can only ever go up.** The first version asked whether
+    another sail would FIT at its proper aspect, which sounds like the honest
+    question and is the wrong one: sail width comes off the beam, so a GIRDLE
+    made every sail wider and taller and pushed the top one off the mast. The
+    ladder oscillated -- the player paid to widen her and watched a yard come
+    down. Nothing on this ladder may go backwards when she grows.
+
+    The thresholds are the ones the rig already uses: a hull under 16 m steps
+    one mast, and 30 m is where she is a ship rather than a big boat."""
+    return 2 if L < 30.0 else 3
+
+
+def sail_bands(span, beam, tiers):
+    """[(z above the foot, z above the foot)] for the sails on one mast.
+
+    `span` is the hoist available above the foot, `beam` the hull's beam
+    already scaled by this spar's own fraction. Returns bottom-up.
+
+    The suit is cut first and fitted second: every sail is drawn at its own
+    aspect, and the whole set is then scaled to the mast it has to go on. The
+    scale is free to run BOTH ways -- squeezing only makes a square sail wider
+    against its hoist, which is the direction that reads right, so a beamy hull
+    with a short stick keeps all her yards instead of dropping one."""
+    drops, gaps = [], []
+    for t in range(min(tiers, len(SAIL_HEAD))):
+        if drops:
+            gaps.append(SAIL_GAP * drops[-1])
+        drops.append(2.0 * beam * SAIL_HEAD[t] / SAIL_ASPECT[t])
+    need = sum(drops) + sum(gaps)
+    f = min(SAIL_STRETCH, span * SAIL_FILL / need) if need > 1e-6 else 1.0
+    bands, z = [], 0.0
+    for i, d in enumerate(drops):
+        bands.append((z, z + d * f))
+        z += (d + (gaps[i] if i < len(gaps) else 0.0)) * f
+    return bands
+
+
 def build_sails(p, coll):
     """Her rig: square sails on yards, one tier on a boat and two on a ship.
 
@@ -2312,9 +2460,9 @@ def build_sails(p, coll):
     nu, nv = 10, 7
 
     # A boat carries a single sail; a ship crosses a topsail above her course.
-    # Tied to LENGTH rather than to a rung number, so an interpolated hull
-    # gets the rig its size earns without anything being authored for it.
-    tiers = 2 if p["length"] >= 22.0 else 1
+    # Tied to the MAST rather than to a rung number, so an interpolated hull
+    # gets the rig its size earns without anything being authored for it --
+    # see `sail_bands` above, which counts what will actually fit.
     scales = p.get("mast_scale") or [1.0] * len(p["mast_x"])
 
     # --- the sight line, which is what actually sizes the rig ---------------
@@ -2365,17 +2513,8 @@ def build_sails(p, coll):
         h = p["mast_height"][k]
         s = scales[k]
         span = max(depth * 0.6, h * 0.94 - foot0)      # hoist available
-        # Course takes a little over half of it, topsail most of the rest,
-        # with a gap between them for the top.
-        #
-        # A hull too small to cross a topsail sets ONE sail, and it has to use
-        # the hoist -- cut at 0.48 it left the top half of her mast bare, so
-        # every rung below 22 m carried a postage stamp up a bare pole while
-        # the brig carried a suit of canvas. Same rig, grown, not a different
-        # idea of what a sail is.
-        cuts = [(0.00, 0.48), (0.56, 0.88)] if tiers > 1 else [(0.00, 0.86)]
-        for t_i, (a, b) in enumerate(cuts):
-            z_bot, z_top = foot0 + span * a, foot0 + span * b
+        for t_i, (z_bot, z_top) in enumerate(
+                sail_bands(span, B * s, sail_tiers(p["length"]))):
             # Narrower aloft, and wider at the foot than at the head, which is
             # what a square sail actually is.
             # **Inside her beam.** At 0.56 the yards measured 4.80 m against
@@ -2388,12 +2527,14 @@ def build_sails(p, coll):
             # scale he cut the spar to. Width taken off the beam alone put the
             # same sail on a mast two thirds the size, which reads as a big
             # ship's sail hung on a boat's mast.
-            head = B * (0.42 if t_i == 0 else 0.34) * s
+            z_bot += foot0
+            z_top += foot0
+            head = B * SAIL_HEAD[t_i] * s
             foot = head * 1.10
             # A sail full of wind, not a sheet hung up to dry. The belly is
             # the whole character of the thing and it was set at a tenth of
             # the beam, which at this size is a crease.
-            belly = B * (0.26 if t_i == 0 else 0.20) * s
+            belly = head * SAIL_BELLY
             hoist = z_top - z_bot
             verts, faces = [], []
             for j in range(nv + 1):
@@ -2417,7 +2558,7 @@ def build_sails(p, coll):
                     a_i = j * (nu + 1) + i
                     b_i = a_i + nu + 1
                     faces.append([a_i, a_i + 1, b_i + 1, b_i])
-            tag = "%d%s" % (k + 1, "" if t_i == 0 else "T")
+            tag = "%d%s" % (k + 1, ("", "T", "TG")[t_i])
             out.append(make_object(p["name"] + "_Sail" + tag, verts, faces,
                                    coll, smooth=True, mirror=False, solidify=0.04))
             # The yard the sail is bent to.
@@ -2432,7 +2573,7 @@ def build_sails(p, coll):
         # stops reading as a sheet pinned at the top only. No course, no boom.
         if p.get("boom", True):
             out.append(_spar_athwart(p["name"] + "_Boom%d" % (k + 1), coll,
-                                     mx, foot0, B * 0.42 * 1.10 * 1.04 * s,
+                                     mx, foot0, B * SAIL_HEAD[0] * 1.10 * 1.04 * s,
                                      B * 0.016 * s))
     return out
 
@@ -2446,13 +2587,14 @@ def build_port_anchors(p, stations, tags, coll, hull):
         return []
     out = []
     rows = _port_rows(p)
+    cols = port_columns(p)
     for ri in range(len(rows)):
         js, jh = tags.index("sill%d" % ri), tags.index("head%d" % ri)
         # Name the battery the way the ship does: a three-decker is fitted out
         # lower, then middle, then upper, so the guns arrive one deck at a
         # time and the anchors have to say which deck they belong to.
         deck = ("Lower", "Middle", "Upper")[ri] if len(rows) == 3 else ""
-        for i, xc in enumerate(p["port_x"]):
+        for i, xc in enumerate(cols[ri]):
             ring = min(stations, key=lambda r: abs(0.5 * (r[js][0] + r[jh][0]) - xc))
             x = 0.5 * (ring[js][0] + ring[jh][0])
             y = 0.5 * (ring[js][1] + ring[jh][1])
@@ -2621,7 +2763,15 @@ RAFT = dict(name="T1_Raft", tier=1, label="Log raft",
 
 PALETTE_DIR = "/Users/kevinandersson/Desktop/SeaSick/Assets/_Project/Art/Ship/Hulls"
 PALETTE_NAME = "seasick_palette"
-PALETTE_GRID = 5                     # 5x5 swatches, 16 px each -> 80x80
+# 8x8 swatches of 16 px -> a 128x128 image, of which the first twenty-five
+# cells are used. **The grid is 8 and not 5 because 128 is a power of two and
+# 80 is not.** Unity's default NPOT handling is `ToNearest`, which RESAMPLED
+# the 80 px palette down to 64 -- so a 16 px swatch became 12.8 px, every
+# swatch centre the UVs point at landed somewhere else, and the whole fleet
+# came out wearing the wrong colours from a texture that looked correct in
+# Blender. Sizing the atlas so no resampler can ever be tempted is a cheaper
+# fix than an import setting somebody has to remember.
+PALETTE_GRID = 8
 
 # sRGB picker values, read off Kevin's reference boat: warm oiled wood, a
 # desaturated near-black for the trim, pale canvas.

@@ -3,7 +3,17 @@ guid: e3e73beeb006a4c319daa76d4c53ffa2
 ModelImporter:
   serializedVersion: 24200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: SeaSick_Hull
+    second: {fileID: 2100000, guid: 95a0a867163984f559a0cdd829b611ad, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: seasick_palette
+    second: {fileID: 2100000, guid: 95a0a867163984f559a0cdd829b611ad, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0

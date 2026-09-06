@@ -76,6 +76,11 @@ namespace SeaSick.Ship
             return wantVol > volume_curve_v[^1] ? volume_curve_z[^1] : volume_curve_z[0];
         }
         public int bays, tiers, cells, gun_rows, ports_per_side, masts;
+
+        /// Gun ports cut in each gun deck, LOWEST first. A hull carries far
+        /// fewer ports than bays — the generator cuts one per gun she can
+        /// actually man — so this, not `bays`, is what limits her battery.
+        public int[] ports_per_row;
         public string[] bay_labels, tier_names;
         public float[] bay_x, tier_floor, tier_ceiling;
 

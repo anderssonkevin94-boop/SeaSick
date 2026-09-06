@@ -70,12 +70,60 @@ namespace SeaSick.Ship
         public const int CrewPerGunCell = 2;
         public const int CrewPerQuarters = 1;
 
+        /// Hands a battery cell needs, by how well drilled the crew is.
+        ///
+        /// **This is the reason a first-rate can be a first-rate.** An untrained
+        /// ship costs two hands a gun cell, and against a roster that stops at
+        /// twenty that caps her at ten guns a side — twenty cannon, on a hull
+        /// with thirty-six ports. The cast of twenty is not negotiable; what a
+        /// real ship did instead was DRILL, until one crew served two guns by
+        /// crossing the deck between broadsides, which is exactly why you rarely
+        /// engaged both sides at once.
+        ///
+        /// Tied to CREW training and not to the gun track on purpose: the gun
+        /// track is calibre, and a heavier gun needs MORE men, not fewer.
+        /// Reading it off calibre would have said the opposite of the truth.
+        public static float CrewPerGun(int crewLevel) => crewLevel switch
+        {
+            <= 0 => 2f,
+            1 => 1.5f,
+            2 => 1f,
+            _ => 0.5f,
+        };
+
+        public float CrewPerGunNow => CrewPerGun(fit.Level(FitTrack.Crew));
+
         public int Cargo => Count(BayUse.Hold) * CargoPerHold;
         public int Guns => Count(BayUse.Battery);
         public int Berths => Count(BayUse.Quarters) * CrewPerQuarters;
-        public int CrewNeeded => Count(BayUse.Battery) * CrewPerGunCell;
+        public int CrewNeeded => Mathf.CeilToInt(Count(BayUse.Battery)
+                                                 * CrewPerGunNow);
         public int Crew => Mathf.Min(Berths, int.MaxValue);
         public bool Undermanned => CrewNeeded > Berths;
+
+        /// The biggest battery she could carry FULLY MANNED — a gun and the
+        /// berths to work it, inside her cells, her ports and the roster.
+        /// Nothing enforces it: the yard will happily fit guns she cannot man
+        /// and say so. It is what the panel quotes and what the ladder is
+        /// balanced against.
+        public int MaxGunsManned
+        {
+            get
+            {
+                var n = Node;
+                if (n == null || n.gun_rows <= 0) return 0;
+                float c = CrewPerGunNow;
+                int byCrew = Mathf.FloorToInt(CrewCeiling / c);
+                int byCells = Mathf.FloorToInt(n.cells / (1f + c));
+                return Mathf.Max(0, Mathf.Min(byCrew, byCells,
+                                              n.ports_per_side));
+            }
+        }
+
+        /// The roster ceiling, and it is a CASTING decision: every hand has a
+        /// name, a role and an iron stomach, so twenty is as many people as
+        /// this game can afford to have be someone.
+        public const int CrewCeiling = 20;
 
         public int Count(BayUse u)
         {
@@ -119,10 +167,28 @@ namespace SeaSick.Ship
         }
 
         /// Cycle a cell: empty -> hold -> battery -> quarters -> empty.
+        ///
+        /// Battery is skipped where there is no gun port. The free board lets
+        /// the player put any cell to any use, but "any use" cannot include a
+        /// gun in a bay with solid planking outside it — she carries ten ports
+        /// a side and forty-eight cells.
         public void CycleUse(string bay, string tier)
         {
-            var u = Use(bay, tier);
-            SetUse(bay, tier, (BayUse)(((int)u + 1) % 4));
+            var next = (BayUse)(((int)Use(bay, tier) + 1) % 4);
+            if (next == BayUse.Battery && !CanBearGun(bay, tier))
+                next = BayUse.Quarters;
+            SetUse(bay, tier, next);
+        }
+
+        /// Can this cell carry a gun — is it on a gun deck, at a port?
+        public bool CanBearGun(string bay, string tier)
+        {
+            var n = Node;
+            if (n == null || n.gun_rows <= 0) return false;
+            int bi = System.Array.IndexOf(n.bay_labels, bay);
+            int ti = System.Array.IndexOf(n.tier_names, tier);
+            if (bi < 0 || ti < 0) return false;
+            return HasPort(n, bi, ti);
         }
 
         // --- buying space by the bay -----------------------------------------
@@ -150,6 +216,47 @@ namespace SeaSick.Ship
                 if (t >= 0) yield return t;
         }
 
+        /// How many guns this tier has ports for.
+        ///
+        /// **A gun deck is not a row of bays, it is a row of PORTS**, and the
+        /// two stopped being the same thing when the generator began cutting
+        /// one port per gun she can man rather than one per bay. A first-rate
+        /// has twelve bays on each of three gun decks and ten ports in total;
+        /// fitting an eleventh gun would run a carriage out at solid planking.
+        int PortsOn(LadderNode n, int ti)
+        {
+            int r = ti - (n.tiers - n.gun_rows);
+            if (r < 0) return 0;
+            if (n.ports_per_row != null && r < n.ports_per_row.Length)
+                return n.ports_per_row[r];
+            // An older manifest has no per-row list. Fall back to the total
+            // rather than to the bay count, so the cap is never too generous.
+            return n.gun_rows > 0 ? n.ports_per_side / n.gun_rows : 0;
+        }
+
+        /// Is there a gun port at this bay on this tier?
+        ///
+        /// The generator cuts a tier's ports amidships out — the `k` bays with
+        /// the smallest `abs(bay_x)`, ties by index — and that is this
+        /// expression, on these numbers. Both sides compute it from `bay_x`
+        /// rather than one of them shipping a list, so there is no list to
+        /// fall out of date with the mesh.
+        bool HasPort(LadderNode n, int bi, int ti)
+        {
+            int ports = PortsOn(n, ti);
+            if (ports <= 0) return false;
+            if (ports >= n.bay_x.Length) return true;
+            int ahead = 0;
+            float mine = Mathf.Abs(n.bay_x[bi]);
+            for (int k = 0; k < n.bay_x.Length; k++)
+            {
+                if (k == bi) continue;
+                float d = Mathf.Abs(n.bay_x[k]);
+                if (d < mine || (d == mine && k < bi)) ahead++;
+            }
+            return ahead < ports;
+        }
+
         /// Where a use would go next, best first. Empty when there is nowhere.
         ///
         /// Guns: the LOWEST gun deck, and amidships before the ends — a gun is
@@ -169,11 +276,15 @@ namespace SeaSick.Ship
             for (int ti = 0; ti < n.tier_names.Length; ti++)
             {
                 if (guns && !tiers.Contains(ti)) continue;
+                if (guns && PortsOn(n, ti) <= 0) continue;
                 // Rank: guns want the lowest tier, everything else the highest.
                 float tierRank = guns ? ti : (n.tier_names.Length - 1 - ti);
                 for (int bi = 0; bi < n.bay_labels.Length; bi++)
                 {
                     if (Use(n.bay_labels[bi], n.tier_names[ti]) != BayUse.Empty) continue;
+                    // A gun goes where there is a hole to run it out of, and
+                    // she has far fewer of those than she has bays.
+                    if (guns && !HasPort(n, bi, ti)) continue;
                     // Amidships first for weight; the ends fill last.
                     float fromMidships = Mathf.Abs(n.bay_x[bi]);
                     outp.Add((n.bay_labels[bi], n.tier_names[ti],
@@ -194,7 +305,8 @@ namespace SeaSick.Ship
                 return "she has no gun deck to run a carriage out on. Raise her.";
             if (Candidates(n, use).Count == 0)
                 return use == BayUse.Battery
-                    ? "every gun deck bay is spoken for. Lengthen or raise her."
+                    ? $"she has {n.ports_per_side} gun ports a side and a gun "
+                      + "in every one. Lengthen or raise her."
                     : "she has no empty bay left. Lengthen or raise her.";
             return null;
         }
@@ -378,6 +490,14 @@ namespace SeaSick.Ship
             if (rig == null) rig = gameObject.AddComponent<SailRig>();
             rig.Fit(visual);
             rig.SetArea(fit.SailAreaScale);
+
+            // Every port her decks allow is cut in the mesh and every lid is
+            // baked shut; this is what decides how many of them are open. Fit
+            // it here, with the hull it belongs to, and re-Open it wherever the
+            // battery changes.
+            var hatches = GetComponent<PortLids>();
+            if (hatches == null) hatches = gameObject.AddComponent<PortLids>();
+            hatches.Fit(visual, GunPositions(Node));
         }
 
         /// A raise adds a tier and a lengthening adds bays amidships. Cells
@@ -393,6 +513,22 @@ namespace SeaSick.Ship
             var drop = new List<string>();
             foreach (var kv in cells) if (!live.Contains(kv.Key)) drop.Add(kv.Key);
             foreach (var k in drop) cells.Remove(k);
+
+            // A battery cell has to keep its PORT as well as its bay. A
+            // lengthening inserts bays amidships and pushes the run of ports
+            // outward, so a gun that was at a port before the upgrade can find
+            // itself behind solid planking after it. It becomes empty space
+            // rather than an invisible gun: the player is told what she is by
+            // the panel, and a gun that is not there must not be counted, fed
+            // or weighed.
+            for (int bi = 0; bi < n.bay_labels.Length; bi++)
+                for (int ti = 0; ti < n.tier_names.Length; ti++)
+                {
+                    if (Use(n.bay_labels[bi], n.tier_names[ti]) != BayUse.Battery)
+                        continue;
+                    if (!HasPort(n, bi, ti))
+                        cells[Key(n.bay_labels[bi], n.tier_names[ti])] = BayUse.Empty;
+                }
         }
 
         /// Recount what is aboard. Cargo comes from the voyage, crew and guns
@@ -510,6 +646,10 @@ namespace SeaSick.Ship
                 battery.CalibreLevel = fit.Level(FitTrack.Guns);
                 battery.Fit(GunPositions(n));
             }
+            // The ports she is showing are the guns she has. Same list the
+            // battery was just fitted from, so the two cannot disagree.
+            var lids = GetComponent<PortLids>();
+            if (lids != null) lids.Open(GunPositions(n));
 
             ApplyLoad();
         }

@@ -174,6 +174,13 @@ namespace SeaSick.UI
                 + (yard.Undermanned ? $"   needs {yard.CrewNeeded}" : ""),
                 UITheme.Body);
             GUI.color = prev;
+            // What her battery could be, and WHY it stops there. Without this
+            // the crew-training track looks like a seasickness upgrade, and
+            // the reason a first-rate carries twenty guns and not sixty is
+            // invisible — it is drill, and drill is for sale.
+            GUILayout.Label(
+                $"{n.ports_per_side} ports a side · {yard.CrewPerGunNow:0.#} hands "
+                + $"a gun · she can man {yard.MaxGunsManned}", UITheme.Small);
 
             // --- the board ----------------------------------------------------
             GUILayout.Space(u * 0.3f);

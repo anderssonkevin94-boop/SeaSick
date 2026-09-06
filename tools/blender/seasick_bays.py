@@ -50,10 +50,18 @@ def lerp(a, b, t):
 def bay_centres(p):
     """Built-x of every bay centre.
 
-    Uses the hand-authored `port_x` where there is one, so the bays and the
-    gun ports are the SAME stations rather than two lists that agree until
-    somebody edits one. Hulls with no ports get an evenly spaced run over the
-    parallel body, at the count the divisor gives."""
+    A bay is a slice of HULL, so it does not depend on whether a gun happens
+    to be run out there: a hull carries every bay her length gives her, and
+    her gun ports are cut in the bays she can actually man. Reading the bays
+    off `port_x` -- which they used to -- made that circular the moment the
+    ports stopped being one per bay, and it would have taken the three-decker
+    from 48 cells to 16 for no reason but her battery being capped.
+
+    `bay_x` is the grid the ladder writes. The four authored hulls have no
+    such field and carry a port in every bay, so for them the old rule holds
+    and the two lists still agree."""
+    if p.get("bay_x"):
+        return list(p["bay_x"])
     if p.get("port_x"):
         return list(p["port_x"])
     n = max(1, round(p["length"] / BAY_DIVISOR))
@@ -61,6 +69,28 @@ def bay_centres(p):
     # bays amidships and the end bays keep their offsets from the ends.
     span = (n - 1) * BAY_PITCH
     return [(-span / 2.0) + i * BAY_PITCH for i in range(n)]
+
+
+# ------------------------------------------------------------ the ports -----
+#
+# **A gun port is structural. It is cut when she is BUILT, and it stays cut
+# whether or not there is a gun behind it.**
+#
+# For one afternoon on 2026-09-05 the generator cut one port per gun she could
+# man, so a first-rate carrying twenty guns had ten holes in her side. It is
+# the honest count and it looks wrong: at a gun's 2.9 m pitch, ten ports cover
+# a third of a 46 m ship and she reads as an unfinished hull. Two different
+# things had been folded into one number -- how many holes she has, which her
+# LENGTH and her DECKS decide, and how many guns are aboard, which the bay
+# economy decides.
+#
+# They are separate again, and the LID is what says which is which: every port
+# is cut, every lid is baked SHUT, and the game swings open the ones with a gun
+# behind them. See `build_port_lids`. That is also what a real ship looks like,
+# and it makes "cleared for action" something you can see.
+#
+# The battery ceiling now lives in `Shipyard`, where the crew's training is --
+# see [[seasick-bay-system]].
 
 
 def tier_plan(p):
@@ -89,7 +119,24 @@ def tier_plan(p):
 
     if deck_z is None:
         return _usable([("Open", floor, z_rail)], p)
-    return _usable([("Hold", floor, deck_z), ("Deck", deck_z, z_rail)], p)
+
+    # **The weather deck of a gunned hull is her UPPER GUN DECK, and it has to
+    # be CALLED that on every rung that has one.** `Shipyard.PruneCells` keys a
+    # cell on (bay, tier NAME), so a tier that is renamed between two rungs is
+    # indistinguishable from a tier that was deleted -- and this one was called
+    # `Deck` on rungs 9-14 and `UpperGunDeck` from 15 up, for the same physical
+    # deck. Measured cost before the fix: raising a Beamy brig to a Two-decker
+    # dropped ALL NINE of her guns, silently, because every battery cell was
+    # keyed on a name that no longer existed. Rungs 15-19 already stack their
+    # names down from the weather deck and lose nothing across a raise; this
+    # makes the two-tier hulls speak the same language, so 14->15 adds
+    # `MiddleGunDeck` underneath and takes nothing away.
+    #
+    # Keyed on whether she carries guns, NOT on tier count: an un-gunned decked
+    # boat also comes through here, and calling her hold's lid a gun deck would
+    # be a lie in the data even though `_usable` drops that tier for headroom.
+    top = "UpperGunDeck" if p.get("gun_decks") else "Deck"
+    return _usable([("Hold", floor, deck_z), (top, deck_z, z_rail)], p)
 
 
 # A tier has to be a place, not a gap. Measured, the sloop's space above her
@@ -902,6 +949,16 @@ def node_params(i, g=None):
             # against the built hull -- so the count the manifest ships comes
             # from the same rule the other sixteen rungs use.
             p["masts"] = g["mast_count"](L)
+            # Her authored `port_x` is also her BAY grid, which is what
+            # `bay_centres` has always read her cells off. Stated once here so
+            # bays and ports stop being the same list by coincidence.
+            if p.get("port_x"):
+                p["bay_x"] = list(p["port_x"])
+                # Stated per ROW even though every row is the same, because
+                # the manifest counts her whole side off this and an anchor
+                # that leaves it unset ships a first-rate with no ports.
+                p["port_rows_x"] = [list(p["port_x"])
+                                    for _ in p.get("gun_decks") or []]
             return p
 
     a, b, t = _bracket(L, anchors)
@@ -975,17 +1032,32 @@ def node_params(i, g=None):
             # or those ports are holes in a single sheet you see through.
             p["inner_floor"] = min(rows)
 
-    # --- ports: one per bay, at the pitch the two authored hulls share -------
+    # --- ports: one per gun she can actually MAN -----------------------------
+    #
+    # `bay_x` is the grid the ports are cut in, and it is exactly the list that
+    # used to BE `port_x` -- same count, same pitch, same centre -- so her
+    # cells do not move now that her ports are a subset of them. It is written
+    # only for a hull that carries guns, because an open boat's bays have
+    # always come from `bay_centres`'s own rule and there is no reason to
+    # shift where her crew stand.
     if p["gun_decks"]:
-        n = max(1, round(L / BAY_DIVISOR))
+        n_bays = max(1, round(L / BAY_DIVISOR))
         span = L * 0.69
-        pitch = span / max(1, n - 1)
+        pitch = span / max(1, n_bays - 1)
         centre = L * 0.02
-        p["port_x"] = [round(centre - span / 2 + k * pitch, 2) for k in range(n)]
+        p["bay_x"] = [round(centre - span / 2 + k * pitch, 2)
+                      for k in range(n_bays)]
+        # One port per bay per gun deck. `bay_x` is the same list this used to
+        # write straight into `port_x` -- same count, pitch and centre -- so
+        # her cells are where they always were, and the ports are back on top
+        # of them.
+        p["port_x"] = list(p["bay_x"])
+        p["port_rows_x"] = [list(p["bay_x"]) for _ in p["gun_decks"]]
         p["port_height"] = ph
         p["port_width"] = lerp(0.68, 0.90, min(1.0, max(0.0, (L - 26.0) / 20.0)))
     else:
         p["port_x"] = []
+        p["port_rows_x"] = []
 
     # --- rig -----------------------------------------------------------------
     # Only the COUNT here, and only because `ladder.json` has to carry it for
@@ -1076,7 +1148,11 @@ def build_ladder(nodes=None, gate=True, lay_out=True):
         for p, objs, c, _ in built:
             y += p["beam"] * 0.5 + 3.0
             for o in objs:
-                o.location.y = y
+                # ROOTS only. Port lids are children of the hull with their
+                # origin on their own hinge, and setting y on them would move
+                # every lid onto the centreline.
+                if o.parent is None:
+                    o.location.y = y
             c["lineup_y"] = y
             y += p["beam"] * 0.5
 
@@ -1108,9 +1184,15 @@ def build_ladder(nodes=None, gate=True, lay_out=True):
 
 UNITY_ART = ("/Users/kevinandersson/Desktop/SeaSick/Assets/_Project/Art/"
              "Ship/Hulls")
+# Where the ladder actually LIVES in the game. `Shipyard` does
+# `Resources.Load(n.ResourcePath)` and that resolves under Resources, so this
+# is the only directory an exported hull can be loaded from -- exporting into
+# the art folder and copying by hand was a step nobody could see going wrong.
+LADDER_DIR = ("/Users/kevinandersson/Desktop/SeaSick/Assets/_Project/"
+              "Resources/Ladder")
 
 
-def export_ladder(out_dir=UNITY_ART, nodes=None):
+def export_ladder(out_dir=LADDER_DIR, nodes=None):
     """One FBX per node, with the generator's own export settings.
 
     Those settings are not negotiable and the reasons are in HULLS.md: the mesh
@@ -1151,7 +1233,11 @@ def export_ladder(out_dir=UNITY_ART, nodes=None):
             mesh_smooth_type='FACE', global_scale=1.0, apply_unit_scale=True,
             apply_scale_options='FBX_SCALE_ALL', bake_space_transform=True,
             axis_forward='-Z', axis_up='Y', use_triangles=False,
-            add_leaf_bones=False, path_mode='COPY')
+            # STRIP, not COPY: the palette is already a Unity asset with its
+            # own import settings (Point, no mips, uncompressed), and a texture
+            # copied in beside the mesh would be a second one of it inside
+            # Resources -- shipped in the build, and the wrong one to edit.
+            add_leaf_bones=False, path_mode='STRIP')
         for o in roots:
             o.location, o.rotation_euler = saved[o.name]
         vl.update()
@@ -1161,6 +1247,13 @@ def export_ladder(out_dir=UNITY_ART, nodes=None):
 
 MANIFEST = ("/Users/kevinandersson/Desktop/SeaSick/Assets/_Project/Art/"
             "Ship/Hulls/ladder.json")
+# What `ShipLadder` actually reads. Resources cannot serve a .json, so the
+# same bytes go down twice under two extensions -- written together, in one
+# call, from one dict, so there is no window in which they disagree. The old
+# arrangement asked a human to copy one to the other and said so in an error
+# message, which is a step that gets skipped exactly once.
+MANIFEST_RESOURCE = ("/Users/kevinandersson/Desktop/SeaSick/Assets/_Project/"
+                     "Resources/Ladder/ladder.txt")
 
 
 def write_manifest(path=MANIFEST):
@@ -1207,17 +1300,27 @@ def write_manifest(path=MANIFEST):
             "tier_floor": [round(t[1], 3) for t in tiers],
             "tier_ceiling": [round(t[2], 3) for t in tiers],
             "gun_rows": len(p.get("gun_decks") or []),
-            "ports_per_side": len(p.get("port_x") or []),
+            # The battery she can carry, and where the holes for it are. It
+            # used to be `len(port_x)`, which was the count on ONE row and so
+            # never the answer to "how many guns" on a hull with three. It is
+            # the whole side now, and `Shipyard` refuses a gun past it -- a
+            # gun with no port is a carriage run out at solid planking.
+            "ports_per_side": sum(len(r) for r in (p.get("port_rows_x") or [])),
+            "ports_per_row": [len(r) for r in (p.get("port_rows_x") or [])],
             "masts": p.get("masts") or len(p.get("mast_x") or []),
         })
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(out, f, indent=1)
+    for dest in (path, MANIFEST_RESOURCE):
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        with open(dest, "w") as f:
+            json.dump(out, f, indent=1)
     return path, len(out["nodes"])
 
 
-KIT_FBX = ("/Users/kevinandersson/Desktop/SeaSick/Assets/_Project/Art/"
-           "Ship/Kit/seasick_kit.fbx")
+# Same reason as LADDER_DIR: `Shipyard` loads the kit with
+# `Resources.Load("Kit/seasick_kit")`, so under Resources is the only place it
+# can be loaded from, and exporting anywhere else needs a human to copy it.
+KIT_FBX = ("/Users/kevinandersson/Desktop/SeaSick/Assets/_Project/"
+           "Resources/Kit/seasick_kit.fbx")
 
 
 def export_kit(path=KIT_FBX):
@@ -1246,7 +1349,7 @@ def export_kit(path=KIT_FBX):
         use_mesh_modifiers=True, mesh_smooth_type='FACE', global_scale=1.0,
         apply_unit_scale=True, apply_scale_options='FBX_SCALE_ALL',
         bake_space_transform=True, axis_forward='-Z', axis_up='Y',
-        use_triangles=False, add_leaf_bones=False, path_mode='COPY')
+        use_triangles=False, add_leaf_bones=False, path_mode='STRIP')
     for o in objs:
         o.location = saved[o.name]
     return path, len(objs)
