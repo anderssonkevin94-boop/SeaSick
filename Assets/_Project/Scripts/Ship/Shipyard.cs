@@ -6,7 +6,11 @@ namespace SeaSick.Ship
 {
     /// What a bay is being used for. One decision per cell, changed at the
     /// yard, and the only place cargo, guns and crew compete for anything.
-    public enum BayUse { Empty, Hold, Battery, Quarters }
+    /// What a bay is for. **Ballast is dead weight you WANT** — pig iron and
+    /// shingle, bought to be heavy and stowed as low as she'll take it — and
+    /// it is the counterweight that turns a high battery from a trap into a
+    /// decision.
+    public enum BayUse { Empty, Hold, Battery, Quarters, Ballast }
 
     /// The ship as a growing thing.
     ///
@@ -166,7 +170,8 @@ namespace SeaSick.Ship
             PushToGame();
         }
 
-        /// Cycle a cell: empty -> hold -> battery -> quarters -> empty.
+        /// Cycle a cell: empty -> hold -> battery -> quarters -> ballast ->
+        /// empty.
         ///
         /// Battery is skipped where there is no gun port. The free board lets
         /// the player put any cell to any use, but "any use" cannot include a
@@ -174,7 +179,7 @@ namespace SeaSick.Ship
         /// a side and forty-eight cells.
         public void CycleUse(string bay, string tier)
         {
-            var next = (BayUse)(((int)Use(bay, tier) + 1) % 4);
+            var next = (BayUse)(((int)Use(bay, tier) + 1) % 5);
             if (next == BayUse.Battery && !CanBearGun(bay, tier))
                 next = BayUse.Quarters;
             SetUse(bay, tier, next);
@@ -271,14 +276,19 @@ namespace SeaSick.Ship
         {
             var outp = new List<(string, string, float)>();
             bool guns = use == BayUse.Battery;
+            // Ballast is the one other thing that wants to be as far DOWN as
+            // she will take it — that is the entire reason to buy it. Ranking
+            // it with cargo would have put pig iron on the weather deck.
+            bool low = guns || use == BayUse.Ballast;
             var tiers = guns ? new List<int>(GunTiers(n)) : null;
 
             for (int ti = 0; ti < n.tier_names.Length; ti++)
             {
                 if (guns && !tiers.Contains(ti)) continue;
                 if (guns && PortsOn(n, ti) <= 0) continue;
-                // Rank: guns want the lowest tier, everything else the highest.
-                float tierRank = guns ? ti : (n.tier_names.Length - 1 - ti);
+                // Rank: guns and ballast want the lowest tier, everything
+                // else the highest.
+                float tierRank = low ? ti : (n.tier_names.Length - 1 - ti);
                 for (int bi = 0; bi < n.bay_labels.Length; bi++)
                 {
                     if (Use(n.bay_labels[bi], n.tier_names[ti]) != BayUse.Empty) continue;
@@ -334,10 +344,10 @@ namespace SeaSick.Ship
 
             string bestBay = null, bestTier = null;
             float worst = float.NegativeInfinity;
-            bool guns = use == BayUse.Battery;
+            bool low = use == BayUse.Battery || use == BayUse.Ballast;
             for (int ti = 0; ti < n.tier_names.Length; ti++)
             {
-                float tierRank = guns ? ti : (n.tier_names.Length - 1 - ti);
+                float tierRank = low ? ti : (n.tier_names.Length - 1 - ti);
                 for (int bi = 0; bi < n.bay_labels.Length; bi++)
                 {
                     if (Use(n.bay_labels[bi], n.tier_names[ti]) != use) continue;
@@ -535,16 +545,31 @@ namespace SeaSick.Ship
         /// from the bays, ballast from what is left over.
         public void RebuildLoad(LadderNode n)
         {
+            // A gun stands on its deck, a hand stands on his, and pig iron
+            // lies on the deck below whatever is on top of it.
+            var gunAt = CentreOf(n, BayUse.Battery, 0.47f);
+            var berthAt = CentreOf(n, BayUse.Quarters, 0.90f);
+            var ironAt = CentreOf(n, BayUse.Ballast, 0.35f);
+
             Load = new ShipLoad(n)
             {
                 Crew = Mathf.Max(1, Berths),
                 Guns = Guns * 2,          // a battery cell is a gun each side
                 GunLevel = fit.Level(FitTrack.Guns),
                 GunKGm = MeanGunHeight(n),
+                GunLCGm = gunAt.z,
+                CrewKGm = berthAt.h,
+                CrewLCGm = berthAt.z,
+                BallastCells = Count(BayUse.Ballast),
+                BallastKGm = ironAt.h,
+                BallastLCGm = ironAt.z,
                 FullCargoUnits = Cargo,
             };
             var voyage = FindFirstObjectByType<SeaSick.Voyage.VoyageManager>();
             Load.CargoUnits = voyage != null ? voyage.TotalHeld : 0;
+            var stow = StowCargo(n, Load.CargoUnits);
+            Load.CargoKGm = stow.h;
+            Load.CargoLCGm = stow.z;
             lastCargo = Load.CargoUnits;
             var bilge = GetComponent<Bilge>();
             if (bilge != null) Load.FloodTonnes = bilge.Bilge01 * n.volume_m3 * 0.08f;
@@ -561,6 +586,66 @@ namespace SeaSick.Ship
                     if (Use(n.bay_labels[bi], n.tier_names[ti]) == BayUse.Battery)
                     { sum += n.tier_floor[ti] + n.draft + 0.47f; c++; }
             return c > 0 ? sum / c : 0f;
+        }
+
+        /// Every cell put to this use, LOWEST first and then from amidships
+        /// outward — the order anything heavy actually gets stowed in, and the
+        /// order that makes "cargo in the bottom centre" the well-balanced
+        /// answer it ought to be.
+        List<(int bi, int ti)> CellsLowestFirst(LadderNode n, BayUse use)
+        {
+            var outp = new List<(int, int, float)>();
+            for (int ti = 0; ti < n.tier_names.Length; ti++)
+                for (int bi = 0; bi < n.bay_labels.Length; bi++)
+                    if (Use(n.bay_labels[bi], n.tier_names[ti]) == use)
+                        outp.Add((bi, ti, ti * 1000f + Mathf.Abs(n.bay_x[bi])));
+            outp.Sort((a, b) => a.Item3.CompareTo(b.Item3));
+            return outp.ConvertAll(e => (e.Item1, e.Item2));
+        }
+
+        /// The centre of a use's cells: height above the keel, and station.
+        (float h, float z) CentreOf(LadderNode n, BayUse use, float sitting)
+        {
+            var list = CellsLowestFirst(n, use);
+            if (list.Count == 0) return (0f, 0f);
+            float h = 0f, z = 0f;
+            foreach (var (bi, ti) in list)
+            { h += n.TierHeightAboveKeel(ti) + sitting; z += n.bay_x[bi]; }
+            return (h / list.Count, z / list.Count);
+        }
+
+        /// Where the cargo actually aboard ends up.
+        ///
+        /// **Not the mean of every hold cell she owns.** Six barrels in an
+        /// eighteen-cell hold are stowed in the six lowest of them, and a hold
+        /// that is a third full therefore sits lower than one that is brim
+        /// full — which is the difference between a ship that is stiff and one
+        /// that is merely deep. Averaging the cells she OWNS would have thrown
+        /// that away and made the hold a single number again.
+        ///
+        /// Anything over what her hold will take goes ON DECK, at the height
+        /// of her topmost tier, because that is where it goes in life and it
+        /// is exactly where it hurts most.
+        (float h, float z) StowCargo(LadderNode n, int units)
+        {
+            if (units <= 0) return (0f, 0f);
+            float m = 0f, mh = 0f, mz = 0f;
+            int left = units;
+            foreach (var (bi, ti) in CellsLowestFirst(n, BayUse.Hold))
+            {
+                int put = Mathf.Min(left, CargoPerHold);
+                float h = n.TierHeightAboveKeel(ti) + 0.60f;
+                m += put; mh += put * h; mz += put * n.bay_x[bi];
+                left -= put;
+                if (left <= 0) break;
+            }
+            if (left > 0)
+            {
+                int top = n.tier_names.Length - 1;
+                float h = n.TierHeightAboveKeel(top) + 0.60f;
+                m += left; mh += left * h; mz += left * n.BayMeanX;
+            }
+            return m > 0f ? (mh / m, mz / m) : (0f, 0f);
         }
 
         void Update()

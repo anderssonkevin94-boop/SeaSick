@@ -309,6 +309,7 @@ namespace SeaSick.UI
             BayUse.Hold => "▣",
             BayUse.Battery => "◄",
             BayUse.Quarters => "≈",
+            BayUse.Ballast => "■",
             _ => "·",
         };
 
@@ -317,6 +318,8 @@ namespace SeaSick.UI
             BayUse.Hold => UITheme.Cargo,
             BayUse.Battery => UITheme.Bad,
             BayUse.Quarters => UITheme.Sea,
+            // Iron: the one thing aboard that is not there to be used.
+            BayUse.Ballast => new Color(0.62f, 0.64f, 0.68f),
             _ => UITheme.TextDim,
         };
     }

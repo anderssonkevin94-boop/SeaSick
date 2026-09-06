@@ -92,6 +92,29 @@ namespace SeaSick.Ship
         /// hull and the same one the paddle steamer needed.
         public float ProbeKeelY => -draft + probe_lift;
         public float RailY => depth - draft;
+
+        /// The mean of her bay stations. Her bays are NOT numbered
+        /// symmetrically about the origin — the loft rakes her stations, so
+        /// the brig's run -8.6 to +9.4 — and without this an evenly stowed
+        /// ship would read as permanently down by the stern.
+        public float BayMeanX
+        {
+            get
+            {
+                if (bay_x == null || bay_x.Length == 0) return 0f;
+                float s = 0f;
+                foreach (var x in bay_x) s += x;
+                return s / bay_x.Length;
+            }
+        }
+
+        /// Height of a tier's deck above the KEEL. `tier_floor` is measured
+        /// from her drawn waterline, and everything about weight is measured
+        /// from the keel, so this conversion had been written out by hand at
+        /// every call site that needed it.
+        public float TierHeightAboveKeel(int ti) =>
+            (tier_floor != null && ti >= 0 && ti < tier_floor.Length)
+                ? tier_floor[ti] + draft : 0f;
     }
 
     [Serializable]

@@ -28,6 +28,7 @@ public static class RunProbe
     public static void DockUpgrade() => Call("DockUpgradeProbe");
     public static void Lids() => Call("LidProbe");
     public static void Sails() => Call("CanvasShot");
+    public static void Stow() => Call("StowProbe");
     public static void Horizon() => Call("HorizonShot");
     public static void Stand() => Call("DeckStandProbe");
     public static void Wood() => Call("WoodProbe");
