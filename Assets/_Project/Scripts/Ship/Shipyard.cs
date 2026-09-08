@@ -49,6 +49,8 @@ namespace SeaSick.Ship
             "PaddleBoatVisual", "LanternBow_Pivot", "LanternStern_Pivot",
         };
 
+        // Fallback only: `HydrostaticLayout` computes the real one per rung
+        // from the rig it builds (0.567 across the ladder, by construction).
         const float FloatRatio = 0.60f;   // mass / (rho * total volume)
         const float TunedMass = 19200f;   // what the drag coefficients were tuned at
         // One copy of the anchor hull's length, owned by ShipMotor. Three
@@ -467,22 +469,41 @@ namespace SeaSick.Ship
             rb.mass = Load.TotalKg;
             float k = rb.mass / TunedMass;
 
+            // The rig is SOLVED from her hydrostatics, so both of the
+            // constants this used to need are gone: `probe_lift` was a
+            // once-solved ratio that made her float right, and `FloatRatio`
+            // was the rig's volume expressed as a guess. Reproduce her
+            // measured volume, waterplane, second moment and centre of
+            // buoyancy and both fall out -- see `HydrostaticLayout`.
             var probes = GetComponent<BuoyancyProbeSet>();
+            float floatRatio = FloatRatio;
             if (probes != null)
-                probes.SetProbes(BuoyancyProbeSet.FleetLayout(
-                    n.length * 0.86f, n.beam * 0.9f, n.draft,
-                    n.ProbeKeelY, n.RailY));
+            {
+                probes.SetProbes(BuoyancyProbeSet.HydrostaticLayout(
+                    n.length, n.beam, n.draft, n.RailY,
+                    n.volume_m3, n.waterplane_m2, n.bm_m, n.kb_above_keel_m,
+                    out float capacity));
+                floatRatio = n.volume_m3 / Mathf.Max(0.01f, capacity);
+            }
 
             var buoy = GetComponent<BuoyantBody>();
             if (buoy != null)
+            {
                 buoy.ConfigureForHull(
-                    n.volume_m3, FloatRatio, k, n.length / TunedLoa,
+                    n.volume_m3, floatRatio, k, n.length / TunedLoa,
                     new Vector3(n.beam, n.depth, n.length * 0.9f),
                     // The centre of gravity is COMPUTED from what is aboard,
                     // not a fixed fraction of her depth. Guns on an upper deck
                     // raise it and ballast pulls it down, so how the player
                     // fills the bays decides how stiff she is.
                     Load.CentreOfMassLocal);
+                // Burial clamp, reserve, planing lift and plow — the
+                // metre-denominated thresholds, rescaled to HER freeboard and
+                // draft. The legacy fleet hulls and the steamer never come
+                // through here and keep their scene-tuned values.
+                buoy.ConfigureWaveResponse(n.RailY, n.draft,
+                    Mathf.Sqrt(n.length / TunedLoa));
+            }
 
             var motor = GetComponent<ShipMotor>();
             if (motor != null)

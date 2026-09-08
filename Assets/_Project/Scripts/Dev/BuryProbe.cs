@@ -8,6 +8,11 @@ using SeaSick.Ocean;
 /// the poop deck goes under the sampled surface. The design rule is that the
 /// deck never submerges unless she is sinking, so the gate is deckUnder ~ 0%.
 /// Run in play mode in Sea.unity. Plain C# for Coplay.
+///
+/// Lived under `Dev/Editor/` from 2adfafc until 2026-09-06, where Unity
+/// refuses to attach it -- an editor-assembly MonoBehaviour cannot go on a
+/// GameObject, so the burial gate silently could not be run at all. Moved
+/// back beside the other play-mode probes.
 /// Writes /tmp/seasick-bury.txt.
 public class BuryProbe : MonoBehaviour
 {
@@ -67,8 +72,19 @@ public class BuryProbe : MonoBehaviour
         int draftN = 0;
         float speedSum = 0f;
         int speedN = 0;
-        Vector3 poopLocal = new Vector3(0f, 1.3f, -7.0f);
-        Vector3 bowLocal = new Vector3(0f, 1.3f, 7.0f);
+        // The deck points come from the HULL she is wearing. They were the
+        // paddle steamer's -- 1.3 m up, 7 m aft -- and the player ship is a
+        // brig off the ladder now, whose rail is at 2.7 m and whose quarters
+        // are 7 m further aft than that. The gate was measuring a point
+        // inside the hull and calling it the deck.
+        var yard = motor.GetComponent<SeaSick.Ship.Shipyard>();
+        var node = yard != null ? yard.Node : null;
+        float deckY = node != null ? node.RailY : 1.3f;
+        float deckZ = node != null ? node.length * 0.27f : 7.0f;
+        Vector3 poopLocal = new Vector3(0f, deckY, -deckZ);
+        Vector3 bowLocal = new Vector3(0f, deckY, deckZ);
+        sb.AppendLine($"deck read at y {deckY:F2}, z +/-{deckZ:F2}"
+                    + (node != null ? $" (rung {node.node}: {node.label})" : " (no hull)"));
         var body = motor.GetComponent<BuoyantBody>();
         float t0 = Time.time;
 

@@ -366,6 +366,25 @@ namespace SeaSick.Ship
             SeaHs = ctrl != null ? ctrl.SeaHsAt(posXZ) : 0f;
             HeadSea01 = head;
             SeaAngleDeg = angle;
+            // The static rule keys the penalty on SEVERITY, which is a
+            // weather coordinate: the same number for a 9 m skiff and a 46 m
+            // first-rate in the same water. But whether a head sea is
+            // trouble is a ratio of the sea to the HULL — Hs 5 m is spray on
+            // the first-rate's bow and a wall the length of the skiff. So a
+            // second rule keyed on that ratio, and she takes the worse of
+            // the two: full penalty from a head sea a third of her length,
+            // which for the Long boat means the sea she was measured
+            // charging at 7.9 m/s and spearing (rails 4.65 freeboards under
+            // at the worst, inside a wave 13.9% of the run). A sea she
+            // cannot climb is a sea she must not be able to CHARGE — the
+            // honest fix is her speed, because every fix tried on the
+            // vertical axis either lost the race (forces) or parked her
+            // inside the crests (position clamps). Measured with the rule:
+            // way 7.9 -> 5.6 m/s and the worst burial nearly halved,
+            // 4.65 -> 2.68 freeboards.
+            float overwhelm = Mathf.Clamp01(SeaHs / Mathf.Max(1f, 0.35f * HullLength));
+            SeaResistance01 = Mathf.Min(SeaResistance01,
+                1f - headSeaPenalty * HeadSea01 * overwhelm);
 
             // Freeboard: cargo and bilge water push the whole ship down.
             float load = Mathf.Max(0f, CargoLoad);

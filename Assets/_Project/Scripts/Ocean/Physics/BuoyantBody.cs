@@ -120,6 +120,9 @@ namespace SeaSick.Ocean
         /// Macroscopic water motion (drift/current) added to the orbital
         /// velocity as the drag reference — the hull is carried, not shoved.
         public Vector3 AmbientFlow { get; set; }
+        /// Displaced volume at full submersion, m^3 — the rig's capacity.
+        /// Read by the float gate to check a layout against the hull's book.
+        public float TotalVolume => totalVolume;
         public Rigidbody Body => rb;
         public BuoyancyProbeSet Probes => probeSet;
 
@@ -173,6 +176,72 @@ namespace SeaSick.Ocean
                 m * (d.x * d.x + d.z * d.z),
                 m * (d.x * d.x + d.y * d.y));
             rb.inertiaTensorRotation = Quaternion.identity;
+        }
+
+        /// The half of `ConfigureForHull` that was missing: every threshold
+        /// that decides when the SEA is allowed to have her is authored in
+        /// metres, and a metre is a different fraction of every hull on the
+        /// ladder. The documented trap — "ship tuning authored as absolute
+        /// metres does not survive a change of hull" — except these five were
+        /// never on the list, so the burial clamp only engaged once green
+        /// water stood 1.2 m over the rail: a wetting on the three-decker's
+        /// 7 m of freeboard, and a metre PAST fully swallowed on the skiff's
+        /// 0.9. Measured on the Long boat before this: 20.61 m of water over
+        /// her deck at the worst instant of the standing burial gate.
+        ///
+        /// Everything scales DOWN from the brig and never up: the constants
+        /// were tuned at her scale and the hulls above her pass the gates at
+        /// those values, so a bigger hull keeps them (relative to her size
+        /// they are already generous) and a smaller hull gets them shrunk to
+        /// mean the same thing they meant on the brig. All five are zero at
+        /// the calm float equilibrium, so statics are untouched by
+        /// construction.
+        ///
+        /// Values are computed from named constants, never by scaling the
+        /// serialized fields — those may be stale (the serialization trap),
+        /// and scaling them would compound on every re-apply.
+        public void ConfigureWaveResponse(float freeboard, float draft, float speedScale)
+        {
+            // The brig — rung 12, the hull Kevin art-directed and the gates ran on.
+            const float TunedFreeboard = 2.70f;
+            float fb = Mathf.Max(0.3f, freeboard);
+            // HALF her freeboard of green water over the deck edge, and no
+            // more — the sea may sweep her deck, never swallow her. The cap
+            // keeps the top of the ladder at what it already passes with.
+            // Half, not the third first tried: at 0.3 x freeboard the clamp
+            // held the Long boat INSIDE the crests instead of letting her
+            // knife through them, the crests swept her way off (1.8 m/s
+            // against 7.9 unclamped), and a boat with no way is a boat the
+            // waves wash over — swallowed time went UP, 13.9% -> 21.3%.
+            burialDepth = Mathf.Clamp(0.50f * fb, 0.25f, 1.00f);
+            // The slam penalty at speeds she can actually reach: 4.5 m/s is
+            // cruising for the brig and flat out for the skiff, so a fixed
+            // floor turned the penalty off on exactly the hulls that bury
+            // easiest.
+            plowSpeedFloor = 4.5f * Mathf.Min(1f, speedScale);
+            // The brake must out-muscle the sail by the same MARGIN on every
+            // hull. Propulsion is a rate-limited servo whose authority grows
+            // as 1/sqrt(L) on smaller hulls (ShipMotor.accelScale), so the
+            // brig's 4.0 ceiling against her 2.6 of sail left 1.4 m/s^2 of
+            // net brake — and the Long boat's 3.3 of sail against the same
+            // 4.0 left 0.7. This alone was measured doing nothing (plow's
+            // mean was 0.24 m/s^2 while she speared — the term barely
+            // fires); the knob that actually slowed her is the hull-relative
+            // head-sea rule in ShipMotor. Kept because the margin argument
+            // stands for the slams plow DOES catch.
+            maxPlowDecel = 4f * Mathf.Clamp(1f / Mathf.Max(0.1f, speedScale), 1f, 2f);
+            //
+            // NOT scaled, all three measured at severity 0.60 on the Long
+            // boat, one knob at a time:
+            //   `reservePerMetre` — reserve arrives with MATCHING DAMPING by
+            //   design, and 3x the rate glued her to the falling back of
+            //   every wave: swallowed time went 2.8% -> 8.4%.
+            //   `dynamicLiftDepth` / `plowOnset` — both shape the PITCH
+            //   COUPLE, not the height she rides at; shrinking the lift ramp
+            //   to 0.41 m multiplied bow lift ~2.4x at shallow bury, which
+            //   reproduced the stern-under failure the area fix had just
+            //   cured (poopDeckUnder 40.5% vs 46.8%, draft 16.7 m vs 21.95).
+            //   More bow lift pitches the STERN in; the deck gets wetter.
         }
 
         void OnEnable() => OceanPhysicsDriver.Register(this);
@@ -319,7 +388,26 @@ namespace SeaSick.Ocean
                     {
                         float liftDepth = Mathf.Clamp01(
                             over / Mathf.Max(0.01f, dynamicLiftDepth));
-                        float area = Mathf.PI * probes[i].radius * probes[i].radius;
+                        // The probe's own WATERPLANE area, not a disc cut from
+                        // its ramp. `radius` is the band a probe takes to go
+                        // from dry to wet; it was standing in for "how much
+                        // hull is presenting itself to the flow" only because
+                        // nothing better was to hand. Now there is:
+                        // capacity/radius is the area whose immersion makes
+                        // this probe's lift, which is an area in the same
+                        // sense a waterplane is.
+                        //
+                        // Measured, and it is not cosmetic. `HydrostaticLayout`
+                        // gives the keel group a ramp twice as wide as the old
+                        // rig's -- forced, because the ramp has to equal twice
+                        // its own depth for the probe to be exactly submerged
+                        // and exactly at the reserve onset. Squared, that was
+                        // 3x the bow-up lift, all of it forward, and she sailed
+                        // her stern under: poop deck submerged 46.8% of a
+                        // 60 s storm run against 10.9%, mean draft 21.95 m
+                        // against 0.41.
+                        float area = totalVolume * probes[i].volumeShare
+                                     / Mathf.Max(0.01f, probes[i].radius);
                         float lift = 0.5f * waterDensity * forwardWay * forwardWay
                                      * area * dynamicLiftCoeff * liftDepth * foreWeight;
                         liftScratch[i] = Vector3.up * lift;

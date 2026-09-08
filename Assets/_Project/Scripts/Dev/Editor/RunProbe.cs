@@ -29,6 +29,8 @@ public static class RunProbe
     public static void Lids() => Call("LidProbe");
     public static void Sails() => Call("CanvasShot");
     public static void Stow() => Call("StowProbe");
+    public static void Bury() => Call("BuryProbe");
+    public static void Shoal() => Call("ShoalShot");
     public static void Horizon() => Call("HorizonShot");
     public static void Stand() => Call("DeckStandProbe");
     public static void Wood() => Call("WoodProbe");
@@ -77,6 +79,17 @@ public static class RunProbe
     /// references and logs nothing you can read.
     public static void Lab() => CallEditor("SetupHullLab");
     public static void Quality() => CallEditor("ReadQuality");
+    // Saves the OPEN scene in place. Coplay's own save_scene takes a NAME
+    // and writes Assets/[name].unity, so calling it on Sea.unity forks a
+    // copy at the project root instead of saving the scene.
+    //
+    // A PLAIN comment, and the angle brackets are gone on purpose: a ///
+    // comment is parsed as XML, an unknown tag is a malformed-XML warning,
+    // and `execute_script` cannot render a Roslyn diagnostic -- it fails
+    // with a resource-loading exception instead, which says nothing about
+    // the line that caused it.
+    public static void SaveOpenScene() => CallEditor("LadderCheck");
+    public static void Rig() => CallEditor("LadderCheck", "Rig");
 
     // --- wear a progression hull, and sail her -----------------------------
     // Edit mode. Run one of these, then press Play.

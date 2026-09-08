@@ -10,8 +10,61 @@ using SeaSick.Ship;
 /// `LadderCheck.Execute()`      — save the open scene in place.
 /// `LadderCheck.Assets()`       — manifest, meshes, kit and the corridor.
 /// `LadderCheck.WalkTheLadder()`— apply all twenty rungs to a throwaway ship.
+/// `LadderCheck.Rig()`          — the buoyancy rig against her hydrostatics.
 public static class LadderCheck
 {
+    /// Does the probe rig each rung is given reproduce the hull it is for?
+    ///
+    /// A probe rig's stability IS its geometry: lift rises at rho*g*A per
+    /// metre a probe goes under, so the righting moment is sum(A x^2) -- the
+    /// second moment of the waterplane the rig makes, which is what BM is.
+    /// For as long as the offsets were authored, that number was whatever the
+    /// picture happened to look like, and on the brig it was 95% high while
+    /// the rig's centre of buoyancy sat 0.23 x draft above hers. The water
+    /// gave 2.05 deg of heel where her own arithmetic wanted 5.80.
+    ///
+    /// Edit mode and instant, because none of this needs a sea: it reads the
+    /// array `HydrostaticLayout` builds and prints it against the hull's book.
+    /// `LadderFloatProbe` is still the gate that says she FLOATS there.
+    [MenuItem("SeaSick/Shipyard/Check the rig")]
+    public static void Rig()
+    {
+        int n = ShipLadder.Count;
+        if (n == 0) { Debug.LogError("LadderCheck: manifest did not load"); return; }
+        var sb = new System.Text.StringBuilder("LadderCheck.Rig — the rig against her book\n");
+        sb.AppendLine("rung  label              volume m3       waterplane m2"
+                    + "        BM m           KB m          float");
+        sb.AppendLine("                          rig    hull      rig    hull"
+                    + "     rig   hull     rig   hull      ratio");
+        float wv = 0f, wa = 0f, wb = 0f, wk = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            var d = ShipLadder.Node(i);
+            var probes = SeaSick.Ocean.BuoyancyProbeSet.HydrostaticLayout(
+                d.length, d.beam, d.draft, d.RailY,
+                d.volume_m3, d.waterplane_m2, d.bm_m, d.kb_above_keel_m,
+                out float capacity);
+            SeaSick.Ocean.BuoyancyProbeSet.RestHydrostatics(
+                probes, capacity, d.draft,
+                out float v, out float aw, out float bm, out float kb);
+            float Err(float got, float want) =>
+                Mathf.Abs(got - want) / Mathf.Max(0.01f, want);
+            wv = Mathf.Max(wv, Err(v, d.volume_m3));
+            wa = Mathf.Max(wa, Err(aw, d.waterplane_m2));
+            wb = Mathf.Max(wb, Err(bm, d.bm_m));
+            wk = Mathf.Max(wk, Err(kb, d.kb_above_keel_m));
+            sb.AppendLine($"{d.node,4}  {d.label,-17} {v,8:F2}{d.volume_m3,8:F2} "
+                        + $"{aw,8:F2}{d.waterplane_m2,8:F2} "
+                        + $"{bm,6:F2}{d.bm_m,7:F2} {kb,7:F2}{d.kb_above_keel_m,7:F2} "
+                        + $"{d.volume_m3 / Mathf.Max(0.01f, capacity),9:F3}");
+        }
+        sb.AppendLine($"  worst error — volume {wv:P2}, waterplane {wa:P2}, "
+                    + $"BM {wb:P2}, KB {wk:P2}");
+        sb.AppendLine("  the rig this replaced: BM +95%, KB +40% on the brig, "
+                    + "which is the 2.8x the inclining experiment measured");
+        Debug.Log(sb.ToString());
+    }
+
     [MenuItem("SeaSick/Shipyard/Check assets")]
     public static void Assets()
     {

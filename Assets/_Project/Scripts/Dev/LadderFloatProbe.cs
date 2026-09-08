@@ -18,11 +18,13 @@ using SeaSick.World;
 /// buttons make. A probe that builds its own parallel rig can pass while the
 /// game is broken.
 ///
-/// The second question it answers is whether the measured rule still holds.
-/// `probe keel = drawn keel + 0.55 x draft` was solved on five hulls across a
-/// 19x range; if it is a property of the probe LAYOUT rather than a
-/// coincidence of those five, it should hold on all twenty. The probe reports
-/// the lift each rung actually wants so the rule can be checked, not assumed.
+/// The second question it answers is whether the rig each rung is given
+/// actually IS her. `HydrostaticLayout` solves the probes from her measured
+/// volume, waterplane, second moment and centre of buoyancy; pass 2 reads all
+/// four back off the array that was built and prints them against her book.
+/// That check used to be a solve for `probe_lift` -- the 0.55 x draft fudge
+/// that made her float. Nothing is solved now: she floats because the rig
+/// displaces what she displaces, so the honest gate is whether it does.
 public class LadderFloatProbe : MonoBehaviour
 {
     public static void Execute()
@@ -44,7 +46,6 @@ public class LadderFloatProbe : MonoBehaviour
     /// chasing it -- which is how a probe reports a 0.03 to 1.03 spread on a
     /// rule that is actually holding.
     const float SampleSecs = 18f;
-    const float SolveSecs = 10f;
 
     class Rig
     {
@@ -52,7 +53,6 @@ public class LadderFloatProbe : MonoBehaviour
         public Shipyard yard;
         public Rigidbody rb;
         public BuoyancyProbeSet probes;
-        public float keelY;             // probe keel, as applied
         double sum, sumSq; int count;
 
         public void Reset() { sum = 0; sumSq = 0; count = 0; }
@@ -126,8 +126,7 @@ public class LadderFloatProbe : MonoBehaviour
             var yard = go.AddComponent<Shipyard>();
             yard.Apply(i);                       // the same call the buttons make
 
-            rigs.Add(new Rig { n = n, yard = yard, rb = rb, probes = probes,
-                               keelY = n.ProbeKeelY });
+            rigs.Add(new Rig { n = n, yard = yard, rb = rb, probes = probes });
             x += n.beam * 0.5f;
         }
         sb.AppendLine($"site {site.x:F0},{site.z:F0} — {ShipLadder.Count} rungs, "
@@ -150,35 +149,34 @@ public class LadderFloatProbe : MonoBehaviour
         sb.AppendLine($"  {ShipLadder.Count - bad}/{ShipLadder.Count} within "
                       + $"{Tolerance:F2} m of their drawn waterline");
 
-        // --- pass 2: what lift does each rung actually want? -----------------
-        // Solve it the way the fleet was solved: nudge the probe keel by the
-        // error and re-measure, three times. If 0.55 is a property of the probe
-        // LAYOUT it will come back at 0.55 on hulls nobody tuned.
-        for (int pass = 0; pass < 3; pass++)
-        {
-            foreach (var r in rigs)
-            {
-                r.keelY += r.MeanErr;
-                r.probes.SetProbes(BuoyancyProbeSet.FleetLayout(
-                    r.n.length * 0.86f, r.n.beam * 0.9f, r.n.draft, r.keelY, r.n.RailY));
-            }
-            yield return new WaitForSeconds(3f);
-            yield return Measure(SolveSecs);
-        }
-
-        sb.AppendLine("\nrung  label              draft   solved lift   ratio   stated 0.55");
-        float lo = 99f, hi = -99f;
+        // --- pass 2: is the rig she was given actually her? ------------------
+        // Read the four numbers back off the probe array and print them
+        // against the hull's own book. The one that used to be wrong by 2x is
+        // BM: the authored rig put its probes at 0.32-0.41 of the beam where
+        // her waterplane's RMS radius is 0.24, and a probe rig's stiffness is
+        // its geometry and nothing else.
+        sb.AppendLine("\nrung  label                 volume m3        waterplane m2"
+                    + "           BM m              KB m");
+        sb.AppendLine("                              rig    hull       rig    hull"
+                    + "       rig   hull       rig   hull");
+        float worstBm = 0f, worstKb = 0f, worstAw = 0f;
         foreach (var r in rigs)
         {
-            float lift = r.keelY + r.n.draft;
-            float ratio = lift / Mathf.Max(0.001f, r.n.draft);
-            lo = Mathf.Min(lo, ratio); hi = Mathf.Max(hi, ratio);
-            sb.AppendLine($"{r.n.node,4}  {r.n.label,-17} {r.n.draft,6:F2} "
-                        + $"{lift,12:F3} {ratio,7:F3} {r.n.probe_lift,13:F3}");
+            var buoy = r.yard.GetComponent<BuoyantBody>();
+            if (buoy == null) continue;
+            BuoyancyProbeSet.RestHydrostatics(r.probes.Probes, buoy.TotalVolume,
+                r.n.draft, out float v, out float aw, out float bm, out float kb);
+            worstBm = Mathf.Max(worstBm, Mathf.Abs(bm - r.n.bm_m) / Mathf.Max(0.01f, r.n.bm_m));
+            worstKb = Mathf.Max(worstKb, Mathf.Abs(kb - r.n.kb_above_keel_m) / Mathf.Max(0.01f, r.n.kb_above_keel_m));
+            worstAw = Mathf.Max(worstAw, Mathf.Abs(aw - r.n.waterplane_m2) / Mathf.Max(0.01f, r.n.waterplane_m2));
+            sb.AppendLine($"{r.n.node,4}  {r.n.label,-17} {v,8:F2}{r.n.volume_m3,8:F2}  "
+                        + $"{aw,8:F2}{r.n.waterplane_m2,8:F2}  "
+                        + $"{bm,6:F2}{r.n.bm_m,7:F2}  {kb,8:F2}{r.n.kb_above_keel_m,7:F2}");
         }
-        sb.AppendLine($"  ratio spans {lo:F3} to {hi:F3} across a "
-                      + $"{ShipLadder.Node(ShipLadder.Count - 1).draft / ShipLadder.Node(0).draft:F0}x "
-                      + $"range of draft — the rule is {(hi - lo < 0.06f ? "HOLDING" : "NOT holding")}");
+        sb.AppendLine($"  worst error: waterplane {worstAw:P1}, BM {worstBm:P1}, "
+                    + $"KB {worstKb:P1}");
+        sb.AppendLine("  (the rig it replaced measured BM +95% and KB +40% on the brig, "
+                    + "which is the 2.8x the inclining experiment saw)");
 
         Debug.Log(sb.ToString());
     }

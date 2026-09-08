@@ -667,3 +667,50 @@ island with resources, press LAND, and watch for thirty seconds. It presses the
 same buttons the player presses and never calls `SendAshore` itself — which is
 the only reason it caught the failure below, where the prompt worked perfectly
 and nothing happened afterwards.
+
+## 2026-09-08 — the swallowing, and the probe that could finally see it
+
+### `SwallowProbe` (`Scripts/Dev/`, `ExecuteNew4/Old4/New12/Old12`)
+**Does the sea swallow her, at a severity the player actually sails?** Reports
+in units of HER OWN FREEBOARD (awash > 0.3×fb, swallowed > 1×fb, worst rail
+depth ×fb), because "she went under" is a fraction of the hull, not a number
+of metres. SEGMENTED: six 15 s windows, each re-warped to the same spot with
+`OceanTime` re-pinned to the same instants and **her heading set into the
+seas at the warp** — one continuous run diverges chaotically from the pinned
+start and two legs stop being comparable. Old legs restore the pre-scaling
+constants by reflection, so one build carries both. Also prints the terms
+that explain the result: forward way against the motor's target,
+`SeaResistance01`, and the plow / dynamic-lift accelerations off
+`BuoyantBody`'s debug surface. Writes `/tmp/seasick-swallow.txt`.
+
+### Traps this session added to the pile
+- **BuryProbe's severity-1.0 gate is not an A/B for small hulls.** Two
+  control runs of IDENTICAL physics: poopDeckUnder 4.7% and 10.6%,
+  deckOverMax 20.6 m and 43.4 m. The documented severity-1.0 chaos trap,
+  now with its control measurement. Measure gameplay complaints at gameplay
+  severities.
+- **A segmented probe that warps without setting the HEADING measures a
+  turn, not a passage.** Left at identity, the autopilot needed up to 9 s
+  to come round, the 15 s window caught her beam-on and mid-transient, and
+  the leg reported 43% swallowed with rails 6.8 freeboards under — none of
+  it what the run claimed to measure. `seaResistance 0.87` was the tell:
+  she was 60 degrees off the sea the whole time.
+- **"Rail probe deeper than one freeboard" partly measures the SEA'S
+  geometry, not the ship's failure.** With ~8 m waves against a 15 m hull,
+  a bow rail rides a freeboard under whenever she knifes a steep face even
+  while her mid-body tracks the surface to 0.3 m RMS — and a bow slicing a
+  crest LOOKS RIGHT. Gate on the worst depth and the deep tail; the shallow
+  crossings are big-sea geometry.
+- **Slowing her down is the fix the vertical axis cannot buy.** Every
+  vertical remedy measured this session failed characteristically: scaled
+  reserve buoyancy brings matching damping that GLUES her to the falling
+  back of every wave (swallowed 2.8% → 8.4%); stronger/earlier bow lift
+  reproduces the stern-under failure (poop 40.5% vs the area-fix's 46.8%);
+  a clamp at a third of freeboard holds her INSIDE crests, the crests strip
+  her way (7.9 → 1.8 m/s), and a parked boat is washed over (swallowed
+  UP at 21.3%). The knob that worked is `ShipMotor`'s hull-relative
+  head-sea rule.
+- **A raised force ceiling proves nothing while the force never reaches
+  it.** `maxPlowDecel` 4 → 5.08 changed mean way by exactly nothing,
+  because plow's measured mean was 0.24 m/s² — the term barely fires in a
+  lively sea. Print the term before tuning its cap (SwallowProbe now does).
