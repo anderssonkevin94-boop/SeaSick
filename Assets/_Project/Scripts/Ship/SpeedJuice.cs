@@ -12,6 +12,7 @@ namespace SeaSick.Ship
         [SerializeField] float shoulderRate = 75f;
 
         ShipMotor motor;
+        Rigidbody rb;
         ParticleSystem bowSpray;
         ParticleSystem wake;
         ParticleSystem shoulderPort;
@@ -19,6 +20,8 @@ namespace SeaSick.Ship
         ParticleSystem sternWash;
         ParticleSystem beamPort;
         ParticleSystem beamStar;
+        ParticleSystem wakeLinePort;
+        ParticleSystem wakeLineStar;
 
         // Impact thresholds are RELATIVE to the sea she is in.
         //
@@ -29,20 +32,45 @@ namespace SeaSick.Ship
         [Header("Wave impacts")]
         [SerializeField] float beamImpactThreshold = 1.5f;
         [SerializeField] float beamImpactCooldown = 0.45f;
-        [SerializeField] float slamThreshold = 1.9f;
-        [SerializeField] float slamCooldown = 0.5f;
         [Tooltip("How much rougher the sea has to hit before a burst counts, " +
                  "scaled by the sea it is standing in.")]
         [SerializeField] float seaThresholdScale = 3.5f;
 
+        // The bow entering the water is the loudest splash the ship makes, and
+        // the honest driver for it is the VERTICAL CLOSING SPEED between the
+        // stem and the surface — the metres per second at which the gap shuts.
+        // The bow dropping into a trough and a wave face rushing up into a
+        // held bow are the same event by this measure, which is what the eye
+        // reads as "water hitting the boat". A burst only fires when the stem
+        // is within a bandwidth of the surface (real contact, not a slam in
+        // mid-air) and the closing speed clears a sea-relative bar.
+        [Header("Bow entry splash")]
+        [Tooltip("Vertical closing speed (m/s) at which the bow-entry splash reaches full size.")]
+        [SerializeField] float entryFullSpeed = 8f;
+        [Tooltip("Closing speed (m/s) below which no burst fires, before the sea-relative rise.")]
+        [SerializeField] float entryThreshold = 2.2f;
+        [SerializeField] float entryCooldown = 0.14f;
+        [Tooltip("Metres of surface either side of the stem counted as contact.")]
+        [SerializeField] float entryContactBand = 1.4f;
+
+        // The diverging bow wake — the V a moving hull leaves. Laid down in
+        // world space so each puff stays on the water where it was dropped and
+        // the ship sails out from under it: the trail IS the accumulation of
+        // what she emitted a few seconds ago. Rate rises with speed; below a
+        // crawl there is no wake to leave.
+        [Header("Bow wake trail")]
+        [SerializeField] float wakeLineFullRate = 110f;
+        [Tooltip("Kelvin half-angle: the wake's arms open this far off her track.")]
+        [SerializeField] float wakeHalfAngleDeg = 19.5f;
+
         float lastBeamImpact = -99f;
-        float lastSlam = -99f;
-        float prevSurf;
+        float lastEntry = -99f;
         Transform emitterRoot;
 
         void Start()
         {
             motor = GetComponent<ShipMotor>();
+            rb = GetComponent<Rigidbody>();
 
             // Every emitter hangs off this rather than off the hull directly,
             // so the whole rig can be held at the waterline as she settles.
@@ -107,6 +135,41 @@ namespace SeaSick.Ship
             sternWash = MakeSystem("SternWash", new Vector3(0f, 0.1f, -9.5f), solid,
                 size: 0.7f, speed: 1.6f, spreadAngle: 55f, lifetime: 1.8f, gravity: 0.15f,
                 solidFoam: true);
+
+            // The diverging wake arms, emitted from the bow shoulders where the
+            // hull first parts the water. Translucent so they dissolve into the
+            // sea rather than popping out; long-lived so the V reaches far
+            // astern; nearly no forward speed and a low outward drift, so once
+            // laid down each puff essentially holds its water while the ship
+            // pulls ahead. Yaw them off the stern line by the Kelvin half-angle
+            // and let them widen over life into a spreading crest.
+            wakeLinePort = MakeSystem("WakeLinePort", new Vector3(-2.2f, 0.12f, 5.0f), mat,
+                size: 1.7f, speed: 0.7f, spreadAngle: 14f, lifetime: 6.5f, gravity: 0f,
+                solidFoam: false);
+            wakeLineStar = MakeSystem("WakeLineStar", new Vector3(2.2f, 0.12f, 5.0f), mat,
+                size: 1.7f, speed: 0.7f, spreadAngle: 14f, lifetime: 6.5f, gravity: 0f,
+                solidFoam: false);
+            // Point each arm aft and outboard by the wake half-angle (180 deg is
+            // dead astern; open it outward from there).
+            wakeLinePort.transform.localRotation =
+                Quaternion.Euler(0f, 180f + wakeHalfAngleDeg, 0f);
+            wakeLineStar.transform.localRotation =
+                Quaternion.Euler(0f, 180f - wakeHalfAngleDeg, 0f);
+            // The wake arm is a crest, not a burst of spume: it grows a little
+            // as it spreads, then fades, rather than shrinking away.
+            WidenOverLife(wakeLinePort);
+            WidenOverLife(wakeLineStar);
+        }
+
+        /// A crest that broadens as it drifts, for the wake arms — the opposite
+        /// of the solid foam's shrink-to-nothing.
+        static void WidenOverLife(ParticleSystem ps)
+        {
+            var sizeOverLife = ps.sizeOverLifetime;
+            sizeOverLife.enabled = true;
+            var curve = new AnimationCurve(
+                new Keyframe(0f, 0.6f), new Keyframe(0.4f, 1f), new Keyframe(1f, 1.15f));
+            sizeOverLife.size = new ParticleSystem.MinMaxCurve(1f, curve);
         }
 
         ParticleSystem MakeSystem(string name, Vector3 localPos, Material mat,
@@ -192,14 +255,54 @@ namespace SeaSick.Ship
             SetRate(shoulderStar, shoulderRate * s01);
             SetRate(sternWash, wakeFullRate * 0.8f * s01);
 
-            WaveImpacts(s01);
+            // The wake arms need real way before there is a wake at all, and
+            // they lengthen with speed — a fast hull throws a longer, denser V.
+            float wakeK = Mathf.Clamp01((s01 - 0.12f) / 0.88f);
+            SetRate(wakeLinePort, wakeLineFullRate * wakeK);
+            SetRate(wakeLineStar, wakeLineFullRate * wakeK);
+
+            BowEntry();
+            WaveImpacts();
         }
 
-        /// Bursts of spray where the sea actually strikes the hull — off the
-        /// beam when a wave shoulders into the side, off the bow when the stem
-        /// drops into a trough. Each also stamps foam into the wake buffer, so
-        /// the mark stays on the water after the spray itself has gone.
-        void WaveImpacts(float speed01)
+        /// The bow entering the water — driven by how fast the surface and the
+        /// stem are closing, so a hard drop into a trough and a face flung up
+        /// into the bow both read as one splash that scales with the blow.
+        void BowEntry()
+        {
+            if (rb == null || !SeaSick.Ocean.OceanSampler.Ready) return;
+
+            Vector3 stem = transform.TransformPoint(new Vector3(0f, 0.1f, 9.2f));
+            var sample = SeaSick.Ocean.OceanSampler.SampleImmediate(stem);
+            // Only while the stem is actually at the water, not slamming in air.
+            if (Mathf.Abs(stem.y - sample.height) > entryContactBand) return;
+
+            // Vertical closing speed: how fast the gap between hull and surface
+            // is shutting. Positive when the bow drives down or the water leaps
+            // up to meet it.
+            float hullVelY = rb.GetPointVelocity(stem).y;
+            float closing = sample.velocity.y - hullVelY;
+            // The bar rises with the sea, the way the beam and slam bars do —
+            // in a big sea every entry is violent and a burst must mark an
+            // unusual one, not the ambient state.
+            float bar = entryThreshold * (1f + motor.SeaSeverity01 * seaThresholdScale);
+            if (closing < bar || Time.time - lastEntry < entryCooldown) return;
+
+            lastEntry = Time.time;
+            float force = Mathf.Clamp01((closing - bar) / Mathf.Max(0.5f, entryFullSpeed));
+            if (bowSpray != null)
+                bowSpray.Emit(Mathf.RoundToInt(Mathf.Lerp(8f, 55f, force)));
+            // The water itself is displaced where she lands — a real dent and
+            // ring of foam the surface shader composites, sized by the blow.
+            Ocean.DynamicWaterSim.Splash(
+                new Vector3(stem.x, sample.height, stem.z), 6f, 0.5f + 1.1f * force);
+        }
+
+        /// Spray off the BEAM when a wave shoulders into the side — thrown up
+        /// and outboard, and stamped into the wake buffer so the mark stays on
+        /// the water after the spray itself has gone. The bow entry is handled
+        /// by its own closing-speed test in `BowEntry`.
+        void WaveImpacts()
         {
             // In a big sea everything is a heavy blow, so the bar has to rise
             // with the water or the effect becomes the weather.
@@ -217,17 +320,6 @@ namespace SeaSick.Ship
 
                 Vector3 at = transform.position + transform.right * (lateral > 0f ? 3.5f : -3.5f);
                 Ocean.DynamicWaterSim.Splash(at, 6f, 0.5f + force);
-            }
-
-            // Bow slam: the surf pull reversing hard as the stem drops.
-            float dSurf = (motor.SurfAccel - prevSurf) / Mathf.Max(0.0001f, Time.deltaTime);
-            prevSurf = motor.SurfAccel;
-            if (dSurf < -slamThreshold * 4f * bar && speed01 > 0.25f
-                && Time.time - lastSlam > slamCooldown)
-            {
-                lastSlam = Time.time;
-                if (bowSpray != null) bowSpray.Emit(Mathf.RoundToInt(Mathf.Lerp(14f, 50f, speed01)));
-                Ocean.DynamicWaterSim.Splash(transform.position + transform.forward * 9f, 7f, 0.8f);
             }
         }
 

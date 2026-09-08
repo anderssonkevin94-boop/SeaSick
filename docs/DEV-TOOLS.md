@@ -714,3 +714,15 @@ that explain the result: forward way against the motor's target,
   it.** `maxPlowDecel` 4 → 5.08 changed mean way by exactly nothing,
   because plow's measured mean was 0.24 m/s² — the term barely fires in a
   lively sea. Print the term before tuning its cap (SwallowProbe now does).
+
+### `WakeShot` (`Scripts/Dev/`)
+**Does she leave a wake, and does the bow throw water?** Sails the player
+ship at full throttle across a gentle sea long enough for the diverging wake
+arms to develop, reports the new emitters are actually alive (live particle
+counts for the wake arms / bow / shoulders — a misconfigured emitter reads
+zero), then shoots a high stern-quarter frame through the MAIN camera into a
+RenderTexture (the clipmap follows `Camera.main`, so its own camera is set as
+`OceanClipmap.FollowOverride` for the shot and restored after; IMGUI HUD never
+reaches the texture). Runs the course ALONG the seas, not into them — a
+head-sea run lets her surf the faces past hull speed and strings the wake
+into dots. Play mode, Sea.unity. Writes `/tmp/seasick-wake-shot.png/.txt`.
