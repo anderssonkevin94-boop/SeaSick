@@ -16,7 +16,30 @@ public static class RunProbe
 {
     public static void Surf() => Call("SurfProbe");
     public static void Look() => Call("IslandLook");
+
+    /// The same sheet, framed on the ROCKIEST island in reach rather than the
+    /// nearest, and tagged so a before cannot be mistaken for an after. The
+    /// carved style is judged on the outcrops, and home is a rock-poor islet.
+    /// Set through reflection like every other launcher here: this file is
+    /// recompiled on its own by `execute_script` and must not name a type
+    /// from the runtime assembly.
+    public static void LookRocky() => LookAt("rock", true);
+    public static void LookNear() => LookAt("run", false);
+
+    static void LookAt(string tag, bool rocky)
+    {
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var t = asm.GetType("IslandLook");
+            if (t == null) continue;
+            t.GetField("Tag").SetValue(null, tag);
+            t.GetField("PreferRocky").SetValue(null, rocky);
+            break;
+        }
+        Call("IslandLook");
+    }
     public static void Peek() => Call("ChunkPeek");
+    public static void Cost() => Call("CostProbe");
     public static void Drive() => Call("DriveProbe");
     public static void Scale() => Call("ScaleCheck");
     public static void Ruler() => Call("ScaleRuler");

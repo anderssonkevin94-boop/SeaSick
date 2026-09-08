@@ -410,7 +410,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  baseHeight: 3
+  baseHeight: 5
   reliefHeight: 42
   massifFrequency: 0.00019230769
   massifMin: 0.8
@@ -433,17 +433,17 @@ MonoBehaviour:
   rockThresholdSoft: 0.72
   rockThresholdHard: 0.4
   verdancyFrequency: 0.0001724138
-  verdancyBias: 0.7
-  verdancyFloor: 0.1
-  verdancyRockSuppress: 0.65
+  verdancyBias: 0.45
+  verdancyFloor: 0.25
+  verdancyRockSuppress: 0.15
   vegSlopeSoft: 0.6
   vegSlopeHard: 1.0
   vegRockSuppress: 0.88
   detailFrequency: 0.04
   detailOctaves: 2
   detailAmplitude: 0.3
-  shoreSlopeMin: 0.032
-  shoreSlopeMax: 0.3
+  shoreSlopeMin: 0.18
+  shoreSlopeMax: 0.35
   shoreSlopeBias: 2.5
   shoreFrequency: 0.0011111111
   shoreFlat: 19
@@ -451,7 +451,7 @@ MonoBehaviour:
   shoreBottom: 12
   beachHeight: 6
   beachBlendWidth: 4
-  sandHeight: 3.2
+  sandHeight: 1.2
   snowHeight: 165
   rockShowsAt: 0.6
   cliffRockStart: 0.72

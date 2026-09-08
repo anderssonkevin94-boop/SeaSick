@@ -37,6 +37,11 @@ public class IslandLook : MonoBehaviour
     /// which terrain built it -- the whole point of an A/B.
     public static string Tag = "run";
 
+    /// Frame the ROCKIEST island in reach instead of the nearest: the home
+    /// islet is rock-poor, and the outcrops the style is judged on live on
+    /// the islands with proud rock. Set from a scratch script, cleared on use.
+    public static bool PreferRocky = false;
+
     IEnumerator Start()
     {
         // Mid-morning, held still. A look sheet shot at whatever hour the
@@ -76,6 +81,25 @@ public class IslandLook : MonoBehaviour
         {
             float d = Vector3.Distance(isl.transform.position, shipAt);
             if (d < best) { best = d; target = isl; }
+        }
+        if (PreferRocky)
+        {
+            PreferRocky = false;
+            var pop = FindFirstObjectByType<SeaSick.Terrain.TerrainWorldPopulator>();
+            if (pop != null && pop.terrain != null)
+            {
+                var prm = SeaSick.Terrain.TerrainParams.From(pop.terrain);
+                float bestRock = -1f;
+                foreach (var isl in Island.All)
+                {
+                    float d = Vector3.Distance(isl.transform.position, shipAt);
+                    if (d > 1000f || isl.Radius < 60f) continue;
+                    float rock = SeaSick.Terrain.TerrainHeight.Rock01(
+                        new Unity.Mathematics.float2(isl.transform.position.x, isl.transform.position.z), prm);
+                    if (rock > bestRock) { bestRock = rock; target = isl; best = d; }
+                }
+                sb.AppendLine($"rockiest island in reach: rockiness {bestRock:F2}");
+            }
         }
         Vector3 c = target.transform.position;
         float r = Mathf.Max(target.Radius, 60f);

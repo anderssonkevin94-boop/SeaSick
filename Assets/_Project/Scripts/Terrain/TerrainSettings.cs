@@ -119,12 +119,12 @@ namespace SeaSick.Terrain
         [Header("Vegetation character")]
         [Tooltip("Island-scale: how GREEN an island is. Same reasoning as rockiness -- slow enough that one landmass sits inside one value.")]
         public float verdancyFrequency = 1f / 5800f;
-        [Tooltip("Bias on verdancy. 1 is an even spread of lush and bare islands.")]
-        public float verdancyBias = 1f;
+        [Tooltip("Bias on verdancy. 1 is an even spread of lush and bare islands; below 1 pushes the spread toward lush. The measured spread at 0.7 had a median of 0.37 and a maximum of 0.75, so NO island in the world was as green as the reference board's 0.90.")]
+        public float verdancyBias = 0.45f;
         [Tooltip("Even the barest island keeps this much scrub, so nothing comes out as a dead grey disc.")]
-        [Range(0f, 1f)] public float verdancyFloor = 0.10f;
-        [Tooltip("How strongly rockiness suppresses green. A crag island is not a wood -- this is what makes the two character axes agree instead of rolling independent dice.")]
-        [Range(0f, 1f)] public float verdancyRockSuppress = 0.65f;
+        [Range(0f, 1f)] public float verdancyFloor = 0.25f;
+        [Tooltip("How strongly rockiness suppresses green ISLAND-WIDE. Kept small on purpose: the reference crag is rock 0.90 AND verdancy 0.90 -- ridges breaking out of a closed wood, which is the picture. At 0.65 the rockiest islands came back the barest (measured verdancy 0.37 on the r386 crag), so the one thing worth photographing was the one thing with no trees on it. Rock still clears trees where it is actually PROUD, through vegRockSuppress, which is the right place for it.")]
+        [Range(0f, 1f)] public float verdancyRockSuppress = 0.15f;
         [Tooltip("Slope where the wood starts thinning. NOT an altitude: the references have green nearly to the summit on gentle ground and bare stone at the waterline on a steep face.")]
         public float vegSlopeSoft = 0.34f;
         [Tooltip("Slope where nothing grows at all.")]

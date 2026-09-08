@@ -22,8 +22,9 @@ namespace SeaSick.Terrain
         List<SceneryWood.Cell> cells;
         float lod0Distance = 220f;
         float cullDistance = 1700f;
-        float next;
+        float next, nextStreamerLook;
         Transform target;
+        TerrainStreamer streamer;
 
         public void Configure(List<SceneryWood.Cell> cells, TerrainSettings terrain)
         {
@@ -41,9 +42,19 @@ namespace SeaSick.Terrain
             if (cells == null) return;
             if (Time.time < next) return;
             next = Time.time + 0.3f;
-            if (target == null && Camera.main != null) target = Camera.main.transform;
-            if (target == null) return;
-            var p = target.position;
+            // Judge from the STREAMER's target where there is one: that is
+            // what the ground is built around, so scenery and terrain agree
+            // -- and a look-sheet camera that borrows the streamer gets its
+            // scenery too, instead of photographing bare ground.
+            if (streamer == null && Time.time >= nextStreamerLook)
+            {
+                nextStreamerLook = Time.time + 5f;
+                streamer = FindFirstObjectByType<TerrainStreamer>();
+            }
+            var t = streamer != null && streamer.target != null ? streamer.target : target;
+            if (t == null && Camera.main != null) t = target = Camera.main.transform;
+            if (t == null) return;
+            var p = t.position;
             for (int i = 0; i < cells.Count; i++)
             {
                 var cell = cells[i];
