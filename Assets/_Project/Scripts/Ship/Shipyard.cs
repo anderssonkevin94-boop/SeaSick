@@ -669,11 +669,21 @@ namespace SeaSick.Ship
             return m > 0f ? (mh / m, mz / m) : (0f, 0f);
         }
 
+        SeaSick.Voyage.VoyageManager voyage;
+        float nextVoyageLookup;
+
         void Update()
         {
             // Cargo is loaded a unit at a time by the shore party, so her mass
-            // changes without anything calling into the yard. Watch it.
-            var voyage = FindFirstObjectByType<SeaSick.Voyage.VoyageManager>();
+            // changes without anything calling into the yard. Watch it —
+            // through a cached reference. The scene scan this used to do
+            // every frame was measured at 0.24-1.4 ms and a share of the
+            // per-frame garbage, for an object that never moves.
+            if (voyage == null && Time.unscaledTime >= nextVoyageLookup)
+            {
+                voyage = FindFirstObjectByType<SeaSick.Voyage.VoyageManager>();
+                nextVoyageLookup = Time.unscaledTime + 1f;
+            }
             if (voyage == null || Node == null) return;
             if (voyage.TotalHeld == lastCargo) return;
             ApplyLoad();

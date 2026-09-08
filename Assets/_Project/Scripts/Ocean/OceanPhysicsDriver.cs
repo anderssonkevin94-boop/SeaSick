@@ -100,8 +100,12 @@ namespace SeaSick.Ocean
                 b.ApplyForces(span.Slice(cursor, n));
                 cursor += n;
             }
+            int frame = Time.frameCount;
             for (int i = 0; i < registry.Count; i++)
+            {
                 registry[i].sample = results[cursor + i];
+                registry[i].sampledFrame = frame;
+            }
         }
     }
 }

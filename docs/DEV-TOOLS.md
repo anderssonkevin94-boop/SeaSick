@@ -726,3 +726,59 @@ RenderTexture (the clipmap follows `Camera.main`, so its own camera is set as
 reaches the texture). Runs the course ALONG the seas, not into them — a
 head-sea run lets her surf the faces past hull speed and strings the wake
 into dots. Play mode, Sea.unity. Writes `/tmp/seasick-wake-shot.png/.txt`.
+
+## 2026-09-08 — "the water lags in heavy weather"
+
+### `CostProbe` (`Scripts/Dev/`)
+**What does heavy water COST, against calm, per frame?** One session, same
+spot, same course at full throttle: 15 s at severity 0.15 then 15 s at 1.0,
+reading `ProfilerRecorder` markers and counters every frame (PlayerLoop,
+BehaviourUpdate, physics, particles, Camera.Render, Gfx.WaitForPresent,
+GUI.Repaint, GC.Collect, GC Allocated In Frame, SetPass/Triangles), plus the
+live particle count across every system, `OceanSampler.ImmediateCalls` per
+frame (new counter), and the GPU frame time where the platform reports it.
+Prints p50/p95/max per leg and the p50 ratio. Markers stay honest under the
+editor's unfocused 10 fps throttle; the frame-time row does not. Writes
+`/tmp/seasick-cost.txt`.
+
+The 2026-09-08 answer: heavy water cost **+1.06 ms/frame of script Update
+and nothing else** (GPU flat at 4.3 ms) — all of it `StormSpray`'s 24
+main-thread `SampleImmediate` crest samples, the one continuous consumer not
+on `OceanProbeRegistry`. Separately, weather-independent: **77 KB of garbage
+a frame** → 12 ms `GC.Collect` pauses, attributed (see below). After: heavy
+Update 2.36 → 1.43 ms (= calm), garbage 77 → 17.5 KB/frame, GUI.Repaint
+2.4 → 0.9 ms.
+
+### Getting Coplay's `get_worst_cpu_frames` / `get_worst_gc_frames` to say anything
+They read the editor profiler, which records nothing until it is switched
+on. An `execute_script` with `UnityEditorInternal.ProfilerDriver.enabled =
+true` (scratch `EnableProfiler.cs`) before the play session is all it takes;
+then they attribute allocation and time per MonoBehaviour method without
+deep profiling. This is how the 77 KB was traced to its scripts in one call.
+
+### Traps this session added to the pile
+- **`HitchProbe` driven from Coplay cannot see frame cost.** The unfocused
+  editor throttles play to a flat 10 fps: 301 frames at 100.00 ms, `capped
+  60` notwithstanding. It still measures the readback lag and hull pops
+  correctly (ring flat at 2 frames, no pops) — which is how it ruled the
+  "water stepping" fault OUT for this complaint. Cost needs markers.
+- **A GUILayout panel that is OPEN allocates its whole layout tree on every
+  IMGUI event.** `ShipyardPanel` — sixty controls — was scene-serialized
+  `open = true` and drawn every frame at sea: **55 KB a frame**, the single
+  largest garbage source, none of it visible in any ocean number. A `bool`
+  default in code cannot close it (serialization trap); it now closes on
+  casting off. Any GUILayout panel must be gated on *when it is needed*.
+- **A "rebuild only when the displayed value moves" HUD rebuilds every frame
+  if the value DECAYS.** `PerfHUD` keyed on a peak-held, decaying frame time
+  and a decaying pop, so three text meshes were regenerated most frames —
+  62 KB a frame from the instrument meant to show GC pauses. Keys are now
+  re-evaluated at 4 Hz. Check what a key does between events, not just
+  whether it is rounded.
+- **`FindFirstObjectByType` in `Update` is a scene scan per frame.**
+  `Shipyard.Update` did it for a VoyageManager that never moves: 0.24–1.4 ms
+  and allocation, every frame. Cache, re-find only while null.
+- **`OceanProbeRegistry.Handle.sampledFrame`** exists so a consumer that
+  moves its handles every frame can tell a fresh sample from a stale one —
+  Update runs several times between physics steps, and overwriting
+  `position` before the driver has sampled it silently pairs a height with
+  the wrong spot.

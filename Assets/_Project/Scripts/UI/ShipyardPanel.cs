@@ -33,12 +33,30 @@ namespace SeaSick.UI
 
         void Say(string s) { note = s; noteAt = Time.unscaledTime; }
 
+        SeaSick.Voyage.VoyageManager voyage;
+        bool wasHome = true;
+
         void OnGUI()
         {
             if (yard == null) return;
             int u = UITheme.Unit;
             float w = Mathf.Min(Screen.width * 0.46f, u * 26f);
             float pad = u * 0.7f;
+
+            // The yard shuts when she casts off. This panel is sixty GUILayout
+            // controls, and GUILayout allocates its layout tree on every event
+            // -- measured at 55 KB a frame with the panel open, which is the
+            // single largest source of the garbage behind the 12 ms GC pauses
+            // that read as "the sea goes choppy". `open` is scene-serialized
+            // (and was saved true), so a default in code cannot close it; the
+            // voyage state does. The tab still reopens it at sea on purpose.
+            if (Event.current.type == EventType.Layout)
+            {
+                if (voyage == null) voyage = FindFirstObjectByType<SeaSick.Voyage.VoyageManager>();
+                bool home = voyage == null || voyage.AtHome;
+                if (wasHome && !home) open = false;
+                wasHome = home;
+            }
 
             var tab = new Rect(pad, Screen.height * 0.30f, u * 5.4f, u * 2.0f);
             if (GUI.Button(tab, open ? "◀ Yard" : "Yard ▶", UITheme.Button))

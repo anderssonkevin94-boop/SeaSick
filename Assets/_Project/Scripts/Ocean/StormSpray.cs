@@ -59,6 +59,18 @@ namespace SeaSick.Ocean
         SeaSick.Ship.ShipMotor motor;
         float mistDue, driftDue;
         Vector3[] samples;   // reused every frame; nothing allocated at sea
+        // The crest scan rides the physics driver's ONE batched Burst query
+        // per step instead of 24 main-thread `SampleImmediate` calls per
+        // frame. Measured before this: StormSpray.Update 1.0 ms a frame on
+        // the Mac in a storm -- the whole of the heavy-water CPU cost, and on
+        // a phone several times that. The registry doc names "spray scans"
+        // as exactly what it is for; this was the one consumer not using it.
+        //
+        // Each handle is moved to a fresh random spot only once the driver
+        // has sampled the spot it was last given (`sampledFrame` moves), so
+        // the (position, height) pair read here always belongs together.
+        OceanProbeRegistry.Handle[] handles;
+        int[] seenFrame;
         float seaMean, seaCrest;
         bool calibrated;
         float dbgClock, dbgBudget;
@@ -76,6 +88,33 @@ namespace SeaSick.Ocean
             motor = GetComponent<SeaSick.Ship.ShipMotor>();
             samples = new Vector3[Mathf.Clamp(samplesPerFrame, 2, 32)];
             BuildSystems();
+        }
+
+        /// Registered lazily and re-checked every frame rather than once in
+        /// Start: a domain reload mid-play empties the registry's static list
+        /// and nulls this plain array while the component itself survives
+        /// (the documented asymmetry), so "did Start run" is not "is my state
+        /// whole".
+        void EnsureHandles(Vector3 centre)
+        {
+            if (handles != null && handles.Length == samples.Length
+                && OceanProbeRegistry.Handles.Count > 0) return;
+            handles = new OceanProbeRegistry.Handle[samples.Length];
+            seenFrame = new int[samples.Length];
+            for (int i = 0; i < handles.Length; i++)
+            {
+                Vector2 off = Random.insideUnitCircle * sampleRadius;
+                handles[i] = OceanProbeRegistry.Register(
+                    new Vector3(centre.x + off.x, 0f, centre.z + off.y));
+            }
+        }
+
+        void OnDestroy()
+        {
+            if (handles == null) return;
+            for (int i = 0; i < handles.Length; i++)
+                OceanProbeRegistry.Unregister(handles[i]);
+            handles = null;
         }
 
         void BuildSystems()
@@ -178,6 +217,7 @@ namespace SeaSick.Ocean
             Vector3 centre = transform.position + transform.forward * sampleLead;
 
             dbgUpdates++;
+            EnsureHandles(centre);
             TearCrests(centre, wind3, t);
             DriftMist(centre, wind3, t);
 
@@ -202,12 +242,21 @@ namespace SeaSick.Ocean
             int found = 0;
             for (int i = 0; i < n; i++)
             {
-                Vector2 off = Random.insideUnitCircle * sampleRadius;
-                Vector2 p = new Vector2(centre.x + off.x, centre.z + off.y);
-                float h = OceanSampler.SampleImmediate(new Vector3(p.x, 0f, p.y)).height;
+                var hd = handles[i];
+                if (hd.sampledFrame != seenFrame[i])
+                {
+                    // Fresh: the sample belongs to the spot the handle holds.
+                    // Bank the pair, then send the handle somewhere new.
+                    samples[i] = new Vector3(hd.position.x, hd.sample.height, hd.position.z);
+                    seenFrame[i] = hd.sampledFrame;
+                    Vector2 off = Random.insideUnitCircle * sampleRadius;
+                    hd.position = new Vector3(centre.x + off.x, 0f, centre.z + off.y);
+                }
+                if (seenFrame[i] == 0) continue;   // never sampled yet
+                float h = samples[i].y;
                 sum += h;
                 if (h > top) top = h;
-                samples[found++] = new Vector3(p.x, h, p.y);
+                found++;
             }
             if (found == 0) return;
 

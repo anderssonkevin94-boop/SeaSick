@@ -16,6 +16,12 @@ namespace SeaSick.Ocean
             public Vector3 position;
             public OceanSample sample;
             public bool active = true;
+            /// Time.frameCount of the physics step that last wrote `sample`,
+            /// 0 until the first. A consumer that moves its handle every frame
+            /// needs this to know whether `sample` still belongs to the
+            /// position it is about to overwrite — Update can run several
+            /// times between two physics steps.
+            public int sampledFrame;
         }
 
         static readonly List<Handle> handles = new List<Handle>();

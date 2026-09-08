@@ -58,6 +58,10 @@ namespace SeaSick.Dev
         [Tooltip("A pop is blamed on a spectrum rebuild if one landed within this many seconds before it.")]
         [SerializeField] float rebuildBlameWindow = 0.35f;
 
+        [Tooltip("How often the readout may rebuild its text, Hz. Not scene-serialized: this component bootstraps itself.")]
+        [SerializeField] float refreshHz = 4f;
+        float nextRefresh;
+
         /// Installs itself after scene load unless a scene already carries
         /// one.
         ///
@@ -177,6 +181,16 @@ namespace SeaSick.Dev
             // 14.4 KB a frame before it took this guard.
             if (!show || Event.current.type != EventType.Repaint) return;
 
+            // Re-key the labels a few times a second, not every frame. The
+            // keys are rounded numbers, but two of them DECAY (peak frame
+            // time, pop) and the fps integer jitters at high frame rates, so
+            // "only rebuild when the displayed value moves" was rebuilding
+            // three text meshes most frames -- measured 62 KB a frame from
+            // this instrument alone, which made it a cause of the GC pauses
+            // it exists to show.
+            bool due = Time.unscaledTime >= nextRefresh;
+            if (due) nextRefresh = Time.unscaledTime + 1f / Mathf.Max(1f, refreshHz);
+
             int u = UITheme.Unit;
             float pad = u * 0.7f;
             float w = u * 9.0f;
@@ -193,12 +207,12 @@ namespace SeaSick.Dev
             UITheme.Rect(new Rect(x, y, w, h), UITheme.Panel);
 
             float ry = y + inner;
-            DrawRow(x + inner, ry, w, rowH, fpsText, FpsKey(), BuildFps,
+            DrawRow(x + inner, ry, w, rowH, fpsText, FpsKey(), BuildFps, due,
                 UITheme.Ramp(Mathf.InverseLerp(60f, 20f, fps)));
 
             ry += rowH;
             DrawRow(x + inner, ry, w, rowH, seaText,
-                HudLabel.Key(Mathf.RoundToInt(seaLagMs), Mathf.RoundToInt(seaLagFrames * 10f)), BuildSea,
+                HudLabel.Key(Mathf.RoundToInt(seaLagMs), Mathf.RoundToInt(seaLagFrames * 10f)), BuildSea, due,
                 // Ramped on FRAMES, not milliseconds: the frame count is what
                 // stays honest under the editor's unfocused-play throttle.
                 // 3 frames is the ring's designed latency, 7 is trouble.
@@ -207,7 +221,7 @@ namespace SeaSick.Dev
 
             ry += rowH;
             DrawRow(x + inner, ry, w, rowH, popText,
-                HudLabel.Key(Mathf.RoundToInt(pop * 100f), popFromRebuild ? 1 : 0), BuildPop,
+                HudLabel.Key(Mathf.RoundToInt(pop * 100f), popFromRebuild ? 1 : 0), BuildPop, due,
                 // 0.75 m is HitchProbe's own "this is a pop, not a wave"
                 // threshold; the ramp is anchored to it so the two
                 // instruments agree about what counts as bad.
@@ -225,9 +239,9 @@ namespace SeaSick.Dev
         /// Formats only when the DISPLAYED value moves, which is the whole
         /// point of HudLabel — a steady 60 fps costs no string at all.
         static void DrawRow(float x, float y, float w, float h,
-            HudLabel label, long key, System.Action build, Color tint)
+            HudLabel label, long key, System.Action build, bool due, Color tint)
         {
-            if (label.Changed(key)) build();
+            if (due && label.Changed(key)) build();
             var prev = GUI.color;
             GUI.color = tint;
             GUI.Label(new Rect(x, y, w, h), label.Content, UITheme.Small);

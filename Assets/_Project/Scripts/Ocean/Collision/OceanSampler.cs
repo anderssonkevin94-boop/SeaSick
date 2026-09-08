@@ -88,9 +88,18 @@ namespace SeaSick.Ocean
             };
         }
 
+        /// How many immediate (main-thread, un-Bursted) queries have been made
+        /// since start. Diagnostic: the cost probes difference it per frame,
+        /// because every caller of this is "one-shot, low-rate" in its own
+        /// mind and nobody has ever counted the total.
+        public static long ImmediateCalls { get; private set; }
+
         /// Convenience single query — do not call in a loop.
-        public static OceanSample SampleImmediate(Vector3 worldPos) =>
-            CurrentField().Sample(new float3(worldPos.x, worldPos.y, worldPos.z));
+        public static OceanSample SampleImmediate(Vector3 worldPos)
+        {
+            ImmediateCalls++;
+            return CurrentField().Sample(new float3(worldPos.x, worldPos.y, worldPos.z));
+        }
 
         /// The real API: batch every query of the physics step into one job.
         public static JobHandle SampleBatch(
