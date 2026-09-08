@@ -764,8 +764,11 @@ KIT_FBX = "/Users/kevinandersson/Desktop/SeaSick/Assets/_Project/Resources/Flora
 
 def build_unit_shard(name, coll, seed, tall=False):
     B = Build()
-    rule = lambda n, p: shade(C["stone_d"] if n.z < -0.2 else C["stone_m"] if n.z < 0.55 else C["stone_l"],
-                              0.78 + 0.30 * (n.z * 0.5 + 0.5))
+    # Lighter than the contact-sheet rocks: Unity lights the shard AGAIN on
+    # top of this baked gradient, and with the full 0.78 floor the kit's
+    # rock stood two stops darker than the stone the terrain is painted.
+    rule = lambda n, p: shade(C["stone_m"] if n.z < -0.2 else C["stone_l"] if n.z < 0.55 else C["stone_l"],
+                              0.92 + 0.22 * (n.z * 0.5 + 0.5))
     rng = random.Random(seed)
     if tall:
         bm = shard(1.0, 0.65 + 0.2 * rng.random(), 1.0, 12, seed,

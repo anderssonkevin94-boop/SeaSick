@@ -257,11 +257,19 @@ namespace SeaSick.Terrain
                         // between them: spread evenly the shards read as a
                         // hedgehog, and a real face is ledges and buttresses
                         // with bare scree between.
-                        bool sheer = slope > 0.85f && h > sand + 3f;
+                        // The RIDGES are what the reference islands have:
+                        // rock that broke out of the soil, painted stone
+                        // and studded with shards along its crest. Sheer
+                        // soil faces get a lighter hand -- a few small
+                        // slabs low on the face -- because on the flatter
+                        // islands they are coastal cliffs, and big tilted
+                        // slabs hung off one float where the ground drops.
+                        bool sheer = slope > 0.85f && slope < 1.3f && h > sand + 3f;
+                        bool ridge = proud > 0.8f;
                         float crag = Mathf.PerlinNoise((wx + 1000f) * 0.035f, (wz + 1000f) * 0.035f);
-                        double pRock = 0.16 * keep + (sheer
-                            ? 0.55 * Mathf.Clamp01((slope - 0.85f) / 0.45f) * Mathf.Clamp01((crag - 0.42f) / 0.25f)
-                            : 0.0);
+                        double pRock = 0.16 * keep
+                            + (ridge ? 0.55 * Mathf.Clamp01((proud - 0.8f) / 3f + 0.45f) : 0.0)
+                            + (sheer ? 0.30 * Mathf.Clamp01((slope - 0.85f) / 0.45f) * Mathf.Clamp01((crag - 0.42f) / 0.25f) : 0.0);
                         if (rocks < MaxRocks && stony && rRock < pRock)
                         {
                             if (!kit)
@@ -279,21 +287,37 @@ namespace SeaSick.Terrain
                                 // that spot, which is what makes the crags
                                 // read as broken stone rather than as a grey
                                 // slope.
-                                if ((proud > 2f && slope > 0.5f && rRockC < 0.6f) || (sheer && rRockC < 0.85f))
+                                if ((ridge && rRockC < 0.75f) || (sheer && rRockC < 0.6f))
                                 {
-                                    // Wide slabs, lying AGAINST the face --
-                                    // tilted downhill by most of the slope
-                                    // angle -- so they read as strata and
-                                    // buttresses rather than as standing
-                                    // stones planted on a dome.
                                     var tp = cliffTp[Mathf.Min(2, (int)(rVariant * 3f))];
-                                    var sc = new Vector3(3.5f + 4.5f * rRockA,
-                                        Mathf.Clamp(proud * 0.8f + slope * 4.5f, 3f, 11f),
-                                        2f + 2.2f * rRockB);
+                                    Vector3 sc;
+                                    float sink, tiltDeg;
+                                    if (ridge)
+                                    {
+                                        // A crest shard: stood on the rock
+                                        // it belongs to, sized by how far
+                                        // the rock stands proud.
+                                        sc = new Vector3(3f + 4f * rRockA,
+                                            Mathf.Clamp(proud * 1.5f + 2.5f, 3f, 8f),
+                                            1.8f + 2f * rRockB);
+                                        sink = 0.20f;
+                                        tiltDeg = Mathf.Atan(slope) * Mathf.Rad2Deg * 0.3f;
+                                    }
+                                    else
+                                    {
+                                        // A slab low on a soil cliff: small,
+                                        // sunk deep, barely tilted, so it
+                                        // stays in the ground when the face
+                                        // falls away under it.
+                                        sc = new Vector3(2f + 2.2f * rRockA,
+                                            Mathf.Clamp(slope * 2.5f, 2f, 5f),
+                                            1.4f + 1.4f * rRockB);
+                                        sink = 0.40f;
+                                        tiltDeg = Mathf.Atan(slope) * Mathf.Rad2Deg * 0.35f;
+                                    }
                                     float yawDeg = Mathf.Atan2(-sx, -sz) * Mathf.Rad2Deg + (rYaw - 0.5f) * 40f;
-                                    float tiltDeg = Mathf.Atan(slope) * Mathf.Rad2Deg * 0.65f;
                                     var rot = Quaternion.Euler(tiltDeg, yawDeg, 0f);
-                                    StampBoth(cb, tp, tp, at - new Vector3(0f, sc.y * 0.15f, 0f), rot, sc);
+                                    StampBoth(cb, tp, tp, at - new Vector3(0f, sc.y * sink, 0f), rot, sc);
                                     cb.Grow(at, sc.x, sc.y);
                                     cliffs++;
                                 }
