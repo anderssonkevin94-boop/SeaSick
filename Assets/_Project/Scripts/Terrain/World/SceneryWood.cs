@@ -10,14 +10,14 @@ namespace SeaSick.Terrain
     /// Measured, he was being generous: 1346 scenery trees against 26
     /// harvestable props on one island — **1.9 %**.
     ///
-    /// The scenery is several hundred trees welded into one mesh precisely so
-    /// it costs one draw call, and that is worth keeping: six hundred
-    /// GameObjects each carrying a trunk and two canopies is eighteen hundred
-    /// renderers per island. So the mesh stays, and this indexes it — every
-    /// tree's base position and the exact range of vertices it owns, recorded
-    /// as it is built. Felling one collapses its vertices onto its own base,
-    /// which turns every triangle it owns into a degenerate and leaves the
-    /// index buffer untouched.
+    /// The scenery is several hundred trees welded into one mesh per cell
+    /// precisely so it costs one draw call, and that is worth keeping: six
+    /// hundred GameObjects each carrying a trunk and two canopies is eighteen
+    /// hundred renderers per island. So the mesh stays, and this indexes it —
+    /// every tree's base position and the exact range of vertices it owns in
+    /// BOTH level-of-detail meshes, recorded as it is built. Felling one
+    /// collapses its vertices onto its own base, which turns every triangle
+    /// it owns into a degenerate and leaves the index buffers untouched.
     ///
     /// Nodes are materialised ON DEMAND around a landing party rather than up
     /// front: at 1300 trees an island and fifteen islands, a GameObject per
@@ -35,36 +35,87 @@ namespace SeaSick.Terrain
         public struct Tree
         {
             public Vector3 baseAt;
-            public int vertStart, vertCount;
+            public int cell;
+            public int vertStart, vertCount;       // in the cell's LOD0 mesh
+            public int lod1Start, lod1Count;       // in the cell's LOD1 mesh (0 if none)
             public bool felled;
         }
 
+        /// One welded mesh pair and the renderers that draw it. `v0`/`v1`
+        /// are cached so felling does not re-fetch tens of thousands of
+        /// vectors from the mesh every time.
+        public class Cell
+        {
+            public Mesh lod0, lod1;
+            public Vector3[] v0, v1;
+            public MeshRenderer r0, r1;
+            public Vector3 centre;
+            public float radius;
+        }
+
         Tree[] trees;
-        Mesh mesh;
-        Vector3[] verts;          // cached, so felling does not re-fetch 90k vectors
+        List<Cell> cells;
         Island island;
         readonly Dictionary<int, ResourceNode> live = new Dictionary<int, ResourceNode>();
 
         public int TreeCount => trees != null ? trees.Length : 0;
+        public IReadOnlyList<Cell> Cells => cells;
+        public Tree TreeAt(int i) => trees[i];
 
-        public void Configure(Mesh m, List<Tree> index, Island isle)
+        public void Configure(List<Cell> cells, List<Tree> index, Island isle)
         {
-            mesh = m;
+            this.cells = cells;
             trees = index.ToArray();
             island = isle;
-            verts = mesh.vertices;
+            foreach (var c in cells)
+            {
+                c.v0 = c.lod0 != null ? c.lod0.vertices : null;
+                c.v1 = c.lod1 != null ? c.lod1.vertices : null;
+            }
         }
 
-        /// Drop the tree: every vertex it owns onto its own base, so each of
-        /// its triangles collapses to a point and draws nothing.
+        /// Drop the tree: every vertex it owns onto its own base, in both
+        /// meshes, so each of its triangles collapses to a point and draws
+        /// nothing at either distance.
         public void Fell(int i)
         {
             if (trees == null || i < 0 || i >= trees.Length || trees[i].felled) return;
             var t = trees[i];
-            for (int v = t.vertStart; v < t.vertStart + t.vertCount && v < verts.Length; v++)
-                verts[v] = t.baseAt;
+            var c = cells[t.cell];
+            if (c.v0 != null)
+            {
+                for (int v = t.vertStart; v < t.vertStart + t.vertCount && v < c.v0.Length; v++)
+                    c.v0[v] = t.baseAt;
+                c.lod0.SetVertices(c.v0);
+            }
+            if (c.v1 != null && t.lod1Count > 0)
+            {
+                for (int v = t.lod1Start; v < t.lod1Start + t.lod1Count && v < c.v1.Length; v++)
+                    c.v1[v] = t.baseAt;
+                c.lod1.SetVertices(c.v1);
+            }
             trees[i].felled = true;
-            mesh.SetVertices(verts);
+        }
+
+        /// Trees whose LOD0 vertex run has collapsed to one point, counted
+        /// off the MESH rather than off the bookkeeping that felled them --
+        /// the probes want the shipped artefact, not the flag.
+        public int FelledInMesh()
+        {
+            if (trees == null) return 0;
+            int n = 0;
+            for (int i = 0; i < trees.Length; i++)
+            {
+                var t = trees[i];
+                var c = cells[t.cell];
+                var v = c.lod0 != null ? c.lod0.vertices : null;
+                if (v == null || t.vertCount < 2) continue;
+                bool collapsed = true;
+                for (int k = t.vertStart + 1; k < t.vertStart + t.vertCount && k < v.Length; k++)
+                    if ((v[k] - v[t.vertStart]).sqrMagnitude > 1e-6f) { collapsed = false; break; }
+                if (collapsed) n++;
+            }
+            return n;
         }
 
         /// Stand up harvest nodes on the real trees near a landing party.

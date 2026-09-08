@@ -131,7 +131,11 @@ Shader "SeaSick/Terrain Vertex Color"
 
                 if (fade > 0.001)
                 {
-                    float steep = saturate((1.0 - n.y) * 1.8);
+                    // How much of this surface is ROCK, from the vertex
+                    // alpha the mesher writes (rock that broke out, or a
+                    // sheer face) -- not from the normal, which striated and
+                    // mottled every steep grass flank like a cliff.
+                    float steep = i.color.a;
                     float3 q = detailCoords(i.positionWS, steep);
 
                     // Gradient by finite difference, in the same stretched

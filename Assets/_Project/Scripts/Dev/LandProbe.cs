@@ -167,32 +167,15 @@ public class LandProbe : MonoBehaviour
         Destroy(gameObject);
     }
 
-    /// Trunk runs whose vertices have all collapsed to a single point.
+    /// Tree vertex runs that have all collapsed to a single point -- read
+    /// off the MESH, not off the flag that felled them. The run's location
+    /// comes from the builder's index now (the kit's trunks are not one flat
+    /// brown any more), but whether it collapsed is still the mesh's word.
     static int FelledInMesh(Island isle)
     {
         int n = 0;
-        foreach (var t in isle.GetComponentsInChildren<Transform>())
-        {
-            if (t.name != "Scenery") continue;
-            var mf = t.GetComponent<MeshFilter>();
-            if (mf == null || mf.sharedMesh == null) continue;
-            var v = mf.sharedMesh.vertices;
-            var c = mf.sharedMesh.colors32;
-            int start = -1;
-            for (int i = 0; i <= c.Length; i++)
-            {
-                bool brown = i < c.Length && c[i].r == 92 && c[i].g == 64 && c[i].b == 40;
-                if (brown && start < 0) start = i;
-                else if (!brown && start >= 0)
-                {
-                    bool collapsed = true;
-                    for (int k = start + 1; k < i; k++)
-                        if ((v[k] - v[start]).sqrMagnitude > 1e-6f) { collapsed = false; break; }
-                    if (collapsed) n++;
-                    start = -1;
-                }
-            }
-        }
+        foreach (var wood in isle.GetComponentsInChildren<SeaSick.Terrain.SceneryWood>())
+            n += wood.FelledInMesh();
         return n;
     }
 }

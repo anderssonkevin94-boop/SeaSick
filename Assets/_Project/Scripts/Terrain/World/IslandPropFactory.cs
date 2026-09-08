@@ -15,11 +15,31 @@ namespace SeaSick.Terrain
         {
             switch (kind)
             {
-                case "Timber": return MakeTree();
-                case "Stone": return MakeBoulder();
-                case "Ore": return MakeOreRock();
+                // The Blender kit where it exists, the primitives where it
+                // does not: a harvest node has to look like the scenery it
+                // stands among, or the one tree the crew can cut is the one
+                // tree that looks like a lollipop.
+                case "Timber": return FromKit("Tree", "Spruce", 11f / 13f) ?? MakeTree();
+                case "Stone": return FromKit("Boulder", "Boulder_" + Random.Range(0, 4), 1.3f) ?? MakeBoulder();
+                case "Ore": return FromKit("OreRock", "Ore", 1f) ?? MakeOreRock();
                 default: return MakeSpiceBush();
             }
+        }
+
+        /// One kit template as a prop of its own: a root (the caller scales
+        /// and yaws it, the node shakes it) with the mesh under it, drawn by
+        /// the scenery material so it is lit like everything round it.
+        static GameObject FromKit(string name, string template, float scale)
+        {
+            var mesh = SceneryKit.MeshOf(template);
+            if (mesh == null) return null;
+            var root = new GameObject(name);
+            var go = new GameObject(template);
+            go.transform.SetParent(root.transform, false);
+            go.transform.localScale = Vector3.one * scale;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = IslandScenery.SceneryMaterial();
+            return root;
         }
 
         public static GameObject MakeBeacon(Color colour, float height, float emission)

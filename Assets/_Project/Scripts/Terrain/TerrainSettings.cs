@@ -132,6 +132,16 @@ namespace SeaSick.Terrain
         [Tooltip("How much PROUD ROCK kills trees. Rock that has broken through is stone, not soil.")]
         [Range(0f, 1f)] public float vegRockSuppress = 0.88f;
 
+        [Header("Flora (the Blender kit)")]
+        [Tooltip("Metres between scenery trees. The kit's 13 m spruce carries a 4.5 m crown, so 5 m closes the canopy into a wood -- which is what the reference boards are made of.")]
+        public float treeSpacing = 5.0f;
+        [Tooltip("World Z south of which islands turn tropical (palms, sandbanks). North is cold, south is hot; home sits at 0 and is temperate.")]
+        public float palmLatitude = -1400f;
+        [Tooltip("Half-width of the temperate-to-tropical blend, metres.")]
+        public float palmBand = 600f;
+        [Tooltip("Scenery cells nearer the camera than this draw their full mesh (~200 tris a tree); beyond it the cheap one (~80).")]
+        public float sceneryLod0Distance = 220f;
+
         [Header("Detail")]
         public float detailFrequency = 1f / 25f;
         [Range(1, 4)] public int detailOctaves = 2;

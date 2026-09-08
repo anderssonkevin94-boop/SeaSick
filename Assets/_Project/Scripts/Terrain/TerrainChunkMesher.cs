@@ -134,7 +134,7 @@ namespace SeaSick.Terrain
                         Vertex v;
                         v.position = new float3(w.x - origin.x, h, w.y - origin.y);
                         v.normal = nrm;
-                        v.colour = VertexColour(h - colours.seaLevel, nrm.y, rock[bi], colours);
+                        v.colour = VertexColour(h - colours.seaLevel, nrm.y, rock[bi], colours, w);
                         v.uv = w * 0.05f;
                         verts[j * n + i] = v;
                         minY = math.min(minY, h); maxY = math.max(maxY, h);
@@ -230,25 +230,54 @@ namespace SeaSick.Terrain
         /// The slope term stays, moved out to genuine cliffs: a sheer face
         /// is stone whether or not a crag happens to have broken out on it,
         /// because soil does not stay on one.
-        static Color32 VertexColour(float hAboveSea, float up, float proud, in ColourParams s)
+        ///
+        /// The palette is the "carved" one the GDD records (island art
+        /// style, 2026-09-08) and the SAME numbers as `C` in
+        /// tools/blender/seasick_style.py, so the ground and the kit that is
+        /// stamped onto it are painted from one table: warm tan sand, olive
+        /// grass broken up with moss and dried off on the tops, scree where
+        /// the slope passes 31 degrees, and stone graded by facing -- dark on
+        /// the sheer faces, pale on the tops -- where rock won or the face is
+        /// a cliff.
+        static Color32 VertexColour(float hAboveSea, float up, float proud, in ColourParams s, float2 w)
         {
-            float3 sand = new float3(0.86f, 0.78f, 0.55f), grass = new float3(0.30f, 0.55f, 0.22f),
-                   rock = new float3(0.42f, 0.38f, 0.34f), snow = new float3(0.95f, 0.95f, 0.97f),
-                   seabed = new float3(0.45f, 0.5f, 0.4f);
+            float3 sand = new float3(0.80f, 0.73f, 0.55f), grass = new float3(0.36f, 0.44f, 0.22f),
+                   moss = new float3(0.26f, 0.35f, 0.17f), dry = new float3(0.52f, 0.52f, 0.28f),
+                   stoneL = new float3(0.58f, 0.54f, 0.47f), stoneM = new float3(0.42f, 0.40f, 0.36f),
+                   stoneD = new float3(0.26f, 0.25f, 0.24f), snow = new float3(0.95f, 0.95f, 0.97f),
+                   seabed = new float3(0.62f, 0.60f, 0.46f), seabedD = new float3(0.22f, 0.32f, 0.30f);
             float3 c;
-            if (hAboveSea < 0f) c = math.lerp(sand, seabed, math.saturate(-hAboveSea / 6f));
-            // Sand stops at the BERM, not at the blend band. Painting it all
-            // the way to beachHeight put a yellow stripe up the hillside
-            // behind every beach, which is half of why the shore read as a
-            // mountainside with sand on it rather than as a beach.
-            else if (hAboveSea < s.sandHeight) c = sand;
-            else c = math.lerp(sand, grass, math.saturate((hAboveSea - s.sandHeight) / 2.5f));
+            if (hAboveSea < 0f) c = math.lerp(seabed, seabedD, math.saturate(-hAboveSea / 9f));
+            else
+            {
+                float m = noise.snoise(w * (1f / 22f)) * 0.5f + 0.5f;
+                float3 g = math.lerp(grass, moss, m);
+                g = math.lerp(g, dry, 0.4f * math.saturate((hAboveSea - 45f) / 40f));
+                // tan of the slope from the normal's y; scree from 0.85 (40
+                // deg). At 0.60 the whole flank of the home island's 80 m
+                // hill went grey -- these hills are steeper than the Blender
+                // crag, and a wooded flank has to stay green under its wood.
+                float slope = math.sqrt(math.max(0f, 1f - up * up)) / math.max(0.05f, up);
+                g = math.lerp(g, stoneM, 0.45f * math.saturate((slope - 0.85f) / 0.45f));
+                // Sand stops at the BERM, not at the blend band. Painting it
+                // all the way to beachHeight put a yellow stripe up the
+                // hillside behind every beach.
+                c = hAboveSea < s.sandHeight ? sand
+                    : math.lerp(sand, g, math.saturate((hAboveSea - s.sandHeight) / 2.5f));
+            }
             c = math.lerp(c, snow, math.saturate((hAboveSea - s.snowHeight) / 8f));
             float wonHere = math.saturate(proud / s.rockShowsAt);
             float cliff = math.saturate((s.cliffRockStart - up)
                                         / math.max(0.01f, s.cliffRockStart - s.cliffRockFull));
-            c = math.lerp(c, rock, math.max(wonHere, cliff));
-            return new Color32((byte)(c.x * 255f), (byte)(c.y * 255f), (byte)(c.z * 255f), 255);
+            float3 stone = math.lerp(stoneD, math.lerp(stoneM, stoneL, math.saturate((up - 0.55f) / 0.45f)),
+                                     math.saturate(up / 0.55f));
+            float stony = math.max(wonHere, cliff);
+            c = math.lerp(c, stone, stony);
+            // Alpha carries "how much of this is rock" to the shader, which
+            // used to infer it from the normal and so striated and mottled
+            // every steep GRASS flank like a cliff. Rock is a fact here;
+            // the shader should not have to guess it from the slope.
+            return new Color32((byte)(c.x * 255f), (byte)(c.y * 255f), (byte)(c.z * 255f), (byte)(stony * 255f));
         }
 
         /// Sizes a writable MeshData for this chunk (main thread, before scheduling).

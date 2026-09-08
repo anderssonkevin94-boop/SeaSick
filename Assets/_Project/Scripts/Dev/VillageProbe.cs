@@ -51,7 +51,7 @@ public class VillageProbe : MonoBehaviour
             if (t.name == "Scenery") scenery = t;
         if (scenery == null) { sb.AppendLine("no Scenery mesh"); Report(sb.ToString()); return; }
 
-        var shipped = Trunks(scenery.GetComponent<MeshFilter>().sharedMesh);
+        var shipped = Trunks(scenery.gameObject);
         int inside = 0; float nearest = float.MaxValue;
         Vector2 c = new Vector2(village.ClearingCentre.x, village.ClearingCentre.z);
         foreach (var p in shipped)
@@ -75,7 +75,7 @@ public class VillageProbe : MonoBehaviour
             (x, z) => Island.TerrainHeight(x, z), pop.terrain, island.RadiusAt,
             pop.terrain.seed * 7919 + 0, TerrainParams.From(pop.terrain), null, null);
         if (probe == null) { sb.AppendLine("re-bake produced nothing"); Report(sb.ToString()); return; }
-        var bare = Trunks(probe.GetComponent<MeshFilter>().sharedMesh);
+        var bare = Trunks(probe);
         probe.SetActive(false);
         Destroy(probe);
 
@@ -202,25 +202,30 @@ public class VillageProbe : MonoBehaviour
         Object.Destroy(rt);
     }
 
-    /// Every tree base in a scenery mesh, from runs of trunk-brown vertices.
-    static List<Vector3> Trunks(Mesh mesh)
+    /// Every tree base in a scenery bake. The base of each tree's vertex
+    /// run is taken off the MESH (its lowest vertex), and the run itself
+    /// from the builder's index -- the kit's trunks carry a graded bark, so
+    /// there is no single brown to scan for any more.
+    static List<Vector3> Trunks(GameObject scenery)
     {
-        var verts = mesh.vertices;
-        var cols = mesh.colors32;
         var found = new List<Vector3>();
-        int runStart = -1;
-        for (int i = 0; i <= verts.Length; i++)
+        var wood = scenery.GetComponent<SeaSick.Terrain.SceneryWood>();
+        if (wood == null) return found;
+        var cells = wood.Cells;
+        var cached = new Dictionary<int, Vector3[]>();
+        for (int i = 0; i < wood.TreeCount; i++)
         {
-            bool brown = i < verts.Length
-                && cols[i].r == Trunk.r && cols[i].g == Trunk.g && cols[i].b == Trunk.b;
-            if (brown && runStart < 0) runStart = i;
-            else if (!brown && runStart >= 0)
+            var t = wood.TreeAt(i);
+            if (!cached.TryGetValue(t.cell, out var verts))
             {
-                Vector3 lo = verts[runStart];
-                for (int k = runStart; k < i; k++) if (verts[k].y < lo.y) lo = verts[k];
-                found.Add(lo);
-                runStart = -1;
+                var m = cells[t.cell].lod0;
+                verts = m != null ? m.vertices : new Vector3[0];
+                cached[t.cell] = verts;
             }
+            if (t.vertCount == 0 || t.vertStart + t.vertCount > verts.Length) continue;
+            Vector3 lo = verts[t.vertStart];
+            for (int k = t.vertStart; k < t.vertStart + t.vertCount; k++) if (verts[k].y < lo.y) lo = verts[k];
+            found.Add(lo);
         }
         return found;
     }

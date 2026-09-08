@@ -3,7 +3,9 @@ using UnityEngine;
 
 namespace SeaSick.Terrain
 {
-    /// Trees and boulders, in bulk, so the eye can tell how big an island is.
+    /// Trees, boulders and cliffs, in bulk, so the eye can tell how big an
+    /// island is and so an island reads as a WOOD rather than as a lawn with
+    /// trees on it.
     ///
     /// The land had almost nothing on it: props are RESOURCE NODES, capped at
     /// 26 an island, and 26 trees on a 400 m island is a golf course. That is
@@ -12,15 +14,19 @@ namespace SeaSick.Terrain
     /// works it out from things it already knows the size of, and there was
     /// nothing out there to know.
     ///
-    /// So this is scenery and nothing else: no components, no harvesting, no
-    /// interaction. Raising the resource count instead would have changed the
-    /// economy to fix a visual problem.
+    /// Everything an island gets is baked into welded meshes with vertex
+    /// colours -- one renderer per 96 m CELL and level of detail, a few dozen
+    /// draw calls for the biggest island. Six hundred GameObjects each
+    /// carrying a trunk and two canopy spheres, which is what the prop
+    /// factory builds, would be eighteen hundred renderers per island.
     ///
-    /// Everything an island gets is baked into ONE mesh with vertex colours --
-    /// one renderer, one draw call, a few thousand triangles. Six hundred
-    /// GameObjects each carrying a trunk and two canopy spheres, which is what
-    /// the prop factory builds, would be eighteen hundred renderers per
-    /// island.
+    /// **The trees are the Blender kit now** (`SceneryKit`, built by
+    /// `tools/blender/seasick_style.py`): a spruce, a broadleaf and a palm at
+    /// two levels of detail, unit shards for boulders and cliffs. They are
+    /// stamped into the buffers as vertex data, so the cost model is
+    /// unchanged -- it is still one mesh per cell -- and the island gets the
+    /// "carved" style the GDD records instead of a prism with two cones on
+    /// it. The cones are kept as the fallback for a project without the FBX.
     public static class IslandScenery
     {
         /// Tree height comes off the charter in WorldScale, not from a
@@ -28,14 +34,6 @@ namespace SeaSick.Terrain
         /// then at 11-26 m, each time chosen against whatever was on screen
         /// rather than against the crew, the buildings and the giants it has
         /// to be seen beside. These must NOT scale with the island.
-        ///
-        /// The first pass built them 5.2-8.6 m, which measured correctly and
-        /// looked wrong, and the reason is worth keeping: the ship is 24.3 m
-        /// overall, so the tallest tree on an island stood barely a third of
-        /// her length. Conifers beside a vessel that size are as tall as she
-        /// is long or taller, so the undersized trees did not read as small
-        /// trees -- they read as a small ISLAND, a model of a place rather
-        /// than a place. Scale cues only work in the direction of the truth.
         static float TreeMinH => SeaSick.World.WorldScale.TreeMin;
         static float TreeMaxH => SeaSick.World.WorldScale.TreeMax;
 
@@ -43,6 +41,43 @@ namespace SeaSick.Terrain
         /// of the range, which is what a stand of mature conifers looks like;
         /// an even spread reads as a nursery.
         const float HeightBias = 0.75f;
+
+        /// Cell edge, metres. Small enough that the near cells of a big
+        /// island can be at full detail while the far side is cheap, big
+        /// enough that a 700 m island is a hundred renderers and not a
+        /// thousand.
+        const float CellSize = 96f;
+
+        /// The tree cap was 3000 when every tree was one draw's worth of
+        /// eighteen triangles in one mesh. With per-cell detail (SceneryLod)
+        /// the far side of an island costs 80 a tree and the cells behind
+        /// the camera cost nothing, so the cap can carry the density the
+        /// reference boards have without the frame paying for all of it.
+        const int MaxTrees = 4500, MaxRocks = 2500;    // a cliff shard is 20 triangles
+
+        /// Every tree yaws to the island's wind, then jitters +/- 20 deg: the
+        /// kit's trees LEAN downwind (+X in the template), and thirteen leans
+        /// in thirteen directions read as thirteen accidents.
+        const float Wind = 0.35f;
+
+        class CellBuild
+        {
+            public readonly List<Vector3> v0 = new List<Vector3>(), n0 = new List<Vector3>();
+            public readonly List<Color32> c0 = new List<Color32>();
+            public readonly List<int> t0 = new List<int>();
+            public readonly List<Vector3> v1 = new List<Vector3>(), n1 = new List<Vector3>();
+            public readonly List<Color32> c1 = new List<Color32>();
+            public readonly List<int> t1 = new List<int>();
+            public Vector3 min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            public Vector3 max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+            public int index;
+
+            public void Grow(Vector3 p, float r, float h)
+            {
+                min = Vector3.Min(min, new Vector3(p.x - r, p.y, p.z - r));
+                max = Vector3.Max(max, new Vector3(p.x + r, p.y + h, p.z + r));
+            }
+        }
 
         /// `keepOut` is where nothing may stand -- the village clearing.
         ///
@@ -60,19 +95,27 @@ namespace SeaSick.Terrain
             System.Func<float, float, bool> keepOut = null)
         {
             var rng = new System.Random(seed);
-            // Where every tree's vertices live, recorded as they are written.
-            // Reconstructing this afterwards by trunk colour is possible (the
-            // probes do it) but it is a guess about a run of bytes; this is
-            // the builder saying what it built.
+            bool kit = SceneryKit.Available;
             var index = new List<SceneryWood.Tree>();
-            var verts = new List<Vector3>();
-            var norms = new List<Vector3>();
-            var cols = new List<Color32>();
-            var tris = new List<int>();
+            var cellMap = new Dictionary<long, CellBuild>();
+            var cellList = new List<CellBuild>();
 
-            // Highest ground on the island, so the tree line is a fraction of
-            // THIS island rather than a world constant: a 300 m massif gets
-            // bare rock up top, a 40 m one is wooded to the summit.
+            CellBuild CellFor(float wx, float wz)
+            {
+                int cx = kit ? Mathf.FloorToInt((wx - centre.x) / CellSize) : 0;
+                int cz = kit ? Mathf.FloorToInt((wz - centre.z) / CellSize) : 0;
+                long key = ((long)cx << 32) ^ (uint)cz;
+                if (!cellMap.TryGetValue(key, out var cb))
+                {
+                    cb = new CellBuild { index = cellList.Count };
+                    cellMap[key] = cb;
+                    cellList.Add(cb);
+                }
+                return cb;
+            }
+
+            // Highest ground on the island, so exposure is a fraction of
+            // THIS island rather than a world constant.
             float peak = 0f;
             for (int a = 0; a < 32; a++)
             {
@@ -86,79 +129,86 @@ namespace SeaSick.Terrain
             }
             float sand = terrain != null ? terrain.sandHeight : 3.2f;
 
-            // **There is no tree line.** It used to be
-            // `max(18, peak * 0.62)` — a horizontal contour, which is the
-            // single most artificial thing about these islands and which
-            // appears nowhere in the reference boards. There, green climbs
-            // nearly to the summit up gentle spurs and bare stone reaches
-            // the water on steep faces: cover is a function of SLOPE and of
-            // what the ground is made of, and altitude barely enters into
-            // it. Only the very top thins, for exposure, and that is a
-            // summit rather than a line.
-            //
-            // The two island-scale character fields are read ONCE, at the
-            // centre: they are slow enough that one landmass sits inside one
-            // value of each, which is the whole point of them (sample per
-            // cell and a sandbank blends into a crag across one beach).
+            // **There is no tree line.** Cover is a function of SLOPE and of
+            // what the ground is made of; altitude barely enters into it.
+            // Only the very top thins, for exposure, and that is a summit
+            // rather than a line. The two island-scale character fields are
+            // read ONCE, at the centre: they are slow enough that one
+            // landmass sits inside one value of each.
             var c2 = new Unity.Mathematics.float2(centre.x, centre.z);
             float verdancy = TerrainHeight.Verdancy01(c2, prm);
             float rockiness = TerrainHeight.Rock01(c2, prm);
 
-            // Jittered grid, so the spacing reads as a wood rather than as a
-            // scatter with clumps and bald patches.
-            //
-            // Spacing has to be read against tree HEIGHT, not chosen on its
-            // own: at 12 m apart and 8 m tall the gaps were wider than the
-            // trees, which is an orchard on a lawn. A 20 m conifer here
-            // carries a canopy about 10 m across, so 7-12 m spacing puts the
-            // canopies in contact and the stand closes up into woodland.
+            // North is cold, south is hot (GDD §5): south of `palmLatitude`
+            // the wood turns to palms over a band, so an island's kind is a
+            // fact about where it is and not a roll.
+            float tropical = 0f;
+            if (terrain != null)
+                tropical = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(
+                    terrain.palmLatitude + terrain.palmBand, terrain.palmLatitude - terrain.palmBand, centre.z));
+
             // The scatter box has to cover the island's REACH, not its mean
-            // radius. Islands are lobed -- the mean is an average over
-            // bearings, so a headland running out past it fell outside the
-            // loop altogether and came back bare, which read as a wood
-            // planted in a band across the middle of the island.
+            // radius: islands are lobed, and a headland past the mean came
+            // back bare.
             float maxR = meanR;
             if (radiusAt != null)
                 for (int a = 0; a < 48; a++)
                     maxR = Mathf.Max(maxR, radiusAt(a / 48f * Mathf.PI * 2f));
             maxR = Mathf.Min(maxR, meanR * 3f);   // guard against a bad sector
 
-            float step = Mathf.Clamp(meanR * 0.02f, 7f, 12f);
-            int trees = 0, rocks = 0;
-            const int MaxTrees = 3000, MaxRocks = 900;
+            // Spacing is read against tree HEIGHT: the canopy of a 13 m
+            // spruce is about 4.5 m across, so 5 m puts the crowns in contact
+            // and the stand closes up into woodland, which is what the
+            // reference boards are made of. The cones needed 7-12 m only
+            // because at 5 m they were an obvious grid.
+            float step = kit
+                ? Mathf.Clamp(terrain != null ? terrain.treeSpacing : 5f, 3f, 12f)
+                : Mathf.Clamp(meanR * 0.02f, 7f, 12f);
+            int trees = 0, rocks = 0, cliffs = 0;
 
             /// Below this peak an island has no exposed summit to thin.
             const float ExposedAbove = 60f;
 
             // Thin UNIFORMLY to the budget rather than filling until it runs
-            // out. The scatter walks the grid in order, so a hard cap dresses
-            // one band of the island and leaves the rest bare -- which is
-            // exactly how it looked: a dense wood across the middle and a
-            // clean green slope beside it. Estimating the eligible cells up
-            // front and keeping that fraction spreads the same number of
-            // trees over the whole island.
-            // **The budget has to know what the rule will accept.**
-            //
-            // `keep` thins uniformly to the tree cap. It was calibrated
-            // against the OLD acceptance rate, and the new cover rule
-            // multiplies by verdancy, slope and exposure on top of it — so
-            // it double-counted and the wood collapsed by about five times,
-            // worst on the big islands where `keep` was already small: a
-            // 314 m island came back with 152 trees on it. The expected
-            // acceptance now includes verdancy, and the budget itself scales
-            // with it, so a bare island is bare because it is BARE and not
-            // because it is large.
+            // out: a hard cap dresses one band of the island and leaves the
+            // rest bare. The expected acceptance includes verdancy, and the
+            // budget itself scales with it, so a bare island is bare because
+            // it is BARE and not because it is large.
             float cells = Mathf.PI * maxR * maxR / (step * step);
             float budget = MaxTrees * Mathf.Lerp(0.3f, 1f, verdancy);
             float expected = cells * 0.45f * verdancy;
             float keep = Mathf.Clamp01(budget / Mathf.Max(1f, expected));
 
+            var spruce0 = SceneryKit.Get("Spruce"); var spruce1 = SceneryKit.Get("Spruce_LOD1");
+            var broad0 = SceneryKit.Get("Broad"); var broad1 = SceneryKit.Get("Broad_LOD1");
+            var palm0 = SceneryKit.Get("Palm"); var palm1 = SceneryKit.Get("Palm_LOD1");
+            var boulders = new[] { SceneryKit.Get("Boulder_0"), SceneryKit.Get("Boulder_1"), SceneryKit.Get("Boulder_2"), SceneryKit.Get("Boulder_3") };
+            var cliffTp = new[] { SceneryKit.Get("Cliff_0"), SceneryKit.Get("Cliff_1"), SceneryKit.Get("Cliff_2") };
+            if (kit && (spruce0 == null || broad0 == null || palm0 == null || boulders[0] == null || cliffTp[0] == null))
+            {
+                Debug.LogWarning("IslandScenery: kit is incomplete -- falling back to cones");
+                kit = false;
+            }
+
             for (float z = -maxR; z <= maxR && trees < MaxTrees; z += step)
             {
                 for (float x = -maxR; x <= maxR && trees < MaxTrees; x += step)
                 {
+                    // Every roll this candidate could ever need is drawn up
+                    // front, so the stream is the same whatever it becomes.
                     float jx = (float)(rng.NextDouble() - 0.5) * step * 0.9f;
                     float jz = (float)(rng.NextDouble() - 0.5) * step * 0.9f;
+                    double rChance = rng.NextDouble();
+                    float rClimate = (float)rng.NextDouble();
+                    float rSpecies = (float)rng.NextDouble();
+                    float rHeight = (float)rng.NextDouble();
+                    float rYaw = (float)rng.NextDouble();
+                    float rVariant = (float)rng.NextDouble();
+                    double rRock = rng.NextDouble();
+                    float rRockA = (float)rng.NextDouble();
+                    float rRockB = (float)rng.NextDouble();
+                    float rRockC = (float)rng.NextDouble();
+
                     float wx = centre.x + x + jx, wz = centre.z + z + jz;
 
                     float ang = Mathf.Atan2(wx - centre.x, wz - centre.z);
@@ -180,115 +230,251 @@ namespace SeaSick.Terrain
                         Mathf.InverseLerp(prm.vegSlopeSoft, prm.vegSlopeHard, slope));
                     float rockTerm = proud > 0.4f ? 1f - prm.vegRockSuppress : 1f;
                     // Exposure is a MOUNTAIN phenomenon and has to be gated
-                    // on the island being one. Keyed to `peak` alone it broke
-                    // completely on flat land: a 5 m sandbank put its
-                    // exposure band at 4.0-5.1 m, which is the whole island
-                    // above the beach, so every tree on it was refused and a
-                    // 10,000-cell island came back with zero.
+                    // on the island being one: keyed to `peak` alone it put a
+                    // 5 m sandbank's exposure band over the whole island.
                     float exposure = peak < ExposedAbove ? 1f
                         : 1f - Mathf.SmoothStep(0f, 1f,
                             Mathf.InverseLerp(peak * 0.80f, peak * 1.02f, h));
                     float chance = verdancy * slopeTerm * rockTerm * exposure * keep;
+                    bool place = keepOut == null || !keepOut(wx, wz);
+                    var at = new Vector3(wx, h, wz);
 
-                    if (rng.NextDouble() > chance)
+                    if (rChance > chance)
                     {
                         // Scree where a tree could not hold: steep ground, or
-                        // rock that has already surfaced.
+                        // rock that has already surfaced. Thinned by `keep`
+                        // like the trees are, or a big island spends its
+                        // whole rock budget on the first band the scan
+                        // reaches.
                         bool stony = slope > prm.vegSlopeSoft || proud > 0.4f;
-                        // Thinned by `keep` like the trees are. Un-thinned, a
-                        // big island spent its whole rock budget on the first
-                        // band the scan reached and came back with 300
-                        // boulders in a stripe and bare ground beyond it —
-                        // the same failure the tree budget already carries a
-                        // comment about.
-                        if (rocks < MaxRocks && stony && rng.NextDouble() < 0.16 * keep)
+                        // A SHEER face gets shards whether or not rock broke
+                        // out of the height field there: the paint already
+                        // calls it stone past 40 degrees, and a smooth grey
+                        // dome is not stone in this style -- planes are.
+                        // The chance climbs with the slope, so the steepest
+                        // faces are clad and a 40-degree flank gets a few.
+                        // Clustered by a slow noise into CRAGS with gullies
+                        // between them: spread evenly the shards read as a
+                        // hedgehog, and a real face is ledges and buttresses
+                        // with bare scree between.
+                        bool sheer = slope > 0.85f && h > sand + 3f;
+                        float crag = Mathf.PerlinNoise((wx + 1000f) * 0.035f, (wz + 1000f) * 0.035f);
+                        double pRock = 0.16 * keep + (sheer
+                            ? 0.55 * Mathf.Clamp01((slope - 0.85f) / 0.45f) * Mathf.Clamp01((crag - 0.42f) / 0.25f)
+                            : 0.0);
+                        if (rocks < MaxRocks && stony && rRock < pRock)
                         {
-                            AddBoulder(verts, norms, cols, tris, new Vector3(wx, h, wz), rng,
-                                keepOut == null || !keepOut(wx, wz));
+                            if (!kit)
+                            {
+                                var cb = CellFor(wx, wz);
+                                AddBoulder(cb.v0, cb.n0, cb.c0, cb.t0, at, rRockA, rRockB, rRockC, place);
+                                if (place) cb.Grow(at, 3f, 3f);
+                            }
+                            else if (place)
+                            {
+                                var cb = CellFor(wx, wz);
+                                // A CLIFF where the rock stands proud and
+                                // the ground is steep: a unit shard stood on
+                                // end and scaled to the metres of rock at
+                                // that spot, which is what makes the crags
+                                // read as broken stone rather than as a grey
+                                // slope.
+                                if ((proud > 2f && slope > 0.5f && rRockC < 0.6f) || (sheer && rRockC < 0.85f))
+                                {
+                                    // Wide slabs, lying AGAINST the face --
+                                    // tilted downhill by most of the slope
+                                    // angle -- so they read as strata and
+                                    // buttresses rather than as standing
+                                    // stones planted on a dome.
+                                    var tp = cliffTp[Mathf.Min(2, (int)(rVariant * 3f))];
+                                    var sc = new Vector3(3.5f + 4.5f * rRockA,
+                                        Mathf.Clamp(proud * 0.8f + slope * 4.5f, 3f, 11f),
+                                        2f + 2.2f * rRockB);
+                                    float yawDeg = Mathf.Atan2(-sx, -sz) * Mathf.Rad2Deg + (rYaw - 0.5f) * 40f;
+                                    float tiltDeg = Mathf.Atan(slope) * Mathf.Rad2Deg * 0.65f;
+                                    var rot = Quaternion.Euler(tiltDeg, yawDeg, 0f);
+                                    StampBoth(cb, tp, tp, at - new Vector3(0f, sc.y * 0.15f, 0f), rot, sc);
+                                    cb.Grow(at, sc.x, sc.y);
+                                    cliffs++;
+                                }
+                                else
+                                {
+                                    var tp = boulders[Mathf.Min(3, (int)(rVariant * 4f))];
+                                    float size = Mathf.Lerp(SeaSick.World.WorldScale.BoulderMin,
+                                                            SeaSick.World.WorldScale.BoulderMax, rRockA);
+                                    var sc = new Vector3(size * 0.5f, size * 0.5f * (0.7f + 0.5f * rRockB),
+                                                         size * 0.5f * (0.8f + 0.4f * rRockC));
+                                    StampBoth(cb, tp, tp, at, rYaw * Mathf.PI * 2f, sc, sc);
+                                    cb.Grow(at, size, size);
+                                }
+                            }
                             rocks++;
                         }
                         continue;
                     }
 
-                    int vStart = verts.Count;
-                    AddTree(verts, norms, cols, tris, new Vector3(wx, h, wz), rng,
-                        keepOut == null || !keepOut(wx, wz));
-                    if (verts.Count > vStart)
-                        index.Add(new SceneryWood.Tree
+                    {
+                        var cb = CellFor(wx, wz);
+                        int v0Start = cb.v0.Count, v1Start = cb.v1.Count;
+                        if (!kit)
                         {
-                            baseAt = new Vector3(wx, h, wz),
-                            vertStart = vStart,
-                            vertCount = verts.Count - vStart,
-                        });
+                            AddTree(cb.v0, cb.n0, cb.c0, cb.t0, at, rHeight, rSpecies, rYaw, rVariant, rClimate, place);
+                            if (place) cb.Grow(at, 4f, TreeMaxH);
+                        }
+                        else if (place)
+                        {
+                            // Species: palms on the hot sandbanks and the
+                            // low ground of a hot island, broadleaves on the
+                            // low ground of a temperate one, spruce
+                            // everywhere else. Altitude decides within an
+                            // island, latitude decides between them.
+                            SceneryKit.Template tp0, tp1;
+                            float factor;
+                            if (rClimate < tropical)
+                            {
+                                bool palm = h < sand + 6f || rSpecies < 0.6f;
+                                tp0 = palm ? palm0 : broad0; tp1 = palm ? palm1 : broad1;
+                                factor = palm ? 0.72f : 0.82f;
+                            }
+                            else
+                            {
+                                bool broad = h < sand + 10f && rSpecies < 0.28f;
+                                tp0 = broad ? broad0 : spruce0; tp1 = broad ? broad1 : spruce1;
+                                factor = broad ? 0.82f : 1f;
+                            }
+                            float target = Mathf.Lerp(TreeMinH, TreeMaxH, Mathf.Pow(rHeight, HeightBias)) * factor;
+                            float s = target / Mathf.Max(1f, tp0.height);
+                            float yaw = Wind + (rYaw - 0.5f) * 0.7f;
+                            var sc = new Vector3(s, s, s);
+                            StampBoth(cb, tp0, tp1, at, yaw, sc, sc);
+                            cb.Grow(at, tp0.radius * s, target);
+                        }
+                        if (cb.v0.Count > v0Start)
+                            index.Add(new SceneryWood.Tree
+                            {
+                                baseAt = at,
+                                cell = cb.index,
+                                vertStart = v0Start,
+                                vertCount = cb.v0.Count - v0Start,
+                                lod1Start = v1Start,
+                                lod1Count = cb.v1.Count - v1Start,
+                            });
+                    }
                     // Counted whether or not it was placed, so the budget and
                     // the loop's exit are the same with a clearing as without.
                     trees++;
                 }
             }
 
+            int tri0 = 0, tri1 = 0;
+            foreach (var cb in cellList) { tri0 += cb.t0.Count / 3; tri1 += cb.t1.Count / 3; }
             Debug.Log($"IslandScenery: r{meanR:F0} peak {peak:F0} verdancy {verdancy:F2} "
-                + $"rockiness {rockiness:F2} keep {keep:F3} cells {cells:F0} step {step:F1} "
-                + $"-> {trees} trees, {rocks} rocks");
+                + $"rockiness {rockiness:F2} tropical {tropical:F2} keep {keep:F3} cells {cells:F0} step {step:F1} "
+                + $"-> {trees} trees, {rocks} rocks ({cliffs} cliffs), {cellList.Count} cells, "
+                + $"{tri0} tris LOD0 / {tri1} LOD1{(kit ? "" : " [cones fallback]")}");
 
-            if (verts.Count == 0) return null;
+            if (index.Count == 0 && rocks == 0) return null;
 
             var go = new GameObject("Scenery");
             go.transform.SetParent(parent, false);
             go.transform.position = Vector3.zero;
-            var mesh = new Mesh { name = "SceneryMesh" };
-            if (verts.Count > 65000) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            mesh.SetVertices(verts);
-            mesh.SetNormals(norms);
-            mesh.SetColors(cols);
-            mesh.SetTriangles(tris, 0);
-            mesh.RecalculateBounds();
-            go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            go.AddComponent<MeshRenderer>().sharedMaterial = SceneryMaterial();
-            go.AddComponent<SceneryWood>().Configure(mesh, index, isle);
+            var wcells = new List<SceneryWood.Cell>();
+            for (int i = 0; i < cellList.Count; i++)
+            {
+                var cb = cellList[i];
+                var cell = new SceneryWood.Cell();
+                if (cb.v0.Count > 0)
+                {
+                    var cgo = new GameObject("Cell_" + i);
+                    cgo.transform.SetParent(go.transform, false);
+                    cell.lod0 = MakeMesh(cb.v0, cb.n0, cb.c0, cb.t0, "SceneryLOD0");
+                    cell.r0 = Attach(cgo.transform, "LOD0", cell.lod0);
+                    if (cb.v1.Count > 0)
+                    {
+                        cell.lod1 = MakeMesh(cb.v1, cb.n1, cb.c1, cb.t1, "SceneryLOD1");
+                        cell.r1 = Attach(cgo.transform, "LOD1", cell.lod1);
+                        cell.r1.enabled = false;
+                    }
+                    cell.centre = (cb.min + cb.max) * 0.5f;
+                    cell.radius = Mathf.Max(cb.max.x - cb.min.x, cb.max.z - cb.min.z) * 0.5f;
+                }
+                wcells.Add(cell);
+            }
+            go.AddComponent<SceneryWood>().Configure(wcells, index, isle);
+            go.AddComponent<SceneryLod>().Configure(wcells, terrain);
             return go;
+        }
+
+        static void StampBoth(CellBuild cb, SceneryKit.Template tp0, SceneryKit.Template tp1,
+            Vector3 at, float yaw, Vector3 s0, Vector3 s1)
+        {
+            SceneryKit.Stamp(tp0, cb.v0, cb.n0, cb.c0, cb.t0, at, yaw, s0);
+            if (tp1 != null) SceneryKit.Stamp(tp1, cb.v1, cb.n1, cb.c1, cb.t1, at, yaw, s1);
+        }
+
+        static void StampBoth(CellBuild cb, SceneryKit.Template tp0, SceneryKit.Template tp1,
+            Vector3 at, Quaternion rot, Vector3 s)
+        {
+            SceneryKit.Stamp(tp0, cb.v0, cb.n0, cb.c0, cb.t0, at, rot, s);
+            if (tp1 != null) SceneryKit.Stamp(tp1, cb.v1, cb.n1, cb.c1, cb.t1, at, rot, s);
+        }
+
+        static Mesh MakeMesh(List<Vector3> v, List<Vector3> n, List<Color32> c, List<int> t, string name)
+        {
+            var mesh = new Mesh { name = name };
+            if (v.Count > 65000) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            mesh.SetVertices(v);
+            mesh.SetNormals(n);
+            mesh.SetColors(c);
+            mesh.SetTriangles(t, 0);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        static MeshRenderer Attach(Transform parent, string name, Mesh mesh)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = SceneryMaterial();
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            return r;
         }
 
         static Material scenery;
 
         /// The terrain's own shader, so scenery is lit exactly like the ground
         /// it stands on -- but with the rock striation off, which is meant for
-        /// cliff faces and looks like a fault on a canopy.
-        static Material SceneryMaterial()
+        /// cliff faces and looks like a fault on a canopy, and the albedo
+        /// break-up low, because the kit carries its own per-vertex shading.
+        public static Material SceneryMaterial()
         {
             if (scenery != null) return scenery;
             var sh = Shader.Find("SeaSick/Terrain Vertex Color");
             scenery = new Material(sh) { name = "Scenery" };
             if (scenery.HasProperty("_StriationStrength")) scenery.SetFloat("_StriationStrength", 0f);
             if (scenery.HasProperty("_DetailScale")) scenery.SetFloat("_DetailScale", 1.1f);
-            if (scenery.HasProperty("_NormalStrength")) scenery.SetFloat("_NormalStrength", 0.25f);
-            if (scenery.HasProperty("_DetailStrength")) scenery.SetFloat("_DetailStrength", 0.3f);
+            if (scenery.HasProperty("_NormalStrength")) scenery.SetFloat("_NormalStrength", 0.15f);
+            if (scenery.HasProperty("_DetailStrength")) scenery.SetFloat("_DetailStrength", 0.12f);
             return scenery;
         }
 
-        /// `place` false still draws every random number this tree would
-        /// have used and then writes nothing -- see the note on `keepOut`.
+        // ---- the cones: fallback for a project without the kit --------------
+
         static void AddTree(List<Vector3> v, List<Vector3> n, List<Color32> c, List<int> t,
-            Vector3 at, System.Random rng, bool place = true)
+            Vector3 at, float rHeight, float rCanopy, float rLeanX, float rLeanZ, float rColour, bool place)
         {
-            float h = Mathf.Lerp(TreeMinH, TreeMaxH, Mathf.Pow((float)rng.NextDouble(), HeightBias));
+            float h = Mathf.Lerp(TreeMinH, TreeMaxH, Mathf.Pow(rHeight, HeightBias));
             float trunkH = h * 0.34f;
             float trunkR = h * 0.035f;
-            // Crown width varies independently of height: a wood of
-            // identically-proportioned cones reads as one tree stamped out
-            // repeatedly, however much the heights differ.
-            float canopyR = h * Mathf.Lerp(0.19f, 0.29f, (float)rng.NextDouble());
-            float lean = (float)(rng.NextDouble() - 0.5) * 0.12f;
-            var leanV = new Vector3(lean, 0f, (float)(rng.NextDouble() - 0.5) * 0.12f);
-
+            float canopyR = h * Mathf.Lerp(0.19f, 0.29f, rCanopy);
+            var leanV = new Vector3((rLeanX - 0.5f) * 0.12f, 0f, (rLeanZ - 0.5f) * 0.12f);
             var trunk = new Color32(92, 64, 40, 255);
-            byte g = (byte)(74 + rng.Next(0, 58));
-            var leaf = new Color32((byte)(24 + rng.Next(0, 26)), g, (byte)(34 + rng.Next(0, 26)), 255);
-
+            byte g = (byte)(74 + (int)(rColour * 58f));
+            var leaf = new Color32((byte)(24 + (int)(rColour * 26f)), g, (byte)(34 + (int)(rCanopy * 26f)), 255);
             if (!place) return;
-
             Prism(v, n, c, t, at, trunkR, trunkH, leanV, trunk);
-            // Two stacked cones read as a conifer from any angle and cost 12
-            // triangles; a sphere canopy costs 500 and reads as a lollipop.
             Cone(v, n, c, t, at + new Vector3(0f, trunkH, 0f) + leanV * 0.5f,
                 canopyR, h * 0.42f, leanV, leaf);
             Cone(v, n, c, t, at + new Vector3(0f, trunkH + h * 0.26f, 0f) + leanV * 0.8f,
@@ -296,14 +482,13 @@ namespace SeaSick.Terrain
         }
 
         static void AddBoulder(List<Vector3> v, List<Vector3> n, List<Color32> c, List<int> t,
-            Vector3 at, System.Random rng, bool place = true)
+            Vector3 at, float rSize, float rGrey, float rLean, bool place)
         {
             float s = Mathf.Lerp(SeaSick.World.WorldScale.BoulderMin,
-                                 SeaSick.World.WorldScale.BoulderMax, (float)rng.NextDouble());
-            byte grey = (byte)(96 + rng.Next(0, 40));
+                                 SeaSick.World.WorldScale.BoulderMax, rSize);
+            byte grey = (byte)(96 + (int)(rGrey * 40f));
             var col = new Color32(grey, (byte)(grey + 4), (byte)(grey + 10), 255);
-            var lean = new Vector3((float)(rng.NextDouble() - 0.5) * 0.5f, 0f,
-                                   (float)(rng.NextDouble() - 0.5) * 0.5f);
+            var lean = new Vector3((rLean - 0.5f) * 0.5f, 0f, (rGrey - 0.5f) * 0.5f);
             if (!place) return;
             Cone(v, n, c, t, at + new Vector3(0f, -s * 0.25f, 0f), s, s * 1.5f, lean, col, 5);
         }

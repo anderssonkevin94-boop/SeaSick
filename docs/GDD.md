@@ -54,6 +54,16 @@ What replaces it is a genuine long swell: roughly **65 m of significant wave hei
 
 **Art direction:** low poly, stylized, warm and comedic. Body language over facial animation. Sickness reads at gameplay distance: skin tint shifts toward green, posture sags, walk becomes a stagger.
 
+**Island art style — "carved" low poly (decided 2026-09-08).** Reference boards: a temperate crag (dark dense conifers, planar cliffs, beach ring, turquoise shelf, skerries) and a tropical atoll chain (sandbanks, dense palms, lagoons). Both say the same three things and the style is built from them:
+- **Silhouette first.** Every triangle goes on the outline. A canopy is ONE jagged envelope (the spruce), one ray-sampled hull (the broadleaf), a fan of folded fronds (the palm) — never a stack of primitives.
+- **Faceted form, soft colour.** Faces stay flat; colour is a per-corner vertex gradient — dark underneath and toward the trunk, lit on top, shade cooled toward blue. Vertex colour, which the terrain/scenery shader already reads, so it is free on mobile.
+- **Rock is planes.** Convex shards with big flat faces, sunk into the ground. Boulder, ore host, skerry, sea stack and cliff are one shard at different sizes; an ore vein is a plane the shard is scored along so the stain has vertices to live on.
+- **Mass over individuals.** Trees close at 4.5–5.5 m spacing; an island is judged as a wood, not as a tree.
+- **Budget (portrait phone):** scenery tree ≈200 tris within 150 m, ≈115 beyond, a card past 600 m; boulders 30–40; harvest props ≤300. Two welded scenery meshes per island swapped by distance.
+- **The water says the depth.** Foam line, turquoise shelf, teal, deep — the ocean's shoal tint is half of what makes the boards read as islands.
+Generators: `tools/blender/seasick_style.py` (assets, contact sheet) and `tools/blender/seasick_island_v2.py` (the island structure as a visual spec: field → paint → scatter, one rule set at three sizes). Unity mapping: `RockBreak` = the proud-rock field, `VertexColour` = paint, `IslandScenery` = scatter.
+- **In Unity (same day).** The kit ships as `Resources/Flora/seasick_flora.fbx` (readable, colours in the vertices, `FloraImport` sets it) and `SceneryKit` stamps it into `IslandScenery`'s welded meshes — now one mesh pair per 96 m CELL, swapped between ~200 and ~80 tris a tree by `SceneryLod` at 220 m and dropped past the streamed terrain. Cliff shards go on sheer faces (slope > 0.85, clustered by a slow noise, tilted against the face), not only where rock broke out; the terrain paint moved to the carved palette and writes "how much rock" into vertex ALPHA so the shader stops striating grass flanks it guessed were cliffs. **Kevin, on the first Unity shots: the Blender islands looked good partly because they are flat, sleek hills, not the steep domes the terrain was making** — so the relief came down (reliefHeight 60 → 42, massif 1–5.5 → 0.8–3.0, plainRelief 26 → 18, ridgeAmount 0.85 → 0.45, rockRelief 34 → 22), trees climb to 45° (vegSlope 0.6–1.0), stone paint starts at 44° (cliffRockStart 0.72), verdancyBias 0.7 so most islands are wooded. Measured with `CostProbe` against the morning baseline: triangles p50 462k vs 466k, SetPass 111 vs 119, GPU 4.39 vs 4.34 ms — the style costs what the cones cost.
+
 ## 6. Key systems
 
 ### Sailing & ocean — MVP, build first

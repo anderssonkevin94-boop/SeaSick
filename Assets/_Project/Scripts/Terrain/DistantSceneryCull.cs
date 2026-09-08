@@ -86,7 +86,14 @@ namespace SeaSick.Terrain
             groups.Clear();
             foreach (var root in roots)
             {
-                var rends = root.GetComponentsInChildren<Renderer>(true);
+                // The welded scenery has its own distance logic (SceneryLod:
+                // per-cell detail AND cull), so it is left out here; two
+                // owners of one `enabled` flag is a fight nobody wins.
+                var all = root.GetComponentsInChildren<Renderer>(true);
+                var kept = new List<Renderer>(all.Length);
+                foreach (var r in all)
+                    if (r.GetComponentInParent<SceneryLod>() == null) kept.Add(r);
+                var rends = kept.ToArray();
                 if (rends.Length == 0) continue;
                 var b = rends[0].bounds;
                 for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);

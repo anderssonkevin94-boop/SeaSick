@@ -411,37 +411,37 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   baseHeight: 3
-  reliefHeight: 60
+  reliefHeight: 42
   massifFrequency: 0.00019230769
-  massifMin: 1
-  massifMax: 5.5
+  massifMin: 0.8
+  massifMax: 3.0
   massifBias: 1.5
   massifMaskStart: 0.35
   uplandFrequency: 0.0014285714
   uplandStart: 0.53
   uplandFull: 0.78
-  plainRelief: 26
+  plainRelief: 18
   lowlandDetail: 0.25
-  ridgeAmount: 0.85
+  ridgeAmount: 0.45
   ridgeLow: 0.42
   ridgeHigh: 0.62
   rockCharacterFrequency: 0.00016666666
   rockBias: 2.2
   rockFrequency: 0.007142857
   rockOctaves: 3
-  rockRelief: 34
+  rockRelief: 22
   rockThresholdSoft: 0.8
   rockThresholdHard: 0.44
   verdancyFrequency: 0.0001724138
-  verdancyBias: 1
+  verdancyBias: 0.7
   verdancyFloor: 0.1
   verdancyRockSuppress: 0.65
-  vegSlopeSoft: 0.34
-  vegSlopeHard: 0.7
+  vegSlopeSoft: 0.6
+  vegSlopeHard: 1.0
   vegRockSuppress: 0.88
   detailFrequency: 0.04
   detailOctaves: 2
-  detailAmplitude: 0.5
+  detailAmplitude: 0.3
   shoreSlopeMin: 0.032
   shoreSlopeMax: 0.45
   shoreSlopeBias: 2.5
@@ -454,8 +454,8 @@ MonoBehaviour:
   sandHeight: 3.2
   snowHeight: 165
   rockShowsAt: 0.6
-  cliffRockStart: 0.62
-  cliffRockFull: 0.4
+  cliffRockStart: 0.72
+  cliffRockFull: 0.55
   chunkSize: 128
   chunkResolution: 65
   skirtDepth: 14
