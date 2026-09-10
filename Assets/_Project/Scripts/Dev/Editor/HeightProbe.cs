@@ -39,12 +39,20 @@ public static class HeightProbe
         Unity.Mathematics.Random rng = new Unity.Mathematics.Random(7);
         int N = 200000, land = 0, ocean0 = 0, ocean0Below = 0, beachSamples = 0, beachSteep = 0;
         float seabedMax = -1e9f, maxSlopeBeach = 0f;
+        float2 worstBeach = 0f;
         for (int i = 0; i < N; i++)
         {
             float2 q = rng.NextFloat2(-20000f, 20000f);
             TerrainSample t = TerrainHeight.Evaluate(q, prm, lut);
             if (t.height > s.seaLevel) land++;
-            if (t.mask <= 0f) { ocean0++; if (t.height < s.seaLevel) ocean0Below++; seabedMax = math.max(seabedMax, t.height); }
+            // "Open ocean" is where the island mask is zero AND the authored
+            // home island is not. Home has no mask by construction -- it is
+            // stamped over the finished height -- so without the second test
+            // this gate reports the one island the player lives on as a
+            // seabed that has come out of the water. Measured: 2 failures in
+            // 200k samples over a 40 km square, which is exactly 1.55 ha.
+            if (t.mask <= 0f && TerrainHeight.HomeIsleWeight(q, prm) <= 0f)
+            { ocean0++; if (t.height < s.seaLevel) ocean0Below++; seabedMax = math.max(seabedMax, t.height); }
             // The blend guarantees smoothness where the SMOOTH height is inside
             // the beach band; a plateau foot can sit lower than beachHeight and
             // still be a legitimate cliff.
@@ -54,7 +62,7 @@ public static class HeightProbe
                 beachSamples++;
                 float h2 = TerrainHeight.Height(q + new float2(1f, 0f), prm, lut);
                 float slope = math.abs(h2 - t.height);
-                maxSlopeBeach = math.max(maxSlopeBeach, slope);
+                if (slope > maxSlopeBeach) { maxSlopeBeach = slope; worstBeach = q; }
                 if (slope > 1.0f) beachSteep++;
             }
         }
@@ -65,7 +73,8 @@ public static class HeightProbe
         // A shoreline cliff would show as a rise of several metres per metre; the
         // steepest legitimate mask edges measure ~1.3 m/m on a fraction of a percent.
         Gate("beach-walkable", beachSamples > 100 && maxSlopeBeach < 1.5f && beachSteep < beachSamples * 0.01f,
-            beachSamples + " beach samples, " + beachSteep + " with >1 m rise per metre, max=" + maxSlopeBeach.ToString("F2"));
+            beachSamples + " beach samples, " + beachSteep + " with >1 m rise per metre, max="
+            + maxSlopeBeach.ToString("F2") + " at " + worstBeach + ", " + math.distance(worstBeach, prm.homeIsleCentre).ToString("F0") + " m from home");
 
         // Beach blend seam: walk a line through land and make sure the blended
         // height never jumps more than the terraced one does (the blend may

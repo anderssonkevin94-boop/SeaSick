@@ -242,19 +242,48 @@ public class HarbourProbe : MonoBehaviour
             // that went wrong: my derivation sat the camera INLAND looking
             // seaward, 136 degrees from his, and every other number in this
             // report was correct while the picture was of the wrong side.
+            //
+            // Gated against the DOCK's own statement of the shot, not against
+            // world numbers. Kevin's framing was stored here as a bearing of
+            // -14 degrees and a point at (-95, 82), and those describe one
+            // pier on one island: the authored home island put the harbour in
+            // a cove on the far side, the camera followed the pier exactly as
+            // it is meant to, and this gate reported "off his framing by 172
+            // degrees". The picture was his; the yardstick was not. `Dock`
+            // already holds the rule -- 41 m inland of the root, 22 m to
+            // starboard, 5 degrees off the pier's seaward bearing -- in ONE
+            // place, so the only honest question left is whether the camera
+            // is obeying it.
             Vector3 rel = chase.transform.position - (dock != null ? dock.Root : home.transform.position);
-            if (chase.Overview.HasValue)
+            if (chase.Overview.HasValue && dock != null)
             {
                 Vector3 f3 = chase.Overview.Value.from; f3.y = 0f;
-                float az = Mathf.Atan2(f3.x, f3.z) * Mathf.Rad2Deg;
                 Vector3 c3 = chase.Overview.Value.centre;
-                sb.AppendLine($"   azimuth {az:F0} deg (his -14), "
-                    + $"centre ({c3.x:F0}, {c3.z:F0}) (his -95, 82), "
-                    + $"span {chase.CurrentSpan:F0} m (his 254), fov {fov:F0} (his 36)");
-                float azErr = Mathf.Abs(Mathf.DeltaAngle(az, -14f));
-                float cErr = Vector2.Distance(new Vector2(c3.x, c3.z), new Vector2(-95f, 82f));
-                sb.AppendLine($"   off his framing by {azErr:F0} deg and {cErr:F0} m"
-                    + (azErr < 8f && cErr < 15f ? "   -- matches" : "   -- DOES NOT MATCH"));
+                Vector3 wantFrom = dock.ViewFrom, wantCentre = dock.ViewCentre;
+
+                float azErr = Vector3.Angle(f3.normalized, wantFrom);
+                float cErr = Vector2.Distance(new Vector2(c3.x, c3.z),
+                                              new Vector2(wantCentre.x, wantCentre.z));
+                Vector3 sea3 = dock.Seaward, stb3 = new Vector3(sea3.z, 0f, -sea3.x);
+                Vector3 d4 = c3 - dock.Root;
+                sb.AppendLine($"   the dock asks for: centre ({wantCentre.x:F0}, {wantCentre.z:F0}), "
+                    + $"camera bearing {Mathf.Atan2(wantFrom.x, wantFrom.z) * Mathf.Rad2Deg:F0} deg");
+                sb.AppendLine($"   the camera gives: centre ({c3.x:F0}, {c3.z:F0}) "
+                    + $"= {-Vector3.Dot(d4, sea3):F0} m inland of the root (his 41), "
+                    + $"{Vector3.Dot(d4, stb3):F0} m to starboard (his 22)");
+                sb.AppendLine($"   span {chase.CurrentSpan:F0} m (his 254), fov {fov:F0} (his 36)");
+                sb.AppendLine($"   off the dock's own framing by {azErr:F0} deg and {cErr:F0} m"
+                    + (azErr < 8f && cErr < 15f && Mathf.Abs(chase.CurrentSpan - 254f) < 25f
+                       && Mathf.Abs(fov - 36f) < 3f ? "   -- matches" : "   -- DOES NOT MATCH"));
+
+                // How much of home is actually in the shot. The docked frame
+                // is a long narrow wedge running up the beach -- 42 m either
+                // side of its centre in portrait -- and the island is 160 m
+                // across, so "can I see the whole island from the dock" has a
+                // number and it is not a matter of opinion.
+                sb.AppendLine($"   the frame holds {Dock.ViewHalfWidth * 2f:F0} m of ground ACROSS "
+                    + $"(portrait, measured) against an island {home.Radius * 2f:F0} m wide"
+                    + $"  ->  about {Mathf.Min(100f, Dock.ViewHalfWidth * 200f / Mathf.Max(1f, home.Radius * 2f)):F0}% of its width");
             }
 
             // "Can I see my ship" is a frustum question, not an opinion.

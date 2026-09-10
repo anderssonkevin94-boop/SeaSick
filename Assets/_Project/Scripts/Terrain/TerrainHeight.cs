@@ -30,12 +30,27 @@ namespace SeaSick.Terrain
         public float verdancyFrequency, verdancyBias, verdancyFloor, verdancyRockSuppress,
                      vegSlopeSoft, vegSlopeHard, vegRockSuppress;
 
+        /// The authored home island. `homeIsle` is 0/1 rather than a bool so
+        /// the struct stays the same shape everything else in here is.
+        public int homeIsle;
+        public float2 homeIsleCentre, homeIsleCoveDir;
+        public float homeIsleRadius, homeIsleShape, homeIsleShapeFrequency;
+        public float homeIsleTop, homeIsleRoll, homeIsleRollFrequency;
+        public float homeIsleShoreRun, homeIsleForeshore;
+        public float homeIsleFadeStart, homeIsleFadeEnd;
+        public float homeIsleCoveMouth, homeIsleCoveHead;
+        public float homeIsleCoveHalfMouth, homeIsleCoveHalfHead;
+        public float homeIsleCoveHalfBasin, homeIsleCoveBasin;
+        public float homeIsleCoveBank, homeIsleCoveFloor;
+
         public const int MaskSeedOffset = 7919, DetailSeedOffset = 104729,
                          MassifSeedOffset = 15485863, RidgeSeedOffset = 4241,
                          ShoreSeedOffset = 611953, UplandSeedOffset = 2750159,
                          RockSeedOffset = 32452843, CragSeedOffset = 49979687,
                          SkerrySeedOffset = 86028121, VerdancySeedOffset = 22801763,
-                         WarpSeedOffset = 15485867, WarpSeedOffsetB = 32452867;
+                         WarpSeedOffset = 15485867, WarpSeedOffsetB = 32452867,
+                         HomeShapeSeedOffset = 24036583, HomeRollSeedOffset = 6972593,
+                         HomeCoveSeedOffset = 3021377;
 
         public static TerrainParams From(TerrainSettings s)
         {
@@ -84,6 +99,31 @@ namespace SeaSick.Terrain
                 vegSlopeSoft = s.vegSlopeSoft,
                 vegSlopeHard = math.max(s.vegSlopeSoft + 0.01f, s.vegSlopeHard),
                 vegRockSuppress = s.vegRockSuppress,
+
+                homeIsle = s.homeIsle ? 1 : 0,
+                homeIsleCentre = new float2(s.homeIsleCentre.x, s.homeIsleCentre.y),
+                homeIsleRadius = math.max(10f, s.homeIsleRadius),
+                homeIsleShape = math.max(0f, s.homeIsleShape),
+                homeIsleShapeFrequency = s.homeIsleShapeFrequency,
+                homeIsleTop = s.homeIsleTop,
+                homeIsleRoll = math.max(0f, s.homeIsleRoll),
+                homeIsleRollFrequency = s.homeIsleRollFrequency,
+                homeIsleShoreRun = math.max(1f, s.homeIsleShoreRun),
+                homeIsleForeshore = math.max(1f, s.homeIsleForeshore),
+                homeIsleFadeStart = math.max(0f, s.homeIsleFadeStart),
+                homeIsleFadeEnd = math.max(s.homeIsleFadeStart + 1f, s.homeIsleFadeEnd),
+                // Same convention as Island's sectors: 0 = +Z, 90 = +X.
+                homeIsleCoveDir = new float2(math.sin(math.radians(s.homeIsleCoveBearing)),
+                                             math.cos(math.radians(s.homeIsleCoveBearing))),
+                homeIsleCoveHead = s.homeIsleCoveHead,
+                homeIsleCoveMouth = math.max(s.homeIsleCoveHead + 5f, s.homeIsleCoveMouth),
+                homeIsleCoveHalfMouth = math.max(1f, s.homeIsleCoveHalfMouth),
+                homeIsleCoveHalfHead = math.max(1f, s.homeIsleCoveHalfHead),
+                homeIsleCoveHalfBasin = math.max(1f, s.homeIsleCoveHalfBasin),
+                homeIsleCoveBasin = math.clamp(s.homeIsleCoveBasin,
+                    s.homeIsleCoveHead + 2f, math.max(s.homeIsleCoveHead + 4f, s.homeIsleCoveMouth) - 2f),
+                homeIsleCoveBank = math.max(1f, s.homeIsleCoveBank),
+                homeIsleCoveFloor = s.homeIsleCoveFloor,
             };
             return p;
         }
@@ -395,10 +435,16 @@ namespace SeaSick.Terrain
         ///
         /// Biased so most islands are soft ground and a rocky one is an
         /// event -- the same rule this file already applies to peaks.
+        /// Zeroed over the authored home island, and that one multiply is
+        /// what keeps it grass and sand. `RockBreak` returns early at zero
+        /// rockiness, so no stone stands proud, so the mesher's rock colour
+        /// never fires -- the island is made of the right material rather
+        /// than painted to look like it.
         public static float Rock01(in float2 p, in TerrainParams prm)
             => math.pow(TerrainNoise.Fbm01(p + prm.worldOffset,
                 prm.seed + TerrainParams.RockSeedOffset, 2,
-                prm.rockCharacterFrequency, 2f, 0.5f), prm.rockBias);
+                prm.rockCharacterFrequency, 2f, 0.5f), prm.rockBias)
+               * (1f - HomeIsleWeight(p, prm));
 
         /// **How green this island is**, in [0, 1].
         ///
@@ -416,8 +462,13 @@ namespace SeaSick.Terrain
                 prm.seed + TerrainParams.VerdancySeedOffset, 2,
                 prm.verdancyFrequency, 2f, 0.5f), prm.verdancyBias);
             float rocky = Rock01(p, prm);
+            // ...and zeroed over home for the same reason. IslandScenery reads
+            // this once at the island's centre and multiplies every placement
+            // chance by it, so a verdancy of zero is a wood that is never
+            // planted rather than a wood that is planted and then culled.
             return math.lerp(prm.verdancyFloor, 1f,
-                math.saturate(v * (1f - prm.verdancyRockSuppress * rocky)));
+                math.saturate(v * (1f - prm.verdancyRockSuppress * rocky)))
+               * (1f - HomeIsleWeight(p, prm));
         }
 
         /// **Metres of rock standing PROUD of the soil here.** Zero almost
@@ -620,6 +671,202 @@ namespace SeaSick.Terrain
             return prm.seaLevel + a * (k + (1f - k) * w);
         }
 
+        /// **The home island is authored, not found.**
+        ///
+        /// Every other island in this world is whatever the noise happened to
+        /// put there, and that is right for a world you sail out into. It is
+        /// wrong for the one place the player starts, because home has to
+        /// satisfy things noise cannot be asked for: it must read WHOLE in the
+        /// docked overview, it must be flat enough to build a village on, and
+        /// it must have somewhere a 24 m ship can actually lie. Sliding
+        /// `worldOffset` until a procedural island happens to do all three is
+        /// how the home island has been chosen so far, and it moves every time
+        /// any mask constant moves — see the 2026-09-09 entry where the pier
+        /// ended up standing in open water with no error of any kind.
+        ///
+        /// So this stamps one over the top. It is a pure function of position
+        /// like everything else here, it runs in Burst, and it is applied to
+        /// the FINAL height rather than to any stage of the pipeline: the
+        /// stages are coupled (the mask sets both the shoreline and the shelf,
+        /// the seabed is keyed on the mask noise, the massif fades in by the
+        /// mask) and reaching into the middle of them is what puts a spire up
+        /// out of deep water. Overriding the answer cannot.
+        ///
+        /// `worldOffset` deliberately does NOT move it. The ship spawns at the
+        /// world origin, so the island is placed in absolute metres and the
+        /// origin lands in its cove every time; the offset goes on choosing
+        /// the archipelago beyond the fade band and nothing else.
+
+        /// How much of this point belongs to the authored island: 1 out to
+        /// `homeIsleFadeStart`, 0 past `homeIsleFadeEnd`.
+        ///
+        /// The band is wide on purpose. Land the archipelago happens to leave
+        /// inside it is pulled down into a shoal rather than half-drowned into
+        /// a cliff, and home comes out standing alone in open water — which is
+        /// what makes it read whole from the deck.
+        public static float HomeIsleWeight(in float2 p, in TerrainParams prm)
+        {
+            if (prm.homeIsle == 0) return 0f;
+            return 1f - math.smoothstep(prm.homeIsleFadeStart, prm.homeIsleFadeEnd,
+                                        math.distance(p, prm.homeIsleCentre));
+        }
+
+        /// The ramp shape used both above and below the waterline: exactly 0
+        /// at u = 0 and exactly 1 at u = 1, with a real but gentle slope at
+        /// BOTH ends.
+        ///
+        /// A plain smoothstep is flat at both ends, and a foreshore that
+        /// leaves the water at zero slope is a tidal flat whose waterline
+        /// wanders tens of metres with the swell. A plain line creases where
+        /// it meets the flat top. Mixing the two keeps a definite beach slope
+        /// at the sea and still joins the plateau without a fold; the steepest
+        /// part ends up in the middle, which is where a grassy bank belongs.
+        static float ShoreRamp(float u)
+        {
+            u = math.saturate(u);
+            const float Straight = 0.5f;
+            return Straight * u + (1f - Straight) * math.smoothstep(0f, 1f, u);
+        }
+
+        /// The authored island's height at a point, metres above sea level
+        /// (the caller adds `seaLevel`).
+        public static float HomeIsleHeight(in float2 p, in TerrainParams prm)
+        {
+            float2 q = p - prm.homeIsleCentre;
+
+            // The coastline is the level set of r - R(p), not a radius as a
+            // function of angle. Angle-keyed outlines seam at +/-pi and cannot
+            // make a bay that turns back on itself; this one is closed and
+            // organic for free, and it is the same trick MaskDomain's warp
+            // plays on the archipelago.
+            float wobble = TerrainNoise.Fbm01(q, prm.seed + TerrainParams.HomeShapeSeedOffset,
+                3, prm.homeIsleShapeFrequency, 2f, 0.5f) - 0.5f;
+            float t = math.length(q) - (prm.homeIsleRadius + 2f * prm.homeIsleShape * wobble);
+
+            // The cove is a SECOND SHORELINE, and that is the whole design.
+            //
+            // It was a carve first -- lerp the ground down to a floor inside a
+            // segment -- and a carve gives you walls. Measured: 5.2 m of land
+            // dropping to -4.2 m across a 7 m soft edge is a slope of 1.3, so
+            // the one part of the island a boat has to get into was the one
+            // part rendering as cliff, on an island whose brief was flat grass
+            // and sand. Widening the soft edge only makes a shallower wall.
+            //
+            // Written as a shore instead, the cove gets the island's own beach
+            // profile for free: sand up the rim at the same gradient as the
+            // outer coast, a real landing beach at the head where the walls
+            // close in, and a bank below the waterline steep enough to give
+            // deep water close in. The two shores are combined with `min`,
+            // which is what stops the union ever RAISING the seabed -- lerping
+            // toward a floor puts a bar across the mouth, and a berth behind a
+            // bar is exactly what HarbourSite's approach test exists to reject.
+            float h = math.min(Profile(t, prm.homeIsleShoreRun, prm.homeIsleTop,
+                                       prm.homeIsleForeshore, prm.seabedDepth),
+                               Profile(CoveInside(q, prm), prm.homeIsleShoreRun, prm.homeIsleTop,
+                                       prm.homeIsleCoveBank, prm.homeIsleCoveFloor));
+
+            // The meadow's roll rides on how high the ground already is, so it
+            // is full strength on the flat top and exactly nothing at either
+            // waterline. Anything that reaches a waterline MOVES that
+            // waterline, which is the regression this pipeline has paid for
+            // twice; keying it to the height it is modifying makes that
+            // impossible rather than merely unlikely.
+            if (prm.homeIsleRoll > 0f && h > 0f)
+                h += prm.homeIsleRoll * math.saturate(h / prm.homeIsleTop) * 2f
+                     * (TerrainNoise.Fbm01(q, prm.seed + TerrainParams.HomeRollSeedOffset, 2,
+                            prm.homeIsleRollFrequency, 2f, 0.5f) - 0.5f);
+            return h;
+        }
+
+        /// One shoreline's profile: `d` is metres INTO THE WATER, so it is
+        /// negative on land and its magnitude there is how far inland you
+        /// stand. Climbs to `top` over `run` inland, falls to `floor` over
+        /// `reach` out to sea.
+        ///
+        /// The outer coast passes `r - R`, which is already that. The cove
+        /// passes `CoveInside` directly, because being inside the cove IS
+        /// being in the water -- negating it (the obvious reading of "metres
+        /// inside") turns the whole island into a 0.16 ha sandbank at the
+        /// head of the cove, with every gate still passing.
+        static float Profile(float d, float run, float top, float reach, float floor)
+            => d <= 0f ? top * ShoreRamp(-d / run) : floor * ShoreRamp(d / reach);
+
+        /// Metres inside the cove: positive in the water, negative on the
+        /// land around it. The distance to the cove's axis less the
+        /// half-width there, so `Profile` can treat it as a second coastline.
+        ///
+        /// Three widths, not two, and the middle one is what makes it a cove
+        /// rather than an inlet: it opens into a BASIN and closes again at a
+        /// THROAT between two horns. Shelter is measured as how much of the
+        /// seaward horizon is land, and a mouth that is the widest part of
+        /// the water has none of it -- the first version tapered straight out
+        /// from head to mouth and HarbourSite scored the berth 0.10.
+        ///
+        /// The capsule is closed at BOTH ends. Clamping only the head let the
+        /// half-width run on past the mouth forever, and because the cove
+        /// floor is deeper than the shallow foreshore it crosses, that ran a
+        /// dead-straight gut a hundred metres out to sea -- a dredged channel
+        /// on an island with nobody to dredge it. It has to end where the
+        /// open foreshore is ALREADY deeper than the cove, or closing it just
+        /// swaps a channel for a bar.
+        static float CoveInside(in float2 q, in TerrainParams prm)
+        {
+            float2 dir = prm.homeIsleCoveDir;
+            float along = math.dot(q, dir);
+            float across = math.abs(q.x * dir.y - q.y * dir.x);
+
+            float half;
+            if (along <= prm.homeIsleCoveBasin)
+                half = math.lerp(prm.homeIsleCoveHalfHead, prm.homeIsleCoveHalfBasin,
+                    math.smoothstep(prm.homeIsleCoveHead, prm.homeIsleCoveBasin, along));
+            else
+                half = math.lerp(prm.homeIsleCoveHalfBasin, prm.homeIsleCoveHalfMouth,
+                    math.smoothstep(prm.homeIsleCoveBasin, prm.homeIsleCoveMouth, along));
+
+            // The HEAD is a rounded box, not a round cap, and that is a
+            // harbour decision rather than a shape one.
+            //
+            // HarbourSite takes a site's seaward bearing from the local
+            // downhill and then runs a straight 160 m approach along it. In a
+            // 48 m cove any bearing more than about 12 degrees off the axis
+            // crosses to the far bank inside that run and is rejected, so the
+            // only berths a cove can ever offer are the ones on ground whose
+            // downhill points straight out of it. On a round cap the normal
+            // IS the angular position, so that is a 12-degree arc -- two or
+            // three cells at a 6 m raster, however wide the cap is made.
+            // Widening it from 15 m to 20 m changed nothing at all, which is
+            // what said the model was wrong.
+            //
+            // A straight back beach points every one of its cells down the
+            // axis. The corners are rounded by `Round` so the two spit tips
+            // are still tips and not right angles.
+            const float Round = 8f;
+            float ex = across - math.max(1f, half - Round);
+            float ey = (prm.homeIsleCoveHead + Round) - along;
+            float ahead = math.max(0f, along - prm.homeIsleCoveMouth);
+            float outside = math.sqrt(math.max(ex, 0f) * math.max(ex, 0f)
+                                    + math.max(ey, 0f) * math.max(ey, 0f)
+                                    + ahead * ahead);
+            float inside = math.min(math.max(ex, ey), 0f);
+            float d = Round - (outside + inside);
+
+            // A rounded box has straight sides, and on the map they read as
+            // exactly what they are: a trapezoid cut out of an otherwise
+            // organic coast. The wobble is the same idea as the island's own
+            // outline -- displace the distance field and its level set bends
+            // -- but it is faded OFF over the back beach, because that beach
+            // is straight for a reason. Wandering it by 4 m over 55 tilts the
+            // local downhill by fifteen-odd degrees, and the approach test
+            // rejects anything more than about twelve off the axis: the noise
+            // that makes the cove look natural is the noise that would empty
+            // it of berths.
+            float clear = math.smoothstep(prm.homeIsleCoveHead + 6f,
+                                          prm.homeIsleCoveHead + 22f, along);
+            if (clear <= 0f) return d;
+            return d + clear * 8f * (TerrainNoise.Fbm01(q,
+                prm.seed + TerrainParams.HomeCoveSeedOffset, 2, 1f / 55f, 2f, 0.5f) - 0.5f);
+        }
+
         /// Full pipeline with all intermediates. Order matters: the mask is
         /// applied BEFORE the beach blend so the blend sees real altitudes —
         /// every shoreline climbs from the seabed through the 0..beachHeight
@@ -668,6 +915,21 @@ namespace SeaSick.Terrain
             s.terraced = OverSeabed(land + detail + s.rock, s.mask, detail, c, prm);
             s.smooth = OverSeabed(Smooth(s.noise01, amp, prm) + detail + s.rock, s.mask, detail, c, prm);
             s.height = ShoreTerrace(BeachBlend(s.terraced, s.smooth, prm), p, interior, prm);
+
+            // Home last, over the top of the finished answer. Rock01 already
+            // returns zero here, so `s.rock` is zero without being touched --
+            // the island is grass and sand by construction rather than by a
+            // shading rule.
+            float home = HomeIsleWeight(p, prm);
+            if (home > 0f)
+            {
+                float hh = HomeIsleHeight(p, prm) + prm.seaLevel;
+                s.height = math.lerp(s.height, hh, home);
+                // The visualiser's two intermediates follow it, or the sheets
+                // draw the island that was replaced.
+                s.terraced = math.lerp(s.terraced, hh, home);
+                s.smooth = math.lerp(s.smooth, hh, home);
+            }
             return s;
         }
 

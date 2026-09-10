@@ -204,9 +204,22 @@ namespace SeaSick.Terrain
                 island.Configure("Home", 0f, meanR, true, false);
                 root.AddComponent<Stockpile>();
                 Home = island;
-                var beacon = IslandPropFactory.MakeBeacon(new Color(1f, 0.55f, 0.25f), 46f, 2.6f);
+                // A mast one ship-length tall, standing ON the ground.
+                //
+                // It was 46, and MakeBeacon scales a Unity cylinder -- which
+                // is two units tall -- so that was a 92 m column, sunk 12 m
+                // into the hill and reaching 80 m over it. On the old home
+                // island, a 111 m peak, that read as a tower on a summit. On
+                // a 5.7 m one it is a girder through the middle of the
+                // picture, fourteen times the relief of the land it marks.
+                // Tied to the ship instead, it is a landmark you can judge
+                // your distance off, which is what a beacon is for.
+                const float BeaconHeight = SeaSick.World.WorldScale.ShipLength;
+                var beacon = IslandPropFactory.MakeBeacon(new Color(1f, 0.55f, 0.25f),
+                    BeaconHeight * 0.5f, 2.6f);
                 beacon.transform.SetParent(root.transform, false);
-                beacon.transform.localPosition = new Vector3(0f, Height(f.centre.x, f.centre.y) + 34f, 0f);
+                beacon.transform.localPosition = new Vector3(0f,
+                    Height(f.centre.x, f.centre.y) + BeaconHeight * 0.5f, 0f);
 
                 // The dock goes in BEFORE the scenery, because the scenery
                 // bake is what a keep-out would have to be handed -- and

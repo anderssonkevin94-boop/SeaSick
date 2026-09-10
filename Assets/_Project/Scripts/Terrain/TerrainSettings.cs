@@ -20,6 +20,57 @@ namespace SeaSick.Terrain
         [Tooltip("Added to world XZ before sampling, so a chosen island can be slid under the home position without changing the seed.")]
         public Vector2 worldOffset = Vector2.zero;
 
+        // Every number in these two blocks is also pushed into the asset by
+        // TuneIslands.HomePush, and the asset is what actually runs. They are
+        // kept in step by hand because there is no third place to keep them,
+        // and Unity caches a field's default in the import artifact the first
+        // time it sees it -- so editing an initialiser here after the asset
+        // has the field changes nothing at all, silently. Push, then measure.
+        [Header("Home isle (authored)")]
+        [Tooltip("Replace the procedural land around the origin with an AUTHORED home island. The rest of the archipelago is untouched: this is a local override on the final height, blended out to open water, so worldOffset still chooses the world the player sails into and only stops choosing the island they live on.")]
+        public bool homeIsle = true;
+        [Tooltip("Where the island's centre sits in WORLD metres. It is absolute and does NOT move with worldOffset, because the ship spawns at the world origin and the whole point of authoring it is that the origin lands in the cove every time.")]
+        public Vector2 homeIsleCentre = new Vector2(0f, 66f);
+        [Tooltip("Mean radius of the land, metres. The island has to read WHOLE in the docked overview, which holds about 165 m of ground up the frame, so the extent is the constraint and not the area.")]
+        public float homeIsleRadius = 74f;
+        [Tooltip("Metres the coastline wanders either side of that radius. This is the level set of r - R(p), so the outline comes back organic and closed however much it wobbles.")]
+        public float homeIsleShape = 11f;
+        [Tooltip("Feature scale of the outline wobble, 1/metres. Near the radius gives two or three lobes; well above it only frays the sand.")]
+        public float homeIsleShapeFrequency = 1f / 95f;
+        [Tooltip("Height of the flat top, metres. Must clear sandHeight (so it reads grass, not beach) AND the village's own floor of sandHeight + 1.2, or the settlement has nowhere to stand.")]
+        public float homeIsleTop = 5.2f;
+        [Tooltip("Metres the flat top rolls either side of that, so it is a meadow rather than a table. Faded to nothing at the waterline so it cannot move the coastline.")]
+        public float homeIsleRoll = 0.55f;
+        public float homeIsleRollFrequency = 1f / 55f;
+        [Tooltip("Metres of ground between the waterline and the flat top. Sets the width of the sand: sand runs from 0 to sandHeight, so at 34 m and a 5.2 m top the beach is about 21 m wide and the grassy bank above it about 13 m.")]
+        public float homeIsleShoreRun = 28f;
+        [Tooltip("Metres from the waterline out to seabedDepth. Steeper than a real sand island, and deliberately: the cove needs 2.5 m of water in its approach, and on a gentle shelf the only way to get it is to run a dead-straight gut a hundred metres out to sea -- a dredged channel on an island with nobody to dredge it. Nothing above the waterline moves with this, so the beach stays as wide as shoreRun says.")]
+        public float homeIsleForeshore = 72f;
+        [Tooltip("Metres from the centre out to where the authored field still wins outright. Everything inside this is home and nothing else.")]
+        public float homeIsleFadeStart = 210f;
+        [Tooltip("...and where the procedural world takes over again. Land the archipelago happens to put inside the band is drowned into a shoal, which is the intent: home stands alone in open water.")]
+        public float homeIsleFadeEnd = 470f;
+
+        [Header("Home isle cove")]
+        [Tooltip("Which way the cove opens, degrees, in the same convention Island uses: 0 = +Z, 90 = +X, 180 = -Z.")]
+        [Range(0f, 360f)] public float homeIsleCoveBearing = 180f;
+        [Tooltip("How far along that bearing, from the centre, the cove's mouth reaches. It sits OUTSIDE the shoreline, far enough out that the open foreshore has already reached the 2.5 m the approach needs -- stop it short and the cove is a pool behind a bar, which is precisely what HarbourSite refuses to berth her in.")]
+        public float homeIsleCoveMouth = 102f;
+        [Tooltip("...and how far in the head of it is. Below the plateau radius (radius - shoreRun) the cove cuts into the flat top, which is where a harbour village wants to stand.")]
+        public float homeIsleCoveHead = 34f;
+        [Tooltip("Half-width at the mouth, metres -- the THROAT. Narrower than the basin on purpose: it is the pinch between the two horns that makes the water behind it quiet, and shelter is a third of what HarbourSite scores a berth on.")]
+        public float homeIsleCoveHalfMouth = 13f;
+        [Tooltip("Half-width at the head, metres, where it closes into a landing beach.")]
+        public float homeIsleCoveHalfHead = 20f;
+        [Tooltip("Half-width at the widest, metres -- the basin she lies in. Bounded by the island, not by taste: the land left between the cove flank and the outer coast is radius - sqrt(basinAlong^2 + halfBasin^2), and past about 18 m here the horns stop being spits and start being a breach.")]
+        public float homeIsleCoveHalfBasin = 24f;
+        [Tooltip("How far along the axis the basin is widest, metres from the centre.")]
+        public float homeIsleCoveBasin = 46f;
+        [Tooltip("Metres from the cove's own waterline out to full depth. Short, because deep water close in is the whole reason to dock here rather than on the beach -- and it is UNDERWATER, so it costs nothing above the sand and it is what decides how much of the basin she can actually float in.")]
+        public float homeIsleCoveBank = 10f;
+        [Tooltip("Depth of the pool, metres (negative). HarbourSite wants 3 m under her whole length at the berth and 2.5 m all the way in, so this carries both with a margin for the swell that still gets in.")]
+        public float homeIsleCoveFloor = -5.4f;
+
         [Header("Noise (fBm)")]
         [Range(1, 8)] public int octaves = 5;
         [Tooltip("Base frequency in 1/metres. 1/400 ≈ features ~400 m across.")]

@@ -17,6 +17,27 @@ MonoBehaviour:
   worldRadius: 0
   worldEdgeFalloff: 500
   worldOffset: {x: -58.950436, y: 4818.805}
+  homeIsle: 1
+  homeIsleCentre: {x: 0, y: 66}
+  homeIsleRadius: 74
+  homeIsleShape: 11
+  homeIsleShapeFrequency: 0.010526316
+  homeIsleTop: 5.2
+  homeIsleRoll: 0.55
+  homeIsleRollFrequency: 0.018181818
+  homeIsleShoreRun: 28
+  homeIsleForeshore: 72
+  homeIsleFadeStart: 210
+  homeIsleFadeEnd: 470
+  homeIsleCoveBearing: 180
+  homeIsleCoveMouth: 102
+  homeIsleCoveHead: 34
+  homeIsleCoveHalfMouth: 13
+  homeIsleCoveHalfHead: 20
+  homeIsleCoveHalfBasin: 24
+  homeIsleCoveBasin: 46
+  homeIsleCoveBank: 10
+  homeIsleCoveFloor: -5.4
   octaves: 5
   baseFrequency: 0.0025
   lacunarity: 2

@@ -84,9 +84,12 @@ public static class RunProbe
     public static void IslePush() => CallEditor("TuneIslands", "Execute");
     public static void IsleHomes() => CallEditor("TuneIslands", "HomeCandidates");
     public static void IsleMap() => CallEditor("TuneIslands", "Map");
+    public static void IsleHomeMap() => CallEditor("TuneIslands", "HomeMap");
     public static void IsleMakeHome() => CallEditor("TuneIslands", "MakeHome");
     public static void IsleGate() => CallEditor("HeightProbe");
     public static void IsleHomeCheck() => CallEditor("TuneIslands", "HomeCheck");
+    public static void IsleHomeIsle() => CallEditor("TuneIslands", "HomeIsle");
+    public static void IsleHomePush() => CallEditor("TuneIslands", "HomePush");
     public static void IsleMesh() => CallEditor("TuneIslands", "MeshVsField");
     public static void DockFrame() => CallEditor("TuneIslands", "DockFraming");
     public static void Legible() => CallEditor("TuneIslands", "Legibility");

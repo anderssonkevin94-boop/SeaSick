@@ -242,10 +242,22 @@ namespace SeaSick.Terrain
             // A 90 m disc is 2.54 ha and a shore site has water over half of
             // it, so about 1.2 ha is as much flat hinterland as any coastal
             // spot can have. Normalising by 2 ha made every site look poor.
+            //
+            // Shelter carries the most of the four, and it was the least at
+            // 1.4 until the authored home island made the reason obvious. The
+            // other three terms DISCRIMINATE only where the ground varies:
+            // on a massif, backSlope and flatBehind are what separate a beach
+            // from a cliff foot, and shelter is a tiebreak. On flat ground
+            // every shore has a gentle back slope and a hectare of flat
+            // behind it, all four sites score the same on three terms out of
+            // four, and the one thing that actually distinguishes a harbour
+            // from a jetty on an open beach was the one term too small to
+            // decide anything -- it put the home dock on the exposed north
+            // beach of an island with a cove cut into its south side.
             s.score = pierScore * 1.2f
                     + Mathf.Clamp01(1f - s.backSlope / 0.36f) * 1.8f
                     + Mathf.Clamp01(s.flatBehind / 1.0f) * 2.4f
-                    + s.shelter * 1.4f;
+                    + s.shelter * 2.6f;
             return s;
         }
 

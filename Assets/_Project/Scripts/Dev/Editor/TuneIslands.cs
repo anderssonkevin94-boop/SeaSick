@@ -183,6 +183,7 @@ public static class TuneIslands
         so.FindProperty("snowHeight").floatValue = 165f;
         so.FindProperty("skirtDepth").floatValue = 14f;
         so.ApplyModifiedPropertiesWithoutUndo();
+        HomePush();
         EditorUtility.SetDirty(s);
         AssetDatabase.SaveAssets();
 
@@ -238,7 +239,14 @@ public static class TuneIslands
     /// Photograph the archipelago from above. Island SHAPE is the one thing
     /// none of the numbers here can answer -- "oddlong and organic" is not a
     /// percentile -- and a map is the cheapest honest look at it.
-    public static string Map()
+    /// Just the home isle, close in. `Map` also renders 8 km and 3 km sheets
+    /// and those are two million samples of the full pipeline apiece -- far
+    /// too slow to sit in a tuning loop about one 160 m island.
+    public static string HomeMap() => Map("home_isle") + Map("home_fade");
+
+    public static string Map() => Map(null);
+
+    public static string Map(string only)
     {
         var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
         if (s == null) return "no TerrainSettings asset at " + Path;
@@ -258,14 +266,27 @@ public static class TuneIslands
             v.tintAboveZero = true;
             v.rampMaxHeight = 60f;
 
-            var shots = new (string name, Vector2 c, float ext, int px)[]
+            // The last one is the authored home isle at 0.35 m/px with the
+            // ramp turned down to its own height. On the world's 60 m ramp a
+            // 5.7 m island is one flat colour, which is a map that cannot
+            // show the one thing it is being asked about.
+            var shots = new (string name, Vector2 c, float ext, int px, float ramp)[]
             {
-                ("wide_8km",   new Vector2(0f, 0f),      8000f, 1400),
-                ("near_3km",   new Vector2(0f, 0f),      3000f, 1200),
-                ("home_1km",   new Vector2(0f, 0f),      700f,  1000),
+                ("wide_8km",   new Vector2(0f, 0f),      8000f, 1400, 60f),
+                ("near_3km",   new Vector2(0f, 0f),      3000f, 1200, 60f),
+                ("home_1km",   new Vector2(0f, 0f),      700f,  1000, 60f),
+                ("home_isle",  s.homeIsleCentre,         150f,  860,  8f),
+                // Wide enough to hold the whole fade band, because what the
+                // authored island does to its NEIGHBOURS is invisible from
+                // close in: land the archipelago left inside the band comes
+                // back as a drowned shoal, and a shoal a ship's length under
+                // the surface is a grounding nobody sited.
+                ("home_fade",  s.homeIsleCentre,         600f,  900,  30f),
             };
             foreach (var sh in shots)
             {
+                if (only != null && sh.name != only) continue;
+                v.rampMaxHeight = sh.ramp;
                 v.centre = sh.c; v.extent = sh.ext; v.textureSize = sh.px;
                 v.Regenerate();
                 string path = System.IO.Path.Combine(dir, sh.name + ".png");
@@ -1220,6 +1241,394 @@ public static class TuneIslands
     /// Cheap enough to run after any change to the mask, which is exactly
     /// when it matters: the home island is not authored, so ANY change to the
     /// mask moves it.
+    /// Measures the AUTHORED home island against everything it was asked to
+    /// be: whole in the docked frame, flat, grass and sand only, and holding
+    /// a cove a 24 m ship can lie in.
+    ///
+    /// Reads the height field, never the settings it was built from. The
+    /// settings say what was asked for; only the field says what came out,
+    /// and the difference between those two is where every island regression
+    /// on this project has lived.
+    /// Pushes the authored home island into the asset.
+    ///
+    /// It has to be pushed, and the reason is worth writing down because it
+    /// cost two rounds of reading a picture of one cove while editing
+    /// another: a serialised field that is ABSENT from the .asset takes the
+    /// script's default, but Unity caches that default in the import artifact
+    /// the first time it sees the field, so later edits to the C# initialiser
+    /// never reach the loaded object -- and nothing anywhere reports a
+    /// difference. The asset wins, so the asset is where the numbers go.
+    /// `HomeIsle()` prints them back off the loaded object for the same
+    /// reason.
+    /// The centre and mean radius TerrainWorldPopulator will derive for the
+    /// home island, recomputed here off the same height field: the land cell
+    /// nearest the centroid, and the mean of 128 radial marches to the
+    /// waterline. Anything that measures a harbour has to ask from here.
+    static void Centroid(System.Func<float, float, float> H, Vector2 about, float span,
+                         out Vector2 centre, out float meanRadius)
+    {
+        const float Cell = 4f;
+        int n = Mathf.CeilToInt(span * 2f / Cell);
+        Vector2 sum = Vector2.zero; int count = 0;
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+            {
+                var p = new Vector2(about.x - span + i * Cell, about.y - span + j * Cell);
+                if ((p - about).sqrMagnitude > span * span) continue;
+                if (H(p.x, p.y) > 0.5f) { sum += p; count++; }
+            }
+        centre = count > 0 ? sum / count : about;
+
+        // ...then onto actual land, the way Discover does: a crescent's
+        // centroid can sit in the water, and so can a cove's.
+        if (H(centre.x, centre.y) <= 0.5f)
+        {
+            float best = float.MaxValue; var found = centre;
+            for (int j = 0; j < n; j++)
+                for (int i = 0; i < n; i++)
+                {
+                    var p = new Vector2(about.x - span + i * Cell, about.y - span + j * Cell);
+                    if (H(p.x, p.y) <= 0.5f) continue;
+                    float d = (p - centre).sqrMagnitude;
+                    if (d < best) { best = d; found = p; }
+                }
+            centre = found;
+        }
+
+        float total = 0f;
+        const int Sectors = 128;
+        for (int k = 0; k < Sectors; k++)
+        {
+            float ang = k / (float)Sectors * Mathf.PI * 2f;
+            var dir = new Vector2(Mathf.Sin(ang), Mathf.Cos(ang));
+            float r = 2f;
+            for (; r < 600f; r += 2f)
+                if (H(centre.x + dir.x * r, centre.y + dir.y * r) < -0.3f) break;
+            total += r;
+        }
+        meanRadius = total / Sectors;
+    }
+
+    public static string HomePush()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+        if (s == null) return "no TerrainSettings asset at " + Path;
+        var so = new SerializedObject(s);
+
+        so.FindProperty("homeIsle").boolValue = true;
+        // The berth wants to land on the world origin, where PlayerShip
+        // spawns, so the centre sits one cove-length up the cove's bearing.
+        so.FindProperty("homeIsleCentre").vector2Value = new Vector2(0f, 66f);
+        so.FindProperty("homeIsleRadius").floatValue = 74f;
+        so.FindProperty("homeIsleShape").floatValue = 11f;
+        so.FindProperty("homeIsleShapeFrequency").floatValue = 1f / 95f;
+        so.FindProperty("homeIsleTop").floatValue = 5.2f;
+        so.FindProperty("homeIsleRoll").floatValue = 0.55f;
+        so.FindProperty("homeIsleRollFrequency").floatValue = 1f / 55f;
+        so.FindProperty("homeIsleShoreRun").floatValue = 28f;
+        so.FindProperty("homeIsleForeshore").floatValue = 72f;
+        so.FindProperty("homeIsleFadeStart").floatValue = 210f;
+        so.FindProperty("homeIsleFadeEnd").floatValue = 470f;
+
+        so.FindProperty("homeIsleCoveBearing").floatValue = 180f;
+        so.FindProperty("homeIsleCoveHead").floatValue = 34f;
+        so.FindProperty("homeIsleCoveBasin").floatValue = 46f;
+        so.FindProperty("homeIsleCoveMouth").floatValue = 102f;
+        // Wide enough to berth in, which is not a look decision.
+        //
+        // At 5 m the head was a round pocket the width of the boat's beam,
+        // and HarbourSite came back with FIFTY viable sites and not one of
+        // them inside the cove. The reason is structural: the approach test
+        // runs 160 m straight out along the local downhill, so a root on the
+        // cove's FLANK aims across the water at the opposite bank and is
+        // always rejected. The only root in a cove that can ever pass it is
+        // one at the HEAD, aiming down the axis -- so the head has to be a
+        // proper inner basin with a clean axial gradient across a 6 m raster,
+        // not a notch.
+        //
+        // 12 m then gave exactly ONE viable berth in the cove, and one is not
+        // a design, it is a coincidence: `Find` rasters at 6 m from the
+        // island's own centroid, the runtime's centroid sits a couple of
+        // metres off any the probe can reconstruct, and that shift was enough
+        // to miss the single cell and build the pier on the open north shore
+        // while the probe reported a berth in the cove. Both answers were
+        // honest. The head has to offer a HANDFUL of sites, so that which one
+        // wins can move without the answer moving.
+        //
+        // What actually makes a cove berthable is the WIDTH OF ITS BACK
+        // BEACH, because the capsule's head is a round cap and only the cells
+        // on it whose downhill points down the axis can pass the approach
+        // test. That arc is the half-width times about 1.4 radians, sampled
+        // at 6 m: at 15 m it is three cells and the winner held from 4 search
+        // centres out of 5, at 20 m it is five and it holds from all of them.
+        so.FindProperty("homeIsleCoveHalfHead").floatValue = 20f;
+        so.FindProperty("homeIsleCoveHalfBasin").floatValue = 24f;
+        so.FindProperty("homeIsleCoveHalfMouth").floatValue = 13f;
+        so.FindProperty("homeIsleCoveBank").floatValue = 10f;
+        // 4.6 m left 2.5 m under her whole 24.2 x 8.4 box at the berth, and
+        // her loaded draft is 1.9 m -- 0.6 m of margin in water that still
+        // moves. HarbourSite only ever asked for 3.0 m under her CENTRELINE;
+        // she grounds by her quarters.
+        so.FindProperty("homeIsleCoveFloor").floatValue = -5.4f;
+
+        so.ApplyModifiedPropertiesWithoutUndo();
+        EditorUtility.SetDirty(s);
+        AssetDatabase.SaveAssets();
+        return "home isle pushed -- run TuneIslands.HomeIsle() to measure what came out";
+    }
+
+    public static string HomeIsle()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+        if (s == null) return "no TerrainSettings asset at " + Path;
+        if (!s.homeIsle) return "homeIsle is OFF -- the home island is whatever worldOffset slid under the origin";
+        var prm = TerrainParams.From(s);
+        var lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
+        System.Func<float, float, float> H = (x, z) => TerrainHeight.Height(new float2(x, z), prm, lut);
+        var sb = new StringBuilder();
+
+        // Read back off the LOADED asset, never off the source file. A field
+        // absent from the .asset takes the script's default, a field present
+        // in it wins, and nothing tells you which happened -- this project's
+        // most-repeated trap, and it cost a round here reading a picture of
+        // one cove while editing another.
+        sb.AppendLine("  live settings: R " + s.homeIsleRadius.ToString("F0")
+            + " +/-" + s.homeIsleShape.ToString("F0")
+            + "  top " + s.homeIsleTop.ToString("F1")
+            + "  shoreRun " + s.homeIsleShoreRun.ToString("F0")
+            + "  foreshore " + s.homeIsleForeshore.ToString("F0")
+            + "  cove " + s.homeIsleCoveHead.ToString("F0") + "/"
+            + s.homeIsleCoveBasin.ToString("F0") + "/" + s.homeIsleCoveMouth.ToString("F0")
+            + " half " + s.homeIsleCoveHalfHead.ToString("F0") + "/"
+            + s.homeIsleCoveHalfBasin.ToString("F0") + "/" + s.homeIsleCoveHalfMouth.ToString("F0")
+            + "  bank " + s.homeIsleCoveBank.ToString("F0")
+            + "  floor " + s.homeIsleCoveFloor.ToString("F1"));
+
+        var c = s.homeIsleCentre;
+        const float Cell = 2f;
+        float span = s.homeIsleFadeStart;
+        int n = Mathf.CeilToInt(span * 2f / Cell);
+        float x0 = c.x - span, z0 = c.y - span;
+
+        var h = new float[n * n];
+        for (int j = 0; j < n; j++)
+            for (int i = 0; i < n; i++)
+                h[j * n + i] = H(x0 + i * Cell, z0 + j * Cell);
+
+        // Extent, area and peak, off the raster rather than off the radius:
+        // the outline wobbles and the cove takes a bite, so the radius that
+        // was asked for is not the extent that came out.
+        float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
+        float peak = float.MinValue;
+        int land = 0, sand = 0, grass = 0, rock = 0;
+        int flat = 0, walk = 0;
+        for (int j = 1; j < n - 1; j++)
+            for (int i = 1; i < n - 1; i++)
+            {
+                int k = j * n + i;
+                if (h[k] <= s.seaLevel) continue;
+                float wx = x0 + i * Cell, wz = z0 + j * Cell;
+                // The raster is a SQUARE and the island is a disc, so without
+                // this the corners reach 1.41x further -- out into the fade
+                // band, where the drowned remains of the procedural world
+                // still break the surface. That is what a first run reported
+                // as 0.1% rock on an island that has none.
+                if ((wx - c.x) * (wx - c.x) + (wz - c.y) * (wz - c.y) > span * span) continue;
+                land++;
+                minX = Mathf.Min(minX, wx); maxX = Mathf.Max(maxX, wx);
+                minZ = Mathf.Min(minZ, wz); maxZ = Mathf.Max(maxZ, wz);
+                peak = Mathf.Max(peak, h[k]);
+
+                float a = h[k] - s.seaLevel;
+                float proud = TerrainHeight.RockBreak(new float2(wx, wz),
+                    TerrainHeight.Rock01(new float2(wx, wz), prm), prm);
+                if (proud > s.rockShowsAt) rock++;
+                else if (a < s.sandHeight) sand++;
+                else grass++;
+
+                float gx = (h[k + 1] - h[k - 1]) / (2f * Cell);
+                float gz = (h[k + n] - h[k - n]) / (2f * Cell);
+                float slope = Mathf.Sqrt(gx * gx + gz * gz);
+                // The mesher paints stone by slope too, at cliffRockStart --
+                // an up of 0.62 is a slope of 1.27. Counted as a fraction so
+                // "grass and sand only" is a measured claim and not a hope.
+                if (slope > 1.27f) rock++;
+                if (slope < 0.176f) flat++;         // buildable, <10 deg
+                if (slope < 0.325f) walk++;         // walkable, <18 deg
+            }
+
+        float area = land * Cell * Cell;
+        sb.AppendLine("HOME ISLE, measured off the height field");
+        sb.AppendLine("  centre " + c + "   extent " + (maxX - minX).ToString("F0")
+            + " x " + (maxZ - minZ).ToString("F0") + " m   area "
+            + (area / 10000f).ToString("F2") + " ha   r_eff "
+            + Mathf.Sqrt(area / Mathf.PI).ToString("F0") + " m");
+        sb.AppendLine("  peak " + peak.ToString("F1") + " m above sea level");
+        sb.AppendLine("  ground: sand " + (sand * 100f / Mathf.Max(1, land)).ToString("F0")
+            + "%   grass " + (grass * 100f / Mathf.Max(1, land)).ToString("F0")
+            + "%   ROCK " + (rock * 100f / Mathf.Max(1, land)).ToString("F1") + "%  (must be 0.0)");
+        sb.AppendLine("  slope: buildable <10deg " + (flat * 100f / Mathf.Max(1, land)).ToString("F0")
+            + "%   walkable <18deg " + (walk * 100f / Mathf.Max(1, land)).ToString("F0") + "%");
+
+        // Does it fit the shot? The docked overview holds a fixed number of
+        // metres UP the frame and the game is portrait, so the frame's tight
+        // axis is the width -- see ChaseCamera.overviewGroundMetres.
+        const float Frame = 165f;
+        float longest = Mathf.Max(maxX - minX, maxZ - minZ);
+        sb.AppendLine("  the docked overview holds " + Frame.ToString("F0")
+            + " m of ground up the frame; the island is " + longest.ToString("F0")
+            + " m at its longest  ->  " + (longest <= Frame ? "WHOLE" : "OVER by "
+                + (longest - Frame).ToString("F0") + " m"));
+
+        // The cove, measured as the pool it actually is: the run of water at
+        // least BerthDepth deep along the cove axis, and how wide it is there.
+        float bearing = s.homeIsleCoveBearing * Mathf.Deg2Rad;
+        var dir = new Vector2(Mathf.Sin(bearing), Mathf.Cos(bearing));
+        var side = new Vector2(dir.y, -dir.x);
+        float deepFrom = float.MaxValue, deepTo = float.MinValue, narrowest = float.MaxValue;
+        float shoreAlong = -1f;
+        for (float al = s.homeIsleCoveHead - 20f; al <= s.homeIsleCoveMouth + 30f; al += 1f)
+        {
+            var q = new Vector2(c.x, c.y) + dir * al;
+            float d = s.seaLevel - H(q.x, q.y);
+            if (d >= HarbourSite.BerthDepth)
+            {
+                deepFrom = Mathf.Min(deepFrom, al); deepTo = Mathf.Max(deepTo, al);
+                float wPlus = 0f, wMinus = 0f;
+                for (float o = 1f; o <= 60f; o += 1f)
+                {
+                    if (s.seaLevel - H(q.x + side.x * o, q.y + side.y * o) < HarbourSite.ApproachDepth) break;
+                    wPlus = o;
+                }
+                for (float o = 1f; o <= 60f; o += 1f)
+                {
+                    if (s.seaLevel - H(q.x - side.x * o, q.y - side.y * o) < HarbourSite.ApproachDepth) break;
+                    wMinus = o;
+                }
+                narrowest = Mathf.Min(narrowest, wPlus + wMinus);
+            }
+        }
+        // How far out the headlands reach, measured on the two bearings that
+        // flank the cove rather than on its own axis -- the axis is water all
+        // the way in by construction, so asking it where the shore is only
+        // ever finds the beach at the head.
+        shoreAlong = 0f;
+        for (int sgn = -1; sgn <= 1; sgn += 2)
+        {
+            var arm = (dir * Mathf.Cos(35f * Mathf.Deg2Rad) + side * sgn * Mathf.Sin(35f * Mathf.Deg2Rad));
+            for (float al = 200f; al > 0f; al -= 1f)
+            {
+                var q = new Vector2(c.x, c.y) + arm * al;
+                if (H(q.x, q.y) > s.seaLevel) { shoreAlong = Mathf.Max(shoreAlong, al * Mathf.Cos(35f * Mathf.Deg2Rad)); break; }
+            }
+        }
+
+        if (deepTo < deepFrom)
+            sb.AppendLine("  COVE: no water " + HarbourSite.BerthDepth.ToString("F1")
+                + " m deep anywhere on the axis -- she cannot lie here");
+        else
+            sb.AppendLine("  cove pool: " + (deepTo - deepFrom).ToString("F0")
+                + " m long, narrowest " + narrowest.ToString("F0")
+                + " m across, of which " + Mathf.Max(0f, shoreAlong - deepFrom).ToString("F0")
+                + " m lies inside the headlands  (she is 24.2 x 8.4 m)");
+
+        // And what the runtime will actually build here.
+        //
+        // Every viable site is collected, not just the winner: "it picked the
+        // open shore" is a rank, and a rank cannot be read from the top entry
+        // alone -- the question is always whether the cove came second by a
+        // hair or was never a candidate at all, and those want opposite
+        // fixes.
+        // ...and searched from the centre the RUNTIME will search from, not
+        // from the authored centre.
+        //
+        // These are not the same point. The populator flood-fills the height
+        // field and takes the land cell nearest the centroid, and a cove is a
+        // bite out of one side, so the centroid sits well off the authored
+        // centre -- measured, 20 m. Its mean radius is marched off the field
+        // too. Searching from a different centre than the populator is the
+        // duplicated-gate failure this project keeps paying for: the first
+        // run of this probe reported a berth in the cove while the runtime
+        // built the pier on the open north shore, and both were telling the
+        // truth about their own question.
+        Centroid(H, c, span, out var runCentre, out float runRadius);
+        sb.AppendLine("  the populator will search from (" + runCentre.x.ToString("F0")
+            + ", " + runCentre.y.ToString("F0") + ") r "
+            + HarbourSite.SearchRadiusFor(runRadius).ToString("F0")
+            + "  (authored centre is " + c + ")");
+
+        bool inCove = false;
+        var all = new System.Collections.Generic.List<HarbourSite.Site>();
+        var site = HarbourSite.Find(new Vector3(runCentre.x, 0f, runCentre.y),
+            HarbourSite.SearchRadiusFor(runRadius), H, all);
+        all.Sort((a2, b2) => b2.score.CompareTo(a2.score));
+        int coveSites = 0;
+        foreach (var o2 in all)
+        {
+            var d2 = new Vector2(o2.berth.x - c.x, o2.berth.z - c.y);
+            if (Vector2.Dot(d2, dir) > s.homeIsleCoveHead
+                && Mathf.Abs(Vector2.Dot(d2, side)) < s.homeIsleCoveHalfBasin + 6f) coveSites++;
+        }
+        sb.AppendLine("  " + all.Count + " viable sites, " + coveSites
+            + " of them inside the cove (one is a coincidence, not a design); the best five:");
+        for (int k = 0; k < Mathf.Min(5, all.Count); k++)
+        {
+            var o = new Vector2(all[k].berth.x - c.x, all[k].berth.z - c.y);
+            sb.AppendLine("    " + all[k].score.ToString("F2")
+                + "  pier " + all[k].pierLength.ToString("F0")
+                + "  flat " + all[k].flatBehind.ToString("F2") + " ha"
+                + "  back " + all[k].backSlope.ToString("F2")
+                + "  shelter " + all[k].shelter.ToString("F2")
+                + "  |  cove frame " + Vector2.Dot(o, dir).ToString("F0")
+                + " along, " + Vector2.Dot(o, side).ToString("F0") + " off");
+        }
+        if (!site.found) sb.AppendLine("  HARBOUR: none found -- there will be no dock");
+        else
+        {
+            var off = new Vector2(site.berth.x - c.x, site.berth.z - c.y);
+            float along = Vector2.Dot(off, dir), across = Vector2.Dot(off, side);
+            sb.AppendLine("  harbour: berth " + site.berth.ToString("F0")
+                + "  depth " + site.berthDepth.ToString("F1")
+                + " m  pier " + site.pierLength.ToString("F0")
+                + " m  shelter " + site.shelter.ToString("F2"));
+            inCove = along > s.homeIsleCoveHead && along < s.homeIsleCoveMouth + 20f
+                  && Mathf.Abs(across) < s.homeIsleCoveHalfBasin + 12f;
+            sb.AppendLine("  berth in the cove's own frame: " + along.ToString("F0")
+                + " m along the axis, " + Mathf.Abs(across).ToString("F0")
+                + " m off it  ->  " + (inCove
+                    ? "IN THE COVE" : "NOT in the cove -- it picked the open shore"));
+        }
+
+        // Would it still be the cove if the search started somewhere else?
+        //
+        // This is a gate and not a curiosity. `Find` rasters at 6 m from the
+        // island's centroid, the populator derives that centroid its own way,
+        // and no probe can reconstruct it exactly -- so the honest question
+        // is not "does the best site sit in the cove from this centre" but
+        // "does it sit there from ANY centre a reasonable measurement would
+        // produce". It did not, once: one cove berth, a 2 m shift, and the
+        // pier went up on the open north shore.
+        int held = 0;
+        var jitter = new[] { new Vector2(0f, 0f), new Vector2(12f, 7f), new Vector2(-11f, 9f),
+                             new Vector2(8f, -13f), new Vector2(-9f, -8f) };
+        foreach (var j2 in jitter)
+        {
+            var b = HarbourSite.Find(new Vector3(runCentre.x + j2.x, 0f, runCentre.y + j2.y),
+                HarbourSite.SearchRadiusFor(runRadius), H);
+            if (!b.found) continue;
+            var d3 = new Vector2(b.berth.x - c.x, b.berth.z - c.y);
+            if (Vector2.Dot(d3, dir) > s.homeIsleCoveHead
+                && Mathf.Abs(Vector2.Dot(d3, side)) < s.homeIsleCoveHalfBasin + 6f) held++;
+        }
+        sb.AppendLine("  from " + jitter.Length + " different search centres the winner is in the cove "
+            + held + " times");
+
+        bool pass = rock == 0 && longest <= Frame && site.found && deepTo > deepFrom
+                 && inCove && held == jitter.Length;
+        sb.AppendLine(pass ? "PASS" : "FAIL -- see the lines above");
+        return sb.ToString();
+    }
+
     public static string HomeCheck()
     {
         var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
