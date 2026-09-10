@@ -43,6 +43,20 @@ namespace SeaSick.Dev
     /// Leave it on while playing: it costs one pass over about twenty rects
     /// and says nothing until something overlaps. It reports each distinct
     /// pair once, so a permanent overlap does not fill the console.
+    ///
+    /// ## RESTART PLAY after changing the Game view's aspect
+    ///
+    /// Switching shape mid-session produces reports that are already stale by
+    /// the time you read them, and they can reach the 300-frame `permanent`
+    /// line: measured 2026-09-11, switching desk to phone with the drawer open
+    /// reported the anchor prompt across the drawer by 269 px as permanent,
+    /// while the census on the very same run showed the two comfortably clear.
+    /// Several hundred frames pass while panels re-settle into the new shape,
+    /// and this probe counts frames, not truth. From a clean start at either
+    /// aspect the same configuration reports nothing at all.
+    ///
+    /// The counter cannot tell "still happening" from "happened a lot"; it
+    /// only ever counts up. So: change the view, then stop and start play.
     [DefaultExecutionOrder(10000)]   // after every other OnGUI, so the frame is complete
     public class HudOverlapProbe : MonoBehaviour
     {

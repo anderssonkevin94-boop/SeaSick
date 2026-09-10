@@ -896,3 +896,12 @@ diagnostic — here it simply timed out three times and logged nothing at all.
 `RunProbe.Landscape()` and not otherwise. **Add a launcher entry rather than
 handing a real file to `execute_script`.** This is written down twice already
 and was still the thing that went wrong.
+
+**Restart play after changing the Game view's aspect.** `HudOverlapProbe`
+counts frames, not truth, and its counter only ever goes up — so a
+configuration that overlapped for a few hundred frames while the panels
+re-settled into a new shape reaches the `permanent` line and stays reported
+even after it resolves. Measured 2026-09-11: switching desk to phone with the
+drawer open reported the anchor prompt across the drawer by 269 px as
+permanent, while the census on the same run showed them comfortably clear, and
+a clean start at either aspect reported nothing at all.
