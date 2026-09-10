@@ -13,7 +13,14 @@
 # Covers C# only. Shaders are invisible to it, exactly as they are to
 # check_compile_errors -- for those, grep Editor.log for "Shader error in".
 #
-# Usage:  tools/compilecheck.sh            # the whole runtime assembly
+# Covers BOTH assemblies. Assembly-CSharp-Editor was missing until
+# 2026-09-11, and it is where most of this project's tooling lives -- every
+# probe launcher, every setup script, every Dev/Editor shot tool. A green run
+# that silently skipped all of them is the same shape as the git-bundle check
+# that certified a backup missing every piece of art: a check that stops at
+# the last thing it can compute stops before the thing that is broken.
+#
+# Usage:  tools/compilecheck.sh            # both assemblies
 set -u
 
 P="$(cd "$(dirname "$0")/.." && pwd)"
@@ -45,9 +52,40 @@ find "$P/Assets" -name "*.cs" -not -path "*/Editor/*" -not -path "*/worktrees/*"
   -out:"$TMP/check.dll" "@$TMP/refs.rsp" "@$TMP/sources.rsp" > "$TMP/out.log" 2>&1
 
 n=$(grep -c "error CS" "$TMP/out.log")
-echo "sources $(wc -l < "$TMP/sources.rsp" | tr -d ' ')   refs $(wc -l < "$TMP/refs.rsp" | tr -d ' ')   errors $n"
+echo "Assembly-CSharp         sources $(wc -l < "$TMP/sources.rsp" | tr -d ' ')   refs $(wc -l < "$TMP/refs.rsp" | tr -d ' ')   errors $n"
 if [ "$n" -gt 0 ]; then
   grep "error CS" "$TMP/out.log" | sed "s|$P/||" | sort -u | head -40
   exit 1
 fi
+
+# ---- Assembly-CSharp-Editor: everything under an Editor folder. -------------
+# It references the runtime assembly just built (not the possibly-stale one in
+# Library/ScriptAssemblies) plus Unity's editor DLLs, so an editor script that
+# calls into game code is checked against the code as it is RIGHT NOW.
+find "$P/Assets" -name "*.cs" -path "*/Editor/*" -not -path "*/worktrees/*" \
+  | sed 's/.*/"&"/' > "$TMP/esources.rsp"
+
+if [ -s "$TMP/esources.rsp" ]; then
+  {
+    cat "$TMP/refs.rsp"
+    echo "/r:\"$TMP/check.dll\""
+    for d in "$U/Resources/Scripting/Managed/UnityEditor/"*.dll; do
+      [ -e "$d" ] && echo "/r:\"$d\""
+    done
+    for d in "$U/Managed/UnityEditor.dll" "$U/Managed/UnityEngine.dll"; do
+      [ -e "$d" ] && echo "/r:\"$d\""
+    done
+  } > "$TMP/erefs.rsp"
+
+  "$DOTNET" "$CSC" -nologo -target:library -nostdlib+ -noconfig -langversion:9.0 -unsafe+ \
+    -out:"$TMP/echeck.dll" "@$TMP/erefs.rsp" "@$TMP/esources.rsp" > "$TMP/eout.log" 2>&1
+
+  m=$(grep -c "error CS" "$TMP/eout.log")
+  echo "Assembly-CSharp-Editor  sources $(wc -l < "$TMP/esources.rsp" | tr -d ' ')   refs $(wc -l < "$TMP/erefs.rsp" | tr -d ' ')   errors $m"
+  if [ "$m" -gt 0 ]; then
+    grep "error CS" "$TMP/eout.log" | sed "s|$P/||" | sort -u | head -40
+    exit 1
+  fi
+fi
+
 echo "clean."

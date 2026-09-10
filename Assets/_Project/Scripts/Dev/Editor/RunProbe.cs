@@ -109,6 +109,16 @@ public static class RunProbe
     /// SECOND copy into a fresh assembly, which runs against different
     /// references and logs nothing you can read.
     public static void Lab() => CallEditor("SetupHullLab");
+
+    // Computer mode: landscape orientation, a 1920x1080 standalone default,
+    // and ChaseCamera.narrowestAspect pushed to 16:9 through SerializedObject.
+    // Through the launcher because SetLandscapeMode names ChaseCamera and
+    // UnityEditor.SceneManagement, and a fresh ad-hoc assembly has neither --
+    // handed straight to execute_script it timed out three times and logged
+    // nothing at all.
+    public static void Landscape() => CallEditor("SetLandscapeMode");
+    public static void ViewDesk() => CallEditor("DesktopGameView");
+    public static void ViewPhone() => CallEditor("PortraitGameView");
     public static void Quality() => CallEditor("ReadQuality");
     // Saves the OPEN scene in place. Coplay's own save_scene takes a NAME
     // and writes Assets/[name].unity, so calling it on Sea.unity forks a

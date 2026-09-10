@@ -18,6 +18,13 @@ namespace SeaSick.CameraRig
         /// on the phone. A constant that is copied is a constant that drifts.
         public const float PortraitAspect = 1080f / 2340f;
 
+        /// The desk. Landscape became the shape the game runs in on
+        /// 2026-09-11 ("computer mode"), and the phone stayed supported rather
+        /// than being retired — so there are now two composed aspects and the
+        /// rig picks by what the window actually is, instead of always
+        /// composing for the narrower one.
+        public const float LandscapeAspect = 1920f / 1080f;
+
         [SerializeField] Transform target;
         // Three-quarter view: tilt = (height - lookHeight) / (distance +
         // lookAhead). Vertical FOV is 60, so the frame spans tilt +/- 30
@@ -237,8 +244,24 @@ namespace SeaSick.CameraRig
         [SerializeField] bool overviewHoldsShip = true;
         [Tooltip("Metres of clear water to leave outboard of her when the shot has to widen for her. Half her length plus a little.")]
         [SerializeField] float overviewShipMargin = 22f;
-        [Tooltip("The aspect the game is composed for. Not the editor's Game view: shots framed against that come out right on the desk and wrong on the phone.")]
-        [SerializeField] float narrowestAspect = PortraitAspect;
+        /// The WIDEST aspect worth composing for. The overview frames for
+        /// whatever the window actually is, clamped to this — so a wide desk
+        /// window frames wide, an ultrawide does not tighten past 16:9, and a
+        /// phone still backs off far enough to hold her.
+        ///
+        /// **It used to be `[SerializeField]`, and that was the bug.** Unity
+        /// wrote 0.4615 into `Sea.unity` when the component was added, and a
+        /// serialized value wins over the C# field initializer forever — so
+        /// switching the game to landscape by editing the default here would
+        /// have changed nothing at all, silently, which is the same
+        /// serialization trap that made `_StormDeep` read the old colour for a
+        /// whole session and that `Dock.ViewHalfWidth` drifted through.
+        ///
+        /// This is not per-scene tuning. It is a fact about the shape the game
+        /// is composed for, and there is exactly one of those, so it lives in
+        /// exactly one place. The stale line left in `Sea.unity` is now
+        /// ignored and Unity drops it on the next save.
+        const float narrowestAspect = LandscapeAspect;
 
         [Tooltip("How tall a 1.7 m crew member must be, as a FRACTION of screen height. 0.0055 is about 13 px on a phone. This is what stops the overview backing off to a pretty landform nobody can read; it is set as low as it is because the frame also has to hold the pier, and the pier is a village-width away from the village.")]
         [SerializeField] float minPersonScreenFraction = 0.0055f;

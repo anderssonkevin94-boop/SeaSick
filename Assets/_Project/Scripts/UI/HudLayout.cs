@@ -81,10 +81,28 @@ namespace SeaSick.UI
             _ => Column.BottomRight,
         };
 
+        /// Is this a desk window or a phone held upright?
+        ///
+        /// The HUD does not have a "mode" it is put into — it asks the window
+        /// what shape it is and lays itself out accordingly, which is what
+        /// keeps the phone working now that landscape is the shape the game
+        /// runs in. Resize the Game view and it re-lays out on the next frame.
+        public static bool Wide => Safe.width >= Safe.height;
+
         /// Where the tab rail starts, as a fraction of the safe area's height.
-        /// One number, because "0.30 of screen height" was written into two
-        /// files and half-copied into two more.
-        public const float RailTop01 = 0.30f;
+        ///
+        /// **Two numbers, because the scarce axis swaps.** Upright, height is
+        /// abundant and the tabs belong down where a thumb reaches — 0.30.
+        /// On a desk, height is the axis that runs out: at 1920x1080 a rail
+        /// starting at 0.30 leaves the drawer 412 px of panel, and the foam
+        /// tuner alone wants about 560, so a tuner opened on a computer would
+        /// have been cut off at the bottom. Starting at 0.14 gives it 585 and
+        /// costs nothing, because nothing reaches for a tab with a thumb on a
+        /// screen you drive with a mouse.
+        ///
+        /// It is still ONE place: "0.30 of screen height" used to be written
+        /// into two files and half-copied into two more.
+        public static float RailTop01 => Wide ? 0.14f : 0.30f;
 
         const int SlotCount = (int)Slot.HelmActions + 1;
         static readonly float[] heights = new float[SlotCount];

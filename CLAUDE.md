@@ -2,7 +2,7 @@
 
 ## Project facts
 - **Engine:** Unity 6000.4.3f1 (Unity 6), Universal Render Pipeline (URP), 3D
-- **Target platform:** mobile, **portrait orientation, one-handed play** — every gameplay/UI/control decision must respect this; keep the mobile URP asset (`Mobile_RPAsset`) in mind for performance
+- **Target platform:** **landscape on a computer is the shape the game runs in** (2026-09-11, "computer mode") and **mobile portrait one-handed is still supported** — not retired. Both are first-class, so a UI/framing decision has to work in BOTH: check it at 1920x1080 *and* 1080x2340 (`RunProbe.ViewDesk()` / `ViewPhone()`, then `HudOverlapProbe`). The HUD has no "mode" — `HudLayout` reads the window's own shape and re-lays out. Keep the mobile URP asset (`Mobile_RPAsset`) in mind for performance.
 - **Core design rule:** sailing feel is pillar #1; seasickness rate is driven by sailing smoothness (see GDD §6)
 - **Editor binary:** `/Applications/Unity/Hub/Editor/6000.4.3f1/Unity.app/Contents/MacOS/Unity`
 - **Input:** Unity Input System package (`com.unity.inputsystem`), not legacy Input Manager

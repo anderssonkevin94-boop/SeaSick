@@ -30,15 +30,15 @@ namespace SeaSick.Dev
     /// stale height that never expires, or a panel that quietly grew past its
     /// slot all show up as a real failure.
     ///
-    /// ## Judge it at the PHONE's aspect
+    /// ## Judge it at BOTH aspects
     ///
-    /// The editor Game view is landscape and the game is not. Every one of the
-    /// overlaps this probe was written to catch is worse in portrait, and two
-    /// of them (the foam tuner on the minimap, the clarity tuner on the crew
-    /// pips) exist at both. `ChaseCamera.PortraitAspect` is the shipping
-    /// aspect; a clean report from a landscape Game view certifies a screen no
-    /// player will see. The report prints the aspect it ran at for exactly
-    /// that reason.
+    /// The game runs landscape on a desk and portrait on a phone, and the HUD
+    /// lays itself out differently in each — the tab rail starts at 0.14 of
+    /// the height on a desk and 0.30 upright, so the panels that hang off it
+    /// land in different places. A clean run at one aspect says nothing about
+    /// the other. `Dev/Editor/DesktopGameView` and `Dev/Editor/PortraitGameView`
+    /// set the Game view to each; the report prints which one it ran at and
+    /// names the one still to check.
     ///
     /// Leave it on while playing: it costs one pass over about twenty rects
     /// and says nothing until something overlaps. It reports each distinct
@@ -238,9 +238,15 @@ namespace SeaSick.Dev
             sb.AppendLine($"  {persistence}");
             sb.AppendLine($"  screen {Screen.width}x{Screen.height} (aspect {aspect:F3}), "
                         + $"UITheme.Unit {UITheme.Unit}");
-            if (aspect > 1f)
-                sb.AppendLine("  NOTE: this is a LANDSCAPE view. The game is portrait — "
-                            + "judge it at ChaseCamera.PortraitAspect before believing a clean run.");
+            // Landscape stopped being "the wrong shape" on 2026-09-11 -- it is
+            // the shape the game runs in now, with the phone still supported.
+            // So neither aspect is the wrong one to be looking at; the mistake
+            // is checking only ONE of them, because the HUD lays itself out
+            // differently in each (the rail starts at 0.14 of the height on a
+            // desk and 0.30 upright).
+            sb.AppendLine(aspect > 1f
+                ? "  This is the DESK layout. Run PortraitGameView and check the phone too."
+                : "  This is the PHONE layout. Run DesktopGameView and check the desk too.");
             Debug.LogWarning(sb.ToString());
         }
 

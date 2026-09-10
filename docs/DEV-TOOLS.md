@@ -855,3 +855,44 @@ runs, and only the count told them apart.
   time out at 60 s. Unity also defers script compilation entirely while in
   play mode. The working loop is: activate Unity, stop play, wait for
   `Library/ScriptAssemblies/Assembly-CSharp.dll` to change, then play.
+
+### `tools/compilecheck.sh` covers BOTH assemblies now (2026-09-11)
+
+It excluded `*/Editor/*` — 109 files, and that is where every probe launcher,
+setup script and shot tool in this project lives. A green run was silently
+skipping all of them. It now builds `Assembly-CSharp-Editor` as well,
+referencing the runtime assembly it just built rather than the possibly-stale
+one in `Library/ScriptAssemblies`, so an editor script is checked against the
+game code as it is right now.
+
+**It was proved able to fail** by appending a reference to a nonexistent type
+to an editor file, watching it report `errors 1` with the file and line, then
+restoring. Do that again if you ever touch the script: a check that only ever
+passes is worse than no check at all, and this project has already shipped one
+of those (`git bundle verify`, which certified a backup missing every piece of
+art).
+
+Reach for it BEFORE the Unity focus trick. It answers in seconds and does not
+need the editor, the bridge, or Kevin's window focus.
+
+### `RunProbe.ViewDesk()` / `ViewPhone()` — check the HUD in both shapes
+
+Landscape became first-class on 2026-09-11 without the phone being retired, so
+there are two shapes the HUD must be right in and a clean run at one says
+nothing about the other — `HudLayout.RailTop01` alone is 0.14 wide and 0.30
+upright, and every panel hanging off the rail moves with it. `HudOverlapProbe`
+prints which shape it ran at and names the one still to check.
+
+`GameViewSize` holds the reflection both go through. Setting `cam.aspect` is
+not a substitute: the IMGUI HUD lays out from `Screen.width`/`Screen.height`,
+which reads the Game VIEW, and nothing about the camera moves it.
+
+### And a reminder that cost this session an hour
+
+`execute_script` **cannot compile a file that names project types.** It builds
+a fresh assembly without the project's reference set and fails with no readable
+diagnostic — here it simply timed out three times and logged nothing at all.
+`SetLandscapeMode` names `ChaseCamera` and `PlayerSettings`; it works through
+`RunProbe.Landscape()` and not otherwise. **Add a launcher entry rather than
+handing a real file to `execute_script`.** This is written down twice already
+and was still the thing that went wrong.
