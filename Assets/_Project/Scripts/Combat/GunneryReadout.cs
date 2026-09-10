@@ -41,9 +41,16 @@ namespace SeaSick.Combat
     /// player should eventually feel instead of read — it is scaffolding for
     /// tuning the guns, not the shipped interface.
     [RequireComponent(typeof(ShipMotor), typeof(CannonBattery))]
-    public class GunneryReadout : MonoBehaviour
+    public class GunneryReadout : MonoBehaviour, SeaSick.UI.IDevTool
     {
         [SerializeField] bool visible = false;
+
+        // --- IDevTool ---
+        public string ToolName => "Gunnery";
+        public string ToolBlurb => "reach, hit rate, what bears and what raising inheritance would cost (G)";
+        public bool ToolActive { get => visible; set => visible = value; }
+        void OnEnable() => SeaSick.UI.DevTools.Register(this);
+        void OnDisable() => SeaSick.UI.DevTools.Unregister(this);
         [SerializeField] float onTargetDeg = 12f;   // how close to abeam counts as bearing
 
         ShipMotor motor;
@@ -63,30 +70,25 @@ namespace SeaSick.Combat
             if (kb == null) return;
             // Letter keys, not the function row: laptops without a physical
             // F-row can't reach F2 without a modifier.
-            if (kb.gKey.wasPressedThisFrame) visible = !visible;
+            if (kb.gKey.wasPressedThisFrame) SeaSick.UI.SettingsPanel.Toggle(this);
             if (visible && kb.hKey.wasPressedThisFrame) GunneryStats.Reset();
         }
 
-        void OnGUI()
+        /// Drawn inside the settings drawer. It used to paint a black slab
+        /// across 62 % of the screen at 0.34 of its height — which on a
+        /// portrait phone is the open Yard panel, and on a desk is the middle
+        /// of the sea.
+        public void DrawTool(Rect body)
         {
-            // Draw-only panel: skip the non-Repaint events. See StatusHUD for
-            // the measurement — IMGUI runs OnGUI once per event, and the
-            // discarded passes were the game's biggest source of GC garbage.
-            if (Event.current.type != EventType.Repaint) return;
-            if (!visible) return;
             const int FontSize = 16; // matches DevHUD: view-derived sizes proved unreliable
             if (label == null || label.fontSize != FontSize)
                 label = new GUIStyle(GUI.skin.label)
                 { fontSize = FontSize, fontStyle = FontStyle.Bold };
 
             const float line = FontSize * 1.7f;
-            float w = Screen.width * 0.62f;
-            float x = 12f;
-            float y = Screen.height * 0.34f;
-
-            GUI.color = new Color(0f, 0f, 0f, 0.5f);
-            GUI.DrawTexture(new Rect(6f, y - 6f, w + 12f, line * 6.4f), Texture2D.whiteTexture);
-            GUI.color = Color.white;
+            float w = body.width;
+            float x = body.x;
+            float y = body.y;
 
             float range = battery.GunRange;
             GUI.Label(new Rect(x, y, w, line),

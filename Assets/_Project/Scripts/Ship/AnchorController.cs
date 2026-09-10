@@ -536,12 +536,18 @@ namespace SeaSick.Ship
         /// stop. On, they keep piling it on deck. Deliberately only reachable
         /// while anchored: overloading is a decision you make in harbour, and
         /// then have to live with all the way home.
-        void DrawDeckCargoToggle(Rect anchorRect, int u, float w,
+        ///
+        /// It takes a row off the prompt stack rather than offsetting itself
+        /// from the button above it. It used to sit at `secondary.y + 2.3u`
+        /// with a height of 1.8u, and the button below it started at
+        /// `secondary.y + 3.2u` — so the toggle covered the top 0.9u of "cast
+        /// off", on a screen where the next thing you do is cast off.
+        void DrawDeckCargoToggle(ref Prompts.Stack stack, int u,
             GUIStyle buttonStyle, GUIStyle infoStyle)
         {
             if (voyage == null) return;
 
-            var r = new Rect(anchorRect.x, anchorRect.y + u * 2.3f, anchorRect.width, u * 1.8f);
+            var r = stack.Next(u * 1.8f);
             UIBlocker.Block(r);
 
             var style = voyage.TakeDeckCargo ? UITheme.ButtonPressed : buttonStyle;
@@ -551,10 +557,18 @@ namespace SeaSick.Ship
             if (GUI.Button(r, label, style)) voyage.TakeDeckCargo = !voyage.TakeDeckCargo;
 
             if (voyage.TakeDeckCargo)
-                GUI.Label(new Rect(0f, r.yMax, w, u * 1.6f),
+                GUI.Label(stack.Next(u * 1.6f),
                     "she'll swim low and take water", infoStyle);
         }
 
+        /// The one contextual prompt, bottom centre, through `Prompts`.
+        ///
+        /// It used to place its own buttons at `h − 4.2u − bh` and hope. At
+        /// the shipping portrait aspect that put "come alongside" 34 px inside
+        /// `CombatLock`'s "space · lock on" — two live buttons overlapping, one
+        /// of which puts the ship somewhere. Position is no longer this
+        /// class's to choose: it bids a priority and draws in the rows it is
+        /// handed.
         void OnGUI()
         {
             // Two panels offering to cast off in the same corner of the
@@ -562,28 +576,45 @@ namespace SeaSick.Ship
             // dock prompt already applies against the beach one.
             if (voyage != null && voyage.AtHome) return;
 
+            // What is in reach is worked out BEFORE bidding. Underway with
+            // open water all round this controller has nothing to say, and a
+            // claim it never draws in would silently mute the combat lock and
+            // the jettison button behind it.
+            Dock dock = null;
+            Island isle = null;
+            if (CurrentState == State.Underway)
+            {
+                dock = DockInRange();
+                if (dock == null)
+                {
+                    isle = IslandInRange();
+                    if (isle == null) return;
+                }
+            }
+
+            // Bid on EVERY event, not only Repaint: a caller that bids on
+            // repaint alone owns the slot on repaint frames and has lost it by
+            // the mouse-up that would have pressed its own button.
+            if (!Prompts.Claim(Prompts.Rank.Anchor)) return;
+
             buttonStyle = UITheme.Button;
             infoStyle = UITheme.Small2Centered;
 
-            int u = UITheme.Unit;
-            float w = Screen.width;
-            float h = Screen.height;
-            float bw = Mathf.Min(w * 0.68f, u * 20f);
+            int u = HudLayout.Unit;
             float bh = u * 2.7f;
-            float bx = (w - bw) * 0.5f;
-            float by = h - u * 4.2f - bh;
-            var primary = new Rect(bx, by, bw, bh);
-            var secondary = new Rect(bx, by - bh - u * 0.5f, bw, bh);
+            // Rows stack upward, so the first row asked for is the one nearest
+            // the thumb. The action you take most often gets it.
+            var stack = Prompts.Begin();
 
             switch (CurrentState)
             {
                 case State.Underway:
                 {
+                    var primary = stack.Next(bh);
                     // The dock's own prompt, which replaces the beach one
                     // rather than sitting beside it -- two ways to stop in
                     // the same thirty metres is a choice nobody wants to make.
-                    var d = DockInRange();
-                    if (d != null)
+                    if (dock != null)
                     {
                         bool slow = motor.CurrentSpeed <= approachSpeedLimit;
                         UIBlocker.Block(primary);
@@ -591,13 +622,11 @@ namespace SeaSick.Ship
                         if (GUI.Button(primary, slow
                                 ? "⚓  Come alongside   (space)"
                                 : "slow down to come alongside  (S)", buttonStyle))
-                            ComeAlongside(d);
+                            ComeAlongside(dock);
                         GUI.enabled = true;
                         return;
                     }
 
-                    var isle = IslandInRange();
-                    if (isle == null) return;
                     bool beach = CanLandHere(isle);
                     bool slowEnough = motor.CurrentSpeed <= approachSpeedLimit;
                     string label = !beach
@@ -615,58 +644,65 @@ namespace SeaSick.Ship
                 }
 
                 case State.Dropping:
-                    GUI.Label(new Rect(0f, by, w, bh),
-$"dropping anchor…  {timer:F1}s", infoStyle);
+                    GUI.Label(stack.Next(bh), $"dropping anchor…  {timer:F1}s", infoStyle);
                     break;
 
                 case State.Weighing:
-                    GUI.Label(new Rect(0f, by, w, bh), $"weighing anchor…  {timer:F1}s", infoStyle);
+                    GUI.Label(stack.Next(bh), $"weighing anchor…  {timer:F1}s", infoStyle);
                     break;
 
                 case State.Anchored:
                 {
                     if (landingPending)
                     {
-                        GUI.Label(new Rect(0f, by, w, bh), "coming alongside…", infoStyle);
+                        GUI.Label(stack.Next(bh), "coming alongside…", infoStyle);
                         break;
                     }
                     // Crew are back aboard: cast off, or put them ashore again.
+                    var primary = stack.Next(bh);
                     UIBlocker.Block(primary);
-                    UIBlocker.Block(secondary);
                     if (GUI.Button(primary, "⚓  Cast off   (space)", buttonStyle)) WeighAnchor();
-                    if (CurrentIsland != null && CurrentIsland.HasResources
-                        && GUI.Button(secondary, "send crew ashore", buttonStyle)) SendAshore();
-                    DrawDeckCargoToggle(secondary, u, w, buttonStyle, infoStyle);
+
+                    if (CurrentIsland != null && CurrentIsland.HasResources)
+                    {
+                        var secondary = stack.Next(bh);
+                        UIBlocker.Block(secondary);
+                        if (GUI.Button(secondary, "send crew ashore", buttonStyle)) SendAshore();
+                    }
+
+                    DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
                     break;
                 }
 
                 case State.Ashore:
                 {
-                    string status = CurrentIsland != null && CurrentIsland.HasResources
-                        ? $"harvesting {CurrentIsland.ResourceName} — {CurrentIsland.Remaining:F0} left"
-                        : "the crew rests on solid ground";
-                    if (repairing) status += "   ·   repairing hull";
-                    GUI.Label(new Rect(0f, secondary.y - u * 2f, w, u * 1.8f), status, infoStyle);
-
-                    DrawDeckCargoToggle(secondary, u, w, buttonStyle, infoStyle);
+                    // Recall is always the bottom row, in every state that
+                    // offers it. A button that moves depending on whether the
+                    // hull happens to need timber is a button you have to read
+                    // before pressing.
+                    var primary = stack.Next(bh);
+                    UIBlocker.Block(primary);
+                    if (GUI.Button(primary, "recall crew aboard   (space)", buttonStyle)) RecallCrew();
 
                     bool canRepair = hull != null && hull.NeedsRepair && voyage != null
                         && voyage.AmountOf("Timber") > 0;
                     if (canRepair || repairing)
                     {
-                        UIBlocker.Block(primary);
+                        var secondary = stack.Next(bh);
                         UIBlocker.Block(secondary);
                         string repairLabel = repairing
                             ? $"stop repairs — hull {hull.Integrity01:P0}"
                             : $"repair hull ({hull.Integrity01:P0}) — uses timber";
-                        if (GUI.Button(primary, repairLabel, buttonStyle)) repairing = !repairing;
-                        if (GUI.Button(secondary, "recall crew aboard   (space)", buttonStyle)) RecallCrew();
+                        if (GUI.Button(secondary, repairLabel, buttonStyle)) repairing = !repairing;
                     }
-                    else
-                    {
-                        UIBlocker.Block(primary);
-                        if (GUI.Button(primary, "recall crew aboard   (space)", buttonStyle)) RecallCrew();
-                    }
+
+                    DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
+
+                    string status = CurrentIsland != null && CurrentIsland.HasResources
+                        ? $"harvesting {CurrentIsland.ResourceName} — {CurrentIsland.Remaining:F0} left"
+                        : "the crew rests on solid ground";
+                    if (repairing) status += "   ·   repairing hull";
+                    GUI.Label(stack.Next(u * 1.8f), status, infoStyle);
                     break;
                 }
             }

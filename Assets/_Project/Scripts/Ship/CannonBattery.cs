@@ -356,16 +356,24 @@ namespace SeaSick.Ship
 
         void OnGUI()
         {
-            int u = UITheme.Unit;
-            float pad = u * 0.7f;
+            // A hull with no gun-port stations is not carrying guns, and two
+            // buttons reading "no crew" are two buttons in a thumb's way.
+            if (allGuns.Count == 0) return;
+
+            int u = SeaSick.UI.HudLayout.Unit;
             // Wide enough for "stbd ▶ 2/2" and for "no crew" — at 5.6 both
             // clipped to "port 2/".
             float bw = u * 7.4f;
             float bh = u * 2.2f;
-            float y = Screen.height - pad - u * 2.6f - bh;
+            // The band is the two buttons AND the reload bars under them, so
+            // what it reserves is what it actually covers.
+            float gap = u * 0.4f;
+            var band = SeaSick.UI.HudLayout.Place(SeaSick.UI.HudLayout.Slot.Broadside,
+                                                  bw * 2f + gap, bh + u * 0.35f + 2f);
+            float y = band.y;
 
-            DrawSide(new Rect(pad, y, bw, bh), false, PortReady, "◀ port");
-            DrawSide(new Rect(pad + bw + u * 0.4f, y, bw, bh), true, StarboardReady, "stbd ▶");
+            DrawSide(new Rect(band.x, y, bw, bh), false, PortReady, "◀ port");
+            DrawSide(new Rect(band.x + bw + gap, y, bw, bh), true, StarboardReady, "stbd ▶");
         }
 
         void DrawSide(Rect r, bool starboardSide, int ready, string label)

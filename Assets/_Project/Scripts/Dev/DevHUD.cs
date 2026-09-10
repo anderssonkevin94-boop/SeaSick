@@ -7,11 +7,21 @@ namespace SeaSick.Dev
     /// Development overlay: speed, sail, wind angle, and the roughness meter.
     /// IMGUI on purpose — zero setup, deleted before release. Toggle with F1.
     [RequireComponent(typeof(ShipMotor), typeof(SmoothnessMeter))]
-    public class DevHUD : MonoBehaviour
+    public class DevHUD : MonoBehaviour, SeaSick.UI.IDevTool
     {
         // Off by default now that StatusHUD owns the permanent readouts.
-        // F1 brings back the full diagnostic wall when tuning.
+        // F1 brings back the full diagnostic wall when tuning — and now brings
+        // it back INSIDE the settings drawer, which is a rect that nothing
+        // else is using. It used to paint a black slab from (6,6) across 60 %
+        // of the screen, straight over the crew pips and the compass tape.
         [SerializeField] bool visible = false;
+
+        // --- IDevTool ---
+        public string ToolName => "Dev HUD";
+        public string ToolBlurb => "speed, engine, roughness, broach and every crew member's state (F1)";
+        public bool ToolActive { get => visible; set => visible = value; }
+        void OnEnable() => SeaSick.UI.DevTools.Register(this);
+        void OnDisable() => SeaSick.UI.DevTools.Unregister(this);
 
         ShipMotor motor;
         SmoothnessMeter meter;
@@ -31,12 +41,12 @@ namespace SeaSick.Dev
         void Update()
         {
             var kb = UnityEngine.InputSystem.Keyboard.current;
-            if (kb != null && kb.f1Key.wasPressedThisFrame) visible = !visible;
+            if (kb != null && kb.f1Key.wasPressedThisFrame)
+                SeaSick.UI.SettingsPanel.Toggle(this);
         }
 
-        void OnGUI()
+        public void DrawTool(Rect body)
         {
-            if (!visible) return;
             const int FontSize = 16; // constant: view-size-derived values proved unreliable
             if (label == null || label.fontSize != FontSize)
                 label = new GUIStyle(GUI.skin.label)
@@ -45,14 +55,10 @@ namespace SeaSick.Dev
                     fontStyle = FontStyle.Bold,
                 };
 
-            float w = Screen.width * 0.6f;
-            float x = 12f, y = 12f;
+            // The drawer owns the panel and its background; this draws rows.
+            float w = body.width;
+            float x = body.x, y = body.y;
             const float line = FontSize * 1.7f;
-
-            int crewCount = crew != null ? crew.Length : 0;
-            GUI.color = new Color(0f, 0f, 0f, 0.45f);
-            GUI.DrawTexture(new Rect(6f, 6f, w + 12f, line * (6.4f + crewCount * 1.75f)), Texture2D.whiteTexture);
-            GUI.color = Color.white;
 
             Vector3 fwd = motor.transform.forward;
             float windAngle = Vector3.SignedAngle(

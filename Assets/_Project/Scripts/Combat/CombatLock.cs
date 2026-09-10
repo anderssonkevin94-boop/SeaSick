@@ -157,8 +157,13 @@ namespace SeaSick.Combat
             else msg = Candidate() != null ? "space  ·  lock on" : null;
             if (msg == null) return;
 
-            float w = Mathf.Min(Screen.width * 0.6f, u * 18f);
-            var r2 = new Rect((Screen.width - w) * 0.5f, Screen.height - u * 8.2f, w, u * 1.9f);
+            // The shared prompt slot, at a rank below the anchor's. This line
+            // used to be pinned at `h − 8.2u` while AnchorController pinned its
+            // BUTTON at `h − 6.9u`, and at 1080x2340 the two rects overlap by
+            // 34 px. Whichever drew second won the pixels; whichever drew
+            // second in the mouse pass won the tap.
+            if (!Prompts.Claim(Prompts.Rank.Combat)) return;
+            var r2 = Prompts.Begin().Next(u * 1.9f);
             UITheme.Rect(r2, UITheme.Panel);
             GUI.Label(r2, msg, UITheme.Small2Centered);
         }

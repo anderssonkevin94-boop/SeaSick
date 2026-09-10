@@ -113,8 +113,7 @@ namespace SeaSick.Ship
 
         void OnGUI()
         {
-            int u = UITheme.Unit;
-            float pad = u * 0.7f;
+            int u = HudLayout.Unit;
 
             // --- Point of sail: the readout that teaches the whole system ---
             float panelW = u * 10f;
@@ -122,9 +121,12 @@ namespace SeaSick.Ship
             // is where surfing and broaching are read, and neither had anywhere
             // on screen to be.
             float panelH = u * 5.7f;
-            float px = Screen.width - panelW - pad;
-            float py = Screen.height - panelH - pad;
-            UITheme.Rect(new Rect(px, py, panelW, panelH), UITheme.Panel);
+            // The bottom-right cluster, placed rather than pinned to the
+            // screen corner -- which on a notched phone was under the home
+            // indicator, and which nothing else on screen knew the extent of.
+            var panel = HudLayout.Place(HudLayout.Slot.Helm, panelW, panelH);
+            float px = panel.x, py = panel.y;
+            UITheme.Rect(panel, UITheme.Panel);
 
             // What the water is doing, and how much of it you're taking on the
             // bow. No point of sail, no no-go: this reads "the sea is heavy and
@@ -194,7 +196,9 @@ namespace SeaSick.Ship
             // half-width controls where there was one, both still under a
             // thumb.
             float half = (panelW - u * 0.4f) * 0.5f;
-            float rowY = py - u * 2.1f;
+            // Its own slot directly above the helm panel, so the two move
+            // together and the prompt slot knows how high this cluster reaches.
+            float rowY = HudLayout.Place(HudLayout.Slot.HelmActions, panelW, u * 1.8f).y;
 
             // Oars: wind-independent, but pure labour — a crew at the rail
             // can't pull, so this stops being the guaranteed way home.

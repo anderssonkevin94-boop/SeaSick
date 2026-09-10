@@ -49,8 +49,14 @@ namespace SeaSick.Dev
     /// instrument cause the very thing it is here to measure.
     public class PerfHUD : MonoBehaviour
     {
-        [Tooltip("Off hides the readout without removing the component.")]
+        [Tooltip("Off hides the readout however the settings drawer is set. The player-facing switch is the 'performance readout' row in Settings.")]
         [SerializeField] bool show = true;
+
+        /// The component's own switch AND the player's. This is an instrument
+        /// somebody may want on screen for a whole session, so it lives with
+        /// the HUD options rather than with the tuners — it has no knobs, it
+        /// only tells you things.
+        bool Showing => show && SeaSick.UI.HudVisibility.Perf;
 
         [Tooltip("How long the peak frame time and peak pop hold before decaying away, seconds.")]
         [SerializeField] float holdSeconds = 3f;
@@ -104,7 +110,7 @@ namespace SeaSick.Dev
 
         void Update()
         {
-            if (!show) return;
+            if (!Showing) return;
 
             float dt = Mathf.Max(Time.unscaledDeltaTime, 1e-5f);
             float frameMs = dt * 1000f;
@@ -179,7 +185,7 @@ namespace SeaSick.Dev
             // panel does on a non-Repaint event is computed and thrown away,
             // and the strings built on the way are garbage. StatusHUD measured
             // 14.4 KB a frame before it took this guard.
-            if (!show || Event.current.type != EventType.Repaint) return;
+            if (!Showing) return;
 
             // Re-key the labels a few times a second, not every frame. The
             // keys are rounded numbers, but two of them DECAY (peak frame
@@ -188,23 +194,27 @@ namespace SeaSick.Dev
             // three text meshes most frames -- measured 62 KB a frame from
             // this instrument alone, which made it a cause of the GC pauses
             // it exists to show.
-            bool due = Time.unscaledTime >= nextRefresh;
-            if (due) nextRefresh = Time.unscaledTime + 1f / Mathf.Max(1f, refreshHz);
-
-            int u = UITheme.Unit;
-            float pad = u * 0.7f;
+            int u = HudLayout.Unit;
             float w = u * 9.0f;
             float rowH = u * 1.25f;
             float inner = u * 0.6f;
             float h = inner * 2f + rowH * 3f;
 
-            float x = Screen.width - w - pad;
-            // Measured off StatusHUD rather than hand-copied. A duplicated
-            // layout constant is the same trap as a duplicated physics
-            // constant: it stops agreeing the moment one side moves.
-            float y = StatusHUD.RightColumnBottom(u, pad) + pad;
+            // The right-hand column places this, so it lands under whatever is
+            // actually drawing above it — and closes up when the minimap is
+            // switched off. It used to derive its y from a public constant on
+            // StatusHUD, which was one hand-copy better than a magic number
+            // and still meant two files had to agree.
+            var panel = HudLayout.Place(HudLayout.Slot.Perf, w, h);
 
-            UITheme.Rect(new Rect(x, y, w, h), UITheme.Panel);
+            // Reserved above, drawn below: the rows are what cost, not the rect.
+            if (Event.current.type != EventType.Repaint) return;
+
+            bool due = Time.unscaledTime >= nextRefresh;
+            if (due) nextRefresh = Time.unscaledTime + 1f / Mathf.Max(1f, refreshHz);
+
+            float x = panel.x, y = panel.y;
+            UITheme.Rect(panel, UITheme.Panel);
 
             float ry = y + inner;
             DrawRow(x + inner, ry, w, rowH, fpsText, FpsKey(), BuildFps, due,

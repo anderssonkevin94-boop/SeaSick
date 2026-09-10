@@ -39,9 +39,9 @@ namespace SeaSick.UI
         void OnGUI()
         {
             if (yard == null) return;
-            int u = UITheme.Unit;
-            float w = Mathf.Min(Screen.width * 0.46f, u * 26f);
-            float pad = u * 0.7f;
+            int u = HudLayout.Unit;
+            float w = Mathf.Min(HudLayout.Safe.width * 0.46f, u * 26f);
+            float pad = HudLayout.Pad;
 
             // The yard shuts when she casts off. This panel is sixty GUILayout
             // controls, and GUILayout allocates its layout tree on every event
@@ -58,7 +58,8 @@ namespace SeaSick.UI
                 wasHome = home;
             }
 
-            var tab = new Rect(pad, Screen.height * 0.30f, u * 5.4f, u * 2.0f);
+            var tab = HudLayout.Place(HudLayout.Slot.RailYard,
+                                      HudLayout.RailWidth, HudLayout.RailButtonHeight);
             if (GUI.Button(tab, open ? "◀ Yard" : "Yard ▶", UITheme.Button))
                 open = !open;
             UIBlocker.Block(tab);
@@ -75,9 +76,13 @@ namespace SeaSick.UI
             // Height from the space that actually remains, not a guess. The
             // first pass used a fixed 34 units and the cell board -- the part
             // this panel exists for -- fell off the bottom of the screen.
-            float top = tab.yMax + pad * 0.6f;
-            float h = Mathf.Min(Screen.height - top - pad, u * 40f);
+            // It now stops above the helm and the broadside buttons rather
+            // than at the bottom of the screen: a panel you opened must never
+            // be sitting on the control that gets her out of trouble.
+            float top = HudLayout.RailPanelTop;
+            float h = Mathf.Min(HudLayout.BottomClustersTop - top - HudLayout.Gap, u * 40f);
             var panel = new Rect(pad, top, w, h);
+            HudLayout.ClaimLeftPanel(panel);
             UITheme.Rect(panel, UITheme.PanelSolid);
             UIBlocker.Block(panel);
 

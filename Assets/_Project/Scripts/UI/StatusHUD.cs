@@ -25,16 +25,12 @@ namespace SeaSick.UI
         readonly HudLabel navText = new HudLabel();
 
         /// The ship panel's height in UITheme units at its TALLEST — the
-        /// flooding layout, which is the one anything stacked underneath has
-        /// to clear. Public so PerfHUD measures off it rather than
-        /// hand-copying the number and quietly overlapping the day this panel
-        /// grows another row.
-        public const float ShipPanelUnitsMax = 5.3f;
-
-        /// Bottom edge of the right-hand column (minimap + ship panel), in
-        /// pixels, for anything stacking below it.
-        public static float RightColumnBottom(int u, float pad) =>
-            pad + MiniMap.ReservedHeight + u * ShipPanelUnitsMax;
+        /// flooding layout. Kept only because the panel has to ask for a
+        /// height before it knows whether the flood row is in it; nothing
+        /// outside this file reads it any more. Anything stacking below asks
+        /// `HudLayout` instead, and gets the height this panel ACTUALLY
+        /// reported rather than its worst case.
+        const float ShipPanelUnitsMax = 5.3f;
 
         void Start()
         {
@@ -61,28 +57,47 @@ namespace SeaSick.UI
             // whole frame, and the water is the fastest-moving thing on screen
             // so it shows it first. It also explains why the stutter was
             // irregular rather than steady — it tracked the mouse moving.
-            if (Event.current.type != EventType.Repaint) return;
             if (motor == null) return;
-            int u = UITheme.Unit;
-            float pad = u * 0.7f;
+            int u = HudLayout.Unit;
 
-            DrawCrew(pad, pad, u);
-            DrawShip(pad, u);
-            DrawNav(pad, u);
+            // **Reserve above the guard, draw below it.** Claiming a rect is
+            // two float compares; it is the string formatting and the text
+            // meshes that the guard exists to skip. Reserving only on Repaint
+            // made this panel's place in the column depend on how often the
+            // view repainted -- and `HudOverlapProbe` duly caught it drawing
+            // inside the minimap at (916..1066, 14..86).
+            var crewRect = HudVisibility.Crew ? ReserveCrew(u) : Rect.zero;
+            var shipRect = ReserveShip(u);
+            var navRect = ReserveNav(u);
+
+            if (Event.current.type != EventType.Repaint) return;
+
+            if (HudVisibility.Crew) DrawCrew(crewRect, u);
+            DrawShip(shipRect, u);
+            DrawNav(navRect, u);
         }
 
         /// Top-left: one slim bar per crew member. Colour is how green the sea
         /// has made them — pure flavour — and a pip above the bar means that
         /// person is off their post on a bucket, which is not.
-        void DrawCrew(float x, float y, int u)
+        Rect ReserveCrew(int u)
         {
-            if (crew == null || crew.Length == 0) return;
+            if (crew == null || crew.Length == 0) return Rect.zero;
+            float barW = u * 0.55f;
+            float gap = u * 0.45f;
+            float w = crew.Length * (barW + gap) + gap;
+            return HudLayout.Place(HudLayout.Slot.Crew, w, u * 3.4f + gap * 2f);
+        }
+
+        void DrawCrew(Rect panel, int u)
+        {
+            if (crew == null || crew.Length == 0 || panel.width <= 0f) return;
             float barW = u * 0.55f;
             float barH = u * 3.4f;
             float gap = u * 0.45f;
-            float w = crew.Length * (barW + gap) + gap;
 
-            UITheme.Rect(new Rect(x, y, w, barH + gap * 2f), UITheme.Panel);
+            float x = panel.x, y = panel.y;
+            UITheme.Rect(panel, UITheme.Panel);
             for (int i = 0; i < crew.Length; i++)
             {
                 var c = crew[i];
@@ -96,16 +111,23 @@ namespace SeaSick.UI
         }
 
         /// Top-right, tucked under the minimap.
-        void DrawShip(float pad, int u)
+        Rect ReserveShip(int u)
         {
-            float w = u * 7.5f;
             // Water aboard reads here, under the hull bar, rather than as a
-            // panel over the boat. The row only exists when there is water.
+            // panel over the boat. The row only exists when there is water --
+            // so the height is state, and it is cheap state.
             bool wet = bilge != null && bilge.Flooding;
-            float h = u * (wet ? ShipPanelUnitsMax : 3.6f);
-            float x = Screen.width - w - pad;
-            float top = pad + MiniMap.ReservedHeight;
-            UITheme.Rect(new Rect(x, top, w, h), UITheme.Panel);
+            return HudLayout.Place(HudLayout.Slot.Ship, u * 7.5f,
+                                   u * (wet ? ShipPanelUnitsMax : 3.6f));
+        }
+
+        void DrawShip(Rect panel, int u)
+        {
+            float w = panel.width;
+            bool wet = bilge != null && bilge.Flooding;
+            float h = panel.height;
+            float x = panel.x, top = panel.y;
+            UITheme.Rect(panel, UITheme.Panel);
 
             float inner = u * 0.6f;
             var hullRect = new Rect(x + inner, top + inner, w - inner * 2f, u * 0.5f);
@@ -140,7 +162,22 @@ namespace SeaSick.UI
         }
 
         /// Bottom-left: speed, how far home is, and the hold count.
-        void DrawNav(float pad, int u)
+        /// The nav line's WIDTH follows its text, which cannot be measured
+        /// without building the text -- and building it on every event is the
+        /// allocation this panel's repaint guard exists to prevent. Its
+        /// HEIGHT is constant, and height is the only thing the column stacks
+        /// on, so the reservation carries last frame's width and the true one
+        /// lands on the next repaint. Nothing sits below it to notice.
+        float navWidth;
+
+        Rect ReserveNav(int u)
+        {
+            if (voyage == null || voyage.HomePoint == null) return Rect.zero;
+            return HudLayout.Place(HudLayout.Slot.Nav,
+                                   Mathf.Max(navWidth, u * 8f), u * 1.8f);
+        }
+
+        void DrawNav(Rect reserved, int u)
         {
             if (voyage == null || voyage.HomePoint == null) return;
             float dist = Island.FlatDistance(motor.transform.position, voyage.HomePoint.position);
@@ -162,7 +199,8 @@ namespace SeaSick.UI
                 navText.Set($"{motor.CurrentSpeed:F1} m/s    home {dist:F0} m    hold {hold}");
             }
             var size = navText.Size(UITheme.Small);
-            var r = new Rect(pad, Screen.height - pad - u * 1.8f, size.x + u, u * 1.8f);
+            navWidth = size.x + u;
+            var r = new Rect(reserved.x, reserved.y, navWidth, reserved.height);
             UITheme.Rect(r, UITheme.Panel);
             GUI.Label(new Rect(r.x + u * 0.5f, r.y, r.width, r.height),
                 navText.Content, UITheme.Small);

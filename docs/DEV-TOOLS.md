@@ -790,3 +790,68 @@ deep profiling. This is how the 77 KB was traced to its scripts in one call.
   Update runs several times between physics steps, and overwriting
   `position` before the driver has sampled it silently pairs a height with
   the wrong spot.
+
+## The HUD (2026-09-11)
+
+### `HudOverlapProbe` — does anything on the screen sit on top of anything else
+
+Self-installs in the editor; no scene wiring. Logs `HUD CENSUS` (every rect on
+screen, with the file and method that claimed it) and `HUD OVERLAP` (any two
+rects that cross).
+
+**It reads what the frame DREW, never what the layout says.** Its inputs are
+`UIBlocker.Claimed` — every interactive control, named for free by
+`[CallerFilePath]`/`[CallerMemberName]` — and `HudLayout.Issued`, the rects the
+layout actually handed out. The test is rectangle intersection, which shares no
+arithmetic with the stacking that produced them. Re-deriving each panel's rect
+from `Screen.width` would have agreed with `HudLayout` by construction and
+could never have caught `HudLayout` being wrong. It caught it three times.
+
+**Run it at the phone's aspect.** `Dev/Editor/PortraitGameView.Execute()` sets
+the Game view to 1080x2340. The editor window is landscape and the game is not;
+a clean report from a landscape window certifies a screen no player will see,
+and the report says so in its own output when the aspect is over 1.
+
+**Read the persistence line, not just the fact.** Each pair reports at 1, 30 and
+300 frames. `FIRST TIME` is usually the cold-start frame — the pass before
+anything has reserved its space, where whichever panel draws first sizes itself
+against an empty screen. `30 FRAMES` is a real overlap. This distinction is the
+whole value: the same three lines meant "harmless" and "broken" on consecutive
+runs, and only the count told them apart.
+
+### Traps this pass added to the pile
+
+- **A check whose exemption covers the failure mode is a check that stops
+  before the broken thing.** The probe's first version treated one rect
+  containing another as intentional nesting — a button inside its panel. The
+  actual bug was the ship panel drawn INSIDE the minimap (916..1066, 14..86
+  against 826..1066, 14..254), and the exemption swallowed it silently.
+  Containment is now innocent only when one side is a control; two placed
+  panels containing each other is always a fault.
+- **A probe that only speaks when it fails cannot be told apart from a probe
+  that is not running.** Hence `HUD CENSUS`: a clean run now carries its own
+  evidence of what was in front of it. Same shape as `SailShots` printing a
+  perfect table of ten seats while photographing one seat ten times.
+- **Print the fullest cycle, and make the record per-STATE.** IMGUI runs
+  several GUI cycles per frame and the repaint-guarded panels draw in only
+  some, so a census on a timer lands on a partial cycle — 13 rects out of 34,
+  missing the minimap, the ship panel, the crew pips and the compass. A single
+  global high-water mark then silenced the census for the drawer-open state,
+  which legitimately has fewer rects than the list.
+- **Reserve on every event, draw only on Repaint.** The repaint guard still
+  earns its keep (formatting on discarded passes was once the largest
+  allocator in the game) but claiming a rect costs two float compares.
+  Reserving only on Repaint made the layout depend on FRAME RATE: a panel
+  could go several frames between placements while permanently on screen, so
+  the slot above expired and the one below stacked at zero.
+- **A layout must not expire on wall-clock.** Widening that window to 0.25 s
+  of real time broke it differently — real time runs while the editor stalls
+  (any blocking Coplay call does this), so one stall left every slot stale and
+  the settings drawer sized itself against an empty screen, 752..2316 instead
+  of stopping at 2156, across the anchor prompt and the nav line. Count
+  frames, not seconds.
+- **Coplay MCP calls need the Unity window FOCUSED.** Unfocused, the editor
+  throttles and `check_compile_errors`, `stop_game` and `execute_script` all
+  time out at 60 s. Unity also defers script compilation entirely while in
+  play mode. The working loop is: activate Unity, stop play, wait for
+  `Library/ScriptAssemblies/Assembly-CSharp.dll` to change, then play.

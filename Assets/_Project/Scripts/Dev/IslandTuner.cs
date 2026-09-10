@@ -21,14 +21,29 @@ using SeaSick.World;
 /// Grounding and landing will disagree with what you see. That is fine for
 /// judging a landform and useless for judging anything else — restart play
 /// to make the world agree with the numbers again.
-public class IslandTuner : MonoBehaviour
+public class IslandTuner : MonoBehaviour, SeaSick.UI.IDevTool
 {
+    [Tooltip("Off = the shipped islands, untouched, and the arrow keys left alone.")]
+    [SerializeField] bool active = false;
+
+    // --- IDevTool: opened from the settings drawer, which decides where it
+    // draws. See SeaSick.UI.DevTools.
+    public string ToolName => "Islands";
+    public string ToolBlurb => "what an island IS — mesh only, restart play to rebuild the world on it";
+    public bool ToolActive { get => active; set => active = value; }
+    void OnEnable() => SeaSick.UI.DevTools.Register(this);
+    void OnDisable() => SeaSick.UI.DevTools.Unregister(this);
+
+    /// The menu route in. It opens the drawer onto this tool rather than
+    /// spawning a second overlay, so there is one way for a tuner to be on
+    /// screen and one place for it to be.
     public static void Execute()
     {
         if (!Application.isPlaying) { Debug.LogError("IslandTuner: not in play mode"); return; }
-        var old = FindAnyObjectByType<IslandTuner>();
-        if (old != null) { Destroy(old.gameObject); return; }   // second call closes it
-        new GameObject("IslandTuner").AddComponent<IslandTuner>();
+        var existing = FindAnyObjectByType<IslandTuner>();
+        if (existing == null)
+            existing = new GameObject("IslandTuner").AddComponent<IslandTuner>();
+        SeaSick.UI.SettingsPanel.Toggle(existing);
     }
 
     class Knob
@@ -125,6 +140,10 @@ public class IslandTuner : MonoBehaviour
 
     void Update()
     {
+        // Gated on `active`, which the drawer owns. Without this a tuner
+        // sitting switched off in the scene still eats the arrow keys — and
+        // the arrow keys are how you pick a knob on every OTHER tuner too.
+        if (!active) return;
         var kb = Keyboard.current;
         if (kb == null || !Bind()) return;
         var ks = Knobs;
@@ -239,19 +258,18 @@ public class IslandTuner : MonoBehaviour
         System.IO.File.WriteAllText("/tmp/island-tune.txt", sb.ToString());
     }
 
-    void OnGUI()
+    /// Drawn inside the settings drawer's rect. It used to take a panel out
+    /// of (8, 8) up to 30 units wide — the top-left corner, which is where the
+    /// crew pips are, and where `WaterClarityTuner` and `DevHUD` also drew.
+    public void DrawTool(Rect panel)
     {
         if (!Bind()) return;
         var ks = Knobs;
         int u = UITheme.Unit;
-        float w = Screen.width;
-        var panel = new Rect(8f, 8f, Mathf.Min(w - 16f, u * 30f), u * (ks.Length + 7f) * 1.5f);
-        UITheme.Rect(panel, UITheme.PanelSolid);
-        UIBlocker.Block(panel);
 
         float y = panel.y + u * 0.5f;
         GUI.Label(new Rect(panel.x + u * 0.6f, y, panel.width, u * 1.6f),
-            "ISLAND TUNER   ↑↓ pick   ←→ change (shift ×4)   N next island   M measure   P print",
+            "↑↓ pick   ←→ change (shift ×4)   N next island   M measure   P print",
             UITheme.Small);
         y += u * 1.9f;
 

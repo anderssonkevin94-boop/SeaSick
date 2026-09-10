@@ -126,20 +126,20 @@ namespace SeaSick.Ship
             bool overloaded = voyage != null && voyage.Overloaded;
             if (!Flooding && !overloaded) return;
 
-            int u = UITheme.Unit;
-            float w = u * 15f;
-            float x = (Screen.width - w) * 0.5f;
-            // Low and central: in the thumb's reach on a portrait phone, and
-            // out of the middle of the sea where it was sitting on the horizon.
-            float y = Screen.height * 0.60f;
+            if (voyage == null || voyage.TotalHeld <= 0) return;
 
-            if (voyage != null && voyage.TotalHeld > 0)
-            {
-                var btn = new Rect(x + u * 0.5f, y, w - u * 1f, u * 2.1f);
-                UIBlocker.Block(btn);
-                if (GUI.Button(btn, $"over the side  ·  {jettisonPerTap}", UITheme.Button))
-                    voyage.Jettison(jettisonPerTap);
-            }
+            // The shared prompt slot, at the lowest rank of anything you can
+            // press: throwing cargo over the side matters, but it never
+            // matters more than coming alongside or a gun that bears. It used
+            // to be pinned at 0.60 of screen height -- the middle of the sea,
+            // 0.02 above where SalvageSpawner was putting its toast.
+            if (!Prompts.Claim(Prompts.Rank.Jettison)) return;
+
+            int u = HudLayout.Unit;
+            var btn = Prompts.Begin().Next(u * 2.1f, u * 14f);
+            UIBlocker.Block(btn);
+            if (GUI.Button(btn, $"over the side  ·  {jettisonPerTap}", UITheme.Button))
+                voyage.Jettison(jettisonPerTap);
         }
     }
 }

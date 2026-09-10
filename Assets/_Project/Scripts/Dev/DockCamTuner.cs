@@ -23,8 +23,16 @@ using SeaSick.World;
 ///   U / O             widen / narrow the lens
 ///   P                 print these numbers (also written to /tmp)
 ///   backspace         back to the shipped framing
-public class DockCamTuner : MonoBehaviour
+public class DockCamTuner : MonoBehaviour, SeaSick.UI.IDevTool
 {
+    // --- IDevTool: opened from the settings drawer, which decides where it
+    // draws. See SeaSick.UI.DevTools.
+    public string ToolName => "Dock camera";
+    public string ToolBlurb => "the docked overview: swing, tilt, zoom and lens (only while she is at a pier)";
+    public bool ToolActive { get => active; set => active = value; }
+    void OnEnable() => SeaSick.UI.DevTools.Register(this);
+    void OnDisable() => SeaSick.UI.DevTools.Unregister(this);
+
     /// **Kept deliberately, switched off.** The framing it produced is
     /// shipped in ChaseCamera (tilt 32, fov 36, 165 m of ground up the
     /// frame); this stays in the scene so the next question about an angle
@@ -182,9 +190,13 @@ public class DockCamTuner : MonoBehaviour
         Debug.Log("DockCamTuner — framing saved:\n" + s);
     }
 
-    void OnGUI()
+    /// The readout, inside the settings drawer's rect. It used to be a
+    /// `GUI.Box` at `8, Screen.height * 0.30f` — on the Yard and Home tabs, and on the
+    /// other camera tuner's readout, which drew 20 pixels away.
+    public void DrawTool(Rect body)
     {
-        if (!active || !Docked || !seeded) return;
+        if (!Docked) { GUI.Label(body, "she is not at a pier — nothing to frame", SeaSick.UI.UITheme.Small); return; }
+        if (!seeded) return;
         if (box == null)
             box = new GUIStyle(GUI.skin.box)
             {
@@ -199,7 +211,8 @@ public class DockCamTuner : MonoBehaviour
             + "\n\nright-drag swing/tilt   scroll zoom   IJKL pan   U/O lens"
             + "\nP save these numbers   backspace reset";
         var size = box.CalcSize(new GUIContent(text));
-        // Top-left, clear of the compass and the minimap.
-        GUI.Box(new Rect(8f, Screen.height * 0.30f, size.x + 6f, size.y + 4f), text, box);
+        GUI.Box(new Rect(body.x, body.y,
+                         Mathf.Min(size.x + 6f, body.width),
+                         Mathf.Min(size.y + 4f, body.height)), text, box);
     }
 }

@@ -361,11 +361,22 @@ namespace SeaSick.Voyage
             // player is not steering.
             if (phase != Phase.Home) return;
 
-            int u = SeaSick.UI.UITheme.Unit;
-            float w = Screen.width, h = Screen.height;
+            int u = SeaSick.UI.HudLayout.Unit;
             var plans = World.BuildPlans.All;
             float ph = u * (19f + (completedSpoiled > 0 ? 1.9f : 0f) + plans.Length * 4.4f);
-            var panel = new Rect(w * 0.08f, Mathf.Max(u * 2f, (h - ph) * 0.42f), w * 0.84f, ph);
+
+            // Clear of the left tab rail, not centred over it. At 0.08 to 0.92
+            // of screen width this panel covered the Yard tab and the open
+            // Yard panel underneath it -- and the yard is the other half of
+            // what you came home to do.
+            var safe = SeaSick.UI.HudLayout.Safe;
+            float pad = SeaSick.UI.HudLayout.Pad;
+            float left = safe.x + pad + SeaSick.UI.HudLayout.RailWidth + SeaSick.UI.HudLayout.Gap;
+            float room = safe.xMax - pad - left;
+            float pw = Mathf.Min(room, u * 30f);
+            var panel = new Rect(left + (room - pw) * 0.5f,
+                                 Mathf.Max(safe.y + pad, safe.y + (safe.height - ph) * 0.42f),
+                                 pw, ph);
             SeaSick.UI.UITheme.Rect(panel, SeaSick.UI.UITheme.PanelSolid);
             SeaSick.UI.UITheme.Rect(new Rect(panel.x, panel.y, panel.width, 2f), SeaSick.UI.UITheme.Sea);
 

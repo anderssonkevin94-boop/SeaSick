@@ -37,15 +37,21 @@ namespace SeaSick.UI
             // Draw-only panel: skip the non-Repaint events. See StatusHUD for
             // the measurement — IMGUI runs OnGUI once per event, and the
             // discarded passes were the game's biggest source of GC garbage.
-            if (Event.current.type != EventType.Repaint) return;
             if (motor == null || voyage == null || voyage.HomePoint == null) return;
+            if (!HudVisibility.Compass) return;
 
-            int u = UITheme.Unit;
-            float w = Mathf.Min(Screen.width * 0.86f, u * 26f);
-            float h = u * 2.3f;
-            float x = (Screen.width - w) * 0.5f;
-            float y = u * 2f;   // leaves room for the 'home' label above it
-            var tape = new Rect(x, y, w, h);
+            int u = HudLayout.Unit;
+            // Centred at the top, narrowed to clear the crew pips and the
+            // minimap rather than running under them. It used to take 0.86 of
+            // the screen unconditionally, which is fine on a phone and lands
+            // on both columns in the editor's landscape view -- where every
+            // framing in this project gets judged at least once.
+            // Declared above the repaint guard so the tape is on the record
+            // every frame -- otherwise `HudOverlapProbe` cannot see it, and a
+            // panel the check cannot see is a panel the check cannot clear.
+            var tape = HudLayout.TopCentre(u * 26f, u * 2.3f);
+
+            if (Event.current.type != EventType.Repaint) return;
 
             UITheme.Rect(tape, UITheme.Panel);
 

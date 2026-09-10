@@ -54,12 +54,16 @@ namespace SeaSick.UI
             // Nothing to do at her own pier.
             if (anchor.AtHomeDock) { armedUntil = -99f; return; }
 
-            int u = UITheme.Unit;
-            float pad = u * 0.7f;
-            // Under the Yard tab (which sits at 0.30 of screen height and is
-            // 2.0 units tall), clear of it by half a pad.
-            var tab = new Rect(pad, Screen.height * 0.30f + u * 2.0f + pad * 0.5f,
-                               u * 5.4f, u * 2.0f);
+            int u = HudLayout.Unit;
+            float pad = HudLayout.Pad;
+            // Third down the left rail, under Settings and Yard. It used to
+            // carry a copy of the Yard tab's position and height in a comment
+            // -- and a copied constant is a constant that drifts. The rail
+            // stacks it now, and it is the LAST tab on purpose: this is the
+            // one that moves the ship across the world, so it should not be
+            // where a thumb lands by accident.
+            var tab = HudLayout.Place(HudLayout.Slot.RailHome,
+                                      HudLayout.RailWidth, HudLayout.RailButtonHeight);
             bool armed = Time.time < armedUntil;
 
             var prev = GUI.contentColor;

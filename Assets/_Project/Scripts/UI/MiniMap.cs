@@ -20,10 +20,6 @@ namespace SeaSick.UI
     {
         [SerializeField] float range = 1500f;  // half-extent in metres
 
-        /// How much vertical space the map claims in the top-right, so the
-        /// ship status panel can sit underneath it instead of on top.
-        public static float ReservedHeight { get; private set; }
-
         ShipMotor motor;
         VoyageManager voyage;
         TerrainWorldPopulator populator;
@@ -172,17 +168,32 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
-            // Draw-only panel: skip the non-Repaint events. See StatusHUD for
-            // the measurement — IMGUI runs OnGUI once per event, and the
-            // discarded passes were the game's biggest source of GC garbage.
-            if (Event.current.type != EventType.Repaint) return;
             if (motor == null) return;
-            int u = UITheme.Unit;
-            float pad = u * 0.7f;
-            float size = Mathf.Min(Screen.width * 0.34f, u * 12f);
-            var box = new Rect(Screen.width - size - pad, pad, size, size);
+            if (!HudVisibility.Minimap) return;
+            int u = HudLayout.Unit;
+            // Sized against the SAFE area, not the screen: on a notched phone
+            // the difference is the map's own right-hand edge.
+            float size = Mathf.Min(HudLayout.Safe.width * 0.34f, u * 12f);
             float windRow = u * 1.6f;
-            ReservedHeight = size + pad + windRow + pad * 0.5f;
+
+            // **Reserve above the repaint guard, draw below it.**
+            //
+            // The guard is still here and still earns its keep -- IMGUI runs
+            // OnGUI once per EVENT, and formatting strings on the passes that
+            // get thrown away was once the largest allocator in the game. But
+            // claiming a rect costs two float compares and no allocation, and
+            // reserving only on Repaint is what broke the top-right column:
+            // `HudOverlapProbe` caught the ship panel drawn INSIDE this map at
+            // (916..1066, 14..86) against (826..1066, 14..254). With
+            // reservations only on repaint, the gap between them can exceed
+            // the window in which a slot counts as still there -- so the panel
+            // above went stale, stopped reserving its space, and the one below
+            // stacked at zero. That made the layout depend on FRAME RATE,
+            // which is why it showed up in a throttled editor.
+            var box = HudLayout.Place(HudLayout.Slot.Map, size, size);
+            var windRect = HudLayout.Place(HudLayout.Slot.Wind, size, windRow);
+
+            if (Event.current.type != EventType.Repaint) return;
 
             UITheme.Rect(box, UITheme.PanelSolid);
 
@@ -272,7 +283,10 @@ namespace SeaSick.UI
             // North tick outside the clip group.
             GUI.Label(new Rect(box.x, box.y - u * 0.1f, box.width, u * 1.2f), "N", UITheme.Small2Centered);
 
-            DrawWind(new Rect(box.x, box.yMax + pad * 0.5f, box.width, windRow), u);
+            // Its own slot rather than "just under the box": the map can be
+            // switched off, and then the wind row is what the column starts
+            // with instead of leaving a hole where the map used to be.
+            DrawWind(windRect, u);
         }
 
         static readonly string[] Points =

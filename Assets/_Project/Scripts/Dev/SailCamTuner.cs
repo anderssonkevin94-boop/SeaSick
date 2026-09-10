@@ -23,8 +23,16 @@ using SeaSick.World;
 ///   U / O        lens
 ///   P            print the numbers to paste into ChaseCamera
 ///   backspace    back to the shipped rig
-public class SailCamTuner : MonoBehaviour
+public class SailCamTuner : MonoBehaviour, SeaSick.UI.IDevTool
 {
+    // --- IDevTool: opened from the settings drawer, which decides where it
+    // draws. See SeaSick.UI.DevTools.
+    public string ToolName => "Sail camera";
+    public string ToolBlurb => "the seat under way: distance astern, height, look-ahead and lens";
+    public bool ToolActive { get => active; set => active = value; }
+    void OnEnable() => SeaSick.UI.DevTools.Register(this);
+    void OnDisable() => SeaSick.UI.DevTools.Unregister(this);
+
     [Tooltip("Off = the game's own rig, untouched. Tick to fly it.")]
     [SerializeField] bool active = false;
 
@@ -163,9 +171,12 @@ public class SailCamTuner : MonoBehaviour
         Debug.Log("SailCamTuner — framing saved:\n" + s);
     }
 
-    void OnGUI()
+    /// The readout, inside the settings drawer's rect. It used to be a
+    /// `GUI.Box` at `8, Screen.height * 0.28f` — on the Yard and Home tabs, and on the
+    /// other camera tuner's readout, which drew 20 pixels away.
+    public void DrawTool(Rect body)
     {
-        if (!active || !seeded) return;
+        if (!seeded) return;
         if (box == null)
             box = new GUIStyle(GUI.skin.box)
             {
@@ -175,10 +186,13 @@ public class SailCamTuner : MonoBehaviour
                 richText = false,
             };
         box.normal.textColor = Color.white;
+
         string text = Report()
             + "\n\nright-drag in/out + up/down   scroll zoom   I/K look ahead"
             + "\nU/O lens   P save these numbers   backspace reset";
         var size = box.CalcSize(new GUIContent(text));
-        GUI.Box(new Rect(8f, Screen.height * 0.28f, size.x + 6f, size.y + 4f), text, box);
+        GUI.Box(new Rect(body.x, body.y,
+                         Mathf.Min(size.x + 6f, body.width),
+                         Mathf.Min(size.y + 4f, body.height)), text, box);
     }
 }

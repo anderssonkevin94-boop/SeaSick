@@ -61,14 +61,21 @@ using SeaSick.Ocean;
 /// The keys and the panel side are deliberately clear of `WaterClarityTuner`
 /// (1/2/P/backspace, top left): both of these are usually on at once and two
 /// dev overlays fighting over the same key is its own afternoon.
-public class SeaFoamTuner : MonoBehaviour
+public class SeaFoamTuner : MonoBehaviour, SeaSick.UI.IDevTool
 {
+    // --- IDevTool: this tuner is opened from the settings drawer, and the
+    // drawer is what decides where it draws. See SeaSick.UI.DevTools.
+    public string ToolName => "Foam & crests";
+    public string ToolBlurb => "how readily a crest breaks, how long the trail lasts, how sharp the tops are";
+    public bool ToolActive { get => active; set => active = value; }
+    void OnEnable() => SeaSick.UI.DevTools.Register(this);
+    void OnDisable() => SeaSick.UI.DevTools.Unregister(this);
+
     [Tooltip("Off = the shipped sea, untouched. Tick to tune it by hand.")]
     [SerializeField] bool active = false;
 
     Material mat;
     StormSpray spray;
-    GUIStyle box;
     bool seeded;
 
     // What the session started with, for backspace.
@@ -171,14 +178,17 @@ public class SeaFoamTuner : MonoBehaviour
     // should not depend on knowing which.
     void LateUpdate() { if (active && seeded) PushSpectrum(); }
 
-    void OnGUI()
+    /// Drawn inside the settings drawer's rect. It used to take a fixed
+    /// 440x560 box out of `Screen.width − 452, 12` — which at the shipping
+    /// portrait aspect is exactly where the minimap, the wind row and the ship
+    /// panel are.
+    public void DrawTool(Rect body)
     {
-        if (!active || mat == null) return;
-        if (box == null)
-            box = new GUIStyle(GUI.skin.box) { alignment = TextAnchor.UpperLeft, fontSize = 13 };
+        Seed();
+        if (mat == null) return;
         var rich = new GUIStyle(GUI.skin.label) { richText = true };
 
-        GUILayout.BeginArea(new Rect(Screen.width - 452, 12, 440, 560), GUIContent.none, box);
+        GUILayout.BeginArea(body);
         GUILayout.Label("<b>SEA FOAM &amp; CREST</b>   7 fold  8 trail  9 spume  O print  Home reset", rich);
 
         GUILayout.Space(6);

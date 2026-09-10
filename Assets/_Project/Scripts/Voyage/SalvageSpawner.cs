@@ -240,7 +240,12 @@ namespace SeaSick.Voyage
             // discarded passes were the game's biggest source of GC garbage.
             if (Event.current.type != EventType.Repaint) return;
             if (Time.time > messageUntil) return;
-            var r = new Rect(0f, Screen.height * 0.62f, Screen.width, SeaSick.UI.UITheme.Unit * 2f);
+            // High and centred under the compass, not a full-width strip
+            // across the middle of the water. The rect was the whole screen
+            // width at 0.62 of its height -- text centred in it, but a full
+            // -width rect over the sea all the same, and 0.02 off the jettison
+            // button that used to live at 0.60.
+            var r = SeaSick.UI.HudLayout.ToastRow(SeaSick.UI.UITheme.Unit * 2f);
             GUI.Label(r, $"+{salvageValue} timber", SeaSick.UI.UITheme.Toast);
         }
     }

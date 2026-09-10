@@ -32,8 +32,15 @@ using SeaSick.World;
 ///   1 / 2             mute the murk / the shoal, to see one at a time
 ///   P                 print the block (console and /tmp/seasick-clarity.txt)
 ///   backspace         back to the values this session started with
-public class WaterClarityTuner : MonoBehaviour
+public class WaterClarityTuner : MonoBehaviour, SeaSick.UI.IDevTool
 {
+    // --- IDevTool: this tuner is opened from the settings drawer, and the
+    // drawer is what decides where it draws. See SeaSick.UI.DevTools.
+    public string ToolName => "Water clarity";
+    public string ToolBlurb => "how far down you can see, and the colour the water takes over a bottom";
+    public bool ToolActive { get => active; set => active = value; }
+    void OnEnable() => SeaSick.UI.DevTools.Register(this);
+
     [Tooltip("Off = the shipped water, untouched. Tick to tune it by hand.")]
     [SerializeField] bool active = false;
 
@@ -43,7 +50,6 @@ public class WaterClarityTuner : MonoBehaviour
     float murkWas, refrWas, shoalDWas, shoalSWas;
     Color murkXWas, shoalCWas;
     bool murkMuted, shoalMuted;
-    GUIStyle box;
 
     void Seed()
     {
@@ -74,15 +80,21 @@ public class WaterClarityTuner : MonoBehaviour
         Shader.SetGlobalFloat("_SS_RefractOff", murkMuted ? 1f : 0f);
     }
 
-    void OnDisable() => Shader.SetGlobalFloat("_SS_RefractOff", 0f);
-
-    void OnGUI()
+    void OnDisable()
     {
-        if (!active || mat == null) return;
-        if (box == null)
-            box = new GUIStyle(GUI.skin.box) { alignment = TextAnchor.UpperLeft, fontSize = 13 };
+        SeaSick.UI.DevTools.Unregister(this);
+        Shader.SetGlobalFloat("_SS_RefractOff", 0f);
+    }
 
-        GUILayout.BeginArea(new Rect(12, 12, 430, 470), GUIContent.none, box);
+    /// Drawn inside the settings drawer's rect. It used to take a fixed
+    /// 430x470 box out of the top left, which is where the crew pips are —
+    /// and where `IslandTuner` and `DevHUD` also drew.
+    public void DrawTool(Rect body)
+    {
+        Seed();
+        if (mat == null) return;
+
+        GUILayout.BeginArea(body);
         GUILayout.Label("<b>WATER CLARITY</b>   1 murk  2 shoal  P print  ⌫ reset",
             new GUIStyle(GUI.skin.label) { richText = true });
 
