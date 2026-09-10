@@ -20,6 +20,40 @@ public static class ApplyCrewScale
 {
     const string ScenePath = "Assets/_Project/Scenes/Sea.unity";
 
+    /// Height from the MESHES, not from Renderer.bounds.
+    ///
+    /// A SkinnedMeshRenderer's bounds are padded so a deforming mesh cannot
+    /// pop out of them, so a crew member authored at exactly 1.700 measures
+    /// 1.703 -- and a tool that scales until the measurement equals 1.700
+    /// then shrinks him by 0.2% every single time it is run, chasing padding
+    /// that is not part of the asset. Mesh bounds in the bind pose are the
+    /// real thing, and they make this idempotent: run it twice and the second
+    /// run changes nothing.
+    static float MeasureHeight(Transform t)
+    {
+        bool any = false;
+        float lo = float.MaxValue, hi = float.MinValue;
+
+        void Eat(Mesh m, Transform x)
+        {
+            if (m == null) return;
+            Bounds lb = m.bounds;
+            for (int i = 0; i < 8; i++)
+            {
+                var c = lb.center + Vector3.Scale(lb.extents, new Vector3(
+                    (i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                float y = x.localToWorldMatrix.MultiplyPoint3x4(c).y;
+                lo = Mathf.Min(lo, y); hi = Mathf.Max(hi, y); any = true;
+            }
+        }
+
+        foreach (var smr in t.GetComponentsInChildren<SkinnedMeshRenderer>())
+            Eat(smr.sharedMesh, smr.transform);
+        foreach (var mf in t.GetComponentsInChildren<MeshFilter>())
+            Eat(mf.sharedMesh, mf.transform);
+        return any ? hi - lo : 0f;
+    }
+
     public static string Execute()
     {
         if (Application.isPlaying) return "stop play mode first — this saves the scene";
@@ -33,11 +67,7 @@ public static class ApplyCrewScale
             bool isCrew = t.name == "Helmsman" || t.GetComponent<SeaSick.Crew.CrewAgent>() != null;
             if (!isCrew) continue;
 
-            var rs = t.GetComponentsInChildren<Renderer>();
-            if (rs.Length == 0) continue;
-            Bounds b = rs[0].bounds;
-            foreach (var r in rs) b.Encapsulate(r.bounds);
-            float was = b.size.y;
+            float was = MeasureHeight(t);
             if (was < 0.05f) continue;
 
             float factor = WorldScale.Person / was;
@@ -47,10 +77,8 @@ public static class ApplyCrewScale
             so.ApplyModifiedPropertiesWithoutUndo();
 
             // Re-measure: bounds are stale until the transform updates.
-            rs = t.GetComponentsInChildren<Renderer>();
-            Bounds b2 = rs[0].bounds;
-            foreach (var r in rs) b2.Encapsulate(r.bounds);
-            sb.AppendLine($"  {t.name}: {was:F2} m -> {b2.size.y:F2} m");
+            sb.AppendLine($"  {t.name}: {was:F3} m -> {MeasureHeight(t):F3} m "
+                + $"(scale {sp.vector3Value.y:F4})");
             done++;
         }
 

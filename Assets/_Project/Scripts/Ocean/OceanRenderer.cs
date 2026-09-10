@@ -109,7 +109,13 @@ namespace SeaSick.Ocean
 
             timeEvolveShader.SetInt("_N", n);
             timeEvolveShader.SetFloat("_Time", (float)OceanTime.Now);
-            timeEvolveShader.SetFloat("_Lambda", settings.choppiness);
+            // Choppiness is per cascade now. See `crestSharpen` on the
+            // spectrum asset for why, and for which of the three are free.
+            Vector3 cs = settings.crestSharpen;
+            timeEvolveShader.SetVector("_LambdaC", new Vector4(
+                settings.choppiness * Mathf.Max(0f, cs.x),
+                settings.choppiness * Mathf.Max(0f, cs.y),
+                settings.choppiness * Mathf.Max(0f, cs.z), 0f));
 
             timeEvolveShader.SetTexture(evolveKernel, "H0", cascades.H0);
             timeEvolveShader.SetTexture(evolveKernel, "WaveData", cascades.WaveData);
@@ -137,6 +143,8 @@ namespace SeaSick.Ocean
                 foamShader.SetFloat("_DecayFactor",
                     Mathf.Exp(-0.6931472f * foamDt / halflife));
                 foamShader.SetFloat("_Injection", settings.foamInjection);
+                foamShader.SetFloat("_InjectSharp",
+                    Mathf.Max(0.5f, settings.foamInjectSharpness));
                 foamShader.SetVector("_PatchSizes", cascades.PatchSizesVec);
                 foamShader.SetTexture(foamKernel, "Displacement", cascades.Displacement);
                 foamShader.SetTexture(foamKernel, "Derivatives", cascades.Derivatives);

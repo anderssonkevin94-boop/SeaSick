@@ -24,11 +24,37 @@ namespace SeaSick.Ship
         [SerializeField] float maxTurnRate = 34f;
         [Tooltip("How fast she BUILDS a turn, rad/s per second. A big ship does not just turn slower, she takes longer to start.")]
         [SerializeField] float yawResponse = 4f;
-        [Tooltip("Top speed astern as a fraction of ahead. Paddle wheels back badly -- the blades are shaped for one direction and the hull is not.")]
+        [Tooltip("Top speed astern as a fraction of ahead. Every hull backs badly -- the rudder is at the wrong end of her and the hull is shaped for one direction.")]
         [SerializeField, Range(0.1f, 0.8f)] float asternFraction = 0.35f;
         [Tooltip("Surf strength: multiple of gravity's pull along the surface slope. The old kinematic surfPower 22 corresponds to ~2.2 here.")]
         [SerializeField] float surfGain = 2.2f;
         [SerializeField] float surfResponse = 2.2f;
+        [Tooltip("How much of the overspeed brake is lifted while she is on a face. The brake exists so she cannot run away; applying it DURING the ride meant a well-worked wave gave back everything it gave the moment the face flattened, and there was nothing left to have earned.")]
+        [SerializeField, Range(0f, 1f)] float surfDragRelief = 0.25f;
+
+        [Header("Broaching")]
+        [Tooltip("Face steepness (tangent of the face angle) at which she STARTS to lose the water. 0.20 is about 11 degrees -- the storm sea's median face is 12.9, so ordinary running water only just reaches it.")]
+        [SerializeField] float broachOnsetSlope = 0.20f;
+        [Tooltip("Steepness at which she is fully broaching. 0.50 is about 27 degrees, which the measured swell faces reach at their worst and the wind sea passes in a squall.")]
+        [SerializeField] float broachFullSlope = 0.50f;
+        [Tooltip("How much of the rudder she loses at a full broach. Never 1: the captain always keeps the tiller -- she answers late and small, she does not stop answering.")]
+        [SerializeField, Range(0f, 0.85f)] float broachRudderLoss = 0.55f;
+        [Tooltip("How much of the keel she loses at a full broach. The stern is lifted clear, so there is less of her in the water to grip with, and she starts to skate.")]
+        [SerializeField, Range(0f, 0.85f)] float broachGripLoss = 0.45f;
+        [Tooltip("Yaw rate the face wants to give her at 90 degrees off the fall line, deg/s. Set against her RUDDER (about 26 deg/s for the tuned hull, 12 once the broach has taken its cut) so that a few degrees off is trivially caught and forty is not.")]
+        [SerializeField] float broachYawRate = 22f;
+        [Tooltip("Roll acceleration that goes with it, rad/s^2. She lies over as the sea takes her -- the tell arrives before the heading has moved far enough to read.")]
+        [SerializeField] float broachHeel = 0.6f;
+        [Tooltip("How fast a broach builds, per second. Quick: it is supposed to arrive.")]
+        [SerializeField] float broachOnsetRate = 1.6f;
+        [Tooltip("How fast it lets go. Slower than it builds -- she is still unsteady after the face has gone under her.")]
+        [SerializeField] float broachRecoverRate = 0.8f;
+
+        [Header("Easing")]
+        [Tooltip("Most speed easing gives up, as a fraction, when she is taking a sea her own size square on the bow.")]
+        [SerializeField, Range(0f, 0.7f)] float easeDepth = 0.40f;
+        [Tooltip("Sea height as a fraction of her length at which easing costs its full depth. 0.35 matches the head-sea overwhelm rule above, so one ratio describes 'a sea big enough to matter to THIS hull' in both places.")]
+        [SerializeField] float easeFullAtHullFraction = 0.35f;
 
         [Header("Attitude limits (soft)")]
         [SerializeField] float pitchLimit = 16f;
@@ -48,7 +74,7 @@ namespace SeaSick.Ship
         [SerializeField] float sailTrimRate = 0.55f;
 
         [Header("Propulsion source")]
-        [Tooltip("Off for the paddle boat: she carries no sail, so the wind must not push her or drift her. The head-sea penalty stays either way — that is the WAVES, and a paddle steamer still loses way charging a sea.")]
+        [Tooltip("Off for a hull with no canvas: the wind must then not push her or drift her. The head-sea penalty stays either way -- that is the WAVES, and any hull loses way charging a sea.")]
         [SerializeField] bool windDriven = true;
 
         [Header("Gun recoil / knockdown")]
@@ -116,11 +142,20 @@ namespace SeaSick.Ship
         /// lengths across, which is a real hull's.
         const float TurnCircleLengths = 2.2f;
 
-        /// The hull every constant in this file was authored and tuned
-        /// against: the paddle steamer, 24.2 m overall. One public copy,
-        /// because the yard and the chase camera both need to know what the
-        /// numbers were anchored to and a second private 24.2 is exactly how
-        /// the steamer once ended up at a sixth of her displacement.
+        /// The length every constant in this file was authored and tuned
+        /// against: 24.2 m.
+        ///
+        /// **It outlives the hull it came from.** This was the paddle
+        /// steamer's length overall, and she has been removed from the game --
+        /// but her dimensions were never the point. Top speed, acceleration,
+        /// turn rate, buoyancy and wave response are all expressed as RATIOS
+        /// to this length, so it is the origin the whole ladder is measured
+        /// from rather than a fact about any ship. Delete it as a leftover and
+        /// all twenty rungs silently change speed.
+        ///
+        /// One public copy, because the yard and the chase camera both need to
+        /// know what the numbers were anchored to and a second private 24.2 is
+        /// exactly how a hull once ended up at a sixth of her displacement.
         public const float TunedLoa = 24.2f;
 
         /// Her length overall. Anything that has to FRAME or scale to the ship
@@ -170,12 +205,10 @@ namespace SeaSick.Ship
         /// astern) through 0 (stopped) to 1 (full ahead).
         ///
         /// This was SailSetting/SailOrder, furled-half-full, which never
-        /// matched the boat: she is a paddle steamer with no sail and
-        /// windDriven has been off in the scene all along -- PaddleDrive was
-        /// already reading the "sail" as a throttle to decide how fast to
-        /// turn the wheels. Renaming it is the honest half; astern is the
-        /// half that adds something, because a sail cannot back up and a
-        /// paddle wheel can, which is what makes coming off a beach possible.
+        /// matched the boat it was written for. The engine vocabulary stayed
+        /// when the paddle steamer went, and it still earns its place: astern
+        /// is what makes coming off a beach possible, and a square rig backs
+        /// its topsails to do exactly that.
         public float Throttle { get; private set; }
         public float ThrottleOrder { get; set; }
         public bool ThrottleMoving => !Mathf.Approximately(Throttle, ThrottleOrder);
@@ -216,8 +249,8 @@ namespace SeaSick.Ship
         public float WindStrength { get; private set; } = 1f;
         public float GustFactor01 { get; private set; }
         public float MaxSpeed => maxSpeed;
-        /// False on the paddle boat: wind still exists in the world and still
-        /// drives the sea state, it just does not act on this hull.
+        /// False on a hull with no canvas: wind still exists in the world and
+        /// still drives the sea state, it just does not act on this hull.
         public bool WindDriven => windDriven;
         /// The whole propulsion budget: x mass is the most force the sail can
         /// ever apply, and any water force above that wins outright.
@@ -225,11 +258,58 @@ namespace SeaSick.Ship
         public Vector3 Velocity => rb != null ? rb.linearVelocity : Vector3.zero;
         public float SurfAccel { get; private set; }
         public float SurfBoost01 => Mathf.Clamp01(SurfAccel / 3.5f);
+        /// How far over her top speed the water is allowed to carry her. The
+        /// way gauge scales itself to this rather than carrying its own copy:
+        /// a gauge with a hand-written ceiling stops agreeing with the hull
+        /// the first time this is retuned, and then it is an instrument that
+        /// lies.
+        public float SurfOvershoot => surfOvershoot;
         public float LateralWaveAccel { get; private set; }
         public float SeaAngleDeg { get; private set; } = 90f;
+        /// Where the SWELL is coming from, relative to the bow. The wind sea
+        /// and the swell are separate trains and the nav tape marks both.
+        public float SwellAngleDeg { get; private set; } = 90f;
+
+        /// World bearings the two trains come FROM, in the same convention as
+        /// everything else that draws on the compass: 0 is +Z, 90 is +X.
+        ///
+        /// `SeaAngleDeg` and `SwellAngleDeg` come from `Vector3.Angle` and are
+        /// therefore UNSIGNED — 0..180 with no side to them. The nav tape has
+        /// been reconstructing a bearing from one of them, which put the sea
+        /// mark on the starboard bow whichever side the seas were actually on;
+        /// half the time the instrument was pointing at the wrong half of the
+        /// compass. A signed quantity cannot be recovered from an unsigned
+        /// one, so the bearing has to be carried rather than derived.
+        public float SeasFromDeg { get; private set; }
+        public float SwellFromDeg { get; private set; }
+
+        static float FromBearing(Vector2 run) =>
+            Mathf.Atan2(-run.x, -run.y) * Mathf.Rad2Deg;
         public float SeaSeverity01 { get; private set; }
         public float HeadSea01 { get; private set; }
         public float SeaResistance01 { get; private set; } = 1f;
+
+        /// How far gone she is toward a broach, 0..1. Rises when she is
+        /// running down a steep face fast: the stern lifts, the rudder goes
+        /// soft, and the sea starts to slew her beam-on. The one number that
+        /// makes the FASTEST heading also the one that needs hands.
+        public float Broach01 { get; private set; }
+        /// Seconds she has held a surf run. A face is worth working, and this
+        /// is the only thing that remembers she worked it.
+        public float SurfRunSeconds { get; private set; }
+        /// How far over her own top speed the water has carried her, 0..1
+        /// across the overspeed allowance. `SurfBoost01` says she is on a
+        /// face; this says the face gave her something.
+        public float Overspeed01 { get; private set; }
+
+        /// Pace her to the sea: hold back deliberately so she rides instead of
+        /// slamming. Costs time, buys smoothness — the one verb at the helm
+        /// besides the tiller and the telegraph.
+        public bool Easing { get; set; }
+        /// What easing is actually costing her right now, as a fraction of the
+        /// speed she would otherwise be making. Zero in calm water, because
+        /// there is then nothing to ease for.
+        public float EaseCost01 { get; private set; }
         public Vector3 WaterVelocity { get; private set; }
         public float KnockdownRoll { get; private set; }
 
@@ -290,20 +370,80 @@ namespace SeaSick.Ship
         }
 
         /// The whole heading-vs-sea model in one place, so raiders sail the
-        /// same water the player does. Kept static with the old signature.
+        /// same water the player does.
+        ///
+        /// **There are TWO trains, not one.** The ocean has had two axes since
+        /// the 08-28 pass — a fast wind sea and a slow swell that turns on its
+        /// own hours-long clock — and this function read only the wind, which
+        /// meant the most interesting fact the sea knows about today never
+        /// reached the helm. With one train the model is a single cosine and
+        /// the optimal play is always "turn away from it"; with two crossing
+        /// trains there is no heading that is clean, and the day's crossing
+        /// angle becomes a thing to plan a route around.
+        ///
+        /// Three terms, and she takes the worst:
+        /// - the wind sea on the bow, at full penalty — short and steep, it is
+        ///   what stops a hull dead;
+        /// - the swell on the bow, at `SwellShare` — longer, so she climbs it
+        ///   rather than slamming it, but it carries nearly all of the height;
+        /// - **confusion**, which is what makes a crossing sea its own weather:
+        ///   the product of the two, so it can only deepen a heading that is
+        ///   already taking water from both and never invents a penalty on a
+        ///   clean run. Pyramidal peaks have no face to work.
+        ///
+        /// The floor exists so a bad day is slow and never a wall — the same
+        /// rule as everywhere else in this project: you lose options, not the
+        /// ship.
         public static float SeaResistanceAt(Vector2 pos, Vector3 forward, float penalty,
-            out float severity, out float headSea, out float angleDeg)
+            out float severity, out float headSea, out float angleDeg,
+            out float swellAngleDeg)
         {
-            severity = 0f; headSea = 0f; angleDeg = 90f;
+            severity = 0f; headSea = 0f; angleDeg = 90f; swellAngleDeg = 90f;
             var ctrl = SeaStateController.Instance;
             if (ctrl == null) return 1f;
             severity = ctrl.SeaSeverityAt(pos);
-            Vector2 run = ctrl.WindDirection;
-            Vector3 seasFrom = new Vector3(-run.x, 0f, -run.y);
-            angleDeg = Vector3.Angle(new Vector3(forward.x, 0f, forward.z), seasFrom);
-            headSea = Mathf.Clamp01(Mathf.Cos(angleDeg * Mathf.Deg2Rad));
-            return 1f - penalty * headSea * severity;
+
+            Vector3 flat = new Vector3(forward.x, 0f, forward.z);
+            angleDeg = AngleOffBow(flat, ctrl.WindDirection);
+            swellAngleDeg = AngleOffBow(flat, ctrl.SwellDirection);
+
+            float headWind = Mathf.Clamp01(Mathf.Cos(angleDeg * Mathf.Deg2Rad));
+            float headSwell = Mathf.Clamp01(Mathf.Cos(swellAngleDeg * Mathf.Deg2Rad));
+            // Whichever train is actually on the bow is the one the rest of
+            // the game should react to — sail strain, the nav tape's shading,
+            // the spray thresholds.
+            headSea = Mathf.Max(headWind, headSwell);
+
+            float r = Mathf.Min(1f - penalty * headWind * severity,
+                                1f - penalty * SwellShare * headSwell * severity);
+            r -= penalty * ConfusionShare * headWind * headSwell * severity;
+            return Mathf.Clamp(r, SeaResistanceFloor, 1f);
         }
+
+        /// Kept so anything still calling the six-argument form compiles. The
+        /// swell angle is the only thing it cannot see.
+        public static float SeaResistanceAt(Vector2 pos, Vector3 forward, float penalty,
+            out float severity, out float headSea, out float angleDeg) =>
+            SeaResistanceAt(pos, forward, penalty, out severity, out headSea,
+                out angleDeg, out _);
+
+        /// Degrees between the bow and where a train is coming FROM. The
+        /// direction vectors say which way the seas RUN, so the bearing they
+        /// arrive on is its negative — the sign error here is silent and puts
+        /// the penalty on exactly the wrong half of the compass.
+        static float AngleOffBow(Vector3 flatForward, Vector2 run) =>
+            Vector3.Angle(flatForward, new Vector3(-run.x, 0f, -run.y));
+
+        /// How much of the bow penalty a swell carries against a wind sea of
+        /// the same height. Below 1 because a 500 m roller is climbed and a
+        /// 30 m one is hit.
+        const float SwellShare = 0.80f;
+        /// The extra cost of taking both trains at once. This is the whole
+        /// point of a crossing sea: it is worse than either train alone and
+        /// there is no heading that escapes it.
+        const float ConfusionShare = 0.45f;
+        /// She is never stopped by water, only slowed.
+        const float SeaResistanceFloor = 0.30f;
 
         // ------------------------- internals -------------------------
         Rigidbody rb;
@@ -336,6 +476,36 @@ namespace SeaSick.Ship
             return Mathf.Abs(axis.x * it.x) + Mathf.Abs(axis.y * it.y) + Mathf.Abs(axis.z * it.z);
         }
 
+        /// How far gone she is toward a broach.
+        ///
+        /// Three things have to be true at once, and the product of them is
+        /// what keeps this from firing in water where it would just be noise:
+        /// the face has to be STEEP, she has to be RUNNING down it rather
+        /// than across or up it, and she has to have WAY on. A hull slower
+        /// than the wave is overtaken and lifted; the danger is being carried,
+        /// which is the same condition that makes surfing worth doing. That
+        /// is deliberate — the reward and the risk are the same piece of
+        /// water, which is the only reason either is interesting.
+        void UpdateBroach(Vector3 downSlope, bool onFace, Vector3 forward, float dt)
+        {
+            float want = 0f;
+            if (onFace && !Anchored)
+            {
+                Vector3 dir = downSlope.normalized;
+                float running = Vector3.Dot(dir, forward);
+                if (running > 0f)
+                {
+                    float steep = Mathf.InverseLerp(broachOnsetSlope, broachFullSlope,
+                        downSlope.magnitude);
+                    float way = Mathf.InverseLerp(0.45f, 0.90f,
+                        CurrentSpeed / Mathf.Max(1f, maxSpeed));
+                    want = steep * way * running * buoyant.Submersion;
+                }
+            }
+            float rate = want > Broach01 ? broachOnsetRate : broachRecoverRate;
+            Broach01 = Mathf.MoveTowards(Broach01, Mathf.Clamp01(want), rate * dt);
+        }
+
         void TrimSails(float dt)
         {
             ThrottleOrder = Mathf.Clamp(ThrottleOrder, -1f, 1f);
@@ -361,11 +531,17 @@ namespace SeaSick.Ship
                 GustFactor01 = Mathf.PerlinNoise(gustPhase * 0.15f, 3.7f) * ctrl.Storminess01;
             }
             SeaResistance01 = SeaResistanceAt(posXZ, transform.forward, headSeaPenalty,
-                out float sev, out float head, out float angle);
+                out float sev, out float head, out float angle, out float swellAngle);
             SeaSeverity01 = sev;
             SeaHs = ctrl != null ? ctrl.SeaHsAt(posXZ) : 0f;
             HeadSea01 = head;
             SeaAngleDeg = angle;
+            SwellAngleDeg = swellAngle;
+            if (ctrl != null)
+            {
+                SeasFromDeg = FromBearing(ctrl.WindDirection);
+                SwellFromDeg = FromBearing(ctrl.SwellDirection);
+            }
             // The static rule keys the penalty on SEVERITY, which is a
             // weather coordinate: the same number for a 9 m skiff and a 46 m
             // first-rate in the same water. But whether a head sea is
@@ -404,7 +580,7 @@ namespace SeaSick.Ship
 
             // Drift: the water mass itself moving (Stokes drift scaled by sea).
             // A hull with no sail still sits in moving water, but this term is
-            // the wind's push on the ship and the paddle boat is exempt.
+            // the wind's push on the ship, so a hull under no canvas is exempt.
             WaterVelocity = windDriven
                 ? new Vector3(WindDirection.x, 0f, WindDirection.y) * (waveDrift * SeaSeverity01)
                 : Vector3.zero;
@@ -476,12 +652,73 @@ namespace SeaSick.Ship
             float speedFactor = Mathf.Clamp01(CurrentSpeed / maxSpeed);
 
             // --- steering: yaw is a control axis, pitch/roll stay physical ---
+            // --- the face she is on, sampled ONCE ---------------------------
+            //
+            // The surf force further down already wanted this; the broach
+            // wants it BEFORE the rudder is applied, and a second
+            // SampleImmediate would spend a call out of a budget of about
+            // eight a frame. `downSlope` points downhill and its magnitude is
+            // the tangent of the face angle.
+            Vector3 downSlope = Vector3.zero;
+            bool onFace = false;
+            if (!Anchored && Ocean.OceanSampler.Ready)
+            {
+                Vector3 n = Ocean.OceanSampler.SampleImmediate(transform.position).normal;
+                if (n.y > 0.2f)
+                {
+                    downSlope = new Vector3(n.x, 0f, n.z) / n.y;
+                    onFace = true;
+                }
+            }
+            UpdateBroach(downSlope, onFace, forward, dt);
+
             float effectiveRudder = EffectiveRudder();
+            // A broaching hull has lost her grip on the water: the stern is
+            // lifted clear and running, the rudder is in aerated water going
+            // the same way she is, and neither bites. She still answers — the
+            // captain never loses the tiller — but she answers late and small,
+            // which is what makes the recovery a thing you can do WELL.
+            float helm = 1f - broachRudderLoss * Broach01;
             float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor)
-                * (1f - 0.15f * laden - 0.20f * over);
+                * (1f - 0.15f * laden - 0.20f * over) * helm;
+            // --- the broach: a DIVERGENT yaw the rudder has to hold off -----
+            //
+            // Square to the face she is stable; a few degrees off and the sea
+            // carries the lifted stern further round, which puts her further
+            // off, which lifts more stern. That runaway is the whole mechanic,
+            // and it is why the term goes as sin(error) about the fall line:
+            // zero straight down the face, largest halfway to beam-on, and
+            // always in the direction that makes it worse. Past 90 degrees it
+            // falls away again, so a broach that is allowed to run does not
+            // spin her — it lays her beam-on and leaves her there, which is
+            // what a broach actually is.
+            //
+            // **It enters as a yaw RATE, not a torque, and that is load-
+            // bearing.** Steering here is an assignment: `av.y` is moved
+            // toward the rudder's target at a fixed rate, so a competing
+            // torque either always beats that rate limiter or always loses to
+            // it, and neither outcome has a lever in it. As a bias on the
+            // TARGET the two are commensurable — the rudder can cancel a
+            // small one outright, a big one outruns the helm, and the way out
+            // of a big one is to stop feeding it: throttle back or ease her,
+            // and the `way` term drops the broach on its own. Slowing down in
+            // a following sea is the real answer, so it should be the one the
+            // mechanic teaches.
+            float broachBias = 0f;
+            if (Broach01 > 0f && onFace)
+            {
+                float err = Vector3.SignedAngle(forward, downSlope.normalized, Vector3.up);
+                float swing = -Mathf.Sin(err * Mathf.Deg2Rad) * Broach01;
+                broachBias = swing * broachYawRate * Mathf.Deg2Rad;
+                // And she lies over as the sea takes her: the visible tell,
+                // before the heading has moved far enough to read.
+                rb.AddTorque(forward * (swing * broachHeel * RollInertia()),
+                    ForceMode.Force);
+            }
+
             Vector3 av = rb.angularVelocity;
-            float targetYawRate = effectiveRudder * turnRate * Mathf.Deg2Rad;
-            av.y = Mathf.MoveTowards(av.y, targetYawRate, yawResponse * dt);
+            float targetYawRate = effectiveRudder * turnRate * Mathf.Deg2Rad + broachBias;
+            av.y = Mathf.MoveTowards(av.y, targetYawRate, yawResponse * helm * dt);
             rb.angularVelocity = av;
 
             // Turn heel: rudder + speed lays her over into the turn.
@@ -497,13 +734,36 @@ namespace SeaSick.Ship
             float demand = Mathf.Clamp(Throttle, -1f, 1f);
             float power = demand >= 0f ? demand : demand * asternFraction;
             float targetSpeed = effMaxSpeed * power * SeaResistance01;
+            // Pace her to the sea. A hull driven flat out into a head sea
+            // does not go faster, she goes wetter -- she launches off a crest
+            // and lands on her forefoot. Easing gives up way on purpose so
+            // she rides, and it only ever costs anything when there is a sea
+            // to ease for, which is what keeps it a decision rather than a
+            // handbrake somebody leaves on.
+            EaseCost01 = 0f;
+            if (Easing && !Anchored)
+            {
+                float bite = HeadSea01 * Mathf.Clamp01(SeaHs
+                    / Mathf.Max(1f, easeFullAtHullFraction * HullLength));
+                EaseCost01 = easeDepth * bite;
+                targetSpeed *= 1f - EaseCost01;
+            }
             if (Rowing && !Anchored && demand >= 0f)
                 targetSpeed = Mathf.Max(targetSpeed,
                     rowSpeed * (1f - 0.22f * laden - 0.30f * over) * OarPower01);
             if (Anchored) targetSpeed = 0f;
 
+            // Above her target the engine stops pushing and starts holding
+            // her back -- except on a face, where the brake was quietly
+            // undoing the ride. A hull that has been carried up to speed by
+            // the water KEEPS it for a while: that is what surfing is, and
+            // the old constant drag meant every run bled away the instant the
+            // face flattened, so working a wave well was worth nothing you
+            // could still feel two seconds later.
+            float overspeedDrag = Mathf.Lerp(overspeedDragScale,
+                overspeedDragScale * surfDragRelief, SurfBoost01);
             float pull = forwardWay > targetSpeed
-                ? acceleration * overspeedDragScale
+                ? acceleration * overspeedDrag
                 : acceleration;
             if (Anchored) pull = acceleration * 2.5f;
             float dv = Mathf.Clamp(targetSpeed - forwardWay,
@@ -515,8 +775,17 @@ namespace SeaSick.Ship
             if (forwardWay > ceiling)
                 rb.AddForce(forward * ((ceiling - forwardWay) / dt * mass * 0.5f), ForceMode.Force);
 
+            // What the ride actually bought her, for the instruments. Measured
+            // against her OWN top speed so it means the same thing on every
+            // rung of the ladder.
+            Overspeed01 = Mathf.Clamp01((forwardWay - effMaxSpeed)
+                / Mathf.Max(0.01f, effMaxSpeed * (surfOvershoot - 1f)));
+            SurfRunSeconds = Overspeed01 > 0.05f || SurfBoost01 > 0.35f
+                ? SurfRunSeconds + dt : 0f;
+
             // --- keel grip: bleed sideways slip so she carves, not skates ---
-            float grip = Anchored ? keelGrip * 3f : keelGrip * heaviness;
+            float grip = Anchored ? keelGrip * 3f
+                : keelGrip * heaviness * (1f - broachGripLoss * Broach01);
             rb.AddForce(-right * (sideWay * grip * mass), ForceMode.Force);
 
             // --- surf: gravity pulling the hull along the surface slope ---
@@ -525,17 +794,12 @@ namespace SeaSick.Ship
             // measured as a 4 kN anti-propulsion force). Running down a face
             // pulls her forward; climbing costs; a beam sea shoves sideways.
             Vector3 surfForce = Vector3.zero;
-            if (!Anchored && Ocean.OceanSampler.Ready)
+            if (onFace)
             {
-                Vector3 n = Ocean.OceanSampler.SampleImmediate(transform.position).normal;
-                if (n.y > 0.2f)
-                {
-                    Vector3 downSlope = new Vector3(n.x, 0f, n.z) / n.y;
-                    Vector3 accel = downSlope * surfGain * 9.81f;
-                    accel = Vector3.ClampMagnitude(accel, 4.5f);
-                    surfForce = accel * mass * buoyant.Submersion;
-                    rb.AddForce(surfForce, ForceMode.Force);
-                }
+                Vector3 accel = downSlope * surfGain * 9.81f;
+                accel = Vector3.ClampMagnitude(accel, 4.5f);
+                surfForce = accel * mass * buoyant.Submersion;
+                rb.AddForce(surfForce, ForceMode.Force);
             }
             smoothedWaveForce = Vector3.Lerp(smoothedWaveForce, surfForce,
                 1f - Mathf.Exp(-surfResponse * dt));

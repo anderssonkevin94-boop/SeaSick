@@ -20,16 +20,77 @@ Shader "SeaSick/Ocean"
         _PeakMaskScale ("Peak Mask Scale", Range(0, 2)) = 0.55
         _FoamJThreshold ("Foam Jacobian Threshold", Range(0, 1)) = 0.72
         _FoamNoiseScale ("Foam Noise Scale", Float) = 0.14
+        // How the fold READS. `j` is the surface Jacobian: 1 is flat water and
+        // below `_FoamJThreshold` the surface is folding over itself. Foam is
+        // the visible evidence of that fold, so its onset should be as abrupt
+        // as the fold is. `_FoamSnap` is the width of the onset in Jacobian
+        // units -- the old hard-coded `* 4.0` was a fixed 0.25-wide ramp, which
+        // spreads what ought to be an edge across a quarter of the whole range
+        // and reads as haze lying on the water instead of a crest breaking.
+        _FoamSnap ("Foam — snap (J width of the onset)", Range(0.02, 0.6)) = 0.12
+        _FoamCrestGain ("Foam — fresh crest gain", Range(0, 3)) = 1.0
+        _FoamRelief ("Foam — relief (bump on the whitecap)", Range(0, 3)) = 1.1
+        _FoamSparkle ("Foam — wet sparkle", Range(0, 2)) = 0.7
+        // WHAT THE FOAM IS ALLOWED TO SEE, as opposed to what the mesh can
+        // DRAW. Measured (CrestProbe, 2026-09-09): the instant fold term
+        // produced foam on 0.09 % of the open sea — i.e. none — while the
+        // persistent buffer produced 100 % of everything on screen. The cause
+        // is that the shader's Jacobian is weighted by the CLIPMAP weights, and
+        // the folding lives in cascade 2, whose weight is near zero past a few
+        // tens of metres. So the water folds and the shader is not looking.
+        //
+        // `FoamAccumulate.compute` has never had that problem: it sums all
+        // three bands UNWEIGHTED, which is exactly why the buffer was carrying
+        // the whole load. This lifts the short bands back into the fragment's
+        // Jacobian the same way, and fades the lift out with distance because
+        // a 32 m patch sampled at LOD 0 two kilometres away is sparkle noise,
+        // not foam — past that the buffer carries it, which is its job.
+        _FoamBandLift ("Foam — short-band lift", Range(0, 1)) = 0.7
+        _FoamLiftFar ("Foam — lift fades out by (m)", Float) = 420
+        // The buffer's own contrast. It is a blurred, decaying field, so left
+        // linear it lays a uniform milk over the whole sea — measured at 0.35
+        // mean coverage with 100 % of water pixels above 0.1, which is a sheet
+        // of paint and the reason a big sea reads soft. The floor cuts the
+        // base; the gain keeps the real trails.
+        _FoamTrailFloor ("Foam — trail floor", Range(0, 0.5)) = 0.20
+        _FoamTrailGain ("Foam — trail contrast", Range(0.2, 4)) = 1.8
         _SurfStrength ("Surf Strength", Range(0, 2)) = 0.95
         _SurfBreakFrac ("Surf Break Onset (x breakFraction)", Range(0.2, 1)) = 0.78
         _SurfSwashDepth ("Surf Swash Depth (m)", Range(0, 12)) = 3
         _SpecPowerNear ("Spec Power Near", Float) = 420
         _SpecPowerFar ("Spec Power Far", Float) = 48
         _SpecStrength ("Spec Strength", Range(0, 2)) = 0.75
+        // Kevin's, driven by hand with `WaterClarityTuner` 2026-09-06 and
+        // printed with its P key -- NOT picked from arithmetic. Where he
+        // landed, against the defaults I had proposed: the water is about
+        // four times CLEARER (green extinction 0.15 per metre against 0.60),
+        // the shoal tint is half as strong because with water this clear the
+        // real see-through does the work a painted tint was standing in for,
+        // and the shoal fades out at 12.6 m, which is the seabed.
+        //
+        // _MurkDepth and _MurkExtinction are redundant with each other --
+        // only 3 * extinction / depth reaches the shader -- and they are left
+        // as he set them so the sliders come back up where he left them.
+        _MurkDepth ("Murk — metres you can see down", Range(0.5, 40)) = 35.61
+        _MurkExtinction ("Murk — per-channel absorption rate", Color) = (4.55, 1.81, 1.57, 1)
+        _RefractStrength ("Refraction (m at the surface)", Range(0, 2)) = 0.57
+        _ShoalColor ("Shoal — colour of water over a bottom", Color) = (0.19, 0.60, 0.58, 1)
+        _ShoalDepth ("Shoal — depth it fades out by (m)", Range(1, 60)) = 12.6
+        _ShoalStrength ("Shoal strength", Range(0, 1)) = 0.29
+        // How far past the hull-clip ellipse the water stays OPAQUE, as a
+        // multiple of the ellipse's own radius. See the shield in Frag.
+        _HullShield ("Hull shield (x clip radius)", Range(1, 3)) = 1.6
     }
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline" "Queue" = "Geometry" }
+        // Transparent queue, but NOT alpha blended: the water still writes
+        // depth and still returns alpha 1. It has to render after the opaques
+        // purely so `_CameraOpaqueTexture` exists to look through -- the
+        // compositing is done by hand in the fragment, with an extinction
+        // curve, which is both prettier than a blend mode and impossible to
+        // sort wrong. Transparent-100 keeps it ahead of the spray, the
+        // tracers and the impact decals, all of which sit at 3000.
+        Tags { "RenderType" = "Transparent" "RenderPipeline" = "UniversalPipeline" "Queue" = "Transparent-100" }
         Pass
         {
             Tags { "LightMode" = "UniversalForward" }
@@ -40,6 +101,8 @@ Shader "SeaSick/Ocean"
             #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
             #include "RegionField.hlsl"
 
             TEXTURE2D_ARRAY(_Ocean_Displacement);
@@ -94,12 +157,32 @@ Shader "SeaSick/Ocean"
             // zero, which is the shipped look, so forgetting to reset it can
             // only fail loudly.
             float _SS_FoamOnly;
+            // Dev only: 1 puts the foam back the way it was before the fold
+            // pass -- Jacobian without its cross term, the fixed 0.25-wide
+            // onset, no crest gain, no relief. It exists so the before and the
+            // after come off the SAME FRAME of the same sea rather than from
+            // two builds an hour apart, which is the only way a foam
+            // comparison means anything: the sea moves. Unset reads as zero =
+            // the shipped look.
+            float _SS_FoamOldJ;
+            // Dev only: writes ONE of the foam's inputs to the screen instead
+            // of the water, so a term that measures as doing nothing can be
+            // split into WHICH of its inputs is wrong. Same discipline that
+            // found the DivergenceProbe fault: one number that could be any of
+            // three explains nothing.
+            //   1 j  2 breaking  3 env  4 wJ.z  5 turb  6 fresh  7 residual
+            //   8 fade  9 wC.x  10 wC.z  11 dist/1000
+            float _SS_FoamChannel;
             // Dev only: 1 suppresses the surf term below, so SurfProbe can
             // shoot the shore with and without it in ONE run at one wave
             // phase, instead of the before and the after being two builds an
             // hour apart with a different sea in each. Unset reads as zero,
             // which is the shipped look.
             float _SS_SurfOff;
+            // Dev only: 1 makes the water opaque again, so a look sheet can
+            // shoot the same shore with and without the bottom showing
+            // through at one wave phase. Unset reads as zero = shipped look.
+            float _SS_RefractOff;
 
             // How much of each cascade the mesh under this vertex can carry.
             // KEEP IDENTICAL to OceanClipmap.WeightsAt -- see the CascadeFade
@@ -139,8 +222,13 @@ Shader "SeaSick/Ocean"
             half4 _FoamColor;
             half _SubsurfaceStrength, _PeakMaskScale;
             half _FoamJThreshold, _FoamNoiseScale;
+            half _FoamSnap, _FoamCrestGain, _FoamRelief, _FoamSparkle;
+            half _FoamBandLift, _FoamLiftFar, _FoamTrailFloor, _FoamTrailGain;
             half _SurfStrength, _SurfBreakFrac, _SurfSwashDepth;
             half _SpecPowerNear, _SpecPowerFar, _SpecStrength;
+            half _MurkDepth, _RefractStrength, _ShoalDepth, _ShoalStrength;
+            half _HullShield;
+            half4 _MurkExtinction, _ShoalColor;
             CBUFFER_END
 
             struct Attributes { float4 positionOS : POSITION; };
@@ -199,6 +287,30 @@ Shader "SeaSick/Ocean"
                 return dv;
             }
 
+            // The three terms of the displacement Jacobian: dxx and dzz from
+            // the derivative texture, and the CROSS term Dxz from
+            // Displacement.w. The cross term is what the vertex path never
+            // wanted, which is how the fragment's Jacobian came to be missing
+            // it. Weights are passed in rather than derived, because the foam
+            // must be allowed to see bands the mesh cannot draw -- see
+            // `_FoamBandLift`.
+            float3 SampleFold(float2 worldXZ, float3 w)
+            {
+                float3 s = 0;   // x = dxx, y = dzz, z = dxz
+                [unroll]
+                for (int c = 0; c < 3; c++)
+                {
+                    if (w[c] <= 0.001) continue;
+                    float2 uv = worldXZ / _Ocean_PatchSizes[c];
+                    float4 dv = SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Derivatives,
+                        sampler_Ocean_Derivatives, uv, c, 0);
+                    float cross = SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Displacement,
+                        sampler_Ocean_Displacement, uv, c, 0).w;
+                    s += w[c] * float3(dv.z, dv.w, cross);
+                }
+                return s;
+            }
+
             // Two octaves of value noise, world-anchored: tears the raw
             // Jacobian foam so it reads as spume, not maths.
             float FoamHash(float2 p)
@@ -242,6 +354,29 @@ Shader "SeaSick/Ocean"
 
             half4 Frag(Varyings input) : SV_Target
             {
+                // How much this pixel must NOT look through the water, 1 at
+                // the hull and 0 past the shield margin.
+                //
+                // **The see-through water dissolves against the player's own
+                // hull, and only against it.** The transmittance below is
+                // exp(-column), where the column is the water between this
+                // surface and whatever opaque thing is behind it. Behind open
+                // ocean that thing is the sky, so the column is enormous, the
+                // transmittance is zero, and the sea is opaque -- which is why
+                // the clarity pass looked right everywhere except here. At the
+                // waterline the hull is CENTIMETRES behind the surface, the
+                // column goes to zero, exp(0) is 1, and the water turns fully
+                // transparent exactly where it meets the boat: a dark hull
+                // showing through a ring of dissolved sea, reading as a second
+                // ocean laid over the first.
+                //
+                // It cannot be tuned out. No value of _MurkDepth or
+                // _MurkExtinction changes exp(-0) = 1, so the fix has to be
+                // geometric. HullWaterClip already hands us the hull's volume
+                // in ship space for the clip below; the same `plan` term, read
+                // a little wider, is exactly the "am I up against the boat"
+                // test we need, and it costs one smoothstep.
+                float hullShield = 0.0;
                 if (_HullClipSize.w > 0.5)
                 {
                     float3 hp = mul(_HullClipWorldToLocal,
@@ -250,6 +385,13 @@ Shader "SeaSick/Ocean"
                                + (hp.z * hp.z) / (_HullClipSize.z * _HullClipSize.z);
                     // Inside the plan ellipse AND within the deck-to-rail band.
                     clip(max(plan - 1.0, abs(hp.y) - _HullClipSize.y));
+                    // `plan` is a squared normalised radius -- 1 on the
+                    // ellipse -- so the margin squares too. Deliberately NOT
+                    // gated on hp.y the way the clip is: the clip band is
+                    // deck-to-rail, and the surface that needs shielding is
+                    // the waterline, which is below it.
+                    float edge = _HullShield * _HullShield;
+                    hullShield = 1.0 - smoothstep(1.0, edge, plan);
                 }
 
                 float env = input.data.x;
@@ -294,6 +436,12 @@ Shader "SeaSick/Ocean"
                 // state. Same rule the spindrift threshold had to learn: a
                 // threshold into the sea is a fraction of the sea's own
                 // spread, never a number of metres.
+                // One shore fetch, used three times below: the water's own
+                // colour over a bottom, how far you can see through it, and
+                // the surf. It was already being paid for down in the surf
+                // block; it is only hoisted.
+                float3 swd = ShoreWetDepth(xz);
+
                 float localHs = max(env * _Ocean_DepthLimit.y, 0.5);
                 float heightLift = saturate(0.38 + input.heightY / localHs);
                 half3 body = lerp(deep, shallow, heightLift);
@@ -305,6 +453,64 @@ Shader "SeaSick/Ocean"
                 // the sun has set. Without this the sea keeps its daylight
                 // turquoise under a black sky.
                 body *= lerp(1.0, _SS_NightBodyDim, saturate(_SS_Night));
+
+                // ---- shoal and murk ------------------------------------
+                // Two different things, and they have to be separate because
+                // they fail at opposite ends.
+                //
+                //   SHOAL is the colour water takes over a bottom: light that
+                //   reached the sand and came back up. It is driven by the
+                //   VERTICAL depth, so it reads the same from anywhere -- and
+                //   that is the whole point, because it is what tells you
+                //   where the shallow water is from the deck of a ship, at a
+                //   grazing angle where you can see through nothing at all.
+                //   Outside the shore grid `swd.z` is a 1e9 sentinel, so the
+                //   open sea is untouched by construction and not by a
+                //   threshold somebody has to keep right.
+                //
+                //   MURK is actually seeing the bottom, and it is driven by
+                //   the length of the water column along the VIEW RAY, which
+                //   is the physical thing: straight down through 2 m you see
+                //   sand, along the same 2 m of water at a grazing angle you
+                //   see none of it. Beer-Lambert per channel, so red dies
+                //   first and the last thing visible is a blue-green ghost --
+                //   which is why deep water hides its floor without a fade
+                //   having to be authored.
+                float shoal = 1.0 - saturate(swd.z / max(_ShoalDepth, 0.5));
+                body = lerp(body, _ShoalColor.rgb,
+                            shoal * shoal * _ShoalStrength * swd.y);
+
+                float2 suv = GetNormalizedScreenSpaceUV(input.positionHCS);
+                // The fragment's SV_POSITION carries the NDC depth in .z and
+                // 1/w in .w -- not the eye depth. Take it through the same
+                // LinearEyeDepth the scene sample goes through, so the two are
+                // the same quantity and reverse-Z is handled in one place.
+                float surfEye = LinearEyeDepth(input.positionHCS.z, _ZBufferParams);
+                // Refraction falls off with distance for the reason the
+                // glitter roughens with it: a fixed offset in metres is a
+                // growing offset in PIXELS as the surface tilts away, and the
+                // far field ends up swimming.
+                float2 refr = n.xz * (_RefractStrength / max(surfEye, 1.0));
+                float sceneEye = LinearEyeDepth(SampleSceneDepth(suv + refr), _ZBufferParams);
+                // A bent ray must not reach something in FRONT of the water:
+                // that is how a hull's bow ends up smeared into the sea
+                // beside it. If the refracted sample is nearer than the
+                // surface, take the straight one.
+                if (sceneEye < surfEye)
+                {
+                    refr = 0;
+                    sceneEye = LinearEyeDepth(SampleSceneDepth(suv), _ZBufferParams);
+                }
+                float column = max(0.0, sceneEye - surfEye);
+                // Nothing behind the water is the sky, which is infinitely
+                // far, so the column is huge and the transmittance is zero --
+                // the open sea needs no special case.
+                float3 trans = exp(-column * (3.0 / max(_MurkDepth, 0.25))
+                                   * _MurkExtinction.rgb);
+                trans *= 1.0 - saturate(_SS_RefractOff);
+                // Meet the hull, do not dissolve into her.
+                trans *= 1.0 - hullShield;
+                body = lerp(body, SampleSceneColor(suv + refr), trans);
 
                 // The signature: sun behind a steep, choppy crest glows jade
                 // through the water toward the camera.
@@ -343,16 +549,52 @@ Shader "SeaSick/Ocean"
                 // torn by two octaves of world noise.
                 // J < threshold means folding. Flat water is J = 1 exactly and
                 // must produce zero (cross term arrives with the M9 compute).
-                float j = (1.0 + dv.z) * (1.0 + dv.w);
-                float breaking = saturate((_FoamJThreshold - j) * 4.0);
+                // J = (1 + Dxx)(1 + Dzz) - Dxz^2. The cross term is not
+                // optional and it was missing here: dropping Dxz^2 can only
+                // make J LARGER, so every fold was under-reported and the
+                // SHEARED ones were missed outright -- and the sheared folds
+                // are the pyramidal peaks where the two swell trains cross,
+                // which is precisely the water that should be breaking first.
+                // FoamAccumulate.compute has carried the full form since it
+                // was written; this is the instant layer catching up with the
+                // persistent one, and the two now agree on what "folding"
+                // means.
+                float old = saturate(_SS_FoamOldJ);
+                // Lift the SHORT bands into the foam's Jacobian, fading the
+                // lift out with distance. Cascade 0 is already at full weight
+                // everywhere and needs none; cascade 2 needs all of it, and is
+                // the band that actually folds.
+                float liftK = _FoamBandLift * (1.0 - smoothstep(_FoamLiftFar * 0.25,
+                                                                _FoamLiftFar, dist));
+                float3 wJ = old > 0.5 ? input.wC * fade
+                          : saturate(input.wC + liftK * float3(0.0, 0.5, 1.0)) * fade;
+                float3 fold = SampleFold(xz, wJ * input.envC);
+                float j = (1.0 + fold.x) * (1.0 + fold.y) - fold.z * fold.z * (1.0 - old);
+                float snap = lerp(_FoamSnap, 0.25, old);
+                float breaking = saturate((_FoamJThreshold - j) / max(snap, 0.02));
                 // Single combined-J foam layer, tiled with patch 0.
                 float turb = SAMPLE_TEXTURE2D_ARRAY(_Ocean_Turbulence,
                     sampler_Ocean_Turbulence, xz / _Ocean_PatchSizes[0], 0).r
                     * input.wC.x;
                 float noise = FoamNoise(xz * _FoamNoiseScale)
                             * FoamNoise(xz * _FoamNoiseScale * 3.7 + 17.0);
-                float foamAmt = saturate((breaking * (0.35 + 0.65 * storm) + turb)
-                                * (0.4 + 1.5 * noise)) * env;
+                // TWO foams, kept apart on purpose. FRESH is water that is
+                // folding right now: bright, torn, and where the light catches.
+                // RESIDUAL is the trail the turbulence buffer carries after it,
+                // duller and older. Added into one number before they are used
+                // -- which is what this did -- they average into flat paint at
+                // one brightness; kept apart, a breaking crest reads white
+                // against its own wake, which is the whole shape of the thing.
+                float fresh = saturate(breaking * (0.35 + 0.65 * storm)
+                                       * (0.4 + 1.5 * noise)) * env;
+                // The buffer is a blurred, decaying field: left linear it lays
+                // a uniform milk over the whole sea rather than marking where
+                // the water broke. Floor it and lift its contrast so a trail
+                // reads as a trail.
+                float trail = old > 0.5 ? turb
+                            : saturate((turb - _FoamTrailFloor) * _FoamTrailGain);
+                float residual = saturate(trail * (0.4 + 1.5 * noise)) * env;
+                float foamAmt = saturate(fresh * lerp(_FoamCrestGain, 1.0, old) + residual);
                 foamAmt = saturate(foamAmt + sim.g * (0.5 + 0.8 * noise));
 
                 // ---- surf ------------------------------------------------
@@ -399,7 +641,6 @@ Shader "SeaSick/Ocean"
                 // 1e9 sentinel: relH goes to zero and swash goes to zero, so
                 // the open sea is untouched by construction rather than by a
                 // threshold that has to be got right.
-                float3 swd = ShoreWetDepth(xz);
                 float bf = max(_Ocean_DepthLimit.x, 0.05);
                 float relH = localHs / max(swd.z, 0.25);
                 float breakers = smoothstep(bf * _SurfBreakFrac, bf, relH);
@@ -435,7 +676,53 @@ Shader "SeaSick/Ocean"
                 float3 foamCol = _FoamColor.rgb
                     * (0.55 * lerp(1.0, _SS_NightBodyDim, saturate(_SS_Night))
                        + 0.45 * sun.color);
+                // Foam is not paint. A whitecap is a rough, structured surface,
+                // and without a bump on it the brightest water in the frame is
+                // also the flattest -- which is exactly what makes a big sea
+                // read soft. Two extra noise taps at a fixed WORLD offset give
+                // a stable gradient (never a screen-space derivative: that
+                // scales with how much world a pixel covers and turns the far
+                // field into sparkle noise), and the branch means clear water
+                // pays nothing for it.
+                float foamSpec = 0.0;
+                if (foamAmt > 0.02 && old < 0.5)
+                {
+                    float fs = _FoamNoiseScale * 3.7;
+                    float e = 0.5 / max(fs, 0.01);
+                    float nx = FoamNoise((xz + float2(e, 0)) * fs + 17.0)
+                             - FoamNoise((xz - float2(e, 0)) * fs + 17.0);
+                    float nz = FoamNoise((xz + float2(0, e)) * fs + 17.0)
+                             - FoamNoise((xz - float2(0, e)) * fs + 17.0);
+                    float3 foamN = normalize(
+                        n + float3(-nx, 0, -nz) * (_FoamRelief * foamAmt));
+                    // Wet foam is rougher than open water, so it takes a much
+                    // wider highlight than the sea's own glitter -- it should
+                    // glow along a whole crest, not pick out one facet.
+                    foamSpec = pow(saturate(dot(foamN, H)), 28.0)
+                             * _FoamSparkle * foamAmt * (1.0 - _SS_LayerOff.z);
+                }
+
                 col = lerp(col, foamCol, foamAmt);
+                col += foamSpec * sun.color;
+
+                // Before the fog, unlike _SS_FoamOnly: these are inputs, not
+                // the shaded result, and nothing about them should be dimmed
+                // by the weather.
+                if (_SS_FoamChannel > 0.5)
+                {
+                    float ch = _SS_FoamChannel;
+                    float v = ch < 1.5 ? j
+                            : ch < 2.5 ? breaking
+                            : ch < 3.5 ? input.envC.x
+                            : ch < 4.5 ? wJ.z
+                            : ch < 5.5 ? turb
+                            : ch < 6.5 ? fresh
+                            : ch < 7.5 ? residual
+                            : ch < 8.5 ? fade
+                            : ch < 9.5 ? input.wC.x
+                            : ch < 10.5 ? input.wC.z : dist * 0.001;
+                    return half4(v.xxx, 1);
+                }
 
                 col = MixFog(col, input.data.w);
                 // After the fog, deliberately: the probe wants the foam the

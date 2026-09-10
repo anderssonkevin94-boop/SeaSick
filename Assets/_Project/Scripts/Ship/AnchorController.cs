@@ -162,6 +162,61 @@ namespace SeaSick.Ship
             CurrentState = State.Anchored;
         }
 
+        /// Put her on her home berth, tied up, from wherever she happens to be.
+        ///
+        /// ONE place knows how to do this: the spawn path calls it on the
+        /// first frame the dock exists, and the Home tab calls it mid-voyage.
+        /// Two copies of "how to be berthed" is exactly the divergence
+        /// `GetUnderway` had to be written to end — a second copy of a
+        /// let-go/tie-up routine has already cost this project a week of
+        /// broken landings.
+        ///
+        /// Returns false with a reason when it would break something rather
+        /// than doing it badly. Today that means crew ashore: the plank is
+        /// the only way they get back aboard, so moving the hull would leave
+        /// them standing on a beach a voyage from home.
+        public bool BerthAtHome(out string why)
+        {
+            why = null;
+            var d = Dock.Home;
+            if (d == null) { why = "no home dock yet"; return false; }
+            if (CurrentState == State.Ashore || landingPending)
+            { why = "crew are ashore"; return false; }
+
+            // Let go of wherever she is FIRST. Arriving somewhere new with
+            // `CurrentDock` still pointing at the last place is the same
+            // fault that made every landing fail, just pointing the other way.
+            GetUnderway();
+
+            Vector3 p = d.Berth;
+            // The berth is a place on the WATER, and the water moves. Taking
+            // her current Y would set her down at whatever height the trough
+            // she was sitting in happened to be — which at sea is metres.
+            p.y = Ocean.OceanSampler.Ready
+                ? Ocean.OceanSampler.SampleImmediate(p).height
+                : transform.position.y;
+
+            var rb = GetComponent<Rigidbody>();
+            transform.SetPositionAndRotation(p, d.Heading);
+            if (rb != null)
+            {
+                rb.position = p;
+                rb.rotation = d.Heading;
+                rb.linearVelocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+            }
+            motor.AnchorPoint = p;
+            ComeAlongside(d);
+
+            // Ring down stop, or she arrives at her own pier under full
+            // ahead. The telegraph re-asserts itself every frame, so the
+            // ORDER has to move — zeroing ThrottleOrder here would last
+            // exactly until HelmInput's next Update.
+            var helm = GetComponent<HelmInput>();
+            if (helm != null) helm.AllStop();
+            return true;
+        }
+
         void Update()
         {
             float dt = Time.deltaTime;
@@ -173,20 +228,7 @@ namespace SeaSick.Ship
             if (startAtHomeDock && !startedDocked && Dock.Home != null)
             {
                 startedDocked = true;
-                var d = Dock.Home;
-                Vector3 p = d.Berth;
-                p.y = transform.position.y;
-                var rb = GetComponent<Rigidbody>();
-                transform.SetPositionAndRotation(p, d.Heading);
-                if (rb != null)
-                {
-                    rb.position = p;
-                    rb.rotation = d.Heading;
-                    rb.linearVelocity = Vector3.zero;
-                    rb.angularVelocity = Vector3.zero;
-                }
-                motor.AnchorPoint = p;
-                ComeAlongside(d);
+                BerthAtHome(out _);
             }
 
             SpacebarCommand();

@@ -60,10 +60,12 @@ namespace SeaSick.Ship
 
         ShipMotor motor;
         CrewAgent[] crew;
+        SeaSick.Ocean.BuoyantBody buoyancy;
 
         void Start()
         {
             motor = GetComponent<ShipMotor>();
+            buoyancy = GetComponent<SeaSick.Ocean.BuoyantBody>();
             crew = GetComponentsInChildren<CrewAgent>(true);
         }
 
@@ -150,7 +152,20 @@ namespace SeaSick.Ship
             if (Island.TerrainHeight == null) return false;
 
             Vector3 p = transform.position;
-            float need = -groundingDraft;
+            // **The bar she clears on a crest is the bar she hits in the
+            // trough.** This test used to compare the seabed against a
+            // constant -0.3, which is mean water — so the wave the whole game
+            // is built on had no say in whether she touched. In a six-metre
+            // sea that is three metres of depth the pilot cannot see and the
+            // game was not charging for, and it is the reason the shallows
+            // were the SAFEST water here: the depth limit lays the sea down
+            // inshore, and nothing else inshore could hurt her.
+            //
+            // `MeanWaterHeight` is the surface under the hull, already
+            // measured by the batched buoyancy query every physics step, so
+            // this costs no sample out of the immediate budget.
+            float surface = buoyancy != null ? buoyancy.MeanWaterHeight : 0f;
+            float need = surface - groundingDraft;
             if (Ground(p) <= need) return false;
 
             const float E = 4f;

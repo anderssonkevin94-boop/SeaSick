@@ -33,7 +33,7 @@ public class FramingProbe : MonoBehaviour
     const float Settle = 3f;
 
     /// A 1080x2340 phone held upright — what the game actually ships on.
-    const float PortraitAspect = 1080f / 2340f;
+    const float PortraitAspect = SeaSick.CameraRig.ChaseCamera.PortraitAspect;
 
     IEnumerator Start()
     {

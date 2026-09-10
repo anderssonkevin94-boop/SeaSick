@@ -7,15 +7,35 @@ namespace SeaSick.CameraRig
     /// past the ship toward the horizon. No manual control by design.
     public class ChaseCamera : MonoBehaviour
     {
+        /// A 1080x2340 phone held upright — what the game actually ships on,
+        /// and the shape every framing decision has to be judged in.
+        ///
+        /// It lives HERE, once, because it was written down three times and
+        /// two of them disagreed: `Dock.ViewHalfWidth`'s note says 900x1500
+        /// (0.600) while FramingProbe and TerrainPerfProbe both use 1080x2340
+        /// (0.462). Composing the docked shot against the wider of the two put
+        /// the ship at viewport 0.89 on the desk and 1.01 -- off the screen --
+        /// on the phone. A constant that is copied is a constant that drifts.
+        public const float PortraitAspect = 1080f / 2340f;
+
         [SerializeField] Transform target;
         // Three-quarter view: tilt = (height - lookHeight) / (distance +
         // lookAhead). Vertical FOV is 60, so the frame spans tilt +/- 30
         // degrees — the horizon is only visible while tilt stays under 30.
         // These give ~22 degrees, which keeps a band of sky at the top while
         // still looking down onto the deck.
-        [SerializeField] float distance = 25f;
-        [SerializeField] float height = 19f;
-        [SerializeField] float lookAhead = 20f;
+        // Kevin picked B2 off the ten-angle sheet (SailShots): 26 m back,
+        // 8 m up, 15 degrees above her, 58 mm — low and astern, the whole
+        // hull in the frame with sea around it, sailing on a desktop screen
+        // where the sides have room. He chose it over the higher angles that
+        // read the DECK better, having seen both, so the deck-legibility
+        // argument is settled and not to be re-litigated.
+        //
+        // These are PRE-SCALE: the rig multiplies them by frameK, which was
+        // 1.25 on the steamer when the sheet was shot. 26 / 1.25 = 20.8.
+        [SerializeField] float distance = 20.8f;
+        [SerializeField] float height = 6.4f;      // 8 m up, / 1.25
+        [SerializeField] float lookAhead = 14.4f;  // 18 m ahead, / 1.25
         [SerializeField] float lookHeight = 0.5f;
         [SerializeField] float positionResponse = 2.2f;
         [SerializeField] float rotationResponse = 3f;
@@ -59,11 +79,11 @@ namespace SeaSick.CameraRig
         // it puts her at about 58% of the height and 77% of the width, which
         // leaves sea on both sides and sky above her on every rung.
         [Tooltip("Room around the ship, on top of the per-hull scaling. 1 is the old framing, which measured wider than a portrait screen. Turn it down to sit closer.")]
-        [SerializeField] float framingMargin = 1.5f;
+        [SerializeField] float framingMargin = 1.25f;
 
         // FOV motion is the main cause of simulator sickness in a chase cam.
         // Keep the total swing small (a few degrees) and ease it slowly.
-        [SerializeField] float fovBase = 58f;
+        [SerializeField] float fovBase = 58f;      // the sheet's lens
         [SerializeField] float fovSpeedBoost = 4f;
         [Tooltip("Extra FOV kick while surfing down a wave face. Keep tiny.")]
         [SerializeField] float fovSurfPunch = 1.5f;
@@ -176,6 +196,17 @@ namespace SeaSick.CameraRig
             public float span;
         }
 
+        /// The sailing rig, overridable live so it can be FLOWN rather than
+        /// guessed at. Same idea as `OverviewOverride`: SailCamTuner writes
+        /// this every frame while it is active, and the numbers it prints drop
+        /// straight back into the serialized fields below.
+        public struct SailShot
+        {
+            public float distance, height, lookAhead, lookHeight, fov;
+        }
+
+        public SailShot? SailOverride { get; set; }
+
         public IslandShot? Overview { get; set; }
 
         /// Set by the dev camera tuner. Takes priority over `Overview` so the
@@ -202,9 +233,17 @@ namespace SeaSick.CameraRig
         [Tooltip("Seconds-ish to rise into the overview and to come back down.")]
         [SerializeField] float overviewResponse = 0.7f;
 
+        [Tooltip("Back the overview off far enough that the ship is always in the frame, at the aspect the game is actually running. The authored zoom is kept whenever it already holds her, so this changes nothing until it has to.")]
+        [SerializeField] bool overviewHoldsShip = true;
+        [Tooltip("Metres of clear water to leave outboard of her when the shot has to widen for her. Half her length plus a little.")]
+        [SerializeField] float overviewShipMargin = 22f;
+        [Tooltip("The aspect the game is composed for. Not the editor's Game view: shots framed against that come out right on the desk and wrong on the phone.")]
+        [SerializeField] float narrowestAspect = PortraitAspect;
+
         [Tooltip("How tall a 1.7 m crew member must be, as a FRACTION of screen height. 0.0055 is about 13 px on a phone. This is what stops the overview backing off to a pretty landform nobody can read; it is set as low as it is because the frame also has to hold the pier, and the pier is a village-width away from the village.")]
         [SerializeField] float minPersonScreenFraction = 0.0055f;
         float overviewLevel;
+        float sailFovOverride = -1f;
         float baseFarClip = -1f;
         float sailFov = -1f;
 
@@ -303,6 +342,10 @@ namespace SeaSick.CameraRig
             }
             else if (sailFov <= 0f) sailFov = fovBase;
 
+            // The tuner's lens, if it is holding one. Applied after the speed
+            // and surf terms so those keep working underneath it.
+            if (sailFovOverride > 1f) sailFov = sailFovOverride;
+
             Vector3 shipFlat = new Vector3(target.position.x, 0f, target.position.z);
             Vector3 anchor, desired, lookPoint;
 
@@ -349,11 +392,24 @@ namespace SeaSick.CameraRig
                 lockLevel = Mathf.Lerp(lockLevel, locked ? 1f : 0f,
                     1f - Mathf.Exp(-lockResponse * dt));
 
-                float back = (distance + cruiseDistance * cruiseLevel) * frameK
+                // The tuner overrides the BASE numbers, not the seat, so the
+                // per-hull scaling still applies and what it prints is what
+                // goes back into the fields.
+                float bDist = distance, bHeight = height, bAhead = lookAhead, bLookH = lookHeight;
+                if (SailOverride.HasValue)
+                {
+                    var so = SailOverride.Value;
+                    bDist = so.distance; bHeight = so.height;
+                    bAhead = so.lookAhead; bLookH = so.lookHeight;
+                    if (so.fov > 1f) sailFovOverride = so.fov;
+                }
+                else sailFovOverride = -1f;
+
+                float back = (bDist + cruiseDistance * cruiseLevel) * frameK
                            - stormPullIn * stormLevel;
-                float up = (height + cruiseHeight * cruiseLevel) * frameK
+                float up = (bHeight + cruiseHeight * cruiseLevel) * frameK
                          - stormDrop * stormLevel;
-                float ahead = (lookAhead + cruiseLookAhead * cruiseLevel) * frameK;
+                float ahead = (bAhead + cruiseLookAhead * cruiseLevel) * frameK;
 
                 anchor = shipFlat;
                 Vector3 sternDir = -flatForward;
@@ -388,7 +444,7 @@ namespace SeaSick.CameraRig
 
                 desired = shipFlat + sternDir * back + Vector3.up * up;
                 lookPoint = anchor + flatForward * (ahead * (1f - lockLevel))
-                          + Vector3.up * (lookHeight * frameK + seaY);
+                          + Vector3.up * (bLookH * frameK + seaY);
             }
 
             // --- the island overview, blended over whatever was framed ----
@@ -406,9 +462,30 @@ namespace SeaSick.CameraRig
                 // as a distance: distance means nothing without the lens, and
                 // the lens changed. Falls back to fitting `radius` when no
                 // coverage is set.
-                float span = overviewGroundMetres > 0.01f
-                    ? overviewGroundMetres / (2f * tanHalf)
-                    : ov.radius * overviewMargin / tanHalf;
+                float ground = overviewGroundMetres > 0.01f
+                    ? overviewGroundMetres
+                    : ov.radius * overviewMargin * 2f;
+
+                // THE SHOT MUST CONTAIN THE SHIP -- BY MOVING, NOT BY
+                // BACKING OFF.
+                //
+                // The composition puts her near the edge on purpose: the frame
+                // is centred inland of the pier root and off to starboard, so
+                // the pier runs in from the corner with her on it. "Near the
+                // edge" is a hair from "outside it", and a longer pier at a new
+                // island was enough -- she measured INSIDE the wedge
+                // Dock.ViewHalfWidth documents and still came out at viewport
+                // x = 1.12, off the screen.
+                //
+                // The first fix widened the coverage until she fitted. It
+                // worked and it was wrong: coverage IS the zoom, so buying her
+                // way into frame cost legibility everywhere else -- the span
+                // went 165 m to 305 m and a crew member fell to 20 px, which
+                // is unreadable. Slide the frame CENTRE toward her instead and
+                // the zoom is untouched. Only widen if she still will not fit,
+                // which for a sane pier she will.
+                Vector3 aim = ov.centre;
+                float span = ground / (2f * tanHalf);
                 // ...but never so far that the people stop reading. When the
                 // ground to cover is bigger than legibility allows,
                 // legibility wins and the frame holds the middle of it: an
@@ -426,13 +503,60 @@ namespace SeaSick.CameraRig
                 float tiltDeg = ov.tiltDeg > 0.01f ? ov.tiltDeg : overviewTilt;
                 CurrentTilt = tiltDeg;
                 float tilt = tiltDeg * Mathf.Deg2Rad;
-                Vector3 seat = ov.centre
+                Vector3 seat = aim
                              + dir * (span * Mathf.Cos(tilt))
                              + Vector3.up * (span * Mathf.Sin(tilt));
+
+                // Pull the frame over until she is actually inside it.
+                //
+                // Done by PROJECTING her, not by estimating. The first attempt
+                // worked the shift out on the ground plane from half-widths in
+                // metres, and it under-corrected every time because the shot is
+                // tilted 32 degrees and she sits 70 m nearer the lens than the
+                // aim point -- so neither "half the coverage" nor the aim
+                // plane's scale describes the frame where she actually is.
+                // Projecting costs a dot product and is exact.
+                //
+                // The NDC is computed by hand rather than with
+                // Camera.WorldToViewportPoint, because that uses cam.aspect --
+                // the editor's landscape Game view -- and the whole point is to
+                // compose for the phone.
+                if (overviewHoldsShip && target != null && overviewLevel > 0.001f)
+                {
+                    float aspect = Mathf.Min(
+                        Mathf.Max(0.2f, cam != null ? cam.aspect : 1f), narrowestAspect);
+                    Quaternion rot = Quaternion.LookRotation(aim - seat, Vector3.up);
+                    Vector3 f2 = rot * Vector3.forward, r2 = rot * Vector3.right, u2 = rot * Vector3.up;
+                    Vector3 rel = target.position - seat;
+                    float z = Vector3.Dot(rel, f2);
+                    if (z > 1f)
+                    {
+                        // Half the frame, in metres, AT HER DEPTH.
+                        float halfH = z * tanHalf;
+                        float halfW = halfH * aspect;
+                        float x = Vector3.Dot(rel, r2), y = Vector3.Dot(rel, u2);
+                        float overX = Mathf.Abs(x) + overviewShipMargin - halfW;
+                        float overY = Mathf.Abs(y) + overviewShipMargin - halfH;
+                        Vector3 shift = Vector3.zero;
+                        if (overX > 0f) shift += r2 * (Mathf.Sign(x) * overX);
+                        if (overY > 0f) shift += u2 * (Mathf.Sign(y) * overY);
+                        if (shift.sqrMagnitude > 1e-4f)
+                        {
+                            // Move the whole shot, seat and aim together, so
+                            // the angle Kevin chose is preserved exactly and
+                            // only the framing slides.
+                            aim += shift;
+                            seat += shift;
+                        }
+                    }
+                }
                 LastOverviewSeat = seat;
                 desired = Vector3.Lerp(desired, seat, overviewLevel);
                 LastDesired = desired;
-                lookPoint = Vector3.Lerp(lookPoint, ov.centre, overviewLevel);
+                // The AIM, not the authored centre: the seat was built from
+                // the shifted point, so looking at the unshifted one aims the
+                // camera off its own framing.
+                lookPoint = Vector3.Lerp(lookPoint, aim, overviewLevel);
                 // Nothing up there rides the swell.
                 seaY *= 1f - overviewLevel;
 

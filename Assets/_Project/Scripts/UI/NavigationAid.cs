@@ -50,7 +50,6 @@ namespace SeaSick.UI
             UITheme.Rect(tape, UITheme.Panel);
 
             float heading = motor.Heading;
-            float seasFrom = heading + Mathf.DeltaAngle(0f, motor.SeaAngleDeg);
             float homeBearing = BearingTo(motor.transform.position, voyage.HomePoint.position);
 
             // Shade where the seas are coming from, weighted by how heavy they
@@ -58,16 +57,27 @@ namespace SeaSick.UI
             // calm water it fades out entirely, because then it costs nothing.
             // Drawn back to front: the shading is a wash, then the marks, and
             // the cardinals last so nothing ever crosses a letter.
+            //
+            // **Two trains, two washes.** The wind sea and the swell run on
+            // their own clocks and they cross; where they cross there is no
+            // clean heading, and the ONLY way for a player to see that coming
+            // is for both to be on the instrument. The wind sea's wash is wide
+            // and warm (it is short, steep and hits over a broad arc); the
+            // swell's is narrow and cool (it is long and comes from one place).
+            // Where the two overlap on the tape is the water with no answer.
             float sev = motor.SeaSeverity01;
             if (sev > 0.15f)
             {
-                float rel = Mathf.DeltaAngle(heading, seasFrom);
-                // A whisper, not a slab: this is a hint about which way is
-                // slower, and in calm water it says nothing at all.
+                float rel = Mathf.DeltaAngle(heading, motor.SeasFromDeg);
                 DrawSpan(tape, rel - 35f, rel + 35f,
-                    new Color(0.95f, 0.62f, 0.22f, 0.35f + 0.45f * sev));
+                    new Color(0.95f, 0.62f, 0.22f, 0.30f + 0.40f * sev));
+
+                float swellRel = Mathf.DeltaAngle(heading, motor.SwellFromDeg);
+                DrawSpan(tape, swellRel - 18f, swellRel + 18f,
+                    new Color(0.55f, 0.72f, 0.95f, 0.35f + 0.45f * sev));
             }
 
+            DrawWeatherAhead(tape, heading);
             DrawPip(tape, Mathf.DeltaAngle(heading, homeBearing), UITheme.Sea, "home", true);
 
             // Cardinals and their halves. These are the map: north is cold,
@@ -91,6 +101,63 @@ namespace SeaSick.UI
 
         static readonly string[] CardinalNames =
             { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
+
+        [Header("Weather ahead")]
+        [Tooltip("How far up the course to look, metres. The storm gradient measures about x1.20 in Hs per 100 m sailed, so a kilometre and a half is roughly the difference between one sea state and the next -- far enough to be worth turning for, near enough that you will be in it soon.")]
+        [SerializeField] float lookahead = 1500f;
+        [Tooltip("How much bigger or smaller the water has to be up that bearing before the tape says so, as a ratio. Below this it is the same weather and a mark would be noise.")]
+        [SerializeField] float callRatio = 1.25f;
+        [Tooltip("Scans per second. The weather moves in kilometres and minutes; asking it sixty times a second is sixty envelope evaluations a frame for an answer that cannot have changed.")]
+        [SerializeField] float scanHz = 3f;
+
+        // Cached scan. Sampled on a slow timer rather than per repaint,
+        // because SeaHsAt walks the whole region envelope.
+        float worstRel, bestRel, worstRatio = 1f, bestRatio = 1f;
+        float nextScan;
+
+        /// Where the water gets worse, and where it gets better.
+        ///
+        /// **This is what turns weather from an event into a decision.** The
+        /// field already knows the sea at any point — SkyDirector asks it on
+        /// eight bearings every frame to tint the sky — but nothing asked it
+        /// on the player's behalf, so a storm was something that arrived. A
+        /// mark on the compass makes the same storm a choice between the short
+        /// way through and the long way round, which is the only thing that
+        /// makes a weather system gameplay rather than scenery.
+        void DrawWeatherAhead(Rect tape, float heading)
+        {
+            var ctrl = SeaSick.Ocean.SeaStateController.Instance;
+            if (ctrl == null) return;
+
+            if (Time.unscaledTime >= nextScan)
+            {
+                nextScan = Time.unscaledTime + 1f / Mathf.Max(0.5f, scanHz);
+                Vector3 p = motor.transform.position;
+                float here = Mathf.Max(0.2f, ctrl.SeaHsAt(new Vector2(p.x, p.z)));
+                worstRatio = 1f; bestRatio = 1f; worstRel = 0f; bestRel = 0f;
+                // Every 15 degrees across the visible tape. Astern is left out
+                // on purpose: it is where she has just been, and a mark there
+                // is advice about the past.
+                for (float rel = -visibleSpan; rel <= visibleSpan + 0.1f; rel += 15f)
+                {
+                    float bearing = (heading + rel) * Mathf.Deg2Rad;
+                    Vector2 q = new Vector2(
+                        p.x + Mathf.Sin(bearing) * lookahead,
+                        p.z + Mathf.Cos(bearing) * lookahead);
+                    float ratio = ctrl.SeaHsAt(q) / here;
+                    if (ratio > worstRatio) { worstRatio = ratio; worstRel = rel; }
+                    if (ratio < bestRatio) { bestRatio = ratio; bestRel = rel; }
+                }
+            }
+
+            if (worstRatio > callRatio)
+                DrawPip(tape, worstRel, UITheme.Bad, "heavy", false);
+            // Only offer the clear water when there is something to get away
+            // from. In settled weather "easing" is a mark that means nothing
+            // and trains the player to ignore the row it lives in.
+            if (bestRatio < 1f / callRatio && worstRatio > callRatio)
+                DrawPip(tape, bestRel, UITheme.Good, "easing", false);
+        }
 
         /// A compass graduation. Majors carry their letter, minors are a stub —
         /// enough to read rate of turn without crowding the tape.

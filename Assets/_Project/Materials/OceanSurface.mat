@@ -25,9 +25,22 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _FoamJThreshold: 0.72
-    - _FoamNoiseScale: 0.14
+    - _FoamBandLift: 0.75508475
+    - _FoamCrestGain: 1.101695
+    - _FoamJThreshold: 0.33983052
+    - _FoamLiftFar: 420.00003
+    - _FoamNoiseScale: 0.08347457
+    - _FoamRelief: 1.118644
+    - _FoamSnap: 0.16915254
+    - _FoamSparkle: 0.75084746
+    - _FoamTrailFloor: 0.2
+    - _FoamTrailGain: 1.8
+    - _HullShield: 1.6
+    - _MurkDepth: 35.61
     - _PeakMaskScale: 0.55
+    - _RefractStrength: 0.57
+    - _ShoalDepth: 12.6
+    - _ShoalStrength: 0.29
     - _SpecPowerFar: 48
     - _SpecPowerNear: 420
     - _SpecStrength: 0.75
@@ -39,7 +52,9 @@ Material:
     - _DeepColor: {r: 0.028, g: 0.14, b: 0.21, a: 1}
     - _FoamColor: {r: 0.92, g: 0.96, b: 0.97, a: 1}
     - _LightColor: {r: 0.24999997, g: 0.54999995, b: 0.6, a: 1}
+    - _MurkExtinction: {r: 4.55, g: 1.81, b: 1.57, a: 1}
     - _ShallowColor: {r: 0.09, g: 0.42, b: 0.45, a: 1}
+    - _ShoalColor: {r: 0.19, g: 0.6, b: 0.58, a: 1}
     - _StormDeep: {r: 0.058, g: 0.086, b: 0.098, a: 1}
     - _StormShallow: {r: 0.1, g: 0.14, b: 0.15, a: 1}
     - _StormSubsurface: {r: 0.16, g: 0.3, b: 0.24, a: 1}

@@ -16,7 +16,7 @@ public static class InspectBoatParts
 
         string[] names =
         {
-            "PaddleWheel_Port", "PaddleWheel_Stbd", "HelmWheel", "HelmStand",
+            "HelmWheel", "HelmStand",
             "LanternBow", "LanternStern", "LanternBow_Pivot", "LanternStern_Pivot",
             "DeckPlanks", "Railing", "HullPlanks", "Margin",
         };

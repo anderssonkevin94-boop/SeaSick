@@ -151,11 +151,11 @@ public static class SetupHullLab
         {
             var s = Fleet[i];
 
-            if (i == 3)   // the paddle steamer's slot, ahead of the brig
+            if (i == 3)   // the anchor length's slot, ahead of the brig
             {
                 x += 8.44f * 0.5f + 3.5f;
                 var mark = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                mark.name = "current_paddle_steamer_24.2m_footprint";
+                mark.name = "anchor_length_24.2m_footprint";
                 mark.transform.SetParent(root.transform);
                 mark.transform.localScale = new Vector3(8.44f, 0.08f, WorldScale.ShipLength);
                 mark.transform.position = new Vector3(x, 0.04f, 0f);

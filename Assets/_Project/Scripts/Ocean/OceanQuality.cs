@@ -34,20 +34,56 @@ namespace SeaSick.Ocean
 
         static OceanQuality active;
 
-        /// The asset matching the current quality tier. Index 0 is the Mobile
-        /// tier in this project's QualitySettings, everything else gets PC.
+        /// The asset matching the current quality tier, chosen by the level's
+        /// NAME.
+        ///
+        /// It used to be `GetQualityLevel() == 0 ? Mobile : PC`, and by
+        /// 2026-09-09 that was **inverted**: the editor reported quality level
+        /// 0, level 0 is named "PC", and the ocean duly loaded the phone's
+        /// tier. So the whole sea was rendering at `displacementFadeDistance`
+        /// 350 m with 5 clipmap rings and a 128 FFT while the project believed
+        /// it was on the 2600 m / 8-ring / 256 tier — every wave dead by 350 m
+        /// and a flat painted plane from there to the horizon. Measured with
+        /// `CrestProbe`: mean displacement fade across a deck-level view,
+        /// **0.00**, with not one pixel above 0.1.
+        ///
+        /// A quality level's INDEX is not stable — the list can be reordered in
+        /// the inspector and Unity keeps a separate per-platform default — so
+        /// an index is the wrong key for a decision this expensive. The name is
+        /// the thing a person actually set, and it is what `ReadQuality`
+        /// prints, which is how the disagreement was visible at all.
         public static OceanQuality Active
         {
             get
             {
                 if (active == null)
-                {
-                    string name = QualitySettings.GetQualityLevel() == 0
-                        ? "OceanQuality_Mobile" : "OceanQuality_PC";
-                    active = Resources.Load<OceanQuality>("Ocean/" + name);
-                }
+                    active = Resources.Load<OceanQuality>("Ocean/" + TierAsset());
                 return active;
             }
+        }
+
+        /// Which tier asset the current quality level asks for. Public so
+        /// nothing has to duplicate the rule — a duplicated constant is a gate
+        /// that silently stops gating, and `ReadQuality` had its own copy of
+        /// this one, printing the wrong conclusion directly underneath the
+        /// level name that contradicted it.
+        public static string TierAsset()
+        {
+            string name = ActiveLevelName();
+            if (name.IndexOf("Mobile", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return "OceanQuality_Mobile";
+            if (name.IndexOf("PC", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return "OceanQuality_PC";
+            // Neither name matched: fall back to what the hardware is, which is
+            // the question the tier was always really about.
+            return Application.isMobilePlatform ? "OceanQuality_Mobile" : "OceanQuality_PC";
+        }
+
+        public static string ActiveLevelName()
+        {
+            var names = QualitySettings.names;
+            int i = QualitySettings.GetQualityLevel();
+            return names != null && i >= 0 && i < names.Length ? names[i] : "";
         }
 
         /// Probes and setup scripts may force a tier.

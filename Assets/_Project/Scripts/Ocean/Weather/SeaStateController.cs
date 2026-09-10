@@ -168,6 +168,13 @@ namespace SeaSick.Ocean
         /// re-deriving them.
         public float WindDirectionDeg => blend != null ? blend.windDirectionDeg : 0f;
         public float SwellDirectionDeg => blend != null ? blend.swellDirectionDeg : 0f;
+        /// The swell's heading as a unit vector, the same way round as
+        /// `WindDirection` — the direction the train RUNS, so the seas come
+        /// from its negative. It existed only in degrees, which meant every
+        /// gameplay caller that wanted to compare a heading against the swell
+        /// had to rebuild the vector itself; the wind has had this since the
+        /// beginning and the swell is the axis that matters more.
+        public Vector2 SwellDirection => blend != null ? blend.SwellDir : Vector2.right;
         public float WindAgainstSwellDeg => blend != null
             ? Mathf.Abs(Mathf.DeltaAngle(blend.windDirectionDeg, blend.swellDirectionDeg)) : 0f;
         public float SwellCrossingDeg => blend != null

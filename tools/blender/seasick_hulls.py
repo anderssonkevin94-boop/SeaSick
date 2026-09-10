@@ -2815,6 +2815,56 @@ SWATCH = [
                           #    against warm timber rather than as a panel
     (0.55, 0.50, 0.44),   # 23 spare
     (0.66, 0.47, 0.29),   # 24 spare
+
+    # --- THE ISLAND, from 25 up ---------------------------------------------
+    # Resources live in the SAME atlas as the ships, in the cells the fleet
+    # never claimed, so the whole game is one material and one draw call. They
+    # are declared HERE and not in `seasick_resources.py` because
+    # `write_palette` bakes this list: a second table in a second file means
+    # the next ordinary run of the ship generator writes a palette with cells
+    # 25+ black and every tree on every island turns black with it.
+    #
+    # Cells 0-24 do not move, so nothing already exported is touched.
+    #
+    # Read against the terrain's own colours in `TerrainChunkMesher`
+    # (grass 0.30/0.55/0.22, sand 0.86/0.78/0.55, rock 0.42/0.38/0.34): every
+    # canopy tone is DARKER than the grass it stands on, or a wood dissolves
+    # into the hillside from the deck of a ship.
+    (0.13, 0.26, 0.18),   # 25 conifer, shaded
+    (0.17, 0.33, 0.21),   # 26 conifer, mid
+    (0.23, 0.41, 0.24),   # 27 conifer, sunlit
+    (0.21, 0.33, 0.16),   # 28 broadleaf, shaded
+    (0.29, 0.44, 0.19),   # 29 broadleaf, mid
+    (0.38, 0.54, 0.23),   # 30 broadleaf, sunlit
+    (0.45, 0.44, 0.24),   # 31 scrub olive -- the wind-burnt coast tree, and
+                          #    the dead leaf on a picked bush
+    (0.24, 0.18, 0.13),   # 32 bark, deep
+    (0.34, 0.25, 0.17),   # 33 bark, mid
+    (0.45, 0.35, 0.24),   # 34 bark, weathered pale
+    (0.78, 0.66, 0.45),   # 35 SAPWOOD -- the cut face of a stump or a log end.
+                          #    The single swatch that says "this was felled";
+                          #    every harvested state that involves an axe shows
+                          #    it, and nothing standing ever does.
+    (0.52, 0.49, 0.45),   # 36 stone, lit
+    (0.40, 0.37, 0.34),   # 37 stone, mid -- the terrain's own rock
+    (0.28, 0.26, 0.25),   # 38 stone, shaded
+    (0.30, 0.23, 0.16),   # 39 soil, spoil, turned ground
+    (0.52, 0.26, 0.13),   # 40 iron ore, rusted -- warm enough to read as
+                          #    metal-bearing against grey host rock at range
+    (0.35, 0.19, 0.13),   # 41 iron ore, shaded and freshly broken
+    (0.42, 0.40, 0.41),   # 42 bloom iron, the worked yield. NOT swatch 14,
+                          #    which is the ships' near-black ironwork: a
+                          #    resource must never share a swatch with a hull
+                          #    surface, or retuning a fitting repaints a cargo.
+    (0.10, 0.10, 0.12),   # 43 coal
+    (0.16, 0.16, 0.19),   # 44 coal, freshly cleaved face -- without it a seam
+                          #    is a silhouette with no shape inside it
+    (0.58, 0.11, 0.16),   # 45 berry
+    (0.83, 0.70, 0.36),   # 46 wheat ear, ripe
+    (0.66, 0.53, 0.27),   # 47 wheat stalk and shaded ear
+    (0.72, 0.63, 0.42),   # 48 straw -- cut stubble and sheaf binding. Paler
+                          #    and greyer than standing wheat, which is what
+                          #    makes a reaped patch read as reaped.
 ]
 
 SW = {"plank_l": 0, "plank_m": 1, "plank_d": 2, "plank_w": 3,
@@ -2822,7 +2872,23 @@ SW = {"plank_l": 0, "plank_m": 1, "plank_d": 2, "plank_w": 3,
       "boot": 9, "spar": 10, "canvas": 11, "rope": 12, "lining": 13,
       "iron": 14, "carved": 15,
       "cloth_a": 16, "cloth_b": 17, "rigging": 18, "band": 19,
-      "spar_d": 20, "gilt": 21, "glass": 22}
+      "spar_d": 20, "gilt": 21, "glass": 22,
+      # the island -- see the swatch table above
+      "conifer_d": 25, "conifer_m": 26, "conifer_l": 27,
+      "broad_d": 28, "broad_m": 29, "broad_l": 30, "scrub": 31,
+      "bark_d": 32, "bark_m": 33, "bark_l": 34, "sapwood": 35,
+      "stone_l": 36, "stone_m": 37, "stone_d": 38, "soil": 39,
+      "ore": 40, "ore_d": 41, "bloom": 42,
+      "coal": 43, "coal_face": 44,
+      "berry": 45, "wheat_l": 46, "wheat_d": 47, "straw": 48}
+
+# Canopies are GRADIENTS, for the same reason a strake is: dark underneath,
+# lit on top, because that is where the light comes from. Drawn at random from
+# three greens they read as noise; running bottom to top they read as a tree.
+CONIFER = [SW["conifer_d"], SW["conifer_m"], SW["conifer_l"]]
+BROADLEAF = [SW["broad_d"], SW["broad_m"], SW["broad_l"]]
+BARKS = [SW["bark_d"], SW["bark_m"], SW["bark_l"]]
+STONES = [SW["stone_d"], SW["stone_m"], SW["stone_l"]]
 
 CLOTHS = [11, 16, 17]
 

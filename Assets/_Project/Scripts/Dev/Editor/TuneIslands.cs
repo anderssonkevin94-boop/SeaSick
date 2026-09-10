@@ -98,29 +98,86 @@ public static class TuneIslands
         if (s == null) return "no TerrainSettings asset at " + Path;
 
         var so = new SerializedObject(s);
+        // --- island SIZE and SHAPE ----------------------------------------
+        // Kevin, 2026-09-09: "make the islands smaller overall to more closely
+        // match the ones from blender. instead lets have many smaller islands.
+        // oddlong and organic shapes, but smaller."
+        //
+        // The Blender reference board is R 85 m. Unity's footprints measured
+        // 275x325 m to 925x1075 m, so they were 3-5x too big. maskFrequency is
+        // the only lever needed for that: landRatio sets the threshold as a
+        // QUANTILE, so the fraction of the world that is land does not move --
+        // the same land comes back as proportionally more, smaller pieces.
+        so.FindProperty("maskFrequency").floatValue = 1f / 1000f;
+        // Lower relief means less of each island breaks the surface, so the
+        // same mask returned less dry land (5.81% -> 4.81%). Put it back on
+        // the mask, where it buys MORE islands rather than taller ones.
+        so.FindProperty("landRatio").floatValue = 0.12f;
+        so.FindProperty("maskStretch").floatValue = 2.0f;
+        so.FindProperty("maskGrainAngle").floatValue = 34f;
+        // 110 m frayed the coast but left every island pointing the same way.
+        // The warp's SHEAR across an island is what re-aims it, and shear is
+        // amplitude over wavelength -- so a bigger warp at a slightly longer
+        // wavelength swings the grain around instead of only crinkling it.
+        so.FindProperty("maskWarp").floatValue = 190f;
+        so.FindProperty("maskWarpFrequency").floatValue = 1f / 1100f;
+
         so.FindProperty("profileCurve").animationCurveValue = BuildCurve();
         so.FindProperty("baseHeight").floatValue = 3f;
-        so.FindProperty("reliefHeight").floatValue = 60f;
+        // Relief has to come down WITH the size, and this is the trap the
+        // whole islet system already exists to dodge: nothing in the pipeline
+        // knows how big a landmass is -- relief is sampled per point. Shrink
+        // the mask 2.5x on its own and a 91 m island gets the same 60 m of
+        // coast relief a 400 m one had, which is a cone. Measured: buildable
+        // fell 59.6% -> 34.9% and the compound that fits fell 104 m -> 49 m.
+        so.FindProperty("reliefHeight").floatValue = 34f;
         so.FindProperty("massifFrequency").floatValue = 1f / 5200f;
         so.FindProperty("massifMin").floatValue = 1f;
-        so.FindProperty("massifMax").floatValue = 5.5f;
+        so.FindProperty("massifMax").floatValue = 3.4f;
         so.FindProperty("massifBias").floatValue = 1.5f;
         so.FindProperty("massifMaskStart").floatValue = 0.35f;
-        so.FindProperty("uplandFrequency").floatValue = 1f / 700f;
+        // 1/700 was WIDER than an island once they shrank, so a whole island
+        // sat at one upland value and came out uniformly mountainous or
+        // uniformly flat -- which is what made some of them spikes with no
+        // buildable ground at all. At 1/450 an island has room for a summit
+        // AND a shoulder, which is also the structure the reference boards
+        // show: massif, spurs, then flat ground down at the shore.
+        so.FindProperty("uplandFrequency").floatValue = 1f / 450f;
         so.FindProperty("uplandStart").floatValue = 0.53f;
         so.FindProperty("uplandFull").floatValue = 0.78f;
-        so.FindProperty("plainRelief").floatValue = 26f;
+        so.FindProperty("plainRelief").floatValue = 12f;
         so.FindProperty("lowlandDetail").floatValue = 0.25f;
         so.FindProperty("detailAmplitude").floatValue = 0.5f;
-        so.FindProperty("ridgeAmount").floatValue = 0.85f;
+        // A ridge that crossed a 400 m island cut its walkable ground in two
+        // and stranded crew: the largest walkable piece fell to 39% of the
+        // walkable ground where it used to be 88-100%.
+        so.FindProperty("ridgeAmount").floatValue = 0.72f;
         so.FindProperty("ridgeLow").floatValue = 0.42f;
         so.FindProperty("ridgeHigh").floatValue = 0.62f;
         so.FindProperty("shoreSlopeMin").floatValue = 0.032f;
+        // Left at the value the beach work was measured against. Capping the
+        // steepest coasts at 0.30 was tried, to widen the walkable ring so a
+        // landing party could always get round an island it cannot get over,
+        // and it moved connectivity by nothing at all (39/41/35% against
+        // 40/42%). It only cost cliffs, so it is not worth having.
+        //
+        // The islands ARE deliberately steeper relative to their size now --
+        // relief came down 0.57x while the footprint came down 0.40x, which is
+        // what makes them read like the reference boards -- and a spine across
+        // an elongated island genuinely does cut its walkable ground in two.
+        // That is a real consequence of the size change, not a bug, and it is
+        // reported rather than tuned away: flattening it out would undo the
+        // look the change was made for.
         so.FindProperty("shoreSlopeMax").floatValue = 0.45f;
         so.FindProperty("shoreSlopeBias").floatValue = 2.5f;
         so.FindProperty("shoreFrequency").floatValue = 1f / 900f;
-        so.FindProperty("shoreFlat").floatValue = 19f;
-        so.FindProperty("shoreTop").floatValue = 70f;
+        // The shore terrace is a VERTICAL scale and it had to come down with
+        // the relief. flat-to-19 m was set when islands peaked at 73 m; the
+        // median peak is 18 m now, so it was flattening entire islands into
+        // beach -- exactly the "flat at the wrong ALTITUDE renders as sand"
+        // failure the plains collapse hit in 2026-08-29.
+        so.FindProperty("shoreFlat").floatValue = 8f;
+        so.FindProperty("shoreTop").floatValue = 40f;
         so.FindProperty("shoreBottom").floatValue = 12f;
         so.FindProperty("sandHeight").floatValue = 3.2f;
         so.FindProperty("snowHeight").floatValue = 165f;
@@ -139,6 +196,11 @@ public static class TuneIslands
             + " f(.5)=" + check.profileCurve.Evaluate(0.5f).ToString("F3")
             + " f(.75)=" + check.profileCurve.Evaluate(0.75f).ToString("F3")
             + " f(1)=" + check.profileCurve.Evaluate(1f).ToString("F3"));
+        sb.AppendLine("island size 1/" + (1f / check.maskFrequency).ToString("F0")
+            + " m, land " + (check.landRatio * 100f).ToString("F0") + "% of the world"
+            + "; shape: stretch x" + check.maskStretch + " along " + check.maskGrainAngle
+            + " deg, warp " + check.maskWarp + " m at 1/"
+            + (1f / check.maskWarpFrequency).ToString("F0") + " m");
         sb.AppendLine("baseHeight " + check.baseHeight + "  reliefHeight " + check.reliefHeight
             + "  massif " + check.massifMin + ".." + check.massifMax + " bias " + check.massifBias
             + " from mask " + check.massifMaskStart);
@@ -173,6 +235,49 @@ public static class TuneIslands
     /// Tiles the survey area at 500 m, takes each tile's highest land, and
     /// reports the distribution of those. A tile maximum is a decent stand-in
     /// for an island peak and needs no flood fill.
+    /// Photograph the archipelago from above. Island SHAPE is the one thing
+    /// none of the numbers here can answer -- "oddlong and organic" is not a
+    /// percentile -- and a map is the cheapest honest look at it.
+    public static string Map()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+        if (s == null) return "no TerrainSettings asset at " + Path;
+        string dir = System.IO.Path.Combine(
+            System.IO.Directory.GetParent(Application.dataPath).FullName, "Temp", "IslandMaps");
+        System.IO.Directory.CreateDirectory(dir);
+
+        var go = new GameObject("~TerrainMap");
+        go.hideFlags = HideFlags.HideAndDontSave;
+        var sb = new StringBuilder();
+        try
+        {
+            var v = go.AddComponent<SeaSick.Terrain.TerrainMapVisualiser>();
+            v.settings = s;
+            v.stage = SeaSick.Terrain.TerrainMapStage.FinalHeight;
+            v.autoRefresh = false;
+            v.tintAboveZero = true;
+            v.rampMaxHeight = 60f;
+
+            var shots = new (string name, Vector2 c, float ext, int px)[]
+            {
+                ("wide_8km",   new Vector2(0f, 0f),      8000f, 1400),
+                ("near_3km",   new Vector2(0f, 0f),      3000f, 1200),
+                ("home_1km",   new Vector2(0f, 0f),      700f,  1000),
+            };
+            foreach (var sh in shots)
+            {
+                v.centre = sh.c; v.extent = sh.ext; v.textureSize = sh.px;
+                v.Regenerate();
+                string path = System.IO.Path.Combine(dir, sh.name + ".png");
+                v.ExportPng(path);
+                sb.AppendLine($"{path}  ({sh.ext * 2f:F0} m across at {sh.px} px "
+                    + $"= {sh.ext * 2f / sh.px:F1} m/px), land {v.LastLandFraction:P1}");
+            }
+        }
+        finally { Object.DestroyImmediate(go); }
+        return sb.ToString();
+    }
+
     public static string Survey()
     {
         var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
@@ -938,7 +1043,246 @@ public static class TuneIslands
     //
     //   IT NEEDS A HARBOUR. Deep water within a short pier, a clear approach,
     //   land behind it. Plenty of coast fails this.
-    public static string HomeCandidates()
+    /// How big are the things you are meant to look at?
+    ///
+    /// "The ship feels small and I cannot tell what the crew are doing" is a
+    /// measurable complaint, so it gets measured rather than eyeballed -- and
+    /// measured in PORTRAIT, because the editor's Game view flatters
+    /// everything. Reports each subject as a percentage of frame height and
+    /// as pixels on a 1080x2340 phone, which is the number that decides
+    /// whether a player can read it.
+    ///
+    /// Run in PLAY mode.
+    public static string Legibility()
+    {
+        var cam = Camera.main;
+        if (cam == null) return "no Camera.main -- are you in play mode?";
+        var sb = new StringBuilder();
+        float was = cam.aspect;
+        cam.aspect = SeaSick.CameraRig.ChaseCamera.PortraitAspect;
+        const float ScreenPx = 2340f;
+
+        System.Func<Vector3, Vector3, string> span = (a1, b1) =>
+        {
+            Vector3 v1 = cam.WorldToViewportPoint(a1), v2 = cam.WorldToViewportPoint(b1);
+            if (v1.z <= 0f || v2.z <= 0f) return "behind the camera";
+            float dy = Mathf.Abs(v2.y - v1.y), dx = Mathf.Abs(v2.x - v1.x);
+            float diag = Mathf.Sqrt(dx * dx + dy * dy);
+            return (diag * 100f).ToString("F1").PadLeft(5) + "% of frame height  "
+                 + (diag * ScreenPx).ToString("F0").PadLeft(4) + " px";
+        };
+
+        var rig = Object.FindFirstObjectByType<SeaSick.CameraRig.ChaseCamera>();
+        sb.AppendLine("aspect " + cam.aspect.ToString("F3") + " (1080x2340), vfov "
+            + cam.fieldOfView.ToString("F0") + " deg"
+            + (rig != null ? ", overview span " + rig.CurrentSpan.ToString("F0") + " m" : ""));
+
+        var ship = GameObject.Find("PlayerShip");
+        if (ship != null)
+        {
+            Vector3 f = ship.transform.forward, p = ship.transform.position;
+            sb.AppendLine("ship (24.2 m LOA):   " + span(p - f * 12.1f, p + f * 12.1f));
+            sb.AppendLine("  distance " + Vector3.Distance(cam.transform.position, p).ToString("F0") + " m");
+        }
+
+        var crew = Object.FindObjectsByType<SeaSick.Crew.CrewAgent>(FindObjectsSortMode.None);
+        sb.AppendLine("crew found: " + crew.Length);
+        int shown = 0;
+        foreach (var c in crew)
+        {
+            if (shown >= 3) break;
+            Vector3 foot = c.transform.position;
+            sb.AppendLine("crew " + c.DisplayName.PadRight(6) + "(1.70 m): "
+                + span(foot, foot + Vector3.up * 1.7f));
+            shown++;
+        }
+        sb.AppendLine();
+        sb.AppendLine("for reference: 13 px is the floor ChaseCamera.minPersonScreenFraction");
+        sb.AppendLine("holds; you cannot read a POSE much under about 40 px.");
+        cam.aspect = was;
+        return sb.ToString();
+    }
+
+    /// Where the ship sits inside the docked shot's WEDGE.
+    ///
+    /// `Dock.ViewHalfWidth` records the shot measured in PORTRAIT: 42 m
+    /// starboard, 44 m port, 252 m inland, 86 m seaward of ViewCentre. Those
+    /// are the edges the ship has to be inside, and the editor's landscape
+    /// Game view will happily tell you she is when she is not.
+    ///
+    /// Run in PLAY mode.
+    public static string DockFraming()
+    {
+        var sb = new StringBuilder();
+        var dock = Object.FindFirstObjectByType<SeaSick.World.Dock>();
+        if (dock == null) return "no Dock in the scene -- are you in play mode and berthed?";
+        var ship = GameObject.Find("PlayerShip");
+        if (ship == null) return "no PlayerShip";
+
+        Vector3 sea = dock.Seaward;
+        Vector3 starboard = new Vector3(sea.z, 0f, -sea.x);
+        Vector3 centre = dock.ViewCentre;
+        Vector3 d = ship.transform.position - centre;
+        float alongSea = Vector3.Dot(d, sea);          // + is seaward of centre
+        float alongStb = Vector3.Dot(d, starboard);
+
+        sb.AppendLine("dock root " + dock.transform.position + ", seaward " + sea.ToString("F2"));
+        sb.AppendLine("view centre " + centre.ToString("F1"));
+        sb.AppendLine("ship is " + alongSea.ToString("F1") + " m seaward of centre, "
+            + alongStb.ToString("F1") + " m to starboard");
+        sb.AppendLine("the wedge holds 86 m seaward, 252 m inland, 42 m stbd, 44 m port");
+        sb.AppendLine(alongSea > 86f
+            ? "  -> SHE IS PAST THE SEAWARD EDGE by " + (alongSea - 86f).ToString("F0") + " m"
+            : "  -> inside seaward by " + (86f - alongSea).ToString("F0") + " m");
+        sb.AppendLine(Mathf.Abs(alongStb) > 42f
+            ? "  -> and outside laterally by " + (Mathf.Abs(alongStb) - 42f).ToString("F0") + " m"
+            : "  -> inside laterally");
+
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            // Portrait, which is the game. cam.aspect follows whatever the
+            // editor Game view happens to be, so set it explicitly and put it
+            // back -- reading the viewport at the editor's aspect is the
+            // whole reason a boat can be "in frame" and invisible.
+            float was = cam.aspect;
+            cam.aspect = SeaSick.CameraRig.ChaseCamera.PortraitAspect;
+            var v = cam.WorldToViewportPoint(ship.transform.position);
+            cam.aspect = was;
+            sb.AppendLine("ship viewport in PORTRAIT: " + v.ToString("F2")
+                + (v.z > 0f && v.x > 0f && v.x < 1f && v.y > 0f && v.y < 1f
+                    ? "  (in frame)" : "  OFF FRAME"));
+        }
+        return sb.ToString();
+    }
+
+    /// Is the terrain MESH where the height function says it is?
+    ///
+    /// Every instrument in this file samples `TerrainHeight.Height` directly,
+    /// so all of them can pass while the thing the player looks at is wrong.
+    /// Trees standing on open water is the signature, and this project has
+    /// shipped it once already.
+    ///
+    /// Run in PLAY mode, where the streamer has actually built chunks.
+    public static string MeshVsField()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+        var prm = TerrainParams.From(s);
+        var lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
+        System.Func<float, float, float> H = (x, z) => TerrainHeight.Height(new float2(x, z), prm, lut);
+        var sb = new StringBuilder();
+
+        var streamer = Object.FindFirstObjectByType<TerrainStreamer>();
+        if (streamer == null) return "no TerrainStreamer -- are you in play mode?";
+
+        int chunks = 0, shown = 0;
+        var all = new Bounds(Vector3.zero, Vector3.zero);
+        bool first = true;
+        foreach (var mr in streamer.GetComponentsInChildren<MeshRenderer>(true))
+        {
+            chunks++;
+            if (!mr.enabled || !mr.gameObject.activeInHierarchy) continue;
+            shown++;
+            if (first) { all = mr.bounds; first = false; } else all.Encapsulate(mr.bounds);
+        }
+        sb.AppendLine("chunks under the streamer: " + chunks + ", " + shown + " drawing");
+        sb.AppendLine("their combined bounds: centre " + all.center + " size " + all.size);
+
+        var ship = GameObject.Find("PlayerShip");
+        Vector3 at = ship != null ? ship.transform.position : Vector3.zero;
+        sb.AppendLine("PlayerShip at " + at);
+        sb.AppendLine("point            field      raycast    delta");
+        foreach (var off in new[] { Vector3.zero, new Vector3(60, 0, 0), new Vector3(-60, 0, 0),
+                                    new Vector3(0, 0, 60), new Vector3(0, 0, -60),
+                                    new Vector3(120, 0, 120), new Vector3(-120, 0, -120) })
+        {
+            Vector3 p3 = at + off;
+            float f = H(p3.x, p3.z);
+            string hit = "  (no hit)";
+            if (Physics.Raycast(new Vector3(p3.x, 400f, p3.z), Vector3.down, out var h2, 800f))
+                hit = h2.point.y.ToString("F2").PadLeft(9) + "  "
+                    + (h2.point.y - f).ToString("+0.00;-0.00").PadLeft(6) + "  " + h2.collider.name;
+            sb.AppendLine(("(" + p3.x.ToString("F0") + "," + p3.z.ToString("F0") + ")").PadRight(16)
+                + f.ToString("F2").PadLeft(8) + hit);
+        }
+        return sb.ToString();
+    }
+
+    /// Does the boat float where she spawns?
+    ///
+    /// This gate did not exist, and its absence is why "i dont see my boat"
+    /// was the first sign anything was wrong. PlayerShip sits at the world
+    /// origin, so whatever `worldOffset` puts there is what she is in --
+    /// and putting an island's CENTRE at the origin buries her inside a hill
+    /// with no exception, no warning and no missing reference. Every other
+    /// number in this file looked perfect while it was true.
+    ///
+    /// Cheap enough to run after any change to the mask, which is exactly
+    /// when it matters: the home island is not authored, so ANY change to the
+    /// mask moves it.
+    public static string HomeCheck()
+    {
+        var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+        if (s == null) return "no TerrainSettings asset at " + Path;
+        var prm = TerrainParams.From(s);
+        var lut = TerrainCurveLut.Bake(s.profileCurve, Allocator.Temp);
+        System.Func<float, float, float> H = (x, z) => TerrainHeight.Height(new float2(x, z), prm, lut);
+        var sb = new StringBuilder();
+
+        float h0 = H(0f, 0f);
+        float depth = s.seaLevel - h0;
+        sb.AppendLine("worldOffset " + s.worldOffset);
+        sb.AppendLine("ground under PlayerShip (0,0): " + h0.ToString("F2") + " m"
+            + "  ->  " + (depth > 0f ? depth.ToString("F2") + " m of water" : "DRY LAND"));
+        sb.AppendLine("she needs " + HarbourSite.BerthDepth.ToString("F1")
+            + " m loaded, and her hull is 24.2 m long");
+
+        // Room to swing, and where the shore actually is.
+        float worstNear = float.MaxValue, nearest = float.MaxValue;
+        int clearRing = 0;
+        for (int a2 = 0; a2 < 72; a2++)
+        {
+            float th = a2 * Mathf.PI * 2f / 72f;
+            float cx = Mathf.Cos(th), cz = Mathf.Sin(th);
+            bool clear = true;
+            for (float r = 2f; r <= 300f; r += 2f)
+            {
+                float hh = H(cx * r, cz * r);
+                if (r <= 12f)
+                {
+                    worstNear = Mathf.Min(worstNear, s.seaLevel - hh);
+                    if (s.seaLevel - hh < HarbourSite.ApproachDepth) clear = false;
+                }
+                if (hh > s.seaLevel) { nearest = Mathf.Min(nearest, r); break; }
+            }
+            if (clear) clearRing++;
+        }
+        // Reported, NOT gated. A berth lies alongside; shallow water on the
+        // landward side is what makes it a berth rather than open sea, so
+        // failing on a full 360 deg minimum condemns every real harbour.
+        // What matters is how much of the swing is clear.
+        sb.AppendLine("shallowest water within her own length: "
+            + worstNear.ToString("F2") + " m (shallow to landward is normal)");
+        sb.AppendLine("of the ring at her half-length, "
+            + (clearRing * 100f / 72f).ToString("F0") + "% is deeper than "
+            + HarbourSite.ApproachDepth.ToString("F1") + " m");
+        sb.AppendLine("nearest dry land: "
+            + (nearest > 299f ? "none within 300 m -- no harbour here"
+                              : nearest.ToString("F0") + " m"));
+
+        bool ok = depth >= HarbourSite.BerthDepth
+               && clearRing >= 36                       // half her swing is clear
+               && nearest < 300f;
+        sb.AppendLine(ok ? "PASS -- she floats, with land to tie up to"
+            : "FAIL -- run TuneIslands.MakeHome()");
+        return sb.ToString();
+    }
+
+    public static string MakeHome() => HomeCandidates(true);
+
+    public static string HomeCandidates() => HomeCandidates(false);
+
+    public static string HomeCandidates(bool apply)
     {
         var s = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
         if (s == null) return "no TerrainSettings asset at " + Path;
@@ -978,7 +1322,7 @@ public static class TuneIslands
         sb.AppendLine("candidates, nearest first (only those that could BE a home):");
         sb.AppendLine("  reach peak  land    flat-patch  compound  pier  shelter   camera  at");
 
-        var rows = new System.Collections.Generic.List<(float score, string line, Vector2 at, float reach)>();
+        var rows = new System.Collections.Generic.List<(float score, string line, Vector2 at, float reach, Vector2 berth, bool hasBerth)>();
         for (int k = 1; k <= nIsl; k++)
         {
             float ha0 = cells[k] * CoarseCell * CoarseCell / 10000f;
@@ -1073,7 +1417,9 @@ public static class TuneIslands
                         + Mathf.Clamp01(compound / 80f) * 3f
                         + (site.found ? 2f + site.shelter : 0f)
                         + Mathf.Clamp01(ha / 14f);
-            rows.Add((score, line, c, reach));
+            rows.Add((score, line, c, reach,
+                      site.found ? new Vector2(site.berth.x, site.berth.z) : c,
+                      site.found));
         }
 
         rows.Sort((a, b) => b.score.CompareTo(a.score));
@@ -1082,14 +1428,48 @@ public static class TuneIslands
         if (rows.Count > 0)
         {
             var best = rows[0];
-            var off = new Vector2(best.at.x + s.worldOffset.x, best.at.y + s.worldOffset.y);
+
+            // Offset to the BERTH, not to the island's centre.
+            //
+            // PlayerShip sits at the world origin in the scene, so whatever
+            // worldOffset puts at (0,0) is what she is floating in. Aligning
+            // the island's CENTRE there buries her inside it -- which is
+            // exactly what happened: no exception, no warning, the boat is
+            // simply not visible because it is inside a hill.
+            //
+            // Sampling is noise(p + worldOffset), so to bring the feature
+            // currently at world b to the origin, newOffset = b + oldOffset.
+            var anchor = best.berth;
+            var off = new Vector2(anchor.x + s.worldOffset.x, anchor.y + s.worldOffset.y);
             sb.AppendLine();
             sb.AppendLine("BEST: the island at (" + best.at.x.ToString("F0") + ", " + best.at.y.ToString("F0")
                 + "), reach " + best.reach.ToString("F0") + " m");
+            sb.AppendLine("   anchoring on " + (best.hasBerth
+                ? "its BERTH at (" + anchor.x.ToString("F0") + ", " + anchor.y.ToString("F0")
+                  + "), which is where PlayerShip floats"
+                : "its CENTRE -- NO HARBOUR SITE FOUND, the ship will be on land"));
             sb.AppendLine("   to make it home:  worldOffset = (" + off.x.ToString("F0") + ", " + off.y.ToString("F0") + ")");
             sb.AppendLine("   (sampling is noise(p + worldOffset), so newOffset = centre + oldOffset = "
                 + best.at.x.ToString("F0") + " + " + s.worldOffset.x.ToString("F0") + ", "
                 + best.at.y.ToString("F0") + " + " + s.worldOffset.y.ToString("F0") + ")");
+
+            if (apply)
+            {
+                // The home island is not authored -- it is whatever land
+                // worldOffset slides under the origin -- so ANY change to the
+                // mask moves it, and shrinking the islands moved it into open
+                // water: the nearest land was 0.7 km from a pier standing in
+                // the sea. Nothing errors when that happens; the harbour just
+                // stops having a coast.
+                var so2 = new SerializedObject(s);
+                so2.FindProperty("worldOffset").vector2Value = off;
+                so2.ApplyModifiedPropertiesWithoutUndo();
+                EditorUtility.SetDirty(s);
+                AssetDatabase.SaveAssets();
+                var back = AssetDatabase.LoadAssetAtPath<TerrainSettings>(Path);
+                sb.AppendLine("   APPLIED: worldOffset is now " + back.worldOffset
+                    + "; home is the island that was at " + best.at);
+            }
         }
         else sb.AppendLine("no island in range met all three");
 

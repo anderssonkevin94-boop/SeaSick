@@ -34,13 +34,23 @@ namespace SeaSick.Terrain
         [Range(0f, 1f)] public float erosionAmount = 1f;
 
         [Header("Island mask")]
-        [Tooltip("Continentalness frequency, much lower than the base noise.")]
-        public float maskFrequency = 1f / 2500f;
+        [Tooltip("Continentalness frequency, much lower than the base noise. This is ISLAND SIZE, and because landRatio sets the threshold as a quantile, raising it shrinks the islands and makes proportionally more of them for free -- total land is unchanged.")]
+        public float maskFrequency = 1f / 1000f;
         [Range(1, 4)] public int maskOctaves = 3;
         [Range(0.01f, 0.6f), Tooltip("Fraction of the world that is land. 0.12 = sparse islands.")]
         public float landRatio = 0.15f;
-        [Tooltip("Width of the mask's soft edge, in mask-noise units, so islands fade into the sea.")]
+        [Tooltip("Width of the mask's soft edge, in mask-noise units, so islands fade into the sea. In NOISE units, not metres, so it scales with maskFrequency on its own: shrink the islands and the beach fringe shrinks with them.")]
         [Range(0.01f, 0.5f)] public float maskFalloff = 0.1f;
+
+        [Header("Island shape")]
+        [Tooltip("How many times longer than wide an island runs. 1 = round lobed blobs, which is what plain fBm gives you. The axis is GLOBAL and constant: a real archipelago has a grain (glacial, tectonic) and a per-island rotation cannot be done in a pure position function without either shredding the field at range or seaming it on a grid.")]
+        [Range(1f, 4f)] public float maskStretch = 2.2f;
+        [Tooltip("Which way the grain runs, degrees.")]
+        [Range(0f, 180f)] public float maskGrainAngle = 34f;
+        [Tooltip("Metres the coastline is displaced by before the mask is read. Applied AFTER the stretch, so it bends and re-aims the elongated shapes rather than being stretched with them -- this is what stops every island pointing the same way. Its finer octaves are the bays, spits and hooks. 0 = smooth blobs.")]
+        public float maskWarp = 110f;
+        [Tooltip("Warp feature scale. Near the mask frequency re-aims whole islands; well above it only frays the coast.")]
+        public float maskWarpFrequency = 1f / 900f;
         [Tooltip("Shelf floor height around land, metres (negative). This is the depth every island's shore profile was tuned against.")]
         public float seabedDepth = -12f;
         [Tooltip("Open-ocean floor height, metres (negative). Must be deeper than the deepest storm trough, or the sea clips through the seafloor.")]

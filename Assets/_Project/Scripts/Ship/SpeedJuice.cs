@@ -67,6 +67,59 @@ namespace SeaSick.Ship
         float lastEntry = -99f;
         Transform emitterRoot;
 
+        // --- the rig is HER size, not a typed coordinate ---------------------
+        //
+        // Every emitter below used to sit at a hard number off the paddle
+        // steamer -- bow at z = 9.2, beam at x = +-3.2, stern at z = -9.5 --
+        // and nothing resized them when the ladder started swapping hulls
+        // underneath. That is the same fault `HullWaterClip` had and it fails
+        // the same way at both ends: on the skiff (9.0 x 2.9 m) the bow emitter
+        // is 4.7 m PAST her stem, throwing spray off open water ahead of the
+        // boat; on the ship of the line (46 x 13 m) z = 9.2 is amidships, x =
+        // 3.2 is well inboard of a 6.5 m half-beam and y = 0.8 is six metres
+        // below her rail -- so the burst is born INSIDE the hull and comes up
+        // through the deck. Which is exactly what Kevin sees in heavy water.
+        //
+        // Fractions, not metres. They are chosen to reproduce the steamer's
+        // rig at the steamer's size and to sit OUTBOARD of the planking on any
+        // hull: `HullWaterClip` holds the sea out to 0.41 x beam and 0.40 x
+        // length, so anything at or beyond those fractions is over the water.
+        const float BowZ = 0.40f;      // x length, from amidships
+        const float ShoulderZ = 0.24f;
+        const float ShoulderX = 0.42f; // x beam -- just outboard of the clip
+        const float BeamX = 0.48f;
+        const float SternZ = -0.42f;
+        const float WakeZ = -0.38f;
+        const float WakeLineZ = 0.22f;
+        const float WakeLineX = 0.40f;
+        // Where in her freeboard the spray leaves her. The waterline is y = 0
+        // in this frame (the same local units `HydrostaticLayout` and the clip
+        // ellipse use), so these are fractions of rail height above it and a
+        // burst can never start below the surface however she is loaded.
+        const float LowY = 0.10f, WashY = 0.06f, BeamY = 0.45f;
+
+        float hullLength = 24.2f;   // the steamer, so an unconfigured rig is
+        float hullBeam = 8.5f;      // the rig this file shipped with
+        float hullRailY = 1.9f;
+        float sizeScale = 1f;
+
+        /// Called by `Shipyard.Refit` for every rung of the ladder. Sizes the
+        /// whole foam rig to the hull standing in it -- the fleet hulls and
+        /// anything else that never comes through the yard keep the defaults.
+        public void ConfigureForHull(float length, float beam, float railY)
+        {
+            hullLength = Mathf.Max(2f, length);
+            hullBeam = Mathf.Max(1f, beam);
+            hullRailY = Mathf.Max(0.3f, railY);
+            // Particle SIZE cannot scale with her length or a three-decker
+            // throws cotton wool and a skiff disappears in it. Spray breaks up
+            // into droplets at a scale set by the water, not by the boat, so
+            // it grows far slower than she does: the square root puts a 46 m
+            // hull's spray at 1.4x the steamer's, not 1.9x.
+            sizeScale = Mathf.Sqrt(hullLength / 24.2f);
+            if (emitterRoot != null) ApplyRig();
+        }
+
         void Start()
         {
             motor = GetComponent<ShipMotor>();
@@ -107,32 +160,32 @@ namespace SeaSick.Ship
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             mat.renderQueue = 3000;
 
-            bowSpray = MakeSystem("BowSpray", new Vector3(0f, 0.4f, 9.2f), solid, size: 0.5f,
+            // Positions are placed by `ApplyRig` at the end of Start, off the
+            // hull she is actually wearing; Vector3.zero here is a placeholder.
+            bowSpray = MakeSystem("BowSpray", Vector3.zero, solid, size: 0.5f,
                 speed: 5.5f, spreadAngle: 62f, lifetime: 1.0f, gravity: 1.3f, solidFoam: true);
-            wake = MakeSystem("WakeFoam", new Vector3(0f, 0.15f, -8.6f), mat, size: 0.8f,
+            wake = MakeSystem("WakeFoam", Vector3.zero, mat, size: 0.8f,
                 speed: 1.0f, spreadAngle: 42f, lifetime: 5.5f, gravity: 0f, solidFoam: false);
 
             // Foam where the hull actually parts the water, thrown out along
             // the shoulders rather than straight back. Solid — this is the
             // water being displaced, and it should look like it has mass.
-            shoulderPort = MakeSystem("ShoulderPort", new Vector3(-2.4f, 0.15f, 5.5f), solid,
+            shoulderPort = MakeSystem("ShoulderPort", Vector3.zero, solid,
                 size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: true);
-            shoulderStar = MakeSystem("ShoulderStar", new Vector3(2.4f, 0.15f, 5.5f), solid,
+            shoulderStar = MakeSystem("ShoulderStar", Vector3.zero, solid,
                 size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: true);
             shoulderPort.transform.localRotation = Quaternion.Euler(-8f, -118f, 0f);
             shoulderStar.transform.localRotation = Quaternion.Euler(-8f, 118f, 0f);
 
             // Seas breaking against the beam — burst-emitted on impact rather
             // than streamed, thrown up and outboard.
-            beamPort = MakeSystem("BeamSprayPort", new Vector3(-3.2f, 0.8f, 0.5f), solid,
+            beamPort = MakeSystem("BeamSprayPort", Vector3.zero, solid,
                 size: 0.7f, speed: 7f, spreadAngle: 40f, lifetime: 1.3f, gravity: 1.6f, solidFoam: true);
-            beamStar = MakeSystem("BeamSprayStar", new Vector3(3.2f, 0.8f, 0.5f), solid,
+            beamStar = MakeSystem("BeamSprayStar", Vector3.zero, solid,
                 size: 0.7f, speed: 7f, spreadAngle: 40f, lifetime: 1.3f, gravity: 1.6f, solidFoam: true);
-            beamPort.transform.localRotation = Quaternion.Euler(-52f, -90f, 0f);
-            beamStar.transform.localRotation = Quaternion.Euler(-52f, 90f, 0f);
 
             // Churn right under the transom — solid, close in, short-lived.
-            sternWash = MakeSystem("SternWash", new Vector3(0f, 0.1f, -9.5f), solid,
+            sternWash = MakeSystem("SternWash", Vector3.zero, solid,
                 size: 0.7f, speed: 1.6f, spreadAngle: 55f, lifetime: 1.8f, gravity: 0.15f,
                 solidFoam: true);
 
@@ -143,10 +196,10 @@ namespace SeaSick.Ship
             // laid down each puff essentially holds its water while the ship
             // pulls ahead. Yaw them off the stern line by the Kelvin half-angle
             // and let them widen over life into a spreading crest.
-            wakeLinePort = MakeSystem("WakeLinePort", new Vector3(-2.2f, 0.12f, 5.0f), mat,
+            wakeLinePort = MakeSystem("WakeLinePort", Vector3.zero, mat,
                 size: 1.7f, speed: 0.7f, spreadAngle: 14f, lifetime: 6.5f, gravity: 0f,
                 solidFoam: false);
-            wakeLineStar = MakeSystem("WakeLineStar", new Vector3(2.2f, 0.12f, 5.0f), mat,
+            wakeLineStar = MakeSystem("WakeLineStar", Vector3.zero, mat,
                 size: 1.7f, speed: 0.7f, spreadAngle: 14f, lifetime: 6.5f, gravity: 0f,
                 solidFoam: false);
             // Point each arm aft and outboard by the wake half-angle (180 deg is
@@ -159,6 +212,33 @@ namespace SeaSick.Ship
             // as it spreads, then fades, rather than shrinking away.
             WidenOverLife(wakeLinePort);
             WidenOverLife(wakeLineStar);
+
+            ApplyRig();
+        }
+
+        /// Put every emitter where THIS hull's water is. Re-run whenever she
+        /// changes size, which on the ladder is every upgrade.
+        void ApplyRig()
+        {
+            float L = hullLength, B = hullBeam, R = hullRailY;
+            Place(bowSpray, new Vector3(0f, R * LowY, L * BowZ), 0.5f);
+            Place(wake, new Vector3(0f, R * WashY, L * WakeZ), 0.8f);
+            Place(shoulderPort, new Vector3(-B * ShoulderX, R * LowY, L * ShoulderZ), 1f);
+            Place(shoulderStar, new Vector3(B * ShoulderX, R * LowY, L * ShoulderZ), 1f);
+            Place(beamPort, new Vector3(-B * BeamX, R * BeamY, L * 0.02f), 0.7f);
+            Place(beamStar, new Vector3(B * BeamX, R * BeamY, L * 0.02f), 0.7f);
+            Place(sternWash, new Vector3(0f, R * WashY, L * SternZ), 0.7f);
+            Place(wakeLinePort, new Vector3(-B * WakeLineX, R * WashY, L * WakeLineZ), 1.7f);
+            Place(wakeLineStar, new Vector3(B * WakeLineX, R * WashY, L * WakeLineZ), 1.7f);
+        }
+
+        void Place(ParticleSystem ps, Vector3 localPos, float baseSize)
+        {
+            if (ps == null) return;
+            ps.transform.localPosition = localPos;
+            var main = ps.main;
+            float sz = baseSize * sizeScale;
+            main.startSize = new ParticleSystem.MinMaxCurve(sz * 0.5f, sz);
         }
 
         /// A crest that broadens as it drifts, for the wake arms — the opposite
@@ -243,9 +323,40 @@ namespace SeaSick.Ship
             emitterRoot.localPosition = new Vector3(p.x, sink, p.z);
         }
 
+        /// The beam bursts are aimed about the WORLD vertical, not about her
+        /// deck.
+        ///
+        /// They used to be `Euler(-52, +-90, 0)` in ship space, which is "up
+        /// and outboard" only while she is upright. A sea that hits hard enough
+        /// to fire one is a sea that has her over: at 30 degrees of heel that
+        /// cone points across her own deck, and in a storm she is rarely
+        /// anywhere else — which is the other half of the spray-through-the-
+        /// deck complaint, and the half that no amount of moving the emitter
+        /// fixes. Water thrown up off the beam goes UP, whatever the boat is
+        /// doing underneath it.
+        void AimBeamSpray()
+        {
+            AimOutboard(beamStar, transform.right);
+            AimOutboard(beamPort, -transform.right);
+        }
+
+        static void AimOutboard(ParticleSystem ps, Vector3 outboard)
+        {
+            if (ps == null) return;
+            Vector3 flat = new Vector3(outboard.x, 0f, outboard.z);
+            if (flat.sqrMagnitude < 1e-4f) return;   // beam-on to vertical: hold
+            flat.Normalize();
+            // Slerp between two perpendicular unit vectors is linear in angle,
+            // so 0.58 is 52 degrees above the horizon — the elevation the old
+            // ship-space Euler was asking for, now measured from the sea.
+            Vector3 dir = Vector3.Slerp(flat, Vector3.up, 0.58f);
+            ps.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+        }
+
         void Update()
         {
             HoldAtWaterline();
+            AimBeamSpray();
             float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
             // Spray kicks in hard when the bow drops onto a wave face.
             float slam = Mathf.Clamp01(-motor.SurfAccel / 2.5f);
@@ -272,7 +383,11 @@ namespace SeaSick.Ship
         {
             if (rb == null || !SeaSick.Ocean.OceanSampler.Ready) return;
 
-            Vector3 stem = transform.TransformPoint(new Vector3(0f, 0.1f, 9.2f));
+            // Her stem, not the steamer's. On the skiff the old number was
+            // 4.7 m ahead of the boat, so this test was reading a patch of
+            // open water and splashing there.
+            Vector3 stem = transform.TransformPoint(
+                new Vector3(0f, hullRailY * LowY, hullLength * BowZ));
             var sample = SeaSick.Ocean.OceanSampler.SampleImmediate(stem);
             // Only while the stem is actually at the water, not slamming in air.
             if (Mathf.Abs(stem.y - sample.height) > entryContactBand) return;
@@ -294,8 +409,10 @@ namespace SeaSick.Ship
                 bowSpray.Emit(Mathf.RoundToInt(Mathf.Lerp(8f, 55f, force)));
             // The water itself is displaced where she lands — a real dent and
             // ring of foam the surface shader composites, sized by the blow.
+            // The dent she leaves is the size of the boat that made it.
             Ocean.DynamicWaterSim.Splash(
-                new Vector3(stem.x, sample.height, stem.z), 6f, 0.5f + 1.1f * force);
+                new Vector3(stem.x, sample.height, stem.z),
+                Mathf.Clamp(hullBeam * 0.7f, 2.5f, 14f), 0.5f + 1.1f * force);
         }
 
         /// Spray off the BEAM when a wave shoulders into the side — thrown up
@@ -318,8 +435,10 @@ namespace SeaSick.Ship
                 var side = lateral > 0f ? beamStar : beamPort;
                 if (side != null) side.Emit(Mathf.RoundToInt(Mathf.Lerp(10f, 45f, force)));
 
-                Vector3 at = transform.position + transform.right * (lateral > 0f ? 3.5f : -3.5f);
-                Ocean.DynamicWaterSim.Splash(at, 6f, 0.5f + force);
+                Vector3 at = transform.position
+                           + transform.right * (hullBeam * 0.5f * (lateral > 0f ? 1f : -1f));
+                Ocean.DynamicWaterSim.Splash(
+                    at, Mathf.Clamp(hullBeam * 0.7f, 2.5f, 14f), 0.5f + force);
             }
         }
 

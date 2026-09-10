@@ -15,6 +15,7 @@ namespace SeaSick.Dev
 
         ShipMotor motor;
         SmoothnessMeter meter;
+        Breakers breakers;
         CrewAgent[] crew;
         GUIStyle label;
 
@@ -22,6 +23,7 @@ namespace SeaSick.Dev
         {
             motor = GetComponent<ShipMotor>();
             meter = GetComponent<SmoothnessMeter>();
+            breakers = GetComponent<Breakers>();
         }
 
         void Start() { crew = GetComponentsInChildren<CrewAgent>(); }
@@ -49,7 +51,7 @@ namespace SeaSick.Dev
 
             int crewCount = crew != null ? crew.Length : 0;
             GUI.color = new Color(0f, 0f, 0f, 0.45f);
-            GUI.DrawTexture(new Rect(6f, 6f, w + 12f, line * (4.4f + crewCount * 1.75f)), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(6f, 6f, w + 12f, line * (6.4f + crewCount * 1.75f)), Texture2D.whiteTexture);
             GUI.color = Color.white;
 
             Vector3 fwd = motor.transform.forward;
@@ -67,6 +69,21 @@ namespace SeaSick.Dev
             string hullText = hull != null ? $"   hull {hull.Integrity01:P0}" : "";
             GUI.Label(new Rect(x, y += line, w, line),
                 $"roughness {meter.Roughness01:F2}{hullText}", label);
+
+            // The six things that decide whether a wave is worth riding.
+            // Without these on screen a playtest of the broach is a report
+            // that something felt odd, which is not a measurement.
+            string ease = motor.Easing ? $"  ease -{motor.EaseCost01:P0}" : "";
+            GUI.Label(new Rect(x, y += line, w, line),
+                $"broach {motor.Broach01:F2}   overspeed {motor.Overspeed01:F2}   " +
+                $"run {motor.SurfRunSeconds:F1}s{ease}", label);
+
+            string surf = breakers != null && breakers.Breaking01 > 0.005f
+                ? $"   BREAKERS {breakers.Breaking01:F2} under {breakers.DepthUnderKeel:F1} m"
+                : "";
+            GUI.Label(new Rect(x, y += line, w, line),
+                $"sea {motor.SeaHs:F1} m ({motor.SeaStateName})  resist {motor.SeaResistance01:P0}   " +
+                $"wind {motor.SeaAngleDeg:F0}° swell {motor.SwellAngleDeg:F0}° off bow{surf}", label);
 
             // Roughness bar: green calm, red rough.
             var barRect = new Rect(x, y + line * 1.1f, w, line * 0.5f);

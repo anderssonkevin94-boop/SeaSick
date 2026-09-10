@@ -16,17 +16,21 @@ MonoBehaviour:
   seaLevel: 0
   worldRadius: 0
   worldEdgeFalloff: 500
-  worldOffset: {x: 1066, y: 2760}
+  worldOffset: {x: -58.950436, y: 4818.805}
   octaves: 5
   baseFrequency: 0.0025
   lacunarity: 2
   gain: 0.5
   erosion: 2
   erosionAmount: 1
-  maskFrequency: 0.0004
+  maskFrequency: 0.001
   maskOctaves: 3
-  landRatio: 0.1
+  landRatio: 0.12
   maskFalloff: 0.16
+  maskStretch: 2
+  maskGrainAngle: 34
+  maskWarp: 190
+  maskWarpFrequency: 0.0009090909
   seabedDepth: -12
   deepSeabedDepth: -180
   shelfBand: 0.12
@@ -410,19 +414,19 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  baseHeight: 5
-  reliefHeight: 42
+  baseHeight: 3
+  reliefHeight: 34
   massifFrequency: 0.00019230769
-  massifMin: 0.8
-  massifMax: 3.0
+  massifMin: 1
+  massifMax: 3.4
   massifBias: 1.5
   massifMaskStart: 0.35
-  uplandFrequency: 0.0014285714
+  uplandFrequency: 0.0022222223
   uplandStart: 0.53
   uplandFull: 0.78
-  plainRelief: 18
+  plainRelief: 12
   lowlandDetail: 0.25
-  ridgeAmount: 0.45
+  ridgeAmount: 0.72
   ridgeLow: 0.42
   ridgeHigh: 0.62
   rockCharacterFrequency: 0.00016666666
@@ -437,21 +441,25 @@ MonoBehaviour:
   verdancyFloor: 0.25
   verdancyRockSuppress: 0.15
   vegSlopeSoft: 0.6
-  vegSlopeHard: 1.0
+  vegSlopeHard: 1
   vegRockSuppress: 0.88
+  treeSpacing: 5
+  palmLatitude: -1400
+  palmBand: 600
+  sceneryLod0Distance: 220
   detailFrequency: 0.04
   detailOctaves: 2
-  detailAmplitude: 0.3
-  shoreSlopeMin: 0.18
-  shoreSlopeMax: 0.35
+  detailAmplitude: 0.5
+  shoreSlopeMin: 0.032
+  shoreSlopeMax: 0.45
   shoreSlopeBias: 2.5
   shoreFrequency: 0.0011111111
-  shoreFlat: 19
-  shoreTop: 70
+  shoreFlat: 8
+  shoreTop: 40
   shoreBottom: 12
   beachHeight: 6
   beachBlendWidth: 4
-  sandHeight: 1.2
+  sandHeight: 3.2
   snowHeight: 165
   rockShowsAt: 0.6
   cliffRockStart: 0.72

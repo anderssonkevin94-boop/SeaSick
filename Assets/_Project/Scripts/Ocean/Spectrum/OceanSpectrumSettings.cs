@@ -71,6 +71,18 @@ namespace SeaSick.Ocean
         [Tooltip("Horizontal displacement scale (lambda). Sharpens crests; too high folds the surface.")]
         [Range(0f, 2f)] public float choppiness = 1f;
 
+        [Tooltip("Per-cascade multiplier on choppiness — crest sharpness BY BAND. " +
+                 "Sharpness and sampler cost used to be the same knob: lambda is " +
+                 "the horizontal displacement the CPU twin inverts by Newton, so " +
+                 "raising it costs an iteration and the budget is spent. " +
+                 "x = cascade 0 (the 2048 m swell) and y = cascade 1 (128 m) are " +
+                 "READ BY PHYSICS and cost that iteration — do not move them " +
+                 "without re-running DivergenceProbe. z = cascade 2 (the 32 m " +
+                 "near-field chop) is not in the readback at all and is FREE: it " +
+                 "is also the band the eye reads as sharp when you are standing " +
+                 "on the deck.")]
+        public Vector3 crestSharpen = new Vector3(1f, 1f, 1f);
+
         [Tooltip("Over-drives the spectrum's short-wave tail: surface TEXTURE without touching wave size. JONSWAP's tail is physically right and visually thin, and at storm wind speeds the wind sea's own peak is out past 150 m, so almost nothing lands at the scales the eye reads as rough. This is a multiplier on spectral DENSITY, so amplitude goes as its square root -- 9 makes the short waves three times taller. 1 = physical.")]
         [Range(1f, 25f)] public float detailGain = 1f;
         [Tooltip("Wavelength, metres, where the detail gain starts. It ramps to full over the three octaves below this.")]
@@ -83,6 +95,11 @@ namespace SeaSick.Ocean
         public float foamHalflife = 4f;
         [Tooltip("Injection strength when crests break.")]
         public float foamInjection = 0.5f;
+        [Tooltip("How SELECTIVE the injection is — the width of the ramp below foamThreshold, " +
+                 "inverted. Low is a wide ramp and fills the buffer everywhere, which reads as " +
+                 "a flat milk over the whole sea; high marks only water that has really folded, " +
+                 "which is what leaves trails you can see the shape of. Was a hard-coded 2.")]
+        [Range(1f, 16f)] public float foamInjectSharpness = 6f;
 
         public Vector2 WindDir =>
             new Vector2(Mathf.Cos(windDirectionDeg * Mathf.Deg2Rad),
@@ -108,9 +125,11 @@ namespace SeaSick.Ocean
             windSeaHeight = s.windSeaHeight; windSeaWavelength = s.windSeaWavelength;
             windSeaSharpness = s.windSeaSharpness;
             detailGain = s.detailGain; detailWavelength = s.detailWavelength;
-            choppiness = s.choppiness; nominalHs = s.nominalHs;
+            choppiness = s.choppiness; crestSharpen = s.crestSharpen;
+            nominalHs = s.nominalHs;
             foamThreshold = s.foamThreshold; foamHalflife = s.foamHalflife;
             foamInjection = s.foamInjection;
+            foamInjectSharpness = s.foamInjectSharpness;
         }
 
         /// Lerp a and b into this instance (SeaStateController owns a runtime copy).
@@ -135,10 +154,12 @@ namespace SeaSick.Ocean
             detailGain = Mathf.Lerp(a.detailGain, b.detailGain, t);
             detailWavelength = Mathf.Lerp(a.detailWavelength, b.detailWavelength, t);
             choppiness = Mathf.Lerp(a.choppiness, b.choppiness, t);
+            crestSharpen = Vector3.Lerp(a.crestSharpen, b.crestSharpen, t);
             nominalHs = Mathf.Lerp(a.nominalHs, b.nominalHs, t);
             foamThreshold = Mathf.Lerp(a.foamThreshold, b.foamThreshold, t);
             foamHalflife = Mathf.Lerp(a.foamHalflife, b.foamHalflife, t);
             foamInjection = Mathf.Lerp(a.foamInjection, b.foamInjection, t);
+            foamInjectSharpness = Mathf.Lerp(a.foamInjectSharpness, b.foamInjectSharpness, t);
         }
     }
 }

@@ -15,6 +15,9 @@ using UnityEngine;
 public static class RunProbe
 {
     public static void Surf() => Call("SurfProbe");
+    public static void Crest() => Call("CrestProbe");
+    public static void SprayRig() => Call("SprayRigCheck");
+    public static void HomeTab() => Call("HomeTabProbe");
     public static void Look() => Call("IslandLook");
 
     /// The same sheet, framed on the ROCKIEST island in reach rather than the
@@ -53,6 +56,8 @@ public static class RunProbe
     public static void Sails() => Call("CanvasShot");
     public static void Stow() => Call("StowProbe");
     public static void Bury() => Call("BuryProbe");
+    public static void Broach() => Call("SeaSick.Dev.SeaTrialProbe", "Broach");
+    public static void Shallow() => Call("SeaSick.Dev.SeaTrialProbe", "Shallow");
     public static void Shoal() => Call("ShoalShot");
     public static void Horizon() => Call("HorizonShot");
     public static void Stand() => Call("DeckStandProbe");
@@ -67,6 +72,25 @@ public static class RunProbe
     public static void Truth() => Call("IslandTruthProbe");
     public static void Variety() => Call("IslandVariety");
     public static void Tune() => Call("IslandTuner");
+
+    // Edit-mode island measurement. TuneIslands has no menu items and is
+    // driven only through execute_script, which recompiles it in a fresh
+    // assembly and dies on the reference set -- the exact failure this file
+    // exists to route around. Through the project assembly it just works.
+    public static void Isles() => CallEditor("TuneIslands", "Survey");
+    public static void IsleFlats() => CallEditor("TuneIslands", "Flats");
+    public static void IsleBeaches() => CallEditor("TuneIslands", "Beaches");
+    public static void IsleWalk() => CallEditor("TuneIslands", "Walkable");
+    public static void IslePush() => CallEditor("TuneIslands", "Execute");
+    public static void IsleHomes() => CallEditor("TuneIslands", "HomeCandidates");
+    public static void IsleMap() => CallEditor("TuneIslands", "Map");
+    public static void IsleMakeHome() => CallEditor("TuneIslands", "MakeHome");
+    public static void IsleGate() => CallEditor("HeightProbe");
+    public static void IsleHomeCheck() => CallEditor("TuneIslands", "HomeCheck");
+    public static void IsleMesh() => CallEditor("TuneIslands", "MeshVsField");
+    public static void DockFrame() => CallEditor("TuneIslands", "DockFraming");
+    public static void Legible() => CallEditor("TuneIslands", "Legibility");
+    public static void SailSheet() => Call("SailShots");
     public static void TerrainPerf() => Call("TerrainPerfProbe");
     public static void HitchStorm() => Call("HitchProbe", "Storm");
     public static void Hitch() => Call("HitchProbe");
@@ -74,25 +98,6 @@ public static class RunProbe
     public static void WeatherAxesLively() => Call("WeatherSheet", "AxesLively");
     public static void WeatherPatches() => Call("WeatherSheet", "Patches");
     public static void WeatherPatchesLively() => Call("WeatherSheet", "PatchesLively");
-
-    /// Edit-mode, not a probe: pushes the paddle steamer's measured mass and
-    /// the fleet damping law onto the ship in the open scene. Separate from
-    /// the full `SetupPaddleBoat.Execute()` cutover on purpose.
-    public static void Remass()
-    {
-        var ship = GameObject.Find("PlayerShip");
-        if (ship == null) { Debug.LogError("RunProbe.Remass: no PlayerShip in the open scene"); return; }
-        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-        {
-            var t = asm.GetType("SetupPaddleBoat");
-            if (t == null) continue;
-            var m = t.GetMethod("PushPhysics", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-            if (m == null) continue;
-            Debug.Log("Remass:\n" + m.Invoke(null, new object[] { ship }));
-            return;
-        }
-        Debug.LogError("RunProbe.Remass: could not find SetupPaddleBoat.PushPhysics");
-    }
 
     /// Edit-mode launcher for the hull lab: reimports the five FBX, measures
     /// every one against `WorldScale.Fleet` and rebuilds HullLab.unity.
@@ -121,7 +126,6 @@ public static class RunProbe
     public static void T3() => WearHull(3);
     public static void T4() => WearHull(4);
     public static void T5() => WearHull(5);
-    public static void Steamer() => CallEditorStr("SetupFleetShip", "Restore");
 
     static void WearHull(int tier)
     {
@@ -135,6 +139,58 @@ public static class RunProbe
             return;
         }
         Debug.LogError("RunProbe: could not find SetupFleetShip.Wear");
+    }
+
+    /// What the PLAYER sees, rendered from Camera.main. Every other probe
+    /// here photographs the scene view, which is not the shot that is broken
+    /// when somebody says they cannot see their boat.
+    ///
+    /// Only UnityEngine types, so this survives being recompiled on its own
+    /// by execute_script.
+    public static void Shot() => Shoot(900, 1500);        // the real game: PORTRAIT
+    public static void ShotWide() => Shoot(1280, 720);    // what the editor shows you
+
+    /// The aspect is not a detail. The editor Game view is landscape and
+    /// the game is not, so a boat that sits comfortably in a 16:9 frame
+    /// can be off the side of the phone -- this project has been caught
+    /// by that before. Default to portrait, because portrait is the game.
+    static void Shoot(int w, int h)
+    {
+        var cam = Camera.main;
+        if (cam == null) { Debug.LogError("RunProbe.Shot: no Camera.main"); return; }
+        var rt = new RenderTexture(w, h, 24) { antiAliasing = 2 };
+        var prev = cam.targetTexture;
+        var prevActive = RenderTexture.active;
+        cam.targetTexture = rt;
+        cam.Render();
+        RenderTexture.active = rt;
+        var tex = new Texture2D(w, h, TextureFormat.RGB24, false);
+        tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+        tex.Apply();
+        cam.targetTexture = prev;
+        RenderTexture.active = prevActive;
+
+        string dir = System.IO.Path.Combine(
+            System.IO.Directory.GetParent(Application.dataPath).FullName, "Temp", "IslandMaps");
+        System.IO.Directory.CreateDirectory(dir);
+        string path = System.IO.Path.Combine(dir,
+            w < h ? "gameview_portrait.png" : "gameview_wide.png");
+        System.IO.File.WriteAllBytes(path, ImageConversion.EncodeToPNG(tex));
+        Object.DestroyImmediate(tex);
+        rt.Release(); Object.DestroyImmediate(rt);
+
+        var ship = GameObject.Find("PlayerShip");
+        string where = "no PlayerShip";
+        if (ship != null)
+        {
+            var v = cam.WorldToViewportPoint(ship.transform.position);
+            bool onScreen = v.z > 0f && v.x > 0.02f && v.x < 0.98f && v.y > 0.02f && v.y < 0.98f;
+            where = "ship " + Vector3.Distance(cam.transform.position, ship.transform.position)
+                        .ToString("F0") + " m from camera, viewport " + v.ToString("F2")
+                  + (v.z <= 0f ? "  -- BEHIND THE CAMERA"
+                              : onScreen ? "  -- in frame" : "  -- OFF FRAME");
+        }
+        Debug.Log("RunProbe.Shot " + w + "x" + h + ": " + path + "\n  " + where);
     }
 
     static void CallEditorStr(string type, string method)

@@ -11,10 +11,13 @@ using SeaSick.Ship;
 /// her drawn waterline, the probe rig is `FleetLayout` lifted 0.55 x draft off
 /// the drawn keel, and the damping is held at the ratio the coefficients were
 /// tuned at. That is the same rule `HullFloatProbe` floats them by and the
-/// same one the paddle steamer was re-massed onto, so a hull behaves here
-/// exactly as she behaved in the float test.
+/// same one every hull is re-massed onto, so a hull behaves here exactly as
+/// she behaved in the float test.
 ///
-/// `RunProbe.T1()` .. `T5()` wear a hull; `RunProbe.Steamer()` puts her back.
+/// `RunProbe.T1()` .. `T5()` wear a hull. There is no way back to the paddle
+/// steamer any more: she and her `SetupPaddleBoat` were removed from the
+/// project, and `Restore()` went with them. The ladder is the way to change
+/// hull now -- see `Shipyard`.
 public static class SetupFleetShip
 {
     const string ArtDir = "Assets/_Project/Art/Ship/Hulls";
@@ -56,11 +59,6 @@ public static class SetupFleetShip
         // --- swap the visual ------------------------------------------------
         Transform old = ship.transform.Find("FleetVisual");
         if (old != null) Object.DestroyImmediate(old.gameObject);
-        Transform paddle = ship.transform.Find("PaddleBoatVisual");
-        if (paddle != null) paddle.gameObject.SetActive(false);
-        var drive = ship.GetComponent<PaddleDrive>();
-        if (drive != null) drive.enabled = false;
-
         var vis = (GameObject)PrefabUtility.InstantiatePrefab(src, ship.transform);
         vis.name = "FleetVisual";
         vis.transform.localPosition = Vector3.zero;
@@ -132,38 +130,6 @@ public static class SetupFleetShip
                           + (sail != null ? $", sail '{sail.name}' trims with the wind" : ", no sail found"));
         }
 
-        EditorSceneManagerDirty();
-        return sb.ToString();
-    }
-
-    /// Back to the paddle steamer. Her own numbers come from SetupPaddleBoat,
-    /// which stays the source of truth for her.
-    public static string Restore()
-    {
-        var sb = new StringBuilder();
-        GameObject ship = GameObject.Find("PlayerShip");
-        if (ship == null) return "no PlayerShip in the open scene";
-        Transform fleet = ship.transform.Find("FleetVisual");
-        if (fleet != null) Object.DestroyImmediate(fleet.gameObject);
-        Transform paddle = ship.transform.Find("PaddleBoatVisual");
-        if (paddle != null) paddle.gameObject.SetActive(true);
-        var drive = ship.GetComponent<PaddleDrive>();
-        if (drive != null) drive.enabled = true;
-        var motor = ship.GetComponent<ShipMotor>();
-        if (motor != null)
-        {
-            var mso = new SerializedObject(motor);
-            mso.FindProperty("windDriven").boolValue = false;
-            mso.FindProperty("mastPivot").objectReferenceValue = null;
-            mso.ApplyModifiedPropertiesWithoutUndo();
-        }
-        sb.AppendLine("paddle steamer restored (visual, PaddleDrive, windDriven off)");
-        sb.AppendLine(SetupPaddleBoat.PushProbes(ship));
-        sb.AppendLine(SetupPaddleBoat.PushPhysics(ship));
-        var so = new SerializedObject(ship.GetComponent<ShipMotor>());
-        so.FindProperty("maxSpeed").floatValue = SetupPaddleBoat.MaxSpeed;
-        so.FindProperty("rowSpeed").floatValue = SetupPaddleBoat.OarSpeed;
-        so.ApplyModifiedPropertiesWithoutUndo();
         EditorSceneManagerDirty();
         return sb.ToString();
     }

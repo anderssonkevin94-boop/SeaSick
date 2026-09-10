@@ -40,7 +40,11 @@ public static class ReadQuality
         sb.AppendLine();
         sb.AppendLine($"-- runtime: QualitySettings level {QualitySettings.GetQualityLevel()} "
                       + $"(\"{QualitySettings.names[QualitySettings.GetQualityLevel()]}\") "
-                      + "-> " + (QualitySettings.GetQualityLevel() == 0 ? "Mobile" : "PC"));
+                      // Ask OceanQuality which tier it wants rather than
+                      // re-deriving it here. This line carried its own copy of
+                      // the rule and therefore reproduced the inversion it
+                      // existed to catch.
+                      + "-> " + SeaSick.Ocean.OceanQuality.TierAsset());
         var act = SeaSick.Ocean.OceanQuality.Active;
         if (act == null)
         {

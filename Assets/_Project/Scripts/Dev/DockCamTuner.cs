@@ -140,7 +140,15 @@ public class DockCamTuner : MonoBehaviour
         string shipSeen = "?";
         if (cam != null && motor != null)
         {
+            // Frustum at the PHONE's aspect, not the editor Game view's.
+            // Read off the live camera, this readout says "fully in shot"
+            // about a landscape window while the ship is off the side of the
+            // portrait frame the game ships in -- which is precisely the
+            // failure this tuner exists to prevent somebody eyeballing.
+            float wasAspect = cam.aspect;
+            cam.aspect = SeaSick.CameraRig.ChaseCamera.PortraitAspect;
             var planes = GeometryUtility.CalculateFrustumPlanes(cam);
+            cam.aspect = wasAspect;
             int seen = 0;
             for (float u = -0.5f; u <= 0.5f; u += 1f)
                 for (float v = -0.5f; v <= 0.5f; v += 1f)

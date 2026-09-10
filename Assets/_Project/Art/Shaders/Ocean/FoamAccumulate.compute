@@ -20,6 +20,16 @@ cbuffer Params
     float _Threshold;   // J below this is breaking
     float _DecayFactor; // exp(-ln2 * dt / halflife), precomputed
     float _Injection;
+    // How far past folding the water has to be before it is marked white.
+    //
+    // This was a hard-coded 2.0, which is a ramp half a Jacobian unit wide --
+    // so water that is barely folding injects nearly as hard as water that has
+    // turned inside out, and the buffer fills EVERYWHERE. Measured 2026-09-09
+    // in a 14 m sea: buffer p50 0.32 with a p95 of only 0.36, i.e. a flat wash
+    // rather than a pattern of trails, and 79% of every white pixel on screen
+    // came from it. A crest that breaks then has nothing to stand out against,
+    // which is what "the sea feels soft" looks like in a number.
+    float _InjectSharp;
     float4 _PatchSizes;
 }
 
@@ -42,7 +52,7 @@ void FoamAccumulate(uint3 id : SV_DispatchThreadID)
         dxz += Displacement.SampleLevel(linearRepeatSampler, uv, 0).w;
     }
     float jac = (1.0 + dxx) * (1.0 + dzz) - dxz * dxz;
-    float inj = saturate((_Threshold - jac) * 2.0) * _Injection;
+    float inj = saturate((_Threshold - jac) * _InjectSharp) * _Injection;
 
     // 5-tap wrap blur of the previous buffer: the feedback that makes foam
     // spread as it dies instead of winking out in place.

@@ -59,7 +59,7 @@ namespace SeaSick.World
         public const float BoulderMax = 3.2f;
 
         // --- the ship -------------------------------------------------------
-        /// Her overall length. Authored by SetupPaddleBoat.Scale, which stays
+        /// Her overall length. Was authored by SetupPaddleBoat.Scale, which was
         /// the one knob that resizes her; this is here so everything else can
         /// be compared against it without importing an editor script.
         public const float ShipLength = 24.2f;

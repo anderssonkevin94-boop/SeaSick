@@ -24,9 +24,19 @@ RWTexture2DArray<float4> Derivatives;   // (sx, sz, lambda*dxx, lambda*dzz)
 
 cbuffer Params
 {
+    // Per-cascade choppiness. It used to be one scalar for the whole
+    // simulation, which made crest SHARPNESS and sampler COST the same knob:
+    // lambda is the horizontal displacement the CPU twin inverts by Newton, so
+    // every raise costs an iteration, and the budget is spent (see
+    // SampleJobs.NewtonIterations). Split per cascade it stops being one knob.
+    // The readback only carries cascades 0 and 1 (DisplacementReadback.
+    // PhysicsCascades = 2), so cascade 2 -- the 32 m patch, the near-field chop
+    // the eye actually reads as "sharp" -- is invisible to the sampler and can
+    // be sharpened for nothing. x and y are NOT free and must not be moved
+    // without re-running DivergenceProbe.
+    float4 _LambdaC;   // xyz = per-cascade lambda, w unused
     uint _N;
     float _Time;
-    float _Lambda;
 }
 
 float2 CMul(float2 a, float2 b)
@@ -85,6 +95,11 @@ void ResolveOutputs(uint3 id : SV_DispatchThreadID)
     float4 p0 = Spatial0[id] * sgn; // (Dx, Dz, y, dxz)
     float4 p1 = Spatial1[id] * sgn; // (sx, sz, dxx, dzz)
 
-    Displacement[id] = float4(_Lambda * p0.x, p0.z, _Lambda * p0.y, _Lambda * p0.w);
-    Derivatives[id] = float4(p1.x, p1.y, _Lambda * p1.z, _Lambda * p1.w);
+    // Written out rather than indexed: a dynamic index into a constant vector
+    // is a scalarising branch on some compilers and this is the hottest kernel
+    // in the ocean.
+    float lam = id.z == 0 ? _LambdaC.x : (id.z == 1 ? _LambdaC.y : _LambdaC.z);
+
+    Displacement[id] = float4(lam * p0.x, p0.z, lam * p0.y, lam * p0.w);
+    Derivatives[id] = float4(p1.x, p1.y, lam * p1.z, lam * p1.w);
 }

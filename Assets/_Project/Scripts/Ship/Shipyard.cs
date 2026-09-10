@@ -40,19 +40,16 @@ namespace SeaSick.Ship
         public ShipLoad Load { get; private set; }
         int lastCargo = -1;
 
-        /// Children that belong to the paddle steamer's HULL rather than to the
-        /// ship, and must step aside with her. Her lanterns are the ones that
-        /// caught us out; the ladder hulls carry no lamps of their own and get
-        /// them from the kit, at the bays the player gave to quarters.
-        static readonly string[] PaddleOnly =
-        {
-            "PaddleBoatVisual", "LanternBow_Pivot", "LanternStern_Pivot",
-        };
-
         // Fallback only: `HydrostaticLayout` computes the real one per rung
         // from the rig it builds (0.567 across the ladder, by construction).
         const float FloatRatio = 0.60f;   // mass / (rho * total volume)
-        const float TunedMass = 19200f;   // what the drag coefficients were tuned at
+        // **The anchor mass, and it OUTLIVES the ship it was measured on.**
+        // 19200 kg was the paddle steamer's, and the steamer is gone -- but
+        // every drag and damping coefficient in the game was tuned at this
+        // mass and is applied as a ratio to it, so the number is not a fact
+        // about her, it is the origin the whole ladder is measured from.
+        // Deleting it as a leftover would silently rescale every rung.
+        const float TunedMass = 19200f;
         // One copy of the anchor hull's length, owned by ShipMotor. Three
         // tables of the same numbers is how the steamer ended up at a sixth of
         // her displacement; this is not going to be a fourth.
@@ -436,18 +433,6 @@ namespace SeaSick.Ship
                     t = transform.Find(stale);
                 }
             }
-            // The steamer's own fittings are SIBLINGS of her visual, not
-            // children of it, so hiding the visual left her two lanterns
-            // hanging in mid-air beside whatever hull replaced her. Anything
-            // that belongs to her hull and not to the ship goes with it.
-            foreach (var only in PaddleOnly)
-            {
-                var t = transform.Find(only);
-                if (t != null) t.gameObject.SetActive(false);
-            }
-            var drive = GetComponent<PaddleDrive>();
-            if (drive != null) drive.enabled = false;
-
             var src = Resources.Load<GameObject>(n.ResourcePath);
             if (src == null)
             {
@@ -516,6 +501,51 @@ namespace SeaSick.Ship
                 motor.ApplyFit(fit.SpeedMultiplier, fit.TurnMultiplier,
                                fit.AccelMultiplier);
             }
+
+            // --- keep the sea out of THIS hull -------------------------------
+            //
+            // `HullWaterClip` was sized once, by `SetupPaddleBoat`, off the
+            // steamer's real deck -- and nothing resized it when the ladder
+            // began swapping hulls underneath it. Every rung was therefore
+            // wearing a 3.5 x 10 m ellipse: a hole in the sea that does not
+            // match the boat standing in it, cutting water away outboard of a
+            // narrow hull and letting it aboard a wide one.
+            //
+            // Sized from the rung the same way the probes are, and in the same
+            // local units they use -- `HydrostaticLayout` is handed n.length
+            // and n.beam raw, so that is the convention this transform is in.
+            //
+            // The ellipse is held INBOARD of the planking and short of the
+            // stem and transom, which is the rule the steamer's version was
+            // written to: an ellipse that reaches past the hull cuts a notch
+            // in the open sea, and that notch is visible from every angle.
+            var clip = GetComponent<HullWaterClip>();
+            if (clip == null) clip = gameObject.AddComponent<HullWaterClip>();
+            {
+                // Deck-to-rail is what has to be kept dry, but the band is
+                // taken from below the waterline instead: everything under
+                // the deck is inside the hull and invisible, so a generous
+                // bottom costs nothing and a tight one risks a gap opening
+                // between the band and the waterline as she settles under
+                // cargo. The top clears the rail so a crest breaking level
+                // with it still does not render through.
+                const float Below = 0.4f, AboveRail = 0.5f;
+                float lo = -Below, hi = n.RailY + AboveRail;
+                clip.Configure(
+                    new Vector3(0f, (lo + hi) * 0.5f, 0f),
+                    new Vector2(n.beam * 0.41f, n.length * 0.40f),
+                    (hi - lo) * 0.5f);
+            }
+
+            // --- and the foam she throws is her size too ---------------------
+            //
+            // Same fault as the clip above, found the same way: `SpeedJuice`
+            // placed every emitter at a typed coordinate off the steamer, so
+            // on a big rung the bow and beam bursts were born INSIDE the hull
+            // and came up through the deck, and on a small one they fired off
+            // water she was nowhere near.
+            var juice = GetComponent<SpeedJuice>();
+            if (juice != null) juice.ConfigureForHull(n.length, n.beam, n.RailY);
 
             var rig = GetComponent<SailRig>();
             if (rig == null) rig = gameObject.AddComponent<SailRig>();

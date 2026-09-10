@@ -43,6 +43,47 @@ namespace SeaSick.Ocean
         [SerializeField] Vector2 driftSpeed = new Vector2(9f, 24f);
         [SerializeField] int maxSpindrift = 260;
 
+        [Header("Breaking crests")]
+        // Spindrift is WEATHER: the wind tearing the tops off, and it belongs
+        // behind a storminess gate. A crest folding over on itself and
+        // throwing its own top forward is not weather -- it happens in any sea
+        // with wind in it, and gating the whole component on `Storminess01`
+        // is why the seas the game is actually sailed in carry no white water
+        // at all. These two share the scan and nothing else.
+        //
+        // The trigger is the OCEAN'S OWN FOAM FIELD, not a guess: `sample.foam`
+        // is the cascade-0 turbulence buffer read back to the CPU, which is
+        // the same number the surface shader whitens itself with. So a spume
+        // burst can only happen where the water is already drawn breaking, and
+        // the two can never disagree about where the sea is folding.
+        // A FRACTION of the foam this sea is actually making, not a count.
+        //
+        // The first version was an absolute 0.22 on `sample.foam`, tuned when
+        // the persistent buffer was saturated and sat at 0.3-0.4 over the whole
+        // ocean. Making the buffer selective dropped it to 0.05 in a 14 m sea,
+        // and the gate promptly became unreachable: 0.5 crests a second and
+        // five particles alive, in a sea that is visibly breaking. Same
+        // mistake, third time in this file's history -- the spindrift crest
+        // threshold started as an absolute 6.5 m and put ONE particle on a full
+        // storm. A threshold into the sea is a fraction of the sea's own scale.
+        [Tooltip("Fraction of the peak foam this sea is currently making, above which a " +
+                 "crest counts as breaking. Relative, so it survives any retune of the " +
+                 "foam buffer — which an absolute number did not.")]
+        [Range(0.1f, 0.95f)] [SerializeField] float foamGateFraction = 0.55f;
+        [Tooltip("Absolute floor, so glassy water makes nothing however you scale a fraction of it.")]
+        [SerializeField] float foamGateFloor = 0.02f;
+        [Tooltip("Breaking crests marked per second, at most.")]
+        [SerializeField] float breakerRate = 7f;
+        [Tooltip("Particles thrown along one crest. A breaker is a LINE, not a point.")]
+        [SerializeField] int spumePerCrest = 14;
+        [Tooltip("How far along the crest the line is spread, as a fraction of the sample radius.")]
+        [Range(0.02f, 0.5f)] [SerializeField] float crestSpread = 0.13f;
+        [SerializeField] int maxSpume = 420;
+        [Tooltip("Nothing is thrown closer to the ship than this MANY HULL LENGTHS — " +
+                 "her own bow and beam spray owns that water. A fixed count of metres " +
+                 "would be a hole around a skiff and inside a three-decker.")]
+        [SerializeField] float hullClearLoa = 0.6f;
+
         [Header("Mist")]
         [Tooltip("Big, faint and few. These are overdraw — keep them cheap.")]
         [SerializeField] int maxMist = 16;
@@ -55,10 +96,11 @@ namespace SeaSick.Ocean
         [Tooltip("Logs the emission budget once a second. Diagnostics only.")]
         [SerializeField] bool logDiagnostics;
 
-        ParticleSystem spindrift, mist;
+        ParticleSystem spindrift, mist, spume;
         SeaSick.Ship.ShipMotor motor;
         float mistDue, driftDue;
         Vector3[] samples;   // reused every frame; nothing allocated at sea
+        float[] sampleFoam;  // the ocean's foam at that same spot, same frame
         // The crest scan rides the physics driver's ONE batched Burst query
         // per step instead of 24 main-thread `SampleImmediate` calls per
         // frame. Measured before this: StormSpray.Update 1.0 ms a frame on
@@ -72,6 +114,8 @@ namespace SeaSick.Ocean
         OceanProbeRegistry.Handle[] handles;
         int[] seenFrame;
         float seaMean, seaCrest;
+        int found;
+        float breakerDue;
         bool calibrated;
         float dbgClock, dbgBudget;
         int dbgEmits, dbgAbove, dbgUpdates;
@@ -82,11 +126,29 @@ namespace SeaSick.Ocean
         public float SeaCrest => seaCrest;
         public float CrestThreshold => seaMean + (seaCrest - seaMean) * crestFraction;
         public int Emitted { get; private set; }
+        /// Diagnostics — breaking crests marked, and the peak foam the scan is
+        /// seeing. If `PeakFoam` never reaches `foamGate` the sea is not
+        /// folding as far as the simulation is concerned, and the fix is the
+        /// spectrum's `foamThreshold`, not this number.
+        public int Breakers { get; private set; }
+        public float PeakFoam { get; private set; }
+        /// The gate as it stands right now, in the same units as `PeakFoam`.
+        public float FoamGate => Mathf.Max(foamGateFloor, foamGateFraction * PeakFoam);
+        public float FoamGateFraction
+        {
+            get => foamGateFraction;
+            set => foamGateFraction = Mathf.Clamp(value, 0.1f, 0.95f);
+        }
+        public float BreakerRate { get => breakerRate; set => breakerRate = Mathf.Max(0f, value); }
+        public int SpumePerCrest { get => spumePerCrest; set => spumePerCrest = Mathf.Clamp(value, 1, 40); }
+        public int SpumeAlive => spume != null ? spume.particleCount : 0;
+        public int SpindriftAlive => spindrift != null ? spindrift.particleCount : 0;
 
         void Start()
         {
             motor = GetComponent<SeaSick.Ship.ShipMotor>();
             samples = new Vector3[Mathf.Clamp(samplesPerFrame, 2, 32)];
+            sampleFoam = new float[samples.Length];
             BuildSystems();
         }
 
@@ -186,6 +248,50 @@ namespace SeaSick.Ocean
             var mr = mist.GetComponent<ParticleSystemRenderer>();
             mr.sharedMaterial = haze;
             mr.renderMode = ParticleSystemRenderMode.Billboard;
+
+            // Spume: the water a crest throws off itself as it folds. It is
+            // the opposite of spindrift in every way that matters -- heavy
+            // instead of blown, tumbling instead of streaked, falling back
+            // onto the face instead of driving downwind -- so it is its own
+            // system with its own material rather than a second emit into the
+            // spindrift one.
+            var chunk = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
+            chunk.SetColor("_BaseColor", new Color(1f, 1f, 1f, 1f));
+            chunk.SetTexture("_BaseMap", FoamTexture.SoftPuff());
+            MakeTransparent(chunk, 3008);
+
+            var sgo = new GameObject("CrestSpume");
+            sgo.transform.SetParent(transform, false);
+            spume = sgo.AddComponent<ParticleSystem>();
+            var smain = spume.main;
+            smain.simulationSpace = ParticleSystemSimulationSpace.World;
+            smain.maxParticles = maxSpume;
+            smain.startLifetime = 1.4f;
+            smain.startSpeed = 0f;        // supplied per particle
+            smain.startSize = 1.5f;
+            smain.gravityModifier = 1.15f; // it falls back down the face
+            var semission = spume.emission;
+            semission.enabled = false;     // emitted by hand, at breaking crests
+            // Grows as it is thrown, then dies -- a fold throws a curtain that
+            // opens. Shrinking it instead reads as a puff of smoke.
+            var ssize = spume.sizeOverLifetime;
+            ssize.enabled = true;
+            ssize.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                new Keyframe(0f, 0.55f), new Keyframe(0.35f, 1.1f), new Keyframe(1f, 0.85f)));
+            var srot = spume.rotationOverLifetime;
+            srot.enabled = true;
+            srot.z = new ParticleSystem.MinMaxCurve(-1.8f, 1.8f);
+            var sfade = spume.colorOverLifetime;
+            sfade.enabled = true;
+            var sgrad = new Gradient();
+            sgrad.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.9f, 0.12f),
+                        new GradientAlphaKey(0.7f, 0.55f), new GradientAlphaKey(0f, 1f) });
+            sfade.color = sgrad;
+            var spr = spume.GetComponent<ParticleSystemRenderer>();
+            spr.sharedMaterial = chunk;
+            spr.renderMode = ParticleSystemRenderMode.Billboard;
         }
 
         static void MakeTransparent(Material m, int queue)
@@ -201,14 +307,12 @@ namespace SeaSick.Ocean
 
         void Update()
         {
+            if (!OceanSampler.Ready) return;
             var sky = SeaSick.World.SkyDirector.Instance;
             float storm = sky != null ? sky.Storminess01 : 0f;
-            if (storm < threshold) return;
 
-            if (!OceanSampler.Ready) return;
-
-            // Above the threshold, ramp the whole effect in over the next
-            // stretch so it arrives with the weather instead of switching on.
+            // Above the threshold, ramp the weather in over the next stretch
+            // so it arrives with the storm instead of switching on.
             float t = Mathf.InverseLerp(threshold, 1f, storm);
 
             Vector2 wind = SeaStateController.Instance != null
@@ -218,7 +322,15 @@ namespace SeaSick.Ocean
 
             dbgUpdates++;
             EnsureHandles(centre);
-            TearCrests(centre, wind3, t);
+            // The scan is shared and runs at every sea state. Breaking crests
+            // are a property of the WATER and come off the ocean's own foam
+            // field; spindrift and mist are a property of the WEATHER and stay
+            // behind the storminess gate below.
+            ScanSea(centre);
+            BreakCrests(wind3);
+
+            if (storm < threshold) return;
+            TearCrests(wind3, t);
             DriftMist(centre, wind3, t);
 
             if (!logDiagnostics) return;
@@ -233,21 +345,23 @@ namespace SeaSick.Ocean
             }
         }
 
-        /// Sample the sea around the ship, work out where the tops are from the
-        /// samples themselves, and throw the tops downwind.
-        void TearCrests(Vector3 centre, Vector3 wind3, float t)
+        /// Sample the sea around the ship and work out, from the samples
+        /// themselves, where its middle and its tops are. Everything that
+        /// throws a particle reads this and nothing re-samples.
+        void ScanSea(Vector3 centre)
         {
             int n = samples.Length;
-            float sum = 0f, top = -99999f;
-            int found = 0;
+            float sum = 0f, top = -99999f, peakFoam = 0f;
+            found = 0;
             for (int i = 0; i < n; i++)
             {
                 var hd = handles[i];
                 if (hd.sampledFrame != seenFrame[i])
                 {
                     // Fresh: the sample belongs to the spot the handle holds.
-                    // Bank the pair, then send the handle somewhere new.
+                    // Bank the triple, then send the handle somewhere new.
                     samples[i] = new Vector3(hd.position.x, hd.sample.height, hd.position.z);
+                    sampleFoam[i] = hd.sample.foam;
                     seenFrame[i] = hd.sampledFrame;
                     Vector2 off = Random.insideUnitCircle * sampleRadius;
                     hd.position = new Vector3(centre.x + off.x, 0f, centre.z + off.y);
@@ -256,6 +370,7 @@ namespace SeaSick.Ocean
                 float h = samples[i].y;
                 sum += h;
                 if (h > top) top = h;
+                if (sampleFoam[i] > peakFoam) peakFoam = sampleFoam[i];
                 found++;
             }
             if (found == 0) return;
@@ -267,6 +382,13 @@ namespace SeaSick.Ocean
             float k = 1f - Mathf.Exp(-calibrationRate * Time.deltaTime);
             seaMean = Mathf.Lerp(seaMean, frameMean, k);
             seaCrest = Mathf.Lerp(seaCrest, top, k);
+            PeakFoam = Mathf.Lerp(PeakFoam, peakFoam, k);
+        }
+
+        /// Throw the tops downwind. Storm weather only.
+        void TearCrests(Vector3 wind3, float t)
+        {
+            if (found == 0) return;
             float threshold = CrestThreshold;
 
             // How much spray there is, and where it comes from, are separate
@@ -285,8 +407,9 @@ namespace SeaSick.Ocean
             float speed = Mathf.Lerp(driftSpeed.x, driftSpeed.y, t);
 
             var ep = new ParticleSystem.EmitParams();
-            for (int i = 0; i < found && driftDue >= 1f; i++)
+            for (int i = 0; i < samples.Length && driftDue >= 1f; i++)
             {
+                if (seenFrame[i] == 0) continue;
                 if (samples[i].y < threshold) continue;
                 driftDue -= 1f;
                 Emitted++;
@@ -299,6 +422,79 @@ namespace SeaSick.Ocean
                 ep.startSize = Random.Range(0.25f, 0.75f) * Mathf.Lerp(0.8f, 1.3f, t);
                 ep.startColor = Color.white;
                 spindrift.Emit(ep, 1);
+            }
+        }
+
+        /// White water where the sea is actually folding over.
+        ///
+        /// A breaking crest is a LINE, not a point — one fold running across
+        /// the wave — so a hit throws a row of spume along the crest rather
+        /// than a puff at the sample. That is also what makes 24 samples a
+        /// frame enough: the scan only has to FIND a breaker, and the line it
+        /// draws is what you actually see. A puff per sample would need an
+        /// order of magnitude more sampling to read as anything at all.
+        void BreakCrests(Vector3 wind3)
+        {
+            if (found == 0 || spume == null) return;
+
+            // Evaporates, never banks — the same rule the spindrift budget had
+            // to learn after it dumped 178 particles of banked credit the
+            // moment the crests came back.
+            float add = breakerRate * Time.deltaTime;
+            breakerDue = Mathf.Min(breakerDue + add, add * 2f + 1f);
+            if (breakerDue < 1f) return;
+
+            // How big the thrown water is, as a fraction of the sea's OWN
+            // measured spread rather than a count of metres — the rule the
+            // spindrift threshold and the shader's colour ramp both had to
+            // learn. A 3 m sea folds in handfuls, a 60 m one in cartloads.
+            float gate = FoamGate;
+            float spread = Mathf.Max(0.4f, seaCrest - seaMean);
+            float size = Mathf.Clamp(spread * 0.14f, 0.5f, 6f);
+            float lineLen = sampleRadius * crestSpread;
+            // The wave runs downwind, so the crest lies across the wind.
+            Vector3 along = new Vector3(-wind3.z, 0f, wind3.x);
+            if (along.sqrMagnitude < 1e-4f) along = Vector3.right;
+            along.Normalize();
+
+            var ep = new ParticleSystem.EmitParams();
+            for (int i = 0; i < samples.Length && breakerDue >= 1f; i++)
+            {
+                if (seenFrame[i] == 0) continue;
+                if (sampleFoam[i] < gate) continue;
+                // Her own bow and beam spray owns the water alongside her. A
+                // second system throwing foam into it is one of the ways white
+                // water ends up somewhere it has no business being.
+                Vector3 at = samples[i];
+                Vector3 d = at - transform.position; d.y = 0f;
+                float clear = hullClearLoa * (motor != null ? motor.HullLength : 24.2f);
+                if (d.sqrMagnitude < clear * clear) continue;
+
+                breakerDue -= 1f;
+                Breakers++;
+
+                // Strength is also relative: at the gate it is a slap, at the
+                // peak the sea is making it is a wall.
+                float strength = Mathf.InverseLerp(gate, Mathf.Max(gate * 1.6f, PeakFoam),
+                                                   sampleFoam[i]);
+                int count = Mathf.Max(3,
+                    Mathf.RoundToInt(spumePerCrest * (0.45f + 0.55f * strength)));
+                for (int k = 0; k < count; k++)
+                {
+                    float u = k / (float)(count - 1) - 0.5f;
+                    Vector3 p = at + along * (u * lineLen) + Vector3.up * (size * 0.3f);
+                    ep.position = p + Random.insideUnitSphere * (size * 0.35f);
+                    // Thrown forward off the face and up, and it falls back
+                    // down the face — the gravity on the system is what makes
+                    // it read as water with mass rather than as blown spray.
+                    ep.velocity = wind3 * ((2.5f + 5f * strength) * Random.Range(0.6f, 1.4f))
+                                + Vector3.up * (Random.Range(1.2f, 4.5f) * (0.6f + strength))
+                                + along * Random.Range(-1.2f, 1.2f);
+                    ep.startLifetime = Random.Range(0.9f, 1.9f);
+                    ep.startSize = size * Random.Range(0.6f, 1.5f);
+                    ep.startColor = Color.white;
+                    spume.Emit(ep, 1);
+                }
             }
         }
 

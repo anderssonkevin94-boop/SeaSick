@@ -14,6 +14,7 @@ namespace SeaSick.Terrain
         public int octaves; public float baseFrequency, lacunarity, gain;
         public float erosion, erosionAmount;
         public int maskOctaves; public float maskFrequency, maskThreshold, maskFalloff;
+        public float maskStretch, maskGrainCos, maskGrainSin, maskWarp, maskWarpFrequency;
         public float seabedDepth, deepSeabedDepth, shelfBand;
         public float baseHeight, reliefHeight;
         public float skerryAmount, skerryFrequency, skerryThreshold, skerryClearance, skerryRelief;
@@ -33,7 +34,8 @@ namespace SeaSick.Terrain
                          MassifSeedOffset = 15485863, RidgeSeedOffset = 4241,
                          ShoreSeedOffset = 611953, UplandSeedOffset = 2750159,
                          RockSeedOffset = 32452843, CragSeedOffset = 49979687,
-                         SkerrySeedOffset = 86028121, VerdancySeedOffset = 22801763;
+                         SkerrySeedOffset = 86028121, VerdancySeedOffset = 22801763,
+                         WarpSeedOffset = 15485867, WarpSeedOffsetB = 32452867;
 
         public static TerrainParams From(TerrainSettings s)
         {
@@ -44,6 +46,10 @@ namespace SeaSick.Terrain
                 octaves = s.octaves, baseFrequency = s.baseFrequency, lacunarity = s.lacunarity, gain = s.gain,
                 erosion = math.max(0f, s.erosion), erosionAmount = math.saturate(s.erosionAmount),
                 maskOctaves = s.maskOctaves, maskFrequency = s.maskFrequency, maskFalloff = s.maskFalloff,
+                maskStretch = math.max(1f, s.maskStretch),
+                maskGrainCos = math.cos(math.radians(s.maskGrainAngle)),
+                maskGrainSin = math.sin(math.radians(s.maskGrainAngle)),
+                maskWarp = math.max(0f, s.maskWarp), maskWarpFrequency = s.maskWarpFrequency,
                 maskThreshold = TerrainHeight.ThresholdForLandRatio(s.landRatio, s.maskOctaves),
                 seabedDepth = s.seabedDepth,
                 deepSeabedDepth = s.deepSeabedDepth,
@@ -254,7 +260,10 @@ namespace SeaSick.Terrain
         public static float Skerry(in float2 p, float c, in TerrainParams prm)
         {
             if (prm.skerryAmount <= 0f) return 0f;
-            float sRaw = TerrainNoise.Fbm01(p + prm.worldOffset,
+            // Islets get the SAME domain as the islands. They are the small
+            // end of one archipelago, not a different world laid over it, so
+            // they take the same grain and the same warp.
+            float sRaw = TerrainNoise.Fbm01(MaskDomain(p, prm),
                 prm.seed + TerrainParams.SkerrySeedOffset, 2, prm.skerryFrequency, 2f, 0.5f);
             float peak = math.saturate((sRaw - prm.skerryThreshold)
                 / math.max(0.01f, 1f - prm.skerryThreshold));
@@ -263,9 +272,63 @@ namespace SeaSick.Terrain
             return prm.skerryAmount * peak * away;
         }
 
+        /// Where the continentalness field is actually sampled: the island's
+        /// SHAPE, as opposed to its size (maskFrequency) or how much of the
+        /// world is land (landRatio).
+        ///
+        /// Plain fBm makes round lobed blobs. Two transforms turn them into
+        /// the long, ragged, organic things a real archipelago is made of, and
+        /// the ORDER matters:
+        ///
+        /// 1. **Elongate.** Compressing the domain along one axis by `s`
+        ///    stretches features along it by `s`. The grain axis is GLOBAL and
+        ///    constant on purpose. A per-island rotation is the obvious idea
+        ///    and it is a trap: the transform uses absolute position, so out
+        ///    at 10 km a hundredth of a radian of drift slides the sample
+        ///    point 100 m and shreds the field. Anchoring the rotation to a
+        ///    grid fixes that and puts a seam down every cell boundary.
+        ///    Real archipelagos have a grain anyway — glacial, tectonic —
+        ///    which is exactly what a constant axis draws.
+        ///
+        /// 2. **Then warp.** Warping AFTER the stretch keeps the wobble
+        ///    isotropic, so it bends and re-aims the elongated shapes instead
+        ///    of being stretched along with them. This is what stops every
+        ///    island pointing the same way, and its finer octaves are the
+        ///    bays, spits and hooks. Warping first would only have moved the
+        ///    blobs around before elongating them.
+        ///
+        /// Both are pure functions of position, which they have to be: the
+        /// height field runs in Burst on a streamed world and cannot look
+        /// anything up.
+        public static float2 MaskDomain(in float2 p, in TerrainParams prm)
+        {
+            float2 q = p + prm.worldOffset;
+
+            if (prm.maskStretch > 1.0001f)
+            {
+                float2 dir = new float2(prm.maskGrainCos, prm.maskGrainSin);
+                q -= dir * math.dot(q, dir) * (1f - 1f / prm.maskStretch);
+            }
+
+            if (prm.maskWarp > 0f)
+            {
+                // Two decorrelated fields, not one field read twice at an
+                // offset: sampling the same noise twice a fixed distance apart
+                // gives a warp whose x and y are correlated, and a correlated
+                // warp slides the whole field diagonally instead of curdling
+                // it.
+                float wx = TerrainNoise.Fbm01(q, prm.seed + TerrainParams.WarpSeedOffset,
+                    3, prm.maskWarpFrequency, 2f, 0.5f) - 0.5f;
+                float wy = TerrainNoise.Fbm01(q, prm.seed + TerrainParams.WarpSeedOffsetB,
+                    3, prm.maskWarpFrequency, 2f, 0.5f) - 0.5f;
+                q += new float2(wx, wy) * (2f * prm.maskWarp);
+            }
+            return q;
+        }
+
         /// The continentalness field before any islets are added to it.
         public static float MaskNoiseBase(in float2 p, in TerrainParams prm)
-            => TerrainNoise.Fbm01(p + prm.worldOffset, prm.seed + TerrainParams.MaskSeedOffset,
+            => TerrainNoise.Fbm01(MaskDomain(p, prm), prm.seed + TerrainParams.MaskSeedOffset,
                 prm.maskOctaves, prm.maskFrequency, 2f, 0.5f);
 
         public static float MaskNoise(in float2 p, in TerrainParams prm)

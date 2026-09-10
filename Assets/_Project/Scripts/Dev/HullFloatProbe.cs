@@ -53,7 +53,7 @@ public class HullFloatProbe : MonoBehaviour
     /// The mass and length the drag coefficients below were TUNED at. This was
     /// the paddle steamer's mass until 2026-09-02 and is no longer — she is
     /// 58.5 t now — but the anchor must not move with her, or every hull's
-    /// damping shifts whenever she is re-measured. `SetupPaddleBoat.TunedMass`
+    /// damping shifts whenever she is re-measured. `Shipyard.TunedMass`
     /// is the same anchor; the two have to stay equal.
     const float RefMass = 19200f;
     const float RefLoa = 24.2f;
@@ -216,13 +216,13 @@ public class HullFloatProbe : MonoBehaviour
                 prb.constraints = RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionZ;
                 rigs.Add(new Rig
                 {
-                    label = "-- paddle steamer (in game)", t = motor.transform, rb = prb,
+                    label = "-- ship in game", t = motor.transform, rb = prb,
                     body = pb, probes = motor.GetComponent<BuoyancyProbeSet>(),
                     loa = RefLoa, beam = 8.44f, draft = 1.02f, depth = 4.2f,
                     railY = 2.2f, deckY = 1.23f * 2f, mass = prb.mass, baseline = true,
                 });
                 x += 8.44f * 0.5f;
-                sb.AppendLine($"baseline: paddle steamer {prb.mass / 1000f:F1} t");
+                sb.AppendLine($"baseline: ship in game {prb.mass / 1000f:F1} t");
             }
         }
 

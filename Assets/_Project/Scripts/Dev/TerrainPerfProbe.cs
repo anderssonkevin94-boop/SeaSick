@@ -34,7 +34,7 @@ public class TerrainPerfProbe : MonoBehaviour
     const int MaxVisibleChunks = 60;
     const int MaxShadowTris = 120000;
     const float MaxStreamMs = 4.0f;
-    const float PortraitAspect = 1080f / 2340f;
+    const float PortraitAspect = SeaSick.CameraRig.ChaseCamera.PortraitAspect;
 
     public static void Execute()
     {

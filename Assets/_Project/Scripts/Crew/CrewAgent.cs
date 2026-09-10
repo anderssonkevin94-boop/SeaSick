@@ -50,7 +50,12 @@ namespace SeaSick.Crew
         [SerializeField] float bailStepInboard = 0.55f;
 
         [Header("Acting")]
+        [Tooltip("ONLY the skin renderer. The tint below is the crew member's " +
+                 "skin colour, so pointing this at the clothes turns the whole " +
+                 "man green instead of just his face and forearms.")]
         [SerializeField] Renderer[] tintRenderers;
+        [Tooltip("Left empty, it is found on the visual child.")]
+        [SerializeField] Animator animator;
         [SerializeField] Color healthyTint = new Color(0.87f, 0.65f, 0.48f);
         [SerializeField] Color sickTint = new Color(0.55f, 0.78f, 0.45f);
         [SerializeField] float maxSwayDegrees = 9f;
@@ -211,6 +216,11 @@ namespace SeaSick.Crew
 
         SmoothnessMeter meter;
         Ship.ShipMotor motor;
+        float walkSpeedSeen;      // metres/second, smoothed, for the Animator
+        Vector3 lastSample;
+        bool sampledAshore;
+        bool sampled;
+        static readonly int SpeedId = Animator.StringToHash("Speed");
         MaterialPropertyBlock block;
         float heaveTimer;     // time left in the current retch
         float heaveCooldown;  // time until the next one
@@ -224,7 +234,8 @@ namespace SeaSick.Crew
             motor = GetComponentInParent<Ship.ShipMotor>();
             block = new MaterialPropertyBlock();
             if (tintRenderers == null || tintRenderers.Length == 0)
-                tintRenderers = GetComponentsInChildren<Renderer>();
+                tintRenderers = FindSkinRenderers();
+            if (animator == null) animator = GetComponentInChildren<Animator>();
             transform.localPosition = stationLocal;
             // Seeded off the name so a given crew member always breaks at the
             // same point — variety between people, not between playthroughs.
@@ -237,7 +248,55 @@ namespace SeaSick.Crew
             TrackSickness(dt);
             TickHeaving(dt);
             RunStateMachine(dt);
+            TrackWalking(dt);
             ActBody(dt);
+        }
+
+        /// The walk cycle is driven by how fast they are ACTUALLY moving, not
+        /// by a list of states that walk. Every state that moves them does it
+        /// through one of the Walk* helpers, so measuring the result cannot
+        /// fall out of step the way an enumeration would the next time a state
+        /// is added.
+        ///
+        /// The frame matters and is not cosmetic: aboard, they are children of
+        /// a ship that is itself doing 15 m/s, so world-space movement would
+        /// have the whole watch sprinting on the spot the moment she got under
+        /// way. Aboard, measure in the SHIP's frame — which is the frame
+        /// WalkTo moves them in anyway.
+        void TrackWalking(float dt)
+        {
+            if (dt <= 0f) return;
+            bool ashore = IsAshore;
+            Vector3 here = ashore ? transform.position : transform.localPosition;
+            float raw = 0f;
+            if (sampled && ashore == sampledAshore)
+                raw = (here - lastSample).magnitude / dt;
+            lastSample = here;
+            sampledAshore = ashore;
+            sampled = true;
+
+            // Doubled over the side is not walking, whatever their feet did
+            // the frame before.
+            if (heaveTimer > 0f) raw = 0f;
+            walkSpeedSeen = Mathf.Lerp(walkSpeedSeen, raw, 1f - Mathf.Exp(-10f * dt));
+            if (animator != null) animator.SetFloat(SpeedId, walkSpeedSeen);
+        }
+
+        /// The tint is a SKIN colour, so it must reach skin and nothing else.
+        /// The old fallback took every renderer on the object, which was right
+        /// when a crew member was a sphere and a capsule and is now the
+        /// difference between a queasy man and a man in a green shirt.
+        Renderer[] FindSkinRenderers()
+        {
+            var all = GetComponentsInChildren<Renderer>();
+            var skin = new List<Renderer>();
+            foreach (var r in all)
+            {
+                var m = r.sharedMaterial;
+                if (m != null && m.name.IndexOf("skin", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                    skin.Add(r);
+            }
+            return skin.Count > 0 ? skin.ToArray() : all;
         }
 
         /// Sickness now READS the sea rather than counting time on it: it
@@ -582,7 +641,7 @@ namespace SeaSick.Crew
             // runtime, so Update can reach here before Start has run.
             if (block == null) block = new MaterialPropertyBlock();
             if (tintRenderers == null || tintRenderers.Length == 0)
-                tintRenderers = GetComponentsInChildren<Renderer>();
+                tintRenderers = FindSkinRenderers();
 
             Color tint = Color.Lerp(healthyTint, sickTint, Mathf.Clamp01(Sickness01 * 1.15f));
             block.SetColor(BaseColorId, tint);

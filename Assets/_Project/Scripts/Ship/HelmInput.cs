@@ -32,10 +32,15 @@ namespace SeaSick.Ship
         const int StopOrder = 1;
 
         ShipMotor motor;
+        Breakers breakers;
         float rudder;
         int order = StopOrder;
 
-        void Awake() { motor = GetComponent<ShipMotor>(); }
+        void Awake()
+        {
+            motor = GetComponent<ShipMotor>();
+            breakers = GetComponent<Breakers>();
+        }
 
         void Update()
         {
@@ -98,6 +103,14 @@ namespace SeaSick.Ship
 
         void StepOrder(int delta) => order = Mathf.Clamp(order + delta, 0, Orders.Length - 1);
 
+        /// Ring down STOP from outside, and centre the rudder.
+        ///
+        /// The telegraph is re-asserted into `motor.ThrottleOrder` every
+        /// Update, so anything that wants her stopped has to move the ORDER,
+        /// not the value the order produces — writing the value lasts exactly
+        /// one frame and then the helm quietly puts it back.
+        public void AllStop() { order = StopOrder; rudder = 0f; }
+
         void OnGUI()
         {
             int u = UITheme.Unit;
@@ -105,7 +118,10 @@ namespace SeaSick.Ship
 
             // --- Point of sail: the readout that teaches the whole system ---
             float panelW = u * 10f;
-            float panelH = u * 4.6f;
+            // Taller by one bar than it was: the way gauge below the telegraph
+            // is where surfing and broaching are read, and neither had anywhere
+            // on screen to be.
+            float panelH = u * 5.7f;
             float px = Screen.width - panelW - pad;
             float py = Screen.height - panelH - pad;
             UITheme.Rect(new Rect(px, py, panelW, panelH), UITheme.Panel);
@@ -115,13 +131,30 @@ namespace SeaSick.Ship
             // you're driving into it", which is the only heading cost left.
             float strain = motor.HeadSea01 * motor.SeaSeverity01;
             var nameColour = strain > 0.4f ? UITheme.Warn : UITheme.Text;
+
+            // Warnings live ON the instrument, never in a banner over the
+            // boat. The sea's name is the line that already describes the
+            // water, so the two things the water is doing TO her go here and
+            // take the line's colour with them. Breakers outrank a broach:
+            // one is a bad few seconds, the other is the beach.
+            string seaLine = motor.SeaStateName;
+            if (breakers != null && breakers.Breaking01 > 0.3f)
+            {
+                seaLine = "BREAKERS";
+                nameColour = UITheme.Bad;
+            }
+            else if (motor.Broach01 > 0.35f)
+            {
+                seaLine = "broaching";
+                nameColour = UITheme.Bad;
+            }
             // GUI.contentColor tints the text without building a style. A
             // per-frame `new GUIStyle` allocates AND invalidates IMGUI's
             // cached text mesh for everything drawn with it.
             var prevContent = GUI.contentColor;
             GUI.contentColor = nameColour;
             GUI.Label(new Rect(px, py + u * 0.2f, panelW, u * 1.6f),
-                motor.SeaStateName, UITheme.Small2Centered);
+                seaLine, UITheme.Small2Centered);
             GUI.contentColor = prevContent;
 
             var effRect = new Rect(px + u * 0.6f, py + u * 1.9f, panelW - u * 1.2f, u * 0.5f);
@@ -153,17 +186,81 @@ namespace SeaSick.Ship
                 UITheme.Bar(new Rect(mid + (mid - barRect.x) * t, barRect.y,
                     (mid - barRect.x) * -t, barRect.height), 1f, UITheme.Warn);
 
+            DrawWayGauge(new Rect(px + u * 0.6f, py + u * 4.9f,
+                panelW - u * 1.2f, u * 0.4f), u);
+
+            // Oars and easing share the band the oars had to themselves, so
+            // the panel's footprint on a portrait phone does not grow: two
+            // half-width controls where there was one, both still under a
+            // thumb.
+            float half = (panelW - u * 0.4f) * 0.5f;
+            float rowY = py - u * 2.1f;
+
             // Oars: wind-independent, but pure labour — a crew at the rail
             // can't pull, so this stops being the guaranteed way home.
             float oars = motor.OarPower01;
-            var row = new Rect(px, py - u * 2.1f, panelW, u * 1.8f);
+            var row = new Rect(px, rowY, half, u * 1.8f);
             UIBlocker.Block(row);
             var rowStyle = motor.Rowing ? UITheme.ButtonPressed : UITheme.Button;
-            string oarLabel = oars < 0.02f ? "—  no one at the oars"
-                : motor.Rowing ? "◉  rowing" : "◎  man the oars";
+            string oarLabel = oars < 0.02f ? "— oars" : motor.Rowing ? "◉ rowing" : "◎ oars";
             GUI.enabled = oars >= 0.02f;
             if (GUI.Button(row, oarLabel, rowStyle)) motor.Rowing = !motor.Rowing;
             GUI.enabled = true;
+
+            // **The one verb at the helm besides the tiller.** Driving flat
+            // out into a head sea does not make her faster, it makes her
+            // launch off the crest and land on her forefoot; easing gives up
+            // way on purpose so she rides instead. It costs time, and the
+            // label says what it is costing right now so the trade is visible
+            // rather than folklore — in calm water it reads "0%" and the
+            // player learns for themselves that there is nothing to ease for.
+            var easeRect = new Rect(px + half + u * 0.4f, rowY, half, u * 1.8f);
+            UIBlocker.Block(easeRect);
+            var easeStyle = motor.Easing ? UITheme.ButtonPressed : UITheme.Button;
+            string easeLabel = motor.Easing
+                ? $"◉ easing −{Mathf.RoundToInt(motor.EaseCost01 * 100f)}%"
+                : "◎ ease her";
+            if (GUI.Button(easeRect, easeLabel, easeStyle)) motor.Easing = !motor.Easing;
+        }
+
+        /// How much way she has, against her own top speed — and where that
+        /// way is coming from.
+        ///
+        /// The whole point is the region PAST the full-speed tick. Surfing has
+        /// been in the physics since the motor was rebuilt and reached exactly
+        /// two things: a camera FOV punch and an audio pitch. Nothing told the
+        /// player they had done anything, so the best-feeling thing in the game
+        /// was invisible. Past the tick the bar goes bright and stays bright
+        /// while the run holds; that band is the reward.
+        ///
+        /// The broach rides the same gauge on purpose. The face that gives her
+        /// the overspeed is the face that takes her stern — reward and risk are
+        /// the same piece of water, and putting them on one bar is the fastest
+        /// way to teach that they are.
+        void DrawWayGauge(Rect r, int u)
+        {
+            float max = Mathf.Max(0.01f, motor.MaxSpeed);
+            // The gauge runs to the hull's own overspeed ceiling, so the
+            // full-speed tick sits inboard of the end and there is somewhere
+            // for a surf run to go. A gauge that ends at 100% cannot show
+            // 118%. Read from the motor, never copied: see SurfOvershoot.
+            float ceiling = Mathf.Max(1.05f, motor.SurfOvershoot);
+            float way01 = Mathf.Clamp01(motor.CurrentSpeed / max / ceiling);
+            float tick = 1f / ceiling;
+
+            UITheme.Bar(r, 1f, UITheme.Track);
+            var body = new Rect(r.x, r.y, r.width * Mathf.Min(way01, tick), r.height);
+            UITheme.Bar(body, 1f, motor.Broach01 > 0.35f ? UITheme.Bad : UITheme.Sea);
+
+            if (way01 > tick)
+            {
+                float x = r.x + r.width * tick;
+                UITheme.Bar(new Rect(x, r.y, r.width * (way01 - tick), r.height),
+                    1f, UITheme.Good);
+            }
+            // The full-speed mark, drawn last so nothing covers it.
+            UITheme.Rect(new Rect(r.x + r.width * tick - 1f, r.y - 2f, 2f,
+                r.height + 4f), UITheme.Text);
         }
     }
 }
