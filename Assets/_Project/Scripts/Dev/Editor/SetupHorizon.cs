@@ -22,9 +22,16 @@ public static class SetupHorizon
 {
     const string MatPath = "Assets/_Project/Materials/Horizon.mat";
     const string ShaderName = "SeaSick/Horizon";
-    /// Just past the ocean clipmap's own 8192 m, so the water always reaches
-    /// at least as far as anything drawn on it.
-    const float FarClip = 8600f;
+    /// The scene's linear fog ends at 1500 m and the ocean displacement fades
+    /// out at 2600 m, so an 8600 m far plane was mostly wasted depth
+    /// precision — but neither of those numbers is what the far plane has to
+    /// contain. `HorizonField`'s own `outerRadius`, set below, is 8000 m: real
+    /// visible geometry, not haze, and clipping it early would cut a sharp
+    /// edge out of the horizon rather than a soft fade. 8000 m x 1.1 (~10 %
+    /// margin) is 8800 m, which is what this is — barely different from the
+    /// old value, because the horizon mesh, not the fog or the displacement
+    /// falloff, was already the thing setting the floor.
+    const float FarClip = 8800f;
 
     public static string Execute()
     {

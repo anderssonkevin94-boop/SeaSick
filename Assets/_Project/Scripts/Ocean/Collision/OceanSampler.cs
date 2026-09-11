@@ -107,17 +107,46 @@ namespace SeaSick.Ocean
             NativeArray<OceanSample> results,
             JobHandle dependency) => SampleBatch(queries, results, dependency, NoHullFilter);
 
+        /// One filter for the whole batch — what every measuring probe wants
+        /// (WaveShot, WaveSizeProbe, SeaProfileProbe, DivergenceProbe).
         public static JobHandle SampleBatch(
             NativeArray<float3> queries,
             NativeArray<OceanSample> results,
             JobHandle dependency,
-            float2 hullFilter)
+            float2 filter) =>
+            Dispatch(queries, results, dependency, 0, filter, filter);
+
+        /// Mixed batch: the first hullCount queries are hull probes and get
+        /// hullFilter; everything after them keeps the raw surface. The physics
+        /// driver lays its array out that way on purpose, so both populations
+        /// ride one schedule and one fence instead of two.
+        public static JobHandle SampleBatch(
+            NativeArray<float3> queries,
+            NativeArray<OceanSample> results,
+            JobHandle dependency,
+            int hullCount,
+            float2 hullFilter) =>
+            Dispatch(queries, results, dependency, hullCount, hullFilter, NoHullFilter);
+
+        static JobHandle Dispatch(
+            NativeArray<float3> queries,
+            NativeArray<OceanSample> results,
+            JobHandle dependency,
+            int hullCount,
+            float2 hullFilter,
+            float2 restFilter)
         {
             var job = new OceanSampleJob
             {
-                field = CurrentField(hullFilter),
+                // Execute overwrites field.hullFilter per query; seeding it
+                // with restFilter keeps the struct in a sane state rather than
+                // a misleading one for anyone reading it in a debugger.
+                field = CurrentField(restFilter),
                 queries = queries,
                 results = results,
+                hullCount = hullCount,
+                hullFilter = hullFilter,
+                restFilter = restFilter,
             };
             return job.Schedule(queries.Length, dependency);
         }

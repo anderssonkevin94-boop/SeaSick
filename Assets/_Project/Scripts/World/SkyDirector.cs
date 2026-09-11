@@ -191,6 +191,26 @@ namespace SeaSick.World
 
         Material skyInstance;
 
+        // Write-on-change cache for the material and ambient/fog writes Apply
+        // makes every frame. The profiler put that LateUpdate at 0.07-0.15 ms,
+        // almost entirely spent in these SetColor/SetFloat/RenderSettings
+        // calls — and on most frames the sky has not actually moved: the sun
+        // creeps a fraction of a degree, storminess eases by a thousandth. A
+        // value that hasn't moved should not be pushed. This is hygiene, not
+        // a frame-time win. `cacheValid` starts false so the very first Apply
+        // (and any call after ForceApply) writes everything unconditionally;
+        // every write after that is compared against the last value THIS
+        // SCRIPT wrote, never read back from the engine, so it stays exact
+        // even when something else (StormTuner) pokes the same properties in
+        // between and restores them.
+        const float ColorEpsilon = 1f / 512f;
+        const float ScalarEpsilon = 1e-3f;
+        bool cacheValid;
+
+        Color cZenith, cHorizon, cGround, cSunColor;
+        float cOvercast, cHorizonSharp, cScud, cCloudScale, cCloudSpeed;
+        Color cAmbientSky, cAmbientEquator, cAmbientGround, cFogColor;
+
         static readonly int ZenithId    = Shader.PropertyToID("_ZenithColor");
         static readonly int HorizonId   = Shader.PropertyToID("_HorizonColor");
         static readonly int GroundId    = Shader.PropertyToID("_GroundColor");
@@ -224,6 +244,12 @@ namespace SeaSick.World
         /// the order the sky shader unpacks them in.
         readonly float[] rose = new float[8];
         bool roseWarm;
+        float roseSampleAccum;
+        // ~4 Hz. The rose drives a wind-rose that drifts over minutes, and
+        // SkyStorminessAt samples the regional sea field — 8 samples a frame
+        // at 60 fps was paying every-frame cost for a value that is only
+        // ever looked at as a slow drift.
+        const float RoseSampleInterval = 0.25f;
         static readonly int SkyWindId   = Shader.PropertyToID("_SS_SkyWind");
         static readonly int SkyHorizonId = Shader.PropertyToID("_SS_SkyHorizon");
         static readonly int StorminessId = Shader.PropertyToID("_SS_Storminess");
@@ -296,6 +322,7 @@ namespace SeaSick.World
             {
                 skyInstance = new Material(src);
                 RenderSettings.skybox = skyInstance;
+                PushMoonStarConstants();
             }
 
             // Ambient from a custom procedural skybox would need
@@ -315,6 +342,42 @@ namespace SeaSick.World
             if (skyInstance != null) Destroy(skyInstance);
         }
 
+        void OnEnable()
+        {
+            // Guarantees the next Apply writes everything rather than trusting
+            // whatever the cache last held — see ForceApply.
+            ForceApply();
+        }
+
+        /// Invalidates the write-on-change cache so the very next Apply pushes
+        /// every material and ambient/fog value regardless of whether it
+        /// moved. Needed because dev probes (Dev/ShaderStrip.cs,
+        /// Dev/WeatherSheet.cs, Dev/Editor/StormTuner.cs) set pinTime or
+        /// forceStorm by reflection and render two frames later, and
+        /// StormTuner also scales RenderSettings.ambient* and restores it to
+        /// the exact previous value. Write-on-change with an EXACT cache
+        /// handles both cases correctly on its own — Apply still runs every
+        /// frame, so a genuinely different value is always caught the moment
+        /// it appears — but a component that was just re-enabled has no
+        /// business trusting stale cached values against a material that may
+        /// have been swapped underneath it.
+        public void ForceApply()
+        {
+            cacheValid = false;
+        }
+
+#if UNITY_EDITOR
+        void OnValidate()
+        {
+            // Same reasoning as the Awake call: these are serialised fields
+            // that never change at runtime, so pushing them from Apply every
+            // frame would be pure waste. OnValidate catches the case an
+            // artist tunes moonColor/moonSize/moonHalo/starBrightness/
+            // starDensity in the Inspector while playing.
+            if (skyInstance != null) PushMoonStarConstants();
+        }
+#endif
+
         void LateUpdate()
         {
             // One owner advances the clock, once a frame. A pin holds the hour
@@ -326,7 +389,21 @@ namespace SeaSick.World
             float want = forceStorm >= 0f ? Mathf.Clamp01(forceStorm) : SampleWeather();
             Storminess01 = Mathf.Lerp(Storminess01, want,
                 1f - Mathf.Exp(-response * Time.deltaTime));
-            SampleRose();
+
+            // The rose changes over minutes, not frames, so sampling it at
+            // ~4 Hz instead of 60 loses nothing anyone can see. Folding the
+            // real elapsed time (rather than a fixed step) into the smoothing
+            // factor keeps the same response curve measured in coarser steps.
+            // Apply reads the whole array every frame regardless of when it
+            // was last written, so every reader always sees one consistent
+            // rose — a few frames stale, never half-updated.
+            roseSampleAccum += Time.deltaTime;
+            if (roseSampleAccum >= RoseSampleInterval)
+            {
+                SampleRose(roseSampleAccum);
+                roseSampleAccum = 0f;
+            }
+
             Apply(Storminess01);
         }
 
@@ -394,13 +471,13 @@ namespace SeaSick.World
         /// the way home — looked exactly like sailing further west. Regions
         /// are already a compass (GDD §5); this is the compass being visible
         /// from the deck rather than only in the numbers.
-        void SampleRose()
+        void SampleRose(float dt)
         {
             var ctrl = SeaSick.Ocean.SeaStateController.Instance;
             if (ctrl == null || ship == null || horizonRoseStrength <= 0f) return;
 
             Vector2 here = new Vector2(ship.position.x, ship.position.z);
-            float k = roseWarm ? 1f - Mathf.Exp(-horizonRoseResponse * Time.deltaTime) : 1f;
+            float k = roseWarm ? 1f - Mathf.Exp(-horizonRoseResponse * dt) : 1f;
 
             for (int i = 0; i < rose.Length; i++)
             {
@@ -410,6 +487,43 @@ namespace SeaSick.World
                 rose[i] = Mathf.Lerp(rose[i], Mathf.Clamp01(ctrl.SkyStorminessAt(at)), k);
             }
             roseWarm = true;
+        }
+
+        static bool Changed(Color a, Color b)
+        {
+            return Mathf.Abs(a.r - b.r) > ColorEpsilon || Mathf.Abs(a.g - b.g) > ColorEpsilon ||
+                   Mathf.Abs(a.b - b.b) > ColorEpsilon || Mathf.Abs(a.a - b.a) > ColorEpsilon;
+        }
+
+        void SetColorIfChanged(int id, Color value, ref Color cached)
+        {
+            if (cacheValid && !Changed(cached, value)) return;
+            skyInstance.SetColor(id, value);
+            cached = value;
+        }
+
+        void SetFloatIfChanged(int id, float value, ref float cached)
+        {
+            if (cacheValid && Mathf.Abs(cached - value) <= ScalarEpsilon) return;
+            skyInstance.SetFloat(id, value);
+            cached = value;
+        }
+
+        /// Moon and star constants: serialised fields that never change at
+        /// runtime, pushed once here (from Awake and OnValidate) rather than
+        /// every Apply. A .mat snapshots a shader property's default at the
+        /// moment the property is CREATED and never sees it again — and the
+        /// sky material predates every one of these, so left alone they would
+        /// read zero and there would simply be no moon and no stars, with
+        /// nothing anywhere reporting a problem. This project has paid for
+        /// that lesson once already with _StormDeep.
+        void PushMoonStarConstants()
+        {
+            skyInstance.SetColor(MoonColorId, moonColor);
+            skyInstance.SetFloat(MoonSizeId, moonSize);
+            skyInstance.SetFloat(MoonHaloId, moonHalo);
+            skyInstance.SetFloat(StarBrightId, starBrightness);
+            skyInstance.SetFloat(StarDensityId, starDensity);
         }
 
         void Apply(float t)
@@ -473,30 +587,21 @@ namespace SeaSick.World
 
             if (skyInstance != null)
             {
-                skyInstance.SetColor(ZenithId, p.zenith);
-                skyInstance.SetColor(HorizonId, p.horizon);
-                skyInstance.SetColor(GroundId, p.ground);
-                skyInstance.SetColor(SunColorId, p.light);
-                skyInstance.SetFloat(OvercastId, p.overcast);
-                skyInstance.SetFloat(HorizonSharpId, p.horizonSharp);
+                // Write-on-change: see the cache fields' comment above. Moon
+                // and star constants are NOT here any more — they never
+                // change at runtime, so they are pushed once by
+                // PushMoonStarConstants instead (Awake and OnValidate).
+                SetColorIfChanged(ZenithId, p.zenith, ref cZenith);
+                SetColorIfChanged(HorizonId, p.horizon, ref cHorizon);
+                SetColorIfChanged(GroundId, p.ground, ref cGround);
+                SetColorIfChanged(SunColorId, p.light, ref cSunColor);
+                SetFloatIfChanged(OvercastId, p.overcast, ref cOvercast);
+                SetFloatIfChanged(HorizonSharpId, p.horizonSharp, ref cHorizonSharp);
                 // Scud only tears past once it is genuinely blowing.
-                skyInstance.SetFloat(ScudId, Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.35f, 1f, t)));
-                skyInstance.SetFloat(CloudScaleId, Mathf.Lerp(cloudScaleClear, cloudScaleStorm, t));
-                skyInstance.SetFloat(CloudSpeedId, Mathf.Lerp(cloudSpeedClear, cloudSpeedStorm, t));
-
-                // Pushed every frame rather than left to the material. A .mat
-                // snapshots a shader property's default at the moment the
-                // property is CREATED and never sees it again — and the sky
-                // material predates every one of these, so left alone they
-                // would read zero and there would simply be no moon and no
-                // stars, with nothing anywhere reporting a problem. This
-                // project has paid for that lesson once already with
-                // _StormDeep.
-                skyInstance.SetColor(MoonColorId, moonColor);
-                skyInstance.SetFloat(MoonSizeId, moonSize);
-                skyInstance.SetFloat(MoonHaloId, moonHalo);
-                skyInstance.SetFloat(StarBrightId, starBrightness);
-                skyInstance.SetFloat(StarDensityId, starDensity);
+                SetFloatIfChanged(ScudId,
+                    Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.35f, 1f, t)), ref cScud);
+                SetFloatIfChanged(CloudScaleId, Mathf.Lerp(cloudScaleClear, cloudScaleStorm, t), ref cCloudScale);
+                SetFloatIfChanged(CloudSpeedId, Mathf.Lerp(cloudSpeedClear, cloudSpeedStorm, t), ref cCloudSpeed);
             }
 
             // One directional light, two roles. URP shadows exactly one of
@@ -523,13 +628,25 @@ namespace SeaSick.World
             // night scale applied by hand.
             float ambientScale = Mathf.Lerp(1f, nightAmbient, Night01);
             Color skyAmb = p.horizon * Mathf.Lerp(0.95f, 0.62f, t);
-            RenderSettings.ambientSkyColor = skyAmb;
-            RenderSettings.ambientEquatorColor = Color.Lerp(
+            Color equatorAmb = Color.Lerp(
                 new Color(0.30f, 0.36f, 0.40f), new Color(0.115f, 0.135f, 0.135f), t) * ambientScale;
-            RenderSettings.ambientGroundColor = Color.Lerp(
+            Color groundAmb = Color.Lerp(
                 new Color(0.10f, 0.13f, 0.14f), new Color(0.045f, 0.055f, 0.058f), t) * ambientScale;
 
-            RenderSettings.fogColor = p.horizon;
+            // Write-on-change, same reasoning as the material block above.
+            if (!cacheValid || Changed(cAmbientSky, skyAmb))
+            { RenderSettings.ambientSkyColor = skyAmb; cAmbientSky = skyAmb; }
+            if (!cacheValid || Changed(cAmbientEquator, equatorAmb))
+            { RenderSettings.ambientEquatorColor = equatorAmb; cAmbientEquator = equatorAmb; }
+            if (!cacheValid || Changed(cAmbientGround, groundAmb))
+            { RenderSettings.ambientGroundColor = groundAmb; cAmbientGround = groundAmb; }
+            if (!cacheValid || Changed(cFogColor, p.horizon))
+            { RenderSettings.fogColor = p.horizon; cFogColor = p.horizon; }
+
+            // The cache is now current for everything written above, whether
+            // or not this call actually touched a given property.
+            cacheValid = true;
+
             RenderSettings.fogStartDistance = p.fogStart;
             RenderSettings.fogEndDistance = p.fogEnd;
 

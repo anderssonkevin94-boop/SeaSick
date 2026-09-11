@@ -68,8 +68,9 @@ namespace SeaSick.Ocean
             for (int i = 0; i < registry.Count; i++)
                 queries[cursor + i] = registry[i].position;
 
-            // TWO jobs over one array, split at the boundary between hull
-            // probes and everything else.
+            // ONE job over the whole array, with a PER-QUERY filter split at
+            // the boundary between hull probes and everything else (the fill
+            // above puts the hulls first for exactly this reason).
             //
             // The hull gets the wave field FILTERED to what a 24 m ship can
             // actually feel: a hull spans most of a 30 m wave, so the crest
@@ -79,18 +80,19 @@ namespace SeaSick.Ocean
             // that is what drives her under. Flotsam and crates are small
             // enough to ride the chop and keep the raw field -- filtering a
             // floating crate would be wrong in the other direction.
+            //
+            // This used to be two batches, each Complete()d in turn, because
+            // the filter lived on the field struct and so had to be per-job.
+            // That cost two serial fences every physics step -- the second job
+            // could not even be SCHEDULED until the first had fenced, though
+            // they write disjoint sub-arrays -- and with Maximum Allowed
+            // Timestep a terrain hitch replays several steps and pays for each.
+            // Worse, the hull batch is only 12-14 probes, so at the old
+            // innerloopBatchCount of 16 the entire ship ran as one batch on one
+            // worker while the pool idled. One schedule, batch 4, one fence.
             int hullCount = cursor;
-            if (hullCount > 0)
-                OceanSampler.SampleBatch(
-                    queries.GetSubArray(0, hullCount),
-                    results.GetSubArray(0, hullCount),
-                    default, HullFilter()).Complete();
-            int restCount = count - hullCount;
-            if (restCount > 0)
-                OceanSampler.SampleBatch(
-                    queries.GetSubArray(hullCount, restCount),
-                    results.GetSubArray(hullCount, restCount),
-                    default).Complete();
+            OceanSampler.SampleBatch(queries, results, default, hullCount, HullFilter())
+                .Complete();
 
             cursor = 0;
             var span = results.AsReadOnlySpan();

@@ -217,12 +217,31 @@ namespace SeaSick.Ocean
         [ReadOnly] public NativeArray<float3> queries;
         [WriteOnly] public NativeArray<OceanSample> results;
 
-        public void Execute(int i) => results[i] = field.Sample(queries[i]);
+        /// Queries [0, hullCount) get hullFilter, the rest get restFilter.
+        /// One job instead of two back-to-back batches: the hull probes and
+        /// everything else want DIFFERENT per-cascade weights but are otherwise
+        /// the same math over disjoint slices of the same arrays, and splitting
+        /// them into two schedules cost a fence between them every physics step.
+        /// The field struct holds only NativeArray handles and blittable data,
+        /// so the per-element copy below is a few registers, not a buffer.
+        public int hullCount;
+        public float2 hullFilter;
+        public float2 restFilter;
+
+        public void Execute(int i)
+        {
+            var f = field;
+            f.hullFilter = i < hullCount ? hullFilter : restFilter;
+            results[i] = f.Sample(queries[i]);
+        }
     }
 
     public static class OceanSampleJobExt
     {
+        /// Batch 4, not 16. The hull is 12-14 probes; at 16 the whole ship
+        /// landed in a single batch on one worker while the rest of the pool
+        /// idled, and the batch is ~0.4 ms of Newton iteration each.
         public static JobHandle Schedule(this OceanSampleJob job, int count, JobHandle dep) =>
-            IJobParallelForExtensions.Schedule(job, count, 16, dep);
+            IJobParallelForExtensions.Schedule(job, count, 4, dep);
     }
 }
