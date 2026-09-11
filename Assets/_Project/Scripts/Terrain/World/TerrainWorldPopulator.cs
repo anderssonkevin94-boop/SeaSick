@@ -296,6 +296,29 @@ namespace SeaSick.Terrain
             return island;
         }
 
+        /// Re-bake one island's scenery against the CURRENT settings, for the
+        /// flora tuner.
+        ///
+        /// Density, species and crag size are look calls, and this project's
+        /// own record is that three measured rounds get lost to one hands-on
+        /// round -- but the scenery is welded at world build, so without this
+        /// every judgement costs a restart. It re-runs only the dressing: the
+        /// landform, the dock, the village clearing and the props are what
+        /// the old settings put there and do not move.
+        ///
+        /// The village keep-out is rebuilt from the island's own Village, so
+        /// a re-dress cannot plant a wood through the settlement.
+        public void Redress(Island island)
+        {
+            if (island == null || terrain == null) return;
+            var old = island.transform.Find("Scenery");
+            if (old != null) Destroy(old.gameObject);
+            var village = island.GetComponent<Village>();
+            int index = System.Array.IndexOf(byComponent, island);
+            Dress(island.transform, island.transform.position, island.Radius, island,
+                  Mathf.Max(0, index), village);
+        }
+
         /// Trees and scree, baked into one mesh. Scenery only -- the
         /// harvestable props are BuildProps and stay capped, because the eye
         /// needs hundreds of known-size objects to judge an island by and the

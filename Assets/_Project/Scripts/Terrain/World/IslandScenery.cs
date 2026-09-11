@@ -217,6 +217,29 @@ namespace SeaSick.Terrain
                 tropical = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(
                     terrain.palmLatitude + terrain.palmBand, terrain.palmLatitude - terrain.palmBand, centre.z));
 
+            // **Where sand stops**, read off the thing that PAINTS it rather
+            // than guessed at again here. The old gate was `sand + 1.2`,
+            // which is inside the mesher's sand-to-grass blend -- so half the
+            // wood on a low island stood with its feet in the beach, which is
+            // exactly what Kevin saw. A tree wants grass under it.
+            float sandTop = sand + TerrainChunkMesher.SandBlend
+                          + (terrain != null ? terrain.sandTreeMargin : 2.0f);
+
+            // **One species per island.** The mix used to be a slow field, so
+            // an island came back as groves of conifer and groves of
+            // broadleaf together -- which Kevin's verdict on is that it does
+            // not make sense, and he is right: two species sharing a 3 ha
+            // island is a botanical garden, not a wood. Latitude decides
+            // whether it is palm; north of that a roll decides conifer or
+            // broadleaf, ONCE, for the whole landmass.
+            int species;                    // 0 spruce, 1 broadleaf, 2 palm
+            {
+                var srng2 = new System.Random(seed * 193 + 41);
+                float u = (float)srng2.NextDouble();
+                float broadShare = terrain != null ? terrain.broadleafIslands : 0.4f;
+                species = tropical > 0.5f ? 2 : (u < broadShare ? 1 : 0);
+            }
+
             // Is this island WORKED, and how hard? Rolled on a generator of
             // its own: the scatter's stream must not move because a field
             // was decided, or adding farming to the world reshuffles every
@@ -256,12 +279,18 @@ namespace SeaSick.Terrain
             // every island gets about the same NUMBER of stands, big or
             // small, which is what makes the patchiness read as a property of
             // woodland rather than of island size.
+            float treeDensity = terrain != null ? terrain.treeDensity : 0.55f;
+            float palmOnSand = terrain != null ? terrain.palmOnSand : 0.06f;
+            /// Set by `ChanceAt` for the spot it was just asked about: this
+            /// one is standing on the beach, on the palm allowance. Read
+            /// immediately by the caller and never across calls.
+            bool sandPalm = false;
+
             float standWave = Mathf.Clamp(meanR * (terrain != null ? terrain.standSpan : 0.55f), 34f, 140f);
             float standF = 1f / standWave;
             float standC = terrain != null ? terrain.standContrast : 2.7f;
             float standFloor = terrain != null ? terrain.standFloor : 0.13f;
             float coverMean = (standFloor + 1f) * 0.5f;
-            float groveF = terrain != null ? terrain.groveFrequency : 1f / 130f;
             // Same reasoning, one size down: a field is an enclosure inside a
             // stand's worth of ground, so it is about half a stand across.
             float fieldF = 1f / Mathf.Clamp(standWave * 0.62f, 26f, 90f);
@@ -336,7 +365,10 @@ namespace SeaSick.Terrain
             // changing shape.
             float warpF = 1f / Mathf.Max(6f, step * 4f);
             float warpAmp = step * (terrain != null ? terrain.treeWarp : 1.5f);
-            double scrubP = terrain != null ? terrain.scrubChance : 0.30f;
+            double scrubP = terrain != null ? terrain.scrubChance : 0.45f;
+            float cragScale = terrain != null ? terrain.cragScale : 1f;
+            float headlandShare = terrain != null ? terrain.headlandShare : 0.14f;
+            float shoreRock = terrain != null ? terrain.shoreRock : 1f;
             int trees = 0, rocks = 0, cliffs = 0, formations = 0, bushes = 0;
             // For the density report: how much of the island the cover field
             // calls a stand, counted over the candidates actually evaluated.
@@ -393,7 +425,15 @@ namespace SeaSick.Terrain
                 if (radiusAt != null && dist > radiusAt(ang) * 0.94f) return 0f;
 
                 sp.h = height(wx, wz);
-                if (sp.h < sand + 1.2f) return 0f;          // not on the beach
+                // Never on sand. A palm island keeps a small allowance for
+                // the beach itself, because a palm is the one tree that
+                // belongs there -- but rarely, or the beach stops being one.
+                if (sp.h < sandTop)
+                {
+                    if (species != 2 || sp.h < sand + 0.6f) return 0f;
+                    sandPalm = true;
+                }
+                else sandPalm = false;
                 sp.sx = (height(wx + 3f, wz) - height(wx - 3f, wz)) / 6f;
                 sp.sz = (height(wx, wz + 3f) - height(wx, wz - 3f)) / 6f;
                 sp.slope = Mathf.Sqrt(sp.sx * sp.sx + sp.sz * sp.sz);
@@ -418,8 +458,9 @@ namespace SeaSick.Terrain
                 // Standing wheat does not have trees in it. Not quite zero:
                 // a hedge line and the odd tree left for shade are what say
                 // somebody made this enclosure rather than the noise did.
-                return verdancy * slopeTerm * rockTerm * exposure
-                     * (sp.cover / coverMean) * (1f - sp.field * 0.94f);
+                return verdancy * slopeTerm * rockTerm * exposure * treeDensity
+                     * (sp.cover / coverMean) * (1f - sp.field * 0.94f)
+                     * (sandPalm ? palmOnSand : 1f);
             }
 
             float cells = Mathf.PI * maxR * maxR / (step * step);
@@ -477,8 +518,6 @@ namespace SeaSick.Terrain
                     float jx = (float)(rng.NextDouble() - 0.5) * step * 0.9f;
                     float jz = (float)(rng.NextDouble() - 0.5) * step * 0.9f;
                     double rChance = rng.NextDouble();
-                    float rClimate = (float)rng.NextDouble();
-                    float rSpecies = (float)rng.NextDouble();
                     float rHeight = (float)rng.NextDouble();
                     float rYaw = (float)rng.NextDouble();
                     float rVariant = (float)rng.NextDouble();
@@ -533,7 +572,8 @@ namespace SeaSick.Terrain
                         if (kit && place && rocks < MaxRocks && formations < maxFormations && rRock < pForm)
                         {
                             int made = Formation(new Vector3(wx, h, wz), sx, sz, slope, proud, rockiness,
-                                height, sand, seed, cliffTp, boulders, CellFor, ref cliffs);
+                                height, sand, seed, cliffTp, boulders, CellFor, ref cliffs,
+                                cragScale, headlandShare);
                             rocks += made;
                             formations++;
                         }
@@ -587,7 +627,7 @@ namespace SeaSick.Terrain
                         int v0Start = cb.v0.Count, v1Start = cb.v1.Count;
                         if (!kit)
                         {
-                            AddTree(cb.v0, cb.n0, cb.c0, cb.t0, at, rHeight, rSpecies, rYaw, rVariant, rClimate, place);
+                            AddTree(cb.v0, cb.n0, cb.c0, cb.t0, at, rHeight, rVariant, rYaw, rVariant, rHeight, place);
                             if (place) cb.Grow(at, 4f, TreeMaxH);
                         }
                         else if (place)
@@ -597,28 +637,16 @@ namespace SeaSick.Terrain
                             // low ground of a temperate one, spruce
                             // everywhere else. Altitude decides within an
                             // island, latitude decides between them.
-                            //
-                            // The MIX is a slow field, not a per-tree roll.
-                            // A roll gives one broadleaf every fourth spruce
-                            // all over the island, which is salt and pepper
-                            // -- it reads as one confused species rather than
-                            // as two. A field puts them in GROVES, and a
-                            // grove is a thing the eye can name.
-                            float grove = Mathf.PerlinNoise((wx - 4400f) * groveF, (wz + 6100f) * groveF);
-                            SceneryKit.Template tp0, tp1;
-                            float factor;
-                            if (rClimate < tropical)
-                            {
-                                bool palm = h < sand + 6f || rSpecies < Mathf.Lerp(0.20f, 0.92f, grove);
-                                tp0 = palm ? palm0 : broad0; tp1 = palm ? palm1 : broad1;
-                                factor = palm ? 0.72f : 0.82f;
-                            }
-                            else
-                            {
-                                bool broad = h < sand + 16f && rSpecies < Mathf.Lerp(0.04f, 0.78f, grove);
-                                tp0 = broad ? broad0 : spruce0; tp1 = broad ? broad1 : spruce1;
-                                factor = broad ? 0.82f : 1f;
-                            }
+                            // **The island's one species.** Decided once, at
+                            // the top, from latitude and a single roll. It
+                            // was a slow field putting groves of conifer next
+                            // to groves of broadleaf, and Kevin's verdict is
+                            // that it does not make sense -- two species
+                            // sharing a 3 ha island is a botanical garden.
+                            SceneryKit.Template tp0 = spruce0, tp1 = spruce1;
+                            float factor = 1f;
+                            if (species == 2) { tp0 = palm0; tp1 = palm1; factor = 0.72f; }
+                            else if (species == 1) { tp0 = broad0; tp1 = broad1; factor = 0.82f; }
                             // Trees inside a closed stand are taller than the
                             // ones out on its edge -- they grew up competing
                             // for the light. It is the cheapest thing that
@@ -647,6 +675,89 @@ namespace SeaSick.Terrain
                     // Counted whether or not it was placed, so the budget and
                     // the loop's exit are the same with a clearing as without.
                     trees++;
+                }
+            }
+
+            // ---- stone on the shore ---------------------------------------
+            // Every rock in this class used to be placed inside the TREE
+            // walk, which only ever looks at ground a tree could have stood
+            // on -- so the one band of an island that is guaranteed to have
+            // no wood on it, the beach and the shallows, was also guaranteed
+            // to have nothing else. Every shore in the world was bare sand.
+            // Kevin asked for stones "around and on some of the islands";
+            // this is the "around".
+            //
+            // Its own walk, at its own step, gated on HEIGHT rather than on
+            // whether anything could grow. Clustered, because rock comes in
+            // reefs and headlands: an even sprinkle of boulders round an
+            // island is a necklace.
+            int shoreStones = 0, stacks = 0;
+            if (kit && shoreRock > 0f)
+            {
+                var srng = new System.Random(seed * 337 + 71);
+                float sstep = 7f;
+                for (float z = -maxR * 1.12f; z <= maxR * 1.12f; z += sstep)
+                {
+                    for (float x = -maxR * 1.12f; x <= maxR * 1.12f; x += sstep)
+                    {
+                        float jx3 = (float)(srng.NextDouble() - 0.5f) * sstep * 0.9f;
+                        float jz3 = (float)(srng.NextDouble() - 0.5f) * sstep * 0.9f;
+                        double rPlace = srng.NextDouble();
+                        float rA = (float)srng.NextDouble(), rB = (float)srng.NextDouble();
+                        float rC = (float)srng.NextDouble(), rYaw3 = (float)srng.NextDouble();
+                        if (shoreStones + stacks > 900) continue;
+                        float wx3 = centre.x + x + jx3, wz3 = centre.z + z + jz3;
+                        float h3 = height(wx3, wz3);
+                        // The band the wood cannot use: from a few metres
+                        // under water up to where grass starts.
+                        if (h3 < -9f || h3 > sandTop) continue;
+
+                        // Clustered along particular stretches of coast.
+                        float reef = Mathf.PerlinNoise((wx3 - 2200f) * 0.014f, (wz3 + 3300f) * 0.014f);
+                        float clump = Mathf.SmoothStep(0f, 1f, (reef - 0.46f) / 0.26f) * (0.55f + rockiness);
+
+                        if (h3 < -1.2f)
+                        {
+                            // Offshore. Mostly nothing; now and then a SEA
+                            // STACK, which is the same cliff shard standing
+                            // in its own water -- the cheapest landmark there
+                            // is, and the reason to give an island a bearing.
+                            if (rPlace < 0.006 * clump * shoreRock)
+                            {
+                                var tp = cliffTp[(int)(rA * cliffTp.Length) % cliffTp.Length];
+                                float above = (5f + 13f * rB) * cragScale;
+                                float hgt = above - h3;                 // it has to reach the seabed
+                                float w = (2.6f + 4.4f * rC) * cragScale;
+                                var cb = CellFor(wx3, wz3);
+                                var rot = Quaternion.Euler((rA - 0.5f) * 16f, rYaw3 * 360f, (rB - 0.5f) * 14f);
+                                var at3 = new Vector3(wx3, h3 + hgt * 0.34f, wz3);
+                                StampBoth(cb, tp, tp, at3, rot, new Vector3(w, hgt, w * (0.7f + 0.5f * rC)));
+                                cb.Grow(new Vector3(wx3, h3, wz3), w, hgt);
+                                stacks++; cliffs++;
+                            }
+                            continue;
+                        }
+
+                        // The tideline itself: boulders, in groups.
+                        if (rPlace > 0.30 * clump * shoreRock) continue;
+                        {
+                            var tp = boulders[(int)(rA * boulders.Length) % boulders.Length];
+                            // Bigger than the inland scree: a stone on a
+                            // beach has nothing beside it to give it scale
+                            // except the beach, so a 1 m one reads as gravel.
+                            float size = Mathf.Lerp(SeaSick.World.WorldScale.BoulderMin * 1.6f,
+                                                    SeaSick.World.WorldScale.BoulderMax * 2.4f, rB * rB) * cragScale;
+                            var cb = CellFor(wx3, wz3);
+                            var sc = new Vector3(size * 0.5f, size * 0.5f * (0.6f + 0.6f * rC),
+                                                 size * 0.5f * (0.8f + 0.4f * rA));
+                            // Sunk a third: a boulder sitting ON sand is a
+                            // prop, one buried in it is a boulder.
+                            var at3 = new Vector3(wx3, h3 - size * 0.16f, wz3);
+                            StampBoth(cb, tp, tp, at3, rYaw3 * Mathf.PI * 2f, sc, sc);
+                            cb.Grow(new Vector3(wx3, h3, wz3), size, size);
+                            shoreStones++;
+                        }
+                    }
                 }
             }
 
@@ -793,12 +904,18 @@ namespace SeaSick.Terrain
                 + $"-> {trees} trees ({trees / ha:F0}/ha, stand {closedPct:F0}% / glade {openPct:F0}%), "
                 + $"{bushes} scrub, {crops} wheat over {cropArea:F2} ha ({100f * cropArea / ha:F1}% of the island"
                 + (cropCut > 0f ? $", eroded to {cropCut:F2}" : "") + "), "
-                + $"{rocks} rocks ({cliffs} cliffs), {cellList.Count} cells, "
+                + $"{rocks} rocks ({cliffs} cliffs), {shoreStones} shore stones, {stacks} sea stacks, {cellList.Count} cells, "
                 + $"{tri0} tris LOD0 / {tri1} LOD1{(kit ? "" : " [cones fallback]")}");
 
+            // Replace, never append: the flora tuner re-dresses an island in
+            // place, and a Report that grows with every rebake would hand the
+            // look probes a stale entry for the same island.
+            for (int i = Report.Count - 1; i >= 0; i--)
+                if ((Report[i].centre - centre).sqrMagnitude < 1f) Report.RemoveAt(i);
             Report.Add(new Dressed { centre = centre, radius = meanR, trees = trees, crops = crops, scrub = bushes });
 
-            if (index.Count == 0 && rocks == 0 && crops == 0 && bushes == 0) return null;
+            if (index.Count == 0 && rocks == 0 && crops == 0 && bushes == 0
+                && shoreStones == 0 && stacks == 0) return null;
 
             var go = new GameObject("Scenery");
             go.transform.SetParent(parent, false);
@@ -841,12 +958,21 @@ namespace SeaSick.Terrain
         static int Formation(Vector3 c, float sx, float sz, float slope, float proud, float rockiness,
             System.Func<float, float, float> height, float sand, int seed,
             SceneryKit.Template[] cliffTp, SceneryKit.Template[] boulders,
-            System.Func<float, float, CellBuild> cellFor, ref int cliffs)
+            System.Func<float, float, CellBuild> cellFor, ref int cliffs,
+            float scale = 1f, float headlandShare = 0.14f)
         {
             var lr = new System.Random(seed * 31 + Mathf.RoundToInt(c.x * 7.3f) * 131 + Mathf.RoundToInt(c.z * 13.1f));
-            bool big = lr.NextDouble() < 0.35;
-            int n = big ? 10 + lr.Next(6) : 3 + lr.Next(5);
-            float L = n * (big ? 2.4f : 1.6f);
+            // Three tiers, not two. Kevin liked the outcrops and asked for
+            // BIG versions of them "acting as cliffs" -- and the top tier the
+            // formations had was 15 m, which is a stone you walk round rather
+            // than a cliff you sail past. A headland is a run of shards two
+            // or three times that, and it is rare on purpose: one an island
+            // is a landmark, five is a quarry.
+            double roll = lr.NextDouble();
+            bool head = roll < headlandShare;
+            bool big = !head && roll < headlandShare + 0.35;
+            int n = head ? 14 + lr.Next(9) : big ? 10 + lr.Next(6) : 3 + lr.Next(5);
+            float L = n * (head ? 3.6f : big ? 2.4f : 1.6f) * scale;
             float dx, dz;
             if (slope > 0.12f) { float inv = 1f / slope; dx = -sz * inv; dz = sx * inv; }   // along the contour
             else { float a = (float)lr.NextDouble() * Mathf.PI * 2f; dx = Mathf.Cos(a); dz = Mathf.Sin(a); }
@@ -864,8 +990,9 @@ namespace SeaSick.Terrain
                 if (ph < sand + 0.5f) continue;
                 float core = Mathf.Clamp(1f - Mathf.Abs(t) * 1.7f, 0.22f, 1f);
                 float j = 0.8f + 0.4f * (float)lr.NextDouble();
-                float w = (big ? 3.5f + 6f * core : 1.6f + 2.8f * core) * j;
-                float hgt = (big ? 3.5f + 9f * core : 1.4f + 4f * core) * (0.8f + 0.4f * (float)lr.NextDouble());
+                float w = (head ? 7f + 14f * core : big ? 3.5f + 6f * core : 1.6f + 2.8f * core) * j * scale;
+                float hgt = (head ? 9f + 26f * core : big ? 3.5f + 9f * core : 1.4f + 4f * core)
+                          * (0.8f + 0.4f * (float)lr.NextDouble()) * scale;
                 float dep = w * (0.5f + 0.4f * (float)lr.NextDouble());
                 float lean = (8f + 20f * (float)lr.NextDouble()) * (t < 0 ? 1f : -1f) * (Mathf.Abs(t) < 0.08f ? 0.3f : 1f);
                 var rot = Quaternion.Euler(lean, yawBase + ((float)lr.NextDouble() - 0.5f) * 70f,
@@ -879,7 +1006,7 @@ namespace SeaSick.Terrain
                 cliffs++;
             }
             // scree at the foot
-            int ns = 2 + lr.Next(big ? 5 : 3);
+            int ns = 2 + lr.Next(head ? 8 : big ? 5 : 3);
             for (int k = 0; k < ns; k++)
             {
                 float a = (float)lr.NextDouble() * Mathf.PI * 2f;
@@ -887,7 +1014,7 @@ namespace SeaSick.Terrain
                 float px = c.x + Mathf.Cos(a) * r, pz = c.z + Mathf.Sin(a) * r;
                 float ph = height(px, pz);
                 if (ph < sand + 0.5f) continue;
-                float size = 0.8f + 1.6f * (float)lr.NextDouble();
+                float size = (0.8f + 1.6f * (float)lr.NextDouble()) * (head ? 1.8f : 1f) * scale;
                 var tp = boulders[lr.Next(boulders.Length)];
                 var cb = cellFor(px, pz);
                 var sc = new Vector3(size * 0.5f, size * 0.4f, size * 0.45f);

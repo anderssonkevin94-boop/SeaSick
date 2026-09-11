@@ -204,14 +204,21 @@ namespace SeaSick.Terrain
         public float sceneryLod0Distance = 220f;
 
         [Header("Stands, glades and fields")]
+        [Tooltip("Overall thickness of the wood, as a multiplier on every tree's chance. The one knob for \"too many trees\" / \"too few\" -- it scales the whole scatter without touching the patchiness, the spacing or the species.")]
+        [Range(0.1f, 2f)] public float treeDensity = 0.8f;
+        [Tooltip("Metres of grass a tree needs under it above where SAND STOPS (TerrainChunkMesher.SandBlend, 2.5 m above sandHeight). Trees must never stand on sand: the old margin was 1.2 m, which is INSIDE the sand-to-grass blend, so half the wood on a low island had its feet in the beach.")]
+        public float sandTreeMargin = 0.6f;
+        [Tooltip("On a tropical island, the chance a palm is allowed to stand down on the sand itself. Palms are the one tree that belongs on a beach -- but rarely, or the beach stops being a beach.")]
+        [Range(0f, 0.3f)] public float palmOnSand = 0.06f;
+        [Tooltip("Share of temperate islands that are BROADLEAF woods rather than conifer. One species per island: mixing them reads as one confused species rather than as two (Kevin, 2026-09-11).")]
+        [Range(0f, 1f)] public float broadleafIslands = 0.4f;
+
         [Tooltip("How big a stand is, as a fraction of the island's mean radius (clamped to 34-140 m). A FRACTION and not a frequency on purpose: at a fixed wavelength an island narrower than one lobe of the field sits at a single value and comes back uniformly open or uniformly closed -- the same trap uplandFrequency was in at 1/700. At 0.55 every island gets about two stands across it whatever its size.")]
         [Range(0.2f, 1.2f)] public float standSpan = 0.55f;
         [Tooltip("How hard the cover field is pushed away from its mean. 1 is the raw noise, which is a gentle wobble and reads as nothing; above 2 the island separates into closed stands and real glades. The MEAN is renormalised afterwards, so this changes the patchiness and not the amount of wood.")]
         public float standContrast = 2.7f;
         [Tooltip("What a glade keeps. Zero would be bald ground, which reads as a bug rather than as a clearing -- the scrub goes in the gap instead, so this can stay low.")]
         [Range(0f, 1f)] public float standFloor = 0.13f;
-        [Tooltip("Wavelength of the species field. Broadleaf and conifer come in GROVES; a per-tree roll gives a salt-and-pepper mix that reads as one confused species.")]
-        public float groveFrequency = 1f / 130f;
         [Tooltip("How far the scatter lattice is warped, as a fraction of the spacing. The jitter inside a cell cannot hide the grid because every tree still belongs to its own cell; a slow warp of the whole lattice moves neighbours TOGETHER, which is what breaks the rows.")]
         [Range(0f, 2f)] public float treeWarp = 1.5f;
         [Tooltip("Chance a failed tree roll puts a bush there instead, at its strongest in the middle of a glade. This is what keeps open ground from being a lawn.")]
@@ -225,6 +232,14 @@ namespace SeaSick.Terrain
         public float cropSpacing = 1.95f;
         [Tooltip("How much of the world is farmed at all. This is a per-island roll biased by this number: at 0.35 most islands have no wheat worth the name and a few are properly worked, which is the variation that makes finding a farmed one mean something.")]
         [Range(0f, 1f)] public float farmedShare = 0.35f;
+
+        [Header("Rock formations")]
+        [Tooltip("Multiplier on every outcrop. The formations were built for the ground BETWEEN trees; above 1 they start reading as landform -- crags you sail past rather than stones you walk round.")]
+        [Range(0.5f, 4f)] public float cragScale = 1.0f;
+        [Tooltip("Chance an inland outcrop is a full HEADLAND: a run of shards two or three times the big ones, tall enough to read as a cliff from the sea. Rare on purpose -- one an island is a landmark, five is a quarry.")]
+        [Range(0f, 0.5f)] public float headlandShare = 0.14f;
+        [Tooltip("How much rock stands on the shore and in the shallows, where the wood is not allowed to go. Boulders at the tideline and, rarely, a sea stack off a headland. Zero leaves every beach bare, which is what it was.")]
+        [Range(0f, 3f)] public float shoreRock = 1.0f;
 
         [Header("Detail")]
         public float detailFrequency = 1f / 25f;

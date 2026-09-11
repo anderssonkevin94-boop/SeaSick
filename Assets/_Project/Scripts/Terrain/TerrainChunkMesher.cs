@@ -239,6 +239,14 @@ namespace SeaSick.Terrain
         /// the slope passes 31 degrees, and stone graded by facing -- dark on
         /// the sheer faces, pale on the tops -- where rock won or the face is
         /// a cliff.
+        /// Metres of blend above `sandHeight` before the ground is fully
+        /// grass. **This is where sand STOPS, and anything that needs to know
+        /// that has to read it here** -- the scatter had its own 1.2 m margin,
+        /// which put trees standing in the middle of the blend, i.e. on sand
+        /// (Kevin, 2026-09-11). Two places encoding the same rule is the
+        /// fault; one of them being a smaller number is how it showed.
+        public const float SandBlend = 2.5f;
+
         static Color32 VertexColour(float hAboveSea, float up, float proud, in ColourParams s, float2 w)
         {
             float3 sand = new float3(0.80f, 0.73f, 0.55f), grass = new float3(0.36f, 0.44f, 0.22f),
@@ -263,7 +271,7 @@ namespace SeaSick.Terrain
                 // all the way to beachHeight put a yellow stripe up the
                 // hillside behind every beach.
                 c = hAboveSea < s.sandHeight ? sand
-                    : math.lerp(sand, g, math.saturate((hAboveSea - s.sandHeight) / 2.5f));
+                    : math.lerp(sand, g, math.saturate((hAboveSea - s.sandHeight) / SandBlend));
             }
             c = math.lerp(c, snow, math.saturate((hAboveSea - s.snowHeight) / 8f));
             float wonHere = math.saturate(proud / s.rockShowsAt);
