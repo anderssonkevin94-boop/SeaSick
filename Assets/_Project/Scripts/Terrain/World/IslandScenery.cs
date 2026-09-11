@@ -27,6 +27,24 @@ namespace SeaSick.Terrain
     /// unchanged -- it is still one mesh per cell -- and the island gets the
     /// "carved" style the GDD records instead of a prism with two cones on
     /// it. The cones are kept as the fallback for a project without the FBX.
+    ///
+    /// **The wood is PATCHY.** Verdancy says how green an island is; it said
+    /// nothing about where the wood is thick, so an island came back as one
+    /// even carpet at its own density -- never dense and open on the same
+    /// landmass, which is what every real wood is. `Cover01` is the missing
+    /// half: a slow field that closes the canopy in places and opens it in
+    /// others, renormalised about its mean so it changes the PATCHINESS and
+    /// not the amount of wood. Out of it come the three things this class
+    /// gained: glades (with scrub in them, because bare ground beside a
+    /// stand reads as a hole rather than as a clearing), a canopy with a
+    /// shape (trees in a closed stand grow taller), and somewhere for the
+    /// wheat to go.
+    ///
+    /// **Wheat is a second pass.** A crop mat is 2.5 m across where a tree
+    /// is 5 m apart, so it cannot share the tree walk. Fields are decided
+    /// FIRST and the wood is told to stay out of them: a field is cleared
+    /// ground, and the order is what makes it read as somebody's enclosure
+    /// rather than as a gap that happens to be gold.
     public static class IslandScenery
     {
         /// Tree height comes off the charter in WorldScale, not from a
@@ -59,6 +77,53 @@ namespace SeaSick.Terrain
         // EXITS the scan, so the last stretch of the walk came back
         // bare with a visible edge down the island.
         const int MaxTrees = 6000, MaxRocks = 2500;    // a cliff shard is 20 triangles
+
+        /// A crop mat is 105 triangles for 2.5 m of ground and a bush is 30,
+        /// so these are the guards that keep a well-farmed island from
+        /// costing more in wheat than it does in wood. Same shape as the
+        /// tree cap: a number the scan should never reach.
+        const int MaxCrops = 2200, MaxScrub = 1800;
+
+        /// Everything the scatter needs to know about one candidate spot,
+        /// filled by ONE function so the pre-pass that sizes the thinning
+        /// and the walk that does the placing can never describe different
+        /// islands. (That is not a hypothetical: a constant standing in for
+        /// this was the fault that left a bare band down one side.)
+        /// What one island's bake came out as, kept so a look probe can FRAME
+        /// a farmed island. There is no other way to find one: farming is a
+        /// roll taken inside the bake, so nothing outside it knows which
+        /// island in the sea has the wheat on it. An instrument, not state --
+        /// nothing in the game reads this.
+        public struct Dressed
+        {
+            public Vector3 centre;
+            public float radius;
+            public int trees, crops, scrub;
+        }
+
+        /// Newest world first; cleared by the populator when it rebuilds.
+        public static readonly List<Dressed> Report = new List<Dressed>();
+
+        /// One probe cell of sowable ground, from the crop pass's first
+        /// sweep. Kept so the second sweep can fill the fields it already
+        /// found instead of asking the slope question sixteen times over.
+        struct FieldCell { public float x, z, gate, n; }
+
+        /// How hard the middle of a field is filled. Above 1 on purpose: at
+        /// the raw noise-times-gate product a field's interior accepted about
+        /// half its mats and read as gold speckles on grass rather than as a
+        /// crop. This saturates the middle and leaves only the outer band
+        /// partial, which is where a real field's edge actually is.
+        const float CropFill = 1.9f;
+
+        struct Spot
+        {
+            public float h, sx, sz, slope, proud;
+            /// How closed the wood is HERE, 0 in a glade and 1 in a stand.
+            public float cover;
+            /// How much of this spot is sown field, 0 to 1.
+            public float field;
+        }
 
         /// Every tree yaws to the island's wind, then jitters +/- 20 deg: the
         /// kit's trees LEAN downwind (+X in the template), and thirteen leans
@@ -152,6 +217,103 @@ namespace SeaSick.Terrain
                 tropical = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(
                     terrain.palmLatitude + terrain.palmBand, terrain.palmLatitude - terrain.palmBand, centre.z));
 
+            // Is this island WORKED, and how hard? Rolled on a generator of
+            // its own: the scatter's stream must not move because a field
+            // was decided, or adding farming to the world reshuffles every
+            // tree in it.
+            //
+            // Most islands get NOTHING. Biasing the roll rather than the
+            // threshold is what keeps the worked ones properly worked --
+            // bias the threshold instead and every island in the sea comes
+            // back with a token patch of wheat, which says nothing about
+            // any of them. Finding a farmed island should mean something.
+            float farm;
+            {
+                var frng = new System.Random(seed * 61 + 7);
+                float u = (float)frng.NextDouble();
+                float share = terrain != null ? terrain.farmedShare : 0.35f;
+                farm = u < 1f - share ? 0f : Mathf.InverseLerp(1f - share, 1f, u);
+                farm *= 1f - tropical * 0.75f;     // palms and wheat are different worlds
+            }
+
+            // --- the cover field ------------------------------------------
+            // Verdancy says how green an ISLAND is. It said nothing about
+            // where the wood is thick, so every island came back as one even
+            // carpet at its own density -- a lawn with trees on it at 22 a
+            // hectare and a solid mat at 230, but never both on the same
+            // island. Cover is the missing half: a slow field that closes
+            // the canopy in places and opens it in others.
+            //
+            // The MEAN is renormalised, so contrast changes the patchiness
+            // and not the amount of wood -- and because the thinning
+            // pre-pass runs through the same function, the budget follows it
+            // for free.
+            // The stand wavelength is a fraction of the ISLAND, not a world
+            // constant. At a fixed 90 m an island 100 m across fits inside one
+            // lobe of the field and comes back uniformly open or uniformly
+            // closed -- one value for the whole landmass, which is the exact
+            // trap `uplandFrequency` was caught in at 1/700. Sized off meanR
+            // every island gets about the same NUMBER of stands, big or
+            // small, which is what makes the patchiness read as a property of
+            // woodland rather than of island size.
+            float standWave = Mathf.Clamp(meanR * (terrain != null ? terrain.standSpan : 0.55f), 34f, 140f);
+            float standF = 1f / standWave;
+            float standC = terrain != null ? terrain.standContrast : 2.7f;
+            float standFloor = terrain != null ? terrain.standFloor : 0.13f;
+            float coverMean = (standFloor + 1f) * 0.5f;
+            float groveF = terrain != null ? terrain.groveFrequency : 1f / 130f;
+            // Same reasoning, one size down: a field is an enclosure inside a
+            // stand's worth of ground, so it is about half a stand across.
+            float fieldF = 1f / Mathf.Clamp(standWave * 0.62f, 26f, 90f);
+            float fieldSlope = terrain != null ? terrain.fieldSlopeMax : 0.17f;
+            float fieldRise = terrain != null ? terrain.fieldMaxRise : 26f;
+
+            float Cover01(float wx, float wz)
+            {
+                // Two octaves. One gives round blobs with a clean edge, which
+                // reads as a stamp; the second is where the stand frays out
+                // into the open, and that fraying is the whole effect.
+                float a = Mathf.PerlinNoise((wx + 7300f) * standF, (wz - 2100f) * standF);
+                float b = Mathf.PerlinNoise((wx - 1500f) * standF * 2.9f, (wz + 900f) * standF * 2.9f);
+                float t = Mathf.Clamp01(((a * 0.74f + b * 0.26f) - 0.5f) * standC + 0.5f);
+                return Mathf.Lerp(standFloor, 1f, t);
+            }
+
+            // --- the fields -----------------------------------------------
+            // A field is CLEARED ground, so it is decided before the wood and
+            // the wood is told to stay out of it. Split in two on purpose:
+            // the NOISE is what shape the enclosure is and costs two Perlin
+            // samples, the GATE is whether this ground could be sown at all
+            // and costs five height samples. The crop pass finds its fields
+            // on the gate at a coarse step and then fills them against the
+            // noise, so the edge of a field is the noise's edge and not a
+            // staircase of probe cells.
+            float FieldNoise(float wx, float wz)
+            {
+                if (farm <= 0.02f) return 0f;
+                float f = Mathf.PerlinNoise((wx + 3100f) * fieldF, (wz - 5200f) * fieldF);
+                // The second octave only frays the EDGE. At a quarter of the
+                // weight it was cutting the fields up instead: an island came
+                // back with a dozen scraps of wheat where it should have had
+                // three fields, because the fine octave punched holes through
+                // the middle of each one. A field is a worked enclosure and
+                // the thing that makes it read as one is that it is WHOLE.
+                float g = Mathf.PerlinNoise((wx - 800f) * fieldF * 1.9f, (wz + 4400f) * fieldF * 1.9f);
+                float thr = Mathf.Lerp(0.78f, 0.38f, farm);
+                return Mathf.SmoothStep(0f, 1f, ((f * 0.87f + g * 0.13f) - thr) / 0.12f);
+            }
+
+            float FieldGate(float h, float slope, float proud)
+            {
+                if (farm <= 0.02f || proud > 0.25f) return 0f;
+                float rise = h - sand;
+                if (rise < 1.4f || rise > fieldRise || slope > fieldSlope) return 0f;
+                // Out at the edges it thins rather than stopping on a line:
+                // nobody ploughs right up to where the hill starts.
+                return (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(fieldSlope * 0.55f, fieldSlope, slope)))
+                     * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(fieldRise * 0.72f, fieldRise, rise)));
+            }
+
             // The scatter box has to cover the island's REACH, not its mean
             // radius: islands are lobed, and a headland past the mean came
             // back bare.
@@ -169,7 +331,16 @@ namespace SeaSick.Terrain
             float step = kit
                 ? Mathf.Clamp(terrain != null ? terrain.treeSpacing : 5f, 3f, 12f)
                 : Mathf.Clamp(meanR * 0.02f, 7f, 12f);
-            int trees = 0, rocks = 0, cliffs = 0, formations = 0;
+            // The warp runs at about four spacings: shorter and it is just
+            // more jitter, longer and the whole wood slides sideways without
+            // changing shape.
+            float warpF = 1f / Mathf.Max(6f, step * 4f);
+            float warpAmp = step * (terrain != null ? terrain.treeWarp : 1.5f);
+            double scrubP = terrain != null ? terrain.scrubChance : 0.30f;
+            int trees = 0, rocks = 0, cliffs = 0, formations = 0, bushes = 0;
+            // For the density report: how much of the island the cover field
+            // calls a stand, counted over the candidates actually evaluated.
+            int coverN = 0, coverDense = 0, coverOpen = 0;
             // Formations are rationed by island size, so a big rocky
             // island gets outcrops and a sandbank gets one at most.
             int maxFormations = 8 + Mathf.RoundToInt(maxR * 0.35f);
@@ -214,34 +385,41 @@ namespace SeaSick.Terrain
             // same function, or the estimate describes a different island
             // than the one being built. Returns the chance BEFORE thinning;
             // zero means the candidate was rejected outright.
-            float ChanceAt(float wx, float wz, out float h, out float sx, out float sz, out float proud)
+            float ChanceAt(float wx, float wz, out Spot sp)
             {
-                h = 0f; sx = 0f; sz = 0f; proud = 0f;
+                sp = default;
                 float ang = Mathf.Atan2(wx - centre.x, wz - centre.z);
                 float dist = Mathf.Sqrt((wx - centre.x) * (wx - centre.x) + (wz - centre.z) * (wz - centre.z));
                 if (radiusAt != null && dist > radiusAt(ang) * 0.94f) return 0f;
 
-                h = height(wx, wz);
-                if (h < sand + 1.2f) return 0f;             // not on the beach
-                sx = (height(wx + 3f, wz) - height(wx - 3f, wz)) / 6f;
-                sz = (height(wx, wz + 3f) - height(wx, wz - 3f)) / 6f;
-                float slope = Mathf.Sqrt(sx * sx + sz * sz);
+                sp.h = height(wx, wz);
+                if (sp.h < sand + 1.2f) return 0f;          // not on the beach
+                sp.sx = (height(wx + 3f, wz) - height(wx - 3f, wz)) / 6f;
+                sp.sz = (height(wx, wz + 3f) - height(wx, wz - 3f)) / 6f;
+                sp.slope = Mathf.Sqrt(sp.sx * sp.sx + sp.sz * sp.sz);
 
                 // Rock that has broken through the soil is stone, and
                 // nothing roots in it.
-                proud = TerrainHeight.RockBreak(
+                sp.proud = TerrainHeight.RockBreak(
                     new Unity.Mathematics.float2(wx, wz), rockiness, prm);
 
+                sp.cover = Cover01(wx, wz);
+                sp.field = FieldNoise(wx, wz) * FieldGate(sp.h, sp.slope, sp.proud);
+
                 float slopeTerm = 1f - Mathf.SmoothStep(0f, 1f,
-                    Mathf.InverseLerp(prm.vegSlopeSoft, prm.vegSlopeHard, slope));
-                float rockTerm = proud > 0.4f ? 1f - prm.vegRockSuppress : 1f;
+                    Mathf.InverseLerp(prm.vegSlopeSoft, prm.vegSlopeHard, sp.slope));
+                float rockTerm = sp.proud > 0.4f ? 1f - prm.vegRockSuppress : 1f;
                 // Exposure is a MOUNTAIN phenomenon and has to be gated on
                 // the island being one: keyed to `peak` alone it put a 5 m
                 // sandbank's exposure band over the whole island.
                 float exposure = peak < ExposedAbove ? 1f
                     : 1f - Mathf.SmoothStep(0f, 1f,
-                        Mathf.InverseLerp(peak * 0.80f, peak * 1.02f, h));
-                return verdancy * slopeTerm * rockTerm * exposure;
+                        Mathf.InverseLerp(peak * 0.80f, peak * 1.02f, sp.h));
+                // Standing wheat does not have trees in it. Not quite zero:
+                // a hedge line and the odd tree left for shade are what say
+                // somebody made this enclosure rather than the noise did.
+                return verdancy * slopeTerm * rockTerm * exposure
+                     * (sp.cover / coverMean) * (1f - sp.field * 0.94f);
             }
 
             float cells = Mathf.PI * maxR * maxR / (step * step);
@@ -255,8 +433,7 @@ namespace SeaSick.Terrain
                     // the middle and the shore gates never get counted.
                     float sa = (float)srng.NextDouble() * Mathf.PI * 2f;
                     float sr = maxR * Mathf.Sqrt((float)srng.NextDouble());
-                    accept += ChanceAt(centre.x + Mathf.Sin(sa) * sr, centre.z + Mathf.Cos(sa) * sr,
-                        out _, out _, out _, out _);
+                    accept += ChanceAt(centre.x + Mathf.Sin(sa) * sr, centre.z + Mathf.Cos(sa) * sr, out _);
                 }
                 accept /= Samples;
             }
@@ -274,6 +451,22 @@ namespace SeaSick.Terrain
                 Debug.LogWarning("IslandScenery: kit is incomplete -- falling back to cones");
                 kit = false;
             }
+            // The crop and the heath are the newest half of the kit, so an
+            // FBX from before them has to degrade to an island with no wheat
+            // rather than to a null reference in the middle of a bake.
+            var crop0 = new[] { SceneryKit.Get("Crop_0"), SceneryKit.Get("Crop_1"), SceneryKit.Get("Crop_2") };
+            var crop1 = new[] { SceneryKit.Get("Crop_0_LOD1"), SceneryKit.Get("Crop_1_LOD1"), SceneryKit.Get("Crop_2_LOD1") };
+            var scrub0 = new[] { SceneryKit.Get("Scrub_0"), SceneryKit.Get("Scrub_1"), SceneryKit.Get("Scrub_2") };
+            var scrub1 = new[] { SceneryKit.Get("Scrub_0_LOD1"), SceneryKit.Get("Scrub_1_LOD1"), SceneryKit.Get("Scrub_2_LOD1") };
+            bool hasCrop = kit, hasScrub = kit;
+            for (int i = 0; i < 3; i++)
+            {
+                if (crop0[i] == null || crop1[i] == null) hasCrop = false;
+                if (scrub0[i] == null || scrub1[i] == null) hasScrub = false;
+            }
+            if (kit && !(hasCrop && hasScrub))
+                Debug.LogWarning("IslandScenery: the flora FBX predates the crop/scrub kit -- "
+                    + "no wheat and no heath. Re-run seasick_style.build_kit + export_kit.");
 
             for (float z = -maxR; z <= maxR && trees < MaxTrees; z += step)
             {
@@ -293,12 +486,30 @@ namespace SeaSick.Terrain
                     float rRockA = (float)rng.NextDouble();
                     float rRockB = (float)rng.NextDouble();
                     float rRockC = (float)rng.NextDouble();
+                    double rScrub = rng.NextDouble();
+                    float rScrubA = (float)rng.NextDouble();
 
+                    // The lattice, WARPED. Jitter inside a cell cannot hide a
+                    // grid, because every tree still belongs to its own cell
+                    // and the cells are in rows -- at 5 m in a closed wood
+                    // that shows as aisles. A slow warp moves NEIGHBOURS
+                    // together, which bends the rows into drifts and crowds
+                    // and opens gaps between them, and gaps and crowds are
+                    // what a real wood is made of.
                     float wx = centre.x + x + jx, wz = centre.z + z + jz;
+                    if (kit && warpAmp > 0f)
+                    {
+                        float ux = wx * warpF, uz = wz * warpF;   // both axes off the SAME point
+                        wx += (Mathf.PerlinNoise(ux + 11.3f, uz) - 0.5f) * warpAmp;
+                        wz += (Mathf.PerlinNoise(ux, uz + 19.7f) - 0.5f) * warpAmp;
+                    }
 
-                    float raw = ChanceAt(wx, wz, out float h, out float sx, out float sz, out float proud);
+                    float raw = ChanceAt(wx, wz, out Spot sp);
                     if (raw <= 0f) continue;
-                    float slope = Mathf.Sqrt(sx * sx + sz * sz);
+                    float h = sp.h, sx = sp.sx, sz = sp.sz, proud = sp.proud, slope = sp.slope;
+                    coverN++;
+                    if (sp.cover > 0.78f) coverDense++;
+                    else if (sp.cover < 0.35f) coverOpen++;
                     float chance = raw * keep;
                     bool place = keepOut == null || !keepOut(wx, wz);
                     var at = new Vector3(wx, h, wz);
@@ -348,6 +559,26 @@ namespace SeaSick.Terrain
                             }
                             rocks++;
                         }
+                        else if (hasScrub && place && bushes < MaxScrub && !stony
+                                 && rScrub < scrubP * (1f - sp.cover) * (1f - sp.field) * verdancy * keep)
+                        {
+                            // Open ground inside the island. Left bare it is
+                            // a lawn, and a lawn beside a closed stand reads
+                            // as a hole in the wood rather than as a glade --
+                            // which would waste the whole point of making the
+                            // wood patchy. The bush is strongest in the
+                            // MIDDLE of a glade and fades out under the
+                            // canopy, where nothing grows anyway.
+                            var cb = CellFor(wx, wz);
+                            int v = (int)(rVariant * 3f); if (v > 2) v = 2;
+                            float target = Mathf.Lerp(SeaSick.World.WorldScale.ScrubMin,
+                                                      SeaSick.World.WorldScale.ScrubMax, rScrubA);
+                            float sb = target / Mathf.Max(0.2f, scrub0[v].height);
+                            var sc = new Vector3(sb * (0.85f + 0.35f * rRockB), sb, sb * (0.85f + 0.35f * rRockC));
+                            StampBoth(cb, scrub0[v], scrub1[v], at, rYaw * Mathf.PI * 2f, sc, sc);
+                            cb.Grow(at, scrub0[v].radius * sb * 1.3f, target);
+                            bushes++;
+                        }
                         continue;
                     }
 
@@ -366,20 +597,35 @@ namespace SeaSick.Terrain
                             // low ground of a temperate one, spruce
                             // everywhere else. Altitude decides within an
                             // island, latitude decides between them.
+                            //
+                            // The MIX is a slow field, not a per-tree roll.
+                            // A roll gives one broadleaf every fourth spruce
+                            // all over the island, which is salt and pepper
+                            // -- it reads as one confused species rather than
+                            // as two. A field puts them in GROVES, and a
+                            // grove is a thing the eye can name.
+                            float grove = Mathf.PerlinNoise((wx - 4400f) * groveF, (wz + 6100f) * groveF);
                             SceneryKit.Template tp0, tp1;
                             float factor;
                             if (rClimate < tropical)
                             {
-                                bool palm = h < sand + 6f || rSpecies < 0.6f;
+                                bool palm = h < sand + 6f || rSpecies < Mathf.Lerp(0.20f, 0.92f, grove);
                                 tp0 = palm ? palm0 : broad0; tp1 = palm ? palm1 : broad1;
                                 factor = palm ? 0.72f : 0.82f;
                             }
                             else
                             {
-                                bool broad = h < sand + 10f && rSpecies < 0.28f;
+                                bool broad = h < sand + 16f && rSpecies < Mathf.Lerp(0.04f, 0.78f, grove);
                                 tp0 = broad ? broad0 : spruce0; tp1 = broad ? broad1 : spruce1;
                                 factor = broad ? 0.82f : 1f;
                             }
+                            // Trees inside a closed stand are taller than the
+                            // ones out on its edge -- they grew up competing
+                            // for the light. It is the cheapest thing that
+                            // makes a stand read as a stand from a mile off,
+                            // because the canopy gets a SHAPE: high in the
+                            // middle, falling away where the wood opens.
+                            factor *= Mathf.Lerp(0.82f, 1.07f, sp.cover);
                             float target = Mathf.Lerp(TreeMinH, TreeMaxH, Mathf.Pow(rHeight, HeightBias)) * factor;
                             float s = target / Mathf.Max(1f, tp0.height);
                             float yaw = Wind + (rYaw - 0.5f) * 0.7f;
@@ -404,14 +650,155 @@ namespace SeaSick.Terrain
                 }
             }
 
+            // ---- the wheat ------------------------------------------------
+            // Its own pass, because a crop mat is 2.5 m across and a tree is
+            // 5 m apart: sharing the tree walk would either space the wheat
+            // like an orchard or run the whole island at the mat spacing.
+            //
+            // Two phases. The gate -- is this ground sowable -- costs five
+            // height samples because it needs the slope, so it is asked once
+            // per PROBE cell; the fill inside an accepted cell costs one
+            // sample a mat and is accepted against the field NOISE at the
+            // mat's own position, which is what keeps a field's edge the
+            // shape of the noise instead of a staircase of probe cells.
+            int crops = 0, fieldCells = 0;
+            float cropArea = 0f;          // hectares actually under wheat
+            float cropCut = 0f;           // the contour the fields were eroded to, 0 if not
+            if (hasCrop && farm > 0.02f)
+            {
+                var crng = new System.Random(seed * 131 + 29);
+                float cstep = Mathf.Clamp(terrain != null ? terrain.cropSpacing : 1.95f, 1.2f, 4f);
+                int sub = 4;
+                float probe = cstep * sub;
+
+                // Pass A finds the fields. The gate -- is this ground sowable
+                // -- costs five height samples because it needs the slope, so
+                // it is asked once per PROBE cell and never per mat.
+                var found = new List<FieldCell>();
+                float estimate = 0f;
+                for (float z = -maxR; z <= maxR; z += probe)
+                {
+                    for (float x = -maxR; x <= maxR; x += probe)
+                    {
+                        float cx = centre.x + x, cz = centre.z + z;
+                        float ang = Mathf.Atan2(x, z);
+                        if (radiusAt != null && Mathf.Sqrt(x * x + z * z) > radiusAt(ang) * 0.94f) continue;
+                        float ch = height(cx, cz);
+                        if (ch < sand + 1.4f) continue;
+                        float csx = (height(cx + 3f, cz) - height(cx - 3f, cz)) / 6f;
+                        float csz = (height(cx, cz + 3f) - height(cx, cz - 3f)) / 6f;
+                        float cproud = TerrainHeight.RockBreak(
+                            new Unity.Mathematics.float2(cx, cz), rockiness, prm);
+                        float gate = FieldGate(ch, Mathf.Sqrt(csx * csx + csz * csz), cproud);
+                        if (gate <= 0.04f) continue;
+                        float n = FieldNoise(cx, cz);
+                        if (n <= 0.02f) continue;
+                        found.Add(new FieldCell { x = cx, z = cz, gate = gate, n = n });
+                        estimate += Mathf.Min(1f, n * gate * CropFill) * sub * sub;
+                    }
+                }
+
+                // Over budget, an island gets LESS FIELD -- not thinner
+                // field. Two wrong answers were tried first and both are
+                // worth remembering, because they are the two obvious ones.
+                // Stopping the scan at the cap leaves a straight edge down
+                // the island, which is the same fault the tree pass was
+                // caught in. Dropping whole cells at random scatters the
+                // crop into confetti: the wheat came back as gold specks
+                // spread over the entire island instead of as fields, and
+                // a field that is not CONTIGUOUS is not a field at all.
+                //
+                // So erode them from the edges. The cells are sorted by how
+                // deep in a field they sit and taken until the budget is
+                // spent; the noise value of the last one becomes a contour,
+                // and everything outside that contour -- cell and mat alike
+                // -- is simply not sown. The fields that survive are whole,
+                // there are just fewer and smaller ones. Which is what an
+                // island with more good ground than hands to work it would
+                // actually look like.
+                float nCut = 0f;
+                if (estimate > MaxCrops * 0.95f)
+                {
+                    found.Sort((a, b) => b.n.CompareTo(a.n));
+                    float acc = 0f;
+                    foreach (var fc in found)
+                    {
+                        acc += Mathf.Min(1f, fc.n * fc.gate * CropFill) * sub * sub;
+                        if (acc > MaxCrops * 0.95f) { nCut = fc.n; break; }
+                    }
+                    cropCut = nCut;
+                }
+
+                foreach (var fc in found)
+                {
+                    if (fc.n < nCut) continue;
+                    bool any = false;
+                    for (int iz = 0; iz < sub; iz++)
+                    {
+                        for (int ix = 0; ix < sub; ix++)
+                        {
+                            float jx2 = (float)(crng.NextDouble() - 0.5) * cstep * 0.85f;
+                            float jz2 = (float)(crng.NextDouble() - 0.5) * cstep * 0.85f;
+                            double rKeep = crng.NextDouble();
+                            float rYaw2 = (float)crng.NextDouble();
+                            float rSize = (float)crng.NextDouble();
+                            int v = crng.Next(3);
+                            if (crops >= MaxCrops) continue;
+                            float mx = fc.x + (ix + 0.5f) * cstep - probe * 0.5f + jx2;
+                            float mz = fc.z + (iz + 0.5f) * cstep - probe * 0.5f + jz2;
+                            // Accepted against the noise at the MAT's own
+                            // position, so a field's edge is the shape of the
+                            // noise and not a staircase of probe cells. The
+                            // fill factor saturates the middle: at the raw
+                            // product the interior of a field accepted about
+                            // half its mats and came back as gold speckles on
+                            // grass. A crop is DENSE -- that density is most
+                            // of what says crop rather than meadow -- so only
+                            // the outer edge is allowed to be partial.
+                            float mn = FieldNoise(mx, mz);
+                            if (mn < nCut || rKeep > mn * fc.gate * CropFill) continue;
+                            if (keepOut != null && keepOut(mx, mz)) continue;
+                            float mh = height(mx, mz);
+                            if (mh < sand + 1.0f) continue;
+                            var cb = CellFor(mx, mz);
+                            float target = SeaSick.World.WorldScale.CropHeight
+                                         * Mathf.Lerp(0.86f, 1.26f, rSize);
+                            float ms = target / Mathf.Max(0.2f, crop0[v].height);
+                            var msc = new Vector3(ms, ms, ms);
+                            // Sunk. The mat's foot flares out under the ground
+                            // so its skirt never shows as a slab of earth
+                            // standing on the grass -- which is exactly what
+                            // it did before it was buried.
+                            StampBoth(cb, crop0[v], crop1[v],
+                                      new Vector3(mx, mh - 0.12f, mz), rYaw2 * Mathf.PI * 2f, msc, msc);
+                            cb.Grow(new Vector3(mx, mh, mz), crop0[v].radius * ms, target);
+                            crops++; any = true;
+                        }
+                    }
+                    if (any) { fieldCells++; cropArea += probe * probe / 10000f; }
+                }
+            }
+
             int tri0 = 0, tri1 = 0;
             foreach (var cb in cellList) { tri0 += cb.t0.Count / 3; tri1 += cb.t1.Count / 3; }
-            Debug.Log($"IslandScenery: r{meanR:F0} peak {peak:F0} verdancy {verdancy:F2} "
-                + $"rockiness {rockiness:F2} tropical {tropical:F2} accept {accept:F3} keep {keep:F3} cells {cells:F0} step {step:F1} "
-                + $"-> {trees} trees ({trees / Mathf.Max(0.01f, Mathf.PI * meanR * meanR / 10000f):F0}/ha), {rocks} rocks ({cliffs} cliffs), {cellList.Count} cells, "
+            float ha = Mathf.Max(0.01f, Mathf.PI * meanR * meanR / 10000f);
+            // Trees a hectare is the number to judge a look change by (the
+            // reference board is ~230), and `closed` is the new one: the
+            // fraction of the island the cover field calls a stand. An
+            // island at 230/ha and 100 % closed is the old even carpet.
+            float closedPct = coverN > 0 ? 100f * coverDense / coverN : 0f;
+            float openPct = coverN > 0 ? 100f * coverOpen / coverN : 0f;
+            Debug.Log($"IslandScenery: r{meanR:F0} at ({centre.x:F0},{centre.z:F0}) peak {peak:F0} verdancy {verdancy:F2} "
+                + $"rockiness {rockiness:F2} tropical {tropical:F2} farm {farm:F2} accept {accept:F3} keep {keep:F3} cells {cells:F0} step {step:F1} "
+                + $"-> {trees} trees ({trees / ha:F0}/ha, stand {closedPct:F0}% / glade {openPct:F0}%), "
+                + $"{bushes} scrub, {crops} wheat over {cropArea:F2} ha ({100f * cropArea / ha:F1}% of the island"
+                + (cropCut > 0f ? $", eroded to {cropCut:F2}" : "") + "), "
+                + $"{rocks} rocks ({cliffs} cliffs), {cellList.Count} cells, "
                 + $"{tri0} tris LOD0 / {tri1} LOD1{(kit ? "" : " [cones fallback]")}");
 
-            if (index.Count == 0 && rocks == 0) return null;
+            Report.Add(new Dressed { centre = centre, radius = meanR, trees = trees, crops = crops, scrub = bushes });
+
+            if (index.Count == 0 && rocks == 0 && crops == 0 && bushes == 0) return null;
 
             var go = new GameObject("Scenery");
             go.transform.SetParent(parent, false);

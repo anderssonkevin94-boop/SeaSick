@@ -58,6 +58,18 @@ namespace SeaSick.World
         public const float BoulderMin = 1.0f;
         public const float BoulderMax = 3.2f;
 
+        /// Ripe wheat: chest on a 1.7 m crewman, which is what says CROP.
+        /// Knee-high is grass and head-high is reeds, and neither is a field
+        /// somebody sowed.
+        public const float CropHeight = 1.05f;
+
+        /// The heath bush, for the open ground between stands. Well under a
+        /// crewman -- a bush he can see over is scrub; one he cannot is a
+        /// thicket, and a thicket at this triangle count reads as a small
+        /// tree and fights the size ladder the trees set.
+        public const float ScrubMin = 0.85f;
+        public const float ScrubMax = 1.55f;
+
         // --- the ship -------------------------------------------------------
         /// Her overall length. Was authored by SetupPaddleBoat.Scale, which was
         /// the one knob that resizes her; this is here so everything else can

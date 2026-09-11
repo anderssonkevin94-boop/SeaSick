@@ -26,10 +26,15 @@ public static class RunProbe
     /// Set through reflection like every other launcher here: this file is
     /// recompiled on its own by `execute_script` and must not name a type
     /// from the runtime assembly.
-    public static void LookRocky() => LookAt("rock", true);
-    public static void LookNear() => LookAt("run", false);
+    public static void LookRocky() => LookAt("rock", true, false);
+    public static void LookNear() => LookAt("run", false, false);
 
-    static void LookAt(string tag, bool rocky)
+    /// The same sheet on the island with the most WHEAT on it. Farming is a
+    /// roll inside the scenery bake, so there is no other way to photograph
+    /// a field without sailing about until one turns up.
+    public static void LookFarm() => LookAt("farm", false, true);
+
+    static void LookAt(string tag, bool rocky, bool farmed)
     {
         foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
         {
@@ -37,6 +42,7 @@ public static class RunProbe
             if (t == null) continue;
             t.GetField("Tag").SetValue(null, tag);
             t.GetField("PreferRocky").SetValue(null, rocky);
+            t.GetField("PreferFarmed").SetValue(null, farmed);
             break;
         }
         Call("IslandLook");

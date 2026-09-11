@@ -57,6 +57,11 @@ namespace SeaSick.Terrain
             lut = TerrainCurveLut.Bake(terrain.profileCurve, Allocator.Persistent);
             Island.TerrainHeight = Height;
             Island.BeachMaxSlope = world.beachMaxSlope;
+            // Statics outlive play mode here (domain reload is off), so the
+            // scenery's account of what it laid down has to be emptied at the
+            // start of a world or the look probes frame an island from the
+            // PREVIOUS run.
+            IslandScenery.Report.Clear();
 
             Vector3 home = homePoint != null ? homePoint.position : Vector3.zero;
             var islands = Discover(new float2(home.x, home.z));

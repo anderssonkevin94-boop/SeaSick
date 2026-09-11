@@ -44,6 +44,11 @@ C = dict(
     palm_d=(0.14, 0.26, 0.11),   palm_l=(0.36, 0.50, 0.18),
     sand=(0.80, 0.73, 0.55),     moss=(0.26, 0.35, 0.17),     dry=(0.52, 0.52, 0.28),
     grass=(0.36, 0.44, 0.22),    shade=(0.08, 0.11, 0.16),    ruler=(0.75, 0.12, 0.10),
+    # The crop and the heath. Wheat is swatches 46-48 of the shared island
+    # palette (seasick_hulls.py), copied rather than imported: importing the
+    # hull module to read three numbers lofts twenty ships into the file.
+    wheat_l=(0.83, 0.70, 0.36),  wheat_d=(0.66, 0.53, 0.27),  straw=(0.72, 0.63, 0.42),
+    scrub_d=(0.18, 0.24, 0.13),  scrub_m=(0.32, 0.38, 0.18),  scrub_l=(0.48, 0.48, 0.25),
 )
 
 
@@ -783,6 +788,145 @@ def build_unit_shard(name, coll, seed, tall=False):
     return B.emit(name, coll)
 
 
+# ------------------------------------------------------------------ crop ---
+# Wheat, and it has to work at two distances that want opposite things. From
+# a deck at 200 m a field is a SURFACE -- a gold patch with a soft edge, and
+# nothing inside it is resolvable. From a landing party's shoulder it is a
+# stand of STALKS, and the verticality is the whole signal: a crop with no
+# visible stalks is a beanbag.
+#
+# So the unit is both. A low mat carries the mass and the colour -- half
+# buried, and low enough (0.42 m on 3 m across) that its walls never read as
+# a block, which is exactly what killed the first attempt at this. Seven
+# stalks stand out of it to chest height, each with a fat pale ear on top,
+# all leaning the same way as everything else on the island. Unity lays the
+# mats overlapping at random yaw and size, which is what hides the octagon.
+
+CROP_H = 1.05          # ear height: chest on a 1.7 m man. Wheat, not grass
+CROP_MAT = 0.40        # the mass below the stalks
+
+
+def build_crop(name, coll, seed=71, r=1.25, h=CROP_H, sides=8, stalks=9, lod=False):
+    rng = random.Random(seed)
+    B = Build()
+    if lod:
+        sides, stalks = 6, 4
+    mat = CROP_MAT
+    rng2 = rng.random()          # this mat's ripeness, one roll for the whole top
+
+    def top_rule(n, p):
+        up = n.z * 0.5 + 0.5
+        rad = math.hypot(p.x, p.y) / max(0.4, r)
+        return shade(mix(C["wheat_d"], C["wheat_l"], 0.22 + 0.34 * rng2),
+                     0.68 + 0.24 * up - 0.12 * min(1.0, rad))
+
+    def side_rule(n, p):
+        # Down in the stubble it is shaded straw, not ear. That dark foot is
+        # most of what keeps the mat sitting IN the ground rather than on it.
+        t = max(0.0, min(1.0, (p.z + 0.16) / (mat + 0.16)))
+        return shade(mix(C["straw"], C["wheat_d"], 0.65), 0.40 + 0.34 * t)
+
+    ground, rim = [], []
+    for j in range(sides):
+        a = 2 * pi * j / sides + (rng.random() - 0.5) * 0.40
+        rr = r * (0.80 + 0.34 * rng.random())
+        zz = mat * (0.18 + 0.95 * rng.random())
+        # The foot FLARES wider than the rim. A vertical wall is a slab of
+        # earth and the eye finds it at the field edge every time; a sloping
+        # skirt is a mound of crop running out into the grass.
+        ground.append(B.vert((cos(a) * rr * 1.16, sin(a) * rr * 1.16, -0.55)))
+        rim.append(B.vert((cos(a) * rr, sin(a) * rr, zz)))
+    crown = B.vert(((rng.random() - 0.5) * r * 0.4, (rng.random() - 0.5) * r * 0.4, mat))
+    for j in range(sides):
+        k = (j + 1) % sides
+        B.quad(ground[j], ground[k], rim[k], rim[j], side_rule)
+        B.tri(rim[j], rim[k], crown, top_rule)
+
+    # The stalks. Three rings would be a waist, an ear and a tip; two rings
+    # and a tip is the same picture for two thirds of the triangles, as long
+    # as the upper ring is WIDER than the lower one -- that step is the ear,
+    # and the ear is the only thing that separates wheat from grass at this
+    # count.
+    def ear_rule(n, p):
+        return shade(C["wheat_l"] if p.z > h * 0.80 else C["wheat_d"],
+                     0.74 + 0.26 * (n.z * 0.5 + 0.5))
+
+    golden = pi * (3.0 - math.sqrt(5.0))
+    for k in range(stalks):
+        a = k * golden + rng.random() * 0.4
+        d = r * 0.74 * math.sqrt((k + 0.4) / stalks)
+        bx, by = cos(a) * d, sin(a) * d
+        z0 = mat * (0.45 + 0.35 * rng.random())
+        top = h * (0.86 + 0.22 * rng.random())
+        lean = (0.06 + 0.09 * rng.random()) * top     # +X, downwind
+        r0, r1 = 0.036, 0.066                          # stalk, then the ear
+        lo = [B.vert((bx + cos(2 * pi * j / 3) * r0,
+                      by + sin(2 * pi * j / 3) * r0, z0)) for j in range(3)]
+        hi = [B.vert((bx + lean * 0.78 + cos(2 * pi * j / 3 + 0.5) * r1,
+                      by + sin(2 * pi * j / 3 + 0.5) * r1, top * 0.72)) for j in range(3)]
+        tip = B.vert((bx + lean, by, top))
+        for j in range(3):
+            B.quad(lo[j], lo[(j + 1) % 3], hi[(j + 1) % 3], hi[j], ear_rule)
+            B.tri(hi[j], hi[(j + 1) % 3], tip, ear_rule)
+    return B.emit(name, coll)
+
+
+# ----------------------------------------------------------------- scrub ---
+# The low bush. It exists for the ground the trees REFUSE: a glade, a windy
+# shoulder, the stony edge of an outcrop. Without it an island's open ground
+# is bald, and bald ground beside closed wood reads as a bug rather than as
+# a clearing -- which is the whole reason the wood is being made patchy.
+#
+# It is NOT a convex hull. The first pass of this was, and a convex hull is a
+# rock: the eye read a heath of them as mossy boulders, because what separates
+# foliage from stone at this triangle count is a BROKEN outline, not a colour.
+# So it is built the way the spruce is -- three ragged fans of different
+# heights, each a ring of tips at jittered radius and height under one apex --
+# and the jaggedness of that ring is the whole asset.
+#
+# No trunk: at this height a stem is invisible, and a bush that shows one
+# reads as a small tree, which would fight the size ladder the trees set.
+
+def build_scrub(name, coll, seed=73, h=1.10, r=0.95, lobes=3, sides=5, lod=False):
+    rng = random.Random(seed)
+    B = Build()
+    if lod:
+        lobes, sides = 2, 4
+
+    def leaf_rule(n, p):
+        up = n.z * 0.5 + 0.5
+        # Only the facets actually pointing at the sky get the pale olive;
+        # everything under the shoulder is the dark mass the bush is made of.
+        tone = C["scrub_d"] if up < 0.56 else C["scrub_m"] if up < 0.86 else C["scrub_l"]
+        return shade(tone, 0.62 + 0.26 * up + 0.14 * (p.z / h))
+
+    for k in range(lobes):
+        a0 = 2 * pi * k / lobes + rng.random() * 1.1
+        d = r * (0.16 + 0.30 * rng.random()) if k else 0.0
+        cx, cy = cos(a0) * d, sin(a0) * d
+        lr = r * (0.58 + 0.34 * rng.random())
+        lh = h * (0.62 + 0.40 * rng.random()) if k else h
+        ring = []
+        for j in range(sides):
+            a = 2 * pi * j / sides + (rng.random() - 0.5) * 0.6
+            # The tips alternate long and short. A ring of equal spokes is a
+            # parasol; it is the alternation that reads as leaf mass.
+            rr = lr * (0.70 + 0.55 * rng.random()) * (1.12 if j % 2 else 0.84)
+            zz = lh * (0.10 + 0.46 * rng.random())
+            ring.append(B.vert((cx + cos(a) * rr, cy + sin(a) * rr, zz)))
+        # The apex is well off centre and not much above the tips: centred
+        # and peaked, each lobe is a tiny conifer, and these stand next to
+        # real ones.
+        apex = B.vert((cx + (rng.random() - 0.5) * lr * 1.0,
+                       cy + (rng.random() - 0.5) * lr * 1.0, lh * (0.78 + 0.16 * rng.random())))
+        foot = B.vert((cx, cy, -0.18))
+        for j in range(sides):
+            m = (j + 1) % sides
+            B.tri(ring[j], ring[m], apex, leaf_rule)
+            B.tri(ring[m], ring[j], foot, leaf_rule)
+    return B.emit(name, coll, recalc=False)
+
+
 def build_kit():
     c = bpy.data.collections.get(KIT_COLL)
     if c:
@@ -799,6 +943,15 @@ def build_kit():
         build_palm("Palm_LOD1", coll, h=9.0, seed=9, lod=True),
         build_ore("Ore", coll, seed=7),
     ]
+    # Three of each, so a field is not one octagon repeated and a heath is
+    # not one bush repeated. Unity picks between them per placement; the
+    # variation that matters at range is in the SET, not inside one mesh.
+    for i in range(3):
+        kit.append(build_crop("Crop_%d" % i, coll, seed=70 + i))
+        kit.append(build_crop("Crop_%d_LOD1" % i, coll, seed=70 + i, lod=True))
+    for i in range(3):
+        kit.append(build_scrub("Scrub_%d" % i, coll, seed=73 + i))
+        kit.append(build_scrub("Scrub_%d_LOD1" % i, coll, seed=73 + i, lod=True))
     for i in range(4):
         kit.append(build_unit_shard("Boulder_%d" % i, coll, 400 + i))
     for i in range(3):

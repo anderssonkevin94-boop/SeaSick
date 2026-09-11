@@ -203,6 +203,29 @@ namespace SeaSick.Terrain
         [Tooltip("Scenery cells nearer the camera than this draw their full mesh (~200 tris a tree); beyond it the cheap one (~80).")]
         public float sceneryLod0Distance = 220f;
 
+        [Header("Stands, glades and fields")]
+        [Tooltip("How big a stand is, as a fraction of the island's mean radius (clamped to 34-140 m). A FRACTION and not a frequency on purpose: at a fixed wavelength an island narrower than one lobe of the field sits at a single value and comes back uniformly open or uniformly closed -- the same trap uplandFrequency was in at 1/700. At 0.55 every island gets about two stands across it whatever its size.")]
+        [Range(0.2f, 1.2f)] public float standSpan = 0.55f;
+        [Tooltip("How hard the cover field is pushed away from its mean. 1 is the raw noise, which is a gentle wobble and reads as nothing; above 2 the island separates into closed stands and real glades. The MEAN is renormalised afterwards, so this changes the patchiness and not the amount of wood.")]
+        public float standContrast = 2.7f;
+        [Tooltip("What a glade keeps. Zero would be bald ground, which reads as a bug rather than as a clearing -- the scrub goes in the gap instead, so this can stay low.")]
+        [Range(0f, 1f)] public float standFloor = 0.13f;
+        [Tooltip("Wavelength of the species field. Broadleaf and conifer come in GROVES; a per-tree roll gives a salt-and-pepper mix that reads as one confused species.")]
+        public float groveFrequency = 1f / 130f;
+        [Tooltip("How far the scatter lattice is warped, as a fraction of the spacing. The jitter inside a cell cannot hide the grid because every tree still belongs to its own cell; a slow warp of the whole lattice moves neighbours TOGETHER, which is what breaks the rows.")]
+        [Range(0f, 2f)] public float treeWarp = 1.5f;
+        [Tooltip("Chance a failed tree roll puts a bush there instead, at its strongest in the middle of a glade. This is what keeps open ground from being a lawn.")]
+        [Range(0f, 1f)] public float scrubChance = 0.45f;
+
+        [Tooltip("Steepest ground anybody would sow. Well under the wood's own limit -- a crop needs ground you can walk a scythe across.")]
+        public float fieldSlopeMax = 0.17f;
+        [Tooltip("Metres above the sand where fields stop. Crops are lowland; a wheat field on a shoulder at 40 m reads as decoration.")]
+        public float fieldMaxRise = 26f;
+        [Tooltip("Metres between wheat mats. The kit's mat is 2.5 m across, so under that they overlap and the field closes -- which is most of what separates a crop from a meadow.")]
+        public float cropSpacing = 1.95f;
+        [Tooltip("How much of the world is farmed at all. This is a per-island roll biased by this number: at 0.35 most islands have no wheat worth the name and a few are properly worked, which is the variation that makes finding a farmed one mean something.")]
+        [Range(0f, 1f)] public float farmedShare = 0.35f;
+
         [Header("Detail")]
         public float detailFrequency = 1f / 25f;
         [Range(1, 4)] public int detailOctaves = 2;

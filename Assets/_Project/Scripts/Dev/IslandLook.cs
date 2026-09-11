@@ -42,6 +42,13 @@ public class IslandLook : MonoBehaviour
     /// the islands with proud rock. Set from a scratch script, cleared on use.
     public static bool PreferRocky = false;
 
+    /// Frame the island with the most WHEAT on it. Farming is a roll taken
+    /// inside the scenery bake, so nothing outside it knows which island in
+    /// the sea is worked -- without this the only way to photograph a field
+    /// is to sail around until one turns up. Reads IslandScenery.Report,
+    /// which is the bake's own account of what it laid down.
+    public static bool PreferFarmed = false;
+
     IEnumerator Start()
     {
         // Mid-morning, held still. A look sheet shot at whatever hour the
@@ -101,6 +108,29 @@ public class IslandLook : MonoBehaviour
                 sb.AppendLine($"rockiest island in reach: rockiness {bestRock:F2}");
             }
         }
+        if (PreferFarmed)
+        {
+            PreferFarmed = false;
+            int bestCrops = 0;
+            Vector3 farmAt = Vector3.zero;
+            foreach (var d in SeaSick.Terrain.IslandScenery.Report)
+                if (d.crops > bestCrops) { bestCrops = d.crops; farmAt = d.centre; }
+            if (bestCrops > 0)
+            {
+                // Match the bake's centre back to a registered island: the
+                // cameras frame an Island, and its radius is what they back
+                // off by.
+                float near = float.MaxValue;
+                foreach (var isl in Island.All)
+                {
+                    float d2 = Vector3.Distance(isl.transform.position, farmAt);
+                    if (d2 < near) { near = d2; target = isl; best = Vector3.Distance(farmAt, shipAt); }
+                }
+                sb.AppendLine($"most-farmed island in reach: {bestCrops} wheat mats");
+            }
+            else sb.AppendLine("no island in reach has any wheat on it");
+        }
+
         Vector3 c = target.transform.position;
         float r = Mathf.Max(target.Radius, 60f);
         sb.AppendLine($"island at {c:F0}, radius {r:F0} m, {best:F0} m from the ship");

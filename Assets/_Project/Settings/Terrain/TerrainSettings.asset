@@ -468,6 +468,16 @@ MonoBehaviour:
   palmLatitude: -1400
   palmBand: 600
   sceneryLod0Distance: 220
+  standSpan: 0.55
+  standContrast: 2.7
+  standFloor: 0.13
+  groveFrequency: 0.0076923077
+  treeWarp: 1.5
+  scrubChance: 0.45
+  fieldSlopeMax: 0.17
+  fieldMaxRise: 26
+  cropSpacing: 1.95
+  farmedShare: 0.35
   detailFrequency: 0.04
   detailOctaves: 2
   detailAmplitude: 0.5
