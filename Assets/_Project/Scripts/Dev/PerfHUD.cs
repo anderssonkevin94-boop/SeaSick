@@ -82,6 +82,10 @@ namespace SeaSick.Dev
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Install()
         {
+            // A dev instrument has no business in a release build: it costs
+            // an IMGUI panel and an ocean sample every frame, and it
+            // contaminates the CostProbe baseline it exists to inform.
+            if (!Application.isEditor && !Debug.isDebugBuild) return;
             if (FindAnyObjectByType<PerfHUD>(FindObjectsInactive.Include) != null) return;
             var go = new GameObject("PerfHUD");
             go.AddComponent<PerfHUD>();

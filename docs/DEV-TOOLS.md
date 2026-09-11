@@ -905,3 +905,45 @@ even after it resolves. Measured 2026-09-11: switching desk to phone with the
 drawer open reported the anchor prompt across the drawer by 269 px as
 permanent, while the census on the same run showed them comfortably clear, and
 a clean start at either aspect reported nothing at all.
+
+## 2026-09-11 (later) — render settings, the timestep, and probes reading URP
+
+`ProjectSettings/TimeManager.asset`'s `Maximum Allowed Timestep` was 0.333 s —
+up to 16 physics steps replayed after one hitch, each one running the ocean
+batch. It is now 0.15. A consequence: with the unfocused editor throttled to
+~10 fps, a frame over 150 ms now loses simulation time instead of catching up
+on the next tick. Any probe measuring speed or distance against wall-clock
+(`DriveProbe`, `SeaTrialProbe`, `LoopProbe`, `CostProbe`) should be run with
+the editor focused, or have its numbers read as game-time rather than
+real-time.
+
+`Application.targetFrameRate` is now pinned to 60 on desktop at load, by
+`World/FramePacing.cs`. Probes that pin the rate themselves still save and
+restore it around the run.
+
+`TerrainPerfProbe` now reads shadow distance and cascade count off the URP
+asset instead of the legacy `QualitySettings` fields, which URP overrides —
+it was reporting 40 m / 2 cascades while the renderer actually ran 50 m / 4.
+
+New `RunProbe` launchers: `Divergence`, `Perf`, `FFT`, `Strip`, `StripSun`,
+`StripDay`.
+
+### `DivergenceProbe` and `PerfProbe` moved to `Scripts/Dev/` (2026-09-11)
+
+Both were MonoBehaviours in `Dev/Editor/`, so `Execute()` logged "Can't add
+script behaviour ... because it is an editor script" and measured NOTHING -- the
+same fault that killed every `ShaderStrip` sheet on 08-28, and it went unnoticed
+because nobody reads the console for a probe that "ran". `RunProbe.Divergence()`
+/ `RunProbe.Perf()` launch them now. The one editor API (`AssetDatabase` loading
+`OceanVerify.compute`) is `#if UNITY_EDITOR`-guarded.
+
+**The parity gate is RED, and has been since before today.** First run after
+the move: 5 of 5000 points over the 6.5 cm gate, p99.9 12.8 cm, ONE point at
+1130 cm, `env` max 0.000267 (unchanged), `disp` max 2.45 cm. A stash of
+today's sampler change reproduced the failure byte for byte, so it predates
+this session -- most likely the 09-09 `crestSharpen` pass (the sampler's
+Newton count tracks steepness, and 7 iterations was already "no headroom").
+The signature is a handful of outliers with the envelope unmoved: Newton not
+converging on a folding crest, where `det ~ 0` is clamped and the step goes
+wild. An 11 m error under the hull is a teleport. Fix belongs in
+`SampleJobs.cs` (step clamp and/or adaptive envelope refresh), gated here.

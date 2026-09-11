@@ -103,6 +103,19 @@ public static class RunProbe
     public static void TerrainPerf() => Call("TerrainPerfProbe");
     public static void HitchStorm() => Call("HitchProbe", "Storm");
     public static void Hitch() => Call("HitchProbe");
+    // The ocean's parity gate and its cost ledger. Both name SeaSick.Ocean
+    // and Unity.Collections, which is the reference set the ad-hoc compile
+    // does not have; through the project assembly they run. Play mode,
+    // OceanLab for Divergence.
+    public static void Divergence() => Call("DivergenceProbe");
+    public static void Perf() => Call("PerfProbe");
+    public static void FFT() => CallEditor("FFTUnit");
+    // The water shader's contact sheets. docs/DEV-TOOLS.md said to hand the
+    // file to execute_script; it names SeaSick.Ocean and SeaSick.Ship and
+    // dies there.
+    public static void Strip() => Call("ShaderStrip");
+    public static void StripSun() => Call("ShaderStrip", "SunAngles");
+    public static void StripDay() => Call("ShaderStrip", "DaySheet");
     public static void WeatherAxes() => Call("WeatherSheet", "Axes");
     public static void WeatherAxesLively() => Call("WeatherSheet", "AxesLively");
     public static void WeatherPatches() => Call("WeatherSheet", "Patches");

@@ -52,11 +52,17 @@ public class TerrainPerfProbe : MonoBehaviour
         for (int w = 0; w < 180; w++) yield return null;
 
         sb.AppendLine("TerrainPerfProbe — terrain load ledger");
-        // Identify the tier by shadow distance, not by QualitySettings.names:
-        // names is not indexed by level here and reported "PC" for Mobile.
+        // Shadow settings come off the URP asset, not QualitySettings: URP
+        // overrides the legacy fields, and this line reported 40 m / 2
+        // cascades for a renderer that was drawing 50 m / 4.
+        var rp = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline
+            as UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset;
+        float rpShadowDist = rp != null ? rp.shadowDistance : QualitySettings.shadowDistance;
+        int rpCascades = rp != null ? rp.shadowCascadeCount : QualitySettings.shadowCascades;
         sb.AppendLine("quality level " + QualitySettings.GetQualityLevel() +
-            ", shadow distance " + string.Format("{0:F0}", QualitySettings.shadowDistance) +
-            " m, shadow cascades " + QualitySettings.shadowCascades);
+            " (" + (rp != null ? rp.name : "no URP asset") + ")" +
+            ", shadow distance " + string.Format("{0:F0}", rpShadowDist) +
+            " m, shadow cascades " + rpCascades);
         sb.AppendLine("viewRadius " + st.settings.viewRadius + ", lod0 " + st.settings.lod0Radius +
             ", lod1 " + st.settings.lod1Radius + ", collider " + st.settings.colliderRadius +
             ", chunkRes " + st.settings.chunkResolution + ", jobsInFlight " + st.settings.jobsInFlight);
@@ -85,7 +91,7 @@ public class TerrainPerfProbe : MonoBehaviour
         int[] lodChunks = new int[8];
         int[] lodVerts = new int[8];
 
-        float shadowDist = QualitySettings.shadowDistance;
+        float shadowDist = rpShadowDist;
         Vector3 camPos = cam.transform.position;
 
         for (int i = 0; i < renderers.Length; i++)

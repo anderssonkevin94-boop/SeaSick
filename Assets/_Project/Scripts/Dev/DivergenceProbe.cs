@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Text;
+#if UNITY_EDITOR
 using UnityEditor;
+#endif
 using UnityEngine;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -142,8 +144,24 @@ public class DivergenceProbe : MonoBehaviour
         // Let the rebuild land and the readback ring refill before measuring.
         for (int f = 0; f < 12; f++) yield return null;
 
+        // Lives in Scripts/Dev, NOT Dev/Editor: a MonoBehaviour in an Editor
+        // folder cannot be AddComponent-ed ("Can't add script behaviour ...
+        // because it is an editor script"), so from the day it was moved there
+        // Execute() logged that line and measured nothing. The one editor API
+        // it needs is guarded instead.
+#if UNITY_EDITOR
         var verify = AssetDatabase.LoadAssetAtPath<ComputeShader>(
             "Assets/_Project/Art/Shaders/Ocean/OceanVerify.compute");
+#else
+        ComputeShader verify = null;
+#endif
+        if (verify == null)
+        {
+            System.IO.File.WriteAllText("/tmp/seasick-divergence.txt",
+                "DivergenceProbe: OceanVerify.compute not found (editor only)\n");
+            Debug.LogError("DivergenceProbe: OceanVerify.compute not found");
+            yield break;
+        }
         int kernel = verify.FindKernel("VerifySample");
 
         var rng = new System.Random(99);
