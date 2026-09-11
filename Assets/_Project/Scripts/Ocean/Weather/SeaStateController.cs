@@ -115,9 +115,10 @@ namespace SeaSick.Ocean
         // is confused pyramidal water. One sea state, three different days.
         //
         // Nothing here changes how BIG the sea is. That is deliberate and it
-        // is a hard constraint, not a preference: NewtonIterations is 7
-        // against a 0.4 ms budget with no headroom, so this layer may only
-        // ever move character. The swell split below is variance-preserving
+        // is a hard constraint, not a preference: the sampler's inversion
+        // runs at 0.29 ms against a 0.4 ms budget (backtracking Newton, up
+        // to ten steps, early exit), so this layer may only ever move
+        // character. The swell split below is variance-preserving
         // for exactly that reason.
         [Tooltip("Seconds for the wind to back and veer through its range. The local wind is the fast axis -- it is weather happening HERE. A day is 180 s, so 300 s is a wind that changes over a day and a half.")]
         [SerializeField] float windTurnPeriod = 300f;
@@ -441,8 +442,8 @@ namespace SeaSick.Ocean
             //   -> 78.0, and halved the median wavelength from 340 m to 185.
             //   The SWELL-ONLY face angle barely moved, which is the tell: the
             //   mountain was not steeper, energy had slid down into the short
-            //   train. NewtonIterations is 7 with no headroom; that is not
-            //   affordable.
+            //   train. The sampler's Newton budget has little headroom
+            //   (0.29 of 0.4 ms); that is not affordable.
             //
             //   Toward the FIRST train. Safe for steepness (median face came
             //   back to 14.5 deg) and wrong for a different reason: 98% in one

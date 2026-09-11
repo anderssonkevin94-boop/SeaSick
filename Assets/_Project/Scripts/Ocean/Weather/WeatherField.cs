@@ -114,6 +114,18 @@ namespace SeaSick.Ocean
             Bake();
         }
 
+        /// patchRangeHi.x MUST stay 1 -- RegionField.cs and RegionField.hlsl
+        /// both assert it in capitals: cascade 0 carries nearly all of Hs, and
+        /// an envelope above 1 on it asks for waves the depth limit cannot
+        /// hold. Nothing upstream enforced that, so clamp it here rather than
+        /// trust every inspector edit.
+        void OnValidate() => ClampPatchRangeHi();
+
+        void ClampPatchRangeHi()
+        {
+            if (patchRangeHi.x > 1f) patchRangeHi.x = 1f;
+        }
+
         void OnDisable()
         {
             if (Instance == this) Instance = null;
@@ -193,6 +205,7 @@ namespace SeaSick.Ocean
 
         void Bake()
         {
+            ClampPatchRangeHi();
             int n = Mathf.Max(8, tileTexels);
             tileTexels = n;
             if (tile.IsCreated && tile.Length != n * n) tile.Dispose();

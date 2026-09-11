@@ -129,7 +129,7 @@ public static class SpectrumProbe2
         int n = cascades.N;
         int groups = Mathf.CeilToInt(n / 8f);
         evolve.SetInt("_N", n);
-        evolve.SetFloat("_Time", t);
+        evolve.SetFloat("_OceanTime", t);
         evolve.SetFloat("_Lambda", settings.choppiness);
         evolve.SetTexture(kEvolve, "H0", cascades.H0);
         evolve.SetTexture(kEvolve, "WaveData", cascades.WaveData);

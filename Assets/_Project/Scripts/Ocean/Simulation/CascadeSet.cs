@@ -62,18 +62,21 @@ namespace SeaSick.Ocean
             Scratch = NewArray(n, RenderTextureFormat.ARGBFloat, false);
             Displacement = NewArray(n, RenderTextureFormat.ARGBHalf, true);
             Derivatives = NewArray(n, RenderTextureFormat.ARGBHalf, true);
-            Turbulence = NewArray(n, RenderTextureFormat.RHalf, true);
-            TurbulencePrev = NewArray(n, RenderTextureFormat.RHalf, true);
+            // FoamAccumulate writes only uint3(id.xy, 0) and Ocean.shader reads
+            // only slice 0 -- the foam layer lives on the cascade-0 grid and is
+            // never per-cascade -- so one slice is correct, not a shortcut.
+            Turbulence = NewArray(n, RenderTextureFormat.RHalf, true, 1);
+            TurbulencePrev = NewArray(n, RenderTextureFormat.RHalf, true, 1);
 
             Noise = BuildNoise(n, noiseSeed);
         }
 
-        static RenderTexture NewArray(int n, RenderTextureFormat fmt, bool bilinearRepeat)
+        static RenderTexture NewArray(int n, RenderTextureFormat fmt, bool bilinearRepeat, int depth = Cascades)
         {
             var rt = new RenderTexture(n, n, 0, fmt, RenderTextureReadWrite.Linear)
             {
                 dimension = TextureDimension.Tex2DArray,
-                volumeDepth = Cascades,
+                volumeDepth = depth,
                 enableRandomWrite = true,
                 useMipMap = false,
                 filterMode = bilinearRepeat ? FilterMode.Bilinear : FilterMode.Point,

@@ -947,3 +947,38 @@ The signature is a handful of outliers with the envelope unmoved: Newton not
 converging on a folding crest, where `det ~ 0` is clamped and the step goes
 wild. An 11 m error under the hull is a teleport. Fix belongs in
 `SampleJobs.cs` (step clamp and/or adaptive envelope refresh), gated here.
+
+### The parity gate, taken from 11 m to 11 cm (2026-09-11, later)
+
+`RunProbe.Divergence()` in OceanLab, storm at +25 % choppiness, five instants,
+5000 points. Every number below is from that run; the file is
+`/tmp/seasick-divergence.txt`.
+
+| sampler | over gate | worst | mean | SampleBatch |
+|---|---|---|---|---|
+| as found (7 plain Newton steps) | 5 | 1130 cm | 0.575 cm | 0.305 ms |
+| + step clipped to 2|r| | 10 | 580 cm | 0.418 | 0.259 |
+| backtracking on every step | 3 | 212 cm | 0.268 | 0.191 |
+| Newton trusted off-fold, FoldDet 1e-3 | 4 | 241 cm | 0.297 | 0.175 |
+| + best-so-far, damped second start | **3** | **11 cm** | **0.250** | **0.290** |
+
+What each row taught, so nobody re-walks it: clipping every step throttles
+the legitimate large steps steep water needs (one instant went 1.5 -> 107 cm);
+backtracking on every step stalls points plain Newton converges (Newton is
+not monotone in |r|); a fold threshold of 0.05 diverts near-fold points that
+converge fine; and the point that never improved from p = q (14 m residual)
+needed a different START, not a better step.
+
+**The gate is still 3 of 5000, and that is the honest state.** The probe now
+prints each outlier with the sampler's final residual (`OceanSample.residual`,
+new): the three are at fold TIPS with 3-20 cm residuals -- the readback
+disagrees with the live texture by up to 2.45 cm (`disp`), and at a fold tip
+that is enough for the query to have no exact inverse in the CPU's field. A
+fourth point converged to 0.1 mm and is still 2.1 m off: a genuine
+multi-valued fold, where the renderer's vertex is another sheet. It is
+reported, not gated -- a question with two answers cannot fail for giving one.
+The gate's PASS now counts non-converged outliers only.
+
+Cost: 0.290 ms of 0.4 (early exit pays for up to ten steps; the second start
+is what took it back up from 0.175). `SeaStateController`'s "no headroom"
+comments now say 0.29 of 0.4.

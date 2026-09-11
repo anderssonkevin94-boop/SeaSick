@@ -23,4 +23,4 @@ MonoBehaviour:
   intersectionFoam: 1
   rippleSimResolution: 512
   rippleSimExtent: 100
-  readbackCascades: 2
+  refraction: 1

@@ -28,9 +28,12 @@ namespace SeaSick.Ocean
         public int rippleSimResolution = 512;
         public float rippleSimExtent = 100f;
 
-        [Header("Physics readback")]
-        [Tooltip("How many cascades physics reads back (coarsest first). Hull probes never care about cascade 2's ripples.")]
-        public int readbackCascades = 2;
+        [Header("Rendering")]
+        [Tooltip("See through the water: scene depth + opaque colour, Beer-Lambert murk and the refracted bottom. " +
+                 "Needs the URP asset to bind the depth AND opaque textures — the mobile asset requires neither, " +
+                 "so on the phone the samplers are unbound and the sea renders opaque or black while still paying " +
+                 "for the fetches. Drives the Ocean shader's _REFRACTION keyword from OceanClipmap.")]
+        public bool refraction = true;
 
         static OceanQuality active;
 

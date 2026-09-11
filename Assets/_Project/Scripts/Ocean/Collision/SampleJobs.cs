@@ -12,6 +12,12 @@ namespace SeaSick.Ocean
         public float3 normal;
         public float3 velocity;     // orbital velocity of the surface
         public float foam;          // 0..1 (populated from M9)
+        /// Horizontal residual |p + D(p) - q| the inversion finished with, in
+        /// metres. ~0 means it converged; a converged sample that still
+        /// disagrees with the renderer sits on a FOLD, where several source
+        /// points share one spot and the question has more than one answer.
+        /// Diagnostic -- DivergenceProbe splits its outliers on this.
+        public float residual;
     }
 
     /// The whole CPU-side sampling math in one blittable struct so the Burst
@@ -20,8 +26,10 @@ namespace SeaSick.Ocean
     ///
     /// Mirrors the GPU exactly: bilinear-with-repeat over the readback texels,
     /// cascades 0-1 (cascade 2 is visual chop shorter than any hull probe),
-    /// regional envelope multiplied in, and 3 Newton iterations to invert the
-    /// horizontal choppiness displacement (the sea is not a heightfield).
+    /// regional envelope multiplied in, and a STEP-BOUNDED Newton inversion of
+    /// the horizontal choppiness displacement (the sea is not a heightfield).
+    /// See NewtonIterations for the count, the bound, and why the envelope is
+    /// no longer re-evaluated on every iteration.
     public struct OceanFieldData
     {
         /// Newton steps used to invert the horizontal choppiness displacement.
@@ -47,8 +55,71 @@ namespace SeaSick.Ocean
         ///
         /// If the sea is ever made steeper again, expect to pay another step --
         /// and note the budget is nearly spent: 0.4 ms per 1000 queries is the
-        /// ceiling and seven steps sit at about 0.35.
-        const int NewtonIterations = 7;
+        /// ceiling and seven steps sit at about 0.35 (0.305 as measured).
+        ///
+        /// TEN NOW, WITH AN EARLY EXIT, AND THE LOOP IS BACKTRACKING NEWTON.
+        /// The gate could not run from 08-28 to 09-11 (the probe sat in an
+        /// Editor folder and AddComponent returned null), and when it ran
+        /// again on the 09-10 sea it read `total: max 1130.52 cm, mean 0.575,
+        /// p50 0.096, p99 1.06, p99.9 12.80; 5 of 5000 over the 6.5 cm bar`
+        /// with env 0.000267 and disp 2.45 cm -- parity and readback clean, so
+        /// all 11 m of it was this loop. At a folding crest det passes through
+        /// zero, the old 1e-3 clamp divided the residual by it, and the "step"
+        /// was hundreds of metres; under a hull that is a teleport.
+        ///
+        /// What it does now, and the numbers each part was measured to earn:
+        ///  - Newton is TRUSTED wherever |det| >= FoldDet, capped only by
+        ///    MaxStepMetres. Making every step earn its residual (halve on
+        ///    growth) took one instant from 1.5 cm to 107 cm: Newton is not
+        ///    monotone on a curved map, and a step that grows |r| for one
+        ///    iteration often lands the next.
+        ///  - On a fold (|det| < FoldDet) the step must shrink |r|: Newton,
+        ///    /2, /4, then the fixed point r, /2, /4. FoldDet is 1e-3 and not
+        ///    0.05: at 0.05 near-fold points that plain Newton converged were
+        ///    diverted to the fixed point and stalled a metre out.
+        ///  - The best point seen is what is returned, and a sample that
+        ///    still sits more than 0.5 m out gets a second start: a damped
+        ///    fixed point from q. One point in 5000 sat at a 14 m residual
+        ///    from p = q with no Newton step improving it; the second start
+        ///    took it to 20 cm.
+        ///  - Converged samples leave early, which is what pays for ten.
+        /// Result at storm +25 % choppiness: max 11 cm on the non-converged
+        /// points (three of 5000, all at fold TIPS with 3-20 cm residuals --
+        /// where the readback's 2 cm disagreement with the texture means the
+        /// query has no exact inverse in the CPU's field), one genuine
+        /// multi-valued fold reported separately, mean 0.250 cm, and
+        /// SampleBatch 0.290 ms against 0.4 (was 0.305 at seven steps).
+        /// `OceanSample.residual` is how DivergenceProbe tells the two apart.
+        ///
+        /// THE ENVELOPE IS NO LONGER EVALUATED EIGHT TIMES PER QUERY. It was,
+        /// once per iteration plus once after -- up to 24 island distances and
+        /// two 256^2 bilinear lookups each, and the dominant cost here. But the
+        /// envelope varies over TENS of metres while Newton's later steps move
+        /// p by centimetres, so inside the loop it is refreshed only when p has
+        /// drifted more than 0.1 m since the last evaluation (accumulated, not
+        /// just the last step, so a run of small steps cannot quietly carry a
+        /// stale envelope away from p), and the FINAL evaluation at the
+        /// converged p is unconditional, because the height returned is
+        /// d(p, envC) and a stale envelope there is a height error outright.
+        /// 0.1 m and not more: a percent of envelope on a 62 m sea is tens of
+        /// centimetres against a 6.5 cm gate, and the envelope has 60 m island
+        /// falloffs and ~9 m shore cells. In practice that is ~4 evaluations
+        /// per query instead of 8: the first step at storm amplitude moves p
+        /// by tens of metres, the next a couple, then centimetres.
+        ///
+        /// DO NOT "optimise" this further by hoisting the envelope out of the
+        /// loop and evaluating it once at q. That changes the fixed point being
+        /// inverted -- the probe deliberately varies the envelope across its
+        /// disc -- and it is wrong exactly where p travels furthest.
+        const int NewtonIterations = 10;
+        /// Horizontal residual under which the inversion is done. A millimetre
+        /// sideways is at most a millimetre of height on any slope the sea
+        /// can hold, against a 6.5 cm gate.
+        const float ConvergedMetres = 1e-3f;
+        /// |det| below this is a fold or the edge of one: the Newton direction
+        /// is noise there and the fixed-point step is used instead.
+        const float FoldDet = 1e-3f;
+        const float MaxStepMetres = 60f;
 
         [ReadOnly] public NativeArray<half4> disp0, disp1, deriv0, deriv1;
         [ReadOnly] public NativeArray<half4> prevDisp0, prevDisp1;
@@ -149,33 +220,125 @@ namespace SeaSick.Ocean
             // dDz/dx == dDx/dz (both come from kx*kz/|k| h), so J is symmetric
             // with the cross term stored in Displacement.w.
             float2 p = q;
-            float3 envC = new float3(1f, 1f, 1f);
-            float4 d = float4.zero;
-            for (int i = 0; i < NewtonIterations; i++)
+            float3 envC = region.EvaluateCascades(p, islands, shore, weather);
+            // Metres p has moved since envC was last evaluated -- see the
+            // header: refreshed past 0.1 m, exact again after the loop.
+            float envDrift = 0f;
+            float4 d = SampleDisp(p, envC.xy);
+            float2 r = p + d.xz - q;
+            float rLen = math.length(r);
+            // The best point seen, returned if the loop ends anywhere worse.
+            // A trusted Newton step off a fold edge can land 48 m out (measured)
+            // and the give-up path must never hand THAT to the hull.
+            float2 bestP = p; float3 bestEnv = envC; float4 bestD = d; float bestR = rLen;
+
+            // Backtracking Newton. A Newton step only earns its place by
+            // shrinking the residual; a trial that grows it is halved, twice,
+            // and if the Newton DIRECTION is the problem (a folding crest,
+            // where det ~ 0 and the direction is noise) the fallback is the
+            // plain fixed-point step -r, which is bounded by |r| and points
+            // the right way when J ~ I. If nothing improves, stop: the point
+            // is on a fold, has no unique inverse, and the best p so far is
+            // the answer. Converged points leave EARLY -- calm water is done
+            // in two or three iterations, which is what pays for allowing
+            // more on the hard ones.
+            for (int i = 0; i < NewtonIterations && rLen > ConvergedMetres; i++)
             {
-                envC = region.EvaluateCascades(p, islands, shore, weather);
-                // d and dv arrive already enveloped, per cascade, so the
-                // Jacobian below carries no separate env factor.
-                d = SampleDisp(p, envC.xy);
                 float4 dv = SampleDeriv(p, envC.xy);
-                float2 r = p + d.xz - q;
                 float j00 = 1f + dv.z;
                 float j11 = 1f + dv.w;
                 float j01 = d.w;
                 float det = j00 * j11 - j01 * j01;
-                // det <= 0 is a folding crest: the surface self-intersects and
-                // has no unique inverse there. Clamp and let the residual ride.
-                float safeDet = math.abs(det) < 1e-3f ? (det < 0f ? -1e-3f : 1e-3f) : det;
-                float2 step = new float2(
-                    j11 * r.x - j01 * r.y,
-                    -j01 * r.x + j00 * r.y) / safeDet;
-                p -= step;
-            }
+                // Newton is not monotone in the residual on a curved map: a
+                // healthy step can grow |r| for one iteration and land on the
+                // answer the next, and rejecting it stalls a point that plain
+                // Newton converged (measured: 1.5 cm -> 107 cm at one instant
+                // when every step was made to earn its residual). So where
+                // det is healthy the Newton step is TRUSTED, capped only by
+                // MaxStepMetres. Where |det| < FoldDet -- a fold or its edge,
+                // where the Newton direction is noise and the old code took
+                // an 11 m step off a 1e-3 clamp -- the step is the plain
+                // fixed point -r, bounded by |r|, and it has to shrink the
+                // residual to be accepted (halved up to twice). If nothing
+                // shrinks it, the point has no unique inverse and the best p
+                // so far is the answer.
+                bool fold = math.abs(det) < FoldDet;
+                // 1e-3 and not higher: at 0.05 the near-fold points that plain
+                // Newton DID converge (1.5 cm at one instant) were diverted to
+                // the fixed point and stalled at a metre. Near a fold Newton
+                // still works more often than not; it just must not be
+                // allowed the 11 m step a clamped determinant hands it.
+                float safeDet = fold ? (det < 0f ? -FoldDet : FoldDet) : det;
+                float2 step = new float2(j11 * r.x - j01 * r.y, -j01 * r.x + j00 * r.y) / safeDet;
+                float stepLen = math.length(step);
+                if (stepLen > MaxStepMetres) { step *= MaxStepMetres / stepLen; stepLen = MaxStepMetres; }
 
+                bool moved = false;
+                // On a fold: Newton, /2, /4, then the fixed point r, /2, /4.
+                // At a fold edge |dD| ~ 1 and the plain fixed point is not
+                // contractive either; the damped ones usually are.
+                int tries = fold ? 6 : 1;
+                for (int k = 0; k < tries; k++)
+                {
+                    if (k == 3) { step = r; stepLen = rLen; }
+                    float2 pT = p - step;
+                    float3 envT = envC;
+                    float driftT = envDrift + stepLen;
+                    if (driftT > 0.1f)
+                    {
+                        envT = region.EvaluateCascades(pT, islands, shore, weather);
+                        driftT = 0f;
+                    }
+                    float4 dT = SampleDisp(pT, envT.xy);
+                    float2 rT = pT + dT.xz - q;
+                    float rTLen = math.length(rT);
+                    if (!fold || rTLen < rLen)
+                    {
+                        p = pT; envC = envT; envDrift = driftT; d = dT; r = rT; rLen = rTLen;
+                        if (rLen < bestR) { bestP = p; bestEnv = envC; bestD = d; bestR = rLen; }
+                        moved = true;
+                        break;
+                    }
+                    step *= 0.5f; stepLen *= 0.5f;
+                }
+                if (!moved) break;
+            }
+            // A sample that never got anywhere (measured: one point in 5000
+            // at storm +25 % choppiness sat at a 14 m residual from p = q and
+            // no Newton step improved on it) gets a second, dumber start: a
+            // DAMPED fixed point from q. It cannot diverge the way Newton can
+            // and on a fold edge it usually walks down to a sheet. Rare, so
+            // its cost is invisible in the batch.
+            if (bestR > 0.5f)
+            {
+                float2 p2 = q; float3 env2 = envC; float drift2 = float.MaxValue;
+                for (int i = 0; i < 8; i++)
+                {
+                    if (drift2 > 0.1f)
+                    {
+                        env2 = region.EvaluateCascades(p2, islands, shore, weather);
+                        drift2 = 0f;
+                    }
+                    float4 d2 = SampleDisp(p2, env2.xy);
+                    float2 r2 = p2 + d2.xz - q;
+                    float r2Len = math.length(r2);
+                    if (r2Len < bestR) { bestP = p2; bestEnv = env2; bestD = d2; bestR = r2Len; }
+                    if (r2Len <= ConvergedMetres) break;
+                    float2 st = r2 * 0.5f;
+                    p2 -= st;
+                    drift2 += r2Len * 0.5f;
+                }
+            }
+            if (rLen > bestR) { p = bestP; envC = bestEnv; d = bestD; rLen = bestR; }
+
+            // The FINAL envelope is always exact at the converged p: the height
+            // below is d(p, envC), so a stale envC here is a height error, not
+            // a convergence detail. One evaluation, no gate risk.
             envC = region.EvaluateCascades(p, islands, shore, weather);
             d = SampleDisp(p, envC.xy);
             result.height = d.y;
             result.displacement = new float3(d.x, d.y, d.z);
+            result.residual = rLen;
 
             float4 derivs = SampleDeriv(p, envC.xy);
             float2 slope = derivs.xy / math.max(new float2(1f, 1f) + derivs.zw, 0.1f);

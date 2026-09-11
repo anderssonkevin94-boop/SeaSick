@@ -37,13 +37,70 @@ namespace SeaSick.Ocean
         readonly List<Transform> rings = new List<Transform>();
         readonly List<float> cellSizes = new List<float>();
 
+        /// The material every ring is actually drawn with at runtime: a COPY of
+        /// the authored `material`, made once in Start and destroyed in
+        /// OnDestroy.
+        ///
+        /// Why a copy at all. The ocean shader's see-through half now lives
+        /// behind a `_REFRACTION` keyword, and the keyword has to be set per
+        /// TIER, from OceanQuality.Active — a runtime decision. The authored
+        /// material is a shared asset: setting a keyword on it in play mode
+        /// writes through to the .mat on disk in the editor, which is how a
+        /// "PC" asset silently ends up saved with the phone's keyword state
+        /// (and the reverse), and there is exactly one OceanSurface.mat handed
+        /// out from a scene field, so there is nowhere else for that damage to
+        /// land. An instance keeps the decision where it belongs — in the
+        /// running game — and guarantees the project's own rule that runtime
+        /// material edits do not survive leaving play mode.
+        ///
+        /// It is also why the shader uses `multi_compile` and not
+        /// `shader_feature`: shader_feature strips variants against the
+        /// keywords SAVED ON THE ASSET at build time, so the variant this
+        /// instance wants might not exist in the player at all. multi_compile
+        /// keeps both and this line picks one.
+        Material instance;
+
         public Transform FollowOverride { get => followOverride; set => followOverride = value; }
-        public Material Material { get => material; set => material = value; }
+
+        /// The material the rings are drawn with — the runtime instance once
+        /// Start has run, the authored asset before that. Anything that writes
+        /// shader properties at runtime (WaterClarityTuner, SeaFoamTuner, the
+        /// look probes) must hit the instance or its edits go to a material
+        /// nothing on screen is using. The dev tuners find it by scanning
+        /// renderers for `sharedMaterial` with shader "SeaSick/Ocean", which
+        /// lands on the instance by construction.
+        public Material Material
+        {
+            get => instance != null ? instance : material;
+            set { material = value; if (instance != null) ApplyQualityKeywords(instance); }
+        }
         public int RingCount => rings.Count;
 
         void Start()
         {
+            // ONE instance for the whole clipmap, made BEFORE the rings so
+            // every ring is handed the same material and they still batch.
+            if (material != null)
+                instance = new Material(material) { name = material.name + " (clipmap)" };
+            ApplyQualityKeywords(instance);
             Build();
+        }
+
+        void OnDestroy()
+        {
+            if (instance != null) Destroy(instance);
+            instance = null;
+        }
+
+        /// Tier-driven shader keywords for the ocean material. Kept in one
+        /// place so the rule is not restated per ring.
+        static void ApplyQualityKeywords(Material m)
+        {
+            if (m == null) return;
+            var q = OceanQuality.Active;
+            bool refraction = q != null ? q.refraction : true;
+            if (refraction) m.EnableKeyword("_REFRACTION");
+            else m.DisableKeyword("_REFRACTION");
         }
 
         public void Build()
@@ -70,7 +127,13 @@ namespace SeaSick.Ocean
                 go.transform.SetParent(transform, false);
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
                 var mr = go.AddComponent<MeshRenderer>();
-                mr.sharedMaterial = material;
+                // `instance` in play mode; the authored asset when an editor
+                // setup script or probe rebuilds the rings outside of it,
+                // where there is no instance and nothing to keep a keyword
+                // decision out of. Never `mr.material`: that would mint a
+                // SECOND copy per ring and break both batching and the dev
+                // tuners, which expect one ocean material to write to.
+                mr.sharedMaterial = instance != null ? instance : material;
                 mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
                 rings.Add(go.transform);

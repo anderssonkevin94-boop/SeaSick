@@ -36,7 +36,9 @@ cbuffer Params
     // without re-running DivergenceProbe.
     float4 _LambdaC;   // xyz = per-cascade lambda, w unused
     uint _N;
-    float _Time;
+    // Named _OceanTime, not _Time: the latter is a Unity built-in shader
+    // global and colliding with it silently feeds the wrong clock in.
+    float _OceanTime;
 }
 
 float2 CMul(float2 a, float2 b)
@@ -62,7 +64,7 @@ void TimeEvolve(uint3 id : SV_DispatchThreadID)
     }
 
     float s, c;
-    sincos(wd.z * _Time, s, c);
+    sincos(wd.z * _OceanTime, s, c);
     float2 e = float2(c, s);
     // h(k,t) = h0(k) e^{iwt} + conj(h0(-k)) e^{-iwt}
     float2 h = CMul(h0.xy, e) + CMul(h0.zw, float2(e.x, -e.y));

@@ -96,13 +96,39 @@ Shader "SeaSick/Ocean"
             Tags { "LightMode" = "UniversalForward" }
             Cull Off
             HLSLPROGRAM
+            // The VERTEX stage samples Texture2DArrays (SampleDisplacement,
+            // three cascades) -- vertex texture fetch, which is Shader Model
+            // 3.5 and up. Nothing declared a target before, so the compiler
+            // assumed the 2.5 default and the whole displacement path was
+            // legal only by accident of the platforms we happened to build.
+            #pragma target 3.5
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma multi_compile_fog
+            // Seeing THROUGH the water costs two _CameraDepthTexture fetches,
+            // one _CameraOpaqueTexture fetch and three exps per water pixel,
+            // and it only works where URP actually binds those textures. The
+            // mobile URP asset has m_RequireDepthTexture: 0 and
+            // m_RequireOpaqueTexture: 0, so on the phone neither is bound: the
+            // sea came out opaque on reverse-Z platforms and BLACK on GLES3 --
+            // while still paying for every one of those fetches. Behind a
+            // keyword the phone does not compile the block at all.
+            //
+            // multi_compile and NOT shader_feature, deliberately. There is one
+            // shared OceanSurface.mat, handed to every ring as sharedMaterial
+            // from a scene field. shader_feature strips variants against the
+            // keyword state SAVED ON THE MATERIAL ASSET, so whichever of the
+            // two the asset was not saved with would simply not exist in the
+            // player, and the tier that wanted it would draw the error shader.
+            // multi_compile keeps both and lets OceanClipmap choose at runtime
+            // from OceanQuality.Active.refraction.
+            #pragma multi_compile_local_fragment _ _REFRACTION
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #if defined(_REFRACTION)
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
+            #endif
             #include "RegionField.hlsl"
 
             TEXTURE2D_ARRAY(_Ocean_Displacement);
@@ -272,43 +298,50 @@ Shader "SeaSick/Ocean"
                 return d;
             }
 
-            float4 SampleDerivs(float2 worldXZ, float fade, float3 envC, float3 wC)
+            // ONE pass over the three cascades feeding TWO weighted sums of
+            // the same _Ocean_Derivatives texels.
+            //
+            // These used to be two functions, `SampleDerivs` and `SampleFold`,
+            // called a hundred lines apart in the fragment -- and they looped
+            // over the same three cascades sampling _Ocean_Derivatives at the
+            // same UVs at the same LOD. Only the weights differed: the shading
+            // normals ride the clipmap weights (`wD = wC * fade * envC`), the
+            // foam's Jacobian rides the lifted ones (`wF = wJ * envC`) because
+            // the foam must be allowed to see bands the mesh cannot draw --
+            // see `_FoamBandLift`. Same texel, fetched twice, per water pixel.
+            //
+            // Merged, each texel is fetched once and both sums are accumulated
+            // from it. Each accumulator keeps its OWN `w <= 0.001` early-out
+            // and its own per-cascade summation order, so both results are
+            // bit-identical to the two loops this replaces -- this is a
+            // refactor and not a retune, and nothing about the water changes.
+            //
+            // `fold` is the three terms of the displacement Jacobian: dxx and
+            // dzz from the derivative texture, and the CROSS term Dxz from
+            // Displacement.w. That second fetch stays exactly where it was --
+            // only the fold wants it, so only the fold pays for it.
+            void SampleDerivsAndFold(float2 worldXZ, float3 wD, float3 wF,
+                out float4 dv, out float3 fold)
             {
-                float4 dv = 0;
+                dv = 0;
+                fold = 0;   // x = dxx, y = dzz, z = dxz
                 [unroll]
                 for (int c = 0; c < 3; c++)
                 {
-                    float w = wC[c] * fade * envC[c];
-                    if (w <= 0.001) continue;
+                    bool useD = wD[c] > 0.001;
+                    bool useF = wF[c] > 0.001;
+                    if (!useD && !useF) continue;
                     float2 uv = worldXZ / _Ocean_PatchSizes[c];
-                    dv += w * SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Derivatives,
+                    float4 d = SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Derivatives,
                         sampler_Ocean_Derivatives, uv, c, 0);
+                    if (useD) dv += wD[c] * d;
+                    if (useF)
+                    {
+                        float cross = SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Displacement,
+                            sampler_Ocean_Displacement, uv, c, 0).w;
+                        fold += wF[c] * float3(d.z, d.w, cross);
+                    }
                 }
-                return dv;
-            }
-
-            // The three terms of the displacement Jacobian: dxx and dzz from
-            // the derivative texture, and the CROSS term Dxz from
-            // Displacement.w. The cross term is what the vertex path never
-            // wanted, which is how the fragment's Jacobian came to be missing
-            // it. Weights are passed in rather than derived, because the foam
-            // must be allowed to see bands the mesh cannot draw -- see
-            // `_FoamBandLift`.
-            float3 SampleFold(float2 worldXZ, float3 w)
-            {
-                float3 s = 0;   // x = dxx, y = dzz, z = dxz
-                [unroll]
-                for (int c = 0; c < 3; c++)
-                {
-                    if (w[c] <= 0.001) continue;
-                    float2 uv = worldXZ / _Ocean_PatchSizes[c];
-                    float4 dv = SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Derivatives,
-                        sampler_Ocean_Derivatives, uv, c, 0);
-                    float cross = SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Displacement,
-                        sampler_Ocean_Displacement, uv, c, 0).w;
-                    s += w[c] * float3(dv.z, dv.w, cross);
-                }
-                return s;
             }
 
             // Two octaves of value noise, world-anchored: tears the raw
@@ -397,10 +430,34 @@ Shader "SeaSick/Ocean"
                 float env = input.data.x;
                 float fade = input.data.y;
                 float2 xz = input.positionWS.xz;
+                float dist = distance(xz, GetCameraPositionWS().xz);
+
+                // The foam's Jacobian weights, hoisted up from the foam block
+                // below. They are needed HERE only because the fold and the
+                // shading derivatives read the same three _Ocean_Derivatives
+                // texels and are now fetched together -- see
+                // SampleDerivsAndFold. Nothing in them depends on anything
+                // computed between here and their old home; they are a
+                // function of the interpolated weights and the distance.
+                //
+                // Lift the SHORT bands into the foam's Jacobian, fading the
+                // lift out with distance. Cascade 0 is already at full weight
+                // everywhere and needs none; cascade 2 needs all of it, and is
+                // the band that actually folds.
+                float old = saturate(_SS_FoamOldJ);
+                float liftK = _FoamBandLift * (1.0 - smoothstep(_FoamLiftFar * 0.25,
+                                                                _FoamLiftFar, dist));
+                float3 wJ = old > 0.5 ? input.wC * fade
+                          : saturate(input.wC + liftK * float3(0.0, 0.5, 1.0)) * fade;
 
                 // Per-pixel normals from the derivative bands. The horizontal
                 // squeeze term keeps crests sharp instead of shaded like domes.
-                float4 dv = SampleDerivs(xz, fade, input.envC, input.wC);
+                // `fold` comes out of the same fetches and is carried down to
+                // the foam block unchanged.
+                float4 dv;
+                float3 fold;
+                SampleDerivsAndFold(xz, input.wC * fade * input.envC,
+                                    wJ * input.envC, dv, fold);
                 float2 slope = dv.xy / max(float2(1.0, 1.0) + dv.zw, 0.15);
                 // Ripple sim contributes slope by finite difference + foam.
                 float2 sim = SampleSim(xz);
@@ -480,6 +537,19 @@ Shader "SeaSick/Ocean"
                 body = lerp(body, _ShoalColor.rgb,
                             shoal * shoal * _ShoalStrength * swd.y);
 
+                // Everything from here to the `body = lerp(...)` below is the
+                // see-through half of the water, and it is the only thing in
+                // this shader that needs the scene depth and colour textures.
+                // Without _REFRACTION the water keeps `body` exactly as it was
+                // computed above -- deep/shallow ramp, night dim and shoal
+                // tint -- and is simply opaque, which is what the sea looked
+                // like before the clarity pass and is a correct sea, not a
+                // degraded one. Nothing below this block reads `trans`,
+                // `column`, `refr`, `sceneEye`, `surfEye` or `suv`, so there
+                // is nothing to define in the other branch; `hullShield` above
+                // is still computed (its `clip()` is the hull cutout and has
+                // to happen either way) and is simply unused here.
+                #if defined(_REFRACTION)
                 float2 suv = GetNormalizedScreenSpaceUV(input.positionHCS);
                 // The fragment's SV_POSITION carries the NDC depth in .z and
                 // 1/w in .w -- not the eye depth. Take it through the same
@@ -511,6 +581,7 @@ Shader "SeaSick/Ocean"
                 // Meet the hull, do not dissolve into her.
                 trans *= 1.0 - hullShield;
                 body = lerp(body, SampleSceneColor(suv + refr), trans);
+                #endif // _REFRACTION
 
                 // The signature: sun behind a steep, choppy crest glows jade
                 // through the water toward the camera.
@@ -538,7 +609,6 @@ Shader "SeaSick/Ocean"
 
                 // Sun glitter, softened with distance so the far field never
                 // sparkles (a variance -> roughness stand-in).
-                float dist = distance(xz, GetCameraPositionWS().xz);
                 float rough = saturate(dist / max(_Ocean_FadeParams.y, 1.0));
                 float specPow = lerp(_SpecPowerNear, _SpecPowerFar, rough);
                 float3 H = normalize(L + Vf);
@@ -559,16 +629,8 @@ Shader "SeaSick/Ocean"
                 // was written; this is the instant layer catching up with the
                 // persistent one, and the two now agree on what "folding"
                 // means.
-                float old = saturate(_SS_FoamOldJ);
-                // Lift the SHORT bands into the foam's Jacobian, fading the
-                // lift out with distance. Cascade 0 is already at full weight
-                // everywhere and needs none; cascade 2 needs all of it, and is
-                // the band that actually folds.
-                float liftK = _FoamBandLift * (1.0 - smoothstep(_FoamLiftFar * 0.25,
-                                                                _FoamLiftFar, dist));
-                float3 wJ = old > 0.5 ? input.wC * fade
-                          : saturate(input.wC + liftK * float3(0.0, 0.5, 1.0)) * fade;
-                float3 fold = SampleFold(xz, wJ * input.envC);
+                // `old`, `liftK`, `wJ` and `fold` are computed up with the
+                // shading derivatives -- same three texels, one fetch each.
                 float j = (1.0 + fold.x) * (1.0 + fold.y) - fold.z * fold.z * (1.0 - old);
                 float snap = lerp(_FoamSnap, 0.25, old);
                 float breaking = saturate((_FoamJThreshold - j) / max(snap, 0.02));

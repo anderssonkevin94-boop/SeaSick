@@ -26,17 +26,23 @@ cbuffer Params
     float _U10;
     float _FetchMeters;
     float _Gamma;
-    float2 _WindDir;
+    // Direction fields are float4 (xy used, zw dead) rather than float2. The
+    // C# side sets each with SetVector, which always writes 16 bytes; a
+    // float2 here would pack two scalars into the same 16-byte slot right
+    // after it, and SetVector's write would clobber them whenever the
+    // direction was set after those scalars. float4 makes the slot exactly
+    // as wide as the write, so no call order can corrupt a neighbour.
+    float4 _WindDir;
     float _SwellHs;
     float _SwellK;
-    float2 _SwellDir;
+    float4 _SwellDir;
     float _SwellSharpness;
     // Second swell train. A real storm sea is two or three trains crossing at
     // an angle; ONE narrow train, however tall, is parallel corduroy and reads
     // as a hillside rather than a sea.
     float _Swell2Hs;
     float _Swell2K;
-    float2 _Swell2Dir;
+    float4 _Swell2Dir;
     float _Swell2Sharpness;
     // The wind-sea band. A third train, deliberately SHORT, sitting in
     // cascade 1 (16-64 m) -- the band the two swells and the JONSWAP peak all
@@ -52,7 +58,7 @@ cbuffer Params
     // averages them away, the raft spans 0.15 and takes the whole ride.
     float _WindSeaHs;
     float _WindSeaK;
-    float2 _WindSeaDir;
+    float4 _WindSeaDir;
     float _WindSeaSharpness;
     // Short-wave detail gain, an art knob over the physical tail. See
     // DetailBoost.
@@ -100,7 +106,7 @@ float SpreadNormalization(float s)
 
 float DirectionalSpread(float w, float wp, float2 kdir)
 {
-    float cosT = dot(kdir, _WindDir);
+    float cosT = dot(kdir, _WindDir.xy);
     float s = SpreadPower(w, wp);
     // cos^{2s}(theta/2) = ((1+cos theta)/2)^s
     float halfAngle = max((1.0f + cosT) * 0.5f, 0.0f);
@@ -221,17 +227,17 @@ float SpectralAmplitude(float2 kCenter, float dk, float bandLow, float bandHigh)
     // impossible for two cascades to simulate the same rollers twice, which
     // is the shimmer bug the band limits exist to prevent.
     if (_SwellK >= bandLow && _SwellK < bandHigh)
-        F += SwellBinMeanDensity(kCenter, dk, _SwellHs, _SwellK, _SwellDir, _SwellSharpness);
+        F += SwellBinMeanDensity(kCenter, dk, _SwellHs, _SwellK, _SwellDir.xy, _SwellSharpness);
     // The second train gets the same treatment and the same one-cascade gate.
     if (_Swell2K >= bandLow && _Swell2K < bandHigh)
-        F += SwellBinMeanDensity(kCenter, dk, _Swell2Hs, _Swell2K, _Swell2Dir, _Swell2Sharpness);
+        F += SwellBinMeanDensity(kCenter, dk, _Swell2Hs, _Swell2K, _Swell2Dir.xy, _Swell2Sharpness);
     // And the wind sea, same machinery, same gate. Its wavelength is authored
     // to land near the middle of cascade 1 in log-k so its gaussian fits
     // inside that cascade's band -- a bump straddling a band edge loses the
     // energy that falls outside, and the realised height stops being the
     // authored one.
     if (_WindSeaK >= bandLow && _WindSeaK < bandHigh)
-        F += SwellBinMeanDensity(kCenter, dk, _WindSeaHs, _WindSeaK, _WindSeaDir, _WindSeaSharpness);
+        F += SwellBinMeanDensity(kCenter, dk, _WindSeaHs, _WindSeaK, _WindSeaDir.xy, _WindSeaSharpness);
     // The h(k,t) = h0 e^{iwt} + conj(h0(-k)) e^{-iwt} construction places each
     // physical wave's energy at both +k and -k, and the complex gaussian xi
     // carries E|xi|^2 = 2; together they inflate variance 4x unless the bin

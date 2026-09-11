@@ -107,13 +107,16 @@ namespace SeaSick.Ocean
         /// NO PER-CASCADE LOOP, AND NO `[c]` ANYWHERE. This is not style. The
         /// three cascades used to be a `for` loop indexing float3s, and taking
         /// the address of a float3 to index it spills it to the stack and
-        /// stops Burst vectorising the function around it. This runs EIGHT
-        /// TIMES PER QUERY inside the sampler's Newton loop, and measured on
-        /// the shipped storm the loop form cost `SampleBatch` 0.38 -> 1.72 ms
-        /// per 1000 queries against a 0.4 ms budget -- a 4.5x blowout from
-        /// nothing but the indexing. Written as three-wide arithmetic it is
-        /// one pass of SIMD and comes in under the budget. If you add a term
-        /// here, add it as a float3.
+        /// stops Burst vectorising the function around it. This runs UP TO
+        /// EIGHT TIMES PER QUERY inside the sampler's Newton loop -- the
+        /// sampler only keeps refreshing the envelope while the Newton point
+        /// is still moving, so a converged point costs 2-3 calls and only a
+        /// folding crest costs the full eight -- and measured on the shipped
+        /// storm the loop form cost `SampleBatch` 0.38 -> 1.72 ms per 1000
+        /// queries against a 0.4 ms budget -- a 4.5x blowout from nothing but
+        /// the indexing. Written as three-wide arithmetic it is one pass of
+        /// SIMD and comes in under the budget. If you add a term here, add it
+        /// as a float3.
         public float3 EvaluateCascades(float2 p, NativeArray<float4> islands,
                                        NativeArray<float> shore, NativeArray<float> weather)
         {
@@ -250,6 +253,10 @@ namespace SeaSick.Ocean
     public class RegionField : MonoBehaviour
     {
         public const int MaxIslands = 24;
+
+        // Reused by PublishNeutralIfAbsent, which runs every frame there is no
+        // RegionField in the scene; an all-zero array, so sharing it is safe.
+        static readonly Vector4[] neutralIslands = new Vector4[MaxIslands];
 
         public static RegionField Instance { get; private set; }
 
@@ -504,7 +511,7 @@ namespace SeaSick.Ocean
             Shader.SetGlobalVector("_Ocean_PatchLo", new Vector4(1f, 1f, 1f, 0f));
             Shader.SetGlobalVector("_Ocean_PatchHi", new Vector4(1f, 1f, 1f, 0f));
             Shader.SetGlobalTexture("_Ocean_WeatherTex", Texture2D.whiteTexture);
-            Shader.SetGlobalVectorArray("_Ocean_Islands", new Vector4[MaxIslands]);
+            Shader.SetGlobalVectorArray("_Ocean_Islands", neutralIslands);
             Shader.SetGlobalTexture("_Ocean_ShoreTex", Texture2D.blackTexture);
         }
     }

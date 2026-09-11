@@ -120,9 +120,11 @@ static const float3 SS_IslandCoupling = float3(0.0, 0.55, 1.0);
 // Three-wide arithmetic and no `[c]` anywhere, matching the C# twin line for
 // line. There it is load-bearing rather than tidy: indexing a float3 in the
 // Burst job spills it to the stack and stops the function vectorising, and
-// this runs eight times per query inside the sampler's Newton loop -- measured
-// on the shipped storm, the per-cascade loop form cost SampleBatch 0.38 ->
-// 1.72 ms per 1000 queries against a 0.4 ms budget.
+// this runs up to eight times per query inside the sampler's Newton loop --
+// adaptively, since the sampler only keeps refreshing the envelope while the
+// Newton point is still moving -- and measured on the shipped storm, the
+// per-cascade loop form cost SampleBatch 0.38 -> 1.72 ms per 1000 queries
+// against a 0.4 ms budget.
 float3 RegionEnvelopeCascades(float2 p)
 {
     float d = distance(p, _Ocean_Region.xy);
@@ -161,8 +163,13 @@ float3 RegionEnvelopeCascades(float2 p)
     // 5 m of chop in 10 m of water is not breaking just because a 70 m swell
     // would be. The cap goes last so it beats the chop floor: in half a metre
     // of water there is no chop to have.
+    // Twin of the C# guard `shoreN > 0 && waveHs > 0.01f`: without a shore
+    // grid bound, swd.z is the nominal 1e9 "bottomless" depth and the cap
+    // would evaluate to a huge but finite number instead of staying off, so
+    // the shore-grid check (_Ocean_ShoreRect.w, texels per edge) must be
+    // ANDed in here too -- edit both halves of this guard or neither.
     float3 cap = 3.402823e38;
-    if (_Ocean_DepthLimit.y > 0.01)
+    if (_Ocean_ShoreRect.w >= 1.0 && _Ocean_DepthLimit.y > 0.01)
         cap = max(0.0, _Ocean_DepthLimit.x * swd.z / (_Ocean_DepthLimit.y * bw));
     return min(max(env, floorTerm), cap);
 }

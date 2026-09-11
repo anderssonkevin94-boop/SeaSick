@@ -108,7 +108,10 @@ namespace SeaSick.Ocean
             int groups = Mathf.CeilToInt(n / 8f);
 
             timeEvolveShader.SetInt("_N", n);
-            timeEvolveShader.SetFloat("_Time", (float)OceanTime.Now);
+            // Named _OceanTime, not _Time: the latter is a Unity built-in
+            // shader global and colliding with it silently feeds the wrong
+            // clock into the kernel.
+            timeEvolveShader.SetFloat("_OceanTime", (float)OceanTime.Now);
             // Choppiness is per cascade now. See `crestSharpen` on the
             // spectrum asset for why, and for which of the three are free.
             Vector3 cs = settings.crestSharpen;
