@@ -81,6 +81,12 @@ namespace SeaSick.Ocean
         Vector3[] plowAt;
         Vector3[] liftScratch;
         float probeHalfLength;
+        // Filled by FillQueries, read back by ApplyForces a few lines later
+        // in the same physics step (OceanPhysicsDriver always calls both,
+        // FillQueries first, with no transform-moving work in between) --
+        // so ApplyForces reuses these instead of calling TransformPoint on
+        // every probe a second time.
+        Vector3[] probeWorldCache;
 
         /// Share-weighted submersion this step, 0..1.
         public float Submersion { get; private set; }
@@ -250,8 +256,14 @@ namespace SeaSick.Ocean
         public void FillQueries(System.Span<Vector3> dst)
         {
             var probes = probeSet.Probes;
+            if (probeWorldCache == null || probeWorldCache.Length != probes.Length)
+                probeWorldCache = new Vector3[probes.Length];
             for (int i = 0; i < probes.Length; i++)
-                dst[i] = transform.TransformPoint(probes[i].localPosition);
+            {
+                Vector3 w = transform.TransformPoint(probes[i].localPosition);
+                probeWorldCache[i] = w;
+                dst[i] = w;
+            }
         }
 
         /// Called by OceanPhysicsDriver with this body's slice of the batch.
@@ -297,7 +309,7 @@ namespace SeaSick.Ocean
 
             for (int i = 0; i < probes.Length; i++)
             {
-                Vector3 world = transform.TransformPoint(probes[i].localPosition);
+                Vector3 world = probeWorldCache[i];
                 float depth = samples[i].height - (world.y + SeatOffset);
                 float sub = Mathf.Clamp01(depth / probes[i].radius + 0.5f);
                 subSum += sub * probes[i].volumeShare;

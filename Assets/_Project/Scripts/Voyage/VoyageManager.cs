@@ -86,6 +86,26 @@ namespace SeaSick.Voyage
         int completedSpoiled;
         string buildNote = "";
 
+        // --- The home panel's strings ---------------------------------------
+        //
+        // IMGUI runs OnGUI once per EVENT — Layout, Repaint, and one more for
+        // every mouse move — so the dozen interpolations this panel used to
+        // make were made several times a frame, `BankSummary`'s StringBuilder
+        // with them. See StatusHUD for the measurement; this is the same fix.
+        //
+        // None of it moves while the panel is up: the tally is fixed the
+        // moment she ties up, and the stores only change when something is
+        // built. So it is built when the CONTENT changes and not otherwise —
+        // a version the two places that change it bump, plus the two numbers
+        // themselves as a backstop against a path that forgets to.
+        int panelVersion;
+        long panelBuiltFor = long.MinValue;
+        string tallyLine = "";
+        string spoiledLine = "";
+        string storesLine = "";
+        string[] planLabels = new string[0];
+        string[] planBlurbs = new string[0];
+
         GUIStyle centerLabel, cargoLabel;
 
         void Start()
@@ -274,6 +294,7 @@ namespace SeaSick.Voyage
             foreach (var c in crew) if (c != null) c.Rest();
             buildNote = "";
             phase = Phase.Home;
+            panelVersion++;   // the whole tally just changed; see RefreshPanelText
         }
 
         // --- The stores, and what they buy ----------------------------------
@@ -311,6 +332,7 @@ namespace SeaSick.Voyage
 
             SpendBanked(plan.resource, plan.cost);
             buildNote = $"{plan.label} raised — home keeps {StoreCapacity}";
+            panelVersion++;   // "build" becomes "build another"; see RefreshPanelText
             return true;
         }
 
@@ -354,12 +376,71 @@ namespace SeaSick.Voyage
             return Vector3.Distance(a, b);
         }
 
+        /// Every line on the home panel, built at most once per thing that
+        /// changes it — a voyage landing, or a building going up.
+        ///
+        /// It is checked here rather than pushed from `CompleteVoyage` so the
+        /// panel cannot draw a stale line if a future path moves the stores
+        /// without saying so: the version catches the changes we know about
+        /// and the two totals catch the ones we do not.
+        void RefreshPanelText()
+        {
+            int total = BankedTotal, cap = StoreCapacity;
+            long key = SeaSick.UI.HudLabel.Key(panelVersion, total, cap);
+            if (key == panelBuiltFor) return;
+            panelBuiltFor = key;
+
+            int m = Mathf.FloorToInt(completedTime / 60f);
+            int sec = Mathf.FloorToInt(completedTime % 60f);
+            // Trips to the rail alone is a misleading number now that the
+            // meter never falls — a crew can be finished having puked twice,
+            // or fine having puked once. Lead with how bad it got.
+            string crewLine = completedPukes == 0
+                ? "the crew kept it together"
+                : $"worst {completedWorst:P0} sick   ·   {completedPukes}× to the rail";
+            tallyLine = $"{m}:{sec:00}   ·   {crewLine}";
+
+            spoiledLine = completedSpoiled > 0
+                ? $"{completedSpoiled} left on the sand — nowhere to keep it"
+                : "";
+
+            // Stores against what they can BE — a bare number cannot tell you
+            // the beach is full, and being full is the whole reason the
+            // buttons below it exist.
+            storesLine = $"stores {total} / {cap}   ·   {BankSummary()}";
+
+            var plans = World.BuildPlans.All;
+            if (planLabels.Length != plans.Length)
+            {
+                planLabels = new string[plans.Length];
+                planBlurbs = new string[plans.Length];
+            }
+            var village = World.Village.Home;
+            for (int i = 0; i < plans.Length; i++)
+            {
+                var plan = plans[i];
+                int have = Banked(plan.resource);
+                bool afford = have >= plan.cost;
+                int already = village != null ? village.CountOf(plan.id) : 0;
+                string res = plan.resource.ToLower();
+                // "×2" read as "build two of them". The second one is
+                // another one.
+                planLabels[i] = already > 0
+                    ? $"build another {plan.label} — {plan.cost} {res}"
+                    : $"build {plan.label} — {plan.cost} {res}";
+                planBlurbs[i] = afford
+                    ? plan.blurb
+                    : $"{plan.blurb}   ·   {have}/{plan.cost} {res}";
+            }
+        }
+
         void OnGUI()
         {
             // At sea the permanent HUD (StatusHUD) covers cargo and distance —
             // this class only draws the one moment she is tied up and the
             // player is not steering.
             if (phase != Phase.Home) return;
+            RefreshPanelText();
 
             int u = SeaSick.UI.HudLayout.Unit;
             var plans = World.BuildPlans.All;
@@ -391,32 +472,22 @@ namespace SeaSick.Voyage
                 var was = GUI.color;
                 GUI.color = SeaSick.UI.UITheme.Warn;
                 GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
-                    $"{completedSpoiled} left on the sand — nowhere to keep it",
-                    SeaSick.UI.UITheme.Small2Centered);
+                    spoiledLine, SeaSick.UI.UITheme.Small2Centered);
                 GUI.color = was;
                 y += u * 1.9f;
             }
 
-            int m = Mathf.FloorToInt(completedTime / 60f);
-            int sec = Mathf.FloorToInt(completedTime % 60f);
-            // Trips to the rail alone is a misleading number now that the
-            // meter never falls — a crew can be finished having puked twice,
-            // or fine having puked once. Lead with how bad it got.
-            string crewLine = completedPukes == 0
-                ? "the crew kept it together"
-                : $"worst {completedWorst:P0} sick   ·   {completedPukes}× to the rail";
             GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
-                $"{m}:{sec:00}   ·   {crewLine}", SeaSick.UI.UITheme.Small2Centered);
+                tallyLine, SeaSick.UI.UITheme.Small2Centered);
             y += u * 2.2f;
 
             // Stores against what they can BE — a bare number cannot tell you
             // the beach is full, and being full is the whole reason the
             // buttons below it exist.
-            int total = BankedTotal, cap = StoreCapacity;
             var fullWas = GUI.color;
-            if (total >= cap) GUI.color = SeaSick.UI.UITheme.Warn;
+            if (BankedTotal >= StoreCapacity) GUI.color = SeaSick.UI.UITheme.Warn;
             GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
-                $"stores {total} / {cap}   ·   {BankSummary()}", SeaSick.UI.UITheme.Small2Centered);
+                storesLine, SeaSick.UI.UITheme.Small2Centered);
             GUI.color = fullWas;
             y += u * 2.4f;
 
@@ -426,28 +497,18 @@ namespace SeaSick.Voyage
 
             float bw = Mathf.Min(panel.width - u * 2f, u * 20f);
             float bx = panel.center.x - bw * 0.5f;
-            var village = World.Village.Home;
-            foreach (var plan in plans)
+            for (int i = 0; i < plans.Length; i++)
             {
-                int have = Banked(plan.resource);
-                bool afford = have >= plan.cost;
-                int already = village != null ? village.CountOf(plan.id) : 0;
-
+                var plan = plans[i];
                 var r = new Rect(bx, y, bw, u * 2.4f);
                 SeaSick.UI.UIBlocker.Block(r);
-                GUI.enabled = afford;
-                // "×2" read as "build two of them". The second one is
-                // another one.
-                string label = already > 0
-                    ? $"build another {plan.label} — {plan.cost} {plan.resource.ToLower()}"
-                    : $"build {plan.label} — {plan.cost} {plan.resource.ToLower()}";
-                if (GUI.Button(r, label, SeaSick.UI.UITheme.Button)) TryBuild(plan);
+                GUI.enabled = Banked(plan.resource) >= plan.cost;
+                if (GUI.Button(r, planLabels[i], SeaSick.UI.UITheme.Button)) TryBuild(plan);
                 GUI.enabled = true;
                 y += u * 2.6f;
 
                 GUI.Label(new Rect(panel.x, y, panel.width, u * 1.4f),
-                    afford ? plan.blurb : $"{plan.blurb}   ·   {have}/{plan.cost} {plan.resource.ToLower()}",
-                    SeaSick.UI.UITheme.Small2Centered);
+                    planBlurbs[i], SeaSick.UI.UITheme.Small2Centered);
                 y += u * 1.8f;
             }
 

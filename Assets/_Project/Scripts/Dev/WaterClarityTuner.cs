@@ -70,7 +70,10 @@ public class WaterClarityTuner : MonoBehaviour, SeaSick.UI.IDevTool
         if (!active) return;
         Seed();
         if (mat == null) return;
-        cam = Camera.main;
+        // Camera.main does a scene-wide FindObjectWithTag under the hood;
+        // this tool's camera doesn't change scene to scene, so look it up
+        // once and keep it.
+        if (cam == null) cam = Camera.main;
         var k = Keyboard.current;
         if (k == null) return;
         if (k.digit1Key.wasPressedThisFrame) murkMuted = !murkMuted;

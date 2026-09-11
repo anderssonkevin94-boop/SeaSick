@@ -36,6 +36,17 @@ namespace SeaSick.Ship
         float rudder;
         int order = StopOrder;
 
+        // IMGUI runs OnGUI once per EVENT, so a string built here is built
+        // several times a frame — Layout, Repaint, and one more for every
+        // mouse move. See StatusHUD for the measurement. These two are the
+        // only strings this panel makes; everything else it draws is a
+        // literal. They are rebuilt when the thing they say changes, and not
+        // otherwise.
+        string orderText = "";
+        string orderTextFrom;          // the Label() literal it was built from
+        bool orderTextMoving;
+        readonly HudLabel easeText = new HudLabel();
+
         void Awake()
         {
             motor = GetComponent<ShipMotor>();
@@ -99,6 +110,23 @@ namespace SeaSick.Ship
             if (o < -0.5f) return "full astern";
             if (o < -0.05f) return "astern";
             return "stop";
+        }
+
+        /// `Label()` costs nothing — it returns one of the literals above — but
+        /// appending the ellipsis does, so the joined string is kept until one
+        /// of its two inputs moves. Reference equality is enough: every branch
+        /// of `Label()` hands back an interned literal.
+        string OrderText()
+        {
+            string l = Label();
+            bool moving = motor.ThrottleMoving;
+            if (!ReferenceEquals(l, orderTextFrom) || moving != orderTextMoving)
+            {
+                orderTextFrom = l;
+                orderTextMoving = moving;
+                orderText = moving ? l + " …" : l;
+            }
+            return orderText;
         }
 
         void StepOrder(int delta) => order = Mathf.Clamp(order + delta, 0, Orders.Length - 1);
@@ -174,8 +202,7 @@ namespace SeaSick.Ship
             // crew have actually managed. When they're sick the two disagree,
             // and that gap IS the mechanic — it has to be on screen.
             GUI.Label(new Rect(px, py + u * 2.9f, panelW, u * 1.2f),
-                motor.ThrottleMoving ? Label() + " …" : Label(),
-                UITheme.Small2Centered);
+                OrderText(), UITheme.Small2Centered);
             // Astern fills the same bar backwards from a centre mark, so
             // which way she is being driven reads without being read.
             var barRect = new Rect(px + u * 0.6f, py + u * 4.25f, panelW - u * 1.2f, u * 0.22f);
@@ -221,10 +248,12 @@ namespace SeaSick.Ship
             var easeRect = new Rect(px + half + u * 0.4f, rowY, half, u * 1.8f);
             UIBlocker.Block(easeRect);
             var easeStyle = motor.Easing ? UITheme.ButtonPressed : UITheme.Button;
-            string easeLabel = motor.Easing
-                ? $"◉ easing −{Mathf.RoundToInt(motor.EaseCost01 * 100f)}%"
-                : "◎ ease her";
-            if (GUI.Button(easeRect, easeLabel, easeStyle)) motor.Easing = !motor.Easing;
+            // Whole percent is what is DISPLAYED, so that — plus the on/off —
+            // is the key. The cost twitches every frame; the label does not.
+            int easePct = Mathf.RoundToInt(motor.EaseCost01 * 100f);
+            if (easeText.Changed(HudLabel.Key(motor.Easing ? easePct : -1)))
+                easeText.Set(motor.Easing ? $"◉ easing −{easePct}%" : "◎ ease her");
+            if (GUI.Button(easeRect, easeText.Content, easeStyle)) motor.Easing = !motor.Easing;
         }
 
         /// How much way she has, against her own top speed — and where that

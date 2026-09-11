@@ -19,6 +19,26 @@ namespace SeaSick.Ship
         float life;
         IHittable owner;   // never bites the hand that fired it
 
+        /// The waterline test rides the registry's ONE batched Burst query per
+        /// physics step instead of a main-thread `SampleImmediate` per ball
+        /// per frame. The cost probe counted 14 immediate samples a frame at
+        /// sea against the 8 the sampler's own doc budgets for, at ~42 us
+        /// each; a broadside puts four to eight balls in the air at once, so
+        /// this is the term that spikes exactly when the frame is already
+        /// busiest. StormSpray made the same move and got 1.0 ms a frame back.
+        OceanProbeRegistry.Handle seaProbe;
+
+        void OnEnable()
+        {
+            seaProbe = OceanProbeRegistry.Register(transform.position);
+        }
+
+        void OnDisable()
+        {
+            OceanProbeRegistry.Unregister(seaProbe);
+            seaProbe = null;
+        }
+
         public static CannonBall Spawn(Vector3 position, Vector3 velocity,
             float assistWindow = 0f, float assistCap = 0f, IHittable owner = null)
         {
@@ -209,12 +229,26 @@ namespace SeaSick.Ship
                 return;
             }
 
-            float surface = Ocean.OceanSampler.Ready
-                ? Ocean.OceanSampler.SampleImmediate(to).height
-                : 0f;
+            // The height the batch took at (or within one step's flight of)
+            // where this ball was last frame. At 42 m/s that is under a metre
+            // of lead, against a surface whose slope is measured in tens of
+            // metres — the crossing frame is unchanged to the eye, and the
+            // ball is falling through the water line at several metres a
+            // frame anyway.
+            float surface = 0f;
+            if (seaProbe != null && seaProbe.sampledFrame != 0) surface = seaProbe.sample.height;
+            else if (Ocean.OceanSampler.Ready) surface = Ocean.OceanSampler.SampleImmediate(to).height;
+            if (seaProbe != null) seaProbe.position = to;
 
             if (to.y <= surface)
             {
+                // The splash is the one place the stale height would SHOW: a
+                // plume hanging a hand's breadth off the water is visible in a
+                // way a frame of crossing latency is not. So the impact point
+                // is re-sampled immediately — genuinely once per ball, on the
+                // frame it dies, which is what the sampler's "one-shot,
+                // low-rate" budget is for.
+                if (Ocean.OceanSampler.Ready) surface = Ocean.OceanSampler.SampleImmediate(to).height;
                 Splash(new Vector3(to.x, surface, to.z));
                 GunneryStats.RecordMiss();
                 Destroy(gameObject);

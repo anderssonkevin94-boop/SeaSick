@@ -1,7 +1,10 @@
 using SeaSick.Combat;
 using SeaSick.Crew;
 using SeaSick.World;
+using Unity.Collections;
 using UnityEngine;
+using RegionField = SeaSick.Ocean.RegionField;
+using RegionFieldParams = SeaSick.Ocean.RegionFieldParams;
 
 namespace SeaSick.Ship
 {
@@ -139,6 +142,81 @@ namespace SeaSick.Ship
         static float Ground(Vector3 p)
             => Island.TerrainHeight != null ? Island.TerrainHeight(p.x, p.z) : -999f;
 
+        /// **The seabed is expensive to ask, and the ocean already asked it.**
+        ///
+        /// `Ground` is `Island.TerrainHeight` is `TerrainHeight.Height` — the
+        /// whole multi-octave fBm with erosion, mask, skerry, ridge and shore
+        /// terms — in plain managed C#, not Burst (HeightBench: the managed
+        /// path is pessimistic against the jobbed one, and it is the path
+        /// this class was taking). Aground, this method used to spend
+        /// **1 + 4 + up to 24 = up to 29 of them in a single frame**: the
+        /// touch test, the gradient, and the 24-step walk-out. A guaranteed
+        /// multi-millisecond hitch landing on exactly the frame the player
+        /// runs onto a beach, which is the worst frame in the game to spend.
+        ///
+        /// `TerrainShoreField` already rebuilds the same height function on a
+        /// 4096 m grid of 256² texels — 16 m apart — centred on the ship, in
+        /// a Burst job, because the ocean needs it to shoal. Same
+        /// `TerrainSettings` asset as the populator that installed
+        /// `Island.TerrainHeight`, so this is the exact seabed sampled
+        /// coarsely, not a second opinion. Reading it is a bilinear fetch.
+        ///
+        /// So the grid does the searching and the exact field does the
+        /// deciding: **0 evaluations in open water, 1 for the touch test,
+        /// and at most 6 when she grounds** (the confirmation plus a capped
+        /// creep). Nothing the rest of the class consumes changed meaning —
+        /// `grounded` is still the exact field's answer, `outward` is still
+        /// straight downhill, `fixedPos` is still the first place along it
+        /// with water under the keel, and it is still confirmed exactly.
+        ///
+        /// With no grid (probe scenes, no RegionField) every path falls back
+        /// to what it did before, at what it cost before.
+        bool ShoreGrid(out RegionFieldParams prm, out NativeArray<float> shore)
+        {
+            prm = default;
+            shore = default;
+            var rf = RegionField.Instance;
+            if (rf == null || rf.ShoreN <= 0) return false;
+            shore = rf.Shore;
+            if (!shore.IsCreated || shore.Length < rf.ShoreN * rf.ShoreN) return false;
+            prm = rf.Params;
+            return prm.shoreN > 0;
+        }
+
+        /// Seabed height from the grid, or NaN where the grid does not reach.
+        /// `ShoreWetDepth` returns depth (positive down) and 1e9 outside its
+        /// rect, so height is its negation and the sentinel is the miss.
+        static float GridGround(Vector3 p, in RegionFieldParams prm, NativeArray<float> shore)
+        {
+            float depth = prm.ShoreWetDepth(new Unity.Mathematics.float2(p.x, p.z), shore).z;
+            return depth >= 1e8f ? float.NaN : -depth;
+        }
+
+        /// Central differences on the grid. False if any of the four samples
+        /// falls outside it, so the caller pays the exact four instead.
+        static bool GridSlope(Vector3 p, float e, in RegionFieldParams prm, NativeArray<float> shore,
+                              out float gx, out float gz)
+        {
+            gx = gz = 0f;
+            float xp = GridGround(p + Vector3.right * e, prm, shore);
+            float xm = GridGround(p - Vector3.right * e, prm, shore);
+            float zp = GridGround(p + Vector3.forward * e, prm, shore);
+            float zm = GridGround(p - Vector3.forward * e, prm, shore);
+            if (float.IsNaN(xp) || float.IsNaN(xm) || float.IsNaN(zp) || float.IsNaN(zm)) return false;
+            gx = xp - xm;
+            gz = zp - zm;
+            return true;
+        }
+
+        /// How much water the grid must report before its word is taken for
+        /// "not aground" with no exact sample at all. 16 m texels cannot see
+        /// a pinnacle standing between their centres, so this is the height
+        /// of the sub-texel rock the cheap reject is willing to miss — and it
+        /// is the same 8 m at which the ocean stops shoaling, i.e. water the
+        /// sea itself already calls open. Inside that band she gets the exact
+        /// test, which is what she got every frame before.
+        const float gridTrustDepth = 8f;
+
         /// Is there ground under her, and which way is deep water?
         ///
         /// `outward` is straight downhill on the height field. `fixedPos` is
@@ -166,11 +244,27 @@ namespace SeaSick.Ship
             // this costs no sample out of the immediate budget.
             float surface = buoyancy != null ? buoyancy.MeanWaterHeight : 0f;
             float need = surface - groundingDraft;
+
+            bool grid = ShoreGrid(out var prm, out var shore);
+
+            // Open water, settled without touching the fBm at all: the grid
+            // says the bottom is a clear `gridTrustDepth` under the keel and
+            // nothing that small hides from it.
+            if (grid)
+            {
+                float g = GridGround(p, prm, shore);
+                if (!float.IsNaN(g) && g <= need - gridTrustDepth) return false;
+            }
+
             if (Ground(p) <= need) return false;
 
             const float E = 4f;
-            float gx = Ground(p + Vector3.right * E) - Ground(p - Vector3.right * E);
-            float gz = Ground(p + Vector3.forward * E) - Ground(p - Vector3.forward * E);
+            float gx, gz;
+            if (!grid || !GridSlope(p, E, prm, shore, out gx, out gz))
+            {
+                gx = Ground(p + Vector3.right * E) - Ground(p - Vector3.right * E);
+                gz = Ground(p + Vector3.forward * E) - Ground(p - Vector3.forward * E);
+            }
             Vector3 down = new Vector3(-gx, 0f, -gz);
             if (down.sqrMagnitude < 1e-6f)
             {
@@ -184,11 +278,22 @@ namespace SeaSick.Ship
             outward = down.normalized;
 
             Vector3 q = p;
+            bool approx = false;
             for (int i = 0; i < 24; i++)
             {
                 q += outward * 4f;
-                if (Ground(q) <= need) break;
+                float g = grid ? GridGround(q, prm, shore) : float.NaN;
+                if (float.IsNaN(g)) { if (Ground(q) <= need) break; }
+                else { approx = true; if (g <= need) break; }
             }
+            // The walk was run on 16 m texels, so the place it stopped is
+            // where the INTERPOLATED bottom drops away. Confirm it on the
+            // real field and, if a sub-texel shelf is still holding her,
+            // creep on with the same 4 m step — capped, because five more
+            // steps is 20 m and anything that needs more than that is a
+            // gradient pointing the wrong way, not a longer walk.
+            if (approx)
+                for (int i = 0; i < 5 && Ground(q) > need; i++) q += outward * 4f;
             fixedPos = q;
             return true;
         }

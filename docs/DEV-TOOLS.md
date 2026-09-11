@@ -982,3 +982,40 @@ The gate's PASS now counts non-converged outliers only.
 Cost: 0.290 ms of 0.4 (early exit pays for up to ten steps; the second start
 is what took it back up from 0.175). `SeaStateController`'s "no headroom"
 comments now say 0.29 of 0.4.
+
+### Phase 3 of the perf pass: the CPU budget (2026-09-11, night)
+
+- **`SampleImmediate` callers moved onto `OceanProbeRegistry`**: raiders, sea
+  monsters, cannonballs and walking crew each hold one handle, sampled in the
+  physics driver's Burst job. 14 immediate calls a frame at sea (11 of them
+  raiders + monsters, ~42 us each, budget 8) -> the ship's own handful. A
+  cannonball's SPLASH placement stays immediate (one call, on the frame it
+  dies). Crew cache their island for 0.5 s and sample terrain at 10 Hz
+  towards where they will be, so the height never lags the walk.
+- **The physics driver's arrays are grow-only** (power-of-two capacity):
+  with balls and crew registering and unregistering, the count moved every
+  few frames and each move was a native dispose + alloc.
+- **`HullIntegrity` grounding** reads the shore grid `RegionField` already
+  keeps (16 m texels, exact seabed heights): open water costs 0 managed
+  terrain evaluations (was 1/frame), aground at most 6 (was 29). The 8 m
+  trust band below the touch threshold is a reasoned bound, not measured:
+  `ShoreProbe` can nail it if a skerry ever gets sailed through.
+- **IMGUI**: every runtime string that depends on a value is a `HudLabel`
+  now, rebuilt on change, in `HelmInput`, `AnchorController`,
+  `VoyageManager` (once per landing / building), `ShipyardPanel` (once per
+  ship change), `CannonBattery`, `Bilge`, `SettingsPanel`. `UIBlocker`
+  formats its owner label once ever instead of per call per event.
+  `HudOverlapProbe`'s census log is opt-in (`logCensus` / `ForceCensus`):
+  35-70 KB and up to 68 ms on the frame it fired, every 5 s, in every
+  editor GC measurement this project has ever taken.
+- **Ripple sim**: `Inject` dispatches the impulses' bounding box, not the
+  whole 512^2 field; `ScrollRT` swaps references instead of copying 2 MB
+  twice a frame; the sim goes quiescent (one clear, then no dispatches)
+  after `6.91/damping` s without an impulse; the ship lookup retries at
+  1 Hz instead of scanning the scene every LateUpdate.
+- `Shader.PropertyToID` cached in `RegionField.Publish` (and the 24-island
+  array uploads only on change), `OceanRenderer`, `DynamicWaterSim`,
+  `HorizonField`, `WaterClarityTuner`. `TerrainStreamer` reuses two
+  stopwatches. `BuoyantBody` transforms each probe once per step.
+  Unthrottled `FindFirstObjectByType` in `CombatLock`, `EnemyShip`,
+  `HomeTab`, `ShipyardPanel`, `Bilge`, `DynamicWaterSim` retry at 1 Hz.

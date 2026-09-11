@@ -104,6 +104,8 @@ namespace SeaSick.Combat
         MaterialPropertyBlock mpb;
         bool flashClear = true;
         ShipMotor player;
+        float nextPlayerLookup;
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         public Vector3 HitCentre => transform.position + Vector3.up * 2.2f;
         public float HitRadius => hitRadius;
@@ -119,16 +121,34 @@ namespace SeaSick.Combat
         public Island Home => home;
         public float PatrolRadius => orbitRadius;
 
+        /// One registry handle per raider instead of a main-thread
+        /// `SampleImmediate` per raider per frame. See RideSea for the
+        /// measurement.
+        Ocean.OceanProbeRegistry.Handle seaProbe;
+
         void OnEnable()
         {
             if (!All.Contains(this)) All.Add(this);
             HitTargets.Register(this);
+            EnsureProbe();
         }
 
         void OnDisable()
         {
             All.Remove(this);
             HitTargets.Unregister(this);
+            Ocean.OceanProbeRegistry.Unregister(seaProbe);
+            seaProbe = null;
+        }
+
+        /// Re-registered rather than assumed: a domain reload mid-play empties
+        /// the registry's static list while the component and this field
+        /// survive, so "I have a handle" is not "the driver knows about it".
+        /// StormSpray.EnsureHandles documents the same asymmetry.
+        void EnsureProbe()
+        {
+            if (seaProbe != null && Ocean.OceanProbeRegistry.Handles.Count > 0) return;
+            seaProbe = Ocean.OceanProbeRegistry.Register(transform.position);
         }
 
         static readonly Color RaiderRed = new Color(0.62f, 0.12f, 0.10f);
@@ -200,7 +220,7 @@ namespace SeaSick.Combat
                     ? r.sharedMaterial.GetColor("_BaseColor") : Color.white;
                 skinColor.Add(Color.Lerp(c, RaiderRed, 0.68f));
             }
-            Tint(c => c);
+            Tint(0f);
             BuildGuns();
             return true;
         }
@@ -321,7 +341,17 @@ namespace SeaSick.Combat
 
             // Built on demand: script order is not guaranteed, so nothing here
             // trusts that the player existed when this spawned.
-            if (player == null) player = FindFirstObjectByType<ShipMotor>();
+            //
+            // Retried once a second, not every frame. Until the player exists
+            // this scan ran per raider per frame, and Shipyard measured the
+            // same call at 0.24-1.4 ms plus a share of the per-frame garbage —
+            // times eight raiders. A second's delay is invisible for a ship
+            // that is only ever missing during the first frames of a scene.
+            if (player == null && Time.unscaledTime >= nextPlayerLookup)
+            {
+                player = FindFirstObjectByType<ShipMotor>();
+                nextPlayerLookup = Time.unscaledTime + 1f;
+            }
 
             Vector3 goal = DecideGoal();
             float desired = Steer(goal);
@@ -474,8 +504,32 @@ namespace SeaSick.Combat
         {
             Vector3 p = transform.position;
 
-            float surface = Ocean.OceanSampler.Ready
-                ? Ocean.OceanSampler.SampleImmediate(p).height : 0f;
+            // Her height comes off the ONE batched Burst query the physics
+            // driver runs per step, not a main-thread sample per raider per
+            // frame. Measured at sea: 14 `SampleImmediate` calls a frame
+            // against the 8 the sampler's own doc budgets for, and 11 of them
+            // were this line and SeaMonster's, at ~42 us each. StormSpray made
+            // exactly this move and got 1.0 ms a frame back.
+            //
+            // The height read here is up to one physics step old. At 17 m/s
+            // that is 34 cm of fetch under a hull already lerping toward the
+            // surface at 7/s, and the player's own hull rides the same
+            // latency — the raider is not being held to a stricter standard
+            // than the ship it is chasing.
+            //
+            // Unlike StormSpray this does NOT gate on `sampledFrame`: that
+            // gate exists because a spray handle TELEPORTS to a fresh random
+            // spot, so a stale height would belong to another part of the sea
+            // entirely. This handle crawls along with the hull, so the last
+            // sample is always within a fraction of a metre of where she is.
+            EnsureProbe();
+            float surface = seaProbe.sampledFrame != 0
+                ? seaProbe.sample.height
+                // First frame only — nothing has been batched for this raider
+                // yet and she would otherwise snap up from y=0.
+                : (Ocean.OceanSampler.Ready ? Ocean.OceanSampler.SampleImmediate(p).height : 0f);
+            seaProbe.position = p;
+
             transform.position = new Vector3(
                 p.x, Mathf.Lerp(p.y, surface, 1f - Mathf.Exp(-7f * dt)), p.z);
 
@@ -615,31 +669,41 @@ namespace SeaSick.Combat
             if (k >= 1f) Destroy(gameObject);
         }
 
+        static readonly Color HitFlash = new Color(1f, 0.55f, 0.25f);
+
         void Flash()
         {
             const float FlashTime = 0.3f;
             float since = Time.time - lastHitAt;
             if (since < FlashTime)
             {
-                float f = 1f - since / FlashTime;
-                Tint(c => Color.Lerp(c, new Color(1f, 0.55f, 0.25f), f));
+                Tint(1f - since / FlashTime);
                 flashClear = false;
             }
             else if (!flashClear)
             {
-                Tint(c => c);
+                Tint(0f);
                 flashClear = true;
             }
         }
 
-        void Tint(System.Func<Color, Color> f)
+        /// How far each piece is pushed toward the hit colour, 0 = its own.
+        ///
+        /// A plain float, not a `Func<Color,Color>`: the old signature was fed
+        /// a CAPTURING lambda (`c => Color.Lerp(c, ..., f)`) every frame of
+        /// every flash, which is a closure object plus a delegate allocated
+        /// per raider per frame for the whole 0.3 s. The property name is
+        /// hashed once for the same reason — `SetColor("_BaseColor", ...)`
+        /// hashes the string on every renderer, every frame.
+        void Tint(float flash)
         {
             for (int i = 0; i < skin.Count; i++)
             {
                 var r = skin[i];
                 if (r == null) continue;
+                Color c = skinColor[i];
                 r.GetPropertyBlock(mpb);
-                mpb.SetColor("_BaseColor", f(skinColor[i]));
+                mpb.SetColor(BaseColorId, flash > 0f ? Color.Lerp(c, HitFlash, flash) : c);
                 r.SetPropertyBlock(mpb);
             }
         }

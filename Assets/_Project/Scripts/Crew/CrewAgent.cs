@@ -163,6 +163,13 @@ namespace SeaSick.Crew
             voyage = voyageManager;
             transform.SetParent(null, true);
             transform.localRotation = Quaternion.identity;
+            // Both footing caches are about WHERE THEY ARE, and they are about
+            // to be somewhere else. Forced stale rather than trusted: the
+            // throttles are an optimisation, and an optimisation that survives
+            // a teleport is a bug.
+            nextIsleLookup = 0f;
+            groundHeld = false;
+            groundTickEnd = 0f;
             PathToShore(landingPoint);
             state = State.GoingAshore;
         }
@@ -227,6 +234,67 @@ namespace SeaSick.Crew
         float pukeJitter;
         float swayPhase;
         static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+
+        // ------------------------------------------------- what is underfoot
+        //
+        // A shore party walking over water used to make THREE managed calls
+        // per agent per frame from WalkToWorld: an un-Bursted
+        // `OceanSampler.SampleImmediate`, an `Island.Nearest` scan of every
+        // island, and a delegate into the terrain height field. The immediate
+        // sample is the expensive one — the cost probe counted 14 a frame at
+        // sea against the 8 the sampler's own doc budgets for, at ~42 us each
+        // — and a full shore party over the water spends that budget on feet.
+        // StormSpray moved its 24 immediate samples into the registry and got
+        // 1.0 ms a frame back; this is the same move.
+        //
+        // The other two are throttled rather than batched: nothing was wrong
+        // with them but the rate.
+
+        /// One handle per hand, folded into the ONE batched Burst query the
+        /// physics driver runs per step. Only read while they are over water.
+        Ocean.OceanProbeRegistry.Handle seaProbe;
+
+        /// Which island they are walking on. Re-resolved twice a second: at
+        /// 6.5 m/s that is three metres of walking, and `Nearest` answers with
+        /// the island whose SHORELINE is closest — an answer that does not
+        /// change hands over three metres unless they are already in the
+        /// strait between two, where either gives the same footing. The
+        /// shoreline test itself stays per-frame (see WalkToWorld): it is an
+        /// array index, and it is the call that decides water from land.
+        World.Island footingIsle;
+        float nextIsleLookup;
+        const float IsleInterval = 0.5f;
+
+        /// The terrain height, sampled at 10 Hz and interpolated across the
+        /// gap. Simply HOLDING the last value would trade the per-frame cost
+        /// for a lag that grows with the slope being crossed — the error the
+        /// big comment in WalkToWorld was written about. So each tick samples
+        /// where they will BE when it expires and the frames between walk the
+        /// straight line to it: no lag at all on a straight leg, and at worst
+        /// one tick of a turn to catch up.
+        float groundFrom, groundTo, groundTickEnd;
+        bool groundHeld;
+        const float GroundInterval = 0.1f;
+
+        void OnEnable()
+        {
+            seaProbe = Ocean.OceanProbeRegistry.Register(transform.position);
+        }
+
+        void OnDisable()
+        {
+            Ocean.OceanProbeRegistry.Unregister(seaProbe);
+            seaProbe = null;
+        }
+
+        /// Re-registered rather than assumed: a domain reload mid-play empties
+        /// the registry's static list while the component and this field
+        /// survive. StormSpray.EnsureHandles documents the same asymmetry.
+        void EnsureProbe()
+        {
+            if (seaProbe != null && Ocean.OceanProbeRegistry.Handles.Count > 0) return;
+            seaProbe = Ocean.OceanProbeRegistry.Register(transform.position);
+        }
 
         void Start()
         {
@@ -567,8 +635,26 @@ namespace SeaSick.Crew
                 // they walk at a couple of metres a second, so following it
                 // exactly cannot jitter — and a lag here would trade a fixed
                 // error for one that grows with the slope they are crossing.
+                // That is why the 10 Hz terrain tick below interpolates toward
+                // where they are GOING rather than holding the last value.
                 y = target.y;
-                var isle = World.Island.Nearest(next);
+
+                // The handle follows their feet whether or not the sea is what
+                // is under them, so the first frame they step off a beach
+                // reads a height taken beside them rather than wherever they
+                // last waded.
+                EnsureProbe();
+                seaProbe.position = next;
+
+                // Which island, twice a second. The shoreline test against it
+                // still runs every frame — see the field comments.
+                if (Time.time >= nextIsleLookup)
+                {
+                    footingIsle = World.Island.Nearest(next);
+                    nextIsleLookup = Time.time + IsleInterval;
+                }
+
+                var isle = footingIsle;
                 if (isle != null)
                 {
                     Vector3 flat = next - isle.transform.position;
@@ -579,12 +665,18 @@ namespace SeaSick.Crew
                     float shore = isle.RadiusAt(Mathf.Atan2(flat.x, flat.z));
                     if (flat.magnitude > shore)
                     {
-                        if (Ocean.OceanSampler.Ready)
+                        // Wading: the sea's height comes off the registry's
+                        // batched Burst query, one physics step old. At
+                        // 6.5 m/s that is 13 cm of walking under a surface
+                        // they are standing 35 cm proud of anyway.
+                        if (seaProbe.sampledFrame != 0) y = seaProbe.sample.height + 0.35f;
+                        else if (Ocean.OceanSampler.Ready)
+                            // First frame only — nothing batched for this hand yet.
                             y = Ocean.OceanSampler.SampleImmediate(next).height + 0.35f;
                     }
                     else if (World.Island.TerrainHeight != null)
                     {
-                        y = World.Island.TerrainHeight(next.x, next.z);
+                        y = Footing(next, flatTarget - next);
                     }
                 }
             }
@@ -595,6 +687,42 @@ namespace SeaSick.Crew
                 transform.rotation = Quaternion.Slerp(transform.rotation,
                     Quaternion.LookRotation(look, Vector3.up), 1f - Mathf.Exp(-6f * dt));
             return false;
+        }
+
+        /// The ground under their feet, from a terrain sample taken 10 times a
+        /// second instead of every frame.
+        ///
+        /// Each tick samples the height where the tick will END — one step of
+        /// `toTarget`, clamped to how far they can actually walk in the
+        /// interval — and the frames in between run the straight line from the
+        /// last tick's end to this one's. On a straight leg, which is what
+        /// WalkToWorld does between waypoints, that lands exactly on the
+        /// sampled field with no lag at all; only a turn inside a tick costs
+        /// anything, and it costs at most that tick.
+        ///
+        /// `groundHeld` alone is not enough to continue from: a hand who has
+        /// been aboard for a minute would resume from a height sampled on
+        /// another island. A gap of more than one tick re-anchors.
+        float Footing(Vector3 here, Vector3 toTarget)
+        {
+            float now = Time.time;
+            if (now >= groundTickEnd)
+            {
+                bool continuous = groundHeld && now < groundTickEnd + GroundInterval;
+                groundFrom = continuous ? groundTo : World.Island.TerrainHeight(here.x, here.z);
+
+                Vector3 step = toTarget;
+                step.y = 0f;
+                float reach = shoreWalkSpeed * GroundInterval;
+                if (step.sqrMagnitude > reach * reach) step = step.normalized * reach;
+                Vector3 ahead = here + step;
+
+                groundTo = World.Island.TerrainHeight(ahead.x, ahead.z);
+                groundTickEnd = now + GroundInterval;
+                groundHeld = true;
+            }
+            return Mathf.Lerp(groundTo, groundFrom,
+                Mathf.Clamp01((groundTickEnd - now) / GroundInterval));
         }
 
         bool WalkTo(Vector3 targetLocal, float dt)

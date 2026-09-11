@@ -300,6 +300,28 @@ namespace SeaSick.Ocean
         NativeArray<float4> islands;
         int islandCount;
 
+        // _Ocean_Islands is bound once at world-bind and otherwise never
+        // changes, but Publish() runs every frame -- these track what was
+        // last actually uploaded so an unchanged 24-Vector4 array isn't
+        // re-sent every frame. See Publish().
+        readonly Vector4[] lastPublishedIslands = new Vector4[MaxIslands];
+        int lastPublishedIslandCount = -1;
+
+        // Shader.PropertyToID cache for Publish()'s per-frame globals. Every
+        // Shader.SetGlobal* call below used to hash its string name each
+        // frame; PropertyToID does that hash once here instead.
+        static readonly int RegionId = Shader.PropertyToID("_Ocean_Region");
+        static readonly int RegionScaleId = Shader.PropertyToID("_Ocean_RegionScale");
+        static readonly int IslandsId = Shader.PropertyToID("_Ocean_Islands");
+        static readonly int ShoreRectId = Shader.PropertyToID("_Ocean_ShoreRect");
+        static readonly int ShoalId = Shader.PropertyToID("_Ocean_Shoal");
+        static readonly int DepthLimitId = Shader.PropertyToID("_Ocean_DepthLimit");
+        static readonly int WeatherId = Shader.PropertyToID("_Ocean_Weather");
+        static readonly int PatchLoId = Shader.PropertyToID("_Ocean_PatchLo");
+        static readonly int PatchHiId = Shader.PropertyToID("_Ocean_PatchHi");
+        static readonly int WeatherTexId = Shader.PropertyToID("_Ocean_WeatherTex");
+        static readonly int ShoreTexId = Shader.PropertyToID("_Ocean_ShoreTex");
+
         NativeArray<float> shore;      // heights, shoreN² (a 1-element dummy when absent)
         Texture2D shoreTex;
         float2 shoreOrigin; float shoreSize; int shoreN;
@@ -464,24 +486,41 @@ namespace SeaSick.Ocean
 
         public void Publish()
         {
-            Shader.SetGlobalVector("_Ocean_Region",
+            Shader.SetGlobalVector(RegionId,
                 new Vector4(home.x, home.y, calmRadius, wildRadius));
-            Shader.SetGlobalVector("_Ocean_RegionScale",
+            Shader.SetGlobalVector(RegionScaleId,
                 new Vector4(nearScale, farScale, shoreFalloff, islandCount));
-            Shader.SetGlobalVectorArray("_Ocean_Islands", islandsGpu);
-            Shader.SetGlobalVector("_Ocean_ShoreRect",
+            // _Ocean_Islands never changes once the world is bound (AddIsland
+            // only runs during the one-shot auto-bind or a probe's own setup),
+            // so re-uploading all 24 Vector4s every frame is waste. Compare
+            // against what was last actually sent and skip when nothing moved.
+            bool islandsChanged = islandCount != lastPublishedIslandCount;
+            if (!islandsChanged)
+            {
+                for (int i = 0; i < MaxIslands; i++)
+                {
+                    if (islandsGpu[i] != lastPublishedIslands[i]) { islandsChanged = true; break; }
+                }
+            }
+            if (islandsChanged)
+            {
+                Shader.SetGlobalVectorArray(IslandsId, islandsGpu);
+                System.Array.Copy(islandsGpu, lastPublishedIslands, MaxIslands);
+                lastPublishedIslandCount = islandCount;
+            }
+            Shader.SetGlobalVector(ShoreRectId,
                 new Vector4(shoreOrigin.x, shoreOrigin.y, shoreSize > 0f ? 1f / shoreSize : 0f, shoreN));
-            Shader.SetGlobalVector("_Ocean_Shoal",
+            Shader.SetGlobalVector(ShoalId,
                 new Vector4(shoalDepthZero, shoalDepthFull, chopFloor, 0f));
-            Shader.SetGlobalVector("_Ocean_DepthLimit",
+            Shader.SetGlobalVector(DepthLimitId,
                 new Vector4(breakFraction, waveHs, 0f, 0f));
-            Shader.SetGlobalVector("_Ocean_Weather",
+            Shader.SetGlobalVector(WeatherId,
                 new Vector4(weatherInvTile, weatherOffset.x, weatherOffset.y, weatherN));
-            Shader.SetGlobalVector("_Ocean_PatchLo",
+            Shader.SetGlobalVector(PatchLoId,
                 new Vector4(patchLo.x, patchLo.y, patchLo.z, 0f));
-            Shader.SetGlobalVector("_Ocean_PatchHi",
+            Shader.SetGlobalVector(PatchHiId,
                 new Vector4(patchHi.x, patchHi.y, patchHi.z, 0f));
-            Shader.SetGlobalTexture("_Ocean_WeatherTex",
+            Shader.SetGlobalTexture(WeatherTexId,
                 weatherTex != null ? (Texture)weatherTex : Texture2D.whiteTexture);
             // ALWAYS bind, even with no shore grid. A fragment shader tolerates
             // an unbound texture it never samples (the _Ocean_ShoreRect.w guard
@@ -490,7 +529,7 @@ namespace SeaSick.Ocean
             // dispatch, writing nothing. That is what killed DivergenceProbe --
             // its verify kernel returned zeros for a fortnight and the failure
             // read as an ocean parity drift. Costs one global set per frame.
-            Shader.SetGlobalTexture("_Ocean_ShoreTex",
+            Shader.SetGlobalTexture(ShoreTexId,
                 shoreTex != null ? (Texture)shoreTex : Texture2D.blackTexture);
         }
 

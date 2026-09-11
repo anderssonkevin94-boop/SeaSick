@@ -27,6 +27,11 @@ cbuffer Params
     float _FoamDecay;  // per-step foam keep
     uint _ImpulseCount;
     int2 _ScrollOffset;
+    // Texel-space origin of Inject's dispatch rect (the C# side dispatches
+    // only the union bounding box of this frame's impulses, not the whole
+    // field). Defaults to (0,0), which reproduces the old whole-field
+    // behaviour if ever left unset.
+    int2 _InjectOrigin;
 }
 
 // Reads Src (current field) and PrevTex, writes Dst only — the C# side
@@ -77,7 +82,11 @@ void Step(uint3 id : SV_DispatchThreadID)
 [numthreads(8, 8, 1)]
 void Inject(uint3 id : SV_DispatchThreadID)
 {
-    if (id.x >= _N || id.y >= _N) return;
+    // The C# side dispatches only the union bounding box of this frame's
+    // impulses; _InjectOrigin is that box's texel-space corner, so the
+    // thread's actual field texel is the origin plus its group-local id.
+    uint2 texel = uint2(_InjectOrigin) + id.xy;
+    if (texel.x >= _N || texel.y >= _N) return;
 
     float addH = 0.0;
     float addF = 0.0;
@@ -86,7 +95,7 @@ void Inject(uint3 id : SV_DispatchThreadID)
         Impulse imp = Impulses[i];
         float2 c = imp.uv * float(_N);
         float r = max(1.0, imp.radius * float(_N));
-        float dist = length(float2(id.xy) - c);
+        float dist = length(float2(texel) - c);
         if (dist > r) continue;
         float fall = saturate(1.0 - dist / r);
         fall = fall * fall * (3.0 - 2.0 * fall);
@@ -95,10 +104,10 @@ void Inject(uint3 id : SV_DispatchThreadID)
     }
     if (addH == 0.0 && addF == 0.0) return;
 
-    float2 v = Curr[id.xy];
-    float2 w = InjectPrev[id.xy];
-    Curr[id.xy] = float2(clamp(v.x + addH, -1.2, 1.2), saturate(v.y + addF));
-    InjectPrev[id.xy] = float2(clamp(w.x + addH, -1.2, 1.2), w.y);
+    float2 v = Curr[texel];
+    float2 w = InjectPrev[texel];
+    Curr[texel] = float2(clamp(v.x + addH, -1.2, 1.2), saturate(v.y + addF));
+    InjectPrev[texel] = float2(clamp(w.x + addH, -1.2, 1.2), w.y);
 }
 
 [numthreads(8, 8, 1)]

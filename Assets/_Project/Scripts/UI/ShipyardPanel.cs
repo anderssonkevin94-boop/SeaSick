@@ -21,9 +21,46 @@ namespace SeaSick.UI
         string note = "";
         float noteAt = -99f;
 
+        // --- Everything this panel says, built when the SHIP changes --------
+        //
+        // IMGUI runs OnGUI once per EVENT — Layout, Repaint, and one more for
+        // every mouse move — so the twenty interpolations below ran several
+        // times a frame, and so did the twelve `WhyNot*` calls, each of which
+        // formats a sentence of its own inside `ShipLadder`/`ShipFit`. See
+        // StatusHUD for the measurement. Nothing here moves unless the yard
+        // moves it, so it is all built behind one key: the rung, the five bay
+        // counts, the five fitting levels, and the three numbers the hull
+        // hands the motor.
+        //
+        // (The GUILayout tree this panel builds is a separate cost, noted
+        // below and closed by shutting the panel when she casts off.)
+        long textKey = long.MinValue;
+        string rungText = "", dimsText = "", handlingText = "";
+        string cellsText = "", crewText = "", portsText = "";
+        string moveWhy;                                       // the one reason line
+        readonly bool[] canMove = new bool[Moves.Length];
+        readonly string[] quantityReading = new string[5];    // by BayUse
+        readonly string[] quantityWhy = new string[5];
+        readonly string[] trackWhy = new string[5];           // by FitTrack
+        readonly string[] trackButton = new string[5];
+        string[] tierShort = new string[0];
+        int tierShortFor = int.MinValue;
+
+        /// The three hull moves, as a field rather than `new[] {…}` in the
+        /// loop — that array was a fresh allocation on every event.
+        static readonly string[] Moves = { "lengthen", "girdle", "raise" };
+
+        /// Both ends of the corridor are compile-time constants, so the line
+        /// under the bar is the same string for the life of the process.
+        static readonly string CorridorText =
+            $"{ShipLadder.BeamyLimit:F1} beamy  ←  L/B  →  slender {ShipLadder.SlenderLimit:F1}";
+
+        SeaSick.Ship.ShipMotor motor;
+
         void Awake()
         {
             if (yard == null) yard = FindFirstObjectByType<Shipyard>();
+            if (yard != null) motor = yard.GetComponent<SeaSick.Ship.ShipMotor>();
         }
 
         // No keyboard toggle. The project runs on the Input System package,
@@ -35,6 +72,87 @@ namespace SeaSick.UI
 
         SeaSick.Voyage.VoyageManager voyage;
         bool wasHome = true;
+        float nextVoyageLookup;
+
+        /// Out of OnGUI: a scene scan per EVENT while the reference was null.
+        /// Same shape as `Shipyard.Update` — retry at 1 Hz, because script
+        /// order is not guaranteed and the manager is not always up first.
+        void Update()
+        {
+            if (yard != null && motor == null)
+                motor = yard.GetComponent<SeaSick.Ship.ShipMotor>();
+            if (voyage != null || Time.unscaledTime < nextVoyageLookup) return;
+            voyage = FindFirstObjectByType<SeaSick.Voyage.VoyageManager>();
+            nextVoyageLookup = Time.unscaledTime + 1f;
+        }
+
+        /// Everything on the panel, rebuilt only when the ship underneath it
+        /// has actually moved. See the field block above for why.
+        void RefreshText()
+        {
+            var n = yard.Node;
+            if (n == null) return;
+
+            long k = n.node;
+            for (int i = 0; i < 5; i++) k = k * 31 + yard.Count((SeaSick.Ship.BayUse)i);
+            for (int i = 0; i < 5; i++) k = k * 31 + yard.Fit.Level((SeaSick.Ship.FitTrack)i);
+            if (motor != null)
+            {
+                k = k * 31 + Mathf.RoundToInt(motor.MaxSpeed * 10f);
+                k = k * 31 + Mathf.RoundToInt(motor.MaxTurnRate * 10f);
+                k = k * 31 + Mathf.RoundToInt(motor.AccelerationNow * 100f);
+            }
+            if (k == textKey) return;
+            textKey = k;
+
+            rungText = $"Rung {n.node} of {ShipLadder.Count - 1}";
+            dimsText = $"{n.length:F1} × {n.beam:F1} m   draft {n.draft:F2}\n"
+                     + $"{n.mass_kg / 1000f:F0} t   L/B {n.loa_over_beam:F2}";
+            handlingText = motor != null
+                ? $"top {motor.MaxSpeed:F1} m/s   "
+                  + $"turn {motor.MaxTurnRate:F1}°/s   "
+                  + $"accel {motor.AccelerationNow:F2} m/s²"
+                : null;
+
+            // ONE reason line, for the move the corridor is currently refusing.
+            moveWhy = null;
+            for (int i = 0; i < Moves.Length; i++)
+            {
+                string why = yard.WhyNot(Moves[i]);
+                canMove[i] = why == null;
+                if (moveWhy == null && !string.IsNullOrEmpty(why)) moveWhy = why;
+            }
+
+            quantityReading[(int)SeaSick.Ship.BayUse.Battery] = $"{yard.Guns} a side";
+            quantityReading[(int)SeaSick.Ship.BayUse.Quarters] = $"{yard.Berths} of 20";
+            quantityReading[(int)SeaSick.Ship.BayUse.Hold] = $"{yard.Cargo} cargo";
+            for (int i = 0; i < 5; i++)
+                quantityWhy[i] = yard.WhyNotAdd((SeaSick.Ship.BayUse)i);
+
+            for (int i = 0; i < 5; i++)
+            {
+                var t = (SeaSick.Ship.FitTrack)i;
+                trackWhy[i] = yard.WhyNotFit(t);
+                trackButton[i] = ShipFitName(t, yard.Fit.Level(t));
+            }
+
+            cellsText = $"{n.bays} bays × {n.tiers} tiers = {n.cells} cells   "
+                      + $"({yard.Count(SeaSick.Ship.BayUse.Empty)} empty)";
+            crewText = $"crew {yard.Berths}   guns {yard.Guns}   cargo {yard.Cargo}"
+                     + (yard.Undermanned ? $"   needs {yard.CrewNeeded}" : "");
+            portsText = $"{n.ports_per_side} ports a side · {yard.CrewPerGunNow:0.#} hands "
+                      + $"a gun · she can man {yard.MaxGunsManned}";
+
+            // Two `Replace` calls a tier, per event, for a name that only
+            // changes when she is re-lofted.
+            if (tierShortFor != n.node || tierShort.Length != n.tier_names.Length)
+            {
+                tierShortFor = n.node;
+                tierShort = new string[n.tier_names.Length];
+                for (int i = 0; i < tierShort.Length; i++)
+                    tierShort[i] = Short(n.tier_names[i]);
+            }
+        }
 
         void OnGUI()
         {
@@ -52,7 +170,6 @@ namespace SeaSick.UI
             // voyage state does. The tab still reopens it at sea on purpose.
             if (Event.current.type == EventType.Layout)
             {
-                if (voyage == null) voyage = FindFirstObjectByType<SeaSick.Voyage.VoyageManager>();
                 bool home = voyage == null || voyage.AtHome;
                 if (wasHome && !home) open = false;
                 wasHome = home;
@@ -64,6 +181,10 @@ namespace SeaSick.UI
                 open = !open;
             UIBlocker.Block(tab);
             if (!open) return;
+
+            // Below the early-out on purpose: a shut panel says nothing, so it
+            // does not need to work out what it would have said.
+            RefreshText();
 
             var n = yard.Node;
             if (n == null)
@@ -95,12 +216,9 @@ namespace SeaSick.UI
             scroll = GUILayout.BeginScrollView(scroll);
 
             // --- who she is now ---------------------------------------------
-            GUILayout.Label($"Rung {n.node} of {ShipLadder.Count - 1}", UITheme.Small);
+            GUILayout.Label(rungText, UITheme.Small);
             GUILayout.Label(n.label, UITheme.Strong);
-            GUILayout.Label(
-                $"{n.length:F1} × {n.beam:F1} m   draft {n.draft:F2}\n"
-                + $"{n.mass_kg / 1000f:F0} t   L/B {n.loa_over_beam:F2}",
-                UITheme.Small);
+            GUILayout.Label(dimsText, UITheme.Small);
 
             // The corridor, drawn. 3.0 to 4.3, with her sitting somewhere in
             // it -- this is the whole pacing rule, and seeing the marker walk
@@ -111,37 +229,26 @@ namespace SeaSick.UI
                                           ShipLadder.SlenderLimit, n.loa_over_beam);
             UITheme.Rect(new Rect(bar.x + bar.width * t01 - 1f, bar.y, 3f, bar.height),
                          UITheme.Sea);
-            GUILayout.Label($"{ShipLadder.BeamyLimit:F1} beamy  ←  L/B  →  "
-                            + $"slender {ShipLadder.SlenderLimit:F1}", UITheme.Small);
+            GUILayout.Label(CorridorText, UITheme.Small);
 
             // --- the three moves --------------------------------------------
             GUILayout.Space(u * 0.4f);
             GUILayout.Label("HULL — she is re-lofted, never replaced", UITheme.Small);
             GUILayout.BeginHorizontal();
-            Move("Lengthen", "lengthen", u);
-            Move("Girdle", "girdle", u);
-            Move("Raise", "raise", u);
+            Move("Lengthen", 0, u);
+            Move("Girdle", 1, u);
+            Move("Raise", 2, u);
             GUILayout.EndHorizontal();
 
             // ONE reason line, for the move the corridor is currently refusing.
             // Three paragraphs of explanation pushed the board -- the thing
             // this panel exists for -- clean off the bottom of the screen.
-            foreach (var m in new[] { "lengthen", "girdle", "raise" })
-            {
-                var why = yard.WhyNot(m);
-                if (string.IsNullOrEmpty(why)) continue;
-                GUILayout.Label(why, UITheme.Small);
-                break;
-            }
+            if (moveWhy != null) GUILayout.Label(moveWhy, UITheme.Small);
 
             // --- how she handles ---------------------------------------------
             // The two numbers the hull decides for her, so the effect of a
             // fitting can be seen against what it is fighting.
-            var motor = yard.GetComponent<SeaSick.Ship.ShipMotor>();
-            if (motor != null)
-                GUILayout.Label($"top {motor.MaxSpeed:F1} m/s   "
-                    + $"turn {motor.MaxTurnRate:F1}°/s   "
-                    + $"accel {motor.AccelerationNow:F2} m/s²", UITheme.Small);
+            if (handlingText != null) GUILayout.Label(handlingText, UITheme.Small);
 
             // --- everything else she can be given ------------------------------
             //
@@ -157,8 +264,7 @@ namespace SeaSick.UI
             // level number — so the reason is always a fact about the ship.
             GUILayout.Space(u * 0.5f);
             GUILayout.Label("GUNS", UITheme.Small);
-            Quantity(SeaSick.Ship.BayUse.Battery, "number",
-                     $"{yard.Guns} a side", u);
+            Quantity(SeaSick.Ship.BayUse.Battery, "number", u);
             Track(SeaSick.Ship.FitTrack.Guns, u);
 
             GUILayout.Space(u * 0.4f);
@@ -168,8 +274,7 @@ namespace SeaSick.UI
 
             GUILayout.Space(u * 0.4f);
             GUILayout.Label("CREW", UITheme.Small);
-            Quantity(SeaSick.Ship.BayUse.Quarters, "berths",
-                     $"{yard.Berths} of 20", u);
+            Quantity(SeaSick.Ship.BayUse.Quarters, "berths", u);
             Track(SeaSick.Ship.FitTrack.Crew, u);
 
             GUILayout.Space(u * 0.4f);
@@ -181,29 +286,21 @@ namespace SeaSick.UI
             // space back is to know that the board below exists.
             GUILayout.Space(u * 0.4f);
             GUILayout.Label("HOLD", UITheme.Small);
-            Quantity(SeaSick.Ship.BayUse.Hold, "bays",
-                     $"{yard.Cargo} cargo", u);
+            Quantity(SeaSick.Ship.BayUse.Hold, "bays", u);
 
             GUILayout.Space(u * 0.5f);
 
             // --- what she is carrying ----------------------------------------
-            GUILayout.Label(
-                $"{n.bays} bays × {n.tiers} tiers = {n.cells} cells   "
-                + $"({yard.Count(SeaSick.Ship.BayUse.Empty)} empty)", UITheme.Small);
+            GUILayout.Label(cellsText, UITheme.Small);
             var crewCol = yard.Undermanned ? UITheme.Bad : UITheme.Text;
             var prev = GUI.color; GUI.color = crewCol;
-            GUILayout.Label(
-                $"crew {yard.Berths}   guns {yard.Guns}   cargo {yard.Cargo}"
-                + (yard.Undermanned ? $"   needs {yard.CrewNeeded}" : ""),
-                UITheme.Body);
+            GUILayout.Label(crewText, UITheme.Body);
             GUI.color = prev;
             // What her battery could be, and WHY it stops there. Without this
             // the crew-training track looks like a seasickness upgrade, and
             // the reason a first-rate carries twenty guns and not sixty is
             // invisible — it is drill, and drill is for sale.
-            GUILayout.Label(
-                $"{n.ports_per_side} ports a side · {yard.CrewPerGunNow:0.#} hands "
-                + $"a gun · she can man {yard.MaxGunsManned}", UITheme.Small);
+            GUILayout.Label(portsText, UITheme.Small);
 
             // --- the board ----------------------------------------------------
             GUILayout.Space(u * 0.3f);
@@ -211,8 +308,8 @@ namespace SeaSick.UI
             for (int ti = n.tier_names.Length - 1; ti >= 0; ti--)
             {
                 GUILayout.BeginHorizontal();
-                GUILayout.Label(Short(n.tier_names[ti]), UITheme.Small,
-                                GUILayout.Width(u * 3.4f));
+                GUILayout.Label(ti < tierShort.Length ? tierShort[ti] : "",
+                                UITheme.Small, GUILayout.Width(u * 3.4f));
                 for (int bi = 0; bi < n.bay_labels.Length; bi++)
                 {
                     var use = yard.Use(n.bay_labels[bi], n.tier_names[ti]);
@@ -253,9 +350,12 @@ namespace SeaSick.UI
         /// each way. The yard picks WHICH bay — low and amidships for a gun,
         /// on deck for a berth — so the player is asked "how many", which is
         /// the question they actually have.
-        void Quantity(SeaSick.Ship.BayUse use, string label, string reading, int u)
+        void Quantity(SeaSick.Ship.BayUse use, string label, int u)
         {
-            string why = yard.WhyNotAdd(use);
+            // Both the reading and the refusal come from the cache: `WhyNotAdd`
+            // formats a sentence, and this ran four times per event.
+            string reading = quantityReading[(int)use];
+            string why = quantityWhy[(int)use];
             GUILayout.BeginHorizontal();
             GUILayout.Label(label, UITheme.Small, GUILayout.Width(u * 5.0f));
             var prev = GUI.color;
@@ -283,7 +383,7 @@ namespace SeaSick.UI
         void Track(SeaSick.Ship.FitTrack t, int u)
         {
             int lvl = yard.Fit.Level(t);
-            string why = yard.WhyNotFit(t);
+            string why = trackWhy[(int)t];
             GUILayout.BeginHorizontal();
             GUILayout.Label(SeaSick.Ship.ShipFit.Label(t), UITheme.Small,
                             GUILayout.Width(u * 5.0f));
@@ -298,7 +398,7 @@ namespace SeaSick.UI
             }
             GUI.color = prev;
             GUI.enabled = why == null;
-            if (GUILayout.Button(ShipFitName(t, lvl), UITheme.Button,
+            if (GUILayout.Button(trackButton[(int)t], UITheme.Button,
                                  GUILayout.Height(u * 1.7f)))
             { yard.Upgrade(t); Say(yard.Status); }
             GUI.enabled = true;
@@ -312,13 +412,15 @@ namespace SeaSick.UI
                 ? SeaSick.Ship.ShipFit.Name(t, lvl)
                 : SeaSick.Ship.ShipFit.Name(t, lvl + 1) + " ▸";
 
-        void Move(string label, string move, int u)
+        /// `move` is an index into `Moves`: `CanMove` goes through
+        /// `ShipLadder.Blocked`, which builds a sentence to throw away, and it
+        /// ran three times per event. The answer is cached with the rest.
+        void Move(string label, int move, int u)
         {
-            bool can = yard.CanMove(move);
-            GUI.enabled = can;
+            GUI.enabled = canMove[move];
             if (GUILayout.Button(label, UITheme.Button, GUILayout.Height(u * 2.0f)))
             {
-                yard.Move(move);
+                yard.Move(Moves[move]);
                 Say(yard.Status);
             }
             GUI.enabled = true;

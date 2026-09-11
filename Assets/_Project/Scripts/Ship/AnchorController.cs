@@ -57,6 +57,20 @@ namespace SeaSick.Ship
         bool repairing;
         GUIStyle buttonStyle, infoStyle;
 
+        // Every readout on this prompt, cached.
+        //
+        // IMGUI calls OnGUI once per EVENT — Layout, Repaint, one per mouse
+        // move — so the interpolations below ran several times a frame to
+        // produce the same sentence. See StatusHUD for the measurement. Each
+        // of these rebuilds only when what it SAYS changes: the anchor timers
+        // on the tenth of a second they show, the hull on the whole percent,
+        // the harvest on the whole unit.
+        readonly HudLabel landText = new HudLabel();
+        readonly HudLabel timerText = new HudLabel();
+        readonly HudLabel repairText = new HudLabel();
+        readonly HudLabel statusText = new HudLabel();
+        readonly HudLabel deckCargoText = new HudLabel();
+
         void Start()
         {
             motor = GetComponent<ShipMotor>();
@@ -551,10 +565,12 @@ namespace SeaSick.Ship
             UIBlocker.Block(r);
 
             var style = voyage.TakeDeckCargo ? UITheme.ButtonPressed : buttonStyle;
-            string label = voyage.TakeDeckCargo
-                ? $"◉  deck cargo — to {voyage.MaxHold}"
-                : $"◎  deck cargo — stop at {voyage.HoldCapacity}";
-            if (GUI.Button(r, label, style)) voyage.TakeDeckCargo = !voyage.TakeDeckCargo;
+            if (deckCargoText.Changed(HudLabel.Key(voyage.TakeDeckCargo ? 1 : 0,
+                                                   voyage.MaxHold, voyage.HoldCapacity)))
+                deckCargoText.Set(voyage.TakeDeckCargo
+                    ? $"◉  deck cargo — to {voyage.MaxHold}"
+                    : $"◎  deck cargo — stop at {voyage.HoldCapacity}");
+            if (GUI.Button(r, deckCargoText.Content, style)) voyage.TakeDeckCargo = !voyage.TakeDeckCargo;
 
             if (voyage.TakeDeckCargo)
                 GUI.Label(stack.Next(u * 1.6f),
@@ -629,26 +645,40 @@ namespace SeaSick.Ship
 
                     bool beach = CanLandHere(isle);
                     bool slowEnough = motor.CurrentSpeed <= approachSpeedLimit;
-                    string label = !beach
-                        ? "sheer cliff — find a beach"
-                        : slowEnough
-                            ? (isle.HasResources
-                                ? $"⚓  Land here — {isle.ResourceName}   (space)"
-                                : "⚓  Land here — rest   (space)")
-                            : "slow down to land  (S)";
+                    // Three of the four readings are literals; only the named
+                    // resource has to be built, and only when the island under
+                    // the bow changes.
+                    bool res = isle.HasResources;
+                    if (landText.Changed(HudLabel.Key(beach ? 1 : 0, slowEnough ? 1 : 0,
+                            res ? 1 : 0, res && isle.ResourceName != null
+                                         ? isle.ResourceName.GetHashCode() : 0)))
+                        landText.Set(!beach
+                            ? "sheer cliff — find a beach"
+                            : slowEnough
+                                ? (res
+                                    ? $"⚓  Land here — {isle.ResourceName}   (space)"
+                                    : "⚓  Land here — rest   (space)")
+                                : "slow down to land  (S)");
                     UIBlocker.Block(primary);
                     GUI.enabled = slowEnough && beach;
-                    if (GUI.Button(primary, label, buttonStyle)) Land(isle);
+                    if (GUI.Button(primary, landText.Content, buttonStyle)) Land(isle);
                     GUI.enabled = true;
                     break;
                 }
 
+                // One tenth of a second is what these show, so that — not the
+                // float — is the key: ten strings a second instead of one per
+                // event.
                 case State.Dropping:
-                    GUI.Label(stack.Next(bh), $"dropping anchor…  {timer:F1}s", infoStyle);
+                    if (timerText.Changed(HudLabel.Key(0, Mathf.RoundToInt(timer * 10f))))
+                        timerText.Set($"dropping anchor…  {timer:F1}s");
+                    GUI.Label(stack.Next(bh), timerText.Content, infoStyle);
                     break;
 
                 case State.Weighing:
-                    GUI.Label(stack.Next(bh), $"weighing anchor…  {timer:F1}s", infoStyle);
+                    if (timerText.Changed(HudLabel.Key(1, Mathf.RoundToInt(timer * 10f))))
+                        timerText.Set($"weighing anchor…  {timer:F1}s");
+                    GUI.Label(stack.Next(bh), timerText.Content, infoStyle);
                     break;
 
                 case State.Anchored:
@@ -690,19 +720,34 @@ namespace SeaSick.Ship
                     {
                         var secondary = stack.Next(bh);
                         UIBlocker.Block(secondary);
-                        string repairLabel = repairing
-                            ? $"stop repairs — hull {hull.Integrity01:P0}"
-                            : $"repair hull ({hull.Integrity01:P0}) — uses timber";
-                        if (GUI.Button(secondary, repairLabel, buttonStyle)) repairing = !repairing;
+                        // Whole percent is what P0 prints; the float under it
+                        // moves every frame a plank goes on.
+                        if (repairText.Changed(HudLabel.Key(repairing ? 1 : 0,
+                                Mathf.RoundToInt(hull.Integrity01 * 100f))))
+                            repairText.Set(repairing
+                                ? $"stop repairs — hull {hull.Integrity01:P0}"
+                                : $"repair hull ({hull.Integrity01:P0}) — uses timber");
+                        if (GUI.Button(secondary, repairText.Content, buttonStyle)) repairing = !repairing;
                     }
 
                     DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
 
-                    string status = CurrentIsland != null && CurrentIsland.HasResources
-                        ? $"harvesting {CurrentIsland.ResourceName} — {CurrentIsland.Remaining:F0} left"
-                        : "the crew rests on solid ground";
-                    if (repairing) status += "   ·   repairing hull";
-                    GUI.Label(stack.Next(u * 1.8f), status, infoStyle);
+                    // What is left reads as a whole unit, so it only needs a
+                    // new string when a unit actually comes out of the ground
+                    // — not on every event while the crew work.
+                    bool harvesting = CurrentIsland != null && CurrentIsland.HasResources;
+                    if (statusText.Changed(HudLabel.Key(harvesting ? 1 : 0, repairing ? 1 : 0,
+                            harvesting ? Mathf.RoundToInt(CurrentIsland.Remaining) : 0,
+                            harvesting && CurrentIsland.ResourceName != null
+                                ? CurrentIsland.ResourceName.GetHashCode() : 0)))
+                    {
+                        string status = harvesting
+                            ? $"harvesting {CurrentIsland.ResourceName} — {CurrentIsland.Remaining:F0} left"
+                            : "the crew rests on solid ground";
+                        if (repairing) status += "   ·   repairing hull";
+                        statusText.Set(status);
+                    }
+                    GUI.Label(stack.Next(u * 1.8f), statusText.Content, infoStyle);
                     break;
                 }
             }

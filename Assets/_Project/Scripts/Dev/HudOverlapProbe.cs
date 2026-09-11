@@ -75,6 +75,13 @@ namespace SeaSick.Dev
         [Tooltip("Re-print the census this often even when nothing changed, so a report carries STEADY-STATE positions rather than only the frame a panel first appeared.")]
         [SerializeField] float censusEverySeconds = 5f;
 
+        [Tooltip("Print the HUD CENSUS. OFF by default: the log call alone was measured at 35-70 KB and up to 68 ms on the frame it fires, which contaminates every GC measurement taken in the editor. Turn it on when you are reading the layout, not when you are measuring it.")]
+        [SerializeField] bool logCensus = false;
+
+        /// So a measurement session, or a probe driving this one, can turn the
+        /// census on without touching the scene.
+        public static bool ForceCensus;
+
 #if UNITY_EDITOR
         /// Installs itself in the editor, for the same reason the settings
         /// drawer does: a check nobody remembers to add to a scene is a check
@@ -136,8 +143,19 @@ namespace SeaSick.Dev
             for (int i = 0; i < issued.Count; i++)
             {
                 rects.Add(issued[i]);
-                names.Add("slot:" + (i < slots.Count ? slots[i] : "?"));
+                names.Add(SlotName(i < slots.Count ? slots[i] : "?"));
             }
+        }
+
+        /// "slot:" + name, built once per slot ever. Gather runs on every
+        /// repaint over ~20 rects, and the concat was a fresh string each time
+        /// for a name that never changes.
+        static readonly Dictionary<string, string> slotNames = new Dictionary<string, string>();
+        static string SlotName(string slot)
+        {
+            if (!slotNames.TryGetValue(slot, out string s))
+                slotNames[slot] = s = "slot:" + slot;
+            return s;
         }
 
         void OnGUI()
@@ -195,6 +213,15 @@ namespace SeaSick.Dev
         /// whole HUD was in front of it.
         void Census()
         {
+            // **Opt-in, because the report costs more than the thing it
+            // watches.** Measured 2026-09-11 in the profiler: the multi-line
+            // `Debug.Log` below allocated 35-70 KB and cost up to 68 ms on the
+            // frame it fired — on a five-second timer, so every editor GC
+            // reading carried a spike this probe put there itself. The overlap
+            // test is the point of the probe and stays on; this is evidence
+            // you switch on while reading the layout.
+            if (!logCensus && !ForceCensus) return;
+
             int key = 17;
             for (int i = 0; i < names.Count; i++) key = key * 31 + names[i].GetHashCode();
 

@@ -62,6 +62,8 @@ namespace SeaSick.Ship
 
         void Update()
         {
+            FindVoyage();
+
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
@@ -114,6 +116,25 @@ namespace SeaSick.Ship
         [SerializeField] int jettisonPerTap = 5;
 
         Voyage.VoyageManager voyage;
+        float nextVoyageLookup;
+
+        // One string, and its only input is a serialized field — but it was
+        // being built on every IMGUI event while she was flooding, which is
+        // exactly when the frame can least afford it. Built once, rebuilt only
+        // if the Inspector moves it.
+        string jettisonLabel;
+        int jettisonLabelFor = int.MinValue;
+
+        /// Out of OnGUI: a scene scan per EVENT, for an object that never
+        /// moves. Same shape as `Shipyard.Update` — cache it, and retry at
+        /// 1 Hz while it is still null, because script order is not guaranteed
+        /// and the manager is not always up before the first draw.
+        void FindVoyage()
+        {
+            if (voyage != null || Time.unscaledTime < nextVoyageLookup) return;
+            voyage = FindAnyObjectByType<Voyage.VoyageManager>();
+            nextVoyageLookup = Time.unscaledTime + 1f;
+        }
 
         /// Contextual, like the rest of this game's HUD. The water level
         /// itself now reads on the ship panel under the hull bar (StatusHUD) —
@@ -122,7 +143,6 @@ namespace SeaSick.Ship
         /// has to be under a thumb.
         void OnGUI()
         {
-            if (voyage == null) voyage = FindAnyObjectByType<Voyage.VoyageManager>();
             bool overloaded = voyage != null && voyage.Overloaded;
             if (!Flooding && !overloaded) return;
 
@@ -138,7 +158,12 @@ namespace SeaSick.Ship
             int u = HudLayout.Unit;
             var btn = Prompts.Begin().Next(u * 2.1f, u * 14f);
             UIBlocker.Block(btn);
-            if (GUI.Button(btn, $"over the side  ·  {jettisonPerTap}", UITheme.Button))
+            if (jettisonLabelFor != jettisonPerTap)
+            {
+                jettisonLabelFor = jettisonPerTap;
+                jettisonLabel = $"over the side  ·  {jettisonPerTap}";
+            }
+            if (GUI.Button(btn, jettisonLabel, UITheme.Button))
                 voyage.Jettison(jettisonPerTap);
         }
     }

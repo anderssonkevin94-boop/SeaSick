@@ -48,11 +48,16 @@ namespace SeaSick.Ocean
             foreach (var b in bodies) count += b.Probes.Count;
             if (count == 0) return;
 
-            if (!queries.IsCreated || queries.Length != count)
+            // Grow-only. Cannonballs, crew and raiders register and unregister
+            // as they come and go, so the count moves every few frames in a
+            // fight; reallocating two persistent arrays on every change was a
+            // native alloc + dispose per shot. Capacity doubles and stays.
+            if (!queries.IsCreated || queries.Length < count)
             {
                 if (queries.IsCreated) { queries.Dispose(); results.Dispose(); }
-                queries = new NativeArray<float3>(count, Allocator.Persistent);
-                results = new NativeArray<OceanSample>(count, Allocator.Persistent);
+                int cap = Mathf.NextPowerOfTwo(count);
+                queries = new NativeArray<float3>(cap, Allocator.Persistent);
+                results = new NativeArray<OceanSample>(cap, Allocator.Persistent);
             }
 
             int cursor = 0;
@@ -91,8 +96,8 @@ namespace SeaSick.Ocean
             // innerloopBatchCount of 16 the entire ship ran as one batch on one
             // worker while the pool idled. One schedule, batch 4, one fence.
             int hullCount = cursor;
-            OceanSampler.SampleBatch(queries, results, default, hullCount, HullFilter())
-                .Complete();
+            OceanSampler.SampleBatch(queries.GetSubArray(0, count), results.GetSubArray(0, count),
+                default, hullCount, HullFilter()).Complete();
 
             cursor = 0;
             var span = results.AsReadOnlySpan();

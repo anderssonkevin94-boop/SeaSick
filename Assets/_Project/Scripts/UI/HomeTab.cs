@@ -39,18 +39,24 @@ namespace SeaSick.UI
         string refusal;
         float refusalUntil = -99f;
 
+        float nextLookup;
+
         void Start() => anchor = FindFirstObjectByType<AnchorController>();
+
+        /// Script order is not guaranteed and the ship is not always the first
+        /// thing up, so the lookup has to be able to run again — but once a
+        /// second from here, not once per IMGUI EVENT from OnGUI, which is
+        /// where it used to live. Same shape as `Shipyard.Update`.
+        void Update()
+        {
+            if (anchor != null || Time.unscaledTime < nextLookup) return;
+            anchor = FindFirstObjectByType<AnchorController>();
+            nextLookup = Time.unscaledTime + 1f;
+        }
 
         void OnGUI()
         {
-            // Built on demand rather than trusted from Start: script order is
-            // not guaranteed and the ship is not always the first thing up.
-            if (anchor == null)
-            {
-                if (Event.current.type != EventType.Layout) return;
-                anchor = FindFirstObjectByType<AnchorController>();
-                if (anchor == null) return;
-            }
+            if (anchor == null) return;
             // Nothing to do at her own pier.
             if (anchor.AtHomeDock) { armedUntil = -99f; return; }
 

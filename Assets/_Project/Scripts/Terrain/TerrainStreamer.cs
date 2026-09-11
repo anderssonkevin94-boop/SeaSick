@@ -87,6 +87,11 @@ namespace SeaSick.Terrain
         static readonly System.Diagnostics.Stopwatch phase = new System.Diagnostics.Stopwatch();
         static float Lap() { float ms = (float)phase.Elapsed.TotalMilliseconds; phase.Restart(); return ms; }
         public int TotalBuilt { get; private set; }
+        // Reused rather than `Stopwatch.StartNew()`'d fresh every Update/
+        // Replan call -- same reasoning as `phase` above, just for the two
+        // callers that used to allocate their own.
+        readonly System.Diagnostics.Stopwatch updateWatch = new System.Diagnostics.Stopwatch();
+        readonly System.Diagnostics.Stopwatch replanWatch = new System.Diagnostics.Stopwatch();
 
         public bool IsLoaded(int2 c) => loaded.TryGetValue(c, out var ch) && ch.lod != 0 && !ch.building;
         public Mesh MeshAt(int2 c) => IsLoaded(c) ? loaded[c].mesh : null;
@@ -152,7 +157,7 @@ namespace SeaSick.Terrain
         void Update()
         {
             if (settings == null || target == null) return;
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            updateWatch.Restart();
 
             if (paramsDirty)
             {
@@ -186,7 +191,7 @@ namespace SeaSick.Terrain
             WorstScheduleMs = math.max(WorstScheduleMs, Lap());
             JobHandle.ScheduleBatchedJobs();
 
-            LastMainThreadMs = (float)sw.Elapsed.TotalMilliseconds;
+            LastMainThreadMs = (float)updateWatch.Elapsed.TotalMilliseconds;
         }
 
         float lastReleaseMs, lastLoopMs, lastSortMs, lastScanMs; int lastDropped;
@@ -204,7 +209,7 @@ namespace SeaSick.Terrain
 
         void Replan(int2 centre)
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
+            replanWatch.Restart();
             int dropR = settings.viewRadius + unloadHysteresis;
             drop.Clear();
             foreach (var kv in loaded)
@@ -212,11 +217,11 @@ namespace SeaSick.Terrain
                 int2 d = math.abs(kv.Key - centre);
                 if (math.max(d.x, d.y) > dropR && !kv.Value.building) drop.Add(kv.Key);
             }
-            lastScanMs = (float)sw.Elapsed.TotalMilliseconds; sw.Restart();
+            lastScanMs = (float)replanWatch.Elapsed.TotalMilliseconds; replanWatch.Restart();
             // Releases are amortised over the next frames (see ReleaseSome).
             foreach (var c in drop) { releaseQueue.Add(loaded[c]); loaded.Remove(c); }
             lastDropped = drop.Count;
-            lastReleaseMs = (float)sw.Elapsed.TotalMilliseconds; sw.Restart();
+            lastReleaseMs = (float)replanWatch.Elapsed.TotalMilliseconds; replanWatch.Restart();
 
             // Existing chunks: update LOD target and collider ring. Missing ones
             // are only queued — their objects are created when scheduled, so a
@@ -240,11 +245,11 @@ namespace SeaSick.Terrain
                     }
                     else queue.Add(c);
                 }
-            lastLoopMs = (float)sw.Elapsed.TotalMilliseconds; sw.Restart();
+            lastLoopMs = (float)replanWatch.Elapsed.TotalMilliseconds; replanWatch.Restart();
             // Chunks already loaded keep rendering at their old LOD until the rebuild lands.
             sortCentre = centre;
             queue.Sort(FarthestFirst);
-            lastSortMs = (float)sw.Elapsed.TotalMilliseconds;
+            lastSortMs = (float)replanWatch.Elapsed.TotalMilliseconds;
         }
 
         void ScheduleMore()

@@ -372,11 +372,18 @@ namespace SeaSick.Ship
                                                   bw * 2f + gap, bh + u * 0.35f + 2f);
             float y = band.y;
 
-            DrawSide(new Rect(band.x, y, bw, bh), false, PortReady, "◀ port");
-            DrawSide(new Rect(band.x + bw + gap, y, bw, bh), true, StarboardReady, "stbd ▶");
+            DrawSide(new Rect(band.x, y, bw, bh), false, PortReady, "◀ port", portText);
+            DrawSide(new Rect(band.x + bw + gap, y, bw, bh), true, StarboardReady, "stbd ▶", starboardText);
         }
 
-        void DrawSide(Rect r, bool starboardSide, int ready, string label)
+        // One cached readout a side. IMGUI runs OnGUI once per EVENT, so these
+        // two were formatted several times a frame to keep saying "◀ port  2/2"
+        // — see StatusHUD for what that costs. They rebuild when the ready
+        // count, the gun count or the crew's presence moves, and not otherwise.
+        readonly HudLabel portText = new HudLabel();
+        readonly HudLabel starboardText = new HudLabel();
+
+        void DrawSide(Rect r, bool starboardSide, int ready, string label, HudLabel text)
         {
             UIBlocker.Block(r);
             var style = UITheme.Button;   // cached; copying it per frame bought nothing
@@ -386,10 +393,11 @@ namespace SeaSick.Ship
             // reads as the two people who are supposed to be there being
             // somewhere else, which is the actual situation.
             int manned = MannedOn(side);
-            string text = manned == 0
-                ? $"{label}  no crew"
-                : $"{label}  {ready}/{side.Count}";
-            if (GUI.Button(r, text, style)) FireBroadside(starboardSide);
+            if (text.Changed(HudLabel.Key(manned == 0 ? 1 : 0, ready, side.Count)))
+                text.Set(manned == 0
+                    ? $"{label}  no crew"
+                    : $"{label}  {ready}/{side.Count}");
+            if (GUI.Button(r, text.Content, style)) FireBroadside(starboardSide);
             GUI.enabled = true;
 
             // Reload progress under the button.

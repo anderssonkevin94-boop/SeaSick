@@ -68,6 +68,8 @@ namespace SeaSick.Terrain
         Vector3[] managedVerts;
         Color[] managedColours;
 
+        static readonly int HorizonHazeId = Shader.PropertyToID("_HorizonHaze");
+
         void OnEnable()
         {
             if (target == null && Camera.main != null) target = Camera.main.transform;
@@ -173,7 +175,7 @@ namespace SeaSick.Terrain
 
             // The haze colour is whatever the sky is doing, so dusk, night and
             // storm all come through without a second set of authored colours.
-            Shader.SetGlobalColor("_HorizonHaze", RenderSettings.fogColor);
+            Shader.SetGlobalColor(HorizonHazeId, RenderSettings.fogColor);
 
             if (building && handle.IsCompleted)
             {

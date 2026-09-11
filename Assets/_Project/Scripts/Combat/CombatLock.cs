@@ -26,6 +26,7 @@ namespace SeaSick.Combat
         ChaseCamera chase;
         IHittable self;
         float outOfRangeFor;
+        float nextChaseLookup;
 
         public IHittable Locked { get; private set; }
 
@@ -36,7 +37,16 @@ namespace SeaSick.Combat
 
         void Update()
         {
-            if (chase == null) chase = FindFirstObjectByType<ChaseCamera>();
+            // Retried once a second, not every frame. A null camera meant a
+            // full scene scan every frame for as long as it stayed null —
+            // Shipyard measured the same call at 0.24-1.4 ms plus a share of
+            // the per-frame garbage, for an object that is found on the first
+            // frame it exists and then never looked for again.
+            if (chase == null && Time.unscaledTime >= nextChaseLookup)
+            {
+                chase = FindFirstObjectByType<ChaseCamera>();
+                nextChaseLookup = Time.unscaledTime + 1f;
+            }
 
             // Drop a lock that has died, sunk out of the registry, or run.
             if (Locked != null)

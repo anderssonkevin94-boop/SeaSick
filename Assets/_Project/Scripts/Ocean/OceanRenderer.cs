@@ -30,6 +30,35 @@ namespace SeaSick.Ocean
         double lastFoamTime;
         bool spectrumDirty = true;
 
+        // Shader.PropertyToID cache for StepSimulation's per-frame sets —
+        // both the compute-shader property names (used with SetInt/SetFloat/
+        // SetVector/SetTexture, which take the int overload same as
+        // Shader.SetGlobal*) and the shader globals published at the end.
+        static readonly int NId = Shader.PropertyToID("_N");
+        static readonly int OceanTimeId = Shader.PropertyToID("_OceanTime");
+        static readonly int LambdaCId = Shader.PropertyToID("_LambdaC");
+        static readonly int H0Id = Shader.PropertyToID("H0");
+        static readonly int WaveDataId = Shader.PropertyToID("WaveData");
+        static readonly int Spec0Id = Shader.PropertyToID("Spec0");
+        static readonly int Spec1Id = Shader.PropertyToID("Spec1");
+        static readonly int Spatial0Id = Shader.PropertyToID("Spatial0");
+        static readonly int Spatial1Id = Shader.PropertyToID("Spatial1");
+        static readonly int DisplacementId = Shader.PropertyToID("Displacement");
+        static readonly int DerivativesId = Shader.PropertyToID("Derivatives");
+        static readonly int DtId = Shader.PropertyToID("_Dt");
+        static readonly int ThresholdId = Shader.PropertyToID("_Threshold");
+        static readonly int DecayFactorId = Shader.PropertyToID("_DecayFactor");
+        static readonly int InjectionId = Shader.PropertyToID("_Injection");
+        static readonly int InjectSharpId = Shader.PropertyToID("_InjectSharp");
+        static readonly int PatchSizesId = Shader.PropertyToID("_PatchSizes");
+        static readonly int TurbPrevId = Shader.PropertyToID("TurbPrev");
+        static readonly int TurbOutId = Shader.PropertyToID("TurbOut");
+        static readonly int OceanDisplacementId = Shader.PropertyToID("_Ocean_Displacement");
+        static readonly int OceanDerivativesId = Shader.PropertyToID("_Ocean_Derivatives");
+        static readonly int OceanTurbulenceId = Shader.PropertyToID("_Ocean_Turbulence");
+        static readonly int OceanPatchSizesId = Shader.PropertyToID("_Ocean_PatchSizes");
+        static readonly int OceanFadeParamsId = Shader.PropertyToID("_Ocean_FadeParams");
+
         public OceanSpectrumSettings Settings => settings;
 
         /// How many times h0 has been regenerated this session. A rebuild
@@ -107,32 +136,32 @@ namespace SeaSick.Ocean
             int n = cascades.N;
             int groups = Mathf.CeilToInt(n / 8f);
 
-            timeEvolveShader.SetInt("_N", n);
+            timeEvolveShader.SetInt(NId, n);
             // Named _OceanTime, not _Time: the latter is a Unity built-in
             // shader global and colliding with it silently feeds the wrong
             // clock into the kernel.
-            timeEvolveShader.SetFloat("_OceanTime", (float)OceanTime.Now);
+            timeEvolveShader.SetFloat(OceanTimeId, (float)OceanTime.Now);
             // Choppiness is per cascade now. See `crestSharpen` on the
             // spectrum asset for why, and for which of the three are free.
             Vector3 cs = settings.crestSharpen;
-            timeEvolveShader.SetVector("_LambdaC", new Vector4(
+            timeEvolveShader.SetVector(LambdaCId, new Vector4(
                 settings.choppiness * Mathf.Max(0f, cs.x),
                 settings.choppiness * Mathf.Max(0f, cs.y),
                 settings.choppiness * Mathf.Max(0f, cs.z), 0f));
 
-            timeEvolveShader.SetTexture(evolveKernel, "H0", cascades.H0);
-            timeEvolveShader.SetTexture(evolveKernel, "WaveData", cascades.WaveData);
-            timeEvolveShader.SetTexture(evolveKernel, "Spec0", cascades.Spec0);
-            timeEvolveShader.SetTexture(evolveKernel, "Spec1", cascades.Spec1);
+            timeEvolveShader.SetTexture(evolveKernel, H0Id, cascades.H0);
+            timeEvolveShader.SetTexture(evolveKernel, WaveDataId, cascades.WaveData);
+            timeEvolveShader.SetTexture(evolveKernel, Spec0Id, cascades.Spec0);
+            timeEvolveShader.SetTexture(evolveKernel, Spec1Id, cascades.Spec1);
             timeEvolveShader.Dispatch(evolveKernel, groups, groups, CascadeSet.Cascades);
 
             fft.Inverse(cascades.Spec0, cascades.Scratch, n, CascadeSet.Cascades);
             fft.Inverse(cascades.Spec1, cascades.Scratch, n, CascadeSet.Cascades);
 
-            timeEvolveShader.SetTexture(resolveKernel, "Spatial0", cascades.Spec0);
-            timeEvolveShader.SetTexture(resolveKernel, "Spatial1", cascades.Spec1);
-            timeEvolveShader.SetTexture(resolveKernel, "Displacement", cascades.Displacement);
-            timeEvolveShader.SetTexture(resolveKernel, "Derivatives", cascades.Derivatives);
+            timeEvolveShader.SetTexture(resolveKernel, Spatial0Id, cascades.Spec0);
+            timeEvolveShader.SetTexture(resolveKernel, Spatial1Id, cascades.Spec1);
+            timeEvolveShader.SetTexture(resolveKernel, DisplacementId, cascades.Displacement);
+            timeEvolveShader.SetTexture(resolveKernel, DerivativesId, cascades.Derivatives);
             timeEvolveShader.Dispatch(resolveKernel, groups, groups, CascadeSet.Cascades);
 
             if (foamKernel >= 0)
@@ -140,30 +169,30 @@ namespace SeaSick.Ocean
                 float foamDt = Mathf.Max(0f, (float)(OceanTime.Now - lastFoamTime));
                 lastFoamTime = OceanTime.Now;
                 float halflife = Mathf.Max(0.5f, settings.foamHalflife);
-                foamShader.SetInt("_N", n);
-                foamShader.SetFloat("_Dt", foamDt);
-                foamShader.SetFloat("_Threshold", settings.foamThreshold);
-                foamShader.SetFloat("_DecayFactor",
+                foamShader.SetInt(NId, n);
+                foamShader.SetFloat(DtId, foamDt);
+                foamShader.SetFloat(ThresholdId, settings.foamThreshold);
+                foamShader.SetFloat(DecayFactorId,
                     Mathf.Exp(-0.6931472f * foamDt / halflife));
-                foamShader.SetFloat("_Injection", settings.foamInjection);
-                foamShader.SetFloat("_InjectSharp",
+                foamShader.SetFloat(InjectionId, settings.foamInjection);
+                foamShader.SetFloat(InjectSharpId,
                     Mathf.Max(0.5f, settings.foamInjectSharpness));
-                foamShader.SetVector("_PatchSizes", cascades.PatchSizesVec);
-                foamShader.SetTexture(foamKernel, "Displacement", cascades.Displacement);
-                foamShader.SetTexture(foamKernel, "Derivatives", cascades.Derivatives);
-                foamShader.SetTexture(foamKernel, "TurbPrev", cascades.Turbulence);
-                foamShader.SetTexture(foamKernel, "TurbOut", cascades.TurbulencePrev);
+                foamShader.SetVector(PatchSizesId, cascades.PatchSizesVec);
+                foamShader.SetTexture(foamKernel, DisplacementId, cascades.Displacement);
+                foamShader.SetTexture(foamKernel, DerivativesId, cascades.Derivatives);
+                foamShader.SetTexture(foamKernel, TurbPrevId, cascades.Turbulence);
+                foamShader.SetTexture(foamKernel, TurbOutId, cascades.TurbulencePrev);
                 foamShader.Dispatch(foamKernel, groups, groups, 1);
                 cascades.SwapTurbulence();
             }
 
-            Shader.SetGlobalTexture("_Ocean_Displacement", cascades.Displacement);
-            Shader.SetGlobalTexture("_Ocean_Derivatives", cascades.Derivatives);
-            Shader.SetGlobalTexture("_Ocean_Turbulence", cascades.Turbulence);
-            Shader.SetGlobalVector("_Ocean_PatchSizes", cascades.PatchSizesVec);
+            Shader.SetGlobalTexture(OceanDisplacementId, cascades.Displacement);
+            Shader.SetGlobalTexture(OceanDerivativesId, cascades.Derivatives);
+            Shader.SetGlobalTexture(OceanTurbulenceId, cascades.Turbulence);
+            Shader.SetGlobalVector(OceanPatchSizesId, cascades.PatchSizesVec);
             var q = OceanQuality.Active;
             float fadeEnd = q != null ? q.displacementFadeDistance : 500f;
-            Shader.SetGlobalVector("_Ocean_FadeParams",
+            Shader.SetGlobalVector(OceanFadeParamsId,
                 new Vector4(fadeEnd * 0.6f, fadeEnd, 0f, 0f));
             RegionField.PublishNeutralIfAbsent();
 

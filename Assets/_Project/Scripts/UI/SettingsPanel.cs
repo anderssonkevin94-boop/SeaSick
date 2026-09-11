@@ -142,13 +142,13 @@ namespace SeaSick.UI
             GUI.Label(new Rect(body.x, y, body.width, u * 1.4f), "HUD", UITheme.Small);
             y += u * 1.8f;
 
-            y = Toggle(body, y, rowH, "minimap & wind", HudVisibility.Minimap,
+            y = Toggle(body, y, rowH, RowMinimap, HudVisibility.Minimap,
                        v => HudVisibility.Minimap = v);
-            y = Toggle(body, y, rowH, "compass tape", HudVisibility.Compass,
+            y = Toggle(body, y, rowH, RowCompass, HudVisibility.Compass,
                        v => HudVisibility.Compass = v);
-            y = Toggle(body, y, rowH, "crew", HudVisibility.Crew,
+            y = Toggle(body, y, rowH, RowCrew, HudVisibility.Crew,
                        v => HudVisibility.Crew = v);
-            y = Toggle(body, y, rowH, "performance readout", HudVisibility.Perf,
+            y = Toggle(body, y, rowH, RowPerf, HudVisibility.Perf,
                        v => HudVisibility.Perf = v);
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -201,16 +201,27 @@ namespace SeaSick.UI
             t.DrawTool(toolBody);
         }
 
+        /// Each row's two faces, { off, on }, built at load.
+        ///
+        /// `(value ? "◉  " : "◎  ") + label` is a fresh string every time it
+        /// runs, and it ran four times per IMGUI EVENT — Layout, Repaint and
+        /// one more per mouse move — to say four fixed things. A row has
+        /// exactly two readings; there is no reason to build either twice.
+        static readonly string[] RowMinimap = { "◎  minimap & wind", "◉  minimap & wind" };
+        static readonly string[] RowCompass = { "◎  compass tape", "◉  compass tape" };
+        static readonly string[] RowCrew = { "◎  crew", "◉  crew" };
+        static readonly string[] RowPerf = { "◎  performance readout", "◉  performance readout" };
+
         /// A row that reads as on or off without a checkbox glyph: the pressed
         /// style IS the state, the same way the oars and ease-her buttons at
         /// the helm already work.
-        static float Toggle(Rect body, float y, float rowH, string label,
+        static float Toggle(Rect body, float y, float rowH, string[] faces,
                             bool value, System.Action<bool> set)
         {
             var r = new Rect(body.x, y, body.width, rowH);
             UIBlocker.Block(r);
             var style = value ? UITheme.ButtonPressed : UITheme.Button;
-            if (GUI.Button(r, (value ? "◉  " : "◎  ") + label, style)) set(!value);
+            if (GUI.Button(r, faces[value ? 1 : 0], style)) set(!value);
             return y + rowH + HudLayout.Unit * 0.35f;
         }
     }

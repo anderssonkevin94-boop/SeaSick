@@ -45,16 +45,33 @@ namespace SeaSick.Combat
         public float Health01 => Mathf.Clamp01(1f - (float)damage / Mathf.Max(1, hitPoints));
         public float LastHitAt => lastHitAt;
 
+        /// One registry handle per beast instead of a main-thread
+        /// `SampleImmediate` per beast per frame. See Update for the numbers.
+        Ocean.OceanProbeRegistry.Handle seaProbe;
+        static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+
         void OnEnable()
         {
             if (!All.Contains(this)) All.Add(this);
             HitTargets.Register(this);
+            EnsureProbe();
         }
 
         void OnDisable()
         {
             All.Remove(this);
             HitTargets.Unregister(this);
+            Ocean.OceanProbeRegistry.Unregister(seaProbe);
+            seaProbe = null;
+        }
+
+        /// Re-registered rather than assumed: a domain reload mid-play empties
+        /// the registry's static list while the component and this field
+        /// survive. StormSpray.EnsureHandles documents the same asymmetry.
+        void EnsureProbe()
+        {
+            if (seaProbe != null && Ocean.OceanProbeRegistry.Handles.Count > 0) return;
+            seaProbe = Ocean.OceanProbeRegistry.Register(transform.position);
         }
 
         void Awake()
@@ -174,13 +191,32 @@ namespace SeaSick.Combat
         {
             float t = Time.time;
 
-            // Ride the surface. Sample on demand — the ocean may not have been
-            // ready when this spawned.
-            if (Ocean.OceanSampler.Ready)
+            // Ride the surface, off the ONE batched Burst query the physics
+            // driver runs per step. This used to be a main-thread
+            // `SampleImmediate` per beast per frame: the cost probe counted 14
+            // immediate samples a frame at sea against the 8 the sampler's own
+            // doc budgets for, 11 of them here and in EnemyShip.RideSea, at
+            // ~42 us each. StormSpray made the same move and got 1.0 ms a
+            // frame back.
+            //
+            // A step-old height is nothing to a beast that holds station and
+            // lerps toward the surface at 6/s anyway — the handle never moves
+            // more than the sway, so there is no need for StormSpray's
+            // `sampledFrame` pairing (its handles teleport; this one does not).
+            EnsureProbe();
+            if (seaProbe.sampledFrame != 0)
             {
-                float surface = Ocean.OceanSampler.SampleImmediate(transform.position).height;
-                restY = Mathf.Lerp(restY, surface, 1f - Mathf.Exp(-6f * Time.deltaTime));
+                restY = Mathf.Lerp(restY, seaProbe.sample.height,
+                    1f - Mathf.Exp(-6f * Time.deltaTime));
             }
+            else if (Ocean.OceanSampler.Ready)
+            {
+                // First frame only — the ocean may not have been ready when
+                // this spawned, and nothing has been batched for it yet.
+                restY = Mathf.Lerp(restY, Ocean.OceanSampler.SampleImmediate(transform.position).height,
+                    1f - Mathf.Exp(-6f * Time.deltaTime));
+            }
+            seaProbe.position = transform.position;
 
             float sink = 0f;
             if (!Alive)
@@ -225,27 +261,37 @@ namespace SeaSick.Combat
             float since = t - lastHitAt;
             if (since < FlashTime)
             {
-                float f = 1f - since / FlashTime;
-                Tint(c => Color.Lerp(c, new Color(1f, 0.25f, 0.20f), f));
+                Tint(1f - since / FlashTime);
                 flashClear = false;
             }
             else if (!flashClear)
             {
-                Tint(c => c);
+                Tint(0f);
                 flashClear = true;
             }
         }
 
-        /// Push a colour through every piece of the beast, relative to whatever
-        /// that piece started as, so the hide/spine/eye separation survives.
-        void Tint(System.Func<Color, Color> f)
+        static readonly Color HitFlash = new Color(1f, 0.25f, 0.20f);
+
+        /// Push the hit colour through every piece of the beast, relative to
+        /// whatever that piece started as, so the hide/spine/eye separation
+        /// survives. `flash` is 0 for its own colour, 1 for full hit.
+        ///
+        /// A plain float, not a `Func<Color,Color>`: the old signature was fed
+        /// a CAPTURING lambda every frame of every flash, which is a closure
+        /// object plus a delegate allocated per beast per frame for the whole
+        /// 0.35 s. The property name is hashed once for the same reason —
+        /// `SetColor("_BaseColor", ...)` re-hashes the string on every
+        /// renderer, every frame.
+        void Tint(float flash)
         {
             for (int i = 0; i < skin.Count; i++)
             {
                 var r = skin[i];
                 if (r == null) continue;
+                Color c = skinColor[i];
                 r.GetPropertyBlock(mpb);
-                mpb.SetColor("_BaseColor", f(skinColor[i]));
+                mpb.SetColor(BaseColorId, flash > 0f ? Color.Lerp(c, HitFlash, flash) : c);
                 r.SetPropertyBlock(mpb);
             }
         }
