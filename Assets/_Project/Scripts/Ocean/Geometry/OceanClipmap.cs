@@ -397,14 +397,26 @@ namespace SeaSick.Ocean
         /// ring's centre (up to the LateUpdate snap), so exactly one quadrant
         /// is behind it in any given view direction and a tight box actually
         /// lets the frustum drop it.
+        /// How far a vertex may be displaced SIDEWAYS by the sea, in metres.
+        /// The mesh is culled against its undisplaced footprint, and at Hs 55
+        /// with choppiness the vertex shader moves a vertex tens of metres:
+        /// a footprint-tight box let a quadrant beside the camera be culled
+        /// while its displaced surface was still in view -- measured as a
+        /// hole in the storm sea with the neighbours' skirts hanging in it
+        /// as curtains (CrestProbe, Hs 55, 2026-09-12). The margin costs the
+        /// inner rings their culling (their half-width is below it), which
+        /// is the right trade: a hole is a bug, four small rings are not.
+        const float HorizontalDisplacementMargin = 100f;
+
         static Bounds QuadrantBounds(float lo, int x0, int x1, int z0, int z1, float cell)
         {
             float qx0 = lo + x0 * cell, qx1 = lo + x1 * cell;
             float qz0 = lo + z0 * cell, qz1 = lo + z1 * cell;
+            float m = HorizontalDisplacementMargin;
             var b = new Bounds();
             b.SetMinMax(
-                new Vector3(Mathf.Min(qx0, qx1), -BoundsHeight * 0.5f, Mathf.Min(qz0, qz1)),
-                new Vector3(Mathf.Max(qx0, qx1), BoundsHeight * 0.5f, Mathf.Max(qz0, qz1)));
+                new Vector3(Mathf.Min(qx0, qx1) - m, -BoundsHeight * 0.5f, Mathf.Min(qz0, qz1) - m),
+                new Vector3(Mathf.Max(qx0, qx1) + m, BoundsHeight * 0.5f, Mathf.Max(qz0, qz1) + m));
             return b;
         }
 

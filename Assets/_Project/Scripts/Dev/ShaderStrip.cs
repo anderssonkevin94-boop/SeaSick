@@ -98,14 +98,14 @@ public class ShaderStrip : MonoBehaviour
         // photographs of the shipped sea and read as "the layers do nothing".
         // OnDestroy takes it off again; the two error exits below take it off
         // themselves, because they leave the object alive.
-        Shader.EnableKeyword("_SEASICK_DEBUG");
+        SeaDebugKeyword.Acquire(this);
         motor = FindAnyObjectByType<ShipMotor>();
         var ctrl = SeaStateController.Instance;
         var cam = Camera.main;
         if (motor == null || ctrl == null || cam == null || !OceanSampler.Ready)
         {
             Debug.LogError("ShaderStrip: no ship / controller / camera / sampler");
-            Shader.DisableKeyword("_SEASICK_DEBUG");
+            SeaDebugKeyword.Release(this);
             yield break;
         }
 
@@ -146,7 +146,7 @@ public class ShaderStrip : MonoBehaviour
             if (pinField == null)
             {
                 Debug.LogError("ShaderStrip: no SkyDirector.pinTime -- cannot pin the hour");
-                Shader.DisableKeyword("_SEASICK_DEBUG");
+                SeaDebugKeyword.Release(this);
                 yield break;
             }
 
@@ -287,7 +287,7 @@ public class ShaderStrip : MonoBehaviour
     /// The keyword comes off with the object, so it comes off on the day-mode
     /// and sun-mode exits too -- both of which destroy this and yield break
     /// without ever reaching the end of Start.
-    void OnDestroy() { Shader.DisableKeyword("_SEASICK_DEBUG"); }
+    void OnDestroy() { SeaDebugKeyword.Release(this); }
 
     /// Force a sea state and then freeze it at the pinned instant.
     ///

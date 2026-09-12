@@ -77,19 +77,19 @@ public class WaterClarityTuner : MonoBehaviour, SeaSick.UI.IDevTool
     /// SILENTLY: the 1 key would simply look broken. So the keyword follows
     /// the tick box.
     ///
-    /// The one limit, written down rather than papered over: this is a single
-    /// global switch and several dev tools want it. If a probe finishes while
-    /// this tuner is still ticked, the probe's DisableKeyword wins and the 1
-    /// key goes quiet until the box is unticked and ticked again. A refcount
-    /// would fix it and would have to live somewhere every tool can see it;
-    /// nobody has needed one yet, because the probes that care already switch
-    /// the tuners off before they run.
+    /// This is a single global switch and several dev tools want it, so the
+    /// keyword is owner-refcounted through `SeaDebugKeyword` rather than set
+    /// bare: a probe finishing (or another tuner ticking off) while this one
+    /// is still active used to be last-writer-wins and could turn the
+    /// keyword off out from under this tuner. Acquire/Release below only
+    /// touch this tuner's own membership in that set, so the 1 key cannot go
+    /// quiet because some other tool finished.
     void SetDebugKeyword(bool on)
     {
         if (on == debugKeyword) return;
         debugKeyword = on;
-        if (on) Shader.EnableKeyword("_SEASICK_DEBUG");
-        else Shader.DisableKeyword("_SEASICK_DEBUG");
+        if (on) SeaDebugKeyword.Acquire(this);
+        else SeaDebugKeyword.Release(this);
     }
 
     void Update()

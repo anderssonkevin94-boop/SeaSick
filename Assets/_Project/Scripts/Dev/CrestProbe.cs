@@ -63,7 +63,7 @@ public class CrestProbe : MonoBehaviour
         // probe would photograph an ordinary sea and report it as foam. It
         // goes on here and comes off in Finish, which every exit path below
         // goes through, including all four aborts.
-        Shader.EnableKeyword("_SEASICK_DEBUG");
+        SeaDebugKeyword.Acquire(this);
         var sb = new StringBuilder();
         System.IO.File.WriteAllText("/tmp/seasick-crest.txt", "CrestProbe: did not finish\n");
 
@@ -591,12 +591,15 @@ public class CrestProbe : MonoBehaviour
         if (r != null) r.SetValue(sky, 25f);
     }
 
-    static void Finish(StringBuilder sb, string tail)
+    // No longer static: it releases the keyword with `this`, the same owner
+    // `Start` acquired it with, so this probe's release cannot be mistaken
+    // for -- or mismatched against -- another tool's.
+    void Finish(StringBuilder sb, string tail)
     {
         // Off again, on every path. A stuck global keyword outlives play mode
         // exactly the way a stuck global float does, and leaving it on would
         // quietly ship the debug variant of the ocean to whoever hit play next.
-        Shader.DisableKeyword("_SEASICK_DEBUG");
+        SeaDebugKeyword.Release(this);
         sb.AppendLine(tail);
         System.IO.File.WriteAllText("/tmp/seasick-crest.txt", sb.ToString());
         Debug.Log("CrestProbe:\n" + sb);

@@ -1070,3 +1070,28 @@ comments now say 0.29 of 0.4.
   tilers); `HullWaterClip.Push` drives it with `active`.
 - Mist: `MistCeiling = 8` in code because `maxMist: 16` is serialised in
   Sea.unity; spawn band pushed to 1.0-2.4 x sampleRadius.
+
+### Two things learnt gating Phase 4 (2026-09-12)
+
+- **`CrestProbe`'s Hs 55 shaded shot shows a black hole with skirt curtains
+  hanging in it.** It is NOT the quadrant clipmap: a stash bisect back to the
+  pre-quadrant mesh gives the identical frame. The probe's camera sits inside
+  a 55 m wave and photographs the ring skirts from below. The foam numbers
+  (its actual purpose) are unaffected; the shot is a known limitation of a
+  deck-level camera in a mountain sea. The quadrant bounds now carry a 100 m
+  horizontal margin anyway (`HorizontalDisplacementMargin`): a footprint-tight
+  box could cull a quadrant whose displaced vertices are still in view.
+- **`_SEASICK_DEBUG` is refcounted** (`Dev/SeaDebugKeyword.Acquire/Release`).
+  With seven owners and last-writer-wins, `CrestProbe` enabled the keyword,
+  disabled the tuners for its run, and their `OnDisable` switched it off
+  under it: "0 water pixels of 393216". Statics survive leaving play mode,
+  so a `SubsystemRegistration` hook clears the owner set each session.
+- **`CrestProbe.running` is a static that survives a stopped run**; the next
+  launch is refused as "already running". Clear it by reflection (a scratch
+  script) or finish the run. Its output file carries a "did not finish"
+  sentinel from the first frame -- wait for the sentinel to go, not for the
+  file to exist.
+
+Foam after the grid change, `CrestProbe` (screen side, deck level): Hs 14
+mean 0.011, 2.9 % of the water above 0.1 (was 0.035 / 6.6 % on 09-09); Hs 55
+mean 0.15, 45 % above 0.1 (was 41 %). Finer trails, less milk. Kevin's eye.

@@ -108,7 +108,7 @@ public class WeatherSheet : MonoBehaviour
         // `_SEASICK_DEBUG` variant now. Without the keyword the two halves of
         // the sheet would be the same photograph twice, which is a comparison
         // that quietly proves nothing. Off again in Finish.
-        Shader.EnableKeyword("_SEASICK_DEBUG");
+        SeaDebugKeyword.Acquire(this);
         var sb = new StringBuilder();
         string stem = "/tmp/seasick-weather-" + (patchMode ? "patches" : "axes") + suffix;
         string outTxt = stem + ".txt";
@@ -826,7 +826,7 @@ public class WeatherSheet : MonoBehaviour
         // Same rule as the _SS_LayerOff resets above: a probe that leaves
         // static state pinned leaves it pinned across play sessions, and a
         // stuck keyword ships the debug ocean to whoever hits play next.
-        Shader.DisableKeyword("_SEASICK_DEBUG");
+        SeaDebugKeyword.Release(this);
         if (err != null) sb.AppendLine(err);
         System.IO.File.WriteAllText(path, sb.ToString());
         Debug.Log("WeatherSheet:\n" + sb);

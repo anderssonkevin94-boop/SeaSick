@@ -39,7 +39,7 @@ public class ShoalShot : MonoBehaviour
         // the keyword the four shots would be four photographs of the same
         // water. OnDestroy takes it off again; the abort below leaves this
         // object alive, so it takes it off itself.
-        Shader.EnableKeyword("_SEASICK_DEBUG");
+        SeaDebugKeyword.Acquire(this);
         var sb = new StringBuilder("=== ShoalShot ===\n");
         var motor = FindAnyObjectByType<SeaSick.Ship.ShipMotor>();
         var streamer = FindAnyObjectByType<SeaSick.Terrain.TerrainStreamer>();
@@ -47,7 +47,7 @@ public class ShoalShot : MonoBehaviour
         if (Island.All.Count == 0)
         {
             Debug.LogError("ShoalShot: no islands");
-            Shader.DisableKeyword("_SEASICK_DEBUG");
+            SeaDebugKeyword.Release(this);
             yield break;
         }
 
@@ -156,7 +156,7 @@ public class ShoalShot : MonoBehaviour
         Destroy(gameObject);
     }
 
-    void OnDestroy() { Shader.DisableKeyword("_SEASICK_DEBUG"); }
+    void OnDestroy() { SeaDebugKeyword.Release(this); }
 
     static Material FindOceanMaterial()
     {

@@ -86,15 +86,16 @@ public class SeaFoamTuner : MonoBehaviour, SeaSick.UI.IDevTool
     /// wants to see WHICH input is wrong -- the channel readout, the foam-only
     /// view, the old-Jacobian comparison -- the shader has to be the variant
     /// that has them. Cheapest correct rule: while the foam is being tuned by
-    /// hand, the debug ocean is what is on screen. Same known limit as
-    /// WaterClarityTuner's: one global switch, several tools, last writer
-    /// wins; untick and re-tick to take it back.
+    /// hand, the debug ocean is what is on screen. One global switch, several
+    /// tools -- so it is owner-refcounted through `SeaDebugKeyword` rather
+    /// than set bare, and this tuner finishing (or another tool's run ending)
+    /// can no longer turn the keyword off out from under a different owner.
     void SetDebugKeyword(bool on)
     {
         if (on == debugKeyword) return;
         debugKeyword = on;
-        if (on) Shader.EnableKeyword("_SEASICK_DEBUG");
-        else Shader.DisableKeyword("_SEASICK_DEBUG");
+        if (on) SeaDebugKeyword.Acquire(this);
+        else SeaDebugKeyword.Release(this);
     }
 
     [Tooltip("Off = the shipped sea, untouched. Tick to tune it by hand.")]

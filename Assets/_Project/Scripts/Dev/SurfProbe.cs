@@ -71,7 +71,7 @@ public class SurfProbe : MonoBehaviour
         // them, so setting the globals without this keyword changes nothing
         // and does so silently. It comes off in Finish, which every abort and
         // the normal end alike go through.
-        Shader.EnableKeyword("_SEASICK_DEBUG");
+        SeaDebugKeyword.Acquire(this);
         var sb = new StringBuilder();
         System.IO.File.WriteAllText("/tmp/seasick-surf.txt", "SurfProbe: did not finish\n");
 
@@ -406,7 +406,7 @@ public class SurfProbe : MonoBehaviour
         // The globals are reset AND the variant is put back, in that order:
         // a keyword left on outlives play mode the same way a global float
         // does, and the shipped ocean should not be the debug one.
-        Shader.DisableKeyword("_SEASICK_DEBUG");
+        SeaDebugKeyword.Release(this);
         OceanTime.Paused = false;
         if (err != null) sb.AppendLine(err);
         System.IO.File.WriteAllText("/tmp/seasick-surf.txt", sb.ToString());
