@@ -247,8 +247,19 @@ public static class RunProbe
             if (t == null) continue;
             var m = t.GetMethod(method, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
             if (m == null) continue;
-            var r = m.Invoke(null, null);
-            Debug.Log(type + "." + method + ":\n" + r);
+            // Unwrap the reflection wrapper: Coplay hands back only the outer
+            // "Exception has been thrown by the target of an invocation" and
+            // the real one never reaches the log.
+            try
+            {
+                var r = m.Invoke(null, null);
+                Debug.Log(type + "." + method + ":\n" + r);
+            }
+            catch (System.Reflection.TargetInvocationException e)
+            {
+                Debug.LogError(type + "." + method + " threw: " + e.InnerException);
+                throw;
+            }
             return;
         }
         Debug.LogError("RunProbe: could not find " + type + "." + method);

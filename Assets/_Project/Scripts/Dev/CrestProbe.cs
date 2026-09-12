@@ -54,6 +54,16 @@ public class CrestProbe : MonoBehaviour
 
     IEnumerator Start()
     {
+        // The `_SS_*` dev uniforms this probe drives are no longer in the
+        // shipped ocean shader: they live behind the `_SEASICK_DEBUG` variant,
+        // so the sea does not pay for six constant loads and an eleven-way
+        // ternary chain per pixel on the chance a probe reads them one
+        // afternoon. Setting the globals without the keyword FAILS SILENTLY --
+        // the variant that reads them is simply not the one running, and the
+        // probe would photograph an ordinary sea and report it as foam. It
+        // goes on here and comes off in Finish, which every exit path below
+        // goes through, including all four aborts.
+        Shader.EnableKeyword("_SEASICK_DEBUG");
         var sb = new StringBuilder();
         System.IO.File.WriteAllText("/tmp/seasick-crest.txt", "CrestProbe: did not finish\n");
 
@@ -583,6 +593,10 @@ public class CrestProbe : MonoBehaviour
 
     static void Finish(StringBuilder sb, string tail)
     {
+        // Off again, on every path. A stuck global keyword outlives play mode
+        // exactly the way a stuck global float does, and leaving it on would
+        // quietly ship the debug variant of the ocean to whoever hit play next.
+        Shader.DisableKeyword("_SEASICK_DEBUG");
         sb.AppendLine(tail);
         System.IO.File.WriteAllText("/tmp/seasick-crest.txt", sb.ToString());
         Debug.Log("CrestProbe:\n" + sb);

@@ -38,7 +38,16 @@ namespace SeaSick.Ship
         {
             // Leave the sea alone when this is not driving it.
             Shader.SetGlobalVector(SizeId, Vector4.zero);
+            Shader.DisableKeyword(HullClipKeyword);
         }
+
+        // The clip() in Ocean.shader lives behind a global keyword now: a
+        // discard anywhere in a fragment shader makes the whole thing late-Z
+        // on a tile GPU, so the shipped variant has none, and only a hull
+        // that is actually clipping switches it on. Must follow `active`
+        // exactly -- keyword on with _HullClipSize.w at 0 is harmless, but
+        // keyword off with a hull in the water draws the sea inside her.
+        const string HullClipKeyword = "_HULL_CLIP";
 
         void Push()
         {
@@ -46,6 +55,8 @@ namespace SeaSick.Ship
             Shader.SetGlobalVector(CentreId, centre);
             Shader.SetGlobalVector(SizeId,
                 new Vector4(semiAxes.x, halfHeight, semiAxes.y, active ? 1f : 0f));
+            if (active) Shader.EnableKeyword(HullClipKeyword);
+            else Shader.DisableKeyword(HullClipKeyword);
         }
 
         /// Sized from the real deck by the setup script, not by eye.

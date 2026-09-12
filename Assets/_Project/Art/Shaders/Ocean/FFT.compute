@@ -1,13 +1,58 @@
-// Radix-2 Stockham inverse FFT over a Tex2DArray holding two complex fields
-// per texel (xy and zw). Stockham is self-sorting: no bit-reversal pass. The
-// caller runs log2(N) horizontal passes then log2(N) vertical ones, ping-pong
-// swapping Src/Dst each pass with _Ns doubling from 1.
+// LDS (groupshared) radix-2 Stockham inverse FFT over a Tex2DArray holding
+// TWO complex fields per texel (xy and zw). One dispatch per axis: a thread
+// group owns one whole line -- a row for the horizontal pass, a column for the
+// vertical one -- loads its N texels into groupshared memory, runs all
+// log2(N) butterfly stages there with a group barrier between stages, and
+// writes the line back once. Main memory is therefore touched twice per axis
+// instead of 2*log2(N) times, and the vertical pass no longer walks a column
+// at a 4 KB stride once per stage.
 //
-// Convention: e^{+i...} (inverse transform), NO 1/N^2 normalization — the
-// spectral amplitudes are built for Tessendorf's direct-sum convention.
+// Convention: e^{+i...} (inverse transform), NO 1/N^2 normalization -- the
+// spectral amplitudes are built for Tessendorf's direct-sum convention. This
+// is UNCHANGED from the old per-stage version: the butterfly index math and
+// the twiddle below are literally the ones the old kernels used, so
+// TimeEvolve/ResolveOutputs and every probe see the same numbers up to float
+// rounding. The (-1)^(x+y) re-centring still lives in TimeEvolve.compute and
+// the fftshifted spectrum layout still comes from InitialSpectrum.compute.
+// Stockham is self-sorting, so there is still no bit-reversal pass.
+//
+// Resource flow, driven by FFTCompute.Inverse:
+//   horizontal:  Src = data    -> Dst = scratch
+//   vertical:    Src = scratch -> Dst = data      (result back in `data`)
+// A line-per-group transform *could* run in place, but that would need the
+// same RenderTexture bound as SRV and UAV in one dispatch, which D3D11 refuses
+// (it silently unbinds one of them). Bouncing through `scratch` keeps a clean
+// read-texture / write-texture split and still touches memory only twice per
+// axis.
+//
+// LDS budget. Stockham is out-of-place, so a group needs two N-element float4
+// buffers: 2 * LDS_N * 16 bytes. LDS_N is a per-kernel define (see the
+// #pragma lines): the default kernels ask for 8 KB and cover every N <= 256
+// (mobile's 128 and PC's 256), the *512 variants ask for 16 KB and are only
+// selected when N == 512. 8 KB is inside the 16 KB that GLES 3.1 guarantees,
+// and both are far inside the 32 KB D3D11 limit. Sizing the common path for
+// 256 rather than compiling one 512-sized kernel for everything is the whole
+// reason for the variants -- a 16 KB request on a phone is a compute-shader
+// compile error, and those are SILENT here: the kernel is skipped and the sea
+// freezes.
 
-#pragma kernel FFTHorizontal
-#pragma kernel FFTVertical
+#pragma kernel FFTHorizontal    LDS_N=256
+#pragma kernel FFTVertical      LDS_N=256
+#pragma kernel FFTHorizontal512 LDS_N=512
+#pragma kernel FFTVertical512   LDS_N=512
+
+// Only reached if a kernel is ever declared without its define.
+#ifndef LDS_N
+#define LDS_N 256
+#endif
+
+// 128 threads/group: one butterfly per thread at N=256 and two loads per
+// thread, which is the PC case. Smaller N (mobile's 128, the unit test's 64)
+// just leaves the tail of the group idle inside the loops below; larger N
+// makes each thread loop. The per-thread loops have thread-dependent trip
+// counts, but every BARRIER sits outside them, at the top level of the stage
+// loop, whose only bound is the uniform _N -- so no thread can miss one.
+#define FFT_GROUP 128
 
 static const float PI = 3.14159265358979f;
 
@@ -16,55 +61,104 @@ RWTexture2DArray<float4> Dst;
 
 cbuffer Params
 {
-    uint _N;
-    uint _Ns; // combined block size before this pass: 1, 2, 4 ... N/2
+    uint _N; // transform length along both axes; power of two, <= LDS_N
 }
+
+// Double-buffered Stockham working set: [0, LDS_N) and [LDS_N, 2*LDS_N).
+groupshared float4 g_lds[2 * LDS_N];
 
 float2 CMul(float2 a, float2 b)
 {
     return float2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
 }
 
-void Butterfly(uint t, out uint i0, out uint i1, out uint o0, out uint o1, out float2 w)
+// `lineIdx` is the row (horizontal pass) or the column (vertical pass); `e` is
+// the position along the transformed axis. Getting these two the wrong way
+// round in one of the two passes is the classic transpose bug, so the mapping
+// lives in exactly one place.
+uint3 Addr(uint lineIdx, uint e, uint slice, bool vertical)
 {
-    uint j = t % _Ns;
-    uint b = (t / _Ns) * (_Ns * 2u) + j;
-    i0 = t;
-    i1 = t + _N / 2u;
-    o0 = b;
-    o1 = b + _Ns;
-    float ang = PI * float(j) / float(_Ns); // +2pi*j/(2Ns): inverse transform
-    sincos(ang, w.y, w.x);
+    return uint3(vertical ? lineIdx : e, vertical ? e : lineIdx, slice);
 }
 
-[numthreads(128, 1, 1)]
-void FFTHorizontal(uint3 id : SV_DispatchThreadID)
+void FFTLine(uint lineIdx, uint slice, uint tid, bool vertical)
 {
-    uint t = id.x;
-    if (t >= _N / 2u) return;
-    uint i0, i1, o0, o1;
-    float2 w;
-    Butterfly(t, i0, i1, o0, o1, w);
+    // INVARIANT: _N is a power of two and _N <= LDS_N. FFTCompute.ValidN and
+    // FFTCompute.MaxN enforce it on the C# side and that is the only place it
+    // is enforced -- an early-out here would put a `return` upstream of the
+    // barriers below, and FXC rejects a thread sync it decides is under
+    // varying flow control. A compute-shader compile error is silent in this
+    // project, so the guard would cost more than the overrun it prevents.
+    uint n = _N;
+    uint halfN = n >> 1u;
 
-    float4 a = Src[uint3(i0, id.y, id.z)];
-    float4 b = Src[uint3(i1, id.y, id.z)];
-    float4 wb = float4(CMul(w, b.xy), CMul(w, b.zw));
-    Dst[uint3(o0, id.y, id.z)] = a + wb;
-    Dst[uint3(o1, id.y, id.z)] = a - wb;
+    // Load the whole line into buffer A.
+    for (uint le = tid; le < n; le += FFT_GROUP)
+        g_lds[le] = Src[Addr(lineIdx, le, slice, vertical)];
+    GroupMemoryBarrierWithGroupSync();
+
+    uint srcBase = 0u;
+    uint dstBase = uint(LDS_N);
+
+    // ns = combined block size before this stage: 1, 2, 4 ... n/2.
+    for (uint ns = 1u; ns < n; ns <<= 1u)
+    {
+        float scale = PI / float(ns); // +2pi*j/(2*ns): inverse transform
+        uint mask = ns - 1u;          // ns is a power of two
+
+        for (uint t = tid; t < halfN; t += FFT_GROUP)
+        {
+            uint j = t & mask;                      // t % ns
+            uint b = ((t & ~mask) << 1u) + j;       // (t / ns) * (2 * ns) + j
+
+            float2 w;
+            sincos(scale * float(j), w.y, w.x);     // w = e^{+i * pi * j / ns}
+
+            float4 a  = g_lds[srcBase + t];
+            float4 bv = g_lds[srcBase + t + halfN];
+            float4 wb = float4(CMul(w, bv.xy), CMul(w, bv.zw));
+
+            g_lds[dstBase + b]      = a + wb;
+            g_lds[dstBase + b + ns] = a - wb;
+        }
+
+        GroupMemoryBarrierWithGroupSync();
+
+        uint tmpBase = srcBase;
+        srcBase = dstBase;
+        dstBase = tmpBase;
+    }
+
+    // After the last swap the finished line is in srcBase.
+    for (uint we = tid; we < n; we += FFT_GROUP)
+        Dst[Addr(lineIdx, we, slice, vertical)] = g_lds[srcBase + we];
 }
 
-[numthreads(128, 1, 1)]
-void FFTVertical(uint3 id : SV_DispatchThreadID)
-{
-    uint t = id.x;
-    if (t >= _N / 2u) return;
-    uint i0, i1, o0, o1;
-    float2 w;
-    Butterfly(t, i0, i1, o0, o1, w);
+// Dispatched as (1, N, slices): group id y = the line, z = the array slice.
 
-    float4 a = Src[uint3(id.y, i0, id.z)];
-    float4 b = Src[uint3(id.y, i1, id.z)];
-    float4 wb = float4(CMul(w, b.xy), CMul(w, b.zw));
-    Dst[uint3(id.y, o0, id.z)] = a + wb;
-    Dst[uint3(id.y, o1, id.z)] = a - wb;
+[numthreads(FFT_GROUP, 1, 1)]
+void FFTHorizontal(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
+{
+    FFTLine(gid.y, gid.z, gtid.x, false);
+}
+
+[numthreads(FFT_GROUP, 1, 1)]
+void FFTVertical(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
+{
+    FFTLine(gid.y, gid.z, gtid.x, true);
+}
+
+// Same bodies, compiled with LDS_N=512. Only FFTCompute's N==512 path uses
+// them; they exist so the common kernels can stay at an 8 KB LDS request.
+
+[numthreads(FFT_GROUP, 1, 1)]
+void FFTHorizontal512(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
+{
+    FFTLine(gid.y, gid.z, gtid.x, false);
+}
+
+[numthreads(FFT_GROUP, 1, 1)]
+void FFTVertical512(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID)
+{
+    FFTLine(gid.y, gid.z, gtid.x, true);
 }

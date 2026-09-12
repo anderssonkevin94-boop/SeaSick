@@ -85,8 +85,23 @@ namespace SeaSick.Ocean
         [SerializeField] float hullClearLoa = 0.6f;
 
         [Header("Mist")]
-        [Tooltip("Big, faint and few. These are overdraw — keep them cheap.")]
-        [SerializeField] int maxMist = 16;
+        // Big, faint and FEW, and "few" is a fill-rate number, not a taste one.
+        // Sixteen puffs 24-46 m across, born 77-187 m out, put five to ten
+        // layers of near-full-screen alpha blend over the ocean on a portrait
+        // phone -- the ocean shader paid over again per layer. Halved to eight
+        // and pushed out to 110-264 m: the same haze between the ship and the
+        // next wave, a smaller share of the screen each, and fewer of them
+        // stacked on any one pixel.
+        [Tooltip("Big, faint and few. These are overdraw — keep them cheap. Capped at " +
+                 "MistCeiling however it is authored; the cap is a fill-rate limit, not taste.")]
+        [SerializeField] int maxMist = 8;
+        /// The fill-rate ceiling, and it is a CEILING rather than just a
+        /// default because `maxMist` is serialized into Sea.unity at 16 — the
+        /// same trap as SeaStateController's `rebuildHz`, where editing the
+        /// field initialiser changes nothing about the game that ships. Eight
+        /// is what the sea gets until someone pushes a new value through
+        /// SerializedObject, and then it is still eight.
+        const int MistCeiling = 8;
         [SerializeField] float mistRate = 4f;
         [SerializeField] float mistAlpha = 0.06f;
 
@@ -230,7 +245,7 @@ namespace SeaSick.Ocean
             mist = mgo.AddComponent<ParticleSystem>();
             var mmain = mist.main;
             mmain.simulationSpace = ParticleSystemSimulationSpace.World;
-            mmain.maxParticles = maxMist;
+            mmain.maxParticles = Mathf.Clamp(maxMist, 1, MistCeiling);
             mmain.startLifetime = 9f;
             mmain.startSpeed = 0f;
             mmain.startSize = 20f;
@@ -509,9 +524,12 @@ namespace SeaSick.Ocean
             for (int i = 0; i < count; i++)
             {
                 // Kept well off the lens: a 25m puff born on top of the
-                // camera is a grey wall, however soft its edges are.
+                // camera is a grey wall, however soft its edges are. The band
+                // is 1.4x further out than it was (77-187 m -> 110-264 m), so
+                // each puff covers less of the screen and fewer of them
+                // overlap on one pixel -- see maxMist.
                 Vector2 off = Random.insideUnitCircle.normalized
-                            * Random.Range(sampleRadius * 0.7f, sampleRadius * 1.7f);
+                            * Random.Range(sampleRadius * 1.0f, sampleRadius * 2.4f);
                 Vector2 p = new Vector2(centre.x + off.x, centre.z + off.y);
                 float h = OceanSampler.SampleImmediate(new Vector3(p.x, 0f, p.y)).height;
 

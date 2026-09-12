@@ -29,6 +29,10 @@ namespace SeaSick.Ocean
         int foamKernel = -1;
         double lastFoamTime;
         bool spectrumDirty = true;
+        // Which cascade slice the in-progress rebuild will do next, or -1 when
+        // no rebuild is running. See the block in StepSimulation.
+        int spectrumSlice = -1;
+        bool firstSpectrumBuild = true;
 
         // Shader.PropertyToID cache for StepSimulation's per-frame sets —
         // both the compute-shader property names (used with SetInt/SetFloat/
@@ -69,13 +73,30 @@ namespace SeaSick.Ocean
         public int SpectrumRebuilds { get; private set; }
         public CascadeSet Cascades => cascades;
 
-        /// Call after mutating settings; the spectrum rebuilds next frame.
+        /// Call after mutating settings; the spectrum rebuilds over the next
+        /// three frames (one cascade slice each — see StepSimulation).
         public void MarkSpectrumDirty() => spectrumDirty = true;
 
         public void SetSettings(OceanSpectrumSettings s)
         {
             settings = s;
             spectrumDirty = true;
+        }
+
+        /// Rebuild all three cascades THIS frame, cost and all. The sliced
+        /// rebuild finishes within three frames, which is inside the settling
+        /// time every probe already waits out, so nothing calls this today; it
+        /// exists for anything that scrubs OceanTime and reads the field back
+        /// in the same frame, where three frames of latency would be three
+        /// frames of the old sea.
+        public void RebuildSpectrumNow()
+        {
+            if (spectrum == null || cascades == null || settings == null) return;
+            spectrum.Generate(cascades, settings);
+            spectrumDirty = false;
+            spectrumSlice = -1;
+            firstSpectrumBuild = false;
+            SpectrumRebuilds++;
         }
 
         void OnEnable()
@@ -99,6 +120,12 @@ namespace SeaSick.Ocean
             if (foamShader != null) foamKernel = foamShader.FindKernel("FoamAccumulate");
             lastFoamTime = OceanTime.Now;
             spectrumDirty = true;
+            // A fresh CascadeSet has empty H0, so the first build must be the
+            // whole thing (see StepSimulation). WaveSizeProbe re-enables this
+            // component to swap quality tiers, which is why this resets here
+            // and not only at construction.
+            spectrumSlice = -1;
+            firstSpectrumBuild = true;
 
             readback = new DisplacementReadback(cascades.N);
             OceanSampler.Bind(readback, cascades.PatchSizes);
@@ -126,11 +153,41 @@ namespace SeaSick.Ocean
         {
             if (settings == null || cascades == null) return;
 
-            if (spectrumDirty)
+            // A rebuild is one dispatch over N^2 x 3 texels with a 4x4
+            // supersampled JONSWAP in each, and SeaStateController asks for one
+            // four times a second while the weather blends — which it does
+            // most of the time. Landing that whole cost in the single frame
+            // the dirty flag is seen is a hitch every 250 ms on a phone, so it
+            // is spread over three frames, ONE CASCADE SLICE EACH.
+            //
+            // That is safe because H0 and WaveData are written in place per
+            // slice: the slices not yet rebuilt still hold the previous h0, so
+            // the evolve/IFFT chain reads a complete, valid field every frame.
+            // The seam is that for two frames the sea is two-thirds new and
+            // one-third old — 33 ms of a mismatch smaller than the step the
+            // rebuild was going to make anyway.
+            //
+            // A dirty flag raised MID-pass is not honoured until the pass ends,
+            // so every rebuild carries one settings snapshot across all three
+            // slices; the worst a caller spamming MarkSpectrumDirty can do is
+            // one full rebuild every three frames.
+            if (spectrumDirty && spectrumSlice < 0)
             {
-                spectrum.Generate(cascades, settings);
                 spectrumDirty = false;
-                SpectrumRebuilds++;
+                // The very first build has no previous h0 to fall back on — a
+                // sliced one would show two frames of a sea missing cascades 1
+                // and 2 — so it is paid whole, once, at startup.
+                if (firstSpectrumBuild) RebuildSpectrumNow();
+                else spectrumSlice = 0;
+            }
+            if (spectrumSlice >= 0)
+            {
+                spectrum.Generate(cascades, settings, spectrumSlice);
+                if (++spectrumSlice >= CascadeSet.Cascades)
+                {
+                    spectrumSlice = -1;
+                    SpectrumRebuilds++;
+                }
             }
 
             int n = cascades.N;

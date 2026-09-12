@@ -92,12 +92,20 @@ public class ShaderStrip : MonoBehaviour
 
     IEnumerator Start()
     {
+        // `_SS_LayerOff` -- the whole point of the layers sheet -- is only
+        // declared in the ocean shader's `_SEASICK_DEBUG` variant now. Without
+        // the keyword the layer strip would come back as eight identical
+        // photographs of the shipped sea and read as "the layers do nothing".
+        // OnDestroy takes it off again; the two error exits below take it off
+        // themselves, because they leave the object alive.
+        Shader.EnableKeyword("_SEASICK_DEBUG");
         motor = FindAnyObjectByType<ShipMotor>();
         var ctrl = SeaStateController.Instance;
         var cam = Camera.main;
         if (motor == null || ctrl == null || cam == null || !OceanSampler.Ready)
         {
             Debug.LogError("ShaderStrip: no ship / controller / camera / sampler");
+            Shader.DisableKeyword("_SEASICK_DEBUG");
             yield break;
         }
 
@@ -138,6 +146,7 @@ public class ShaderStrip : MonoBehaviour
             if (pinField == null)
             {
                 Debug.LogError("ShaderStrip: no SkyDirector.pinTime -- cannot pin the hour");
+                Shader.DisableKeyword("_SEASICK_DEBUG");
                 yield break;
             }
 
@@ -274,6 +283,11 @@ public class ShaderStrip : MonoBehaviour
         Debug.Log("ShaderStrip: wrote /tmp/seasick-shader-states.png and -layers.png");
         Destroy(gameObject);
     }
+
+    /// The keyword comes off with the object, so it comes off on the day-mode
+    /// and sun-mode exits too -- both of which destroy this and yield break
+    /// without ever reaching the end of Start.
+    void OnDestroy() { Shader.DisableKeyword("_SEASICK_DEBUG"); }
 
     /// Force a sea state and then freeze it at the pinned instant.
     ///

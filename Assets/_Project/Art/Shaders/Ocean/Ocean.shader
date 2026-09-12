@@ -123,6 +123,37 @@ Shader "SeaSick/Ocean"
             // multi_compile keeps both and lets OceanClipmap choose at runtime
             // from OceanQuality.Active.refraction.
             #pragma multi_compile_local_fragment _ _REFRACTION
+            // Everything the SHIPPED sea must not pay for.
+            //
+            // _SEASICK_DEBUG gates the six _SS_* dev uniforms and the foam
+            // channel chain. They were in the shipped fragment: six global
+            // loads and an eleven-way ternary on every water pixel, so that a
+            // probe run for an hour in 2026 could read the foam field. Behind
+            // the keyword the shipped variant does not declare them, does not
+            // load them, and does not branch on them; with them at their
+            // neutral values (all zero, which is the rule those uniforms were
+            // written to) the two paths are the same picture.
+            //
+            // _HULL_CLIP gates the clip() for the hull cutout. A clip() in the
+            // fragment makes the WHOLE shader late-Z on a tile GPU — the
+            // hardware can no longer reject a pixel before shading it, because
+            // the shader is allowed to change whether it writes depth — and it
+            // does that whether or not _HullClipSize.w is set, since the cost
+            // is a property of the compiled program and not of the branch. The
+            // ocean is most of the screen, so that is the most expensive
+            // instruction in the file. HullWaterClip owns the keyword: on when
+            // it pushes a live volume, off when it clears it.
+            //
+            // GLOBAL multi_compile on both, deliberately — NOT _local. There
+            // is one shared OceanSurface.mat and no per-material state to
+            // drive this from; the switches are Shader.EnableKeyword /
+            // DisableKeyword from script, and a _local keyword is invisible to
+            // those. Same reasoning as the _REFRACTION note above for why
+            // multi_compile and not shader_feature: nothing may be stripped
+            // against whatever state the material asset happened to be saved
+            // with, or the variant we want at runtime would not exist.
+            #pragma multi_compile _ _SEASICK_DEBUG
+            #pragma multi_compile _ _HULL_CLIP
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #if defined(_REFRACTION)
@@ -169,6 +200,21 @@ Shader "SeaSick/Ocean"
             // and none means _SS_Night is 0, which is broad daylight.
             float _SS_NightBodyDim;
             float _SS_NightSkyMix;
+            // ---- dev uniforms, behind _SEASICK_DEBUG ------------------------
+            // All six of these exist to make a probe able to read one of the
+            // shader's own inputs off the framebuffer. They are worth having
+            // and they are not worth SHIPPING: six constant-buffer loads and
+            // an eleven-way ternary chain on every water pixel, permanently,
+            // for a measurement taken on a Tuesday.
+            //
+            // The "unset reads as zero = shipped look" rule each one was
+            // written to is what makes this safe, and it is now doubly
+            // enforced: with the keyword off the uniforms are not declared at
+            // all and every read below resolves to the literal neutral value
+            // through the SS_* macros, so the compiler folds the branches out
+            // entirely. The shipped variant is the exact picture you get today
+            // with every _SS_* at zero.
+            #if defined(_SEASICK_DEBUG)
             // Dev only: which shading layers to SUPPRESS (subsurface, sky
             // reflection, sun glitter, foam). Phrased as "off" and not "on"
             // deliberately -- an unset global reads as ZERO, so the shipped
@@ -209,6 +255,34 @@ Shader "SeaSick/Ocean"
             // shoot the same shore with and without the bottom showing
             // through at one wave phase. Unset reads as zero = shipped look.
             float _SS_RefractOff;
+
+            #define SS_LAYER_OFF     _SS_LayerOff
+            #define SS_FOAM_ONLY     _SS_FoamOnly
+            #define SS_FOAM_OLD_J    _SS_FoamOldJ
+            #define SS_FOAM_CHANNEL  _SS_FoamChannel
+            #define SS_SURF_OFF      _SS_SurfOff
+            #define SS_REFRACT_OFF   _SS_RefractOff
+            #else
+            // The neutral values, as COMPILE-TIME CONSTANTS. Every use site
+            // below reads a macro, so the non-debug variant folds
+            // `1.0 - SS_LAYER_OFF.x` to 1.0, `SS_FOAM_ONLY > 0.5` to false,
+            // and the channel chain out of existence, with no uniform
+            // declared and nothing loaded.
+            //
+            // The float4 is a named `static const` rather than an inline
+            // `float4(0,0,0,0)` literal for one dull reason: the use sites
+            // swizzle it, and a swizzle applied to a constructor expression is
+            // the sort of thing a cross-compiler somewhere down the chain gets
+            // wrong. A named constant swizzles like any other variable, folds
+            // just as hard, and cannot be got wrong.
+            static const float4 _SS_LayerOffNeutral = float4(0.0, 0.0, 0.0, 0.0);
+            #define SS_LAYER_OFF     _SS_LayerOffNeutral
+            #define SS_FOAM_ONLY     0.0
+            #define SS_FOAM_OLD_J    0.0
+            #define SS_FOAM_CHANNEL  0.0
+            #define SS_SURF_OFF      0.0
+            #define SS_REFRACT_OFF   0.0
+            #endif // _SEASICK_DEBUG
 
             // How much of each cascade the mesh under this vertex can carry.
             // KEEP IDENTICAL to OceanClipmap.WeightsAt -- see the CascadeFade
@@ -346,9 +420,64 @@ Shader "SeaSick/Ocean"
 
             // Two octaves of value noise, world-anchored: tears the raw
             // Jacobian foam so it reads as spume, not maths.
+            //
+            // The hash used to be `frac(sin(dot(p, k)) * 43758.5453)`, the
+            // canonical shadertoy one-liner, and it is the single most
+            // expensive thing this shader did. `sin` is not an ALU op on a
+            // GPU: it goes to the transcendental unit, which on most parts
+            // issues at a quarter rate. FoamNoise is four hashes, and FoamNoise
+            // was called SIX times a water pixel (two for the tear, four for
+            // the relief gradient) — twenty-four transcendentals per pixel of
+            // most of the screen, to produce a number whose only job is to be
+            // random.
+            //
+            // It is also a bad hash. `sin` at large arguments is where float
+            // precision dies, and the lattice coordinates here are world
+            // metres times a small scale: sail far enough from the origin and
+            // the same texel starts hashing to neighbouring values, so the
+            // noise smears into banding. Mobile compilers make it worse — many
+            // lower `sin` to a fast approximation, so the phone and the PC do
+            // not even agree on what the foam looks like.
+            //
+            // This is an integer bit-mix instead (xxhash/pcg-shaped: multiply
+            // by a large odd constant, fold the high bits down with a shift-
+            // xor, repeat). Same interface, same job, and the distribution is
+            // better than the thing it replaces rather than merely as good:
+            // every output bit depends on every input bit, so it is flat and
+            // decorrelated across the whole lattice at any distance from the
+            // origin. Cost is a handful of integer ops and no transcendentals.
+            //
+            // Detail that matters: the mantissa. `float(h) * (1/2^32)` would
+            // round h upward at the top of the range and can return exactly
+            // 1.0, which puts the value noise outside [0,1) and shows up as
+            // the odd blown-out texel. Taking the top 24 bits (`h >> 8`) gives
+            // an integer that a float holds EXACTLY, so the result is in
+            // [0, 1) by construction — the same half-open range `frac` gave.
+            //
+            // Requires integer ops in the fragment shader, which is why the
+            // `#pragma target 3.5` above is load-bearing and not decorative.
             float FoamHash(float2 p)
             {
-                return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+                // The callers already hand this integral lattice coordinates;
+                // the floor is here so the function is correct on its own
+                // terms for anything else that ever calls it. Negative
+                // coordinates wrap through two's complement, which is fine —
+                // the hash only needs the bit pattern to be distinct.
+                int2 ip = int2(floor(p));
+                uint2 q = asuint(ip);
+                // The 0x9E37... seed is not decoration: without it the lattice
+                // point at the world origin mixes 0, every step of a shift-xor-
+                // multiply leaves 0 alone, and that one texel would hash to a
+                // hard 0.0 for ever. Every multiplier here is ODD, which is
+                // what makes each step a bijection on 32 bits -- an even one
+                // throws away a bit per multiply and the noise loses range.
+                uint h = q.x * 0x27220A95u + q.y * 0x85EBCA6Bu + 0x9E3779B9u;
+                h ^= h >> 15;
+                h *= 0x2C1B3C6Du;
+                h ^= h >> 13;
+                h *= 0x297A2D39u;
+                h ^= h >> 16;
+                return float(h >> 8) * (1.0 / 16777216.0);   // 2^-24, in [0,1)
             }
             float FoamNoise(float2 p)
             {
@@ -417,7 +546,28 @@ Shader "SeaSick/Ocean"
                     float plan = (hp.x * hp.x) / (_HullClipSize.x * _HullClipSize.x)
                                + (hp.z * hp.z) / (_HullClipSize.z * _HullClipSize.z);
                     // Inside the plan ellipse AND within the deck-to-rail band.
+                    //
+                    // Behind _HULL_CLIP because a clip() is not free when it
+                    // does nothing. Its cost is not the instruction: it is that
+                    // a fragment shader containing one can DISCARD, so the
+                    // hardware may no longer decide a pixel's depth before
+                    // shading it. On a tile GPU that turns off early-Z for the
+                    // whole shader, and the ocean is most of the screen. That
+                    // penalty is a property of the compiled program, so
+                    // `_HullClipSize.w` being zero does not avoid a penny of
+                    // it -- the branch is checked at runtime, early-Z is
+                    // decided at compile time. HullWaterClip turns the keyword
+                    // on when it pushes a live volume and off when it clears
+                    // one, so the sea is only late-Z while there is actually a
+                    // hull to cut out of it.
+                    //
+                    // `hullShield` below is deliberately OUTSIDE the keyword:
+                    // it is a smoothstep, not a discard, it costs nothing in
+                    // early-Z terms, and the refraction block needs it whenever
+                    // there is a hull -- keyword or no keyword.
+                    #if defined(_HULL_CLIP)
                     clip(max(plan - 1.0, abs(hp.y) - _HullClipSize.y));
+                    #endif
                     // `plan` is a squared normalised radius -- 1 on the
                     // ellipse -- so the margin squares too. Deliberately NOT
                     // gated on hp.y the way the clip is: the clip band is
@@ -444,7 +594,7 @@ Shader "SeaSick/Ocean"
                 // lift out with distance. Cascade 0 is already at full weight
                 // everywhere and needs none; cascade 2 needs all of it, and is
                 // the band that actually folds.
-                float old = saturate(_SS_FoamOldJ);
+                float old = saturate(SS_FOAM_OLD_J);
                 float liftK = _FoamBandLift * (1.0 - smoothstep(_FoamLiftFar * 0.25,
                                                                 _FoamLiftFar, dist));
                 float3 wJ = old > 0.5 ? input.wC * fade
@@ -577,7 +727,7 @@ Shader "SeaSick/Ocean"
                 // the open sea needs no special case.
                 float3 trans = exp(-column * (3.0 / max(_MurkDepth, 0.25))
                                    * _MurkExtinction.rgb);
-                trans *= 1.0 - saturate(_SS_RefractOff);
+                trans *= 1.0 - saturate(SS_REFRACT_OFF);
                 // Meet the hull, do not dissolve into her.
                 trans *= 1.0 - hullShield;
                 body = lerp(body, SampleSceneColor(suv + refr), trans);
@@ -590,7 +740,7 @@ Shader "SeaSick/Ocean"
                 float towardSun = pow(saturate(dot(Vf, -L) * 0.5 + 0.5), 3.0);
                 float sss = towardSun * (0.35 + 0.65 * peakMask) * (0.4 + 0.6 * steep)
                             * _SubsurfaceStrength;
-                body += subsurf * sss * sun.color * (1.0 - _SS_LayerOff.x);
+                body += subsurf * sss * sun.color * (1.0 - SS_LAYER_OFF.x);
 
                 // Fresnel sky reflection: cheap probe + authored horizon mix.
                 float fresnel = 0.02 + 0.98 * pow(1.0 - saturate(dot(n, Vf)), 5.0);
@@ -613,7 +763,7 @@ Shader "SeaSick/Ocean"
                 float specPow = lerp(_SpecPowerNear, _SpecPowerFar, rough);
                 float3 H = normalize(L + Vf);
                 float spec = pow(saturate(dot(n, H)), specPow) * _SpecStrength
-                             * (1.0 - 0.6 * storm) * (1.0 - _SS_LayerOff.z);
+                             * (1.0 - 0.6 * storm) * (1.0 - SS_LAYER_OFF.z);
 
                 // Foam: instant Jacobian whitecaps + the persistent buffer,
                 // torn by two octaves of world noise.
@@ -634,36 +784,38 @@ Shader "SeaSick/Ocean"
                 float j = (1.0 + fold.x) * (1.0 + fold.y) - fold.z * fold.z * (1.0 - old);
                 float snap = lerp(_FoamSnap, 0.25, old);
                 float breaking = saturate((_FoamJThreshold - j) / max(snap, 0.02));
-                // Single combined-J foam layer, tiled with patch 0.
+                // Single combined-J foam layer, tiled with patch 1 -- the grid
+                // FoamAccumulate.compute now accumulates on. The two MUST name
+                // the same patch: the buffer is a plain N x N field with no
+                // world anchor of its own, so this division is the only thing
+                // that says what one of its texels means in metres. Get them
+                // out of step and the foam is not merely the wrong size, it is
+                // in the wrong PLACE -- a trail laid down where the water broke
+                // would be drawn somewhere else entirely. See that kernel's
+                // header for why patch 0 was the wrong grid to accumulate on.
                 float turb = SAMPLE_TEXTURE2D_ARRAY(_Ocean_Turbulence,
-                    sampler_Ocean_Turbulence, xz / _Ocean_PatchSizes[0], 0).r
+                    sampler_Ocean_Turbulence, xz / _Ocean_PatchSizes[1], 0).r
                     * input.wC.x;
-                float noise = FoamNoise(xz * _FoamNoiseScale)
-                            * FoamNoise(xz * _FoamNoiseScale * 3.7 + 17.0);
-                // TWO foams, kept apart on purpose. FRESH is water that is
-                // folding right now: bright, torn, and where the light catches.
-                // RESIDUAL is the trail the turbulence buffer carries after it,
-                // duller and older. Added into one number before they are used
-                // -- which is what this did -- they average into flat paint at
-                // one brightness; kept apart, a breaking crest reads white
-                // against its own wake, which is the whole shape of the thing.
-                float fresh = saturate(breaking * (0.35 + 0.65 * storm)
-                                       * (0.4 + 1.5 * noise)) * env;
                 // The buffer is a blurred, decaying field: left linear it lays
                 // a uniform milk over the whole sea rather than marking where
                 // the water broke. Floor it and lift its contrast so a trail
                 // reads as a trail.
                 float trail = old > 0.5 ? turb
                             : saturate((turb - _FoamTrailFloor) * _FoamTrailGain);
-                float residual = saturate(trail * (0.4 + 1.5 * noise)) * env;
-                float foamAmt = saturate(fresh * lerp(_FoamCrestGain, 1.0, old) + residual);
-                foamAmt = saturate(foamAmt + sim.g * (0.5 + 0.8 * noise));
 
                 // ---- surf ------------------------------------------------
+                // Hoisted above the tearing noise, and only for that reason:
+                // the surf is torn by the same `noise` as the rest of the foam,
+                // so the test that decides whether the noise is worth
+                // computing at all has to know whether there is any surf here.
+                // Everything it reads -- swd, localHs, heightLift -- was
+                // already computed further up; nothing has moved but the lines.
+                //
                 // The shoreline should be the foamiest water in the world and
                 // was measurably the least: SurfProbe read foam falling 23x on
                 // the way in, 0.106 in 32-64 m of water down to 0.005 in the
-                // last metre. The cause is the `* env` on the line above.
+                // last metre. The cause is the `* env` on the fresh and
+                // residual terms below.
                 // Near a beach `env` IS the depth cap -- breakFraction * depth
                 // / Hs, which in 8 m of water under a 62 m sea is 0.07 -- so
                 // the term that correctly lies the sea DOWN also takes the
@@ -722,12 +874,61 @@ Shader "SeaSick/Ocean"
                 // Torn by the same noise as the rest of the foam, because an
                 // untorn breaker line reads as a painted stripe.
                 float crest = smoothstep(0.30, 0.72, heightLift);
-                float surf = max(breakers * (0.20 + 0.80 * crest), swash)
-                           * (0.45 + 0.90 * noise) * swd.y * _SurfStrength
-                           * (1.0 - saturate(_SS_SurfOff));
-                foamAmt = saturate(foamAmt + surf) * (1.0 - _SS_LayerOff.w);
+                float surfMask = max(breakers * (0.20 + 0.80 * crest), swash);
 
-                half3 col = lerp(body, sky, fresnel * (1.0 - foamAmt) * (1.0 - _SS_LayerOff.y));
+                // ---- the tearing noise, and the one test that skips it -----
+                // `noise` is two octaves of value noise, i.e. EIGHT hashes, and
+                // it was computed unconditionally on every water pixel in the
+                // world. It has exactly one job: to tear foam. On open water
+                // with no whitecap, no trail, no wake and no surf under it,
+                // every one of those hashes is multiplied by nothing.
+                //
+                // It cannot simply be moved inside a `foamAmt > 0.02` branch,
+                // because `noise` is an INPUT to foamAmt -- it multiplies the
+                // fresh term, the residual term, the wake and the surf. So the
+                // test is on a CEILING instead: every place the noise appears
+                // it appears as a positive factor bounded above (0.4 + 1.5n and
+                // 0.5 + 0.8n and 0.45 + 0.9n, all maximised at n = 1), so
+                // substituting those maxima gives a value that foamAmt provably
+                // cannot exceed. If even that ceiling is below the 0.02 the
+                // relief branch already treats as no foam, there is no foam
+                // here for any value of the noise, and the hashes are skipped.
+                //
+                // The bound is one-sided on purpose: it can only ever say "no
+                // foam" when there really is none. Where it says "maybe", the
+                // noise is computed and every number below is exactly what it
+                // was before -- same terms, same order, same rounding.
+                float ceilFresh = saturate(breaking * (0.35 + 0.65 * storm) * 1.9)
+                                * env * lerp(_FoamCrestGain, 1.0, old);
+                float ceilResid = saturate(trail * 1.9) * env;
+                float foamCeil = saturate(ceilFresh + ceilResid)
+                               + max(sim.g, 0.0) * 1.3
+                               + surfMask * 1.35 * swd.y * _SurfStrength;
+                float noise = 0.0;
+                if (foamCeil > 0.02)
+                {
+                    noise = FoamNoise(xz * _FoamNoiseScale)
+                          * FoamNoise(xz * _FoamNoiseScale * 3.7 + 17.0);
+                }
+
+                // TWO foams, kept apart on purpose. FRESH is water that is
+                // folding right now: bright, torn, and where the light catches.
+                // RESIDUAL is the trail the turbulence buffer carries after it,
+                // duller and older. Added into one number before they are used
+                // -- which is what this did -- they average into flat paint at
+                // one brightness; kept apart, a breaking crest reads white
+                // against its own wake, which is the whole shape of the thing.
+                float fresh = saturate(breaking * (0.35 + 0.65 * storm)
+                                       * (0.4 + 1.5 * noise)) * env;
+                float residual = saturate(trail * (0.4 + 1.5 * noise)) * env;
+                float foamAmt = saturate(fresh * lerp(_FoamCrestGain, 1.0, old) + residual);
+                foamAmt = saturate(foamAmt + sim.g * (0.5 + 0.8 * noise));
+                float surf = surfMask
+                           * (0.45 + 0.90 * noise) * swd.y * _SurfStrength
+                           * (1.0 - saturate(SS_SURF_OFF));
+                foamAmt = saturate(foamAmt + surf) * (1.0 - SS_LAYER_OFF.w);
+
+                half3 col = lerp(body, sky, fresnel * (1.0 - foamAmt) * (1.0 - SS_LAYER_OFF.y));
                 col += spec * sun.color;
                 // The 0.45 term rides sun.color and so dims itself once the
                 // moon takes over the key light, but the 0.55 is flat ambient
@@ -761,18 +962,24 @@ Shader "SeaSick/Ocean"
                     // wider highlight than the sea's own glitter -- it should
                     // glow along a whole crest, not pick out one facet.
                     foamSpec = pow(saturate(dot(foamN, H)), 28.0)
-                             * _FoamSparkle * foamAmt * (1.0 - _SS_LayerOff.z);
+                             * _FoamSparkle * foamAmt * (1.0 - SS_LAYER_OFF.z);
                 }
 
                 col = lerp(col, foamCol, foamAmt);
                 col += foamSpec * sun.color;
 
+                #if defined(_SEASICK_DEBUG)
                 // Before the fog, unlike _SS_FoamOnly: these are inputs, not
                 // the shaded result, and nothing about them should be dimmed
                 // by the weather.
-                if (_SS_FoamChannel > 0.5)
+                //
+                // The whole chain is compiled out of the shipped variant. It is
+                // eleven comparisons and ten selects to answer a question only
+                // a probe ever asks, and the answer is discarded on every pixel
+                // of every frame the game actually renders.
+                if (SS_FOAM_CHANNEL > 0.5)
                 {
-                    float ch = _SS_FoamChannel;
+                    float ch = SS_FOAM_CHANNEL;
                     float v = ch < 1.5 ? j
                             : ch < 2.5 ? breaking
                             : ch < 3.5 ? input.envC.x
@@ -785,11 +992,14 @@ Shader "SeaSick/Ocean"
                             : ch < 10.5 ? input.wC.z : dist * 0.001;
                     return half4(v.xxx, 1);
                 }
+                #endif // _SEASICK_DEBUG
 
                 col = MixFog(col, input.data.w);
+                #if defined(_SEASICK_DEBUG)
                 // After the fog, deliberately: the probe wants the foam the
                 // shader computed, not the foam the weather let you see.
-                if (_SS_FoamOnly > 0.5) col = foamAmt.xxx;
+                if (SS_FOAM_ONLY > 0.5) col = foamAmt.xxx;
+                #endif
                 return half4(col, 1);
             }
             ENDHLSL

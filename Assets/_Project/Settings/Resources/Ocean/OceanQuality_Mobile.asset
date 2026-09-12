@@ -19,8 +19,9 @@ MonoBehaviour:
   - 32
   clipmapRings: 5
   innerCellSize: 0.5
-  displacementFadeDistance: 350
+  displacementFadeDistance: 700
   intersectionFoam: 1
   rippleSimResolution: 256
   rippleSimExtent: 60
   refraction: 0
+  cellsAcross: 64

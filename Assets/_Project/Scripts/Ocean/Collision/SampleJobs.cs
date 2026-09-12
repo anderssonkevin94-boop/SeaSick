@@ -344,11 +344,15 @@ namespace SeaSick.Ocean
             float2 slope = derivs.xy / math.max(new float2(1f, 1f) + derivs.zw, 0.1f);
             result.normal = math.normalize(new float3(-slope.x, 1f, -slope.y));
 
-            // Foam from the cascade-0 turbulence readback (nearest texel is
-            // plenty — foam feeds VFX intensity, not geometry).
+            // Foam from the turbulence readback (nearest texel is plenty --
+            // foam feeds VFX intensity, not geometry). The buffer is tiled by
+            // CASCADE 1 since 2026-09-12: FoamAccumulate runs on the 128 m
+            // patch (0.5 m/texel) instead of the 2048 m one (8 m/texel, which
+            // aliased cascade 2 into noise). Same patch index as the shader's
+            // _Ocean_Turbulence read, or the two foams disagree.
             if (turb0.Length > 1)
             {
-                float2 fuv = p * invPatch.x;
+                float2 fuv = p * invPatch.y;
                 float2 fp = fuv * n - 0.5f;
                 int2 fi = (int2)math.floor(fp + 0.5f);
                 fi = ((fi % n) + n) % n;

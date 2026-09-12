@@ -69,7 +69,33 @@ public class SeaFoamTuner : MonoBehaviour, SeaSick.UI.IDevTool
     public string ToolBlurb => "how readily a crest breaks, how long the trail lasts, how sharp the tops are";
     public bool ToolActive { get => active; set => active = value; }
     void OnEnable() => SeaSick.UI.DevTools.Register(this);
-    void OnDisable() => SeaSick.UI.DevTools.Unregister(this);
+    void OnDisable()
+    {
+        SeaSick.UI.DevTools.Unregister(this);
+        SetDebugKeyword(false);
+    }
+
+    // Whether THIS tuner currently has the ocean's debug variant switched on.
+    // Tracked rather than set every frame: a keyword change is a shader
+    // variant switch, not a uniform write.
+    bool debugKeyword;
+
+    /// The ocean's six `_SS_*` dev uniforms and its foam-channel readout are
+    /// behind the `_SEASICK_DEBUG` variant now, so the shipped sea does not
+    /// carry them. This tuner drives the foam by hand, and the moment anyone
+    /// wants to see WHICH input is wrong -- the channel readout, the foam-only
+    /// view, the old-Jacobian comparison -- the shader has to be the variant
+    /// that has them. Cheapest correct rule: while the foam is being tuned by
+    /// hand, the debug ocean is what is on screen. Same known limit as
+    /// WaterClarityTuner's: one global switch, several tools, last writer
+    /// wins; untick and re-tick to take it back.
+    void SetDebugKeyword(bool on)
+    {
+        if (on == debugKeyword) return;
+        debugKeyword = on;
+        if (on) Shader.EnableKeyword("_SEASICK_DEBUG");
+        else Shader.DisableKeyword("_SEASICK_DEBUG");
+    }
 
     [Tooltip("Off = the shipped sea, untouched. Tick to tune it by hand.")]
     [SerializeField] bool active = false;
@@ -119,6 +145,7 @@ public class SeaFoamTuner : MonoBehaviour, SeaSick.UI.IDevTool
 
     void Update()
     {
+        SetDebugKeyword(active);
         if (!active) return;
         Seed();
         if (mat == null) return;

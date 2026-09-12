@@ -4,6 +4,13 @@
 // (Horvath 2015), plus an independent gaussian swell train. Band-limited per
 // cascade so no wavenumber is ever simulated twice.
 
+// TWO passes, not one. h0 needs the bin amplitude at +k AND at -k, and -k at
+// texel (i,j) is exactly +k at the mirrored texel (N-i, N-j) — the layout is
+// fftshifted, so evaluating both here means running the 4x4-supersampled
+// JONSWAP twice per texel for a number the neighbour already has. Pass 1
+// writes each texel's own amplitude, pass 2 reads its own and its mirror's.
+// Same output, half the spectral evaluations.
+#pragma kernel CalcAmplitude
 #pragma kernel CalcInitialSpectrum
 
 static const float PI = 3.14159265358979f;
@@ -15,10 +22,17 @@ RWTexture2DArray<float4> H0;
 RWTexture2DArray<float4> WaveData;
 // Fixed gaussian pairs, one slice per cascade. Fixed seed => deterministic sea.
 Texture2DArray<float2> Noise;
+// Pass 1 -> pass 2 scratch: the bin amplitude a(+k) of every texel. R32_FLOAT,
+// so pass 2 reads back exactly what pass 1 wrote.
+RWTexture2DArray<float> Amp;
 
 cbuffer Params
 {
     uint _N;
+    // First cascade slice of this dispatch. OceanRenderer rebuilds ONE slice
+    // per frame (h0 is written in place per slice, so the slices not yet
+    // rebuilt stay valid), and SV_DispatchThreadID.z always starts at 0.
+    uint _Slice;
     float _Depth;
     float4 _PatchSizes;   // L per cascade
     float4 _BandLow;      // k >= this per cascade
@@ -245,12 +259,39 @@ float SpectralAmplitude(float2 kCenter, float dk, float bandLow, float bandHigh)
     return sqrt(0.5f * F) * dk;
 }
 
+// Pass 1: this texel's own bin amplitude a(+k). Nothing else — no noise, no
+// output textures — so the whole cost of the shader is the one supersampled
+// SpectralAmplitude call, evaluated once per texel instead of twice.
+[numthreads(8, 8, 1)]
+void CalcAmplitude(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _N || id.y >= _N) return;
+    uint slice = _Slice + id.z;
+
+    float L = _PatchSizes[slice];
+    float dk = 2.0f * PI / L;
+    int half_ = int(_N) / 2;
+    int2 nc = int2(id.xy) - half_;
+    float2 k = dk * float2(nc);
+
+    // Row/column n=0 has no -k partner on the grid, so pass 2 never reads it
+    // and never mirrors onto it; k=0 carries no wave.
+    float a = 0.0f;
+    if (id.x != 0 && id.y != 0 && length(k) > 1e-6f)
+        a = SpectralAmplitude(k, dk, _BandLow[slice], _BandHigh[slice]);
+
+    Amp[uint3(id.xy, slice)] = a;
+}
+
+// Pass 2: assemble h0 from this texel's amplitude and its mirror's.
 [numthreads(8, 8, 1)]
 void CalcInitialSpectrum(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= _N || id.y >= _N) return;
+    uint slice = _Slice + id.z;
+    uint3 tid = uint3(id.xy, slice);
 
-    float L = _PatchSizes[id.z];
+    float L = _PatchSizes[slice];
     float dk = 2.0f * PI / L;
     int half_ = int(_N) / 2;
     int2 nc = int2(id.xy) - half_;
@@ -274,12 +315,16 @@ void CalcInitialSpectrum(uint3 id : SV_DispatchThreadID)
 
     if (valid)
     {
-        float2 xiK = Noise[id];
-        uint3 mid = uint3((_N - id.x) % _N, (_N - id.y) % _N, id.z);
+        float2 xiK = Noise[tid];
+        uint3 mid = uint3((_N - id.x) % _N, (_N - id.y) % _N, slice);
         float2 xiMK = Noise[mid];
 
-        float aK = SpectralAmplitude(k, dk, _BandLow[id.z], _BandHigh[id.z]);
-        float aMK = SpectralAmplitude(-k, dk, _BandLow[id.z], _BandHigh[id.z]);
+        // The mirror texel's grid coordinate is (N - i) - N/2 = -(i - N/2) on
+        // both axes, so its +k IS this texel's -k, bit for bit: same dk, same
+        // band, same sub-sample offsets, negated centre. Reading it is exactly
+        // what SpectralAmplitude(-k, ...) used to compute here.
+        float aK = Amp[tid];
+        float aMK = Amp[mid];
 
         // xi is a unit phasor (see CascadeSet.BuildNoise), so |h0| = a exactly.
         float2 h0k = xiK * aK;
@@ -287,6 +332,6 @@ void CalcInitialSpectrum(uint3 id : SV_DispatchThreadID)
         h0 = float4(h0k, h0mk.x, -h0mk.y); // zw stores conj(h0(-k))
     }
 
-    H0[id] = h0;
-    WaveData[id] = wd;
+    H0[tid] = h0;
+    WaveData[tid] = wd;
 }

@@ -23,6 +23,7 @@ namespace SeaSick.UI
         readonly HudLabel hullText = new HudLabel();
         readonly HudLabel waterText = new HudLabel();
         readonly HudLabel navText = new HudLabel();
+        float nextNavRefresh;
 
         /// The ship panel's height in UITheme units at its TALLEST — the
         /// flooding layout. Kept only because the panel has to ask for a
@@ -187,7 +188,16 @@ namespace SeaSick.UI
             // the metre, the hold counts. Sailing at a steady speed the line
             // now rebuilds only when the metre ticks over, instead of sixty
             // times a second.
-            if (navText.Changed(HudLabel.Key(
+            // ...and at most four times a second. Speed to a tenth moves on
+            // nearly every frame in any sea, and at 6 m/s the metre ticks six
+            // times a second, so the line was regenerating its text mesh on
+            // most frames -- ~60 KB each in GUIStyle.GetMeshInfo, the whole
+            // per-frame GC floor once everything else was quiet (measured
+            // 2026-09-11: GC p50 56 KB/frame, StatusHUD.OnGUI 60-74 KB on the
+            // worst frames). Four a second is what PerfHUD settled on.
+            bool due = Time.unscaledTime >= nextNavRefresh;
+            if (due) nextNavRefresh = Time.unscaledTime + 0.25f;
+            if (due && navText.Changed(HudLabel.Key(
                     Mathf.RoundToInt(motor.CurrentSpeed * 10f),
                     Mathf.RoundToInt(dist),
                     voyage.TotalHeld,

@@ -65,8 +65,36 @@ public class WaterClarityTuner : MonoBehaviour, SeaSick.UI.IDevTool
         seeded = true;
     }
 
+    // Whether THIS tuner currently has the ocean's debug variant switched on.
+    // Tracked rather than set every frame: a keyword change is a shader
+    // variant switch, not a uniform write, and is not something to do 60
+    // times a second for no reason.
+    bool debugKeyword;
+
+    /// `_SS_RefractOff` is only declared in the ocean shader's `_SEASICK_DEBUG`
+    /// variant now -- the shipped sea does not carry the six dev uniforms at
+    /// all. Setting the global without the keyword does nothing, and does it
+    /// SILENTLY: the 1 key would simply look broken. So the keyword follows
+    /// the tick box.
+    ///
+    /// The one limit, written down rather than papered over: this is a single
+    /// global switch and several dev tools want it. If a probe finishes while
+    /// this tuner is still ticked, the probe's DisableKeyword wins and the 1
+    /// key goes quiet until the box is unticked and ticked again. A refcount
+    /// would fix it and would have to live somewhere every tool can see it;
+    /// nobody has needed one yet, because the probes that care already switch
+    /// the tuners off before they run.
+    void SetDebugKeyword(bool on)
+    {
+        if (on == debugKeyword) return;
+        debugKeyword = on;
+        if (on) Shader.EnableKeyword("_SEASICK_DEBUG");
+        else Shader.DisableKeyword("_SEASICK_DEBUG");
+    }
+
     void Update()
     {
+        SetDebugKeyword(active);
         if (!active) return;
         Seed();
         if (mat == null) return;
@@ -87,6 +115,7 @@ public class WaterClarityTuner : MonoBehaviour, SeaSick.UI.IDevTool
     {
         SeaSick.UI.DevTools.Unregister(this);
         Shader.SetGlobalFloat("_SS_RefractOff", 0f);
+        SetDebugKeyword(false);
     }
 
     /// Drawn inside the settings drawer's rect. It used to take a fixed

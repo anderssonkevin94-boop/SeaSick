@@ -1,9 +1,43 @@
 // Persistent foam. The folding Jacobian must be COMBINED across cascades —
 // J = (1 + sum Dxx)(1 + sum Dzz) - (sum Dxz)^2 — because no band folds alone;
-// crests break where the bands conspire. Computed on the cascade-0 grid into
-// a single persistent layer (slice 0) that decays with a progressive 5-tap
-// blur feedback, so foam disperses outward as it fades (Rare's "progressive
-// blur with feedback").
+// crests break where the bands conspire. Computed into a single persistent
+// layer (slice 0) that decays with a progressive 5-tap blur feedback, so foam
+// disperses outward as it fades (Rare's "progressive blur with feedback").
+//
+// THE GRID IS CASCADE 1's, not cascade 0's. This was the cascade-0 patch, and
+// the buffer is N x N whatever patch it stands on, so patch 0 — 2048 m, at
+// N = 256 on PC and 128 on the phone — put a texel every 8 m on PC and every
+// 16 m on the phone. Three things went wrong at that spacing, and they all
+// point the same way:
+//
+//   - It POINT-SAMPLES all three cascades at that spacing, cascade 2 included
+//     — a 32 m patch whose own texels are 0.125 m apart, read once every 8 m.
+//     That is one sample in sixty-four of the band that folds hardest, which
+//     is not a measurement of folding at all; it is aliasing noise, and it
+//     fires wherever it happens to land rather than where the water breaks.
+//     Every frame it lands somewhere else, so the injection sprays over the
+//     whole patch instead of following crests.
+//   - A texel is the smallest trail the buffer can hold. At 8 m the "trails"
+//     are 8 m blobs — bigger than the breaking crest that made them, which is
+//     the milk the _FoamTrailFloor / _InjectSharp notes are tuning around.
+//   - The 5-tap blur's radius is one texel, so the feedback spread the foam
+//     8 m per step. Foam does not disperse at 8 m a frame.
+//
+// On patch 1 (128 m) the same N gives 0.5 m/texel on PC and 1 m on the phone:
+// cascade 1 is sampled at exactly its own rate, cascade 2 is read every 4 of
+// its own texels instead of every 64, and a trail is half a metre wide rather
+// than eight metres wide. `Ocean.shader` tiles
+// _Ocean_Turbulence with _Ocean_PatchSizes[1] to match — the two MUST agree,
+// and so must the CPU sampler in SampleJobs.cs.
+//
+// What it costs, stated rather than hidden: the window is now 128 m, so the
+// FOAM repeats every 128 m instead of every 2048 m, and cascade 0's share of
+// the fold is read over a sixteenth of its own patch (128 of its 2048 m) and
+// tiled. That is the right trade — cascade 0 is the long swell, and long swell
+// does not fold; nearly all the Jacobian lives in bands 1 and 2, which are
+// exactly the bands the old grid could not see. A 128 m repeat in a blurred,
+// decaying, low-contrast field is far harder to spot than 8 m blobs, and this
+// is the same 128 m repeat the sea's own cascade-1 chop already has.
 
 #pragma kernel FoamAccumulate
 
@@ -38,9 +72,9 @@ void FoamAccumulate(uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= _N || id.y >= _N) return;
 
-    // This texel's world offset within the cascade-0 patch (the foam layer
-    // tiles with patch 0, exactly like the shader samples it).
-    float2 world = (float2(id.xy) + 0.5) / _N * _PatchSizes[0];
+    // This texel's world offset within the cascade-1 patch (the foam layer
+    // tiles with patch 1, exactly like the shader samples it).
+    float2 world = (float2(id.xy) + 0.5) / _N * _PatchSizes[1];
 
     float dxx = 0, dzz = 0, dxz = 0;
     [unroll]
@@ -56,6 +90,16 @@ void FoamAccumulate(uint3 id : SV_DispatchThreadID)
 
     // 5-tap wrap blur of the previous buffer: the feedback that makes foam
     // spread as it dies instead of winking out in place.
+    //
+    // The taps are a TEXEL apart, so on the new grid the spread is 0.5 m a
+    // step where it used to be 8 m — sixteen times slower in metres, at the
+    // same weights. That is deliberately left alone here: half a metre of
+    // dispersion per step over a half-life measured in seconds is already
+    // several metres of spread over a trail's life, and the old 8 m was a
+    // large part of why the buffer read as a wash. If it turns out to need
+    // widening, the honest fix is a second tap ring (or a separable two-pass
+    // blur), NOT more weight on the same four neighbours: the kernel is a
+    // partition of unity and shifting weight outward only softens the centre.
     uint xm = (id.x + _N - 1) % _N, xp = (id.x + 1) % _N;
     uint ym = (id.y + _N - 1) % _N, yp = (id.y + 1) % _N;
     float prev = TurbPrev[uint3(id.xy, 0)] * 0.52

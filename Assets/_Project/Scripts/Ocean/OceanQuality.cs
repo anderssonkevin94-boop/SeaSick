@@ -22,6 +22,14 @@ namespace SeaSick.Ocean
         public float innerCellSize = 0.5f;
         [Tooltip("World distance at which displacement fades to zero so the horizon stays flat.")]
         public float displacementFadeDistance = 500f;
+        [Tooltip("Cells across the centre block and each ring annulus. 128 on PC, " +
+                 "64 on mobile. Was hard-coded 128 on the OceanClipmap component " +
+                 "itself, so both tiers were built at PC density -- the phone was " +
+                 "drawing 5 rings times ~14.4k verts (~75k verts / 141k tris) for " +
+                 "a screen that could not resolve it. OceanClipmap reads this at " +
+                 "build time; the component's own field is only the fallback for " +
+                 "when no quality asset resolves.")]
+        public int cellsAcross = 128;
 
         [Header("Foam & interaction")]
         public bool intersectionFoam = true;

@@ -66,6 +66,12 @@ public class SurfProbe : MonoBehaviour
 
     IEnumerator Start()
     {
+        // `_SS_FoamOnly` and `_SS_SurfOff` only exist in the ocean shader's
+        // `_SEASICK_DEBUG` variant now -- the shipped one does not declare
+        // them, so setting the globals without this keyword changes nothing
+        // and does so silently. It comes off in Finish, which every abort and
+        // the normal end alike go through.
+        Shader.EnableKeyword("_SEASICK_DEBUG");
         var sb = new StringBuilder();
         System.IO.File.WriteAllText("/tmp/seasick-surf.txt", "SurfProbe: did not finish\n");
 
@@ -397,6 +403,10 @@ public class SurfProbe : MonoBehaviour
         running = false;
         Shader.SetGlobalFloat("_SS_FoamOnly", 0f);
         Shader.SetGlobalFloat("_SS_SurfOff", 0f);
+        // The globals are reset AND the variant is put back, in that order:
+        // a keyword left on outlives play mode the same way a global float
+        // does, and the shipped ocean should not be the debug one.
+        Shader.DisableKeyword("_SEASICK_DEBUG");
         OceanTime.Paused = false;
         if (err != null) sb.AppendLine(err);
         System.IO.File.WriteAllText("/tmp/seasick-surf.txt", sb.ToString());

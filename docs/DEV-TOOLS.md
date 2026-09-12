@@ -1019,3 +1019,54 @@ comments now say 0.29 of 0.4.
   stopwatches. `BuoyantBody` transforms each probe once per step.
   Unthrottled `FindFirstObjectByType` in `CombatLock`, `EnemyShip`,
   `HomeTab`, `ShipyardPanel`, `Bilge`, `DynamicWaterSim` retry at 1 Hz.
+
+### Phase 4 of the perf pass: the GPU and the mobile tier (2026-09-12)
+
+- **The FFT is an LDS Stockham now** (`FFT.compute`, `FFTCompute.cs`): one
+  dispatch per axis per field instead of 2*log2(N) -- 32 dispatches a frame
+  became 4, and each row/column touches main memory twice instead of 16
+  times. Same twiddle sign, no normalisation, result lands in `data`.
+  `RunProbe.FFT()` (`FFTUnit`, edit mode) now runs 15 cases at N=64/128/256
+  -- impulses on both axes (the transpose trap), a cosine pair, three pairs,
+  and a flat spectrum -> N^2 delta -- against a CPU DFT: **PASS 15/15, worst
+  relative error 4.4e-5**. The harness had a bug of its own: `GetData` with
+  no layer index returns ONE layer of an array readback; gather per layer.
+  The 512 kernels ask 16 KB of LDS, exactly the GLES 3.1 minimum, so they
+  are separate kernels and only picked when N > 256.
+- **The initial spectrum is computed once per texel, not twice**: `F(-k)`
+  at texel i is `F(+k)` at the mirror texel, so `CalcAmplitude` writes an
+  R32 scratch and `CalcInitialSpectrum` gathers its own and its mirror's.
+  Bit-exact. And the rebuild is **sliced**: one cascade per frame, three
+  frames per rebuild, H0 written in place so the evolve chain always reads
+  a complete field; the first build after enable is whole. Probes that
+  `SetSettings` and wait >= 3 frames need nothing (all of them wait more).
+- **Clipmap**: `cellsAcross` is a tier field (PC 128, Mobile 64 -- the
+  phone drew 75k verts at PC density; now 25k). Every ring is FOUR quadrant
+  renderers under the ring transform with tight bounds, so the camera
+  culls the sea behind it for the first time (every AABB used to contain
+  the camera). Skirt segments equal the cells they span. Mobile
+  `displacementFadeDistance` 350 -> 700. `CascadeFadeProbe` still reflects
+  the component's private `cellsAcross` and `GetComponent<MeshRenderer>()`
+  on `RingN` (now the parent) -- both read stale on the phone tier; fix
+  when that probe is next used.
+- **Foam runs on the cascade-1 grid** (`FoamAccumulate.compute`): 0.5 m per
+  texel instead of 8 m, which was point-sampling the 32 m cascade at one
+  sample per 64 of its texels -- aliasing noise, not folding, and 8-16 m
+  trail blobs. The buffer tiles at 128 m now; `Ocean.shader` and
+  `SampleJobs.cs` (`invPatch.y`) read it that way. The 5-tap blur spreads
+  0.5 m a step instead of 8; judge on screen before widening it (a second
+  tap ring, not reweighting). **Visual change -- Kevin's eye.**
+- **`FoamNoise` is an integer hash** (was `frac(sin())`, up to 24 sin per
+  water pixel) and the two unconditional calls sit behind a provable upper
+  bound on `foamAmt`, so clear water skips them. **Visual change** in the
+  foam's grain.
+- **Two global keywords on `Ocean.shader`**: `_SEASICK_DEBUG` carries the
+  six `_SS_*` dev uniforms and the 11-way channel chain; the shipped
+  variant has none of them. `CrestProbe`, `SurfProbe`, `ShaderStrip`,
+  `WeatherSheet`, `ShoalShot`, `WaterClarityTuner`, `SeaFoamTuner` enable it
+  while they run. Last writer wins; a probe finishing while a tuner is
+  ticked switches the tuner's mutes off until re-ticked. `_HULL_CLIP`
+  carries the hull `clip()` (a discard makes the whole shader late-Z on
+  tilers); `HullWaterClip.Push` drives it with `active`.
+- Mist: `MistCeiling = 8` in code because `maxMist: 16` is serialised in
+  Sea.unity; spawn band pushed to 1.0-2.4 x sampleRadius.

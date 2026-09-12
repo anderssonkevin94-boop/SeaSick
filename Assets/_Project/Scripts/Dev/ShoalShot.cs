@@ -34,11 +34,22 @@ public class ShoalShot : MonoBehaviour
 
     IEnumerator Start()
     {
+        // `_SS_RefractOff` -- the whole "murk off" half of this sheet -- lives
+        // behind the ocean shader's `_SEASICK_DEBUG` variant now, so without
+        // the keyword the four shots would be four photographs of the same
+        // water. OnDestroy takes it off again; the abort below leaves this
+        // object alive, so it takes it off itself.
+        Shader.EnableKeyword("_SEASICK_DEBUG");
         var sb = new StringBuilder("=== ShoalShot ===\n");
         var motor = FindAnyObjectByType<SeaSick.Ship.ShipMotor>();
         var streamer = FindAnyObjectByType<SeaSick.Terrain.TerrainStreamer>();
         var sea = SeaSick.Ocean.SeaStateController.Instance;
-        if (Island.All.Count == 0) { Debug.LogError("ShoalShot: no islands"); yield break; }
+        if (Island.All.Count == 0)
+        {
+            Debug.LogError("ShoalShot: no islands");
+            Shader.DisableKeyword("_SEASICK_DEBUG");
+            yield break;
+        }
 
         // Calm and midday: this is a look at the WATER, and a storm sea or a
         // low sun would be judging something else.
@@ -132,6 +143,8 @@ public class ShoalShot : MonoBehaviour
         // Put everything back. A forced sea and a global dev flag both
         // survive leaving play mode here (domain reload is off), so a probe
         // that walks away leaves every later run looking at the wrong thing.
+        // The `_SEASICK_DEBUG` keyword is exactly such a flag; OnDestroy below
+        // clears it, so it is cleared on this path too.
         Shader.SetGlobalFloat("_SS_RefractOff", 0f);
         if (mat != null) mat.SetFloat("_ShoalStrength", shoalWas);
         if (streamer != null) streamer.target = streamerTarget;
@@ -142,6 +155,8 @@ public class ShoalShot : MonoBehaviour
         Debug.Log(sb.ToString());
         Destroy(gameObject);
     }
+
+    void OnDestroy() { Shader.DisableKeyword("_SEASICK_DEBUG"); }
 
     static Material FindOceanMaterial()
     {
