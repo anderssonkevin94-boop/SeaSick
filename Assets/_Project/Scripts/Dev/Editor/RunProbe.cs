@@ -78,6 +78,8 @@ public static class RunProbe
     /// arithmetic over a ledger built in the probe, so it needs no scene, no
     /// island and no play mode. That is the point of it.
     public static void Ledger() => CallEditor("LedgerProbe");
+    /// Sail to a real island, land, make camp, and count what came down.
+    public static void Camp() => Call("CampProbe");
     public static void VillageBuild() => Call("VillageProbe", "Build");
     public static void VillageShot() => Call("VillageProbe", "Shot");
     public static void Loop() => Call("LoopProbe");

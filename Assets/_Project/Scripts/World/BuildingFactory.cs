@@ -38,6 +38,20 @@ namespace SeaSick.World
             root.transform.SetParent(parent, true);
             root.transform.SetPositionAndRotation(floorAt, facing);
 
+            // **Every kind gets its `Building` component**, which is what the
+            // village counts itself by. An earlier version returned here
+            // before the one at the bottom of this method, so a campfire was
+            // raised on the ground and then reported as a failure to raise
+            // one -- and the caller's error message blamed the terrain. A
+            // shape that leaves by a different door has to carry the same
+            // things out with it.
+            if (plan.kind == BuildKind.Fire)
+            {
+                Fire(root.transform, plan);
+                root.AddComponent<Building>().Configure(plan);
+                return root;
+            }
+
             var timber = Mat("wall", new Color(0.42f, 0.31f, 0.20f));
             var dark = Mat("beam", new Color(0.25f, 0.18f, 0.12f));
             var thatch = Mat("thatch", new Color(0.34f, 0.33f, 0.22f));
@@ -99,6 +113,59 @@ namespace SeaSick.World
             go.transform.localPosition = at;
             go.GetComponent<MeshRenderer>().sharedMaterial = mat;
             return go;
+        }
+
+        /// A ring of stones with a few logs leaning in, and a light.
+        ///
+        /// Deliberately NOT a hut. The campfire is the moment an island stops
+        /// being scenery and starts being somewhere you have a stake in, and a
+        /// shed says that far less than a fire does. The light matters more
+        /// than the geometry: day and night are shipped, so a camp you left
+        /// burning is visible from the water at night, which is the cheapest
+        /// possible way to make an investment READ from the deck.
+        static void Fire(Transform root, BuildPlan plan)
+        {
+            var stone = Mat("firestone", new Color(0.46f, 0.45f, 0.43f));
+            var log = Mat("firelog", new Color(0.29f, 0.20f, 0.13f));
+            var ember = Mat("ember", new Color(1f, 0.46f, 0.12f), 0.6f);
+
+            float r = plan.footprint.x * 0.5f;
+
+            // The ring. Eight stones, jittered off a circle so it reads as
+            // gathered rather than laid out.
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI * 2f / 8f;
+                float rr = r * (0.92f + 0.1f * Mathf.Sin(i * 2.3f));
+                var b = Box(root, stone,
+                    new Vector3(0.34f, 0.22f, 0.28f),
+                    new Vector3(Mathf.Cos(a) * rr, 0.11f, Mathf.Sin(a) * rr));
+                b.transform.localRotation = Quaternion.Euler(0f, -a * Mathf.Rad2Deg + i * 11f, 0f);
+            }
+
+            // Three logs leaning into the middle.
+            for (int i = 0; i < 3; i++)
+            {
+                float a = i * Mathf.PI * 2f / 3f + 0.4f;
+                var b = Box(root, log,
+                    new Vector3(0.17f, 0.17f, r * 1.5f),
+                    new Vector3(Mathf.Cos(a) * r * 0.34f, 0.24f, Mathf.Sin(a) * r * 0.34f));
+                b.transform.localRotation =
+                    Quaternion.Euler(38f, -a * Mathf.Rad2Deg + 90f, 0f);
+            }
+
+            Box(root, ember, new Vector3(0.4f, 0.14f, 0.4f), new Vector3(0f, 0.1f, 0f));
+
+            var lightGo = new GameObject("Firelight");
+            lightGo.transform.SetParent(root, false);
+            lightGo.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+            var l = lightGo.AddComponent<Light>();
+            l.type = LightType.Point;
+            l.color = new Color(1f, 0.62f, 0.28f);
+            l.range = 14f;
+            l.intensity = 2.2f;
+            l.shadows = LightShadows.None;      // one more shadow caster per camp is not worth it
+            lightGo.AddComponent<Campfire>();
         }
     }
 }

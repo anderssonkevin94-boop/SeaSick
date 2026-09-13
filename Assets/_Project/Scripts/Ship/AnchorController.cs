@@ -146,6 +146,55 @@ namespace SeaSick.Ship
             if (isle != null && !isle.IsHome) Outpost.BeginSurvey(isle, this);
         }
 
+        /// Make camp, or say what the camp is holding.
+        ///
+        /// This sits on the existing prompt stack rather than in a panel of
+        /// its own. The bottom sheet the orders will eventually live in is a
+        /// later piece of work; putting one button in the slot that already
+        /// exists is what lets the loop be SEEN before any of that is built.
+        void DrawCampControl(ref Prompts.Stack stack, float bh,
+            GUIStyle button, GUIStyle info)
+        {
+            if (CurrentIsland == null || CurrentIsland.IsHome) return;
+
+            var outpost = Outpost.Of(CurrentIsland);
+
+            // Still looking at the ground. Say so rather than showing nothing:
+            // an absent button is indistinguishable from a broken one.
+            if (outpost == null)
+            {
+                if (Outpost.Surveying(CurrentIsland))
+                    GUI.Label(stack.Next(bh * 0.6f), "looking over the ground…", info);
+                else if (Outpost.Surveyed(CurrentIsland))
+                    GUI.Label(stack.Next(bh * 0.6f), "no ground here will take a camp", info);
+                return;
+            }
+
+            if (!outpost.HasCamp)
+            {
+                var r = stack.Next(bh);
+                UIBlocker.Block(r);
+                if (GUI.Button(r, "🔥  Make camp", button))
+                {
+                    int logs = outpost.MakeCamp();
+                    if (logs >= 0)
+                        Debug.Log($"Camp made on {CurrentIsland.name}: "
+                            + $"{logs} logs out of the clearing, "
+                            + $"keeps {outpost.StoreCapacity}");
+                }
+                return;
+            }
+
+            // There is a camp. Tell the player what it is holding — this is
+            // the line they sailed back to read.
+            outpost.CatchUp();
+            var l = outpost.Ledger;
+            if (l != null)
+                GUI.Label(stack.Next(bh * 0.6f),
+                    $"camp: {l.timber} / {l.ceiling} timber   ·   {l.standing:F0} standing",
+                    info);
+        }
+
         Island IslandInRange()
         {
             var isle = Island.Nearest(transform.position);
@@ -405,6 +454,38 @@ namespace SeaSick.Ship
                     centre = CurrentDock.ViewCentre,
                     radius = reach,
                     from = CurrentDock.ViewFrom,
+                };
+            }
+            else if (CurrentIsland != null && !CurrentIsland.IsHome
+                     && (CurrentState == State.Anchored || CurrentState == State.Ashore))
+            {
+                // **The bird's-eye at any island.** Home gets the shot Kevin
+                // flew to, composed against its pier; a camp has no pier, so
+                // the vantage is taken from where the ship actually is —
+                // seaward of the ground, looking inland past her. That is the
+                // same composition as home (the water in the near edge with
+                // her on it, the land beyond) without a second set of authored
+                // constants to drift out of step.
+                var outpost = Outpost.Of(CurrentIsland);
+                Vector3 aim = outpost != null && outpost.Sited
+                    ? outpost.ClearingCentre
+                    : CurrentIsland.transform.position;
+
+                Vector3 seaward = transform.position - aim;
+                seaward.y = 0f;
+
+                // What has to fit. The settlement's own ViewRadius when the
+                // ground has been surveyed -- the same number home frames by --
+                // and the island otherwise.
+                var settle = CurrentIsland.GetComponent<Settlement>();
+                float reach = settle != null ? settle.ViewRadius
+                                             : Mathf.Max(70f, CurrentIsland.Radius);
+
+                chaseCam.Overview = new SeaSick.CameraRig.ChaseCamera.IslandShot
+                {
+                    centre = aim,
+                    radius = reach,
+                    from = seaward,
                 };
             }
             else chaseCam.Overview = null;
@@ -738,6 +819,7 @@ namespace SeaSick.Ship
                         if (GUI.Button(secondary, "send crew ashore", buttonStyle)) SendAshore();
                     }
 
+                    DrawCampControl(ref stack, bh, buttonStyle, infoStyle);
                     DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
                     break;
                 }

@@ -57,7 +57,7 @@ namespace SeaSick.World
             surveying.Clear();
         }
 
-        [Tooltip("What open ground keeps before the weather has it. At home this is the beach, and it is the reason to build the first storehouse; at a camp it is what the fire can watch over.")]
+        [Tooltip("What open ground keeps before anything is built. 30 at home — that is the beach, and the reason to build the first storehouse. ZERO anywhere else: an island with nobody on it keeps nothing, and the campfire is what first gives a place a ceiling at all.")]
         [SerializeField] int openCapacity = 30;
 
         [Tooltip("Metres between buildings -- room to walk round one, which is what a village looks like from above.")]
@@ -105,7 +105,76 @@ namespace SeaSick.World
         /// Bring the ledger up to now. Free to call as often as you like --
         /// the tick advances on a fixed grid of game time, so asking twice in
         /// a frame does nothing the second time.
-        public void CatchUp() { ledger?.Tick(TimeOfDay.Seconds); }
+        public void CatchUp()
+        {
+            if (ledger == null) return;
+            // **One definition of the ceiling, and it is what stands on the
+            // ground.** The ledger could have carried its own and drifted from
+            // the buildings the moment a storehouse went up; instead the
+            // buildings ARE the ledger's ceiling, pushed in before every tick.
+            ledger.ceiling = StoreCapacity;
+            ledger.Tick(TimeOfDay.Seconds);
+        }
+
+        /// Is there a camp here at all, or only ground that would take one?
+        /// The fire is the difference.
+        public bool HasCamp => CountOf(BuildPlans.Campfire.id) > 0;
+
+        /// Light the fire.
+        ///
+        /// Returns the logs that came out of the clearing, or -1 if there is
+        /// nowhere here to put a camp. **Making camp fells the wood it stands
+        /// on** — at home the village clearing is reserved before the scenery
+        /// is baked, but on any other island the trees are already standing
+        /// when the player decides, so they come down through the same path
+        /// the crew fell them by, and the logs go straight into the pile.
+        public int MakeCamp() => MakeCamp(out _);
+
+        /// As above, and says WHY when it refuses.
+        ///
+        /// The first version folded "no ground here", "already a camp" and
+        /// "nowhere inside the clearing will take it" into a single -1, which
+        /// is a number you cannot debug from. Three refusals that mean
+        /// different things must not share a return value.
+        public int MakeCamp(out string why)
+        {
+            if (!Sited) { why = "the ground here was never surveyed"; return -1; }
+            if (HasCamp) { why = "there is already a camp here"; return -1; }
+            var fire = Raise(BuildPlans.Campfire);
+            if (fire == null)
+            {
+                why = $"nowhere in the {ClearingRadius:F0} m clearing stands level enough "
+                    + $"or high enough (needs {minHeight:F1} m)";
+                return -1;
+            }
+            why = "";
+
+            int felled = 0;
+            var wood = GetComponentInChildren<Terrain.SceneryWood>();
+            if (wood != null)
+            {
+                // The fire's own footprint plus room to stand round it, not
+                // the whole clearing: a camp is a gap in the wood, and
+                // stripping thirty metres on the first tap would read as the
+                // island being deleted rather than settled.
+                felled = wood.FellWithin(ClearingCentre, CampClearingRadius);
+            }
+
+            if (ledger != null)
+            {
+                ledger.SetKey(ClearingCentre);
+                ledger.ceiling = StoreCapacity;
+                // The clearing's timber goes in the pile, capped by what the
+                // fire can keep — the rest is left where it fell.
+                ledger.timber = Mathf.Min(ledger.ceiling, ledger.timber + felled);
+                ledger.lastTicked = TimeOfDay.Seconds;
+            }
+            return felled;
+        }
+
+        /// How much wood a camp clears when it is founded. Room to walk round
+        /// the fire and stack what came down, nothing more.
+        public const float CampClearingRadius = 7.5f;
 
         /// Everything this place can keep. Land more than this on one voyage
         /// and the surplus stays on the ground and is not there when you get
@@ -169,6 +238,10 @@ namespace SeaSick.World
             height = terrainHeight;
             minHeight = minGroundHeight;
 
+            // Bare ground keeps nothing. Home is the exception and keeps its
+            // beach, which is the whole reason its first storehouse exists.
+            if (!IsHome) openCapacity = 0;
+
             // Centre the clearing on a circle that FITS in the buildable
             // patch, not on its centroid: a lobed patch has a centroid that
             // need not be on it at all, and the whole point of this disc is
@@ -200,6 +273,19 @@ namespace SeaSick.World
                                     + plan.footprint.y * plan.footprint.y));
             float reach = viewHalfWidth > 0.01f ? viewHalfWidth : Dock.ViewHalfWidth;
             ClearingRadius = Mathf.Clamp(reach - widest - 2f, 14f, 30f);
+
+            // A CAMP's clearing is sized by the ground, not by the shot.
+            //
+            // Home's 30 m comes from what the docked camera holds, and home
+            // has the broad flat ground to fill it. An island need not: the
+            // measured circle that actually fits inside its buildable patch
+            // can be a third of that, and a spiral searching 30 m of a 10 m
+            // patch puts every candidate off the good ground and finds
+            // nowhere to stand a fire. The floor drops to 4 m for the same
+            // reason -- 14 m is a village's minimum, and a camp is a fire.
+            if (!IsHome && settlement.VillageClearing > 0.01f)
+                ClearingRadius = Mathf.Clamp(
+                    Mathf.Min(ClearingRadius, settlement.VillageClearing), 4f, 30f);
 
             // Seed the ledger off the ground that was just surveyed: how much
             // timber stands within reach is a property of the place, so it

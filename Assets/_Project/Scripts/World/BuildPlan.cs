@@ -8,9 +8,21 @@ namespace SeaSick.World
     /// runtime on ground that was chosen, never flattened (`TerrainHeight` is
     /// a pure function of position -- see Outpost), so there is nothing to
     /// author in the editor and nothing to keep in sync with a mesh.
+    /// What a plan LOOKS like when it is raised. The geometry is derived from
+    /// the footprint and ridge either way; this picks which shape.
+    public enum BuildKind
+    {
+        /// Walls, corner posts and a thatched roof.
+        Hut,
+        /// A ring of stones and a few logs, with a light in it. Not a
+        /// building -- the mark that somebody means to stay.
+        Fire,
+    }
+
     public struct BuildPlan
     {
         public string id;
+        public BuildKind kind;
         /// What the button says.
         public string label;
         /// One line on what it buys you. The player is spending a voyage's
@@ -52,6 +64,31 @@ namespace SeaSick.World
             ridge = WorldScale.Storehouse,
         };
 
+        /// **The first thing you put on an island that is not home.**
+        ///
+        /// It costs nothing, because it is not an investment -- it is the
+        /// decision to make one. What it buys is a place that KEEPS things:
+        /// ten logs, which is what the fire can watch over, and the ceiling
+        /// that stops a camp producing for ever. Everything after this raises
+        /// that ceiling.
+        public static readonly BuildPlan Campfire = new BuildPlan
+        {
+            id = "Campfire",
+            kind = BuildKind.Fire,
+            label = "make camp",
+            blurb = "a fire, and somewhere to stack ten logs",
+            resource = "Timber",
+            cost = 0,
+            storeCapacity = OutpostLedger.CampfireCeiling,
+            footprint = new Vector2(2.4f, 2.4f),
+            ridge = 0.9f,
+        };
+
         public static readonly BuildPlan[] All = { Storehouse };
+
+        /// Plans a CAMP can raise, in the order they are offered. Kept apart
+        /// from `All` because `All` is what sizes the village clearing at
+        /// home, and a fire is not a building to leave room for.
+        public static readonly BuildPlan[] AtACamp = { Campfire };
     }
 }

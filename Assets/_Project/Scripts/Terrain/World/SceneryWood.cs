@@ -154,6 +154,37 @@ namespace SeaSick.Terrain
             return made;
         }
 
+        /// Fell everything standing inside a circle, and say how many came
+        /// down.
+        ///
+        /// This is how a camp gets its clearing. At home the village's ground
+        /// is handed to the scenery bake as a keep-out BEFORE the trees go in,
+        /// because the wood is several hundred trees welded into one mesh --
+        /// but on any other island the trees are already standing when the
+        /// player decides to build, so there is no keep-out to hand anyone.
+        /// The wood comes down at runtime instead, through the same path the
+        /// crew fell it by. Which is the better story anyway: **making camp
+        /// fells the wood it stands on, and you keep the logs.**
+        public int FellWithin(Vector3 at, float radius)
+        {
+            if (trees == null) return 0;
+            float r2 = radius * radius;
+            int n = 0;
+            for (int i = 0; i < trees.Length; i++)
+            {
+                if (trees[i].felled) continue;
+                Vector3 d = trees[i].baseAt - at;
+                d.y = 0f;                       // a disc on the map, not a sphere
+                if (d.sqrMagnitude > r2) continue;
+                // Through the live node if there is one, so a tree a crewman
+                // has claimed does not leave a node standing on a stump.
+                if (live.TryGetValue(i, out var node) && node != null) live.Remove(i);
+                Fell(i);
+                n++;
+            }
+            return n;
+        }
+
         /// Called by the node when the crew finish it.
         public void NodeHarvested(int i)
         {
