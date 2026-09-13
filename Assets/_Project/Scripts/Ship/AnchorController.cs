@@ -85,6 +85,8 @@ namespace SeaSick.Ship
             // one machine.
             if (GetComponentInChildren<SeaSick.UI.CampSheet>(true) == null)
                 gameObject.AddComponent<SeaSick.UI.CampSheet>();
+            islandCam = GetComponent<SeaSick.CameraRig.IslandCam>();
+            if (islandCam == null) islandCam = gameObject.AddComponent<SeaSick.CameraRig.IslandCam>();
             voyage = FindFirstObjectByType<VoyageManager>();
             chaseCam = FindFirstObjectByType<SeaSick.CameraRig.ChaseCamera>();
         }
@@ -160,6 +162,13 @@ namespace SeaSick.Ship
                 if (here != null) { here.CatchUp(); here.ShowHands(true); }
             }
         }
+
+        SeaSick.CameraRig.IslandCam islandCam;
+
+        /// What the view is doing, for the HUD. Null when the overview is not up.
+        public string ViewReadout =>
+            islandCam != null && chaseCam != null && chaseCam.Overview.HasValue
+                ? islandCam.Readout : null;
 
         Island IslandInRange()
         {
@@ -426,12 +435,18 @@ namespace SeaSick.Ship
                 // the zoom itself is ChaseCamera's, in metres of ground.
                 float reach = village != null ? village.ViewRadius : 120f;
 
-                chaseCam.Overview = new SeaSick.CameraRig.ChaseCamera.IslandShot
+                var homeShot = new SeaSick.CameraRig.ChaseCamera.IslandShot
                 {
                     centre = CurrentDock.ViewCentre,
                     radius = reach,
                     from = CurrentDock.ViewFrom,
                 };
+                if (islandCam != null)
+                {
+                    islandCam.Focus(CurrentIsland);
+                    homeShot = islandCam.Apply(homeShot);
+                }
+                chaseCam.Overview = homeShot;
             }
             else if (CurrentIsland != null && !CurrentIsland.IsHome
                      && (CurrentState == State.Anchored || CurrentState == State.Ashore))
@@ -458,14 +473,24 @@ namespace SeaSick.Ship
                 float reach = settle != null ? settle.ViewRadius
                                              : Mathf.Max(70f, CurrentIsland.Radius);
 
-                chaseCam.Overview = new SeaSick.CameraRig.ChaseCamera.IslandShot
+                var shot = new SeaSick.CameraRig.ChaseCamera.IslandShot
                 {
                     centre = aim,
                     radius = reach,
                     from = seaward,
                 };
+                if (islandCam != null)
+                {
+                    islandCam.Focus(CurrentIsland);
+                    shot = islandCam.Apply(shot);
+                }
+                chaseCam.Overview = shot;
             }
-            else chaseCam.Overview = null;
+            else
+            {
+                chaseCam.Overview = null;
+                if (islandCam != null) islandCam.Focus(null);
+            }
 
             if (CurrentState != State.Ashore) { chaseCam.PointOfInterest = null; return; }
 

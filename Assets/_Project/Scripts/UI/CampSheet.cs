@@ -92,7 +92,16 @@ namespace SeaSick.UI
             var head = new Rect(inner.x, inner.y, inner.width, lineH);
             GUI.Label(head, HeadlineFor(isle, outpost), title);
 
-            float y = head.yMax + HudLayout.Gap;
+            // What the view is doing, in the unit the dock shot is authored in
+            // (165 m), so what is on screen can be compared with the authored
+            // number rather than guessed at. Per the project's own rule: for a
+            // look call, draw the numbers on the picture.
+            string view = anchor != null ? anchor.ViewReadout : null;
+            if (!string.IsNullOrEmpty(view))
+                GUI.Label(new Rect(inner.x, head.yMax, inner.width, lineH),
+                    view + "   ·   arrows pan, +/− or wheel zoom, End recentres", body);
+
+            float y = head.yMax + (string.IsNullOrEmpty(view) ? 0f : lineH) + HudLayout.Gap;
 
             // Nothing to command yet: the ground is still being looked at, or
             // it will not take a camp. Say which — an empty sheet is

@@ -102,16 +102,22 @@ public class CampProbe : MonoBehaviour
             sb.AppendLine($"cast off: now {anchor.CurrentState}");
         }
 
-        Warp(motor, standOff, Quaternion.LookRotation(target.transform.position - standOff));
-        // Two frames: the warp moves the rigidbody, and `Island.Nearest` and
-        // the beach test both answer about where she IS.
-        yield return null;
-        yield return new WaitForFixedUpdate();
-        yield return null;
-
-        // --- land -------------------------------------------------------------
-
-        bool landed = anchor.TryLand(out string why);
+        // Re-place and ask again for a second or two rather than warping once.
+        //
+        // She has way on after casting off, so a single warp plus two frames
+        // can leave her drifting off the spot before the landing test runs --
+        // measured, intermittently, as "no island in range" at a position this
+        // probe's own scan had just called landable. The return leg needed the
+        // same treatment and got it first; the arrival leg was left fragile.
+        bool landed = false; string why = "never tried";
+        float landBy = Time.realtimeSinceStartup + 4f;
+        while (!landed && Time.realtimeSinceStartup < landBy)
+        {
+            Warp(motor, standOff, Quaternion.LookRotation(target.transform.position - standOff));
+            yield return new WaitForFixedUpdate();
+            yield return null;
+            landed = anchor.TryLand(out why);
+        }
         sb.AppendLine($"land: {(landed ? "yes" : "NO")} — {why}");
         Gate(sb, ref fails, "she-can-land-there", landed, why);
         if (!landed) { Finish(sb, fails); yield break; }
@@ -155,6 +161,72 @@ public class CampProbe : MonoBehaviour
                 + $"centred {cam.Overview.Value.centre.x:F0},{cam.Overview.Value.centre.z:F0}" : ""));
         Gate(sb, ref fails, "birds-eye-at-a-plain-island", overview,
             "the overview only engages at the home dock");
+
+        // --- the player's hands on the view ----------------------------------
+
+        var icam = Object.FindFirstObjectByType<SeaSick.CameraRig.IslandCam>();
+        if (icam != null && overview)
+        {
+            // Untouched, the shot must be EXACTLY the shipped composition --
+            // the authored zoom, the legibility clamp still on, the ship still
+            // dragged into frame. A camera feature that changes the default
+            // view has changed something nobody asked it to.
+            var asShipped = cam.Overview.Value;
+            sb.AppendLine($"view: {asShipped.ground:F0} m of ground, free {asShipped.free}"
+                + $"   (range {icam.MinGround:F0}–{icam.MaxGround:F0} m, default {icam.DefaultGround:F0})");
+            Gate(sb, ref fails, "an-untouched-view-is-the-shipped-one",
+                !asShipped.free
+                && Mathf.Abs(asShipped.ground - icam.DefaultGround) < 1f,
+                $"ground {asShipped.ground:F1}, free {asShipped.free}");
+
+            // Zoom right out, then right in, through the same path the keys take.
+            // **Read AFTER the camera has run, not merely after a frame.**
+            // `LastOverviewSpan` is written in the rig's LateUpdate and
+            // coroutines resume before it, so a single `yield return null`
+            // reads the span from BEFORE the change -- which reported the
+            // zoomed-out shot as 249 m back and the zoomed-in one as 786 m,
+            // exactly inverted, and looked like a broken feature rather than a
+            // mis-timed measurement.
+            icam.ZoomTo(10000f); icam.SnapToTarget();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            float wideGround = cam.Overview.Value.ground;
+            float wideSpan = cam.LastOverviewSpan;
+
+            icam.ZoomTo(0f); icam.SnapToTarget();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            float closeGround = cam.Overview.Value.ground;
+            float closeSpan = cam.LastOverviewSpan;
+
+            sb.AppendLine($"  zoomed out: {wideGround:F0} m of ground at {wideSpan:F0} m back");
+            sb.AppendLine($"  zoomed in:  {closeGround:F0} m of ground at {closeSpan:F0} m back");
+            Gate(sb, ref fails, "zoom-is-clamped-both-ways",
+                Mathf.Abs(wideGround - icam.MaxGround) < 1f
+                && Mathf.Abs(closeGround - icam.MinGround) < 1f,
+                $"{closeGround:F0}–{wideGround:F0} against {icam.MinGround:F0}–{icam.MaxGround:F0}");
+            // The whole point: zooming out must actually move the camera back,
+            // which the legibility clamp used to forbid.
+            Gate(sb, ref fails, "zooming-out-really-pulls-back", wideSpan > closeSpan * 2f,
+                $"{closeSpan:F0} m -> {wideSpan:F0} m");
+
+            // Pan, and it must stay over the island.
+            icam.PanTo(new Vector3(100000f, 0f, 0f)); icam.SnapToTarget();
+            yield return new WaitForEndOfFrame();
+            yield return new WaitForEndOfFrame();
+            float walked = (cam.Overview.Value.centre - asShipped.centre).magnitude;
+            sb.AppendLine($"  panned as far as it goes: {walked:F0} m off centre "
+                + $"(island r {target.Radius:F0} m)");
+            Gate(sb, ref fails, "pan-stays-over-the-island",
+                walked > 1f && walked <= Mathf.Max(60f, target.Radius * 1.16f) + 1f,
+                $"{walked:F0} m from centre on an island of r {target.Radius:F0}");
+
+            // Put it back so the rest of the probe sees the normal view.
+            icam.PanTo(Vector3.zero);
+            icam.ZoomTo(icam.DefaultGround);
+            icam.SnapToTarget();
+            yield return null;
+        }
 
         // --- make camp --------------------------------------------------------
 

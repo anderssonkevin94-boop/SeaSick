@@ -201,6 +201,23 @@ namespace SeaSick.CameraRig
             /// distance that fits `radius` with the legibility clamp applied.
             public float tiltDeg;
             public float span;
+
+            /// Metres of ground up the frame, overriding the authored zoom.
+            ///
+            /// The unit the zoom is AUTHORED in, so a player-driven zoom and
+            /// the hand-tuned dock shot are the same kind of number and can be
+            /// compared. Zero means "use the authored one".
+            public float ground;
+
+            /// The player is driving.
+            ///
+            /// Two things that are right for an automatic shot are wrong the
+            /// moment somebody is steering it: the legibility clamp, which
+            /// refuses to back off far enough to see a whole island, and the
+            /// slide that drags the frame until the ship is inside it. Both
+            /// fight the hands on the controls. A player who has zoomed out
+            /// past legibility has said what they want.
+            public bool free;
         }
 
         /// The sailing rig, overridable live so it can be FLOWN rather than
@@ -485,9 +502,11 @@ namespace SeaSick.CameraRig
                 // as a distance: distance means nothing without the lens, and
                 // the lens changed. Falls back to fitting `radius` when no
                 // coverage is set.
-                float ground = overviewGroundMetres > 0.01f
-                    ? overviewGroundMetres
-                    : ov.radius * overviewMargin * 2f;
+                float ground = ov.ground > 0.01f
+                    ? ov.ground
+                    : (overviewGroundMetres > 0.01f
+                        ? overviewGroundMetres
+                        : ov.radius * overviewMargin * 2f);
 
                 // THE SHOT MUST CONTAIN THE SHIP -- BY MOVING, NOT BY
                 // BACKING OFF.
@@ -514,7 +533,7 @@ namespace SeaSick.CameraRig
                 // legibility wins and the frame holds the middle of it: an
                 // overview you cannot pick a person out of is a map, and the
                 // player already has a minimap.
-                span = Mathf.Min(span, ReadableDistance(vfov));
+                if (!ov.free) span = Mathf.Min(span, ReadableDistance(vfov));
                 // Never so far back that the far clip cannot draw the ground.
                 
                 if (ov.span > 0.01f) span = ov.span;          // the tuner says exactly
@@ -544,7 +563,7 @@ namespace SeaSick.CameraRig
                 // Camera.WorldToViewportPoint, because that uses cam.aspect --
                 // the editor's landscape Game view -- and the whole point is to
                 // compose for the phone.
-                if (overviewHoldsShip && target != null && overviewLevel > 0.001f)
+                if (overviewHoldsShip && !ov.free && target != null && overviewLevel > 0.001f)
                 {
                     float aspect = Mathf.Min(
                         Mathf.Max(0.2f, cam != null ? cam.aspect : 1f), narrowestAspect);

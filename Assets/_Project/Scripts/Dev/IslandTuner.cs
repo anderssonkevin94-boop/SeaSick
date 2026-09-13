@@ -93,6 +93,22 @@ public class IslandTuner : MonoBehaviour, SeaSick.UI.IDevTool
     {
         return new[]
         {
+            // **ISLAND SIZE, which was never on this panel.**
+            //
+            // `maskFrequency` is the continentalness frequency, and because
+            // `landRatio` sets the land threshold as a QUANTILE, raising it
+            // shrinks every island and makes proportionally more of them for
+            // free -- the total area of land in the world does not change. So
+            // this one dial is both "smaller islands" and "more places worth
+            // sailing to", which is exactly the pair Kevin asked for.
+            //
+            // Shown as a scale in metres (1/f), because a frequency is not a
+            // thing anyone can picture. Shipped at 1/1000.
+            new Knob { label = "ISLAND SIZE", unit = "m", step = 50f, min = 250f, max = 2000f, asScale = true,
+                get = t => t.maskFrequency, set = (t, v) => t.maskFrequency = v },
+            new Knob { label = "how much of the world is land", step = 0.01f, min = 0.04f, max = 0.4f,
+                get = t => t.landRatio, set = (t, v) => t.landRatio = v },
+
             new Knob { label = "rock relief", unit = "m", step = 2f, min = 0f, max = 120f,
                 get = s => s.rockRelief, set = (s, v) => s.rockRelief = v },
             new Knob { label = "rock breaks out (soft isle)", step = 0.02f, min = 0f, max = 1f,
