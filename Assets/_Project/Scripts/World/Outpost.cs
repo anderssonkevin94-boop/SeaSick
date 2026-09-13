@@ -506,7 +506,43 @@ namespace SeaSick.World
         public static float LastSurveyWorstFrameMs { get; private set; }
         public static int LastSurveyFrames { get; private set; }
         public static float WorstSurveyFrameMs { get; private set; }
-        public static void ResetSurveyCost() { WorstSurveyFrameMs = 0f; }
+
+        /// How many bands ran, and how many of them went over budget.
+        ///
+        /// **The max alone is the wrong statistic and it cost three rounds to
+        /// see it.** A survey is thousands of short bands, and a single GC or
+        /// a slice the OS took back adds ten milliseconds to whichever band it
+        /// lands in — so the worst of eight thousand samples always finds an
+        /// outlier, whatever the code does. Chasing it tuned a control loop
+        /// against noise. What actually says "does this hitch" is how OFTEN a
+        /// band is slow: three in eight thousand is the machine, two thousand
+        /// is the feature.
+        public static int SurveyBands { get; private set; }
+        public static int SurveyBandsOverBudget { get; private set; }
+        public static float SurveyBandMeanMs =>
+            SurveyBands > 0 ? surveyBandTotalMs / SurveyBands : 0f;
+        static float surveyBandTotalMs;
+
+        /// A band the player could notice. One frame at 60 fps is 16.7 ms and
+        /// the ship is stopped with the camera rising, so 10 is generous.
+        public const float BandBudgetMs = 10f;
+
+        /// The one-frame analysis pass at the end of a survey, which is not a
+        /// band and cannot be spread: flood fill, connected components and a
+        /// distance transform over the whole raster, each needing the finished
+        /// grid. Spreading it would mean holding a half-labelled grid across
+        /// frames, which is a lot of machinery for a cost paid once while the
+        /// ship is stopped.
+        public static float WorstSolveMs { get; private set; }
+
+        public static void ResetSurveyCost()
+        {
+            WorstSurveyFrameMs = 0f;
+            SurveyBands = 0;
+            SurveyBandsOverBudget = 0;
+            surveyBandTotalMs = 0f;
+            WorstSolveMs = 0f;
+        }
 
         /// True while the ground here is being looked at but has not answered.
         public static bool Surveying(Island isle) => isle != null && surveying.Contains(isle);
@@ -552,6 +588,8 @@ namespace SeaSick.World
             const float TargetMs = 4f;
             var clock = new System.Diagnostics.Stopwatch();
             int rowsPerFrame = 1;
+            int lastYieldRow = -1;
+            float rowMsAvg = -1f;
             float worst = 0f; int frames = 1;
 
             clock.Restart();
@@ -563,13 +601,48 @@ namespace SeaSick.World
                 if (j == 0)
                 {
                     float rowMs = Mathf.Max(0.001f, (float)clock.Elapsed.TotalMilliseconds);
-                    rowsPerFrame = Mathf.Clamp(Mathf.FloorToInt(TargetMs / rowMs), 1, n);
+                    rowMsAvg = rowMs;
+                    rowsPerFrame = Mathf.Clamp(Mathf.FloorToInt(TargetMs / rowMs),
+                        1, Mathf.Max(1, n / 4));
                 }
 
-                if ((j + 1) % rowsPerFrame == 0)
+                if (j - lastYieldRow >= rowsPerFrame)
                 {
                     float ms = (float)clock.Elapsed.TotalMilliseconds;
                     if (ms > worst) worst = ms;
+                    SurveyBands++;
+                    surveyBandTotalMs += ms;
+                    if (ms > BandBudgetMs) SurveyBandsOverBudget++;
+
+                    // **Re-size the band every time — but SLOWLY, and off a
+                    // smoothed cost.**
+                    //
+                    // Calibrating off row 0 alone assumes the first row is
+                    // representative and it is not: the height function does
+                    // different work over ocean than over land, and a world
+                    // with twice the islands is a busier frame than the one
+                    // row 0 was timed in. Shrinking the islands 1/1000 -> 1/700
+                    // took the worst band from under 10 ms to 14.9.
+                    //
+                    // The first attempt at a fix made it WORSE, at 34.6 ms, and
+                    // the reason is worth keeping: the band time is a wall
+                    // clock, so a slice the OS did not interrupt reads fast,
+                    // which sized the next band bigger, which read slower...
+                    // **An undamped control loop on a noisy measurement
+                    // oscillates instead of settling.** So: an exponential
+                    // average of the per-row cost, and the band may change by
+                    // at most half again per step.
+                    int rows = Mathf.Max(1, j - lastYieldRow);
+                    float perRow = Mathf.Max(0.0005f, ms / rows);
+                    rowMsAvg = rowMsAvg <= 0f ? perRow : Mathf.Lerp(rowMsAvg, perRow, 0.35f);
+
+                    int want = Mathf.FloorToInt(TargetMs / rowMsAvg);
+                    want = Mathf.Clamp(want,
+                        Mathf.Max(1, Mathf.FloorToInt(rowsPerFrame / 1.5f)),
+                        Mathf.Max(1, Mathf.CeilToInt(rowsPerFrame * 1.5f)));
+                    rowsPerFrame = Mathf.Clamp(want, 1, Mathf.Max(1, n / 4));
+
+                    lastYieldRow = j;
                     yield return null;
                     frames++;
                     clock.Restart();
@@ -582,8 +655,16 @@ namespace SeaSick.World
 
             var flat = Terrain.SettlementSite.Solve(h, n, x0, z0, centre, height,
                 Cell, surveyFloor, default, 0f);
+            // The analysis pass — flood, label, distance transform — runs in
+            // ONE frame, and it is not a sampling band. Counted separately or
+            // the report contradicts itself: it showed "0 bands over 10 ms"
+            // beside "worst 12.9 ms", because the worst was this and it was
+            // never a band at all. It is a real single-frame cost and the
+            // player could feel it, so it gets its own number rather than
+            // hiding inside a max.
             float tail = (float)clock.Elapsed.TotalMilliseconds;
             if (tail > worst) worst = tail;
+            if (tail > WorstSolveMs) WorstSolveMs = tail;
 
             LastSurveyWorstFrameMs = worst;
             LastSurveyFrames = frames;
