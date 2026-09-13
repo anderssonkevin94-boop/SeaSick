@@ -235,7 +235,36 @@ namespace SeaSick.Crew
         {
             if (carried != null) Destroy(carried);
             carried = null;
-            if (voyage != null && !string.IsNullOrEmpty(carriedResource))
+            if (string.IsNullOrEmpty(carriedResource)) { carriedResource = null; return; }
+
+            // **A camp takes what is cut on its own island.**
+            //
+            // Without this the ship's party carries wood past a fire that
+            // exists to keep exactly that, and straight into the hold — which
+            // makes the camp an ornament on the island it is standing on.
+            //
+            // There is no double-counting to worry about, and the reason is
+            // worth stating: the ledger counts only the hands who LIVE here,
+            // and a hand walking about is by definition not one of them. A
+            // stationed hand is a row that produces arithmetically; a visiting
+            // hand is a body that delivers. The two sets never overlap.
+            var camp = workIsland != null ? World.Outpost.Of(workIsland) : null;
+            if (camp != null && camp.HasCamp && camp.Ledger != null)
+            {
+                camp.CatchUp();
+                var l = camp.Ledger;
+                if (l.timber < l.ceiling)
+                {
+                    l.timber++;
+                    carriedResource = null;
+                    return;
+                }
+                // The pile is full. Fall through: better in the hold than
+                // vanished, and a full camp is exactly when you want the wood
+                // on the ship anyway.
+            }
+
+            if (voyage != null)
             {
                 voyage.AddLoot(1, carriedResource);
                 if (hold != null) hold.AddVisual(carriedResource);

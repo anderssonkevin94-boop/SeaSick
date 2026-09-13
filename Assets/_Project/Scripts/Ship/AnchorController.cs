@@ -315,11 +315,22 @@ namespace SeaSick.Ship
             MoorAlongside(dt);
 
             // Finish the landing once the plank is actually down.
+            //
+            // **The plank going down no longer empties the ship.** Landing put
+            // the whole crew ashore automatically, which was right while
+            // gathering wood was the only thing you could do on a beach — and
+            // is wrong now that the sheet asks WHO goes and a camp is
+            // somewhere they might stay. Emptying the deck before the player
+            // has been asked takes the decision away and then offers it.
+            //
+            // The feature is not gone: "send crew ashore" is still one tap in
+            // the prompt stack, and that button was always the way to send
+            // them back out after a recall. It is an ACTION now rather than a
+            // consequence of arriving.
             if (landingPending && CurrentState == State.Anchored
                 && gangway != null && gangway.Ready)
             {
                 landingPending = false;
-                SendAshore();
             }
 
             UpdateCameraFocus();

@@ -123,6 +123,17 @@ public class CampProbe : MonoBehaviour
             yield return null;
         float waited = Time.realtimeSinceStartup - t0;
 
+        // Landing must no longer empty the ship. This is the change that lets
+        // the sheet mean anything: arriving used to put the whole crew on the
+        // beach before the player had been asked who should go.
+        int aboardOnArrival = 0;
+        var roster0 = Object.FindFirstObjectByType<SeaSick.Crew.CrewRoster>();
+        foreach (var c in roster0.All) if (c != null && c.IsAboard) aboardOnArrival++;
+        sb.AppendLine($"aboard after landing: {aboardOnArrival} of {roster0.All.Length}");
+        Gate(sb, ref fails, "landing-does-not-empty-the-ship",
+            aboardOnArrival == roster0.All.Length,
+            $"{aboardOnArrival} of {roster0.All.Length} still aboard");
+
         var outpost = Outpost.Of(target);
         sb.AppendLine($"survey: {(outpost != null ? "ground found" : "refused")} "
             + $"after {waited:F2} s of waiting");
@@ -253,7 +264,7 @@ public class CampProbe : MonoBehaviour
 
         // Cast off. The bodies must go away with her gone, not fall through
         // terrain that is about to stream out.
-        // Get the rest of the shore party back aboard first.
+        // Get any shore party back aboard first.
         //
         // Landing still sends the WHOLE crew ashore on the old harvest errand,
         // and she cannot weigh with people on the beach — so without this she
