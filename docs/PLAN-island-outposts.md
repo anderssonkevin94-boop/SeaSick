@@ -33,7 +33,8 @@ genuinely worth more than small ones, and gives a reason to move on and return.
 
 ## Five decisions before any code
 
-- **D1 — Home is outpost zero.** Generalise `World/Village.cs` into a per-island
+- **D1 — DONE 2026-09-13, `81d1d4e`, probe-green.** See the section at the end.
+  Original statement of it: **Home is outpost zero.** Generalise `World/Village.cs` into a per-island
   `Outpost`; `Settlement` stays the ground survey; `Stockpile` becomes
   per-outpost. Do this FIRST. A day now, a week later.
 - **D2 — The ledger is the truth; walking crew are a rendering of it.** An
@@ -241,3 +242,54 @@ optimize the creavie process."* Per [[orchestrate-and-delegate]]: orchestrate
 the build, Opus for judgement-inside-a-spec, Sonnet for mechanical edits, and
 **agents never touch the Unity MCP bridge** — editor work stays on the main
 session.
+
+
+## D1 as built — 2026-09-13, `81d1d4e`
+
+`World/Outpost.cs` (was `Village.cs`, git-mv'd so the .meta GUID and the
+history survive), per-island, found by `Outpost.Of(island)`. `Stockpile` is
+per-island the same way via `Stockpile.Of` / `EnsureOn`. Both keep a static for
+home and **only home may claim it** — `Outpost.Home`, `Stockpile.Instance` and
+`Settlement.Home` were all "whoever enabled last", which is harmless with one
+island and wrong with two.
+
+Islands are surveyed **lazily and over frames**: `Outpost.BeginSurvey`, started
+by `AnchorController.SurveyWhatIsNear` when an island comes into landing range.
+Home is still surveyed eagerly by the populator because its clearing has to be
+reserved before the scenery mesh is welded shut. `Outpost.Rules` is published
+once by the world build (same pattern as `Island.TerrainHeight`).
+
+Gate: `RunProbe.Outpost()` -> `Logs/OutpostProbe.txt`.
+
+| | measured |
+|---|---|
+| home clearing | 30.00 m, unchanged, exactly on `Settlement.VillageAt` |
+| home capacity | 30, unchanged |
+| islands that take a camp | **28 of 33** |
+| islands that refuse | 5 (low sandbanks under the 3.7 m survey floor) |
+| worst single frame | **8.2 ms** |
+| longest survey | 3.3 s (biggest island), begun on approach |
+| biggest flat ground | 7.96 ha |
+
+### Traps, all of which cost a run
+
+- **The survey floor and the build floor are different numbers.** 3.7 vs 4.4.
+  Passing the build floor to the survey found ground on **0 of 5** islands.
+- **A timed-out Coplay call still runs** — the timeout is on the bridge. A
+  "failed" probe had already sited the archipelago; the retry then reported
+  what it found as though nothing worked.
+- **A script recompile during play mode nulls every non-serializable field.**
+  The height delegates are `System.Func`, so they vanish on domain reload and
+  everything reads "not sited" with no error, while `playMode` still says true.
+  After any edit: stop, compile, play again.
+- **A probe that reports a difference cannot tell you the state.**
+- **The band size is measured, not chosen** — the survey times its own first
+  row, because guesses at the height function's cost were wrong both ways.
+- **`SettlementRadiusFor` is not `HarbourSite.SearchRadiusFor`** and home stays
+  on the latter, so this cannot move the village.
+
+### Next
+
+Phase 1 proper: the bottom sheet, crew selection, `make camp` felling its own
+site through `SceneryWood.NodeHarvested`, crew carrying to the camp pile, and
+the ledger + tick (D2) — the ledger is the piece to design first.
