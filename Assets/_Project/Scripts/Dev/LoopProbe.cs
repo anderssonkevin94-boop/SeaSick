@@ -30,7 +30,7 @@ public class LoopProbe : MonoBehaviour
         var motor = FindFirstObjectByType<ShipMotor>();
         var anchor = motor != null ? motor.GetComponent<AnchorController>() : null;
         var dock = Dock.Home;
-        var village = Village.Home;
+        var village = Outpost.Home;
         if (voyage == null || motor == null || anchor == null || dock == null)
         { Report("missing voyage/ship/anchor/dock\n"); yield break; }
 
@@ -93,7 +93,7 @@ public class LoopProbe : MonoBehaviour
         Destroy(gameObject);
     }
 
-    void Line(VoyageManager v, Village village, string label)
+    void Line(VoyageManager v, Outpost village, string label)
     {
         sb.AppendLine($"{label}: panel {v.AtHome}   hold {v.TotalHeld}   "
             + $"stores {v.BankedTotal}/{v.StoreCapacity}   "

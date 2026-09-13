@@ -87,7 +87,15 @@ namespace SeaSick.World
             villageAt = s.villageAt;
         }
 
-        void OnEnable() { if (Home == null) Home = this; }
+        // Only the home island's survey claims the static. It used to be
+        // whichever enabled first, which was right while home was the only
+        // island ever surveyed -- and wrong the moment a camp surveys its own
+        // ground, because the docked camera reads `Home` to frame the village.
+        void OnEnable()
+        {
+            var isle = GetComponent<Island>();
+            if (Home == null || isle == null || isle.IsHome) Home = this;
+        }
         void OnDisable() { if (Home == this) Home = null; }
     }
 }

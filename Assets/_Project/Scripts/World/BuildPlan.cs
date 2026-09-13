@@ -6,7 +6,7 @@ namespace SeaSick.World
     ///
     /// A plan is data, not a prefab: the buildings are primitives raised at
     /// runtime on ground that was chosen, never flattened (`TerrainHeight` is
-    /// a pure function of position -- see Village), so there is nothing to
+    /// a pure function of position -- see Outpost), so there is nothing to
     /// author in the editor and nothing to keep in sync with a mesh.
     public struct BuildPlan
     {

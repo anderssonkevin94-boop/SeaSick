@@ -3,17 +3,26 @@ using UnityEngine;
 
 namespace SeaSick.World
 {
-    /// The pile of everything you've ever brought home, sitting on the beach.
+    /// The pile of everything landed at one place, sitting on the ground.
     /// The whole point of the voyage loop is watching this grow — a number in
     /// a menu doesn't do that.
+    ///
+    /// One per island, not one per world: a camp's pile is the same object as
+    /// home's beach, and it is what a returning player has come back to look
+    /// at. See `Outpost` — home is outpost zero.
     public class Stockpile : MonoBehaviour
     {
+        static readonly List<Stockpile> all = new List<Stockpile>();
+
+        /// Home's pile. Kept because the voyage loop still banks at home
+        /// specifically; anything asking about the island the ship is AT must
+        /// use `Of`.
         public static Stockpile Instance { get; private set; }
 
         [SerializeField] int perRow = 4;
         [SerializeField] float spacing = 1.7f;
         [SerializeField] float layerHeight = 0.9f;
-        [Tooltip("Visual ceiling only -- how many objects one pile will ever build. What home can KEEP is Village.StoreCapacity, and the ledger is VoyageManager's.")]
+        [Tooltip("Visual ceiling only -- how many objects one pile will ever build. What a place can KEEP is Outpost.StoreCapacity, and the ledger is VoyageManager's.")]
         [SerializeField] int maxPerResource = 160;
 
         readonly Dictionary<string, List<GameObject>> piles = new Dictionary<string, List<GameObject>>();
@@ -21,10 +30,42 @@ namespace SeaSick.World
         Island island;
         int pileIndex;
 
-        void OnEnable() { Instance = this; }
-        void OnDisable() { if (Instance == this) Instance = null; }
+        /// The island this pile is on. Resolved on demand rather than in
+        /// `Start`, because `Of` can be asked before Unity has run it --
+        /// script order is not guaranteed, and the populator adds the island
+        /// and the pile in the same frame.
+        public Island Island => island != null ? island : (island = GetComponent<Island>());
 
-        void Start() { island = GetComponent<Island>(); }
+        void OnEnable()
+        {
+            if (!all.Contains(this)) all.Add(this);
+            // Only home claims the singleton. It used to be whichever pile
+            // enabled last -- harmless while there was exactly one, and a trap
+            // the moment a camp gets its own.
+            if (Instance == null || Island == null || Island.IsHome) Instance = this;
+        }
+
+        void OnDisable()
+        {
+            all.Remove(this);
+            if (Instance == this) Instance = null;
+        }
+
+        /// The pile on this island, or null if nothing has been landed there.
+        public static Stockpile Of(Island isle)
+        {
+            if (isle == null) return null;
+            foreach (var s in all) if (s != null && s.Island == isle) return s;
+            return null;
+        }
+
+        /// The pile on this island, made if it is not there yet -- a camp gets
+        /// one the moment something is set down on it.
+        public static Stockpile EnsureOn(Island isle)
+        {
+            if (isle == null) return null;
+            return Of(isle) ?? isle.gameObject.AddComponent<Stockpile>();
+        }
 
         Transform RootFor(string resource)
         {
@@ -38,9 +79,10 @@ namespace SeaSick.World
             float ang = pileIndex * 0.9f + 0.4f;
             pileIndex++;
             Vector3 local = Vector3.zero;
-            if (island != null)
+            var isle = Island;   // through the property: `Start` no longer caches it
+            if (isle != null)
             {
-                Vector3 world = island.SurfacePoint(ang, island.RadiusAt(ang) * 0.62f);
+                Vector3 world = isle.SurfacePoint(ang, isle.RadiusAt(ang) * 0.62f);
                 local = transform.InverseTransformPoint(world);
             }
             go.transform.localPosition = local;

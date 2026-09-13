@@ -30,7 +30,7 @@ public class VillageProbe : MonoBehaviour
         if (!Application.isPlaying) { Debug.LogError("VillageProbe: not in play mode"); return; }
         var sb = new StringBuilder();
 
-        var village = Village.Home;
+        var village = Outpost.Home;
         var island = Island.All.Find(i => i.IsHome);
         if (island == null) { Report("no home island\n"); return; }
         var settlement = island.GetComponent<Settlement>();
@@ -40,7 +40,7 @@ public class VillageProbe : MonoBehaviour
         if (settlement == null) { sb.AppendLine("NO Settlement -- the site search found nothing"); Report(sb.ToString()); return; }
         sb.AppendLine($"settlement: {settlement.AreaHectares:F2} ha, core {settlement.Core:F0} m, "
             + $"inscribed {settlement.Inscribed:F0} m at {settlement.InscribedAt.x:F0},{settlement.InscribedAt.z:F0}");
-        if (village == null) { sb.AppendLine("NO Village component"); Report(sb.ToString()); return; }
+        if (village == null) { sb.AppendLine("NO Outpost component"); Report(sb.ToString()); return; }
         sb.AppendLine($"clearing: r={village.ClearingRadius:F1} m centred "
             + $"{village.ClearingCentre.x:F0},{village.ClearingCentre.z:F0}   "
             + $"(capacity {village.StoreCapacity}, {village.Built.Count} built)");
@@ -112,8 +112,8 @@ public class VillageProbe : MonoBehaviour
     public static void Build()
     {
         if (!Application.isPlaying) { Debug.LogError("VillageProbe: not in play mode"); return; }
-        var village = Village.Home;
-        if (village == null) { Report("no Village\n"); return; }
+        var village = Outpost.Home;
+        if (village == null) { Report("no Outpost\n"); return; }
         var sb = new StringBuilder();
         var plan = BuildPlans.Storehouse;
         var dock = Dock.Home;
@@ -154,8 +154,8 @@ public class VillageProbe : MonoBehaviour
     public static void Shot()
     {
         if (!Application.isPlaying) { Debug.LogError("VillageProbe: not in play mode"); return; }
-        var village = Village.Home;
-        if (village == null) { Debug.LogError("VillageProbe: no Village"); return; }
+        var village = Outpost.Home;
+        if (village == null) { Debug.LogError("VillageProbe: no Outpost"); return; }
 
         var cam = Camera.main;
         if (cam != null) Capture(cam, "/tmp/village-dock.png");

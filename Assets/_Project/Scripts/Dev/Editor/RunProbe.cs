@@ -70,6 +70,9 @@ public static class RunProbe
     public static void Wood() => Call("WoodProbe");
     public static void Harbour() => Call("HarbourProbe");
     public static void Village() => Call("VillageProbe");
+    /// The D1 gate: home unchanged by the Village -> Outpost generalisation,
+    /// and every other island surveyable on demand at a measured cost.
+    public static void Outpost() => Call("OutpostProbe");
     public static void VillageBuild() => Call("VillageProbe", "Build");
     public static void VillageShot() => Call("VillageProbe", "Shot");
     public static void Loop() => Call("LoopProbe");

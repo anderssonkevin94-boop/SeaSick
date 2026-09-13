@@ -56,14 +56,36 @@ namespace SeaSick.Terrain
             System.Func<float, float, float> height, float cell = 4f, float minHeight = 0.5f,
             Vector3 preferNear = default, float preferRadius = 0f)
         {
-            var s = new Site();
-            int n = Mathf.Clamp(Mathf.CeilToInt(searchRadius * 2f / cell), 8, 500);
+            int n = Grid(searchRadius, cell);
             float x0 = islandCentre.x - searchRadius, z0 = islandCentre.z - searchRadius;
 
             var h = new float[n * n];
             for (int j = 0; j < n; j++)
                 for (int i = 0; i < n; i++)
                     h[j * n + i] = height(x0 + i * cell, z0 + j * cell);
+
+            return Solve(h, n, x0, z0, islandCentre, height, cell, minHeight,
+                preferNear, preferRadius);
+        }
+
+        /// How many cells across the raster is. One definition, because the
+        /// frame-spread path has to fill exactly the array `Solve` expects.
+        public static int Grid(float searchRadius, float cell)
+            => Mathf.Clamp(Mathf.CeilToInt(searchRadius * 2f / cell), 8, 500);
+
+        /// The same survey, with the height raster handed in already filled.
+        ///
+        /// Split out because **the raster is essentially the whole cost**:
+        /// measured at 443 ms on the largest island, of which the 32 k calls
+        /// to `height` are all but a millisecond or two. Everything below is
+        /// array passes over that grid. Filling it over several frames and
+        /// then calling this is what keeps a survey off the frame budget --
+        /// see `Sample` and Outpost.Establish.
+        public static Site Solve(float[] h, int n, float x0, float z0,
+            Vector3 islandCentre, System.Func<float, float, float> height,
+            float cell, float minHeight, Vector3 preferNear, float preferRadius)
+        {
+            var s = new Site();
 
             // This island only: flood the land from the centre, so a
             // neighbour inside the same square is not mistaken for more of

@@ -136,6 +136,16 @@ namespace SeaSick.Ship
             }
         }
 
+        /// Kick off the ground survey for whatever island she is standing in
+        /// toward. Cheap to call every frame: `BeginSurvey` ignores anything
+        /// already surveyed or already running, and the range test is a
+        /// distance against the nearest island.
+        void SurveyWhatIsNear()
+        {
+            var isle = IslandInRange();
+            if (isle != null && !isle.IsHome) Outpost.BeginSurvey(isle, this);
+        }
+
         Island IslandInRange()
         {
             var isle = Island.Nearest(transform.position);
@@ -246,6 +256,17 @@ namespace SeaSick.Ship
             }
 
             SpacebarCommand();
+
+            // Look at the ground while she is still standing in, not when the
+            // anchor bites.
+            //
+            // The survey is about 800 ms of work on the biggest island. Spread
+            // over frames at 4 ms a band that is some three seconds, and the
+            // camera only takes 0.7 s to rise -- so starting it at anchor means
+            // the answer arrives after the player has already looked at the
+            // place. Landing range is the earliest honest moment to ask: she is
+            // close enough that this island is the one she means.
+            if (CurrentState == State.Underway) SurveyWhatIsNear();
 
             switch (CurrentState)
             {
@@ -462,6 +483,23 @@ namespace SeaSick.Ship
         void DropAnchor(Island isle)
         {
             CurrentIsland = isle;
+
+            // Survey the ground the first time she anchors here.
+            //
+            // Lazy on purpose: the survey rasterises the island and searches
+            // it, and paying that for thirty islands at world build would
+            // charge every launch for places most players never land on.
+            //
+            // And spread over frames, not taken in one: about 800 ms of work
+            // on the biggest island, which is fifty frames, not one.
+            //
+            // Usually a no-op by now -- `SurveyWhatIsNear` started this while
+            // she was still standing in. Kept because anchoring is the moment
+            // the answer is definitely needed, and a ship that arrives by some
+            // other path (a dev warp, a respawn) never passed through the
+            // approach. Null is a real answer: some ground will not take a
+            // settlement.
+            if (isle != null && !isle.IsHome) Outpost.BeginSurvey(isle, this);
             motor.Anchored = true;
             timer = dropTime;
             CurrentState = timer > 0f ? State.Dropping : State.Anchored;

@@ -21,7 +21,7 @@ namespace SeaSick.Voyage
         [SerializeField] float homeRadius = 60f;
         [Tooltip("How far off her berth she has to get before she counts as having sailed. She starts tied up, so leaving has to be an act, not a distance from an island centre.")]
         [SerializeField] float departureRange = 150f;
-        [Tooltip("What home keeps with nothing built. Only used if the island never got a Village.")]
+        [Tooltip("What home keeps with nothing built. Only used if the island never got an Outpost.")]
         [SerializeField] int fallbackStoreCapacity = 30;
         [Tooltip("The marked line — a full hold. NOT a hard cap: you may load past it.")]
         [SerializeField] int holdCapacity = 40;
@@ -300,8 +300,8 @@ namespace SeaSick.Voyage
         // --- The stores, and what they buy ----------------------------------
 
         /// Everything home can keep, which grows as the village is built.
-        public int StoreCapacity => World.Village.Home != null
-            ? World.Village.Home.StoreCapacity : fallbackStoreCapacity;
+        public int StoreCapacity => World.Outpost.Home != null
+            ? World.Outpost.Home.StoreCapacity : fallbackStoreCapacity;
 
         public int BankedTotal
         {
@@ -313,13 +313,13 @@ namespace SeaSick.Voyage
 
         /// Raise a building and pay for it out of the stores.
         ///
-        /// Sited FIRST, paid for second: `Village.Raise` returns null when
+        /// Sited FIRST, paid for second: `Outpost.Raise` returns null when
         /// there is nowhere in the clearing left to stand it, and charging
         /// for a building that was never built is the one outcome the player
         /// can neither see nor undo.
         public bool TryBuild(World.BuildPlan plan)
         {
-            var village = World.Village.Home;
+            var village = World.Outpost.Home;
             if (village == null) { buildNote = "nowhere to build"; return false; }
             if (Banked(plan.resource) < plan.cost)
             {
@@ -415,7 +415,7 @@ namespace SeaSick.Voyage
                 planLabels = new string[plans.Length];
                 planBlurbs = new string[plans.Length];
             }
-            var village = World.Village.Home;
+            var village = World.Outpost.Home;
             for (int i = 0; i < plans.Length; i++)
             {
                 var plan = plans[i];

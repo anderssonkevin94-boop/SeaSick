@@ -57,6 +57,23 @@ namespace SeaSick.Terrain
             lut = TerrainCurveLut.Bake(terrain.profileCurve, Allocator.Persistent);
             Island.TerrainHeight = Height;
             Island.BeachMaxSlope = world.beachMaxSlope;
+            // What a camp raised later gets sited under. Home is surveyed
+            // eagerly below because its clearing has to be reserved before the
+            // scenery is welded shut; every other island is surveyed the first
+            // time the ship anchors there, so these rules have to outlive this
+            // method. See Outpost.Establish.
+            World.Outpost.Rules = new World.Outpost.SiteRules
+            {
+                height = Height,
+                // The two floors home uses, kept apart: the survey works to
+                // sandHeight + 0.5 (line below in BuildIsland) and an
+                // individual building's corners are refused under
+                // sandHeight + 1.2.
+                surveyFloor = terrain != null ? terrain.sandHeight + 0.5f : 3.7f,
+                buildFloor = terrain != null ? terrain.sandHeight + 1.2f : 4.4f,
+                viewHalfWidth = World.Dock.ViewHalfWidth,
+            };
+            World.Outpost.ForgetSurveys();   // and anything half-surveyed from the old world
             // Statics outlive play mode here (domain reload is off), so the
             // scenery's account of what it laid down has to be emptied at the
             // start of a world or the look probes frame an island from the
@@ -83,6 +100,11 @@ namespace SeaSick.Terrain
         {
             if (lut.IsCreated) lut.Dispose();
             if (Island.TerrainHeight == (System.Func<float, float, float>)Height) Island.TerrainHeight = null;
+            // Statics outlive play mode (domain reload is off), and a height
+            // delegate closed over a destroyed populator is a trap for the next
+            // session, not a convenience for this one.
+            if (World.Outpost.Rules.height == (System.Func<float, float, float>)Height)
+                World.Outpost.Rules = default;
         }
 
         struct Found
@@ -252,7 +274,7 @@ namespace SeaSick.Terrain
                     4f, terrain != null ? terrain.sandHeight + 0.5f : 3.7f,
                     dock != null ? dock.ViewCentre : default,
                     dock != null ? Dock.ViewHalfWidth : 0f);
-                Village village = null;
+                Outpost village = null;
                 if (flat.found)
                 {
                     var settlement = root.AddComponent<Settlement>();
@@ -264,9 +286,14 @@ namespace SeaSick.Terrain
                     // get. What is reserved is the CLEARING, not the
                     // buildings -- they are raised across a session, long
                     // after this mesh is welded shut.
-                    village = root.AddComponent<Village>();
+                    // Home passes the DOCKED shot's half-width, which is
+                    // what `Configure` used to read off `Dock` directly. The
+                    // value is unchanged; it is an argument now because a camp
+                    // has no pier to read it from.
+                    village = root.AddComponent<Outpost>();
                     village.Configure(settlement, Height,
-                        terrain != null ? terrain.sandHeight + 1.2f : 4.4f);
+                        terrain != null ? terrain.sandHeight + 1.2f : 4.4f,
+                        Dock.ViewHalfWidth);
                     village.Reserve(root.transform.position, 8f);      // the beacon
                     if (site.found) village.Reserve(site.root, 14f);   // the head of the pier
                 }
@@ -306,14 +333,14 @@ namespace SeaSick.Terrain
         /// landform, the dock, the village clearing and the props are what
         /// the old settings put there and do not move.
         ///
-        /// The village keep-out is rebuilt from the island's own Village, so
+        /// The village keep-out is rebuilt from the island's own Outpost, so
         /// a re-dress cannot plant a wood through the settlement.
         public void Redress(Island island)
         {
             if (island == null || terrain == null) return;
             var old = island.transform.Find("Scenery");
             if (old != null) Destroy(old.gameObject);
-            var village = island.GetComponent<Village>();
+            var village = island.GetComponent<Outpost>();
             int index = System.Array.IndexOf(byComponent, island);
             Dress(island.transform, island.transform.position, island.Radius, island,
                   Mathf.Max(0, index), village);
@@ -324,7 +351,7 @@ namespace SeaSick.Terrain
         /// needs hundreds of known-size objects to judge an island by and the
         /// economy does not.
         void Dress(Transform parent, Vector3 centre, float meanR, Island island, int index,
-            Village village = null)
+            Outpost village = null)
         {
             IslandScenery.Build(parent, centre, meanR, Height, terrain,
                 ang => island.RadiusAt(ang), terrain.seed * 7919 + index, prm, island,
