@@ -107,6 +107,28 @@ namespace SeaSick.Crew
             if (state == State.Bailing) state = State.Returning;
         }
 
+        /// Put them back at their post, wherever they were and whatever they
+        /// were doing.
+        ///
+        /// Unlike `ReturnAboard`, which makes them WALK back, this is for the
+        /// cases where the body has been moved by something else -- parked at
+        /// a camp and brought back aboard, restored from a save -- and the
+        /// state machine has to agree with where the transform now is rather
+        /// than path to it.
+        public void PutBackOnStation()
+        {
+            ReleaseNode();
+            state = State.Station;
+            carriedResource = null;
+            if (carried != null) { Destroy(carried); carried = null; }
+            if (ship != null)
+            {
+                transform.SetParent(ship, true);
+                transform.localPosition = stationLocal;
+                transform.localRotation = Quaternion.identity;
+            }
+        }
+
         /// Thrown across the deck — running aground rattles them badly. Now
         /// permanent progress up the meter, so every hit spends the voyage.
         public void Jolt(float amount) => Sickness01 = Mathf.Clamp01(Sickness01 + amount);

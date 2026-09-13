@@ -172,6 +172,91 @@ namespace SeaSick.World
             return felled;
         }
 
+        // --- the crew who stay ------------------------------------------------
+
+        /// Leave this hand here.
+        ///
+        /// **The body is PARKED, not destroyed.** The ledger is what makes the
+        /// hand real — it produces whether or not anything is drawn — but
+        /// rebuilding a crewman from nothing on the way back would throw away
+        /// an authored, named, tinted character to save a deactivated
+        /// GameObject. So the body is unparented from the ship, stood at the
+        /// camp, and switched off: no Update, no renderer, no physics, and
+        /// nothing under it to fall through when the terrain streams out.
+        ///
+        /// The ship must be told to recount afterwards — see `CrewRoster`.
+        public bool Station(Crew.CrewAgent hand)
+        {
+            if (hand == null || !HasCamp) return false;
+            string who = hand.DisplayName;
+            if (HandNamed(who) != null) return false;
+
+            // They may be mid-errand ashore with a tree claimed. Drop it
+            // first, or the node stays claimed by a body nobody can see and
+            // no other hand will ever work it.
+            hand.ReturnAboard();
+
+            ledger?.hands.Add(new OutpostHand { name = who, order = OutpostOrder.Cut });
+
+            var t = hand.transform;
+            t.SetParent(transform, true);
+            Vector3 at = ClearingCentre;
+            if (height != null) at.y = height(at.x, at.z);
+            // Scatter them a couple of metres round the fire, on the ground
+            // plane only -- a sphere would put somebody underneath it.
+            Vector2 off = Random.insideUnitCircle * 2.2f;
+            at += new Vector3(off.x, 0f, off.y);
+            if (height != null) at.y = height(at.x, at.z);
+            t.position = at;
+            t.rotation = Quaternion.identity;
+            hand.gameObject.SetActive(false);
+            return true;
+        }
+
+        /// Take this hand back aboard. The ledger stops counting them here.
+        public bool Recall(Crew.CrewAgent hand, Transform ship)
+        {
+            if (hand == null || ship == null) return false;
+            var row = HandNamed(hand.DisplayName);
+            if (row == null) return false;
+            ledger.hands.Remove(row);
+            hand.transform.SetParent(ship, true);
+            hand.gameObject.SetActive(true);
+            // The body was MOVED, not walked -- the state machine has to agree
+            // with where the transform is rather than try to path to it.
+            hand.PutBackOnStation();
+            hand.Rest();
+            return true;
+        }
+
+        public OutpostHand HandNamed(string who)
+        {
+            if (ledger == null || string.IsNullOrEmpty(who)) return null;
+            foreach (var h in ledger.hands) if (h != null && h.name == who) return h;
+            return null;
+        }
+
+        /// The parked bodies belonging to this outpost, active or not.
+        public Crew.CrewAgent[] Parked() => GetComponentsInChildren<Crew.CrewAgent>(true);
+
+        /// Show the hands who live here, or put them away again.
+        ///
+        /// Called when the ship arrives and when she leaves: a camp you are
+        /// standing in front of should have people in it, and a camp three
+        /// kilometres astern should cost nothing at all.
+        public void ShowHands(bool visible)
+        {
+            foreach (var a in Parked())
+            {
+                if (a == null) continue;
+                // Only the ones this outpost actually owns. A crewman walking
+                // ashore from the ship is parented elsewhere and is not ours
+                // to switch off.
+                if (HandNamed(a.DisplayName) == null) continue;
+                if (a.gameObject.activeSelf != visible) a.gameObject.SetActive(visible);
+            }
+        }
+
         /// How much wood a camp clears when it is founded. Room to walk round
         /// the fire and stack what came down, nothing more.
         public const float CampClearingRadius = 7.5f;

@@ -212,6 +212,132 @@ public class CampProbe : MonoBehaviour
         Gate(sb, ref fails, "an-absent-camp-produces", l.timber > 0,
             $"{l.timber} logs after two days");
 
+        // --- leave two hands, sail away, come back ---------------------------
+        //
+        // The whole point of the design, driven end to end. Nothing here asks
+        // whether it WOULD work: it stations real crew, gets her underway,
+        // moves her a kilometre off, brings her back and reads what is there.
+
+        var roster = Object.FindFirstObjectByType<SeaSick.Crew.CrewRoster>();
+        int aboardBefore = 0;
+        foreach (var c in roster.All) if (c != null && c.IsAboard) aboardBefore++;
+
+        l.hands.Clear();
+        l.timber = 0; l.timberPart = 0f;
+        l.lastTicked = TimeOfDay.Seconds;
+
+        // NOT filtered on `IsAboard`. Landing still sends the whole crew
+        // ashore on the old harvest errand, so at this moment there is nobody
+        // "aboard" to assign -- which is the design conflict this probe found
+        // and which is Kevin's call, not mine. Stationing works from either
+        // state, so the probe takes whoever is there.
+        int left = 0;
+        foreach (var c in roster.All)
+        {
+            if (c == null) continue;
+            if (left >= 2) break;
+            if (outpost.Station(c)) left++;
+        }
+        roster.Refresh();
+
+        int aboardAfter = 0;
+        foreach (var c in roster.All) if (c != null && c.IsAboard) aboardAfter++;
+
+        sb.AppendLine();
+        sb.AppendLine($"LEAVING {left} HANDS: aboard {aboardBefore} -> {aboardAfter}, "
+            + $"ledger holds {l.hands.Count}");
+        Gate(sb, ref fails, "two-hands-can-be-left", left == 2,
+            $"stationed {left}");
+        Gate(sb, ref fails, "the-ledger-has-them", l.hands.Count == left,
+            $"{l.hands.Count} rows for {left} hands");
+
+        // Cast off. The bodies must go away with her gone, not fall through
+        // terrain that is about to stream out.
+        // Get the rest of the shore party back aboard first.
+        //
+        // Landing still sends the WHOLE crew ashore on the old harvest errand,
+        // and she cannot weigh with people on the beach — so without this she
+        // stays `Ashore`, never leaves, and the gates below pass on a voyage
+        // that did not happen. `ReturnAboard` is the same call the recall
+        // button makes.
+        foreach (var c in roster.All)
+            if (c != null && c.IsAshore) c.ReturnAboard();
+        float back = Time.realtimeSinceStartup;
+        while (anchor.CurrentState == AnchorController.State.Ashore
+               && Time.realtimeSinceStartup - back < 25f)
+            yield return null;
+        sb.AppendLine($"  shore party recalled: now {anchor.CurrentState}");
+
+        anchor.CastOff();
+        float cast2 = Time.realtimeSinceStartup;
+        while (anchor.CurrentState != AnchorController.State.Underway
+               && Time.realtimeSinceStartup - cast2 < 10f)
+            yield return null;
+        sb.AppendLine($"  cast off: now {anchor.CurrentState}");
+        int awake = 0;
+        foreach (var a in outpost.Parked())
+            if (a != null && a.gameObject.activeSelf && outpost.HandNamed(a.DisplayName) != null) awake++;
+        sb.AppendLine($"  after casting off: {awake} of {left} bodies still drawn");
+        Gate(sb, ref fails, "she-actually-left",
+            anchor.CurrentState == AnchorController.State.Underway,
+            $"still {anchor.CurrentState}");
+        Gate(sb, ref fails, "the-camp-costs-nothing-once-she-is-gone", awake == 0,
+            $"{awake} still active");
+
+        // A kilometre out, and time passes.
+        Vector3 away = standOff + (standOff - target.transform.position).normalized * 1000f;
+        Warp(motor, away, motor.transform.rotation);
+        double sailedFor = 3.0 * TimeOfDay.DayLength;
+        TimeOfDay.Scrub(TimeOfDay.Seconds + sailedFor);
+        yield return null;
+
+        // Home again.
+        // Coming BACK is not the same as arriving the first time: she is
+        // under way with the helm set, so one warp and two frames leaves her
+        // drifting off the spot before the landing test runs. Re-place her and
+        // ask again for a second or two, which is what a player does anyway.
+        bool landedAgain = false; string why2 = "never tried";
+        float tryUntil = Time.realtimeSinceStartup + 4f;
+        while (!landedAgain && Time.realtimeSinceStartup < tryUntil)
+        {
+            Warp(motor, standOff, Quaternion.LookRotation(target.transform.position - standOff));
+            yield return new WaitForFixedUpdate();
+            yield return null;
+            landedAgain = anchor.TryLand(out why2);
+        }
+        yield return null;
+
+        outpost.CatchUp();
+        int drawnBack = 0;
+        foreach (var a in outpost.Parked())
+            if (a != null && a.gameObject.activeSelf && outpost.HandNamed(a.DisplayName) != null) drawnBack++;
+
+        sb.AppendLine();
+        sb.AppendLine($"BACK AFTER THREE GAME DAYS ({(landedAgain ? "landed" : "could not land: " + why2)}):");
+        sb.AppendLine($"  pile {l.timber} / {l.ceiling}   standing {l.standing:F0}   "
+            + $"bodies drawn {drawnBack} of {left}");
+        Gate(sb, ref fails, "work-was-done-while-she-was-away", l.timber > 0,
+            $"{l.timber} logs after three days away");
+        Gate(sb, ref fails, "the-hands-are-still-there", l.hands.Count == left,
+            $"{l.hands.Count} of {left} still in the ledger");
+        // **Not `!landedAgain || ...`.** That is how a gate passes because the
+        // thing it was meant to test never ran -- this exact line once went
+        // green on a voyage that never left the beach. If she could not get
+        // back, that IS the failure.
+        Gate(sb, ref fails, "she-got-back", landedAgain, why2);
+        Gate(sb, ref fails, "and-they-are-drawn-again-on-arrival",
+            landedAgain && drawnBack == left, $"{drawnBack} of {left} drawn");
+
+        // And you can take them back.
+        var first = outpost.Parked().Length > 0 ? System.Array.Find(outpost.Parked(),
+            a => a != null && outpost.HandNamed(a.DisplayName) != null) : null;
+        bool tookBack = first != null && outpost.Recall(first, anchor.transform);
+        roster.Refresh();
+        sb.AppendLine($"  recalled one: {tookBack}, ledger now {l.hands.Count}");
+        Gate(sb, ref fails, "a-hand-can-come-back-aboard",
+            tookBack && l.hands.Count == left - 1,
+            $"recall {tookBack}, {l.hands.Count} left in the ledger");
+
         Finish(sb, fails);
     }
 

@@ -78,6 +78,13 @@ namespace SeaSick.Ship
             hold = GetComponent<ShipHold>();
             gangway = GetComponent<Gangway>();
             crew = GetComponentsInChildren<CrewAgent>(true);
+
+            // Build on demand rather than trusting the scene: Unity does not
+            // guarantee script order, and a sheet that only exists if somebody
+            // remembered to add it in the editor is a feature that works on
+            // one machine.
+            if (GetComponentInChildren<SeaSick.UI.CampSheet>(true) == null)
+                gameObject.AddComponent<SeaSick.UI.CampSheet>();
             voyage = FindFirstObjectByType<VoyageManager>();
             chaseCam = FindFirstObjectByType<SeaSick.CameraRig.ChaseCamera>();
         }
@@ -143,56 +150,15 @@ namespace SeaSick.Ship
         void SurveyWhatIsNear()
         {
             var isle = IslandInRange();
-            if (isle != null && !isle.IsHome) Outpost.BeginSurvey(isle, this);
-        }
-
-        /// Make camp, or say what the camp is holding.
-        ///
-        /// This sits on the existing prompt stack rather than in a panel of
-        /// its own. The bottom sheet the orders will eventually live in is a
-        /// later piece of work; putting one button in the slot that already
-        /// exists is what lets the loop be SEEN before any of that is built.
-        void DrawCampControl(ref Prompts.Stack stack, float bh,
-            GUIStyle button, GUIStyle info)
-        {
-            if (CurrentIsland == null || CurrentIsland.IsHome) return;
-
-            var outpost = Outpost.Of(CurrentIsland);
-
-            // Still looking at the ground. Say so rather than showing nothing:
-            // an absent button is indistinguishable from a broken one.
-            if (outpost == null)
+            if (isle != null && !isle.IsHome)
             {
-                if (Outpost.Surveying(CurrentIsland))
-                    GUI.Label(stack.Next(bh * 0.6f), "looking over the ground…", info);
-                else if (Outpost.Surveyed(CurrentIsland))
-                    GUI.Label(stack.Next(bh * 0.6f), "no ground here will take a camp", info);
-                return;
+                Outpost.BeginSurvey(isle, this);
+                // Wake the hands who live here. A camp you are standing in
+                // front of should have people in it; one three kilometres
+                // astern should cost nothing at all.
+                var here = Outpost.Of(isle);
+                if (here != null) { here.CatchUp(); here.ShowHands(true); }
             }
-
-            if (!outpost.HasCamp)
-            {
-                var r = stack.Next(bh);
-                UIBlocker.Block(r);
-                if (GUI.Button(r, "🔥  Make camp", button))
-                {
-                    int logs = outpost.MakeCamp();
-                    if (logs >= 0)
-                        Debug.Log($"Camp made on {CurrentIsland.name}: "
-                            + $"{logs} logs out of the clearing, "
-                            + $"keeps {outpost.StoreCapacity}");
-                }
-                return;
-            }
-
-            // There is a camp. Tell the player what it is holding — this is
-            // the line they sailed back to read.
-            outpost.CatchUp();
-            var l = outpost.Ledger;
-            if (l != null)
-                GUI.Label(stack.Next(bh * 0.6f),
-                    $"camp: {l.timber} / {l.ceiling} timber   ·   {l.standing:F0} standing",
-                    info);
         }
 
         Island IslandInRange()
@@ -339,7 +305,7 @@ namespace SeaSick.Ship
                         restockIn = 3f;
                         Vector3 at = Vector3.zero; int n = 0;
                         foreach (var c in crew)
-                            if (c != null && !c.IsAboard) { at += c.transform.position; n++; }
+                            if (Ours(c) && !c.IsAboard) { at += c.transform.position; n++; }
                         if (n > 0) StockTheWood(at / n);
                     }
                     if (AllAboard()) { CurrentState = State.Anchored; repairing = false; }
@@ -495,7 +461,7 @@ namespace SeaSick.Ship
             Vector3 sum = Vector3.zero;
             int n = 0;
             foreach (var c in crew)
-                if (c != null && !c.IsAboard) { sum += c.transform.position; n++; }
+                if (Ours(c) && !c.IsAboard) { sum += c.transform.position; n++; }
 
             chaseCam.PointOfInterest = n > 0
                 ? sum / n
@@ -523,12 +489,32 @@ namespace SeaSick.Ship
         // member walks to a tree, works it, and carries the log back
         // themselves (see CrewAgent).
 
+        /// Is the whole SHIP'S COMPANY back aboard?
+        ///
+        /// **Only hands that still belong to this ship count.** A hand left at
+        /// a camp is parked under the island and switched off, and its state
+        /// machine is frozen wherever it stopped — so a cached array that
+        /// still holds it answers "not aboard" for ever, and she can never
+        /// weigh anchor again. Measured: two hands left at a camp and the
+        /// ship was stuck `Ashore` permanently.
+        ///
+        /// Asking the transform rather than re-caching, because this is called
+        /// every frame in `Ashore` and a hand can change hands mid-frame.
         bool AllAboard()
         {
             foreach (var c in crew)
-                if (c != null && !c.IsAboard) return false;
+            {
+                if (c == null) continue;
+                if (!Ours(c)) continue;
+                if (!c.IsAboard) return false;
+            }
             return true;
         }
+
+        /// Still one of ours: alive, switched on, and under this ship.
+        bool Ours(CrewAgent c)
+            => c != null && c.gameObject.activeInHierarchy
+               && (c.transform.IsChildOf(transform) || c.IsAshore);
 
         // --- Player actions -------------------------------------------------
 
@@ -580,7 +566,15 @@ namespace SeaSick.Ship
             // other path (a dev warp, a respawn) never passed through the
             // approach. Null is a real answer: some ground will not take a
             // settlement.
-            if (isle != null && !isle.IsHome) Outpost.BeginSurvey(isle, this);
+            if (isle != null && !isle.IsHome)
+            {
+                Outpost.BeginSurvey(isle, this);
+                // Wake the hands who live here. A camp you are standing in
+                // front of should have people in it; one three kilometres
+                // astern should cost nothing at all.
+                var here = Outpost.Of(isle);
+                if (here != null) { here.CatchUp(); here.ShowHands(true); }
+            }
             motor.Anchored = true;
             timer = dropTime;
             CurrentState = timer > 0f ? State.Dropping : State.Anchored;
@@ -602,7 +596,7 @@ namespace SeaSick.Ship
 
             for (int i = 0; i < crew.Length; i++)
             {
-                if (crew[i] == null) continue;
+                if (!Ours(crew[i])) continue;   // a camp's own hands stay put
                 Vector3 spread = transform.right * ((i - (crew.Length - 1) * 0.5f) * 2.2f);
                 crew[i].GoAshore(landing + spread, CurrentIsland, hold, gangway, voyage);
             }
@@ -621,13 +615,26 @@ namespace SeaSick.Ship
 
         void RecallCrew()
         {
-            foreach (var c in crew) if (c != null) c.ReturnAboard();
+            // Parked camp hands are not ours to recall -- they live there now.
+            foreach (var c in crew) if (Ours(c)) c.ReturnAboard();
         }
 
         /// Let go and get her underway, from outside. The home panel's
         /// "set sail" runs this so one button both closes the tally and
         /// casts off -- splitting it in two is the same mistake `Land`
         /// already fixed in the other direction.
+        /// Put the camp's own hands away again. They keep working -- the
+        /// ledger is what produces -- but nothing needs drawing on an island
+        /// the ship has left.
+        void StowCampHands()
+        {
+            if (CurrentIsland == null || CurrentIsland.IsHome) return;
+            var here = Outpost.Of(CurrentIsland);
+            if (here == null) return;
+            here.CatchUp();          // settle the books before we stop looking
+            here.ShowHands(false);
+        }
+
         public void CastOff()
         {
             if (CurrentState == State.Anchored && !landingPending) WeighAnchor();
@@ -655,6 +662,9 @@ namespace SeaSick.Ship
         /// this was on the only path there is.
         void GetUnderway()
         {
+            // Before `CurrentIsland` is cleared -- this is the last moment
+            // anything knows which camp she is leaving.
+            StowCampHands();
             motor.Anchored = false;
             motor.MooringHeading = null;
             CurrentIsland = null;
@@ -819,7 +829,10 @@ namespace SeaSick.Ship
                         if (GUI.Button(secondary, "send crew ashore", buttonStyle)) SendAshore();
                     }
 
-                    DrawCampControl(ref stack, bh, buttonStyle, infoStyle);
+                    // The camp's own controls live in `CampSheet`, which owns
+                    // the lower third while she is lying at an island. Two
+                    // places offering to make the same camp is the duplication
+                    // the prompt slot exists to prevent.
                     DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
                     break;
                 }
