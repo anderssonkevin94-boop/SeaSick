@@ -73,6 +73,11 @@ public static class RunProbe
     /// The D1 gate: home unchanged by the Village -> Outpost generalisation,
     /// and every other island surveyable on demand at a measured cost.
     public static void Outpost() => Call("OutpostProbe");
+    /// The D2 gate: the ledger's arithmetic is path-independent, idempotent,
+    /// and survives a save. **`CallEditor`, not `Call`** -- this one is pure
+    /// arithmetic over a ledger built in the probe, so it needs no scene, no
+    /// island and no play mode. That is the point of it.
+    public static void Ledger() => CallEditor("LedgerProbe");
     public static void VillageBuild() => Call("VillageProbe", "Build");
     public static void VillageShot() => Call("VillageProbe", "Shot");
     public static void Loop() => Call("LoopProbe");

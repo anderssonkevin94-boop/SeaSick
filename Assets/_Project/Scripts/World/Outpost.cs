@@ -94,6 +94,19 @@ namespace SeaSick.World
         public Vector3 ClearingCentre { get; private set; }
         public float ClearingRadius { get; private set; }
 
+        /// **What this place actually is.** The buildings and the crew you can
+        /// see are a rendering of this; see OutpostLedger.
+        ///
+        /// Seeded when the ground is surveyed, because the worked area is what
+        /// sets how much timber is standing within reach.
+        [SerializeField] OutpostLedger ledger;
+        public OutpostLedger Ledger => ledger;
+
+        /// Bring the ledger up to now. Free to call as often as you like --
+        /// the tick advances on a fixed grid of game time, so asking twice in
+        /// a frame does nothing the second time.
+        public void CatchUp() { ledger?.Tick(TimeOfDay.Seconds); }
+
         /// Everything this place can keep. Land more than this on one voyage
         /// and the surplus stays on the ground and is not there when you get
         /// back.
@@ -187,6 +200,12 @@ namespace SeaSick.World
                                     + plan.footprint.y * plan.footprint.y));
             float reach = viewHalfWidth > 0.01f ? viewHalfWidth : Dock.ViewHalfWidth;
             ClearingRadius = Mathf.Clamp(reach - widest - 2f, 14f, 30f);
+
+            // Seed the ledger off the ground that was just surveyed: how much
+            // timber stands within reach is a property of the place, so it
+            // belongs to the survey rather than to a constant.
+            if (ledger == null)
+                ledger = OutpostLedger.For(ClearingCentre, settlement.AreaHectares);
         }
 
         /// What a NEW outpost is sited under, published once by the world
