@@ -100,8 +100,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 9001054854898812174}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: -0.09177184, y: 0.44745016, z: 0.037217975}
-  m_Size: 1.7013302
+  m_LocalReferencePoint: {x: 0.013958216, y: 0.42797485, z: -0.03575909}
+  m_Size: 1.7982061
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -126,4 +126,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Fern
   resource:
-  authoredHeight: 0.8949003
+  authoredHeight: 0.8559497

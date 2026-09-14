@@ -774,7 +774,7 @@ namespace SeaSick.Terrain
             // twice; keying it to the height it is modifying makes that
             // impossible rather than merely unlikely.
             if (prm.homeIsleRoll > 0f && h > 0f)
-                h += prm.homeIsleRoll * math.saturate(h / prm.homeIsleTop) * 2f
+                h += prm.homeIsleRoll * (prm.storybookLandforms != 0 ? math.smoothstep(4.8f, 5.2f, h) * .3f : math.saturate(h / prm.homeIsleTop)) * 2f
                      * (TerrainNoise.Fbm01(q, prm.seed + TerrainParams.HomeRollSeedOffset, 2,
                             prm.homeIsleRollFrequency, 2f, 0.5f) - 0.5f);
             return h;
@@ -951,13 +951,13 @@ namespace SeaSick.Terrain
                     float2 q = p - prm.homeIsleCentre;
                     float rear = math.dot(q, -prm.homeIsleCoveDir);
                     float side = math.dot(q, new float2(prm.homeIsleCoveDir.y, -prm.homeIsleCoveDir.x));
-                    float wav = 5f * math.abs(math.frac(side / 42f) * 2f - 1f) + 2f * math.abs(math.frac(side / 21f) * 2f - 1f);
-                    float shore = math.smoothstep(4f, 5.05f, h);
+                    float wav = 7f * math.sin(side / 29f) + 3f * math.sin(side / 13f + .7f);
+                    float shore = math.smoothstep(4.85f, 5.18f, h);
                     float ramp1 = 1f - math.smoothstep(5f, 15f, math.abs(side + 22f));
                     float ramp2 = 1f - math.smoothstep(5f, 15f, math.abs(side - 23f));
                     float first = math.saturate((rear - 12f - wav) / math.lerp(9f, 38f, ramp1));
                     float second = math.saturate((rear - 44f - wav) / math.lerp(10f, 38f, ramp2));
-                    s.height += home * shore * (first * 19f + second * 23f);
+                    s.height += home * shore * (first * 19f + second * (20f + 4f * math.sin(side / 42f + .8f)));
                 }
             }
             return s;

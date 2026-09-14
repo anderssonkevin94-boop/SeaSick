@@ -224,8 +224,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6704480970907712646}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: 0.13621616, y: 5.514872, z: -0.2480855}
-  m_Size: 11.048577
+  m_LocalReferencePoint: {x: 0.48935318, y: 6.3493953, z: -0.17518044}
+  m_Size: 12.725625
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -254,7 +254,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Broad_B
   resource: Timber
-  authoredHeight: 11.048577
+  authoredHeight: 12.725625
 --- !u!65 &6944778465037207026
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -274,5 +274,5 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 9.638348, y: 11.048577, z: 8.747295}
-  m_Center: {x: 0.13621616, y: 5.514872, z: -0.2480855}
+  m_Size: {x: 6.326793, y: 12.725625, z: 5.6763563}
+  m_Center: {x: 0.48935318, y: 6.3493953, z: -0.17518044}

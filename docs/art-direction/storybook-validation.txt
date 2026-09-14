@@ -1,2 +1,2 @@
 Individual tree harvest: removed=True, neighbour intact=True, felled count=1
-Home land connected at slope <=0.70: 7200 samples; trees reachable=162/162; highest reached=47.71317
+Home land connected at slope <=0.70: 7508 samples; trees reachable=174/174; highest reached=48.21504

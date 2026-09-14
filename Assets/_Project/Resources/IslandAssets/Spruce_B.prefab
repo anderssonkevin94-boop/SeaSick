@@ -224,8 +224,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7178966408210223564}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: -0.222718, y: 6.147235, z: 0.12028551}
-  m_Size: 12.305531
+  m_LocalReferencePoint: {x: -0.12639928, y: 6.6042347, z: 0.059189677}
+  m_Size: 13.21953
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -254,7 +254,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Spruce_B
   resource: Timber
-  authoredHeight: 12.305531
+  authoredHeight: 13.21953
 --- !u!65 &6360226010987683673
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -274,5 +274,5 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 5.1884584, y: 12.305531, z: 5.638041}
-  m_Center: {x: -0.29043627, y: 6.147235, z: 0.17684531}
+  m_Size: {x: 4.010173, y: 13.21953, z: 3.5762882}
+  m_Center: {x: -0.12639928, y: 6.6042347, z: -0.07130027}

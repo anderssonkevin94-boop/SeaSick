@@ -134,8 +134,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 467563079063692642}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: -1.1609089, y: 5.144281, z: 0.061935663}
-  m_Size: 10.388562
+  m_LocalReferencePoint: {x: -0.9606366, y: 5.1370745, z: 0.055903673}
+  m_Size: 10.374149
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -164,7 +164,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Palm
   resource: Timber
-  authoredHeight: 10.388562
+  authoredHeight: 10.374149
 --- !u!65 &603962845057884091
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -184,8 +184,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 8.021864, y: 10.388562, z: 8.37252}
-  m_Center: {x: -1.2600036, y: 5.144281, z: 0.13475466}
+  m_Size: {x: 7.912735, y: 10.374149, z: 7.821199}
+  m_Center: {x: -0.9606366, y: 5.1370745, z: -0.09947276}
 --- !u!1 &8913620164136012195
 GameObject:
   m_ObjectHideFlags: 0

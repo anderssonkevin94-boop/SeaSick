@@ -133,8 +133,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 6295053858983295127}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: -0.13672304, y: 0.73412126, z: 0.021930456}
-  m_Size: 2.4191804
+  m_LocalReferencePoint: {x: -0.12516952, y: 0.759063, z: 0.06661463}
+  m_Size: 2.9362197
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -163,7 +163,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Scrub_1
   resource:
-  authoredHeight: 1.6179308
+  authoredHeight: 1.1482372
 --- !u!1 &7198924980184269371
 GameObject:
   m_ObjectHideFlags: 0

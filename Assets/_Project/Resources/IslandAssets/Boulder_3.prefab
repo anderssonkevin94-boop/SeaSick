@@ -101,8 +101,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4038756392122010766}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: 0.07549071, y: 0.45157003, z: 0.13880765}
-  m_Size: 2.0689592
+  m_LocalReferencePoint: {x: -0.006416559, y: 0.54493856, z: 0.034276128}
+  m_Size: 2.0577977
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -127,7 +127,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Boulder_3
   resource: Stone
-  authoredHeight: 1.0999401
+  authoredHeight: 1.3260372
 --- !u!65 &9141706556157353285
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -147,5 +147,5 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 2.0689592, y: 1.0999401, z: 1.9617274}
-  m_Center: {x: 0.07549065, y: 0.45157003, z: 0.13880765}
+  m_Size: {x: 1.7324657, y: 1.3260372, z: 2.0577977}
+  m_Center: {x: -0.006416559, y: 0.54493856, z: 0.034276128}

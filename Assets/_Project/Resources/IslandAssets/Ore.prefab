@@ -101,8 +101,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4812810510452851698}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: -0.019480467, y: 0.4491108, z: 0.0649904}
-  m_Size: 1.9724917
+  m_LocalReferencePoint: {x: -0.06917477, y: 0.33727354, z: 0.03630805}
+  m_Size: 2.7241595
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -127,7 +127,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Ore
   resource: Ore
-  authoredHeight: 1.0950216
+  authoredHeight: 0.7827871
 --- !u!65 &8523343201163415779
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -147,5 +147,5 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 1.9724917, y: 1.0950216, z: 1.8444636}
-  m_Center: {x: -0.019480467, y: 0.4491108, z: 0.0649904}
+  m_Size: {x: 2.7241595, y: 0.7827871, z: 1.5968938}
+  m_Center: {x: -0.06917477, y: 0.33727354, z: 0.03630805}

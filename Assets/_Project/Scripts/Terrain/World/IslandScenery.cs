@@ -636,17 +636,8 @@ namespace SeaSick.Terrain
                         }
                         else if (place)
                         {
-                            // Species: palms on the hot sandbanks and the
-                            // low ground of a hot island, broadleaves on the
-                            // low ground of a temperate one, spruce
-                            // everywhere else. Altitude decides within an
-                            // island, latitude decides between them.
-                            // **The island's one species.** Decided once, at
-                            // the top, from latitude and a single roll. It
-                            // was a slow field putting groves of conifer next
-                            // to groves of broadleaf, and Kevin's verdict is
-                            // that it does not make sense -- two species
-                            // sharing a 3 ha island is a botanical garden.
+                            // Climate selects palms; temperate stands mix coordinated
+                            // broadleaf and conifer families with distinct ages.
                             SceneryKit.Template tp0 = spruce0, tp1 = spruce1;
                             float factor = 1f;
                             if (species == 2) { tp0 = palm0; tp1 = palm1; factor = 0.72f; }
@@ -654,9 +645,10 @@ namespace SeaSick.Terrain
                             if (individualTrees && species != 2)
                             {
                                 bool broad = Mathf.PerlinNoise(wx * .025f + 12f, wz * .025f) > .38f;
-                                string id = broad ? (rVariant < .33f ? "Broad" : rVariant < .66f ? "Broad_B" : "Broad_C") : (rVariant < .5f ? "Spruce" : "Spruce_B");
+                                string id = broad ? (rVariant < .18f ? "Broad_Young" : rVariant < .48f ? "Broad" : rVariant < .72f ? "Broad_B" : "Broad_C") : (rVariant < .2f ? "Spruce_Young" : rVariant < .65f ? "Spruce" : "Spruce_B");
+                                if (id.EndsWith("Young")) factor = .65f;
+                                else factor = broad ? .90f : 1.02f;
                                 tp0 = SceneryKit.Get(id); tp1 = SceneryKit.Get(id + "_LOD1");
-                                factor = broad ? .90f : 1.02f;
                             }
                             // Trees inside a closed stand are taller than the
                             // ones out on its edge -- they grew up competing
@@ -667,8 +659,9 @@ namespace SeaSick.Terrain
                             factor *= Mathf.Lerp(0.82f, 1.07f, sp.cover);
                             float target = Mathf.Lerp(TreeMinH, TreeMaxH, Mathf.Pow(rHeight, HeightBias)) * factor;
                             float s = target / Mathf.Max(1f, tp0.height);
-                            float yaw = Wind + (rYaw - 0.5f) * 0.7f;
-                            var sc = new Vector3(s, s, s);
+                            float yaw = individualTrees ? rYaw * Mathf.PI * 2f : Wind + (rYaw - 0.5f) * 0.7f;
+                            float width = individualTrees ? Mathf.Lerp(.78f, 1.18f, rRockC) : 1f;
+                            var sc = new Vector3(s * width, s, s * width);
                             if (individualTrees)
                                 individuals.Add((tp0.name, at, yaw, sc));
                             else StampBoth(cb, tp0, tp1, at, yaw, sc, sc);
@@ -687,21 +680,49 @@ namespace SeaSick.Terrain
                     }
                     // Counted whether or not it was placed, so the budget and
                     // the loop's exit are the same with a clearing as without.
-                    if (individualTrees && place && rRockA < .65f)
+                    if (individualTrees && place)
                     {
-                        var under = SceneryKit.Get(rRockB < .3f ? "Scrub_0" : rRockB < .65f ? "Fern" : "Grass");
-                        float ux = wx + 2f + rRockC, uz = wz - 2f;
-                        float uy = height(ux, uz);
-                        if (under != null && Mathf.Abs(uy - h) < 1f && (keepOut == null || !keepOut(ux, uz)))
+                        // Groundcover clusters share a habitat but never a fixed offset.
+                        int count = 2 + (int)(rRockA * 4f);
+                        for (int u = 0; u < count; u++)
                         {
+                            float angle = rYaw * Mathf.PI * 2f + u * 2.39996f;
+                            float distance = 1.7f + u * .65f + rRockC;
+                            float ux = wx + Mathf.Cos(angle) * distance, uz = wz + Mathf.Sin(angle) * distance;
+                            float uy = height(ux, uz);
+                            if (uy < sandTop || Mathf.Abs(uy - h) > .8f || (keepOut != null && keepOut(ux, uz))) continue;
+                            string id = u == 0 ? (rRockB < .16f ? "Sticks" : "Scrub_" + Mathf.Min(2,(int)(rRockB*3f)))
+                                : rScrubA < .35f ? (u % 2 == 0 ? "Fern" : "Fern_B") : (u % 2 == 0 ? "Grass" : "Grass_B");
+                            var under = SceneryKit.Get(id);
+                            if (under == null) continue;
                             var cb = CellFor(ux, uz);
-                            var low = SceneryKit.Get(under.name + "_LOD1") ?? under;
-                            var scale = Vector3.one * (1f + rScrubA);
-                            StampBoth(cb, under, low, new Vector3(ux,uy,uz),rYaw*Mathf.PI*2f,scale,scale);
-                            cb.Grow(new Vector3(ux,uy,uz),3f,3f);bushes++;
+                            var low = SceneryKit.Get(id + "_LOD1") ?? under;
+                            var scale = Vector3.one * Mathf.Lerp(.8f,1.65f,rScrubA);
+                            var pos = new Vector3(ux,uy-.035f,uz);
+                            StampBoth(cb,under,low,pos,angle,scale,scale);
+                            cb.Grow(pos,3f,3f);bushes++;
                         }
                     }
                     trees++;
+                }
+            }
+
+            if (individualTrees)
+            {
+                for (float gx = -meanR; gx < meanR; gx += 4.5f)
+                for (float gz = -meanR; gz < meanR; gz += 4.5f)
+                {
+                    float x = centre.x + gx + 1.6f * Mathf.Sin(gz * 1.73f), z = centre.z + gz + 1.6f * Mathf.Sin(gx * 2.31f);
+                    float y = height(x,z);
+                    float patch = Mathf.PerlinNoise(x*.09f+37f,z*.09f+17f);
+                    if (gx*gx+gz*gz > meanR*meanR || y < 2.8f || y > sandTop+3f || patch < .54f || (keepOut != null && keepOut(x,z))) continue;
+                    if (Mathf.Abs(height(x+1,z)-y) > .45f || Mathf.Abs(height(x,z+1)-y) > .45f) continue;
+                    string id = y < 3.5f ? "Driftwood" : y < sandTop ? "Grass_Dry" : patch > .7f ? "Scrub_1" : "Grass";
+                    if (id == "Driftwood" && patch < .7f) continue;
+                    var under=SceneryKit.Get(id);if(under==null)continue;
+                    var cb=CellFor(x,z);var pos=new Vector3(x,y-.03f,z);
+                    var scale=Vector3.one*Mathf.Lerp(.7f,1.6f,patch);
+                    StampBoth(cb,under,SceneryKit.Get(id+"_LOD1")??under,pos,x+z,scale,scale);cb.Grow(pos,3f,3f);bushes++;
                 }
             }
 

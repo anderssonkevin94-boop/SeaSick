@@ -4,21 +4,22 @@ Implemented in Sea.unity using Blender MCP. This replaces the former conifer/sha
 
 ## Assets
 
-`Assets/_Project/Resources/IslandAssets/` contains 22 standalone prefabs, each backed by its own FBX in `Resources/Flora/Storybook/`:
+`Assets/_Project/Resources/IslandAssets/` contains 29 standalone prefabs, each backed by its own FBX in `Resources/Flora/Storybook/`:
 
 | Family | Prefabs | Treatment |
 | --- | --- | --- |
-| Broadleaf | Broad, Broad_B, Broad_C | Branched trunks, overlapping rounded canopy masses |
-| Conifer | Spruce, Spruce_B | Fuller irregular skirts, connected silhouette |
+| Broadleaf | Broad, Broad_B, Broad_C, Broad_Young | Spreading oak, slender pale trunk, wind-shaped coastal oak and young growth |
+| Conifer | Spruce, Spruce_B, Spruce_Young | Full, slender blue-green and smaller young conifers |
 | Tropical | Palm | Regenerated from the existing palm builder |
 | Boulder | Boulder_0–3 | Asymmetric blunt blocks with slanted tops |
 | Cliff | Cliff_0–2 | Larger planar rock modules, no needle apex |
 | Bush | Scrub_0–2 | Low overlapping leaf clusters |
-| Groundcover | Fern, Grass | Broad fronds and grass blades |
+| Groundcover | Fern, Fern_B, Grass, Grass_B, Grass_Dry | Broad fronds, upright and dry meadow tufts |
+| Fallen wood | Sticks, Driftwood | Forked branches in bark and weathered wood tones |
 | Ore | Ore | Distinct mineral inclusions |
 | Crops | Crop_0–2 | Regenerated wheat from the existing resource builder |
 
-The library has 34 meshes including paired LODs. Prefabs carry IslandAsset identity, shared vertex-colour materials, LOD groups, and trigger bounds for resource families. Generator: `tools/blender/storybook_islands.py`. Editable Blender scene: `tools/blender/source/storybook-islands.blend`. Blender exports linear vertex colours; exporting sRGB caused double conversion and visibly pale vegetation in Unity. The original Blender scene/file is preserved.
+The library has 43 meshes including paired LODs. Prefabs carry IslandAsset identity, shared vertex-colour materials, LOD groups, and trigger bounds for resource families. Generator: `tools/blender/storybook_islands.py`. Editable Blender scene: `tools/blender/source/storybook-islands.blend`. Blender exports linear vertex colours; exporting sRGB caused double conversion and visibly pale vegetation in Unity. The original Blender scene/file is preserved.
 
 ## Gameplay integration
 
@@ -38,8 +39,8 @@ One island-level scheduler handles tree LOD/culling; the standalone prefab LODGr
 
 - Runtime and editor C# compile cleanly; the terrain shader reports no Unity compile messages.
 - Individual harvest test: selected tree disappears, neighbour stays active, shared source mesh is unchanged.
-- Home: 162 individual trees. A 2 m sampled connectivity check from the settlement reaches all 162 over land with local slope at most 0.70; the highest connected sample is 47.7 m. This verifies terrain connectivity, not a complete autonomous crew voyage.
-- HarbourProbe: 3.1 m minimum water under the tested footprint, afloat at the dock; about 0.96 ha of connected buildable ground. Full report: `storybook-harbour-validation.txt`.
+- Home: 174 individual trees. A 2 m sampled connectivity check from the settlement reaches all 174 over land with local slope at most 0.70; the highest connected sample is 48.2 m. This verifies terrain connectivity, not a complete autonomous crew voyage.
+- HarbourProbe: 3.1 m minimum water under the tested footprint, afloat at the dock; about 0.89 ha of connected buildable ground. Full report: `storybook-harbour-validation.txt`.
 - Desktop and portrait camera renders reviewed. These omit IMGUI and do not establish HUD validation.
 - Reproducible checks: `unity --json command eval_file --file tools/validation/storybook-harvest.cs` and `storybook-access.cs`, in play mode. These temporarily harvest a tree; stop play afterwards. Reports are in this directory.
 
@@ -51,3 +52,13 @@ Rebuild through **SeaSick → Art → Build Storybook Island Prefabs** in edit m
 - `storybook-home-final.png`: redesigned home island in Unity.
 - `storybook-island-final.png`: second generated island and original brig.
 - `storybook-island-portrait.png`: portrait camera check.
+
+## Variation refinement
+
+Option B in `harbour-directions-v1.png` remains the design reference: rounded canopy clusters, restrained greens and broad rock planes. Types have distinct proportions and colours authored through Blender MCP, with full-turn orientation and width variation in Unity. Young trees remain smaller than mature trees. Temperate groves mix these families; tropical islands retain palms.
+
+Bushes vary in spread and height. Rock variants vary aspect, slab thickness and warm/cool stone tones. Irregular under-tree clusters add shrubs, fern variants, grass and fallen sticks; a separate lowland pass adds meadow-edge tufts and sparse driftwood. All source assets have separate prefabs; decorative placements are batched, while trees retain individual harvesting.
+
+Home beach rolling is attenuated below the meadow and bluff shaping starts above the beach. Grass uses a narrower, lightly irregular transition into clean meadow colour, supported by physical tufts. Upper shelf heights and outlines vary while retaining tested access ramps.
+
+Current renders: `storybook-variety-home.png`, `storybook-variety-island.png`, `storybook-variety-portrait.png`. These are staged art cameras, not HUD tests. Mobile GPU performance remains unmeasured.

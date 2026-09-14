@@ -281,8 +281,9 @@ namespace SeaSick.Terrain
                 // Sand stops at the BERM, not at the blend band. Painting it
                 // all the way to beachHeight put a yellow stripe up the
                 // hillside behind every beach.
-                c = hAboveSea < s.sandHeight ? sand
-                    : math.lerp(sand, g, math.saturate((hAboveSea - s.sandHeight) / SandBlend));
+                float edge = s.storybook ? .18f * noise.snoise(w * .09f) + .12f * noise.snoise(w * .035f) : 0f;
+                float blend = s.storybook ? math.smoothstep(0f,.85f,hAboveSea-s.sandHeight-.55f-edge) : math.saturate((hAboveSea-s.sandHeight)/SandBlend);
+                c = math.lerp(sand,g,blend);
             }
             c = math.lerp(c, snow, math.saturate((hAboveSea - s.snowHeight) / 8f));
             float wonHere = math.saturate(proud / s.rockShowsAt);

@@ -100,8 +100,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2432936231009753459}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: 0.086547434, y: 0.4509508, z: -0.09245014}
-  m_Size: 1.67713
+  m_LocalReferencePoint: {x: 0.03311348, y: 0.4143147, z: 0.07727635}
+  m_Size: 1.7733685
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -126,4 +126,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Grass
   resource:
-  authoredHeight: 0.9019016
+  authoredHeight: 0.8286294
