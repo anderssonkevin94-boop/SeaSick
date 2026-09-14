@@ -41,18 +41,18 @@ Material:
     - _HullShield: 1.6
     - _MurkDepth: 35.61
     - _PeakMaskScale: 0.55
-    - _ReflectionStrength: 0.26
+    - _ReflectionStrength: 0.85
     - _RefractStrength: 0.22
     - _ShoalDepth: 12.6
     - _ShoalStrength: 0.58
-    - _SpecPowerFar: 24
-    - _SpecPowerNear: 64
-    - _SpecStrength: 0.25
+    - _SpecPowerFar: 60
+    - _SpecPowerNear: 160
+    - _SpecStrength: 1.15
     - _SubsurfaceStrength: 0.65
     - _SurfBreakFrac: 0.78
     - _SurfStrength: 0.7
     - _SurfSwashDepth: 0.8
-    - _SurfaceDetail: 0.3
+    - _SurfaceDetail: 0.5
     m_Colors:
     - _DeepColor: {r: 0.025, g: 0.17, b: 0.4, a: 1}
     - _FoamColor: {r: 0.94, g: 0.97, b: 0.94, a: 1}

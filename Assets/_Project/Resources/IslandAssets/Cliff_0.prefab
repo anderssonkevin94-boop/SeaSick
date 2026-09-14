@@ -100,8 +100,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4154320577997802396}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: 0.031532884, y: 0.3175819, z: 0.0653317}
-  m_Size: 2.763197
+  m_LocalReferencePoint: {x: 0.022523522, y: 0.8661324, z: 0.052265286}
+  m_Size: 2.1102648
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -126,4 +126,4 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Cliff_0
   resource:
-  authoredHeight: 0.7737638
+  authoredHeight: 2.1102648

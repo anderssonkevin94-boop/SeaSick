@@ -70,3 +70,13 @@ The home bluff now intersects nine oblique supporting planes with its terraces. 
 The shared terrain/scenery shader now uses two cel lighting bands with an antialiased threshold, warm direct light and cool shadow fill. It uses mesh normals rather than derivative triangle normals, which previously exposed thin terrain grid strips. The existing GraphicLight material control gates the treatment; the sailing and water shaders are unchanged. This is a Wind Waker-inspired lighting trial judged against option B, not an exact reproduction.
 
 Validation: runtime/editor C# clean, Unity shader diagnostics empty, individual harvest passes, all 158 home trees connected at sampled slope <=0.70 (highest reached 43.1 m), berth footprint afloat at 3.1 m minimum depth. Final art camera renders: `toon-cliffs-review.png`, `toon-cliffs-low.png`, `toon-cliffs-portrait.png`. Camera renders omit HUD. The base terrain remains a heightfield, so shelf edges retain some triangulation; the narrow vertical ribbing is removed.
+
+## Crisp regions, integrated tufts and reflective water
+
+The terrain material opts into per-fragment grass/sand/stone classification. The sand line is 4.3 m and region edges use pixel-sized antialiasing instead of vertex-colour blending across the terrain grid. Terrain detail/normal noise is disabled for this treatment. Other objects retain vertex colour shading; the terrain classification must not be enabled on Scenery.mat.
+
+Blender MCP regenerated the grass/fern colours to match the linear meadow palette, with smaller runtime tuft scales. Dry grass is confined below the grass boundary. Cliff modules now have taller, sharp bevelled shoulders and are stamped along steep ground with their bases fitted to the downhill terrain sample. These are decorative outcrops, not a replacement for the underlying heightfield or its collision mesh. They retain separate source FBXs and prefabs. Tree/resource identities and harvesting are unchanged.
+
+Ocean reflection strength increases from .26 to .85, specular strength .25 to 1.15, near/far powers 64/24 to 160/60, and surface detail .3 to .5. These are material changes; the sailing/wave simulation is unchanged.
+
+Checks: clean runtime/editor compilation, no terrain-shader diagnostics, individual harvesting passes, 158/158 home tree positions connected by the terrain slope probe. The latter tests terrain connectivity, not collisions with decorative dressing. Art renders: `crisp-island-review.png`, `crisp-island-portrait.png`, `crisp-island-water.png`. GPU and HUD validation remain outside these camera captures.

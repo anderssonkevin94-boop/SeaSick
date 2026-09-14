@@ -100,7 +100,7 @@ def stone(name,coll,seed,tall=False,ore=False):
     for j in range(3):
         fs += [(j*n+i,j*n+(i+1)%n,(j+1)*n+(i+1)%n,(j+1)*n+i) for i in range(n)]
     fs.append(tuple(range(3*n,4*n)))
-    aspect=[(1.2,.75,.7),(.85,1.12,1.2),(1.4,.9,.55),(.9,.85,1.0)][seed%4]
+    aspect=([(1.0,.72,1.5),(.75,.85,1.85),(1.2,.65,1.25)][seed%3] if tall else [(1.2,.75,.7),(.85,1.12,1.2),(1.4,.9,.55),(.9,.85,1.0)][seed%4])
     vs=[(x*aspect[0],y*aspect[1],z*aspect[2]) for x,y,z in vs]
     rockcol=[(.48,.45,.36),(.40,.43,.44),(.56,.51,.39),(.43,.44,.35)][seed%4]
     parts=[mesh(name,vs,fs,COLORS['ore'] if ore else rockcol,coll)]
@@ -122,7 +122,7 @@ def fronds(name,coll,seed,grass=False):
         u=Vector((math.cos(a),math.sin(a),0));v=Vector((-u.y,u.x,0));w=.07 if grass else .23
         for p in (Vector((0,0,0)),u*r*.4-v*w+Vector((0,0,h*.8)),u*r+Vector((0,0,h*.65)),u*r*.4+v*w+Vector((0,0,h*.8))):vs.append(tuple(p))
         fs.extend([(base,base+1,base+2),(base,base+2,base+3),(base+2,base+1,base),(base+3,base+2,base)])
-    col=(.34,.40,.10) if name.endswith('_Dry') else (.18,.31,.055) if name.endswith('_B') else (.26,.40,.06)
+    col=(.17,.25,.045) if name.endswith('_Dry') else (.085,.205,.026) if name.endswith('_B') else (.100,.243,.030)
     if name.endswith('_B'):vs=[(x*.7,y*.7,z*1.5) for x,y,z in vs]
     return mesh(name,vs,fs,col,coll)
 

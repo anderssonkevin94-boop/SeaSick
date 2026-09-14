@@ -697,7 +697,7 @@ namespace SeaSick.Terrain
                             if (under == null) continue;
                             var cb = CellFor(ux, uz);
                             var low = SceneryKit.Get(id + "_LOD1") ?? under;
-                            var scale = Vector3.one * Mathf.Lerp(.8f,1.65f,rScrubA);
+                            var scale = Vector3.one * Mathf.Lerp(.55f,1.1f,rScrubA);
                             var pos = new Vector3(ux,uy-.035f,uz);
                             StampBoth(cb,under,low,pos,angle,scale,scale);
                             cb.Grow(pos,3f,3f);bushes++;
@@ -717,12 +717,41 @@ namespace SeaSick.Terrain
                     float patch = Mathf.PerlinNoise(x*.09f+37f,z*.09f+17f);
                     if (gx*gx+gz*gz > meanR*meanR || y < 2.8f || y > sandTop+3f || patch < .54f || (keepOut != null && keepOut(x,z))) continue;
                     if (Mathf.Abs(height(x+1,z)-y) > .45f || Mathf.Abs(height(x,z+1)-y) > .45f) continue;
-                    string id = y < 3.5f ? "Driftwood" : y < sandTop ? "Grass_Dry" : patch > .7f ? "Scrub_1" : "Grass";
+                    string id = y < 3.5f ? "Driftwood" : y < 4.3f ? "Grass_Dry" : patch > .7f ? "Scrub_1" : "Grass";
                     if (id == "Driftwood" && patch < .7f) continue;
                     var under=SceneryKit.Get(id);if(under==null)continue;
                     var cb=CellFor(x,z);var pos=new Vector3(x,y-.03f,z);
-                    var scale=Vector3.one*Mathf.Lerp(.7f,1.6f,patch);
+                    var scale=Vector3.one*Mathf.Lerp(.45f,.85f,patch);
                     StampBoth(cb,under,SceneryKit.Get(id+"_LOD1")??under,pos,x+z,scale,scale);cb.Grow(pos,3f,3f);bushes++;
+                }
+            }
+
+            // Authored flat-faced outcrops break up long heightfield walls.
+            // Confine them to steep rock, away from the traversable shelves.
+            if (individualTrees)
+            {
+                for (float z = -meanR; z < meanR; z += 7f)
+                for (float x = -meanR; x < meanR; x += 11f)
+                {
+                    float wx=centre.x+x, wz=centre.z+z;
+                    float h=height(wx,wz);
+                    if(h<9f || h>55f || (keepOut!=null && keepOut(wx,wz)))continue;
+                    float dx=(height(wx+2,wz)-height(wx-2,wz))*.25f;
+                    float dz=(height(wx,wz+2)-height(wx,wz-2))*.25f;
+                    float slope=Mathf.Sqrt(dx*dx+dz*dz);
+                    if(slope<.80f || slope>2.8f)continue;
+                    float patch=Mathf.PerlinNoise(wx*.047f+19,wz*.047f+33);
+                    if(patch<.25f)continue;
+                    int variant=Mathf.Abs((int)(x+z))%3;
+                    var tp=SceneryKit.Get("Cliff_"+variant);if(tp==null)continue;
+                    float high=height(wx+dx/slope*8,wz+dz/slope*8);
+                    float low=height(wx-dx/slope*8,wz-dz/slope*8);
+                    float rockHeight=Mathf.Clamp(high-low+1f,7f,25f);
+                    var pos=new Vector3(wx-dx/slope*1.2f,low-.7f,wz-dz/slope*1.2f);
+                    var scale=new Vector3(7f+patch*3f,rockHeight/Mathf.Max(.1f,tp.height),4.3f);
+                    var cb=CellFor(wx,wz);
+                    StampBoth(cb,tp,tp,pos,Mathf.Atan2(dx,dz)+(patch-.5f)*.35f,scale,scale);
+                    cb.Grow(pos,12f,rockHeight);
                 }
             }
 

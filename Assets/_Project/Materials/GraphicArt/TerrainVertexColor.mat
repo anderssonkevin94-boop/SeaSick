@@ -25,11 +25,13 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
+    - _CrispTerrain: 1
     - _DetailFade: 260
     - _DetailScale: 3.5
-    - _DetailStrength: 0.025
+    - _DetailStrength: 0
     - _GraphicLight: 0.8
-    - _NormalStrength: 0.04
+    - _NormalStrength: 0
+    - _SandLine: 4.3
     - _StriationStrength: 0
     m_Colors:
     - _ShadowTint: {r: 0.56, g: 0.67, b: 0.88, a: 1}

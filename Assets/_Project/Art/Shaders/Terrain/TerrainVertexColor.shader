@@ -21,6 +21,8 @@ Shader "SeaSick/Terrain Vertex Color"
 {
     Properties
     {
+        _CrispTerrain ("Crisp terrain regions", Range(0,1)) = 0
+        _SandLine ("Grass boundary height", Float) = 4.3
         _Tint ("Tint", Color) = (1,1,1,1)
         _DetailScale ("Detail scale (m)", Float) = 3.5
         _DetailStrength ("Albedo break-up", Range(0,0.6)) = 0.22
@@ -48,6 +50,7 @@ Shader "SeaSick/Terrain Vertex Color"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _Tint;
+                float _CrispTerrain, _SandLine;
                 float _DetailScale;
                 float _DetailStrength;
                 float _NormalStrength;
@@ -129,6 +132,20 @@ Shader "SeaSick/Terrain Vertex Color"
                 // The heightfield's finite-difference normals bridge mesh LODs.
                 // Derivative triangle normals exposed every narrow grid strip.
                 float3 albedo = i.color.rgb * _Tint.rgb;
+                if (_CrispTerrain > .5 && i.positionWS.y > 0)
+                {
+                    // Classify per fragment, never interpolate tan into green
+                    // across several metres of a terrain triangle.
+                    float border = i.positionWS.y - _SandLine;
+                    float aa = max(fwidth(border), .008);
+                    float grassMask = smoothstep(-aa, aa, border);
+                    float stoneAA = max(fwidth(i.color.a), .01);
+                    float rockMask = smoothstep(.48-stoneAA,.48+stoneAA,i.color.a);
+                    float3 meadow = float3(.100,.243,.030);
+                    float3 sand = float3(.674,.523,.224);
+                    float3 rock = float3(.36,.35,.29);
+                    albedo = lerp(lerp(sand,meadow,grassMask),rock,rockMask) * _Tint.rgb;
+                }
 
                 // Fade the whole detail layer out with distance. Without this
                 // it turns into per-pixel noise on the horizon -- shimmer that
