@@ -725,9 +725,9 @@ namespace SeaSick.Terrain
                             if (rPlace < 0.006 * clump * shoreRock)
                             {
                                 var tp = cliffTp[(int)(rA * cliffTp.Length) % cliffTp.Length];
-                                float above = (5f + 13f * rB) * cragScale;
+                                float above = (terrain.graphicArtPalette ? 4f + 6f * rB : 5f + 13f * rB) * cragScale;
                                 float hgt = above - h3;                 // it has to reach the seabed
-                                float w = (2.6f + 4.4f * rC) * cragScale;
+                                float w = (terrain.graphicArtPalette ? 4.5f + 5f * rC : 2.6f + 4.4f * rC) * cragScale;
                                 var cb = CellFor(wx3, wz3);
                                 var rot = Quaternion.Euler((rA - 0.5f) * 16f, rYaw3 * 360f, (rB - 0.5f) * 14f);
                                 var at3 = new Vector3(wx3, h3 + hgt * 0.34f, wz3);
@@ -1070,6 +1070,8 @@ namespace SeaSick.Terrain
         /// break-up low, because the kit carries its own per-vertex shading.
         public static Material SceneryMaterial()
         {
+            if (SeaSick.World.WorldArtStyle.SceneryOverride != null)
+                return SeaSick.World.WorldArtStyle.SceneryOverride;
             if (scenery != null) return scenery;
             var sh = Shader.Find("SeaSick/Terrain Vertex Color");
             scenery = new Material(sh) { name = "Scenery" };

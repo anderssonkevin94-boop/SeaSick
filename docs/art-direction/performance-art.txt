@@ -1,0 +1,3 @@
+sim dispatch CPU: median 0.015 ms, p90 0.036 ms (issue cost only; GPU time is a device measurement)
+VRAM: cascades+sim 21.8 MB (N=256); CPU readback buffers 6.4 MB
+PASS (editor-measurable budget)

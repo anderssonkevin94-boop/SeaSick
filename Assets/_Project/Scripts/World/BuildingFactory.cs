@@ -13,12 +13,26 @@ namespace SeaSick.World
 
         static Material Mat(string key, Color c, float smoothness = 0.08f)
         {
+            c = WorldArtStyle.BuildingColour(key, c);
+            key += WorldArtStyle.CacheSuffix;
             if (mats.TryGetValue(key, out var m) && m != null) return m;
             m = new Material(Shader.Find("Universal Render Pipeline/Lit"));
             m.SetColor("_BaseColor", c);
             m.SetFloat("_Smoothness", smoothness);
             mats[key] = m;
             return m;
+        }
+
+        internal static void ReleaseArtMaterials(string suffix)
+        {
+            var keys = new List<string>();
+            foreach (var pair in mats)
+                if (pair.Key.EndsWith(suffix, System.StringComparison.Ordinal)) keys.Add(pair.Key);
+            foreach (var key in keys)
+            {
+                if (mats[key] != null) Object.Destroy(mats[key]);
+                mats.Remove(key);
+            }
         }
 
         /// `footing` is how far the base slab reaches BELOW the floor. The

@@ -33,9 +33,10 @@ namespace SeaSick.Terrain
         public struct ColourParams
         {
             public float seaLevel, beachHeight, snowHeight, sandHeight;
+            public bool graphicArt;
             public float rockShowsAt, cliffRockStart, cliffRockFull;
             public static ColourParams From(TerrainSettings s) =>
-                new ColourParams { seaLevel = s.seaLevel, beachHeight = s.beachHeight,
+                new ColourParams { graphicArt = s.graphicArtPalette, seaLevel = s.seaLevel, beachHeight = s.beachHeight,
                                    snowHeight = s.snowHeight, sandHeight = s.sandHeight,
                                    rockShowsAt = math.max(0.05f, s.rockShowsAt),
                                    cliffRockStart = s.cliffRockStart,
@@ -254,6 +255,16 @@ namespace SeaSick.Terrain
                    stoneL = new float3(0.58f, 0.54f, 0.47f), stoneM = new float3(0.42f, 0.40f, 0.36f),
                    stoneD = new float3(0.26f, 0.25f, 0.24f), snow = new float3(0.95f, 0.95f, 0.97f),
                    seabed = new float3(0.62f, 0.60f, 0.46f), seabedD = new float3(0.22f, 0.32f, 0.30f);
+            if (s.graphicArt)
+            {
+                sand = new float3(0.84f, 0.75f, 0.51f);
+                grass = new float3(0.35f, 0.53f, 0.19f);
+                moss = new float3(0.22f, 0.40f, 0.18f);
+                dry = new float3(0.56f, 0.59f, 0.27f);
+                stoneL = new float3(0.67f, 0.65f, 0.57f);
+                stoneM = new float3(0.47f, 0.51f, 0.54f);
+                stoneD = new float3(0.28f, 0.35f, 0.45f);
+            }
             float3 c;
             if (hAboveSea < 0f) c = math.lerp(seabed, seabedD, math.saturate(-hAboveSea / 9f));
             else

@@ -27,6 +27,8 @@ Shader "SeaSick/Terrain Vertex Color"
         _NormalStrength ("Surface roughness", Range(0,1.5)) = 0.55
         _StriationStrength ("Rock striation", Range(0,3)) = 1.4
         _DetailFade ("Detail fade distance (m)", Float) = 260
+        _GraphicLight ("Graphic — soft sculpted lighting", Range(0,1)) = 0
+        _ShadowTint ("Graphic — shadow colour", Color) = (0.56,0.67,0.88,1)
     }
     SubShader
     {
@@ -50,6 +52,8 @@ Shader "SeaSick/Terrain Vertex Color"
                 float _NormalStrength;
                 float _StriationStrength;
                 float _DetailFade;
+                float _GraphicLight;
+                float4 _ShadowTint;
             CBUFFER_END
 
             // --- procedural value noise -------------------------------------
@@ -129,7 +133,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 float fade = saturate(1.0 - dist / max(_DetailFade, 1.0));
                 fade *= fade;
 
-                if (fade > 0.001)
+                if (fade > 0.001 && (_DetailStrength > 0.001 || _NormalStrength > 0.001))
                 {
                     // How much of this surface is ROCK, from the vertex
                     // alpha the mesher writes (rock that broke out, or a
@@ -165,6 +169,13 @@ Shader "SeaSick/Terrain Vertex Color"
                 float3 diffuse = light.color * light.shadowAttenuation * ndl;
                 float3 ambient = SampleSH(n);
                 float3 col = albedo * (diffuse + ambient);
+                // Vertex colours already carry canopy/rock form. Give their
+                // darkest faces a coloured fill rather than crushing twice.
+                float sculpted = smoothstep(0.05, 0.9, ndl) * light.shadowAttenuation;
+                float3 fill = max(ambient, 0.16 * _ShadowTint.rgb);
+                float3 graphic = albedo * (fill + light.color
+                    * lerp(_ShadowTint.rgb * 0.18, float3(0.9,0.9,0.9), sculpted));
+                col = lerp(col, graphic, _GraphicLight);
                 col = MixFog(col, i.fog);
                 return half4(col, 1);
             }

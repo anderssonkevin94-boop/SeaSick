@@ -33,7 +33,7 @@ namespace SeaSick.Terrain
             public int Tris => t.Length / 3;
         }
 
-        const string Path = "Flora/seasick_flora";
+        static string loadedPath;
         static Dictionary<string, Template> byName;
         static bool tried;
 
@@ -49,12 +49,19 @@ namespace SeaSick.Terrain
 
         static Dictionary<string, Template> Load()
         {
+            string path = SeaSick.World.WorldArtStyle.SceneryResource;
+            if (loadedPath != path)
+            {
+                loadedPath = path;
+                tried = false;
+                byName = null;
+            }
             if (tried) return byName;
             tried = true;
-            var go = Resources.Load<GameObject>(Path);
+            var go = Resources.Load<GameObject>(path);
             if (go == null)
             {
-                Debug.LogWarning("SceneryKit: Resources/" + Path + ".fbx not found -- islands fall back to procedural cones");
+                Debug.LogWarning("SceneryKit: Resources/" + path + ".fbx not found -- islands fall back to procedural cones");
                 return null;
             }
             var found = new Dictionary<string, Template>();
@@ -163,7 +170,8 @@ namespace SeaSick.Terrain
         /// template, however many props use it.
         public static Mesh MeshOf(string name)
         {
-            if (meshCache.TryGetValue(name, out var m) && m != null) return m;
+            string cacheKey = SeaSick.World.WorldArtStyle.SceneryResource + "/" + name;
+            if (meshCache.TryGetValue(cacheKey, out var m) && m != null) return m;
             var tp = Get(name);
             if (tp == null) return null;
             m = new Mesh { name = "Kit_" + name };
@@ -172,7 +180,7 @@ namespace SeaSick.Terrain
             m.SetColors(tp.c);
             m.SetTriangles(tp.t, 0);
             m.RecalculateBounds();
-            meshCache[name] = m;
+            meshCache[cacheKey] = m;
             return m;
         }
     }

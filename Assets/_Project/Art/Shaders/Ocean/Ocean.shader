@@ -60,6 +60,11 @@ Shader "SeaSick/Ocean"
         _SpecPowerNear ("Spec Power Near", Float) = 420
         _SpecPowerFar ("Spec Power Far", Float) = 48
         _SpecStrength ("Spec Strength", Range(0, 2)) = 0.75
+        _GraphicLight ("Graphic — wave face lighting", Range(0, 1)) = 0
+        _SurfaceDetail ("Graphic — small surface normals", Range(0, 1)) = 1
+        _ReflectionStrength ("Graphic — sky reflection", Range(0, 1)) = 1
+        _FoamBreakup ("Graphic — foam detail", Range(0, 1)) = 1
+        _FoamEdge ("Graphic — foam shape definition", Range(0, 1)) = 0
         // Kevin's, driven by hand with `WaterClarityTuner` 2026-09-06 and
         // printed with its P key -- NOT picked from arithmetic. Where he
         // landed, against the defaults I had proposed: the water is about
@@ -324,6 +329,8 @@ Shader "SeaSick/Ocean"
             half _FoamJThreshold, _FoamNoiseScale;
             half _FoamSnap, _FoamCrestGain, _FoamRelief, _FoamSparkle;
             half _FoamBandLift, _FoamLiftFar, _FoamTrailFloor, _FoamTrailGain;
+            half _GraphicLight, _ReflectionStrength, _FoamBreakup, _FoamEdge;
+            half _SurfaceDetail;
             half _SurfStrength, _SurfBreakFrac, _SurfSwashDepth;
             half _SpecPowerNear, _SpecPowerFar, _SpecStrength;
             half _MurkDepth, _RefractStrength, _ShoalDepth, _ShoalStrength;
@@ -606,7 +613,8 @@ Shader "SeaSick/Ocean"
                 // the foam block unchanged.
                 float4 dv;
                 float3 fold;
-                SampleDerivsAndFold(xz, input.wC * fade * input.envC,
+                float3 shadingBands = float3(1.0, lerp(0.5, 1.0, _SurfaceDetail), _SurfaceDetail);
+                SampleDerivsAndFold(xz, input.wC * fade * input.envC * shadingBands,
                                     wJ * input.envC, dv, fold);
                 float2 slope = dv.xy / max(float2(1.0, 1.0) + dv.zw, 0.15);
                 // Ripple sim contributes slope by finite difference + foam.
@@ -652,6 +660,10 @@ Shader "SeaSick/Ocean"
                 float localHs = max(env * _Ocean_DepthLimit.y, 0.5);
                 float heightLift = saturate(0.38 + input.heightY / localHs);
                 half3 body = lerp(deep, shallow, heightLift);
+                // Broad, continuous light on the real wave normals. No
+                // quantization: hard tone bands crawl when a wave rolls.
+                float faceLight = smoothstep(-0.2, 0.85, dot(n, L));
+                body *= lerp(1.0, lerp(0.72, 1.12, faceLight), _GraphicLight);
 
                 // The body colour carries no diffuse and no normal term — it
                 // is authored, not lit — so unlike the specular and the
@@ -918,6 +930,9 @@ Shader "SeaSick/Ocean"
                 // -- which is what this did -- they average into flat paint at
                 // one brightness; kept apart, a breaking crest reads white
                 // against its own wake, which is the whole shape of the thing.
+                // Keep the simulation's locations and history; simplify only
+                // the small fragment-side holes in its foam shapes.
+                noise = lerp(0.5, noise, _FoamBreakup);
                 float fresh = saturate(breaking * (0.35 + 0.65 * storm)
                                        * (0.4 + 1.5 * noise)) * env;
                 float residual = saturate(trail * (0.4 + 1.5 * noise)) * env;
@@ -927,8 +942,11 @@ Shader "SeaSick/Ocean"
                            * (0.45 + 0.90 * noise) * swd.y * _SurfStrength
                            * (1.0 - saturate(SS_SURF_OFF));
                 foamAmt = saturate(foamAmt + surf) * (1.0 - SS_LAYER_OFF.w);
+                float edgeWidth = max(fwidth(foamAmt) * 1.5, 0.06);
+                float shapedFoam = smoothstep(0.28 - edgeWidth, 0.52 + edgeWidth, foamAmt);
+                foamAmt = lerp(foamAmt, shapedFoam, _FoamEdge);
 
-                half3 col = lerp(body, sky, fresnel * (1.0 - foamAmt) * (1.0 - SS_LAYER_OFF.y));
+                half3 col = lerp(body, sky, fresnel * _ReflectionStrength * (1.0 - foamAmt) * (1.0 - SS_LAYER_OFF.y));
                 col += spec * sun.color;
                 // The 0.45 term rides sun.color and so dims itself once the
                 // moon takes over the key light, but the 0.55 is flat ambient
@@ -948,7 +966,7 @@ Shader "SeaSick/Ocean"
                 // field into sparkle noise), and the branch means clear water
                 // pays nothing for it.
                 float foamSpec = 0.0;
-                if (foamAmt > 0.02 && old < 0.5)
+                if (foamAmt > 0.02 && old < 0.5 && _FoamSparkle > 0.001)
                 {
                     float fs = _FoamNoiseScale * 3.7;
                     float e = 0.5 / max(fs, 0.01);

@@ -174,7 +174,7 @@ def flat_material(name, col):
 # shadow under each layer, and they are painted that way.
 
 def build_spruce(name, coll, h=13.0, tiers=6, sides=6, crown=0.165,
-                 lean=0.35, seed=1, base=0.13, trunk_sides=5, trunk_segs=3):
+                 lean=0.35, seed=1, base=0.13, trunk_sides=5, trunk_segs=3, tuck=0.66, tip_radius=0.009):
     rng = random.Random(seed)
     B = Build()
     lean_dir = Vector((1.0, 0.0))            # +X is downwind, as the resources do
@@ -227,9 +227,9 @@ def build_spruce(name, coll, h=13.0, tiers=6, sides=6, crown=0.165,
     for i in range(tiers):
         t = i / max(1, tiers - 1)
         zb = z0 + gap * i
-        R = (R0 * (1.0 - t) ** 1.15 + h * 0.009) * (0.84 if i == 0 else 1.0)
+        R = (R0 * (1.0 - t) ** 1.15 + h * tip_radius) * (0.84 if i == 0 else 1.0)
         prof.append((zb, R, True))
-        prof.append((zb + gap * 0.58, R * 0.66, False))
+        prof.append((zb + gap * 0.58, R * tuck, False))
     ring_ids = []
     for ri, (z, r, skirt) in enumerate(prof):
         c = ax(z)

@@ -39,10 +39,14 @@ namespace SeaSick.Terrain
         const float PileSpacing = 4.5f;
         const float RampRun = 7f;
 
-        static readonly Color32 Plank = new Color32(122, 96, 66, 255);
-        static readonly Color32 PlankDark = new Color32(98, 76, 52, 255);
-        static readonly Color32 PileWood = new Color32(78, 62, 46, 255);
-        static readonly Color32 Bollard = new Color32(64, 54, 44, 255);
+        static Color32 Plank => SeaSick.World.WorldArtStyle.Instance != null
+            ? new Color32(166, 122, 68, 255) : new Color32(122, 96, 66, 255);
+        static Color32 PlankDark => SeaSick.World.WorldArtStyle.Instance != null
+            ? new Color32(139, 98, 53, 255) : new Color32(98, 76, 52, 255);
+        static Color32 PileWood => SeaSick.World.WorldArtStyle.Instance != null
+            ? new Color32(99, 70, 43, 255) : new Color32(78, 62, 46, 255);
+        static Color32 Bollard => SeaSick.World.WorldArtStyle.Instance != null
+            ? new Color32(58, 62, 68, 255) : new Color32(64, 54, 44, 255);
 
         public static GameObject Build(Transform parent, HarbourSite.Site site,
             System.Func<float, float, float> height)
@@ -125,6 +129,8 @@ namespace SeaSick.Terrain
         /// on this island, with the cliff striation off.
         static Material DockMaterial()
         {
+            if (SeaSick.World.WorldArtStyle.SceneryOverride != null)
+                return SeaSick.World.WorldArtStyle.SceneryOverride;
             if (dockMat != null) return dockMat;
             var sh = Shader.Find("SeaSick/Terrain Vertex Color");
             dockMat = new Material(sh) { name = "Dock" };

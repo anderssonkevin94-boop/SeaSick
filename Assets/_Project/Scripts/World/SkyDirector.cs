@@ -72,6 +72,9 @@ namespace SeaSick.World
         [SerializeField] Color clearGround  = new Color(0.22f, 0.30f, 0.34f);
         [SerializeField] Color clearSun     = new Color(1f, 0.93f, 0.82f);
         [SerializeField] float clearSunIntensity = 1.15f;
+        [Header("Daylight fill")]
+        [SerializeField] Color clearAmbientEquator = new Color(0.30f, 0.36f, 0.40f);
+        [SerializeField] Color clearAmbientGround = new Color(0.10f, 0.13f, 0.14f);
         [SerializeField] float clearOvercast = 0.10f;
         [SerializeField] float clearFogStart = 600f;
         [SerializeField] float clearFogEnd = 1500f;
@@ -629,9 +632,9 @@ namespace SeaSick.World
             float ambientScale = Mathf.Lerp(1f, nightAmbient, Night01);
             Color skyAmb = p.horizon * Mathf.Lerp(0.95f, 0.62f, t);
             Color equatorAmb = Color.Lerp(
-                new Color(0.30f, 0.36f, 0.40f), new Color(0.115f, 0.135f, 0.135f), t) * ambientScale;
+                clearAmbientEquator, new Color(0.115f, 0.135f, 0.135f), t) * ambientScale;
             Color groundAmb = Color.Lerp(
-                new Color(0.10f, 0.13f, 0.14f), new Color(0.045f, 0.055f, 0.058f), t) * ambientScale;
+                clearAmbientGround, new Color(0.045f, 0.055f, 0.058f), t) * ambientScale;
 
             // Write-on-change, same reasoning as the material block above.
             if (!cacheValid || Changed(cAmbientSky, skyAmb))

@@ -798,6 +798,7 @@ namespace SeaSick.Ship
             if (lids != null) lids.Open(GunPositions(n));
 
             ApplyLoad();
+            SeaSick.World.WorldArtStyle.ApplyFleet(transform);
         }
 
         /// Bring the crew up to the number of berths she has, and stand them

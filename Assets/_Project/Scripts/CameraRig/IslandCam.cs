@@ -1,5 +1,6 @@
 using SeaSick.UI;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace SeaSick.CameraRig
 {
@@ -83,9 +84,12 @@ namespace SeaSick.CameraRig
             // Proportional, not additive: 10 m a second is a lurch at 40 m and
             // imperceptible at 500, and the eye reads zoom as a ratio anyway.
             float zoom = 0f;
-            if (Input.GetKey(KeyCode.Equals) || Input.GetKey(KeyCode.KeypadPlus)) zoom -= 1f;
-            if (Input.GetKey(KeyCode.Minus) || Input.GetKey(KeyCode.KeypadMinus)) zoom += 1f;
-            float wheel = Input.mouseScrollDelta.y;
+            var keys = Keyboard.current;
+            if (keys != null && (keys.equalsKey.isPressed || keys.numpadPlusKey.isPressed)) zoom -= 1f;
+            if (keys != null && (keys.minusKey.isPressed || keys.numpadMinusKey.isPressed)) zoom += 1f;
+            // Input System reports wheel motion in native units (120 per
+            // detent), whereas the old API returned detents.
+            float wheel = Mouse.current != null ? Mouse.current.scroll.ReadValue().y / 120f : 0f;
             if (Mathf.Abs(wheel) > 0.01f) zoom -= wheel * 3.5f;
 
             if (Mathf.Abs(zoom) > 0.0001f)
@@ -97,10 +101,10 @@ namespace SeaSick.CameraRig
 
             // --- pan ----------------------------------------------------------
             float x = 0f, z = 0f;
-            if (Input.GetKey(KeyCode.LeftArrow)) x -= 1f;
-            if (Input.GetKey(KeyCode.RightArrow)) x += 1f;
-            if (Input.GetKey(KeyCode.UpArrow)) z += 1f;
-            if (Input.GetKey(KeyCode.DownArrow)) z -= 1f;
+            if (keys != null && keys.leftArrowKey.isPressed) x -= 1f;
+            if (keys != null && keys.rightArrowKey.isPressed) x += 1f;
+            if (keys != null && keys.upArrowKey.isPressed) z += 1f;
+            if (keys != null && keys.downArrowKey.isPressed) z -= 1f;
 
             if (x != 0f || z != 0f)
             {
@@ -128,7 +132,7 @@ namespace SeaSick.CameraRig
                 wantPan = wantPan.normalized * reach;
 
             // Home the frame with the END key -- cheaper than panning back.
-            if (Input.GetKeyDown(KeyCode.End)) { wantPan = Vector3.zero; Driven = true; }
+            if (keys != null && keys.endKey.wasPressedThisFrame) { wantPan = Vector3.zero; Driven = true; }
 
             Settle();
         }

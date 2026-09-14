@@ -11,6 +11,8 @@ namespace SeaSick.Terrain
     {
         [Header("World")]
         public int seed = 1337;
+        [Tooltip("Use the graphic art palette; changes vertex colours only, never terrain shape.")]
+        public bool graphicArtPalette;
         [Tooltip("Water surface height. The whole ocean stack assumes 0.")]
         public float seaLevel = 0f;
         [Tooltip("0 = unbounded. Otherwise everything beyond this radius (metres from origin) is ocean.")]
