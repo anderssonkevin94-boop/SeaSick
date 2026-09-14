@@ -45,16 +45,16 @@ THE SETTLEMENT
    0.89 ha of joined-up buildable ground, core 78 m, framed at 133 m (extent 99 m -- tendrils), compound 57 m across, centred (5, 46) at 3 m
 
 THE VIEW
-   overview ON, 132 m up, 252 m from what it is framing, far clip 8600 m, screen 1531x937
+   overview ON, 8 m up, 151 m from what it is framing, far clip 8600 m, screen 1531x937
    a crew member is 1.03% of screen height = 10 px in this window, 24 px on a 2340-tall phone
    on a phone: hut 43 px,  longhouse 99 px,  watchtower 156 px,  the ship 343 px long
    ground in frame: about 165 m tall
-   tilt 32 deg above the horizon
+   tilt 0 deg above the horizon
    the dock asks for: centre (-76, -25), camera bearing 133 deg
    the camera gives: centre (-76, -25) = 41 m inland of the root (his 41), 22 m to starboard (his 22)
-   span 252 m (his 254), fov 36 (his 36)
-   off the dock's own framing by 0 deg and 0 m   -- matches
+   span 151 m (his 254), fov 57 (his 36)
+   off the dock's own framing by 0 deg and 0 m   -- DOES NOT MATCH
    the frame holds 84 m of ground ACROSS (portrait, measured) against an island 207 m wide  ->  about 41% of its width
-   the ship: 4 of 4 hull corners in frame -- fully in shot
-   the pier head: in frame
+   the ship: 0 of 4 hull corners in frame -- NOT VISIBLE
+   the pier head: NOT VISIBLE
    the settlement holds about 39 buildings on 15 m plots (village radius 38 m)

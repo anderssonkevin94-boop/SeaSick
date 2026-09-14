@@ -126,9 +126,8 @@ Shader "SeaSick/Terrain Vertex Color"
             half4 frag(Varyings i) : SV_Target
             {
                 float3 n = normalize(i.normalWS);
-                float3 planeN = normalize(cross(ddy(i.positionWS), ddx(i.positionWS)));
-                planeN *= dot(planeN, n) < 0 ? -1 : 1;
-                n = normalize(lerp(n, planeN, _GraphicLight * (1.0 - smoothstep(0.55, 0.85, n.y))));
+                // The heightfield's finite-difference normals bridge mesh LODs.
+                // Derivative triangle normals exposed every narrow grid strip.
                 float3 albedo = i.color.rgb * _Tint.rgb;
 
                 // Fade the whole detail layer out with distance. Without this
@@ -176,10 +175,13 @@ Shader "SeaSick/Terrain Vertex Color"
                 float3 col = albedo * (diffuse + ambient);
                 // Vertex colours already carry canopy/rock form. Give their
                 // darkest faces a coloured fill rather than crushing twice.
-                float sculpted = smoothstep(0.05, 0.9, ndl) * light.shadowAttenuation;
-                float3 fill = max(ambient, 0.16 * _ShadowTint.rgb);
+                // Two broad cel bands with a small antialiased transition.
+                float sun = ndl * light.shadowAttenuation;
+                float bandWidth = max(.025, fwidth(sun) * 1.5);
+                float sculpted = smoothstep(.22 - bandWidth, .22 + bandWidth, sun);
+                float3 fill = max(ambient * .6, 0.22 * _ShadowTint.rgb);
                 float3 graphic = albedo * (fill + light.color
-                    * lerp(_ShadowTint.rgb * 0.18, float3(0.9,0.9,0.9), sculpted));
+                    * lerp(_ShadowTint.rgb * 0.38, float3(1.02,0.97,0.85), sculpted));
                 col = lerp(col, graphic, _GraphicLight);
                 col = MixFog(col, i.fog);
                 return half4(col, 1);

@@ -948,16 +948,34 @@ namespace SeaSick.Terrain
                     s.height = prm.seaLevel + math.lerp(h, shaped, inland * (1f - home));
                     // Home's northern half becomes a two-level wooded bluff;
                     // the cove and village foreground remain low and usable.
-                    float2 q = p - prm.homeIsleCentre;
-                    float rear = math.dot(q, -prm.homeIsleCoveDir);
-                    float side = math.dot(q, new float2(prm.homeIsleCoveDir.y, -prm.homeIsleCoveDir.x));
-                    float wav = 7f * math.sin(side / 29f) + 3f * math.sin(side / 13f + .7f);
-                    float shore = math.smoothstep(4.85f, 5.18f, h);
-                    float ramp1 = 1f - math.smoothstep(5f, 15f, math.abs(side + 22f));
-                    float ramp2 = 1f - math.smoothstep(5f, 15f, math.abs(side - 23f));
-                    float first = math.saturate((rear - 12f - wav) / math.lerp(9f, 38f, ramp1));
-                    float second = math.saturate((rear - 44f - wav) / math.lerp(10f, 38f, ramp2));
-                    s.height += home * shore * (first * 19f + second * (20f + 4f * math.sin(side / 42f + .8f)));
+                    if (home > 0f)
+                    {
+                        float2 q = p - prm.homeIsleCentre;
+                        float rear = math.dot(q, -prm.homeIsleCoveDir);
+                        float side = math.dot(q, new float2(prm.homeIsleCoveDir.y, -prm.homeIsleCoveDir.x));
+                        float wav = 7f * math.sin(side / 29f) + 3f * math.sin(side / 13f + .7f);
+                        // Broad oblique supporting planes form the coastal bluff.
+                        // Multiplying 40 m of relief by a sub-metre height band
+                        // made nearly vertical, grid-sized ribs along the beach.
+                        float edgeRise = 1000f;
+                        for (int face = 0; face < 9; face++)
+                        {
+                            float angle = face * (6.2831853f / 9f) + .17f;
+                            float2 normal = new float2(math.cos(angle), math.sin(angle));
+                            float support = prm.homeIsleRadius * (.85f + .035f * math.sin(face * 2.4f));
+                            float inset = support - math.dot(q + prm.homeIsleCoveDir * 8f, normal);
+                            edgeRise = math.min(edgeRise, math.max(0f,inset) * (1.15f + .25f * math.sin(face * 1.7f)));
+                        }
+                        float shore = math.smoothstep(4f, 5f, h);
+                        float ramp1 = 1f - math.smoothstep(5f, 15f, math.abs(side + 22f));
+                        float ramp2 = 1f - math.smoothstep(9f, 23f, math.abs(side - 23f));
+                        float first = math.saturate((rear - 12f - wav) / math.lerp(9f, 38f, ramp1));
+                        float second = math.saturate((rear - 44f - wav) / math.lerp(10f, 46f, ramp2));
+                        float bluff = math.min(edgeRise, first * 19f + second * (20f + 4f * math.sin(side / 42f + .8f)));
+                        float access = 1f - math.smoothstep(7f, 40f, math.abs(side + 23f));
+                        bluff = math.lerp(bluff, math.min(bluff, math.max(0f,rear) * .55f), access);
+                        s.height += home * shore * bluff;
+                    }
                 }
             }
             return s;

@@ -39,7 +39,7 @@ One island-level scheduler handles tree LOD/culling; the standalone prefab LODGr
 
 - Runtime and editor C# compile cleanly; the terrain shader reports no Unity compile messages.
 - Individual harvest test: selected tree disappears, neighbour stays active, shared source mesh is unchanged.
-- Home: 174 individual trees. A 2 m sampled connectivity check from the settlement reaches all 174 over land with local slope at most 0.70; the highest connected sample is 48.2 m. This verifies terrain connectivity, not a complete autonomous crew voyage.
+- Home: 158 individual trees. A 2 m sampled connectivity check from the settlement reaches all 158 over land with local slope at most 0.70; the highest connected sample is 43.1 m. This verifies terrain connectivity, not a complete autonomous crew voyage.
 - HarbourProbe: 3.1 m minimum water under the tested footprint, afloat at the dock; about 0.89 ha of connected buildable ground. Full report: `storybook-harbour-validation.txt`.
 - Desktop and portrait camera renders reviewed. These omit IMGUI and do not establish HUD validation.
 - Reproducible checks: `unity --json command eval_file --file tools/validation/storybook-harvest.cs` and `storybook-access.cs`, in play mode. These temporarily harvest a tree; stop play afterwards. Reports are in this directory.
@@ -62,3 +62,11 @@ Bushes vary in spread and height. Rock variants vary aspect, slab thickness and 
 Home beach rolling is attenuated below the meadow and bluff shaping starts above the beach. Grass uses a narrower, lightly irregular transition into clean meadow colour, supported by physical tufts. Upper shelf heights and outlines vary while retaining tested access ramps.
 
 Current renders: `storybook-variety-home.png`, `storybook-variety-island.png`, `storybook-variety-portrait.png`. These are staged art cameras, not HUD tests. Mobile GPU performance remains unmeasured.
+
+## Broad cliff planes and toon lighting
+
+The home bluff now intersects nine oblique supporting planes with its terraces. This replaces the narrow shoreline-height multiplier that extruded tall relief into metre-wide vertical ribs. Supporting faces vary in angle, extent and slope. A broad eastern access slope links the wooded shelves. These are changes to the shared terrain height function, so collision and crew queries follow the visible terrain; no decorative cliff shell hides different collision geometry.
+
+The shared terrain/scenery shader now uses two cel lighting bands with an antialiased threshold, warm direct light and cool shadow fill. It uses mesh normals rather than derivative triangle normals, which previously exposed thin terrain grid strips. The existing GraphicLight material control gates the treatment; the sailing and water shaders are unchanged. This is a Wind Waker-inspired lighting trial judged against option B, not an exact reproduction.
+
+Validation: runtime/editor C# clean, Unity shader diagnostics empty, individual harvest passes, all 158 home trees connected at sampled slope <=0.70 (highest reached 43.1 m), berth footprint afloat at 3.1 m minimum depth. Final art camera renders: `toon-cliffs-review.png`, `toon-cliffs-low.png`, `toon-cliffs-portrait.png`. Camera renders omit HUD. The base terrain remains a heightfield, so shelf edges retain some triangulation; the narrow vertical ribbing is removed.
