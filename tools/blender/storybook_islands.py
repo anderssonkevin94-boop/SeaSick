@@ -108,6 +108,26 @@ def stone(name,coll,seed,tall=False,ore=False):
         for i in range(4):parts.append(crown((math.cos(i*1.8)*.65,math.sin(i*1.8)*.6,.5),(.22,.19,.21),(.36,.44,.43),coll,seed+i,True))
     return join(parts,name)
 
+def bluff(name,coll,variant):
+    # A handful of broad geological planes, rather than a scaled pillar.
+    outlines=[
+        [(-1.7,-.5),(-.6,-.78),(1.65,-.6),(1.8,.35),(.9,.72),(-1.65,.6)],
+        [(-1.5,-.6),(.2,-.88),(1.75,-.15),(1.25,.68),(-1.7,.55)],
+        [(-1.8,-.3),(-.9,-.75),(1.4,-.7),(1.75,.6),(-1.5,.55)],
+        [(-1.6,-.6),(.8,-.8),(1.8,-.05),(1.2,.8),(-1.75,.5)],
+    ]
+    outline=outlines[variant];n=len(outline);vs=[]
+    for z,scale,lean in [(-.12,1.04,0),(.12,1,0),(.62,.92,.16),(1,.60,.35)]:
+        for x,y in outline:
+            px=x*scale+lean*(-1 if variant%2 else 1)
+            py=y*scale+lean*.5
+            vs.append((px,py,z*(1+.22*px*(1 if variant<2 else -1)+.13*py)))
+    fs=[tuple(range(n-1,-1,-1))]
+    for row in range(3):
+        fs += [(row*n+i,row*n+(i+1)%n,(row+1)*n+(i+1)%n,(row+1)*n+i) for i in range(n)]
+    fs.append(tuple(range(3*n,4*n)))
+    return mesh(name,vs,fs,[(.43,.42,.35),(.46,.44,.36),(.40,.415,.37),(.45,.43,.35)][variant],coll)
+
 def shrub(name,coll,seed,lod=False):
     parts=[]
     variant=int(name.split('_')[1]);spread=[.75,1.25,.55][variant];height=[1.2,.7,1.6][variant]
@@ -145,7 +165,7 @@ def build():
         bpy.context.window.scene=scene
         for o in list(scene.objects):bpy.data.objects.remove(o,do_unlink=True)
         coll=bpy.data.collections.new('Storybook_Kit');scene.collection.children.link(coll)
-        names=['Broad','Broad_B','Broad_C','Broad_Young','Spruce','Spruce_B','Spruce_Young','Palm','Ore','Fern','Fern_B','Grass','Grass_B','Grass_Dry','Sticks','Driftwood']+[f'{k}_{i}' for k,n in [('Boulder',4),('Cliff',3),('Scrub',3),('Crop',3)] for i in range(n)]
+        names=['Broad','Broad_B','Broad_C','Broad_Young','Spruce','Spruce_B','Spruce_Young','Palm','Ore','Fern','Fern_B','Grass','Grass_B','Grass_Dry','Sticks','Driftwood']+[f'{k}_{i}' for k,n in [('Boulder',4),('Cliff',3),('Bluff',4),('Scrub',3),('Crop',3)] for i in range(n)]
         for name in names:
             for nm in [name,name+'_LOD1']:
                 old=bpy.data.objects.get(nm)
@@ -157,6 +177,7 @@ def build():
             elif name.startswith('Spruce'):make=lambda lod,n=name,j=i:pine(n+('_LOD1' if lod else ''),coll,j+7,lod)
             elif name.startswith('Scrub'):make=lambda lod,n=name,j=i:shrub(n+('_LOD1' if lod else ''),coll,j+7,lod)
             if make:pair=[make(False),make(True)]
+            elif name.startswith('Bluff'):pair=[bluff(name,coll,int(name.split('_')[1]))]
             elif name.startswith('Boulder') or name.startswith('Cliff') or name=='Ore':pair=[stone(name,coll,i+10,name.startswith('Cliff'),name=='Ore')]
             elif name.startswith(('Fern','Grass')):pair=[fronds(name,coll,i,name.startswith('Grass'))]
             elif name in ('Sticks','Driftwood'):pair=[sticks(name,coll)]

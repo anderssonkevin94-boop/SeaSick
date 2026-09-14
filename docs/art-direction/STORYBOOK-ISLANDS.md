@@ -4,7 +4,7 @@ Implemented in Sea.unity using Blender MCP. This replaces the former conifer/sha
 
 ## Assets
 
-`Assets/_Project/Resources/IslandAssets/` contains 29 standalone prefabs, each backed by its own FBX in `Resources/Flora/Storybook/`:
+`Assets/_Project/Resources/IslandAssets/` contains 33 standalone prefabs, each backed by its own FBX in `Resources/Flora/Storybook/`:
 
 | Family | Prefabs | Treatment |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ Implemented in Sea.unity using Blender MCP. This replaces the former conifer/sha
 | Ore | Ore | Distinct mineral inclusions |
 | Crops | Crop_0–2 | Regenerated wheat from the existing resource builder |
 
-The library has 43 meshes including paired LODs. Prefabs carry IslandAsset identity, shared vertex-colour materials, LOD groups, and trigger bounds for resource families. Generator: `tools/blender/storybook_islands.py`. Editable Blender scene: `tools/blender/source/storybook-islands.blend`. Blender exports linear vertex colours; exporting sRGB caused double conversion and visibly pale vegetation in Unity. The original Blender scene/file is preserved.
+The library has 47 meshes including paired LODs. Prefabs carry IslandAsset identity, shared vertex-colour materials, LOD groups, and trigger bounds for resource families. Generator: `tools/blender/storybook_islands.py`. Editable Blender scene: `tools/blender/source/storybook-islands.blend`. Blender exports linear vertex colours; exporting sRGB caused double conversion and visibly pale vegetation in Unity. The original Blender scene/file is preserved.
 
 ## Gameplay integration
 
@@ -80,3 +80,9 @@ Blender MCP regenerated the grass/fern colours to match the linear meadow palett
 Ocean reflection strength increases from .26 to .85, specular strength .25 to 1.15, near/far powers 64/24 to 160/60, and surface detail .3 to .5. These are material changes; the sailing/wave simulation is unchanged.
 
 Checks: clean runtime/editor compilation, no terrain-shader diagnostics, individual harvesting passes, 158/158 home tree positions connected by the terrain slope probe. The latter tests terrain connectivity, not collisions with decorative dressing. Art renders: `crisp-island-review.png`, `crisp-island-portrait.png`, `crisp-island-water.png`. GPU and HUD validation remain outside these camera captures.
+
+## Broad bluff masses
+
+Four Blender-authored Bluff_0–3 modules replace the dense Cliff module rows on plateau sides. The new forms have wide asymmetric outlines, tapered shoulders and slanted crowns. Placement uses shuffled slope candidates with footprint-based separation, yielding a few 25–43 m masses instead of equal blocks at fixed intervals. Depth and height are fitted to uphill/downhill samples; each formation has two or three smaller, variably scaled stones where suitable downhill ground exists. Shoreline Cliff assets remain available separately.
+
+The Blender scene and individual FBXs/prefabs include the four new modules. They remain decorative rock dressing over the terrain heightfield. Runtime/editor compilation passes, individual harvesting passes, and the terrain connectivity probe still reaches 158/158 home trees. This is not a full crew/collision test of decorative dressing. Current staged desktop/portrait views: `broad-bluffs-low.png`, `broad-bluffs-review.png`, `broad-bluffs-portrait.png`.

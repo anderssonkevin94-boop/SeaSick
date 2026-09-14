@@ -726,32 +726,66 @@ namespace SeaSick.Terrain
                 }
             }
 
-            // Authored flat-faced outcrops break up long heightfield walls.
-            // Confine them to steep rock, away from the traversable shelves.
+            // Broad rock masses have their own spacing, unrelated to tree or
+            // shore grids. A few long faces establish the bluff silhouette.
             if (individualTrees)
             {
-                for (float z = -meanR; z < meanR; z += 7f)
-                for (float x = -meanR; x < meanR; x += 11f)
+                var candidates = new List<Vector3>();
+                var accepted = new List<Vector3>(); // x/z centre, y footprint radius
+                var brng = new System.Random(seed * 479 + 131);
+                for (float z = -meanR; z < meanR; z += 6f)
+                for (float x = -meanR; x < meanR; x += 6f)
                 {
-                    float wx=centre.x+x, wz=centre.z+z;
+                    float wx=centre.x+x+(float)brng.NextDouble()*3f, wz=centre.z+z+(float)brng.NextDouble()*3f;
                     float h=height(wx,wz);
                     if(h<9f || h>55f || (keepOut!=null && keepOut(wx,wz)))continue;
                     float dx=(height(wx+2,wz)-height(wx-2,wz))*.25f;
                     float dz=(height(wx,wz+2)-height(wx,wz-2))*.25f;
                     float slope=Mathf.Sqrt(dx*dx+dz*dz);
-                    if(slope<.80f || slope>2.8f)continue;
-                    float patch=Mathf.PerlinNoise(wx*.047f+19,wz*.047f+33);
-                    if(patch<.25f)continue;
-                    int variant=Mathf.Abs((int)(x+z))%3;
-                    var tp=SceneryKit.Get("Cliff_"+variant);if(tp==null)continue;
-                    float high=height(wx+dx/slope*8,wz+dz/slope*8);
-                    float low=height(wx-dx/slope*8,wz-dz/slope*8);
-                    float rockHeight=Mathf.Clamp(high-low+1f,7f,25f);
-                    var pos=new Vector3(wx-dx/slope*1.2f,low-.7f,wz-dz/slope*1.2f);
-                    var scale=new Vector3(7f+patch*3f,rockHeight/Mathf.Max(.1f,tp.height),4.3f);
-                    var cb=CellFor(wx,wz);
-                    StampBoth(cb,tp,tp,pos,Mathf.Atan2(dx,dz)+(patch-.5f)*.35f,scale,scale);
-                    cb.Grow(pos,12f,rockHeight);
+                    if(slope>.9f && slope<2.8f)candidates.Add(new Vector3(wx,h,wz));
+                }
+                // Shuffle prevents scan rows from turning into masonry courses.
+                for(int i=candidates.Count-1;i>0;i--){int j=brng.Next(i+1);var t=candidates[i];candidates[i]=candidates[j];candidates[j]=t;}
+                foreach(var candidate in candidates)
+                {
+                    float wx=candidate.x,wz=candidate.z;
+                    float width=Mathf.Lerp(25f,43f,(float)brng.NextDouble());
+                    bool crowded=false;
+                    foreach(var other in accepted)
+                        if(new Vector2(wx-other.x,wz-other.z).sqrMagnitude < Mathf.Pow((width*.5f+other.y)*.72f,2f)){crowded=true;break;}
+                    if(crowded)continue;
+                    float dx=(height(wx+2,wz)-height(wx-2,wz))*.25f;
+                    float dz=(height(wx,wz+2)-height(wx,wz-2))*.25f;
+                    float slope=Mathf.Sqrt(dx*dx+dz*dz);
+                    float high=candidate.y,low=candidate.y;
+                    for(int sampleOffset=2;sampleOffset<=16;sampleOffset+=2)
+                    {
+                        high=Mathf.Max(high,height(wx+dx/slope*sampleOffset,wz+dz/slope*sampleOffset));
+                        low=Mathf.Min(low,height(wx-dx/slope*sampleOffset,wz-dz/slope*sampleOffset));
+                    }
+                    float rockHeight=Mathf.Clamp(high-low+.5f,8f,27f);
+                    int variant=brng.Next(4);var tp=SceneryKit.Get("Bluff_"+variant);if(tp==null)continue;
+                    float yaw=Mathf.Atan2(dx,dz)+((float)brng.NextDouble()-.5f)*.20f;
+                    var pos=new Vector3(wx-dx/slope*2.5f,low-.8f,wz-dz/slope*2.5f);
+                    var scale=new Vector3(width/3.5f,rockHeight/Mathf.Max(.1f,tp.height),Mathf.Lerp(8f,11f,(float)brng.NextDouble()));
+                    var cb=CellFor(wx,wz);StampBoth(cb,tp,tp,pos,yaw,scale,scale);cb.Grow(pos,width*.6f,rockHeight);
+                    accepted.Add(new Vector3(wx,width*.5f,wz));
+                    // Two or three subordinate stones, placed on the downhill
+                    // ground with varied sizes instead of another repeated row.
+                    int stones=brng.Next(2,4);
+                    for(int k=0;k<stones;k++)
+                    {
+                        float along=((float)brng.NextDouble()-.5f)*width;
+                        float outwards=10f+(float)brng.NextDouble()*4f;
+                        float bx=wx-dx/slope*outwards+dz/slope*along;
+                        float bz=wz-dz/slope*outwards-dx/slope*along;
+                        float by=height(bx,bz);
+                        if(by<3f || (keepOut!=null && keepOut(bx,bz)) || Mathf.Abs(height(bx+1,bz)-by)>.6f || Mathf.Abs(height(bx,bz+1)-by)>.6f)continue;
+                        var small=SceneryKit.Get("Boulder_"+brng.Next(4));if(small==null)continue;
+                        float size=Mathf.Lerp(.8f,3.8f,Mathf.Pow((float)brng.NextDouble(),1.5f));
+                        var foot=new Vector3(bx,by-size*.12f,bz);var sc=new Vector3(size,size*Mathf.Lerp(.6f,1.2f,(float)brng.NextDouble()),size);
+                        var cell=CellFor(bx,bz);StampBoth(cell,small,small,foot,(float)brng.NextDouble()*Mathf.PI*2f,sc,sc);cell.Grow(foot,size*2f,size*2f);
+                    }
                 }
             }
 

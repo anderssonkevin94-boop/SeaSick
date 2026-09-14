@@ -134,8 +134,8 @@ LODGroup:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5628729414964528736}
   serializedVersion: 3
-  m_LocalReferencePoint: {x: -0.008238554, y: 0.26879692, z: -0.04400283}
-  m_Size: 2.742146
+  m_LocalReferencePoint: {x: 0.026893139, y: 0.2869296, z: 0.066601396}
+  m_Size: 3.1332784
   m_FadeMode: 0
   m_AnimateCrossFading: 0
   m_LastLODIsBillboard: 0
@@ -164,7 +164,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.IslandAsset
   assetId: Crop_0
   resource: Grain
-  authoredHeight: 1.6045537
+  authoredHeight: 1.6630476
 --- !u!65 &9124255344449954584
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -184,8 +184,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 2.502818, y: 1.6045537, z: 2.6630182}
-  m_Center: {x: -0.08585715, y: 0.25227678, z: -0.004438877}
+  m_Size: {x: 2.8494377, y: 1.6630476, z: 2.7988513}
+  m_Center: {x: -0.11502719, y: 0.28152382, z: 0.066601396}
 --- !u!1 &7019769348991301745
 GameObject:
   m_ObjectHideFlags: 0
