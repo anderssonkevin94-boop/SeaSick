@@ -1,0 +1,55 @@
+'Island_Home' centre (12, 81), mean radius 104 m
+44 shore cells passed all four tests (depth, approach, backshore, land)
+
+best candidates (score = pier + backshore + flat behind + shelter):
+   score   pier  depth  backslope  flat-behind  shelter   at
+    4.26    22m   3.1m       4 deg       0.27 ha      38%   (-30, -33)
+    4.13    40m   3.2m       2 deg       0.53 ha       0%   (102, 21)
+    4.07    44m   3.0m       1 deg       0.49 ha       0%   (-102, 69)
+
+CHOSEN:
+   root  (-30, -33) standing 0.8 m above the water
+   head  (-12, -46)
+   berth (-7, -40)
+   pier 22 m = 0.9 ship lengths, 3.1 m under her at the head
+   backshore 4 deg, 0.27 ha buildable within 90 m, shelter 38%
+   depth from the root, seaward:
+         0 m:    0.8 m
+        20 m:   -5.2 m
+        40 m:   -5.4 m
+        60 m:   -5.4 m
+        80 m:   -8.4 m
+       100 m:  -11.6 m
+       120 m:  -12.0 m
+       140 m:  -12.0 m
+       160 m:  -12.0 m
+       180 m:  -13.4 m
+   from the ship's spawn: 26 m, shallowest water on the straight line -5.4 m -- clear
+
+   the dock stands on 'Island_Home' -- home
+DOCK AS BUILT
+   428 verts, 214 tris
+   highest point 2.70 m above sea level (bollards stand on decking at 1.80)
+   deepest pile foot -6.0 m
+   highest vertex normal (0.00, 1.00, 0.00) -- facing the sky   (72 up / 72 down)
+   ground under the decking: worst is -1.66 m at 7 m out -- clear
+   water under her whole 24.2 x 8.4 m box: 3.1 m at its shallowest -- afloat
+   daylight between her side and the pier head: 0.90 m
+
+THE SHIP
+   25.9 m off her berth, heading 11 deg from parallel
+   3.0 m of water under her, shallowest -- afloat
+   state Underway, not at a dock
+
+THE SETTLEMENT
+   0.96 ha of joined-up buildable ground, core 79 m, framed at 134 m (extent 102 m -- tendrils), compound 57 m across, centred (7, 48) at 4 m
+
+THE VIEW
+   overview off, 9 m up, 254 m from what it is framing, far clip 8600 m, screen 2744x1582
+   a crew member is 0.59% of screen height = 9 px in this window, 14 px on a 2340-tall phone
+   on a phone: hut 24 px,  longhouse 57 px,  watchtower 89 px,  the ship 196 px long
+   ground in frame: about 288 m tall
+   tilt 8 deg above the horizon
+   the ship: 4 of 4 hull corners in frame -- fully in shot
+   the pier head: in frame
+   the settlement holds about 42 buildings on 15 m plots (village radius 38 m)

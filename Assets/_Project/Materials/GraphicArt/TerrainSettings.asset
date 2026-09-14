@@ -14,26 +14,28 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.TerrainSettings
   seed: 1337
   graphicArtPalette: 1
+  storybookLandforms: 1
+  individualTrees: 1
   seaLevel: 0
   worldRadius: 0
   worldEdgeFalloff: 500
   worldOffset: {x: -58.950436, y: 4818.805}
   homeIsle: 1
   homeIsleCentre: {x: 0, y: 66}
-  homeIsleRadius: 74
-  homeIsleShape: 11
+  homeIsleRadius: 110
+  homeIsleShape: 19
   homeIsleShapeFrequency: 0.010526316
   homeIsleTop: 5.2
   homeIsleRoll: 0.55
   homeIsleRollFrequency: 0.018181818
-  homeIsleShoreRun: 28
+  homeIsleShoreRun: 23
   homeIsleForeshore: 72
   homeIsleFadeStart: 210
   homeIsleFadeEnd: 470
   homeIsleCoveBearing: 180
-  homeIsleCoveMouth: 102
+  homeIsleCoveMouth: 145
   homeIsleCoveHead: 34
-  homeIsleCoveHalfMouth: 13
+  homeIsleCoveHalfMouth: 22
   homeIsleCoveHalfHead: 20
   homeIsleCoveHalfBasin: 24
   homeIsleCoveBasin: 46
@@ -465,19 +467,19 @@ MonoBehaviour:
   vegSlopeSoft: 0.6
   vegSlopeHard: 1
   vegRockSuppress: 0.88
-  treeSpacing: 5
+  treeSpacing: 9
   palmLatitude: -1400
   palmBand: 600
   sceneryLod0Distance: 220
-  treeDensity: 0.8
-  sandTreeMargin: 0.6
+  treeDensity: 0.72
+  sandTreeMargin: 0.25
   palmOnSand: 0.06
   broadleafIslands: 0.4
   standSpan: 0.55
-  standContrast: 2.7
-  standFloor: 0.13
+  standContrast: 3.2
+  standFloor: 0.1
   treeWarp: 1.5
-  scrubChance: 0.45
+  scrubChance: 0.65
   fieldSlopeMax: 0.17
   fieldMaxRise: 26
   cropSpacing: 1.95

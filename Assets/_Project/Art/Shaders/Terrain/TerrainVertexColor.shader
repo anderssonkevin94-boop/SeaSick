@@ -39,6 +39,7 @@ Shader "SeaSick/Terrain Vertex Color"
             Tags { "LightMode" = "UniversalForward" }
             HLSLPROGRAM
             #pragma vertex vert
+            #pragma multi_compile_instancing
             #pragma fragment frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fog
@@ -100,7 +101,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 return q;
             }
 
-            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; };
+            struct Attributes { float4 positionOS : POSITION; float3 normalOS : NORMAL; float4 color : COLOR; UNITY_VERTEX_INPUT_INSTANCE_ID };
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
@@ -112,6 +113,7 @@ Shader "SeaSick/Terrain Vertex Color"
 
             Varyings vert(Attributes v)
             {
+                UNITY_SETUP_INSTANCE_ID(v);
                 Varyings o;
                 o.positionWS = TransformObjectToWorld(v.positionOS.xyz);
                 o.positionCS = TransformWorldToHClip(o.positionWS);
@@ -124,6 +126,9 @@ Shader "SeaSick/Terrain Vertex Color"
             half4 frag(Varyings i) : SV_Target
             {
                 float3 n = normalize(i.normalWS);
+                float3 planeN = normalize(cross(ddy(i.positionWS), ddx(i.positionWS)));
+                planeN *= dot(planeN, n) < 0 ? -1 : 1;
+                n = normalize(lerp(n, planeN, _GraphicLight * (1.0 - smoothstep(0.55, 0.85, n.y))));
                 float3 albedo = i.color.rgb * _Tint.rgb;
 
                 // Fade the whole detail layer out with distance. Without this
@@ -189,13 +194,15 @@ Shader "SeaSick/Terrain Vertex Color"
             ZWrite On ZTest LEqual ColorMask 0
             HLSLPROGRAM
             #pragma vertex vertShadow
+            #pragma multi_compile_instancing
             #pragma fragment fragShadow
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
             float3 _LightDirection;
-            struct A { float4 positionOS : POSITION; float3 normalOS : NORMAL; };
+            struct A { float4 positionOS : POSITION; float3 normalOS : NORMAL; UNITY_VERTEX_INPUT_INSTANCE_ID };
             float4 vertShadow(A v) : SV_POSITION
             {
+                UNITY_SETUP_INSTANCE_ID(v);
                 float3 wp = TransformObjectToWorld(v.positionOS.xyz);
                 float3 wn = TransformObjectToWorldNormal(v.normalOS);
                 float4 cs = TransformWorldToHClip(ApplyShadowBias(wp, wn, _LightDirection));

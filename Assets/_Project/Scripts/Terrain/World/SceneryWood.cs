@@ -4,7 +4,11 @@ using SeaSick.World;
 
 namespace SeaSick.Terrain
 {
-    /// **Makes the baked wood cuttable.**
+    /// Harvest index for both standalone storybook tree instances and legacy
+    /// welded scenery. Each standalone tree owns its prefab instance; felling
+    /// disables only that instance. Its meshes remain shared and untouched.
+    ///
+    /// Legacy batching history:
     ///
     /// Kevin: *"most of the trees are cosmetic and dont even get cut down."*
     /// Measured, he was being generous: 1346 scenery trees against 26
@@ -39,6 +43,7 @@ namespace SeaSick.Terrain
             public int vertStart, vertCount;       // in the cell's LOD0 mesh
             public int lod1Start, lod1Count;       // in the cell's LOD1 mesh (0 if none)
             public bool felled;
+            public GameObject instance;
         }
 
         /// One welded mesh pair and the renderers that draw it. `v0`/`v1`
@@ -82,6 +87,12 @@ namespace SeaSick.Terrain
             if (trees == null || i < 0 || i >= trees.Length || trees[i].felled) return;
             var t = trees[i];
             var c = cells[t.cell];
+            if (t.instance != null)
+            {
+                t.instance.SetActive(false);
+                trees[i].felled = true;
+                return;
+            }
             if (c.v0 != null)
             {
                 for (int v = t.vertStart; v < t.vertStart + t.vertCount && v < c.v0.Length; v++)
@@ -107,6 +118,8 @@ namespace SeaSick.Terrain
             for (int i = 0; i < trees.Length; i++)
             {
                 var t = trees[i];
+                if (t.instance != null) { if (!t.instance.activeSelf) n++; continue; }
+                if (t.felled && t.vertCount == 0) { n++; continue; }
                 var c = cells[t.cell];
                 var v = c.lod0 != null ? c.lod0.vertices : null;
                 if (v == null || t.vertCount < 2) continue;
@@ -143,7 +156,7 @@ namespace SeaSick.Terrain
             foreach (var (_, i) in candidates)
             {
                 if (live.Count >= max) break;
-                var go = new GameObject("Tree_" + i);
+                var go = trees[i].instance != null ? trees[i].instance : new GameObject("Tree_" + i);
                 go.transform.SetParent(transform, true);
                 go.transform.position = trees[i].baseAt;
                 var node = go.AddComponent<ResourceNode>();

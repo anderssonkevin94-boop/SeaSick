@@ -33,10 +33,10 @@ namespace SeaSick.Terrain
         public struct ColourParams
         {
             public float seaLevel, beachHeight, snowHeight, sandHeight;
-            public bool graphicArt;
+            public bool graphicArt, storybook;
             public float rockShowsAt, cliffRockStart, cliffRockFull;
             public static ColourParams From(TerrainSettings s) =>
-                new ColourParams { graphicArt = s.graphicArtPalette, seaLevel = s.seaLevel, beachHeight = s.beachHeight,
+                new ColourParams { storybook = s.storybookLandforms, graphicArt = s.graphicArtPalette, seaLevel = s.seaLevel, beachHeight = s.beachHeight,
                                    snowHeight = s.snowHeight, sandHeight = s.sandHeight,
                                    rockShowsAt = math.max(0.05f, s.rockShowsAt),
                                    cliffRockStart = s.cliffRockStart,
@@ -296,6 +296,8 @@ namespace SeaSick.Terrain
             // used to infer it from the normal and so striated and mottled
             // every steep GRASS flank like a cliff. Rock is a fact here;
             // the shader should not have to guess it from the slope.
+            if (s.storybook)
+                c = math.select(c / 12.92f, math.pow((c + .055f) / 1.055f, 2.4f), c > .04045f);
             return new Color32((byte)(c.x * 255f), (byte)(c.y * 255f), (byte)(c.z * 255f), (byte)(stony * 255f));
         }
 

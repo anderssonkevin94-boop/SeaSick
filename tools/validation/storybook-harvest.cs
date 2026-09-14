@@ -1,0 +1,15 @@
+var w=UnityEngine.Object.FindObjectsByType<SeaSick.Terrain.SceneryWood>(UnityEngine.FindObjectsSortMode.None).First(x=>x.TreeCount>5 && x.TreeAt(0).instance!=null);
+var t=w.TreeAt(0);var neighbour=w.TreeAt(1).instance;
+var source=t.instance.GetComponentsInChildren<UnityEngine.MeshFilter>(true).First().sharedMesh;
+int verts=source.vertexCount;
+w.Populate(t.baseAt,2f,48);
+var node=t.instance.GetComponent<SeaSick.World.ResourceNode>();
+if(node==null)throw new System.Exception("Tree did not receive harvest node");
+node.Harvest();
+bool gone=!t.instance.activeSelf;
+bool intact=neighbour.activeSelf && source.vertexCount==verts;
+var text="Individual tree harvest: removed="+gone+", neighbour intact="+intact+", felled count="+w.FelledInMesh()+"\n";
+System.IO.File.WriteAllText("/Users/kevinandersson/Desktop/SeaSick/docs/art-direction/storybook-validation.txt",text);
+if(!gone || !intact) throw new System.Exception(text);
+RunProbe.Harbour();
+return text;

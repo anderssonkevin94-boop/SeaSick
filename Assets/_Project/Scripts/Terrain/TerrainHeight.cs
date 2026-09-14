@@ -9,6 +9,7 @@ namespace SeaSick.Terrain
     public struct TerrainParams
     {
         public int seed;
+        public int storybookLandforms;
         public float seaLevel, worldRadius, worldEdgeFalloff;
         public float2 worldOffset;
         public int octaves; public float baseFrequency, lacunarity, gain;
@@ -56,6 +57,7 @@ namespace SeaSick.Terrain
         {
             var p = new TerrainParams
             {
+                storybookLandforms = s.storybookLandforms ? 1 : 0,
                 seed = s.seed, seaLevel = s.seaLevel, worldRadius = s.worldRadius, worldEdgeFalloff = s.worldEdgeFalloff,
                 worldOffset = new float2(s.worldOffset.x, s.worldOffset.y),
                 octaves = s.octaves, baseFrequency = s.baseFrequency, lacunarity = s.lacunarity, gain = s.gain,
@@ -468,7 +470,7 @@ namespace SeaSick.Terrain
             // planted rather than a wood that is planted and then culled.
             return math.lerp(prm.verdancyFloor, 1f,
                 math.saturate(v * (1f - prm.verdancyRockSuppress * rocky)))
-               * (1f - HomeIsleWeight(p, prm));
+               * (1f - HomeIsleWeight(p, prm) * (prm.storybookLandforms != 0 ? 0f : 1f));
         }
 
         /// **Metres of rock standing PROUD of the soil here.** Zero almost
@@ -929,6 +931,34 @@ namespace SeaSick.Terrain
                 // draw the island that was replaced.
                 s.terraced = math.lerp(s.terraced, hh, home);
                 s.smooth = math.lerp(s.smooth, hh, home);
+            }
+            if (prm.storybookLandforms != 0)
+            {
+                float h = s.height - prm.seaLevel;
+                // Keep every existing waterline, underwater approach and beach.
+                // A terrace is actual terrain: rendering, collision, slope tests
+                // and the crew all sample this same answer.
+                if (h > 4f)
+                {
+                    float inland = math.smoothstep(4f, 10f, h);
+                    float relief = math.max(0f, h - 7f) * 1.65f;
+                    float level = relief / 16f;
+                    float terrace = (math.floor(level) + math.smoothstep(.67f, .94f, math.frac(level))) * 16f;
+                    float shaped = 7f + math.lerp(terrace, relief, .08f);
+                    s.height = prm.seaLevel + math.lerp(h, shaped, inland * (1f - home));
+                    // Home's northern half becomes a two-level wooded bluff;
+                    // the cove and village foreground remain low and usable.
+                    float2 q = p - prm.homeIsleCentre;
+                    float rear = math.dot(q, -prm.homeIsleCoveDir);
+                    float side = math.dot(q, new float2(prm.homeIsleCoveDir.y, -prm.homeIsleCoveDir.x));
+                    float wav = 5f * math.abs(math.frac(side / 42f) * 2f - 1f) + 2f * math.abs(math.frac(side / 21f) * 2f - 1f);
+                    float shore = math.smoothstep(4f, 5.05f, h);
+                    float ramp1 = 1f - math.smoothstep(5f, 15f, math.abs(side + 22f));
+                    float ramp2 = 1f - math.smoothstep(5f, 15f, math.abs(side - 23f));
+                    float first = math.saturate((rear - 12f - wav) / math.lerp(9f, 38f, ramp1));
+                    float second = math.saturate((rear - 44f - wav) / math.lerp(10f, 38f, ramp2));
+                    s.height += home * shore * (first * 19f + second * 23f);
+                }
             }
             return s;
         }

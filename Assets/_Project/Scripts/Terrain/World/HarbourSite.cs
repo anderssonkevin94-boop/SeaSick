@@ -48,6 +48,7 @@ namespace SeaSick.Terrain
         /// full hold, so 3 m is her loaded draft with a fair margin -- and
         /// the margin is the point, because the sea still moves here.
         public const float BerthDepth = 3.0f;
+        public const float BerthWidth = 8.4f;
 
         /// She must not touch anything on the way in either. A berth in a
         /// pocket of deep water behind a bar is not a berth.
@@ -148,9 +149,14 @@ namespace SeaSick.Terrain
                 bool floats = true;
                 for (float t = -0.5f; t <= 0.5f; t += 0.1f)
                 {
-                    float px = bx + sea.x * t * SeaSick.World.WorldScale.ShipLength;
-                    float pz = bz + sea.y * t * SeaSick.World.WorldScale.ShipLength;
-                    if (height(px, pz) > -BerthDepth) { floats = false; break; }
+                    // A centreline sounding misses the shoreward corners.
+                    for (float b = -.5f; b <= .5f; b += .25f)
+                    {
+                        float px = bx + sea.x * t * SeaSick.World.WorldScale.ShipLength + alongAxis.x * b * BerthWidth;
+                        float pz = bz + sea.y * t * SeaSick.World.WorldScale.ShipLength + alongAxis.y * b * BerthWidth;
+                        if (height(px, pz) > -BerthDepth) { floats = false; break; }
+                    }
+                    if (!floats) break;
                 }
                 if (floats) { pier = d; break; }
             }
@@ -220,9 +226,12 @@ namespace SeaSick.Terrain
             float shallowest = 999f;
             for (float t = -0.5f; t <= 0.5f; t += 0.1f)
             {
-                float bx = s.berth.x + sea.x * t * SeaSick.World.WorldScale.ShipLength;
-                float bz = s.berth.z + sea.y * t * SeaSick.World.WorldScale.ShipLength;
-                shallowest = Mathf.Min(shallowest, -height(bx, bz));
+                for (float b = -.5f; b <= .5f; b += .25f)
+                {
+                    float bx = s.berth.x + sea.x * t * SeaSick.World.WorldScale.ShipLength + alongAxis.x * b * BerthWidth;
+                    float bz = s.berth.z + sea.y * t * SeaSick.World.WorldScale.ShipLength + alongAxis.y * b * BerthWidth;
+                    shallowest = Mathf.Min(shallowest, -height(bx, bz));
+                }
             }
             s.berthDepth = shallowest;   // the shallowest water under her, not the deepest
 

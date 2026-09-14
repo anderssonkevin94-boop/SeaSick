@@ -166,7 +166,9 @@ namespace SeaSick.Terrain
         {
             var rng = new System.Random(seed);
             bool kit = SceneryKit.Available;
+            bool individualTrees = terrain != null && terrain.individualTrees;
             var index = new List<SceneryWood.Tree>();
+            var individuals = new List<(string id, Vector3 at, float yaw, Vector3 scale)>();
             var cellMap = new Dictionary<long, CellBuild>();
             var cellList = new List<CellBuild>();
 
@@ -206,6 +208,7 @@ namespace SeaSick.Terrain
             // read ONCE, at the centre: they are slow enough that one
             // landmass sits inside one value of each.
             var c2 = new Unity.Mathematics.float2(centre.x, centre.z);
+            bool sculptedHome = terrain != null && terrain.storybookLandforms && TerrainHeight.HomeIsleWeight(c2, prm) > .9f;
             float verdancy = TerrainHeight.Verdancy01(c2, prm);
             float rockiness = TerrainHeight.Rock01(c2, prm);
 
@@ -279,7 +282,7 @@ namespace SeaSick.Terrain
             // every island gets about the same NUMBER of stands, big or
             // small, which is what makes the patchiness read as a property of
             // woodland rather than of island size.
-            float treeDensity = terrain != null ? terrain.treeDensity : 0.55f;
+            float treeDensity = sculptedHome ? 1.05f : terrain != null ? terrain.treeDensity : 0.55f;
             float palmOnSand = terrain != null ? terrain.palmOnSand : 0.06f;
             /// Set by `ChanceAt` for the spot it was just asked about: this
             /// one is standing on the beach, on the palm allowance. Read
@@ -305,7 +308,7 @@ namespace SeaSick.Terrain
                 float a = Mathf.PerlinNoise((wx + 7300f) * standF, (wz - 2100f) * standF);
                 float b = Mathf.PerlinNoise((wx - 1500f) * standF * 2.9f, (wz + 900f) * standF * 2.9f);
                 float t = Mathf.Clamp01(((a * 0.74f + b * 0.26f) - 0.5f) * standC + 0.5f);
-                return Mathf.Lerp(standFloor, 1f, t);
+                return Mathf.Lerp(sculptedHome ? .65f : standFloor, 1f, t);
             }
 
             // --- the fields -----------------------------------------------
@@ -363,6 +366,7 @@ namespace SeaSick.Terrain
             // The warp runs at about four spacings: shorter and it is just
             // more jitter, longer and the whole wood slides sideways without
             // changing shape.
+            if (sculptedHome) step = 6f;
             float warpF = 1f / Mathf.Max(6f, step * 4f);
             float warpAmp = step * (terrain != null ? terrain.treeWarp : 1.5f);
             double scrubP = terrain != null ? terrain.scrubChance : 0.45f;
@@ -647,6 +651,13 @@ namespace SeaSick.Terrain
                             float factor = 1f;
                             if (species == 2) { tp0 = palm0; tp1 = palm1; factor = 0.72f; }
                             else if (species == 1) { tp0 = broad0; tp1 = broad1; factor = 0.82f; }
+                            if (individualTrees && species != 2)
+                            {
+                                bool broad = Mathf.PerlinNoise(wx * .025f + 12f, wz * .025f) > .38f;
+                                string id = broad ? (rVariant < .33f ? "Broad" : rVariant < .66f ? "Broad_B" : "Broad_C") : (rVariant < .5f ? "Spruce" : "Spruce_B");
+                                tp0 = SceneryKit.Get(id); tp1 = SceneryKit.Get(id + "_LOD1");
+                                factor = broad ? .90f : 1.02f;
+                            }
                             // Trees inside a closed stand are taller than the
                             // ones out on its edge -- they grew up competing
                             // for the light. It is the cheapest thing that
@@ -658,7 +669,9 @@ namespace SeaSick.Terrain
                             float s = target / Mathf.Max(1f, tp0.height);
                             float yaw = Wind + (rYaw - 0.5f) * 0.7f;
                             var sc = new Vector3(s, s, s);
-                            StampBoth(cb, tp0, tp1, at, yaw, sc, sc);
+                            if (individualTrees)
+                                individuals.Add((tp0.name, at, yaw, sc));
+                            else StampBoth(cb, tp0, tp1, at, yaw, sc, sc);
                             cb.Grow(at, tp0.radius * s, target);
                         }
                         if (cb.v0.Count > v0Start)
@@ -674,6 +687,20 @@ namespace SeaSick.Terrain
                     }
                     // Counted whether or not it was placed, so the budget and
                     // the loop's exit are the same with a clearing as without.
+                    if (individualTrees && place && rRockA < .65f)
+                    {
+                        var under = SceneryKit.Get(rRockB < .3f ? "Scrub_0" : rRockB < .65f ? "Fern" : "Grass");
+                        float ux = wx + 2f + rRockC, uz = wz - 2f;
+                        float uy = height(ux, uz);
+                        if (under != null && Mathf.Abs(uy - h) < 1f && (keepOut == null || !keepOut(ux, uz)))
+                        {
+                            var cb = CellFor(ux, uz);
+                            var low = SceneryKit.Get(under.name + "_LOD1") ?? under;
+                            var scale = Vector3.one * (1f + rScrubA);
+                            StampBoth(cb, under, low, new Vector3(ux,uy,uz),rYaw*Mathf.PI*2f,scale,scale);
+                            cb.Grow(new Vector3(ux,uy,uz),3f,3f);bushes++;
+                        }
+                    }
                     trees++;
                 }
             }
@@ -914,7 +941,7 @@ namespace SeaSick.Terrain
                 if ((Report[i].centre - centre).sqrMagnitude < 1f) Report.RemoveAt(i);
             Report.Add(new Dressed { centre = centre, radius = meanR, trees = trees, crops = crops, scrub = bushes });
 
-            if (index.Count == 0 && rocks == 0 && crops == 0 && bushes == 0
+            if (index.Count == 0 && individuals.Count == 0 && rocks == 0 && crops == 0 && bushes == 0
                 && shoreStones == 0 && stacks == 0) return null;
 
             var go = new GameObject("Scenery");
@@ -941,6 +968,20 @@ namespace SeaSick.Terrain
                     cell.radius = Mathf.Max(cb.max.x - cb.min.x, cb.max.z - cb.min.z) * 0.5f;
                 }
                 wcells.Add(cell);
+            }
+            foreach (var item in individuals)
+            {
+                var prefab = Resources.Load<GameObject>("IslandAssets/" + item.id);
+                if (prefab == null) { Debug.LogError("Missing island asset " + item.id); continue; }
+                var tree = Object.Instantiate(prefab, item.at, Quaternion.Euler(0f, item.yaw * Mathf.Rad2Deg, 0f), go.transform);
+                tree.transform.localScale = item.scale;
+                var group = tree.GetComponent<LODGroup>();
+                if (group != null) group.enabled = false; // island-level scheduler owns culling
+                var rs = tree.GetComponentsInChildren<MeshRenderer>(true);
+                MeshRenderer high = null, low = null;
+                foreach (var r in rs) { if (r.name.EndsWith("_LOD1")) low=r; else high=r; }
+                index.Add(new SceneryWood.Tree { baseAt=item.at, cell=wcells.Count, instance=tree });
+                wcells.Add(new SceneryWood.Cell { r0=high,r1=low,centre=item.at,radius=6f*item.scale.x });
             }
             go.AddComponent<SceneryWood>().Configure(wcells, index, isle);
             go.AddComponent<SceneryLod>().Configure(wcells, terrain);

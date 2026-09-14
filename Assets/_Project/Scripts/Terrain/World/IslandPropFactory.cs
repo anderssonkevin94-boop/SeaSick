@@ -13,6 +13,12 @@ namespace SeaSick.Terrain
 
         public static GameObject Make(string kind)
         {
+            if (SeaSick.World.WorldArtStyle.SceneryResource == "Flora/storybook_flora")
+            {
+                string id = kind == "Timber" ? "Broad" : kind == "Stone" ? "Boulder_" + Random.Range(0,4) : kind == "Ore" ? "Ore" : "Scrub_0";
+                var prefab = Resources.Load<GameObject>("IslandAssets/" + id);
+                if (prefab != null) return Object.Instantiate(prefab);
+            }
             switch (kind)
             {
                 // The Blender kit where it exists, the primitives where it

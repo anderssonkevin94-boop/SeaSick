@@ -1,5 +1,7 @@
 # SeaSick graphic adventure art pass
 
+**Island rebuild:** see [the standalone asset library and gameplay checks](STORYBOOK-ISLANDS.md). The newer storybook kit replaces the first-pass scenery described below.
+
 The Option B treatment is applied to **Sea.unity**. `ArtDirectionLab.unity` remains available for look development. The actual twenty-node fleet retains its original meshes, rigging, sockets, displacement data and physics.
 
 ## Implemented

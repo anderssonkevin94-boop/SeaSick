@@ -37,6 +37,14 @@ namespace SeaSick.Terrain
         static Dictionary<string, Template> byName;
         static bool tried;
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetForPlay()
+        {
+            loadedPath = null; tried = false; byName = null;
+            foreach (var m in meshCache.Values) if (m != null) Object.Destroy(m);
+            meshCache.Clear();
+        }
+
         public static bool Available => Load() != null;
 
         public static Template Get(string name)

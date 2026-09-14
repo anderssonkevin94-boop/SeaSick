@@ -108,7 +108,7 @@ namespace SeaSick.Dev
             var styleData = new SerializedObject(style);
             styleData.FindProperty("shipPalette").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Texture2D>(palettePath);
             styleData.FindProperty("sceneryMaterial").objectReferenceValue = scenery;
-            styleData.FindProperty("sceneryResource").stringValue = "Flora/graphic_flora";
+            styleData.FindProperty("sceneryResource").stringValue = settings.individualTrees ? "Flora/storybook_flora" : "Flora/graphic_flora";
             styleData.ApplyModifiedPropertiesWithoutUndo();
             AssetDatabase.SaveAssets();
             EditorSceneManager.SaveScene(scene);
