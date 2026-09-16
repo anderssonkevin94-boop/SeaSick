@@ -433,6 +433,11 @@ namespace SeaSick.Ship
                     t = transform.Find(stale);
                 }
             }
+            if (n.node == 12)
+            {
+                var approved = AdventureBrigVisual.Build(transform);
+                if (approved != null) { visual = approved.transform; return; }
+            }
             var src = Resources.Load<GameObject>(n.ResourcePath);
             if (src == null)
             {
@@ -834,7 +839,12 @@ namespace SeaSick.Ship
             // Stand them in the quarters bays, so where the crew ARE is where
             // the player put their berths.
             var posts = QuartersPosts(n);
-            if (posts.Count == 0) return;
+            if (posts.Count == 0)
+            {
+                var art = visual != null ? visual.GetComponent<AdventureBrigVisual>() : null;
+                if (art == null) return;
+                posts.Add(new Vector3(0.7f, art.DeckHeight(-8.6f), -8.6f));
+            }
             for (int i = 0; i < want && i < live.Count; i++)
             {
                 Vector3 at = posts[i % posts.Count];
@@ -851,8 +861,11 @@ namespace SeaSick.Ship
             for (int bi = 0; bi < n.bay_labels.Length; bi++)
                 for (int ti = 0; ti < n.tier_names.Length; ti++)
                     if (Use(n.bay_labels[bi], n.tier_names[ti]) == BayUse.Quarters)
+                    {
+                        var art = visual != null ? visual.GetComponent<AdventureBrigVisual>() : null;
                         outp.Add(new Vector3(n.beam * 0.20f,
-                                             n.tier_floor[ti], n.bay_x[bi]));
+                            art != null ? art.DeckHeight(n.bay_x[bi]) : n.tier_floor[ti], n.bay_x[bi]));
+                    }
             return outp;
         }
 
@@ -869,9 +882,9 @@ namespace SeaSick.Ship
                     // Blender bow is +X and Unity's is +Z; the exporter yaws
                     // -90 so a bay's x is Unity's z. The gun stands just inboard
                     // of the side, on the deck of its own tier.
-                    outp.Add(new Vector3(n.beam * 0.34f - 0.6f,
-                                         n.tier_floor[ti] + 0.47f,
-                                         n.bay_x[bi]));
+                    var art = visual != null ? visual.GetComponent<AdventureBrigVisual>() : null;
+                    outp.Add(art != null ? art.GunSocket(bi) : new Vector3(n.beam * 0.34f - 0.6f,
+                                         n.tier_floor[ti] + 0.47f, n.bay_x[bi]));
                 }
             return outp;
         }
@@ -957,6 +970,7 @@ namespace SeaSick.Ship
             }
             else if (use == BayUse.Battery)
             {
+                if (visual != null && visual.GetComponent<AdventureBrigVisual>() != null) return;
                 Transform gun = KitPiece("Gun");
                 for (int s = -1; s <= 1; s += 2)
                     if (gun != null)
