@@ -94,7 +94,9 @@ namespace SeaSick.Terrain
                 // taking the whole sample costs nothing and carries the metres
                 // of proud rock out with it. Recomputing it in the mesh job
                 // would have meant a second pass over the entire pipeline.
-                var s = TerrainHeight.Evaluate(VertexWorldXZ(desc, x, y), prm, lut);
+                // The connected plateau has its own exact mesh and collider.
+                // Keep the grid underneath it, rather than resampling its creases.
+                var s = TerrainHeight.Evaluate(VertexWorldXZ(desc, x, y), prm, lut, false);
                 heights[index] = s.height;
                 rock[index] = s.rock;
             }

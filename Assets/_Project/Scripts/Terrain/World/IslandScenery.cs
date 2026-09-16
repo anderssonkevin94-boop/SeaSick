@@ -164,6 +164,11 @@ namespace SeaSick.Terrain
             SeaSick.World.Island isle = null,
             System.Func<float, float, bool> keepOut = null)
         {
+            if (isle != null && isle.IsHome && terrain != null && terrain.homeIsle && terrain.storybookLandforms)
+            {
+                var authored = HomeIslandDressing.Build(parent, centre, meanR, isle, terrain, keepOut);
+                if (authored != null) return authored;
+            }
             var rng = new System.Random(seed);
             bool kit = SceneryKit.Available;
             bool individualTrees = terrain != null && terrain.individualTrees;
@@ -573,7 +578,7 @@ namespace SeaSick.Terrain
                         double pForm = (ridge || sheer)
                             ? 0.10 * Mathf.Clamp01((crag - 0.40f) / 0.30f) * (0.5f + rockiness)
                             : (stony ? 0.012 : 0.006 * Mathf.Clamp01((crag - 0.55f) / 0.25f));
-                        if (kit && place && rocks < MaxRocks && formations < maxFormations && rRock < pForm)
+                        if (!sculptedHome && kit && place && rocks < MaxRocks && formations < maxFormations && rRock < pForm)
                         {
                             int made = Formation(new Vector3(wx, h, wz), sx, sz, slope, proud, rockiness,
                                 height, sand, seed, cliffTp, boulders, CellFor, ref cliffs,
@@ -723,69 +728,6 @@ namespace SeaSick.Terrain
                     var cb=CellFor(x,z);var pos=new Vector3(x,y-.03f,z);
                     var scale=Vector3.one*Mathf.Lerp(.45f,.85f,patch);
                     StampBoth(cb,under,SceneryKit.Get(id+"_LOD1")??under,pos,x+z,scale,scale);cb.Grow(pos,3f,3f);bushes++;
-                }
-            }
-
-            // Broad rock masses have their own spacing, unrelated to tree or
-            // shore grids. A few long faces establish the bluff silhouette.
-            if (individualTrees)
-            {
-                var candidates = new List<Vector3>();
-                var accepted = new List<Vector3>(); // x/z centre, y footprint radius
-                var brng = new System.Random(seed * 479 + 131);
-                for (float z = -meanR; z < meanR; z += 6f)
-                for (float x = -meanR; x < meanR; x += 6f)
-                {
-                    float wx=centre.x+x+(float)brng.NextDouble()*3f, wz=centre.z+z+(float)brng.NextDouble()*3f;
-                    float h=height(wx,wz);
-                    if(h<9f || h>55f || (keepOut!=null && keepOut(wx,wz)))continue;
-                    float dx=(height(wx+2,wz)-height(wx-2,wz))*.25f;
-                    float dz=(height(wx,wz+2)-height(wx,wz-2))*.25f;
-                    float slope=Mathf.Sqrt(dx*dx+dz*dz);
-                    if(slope>.9f && slope<2.8f)candidates.Add(new Vector3(wx,h,wz));
-                }
-                // Shuffle prevents scan rows from turning into masonry courses.
-                for(int i=candidates.Count-1;i>0;i--){int j=brng.Next(i+1);var t=candidates[i];candidates[i]=candidates[j];candidates[j]=t;}
-                foreach(var candidate in candidates)
-                {
-                    float wx=candidate.x,wz=candidate.z;
-                    float width=Mathf.Lerp(25f,43f,(float)brng.NextDouble());
-                    bool crowded=false;
-                    foreach(var other in accepted)
-                        if(new Vector2(wx-other.x,wz-other.z).sqrMagnitude < Mathf.Pow((width*.5f+other.y)*.72f,2f)){crowded=true;break;}
-                    if(crowded)continue;
-                    float dx=(height(wx+2,wz)-height(wx-2,wz))*.25f;
-                    float dz=(height(wx,wz+2)-height(wx,wz-2))*.25f;
-                    float slope=Mathf.Sqrt(dx*dx+dz*dz);
-                    float high=candidate.y,low=candidate.y;
-                    for(int sampleOffset=2;sampleOffset<=16;sampleOffset+=2)
-                    {
-                        high=Mathf.Max(high,height(wx+dx/slope*sampleOffset,wz+dz/slope*sampleOffset));
-                        low=Mathf.Min(low,height(wx-dx/slope*sampleOffset,wz-dz/slope*sampleOffset));
-                    }
-                    float rockHeight=Mathf.Clamp(high-low+.5f,8f,27f);
-                    int variant=brng.Next(4);var tp=SceneryKit.Get("Bluff_"+variant);if(tp==null)continue;
-                    float yaw=Mathf.Atan2(dx,dz)+((float)brng.NextDouble()-.5f)*.20f;
-                    var pos=new Vector3(wx-dx/slope*2.5f,low-.8f,wz-dz/slope*2.5f);
-                    var scale=new Vector3(width/3.5f,rockHeight/Mathf.Max(.1f,tp.height),Mathf.Lerp(8f,11f,(float)brng.NextDouble()));
-                    var cb=CellFor(wx,wz);StampBoth(cb,tp,tp,pos,yaw,scale,scale);cb.Grow(pos,width*.6f,rockHeight);
-                    accepted.Add(new Vector3(wx,width*.5f,wz));
-                    // Two or three subordinate stones, placed on the downhill
-                    // ground with varied sizes instead of another repeated row.
-                    int stones=brng.Next(2,4);
-                    for(int k=0;k<stones;k++)
-                    {
-                        float along=((float)brng.NextDouble()-.5f)*width;
-                        float outwards=10f+(float)brng.NextDouble()*4f;
-                        float bx=wx-dx/slope*outwards+dz/slope*along;
-                        float bz=wz-dz/slope*outwards-dx/slope*along;
-                        float by=height(bx,bz);
-                        if(by<3f || (keepOut!=null && keepOut(bx,bz)) || Mathf.Abs(height(bx+1,bz)-by)>.6f || Mathf.Abs(height(bx,bz+1)-by)>.6f)continue;
-                        var small=SceneryKit.Get("Boulder_"+brng.Next(4));if(small==null)continue;
-                        float size=Mathf.Lerp(.8f,3.8f,Mathf.Pow((float)brng.NextDouble(),1.5f));
-                        var foot=new Vector3(bx,by-size*.12f,bz);var sc=new Vector3(size,size*Mathf.Lerp(.6f,1.2f,(float)brng.NextDouble()),size);
-                        var cell=CellFor(bx,bz);StampBoth(cell,small,small,foot,(float)brng.NextDouble()*Mathf.PI*2f,sc,sc);cell.Grow(foot,size*2f,size*2f);
-                    }
                 }
             }
 

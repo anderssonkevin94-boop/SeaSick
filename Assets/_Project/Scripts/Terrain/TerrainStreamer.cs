@@ -74,6 +74,7 @@ namespace SeaSick.Terrain
         TerrainChunkMesher.ColourParams colours;
         NativeArray<float> lut;
         bool paramsDirty = true;
+        GameObject authoredHomeGround;
 
         public int LoadedCount => loaded.Count;
         public int PendingCount => queue.Count + inFlight.Count + baking.Count + releaseQueue.Count;
@@ -122,6 +123,8 @@ namespace SeaSick.Terrain
 
         void OnDisable()
         {
+            HomePlateauSurface.Release(authoredHomeGround);
+            authoredHomeGround = null;
             foreach (var f in inFlight) { f.handle.Complete(); f.heights.Dispose(); f.rock.Dispose(); f.yRange.Dispose(); f.mda.Dispose(); }
             inFlight.Clear();
             foreach (var b in baking) b.handle.Complete();
@@ -137,6 +140,8 @@ namespace SeaSick.Terrain
         void RefreshParams()
         {
             prm = TerrainParams.From(settings);
+            HomePlateauSurface.Release(authoredHomeGround);
+            authoredHomeGround = HomePlateauSurface.Create(transform, prm, material);
             colours = TerrainChunkMesher.ColourParams.From(settings);
             if (lut.IsCreated) lut.Dispose();
             lut = TerrainCurveLut.Bake(settings.profileCurve, Allocator.Persistent);
