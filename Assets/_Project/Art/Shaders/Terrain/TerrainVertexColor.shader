@@ -21,6 +21,8 @@ Shader "SeaSick/Terrain Vertex Color"
 {
     Properties
     {
+        _PaintedSurface ("Painted study: off / ground / plants / stone", Float) = 0
+        _PaintStudy ("Limit ground paint to review patch", Range(0,1)) = 0
         _CrispTerrain ("Crisp terrain regions", Range(0,1)) = 0
         _SandLine ("Grass boundary height", Float) = 4.3
         _Tint ("Tint", Color) = (1,1,1,1)
@@ -51,6 +53,7 @@ Shader "SeaSick/Terrain Vertex Color"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
+                float _PaintedSurface, _PaintStudy;
                 float4 _Tint;
                 float _CrispTerrain, _SandLine;
                 float _DetailScale;
@@ -115,6 +118,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 float3 normalWS : TEXCOORD1;
                 float4 color : COLOR;
                 float fog : TEXCOORD2;
+                float3 positionOS : TEXCOORD3;
             };
 
             Varyings vert(Attributes v)
@@ -122,6 +126,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 UNITY_SETUP_INSTANCE_ID(v);
                 Varyings o;
                 o.positionWS = TransformObjectToWorld(v.positionOS.xyz);
+                o.positionOS = v.positionOS.xyz;
                 o.positionCS = TransformWorldToHClip(o.positionWS);
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
                 o.color = v.color;
@@ -135,6 +140,48 @@ Shader "SeaSick/Terrain Vertex Color"
                 // The heightfield's finite-difference normals bridge mesh LODs.
                 // Derivative triangle normals exposed every narrow grid strip.
                 float3 albedo = i.color.rgb * _Tint.rgb;
+                if (_PaintedSurface > .5)
+                {
+                    // Broad painted colour shapes, with no grit or normal-map
+                    // noise. Object coordinates keep marks attached to assets.
+                    float3 p = i.positionOS;
+                    float cameraDistance = distance(i.positionWS, GetCameraPositionWS());
+                    float nearDetail = 1-smoothstep(110,320,cameraDistance);
+                    float3 painted = albedo;
+                    float plant = step(1.5,_PaintedSurface)*(1-step(2.5,_PaintedSurface));
+                    float green = smoothstep(.018,.065,albedo.g-albedo.r);
+                    if (plant > .5)
+                    {
+                        // Overlapping rounded leaf groups; quiet broad pigment
+                        // patches persist at range, smaller scallops fade out.
+                        float mass = vnoise(p*float3(.65,.80,.65));
+                        float scallop = smoothstep(.48,.58,mass+.10*vnoise(p*1.9));
+                        float leafTop = smoothstep(-.2,.75,n.y);
+                        float3 leaf = albedo * lerp(float3(.84,.90,1.06),float3(1.20,1.13,.82),scallop*nearDetail);
+                        leaf = lerp(leaf,leaf*float3(1.08,1.04,.90),leafTop*.35);
+                        float strokes = smoothstep(.59,.70,vnoise(p*float3(4,.24,4)));
+                        float3 bark = albedo*(1-.15*strokes*nearDetail);
+                        painted = lerp(bark,leaf,green);
+                    }
+                    else
+                    {
+                        float rock = _PaintedSurface>2.5 ? 1 : saturate(i.color.a);
+                        float meadow = green*(1-rock);
+                        float large = vnoise(p*float3(.055,.035,.055));
+                        float grassPatch = smoothstep(.30,.69,large);
+                        float3 grass = albedo*lerp(float3(.79,.89,1.01),float3(1.08,1.04,.88),grassPatch);
+                        // Anisotropic pigment follows a rock's broad face; no
+                        // painted cracks across bevels or arbitrary black lines.
+                        float mineral = vnoise(p*float3(.07,.04,.07));
+                        float stonePatch = smoothstep(.22,.78,mineral);
+                        float3 stone = albedo*lerp(float3(.965,.975,1.015),float3(1.025,1.012,.98),stonePatch);
+                        float sandPatch = vnoise(p*float3(.12,.03,.12));
+                        float3 sand = albedo*lerp(float3(.94,.965,1.01),float3(1.035,1.015,.97),sandPatch);
+                        painted = lerp(lerp(sand,grass,meadow),stone,rock);
+                    }
+                    float study = lerp(1,1-smoothstep(24,36,distance(p.xz,float2(-55,32))),_PaintStudy);
+                    albedo = lerp(albedo,painted,study);
+                }
                 if (_CrispTerrain > .5 && i.positionWS.y > 0)
                 {
                     // Classify per fragment, never interpolate tan into green

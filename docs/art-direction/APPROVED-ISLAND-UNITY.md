@@ -1,5 +1,13 @@
 # Approved island integration
 
+## Painted material treatment — 16 September
+
+Home-island ground and dressing now opt into object-space procedural colour masks in the terrain/scenery shader. These are shader-generated painted effects, not new bitmap textures: broad meadow colour fields, restrained warm/cool stone variation, quiet sand variation, leaf-group highlights and sparse elongated bark marks. Existing mesh material boundaries remain crisp. Stone variation was reduced after the overview showed distracting mottling; the geometric planes carry the larger contrast. Leaf/bark detail fades with distance.
+
+Dressing instances share runtime material clones by source material and surface type, including both LOD renderers. Their owner releases these alongside the existing mesh clones. Other islands retain their prior material settings. Shadows remain dynamic and trees remain independently harvestable.
+
+Reviewed overview, gameplay and close-up captures (`painted-material-tree.png`, `painted-material-cliff.png`). Unity compilation and rendering succeeded. All 4,206 collision/height samples, grounding of 127 trees, dock depth and individual harvesting checks passed. The validation helper reports existing deprecated Unity object-finding API warnings. This pass does not establish device performance or exact reference parity.
+
 ## Canopies, grounding and composed detail — 16 September
 
 Broadleaf and scrub assets now use smooth, scalloped leaf masses with a continuous dark-underside/light-crown colour gradient. The four broadleaf silhouettes, three scrub shapes and individual resource identities remain. The Blender kit was regenerated through MCP, including its shared LOD library; the non-canopy builders retain their previous shapes.

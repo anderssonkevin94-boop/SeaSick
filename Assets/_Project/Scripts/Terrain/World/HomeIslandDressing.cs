@@ -29,6 +29,7 @@ namespace SeaSick.Terrain
             var owner = root.AddComponent<HomeIslandDressingMeshes>();
             var clones = new Dictionary<Mesh, Mesh>();
             float s = terrain.homeIsleRadius / 110f;
+            var paintedMaterials = new Dictionary<(Material,int),Material>();
             foreach (var d in data.instances)
             {
                 if (d == null || string.IsNullOrEmpty(d.assetId) || d.position == null) continue;
@@ -45,6 +46,24 @@ namespace SeaSick.Terrain
                 var sc = d.scale == null ? Vector3.one : new Vector3(d.scale.x, d.scale.y, d.scale.z);
                 go.transform.localScale = new Vector3(sc.x * s, sc.y, sc.z * s);
                 var rs = go.GetComponentsInChildren<MeshRenderer>(true);
+                int surface = d.kind == "stone" ? 3 : 2;
+                foreach(var renderer in rs)
+                {
+                    var mats = renderer.sharedMaterials;
+                    for(int j=0;j<mats.Length;j++)
+                    {
+                        if (!mats[j]) continue;
+                        var key = (mats[j],surface);
+                        if (!paintedMaterials.TryGetValue(key,out var painted))
+                        {
+                            painted = new Material(mats[j]) {name="Home painted "+surface,enableInstancing=true};
+                            painted.SetFloat("_PaintedSurface",surface);
+                            paintedMaterials.Add(key,painted);owner.Own(painted);
+                        }
+                        mats[j]=painted;
+                    }
+                    renderer.sharedMaterials=mats;
+                }
                 if (IsMeadowAsset(d.assetId))
                     foreach (var mf in go.GetComponentsInChildren<MeshFilter>(true))
                         if (mf.sharedMesh != null) mf.sharedMesh = MeadowMesh(mf.sharedMesh, clones, owner);
