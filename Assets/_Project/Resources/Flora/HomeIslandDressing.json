@@ -1,6 +1,51 @@
 {
   "instances": [
     {
+      "assetId": "Boulder_1",
+      "kind": "stone",
+      "position": {
+        "x": -64.0,
+        "y": 3.019997,
+        "z": 22.0
+      },
+      "scale": {
+        "x": 2.3,
+        "y": 1.05,
+        "z": 1.25
+      },
+      "yaw": -13.750986775781245
+    },
+    {
+      "assetId": "Boulder_3",
+      "kind": "stone",
+      "position": {
+        "x": -69.0,
+        "y": 3.019997,
+        "z": 25.0
+      },
+      "scale": {
+        "x": 0.9,
+        "y": 0.65,
+        "z": 0.72
+      },
+      "yaw": -23.491269395458076
+    },
+    {
+      "assetId": "Boulder_0",
+      "kind": "stone",
+      "position": {
+        "x": -60.0,
+        "y": 3.019997,
+        "z": 21.0
+      },
+      "scale": {
+        "x": 0.55,
+        "y": 0.48,
+        "z": 0.7
+      },
+      "yaw": 6.875493387890622
+    },
+    {
       "assetId": "Broad",
       "kind": "tree",
       "position": {

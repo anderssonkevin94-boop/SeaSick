@@ -1,5 +1,11 @@
 # Approved island integration
 
+## Local cliff character trial — 16 September
+
+`cliff_character.py`, executed through Blender MCP, derives a separate `island-cliff-study.blend` from the approved dressed source. Two adjoining front-left wall sections have tapered, recessed fractures cut into their connected geometry, broad warm/cool mineral regions and a thin uneven earth reveal below the grass. Three existing stone assets form a small separate group at the foot. This is a local trial, not a whole-island rollout or a replacement of the cliff sides with enlarged boulders.
+
+The mountain rises from 408 to 432 triangles; the complete collision/height export contains 4,230. Blender checks found no nonpositive projected faces. Unity compiled successfully and all terrain collision/height samples, grounding of 127 trees, dock depth and independent harvesting checks passed. Close and low viewing angles are recorded in `cliff-character-close.png` and `cliff-character-ship.png`. The exporter now defaults to the cliff study; pass `HOME_STUDY_FILE` and `HOME_STUDY_SCENE` to export a different study. Rebuild this local study after regenerating island dressing.
+
 ## Painted material treatment — 16 September
 
 Home-island ground and dressing now opt into object-space procedural colour masks in the terrain/scenery shader. These are shader-generated painted effects, not new bitmap textures: broad meadow colour fields, restrained warm/cool stone variation, quiet sand variation, leaf-group highlights and sparse elongated bark marks. Existing mesh material boundaries remain crisp. Stone variation was reduced after the overview showed distracting mottling; the geometric planes carry the larger contrast. Leaf/bark detail fades with distance.

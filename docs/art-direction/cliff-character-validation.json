@@ -1,0 +1,10 @@
+{
+  "mountain_vertices": 231,
+  "mountain_triangles": 432,
+  "invalid_projected_faces": 0,
+  "new_individual_stones": 3,
+  "studied_faces": [
+    1,
+    3
+  ]
+}

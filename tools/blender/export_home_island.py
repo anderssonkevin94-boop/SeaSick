@@ -4,8 +4,9 @@ from pathlib import Path
 from mathutils import Vector, Matrix
 ROOT=Path('/Users/kevinandersson/Desktop/SeaSick')
 out=ROOT/'Assets/_Project/Resources/Flora'
-with bpy.data.libraries.load(str(ROOT/'tools/blender/source/island-dressed-study.blend'),link=False) as (src,dst):
-    dst.scenes=['Island_Dressed_Study']
+with bpy.data.libraries.load(str(ROOT/'tools/blender/source'/globals().get('HOME_STUDY_FILE','island-cliff-study.blend')),link=False) as (src,dst):
+    scene_name=globals().get('HOME_STUDY_SCENE','Island_Cliff_Study')
+    dst.scenes=[next(name for name in src.scenes if name==scene_name or name.startswith(scene_name+'.'))]
 scene=dst.scenes[0]
 def xyz(v):return {'x':round(v.x,6),'y':round(v.z,6),'z':round(v.y,6)}
 verts=[];normals=[];colors=[];tris=[];instances=[]
@@ -27,7 +28,7 @@ for ob in scene.objects:
                 normals.append(xyz(transform.to_3x3().inverted().transposed()@mesh.corner_normals[li].vector))
                 c=tint.data[vi].color if tint else mesh.materials[tri.material_index].diffuse_color
                 color=dict(zip(['r','g','b','a'],c))
-                color['a']=1 if ob.name.startswith('Mountain silhouette') and tri.material_index==0 else 0
+                color['a']=1 if ob.name.startswith('Mountain silhouette') and tri.material_index!=1 else 0
                 colors.append(color)
             tris.extend([base,base+2,base+1])
         if ob.name.startswith('Sculpted beach'):
