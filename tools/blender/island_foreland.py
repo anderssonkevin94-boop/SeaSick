@@ -64,11 +64,14 @@ try:
     mountain=dst.objects[0];scene.collection.objects.link(mountain)
     mountain.location=(0,25,3.2)
     mountain.data.materials.clear();mountain.data.materials.append(stone);mountain.data.materials.append(grass)
+    zones=mountain.data.attributes.get('TerrainZone')
     for p in mountain.data.polygons:
-        # Keep the authored summit cap continuous; slope selects the lower
-        # meadows, while steep supporting faces remain exposed stone.
-        cap=p.index>=len(mountain.data.polygons)-12
-        p.material_index=1 if cap or p.normal.z>.83 else 0
+        # Authored zones keep the upper ledges/cap coherent as topology changes.
+        zone=zones.data[p.index].value if zones else -1
+        p.material_index=zone if zone>=0 else (1 if p.normal.z>.83 else 0)
+        # Soft meadow lighting removes triangulation stripes, while the stone
+        # polygons retain hard normals and sharp silhouette/crest boundaries.
+        p.use_smooth=zone==1
 
     # The usable ground is genuinely planar, not a sloped skirt around the hill.
     flat=[Vector((x,y,3.2)) for x,y in turf]

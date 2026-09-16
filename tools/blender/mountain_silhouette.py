@@ -6,6 +6,7 @@ keeps the existing plateau source and all gameplay data untouched.
 import bpy
 from pathlib import Path
 from mathutils import Vector
+from mathutils.geometry import tessellate_polygon
 
 ROOT = Path('/Users/kevinandersson/Desktop/SeaSick')
 OUT = ROOT / 'docs/art-direction'
@@ -23,22 +24,56 @@ shoulder = [(-53,25,30),(-39,20,23),(-18,10.5,28),(12,10.5,28),(40,24,24),(51,25
 # before the main crown. This breaks the long straight tent-like skyline.
 ridge = [(-31,36,34),(-25,31.5,29),(-8,34,32),(17,35,31),(36,36,34),(40,35,41),
          (37,38,49),(31,43,56),(7,47,58),(-20,44,55),(-32,50,49),(-38,45,41)]
-summit_foot = [(-13,38,40),(-9,37,36),(8,35,35),(24,36,35),(34,37,39),(36,36,47),
-               (32,39,52),(24,44,54),(12,46,56),(-5,43,56),(-12,41,51),(-15,40,46)]
+summit_foot = [(-13,45,40),(-9,42,36),(8,36,35),(24,36,35),(34,37,39),(36,37,47),
+               (32,40,52),(24,44,54),(12,46,56),(-5,47,56),(-12,46,51),(-15,45,46)]
 # Summit is deliberately offset right and back. Several vertices lie on broad
 # faces; the skyline has a sloping saddle and a blunt, irregular crown.
-crown = [(2,51,43),(5,55,39),(13,61,38),(24,63,38),(31,62,42),(33,61,47),
-         (30,64,52),(24,65,53),(15,60,55),(8,54,53),(2,50,50),(-1,47,47)]
-verts = foot + coast + shoulder + ridge + summit_foot + crown + [(17,58,47)]
-faces = []
-for ring in range(5):
+crown = [(5,57.5,43),(7,59.5,39),(13,61,38),(24,63,38),(31,62,42),(33,61,47),
+         (30,64,52),(24,65,53),(15,62,55),(8,60,53),(5,58,50),(2,56.5,47)]
+
+def softened_corners(loop):
+    # Two points at each authored corner form short, deliberate chamfers.
+    # More geometry goes into the silhouette instead of noisy triangulation.
+    result=[]
+    for i,p in enumerate(loop):
+        for neighbour in (loop[(i-1)%len(loop)],loop[(i+1)%len(loop)]):
+            result.append(tuple(.84*a+.16*b for a,b in zip(p,neighbour)))
+    return result
+
+verts = foot + coast + shoulder
+faces = []; zones=[]
+for ring in range(2):
     for i in range(12):
         j=(i+1)%12; a=ring*12+i; b=ring*12+j; c=b+12; d=a+12
-        # Alternating the chosen diagonal follows the direction of the ridge.
-        # The two concave eastern shelf quads need the inward diagonal.
-        split_bd=i in (0,4,7,10) or (ring==3 and i in (5,6))
+        split_bd=i in (0,4,7,10)
         faces.extend([(a,b,d),(b,c,d)] if split_bd else [(a,b,c),(a,c,d)])
-for i in range(12): faces.append((60+i,60+(i+1)%12,72))
+        zones.extend([-1,-1])
+
+def patch(indices,zone):
+    # Triangulate in the ground plane so concave shelf corners cannot fold.
+    points=[Vector((verts[i][0],verts[i][2],0)) for i in indices]
+    for tri in tessellate_polygon([points]):
+        ids=[v if isinstance(v,int) else min(range(len(points)),key=lambda k:(points[k]-v).length_squared) for v in tri]
+        faces.append(tuple(indices[i] for i in ids));zones.append(zone)
+
+ridge24=softened_corners(ridge);foot24=softened_corners(summit_foot);crown24=softened_corners(crown)
+bevel=[]
+for low,high in zip(foot24,crown24):
+    # A short upper shoulder catches light above the broad main rock planes.
+    bevel.append((low[0]*.22+high[0]*.78,high[1]-3.0,low[2]*.22+high[2]*.78))
+verts += ridge24 + foot24 + bevel + crown24
+for i in range(12):
+    j=(i+1)%12
+    patch([24+i,24+j,36+2*j,36+2*i+1,36+2*i],-1)
+for ring in range(3):
+    for i in range(24):
+        j=(i+1)%24;a=36+ring*24+i;b=36+ring*24+j
+        # A continuous upper meadow, a few connected western ramp faces,
+        # then solid stone up to the turf crown. Never scattered green shards.
+        zone=1 if ring==0 or i in (0,21,22,23) else 0
+        patch([a,b,b+24,a+24],zone)
+centre=len(verts);verts.append((17,61.6,47))
+for i in range(24):faces.append((108+i,108+(i+1)%24,centre));zones.append(1)
 
 def material(name, color, emission=False):
     mat=bpy.data.materials.get(name) or bpy.data.materials.new(name)
@@ -58,6 +93,8 @@ bpy.context.window.scene=scene
 try:
     mesh=bpy.data.meshes.new('Mountain_Study_Connected_Surface')
     mesh.from_pydata([(x,z,h) for x,h,z in verts],[],faces); mesh.update()
+    zone_attribute=mesh.attributes.new(name='TerrainZone',type='INT',domain='FACE')
+    for i,zone in enumerate(zones):zone_attribute.data[i].value=zone
     land=bpy.data.objects.new('Mountain silhouette — long shoulder and offset crown',mesh)
     scene.collection.objects.link(land)
     clay=material('MountainStudy_Clay',(.48,.43,.34))
