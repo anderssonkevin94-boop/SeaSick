@@ -30,8 +30,8 @@ MonoBehaviour:
   windSeaSharpness: 2.5
   nominalHs: 3.5
   choppiness: 1
-  crestSharpen: {x: 1, y: 1, z: 1.35}
-  detailGain: 9
+  crestSharpen: {x: 1, y: 1, z: 0.9}
+  detailGain: 2.5
   detailWavelength: 30
   foamThreshold: 0.03
   foamHalflife: 4
