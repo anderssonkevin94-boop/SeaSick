@@ -1,5 +1,5 @@
-Exact ground: 4206 triangles; max collision/height error 4.577637E-05m. Trees: 104; grounding error 2.807751E-05m.
-Home (-12.00, 0.00, 81.00); ship (31.75, 0.40, 15.14)
-Dock landing (37.01, 0.45, 40.01); berth (31.77, 0.00, 15.05); actual seabed -12m.
+Exact ground: 4206 triangles; max collision/height error 3.814697E-05m. Trees: 127; grounding error 3.403798E-05m.
+Home (-12.00, 0.00, 81.00); ship (7.88, 0.00, -14.43)
+Dock landing (-13.77, 0.71, -16.77); berth (7.88, 0.00, -14.43); actual seabed -12m.
 Individual tree harvest passed; neighbour intact. Restart play before handoff.
-Dock (37.01, 0.00, 40.01)
+Dock (-13.77, 0.00, -16.77)

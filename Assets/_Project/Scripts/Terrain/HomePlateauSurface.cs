@@ -60,6 +60,7 @@ namespace SeaSick.Terrain
             var mat = new Material(source) { name = "Authored plateau face colours" };
             mat.SetFloat("_CrispTerrain", 0);
             mat.SetFloat("_DetailStrength", 0); mat.SetFloat("_NormalStrength", 0); mat.SetFloat("_StriationStrength", 0);
+            mat.SetFloat("_AuthoredFormLighting", 1f);
             go.AddComponent<MeshRenderer>().sharedMaterial = mat;
             go.AddComponent<MeshCollider>().sharedMesh = mesh;
             return go;

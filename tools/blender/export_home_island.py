@@ -26,7 +26,9 @@ for ob in scene.objects:
                 verts.append(xyz(transform@mesh.vertices[vi].co))
                 normals.append(xyz(transform.to_3x3().inverted().transposed()@mesh.corner_normals[li].vector))
                 c=tint.data[vi].color if tint else mesh.materials[tri.material_index].diffuse_color
-                colors.append(dict(zip(['r','g','b','a'],c)))
+                color=dict(zip(['r','g','b','a'],c))
+                color['a']=1 if ob.name.startswith('Mountain silhouette') and tri.material_index==0 else 0
+                colors.append(color)
             tris.extend([base,base+2,base+1])
         if ob.name.startswith('Sculpted beach'):
             # Underwater continuation makes the depth field follow the exact coast.
@@ -45,7 +47,7 @@ for ob in scene.objects:
                     for points in [(rings[k][i],rings[k+1][i],rings[k+1][j]),(rings[k][i],rings[k+1][j],rings[k][j])]:
                         base=len(verts);normal=(points[1]-points[0]).cross(points[2]-points[0]).normalized()
                         for p in points:
-                            verts.append(xyz(p));normals.append(xyz(normal));colors.append({'r':.55,'g':.43,'b':.25,'a':1})
+                            verts.append(xyz(p));normals.append(xyz(normal));colors.append({'r':.55,'g':.43,'b':.25,'a':0})
                         tris.extend([base,base+2,base+1])
 (out/'HomeIslandTerrain.json').write_text(json.dumps({'vertices':verts,'normals':normals,'colors':colors,'triangles':tris},separators=(',',':')))
 (out/'HomeIslandDressing.json').write_text(json.dumps({'instances':instances},indent=2))

@@ -68,9 +68,9 @@ try:
         counts[name]=counts.get(name,0)+1;placements.append((ob.name,x,y,z))
         return ob
     # Unequal woodland masses frame open grass routes and the offset summit.
-    groves=[(-67,47,18,20,15),(-40,74,25,16,19),(-3,99,28,16,22),
-            (47,88,24,18,20),(72,49,17,22,15),(-56,-4,17,16,11),
-            (49,6,14,12,7),(-25,58,15,9,7),(17,75,14,8,6)]
+    groves=[(-67,47,20,22,23),(-40,74,27,18,29),(-3,99,29,18,34),
+            (47,88,25,19,30),(72,49,19,24,22),(-56,-4,17,16,13),
+            (49,6,14,12,8),(-25,58,16,10,11),(17,75,14,8,6)]
     for cx,cy,rx,ry,target in groves:
         accepted=0
         for attempt in range(target*35):
@@ -81,7 +81,7 @@ try:
             name=rng.choices(['Broad','Broad_B','Broad_C','Broad_Young','Spruce','Spruce_B','Spruce_Young'],[25,17,15,12,15,8,8])[0]
             size=rng.uniform(.65,1.15)
             if place(name,x,y,size,'Trees',clearance=1.2):
-                occupied.append((x,y,5.2*size));accepted+=1
+                occupied.append((x,y,4.5*size));accepted+=1
     # Deliberately sparse crest accents keep the mountain's outline legible.
     for x,y,name,size in [(12,69,'Broad_C',.63),(22,74,'Broad_Young',.65),(8,73,'Spruce_Young',.65)]:
         if place(name,x,y,size,'Trees',clearance=.8):occupied.append((x,y,4))

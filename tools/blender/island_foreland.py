@@ -120,7 +120,7 @@ try:
     for label,position,target,scale in views:
         camera.location=position;camera.rotation_euler=(Vector(target)-camera.location).to_track_quat('-Z','Y').to_euler()
         data.ortho_scale=scale;scene.render.filepath=str(OUT/f'island-foreland-{label}.png')
-        bpy.ops.render.render(write_still=True)
+        if globals().get('RENDER_STUDIES',True): bpy.ops.render.render(write_still=True)
     camera.location=views[0][1];camera.rotation_euler=(Vector(views[0][2])-camera.location).to_track_quat('-Z','Y').to_euler()
     data.ortho_scale=views[0][3]
     bpy.data.libraries.write(str(SOURCE/'island-foreland-study.blend'),{scene})

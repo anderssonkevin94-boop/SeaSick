@@ -14,10 +14,10 @@ SOURCE = ROOT / 'tools/blender/source'
 
 # Each loop is a different contour, not a level terrace. The western shoulder
 # rises gradually; the eastern flank drops steeply into two low promontories.
-foot = [(-78,0,15),(-52,0,-2),(-18,0,6),(15,0,3),(52,0,-4),(78,0,20),
-        (79,0,48),(52,0,73),(12,0,82),(-27,0,77),(-65,0,61),(-80,0,40)]
-coast = [(-67,24,19),(-47,19,9),(-18,9,22),(12,9,22),(48,22,7),(65,24,23),
-         (64,26,44),(45,23,64),(9,29,69),(-24,27,65),(-53,30,53),(-68,27,37)]
+foot = [(-111,-5,18),(-52,0,-2),(-18,0,6),(15,0,3),(52,0,-4),(116,-5,26),
+        (106,-5,65),(61,0,91),(12,0,82),(-27,0,100),(-95,-5,77),(-113,-5,46)]
+coast = [(-78,20,21),(-47,19,9),(-18,9,22),(12,9,22),(48,22,7),(94,17,32),
+         (81,23,61),(46,21,77),(9,29,69),(-24,27,78),(-79,23,65),(-94,28,43)]
 shoulder = [(-53,25,30),(-39,20,23),(-18,10.5,28),(12,10.5,28),(40,24,24),(51,25,36),
             (46,27,46),(36,29,58),(9,31,61),(-19,29,56),(-40,31,49),(-54,28,38)]
 # An interrupted high shoulder creates a secondary rise and a shallow saddle
@@ -30,6 +30,15 @@ summit_foot = [(-13,45,40),(-9,42,36),(8,36,35),(24,36,35),(34,37,39),(36,37,47)
 # faces; the skyline has a sloping saddle and a blunt, irregular crown.
 crown = [(5,57.5,43),(7,59.5,39),(13,61,38),(24,63,38),(31,62,42),(33,61,47),
          (30,64,52),(24,65,53),(15,62,55),(8,60,53),(5,58,50),(2,56.5,47)]
+
+# Pinch some ledges into the rock mass instead of carrying equal-width grass
+# ribbons around every level. Keep the southern approach and western saddle.
+for i,weight in [(4,.78),(5,.82),(6,.72),(10,.72),(11,.76)]:
+    p=shoulder[i];q=coast[i]
+    shoulder[i]=tuple(a*(1-weight)+b*weight for a,b in zip(p,q))
+for i,weight in [(4,.60),(5,.73),(6,.75),(7,.68),(8,.50)]:
+    p=summit_foot[i];q=ridge[i]
+    summit_foot[i]=tuple(a*(1-weight)+b*weight for a,b in zip(p,q))
 
 def softened_corners(loop, amount=.16):
     # Two points at each authored corner form short, deliberate chamfers.
@@ -151,14 +160,15 @@ try:
     for label,position,target in views:
         camera.location=position;camera.rotation_euler=(Vector(target)-camera.location).to_track_quat('-Z','Y').to_euler()
         scene.render.filepath=str(OUT/f'mountain-silhouette-{label}.png')
-        bpy.ops.render.render(write_still=True)
+        if globals().get('RENDER_STUDIES',True): bpy.ops.render.render(write_still=True)
     # Pure silhouette reveals proportion without lighting doing the work.
     ink=material('MountainStudy_Ink',(.028,.045,.067),True)
     mesh.materials[0]=ink;bottom.materials[0]=ink
     camera.location=views[0][1];camera.rotation_euler=(Vector(views[0][2])-camera.location).to_track_quat('-Z','Y').to_euler()
     world.node_tree.nodes['Background'].inputs[0].default_value=(.8,.86,.91,1)
     world.node_tree.nodes['Background'].inputs[1].default_value=1
-    scene.render.filepath=str(OUT/'mountain-silhouette-outline.png');bpy.ops.render.render(write_still=True)
+    scene.render.filepath=str(OUT/'mountain-silhouette-outline.png')
+    if globals().get('RENDER_STUDIES',True): bpy.ops.render.render(write_still=True)
     mesh.materials[0]=clay;bottom.materials[0]=clay
     world.node_tree.nodes['Background'].inputs[0].default_value=(.42,.52,.65,1)
     world.node_tree.nodes['Background'].inputs[1].default_value=.35

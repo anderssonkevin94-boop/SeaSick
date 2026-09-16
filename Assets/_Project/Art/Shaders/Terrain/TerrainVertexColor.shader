@@ -31,6 +31,7 @@ Shader "SeaSick/Terrain Vertex Color"
         _DetailFade ("Detail fade distance (m)", Float) = 260
         _GraphicLight ("Graphic — soft sculpted lighting", Range(0,1)) = 0
         _ShadowTint ("Graphic — shadow colour", Color) = (0.56,0.67,0.88,1)
+        _AuthoredFormLighting ("Authored form lighting", Range(0,1)) = 0
     }
     SubShader
     {
@@ -58,6 +59,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 float _DetailFade;
                 float _GraphicLight;
                 float4 _ShadowTint;
+                float _AuthoredFormLighting;
             CBUFFER_END
 
             // --- procedural value noise -------------------------------------
@@ -200,6 +202,31 @@ Shader "SeaSick/Terrain Vertex Color"
                 float3 graphic = albedo * (fill + light.color
                     * lerp(_ShadowTint.rgb * 0.38, float3(1.02,0.97,0.85), sculpted));
                 col = lerp(col, graphic, _GraphicLight);
+
+                // The Blender plateau has deliberate broad face colours.  This
+                // optional response keeps those facets legible: three wide,
+                // softly joined bands give the toon shape, while the position
+                // inside each band still changes continuously so nearby planes
+                // do not collapse to one flat swatch.  Rock alpha strengthens
+                // the cool shadow response, while the lower ground weight keeps
+                // grass and sand readable when this is enabled on the plateau.
+                float authoredSun = saturate(ndl * light.shadowAttenuation);
+                float authoredLow = smoothstep(0.16, 0.32, authoredSun);
+                float authoredMid = smoothstep(0.48, 0.66, authoredSun);
+                float authoredHigh = smoothstep(0.58, 0.78, authoredSun);
+                float3 authoredShadow = float3(0.30, 0.42, 0.85);
+                float3 authoredMidTint = float3(0.66, 0.70, 0.82);
+                float3 authoredSunTint = float3(1.08, 1.03, 0.90);
+                float3 authoredTint = authoredShadow;
+                authoredTint = lerp(authoredTint, authoredMidTint, authoredLow);
+                authoredTint = lerp(authoredTint, authoredSunTint, authoredMid);
+                authoredTint *= lerp(0.92, 1.04, authoredHigh);
+                // Broad bands are the dominant form cue; this small continuous
+                // term preserves plane-to-plane direction variation inside them.
+                authoredTint *= lerp(0.94, 1.04, authoredSun);
+                float authoredMask = _AuthoredFormLighting * lerp(0.62, 1.0, saturate(i.color.a));
+                float3 authored = albedo * (max(ambient * 0.42, float3(0.10,0.10,0.10)) + light.color * authoredTint);
+                col = lerp(col, authored, authoredMask);
                 col = MixFog(col, i.fog);
                 return half4(col, 1);
             }
