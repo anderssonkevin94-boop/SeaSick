@@ -9,6 +9,8 @@ public static class ApprovedIslandShot
         go.transform.position=new Vector3(-180,210,-205);go.transform.LookAt(new Vector3(0,20,90));
         camera.fieldOfView=50;camera.farClipPlane=3000;
         Render(camera,1920,1080,"docs/art-direction/approved-island-unity-overview.png");
+        go.transform.position=new Vector3(-96,24,4);go.transform.LookAt(new Vector3(-42,24,100));
+        Render(camera,1920,1080,"docs/art-direction/approved-island-unity-detail.png");
         Render(main,1080,2340,"docs/art-direction/approved-island-unity-portrait.png");
         Render(main,1920,1080,"docs/art-direction/approved-island-unity-gameplay.png");
         Object.Destroy(go);

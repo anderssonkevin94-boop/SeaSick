@@ -36,6 +36,39 @@ def limb(a,b,r0,r1,color,coll,sides=7):
     return mesh('branch',vs,fs,color,coll)
 
 def crown(at,scale,color,coll,seed,lod=False):
+    if max(scale)>.3:
+        # Rounded, scalloped leaf masses. Shape changes follow broad lobes,
+        # never independent vertex noise; smooth normals preserve a clean
+        # silhouette while vertex colour gives one dark underside/light crown.
+        segments=10 if lod else 16;bands=5 if lod else 8
+        phase=seed*.713;vs=[]
+        for row in range(1,bands):
+            theta=math.pi*row/bands
+            for j in range(segments):
+                a=j*math.tau/segments
+                lobe=1+.085*math.cos(3*a+phase)*math.sin(theta)**2+.035*math.cos(5*a-phase)
+                vs.append((at[0]+math.cos(a)*math.sin(theta)*scale[0]*lobe,
+                           at[1]+math.sin(a)*math.sin(theta)*scale[1]*lobe,
+                           at[2]+math.cos(theta)*scale[2]*(1+.035*math.sin(a+phase)*math.sin(theta))))
+        top=len(vs);vs.append((at[0],at[1],at[2]+scale[2]))
+        bottom=len(vs);vs.append((at[0],at[1],at[2]-scale[2]))
+        fs=[]
+        for row in range(bands-2):
+            for j in range(segments):
+                a=row*segments+j;b=row*segments+(j+1)%segments
+                fs.append((a,a+segments,b+segments,b))
+        for j in range(segments):
+            k=(j+1)%segments;last=(bands-2)*segments
+            fs.extend([(top,j,k),(bottom,last+k,last+j)])
+        ob=mesh('canopy',vs,fs,color,coll);attr=ob.data.color_attributes['Color']
+        for p in ob.data.polygons:
+            p.use_smooth=True
+            for li in p.loop_indices:
+                v=ob.data.vertices[ob.data.loops[li].vertex_index].co
+                h=max(0,min(1,(v.z-at[2])/scale[2]*.5+.5));h=h*h*(3-2*h)
+                shade=.60+.51*h
+                attr.data[li].color=(color[0]*shade,color[1]*shade+.012*(1-h),color[2]*shade+.018*(1-h),1)
+        return ob
     bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=1 if lod else 2,radius=1,location=at)
     o=bpy.context.object
     for c in list(o.users_collection): c.objects.unlink(o)

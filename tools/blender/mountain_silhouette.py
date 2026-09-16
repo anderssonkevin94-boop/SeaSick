@@ -67,11 +67,13 @@ def stone_shoulders(low,high,phase=0):
     # Uneven shoulder elevations split broad walls into inclined stone planes.
     # Keep their horizontal position between the surrounding loops; no added
     # boulder shells, surface noise, or detached decorative geometry.
-    heights=(.42,.63,.50,.57,.38,.69,.47,.60,.40,.65,.51,.58)
+    # Shared shoulder height across the two ends of each broad face avoids
+    # accidental diagonal wedges. Short corner chamfers carry the changes.
+    heights=(.52,.52,.50,.50,.56,.56,.48,.48,.54,.54,.50,.50)
     result=[]
     for i,(a,b) in enumerate(zip(low,high)):
         t=heights[((i+1)//2+phase)%12]
-        horizontal=t-.11
+        horizontal=t-.055
         result.append((a[0]*(1-horizontal)+b[0]*horizontal,
                        a[1]*(1-t)+b[1]*t,
                        a[2]*(1-horizontal)+b[2]*horizontal))

@@ -85,12 +85,26 @@ try:
     # Deliberately sparse crest accents keep the mountain's outline legible.
     for x,y,name,size in [(12,69,'Broad_C',.63),(22,74,'Broad_Young',.65),(8,73,'Spruce_Young',.65)]:
         if place(name,x,y,size,'Trees',clearance=.8):occupied.append((x,y,4))
-    # Cluster undergrowth at woodland margins; leave the harbour apron open.
-    for x,y,spacing in occupied:
-        for j in range(rng.randint(2,4)):
-            a=rng.uniform(0,math.tau);r=rng.uniform(2.5,6.0)
-            name=rng.choice(['Scrub_0','Scrub_1','Scrub_2','Fern','Grass','Grass_B'])
-            place(name,x+math.cos(a)*r,y+math.sin(a)*r,rng.uniform(.65,1.2),'Understory')
+    # A few asymmetric arrangements at woodland edges: one bush anchors a
+    # pocket, with smaller tufts, a fern and occasional half-buried stone.
+    # No independent confetti around every trunk; broad grass stays quiet.
+    for index,(x,y,spacing) in enumerate(occupied):
+        if index%3:continue
+        a=rng.uniform(0,math.tau);r=rng.uniform(2.8,4.7)
+        cx=x+math.cos(a)*r;cy=y+math.sin(a)*r
+        bush=place('Scrub_'+str((index//3)%3),cx,cy,rng.uniform(.85,1.25),'Understory',clearance=.6)
+        if not bush:continue
+        for dx,dy,name,size in [(1.1,.25,'Grass',.60),(1.65,.8,'Grass_B',.45),(-.6,.85,'Fern',.65)]:
+            px=cx+dx*math.cos(a)-dy*math.sin(a);py=cy+dx*math.sin(a)+dy*math.cos(a)
+            place(name,px,py,size,'Understory')
+        if index%9==0:
+            stone=place('Boulder_'+str(index%4),cx-1.3*math.cos(a),cy-1.3*math.sin(a),.8,'Shore stones')
+            if stone:stone.location.z-=.18
+            place('Sticks',cx+.8,cy-1.1,.7,'Understory')
+    # Deliberate pockets along the low cliff feet; open central approach.
+    for x,y in [(-55,20),(-45,29),(45,28),(64,32),(-74,18)]:
+        for dx,dy,name,size in [(0,0,'Scrub_1',1.2),(1.8,.5,'Scrub_2',.65),(-1.2,-.4,'Grass',.7),(.8,-1,'Fern',.6)]:
+            place(name,x+dx,y+dy,size,'Understory',clearance=.5)
     # Small, asymmetrical shoreline families, never an armour of repeated cliffs.
     for cx,cy in [(-105,-25),(-82,-69),(98,-30),(99,39),(-82,86),(61,106)]:
         for j in range(5):
