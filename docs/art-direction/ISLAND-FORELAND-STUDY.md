@@ -11,3 +11,7 @@ Review the three renders produced by the script:
 - `island-foreland-plan.png` — shoreline, turf footprint, and inlet layout from above
 
 The prototype footprint intentionally differs from the current runtime island and is only a visual direction study. Harbour navigability, berth clearance, water depth, collision, traversal, and runtime terrain integration are not validated here. Existing home-island and mountain findings inform later integration decisions; this study leaves Unity and gameplay data unchanged.
+
+The current plateau phase keeps the mountain as one connected surface, with a lowered central approach, broader low shelves to the left and right, and a distinct upper bench. These are art-direction geometry goals for the silhouette study. Game traversal, collision, harvesting, and runtime terrain behavior remain unvalidated.
+
+Geometry review: all 132 mountain triangles have positive projected area in the horizontal plane, with no degenerate triangles. Concave quads behind the summit use an inward diagonal to prevent folded faces. These source-mesh checks are separate from the pending Unity validation.

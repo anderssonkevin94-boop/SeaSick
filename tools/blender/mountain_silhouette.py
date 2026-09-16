@@ -15,27 +15,29 @@ SOURCE = ROOT / 'tools/blender/source'
 # rises gradually; the eastern flank drops steeply into two low promontories.
 foot = [(-78,0,15),(-52,0,-2),(-18,0,6),(15,0,3),(52,0,-4),(78,0,20),
         (79,0,48),(52,0,73),(12,0,82),(-27,0,77),(-65,0,61),(-80,0,40)]
-coast = [(-67,24,19),(-47,19,9),(-18,15,17),(12,13,13),(48,18,7),(65,21,23),
+coast = [(-67,24,19),(-47,19,9),(-18,9,22),(12,9,22),(48,22,7),(65,24,23),
          (64,26,44),(45,23,64),(9,29,69),(-24,27,65),(-53,30,53),(-68,27,37)]
-shoulder = [(-53,30,30),(-39,32,23),(-18,30,28),(12,25,25),(40,26,24),(51,29,36),
-            (46,34,46),(36,36,58),(9,42,61),(-19,39,56),(-40,35,49),(-54,33,38)]
+shoulder = [(-53,25,30),(-39,20,23),(-18,10.5,28),(12,10.5,28),(40,24,24),(51,25,36),
+            (46,27,46),(36,29,58),(9,31,61),(-19,29,56),(-40,31,49),(-54,28,38)]
 # An interrupted high shoulder creates a secondary rise and a shallow saddle
 # before the main crown. This breaks the long straight tent-like skyline.
-ridge = [(-31,40,34),(-25,43,29),(-8,40,32),(17,39,31),(36,37,34),(40,35,41),
+ridge = [(-31,36,34),(-25,31.5,29),(-8,34,32),(17,35,31),(36,36,34),(40,35,41),
          (37,38,49),(31,43,56),(7,47,58),(-20,44,55),(-32,50,49),(-38,45,41)]
-summit_foot = [(-13,42,40),(-9,44,36),(8,46,35),(24,44,35),(34,42,39),(36,40,47),
-               (32,45,54),(24,49,57),(12,50,58),(-5,45,56),(-12,43,51),(-15,42,46)]
+summit_foot = [(-13,38,40),(-9,37,36),(8,35,35),(24,36,35),(34,37,39),(36,36,47),
+               (32,39,52),(24,44,54),(12,46,56),(-5,43,56),(-12,41,51),(-15,40,46)]
 # Summit is deliberately offset right and back. Several vertices lie on broad
 # faces; the skyline has a sloping saddle and a blunt, irregular crown.
-crown = [(2,55,43),(5,59,39),(13,61,38),(24,63,38),(31,62,42),(33,61,47),
-         (30,64,52),(24,65,55),(15,63,55),(8,61,53),(2,57,50),(-1,54,47)]
-verts = foot + coast + shoulder + ridge + summit_foot + crown + [(17,63,47)]
+crown = [(2,51,43),(5,55,39),(13,61,38),(24,63,38),(31,62,42),(33,61,47),
+         (30,64,52),(24,65,53),(15,60,55),(8,54,53),(2,50,50),(-1,47,47)]
+verts = foot + coast + shoulder + ridge + summit_foot + crown + [(17,58,47)]
 faces = []
 for ring in range(5):
     for i in range(12):
         j=(i+1)%12; a=ring*12+i; b=ring*12+j; c=b+12; d=a+12
         # Alternating the chosen diagonal follows the direction of the ridge.
-        faces.extend([(a,b,d),(b,c,d)] if i in (0,4,7,10) else [(a,b,c),(a,c,d)])
+        # The two concave eastern shelf quads need the inward diagonal.
+        split_bd=i in (0,4,7,10) or (ring==3 and i in (5,6))
+        faces.extend([(a,b,d),(b,c,d)] if split_bd else [(a,b,c),(a,c,d)])
 for i in range(12): faces.append((60+i,60+(i+1)%12,72))
 
 def material(name, color, emission=False):
