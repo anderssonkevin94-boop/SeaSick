@@ -1,0 +1,25 @@
+{
+  "counts": {
+    "Broad_C": 20,
+    "Broad_B": 21,
+    "Spruce_B": 14,
+    "Broad_Young": 14,
+    "Spruce": 21,
+    "Broad": 22,
+    "Spruce_Young": 10,
+    "Grass_B": 48,
+    "Scrub_2": 53,
+    "Scrub_0": 46,
+    "Scrub_1": 54,
+    "Grass": 51,
+    "Fern": 43,
+    "Boulder_1": 10,
+    "Boulder_0": 6,
+    "Boulder_2": 6,
+    "Boulder_3": 8,
+    "Driftwood": 3
+  },
+  "individual_objects": 450,
+  "seed": 91627,
+  "unity_exported": false
+}
