@@ -2,6 +2,7 @@
 Builds on the approved mountain study without exporting any Unity assets.
 """
 import bpy
+import math
 from pathlib import Path
 from mathutils import Vector
 from mathutils.geometry import tessellate_polygon
@@ -11,14 +12,28 @@ OUT=ROOT/'docs/art-direction'
 SOURCE=ROOT/'tools/blender/source'
 
 # Counter-clockwise shoreline with a southern inlet cut into its foreground.
-shore=[(0,-28),(36,-28),(47,-43),(50,-64),(62,-84),(91,-77),
-       (112,-50),(121,-14),(117,28),(99,72),(71,109),(35,126),
-       (-10,130),(-52,118),(-86,92),(-107,55),(-120,15),(-116,-30),
-       (-101,-68),(-73,-94),(-41,-103),(-16,-94),(-6,-77),(-9,-53),(-6,-37)]
-turf=[(0,-12),(34,-12),(59,-36),(65,-58),(69,-66),(80,-60),
-      (98,-39),(105,-10),(102,24),(89,65),(65,97),(32,112),
-      (-8,115),(-47,104),(-74,83),(-94,50),(-103,12),(-99,-24),
-      (-86,-57),(-64,-76),(-39,-85),(-31,-78),(-23,-68),(-24,-47),(-20,-25)]
+shore=[(-2,-27),(28,-24),(45,-37),(53,-60),(64,-80),(91,-75),
+       (110,-45),(108,-4),(111,30),(99,72),(71,109),(35,126),
+       (-10,130),(-52,118),(-86,92),(-105,53),(-100,16),(-118,-28),
+       (-106,-61),(-76,-88),(-45,-104),(-22,-99),(-10,-81),(-15,-59),(-14,-40)]
+turf=[(-4,-3),(27,-6),(59,-22),(70,-48),(76,-66),(84,-63),
+      (104,-41),(100,-4),(106,29),(94,69),(67,105),(33,122),
+      (-10,126),(-49,114),(-81,88),(-97,52),(-90,17),(-96,-23),
+      (-79,-49),(-61,-64),(-40,-77),(-34,-79),(-28,-69),(-34,-48),(-29,-18)]
+
+def coastline(points):
+    """Broad authored curves. No high-frequency noise or displaced beach lumps."""
+    result=[]
+    for i in range(len(points)):
+        a,b,c,d=[Vector(points[j%len(points)]) for j in (i-1,i,i+1,i+2)]
+        for k in range(8):
+            t=k/8
+            p=.5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t*t+(-a+3*b-3*c+d)*t*t*t)
+            result.append(tuple(p))
+    return result
+
+shore=coastline(shore)
+turf=coastline(turf)
 
 def mat(name,color,roughness=.85):
     m=bpy.data.materials.get(name) or bpy.data.materials.new(name)
@@ -57,16 +72,28 @@ try:
     def index(v):return v if isinstance(v,int) else min(range(len(flat)),key=lambda i:(flat[i]-v).length_squared)
     foreland=mesh_object(scene,'Flat grassy foreland — 3.2 m level',flat,
                          [tuple(index(v) for v in t) for t in tris],grass)
-    # Broad dry beach, then a shallow wet-sand approach to the waterline.
-    lower=[(x*.75+gx*.25,y*.75+gy*.25,1.5) for (x,y),(gx,gy) in zip(shore,turf)]
-    upper=[(x*.25+gx*.75,y*.25+gy*.75,1.65) for (x,y),(gx,gy) in zip(shore,turf)]
-    beachverts=[(x,y,-.18) for x,y in shore]+lower+upper+[(x,y,3.2) for x,y in turf]
+    # Wide sand pockets south/west; only narrow strands on the exposed north.
+    # Smooth the cross-section while keeping the dry beach almost level.
+    profile=[(0,-.18),(.04,.05),(.12,.50),(.24,1.2),(.44,1.48),(.68,1.55),(.86,2.25),(1,3.2)]
+    beachverts=[(x*(1-t)+gx*t,y*(1-t)+gy*t,h)
+                for t,h in profile for (x,y),(gx,gy) in zip(shore,turf)]
     n=len(shore);beachfaces=[]
-    for ring in range(3):
+    for ring in range(len(profile)-1):
         for i in range(n):
             j=(i+1)%n;a=ring*n+i;b=ring*n+j
             beachfaces.extend([(a,b,b+n),(a,b+n,a+n)])
-    mesh_object(scene,'Broad beaches and cove banks',beachverts,beachfaces,sand)
+    beach=mesh_object(scene,'Sculpted beach crescents and narrow coastal strands',beachverts,beachfaces,sand)
+    for p in beach.data.polygons:p.use_smooth=True
+    # A quiet wet-sand transition follows the water, with no painted noise.
+    color=beach.data.color_attributes.new(name='BeachTint',type='FLOAT_COLOR',domain='POINT')
+    for ring,(t,h) in enumerate(profile):
+        for i in range(n):
+            wet=max(0,1-t/(.21+.035*math.sin(i/n*math.tau*3)))
+            dry=(.78,.61,.33);damp=(.55,.43,.25)
+            color.data[ring*n+i].color=(*[a*(1-wet)+b*wet for a,b in zip(dry,damp)],1)
+    node=sand.node_tree.nodes.get('BeachTint') or sand.node_tree.nodes.new('ShaderNodeVertexColor')
+    node.name='BeachTint';node.layer_name='BeachTint'
+    sand.node_tree.links.new(node.outputs['Color'],sand.node_tree.nodes.get('Principled BSDF').inputs['Base Color'])
     mesh_object(scene,'Sea level', [(-10000,-10000,0),(10000,-10000,0),(10000,10000,0),(-10000,10000,0)],[(0,1,2,3)],water)
 
     data=bpy.data.cameras.new('ForelandStudy_Camera');camera=bpy.data.objects.new('ForelandStudy_Camera',data)
