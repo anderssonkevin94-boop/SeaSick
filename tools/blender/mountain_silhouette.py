@@ -31,23 +31,17 @@ summit_foot = [(-13,45,40),(-9,42,36),(8,36,35),(24,36,35),(34,37,39),(36,37,47)
 crown = [(5,57.5,43),(7,59.5,39),(13,61,38),(24,63,38),(31,62,42),(33,61,47),
          (30,64,52),(24,65,53),(15,62,55),(8,60,53),(5,58,50),(2,56.5,47)]
 
-def softened_corners(loop):
+def softened_corners(loop, amount=.16):
     # Two points at each authored corner form short, deliberate chamfers.
     # More geometry goes into the silhouette instead of noisy triangulation.
     result=[]
     for i,p in enumerate(loop):
         for neighbour in (loop[(i-1)%len(loop)],loop[(i+1)%len(loop)]):
-            result.append(tuple(.84*a+.16*b for a,b in zip(p,neighbour)))
+            result.append(tuple((1-amount)*a+amount*b for a,b in zip(p,neighbour)))
     return result
 
-verts = foot + coast + shoulder
+verts = []
 faces = []; zones=[]
-for ring in range(2):
-    for i in range(12):
-        j=(i+1)%12; a=ring*12+i; b=ring*12+j; c=b+12; d=a+12
-        split_bd=i in (0,4,7,10)
-        faces.extend([(a,b,d),(b,c,d)] if split_bd else [(a,b,c),(a,c,d)])
-        zones.extend([-1,-1])
 
 def patch(indices,zone):
     # Triangulate in the ground plane so concave shelf corners cannot fold.
@@ -56,24 +50,51 @@ def patch(indices,zone):
         ids=[v if isinstance(v,int) else min(range(len(points)),key=lambda k:(points[k]-v).length_squared) for v in tri]
         faces.append(tuple(indices[i] for i in ids));zones.append(zone)
 
+base24=softened_corners(foot,.12);coast24=softened_corners(coast,.12)
+shoulder24=softened_corners(shoulder,.12)
 ridge24=softened_corners(ridge);foot24=softened_corners(summit_foot);crown24=softened_corners(crown)
+
+def stone_shoulders(low,high,phase=0):
+    # Uneven shoulder elevations split broad walls into inclined stone planes.
+    # Keep their horizontal position between the surrounding loops; no added
+    # boulder shells, surface noise, or detached decorative geometry.
+    heights=(.42,.63,.50,.57,.38,.69,.47,.60,.40,.65,.51,.58)
+    result=[]
+    for i,(a,b) in enumerate(zip(low,high)):
+        t=heights[((i+1)//2+phase)%12]
+        horizontal=t-.11
+        result.append((a[0]*(1-horizontal)+b[0]*horizontal,
+                       a[1]*(1-t)+b[1]*t,
+                       a[2]*(1-horizontal)+b[2]*horizontal))
+    return result
+
+lower_break=stone_shoulders(base24,coast24)
+middle_break=stone_shoulders(shoulder24,ridge24,3)
 bevel=[]
 for low,high in zip(foot24,crown24):
     # A short upper shoulder catches light above the broad main rock planes.
     bevel.append((low[0]*.22+high[0]*.78,high[1]-3.0,low[2]*.22+high[2]*.78))
-verts += ridge24 + foot24 + bevel + crown24
-for i in range(12):
-    j=(i+1)%12
-    patch([24+i,24+j,36+2*j,36+2*i+1,36+2*i],-1)
-for ring in range(3):
+loops=[base24,lower_break,coast24,shoulder24,middle_break,ridge24,foot24,bevel,crown24]
+verts=[p for loop in loops for p in loop]
+
+def ground_zone(low,high,i):
+    # Classify the original whole wall/slope, then carry that decision through
+    # every new facet. Added geometry must not create scattered turf triangles.
+    j=(i+1)%24
+    a,b,c=[Vector((p[0],p[2],p[1])) for p in (low[i],low[j],high[j])]
+    return 1 if (b-a).cross(c-a).normalized().z>.83 else 0
+
+for ring in range(len(loops)-1):
     for i in range(24):
-        j=(i+1)%24;a=36+ring*24+i;b=36+ring*24+j
-        # A continuous upper meadow, a few connected western ramp faces,
-        # then solid stone up to the turf crown. Never scattered green shards.
-        zone=1 if ring==0 or i in (0,21,22,23) else 0
+        j=(i+1)%24;a=ring*24+i;b=ring*24+j
+        if ring in (0,1):zone=ground_zone(base24,coast24,i)
+        elif ring in (3,4):zone=ground_zone(shoulder24,ridge24,i)
+        elif ring in (2,5):zone=1
+        else:zone=1 if i in (0,21,22,23) else 0
         patch([a,b,b+24,a+24],zone)
 centre=len(verts);verts.append((17,61.6,47))
-for i in range(24):faces.append((108+i,108+(i+1)%24,centre));zones.append(1)
+top_start=(len(loops)-1)*24
+for i in range(24):faces.append((top_start+i,top_start+(i+1)%24,centre));zones.append(1)
 
 def material(name, color, emission=False):
     mat=bpy.data.materials.get(name) or bpy.data.materials.new(name)
@@ -103,9 +124,9 @@ try:
 
     # A very shallow foundation closes the mountain into a single solid form.
     bottom=bpy.data.meshes.new('MountainStudy_Foundation')
-    foundation=[(x,z,h) for x,h,z in foot]+[(x,z,-2) for x,h,z in foot]
-    sides=[(i,(i+1)%12,(i+1)%12+12,i+12) for i in range(12)]
-    sides.append(tuple(range(23,11,-1)))
+    foundation=[(x,z,h) for x,h,z in base24]+[(x,z,-2) for x,h,z in base24]
+    sides=[(i,(i+1)%24,(i+1)%24+24,i+24) for i in range(24)]
+    sides.append(tuple(range(47,23,-1)))
     bottom.from_pydata(foundation,[],sides);bottom.update()
     base=bpy.data.objects.new('Study foundation',bottom);scene.collection.objects.link(base);bottom.materials.append(clay)
 

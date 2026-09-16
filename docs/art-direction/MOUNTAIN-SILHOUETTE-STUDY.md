@@ -2,7 +2,7 @@
 
 Stage one is a Blender-only proportion study for the connected mountain form. It keeps the existing plateau source and gameplay data untouched, and produces no Unity runtime export.
 
-The intended read is an off-centre crown set toward the right and rear, reached by a long, gradual west shoulder. The east side should descend quickly into two low promontories. The crown should feel broad, blunt, and irregular, with a sloping saddle rather than a level terrace. The current refinement rebuilds the crown at higher topology with chamfered corners and an upper bevel, retaining the authored silhouette while giving the summit a less messy natural break-up. Explicit face-domain terrain zones preserve the intended grass/rock pattern as topology changes.
+The intended read is an off-centre crown set toward the right and rear, reached by a long, gradual west shoulder. The east side should descend quickly into two low promontories. The crown should feel broad, blunt, and irregular, with a sloping saddle rather than a level terrace. The current refinement uses chamfered lower and middle loop corners plus uneven shoulder elevations to split broad walls into secondary inclined rock planes within the same continuous surface. The upper bevel retains the authored silhouette while giving the summit a less messy natural break-up. Explicit face-domain terrain zones preserve the intended grass/rock pattern as topology changes.
 
 Review the isolated `mountain-silhouette-study.blend` source together with four renders:
 
@@ -22,4 +22,4 @@ Stage-one review criteria:
 5. The reverse and gameplay views preserve the same directional story without revealing a flat terrace or accidental symmetry.
 6. The clay facet pattern supports the form while the outline remains legible on its own.
 
-The refined source currently contains 133 vertices and 252 triangles. Blender geometry QA found no negative or zero projected-area triangles (minimum projected area 0.1975). This document records visual intent and review criteria only. Passing this study is not gameplay validation and makes no claims about runtime rendering, collision, height queries, streaming, or player traversal; Unity runtime remains untested.
+The refined source contains 217 vertices and 408 triangles. Blender geometry QA passed: zero negative or zero projected-area faces, minimum projected area 0.1974756746, 24 boundary edges matching the expected outer foot, and zero non-manifold edges. This document records visual intent and review criteria only. Passing this study is not gameplay validation and makes no claims about runtime rendering, collision, height queries, streaming, or player traversal; Unity runtime remains untested.
