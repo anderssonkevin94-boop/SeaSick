@@ -13,6 +13,10 @@
 
 Texture2DArray<float4> H0;
 Texture2DArray<float4> WaveData;
+// Accumulated phase per k, radians, wrapped. Read AND written every frame by
+// TimeEvolve; nothing else in the ocean touches it. See the block at the
+// sincos below for why the phase is carried rather than recomputed.
+RWTexture2DArray<float> Phase;
 RWTexture2DArray<float4> Spec0;
 RWTexture2DArray<float4> Spec1;
 
@@ -39,7 +43,19 @@ cbuffer Params
     // Named _OceanTime, not _Time: the latter is a Unity built-in shader
     // global and colliding with it silently feeds the wrong clock in.
     float _OceanTime;
+    // Ocean seconds since the previous TimeEvolve dispatch -- the phase
+    // integrator's step. Zero when the clock is paused, so a pinned sea stays
+    // pinned without a special case.
+    float _PhaseDt;
+    // 1 = ignore the stored phase and set it to omega * _OceanTime. Used for
+    // the first dispatch after the textures are created, whenever OceanTime is
+    // scrubbed (which is how probes pin the sea), and every frame while phase
+    // accumulation is switched off for an A/B.
+    uint _SeedPhase;
 }
+
+static const float TWO_PI = 6.28318530718f;
+static const float INV_TWO_PI = 0.15915494309f;
 
 float2 CMul(float2 a, float2 b)
 {
@@ -63,8 +79,45 @@ void TimeEvolve(uint3 id : SV_DispatchThreadID)
         return;
     }
 
+    // PHASE IS CARRIED, NOT RECOMPUTED.
+    //
+    // This used to be sincos(wd.z * _OceanTime), i.e. phase = omega(k) * t off
+    // the absolute clock. That is only correct while omega is constant, and it
+    // is not: omega = sqrt(g k tanh(k * depth)) and `depth` is lerped across
+    // the sea state blend -- 200 m through Calm and Normal, then 50 m at Rough
+    // and 30 m at Stormy. So every spectrum rebuild (4 Hz while the weather
+    // moves, which in a running sea is always, because sets and lulls swing Hs
+    // +/-16 %) recomputed WaveData with a slightly different omega, and the
+    // whole surface jumped by d_omega * t.
+    //
+    // That product is the bug. d_omega per rebuild is tiny, but it multiplies
+    // the ABSOLUTE session clock, so the jump grows without bound the longer
+    // the game runs, four times a second:
+    //
+    //     lambda 512 m, a steady Rough sea, depth wobbling 45 <-> 55 m
+    //     t =   60 s -> 0.006 rad jump   (0.1x the wave's real motion)
+    //     t = 1000 s -> 0.106 rad        (1.7x)
+    //     t = 3000 s -> 0.319 rad        (5.0x -- the swell jerks further than
+    //                                     it travels, every rebuild)
+    //
+    // Three things follow, and all three match the report exactly. It only
+    // happens in heavy water, because Calm->Normal is 200 m at both ends and
+    // omega never moves there. It hits the LONG waves, because tanh saturates
+    // and short chop is deep-water at any of these depths. And it gets worse
+    // the longer you play.
+    //
+    // Integrating instead means a new omega changes how fast the wave travels
+    // from here, which is what a changing sea should do, and the surface stays
+    // continuous through it. Wrapping keeps fp32 exact forever, which the old
+    // form also lost after a few hours.
+    float phase = _SeedPhase != 0u
+        ? wd.z * _OceanTime
+        : Phase[id] + wd.z * _PhaseDt;
+    phase -= TWO_PI * floor(phase * INV_TWO_PI);
+    Phase[id] = phase;
+
     float s, c;
-    sincos(wd.z * _OceanTime, s, c);
+    sincos(phase, s, c);
     float2 e = float2(c, s);
     // h(k,t) = h0(k) e^{iwt} + conj(h0(-k)) e^{-iwt}
     float2 h = CMul(h0.xy, e) + CMul(h0.zw, float2(e.x, -e.y));

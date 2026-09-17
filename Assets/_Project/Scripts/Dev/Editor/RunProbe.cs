@@ -19,6 +19,9 @@ public static class RunProbe
     public static void SprayRig() => Call("SprayRigCheck");
     public static void HomeTab() => Call("HomeTabProbe");
     public static void Look() => Call("IslandLook");
+    public static void Ripple() => Call("RippleStressProbe");
+    /// The needle gate under a jittering frame time, old sub-step vs fixed.
+    public static void RippleJitter() => Call("RippleStressProbe", "Jitter");
 
     /// The same sheet, framed on the ROCKIEST island in reach rather than the
     /// nearest, and tagged so a before cannot be mistaken for an after. The
@@ -113,6 +116,19 @@ public static class RunProbe
     public static void TerrainPerf() => Call("TerrainPerfProbe");
     public static void HitchStorm() => Call("HitchProbe", "Storm");
     public static void Hitch() => Call("HitchProbe");
+    // The same complaint as Hitch, but SAILING and with every jump charged to
+    // the term that moved. Hitch measures a ship at spawn and reports 0.27 m
+    // against the 1.24 m PerfHUD shows while under way.
+    public static void Step() => Call("StepProbe");
+    public static void StepStorm() => Call("StepProbe", "Storm");
+    // The water the complaint actually came from: ~3 km out, deep, envelope
+    // near 1. Near home the envelope holds the sea to a third amplitude and
+    // the probe finds nothing.
+    public static void StepOffshore() => Call("StepProbe", "Offshore");
+    public static void StepOffshoreStorm() => Call("StepProbe", "OffshoreStorm");
+    public static void Smooth() => Call("SmoothProbe");
+    public static void StepRebuildSweep() => Call("StepProbe", "RebuildSweep");
+    public static void StepRebuildSweepUnsliced() => Call("StepProbe", "RebuildSweepUnsliced");
     // The ocean's parity gate and its cost ledger. Both name SeaSick.Ocean
     // and Unity.Collections, which is the reference set the ad-hoc compile
     // does not have; through the project assembly they run. Play mode,

@@ -159,6 +159,18 @@ namespace SeaSick.UI
                       "TUNING — editor and dev builds only", UITheme.Small);
             y += u * 1.8f;
 
+            // Straight in the list rather than behind a tuner, because the
+            // thing it fixes only exists in a full-sized sea a long way from
+            // home, and reaching it means sailing there -- the A/B has to be
+            // one thumb away when you arrive. See OceanRenderer.AccumulatePhase.
+            y = Toggle(body, y, rowH, RowWavePhase,
+                       SeaSick.Ocean.OceanRenderer.AccumulatePhase,
+                       v => SeaSick.Ocean.OceanRenderer.AccumulatePhase = v);
+            GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
+                      "off = the old sea, which re-phases on every rebuild",
+                      UITheme.Small);
+            y += u * 1.6f;
+
             var tools = DevTools.All;
             if (tools.Count == 0)
             {
@@ -211,6 +223,7 @@ namespace SeaSick.UI
         static readonly string[] RowCompass = { "◎  compass tape", "◉  compass tape" };
         static readonly string[] RowCrew = { "◎  crew", "◉  crew" };
         static readonly string[] RowPerf = { "◎  performance readout", "◉  performance readout" };
+        static readonly string[] RowWavePhase = { "◎  smooth wave phase", "◉  smooth wave phase" };
 
         /// A row that reads as on or off without a checkbox glyph: the pressed
         /// style IS the state, the same way the oars and ease-her buttons at

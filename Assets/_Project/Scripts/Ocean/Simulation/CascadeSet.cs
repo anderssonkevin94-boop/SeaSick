@@ -20,6 +20,19 @@ namespace SeaSick.Ocean
         public RenderTexture WaveData { get; private set; }
         public Texture2DArray Noise { get; private set; }
 
+        /// Accumulated wave phase per k, one slice per cascade, in radians
+        /// wrapped to [0, 2pi).
+        ///
+        /// It is NOT part of the spectrum and a rebuild must never touch it.
+        /// That is the whole point: omega depends on `depth`, which the sea
+        /// state blend lerps (200 m calm -> 50 m rough -> 30 m stormy), so
+        /// every rebuild hands the simulation a slightly different omega. The
+        /// old `sincos(omega * _OceanTime)` turned that into a phase JUMP of
+        /// d_omega * t -- proportional to how long the session has been
+        /// running. Carrying phase across the change makes a new omega alter
+        /// the wave's SPEED instead of teleporting it.
+        public RenderTexture Phase { get; private set; }
+
         // Per-frame working set
         public RenderTexture Spec0 { get; private set; }
         public RenderTexture Spec1 { get; private set; }
@@ -57,6 +70,9 @@ namespace SeaSick.Ocean
 
             H0 = NewArray(n, RenderTextureFormat.ARGBFloat, false);
             WaveData = NewArray(n, RenderTextureFormat.ARGBFloat, false);
+            // Fresh, so it holds garbage: OceanRenderer seeds it on the first
+            // step after a Create (firstSpectrumBuild does the same job for H0).
+            Phase = NewArray(n, RenderTextureFormat.RFloat, false);
             Spec0 = NewArray(n, RenderTextureFormat.ARGBFloat, false);
             Spec1 = NewArray(n, RenderTextureFormat.ARGBFloat, false);
             Scratch = NewArray(n, RenderTextureFormat.ARGBFloat, false);
@@ -117,10 +133,10 @@ namespace SeaSick.Ocean
 
         public void Release()
         {
-            foreach (var rt in new[] { H0, WaveData, Spec0, Spec1, Scratch, Displacement, Derivatives, Turbulence, TurbulencePrev })
+            foreach (var rt in new[] { H0, WaveData, Phase, Spec0, Spec1, Scratch, Displacement, Derivatives, Turbulence, TurbulencePrev })
                 if (rt != null) rt.Release();
             if (Noise != null) Object.DestroyImmediate(Noise);
-            H0 = WaveData = Spec0 = Spec1 = Scratch = Displacement = Derivatives = Turbulence = TurbulencePrev = null;
+            H0 = WaveData = Phase = Spec0 = Spec1 = Scratch = Displacement = Derivatives = Turbulence = TurbulencePrev = null;
             Noise = null;
         }
     }

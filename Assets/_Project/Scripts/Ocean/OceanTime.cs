@@ -26,8 +26,16 @@ namespace SeaSick.Ocean
             if (!Paused) Now += deltaTime * Scale;
         }
 
+        /// Bumped by every scrub. The simulation ACCUMULATES wave phase frame
+        /// by frame now (see TimeEvolve.compute), so a jump in this clock is
+        /// the one event that can make the accumulated phase wrong.
+        /// OceanRenderer watches this counter and reseeds phase from omega*t
+        /// when it moves, which is what keeps "scrub and re-step is exact"
+        /// true for every probe that pins the sea.
+        public static int ScrubCount { get; private set; }
+
         /// Jump the ocean to an absolute time. The surface is a pure function
         /// of (spectrum, seed, time), so scrubbing is exact, not approximate.
-        public static void Scrub(double t) => Now = t;
+        public static void Scrub(double t) { Now = t; ScrubCount++; }
     }
 }

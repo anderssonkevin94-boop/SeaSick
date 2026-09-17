@@ -33,6 +33,11 @@ namespace SeaSick.Ocean
         // no rebuild is running. See the block in StepSimulation.
         int spectrumSlice = -1;
         bool firstSpectrumBuild = true;
+        // Phase integrator bookkeeping. lastPhaseTime is ocean seconds, not
+        // engine seconds, so a paused clock integrates a dt of zero on its own.
+        double lastPhaseTime;
+        bool phaseValid;
+        int lastScrubCount;
 
         // Shader.PropertyToID cache for StepSimulation's per-frame sets —
         // both the compute-shader property names (used with SetInt/SetFloat/
@@ -62,6 +67,9 @@ namespace SeaSick.Ocean
         static readonly int OceanTurbulenceId = Shader.PropertyToID("_Ocean_Turbulence");
         static readonly int OceanPatchSizesId = Shader.PropertyToID("_Ocean_PatchSizes");
         static readonly int OceanFadeParamsId = Shader.PropertyToID("_Ocean_FadeParams");
+        static readonly int PhaseId = Shader.PropertyToID("Phase");
+        static readonly int PhaseDtId = Shader.PropertyToID("_PhaseDt");
+        static readonly int SeedPhaseId = Shader.PropertyToID("_SeedPhase");
 
         public OceanSpectrumSettings Settings => settings;
 
@@ -71,6 +79,62 @@ namespace SeaSick.Ocean
         /// rotates — so anything investigating a jolt in the water wants to
         /// know whether one landed on the same frame. PerfHUD reads it.
         public int SpectrumRebuilds { get; private set; }
+
+        /// Slice a spectrum rebuild over three frames, one cascade each.
+        ///
+        /// OFF, because slicing was drawing the ocean out of TWO DIFFERENT
+        /// SEAS. The slice rebuilds one cascade per frame while the time
+        /// evolution below dispatches all three EVERY frame, so for two frames
+        /// of every rebuild the surface is built from cascades belonging to
+        /// different spectra -- different directions, different amplitudes.
+        /// The first-build case was spotted and paid whole ("a sliced one would
+        /// show two frames of a sea missing cascades 1 and 2"); the same
+        /// inconsistency on every LATER rebuild was not, because the old
+        /// cascades are still there and merely belong to another sea.
+        ///
+        /// Measured by StepProbe.RebuildSweep, worst one-frame surface step in
+        /// open water, 60 fps, Hs ~8 m, sliced vs whole:
+        ///
+        ///     rebuildHz   0.5    4.0     20.0
+        ///     sliced    0.147  0.678    1.913 m
+        ///     whole     0.175  0.165    0.088 m
+        ///
+        /// Sliced, the fault scales with the rebuild RATE, because at 20 Hz a
+        /// rebuild starts every three frames and slicing takes three -- the sea
+        /// is then permanently mid-rebuild. Whole, the rate-dependence is gone
+        /// and the shipped 4 Hz improves 4.1x. This is the "only the ocean
+        /// lags, the boat and the land are fine" report: nothing but the water
+        /// goes through here.
+        ///
+        /// Left as a switch rather than deleted so the cost of the choice stays
+        /// measurable -- see PerfProbe's sim-dispatch numbers.
+        public static bool SliceSpectrumRebuild;
+
+        /// Carry wave phase across a spectrum rebuild instead of recomputing it
+        /// as omega * t from the absolute clock.
+        ///
+        /// ON. The full argument is in TimeEvolve.compute; the short version is
+        /// that omega depends on `depth`, the sea state blend lerps depth from
+        /// 200 m down to 30 m as the weather builds, and the old form turned
+        /// every rebuild into a surface-wide phase jump of d_omega * t. Because
+        /// it multiplies the SESSION clock the jump grows all evening, and
+        /// because tanh saturates for short waves it lands entirely on the long
+        /// swell -- "the big waves don't move smoothly in heavy weather", worse
+        /// the longer you have been sailing.
+        ///
+        /// Left as a switch, and wired to the settings drawer in dev builds, so
+        /// the A/B stays available at the keyboard: this artefact cannot be
+        /// measured remotely (the editor throttles unfocused play mode to
+        /// 10 fps) and it only exists in a full-sized sea.
+        public static bool AccumulatePhase = true;
+
+        /// How many times the phase field has been reseeded from omega * t
+        /// rather than carried. Expected: once at startup, once per scrub, and
+        /// every frame while AccumulatePhase is off. Anything else means the
+        /// scrub guard below is firing on ordinary frames and the fix is not
+        /// actually running -- PerfHUD and StepProbe read it.
+        public int PhaseReseeds { get; private set; }
+
         public CascadeSet Cascades => cascades;
 
         /// Call after mutating settings; the spectrum rebuilds over the next
@@ -126,6 +190,10 @@ namespace SeaSick.Ocean
             // and not only at construction.
             spectrumSlice = -1;
             firstSpectrumBuild = true;
+            // A fresh Phase texture holds garbage, so the first dispatch must
+            // seed rather than carry.
+            phaseValid = false;
+            lastScrubCount = OceanTime.ScrubCount;
 
             readback = new DisplacementReadback(cascades.N);
             OceanSampler.Bind(readback, cascades.PatchSizes);
@@ -177,7 +245,7 @@ namespace SeaSick.Ocean
                 // The very first build has no previous h0 to fall back on — a
                 // sliced one would show two frames of a sea missing cascades 1
                 // and 2 — so it is paid whole, once, at startup.
-                if (firstSpectrumBuild) RebuildSpectrumNow();
+                if (firstSpectrumBuild || !SliceSpectrumRebuild) RebuildSpectrumNow();
                 else spectrumSlice = 0;
             }
             if (spectrumSlice >= 0)
@@ -205,6 +273,28 @@ namespace SeaSick.Ocean
                 settings.choppiness * Mathf.Max(0f, cs.x),
                 settings.choppiness * Mathf.Max(0f, cs.y),
                 settings.choppiness * Mathf.Max(0f, cs.z), 0f));
+
+            // Seed the phase field rather than carrying it when there is
+            // nothing valid to carry (first dispatch), when the clock has been
+            // scrubbed (probes pin the sea that way, and seeding is what keeps
+            // "scrub and re-step is exact" true), or when the fix is switched
+            // off for an A/B. The dt guard is belt and braces for a clock moved
+            // by something that did not go through Scrub.
+            double now = OceanTime.Now;
+            double phaseDt = now - lastPhaseTime;
+            bool seedPhase = !phaseValid
+                || !AccumulatePhase
+                || OceanTime.ScrubCount != lastScrubCount
+                || phaseDt < 0.0
+                || phaseDt > 1.0;
+            if (seedPhase) PhaseReseeds++;
+            lastScrubCount = OceanTime.ScrubCount;
+            lastPhaseTime = now;
+            phaseValid = true;
+
+            timeEvolveShader.SetFloat(PhaseDtId, seedPhase ? 0f : (float)phaseDt);
+            timeEvolveShader.SetInt(SeedPhaseId, seedPhase ? 1 : 0);
+            timeEvolveShader.SetTexture(evolveKernel, PhaseId, cascades.Phase);
 
             timeEvolveShader.SetTexture(evolveKernel, H0Id, cascades.H0);
             timeEvolveShader.SetTexture(evolveKernel, WaveDataId, cascades.WaveData);
