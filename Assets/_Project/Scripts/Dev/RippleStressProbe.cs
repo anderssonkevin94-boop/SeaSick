@@ -10,9 +10,38 @@ using SeaSick.Ocean;
 /// is that max |offset| stays bounded (a few metres at most) and never goes
 /// non-finite — the stretched-spike bug is this field exploding. Plain C#.
 /// Run in play mode in Sea.unity. Writes /tmp/seasick-ripplestress.txt.
+///
+/// LIVED IN `Dev/Editor/` UNTIL 2026-09-17, which means it had never run: a
+/// MonoBehaviour in an Editor folder makes AddComponent return null and the
+/// next dereference throws a bare NRE. The same trap that had DivergenceProbe
+/// and PerfProbe unrunnable for a fortnight. There was no RunProbe entry for
+/// it either, so nothing ever called it to notice.
 public class RippleStressProbe : MonoBehaviour
 {
+    /// Jitter the sim's dt during the run, reproducing a real machine's
+    /// variable frame time. Remote play mode is pinned at a dead-steady
+    /// 10 fps by the editor throttle, and a constant dt is exactly the
+    /// condition under which the variable-sub-step bug does not happen -- so
+    /// without this the gate is measuring a sea that cannot fail.
+    static float jitter;
+    /// Run both sides of DynamicWaterSim.FixedTimestep in one go.
+    static bool ab;
+
     public static void Execute()
+    {
+        jitter = 0f; ab = false;
+        Launch();
+    }
+
+    /// The gate under a JITTERING frame time, old scheme against new. This is
+    /// the falsifiable version: leg A is what Kevin sails.
+    public static void Jitter()
+    {
+        jitter = 0.4f; ab = true;
+        Launch();
+    }
+
+    static void Launch()
     {
         if (!Application.isPlaying)
         {
@@ -21,7 +50,10 @@ public class RippleStressProbe : MonoBehaviour
         }
         RippleStressProbe old = FindAnyObjectByType<RippleStressProbe>();
         if (old != null) Destroy(old.gameObject);
-        new GameObject("RippleStressProbe").AddComponent<RippleStressProbe>();
+        var go = new GameObject("RippleStressProbe");
+        if (go.AddComponent<RippleStressProbe>() == null)
+            Debug.LogError("RippleStressProbe: AddComponent returned null — "
+                + "the script is in an Editor folder again.");
     }
 
     IEnumerator Start()
@@ -38,14 +70,43 @@ public class RippleStressProbe : MonoBehaviour
         if (helm != null) helm.enabled = false;
 
         bool ok = true;
-        yield return Leg("A driving + splash spam", sim, motor, 1f, 0.4f, true, sb);
-        if (worstGrad > 0.35f) ok = false;
-        if (worstBad > 0) ok = false;
-        if (worstClamped > 0) ok = false;
-        yield return Leg("B stalled in a storm ", sim, motor, 0.12f, 0f, false, sb);
-        if (worstGrad > 0.35f) ok = false;
-        if (worstBad > 0) ok = false;
-        if (worstClamped > 0) ok = false;
+        DynamicWaterSim.DebugDtJitter = jitter;
+        bool wasFixed = DynamicWaterSim.FixedTimestep;
+        sb.AppendLine(string.Format("dt jitter {0:P0}, fps {1:F0}",
+            jitter, 1f / Mathf.Max(1e-4f, Time.smoothDeltaTime)));
+        sb.AppendLine("");
+
+        if (ab)
+        {
+            // Old scheme first, so a warm field is not doing the new one any
+            // favours. Each leg re-runs from the same 6 s settle.
+            DynamicWaterSim.FixedTimestep = false;
+            yield return Leg("A driving + splash, dt/steps (old)", sim, motor, 1f, 0.4f, true, sb);
+            float oldGrad = worstGrad;
+            DynamicWaterSim.FixedTimestep = true;
+            yield return Leg("A driving + splash, fixed step   ", sim, motor, 1f, 0.4f, true, sb);
+            float newGrad = worstGrad;
+            sb.AppendLine("");
+            sb.AppendLine(string.Format(
+                "  gradient old {0:F3} -> new {1:F3} m/texel  ({2:F2}x)",
+                oldGrad, newGrad, newGrad > 1e-6f ? oldGrad / newGrad : 0f));
+            if (newGrad > 0.35f) ok = false;
+            if (worstBad > 0 || worstClamped > 0) ok = false;
+        }
+        else
+        {
+            yield return Leg("A driving + splash spam", sim, motor, 1f, 0.4f, true, sb);
+            if (worstGrad > 0.35f) ok = false;
+            if (worstBad > 0) ok = false;
+            if (worstClamped > 0) ok = false;
+            yield return Leg("B stalled in a storm ", sim, motor, 0.12f, 0f, false, sb);
+            if (worstGrad > 0.35f) ok = false;
+            if (worstBad > 0) ok = false;
+            if (worstClamped > 0) ok = false;
+        }
+
+        DynamicWaterSim.DebugDtJitter = 0f;
+        DynamicWaterSim.FixedTimestep = wasFixed;
 
         sb.AppendLine("");
         sb.AppendLine("gates: maxGradient < 0.35 m/texel, texelsAtClamp 0, nonFinite 0");
@@ -126,7 +187,11 @@ public class RippleStressProbe : MonoBehaviour
                 if (float.IsNaN(h) || float.IsInfinity(h)) { worstBad++; continue; }
                 float a = Mathf.Abs(h);
                 if (a > worstAbs) worstAbs = a;
-                if (a >= 1.99f) worstClamped++;
+                // The Step kernel clamps at +/-1.2. This read 1.99 against an
+                // older 2.0 clamp and so could never fire once the clamp was
+                // tightened -- the exact unfalsifiable-gate trap DEV-TOOLS
+                // warns about, reintroduced by a tuning change elsewhere.
+                if (a >= 1.19f) worstClamped++;
                 if (x + 1 < n)
                 {
                     float g = Mathf.Abs((float)d[y * n + x + 1].x - h);

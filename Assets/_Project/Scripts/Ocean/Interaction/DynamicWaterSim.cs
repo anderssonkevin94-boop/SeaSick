@@ -16,6 +16,43 @@ namespace SeaSick.Ocean
         /// sqrt(0.5) ~ 0.707; 0.5 leaves real margin for the damping, rim and
         /// impulse terms rather than the 0.67-0.71 the old clamp allowed.
         const float SafeCourant = 0.5f;
+        /// Sub-steps one frame may spend on the sim. A frame that needs more
+        /// than this drops the remainder rather than spiralling.
+        const int MaxSubSteps = 4;
+
+        /// Advance the sim on a FIXED sub-step instead of dividing the frame.
+        ///
+        /// ON. The leapfrog in RippleSim.compute is `h' = 2h - hPrev + C^2 L h`,
+        /// and the `2h - hPrev` half of that is a velocity term that assumes
+        /// hPrev is exactly ONE sub-step back. It divided the frame instead --
+        /// `dtSub = dt / steps` with `steps = ceil(courant / SafeCourant)` --
+        /// so dtSub moved with the frame time, every frame. On the PC tier
+        /// (texel 0.195 m, c 6.5 m/s) the step count changes at dt = 15.0,
+        /// 30.0 and 45.1 ms, and INSIDE a step count dtSub still ranges 2:1.
+        /// At Kevin's measured 16.8 ms median with a 24 ms p95 that is roughly
+        /// 40 % of dt movement frame to frame, and every bit of it lands on
+        /// the velocity term as `(1 - dt_n/dt_n-1) * (h - hPrev)`.
+        ///
+        /// That error is proportional to how fast a texel is moving, so it is
+        /// largest at the shortest wavelengths -- it feeds the single-texel
+        /// checkerboard, which is what "choppy spikes" looks like, and it
+        /// lives wherever the field has energy, which is the wake behind the
+        /// boat. Damping holds it at an equilibrium rather than exploding,
+        /// which is why the field never trips the non-finite or clamp checks.
+        ///
+        /// A fixed sub-step makes the ratio exactly 1 and makes the wake
+        /// frame-rate independent as a side effect -- it used to look
+        /// different at different frame rates, which is its own small bug.
+        public static bool FixedTimestep = true;
+
+        /// Dev only: multiply the sim's dt by 1 +/- this each frame.
+        ///
+        /// The artefact above needs a JITTERING frame time, and every remote
+        /// probe run is pinned at a dead-steady 10 fps by the editor throttle
+        /// -- constant dt, no artefact, green gate. That is why the needle gate
+        /// never caught this. Setting this reproduces the condition at any
+        /// frame rate, so RippleStressProbe can fail on purpose.
+        public static float DebugDtJitter;
 
         public static DynamicWaterSim Instance { get; private set; }
 
@@ -54,6 +91,8 @@ namespace SeaSick.Ocean
         // remove.
         float timeSinceImpulse;
         bool quiescent;
+        // Unspent frame time carried to the next fixed sub-step.
+        float simAccumulator;
 
         /// Time for any impulse's amplitude to decay under ~0.1% of itself
         /// (ln(1000) ~= 6.91 e-foldings) — comfortably below one bit of an
@@ -165,6 +204,9 @@ namespace SeaSick.Ocean
         {
             if (kStep < 0) return;
             float dt = Mathf.Min(Time.deltaTime, 0.05f);
+            if (DebugDtJitter > 0f)
+                dt = Mathf.Clamp(dt * (1f + Random.Range(-DebugDtJitter, DebugDtJitter)),
+                                 0.001f, 0.05f);
             if (dt <= 0f) return;
 
             // Cached with a 1 s retry, not a scene scan every frame until
@@ -276,15 +318,32 @@ namespace SeaSick.Ocean
                 rippleShader.Dispatch(kInject, injGroupsX, injGroupsY, 1);
             }
 
-            // CFL: the explicit 2D wave scheme is unstable past (c dt/dx)^2 = 0.5.
-            // This used to run one step and CLAMP at 0.45 — 90% of the limit,
-            // and on both tiers it sat there every frame. Marginal stability
-            // plus impulse forcing is what produced the needles. Sub-step
-            // instead, so the authored wave speed is preserved and each step
-            // is comfortably inside the limit.
-            float courant = waveSpeed * dt / texel;
-            int steps = Mathf.Clamp(Mathf.CeilToInt(courant / SafeCourant), 1, 4);
-            float dtSub = dt / steps;
+            // CFL: the explicit 2D wave scheme is unstable past (c dt/dx)^2 = 0.5,
+            // so the frame is spent in sub-steps held inside that limit. The
+            // authored wave speed survives, where lowering the speed or the
+            // clamp would not.
+            //
+            // The sub-step is FIXED, not the frame divided by a step count --
+            // see FixedTimestep for why the divided form fed the wake a
+            // checkerboard. Unspent frame time carries in the accumulator, and
+            // a frame that would need more than MaxSubSteps drops its
+            // remainder instead of spiralling.
+            int steps;
+            float dtSub;
+            if (FixedTimestep)
+            {
+                dtSub = SafeCourant * texel / Mathf.Max(0.01f, waveSpeed);
+                simAccumulator += dt;
+                steps = Mathf.FloorToInt(simAccumulator / dtSub);
+                if (steps > MaxSubSteps) { steps = MaxSubSteps; simAccumulator = 0f; }
+                else simAccumulator -= steps * dtSub;
+            }
+            else
+            {
+                float courant = waveSpeed * dt / texel;
+                steps = Mathf.Clamp(Mathf.CeilToInt(courant / SafeCourant), 1, MaxSubSteps);
+                dtSub = dt / steps;
+            }
             float cSub = waveSpeed * dtSub / texel;
             rippleShader.SetFloat(C2Dt2Id, Mathf.Min(cSub * cSub, SafeCourant * SafeCourant));
             rippleShader.SetFloat(DampingId, Mathf.Exp(-damping * dtSub));
@@ -317,6 +376,7 @@ namespace SeaSick.Ocean
             {
                 ClearAll();
                 quiescent = true;
+                simAccumulator = 0f;
             }
         }
 
