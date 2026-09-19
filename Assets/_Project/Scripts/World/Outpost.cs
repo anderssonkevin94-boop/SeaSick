@@ -114,20 +114,200 @@ namespace SeaSick.World
             // buildings ARE the ledger's ceiling, pushed in before every tick.
             ledger.ceiling = StoreCapacity;
             ledger.Tick(TimeOfDay.Seconds);
+
+            // The arithmetic can finish a building on an island nobody is
+            // looking at, so the raise cannot live in the tick -- it needs a
+            // scene to put something in. It happens here instead, which is
+            // called on arrival, and whose whole job is "make the world agree
+            // with the ledger".
+            if (ledger.ReadyToRaise) FinishPending();
+            else if (ledger.Building) EnsureBlueprint();
         }
 
         /// Is there a camp here at all, or only ground that would take one?
         /// The fire is the difference.
         public bool HasCamp => CountOf(BuildPlans.Campfire.id) > 0;
 
-        /// Light the fire.
+        /// Where the camp itself is: the fire, or the blueprint of one.
         ///
-        /// Returns the logs that came out of the clearing, or -1 if there is
-        /// nowhere here to put a camp. **Making camp fells the wood it stands
-        /// on** — at home the village clearing is reserved before the scenery
-        /// is baked, but on any other island the trees are already standing
-        /// when the player decides, so they come down through the same path
-        /// the crew fell them by, and the logs go straight into the pile.
+        /// NOT `ClearingCentre`. The clearing is what the survey found and
+        /// what the scenery bake was told to keep out of; the camp is where
+        /// the PLAYER put it, which since the blueprint pass is a point they
+        /// chose off the ground with a ring round the ship. They coincide at
+        /// home and need not anywhere else.
+        public Vector3 CampCentre => hasCampCentre ? campCentre : ClearingCentre;
+        Vector3 campCentre;
+        bool hasCampCentre;
+
+        /// The blueprint standing here, if one is drawn. Rebuilt from the
+        /// ledger whenever the island is loaded -- never the only copy.
+        BuildSite blueprint;
+
+        /// Is something sited here and waiting on wood?
+        public bool Building => ledger != null && ledger.Building;
+
+        /// **Site a plan: put the blueprint down.**
+        ///
+        /// This is the moment the player commits an island to something, and
+        /// it costs nothing but the decision. It writes the row that makes the
+        /// blueprint real for as long as it takes — whether or not anybody is
+        /// watching — and it puts every hand here on to building it, because
+        /// until there is a fire there is no pile for a cutter to cut into.
+        ///
+        /// **It does NOT fell the site, and the first version did.** Clearing
+        /// the ground at siting sounded right and quietly broke the feature:
+        /// a campfire costs four logs, the probe's spot had four trees on it,
+        /// and the camp finished the frame it was placed — no blueprint, no
+        /// crew, nothing to come back to. The ground is cleared when the thing
+        /// is BUILT, which is also the better story: a blueprint stands among
+        /// the trees it is going to take down.
+        ///
+        /// Returns the logs still wanted, or -1 with a reason.
+        public int Site(BuildPlan plan, Vector3 at, out string why)
+        {
+            if (ledger == null) { why = "this ground was never surveyed"; return -1; }
+            if (ledger.pending != null) { why = "something is already being built here"; return -1; }
+            if (CountOf(plan.id) > 0) { why = $"there is already a {plan.label} here"; return -1; }
+            if (!CanPlace(plan, at, out why, out float lo, out float hi)) return -1;
+
+            campCentre = at;
+            campCentre.y = hi;
+            hasCampCentre = true;
+
+            // The key moves to where the player put it, and it moves NOW --
+            // before any wood is counted. A ledger keyed to the survey's
+            // clearing and then filled by a camp forty metres away is a camp
+            // that will not be found again after a save.
+            ledger.SetKey(campCentre);
+            ledger.pending = new PendingBuild
+            {
+                planId = plan.id,
+                x = campCentre.x,
+                z = campCentre.z,
+                needed = Mathf.Max(0, plan.cost),
+            };
+
+            ledger.OrderAll(OutpostOrder.Build);
+            EnsureBlueprint();
+            // A plan that costs nothing is finished the moment it is sited.
+            // Nothing does today; the dev path (`MakeCamp`) reaches the same
+            // door by paying the cost outright.
+            if (ledger.ReadyToRaise) FinishPending();
+            why = "";
+            return ledger.pending != null ? ledger.pending.needed - ledger.pending.done : 0;
+        }
+
+        /// Logs that came out of the ground the last thing built here stands
+        /// on. Reported rather than returned because the felling now happens
+        /// when the build FINISHES, which can be days after the player sited
+        /// it and on a frame nobody asked a question on.
+        public int LastClearingFelled { get; private set; }
+
+        /// Draw the blueprint if the ledger says there is one and nothing is
+        /// drawing it. Called on arrival, so a camp you sited and sailed away
+        /// from is standing there half built when you get back.
+        void EnsureBlueprint()
+        {
+            if (ledger == null || !ledger.Building || !Sited) return;
+            if (blueprint != null && blueprint.PlanId == ledger.pending.planId) return;
+            if (blueprint != null) blueprint.Retire();
+
+            var plan = PlanNamed(ledger.pending.planId);
+            Vector3 at = ledger.pending.At;
+            at.y = height(at.x, at.z);
+            if (!CanPlace(plan, at, out _, out float lo, out float hi))
+            {
+                // The ground moved under a saved blueprint (a terrain
+                // parameter changed between sessions). Draw it anyway at the
+                // height the field gives now: refusing to draw it would leave
+                // a row nobody can see, act on or cancel.
+                lo = hi = at.y;
+            }
+            at.y = hi;
+            blueprint = BuildSite.Place(this, plan, at, FacingAt(at), hi - lo);
+            blueprint.Refresh(ledger.pending);
+        }
+
+        /// The wood is in: take the drawing down and stand the thing up.
+        void FinishPending()
+        {
+            if (ledger == null || ledger.pending == null) return;
+            var plan = PlanNamed(ledger.pending.planId);
+            Vector3 at = ledger.pending.At;
+            if (height != null) at.y = height(at.x, at.z);
+
+            // The blueprint goes first. `Raise` reserves the ground it stands
+            // on, and the drawing is not a reservation -- but leaving it up
+            // for a frame beside the real thing is two buildings in one place,
+            // which is exactly what a player reports as a duplicate.
+            if (blueprint != null) { blueprint.Retire(); blueprint = null; }
+
+            var b = Raise(plan, at);
+            if (b == null)
+            {
+                // Refused on ground it was green on when it was sited. Rather
+                // than silently eating the wood, keep the row: the blueprint
+                // comes back next frame and the player can move it.
+                EnsureBlueprint();
+                return;
+            }
+
+            campCentre = b.transform.position;
+            hasCampCentre = true;
+            ledger.built.Add(plan.id);
+            ledger.pending = null;
+            ledger.SetKey(campCentre);
+            ledger.ceiling = StoreCapacity;
+
+            // **The ground is cleared now, not when it was sited.** At home
+            // the village clearing is reserved before the scenery is baked;
+            // anywhere else the trees are standing when the player chooses, so
+            // they come down through the same path the crew fell them by --
+            // and what comes down is a camp appearing in the wood rather than
+            // a gap appearing where a camp might one day go.
+            LastClearingFelled = 0;
+            var wood = GetComponentInChildren<Terrain.SceneryWood>();
+            if (wood != null)
+                LastClearingFelled = wood.FellWithin(campCentre, CampClearingRadius);
+            if (LastClearingFelled > 0)
+                ledger.timber = Mathf.Min(ledger.ceiling,
+                    ledger.timber + LastClearingFelled);
+            // Everybody goes back to cutting. With the fire lit there is
+            // finally somewhere to cut INTO.
+            ledger.OrderAll(OutpostOrder.Cut);
+        }
+
+        /// Look a plan up by the id a ledger row carries. A save restores ids,
+        /// not structs.
+        static BuildPlan PlanNamed(string id)
+        {
+            foreach (var p in BuildPlans.AtACamp) if (p.id == id) return p;
+            foreach (var p in BuildPlans.All) if (p.id == id) return p;
+            return BuildPlans.Campfire;
+        }
+
+        /// Give up on what is sited here. The wood already in it is gone --
+        /// it was cut and carried, and there is nowhere to put it back.
+        public bool CancelPending()
+        {
+            if (ledger == null || ledger.pending == null) return false;
+            ledger.pending = null;
+            ledger.OrderAll(OutpostOrder.Cut);
+            if (blueprint != null) { blueprint.Retire(); blueprint = null; }
+            return true;
+        }
+
+        /// Light the fire, here and now, with no blueprint and no wood.
+        ///
+        /// **This is the DEV path, not the player's.** Since the blueprint
+        /// pass the player sites a camp (`Site`) and the crew build it; this
+        /// still exists because a probe that has to sail, land, site, wait out
+        /// a build and then measure something else is a probe that measures
+        /// the build every time it runs. It goes through exactly the same two
+        /// steps the slow way does, so it cannot drift from it: site it at the
+        /// surveyed clearing, then pay for it out of nothing.
+        ///
+        /// Returns the logs that came out of the clearing, or -1 with a reason.
         public int MakeCamp() => MakeCamp(out _);
 
         /// As above, and says WHY when it refuses.
@@ -140,36 +320,26 @@ namespace SeaSick.World
         {
             if (!Sited) { why = "the ground here was never surveyed"; return -1; }
             if (HasCamp) { why = "there is already a camp here"; return -1; }
-            var fire = Raise(BuildPlans.Campfire);
-            if (fire == null)
+
+            // Where the spiral would have put it. `Site` wants a point, and
+            // the surveyed clearing is the answer to "somewhere sensible" --
+            // which is the question the player is answering by hand now.
+            Vector3 at = ClearingCentre;
+            if (height != null) at.y = height(at.x, at.z);
+
+            if (Site(BuildPlans.Campfire, at, out why) < 0) return -1;
+
+            if (ledger != null && ledger.pending != null)
             {
-                why = $"nowhere in the {ClearingRadius:F0} m clearing stands level enough "
-                    + $"or high enough (needs {minHeight:F1} m)";
-                return -1;
+                ledger.pending.done = ledger.pending.needed;
+                ledger.pending.donePart = 0f;
+                FinishPending();
             }
+            if (!HasCamp) { why = "the fire would not stand there"; return -1; }
+
+            if (ledger != null) ledger.lastTicked = TimeOfDay.Seconds;
             why = "";
-
-            int felled = 0;
-            var wood = GetComponentInChildren<Terrain.SceneryWood>();
-            if (wood != null)
-            {
-                // The fire's own footprint plus room to stand round it, not
-                // the whole clearing: a camp is a gap in the wood, and
-                // stripping thirty metres on the first tap would read as the
-                // island being deleted rather than settled.
-                felled = wood.FellWithin(ClearingCentre, CampClearingRadius);
-            }
-
-            if (ledger != null)
-            {
-                ledger.SetKey(ClearingCentre);
-                ledger.ceiling = StoreCapacity;
-                // The clearing's timber goes in the pile, capped by what the
-                // fire can keep — the rest is left where it fell.
-                ledger.timber = Mathf.Min(ledger.ceiling, ledger.timber + felled);
-                ledger.lastTicked = TimeOfDay.Seconds;
-            }
-            return felled;
+            return LastClearingFelled;
         }
 
         // --- the crew who stay ------------------------------------------------
@@ -187,7 +357,11 @@ namespace SeaSick.World
         /// The ship must be told to recount afterwards — see `CrewRoster`.
         public bool Station(Crew.CrewAgent hand)
         {
-            if (hand == null || !HasCamp) return false;
+            // A blueprint is enough to be left behind for. That IS the flow:
+            // you site a camp, you leave hands, and what they do first is
+            // build the thing you sited. Requiring a finished fire here would
+            // have made the feature impossible to reach.
+            if (hand == null || !(HasCamp || Building)) return false;
             string who = hand.DisplayName;
             if (HandNamed(who) != null) return false;
 
@@ -196,11 +370,18 @@ namespace SeaSick.World
             // no other hand will ever work it.
             hand.ReturnAboard();
 
-            ledger?.hands.Add(new OutpostHand { name = who, order = OutpostOrder.Cut });
+            ledger?.hands.Add(new OutpostHand
+            {
+                name = who,
+                // Whatever the camp is doing. A hand left at a half-built camp
+                // who defaulted to cutting would stand there filling a pile
+                // that does not exist yet.
+                order = Building ? OutpostOrder.Build : OutpostOrder.Cut,
+            });
 
             var t = hand.transform;
             t.SetParent(transform, true);
-            Vector3 at = ClearingCentre;
+            Vector3 at = CampCentre;
             if (height != null) at.y = height(at.x, at.z);
             // Scatter them a couple of metres round the fire, on the ground
             // plane only -- a sphere would put somebody underneath it.
@@ -744,6 +925,91 @@ namespace SeaSick.World
                 return b;
             }
             return null;
+        }
+
+        /// Put the plan up AT A CHOSEN POINT, which is what the player does
+        /// when they site a camp.
+        ///
+        /// The spiral version above answers "somewhere in the clearing"; this
+        /// answers "here". Same two tests, same instantiation -- the only
+        /// thing that changes is who picked the spot, and that is exactly why
+        /// this must not grow its own copy of either test. A ghost that goes
+        /// green on one rule and a raise that refuses on another is the bug
+        /// this whole shape exists to prevent.
+        public Building Raise(BuildPlan plan, Vector3 at)
+        {
+            if (!CanPlace(plan, at, out _, out float lo, out float hi)) return null;
+
+            float len = plan.footprint.x, wid = plan.footprint.y;
+            float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
+            Quaternion facing = FacingAt(at);
+
+            Vector3 p = at;
+            p.y = hi;
+            var go = BuildingFactory.Raise(plan, transform, p, facing, hi - lo);
+            var b = go.GetComponent<Building>();
+            built.Add(b);
+            reserved.Add(new Vector4(p.x, p.y, p.z, halfDiag + spacing * 0.5f));
+            return b;
+        }
+
+        /// Door toward the middle of the clearing, as the spiral does. A fire
+        /// has no door, but a hut sited by hand should not have its back to
+        /// the rest of the camp any more than one sited by the spiral.
+        Quaternion FacingAt(Vector3 at)
+        {
+            Vector3 toCentre = CampCentre - at;
+            toCentre.y = 0f;
+            return toCentre.sqrMagnitude > 0.01f
+                ? Quaternion.LookRotation(toCentre.normalized, Vector3.up)
+                    * Quaternion.Euler(0f, 90f, 0f)
+                : Quaternion.identity;
+        }
+
+        /// **Can this plan stand here?** The one test the ghost and the raise
+        /// both ask.
+        ///
+        /// Deliberately does NOT test the clearing. The survey's clearing says
+        /// where a camp COULD go if nobody chose; once the player is choosing,
+        /// the constraint that matters is the one they can see -- the ring
+        /// round the ship -- and that belongs to the siting interface, not to
+        /// the ground. What the ground still gets to refuse is beach, water,
+        /// a slope nothing will stand on, and somewhere already occupied.
+        public bool CanPlace(BuildPlan plan, Vector3 at, out string why)
+            => CanPlace(plan, at, out why, out _, out _);
+
+        public bool CanPlace(BuildPlan plan, Vector3 at, out string why,
+            out float lo, out float hi)
+        {
+            lo = hi = 0f;
+            why = "";
+            if (!Sited) { why = "this ground was never surveyed"; return false; }
+
+            // On this island at all. The height test below rejects open water
+            // on its own, but it cannot tell the player WHY, and "out past the
+            // shore" is the mistake a top-down view makes easiest to make.
+            if (Island != null && Island.HasProfile)
+            {
+                float d = Island.FlatDistance(at, Island.transform.position);
+                if (d > Island.RadiusToward(at))
+                {
+                    why = "that is past the shore";
+                    return false;
+                }
+            }
+
+            float len = plan.footprint.x, wid = plan.footprint.y;
+            if (!Corners(at, FacingAt(at), len, wid, out lo, out hi))
+            {
+                why = height(at.x, at.z) < minHeight
+                    ? "too low -- that is beach"
+                    : "the ground is too steep there";
+                return false;
+            }
+
+            float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
+            if (!Clear(at, halfDiag)) { why = "something already stands there"; return false; }
+            return true;
         }
 
         /// Nothing already claimed within reach of this footprint.

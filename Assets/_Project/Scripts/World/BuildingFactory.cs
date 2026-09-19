@@ -16,9 +16,10 @@ namespace SeaSick.World
             c = WorldArtStyle.BuildingColour(key, c);
             key += WorldArtStyle.CacheSuffix;
             if (mats.TryGetValue(key, out var m) && m != null) return m;
-            m = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            m = new Material(Shader.Find(WorldArtStyle.Instance != null ? "SeaSick/Environment Toon" : "Universal Render Pipeline/Lit"));
             m.SetColor("_BaseColor", c);
-            m.SetFloat("_Smoothness", smoothness);
+            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", smoothness);
+            if (m.HasProperty("_Ambient")) m.SetFloat("_Ambient", 0);
             mats[key] = m;
             return m;
         }
@@ -115,6 +116,85 @@ namespace SeaSick.World
 
             root.AddComponent<Building>().Configure(plan);
             return root;
+        }
+
+        /// **The blueprint: what it will look like, standing there not built.**
+        ///
+        /// Built by raising the real thing and then taking away everything
+        /// that makes it real -- its `Building` component (or the village
+        /// would count a plan as a shed), its light, its flicker. That is the
+        /// point: a ghost assembled separately is a second description of the
+        /// same building, and the two drift the first time a roof pitch
+        /// changes. This one cannot be wrong about what it is previewing
+        /// because it IS the preview.
+        public static GameObject Ghost(BuildPlan plan, Transform parent,
+            Vector3 floorAt, Quaternion facing, float footing, float alpha)
+        {
+            var root = Raise(plan, parent, floorAt, facing, footing);
+            root.name = "Blueprint_" + plan.id;
+
+            var b = root.GetComponent<Building>();
+            if (b != null) Object.Destroy(b);
+            foreach (var f in root.GetComponentsInChildren<Campfire>(true))
+                Object.Destroy(f);
+            // The light goes with its GameObject: an unlit fire that still
+            // lights the trees is the one tell that would read as a bug.
+            foreach (var l in root.GetComponentsInChildren<Light>(true))
+                Object.Destroy(l.gameObject);
+
+            Tint(root, alpha);
+            return root;
+        }
+
+        /// Chalk: what a blueprint is drawn in unless somebody says otherwise.
+        public static readonly Color GhostChalk = new Color(0.62f, 0.78f, 0.92f);
+        /// What a ghost turns when it is standing somewhere it cannot be
+        /// built. Red is the whole feedback — the sheet says why in words, but
+        /// the colour is what the thumb is reading.
+        public static readonly Color GhostRefused = new Color(0.92f, 0.36f, 0.30f);
+
+        /// Re-tint a ghost in place, so a blueprint filling up does not have
+        /// to be torn down and rebuilt every time a log arrives.
+        public static void Tint(GameObject ghost, float alpha)
+            => Tint(ghost, GhostChalk, alpha);
+
+        public static void Tint(GameObject ghost, Color colour, float alpha)
+        {
+            var mat = GhostMat(colour, alpha);
+            foreach (var r in ghost.GetComponentsInChildren<MeshRenderer>(true))
+                r.sharedMaterial = mat;
+        }
+
+        static readonly Dictionary<int, Material> ghostMats = new Dictionary<int, Material>();
+
+        /// One material per rounded colour, cached: a ghost dragged about the
+        /// island re-tints every frame it crosses a boundary, and a material
+        /// per change would leak one per frame.
+        static Material GhostMat(Color colour, float alpha)
+        {
+            int key = Mathf.RoundToInt(Mathf.Clamp01(alpha) * 20f)
+                | (Mathf.RoundToInt(colour.r * 15f) << 8)
+                | (Mathf.RoundToInt(colour.g * 15f) << 12)
+                | (Mathf.RoundToInt(colour.b * 15f) << 16);
+            if (ghostMats.TryGetValue(key, out var m) && m != null) return m;
+
+            m = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            m.SetFloat("_Surface", 1f);
+            m.SetOverrideTag("RenderType", "Transparent");
+            m.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            m.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            m.SetInt("_ZWrite", 0);
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.renderQueue = 3000;
+            // Chalk, not the building's own colour. A blueprint that is
+            // merely a pale version of the finished thing reads as a building
+            // in fog; one that is plainly a drawing reads as a decision not
+            // yet paid for.
+            m.SetColor("_BaseColor", new Color(colour.r, colour.g, colour.b,
+                Mathf.Clamp01(alpha)));
+            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0f);
+            ghostMats[key] = m;
+            return m;
         }
 
         static GameObject Box(Transform parent, Material mat, Vector3 size, Vector3 at)

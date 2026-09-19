@@ -66,11 +66,17 @@ namespace SeaSick.World
 
         /// **The first thing you put on an island that is not home.**
         ///
-        /// It costs nothing, because it is not an investment -- it is the
-        /// decision to make one. What it buys is a place that KEEPS things:
-        /// ten logs, which is what the fire can watch over, and the ceiling
-        /// that stops a camp producing for ever. Everything after this raises
-        /// that ceiling.
+        /// What it buys is a place that KEEPS things: ten logs, which is what
+        /// the fire can watch over, and the ceiling that stops a camp
+        /// producing for ever. Everything after this raises that ceiling.
+        ///
+        /// **Four logs, which is one hand for one day** -- the rate is
+        /// `OutpostLedger.TimberPerHandPerDay`, so the cost is legible in the
+        /// only unit the player has: leave one man and he has a fire by
+        /// nightfall, leave four and it is up before you have cleared the bay.
+        /// It used to be free because making camp was instant; now that the
+        /// crew build it, free would mean a blueprint that finishes the frame
+        /// it is placed. **A guess, never played.**
         public static readonly BuildPlan Campfire = new BuildPlan
         {
             id = "Campfire",
@@ -78,7 +84,7 @@ namespace SeaSick.World
             label = "make camp",
             blurb = "a fire, and somewhere to stack ten logs",
             resource = "Timber",
-            cost = 0,
+            cost = 4,
             storeCapacity = OutpostLedger.CampfireCeiling,
             footprint = new Vector2(2.4f, 2.4f),
             ridge = 0.9f,

@@ -11,6 +11,11 @@ namespace SeaSick.World
         Idle,
         /// Felling timber into the outpost's pile.
         Cut,
+        /// Cutting and carrying wood into whatever is sited here but not yet
+        /// built. **The same work at the same rate as `Cut`** -- the only
+        /// difference is where the logs land, which is what makes a half-built
+        /// camp cost exactly what it looks like it costs.
+        Build,
     }
 
     /// One hand left at an outpost.
@@ -30,6 +35,37 @@ namespace SeaSick.World
         /// from the start so the save format does not have to change when
         /// something does.
         public float mood = 1f;
+    }
+
+    /// Something the player has SITED here but nobody has finished building.
+    ///
+    /// **This is ledger state, not a scene object, and that is the whole
+    /// point.** A blueprint you placed and then sailed away from has to still
+    /// be there -- half built, with the logs that went into it -- when you come
+    /// back three islands later and its terrain has streamed in and out twice.
+    /// The ghost standing on the ground is DRAWN from this, the same way the
+    /// crew bodies are drawn from the hand rows.
+    ///
+    /// Position is carried here rather than taken from the outpost's surveyed
+    /// clearing because the player chose it. The survey says where a camp COULD
+    /// go; this says where it is going.
+    [System.Serializable]
+    public class PendingBuild
+    {
+        public string planId;
+        /// Where the player put it, world metres.
+        public float x, z;
+        /// Logs to finish it.
+        public int needed;
+        /// Logs in it. Whole logs only -- a half-carried log is not a thing
+        /// anyone can see, so the fraction lives beside it.
+        public int done;
+        public float donePart;
+
+        public Vector3 At => new Vector3(x, 0f, z);
+        public bool Complete => done >= needed;
+        public float Fill01 => needed > 0
+            ? Mathf.Clamp01((done + donePart) / needed) : 1f;
     }
 
     /// **The outpost IS this object. The crew you can see are a rendering of
@@ -117,6 +153,23 @@ namespace SeaSick.World
         /// Plan ids raised here. `Outpost` owns the objects on the ground; this
         /// is what a save would restore them from.
         public List<string> built = new List<string>();
+
+        /// What is sited here and not yet finished, or null.
+        ///
+        /// One at a time, deliberately. A camp with three half-built sheds in
+        /// it is a camp that has told the player nothing about what it is
+        /// doing, and the first building on an island is a fire -- there is
+        /// nothing to queue behind it.
+        public PendingBuild pending;
+
+        /// Is there a blueprint here waiting on wood?
+        public bool Building => pending != null && !pending.Complete;
+
+        /// Sited, paid for, and waiting for somebody to stand it up. The
+        /// arithmetic can finish a building while its island is unloaded, so
+        /// the raise happens when the scene next has somewhere to put it --
+        /// see `Outpost.CatchUp`.
+        public bool ReadyToRaise => pending != null && pending.Complete;
 
         // --- the clock -------------------------------------------------------
 
@@ -224,6 +277,34 @@ namespace SeaSick.World
             if (standingMax > 0f && standing < standingMax)
                 standing = Mathf.Min(standingMax, standing + standingMax * RegrowthPerDay * days);
 
+            // **Building comes before stockpiling, and draws from the same
+            // standing timber.** A camp that has not been built yet has
+            // nowhere to stockpile TO -- the ceiling is what the fire watches
+            // over and there is no fire -- so a hand told to build is not
+            // choosing between two piles, they are the reason there will be
+            // one.
+            if (pending != null && !pending.Complete)
+            {
+                int builders = HandsOn(OutpostOrder.Build);
+                if (builders > 0)
+                {
+                    float wantB = builders * TimberPerHandPerDay * days;
+                    float roomB = (pending.needed - pending.done) - pending.donePart;
+                    float gotB = Mathf.Min(wantB, Mathf.Min(standing, roomB));
+                    if (gotB > 0f)
+                    {
+                        standing -= gotB;
+                        pending.donePart += gotB;
+                        int wholeB = Mathf.FloorToInt(pending.donePart);
+                        if (wholeB > 0)
+                        {
+                            pending.done += wholeB;
+                            pending.donePart -= wholeB;
+                        }
+                    }
+                }
+            }
+
             int cutters = HandsOn(OutpostOrder.Cut);
             if (cutters <= 0) return;
 
@@ -249,6 +330,17 @@ namespace SeaSick.World
         public float Fill01 => ceiling > 0 ? Mathf.Clamp01(timber / (float)ceiling) : 0f;
 
         /// Nothing more to do here: the pile is full, or the wood is gone.
-        public bool Stalled => timber >= ceiling || standing < 1f;
+        /// A camp still building is never stalled -- there is always the one
+        /// job left.
+        public bool Stalled => !Building && (timber >= ceiling || standing < 1f);
+
+        /// Put every hand here on the same order. Used when a blueprint goes
+        /// down (everybody builds it) and when it is finished (everybody goes
+        /// back to cutting): the alternative is a per-hand order interface
+        /// before there is anything to choose between.
+        public void OrderAll(OutpostOrder order)
+        {
+            foreach (var h in hands) if (h != null) h.order = order;
+        }
     }
 }

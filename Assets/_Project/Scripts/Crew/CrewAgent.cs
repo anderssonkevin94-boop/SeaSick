@@ -249,11 +249,30 @@ namespace SeaSick.Crew
             // stationed hand is a row that produces arithmetically; a visiting
             // hand is a body that delivers. The two sets never overlap.
             var camp = workIsland != null ? World.Outpost.Of(workIsland) : null;
-            if (camp != null && camp.HasCamp && camp.Ledger != null)
+            if (camp != null && camp.Ledger != null)
             {
                 camp.CatchUp();
                 var l = camp.Ledger;
-                if (l.timber < l.ceiling)
+
+                // **A blueprint is paid before a pile is filled.** A hand who
+                // walked a log past the half-built fire and stacked it beside
+                // one is the same nonsense as carrying it past the camp into
+                // the hold, one step further in. This is also the whole of how
+                // a VISITING hand helps build: the stationed rows accrue
+                // through the tick, the bodies deliver through here, and the
+                // two never double-count because a hand who lives here is a
+                // row and a hand walking about is not.
+                if (l.Building)
+                {
+                    l.pending.done++;
+                    carriedResource = null;
+                    // The last log finishes it, and the fire should be alight
+                    // before the man has walked away from it.
+                    camp.CatchUp();
+                    return;
+                }
+
+                if (camp.HasCamp && l.timber < l.ceiling)
                 {
                     l.timber++;
                     carriedResource = null;

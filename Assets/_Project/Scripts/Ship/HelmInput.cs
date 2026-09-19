@@ -63,7 +63,15 @@ namespace SeaSick.Ship
             if (pointer != null && pointer.press.isPressed)
             {
                 Vector2 p = pointer.position.ReadValue();
-                if (p.y < Screen.height * steerZoneHeight && !UIBlocker.Blocked(p))
+                // **Not while the island view is up.** The sheet covers the
+                // bottom 36% of the screen and the steer zone is the bottom
+                // 45%, so there is a band where a tap meant for the ground --
+                // siting a building, or pressing on a crewman to follow them
+                // -- is also a tap on the helm. She is anchored whenever that
+                // view is engaged, so nothing moves; but the rudder would sit
+                // over and stay there, and she would sail off it.
+                if (p.y < Screen.height * steerZoneHeight && !UIBlocker.Blocked(p)
+                    && !SeaSick.CameraRig.IslandCam.Engaged)
                 {
                     // Slight overdrive (x2.2) so full rudder doesn't need the screen edge.
                     target = Mathf.Clamp((p.x / Screen.width - 0.5f) * 2.2f, -1f, 1f);

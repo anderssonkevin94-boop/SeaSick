@@ -188,12 +188,137 @@ public class LedgerProbe : MonoBehaviour
             && !keyed.Matches(new Vector3(-750f, 12f, 104.4f)),
             "matches the same spot at any height, not a spot 8 m away");
 
+        // --- 9. the blueprint ------------------------------------------------
+        //
+        // A camp is SITED before it is built now, and the wood that builds it
+        // is cut by the hands left behind. That work is arithmetic for exactly
+        // the same reason the felling is: a blueprint must go on being built
+        // while its island is unloaded, or the player has to sit and watch a
+        // fire being laid.
+
+        double bspan = 3.0 * day;
+        var b1 = Building(t0);
+        b1.Tick(t0 + bspan);
+
+        var b2 = Building(t0);
+        for (int i = 1; i <= 240; i++) b2.Tick(t0 + bspan * i / 240.0);
+
+        var b3 = Building(t0);
+        b3.Tick(t0 + bspan * 0.07);
+        b3.Tick(t0 + bspan * 0.41);
+        b3.Tick(t0 + bspan * 0.42);
+        b3.Tick(t0 + bspan);
+
+        sb.AppendLine();
+        sb.AppendLine($"BLUEPRINT ({BuildPlans.Campfire.cost} logs, 1 hand building) "
+            + "over 3 game days:");
+        sb.AppendLine($"  one call      done {b1.pending.done}  part {b1.pending.donePart:F4}  standing {b1.standing:F2}");
+        sb.AppendLine($"  240 calls     done {b2.pending.done}  part {b2.pending.donePart:F4}  standing {b2.standing:F2}");
+        sb.AppendLine($"  4 ragged      done {b3.pending.done}  part {b3.pending.donePart:F4}  standing {b3.standing:F2}");
+
+        Gate(sb, ref fails, "build-is-path-independent",
+            SameBuild(b1, b2) && SameBuild(b1, b3),
+            $"{b1.pending.done}/{b1.standing:F3} vs {b2.pending.done}/{b2.standing:F3} "
+            + $"vs {b3.pending.done}/{b3.standing:F3}");
+
+        Gate(sb, ref fails, "a-finished-build-stops-eating-wood",
+            b1.pending.Complete && b1.pending.done == BuildPlans.Campfire.cost,
+            $"{b1.pending.done} of {BuildPlans.Campfire.cost} logs, no overshoot");
+
+        // How long one hand takes, which is the number the cost was chosen
+        // to express: four logs at four logs a day is one day's work.
+        var timed = Building(t0);
+        int steps = 0;
+        while (!timed.pending.Complete && steps < 400)
+        {
+            steps++;
+            timed.Tick(t0 + steps * OutpostLedger.QuantumDays * day);
+        }
+        float daysTaken = steps * OutpostLedger.QuantumDays;
+        sb.AppendLine($"  one hand finishes it in {daysTaken:F1} game days "
+            + $"({daysTaken * day:F0} s at the current day length)");
+        Gate(sb, ref fails, "one-hand-one-day", Mathf.Abs(daysTaken - 1f) < 0.15f,
+            $"{daysTaken:F2} days against the 1.0 the cost was set to mean");
+
+        // Builders do not stockpile. Until the fire is lit there is nothing to
+        // stockpile INTO — in the game the ceiling is zero before the first
+        // building — and a builder who also filled a pile would be paid twice.
+        Gate(sb, ref fails, "building-does-not-also-fill-the-pile",
+            b1.timber == 0 && b1.timberPart < 1e-4f,
+            $"pile {b1.timber} logs while building");
+
+        // The wood comes off the island. A camp sited on bare rock cannot
+        // build itself out of nothing.
+        //
+        // **`standingMax` has to go to zero too, and the first version of this
+        // gate did not do it.** Zeroing the stock alone leaves the regrowth
+        // term running against a 40-log maximum, so ten game days quietly grew
+        // the four logs back and the build finished -- correctly. The gate
+        // failed on ground that was only bare for the first quantum, which is
+        // not what it says it is measuring.
+        var bare = Building(t0);
+        bare.standing = 0f;
+        bare.standingMax = 0f;
+        bare.Tick(t0 + 10.0 * day);
+        Gate(sb, ref fails, "a-build-draws-on-standing-timber",
+            bare.pending.done == 0 && !bare.pending.Complete,
+            $"{bare.pending.done} logs delivered on ground with nothing standing");
+
+        // And the other half of the same fact: on ground that was stripped but
+        // is growing back, a day's building delivers what GREW, not what a
+        // hand could have cut. This is the term that makes a worked-out island
+        // worth leaving and coming back to rather than worth abandoning.
+        var thin = Building(t0);
+        thin.standing = 0f;
+        thin.Tick(t0 + 1.0 * day);
+        float grew = OutpostLedger.StandingPerHectare * OutpostLedger.RegrowthPerDay;
+        Gate(sb, ref fails, "a-stripped-camp-builds-at-the-rate-it-regrows",
+            thin.pending.done + thin.pending.donePart <= grew + 0.05f,
+            $"{thin.pending.done + thin.pending.donePart:F2} logs in a day "
+            + $"against {grew:F2} regrown, not the {OutpostLedger.TimberPerHandPerDay:F0} a hand can cut");
+
+        // And it survives a save half built, which is the whole reason the
+        // blueprint is a row and not a GameObject.
+        var half = Building(t0);
+        half.Tick(t0 + 0.5 * day);
+        var reloaded = JsonUtility.FromJson<OutpostLedger>(JsonUtility.ToJson(half));
+        Gate(sb, ref fails, "a-half-built-blueprint-round-trips",
+            reloaded != null && reloaded.pending != null
+            && reloaded.pending.planId == half.pending.planId
+            && reloaded.pending.done == half.pending.done
+            && Mathf.Abs(reloaded.pending.x - half.pending.x) < 1e-3f,
+            $"{half.pending.done}/{half.pending.needed} logs at "
+            + $"({half.pending.x:F1}, {half.pending.z:F1}) restored intact");
+
         sb.AppendLine();
         sb.AppendLine(fails == 0
             ? "PASS — the ledger answers the same however often it is asked"
             : $"{fails} GATE(S) FAILED");
         Report(sb.ToString());
     }
+
+    /// One hand building a campfire that was sited 40 m off the survey's
+    /// clearing -- which is the case the position field exists for.
+    static OutpostLedger Building(double at, float hectares = 1f)
+    {
+        var l = OutpostLedger.For(Vector3.zero, hectares);
+        l.lastTicked = at;
+        l.ceiling = 0;                     // no fire yet, so nothing keeps anything
+        l.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Build });
+        l.pending = new PendingBuild
+        {
+            planId = BuildPlans.Campfire.id,
+            x = 40f,
+            z = -12.5f,
+            needed = BuildPlans.Campfire.cost,
+        };
+        return l;
+    }
+
+    static bool SameBuild(OutpostLedger a, OutpostLedger b)
+        => a.pending.done == b.pending.done
+        && Mathf.Abs(a.pending.donePart - b.pending.donePart) < 1e-4f
+        && Mathf.Abs(a.standing - b.standing) < 1e-3f;
 
     /// Two hands cutting on a hectare of ground, at a known instant.
     static OutpostLedger Working(double at, float hectares = 1f)

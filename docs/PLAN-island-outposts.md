@@ -293,3 +293,171 @@ Gate: `RunProbe.Outpost()` -> `Logs/OutpostProbe.txt`.
 Phase 1 proper: the bottom sheet, crew selection, `make camp` felling its own
 site through `SceneryWood.NodeHarvested`, crew carrying to the camp pile, and
 the ledger + tick (D2) — the ledger is the piece to design first.
+
+## THE BLUEPRINT PASS — 2026-09-19
+
+Kevin, 2026-09-19: *"when building the campfire you can only build it within a
+certain radius of the ship. after docking i have the option to build a campfire
+and it will be a blueprint of the campfire. i get to press where on the island i
+want it and it will remain a blueprint there until its built (imagine how the
+forest does with their blueprint builds) then the people i send ashore will cut
+down wood to build it. once its built and lit i can start doing other things."*
+
+So **make camp is no longer instant**. The button hands you a ghost; you put it
+somewhere within reach of the ship; it stands there as a drawing until the crew
+have cut the wood for it.
+
+### The four decisions this took
+
+1. **The blueprint is a LEDGER ROW, not a scene object.** `PendingBuild` —
+   plan id, world XZ, logs needed, logs delivered — lives in `OutpostLedger`
+   beside the timber, because a camp you sited and then sailed away from has to
+   go on being half built while its island is unloaded. `BuildSite` is the
+   drawing OF that row and is rebuilt from it on every arrival, exactly like
+   the parked crew bodies. Gated: `a-half-built-blueprint-round-trips`.
+
+2. **One validity test for the ghost and the raise.** `Outpost.CanPlace` is
+   what turns the ghost red and what the raise asks before it stands anything
+   up. A ghost that goes green on one rule and a raise that refuses on another
+   is the bug the whole shape exists to prevent, and the only way to keep it
+   prevented is that there is one function.
+
+3. **Picking is analytic against the height field.** NOT `Physics.Raycast`:
+   `TerrainSettings.colliderRadius` is 1 chunk, so colliders exist within about
+   128 m of the ship and nowhere else, while `IslandCam` frames up to 520 m of
+   ground. A screen ray would pass clean through the far half of the island the
+   player is looking at — a bug that appears only when somebody zooms out,
+   which is exactly when they are choosing where to put something.
+   `CameraRig/GroundPick.cs` marches the ray with a step that adapts to its
+   height above the surface and bisects the crossing; measured 0.0 cm off a
+   known point from 400 m up.
+
+4. **The wood comes off the island, by two routes that cannot double-count.**
+   A stationed hand is a row on `OutpostOrder.Build` and accrues arithmetically
+   through the tick at the felling rate, drawn from `standing`. A visiting hand
+   is a body and delivers through `CrewAgent.DropOff`, which now pays a
+   blueprint before it fills a pile. The old rule holds unchanged: the ledger
+   counts only the hands who LIVE there, and a hand walking about is by
+   definition not one of them.
+
+### The error the probe caught, which is the one worth remembering
+
+The first version **felled the site at siting** and put those logs straight into
+the build — "a site in thick timber starts part-paid" — which sounded like a
+reason to care where you put it. A campfire costs four logs; the probe's spot
+had four trees on it; **the camp finished the frame it was placed and there was
+no blueprint at all.** A blueprint that can pay for itself is not a blueprint.
+
+The clearing is now felled when the build **completes**, which is both the fix
+and the better story: a drawing stands among the trees it is going to take down,
+and the camp appears in the wood rather than a gap appearing where a camp might
+one day go. Gated both ways — `siting-fells-nothing` and
+`making-camp-fells-its-own-site`.
+
+### Numbers, all guesses, none played
+
+| | value | why that |
+|---|---|---|
+| `CampSiting.SiteRadius` | 80 m | median island radius is 78 m and the default shot holds 165 m of ground: reaches a good part of a typical island from a ship lying off the beach, without letting you develop the far side of a big one from the water |
+| `BuildPlans.Campfire.cost` | 4 logs | **one hand for one day** at `TimberPerHandPerDay` 4 — the only unit the player has. Gated: `one-hand-one-day` measures 1.00 days |
+| `Outpost.CampClearingRadius` | 7.5 m | unchanged, and still the open look call: it took 4 trees down on Island_1 |
+
+### Gates
+
+`RunProbe.Ledger()` — 8 new, all green: build is path-independent over 3 game
+days across 1 / 240 / 4 ragged calls; no overshoot; one hand one day; a builder
+does not also fill the pile; a build draws on standing timber (**and the first
+version of that gate was wrong — zeroing `standing` without `standingMax` let
+regrowth refill the ground over the ten days being measured**); a stripped camp
+builds at the rate it regrows; a half-built blueprint round-trips through JSON.
+
+`RunProbe.Camp()` — 9 new, all green, driven end to end in play mode: a spot 6 m
+off the surveyed clearing takes a camp; the pick lands on the ground; siting
+writes a blueprint where it was put; a blueprint is not a camp, keeps nothing,
+and is drawn on the ground; one hand and two game days lights the fire within
+1.5 m of the spot; the drawing comes down; the hands go back to cutting.
+
+### Still open
+
+- **The look call, unchanged and now more important:** 7.5 m of clearing took
+  four trees down. Kevin has not seen any of this — the ghost, the ring, the
+  stakes, the log stack, the fire appearing in the wood.
+- **Stationed hands still do not ANIMATE the build.** Parity is structural in
+  the ledger; the bodies standing at a camp you are watching are parked, not
+  working. Same gap as before this pass, one job larger.
+- Other buildings reuse all of this the moment `BuildPlans.AtACamp` grows:
+  `Site` takes any plan. Only the campfire is offered today.
+
+## THE VIEW FOLLOWS THE DECISION — 2026-09-19
+
+Kevin, same day: *"when the campfire blueprint has been set the camera moves to
+focusing the campfire with a hight of 35 meters above it. using the keys allows
+you to move the camera around freely across the island. zooming in and out
+obviously zooms in and out. i also want to be able to press on one of the
+villagers and have the camera follow them."*
+
+### Height is not coverage, so the triangle lives in one place
+
+The overview is authored in **metres of ground up the frame**, not in altitude,
+and for a good reason: a distance means nothing without the lens. But a person
+says "35 m above the fire". `ChaseCamera.OverviewGroundForHeight` inverts the
+seat geometry — `seat = aim + dir·span·cos(tilt) + up·span·sin(tilt)`, so
+`span = h / sin(tilt)` and coverage is `span · 2 · tan(fov/2)`. At the shipped
+32° tilt and 36° lens, **35 m up is 43 m of ground**. Measured: the lens lands
+35.0 m above the fire with it at viewport (0.50, 0.50).
+
+### Focus, not pan
+
+`IslandCam` gained a `focus` point that REPLACES the composed centre, and a
+`following` transform that drives the focus every frame. Consequences that had
+to be handled rather than discovered:
+
+- **A focus sets `shot.free`.** `free` is also what switches off the slide that
+  drags the frame until the ship is inside it — and a view centred on a
+  campfire that then slid to include the ship is not centred on the campfire.
+- **The pan clamp moved on to the RESULT.** It used to limit how far the frame
+  had been walked from the composed centre; now the centre can be a fire or a
+  crewman that is already off the island's middle, so what is clamped is where
+  the frame ends up, against the island's own centre and radius.
+- **END is the way back.** It releases the focus and the follow and hands the
+  shot back to the composition the dock authored.
+
+### The pick is a projection, not a raycast
+
+The crew are 388-triangle characters with **no colliders**, and giving twenty of
+them colliders so a camera can be aimed would be paying physics for an
+interface. `IslandCam.PickCrew` projects every body near the island to the
+screen on the frame a finger goes down and takes the nearest within 7% of screen
+height. A tap that hits nobody lets go, and letting go leaves the camera where
+it is rather than snapping back — releasing somebody should not move the view.
+
+A followed hand who is parked (the ship sailed) or recalled goes inactive, and
+the follow stops at their last position rather than chasing a switched-off body.
+
+### The zoom floor had to come down
+
+`minGround` was **40 m** and the camp view is 43 m of ground, so "zoom in" from
+a blueprint bought 7% and read as broken. Now **18 m** — the lens about 15 m up,
+a crewman a tenth of the frame. The shipped default (165 m) and the composed
+dock shot are untouched; this is a limit, not a composition. `IslandCam` is
+added at runtime by `AnchorController` and is NOT serialised in `Sea.unity`, so
+the C# default is the live value — checked, because a serialised field beating
+the initializer is this project's oldest silent trap.
+
+### Gates — `RunProbe.Camp()`, 43 green, 0 failed, **run on the steamer**
+
+`the-view-goes-to-what-was-sited` (0% off the middle) · `the-view-is-35-m-above-it`
+(35.0 m) · `the-view-follows-who-you-press-on` (0% off) ·
+`and-keeps-following-when-they-move` (2% after the hand walked 23 m) ·
+`letting-go-hands-the-shot-back`.
+
+Driven through `CampSiting.DropTheViewOn`, the same call the tap makes, so the
+gate cannot pass against a copy of the behaviour. The pick itself is the one
+half not gated — it needs a real tap.
+
+### Also
+
+`HelmInput` no longer touch-steers while the island view is engaged. The sheet
+covers the bottom 36% of the screen and the steer zone is the bottom 45%, so
+there was a band where a tap meant for the ground — siting, or pressing on a
+crewman — also put the rudder over and left it there.

@@ -25,8 +25,8 @@ namespace SeaSick.CameraRig
     public class IslandCam : MonoBehaviour
     {
         [Header("Zoom, in metres of ground up the frame")]
-        [Tooltip("Closest. About a hut and the people round it — at 40 m a 1.7 m crewman is roughly a twentieth of the frame.")]
-        [SerializeField] float minGround = 40f;
+        [Tooltip("Closest. At 18 m the lens is about 15 m above the ground and a 1.7 m crewman is a tenth of the frame — close enough to watch one person work. It was 40 m, which stopped being a sensible floor the day the view started dropping to 35 m above a campfire: that shot is 43 m of ground, so 'zoom in' bought 7% and read as broken.")]
+        [SerializeField] float minGround = 18f;
         [Tooltip("Furthest. Far enough to hold a whole island of the size the world makes now; raise it if the islands grow.")]
         [SerializeField] float maxGround = 520f;
         [Tooltip("Where it starts, and what it returns to at a new island. The authored dock shot's own zoom.")]
@@ -51,22 +51,101 @@ namespace SeaSick.CameraRig
         /// `free` then, so an untouched view is exactly the shipped one.
         public bool Driven { get; private set; }
 
+        [Header("Following somebody")]
+        [Tooltip("How near the tap has to land, in fractions of screen HEIGHT, to count as pressing on a crewman. A fraction rather than pixels because a phone and a desk window do not have the same pixels.")]
+        [SerializeField, Range(0.02f, 0.2f)] float pickRadius = 0.07f;
+
+        /// Metres above the ground the view drops to when a blueprint goes
+        /// down. Kevin's number: close enough to watch the thing being built.
+        public const float BlueprintHeight = 35f;
+
         float wantGround;
         Vector3 wantPan;
         World.Island subject;
 
+        /// A world point the view is centred on INSTEAD of the shot's own
+        /// composed centre, and the thing it is tracking if it is tracking
+        /// something.
+        ///
+        /// These are what make the view the player's rather than the dock's:
+        /// the composed shot answers "look at this island from the sea", and
+        /// once somebody has sited a camp or pressed on a crewman the question
+        /// has changed to "look at THAT".
+        Vector3? focus;
+        Transform following;
+
+        /// Is the island view live at all? Read by `HelmInput`, which shares
+        /// the lower half of the screen with it.
+        public static bool Engaged { get; private set; }
+
+        /// What the view is centred on, for the readout and the probe.
+        public Vector3? FocusPoint => focus;
+        public Transform Following => following;
+
         void Awake() { Ground = wantGround = defaultGround; }
+
+        void OnDisable() { Engaged = false; }
 
         /// Point it at a new place. Resets the zoom and the pan, because a
         /// frame walked to the north end of one island means nothing at the
         /// next one.
         public void Focus(World.Island isle)
         {
+            Engaged = isle != null;
             if (subject == isle) return;
             subject = isle;
             wantGround = Ground = defaultGround;
             wantPan = Pan = Vector3.zero;
             Driven = false;
+            focus = null;
+            following = null;
+        }
+
+        /// **Centre the view on a point, at a given height above it.**
+        ///
+        /// Height, not coverage, because that is how the request arrives — "35
+        /// m above the campfire" — and `ChaseCamera` owns the triangle that
+        /// converts one into the other. Counts as driving: a view somebody has
+        /// pointed at something must not also be sliding about to keep the
+        /// ship in frame.
+        public void LookAt(Vector3 point, float heightMetres)
+        {
+            focus = point;
+            following = null;
+            wantPan = Pan = Vector3.zero;
+            var chase = Camera.main != null ? Camera.main.GetComponent<ChaseCamera>() : null;
+            if (chase == null) chase = Object.FindFirstObjectByType<ChaseCamera>();
+            if (chase != null) wantGround = Mathf.Clamp(
+                chase.OverviewGroundForHeight(heightMetres), minGround, maxGround);
+            Driven = true;
+        }
+
+        /// Keep this transform in the middle of the frame until told otherwise.
+        /// The zoom is left alone -- whoever is watching chose it.
+        public void FollowThis(Transform who)
+        {
+            if (who == null) return;
+            following = who;
+            focus = who.position;
+            wantPan = Pan = Vector3.zero;
+            Driven = true;
+        }
+
+        /// Stop following, and stay where the view is rather than snapping
+        /// back to the composed shot. Letting go of somebody should not move
+        /// the camera.
+        public void StopFollowing()
+        {
+            if (following != null) focus = following.position;
+            following = null;
+        }
+
+        /// Back to the shot the dock composed.
+        public void Release()
+        {
+            focus = null;
+            following = null;
+            wantPan = Pan = Vector3.zero;
         }
 
         void Update()
@@ -125,16 +204,93 @@ namespace SeaSick.CameraRig
                 Driven = true;
             }
 
+            // Whoever is being followed drags the centre with them.
+            if (following != null)
+            {
+                if (!following.gameObject.activeInHierarchy)
+                {
+                    // Parked when the ship sailed, or gone ashore and switched
+                    // off. Hold the last place they stood rather than snapping
+                    // the view across the island.
+                    StopFollowing();
+                }
+                else focus = following.position;
+            }
+
             // Keep it over the island. Walking the frame out to sea shows you
             // nothing and is the easiest way to get lost in a top-down view.
+            //
+            // The clamp is on WHERE THE FRAME ENDS UP, not on how far it has
+            // been walked, because since the view can be re-centred on a
+            // campfire or a crewman the pan is an offset from something that
+            // is already off the island's middle.
             float reach = Mathf.Max(60f, subject.Radius * panReach);
-            if (wantPan.sqrMagnitude > reach * reach)
+            Vector3 islandCentre = subject.transform.position;
+            if (focus.HasValue)
+            {
+                Vector3 centre = focus.Value + wantPan;
+                Vector3 off = centre - islandCentre;
+                off.y = 0f;
+                if (off.sqrMagnitude > reach * reach)
+                    wantPan = islandCentre + off.normalized * reach - focus.Value;
+            }
+            else if (wantPan.sqrMagnitude > reach * reach)
                 wantPan = wantPan.normalized * reach;
 
-            // Home the frame with the END key -- cheaper than panning back.
-            if (keys != null && keys.endKey.wasPressedThisFrame) { wantPan = Vector3.zero; Driven = true; }
+            // Home the frame with the END key -- cheaper than panning back,
+            // and the one way back to the shot the dock composed.
+            if (keys != null && keys.endKey.wasPressedThisFrame)
+            {
+                Release();
+                Driven = true;
+            }
 
+            PickCrew();
             Settle();
+        }
+
+        /// **Press on a crewman and the view follows them.**
+        ///
+        /// Picked by projecting each body to the screen and taking the nearest
+        /// within `pickRadius` of the tap, NOT by raycasting a collider: the
+        /// crew are 388-triangle characters with no colliders on them, and
+        /// giving twenty of them colliders so that a camera can be aimed would
+        /// be paying physics for an interface. Projection costs one transform
+        /// per body on the frame a finger goes down.
+        void PickCrew()
+        {
+            var pointer = Pointer.current;
+            if (pointer == null || !pointer.press.wasPressedThisFrame) return;
+            if (UI.CampSiting.Placing) return;          // that tap is siting a building
+            Vector2 p = pointer.position.ReadValue();
+            if (UIBlocker.Blocked(p)) return;
+
+            var cam = Camera.main;
+            if (cam == null) return;
+
+            float best = float.MaxValue;
+            Transform picked = null;
+            float limit = pickRadius * Screen.height;
+            float limitSq = limit * limit;
+
+            // Everybody on their feet near this island: the hands who live
+            // here and the shore party off the ship both read as villagers to
+            // somebody looking down at them.
+            var all = Object.FindObjectsByType<Crew.CrewAgent>(FindObjectsSortMode.None);
+            foreach (var a in all)
+            {
+                if (a == null || !a.gameObject.activeInHierarchy) continue;
+                Vector3 at = a.transform.position + Vector3.up * 0.9f;
+                if (World.Island.FlatDistance(at, subject.transform.position)
+                    > subject.Radius + 120f) continue;
+                Vector3 sp = cam.WorldToScreenPoint(at);
+                if (sp.z <= 0f) continue;              // behind the lens
+                float d = (new Vector2(sp.x, sp.y) - p).sqrMagnitude;
+                if (d < limitSq && d < best) { best = d; picked = a.transform; }
+            }
+
+            if (picked != null) FollowThis(picked);
+            else StopFollowing();       // a tap on empty ground lets them go
         }
 
         /// Ask for a zoom directly, in metres of ground.
@@ -179,16 +335,38 @@ namespace SeaSick.CameraRig
         public ChaseCamera.IslandShot Apply(ChaseCamera.IslandShot shot)
         {
             if (subject == null) return shot;
+            // A focus REPLACES the composed centre; a pan offsets whichever
+            // centre is in force.
+            if (focus.HasValue) shot.centre = focus.Value;
             shot.centre += Pan;
             shot.ground = Ground;
             // Only once they have actually touched it: an untouched view must
             // be exactly the shipped composition, legibility clamp and all.
-            shot.free = Driven;
+            //
+            // A focus counts, and it has to: `free` is also what switches off
+            // the slide that drags the frame until the ship is in it, and a
+            // view centred on a campfire that then slid to include the ship
+            // would not be centred on the campfire.
+            shot.free = Driven || focus.HasValue;
             return shot;
         }
 
         /// One line for the HUD, in the units the shot is authored in.
         public string Readout =>
-            $"view {Ground:F0} m of ground   ·   {(Pan.magnitude < 1f ? "centred" : $"{Pan.magnitude:F0} m off centre")}";
+            following != null
+                ? $"following {FollowName}   ·   {Ground:F0} m of ground"
+                : $"view {Ground:F0} m of ground   ·   "
+                  + (focus.HasValue
+                      ? (Pan.magnitude < 1f ? "on the camp" : $"{Pan.magnitude:F0} m off the camp")
+                      : (Pan.magnitude < 1f ? "centred" : $"{Pan.magnitude:F0} m off centre"));
+
+        string FollowName
+        {
+            get
+            {
+                var a = following != null ? following.GetComponent<Crew.CrewAgent>() : null;
+                return a != null ? a.DisplayName : "somebody";
+            }
+        }
     }
 }

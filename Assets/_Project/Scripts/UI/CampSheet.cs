@@ -46,6 +46,12 @@ namespace SeaSick.UI
             if (anchor == null) anchor = Object.FindFirstObjectByType<AnchorController>();
             roster = Object.FindFirstObjectByType<CrewRoster>();
             motor = Object.FindFirstObjectByType<ShipMotor>();
+
+            // Siting mode rides along with the sheet that starts it rather
+            // than being a second thing to place in `Sea.unity`. The scene is
+            // carrying other uncommitted work and every object added to it is
+            // a merge nobody wants; this needs no serialised state.
+            if (CampSiting.Instance == null) gameObject.AddComponent<CampSiting>();
         }
 
         /// The island she is lying at, if this sheet has anything to say.
@@ -99,32 +105,47 @@ namespace SeaSick.UI
             string view = anchor != null ? anchor.ViewReadout : null;
             if (!string.IsNullOrEmpty(view))
                 GUI.Label(new Rect(inner.x, head.yMax, inner.width, lineH),
-                    view + "   ·   arrows pan, +/− or wheel zoom, End recentres", body);
+                    view + "   ·   arrows pan, +/− zoom, tap a hand to follow, End recentres", body);
 
             float y = head.yMax + (string.IsNullOrEmpty(view) ? 0f : lineH) + HudLayout.Gap;
 
             // Nothing to command yet: the ground is still being looked at, or
             // it will not take a camp. Say which — an empty sheet is
             // indistinguishable from a broken one.
-            if (outpost == null || !outpost.HasCamp)
+            if (outpost == null)
+            {
+                var wait = new Rect(inner.x, y, inner.width, HudLayout.Unit * 2.7f);
+                GUI.Label(wait, Outpost.Surveying(isle)
+                    ? "looking over the ground…"
+                    : "no ground here will take a camp", body);
+                return;
+            }
+
+            // --- siting: the blueprint is on the end of your thumb ----------
+            if (CampSiting.Placing)
+            {
+                var stop = new Rect(inner.x, y, inner.width, HudLayout.Unit * 2.7f);
+                if (GUI.Button(stop, "✕   Never mind", UITheme.Button)) CampSiting.End();
+                string refusal = CampSiting.Refusal;
+                GUI.Label(new Rect(inner.x, stop.yMax + HudLayout.Gap, inner.width, lineH),
+                    string.IsNullOrEmpty(refusal)
+                        ? "tap the ground inside the ring"
+                        : "✕ " + refusal, body);
+                return;
+            }
+
+            // Nothing sited and nothing built: the decision is still to be
+            // made. This is the only button on the sheet that spends nothing
+            // — what it costs is the wood the crew will cut for it.
+            if (!outpost.HasCamp && !outpost.Building)
             {
                 var btn = new Rect(inner.x, y, inner.width, HudLayout.Unit * 2.7f);
-                if (outpost == null)
-                {
-                    GUI.Label(btn, Outpost.Surveying(isle)
-                        ? "looking over the ground…"
-                        : "no ground here will take a camp", body);
-                    return;
-                }
-
                 if (GUI.Button(btn, "🔥   Make camp", UITheme.Button))
-                {
-                    int logs = outpost.MakeCamp(out string why);
-                    if (logs < 0) Debug.Log($"CampSheet: cannot make camp — {why}");
-                }
+                    CampSiting.Begin(outpost, BuildPlans.Campfire,
+                        motor != null ? motor.transform : null);
                 var note = new Rect(inner.x, btn.yMax + HudLayout.Gap, inner.width, lineH);
-                GUI.Label(note, "a fire, somewhere to stack ten logs, "
-                    + "and the wood it stands on comes down", body);
+                GUI.Label(note, $"put a fire where you want it — {BuildPlans.Campfire.cost} logs, "
+                    + "cut by whoever you leave behind", body);
                 return;
             }
 
@@ -194,6 +215,23 @@ namespace SeaSick.UI
         {
             sb.Clear();
             sb.Append(isle.name);
+
+            // A blueprint reports what it is waiting for, in logs, because
+            // logs are what the player has to do something about. "Building"
+            // on its own would be a progress bar with no verb attached.
+            if (outpost != null && outpost.Building)
+            {
+                outpost.CatchUp();
+                var p = outpost.Ledger.pending;
+                int building = outpost.Ledger.HandsOn(OutpostOrder.Build);
+                sb.Append("   ·   camp sited   ·   ").Append(p.done).Append(" / ")
+                  .Append(p.needed).Append(" logs");
+                sb.Append("   ·   ").Append(building)
+                  .Append(building == 1 ? " hand building" : " hands building");
+                if (building == 0) sb.Append("   ·   nobody is building it");
+                return sb.ToString();
+            }
+
             if (outpost != null && outpost.HasCamp && outpost.Ledger != null)
             {
                 // Bring it up to now before reporting: a stale number is worse

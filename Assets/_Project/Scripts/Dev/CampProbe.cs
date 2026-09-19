@@ -240,16 +240,243 @@ public class CampProbe : MonoBehaviour
         sb.AppendLine($"  fires already under this island: "
             + $"{target.GetComponentsInChildren<Campfire>().Length}");
 
-        int felled = outpost.MakeCamp(out string whyNot);
-        if (felled < 0) sb.AppendLine($"  MakeCamp refused: {whyNot}");
+        // --- the player sites it, the crew build it --------------------------
+        //
+        // Kevin's flow, 2026-09-19: the button no longer makes a camp, it puts
+        // a BLUEPRINT on the ground where the player points, and the hands
+        // left behind cut the wood that builds it. So the probe does what the
+        // player does -- picks a spot off the ground, sites there, leaves
+        // somebody, and lets the clock do the rest.
+
+        // Somewhere off the surveyed clearing, so this cannot pass by
+        // accidentally doing what the old spiral did. Walk out until the
+        // ground says yes.
+        Vector3 spot = outpost.ClearingCentre;
+        string placeWhy = "";
+        bool found = false;
+        for (int ring = 0; ring < 6 && !found; ring++)
+        {
+            float rad = 6f + ring * 5f;
+            for (int i = 0; i < 12 && !found; i++)
+            {
+                float a = i * Mathf.PI * 2f / 12f + ring;
+                var p = outpost.ClearingCentre
+                    + new Vector3(Mathf.Cos(a) * rad, 0f, Mathf.Sin(a) * rad);
+                p.y = SeaSick.CameraRig.GroundPick.Height != null
+                    ? SeaSick.CameraRig.GroundPick.Height(p.x, p.z) : p.y;
+                if (outpost.CanPlace(BuildPlans.Campfire, p, out placeWhy))
+                {
+                    spot = p;
+                    found = true;
+                }
+            }
+        }
+        float offClearing = Vector3.Distance(
+            new Vector3(spot.x, 0f, spot.z),
+            new Vector3(outpost.ClearingCentre.x, 0f, outpost.ClearingCentre.z));
+
+        // A ray straight down on to that spot has to land on it. This is the
+        // pick the player's thumb goes through, and it is analytic against the
+        // height field rather than a Physics.Raycast because colliders only
+        // exist within one chunk of the ship -- the far half of any island in
+        // the bird's-eye has none.
+        bool picked = SeaSick.CameraRig.GroundPick.Along(
+            new Ray(spot + Vector3.up * 400f, Vector3.down), out Vector3 pickHit);
+        float pickErr = picked ? Vector3.Distance(pickHit, spot) : 999f;
+
+        int wanted = outpost.Site(BuildPlans.Campfire, spot, out string whyNot);
+        if (wanted < 0) sb.AppendLine($"  Site refused: {whyNot}");
         yield return null;
 
-        int standingAfter = wood != null ? wood.TreeCount - wood.FelledInMesh() : -1;
-        int downInMesh = standingBefore - standingAfter;
+        var pending = outpost.Ledger != null ? outpost.Ledger.pending : null;
+        int standingAtSiting = wood != null ? wood.TreeCount - wood.FelledInMesh() : -1;
 
         sb.AppendLine();
-        sb.AppendLine($"MAKE CAMP on {target.name}:");
-        sb.AppendLine($"  reported {felled} logs out of the clearing");
+        sb.AppendLine($"SITE A CAMP at a point {offClearing:F1} m off the surveyed clearing:");
+        sb.AppendLine($"  ground pick from 400 m up: "
+            + (picked ? $"hit, {pickErr * 100f:F1} cm from the spot" : "MISSED"));
+        sb.AppendLine($"  blueprint wants {wanted} logs; "
+            + $"trees standing in the MESH {standingBefore} -> {standingAtSiting}");
+
+        Gate(sb, ref fails, "a-spot-off-the-clearing-will-take-a-camp", found,
+            found ? $"{offClearing:F1} m out" : $"nowhere in 30 m: {placeWhy}");
+        Gate(sb, ref fails, "the-ground-pick-lands-on-the-ground",
+            picked && pickErr < 0.25f,
+            picked ? $"{pickErr * 100f:F1} cm" : "ray missed the height field");
+        Gate(sb, ref fails, "siting-writes-a-blueprint",
+            pending != null && pending.planId == BuildPlans.Campfire.id
+            && pending.needed == BuildPlans.Campfire.cost,
+            pending != null ? $"{pending.planId}, {pending.needed} logs" : "no pending row");
+        Gate(sb, ref fails, "the-blueprint-is-where-it-was-put",
+            pending != null && Mathf.Abs(pending.x - spot.x) < 0.01f
+            && Mathf.Abs(pending.z - spot.z) < 0.01f,
+            pending != null
+                ? $"({pending.x:F2}, {pending.z:F2}) against ({spot.x:F2}, {spot.z:F2})"
+                : "no pending row");
+        Gate(sb, ref fails, "a-blueprint-is-not-a-camp",
+            !outpost.HasCamp && outpost.Building,
+            $"HasCamp {outpost.HasCamp}, Building {outpost.Building}");
+        Gate(sb, ref fails, "a-blueprint-is-drawn-on-the-ground",
+            target.GetComponentInChildren<BuildSite>() != null,
+            "no BuildSite under the island");
+        Gate(sb, ref fails, "an-unbuilt-camp-keeps-nothing",
+            outpost.StoreCapacity == 0,
+            $"keeps {outpost.StoreCapacity} before the fire is lit");
+
+        // **The blueprint does not clear its own ground**, and an earlier
+        // version did: the probe's spot had four trees on it, a campfire costs
+        // four logs, and the camp finished the frame it was sited. A blueprint
+        // that can pay for itself is not a blueprint.
+        Gate(sb, ref fails, "siting-fells-nothing",
+            wood == null || standingAtSiting == standingBefore,
+            $"{standingBefore - standingAtSiting} trees came down at siting");
+        Gate(sb, ref fails, "a-sited-camp-is-not-a-built-one",
+            wanted == BuildPlans.Campfire.cost,
+            $"wants {wanted} of {BuildPlans.Campfire.cost} logs the moment it is placed");
+
+        // Somebody has to build it, and a hand must be leavable at a camp that
+        // is only a drawing -- that IS the flow. A hand left here goes on to
+        // the build, not on to a pile that does not exist yet.
+        var builder = new OutpostHand { name = "probe-builder", order = OutpostOrder.Build };
+        outpost.Ledger.hands.Add(builder);
+        outpost.Ledger.lastTicked = TimeOfDay.Seconds;
+
+        int logsAtSiting = pending != null ? pending.done : 0;
+        outpost.Ledger.Tick(TimeOfDay.Seconds + 2.0 * TimeOfDay.DayLength);
+        outpost.CatchUp();
+        yield return null;
+
+        var fireGo = target.GetComponentInChildren<Campfire>();
+        Vector3 firePos = fireGo != null ? fireGo.transform.position : Vector3.zero;
+        float fireOff = fireGo != null
+            ? Vector3.Distance(new Vector3(firePos.x, 0f, firePos.z),
+                               new Vector3(spot.x, 0f, spot.z))
+            : 999f;
+
+        sb.AppendLine($"  one hand, two game days later: "
+            + (outpost.HasCamp ? "the fire is lit" : "still a blueprint"));
+        Gate(sb, ref fails, "the-crew-build-what-was-sited", outpost.HasCamp,
+            outpost.Ledger.pending != null
+                ? $"{outpost.Ledger.pending.done}/{outpost.Ledger.pending.needed} logs"
+                : "no pending row and no fire");
+        Gate(sb, ref fails, "the-fire-stands-where-it-was-sited", fireOff < 1.5f,
+            $"{fireOff:F2} m from the spot");
+        Gate(sb, ref fails, "the-blueprint-comes-down-when-it-is-built",
+            target.GetComponentInChildren<BuildSite>() == null,
+            "a BuildSite is still standing under the island");
+        Gate(sb, ref fails, "building-costs-what-it-says",
+            logsAtSiting == 0,
+            $"{logsAtSiting} logs were in it before anybody worked on it");
+
+        // Everybody goes back to cutting once there is somewhere to cut into.
+        Gate(sb, ref fails, "a-finished-camp-puts-its-hands-back-on-the-wood",
+            builder.order == OutpostOrder.Cut,
+            $"the builder is on {builder.order}");
+        outpost.Ledger.hands.Remove(builder);
+
+        // --- the view drops on to what was sited ------------------------------
+        //
+        // Kevin, 2026-09-19: once the blueprint is down the camera goes to it,
+        // 35 m above. Driven through the SAME call the tap makes, so this
+        // cannot pass against a copy of the behaviour.
+
+        SeaSick.UI.CampSiting.DropTheViewOn(outpost);
+        for (int f = 0; f < 90; f++) yield return null;      // let the rig fly in
+
+        Vector3 campAt = outpost.CampCentre;
+        float camHeight = Camera.main != null
+            ? Camera.main.transform.position.y - campAt.y : -1f;
+        Vector3 vp = Camera.main != null
+            ? Camera.main.WorldToViewportPoint(campAt) : Vector3.zero;
+        float offCentre = Vector2.Distance(new Vector2(vp.x, vp.y), new Vector2(0.5f, 0.5f));
+
+        sb.AppendLine();
+        sb.AppendLine("THE VIEW, ONCE THE CAMP IS SITED:");
+        sb.AppendLine($"  asked for {SeaSick.CameraRig.IslandCam.BlueprintHeight:F0} m above it; "
+            + $"the lens is {camHeight:F1} m above it");
+        sb.AppendLine($"  it sits at viewport ({vp.x:F2}, {vp.y:F2}), "
+            + $"{offCentre * 100f:F0}% of the frame off centre");
+        sb.AppendLine($"  readout: {(icam != null ? icam.Readout : "no IslandCam")}");
+
+        Gate(sb, ref fails, "the-view-goes-to-what-was-sited", offCentre < 0.14f,
+            $"{offCentre * 100f:F0}% off the middle of the frame");
+        Gate(sb, ref fails, "the-view-is-35-m-above-it",
+            Mathf.Abs(camHeight - SeaSick.CameraRig.IslandCam.BlueprintHeight) < 4f,
+            $"{camHeight:F1} m against {SeaSick.CameraRig.IslandCam.BlueprintHeight:F0}");
+
+        // --- and it follows whoever you press on ------------------------------
+        //
+        // The pick itself is a projection against a tap and cannot be pressed
+        // from here; what is gated is the thing the pick DOES, which is the
+        // half that can silently stop working.
+
+        // Somebody has to be standing there to be pressed on. Station one for
+        // the duration -- that IS the villager case: a hand who lives at the
+        // camp, parked between visits and drawn while the ship is here.
+        var someone = FirstAshore(outpost);
+        bool borrowed = false;
+        if (someone == null)
+        {
+            var crewRoster = Object.FindFirstObjectByType<SeaSick.Crew.CrewRoster>();
+            if (crewRoster != null)
+                foreach (var hand in crewRoster.All)
+                {
+                    if (hand == null || !hand.IsAboard) continue;
+                    if (!outpost.Station(hand)) continue;
+                    outpost.ShowHands(true);
+                    crewRoster.Refresh();
+                    someone = hand;
+                    borrowed = true;
+                    break;
+                }
+        }
+
+        if (someone != null && icam != null)
+        {
+            icam.FollowThis(someone.transform);
+            for (int f = 0; f < 60; f++) yield return null;
+            Vector3 vp1 = Camera.main.WorldToViewportPoint(someone.transform.position);
+            float off1 = Vector2.Distance(new Vector2(vp1.x, vp1.y), new Vector2(0.5f, 0.5f));
+
+            // Move them, and the frame has to come too.
+            Vector3 was = someone.transform.position;
+            someone.transform.position = was + new Vector3(18f, 0f, 14f);
+            for (int f = 0; f < 60; f++) yield return null;
+            Vector3 vp2 = Camera.main.WorldToViewportPoint(someone.transform.position);
+            float off2 = Vector2.Distance(new Vector2(vp2.x, vp2.y), new Vector2(0.5f, 0.5f));
+            someone.transform.position = was;
+
+            sb.AppendLine($"  following {someone.DisplayName}: "
+                + $"{off1 * 100f:F0}% off centre, and {off2 * 100f:F0}% after they walked 23 m");
+            Gate(sb, ref fails, "the-view-follows-who-you-press-on", off1 < 0.14f,
+                $"{off1 * 100f:F0}% off the middle");
+            Gate(sb, ref fails, "and-keeps-following-when-they-move", off2 < 0.14f,
+                $"{off2 * 100f:F0}% off the middle after they moved");
+
+            icam.Release();
+            for (int f = 0; f < 60; f++) yield return null;
+            Gate(sb, ref fails, "letting-go-hands-the-shot-back",
+                icam.Following == null && !icam.FocusPoint.HasValue,
+                "still holding a focus after Release");
+
+            // Put them back aboard, or the gates that follow are counting a
+            // crew this section quietly took a man out of.
+            if (borrowed && anchor != null)
+            {
+                outpost.Recall(someone, anchor.transform);
+                var r2 = Object.FindFirstObjectByType<SeaSick.Crew.CrewRoster>();
+                if (r2 != null) r2.Refresh();
+            }
+        }
+        else sb.AppendLine("  (nobody ashore to follow -- the follow gates did not run)");
+
+        int standingAfter = wood != null ? wood.TreeCount - wood.FelledInMesh() : -1;
+        int downInMesh = standingAtSiting - standingAfter;
+        int felled = outpost.LastClearingFelled;
+
+        sb.AppendLine();
+        sb.AppendLine($"THE CAMP, ONCE IT IS BUILT, on {target.name}:");
+        sb.AppendLine($"  reported {felled} logs out of the clearing it stands in");
         sb.AppendLine($"  trees standing in the MESH: {standingBefore} -> {standingAfter} "
             + $"({downInMesh} came down)");
         sb.AppendLine($"  keeps {outpost.StoreCapacity}, ledger ceiling {outpost.Ledger?.ceiling}, "
@@ -422,6 +649,19 @@ public class CampProbe : MonoBehaviour
             $"recall {tookBack}, {l.hands.Count} left in the ledger");
 
         Finish(sb, fails);
+    }
+
+    /// Anybody standing on this island: a hand who lives here, or one of the
+    /// shore party off the ship. Both read as villagers to somebody looking
+    /// down at them, which is what the pick has to agree with.
+    static SeaSick.Crew.CrewAgent FirstAshore(Outpost outpost)
+    {
+        foreach (var a in outpost.Parked())
+            if (a != null && a.gameObject.activeInHierarchy) return a;
+        var all = Object.FindObjectsByType<SeaSick.Crew.CrewAgent>(FindObjectsSortMode.None);
+        foreach (var a in all)
+            if (a != null && a.gameObject.activeInHierarchy && a.IsAshore) return a;
+        return null;
     }
 
     void Finish(StringBuilder sb, int fails)

@@ -305,6 +305,35 @@ namespace SeaSick.CameraRig
         /// phone is 2340, so the same code framed a 78 m view in one and a
         /// 430 m view in the other, and neither was a decision anybody made.
         /// A fraction of screen height is the same picture everywhere.
+        /// **Metres of ground up the frame that put the lens `metres` ABOVE
+        /// what it is looking at.**
+        ///
+        /// The overview is authored in ground coverage, not in altitude, for
+        /// good reasons (distance means nothing without the lens). But height
+        /// is how a person describes a camera — "35 m above the fire" — so the
+        /// translation belongs here, beside the geometry it inverts, rather
+        /// than as a number somebody worked out once and wrote down.
+        ///
+        /// The seat is `aim + dir·span·cos(tilt) + up·span·sin(tilt)`, so a
+        /// height of h wants `span = h / sin(tilt)`, and coverage is
+        /// `span · 2 · tan(fov/2)`. At the shipped 32° tilt and 36° lens,
+        /// 35 m up is about 43 m of ground.
+        public float OverviewGroundForHeight(float metres)
+        {
+            float tilt = Mathf.Max(1f, overviewTilt) * Mathf.Deg2Rad;
+            float span = Mathf.Max(0.1f, metres) / Mathf.Sin(tilt);
+            return span * 2f * Mathf.Tan(overviewFov * 0.5f * Mathf.Deg2Rad);
+        }
+
+        /// And back again, so anything reporting the view can say how high it
+        /// is without re-deriving the same triangle.
+        public float OverviewHeightForGround(float groundMetres)
+        {
+            float tilt = Mathf.Max(1f, overviewTilt) * Mathf.Deg2Rad;
+            float span = groundMetres / (2f * Mathf.Tan(overviewFov * 0.5f * Mathf.Deg2Rad));
+            return span * Mathf.Sin(tilt);
+        }
+
         public float ReadableDistance(float fov)
         {
             float t = Mathf.Tan(fov * 0.5f * Mathf.Deg2Rad);
