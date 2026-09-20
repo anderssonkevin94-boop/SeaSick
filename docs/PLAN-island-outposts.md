@@ -772,6 +772,14 @@ air pays nothing; 0 bytes held) · `CampLife` 21.
   either shape; `Hand` and `CampLife` have only been run at the desk shape.
 - The reach is a 300 m disc round the SHIP (the streamer follows her) — the
   placeholder for Phase 3's influence ring.
-- `CampSheet` still takes 36 % of a portrait screen under a god's-eye view; the
-  IMGUI lists still allocate per event (Stream E, not done).
+- **`CampSheet` is a fold-away bar now** (Kevin's first play: *"i cant playtest
+  the rest of the steps because the ui is blocked by the menu"*). Folded by
+  default to one row along the bottom edge — 60 px of 1080, was 389 — carrying
+  the headline and the one button that matters (make camp / never mind /
+  ▲ crew); the ABOARD/ASHORE lists open on request and fold themselves the
+  moment a hand takes the land or a villager. It fits BETWEEN the bottom HUD
+  clusters, or on top of them where there is no room: `HudOverlapProbe` had the
+  first full-width bar across the helm in a second, and the old slab had been
+  lying on the helm all along. Portrait not yet looked at. The IMGUI lists
+  still allocate per event.
 - Pile positions are replicated in `CampWorker.PileSpot` from `CampPiles`.
