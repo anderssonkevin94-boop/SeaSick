@@ -50,6 +50,10 @@ namespace SeaSick.UI
             /// Land, come alongside, cast off, recall the crew. This is the
             /// one that moves the ship, so it outranks everything.
             public const int Anchor = 40;
+            /// Somebody is in the Hand. Outranks even the anchor, and only
+            /// while they are held: with a man dangling from the cursor the
+            /// one thing the game is asking is where to put him down.
+            public const int Hand = 50;
         }
 
         static int frame = -1;

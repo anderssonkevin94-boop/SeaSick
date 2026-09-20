@@ -1095,3 +1095,58 @@ comments now say 0.29 of 0.4.
 Foam after the grid change, `CrestProbe` (screen side, deck level): Hs 14
 mean 0.011, 2.9 % of the water above 0.1 (was 0.035 / 6.6 % on 09-09); Hs 55
 mean 0.15, 45 % above 0.1 (was 41 %). Finer trails, less milk. Kevin's eye.
+
+## 2026-09-20 — the island loop's gates, and the god's-eye island
+
+Two probes have gated the whole outpost loop since 2026-09-13 and were never
+listed here; their reasoning lives in `docs/PLAN-island-outposts.md`. They are
+listed now because four more joined them and somebody other than their author
+has to be able to run the set.
+
+| Launcher | What it answers | Mode | Output |
+| --- | --- | --- | --- |
+| `RunProbe.Ledger()` (`Dev/LedgerProbe.cs`) | **Is the camp's arithmetic the same however often it is asked?** Path independence over 1 / 240 / ragged calls, idempotence, per-resource ceilings, rock does not regrow, a worked-out seam stops below its ceiling, the sawyer / smith / farmhand conversions, and a JSON round trip including a half-built blueprint. Pure arithmetic, no scene — **`CallEditor`**. Run it first: it takes a second and everything else assumes it. | edit | `Logs/LedgerProbe.txt` |
+| `RunProbe.Camp()` (`Dev/CampProbe.cs`) | **Press the button and watch.** Sails to a real island, lands, sites a blueprint from a ground pick, builds it with one hand over two game days, and then measures the ARTEFACTS: trees down in the mesh, hands ringed at 2.90 m, piles 5.2 m out, the sawmill chain, a shelter standing at the angle it was turned to, the view 35 m above what was sited, follow-a-crewman, leaving and returning. ~3 min. **The control for anything that touches `Outpost`, `IslandCam`, `CampSiting` or `CrewAgent`.** | play | `Logs/CampProbe.txt` |
+| `RunProbe.IslandCam()` (`Dev/IslandCamProbe.cs`) | **Does the land stay in the hand?** An untouched view is still 32° / 165 m; the first touch does not pop; a grabbed point stays under the cursor across a 40 %-of-screen drag (at 165 m and 20 m of ground); zoom holds what it is aimed at; a 90° orbit keeps its pivot; the lens is never under the ground over an azimuth × zoom × transect sweep; the pivot stays in both reach discs; fly-to lands centred; a fling stops and a press kills it. **Prints which transform each streaming system follows** — the reach clamp is justified by `TerrainStreamer.target` being the ship, and that is a scene fact, not a code fact. | play | `Logs/IslandCamProbe.txt` |
+| `RunProbe.IslandInput()` (`Dev/IslandInputProbe.cs`) | **The arithmetic of two fingers**, which is the only part of touch the editor can gate: a pure pinch has no twist, a pure twist has no zoom, shared vertical motion is found and opposed motion rejected, the tap / drag / long-press / double-tap classifier answers identically at 422 px and 2340 px of screen height, and the wheel round-trips. The gestures themselves need a device. | edit | `Logs/IslandInputProbe.txt` |
+| `RunProbe.Hand()` (`Dev/HandProbe.cs`) | **Does every drop write the row it promised, in the frame it happens — and does D2 survive the Hand?** Drives only `Hand.PickAt/PickUp/Preview/DropAt/Cancel` with screen points projected from known world positions. Pick-up + cancel leaves the ledger JSON byte-identical; tree → Gather timber, prop → Gather that, sawmill → Work, shelter → refused with a reason, blueprint → Build, ship → recalled, an aboard hand on the ground → stationed; preview equals commit (**a frame apart** — inside one frame they share a memo and would compare a value with itself); 240 re-drops of one order across a day pay what one order pays; holding a man for half a day pays nothing; steady hover allocates nothing. | play | `Logs/HandProbe.txt` |
+| `RunProbe.CampLife()` (`Dev/CampLifeProbe.cs`) | **Are they seen to work, and does it change no number?** A sawyer walks to his mill and stays at his trade; an order on one hand moves the others < 0.1 m that frame; a walking body faces the way it is going (the `ActBody` rotation fight); `Saw` while working and `None` at the door of a stalled mill; held → dangles and does not drift, put down → back to work within 2 s; clock paused, 30 s of villagers leaves the ledger JSON and `FelledInMesh()` identical — **with a companion gate that they actually walked**, so it cannot go green on a frozen camp. ~90 s. | play | `Logs/CampLifeProbe.txt` |
+
+`Dev/IslandCamTuner.cs` is the look-and-feel half, for the reason `DockCamTuner`
+was kept: **composition is a judgement.** Every `IslandCam.Feel` value on a
+slider, a live readout, and *dump C#* writes paste-ready initialisers to
+`Logs/IslandCamFeel.txt`. `IslandCam` stands aside for any open dev tool
+*except* this one (`IslandCam.TunerAttached`) — otherwise opening the tuner
+switches off the camera it is there to tune.
+
+### Traps this pass added
+
+- **Parallel agents and the editor do not mix.** Four subagents edited disjoint
+  files at once and verified with `tools/compilecheck.sh`; the editor was left
+  strictly alone until all four had landed, because one auto-refresh mid-edit
+  compiles a half-written tree and the domain reload kills whatever was
+  running. Contracts first (compiling stubs with exact signatures), then the
+  streams, then Unity.
+- **A shared file is a shared namespace of locals.** The one compile break of
+  the pass was a `waited` added to `CampProbe.Run()` colliding with a `waited`
+  600 lines above it in the same coroutine — found by another stream's
+  compile check, not by the author's.
+- **A gate that measured a teleport fails the day the teleport is fixed.**
+  `and-goes-and-stands-there` read the sawyer's position one frame after
+  `Assign`, which was only ever true because every order write snapped the
+  whole camp to its spots. He walks now; the gate waits for him, thresholds
+  unchanged. When behaviour improves under a gate, check what the gate was
+  really observing before calling it a regression.
+- **`Attach` on every order write must not re-seed state.** `PuppetsToWork`
+  runs after each order and `CampWorker.Attach` used to reset `home` to where
+  the body stood — discarding the spot `ArrangeHands` had computed one line
+  earlier. Only a fresh worker is seeded.
+- **`direct` cannot switch on at "blend > 0.98".** The overview blend is an
+  exponential; at 0.98 the rendered seat is still metres short of the computed
+  one, so skipping the low-pass there is a visible jump on first touch. The
+  rig snaps the blend to 1 past 0.98 and `direct` waits until the rig has
+  actually arrived.
+- **The input convention is the code's, not CLAUDE.md's.** No script uses the
+  `.inputactions` asset; all read `Keyboard/Mouse/Pointer.current`, and
+  `IslandInput` reads `Touchscreen.current` raw. Note `TouchPhase` is ambiguous
+  between `UnityEngine` and `UnityEngine.InputSystem` — qualify it.

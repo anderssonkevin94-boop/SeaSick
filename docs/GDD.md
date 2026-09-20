@@ -84,8 +84,20 @@ Generators: `tools/blender/seasick_style.py` (assets, contact sheet) and `tools/
 - Crew as data from day one: ScriptableObject per villager — name, role, traits, sickness stats — so the roster layer slots in without rework.
 - **Roster (post-MVP):** named persistent villagers; recruit from islands; breeding with heritable traits (Cult of the Lamb-style); sea legs grow with voyages; death/retirement. Example traits: Iron Stomach, Weak-Kneed, Fast Trimmer.
 
-### Islands & gathering — MVP simple
-Sail into anchor zone → gathering resolves (timer/auto at MVP) → cargo aboard, handling worsens with weight. Depth (choices on the island) comes later.
+### Islands — outposts you govern by hand (rewritten 2026-09-20)
+_The "MVP simple" timer this section used to describe was overtaken on 2026-09-13. The working spec, the trap log and every measured number live in `docs/PLAN-island-outposts.md`; this is the shape of it._
+
+**Islands make it, the sea risks it, the ship spends it, and the ship reaches further.**
+
+1. **Anchor.** The camera lifts to a god's-eye view of the island and the player's **Hand** appears. On islands — and only on islands — the game plays like *Black & White 2*: grab the land and pull it, orbit about what is under the cursor, dive toward it, fling, fly to a spot.
+2. **Govern by hand.** Pick a crewman off the deck and put him down: on a tree to cut timber, on a blueprint to build it, on a sawmill to be its sawyer, on the ship to come back aboard. Buildings are sited as ghosts. **The Hand gives orders and never produces** — a drop writes the camp's ledger row and that is all it does.
+3. **Leave them working.** An outpost is a ledger that ticks on game time whether or not anybody is looking (**D2: watching must not beat leaving**); the people on screen are its puppets. A hand ashore is an empty berth at sea. A camp's stores have a ceiling and **only building raises it**, so absentee income is bounded without a timer.
+4. **Return and load.** A camp **never ships home by itself**. The hold is the bottleneck, deck cargo is the greed, and the sea is where the value is at stake.
+5. **Spend it at home.** **Ship-ladder rungs are priced in made goods** — timber first, then boards (a sawmill on a wooded island), tools (a smith on an ore island), spice (far out). A bigger ship reaches further rings, further rings hold new kinds, new kinds buy the next rungs. **Home village growth** (storage, recruits, the settlement's appetite) is the second sink and comes after the ship.
+6. **Upkeep.** Food is local (berries subsist, wheat feeds a settlement — an island tells you from the air how many it can hold), huts cap supported hands, the campfire's brightness is the provisions gauge, neglected hands get angry, and the camp's **influence** — how far from it the Hand can reach — grows with what is built.
+7. **Teeth, then the portfolio.** Raiders find rich unwatched camps; a lost camp must read as the player's mistake. The minimap becomes the dashboard of every ledger, and a save carries them.
+
+Build order: **1** the god's-eye island (camera, Hand, living villagers) · **2** the sink (rung prices, camp → hold → home) · **3** upkeep and influence · **4** raiders and the watchtower · **5** portfolio and save.
 
 ### Village / home base — post-MVP (menu-first)
 Buildings as upgrade cards before they're 3D: housing (crew capacity), blacksmith (ship parts), hospital (heal sickness aftereffects, unlock doctor), farmland (food → cook effectiveness), apothecary (potions). Village becomes a walkable/visible scene only after the loop is proven.
@@ -117,6 +129,14 @@ Each milestone is a committable, testable slice. Sailing first; work backward.
 
 ## 10. Decisions log
 _Append-only._
+
+- 2026-09-20 — **The island loop is named, and islands play like Black & White 2.**
+  - Kevin asked for a loop that fits the game and for islands — *only* islands — to take their *"game feel, camera, and movement"* from B&W2. Three calls, all his: **the Hand gives orders and never produces** (the full god hand that carries logs was on the table and was refused, because it makes being present pay better than sailing and D2 is the reason the ledger exists); **rungs are priced in camp-made goods, and home growth follows** ("both, ship first"); **villagers visibly do their work**, as pure animation of the ledger.
+  - **What the survey found, which is why the sink is Phase 2 and not a nicety:** the 20-rung ladder is *free*. `Shipyard`/`ShipyardPanel` never read a `Stockpile`. Camps make eight kinds of goods and the game buys camp buildings, one storehouse and hull repair with them. The two halves of the game were not connected.
+  - **§6 Islands rewritten** from the three-line "MVP simple" timer to the loop as it is actually being built. The seasickness prose in §6 is still stale against `PLAN-weight-water-days.md` (sickness is characterisation, not a clock) — noted, not fixed here.
+  - **Phase 1 architecture:** no new rig. `ChaseCamera` stays the only writer of the camera transform and `IslandCam` stays the only thing that transforms the shot; `IslandShot` gained `direct` (a 1:1 grab cannot pass through a 2.2/s low-pass) and `clearance` (the near-ground clamp reads the height field, not the 46-sector profile). `CameraRig/IslandInput` is the **one** device reader for the island view and every gesture lands on a public method the probes also call.
+  - **Input convention, stated because CLAUDE.md says otherwise:** no script in this project uses the `.inputactions` asset or a generated wrapper; all of them read `Keyboard/Mouse/Pointer.current`. The island input follows the code, reads `Touchscreen` raw for two-finger gestures, and the migration is nobody's job yet.
+  - **The reach is the ship's, for a measured reason:** `TerrainStreamer.target` is the ship, so full-detail ground exists only ~256 m from her. The view is clamped to the island ∩ a disc round the ship — on a 2 km island you govern the side you anchored off. That disc is the placeholder for Phase 3's influence ring.
 
 - 2026-09-11 — **Computer mode: landscape is the shape the game runs in, and the phone is still supported.**
   - Kevin: *"please change the game to computer mode, right now its in portrait mode."* Asked how far it went, he chose **landscape first-class with the portrait path kept alive** — not a pivot. Both aspects are now first-class, which means a framing or UI decision has to work in BOTH; CLAUDE.md says so and names the two commands that check it.

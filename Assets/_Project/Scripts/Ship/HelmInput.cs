@@ -79,8 +79,14 @@ namespace SeaSick.Ship
                 }
             }
 
+            // **Not while the island view is up**, for the same reason the
+            // pointer path above already guards on it: arrows and WASD
+            // would otherwise steer a ship that is anchored and cannot
+            // move, and R would ring down rowing at the exact moment it is
+            // also `CampSiting`'s rotate-the-ghost key — a key meant for a
+            // blueprint would silently flip the oars too.
             var kb = Keyboard.current;
-            if (kb != null)
+            if (kb != null && !SeaSick.CameraRig.IslandCam.Engaged)
             {
                 if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) { target = -1f; steering = true; }
                 else if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) { target = 1f; steering = true; }

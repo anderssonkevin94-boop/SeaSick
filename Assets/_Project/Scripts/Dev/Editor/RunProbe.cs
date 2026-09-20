@@ -83,6 +83,21 @@ public static class RunProbe
     public static void Ledger() => CallEditor("LedgerProbe");
     /// Sail to a real island, land, make camp, and count what came down.
     public static void Camp() => Call("CampProbe");
+    // --- the god's-eye island (2026-09-20) -----------------------------------
+    /// The hands-on view: a grabbed point stays under the cursor, zoom holds
+    /// what it is aimed at, an orbit keeps its pivot, the lens never goes
+    /// under the ground. Driven through the methods `IslandInput` calls.
+    public static void IslandCam() => Call("IslandCamProbe");
+    /// Two-finger maths and the tap/drag/long-press classifier. **`CallEditor`**
+    /// -- pure functions, no scene; fingers cannot be faked in the editor, so
+    /// the arithmetic is what CAN be gated.
+    public static void IslandInput() => CallEditor("IslandInputProbe");
+    /// Every kind of drop writes the row it promised, in the frame it
+    /// happens -- and D2 survives the Hand: fidgeting and holding pay nothing.
+    public static void Hand() => Call("HandProbe");
+    /// The people at a camp walk to their work, act it, carry to the pile,
+    /// and change no number by doing so.
+    public static void CampLife() => Call("CampLifeProbe");
     public static void VillageBuild() => Call("VillageProbe", "Build");
     public static void VillageShot() => Call("VillageProbe", "Shot");
     public static void Loop() => Call("LoopProbe");

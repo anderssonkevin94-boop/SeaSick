@@ -218,6 +218,40 @@ namespace SeaSick.CameraRig
             /// fight the hands on the controls. A player who has zoomed out
             /// past legibility has said what they want.
             public bool free;
+
+            /// **The rendered pose IS the computed seat, this frame.**
+            ///
+            /// Every other shot this rig serves is a moving target that the
+            /// two response filters chase (`positionResponse` 2.2,
+            /// `rotationResponse` 3), and that lag is most of what makes the
+            /// sailing camera feel like a camera rather than a cursor. Under a
+            /// hand on the land it is fatal: a 1:1 grab means the ground point
+            /// the finger went down on stays UNDER the finger, and it cannot,
+            /// through a low pass — the land slides on for a third of a second
+            /// after the hand stops, which reads as ice.
+            ///
+            /// So `IslandCam` does its own easing (it has to: it is the thing
+            /// that knows a fling from a drag) and asks for the result
+            /// verbatim. Only honoured once `overviewLevel > 0.98`, and the
+            /// blend is snapped to 1 at that point — at 0.98 the seat is still
+            /// 2% of the way back down to the sailing shot, which at a 300 m
+            /// span is metres of drift under a "1:1" grab.
+            ///
+            /// Default false, so nothing that does not ask for it changes.
+            public bool direct;
+
+            /// Metres of air to keep between the lens and the real ground.
+            ///
+            /// Zero means the rig's own `terrainClearance` against the 46-
+            /// sector `Island.SurfacePoint`, which is what every shot before
+            /// the hands-on view used and what they keep using. Above zero it
+            /// switches the clamp to the HEIGHT FIELD — the same function the
+            /// picks, the siting rules and `IslandCam`'s own terrain yield all
+            /// read — because a clamp that disagrees with the pick is a camera
+            /// that dives into a hill the cursor says is not there.
+            ///
+            /// The water floor is applied either way and is not negotiable.
+            public float clearance;
         }
 
         /// The sailing rig, overridable live so it can be FLOWN rather than
@@ -243,9 +277,17 @@ namespace SeaSick.CameraRig
         public float CurrentTilt { get; private set; }
         public float CurrentSpan { get; private set; }
 
+        /// The three-quarter angle Kevin flew to, in ONE place.
+        ///
+        /// `overviewTilt` below is serialized and therefore may be overridden
+        /// in a scene; this is the authored number the seat triangle falls
+        /// back to when a shot carries no explicit tilt of its own, and it is
+        /// that field's initializer, so the two cannot drift apart in source.
+        public const float DefaultOverviewTilt = 32f;
+
         [Header("Island overview (at a dock)")]
         [Tooltip("Degrees above the horizon. 90 is a map and 56 still reads as one; 32 is the three-quarter angle Kevin flew to with DockCamTuner, low enough that a building shows its WALLS and not just its roof.")]
-        [SerializeField] float overviewTilt = 32f;
+        [SerializeField] float overviewTilt = DefaultOverviewTilt;
         [Tooltip("How much wider than the island to frame, so it isn't jammed against the edges. Only used when no explicit ground coverage is set.")]
         [SerializeField] float overviewMargin = 1.3f;
 
@@ -283,6 +325,14 @@ namespace SeaSick.CameraRig
         [Tooltip("How tall a 1.7 m crew member must be, as a FRACTION of screen height. 0.0055 is about 13 px on a phone. This is what stops the overview backing off to a pretty landform nobody can read; it is set as low as it is because the frame also has to hold the pier, and the pier is a village-width away from the village.")]
         [SerializeField] float minPersonScreenFraction = 0.0055f;
         float overviewLevel;
+        /// **How far the drawn rig still is from the seat a hand is asking
+        /// for, while `direct` is on.** See the note where `rigPos` is written.
+        Vector3 directOffset;
+        Quaternion directTurn = Quaternion.identity;
+        bool wasDirect;
+        /// How fast that gap closes, per second. 10 leaves under 1 % of it
+        /// after half a second: gone before a drag is a hand's width long.
+        const float directSettle = 10f;
         float sailFovOverride = -1f;
         float baseFarClip = -1f;
         float sailFov = -1f;
@@ -291,6 +341,83 @@ namespace SeaSick.CameraRig
         public float LastOverviewSpan { get; private set; }
         public Vector3 LastOverviewSeat { get; private set; }
         public Vector3 LastDesired { get; private set; }
+
+        /// **Where the overview is actually LOOKING**, after the slide that
+        /// drags the frame over until the ship is inside it.
+        ///
+        /// Not `Overview.centre`: the seat is built from the shifted point, so
+        /// the authored centre is not on the axis of the shot that is on
+        /// screen. `IslandCam` latches its pivot from THIS the first time
+        /// somebody takes hold of the land — latching the authored centre
+        /// instead would jump the picture by however far the slide had moved
+        /// it, which on a long pier is tens of metres.
+        public Vector3 LastOverviewAim { get; private set; }
+
+        /// The lens the overview settles at, for anything that has to build
+        /// the same frustum by hand (see `IslandCam.ScreenRay`, which must not
+        /// use the camera's own — that one lags).
+        public float OverviewFov => overviewFov;
+
+        /// 0 = sailing, 1 = fully up at the island. Input stays inert until
+        /// this is essentially 1: a grab against a camera still flying up
+        /// from the chase shot has nothing fixed to take hold of.
+        public float OverviewLevel => overviewLevel;
+
+        /// **The drawn pose IS the asked-for pose, this frame.** True once a
+        /// `direct` shot's leftover gap has decayed to nothing. A screen ray
+        /// composed against the asked-for pose is exact only while this is
+        /// true, which is what `IslandCamProbe` waits on before it measures
+        /// whether the land stays under the cursor.
+        public bool OverviewDirect { get; private set; }
+
+        /// **The rig has caught up with the overview seat** -- to within 2 % of
+        /// the span, or it is being driven `direct`.
+        ///
+        /// The blend reaching 1 is not this. `overviewLevel` cross-fades the
+        /// TARGET; the rig then eases toward that target through a 2.2/s low
+        /// pass and is still tens of metres short when the blend says done --
+        /// `IslandCamProbe` caught an "untouched, ready" view moving 15 m in two
+        /// frames. A hand that grabs then is grabbing a picture in flight.
+        /// `IslandCam.Ready` waits for both.
+        public bool OverviewSettled { get; private set; }
+
+        /// **The seat triangle, in one place.**
+        ///
+        /// `IslandCam` has to know exactly where the lens will be BEFORE the
+        /// frame is drawn — every screen ray it casts, every ground point it
+        /// keeps under the cursor and every terrain yield it makes is built
+        /// from that pose. Working it out a second time over there is how the
+        /// grab and the picture end up half a degree apart, and half a degree
+        /// at 300 m is metres on the ground.
+        ///
+        /// `span` and `tiltDeg` are expected to be RESOLVED by the caller
+        /// (LateUpdate does its own legibility clamp and authored-tilt
+        /// fallback first, then hands the resolved shot straight in). The
+        /// fallbacks here are guards, not policy.
+        public static void OverviewPose(in IslandShot s, float vfovDeg,
+                                        out Vector3 seat, out Quaternion rot)
+        {
+            float tanHalf = Mathf.Tan(Mathf.Max(1f, vfovDeg) * 0.5f * Mathf.Deg2Rad);
+            float span = s.span > 0.01f
+                ? s.span
+                : (s.ground > 0.01f ? s.ground / (2f * tanHalf)
+                                    : Mathf.Max(1f, s.radius * 2f));
+            float tiltDeg = s.tiltDeg > 0.01f ? s.tiltDeg : DefaultOverviewTilt;
+
+            Vector3 dir = s.from;
+            dir.y = 0f;
+            dir = dir.sqrMagnitude < 0.01f ? Vector3.back : dir.normalized;
+
+            float tilt = tiltDeg * Mathf.Deg2Rad;
+            seat = s.centre
+                 + dir * (span * Mathf.Cos(tilt))
+                 + Vector3.up * (span * Mathf.Sin(tilt));
+
+            Vector3 look = s.centre - seat;
+            rot = look.sqrMagnitude > 1e-6f
+                ? Quaternion.LookRotation(look, Vector3.up)
+                : Quaternion.identity;
+        }
 
         /// How far back the rig may sit and still draw a person big enough to
         /// see.
@@ -521,6 +648,38 @@ namespace SeaSick.CameraRig
             float wantOverview = shot.HasValue ? 1f : 0f;
             overviewLevel = Mathf.Lerp(overviewLevel, wantOverview,
                 1f - Mathf.Exp(-overviewResponse * dt));
+
+            // **The blend has to ARRIVE, not approach.**
+            //
+            // An exponential never reaches 1, and "the view has finished
+            // coming up" is a fact three separate things now need to know: a
+            // grab that takes the rig off its filters, a screen ray composed
+            // against the overview's own pose, and the input layer deciding
+            // whether it is live at all. At 0.98 the seat is still 2% of the
+            // way back down toward the sailing shot — on a normal island
+            // that is five metres — so honouring `direct` there would jump
+            // the rig by five metres the instant a hand touched the land.
+            //
+            // Closing the last 2% here instead costs nothing to look at: the
+            // position low pass is still running (`direct` cannot be on yet,
+            // because nothing can gesture before the view is up) and it eases
+            // those five metres away over about half a second, which is what
+            // it was already doing to the two hundred metres before them. The
+            // descent is untouched — this only fires on the way UP.
+            if (wantOverview > 0.5f && overviewLevel > 0.98f) overviewLevel = 1f;
+
+            // `direct` is honoured the frame it is asked for. The first
+            // version made it WAIT until the rig had eased to within half a
+            // metre of its seat, and `IslandCamProbe` measured what that does:
+            // the view reports ready when the BLEND finishes (1.7 s), the
+            // position low pass is still tens of metres short of the seat at
+            // that moment, and a hand that grabs then moves the seat every
+            // frame -- so the rig never gets within half a metre of it, the
+            // flag never latches, and the whole drag goes through the filter
+            // (the held point strayed 23 % of the screen). A wait on a target
+            // that the waiting-for thing keeps moving is not a wait.
+            bool direct = shot.HasValue && shot.Value.direct && overviewLevel >= 1f;
+
             if (overviewLevel > 0.001f && shot.HasValue)
             {
                 var ov = shot.Value;
@@ -564,19 +723,23 @@ namespace SeaSick.CameraRig
                 // player already has a minimap.
                 if (!ov.free) span = Mathf.Min(span, ReadableDistance(vfov));
                 // Never so far back that the far clip cannot draw the ground.
-                
+
                 if (ov.span > 0.01f) span = ov.span;          // the tuner says exactly
                 LastOverviewSpan = span;
                 CurrentSpan = span;
-                Vector3 dir = ov.from;
-                dir.y = 0f;
-                dir = dir.sqrMagnitude < 0.01f ? Vector3.back : dir.normalized;
                 float tiltDeg = ov.tiltDeg > 0.01f ? ov.tiltDeg : overviewTilt;
                 CurrentTilt = tiltDeg;
-                float tilt = tiltDeg * Mathf.Deg2Rad;
-                Vector3 seat = aim
-                             + dir * (span * Mathf.Cos(tilt))
-                             + Vector3.up * (span * Mathf.Sin(tilt));
+
+                // The triangle itself is `OverviewPose`, shared with
+                // `IslandCam` so the pose it aims its screen rays at and the
+                // pose that is drawn cannot be two different pieces of
+                // arithmetic. The resolution ABOVE stays here: the legibility
+                // clamp and the authored-tilt fallback both read fields that
+                // belong to this component.
+                var resolved = ov;
+                resolved.span = span;
+                resolved.tiltDeg = tiltDeg;
+                OverviewPose(resolved, vfov, out Vector3 seat, out Quaternion seatRot);
 
                 // Pull the frame over until she is actually inside it.
                 //
@@ -596,7 +759,7 @@ namespace SeaSick.CameraRig
                 {
                     float aspect = Mathf.Min(
                         Mathf.Max(0.2f, cam != null ? cam.aspect : 1f), narrowestAspect);
-                    Quaternion rot = Quaternion.LookRotation(aim - seat, Vector3.up);
+                    Quaternion rot = seatRot;
                     Vector3 f2 = rot * Vector3.forward, r2 = rot * Vector3.right, u2 = rot * Vector3.up;
                     Vector3 rel = target.position - seat;
                     float z = Vector3.Dot(rel, f2);
@@ -622,6 +785,7 @@ namespace SeaSick.CameraRig
                     }
                 }
                 LastOverviewSeat = seat;
+                LastOverviewAim = aim;
                 desired = Vector3.Lerp(desired, seat, overviewLevel);
                 LastDesired = desired;
                 // The AIM, not the authored centre: the seat was built from
@@ -653,7 +817,30 @@ namespace SeaSick.CameraRig
                     overviewFov, overviewLevel);
 
             if (!rigSeeded) { rigPos = transform.position; rigSeeded = true; }
-            rigPos = Vector3.Lerp(rigPos, desired, 1f - Mathf.Exp(-positionResponse * dt));
+            // `direct` is k = 1: the seat, verbatim. Written into `rigPos`
+            // rather than round it, so letting go of the land resumes the
+            // filter from where the hand left it instead of snapping back to
+            // a position the low pass never reached.
+            //
+            // **What is left of the old gap rides along as an OFFSET and
+            // decays on its own.** The frame a hand takes hold, the rig is
+            // wherever the filter had got it to -- maybe metres from the seat.
+            // Jumping there is a pop; easing there is the lag `direct` exists
+            // to remove. So the rig is `seat + offset`: it moves rigidly with
+            // the seat from the first frame (the land follows the hand 1:1)
+            // while the offset shrinks to nothing underneath, at a rate that
+            // does not depend on what the hand is doing.
+            if (direct)
+            {
+                if (!wasDirect) directOffset = rigPos - desired;
+                directOffset *= Mathf.Exp(-directSettle * dt);
+                if (directOffset.sqrMagnitude < 1e-6f) directOffset = Vector3.zero;
+                rigPos = desired + directOffset;
+            }
+            else rigPos = Vector3.Lerp(rigPos, desired, 1f - Mathf.Exp(-positionResponse * dt));
+
+            OverviewSettled = overviewLevel >= 1f && shot.HasValue
+                && (direct || (rigPos - desired).magnitude < 0.02f * Mathf.Max(10f, CurrentSpan));
 
             // Heave is added AFTER the framing lerp rather than folded into the
             // target. Through the lerp it becomes a second low pass stacked on
@@ -688,14 +875,46 @@ namespace SeaSick.CameraRig
                 float ang = Mathf.Atan2(d.x, d.z);
                 if (dist < isle.RadiusAt(ang))
                 {
-                    float ground = isle.SurfacePoint(ang, dist).y;
-                    if (cp.y < ground + terrainClearance)
-                        transform.position = new Vector3(cp.x, ground + terrainClearance, cp.z);
+                    // **Which ground, and how much air over it.**
+                    //
+                    // The 46-sector profile is what every shot before the
+                    // hands-on view was clamped against, and it stays the
+                    // answer for all of them. A shot that asks for a
+                    // `clearance` gets the HEIGHT FIELD instead — the same
+                    // function the picks and `IslandCam`'s own terrain yield
+                    // read, so the yield and this net cannot disagree about
+                    // where the hill is and fight each other for the lens.
+                    //
+                    // `GroundPick.Height` is a non-serialisable static and a
+                    // play-mode recompile nulls it. Falling through to the
+                    // profile is the right answer then, not an exception.
+                    float want = shot.HasValue ? shot.Value.clearance : 0f;
+                    var height = want > 0f ? GroundPick.Height : null;
+                    float clear = height != null
+                        ? Mathf.Lerp(terrainClearance, want, overviewLevel)
+                        : terrainClearance;
+                    float ground = height != null
+                        ? height(cp.x, cp.z)
+                        : isle.SurfacePoint(ang, dist).y;
+                    if (cp.y < ground + clear)
+                        transform.position = new Vector3(cp.x, ground + clear, cp.z);
                 }
             }
             Quaternion desiredRot = Quaternion.LookRotation(lookPoint - transform.position, Vector3.up);
-            transform.rotation = Quaternion.Slerp(
-                transform.rotation, desiredRot, 1f - Mathf.Exp(-rotationResponse * dt));
+            // The rotation's leftover is carried the same way as the position's.
+            if (direct)
+            {
+                if (!wasDirect) directTurn = Quaternion.Inverse(desiredRot) * transform.rotation;
+                directTurn = Quaternion.Slerp(directTurn, Quaternion.identity,
+                    1f - Mathf.Exp(-directSettle * dt));
+                transform.rotation = desiredRot * directTurn;
+            }
+            else transform.rotation = Quaternion.Slerp(transform.rotation, desiredRot,
+                    1f - Mathf.Exp(-rotationResponse * dt));
+
+            OverviewDirect = direct && directOffset == Vector3.zero
+                             && Quaternion.Angle(directTurn, Quaternion.identity) < 0.01f;
+            wasDirect = direct;
         }
     }
 }

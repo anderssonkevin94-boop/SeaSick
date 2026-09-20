@@ -151,7 +151,18 @@ namespace SeaSick.UI
             Place(at);
             ShowGhost(true);
 
-            if (valid && pointer.press.wasPressedThisFrame)
+            // **Commit on tap, not on press.** LMB now grabs the land to pan
+            // it, so committing on press would drop a building every time
+            // the player panned while choosing a spot. `IslandInput` only
+            // raises `TapThisFrame` for a press that went down and came up
+            // inside the drag slop, and it does so on THIS frame, before
+            // this `Update` runs (`DefaultExecutionOrder(-50)`) — so `at`
+            // and `valid`, both computed above from this same frame's
+            // pointer position, already describe the ground at `TapAt`.
+            // That is also why this stays the file's only `Test` call: a
+            // second one at `TapAt` would just be re-asking the same
+            // question about the same point.
+            if (valid && IslandInput.TapThisFrame)
             {
                 int wanted = outpost.Site(plan, at, Yaw, out string siteWhy);
                 if (wanted < 0)

@@ -177,25 +177,44 @@ namespace SeaSick.World
             if (CountOf(plan.id) > 0) { why = $"there is already a {plan.label} here"; return -1; }
             if (!CanPlace(plan, at, yaw, out why, out float lo, out float hi)) return -1;
 
-            campCentre = at;
-            campCentre.y = hi;
-            hasCampCentre = true;
+            // **Only the FIRE says where the camp is.** Until 2026-09-20 every
+            // siting moved the camp centre -- harmless while the campfire was
+            // the only thing that could be sited, and wrong from the day the
+            // build list grew: site a store hut 22 m off and the ring of hands,
+            // the piles, the order the wood is felled in and the ledger's SAVE
+            // KEY all moved onto the drawing of a hut. `HandProbe` found it by
+            // dropping a man on the fire and being told he was on a blueprint.
+            Vector3 spot = at;
+            spot.y = hi;
+            bool isTheCamp = plan.kind == BuildKind.Fire || !hasCampCentre;
+            if (isTheCamp)
+            {
+                campCentre = spot;
+                hasCampCentre = true;
 
-            // The key moves to where the player put it, and it moves NOW --
-            // before any wood is counted. A ledger keyed to the survey's
-            // clearing and then filled by a camp forty metres away is a camp
-            // that will not be found again after a save.
-            ledger.SetKey(campCentre);
+                // The key moves to where the player put it, and it moves NOW --
+                // before any wood is counted. A ledger keyed to the survey's
+                // clearing and then filled by a camp forty metres away is a
+                // camp that will not be found again after a save.
+                ledger.SetKey(campCentre);
+            }
             ledger.pending = new PendingBuild
             {
                 planId = plan.id,
-                x = campCentre.x,
-                z = campCentre.z,
+                x = spot.x,
+                z = spot.z,
                 yaw = yaw,
                 needed = Mathf.Max(0, plan.cost),
             };
 
-            ledger.OrderAll(OutpostOrder.Build);
+            // Making camp is everybody's job. A LATER building takes whoever is
+            // not already in a position: a sawyer pulled off his mill every
+            // time a hut is drawn is the list undoing what the Hand just did.
+            if (plan.kind == BuildKind.Fire) ledger.OrderAll(OutpostOrder.Build);
+            else
+                foreach (var h in ledger.hands)
+                    if (h != null && h.order != OutpostOrder.Work)
+                    { h.order = OutpostOrder.Build; h.target = ""; }
             EnsureBlueprint();
             // A plan that costs nothing is finished the moment it is sited.
             // Nothing does today; the dev path (`MakeCamp`) reaches the same
@@ -261,11 +280,17 @@ namespace SeaSick.World
                 return;
             }
 
-            campCentre = b.transform.position;
-            hasCampCentre = true;
+            // The fire is the camp; anything else is a building AT the camp.
+            // See `Site`.
+            Vector3 stoodAt = b.transform.position;
+            if (plan.kind == BuildKind.Fire || !hasCampCentre)
+            {
+                campCentre = stoodAt;
+                hasCampCentre = true;
+                ledger.SetKey(campCentre);
+            }
             ledger.built.Add(plan.id);
             ledger.pending = null;
-            ledger.SetKey(campCentre);
             ledger.ceilingPer = KeepsOfEach;
 
             // **The ground is cleared now, not when it was sited.** At home
@@ -277,7 +302,7 @@ namespace SeaSick.World
             LastClearingFelled = 0;
             var wood = GetComponentInChildren<Terrain.SceneryWood>();
             if (wood != null)
-                LastClearingFelled = wood.FellWithin(campCentre, CampClearingRadius);
+                LastClearingFelled = wood.FellWithin(stoodAt, CampClearingRadius);
             if (LastClearingFelled > 0)
                 ledger.Add(Res.Timber, LastClearingFelled);
 
@@ -291,7 +316,12 @@ namespace SeaSick.World
             ledger.treesFelled += LastClearingFelled;
             // Everybody goes back to cutting. With the fire lit there is
             // finally somewhere to cut INTO.
-            ledger.OrderAll(OutpostOrder.Gather, Res.Timber);
+            //
+            // The BUILDERS do. Everybody used to, which reset a sawyer and a
+            // farmhand to cutting timber every time a hut was finished.
+            foreach (var h in ledger.hands)
+                if (h != null && h.order == OutpostOrder.Build)
+                { h.order = OutpostOrder.Gather; h.target = Res.Timber; }
             // And they stand round it, which is the moment the camp stops
             // being a clearing and starts being somewhere people are.
             ArrangeHands();
@@ -314,7 +344,10 @@ namespace SeaSick.World
         {
             if (ledger == null || ledger.pending == null) return false;
             ledger.pending = null;
-            ledger.OrderAll(OutpostOrder.Gather, Res.Timber);
+            // Whoever was building goes back to cutting; nobody else is moved.
+            foreach (var h in ledger.hands)
+                if (h != null && h.order == OutpostOrder.Build)
+                { h.order = OutpostOrder.Gather; h.target = Res.Timber; }
             if (blueprint != null) { blueprint.Retire(); blueprint = null; }
             return true;
         }
@@ -503,6 +536,16 @@ namespace SeaSick.World
         /// A hand ASSIGNED to a building stands at that building instead —
         /// which is the whole visible difference between a camp of four idlers
         /// and a camp with a sawyer in it.
+        ///
+        /// **A body on its feet is TOLD where it belongs; a body that is not
+        /// is PUT there.** Every order method calls this, so the teleport it
+        /// used to be snapped the whole camp back to the ring each time
+        /// anybody was given a job — four people jumping because one of them
+        /// was reassigned. A hand with a live `CampWorker` gets `SetHome` and
+        /// walks; a hand that is switched off, has no worker, or is being seen
+        /// for the first time on arrival is still placed outright, because
+        /// there is nothing to watch the walk and a camp must be standing in
+        /// its ring the frame the player looks at it.
         public void ArrangeHands()
         {
             if (ledger == null) return;
@@ -530,13 +573,10 @@ namespace SeaSick.World
                 {
                     // Just outside the building's own footprint, on the side
                     // facing the fire, so a worker reads as belonging to the
-                    // shed without standing inside its walls.
-                    var plan = BuildPlans.Named(row.target);
-                    Vector3 toFire = CampCentre - post.transform.position;
-                    toFire.y = 0f;
-                    if (toFire.sqrMagnitude < 0.01f) toFire = Vector3.forward;
-                    float reach = 0.6f + 0.5f * Mathf.Max(plan.footprint.x, plan.footprint.y);
-                    spot = post.transform.position + toFire.normalized * reach;
+                    // shed without standing inside its walls. The maths lives
+                    // in `CampWorker.WorkSpot` so that the spot a hand is PUT
+                    // and the spot a hand WALKS to cannot drift apart.
+                    spot = CampWorker.WorkSpot(this, post);
                     lookAt = post.transform.position;
                 }
                 else
@@ -549,6 +589,16 @@ namespace SeaSick.World
                 }
 
                 if (height != null) spot.y = height(spot.x, spot.z);
+
+                var worker = a.gameObject.activeInHierarchy ? CampWorker.Of(a) : null;
+                if (worker != null)
+                {
+                    // On their feet and being watched: this is a change of
+                    // where they belong, not a change of where they are.
+                    worker.SetHome(spot, lookAt);
+                    continue;
+                }
+
                 a.transform.position = spot;
 
                 Vector3 face = lookAt - spot;
@@ -644,6 +694,21 @@ namespace SeaSick.World
             if (CountOf(planId) <= 0) return false;         // it is not standing here
             h.order = OutpostOrder.Work;
             h.target = planId;
+            ArrangeHands();
+            PuppetsToWork();
+            return true;
+        }
+
+        /// **Put this one hand on the blueprint.** `Site` orders everybody to
+        /// build and the crew list has never needed anything finer, but the
+        /// Hand drops ONE person on a drawing, and the rest of the camp should
+        /// go on with what they were doing. Nothing to build is a refusal
+        /// rather than an order that silently does nothing.
+        public bool OrderBuild(OutpostHand h)
+        {
+            if (h == null || ledger == null || !ledger.Building) return false;
+            h.order = OutpostOrder.Build;
+            h.target = "";
             ArrangeHands();
             PuppetsToWork();
             return true;

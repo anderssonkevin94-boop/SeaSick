@@ -707,6 +707,20 @@ public class CampProbe : MonoBehaviour
         bool assigned = sawyer != null && outpost.Assign(sawyer, BuildPlans.Sawmill.id);
         yield return null;
 
+        // **He WALKS there now.** Until 2026-09-20 every order write snapped
+        // the whole camp to its spots, so one frame later he was standing at
+        // the mill and this measured a teleport. A hand who is on his feet and
+        // being watched is now given somewhere to go instead, so the gate has
+        // to give him the time to get there -- at camp pace (2.6 m/s) across
+        // at most the 30 m the mill was sited within. Same thresholds as
+        // before: where he ENDS UP has not moved.
+        for (float walked = 0f; walked < 16f && millB != null && stood.Count > 0; walked += Time.unscaledDeltaTime)
+        {
+            if (SeaSick.World.Island.FlatDistance(
+                    stood[0].transform.position, millB.transform.position) < 5f) break;
+            yield return null;
+        }
+
         float toMill = millB != null && stood.Count > 0
             ? SeaSick.World.Island.FlatDistance(stood[0].transform.position, millB.transform.position)
             : -1f;

@@ -73,6 +73,20 @@ namespace SeaSick.Crew
         /// system asks before it does anything. Being sick is NOT a reason.
         public bool Available => state == State.Station;
 
+        /// **Something else is moving this body.** Set by `World.CampWorker`
+        /// (and the Hand) for as long as they drive the transform of a hand
+        /// parked at a camp. A parked hand's state is `Station`, and `Station`
+        /// both writes the body's rotation every frame and counts as being at
+        /// sea — neither of which is true of somebody walking to a sawmill.
+        ///
+        /// Two things honour it, and only two: `ActBody` leaves the root
+        /// rotation alone (the tint is untouched, so the sea still shows on
+        /// their faces), and `TrackSickness` treats them as ashore. The state
+        /// machine is NOT bypassed — `Station` does nothing anyway, and the
+        /// walk cycle is driven by how fast the body is actually moving, so
+        /// the legs come along for free however something else moves them.
+        public bool Puppeted { get; set; }
+
         /// How fast they work when they are working. Flat: a queasy hand is
         /// still a hand. Kept as a seam for a future happiness/skill system.
         public float WorkRate01 => state == State.Station ? 1f : 0f;
@@ -450,7 +464,11 @@ namespace SeaSick.Crew
         void TrackSickness(float dt)
         {
             float target;
-            if (IsAshore) target = 0f;
+            // A hand parked at a camp is standing on an island. Their state is
+            // `Station`, because that is what a body switched off at a camp
+            // is, and without this they would go on being measured against
+            // the sea the ship is in three kilometres away.
+            if (IsAshore || Puppeted) target = 0f;
             else
             {
                 float rough = meter != null ? meter.Roughness01 : 0f;
@@ -584,7 +602,12 @@ namespace SeaSick.Crew
         {
             if (heaveTimer > 0f) { heaveTimer -= dt; return; }
 
-            if (!IsAboard || Sickness01 < HeaveAt)
+            // `Puppeted` for the same reason `TrackSickness` reads it: a hand
+            // at a camp is `Station`, so without this a crewman left ashore
+            // still green from the crossing would retch in the middle of the
+            // village — and `ActBody` no longer has the rotation to show it
+            // with, so it would be a counter going up and nothing on screen.
+            if (!IsAboard || Puppeted || Sickness01 < HeaveAt)
             {
                 heaveCooldown = heaveInterval.x;
                 return;
@@ -814,7 +837,16 @@ namespace SeaSick.Crew
             swayPhase += dt * Mathf.Lerp(1.2f, 3.2f, Sickness01);
             float sway = Mathf.Sin(swayPhase) * maxSwayDegrees * Sickness01;
 
-            if (heaveTimer > 0f && IsAboard)
+            // **Somebody else owns this body's rotation.** Every branch below
+            // writes `localRotation` outright, and a puppeted hand is being
+            // walked to a sawmill by `World.CampWorker` or dangled from the
+            // Hand — either of which would be fought frame by frame, which is
+            // exactly what made the camp's villagers face the wrong way. The
+            // tint underneath is NOT guarded: it is additive, it is the only
+            // thing that reads the weather on their faces, and `VillagerActing`
+            // deliberately stays off that channel so nothing double-books it.
+            if (Puppeted) { /* pose is not ours */ }
+            else if (heaveTimer > 0f && IsAboard)
             {
                 // Doubled over the side where they stand — gun crews are at
                 // their own gunport anyway. Big pose: it has to read from the

@@ -686,3 +686,88 @@ off and never drawn: **the same fault Kevin reported, one door further in.**
 `ShowHands(true)` itself right after stationing — so it was measuring the
 probe's own action, not the game's arrival path. The crutch is gone and the gate
 is still green, which now means something.
+
+## THE GOD'S-EYE ISLAND — 2026-09-20 (Phase 1 of the named loop)
+
+Kevin: islands — *only* islands — should take their *"game feel, camera, and
+movement"* from Black & White 2. Three calls, all his: **the Hand gives orders
+and never produces** (D2 stands); **ship rungs get priced in camp-made goods,
+home growth after** (the ladder is FREE today — `Shipyard` never reads a
+`Stockpile` — which is the biggest hole in the loop and is Phase 2);
+**villagers visibly do their work.** The loop as named is in `GDD.md` §6.
+
+### What was built
+
+- **The camera is `IslandCam` grown up, not a new rig.** Pivot / azimuth / tilt /
+  ground; grab-the-land, zoom-to-cursor, orbit about what is under the press,
+  fling, fly-to, a tilt that follows the zoom (through 165 m → 32° exactly, so
+  an untouched view is still the shot Kevin flew). `ChaseCamera` is still the
+  only writer of the camera; `IslandShot` gained `direct` and `clearance`.
+- **`CameraRig/IslandInput` is the one device reader** — mouse, keys, and
+  `Touchscreen` raw for pinch / twist / two-finger tilt / long-press. Every
+  gesture lands on a public method the probes also call.
+- **The Hand** (`UI/Hand`, `World/HandTargets`, `UI/HandCursor`): tree → gather
+  timber, prop → gather that, building with a position → assign (and *that*
+  building, via `CampWorker.PreferWorkplace`), blueprint → `Outpost.OrderBuild`
+  (new: one hand, not everybody), fire → idle, ship → recall, an aboard hand on
+  land → `Station` + the target's order in the same drop. One resolver serves
+  the preview and the drop. No colliders anywhere: footprints, `TreeIndex`,
+  projection picks, `GroundPick`.
+- **Living villagers** (`CampWorker`, `VillagerActing`): a `Work` loop at the
+  building, per-trade acting as bone overrides over Idle/Walk (no new clips),
+  carrying to the pile, a stalled mill that READS as stalled, dangle / land.
+  `CrewAgent.Puppeted` stops `Station` writing rotation and sickness onto a
+  body something else is walking.
+
+### What the probes found that was not the new code
+
+- **`Outpost.Site` moved the camp onto every new blueprint.** `campCentre = at`
+  for ANY plan — invisible while the fire was the only thing that could be
+  sited, and wrong since the build list grew: the ring of hands, the piles, the
+  felling order and the ledger's save key all followed a store hut 22 m away.
+  `HandProbe` found it by dropping a man on the fire and being told "blueprint".
+  **Only the fire says where the camp is** now.
+- **Siting, finishing and cancelling all reset EVERYBODY's orders.** A sawyer
+  was sent back to cutting timber each time a hut was finished. Now: making
+  camp is everybody's job; a later building takes whoever is not in a position;
+  completion and cancel send only the builders back to the wood.
+- **Every order write teleported the whole camp** (`ArrangeHands`). A hand on
+  his feet with a `CampWorker` is given somewhere to walk to instead.
+
+### What the camera cost to get right (seven probe runs)
+
+1. `direct` waited for the rig to "arrive" within 0.5 m — but a drag moves the
+   seat every frame, so a grab a moment too early never got 1:1 at all (23 %
+   stray). Now honoured at once, the leftover gap carried as a decaying offset.
+2. The terrain yield makes the shot non-rigid, so a rigid solve drifts over
+   hills (9 % at 165 m, 44 % at 20 m). `HoldUnder` re-casts through the pose as
+   it NOW composes and closes the difference — and its first version cast
+   through the frame's cached pose and applied the same fix three times over.
+3. `IslandCam` had no execution order; eased paths drew last frame's zoom half
+   the time. Pinned between `IslandInput` and the default.
+4. Four failures were the PROBE: a latch compared with the authored zoom
+   instead of what was on screen; a first touch measured while she was still
+   being warped alongside; drags thrown into their own reach clamp by the
+   previous section's fling; an orbit measured through its own hand-over.
+
+### Gates — all green, 2026-09-20
+
+`Ledger` 28 · `Camp` 58 (control, before and after) · `IslandInput` 15 ·
+`IslandCam` 33 (grab 0.00 % / 0.01 %, zoom 0.00 %, orbit 0.00 %, first touch
+0.20 %) · `Hand` 26 (240 re-drops pay what one order pays; half a day in the
+air pays nothing; 0 bytes held) · `CampLife` 21.
+
+### Still open
+
+- **Kevin has not flown it.** `IslandCamTuner` (dev tools) has every feel value
+  on a slider and dumps C# to paste back. `Feel.clearance` is the first one:
+  4 m lets the close shot stay shallow; on a hilltop the yield still stands it
+  up steeply.
+- **Two-finger gestures have only had their arithmetic gated.** Needs a device.
+- **Portrait (1080x2340) has not been run** for `IslandCam` / `HudOverlapProbe`
+  with the Hand prompt up. The probe says which shape it ran at.
+- The reach is a 300 m disc round the SHIP (the streamer follows her) — the
+  placeholder for Phase 3's influence ring.
+- `CampSheet` still takes 36 % of a portrait screen under a god's-eye view; the
+  IMGUI lists still allocate per event (Stream E, not done).
+- Pile positions are replicated in `CampWorker.PileSpot` from `CampPiles`.
