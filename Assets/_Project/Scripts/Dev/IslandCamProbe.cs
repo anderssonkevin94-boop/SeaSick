@@ -63,6 +63,14 @@ public class IslandCamProbe : MonoBehaviour
         sb = new StringBuilder();
         fails = 0;
 
+        // **Read the screen from INSIDE a frame.** A coroutine's first segment
+        // runs inside `StartCoroutine`, which here is inside `Execute`, which
+        // is called from an editor script -- and `Screen` in that context is
+        // the editor window, not the Game view. The first portrait run of this
+        // probe announced itself as "1531x937 DESK" with the Game view set to
+        // 1080x2340, which is DEV-TOOLS' oldest measurement trap.
+        yield return new WaitForEndOfFrame();
+
         sb.AppendLine($"window {Screen.width}x{Screen.height}  "
             + $"(aspect {W / H:F3} — {(W >= H ? "DESK" : "PHONE")}; "
             + $"run the other one too)");

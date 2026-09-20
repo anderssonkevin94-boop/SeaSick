@@ -764,8 +764,12 @@ air pays nothing; 0 bytes held) · `CampLife` 21.
   4 m lets the close shot stay shallow; on a hilltop the yield still stands it
   up steeply.
 - **Two-finger gestures have only had their arithmetic gated.** Needs a device.
-- **Portrait (1080x2340) has not been run** for `IslandCam` / `HudOverlapProbe`
-  with the Hand prompt up. The probe says which shape it ran at.
+- **`IslandCam` is green at BOTH shapes** (33/33 at 1531x937 and at 1080x2340).
+  The portrait run found the throw was frame-rate dependent -- the velocity
+  window was 80 ms, so under ~12 fps no second sample was ever inside it and
+  letting go of the land threw nothing. The last two samples always count now
+  unless stale. `HudOverlapProbe` with the Hand prompt up has NOT been run at
+  either shape; `Hand` and `CampLife` have only been run at the desk shape.
 - The reach is a 300 m disc round the SHIP (the streamer follows her) — the
   placeholder for Phase 3's influence ring.
 - `CampSheet` still takes 36 % of a portrait screen under a god's-eye view; the

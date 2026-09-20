@@ -153,6 +153,9 @@ namespace SeaSick.CameraRig
             /// Seconds of pointer history the throw is averaged over. Short
             /// enough that a flick counts and a drag that stopped does not.
             public static float flingSample = 0.08f;
+            /// ...but never fewer than the last two, unless the older of them
+            /// is this old -- see `MeanVelocity`.
+            public static float flingStale = 0.35f;
             /// e-folds per second. 4 means a throw is down to 2% of its speed
             /// in under a second.
             public static float flingDecay = 4f;
@@ -1301,7 +1304,16 @@ namespace SeaSick.CameraRig
             for (int i = 1; i < n; i++)
             {
                 int k = ((trailN - 1 - i) % trail.Length + trail.Length) % trail.Length;
-                if (now - trail[k].t > Feel.flingSample) break;
+                // **The sample before the last one is always in**, unless it is
+                // genuinely stale. The window alone made the throw depend on
+                // the FRAME RATE: at under ~12 fps no second sample is ever
+                // inside 80 ms, the span is zero, and letting go of the land
+                // did nothing at all -- which `IslandCamProbe` caught only on
+                // the runs where the editor happened to be slow. A hand that
+                // had stopped before it let go still throws nothing: it goes
+                // on recording the same place every frame.
+                float age = now - trail[k].t;
+                if (i == 1 ? age > Feel.flingStale : age > Feel.flingSample) break;
                 oldest = k;
             }
             float dt = trail[newest].t - trail[oldest].t;
@@ -1320,7 +1332,10 @@ namespace SeaSick.CameraRig
             for (int i = 0; i < n; i++)
             {
                 int k = ((trailN - 1 - i) % trail.Length + trail.Length) % trail.Length;
-                if (now - trail[k].t > Feel.flingSample) break;
+                // As `MeanVelocity`: the newest step always counts unless stale,
+                // or a swing thrown at a low frame rate is not thrown at all.
+                float age = now - trail[k].t;
+                if (i == 0 ? age > Feel.flingStale : age > Feel.flingSample) break;
                 sum += trail[k].az; used++;
             }
             return used > 0 ? sum / used : 0f;
