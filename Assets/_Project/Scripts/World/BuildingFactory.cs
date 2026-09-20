@@ -53,13 +53,28 @@ namespace SeaSick.World
             root.transform.SetParent(parent, true);
             root.transform.SetPositionAndRotation(floorAt, facing);
 
-            // **Every kind gets its `Building` component**, which is what the
-            // village counts itself by. An earlier version returned here
-            // before the one at the bottom of this method, so a campfire was
-            // raised on the ground and then reported as a failure to raise
-            // one -- and the caller's error message blamed the terrain. A
-            // shape that leaves by a different door has to carry the same
-            // things out with it.
+            // **The authored kit first, and the extrusion as the fallback.**
+            //
+            // `SettlementKitV1` is fifteen models on a vertex palette, scaled
+            // to the crew's own height, with worker and entry markers already
+            // in the prefabs. A plan that names one wears it; a plan that does
+            // not is extruded exactly as before. Both leave by the same door
+            // at the bottom of this method -- an earlier version returned
+            // early for a campfire and so raised a fire and then reported a
+            // failure to raise one, and the caller's error message blamed the
+            // terrain. **A shape that leaves by a different door has to carry
+            // the same things out with it.**
+            if (Dress(root.transform, plan))
+            {
+                Footing(root.transform, plan, footing);
+                // The kit's fire is a ring of stones and nothing else. The
+                // LIGHT is the whole reason a camp reads from the water at
+                // night, so it is added whatever the geometry came from.
+                if (plan.kind == BuildKind.Fire) Firelight(root.transform);
+                root.AddComponent<Building>().Configure(plan);
+                return root;
+            }
+
             if (plan.kind == BuildKind.Fire)
             {
                 Fire(root.transform, plan);
@@ -197,6 +212,70 @@ namespace SeaSick.World
             return m;
         }
 
+        /// Put the authored model on, if the plan names one and it loads.
+        ///
+        /// Quietly false when it does not: a camp that cannot be built because
+        /// an art asset moved is a worse failure than a plainer shed, and the
+        /// extrusion below is a complete building in its own right.
+        static bool Dress(Transform root, BuildPlan plan)
+        {
+            if (string.IsNullOrEmpty(plan.prefab)) return false;
+            var asset = Resources.Load<GameObject>(plan.prefab);
+            if (asset == null)
+            {
+                if (!warned.Contains(plan.prefab))
+                {
+                    warned.Add(plan.prefab);
+                    Debug.LogWarning($"[Camp] no model at Resources/{plan.prefab} -- "
+                        + $"'{plan.label}' is raised out of primitives instead.");
+                }
+                return false;
+            }
+
+            var model = Object.Instantiate(asset, root);
+            model.name = "Model";
+            model.transform.localPosition = Vector3.zero;
+            model.transform.localRotation = Quaternion.identity;
+            // Colliders on a building would put the crew's pathing and the
+            // ship's grounding into a conversation nobody asked for. The
+            // ground is what things stand on here.
+            foreach (var c in model.GetComponentsInChildren<Collider>(true))
+                Object.Destroy(c);
+            return true;
+        }
+
+        static readonly HashSet<string> warned = new HashSet<string>();
+
+        /// A slab under an authored model, for the same reason the extruded
+        /// ones have one: the ground is never flattened, so a building sits at
+        /// its highest corner and something has to bridge the drop to its
+        /// lowest. Buried is invisible; floating is not.
+        static void Footing(Transform root, BuildPlan plan, float footing)
+        {
+            if (footing <= 0.05f && plan.kind == BuildKind.Fire) return;
+            var stone = Mat("footing", new Color(0.44f, 0.44f, 0.42f));
+            float slab = 0.35f + Mathf.Max(0f, footing);
+            Box(root, stone,
+                new Vector3(plan.footprint.x + 0.5f, slab, plan.footprint.y + 0.5f),
+                new Vector3(0f, 0.08f - slab * 0.5f, 0f));
+        }
+
+        /// The fire itself, separated from the stones so the authored ring and
+        /// the extruded one light the island the same way.
+        static void Firelight(Transform root)
+        {
+            var lightGo = new GameObject("Firelight");
+            lightGo.transform.SetParent(root, false);
+            lightGo.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+            var l = lightGo.AddComponent<Light>();
+            l.type = LightType.Point;
+            l.color = new Color(1f, 0.62f, 0.28f);
+            l.range = 14f;
+            l.intensity = 2.2f;
+            l.shadows = LightShadows.None;   // one more shadow caster per camp is not worth it
+            lightGo.AddComponent<Campfire>();
+        }
+
         static GameObject Box(Transform parent, Material mat, Vector3 size, Vector3 at)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -250,16 +329,7 @@ namespace SeaSick.World
 
             Box(root, ember, new Vector3(0.4f, 0.14f, 0.4f), new Vector3(0f, 0.1f, 0f));
 
-            var lightGo = new GameObject("Firelight");
-            lightGo.transform.SetParent(root, false);
-            lightGo.transform.localPosition = new Vector3(0f, 0.6f, 0f);
-            var l = lightGo.AddComponent<Light>();
-            l.type = LightType.Point;
-            l.color = new Color(1f, 0.62f, 0.28f);
-            l.range = 14f;
-            l.intensity = 2.2f;
-            l.shadows = LightShadows.None;      // one more shadow caster per camp is not worth it
-            lightGo.AddComponent<Campfire>();
+            Firelight(root);
         }
     }
 }

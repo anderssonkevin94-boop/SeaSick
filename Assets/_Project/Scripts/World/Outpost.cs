@@ -112,7 +112,7 @@ namespace SeaSick.World
             // ground.** The ledger could have carried its own and drifted from
             // the buildings the moment a storehouse went up; instead the
             // buildings ARE the ledger's ceiling, pushed in before every tick.
-            ledger.ceiling = StoreCapacity;
+            ledger.ceilingPer = KeepsOfEach;
             ledger.Tick(TimeOfDay.Seconds);
 
             // The arithmetic can finish a building on an island nobody is
@@ -122,6 +122,10 @@ namespace SeaSick.World
             // with the ledger".
             if (ledger.ReadyToRaise) FinishPending();
             else if (ledger.Building) EnsureBlueprint();
+            SyncFelling();
+            // The piles beside the fire are drawn from the stores, so they
+            // want to exist wherever the stores are being looked at.
+            if (HasCamp) CampPiles.EnsureOn(this);
         }
 
         /// Is there a camp here at all, or only ground that would take one?
@@ -164,11 +168,14 @@ namespace SeaSick.World
         ///
         /// Returns the logs still wanted, or -1 with a reason.
         public int Site(BuildPlan plan, Vector3 at, out string why)
+            => Site(plan, at, AutoYaw(at), out why);
+
+        public int Site(BuildPlan plan, Vector3 at, float yaw, out string why)
         {
             if (ledger == null) { why = "this ground was never surveyed"; return -1; }
             if (ledger.pending != null) { why = "something is already being built here"; return -1; }
             if (CountOf(plan.id) > 0) { why = $"there is already a {plan.label} here"; return -1; }
-            if (!CanPlace(plan, at, out why, out float lo, out float hi)) return -1;
+            if (!CanPlace(plan, at, yaw, out why, out float lo, out float hi)) return -1;
 
             campCentre = at;
             campCentre.y = hi;
@@ -184,6 +191,7 @@ namespace SeaSick.World
                 planId = plan.id,
                 x = campCentre.x,
                 z = campCentre.z,
+                yaw = yaw,
                 needed = Mathf.Max(0, plan.cost),
             };
 
@@ -215,7 +223,7 @@ namespace SeaSick.World
             var plan = PlanNamed(ledger.pending.planId);
             Vector3 at = ledger.pending.At;
             at.y = height(at.x, at.z);
-            if (!CanPlace(plan, at, out _, out float lo, out float hi))
+            if (!CanPlace(plan, at, ledger.pending.yaw, out _, out float lo, out float hi))
             {
                 // The ground moved under a saved blueprint (a terrain
                 // parameter changed between sessions). Draw it anyway at the
@@ -224,7 +232,8 @@ namespace SeaSick.World
                 lo = hi = at.y;
             }
             at.y = hi;
-            blueprint = BuildSite.Place(this, plan, at, FacingAt(at), hi - lo);
+            blueprint = BuildSite.Place(this, plan, at,
+                Quaternion.Euler(0f, ledger.pending.yaw, 0f), hi - lo);
             blueprint.Refresh(ledger.pending);
         }
 
@@ -242,7 +251,7 @@ namespace SeaSick.World
             // which is exactly what a player reports as a duplicate.
             if (blueprint != null) { blueprint.Retire(); blueprint = null; }
 
-            var b = Raise(plan, at);
+            var b = Raise(plan, at, ledger.pending.yaw);
             if (b == null)
             {
                 // Refused on ground it was green on when it was sited. Rather
@@ -257,7 +266,7 @@ namespace SeaSick.World
             ledger.built.Add(plan.id);
             ledger.pending = null;
             ledger.SetKey(campCentre);
-            ledger.ceiling = StoreCapacity;
+            ledger.ceilingPer = KeepsOfEach;
 
             // **The ground is cleared now, not when it was sited.** At home
             // the village clearing is reserved before the scenery is baked;
@@ -270,20 +279,33 @@ namespace SeaSick.World
             if (wood != null)
                 LastClearingFelled = wood.FellWithin(campCentre, CampClearingRadius);
             if (LastClearingFelled > 0)
-                ledger.timber = Mathf.Min(ledger.ceiling,
-                    ledger.timber + LastClearingFelled);
+                ledger.Add(Res.Timber, LastClearingFelled);
+
+            // **The clearing counts toward the wood the ledger has already
+            // cut.** Building the fire consumed four logs of standing timber,
+            // and `SyncFelling` would take four trees down for them --
+            // somewhere else, while these four came down here. That is the
+            // same wood twice: the probe measured four logs reported and eight
+            // trees gone. The site IS where that wood came from, which was the
+            // story all along ("making camp fells the wood it stands on").
+            ledger.treesFelled += LastClearingFelled;
             // Everybody goes back to cutting. With the fire lit there is
             // finally somewhere to cut INTO.
-            ledger.OrderAll(OutpostOrder.Cut);
+            ledger.OrderAll(OutpostOrder.Gather, Res.Timber);
+            // And they stand round it, which is the moment the camp stops
+            // being a clearing and starts being somewhere people are.
+            ArrangeHands();
+            CampPiles.EnsureOn(this);
         }
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
-        /// not structs.
+        /// not structs. Lives on `BuildPlans` now, because the ledger has to
+        /// ask the same question when it works out what an assigned hand
+        /// makes.
         static BuildPlan PlanNamed(string id)
         {
-            foreach (var p in BuildPlans.AtACamp) if (p.id == id) return p;
-            foreach (var p in BuildPlans.All) if (p.id == id) return p;
-            return BuildPlans.Campfire;
+            var p = BuildPlans.Named(id);
+            return string.IsNullOrEmpty(p.id) ? BuildPlans.Campfire : p;
         }
 
         /// Give up on what is sited here. The wood already in it is gone --
@@ -292,7 +314,7 @@ namespace SeaSick.World
         {
             if (ledger == null || ledger.pending == null) return false;
             ledger.pending = null;
-            ledger.OrderAll(OutpostOrder.Cut);
+            ledger.OrderAll(OutpostOrder.Gather, Res.Timber);
             if (blueprint != null) { blueprint.Retire(); blueprint = null; }
             return true;
         }
@@ -376,21 +398,17 @@ namespace SeaSick.World
                 // Whatever the camp is doing. A hand left at a half-built camp
                 // who defaulted to cutting would stand there filling a pile
                 // that does not exist yet.
-                order = Building ? OutpostOrder.Build : OutpostOrder.Cut,
+                order = Building ? OutpostOrder.Build : OutpostOrder.Gather,
+                target = Building ? "" : Res.Timber,
             });
 
-            var t = hand.transform;
-            t.SetParent(transform, true);
-            Vector3 at = CampCentre;
-            if (height != null) at.y = height(at.x, at.z);
-            // Scatter them a couple of metres round the fire, on the ground
-            // plane only -- a sphere would put somebody underneath it.
-            Vector2 off = Random.insideUnitCircle * 2.2f;
-            at += new Vector3(off.x, 0f, off.y);
-            if (height != null) at.y = height(at.x, at.z);
-            t.position = at;
-            t.rotation = Quaternion.identity;
-            hand.gameObject.SetActive(false);
+            hand.transform.SetParent(transform, true);
+            // Off only when nobody is here to see them. Leaving somebody
+            // ashore in front of you and watching them wink out is the bug
+            // this line is the whole of.
+            hand.gameObject.SetActive(Watched);
+            ArrangeHands();
+            if (Watched) PuppetsToWork();
             return true;
         }
 
@@ -425,8 +443,21 @@ namespace SeaSick.World
         /// Called when the ship arrives and when she leaves: a camp you are
         /// standing in front of should have people in it, and a camp three
         /// kilometres astern should cost nothing at all.
+        /// Is the ship here and looking at this camp?
+        ///
+        /// **`Station` switches a hand off, and only `ShowHands(true)` ever
+        /// switches one on** — which fires when she ANCHORS. So a hand left
+        /// while you were already standing there vanished and nothing brought
+        /// them back until you had sailed away and returned. Kevin, playing
+        /// it: *"i never saw the people on the island."*
+        ///
+        /// Being watched is now a state the outpost keeps, so anything that
+        /// adds a body can ask whether to draw it.
+        public bool Watched { get; private set; }
+
         public void ShowHands(bool visible)
         {
+            Watched = visible;
             foreach (var a in Parked())
             {
                 if (a == null) continue;
@@ -436,7 +467,251 @@ namespace SeaSick.World
                 if (HandNamed(a.DisplayName) == null) continue;
                 if (a.gameObject.activeSelf != visible) a.gameObject.SetActive(visible);
             }
+            // Arriving is the one moment their positions are looked at, and
+            // orders may have changed while nobody could see them.
+            if (visible) { ArrangeHands(); PuppetsToWork(); }
+            else foreach (var a in Parked()) CampWorker.Remove(a);
         }
+
+        /// Put a walking, carrying body on every hand who is drawn.
+        ///
+        /// **Animation only.** See `CampWorker`: it produces nothing, because
+        /// a camp that paid differently while somebody watched it would undo
+        /// the whole reason the ledger exists.
+        public void PuppetsToWork()
+        {
+            if (!Watched) return;
+            foreach (var a in Parked())
+            {
+                if (a == null || !a.gameObject.activeInHierarchy) continue;
+                if (HandNamed(a.DisplayName) == null) continue;
+                CampWorker.Attach(this, a);
+            }
+        }
+
+        /// **Stand everybody where they belong.**
+        ///
+        /// Kevin, 2026-09-19: *"after sending the crew to the island and
+        /// they've built the campfire they should stand around the campfire."*
+        /// They did not: `Station` dropped each hand at a random point inside
+        /// 2.2 m of wherever the camp centre was AT THE TIME, which for a hand
+        /// left before the fire was built was the blueprint, and which never
+        /// moved afterwards.
+        ///
+        /// So the ring is computed, not scattered, and it is recomputed
+        /// whenever the camp changes: evenly spaced round the fire, facing in.
+        /// A hand ASSIGNED to a building stands at that building instead —
+        /// which is the whole visible difference between a camp of four idlers
+        /// and a camp with a sawyer in it.
+        public void ArrangeHands()
+        {
+            if (ledger == null) return;
+            var bodies = Parked();
+
+            // Count the ones who belong to the fire, so the ring is spaced by
+            // how many are actually standing in it rather than by how many
+            // live here.
+            int atFire = 0;
+            foreach (var h in ledger.hands)
+                if (h != null && WorkplaceOf(h) == null) atFire++;
+            atFire = Mathf.Max(1, atFire);
+
+            int i = 0;
+            foreach (var a in bodies)
+            {
+                if (a == null) continue;
+                var row = HandNamed(a.DisplayName);
+                if (row == null) continue;
+
+                Vector3 spot;
+                Vector3 lookAt;
+                var post = WorkplaceOf(row);
+                if (post != null)
+                {
+                    // Just outside the building's own footprint, on the side
+                    // facing the fire, so a worker reads as belonging to the
+                    // shed without standing inside its walls.
+                    var plan = BuildPlans.Named(row.target);
+                    Vector3 toFire = CampCentre - post.transform.position;
+                    toFire.y = 0f;
+                    if (toFire.sqrMagnitude < 0.01f) toFire = Vector3.forward;
+                    float reach = 0.6f + 0.5f * Mathf.Max(plan.footprint.x, plan.footprint.y);
+                    spot = post.transform.position + toFire.normalized * reach;
+                    lookAt = post.transform.position;
+                }
+                else
+                {
+                    float a2 = (i / (float)atFire) * Mathf.PI * 2f;
+                    spot = CampCentre + new Vector3(
+                        Mathf.Cos(a2) * FireRingRadius, 0f, Mathf.Sin(a2) * FireRingRadius);
+                    lookAt = CampCentre;
+                    i++;
+                }
+
+                if (height != null) spot.y = height(spot.x, spot.z);
+                a.transform.position = spot;
+
+                Vector3 face = lookAt - spot;
+                face.y = 0f;
+                if (face.sqrMagnitude > 0.01f)
+                    a.transform.rotation = Quaternion.LookRotation(face.normalized, Vector3.up);
+            }
+        }
+
+        /// **Take the wood down to match what has been cut.**
+        ///
+        /// One tree per log, nearest the camp outward. The stock is 40 logs a
+        /// hectare against the ~230 trees a hectare the scenery draws, so even
+        /// a worked-out camp only thins its wood -- which is the picture the
+        /// plan asked for: *a camp running twenty days sits in a widening ring
+        /// of stumps.*
+        ///
+        /// Driven by `ledger.treesFelled` against `ledger.timberTaken`, so it
+        /// is a pure function of the ledger and works on any visit however the
+        /// terrain streamed in between. Cheap: it does nothing at all unless
+        /// somebody has cut something since the last call.
+        public void SyncFelling()
+        {
+            if (ledger == null) return;
+            int want = Mathf.FloorToInt(ledger.timberTaken);
+            if (want <= ledger.treesFelled) return;
+
+            var wood = GetComponentInChildren<Terrain.SceneryWood>();
+            if (wood == null || wood.TreeCount == 0) return;
+
+            // The order is by distance from the camp and never changes, so the
+            // same ledger always takes the same trees down -- which is what
+            // makes this reproducible rather than merely plausible.
+            if (fellOrder == null || fellOrder.Length != wood.TreeCount)
+            {
+                var idx = new int[wood.TreeCount];
+                var d2 = new float[wood.TreeCount];
+                Vector3 c = CampCentre;
+                for (int i = 0; i < idx.Length; i++)
+                {
+                    idx[i] = i;
+                    Vector3 p = wood.TreeAt(i).baseAt - c;
+                    p.y = 0f;
+                    d2[i] = p.sqrMagnitude;
+                }
+                System.Array.Sort(d2, idx);
+                fellOrder = idx;
+                fellCursor = 0;
+            }
+
+            while (ledger.treesFelled < want && fellCursor < fellOrder.Length)
+            {
+                int i = fellOrder[fellCursor++];
+                if (wood.TreeAt(i).felled) continue;
+                wood.Fell(i);
+                ledger.treesFelled++;
+            }
+            // The island ran out of trees before the ledger ran out of logs.
+            // Stop asking: the stock is the authority on how much wood there
+            // was, and the mesh is only the picture of it.
+            if (fellCursor >= fellOrder.Length) ledger.treesFelled = want;
+        }
+
+        int[] fellOrder;
+        int fellCursor;
+
+        /// Ground height here, for anything that has to stand something on it.
+        /// The height field is the authority everywhere in this codebase; this
+        /// is just the polite way to ask an outpost for it.
+        public float GroundAt(Vector3 at) => height != null ? height(at.x, at.z) : at.y;
+
+        // --- telling one hand what to do -------------------------------------
+
+        /// **Send this hand after a resource.** `resource` must be something
+        /// the island actually has — see `Gatherable`.
+        public bool OrderGather(OutpostHand h, string resource)
+        {
+            if (h == null || ledger == null || !Res.IsGatherable(resource)) return false;
+            h.order = OutpostOrder.Gather;
+            h.target = resource;
+            ArrangeHands();
+            PuppetsToWork();
+            return true;
+        }
+
+        /// **Assign this hand to a building.** The position is the building's,
+        /// so what they make is decided by what they were assigned to rather
+        /// than by anything carried on the hand.
+        public bool Assign(OutpostHand h, string planId)
+        {
+            if (h == null || ledger == null) return false;
+            if (!BuildPlans.HasPosition(planId)) return false;
+            if (CountOf(planId) <= 0) return false;         // it is not standing here
+            h.order = OutpostOrder.Work;
+            h.target = planId;
+            ArrangeHands();
+            PuppetsToWork();
+            return true;
+        }
+
+        public bool OrderIdle(OutpostHand h)
+        {
+            if (h == null) return false;
+            h.order = OutpostOrder.Idle;
+            h.target = "";
+            ArrangeHands();
+            return true;
+        }
+
+        /// **What can be gathered here**, in the order the menu offers it.
+        ///
+        /// Timber first because every island has trees, then whatever kind the
+        /// populator gave this one. A stock with nothing left in it is still
+        /// listed — an empty seam is information, and hiding it would look
+        /// like the menu was broken.
+        public List<string> Gatherable()
+        {
+            var list = new List<string>();
+            if (ledger == null) return list;
+            foreach (var st in ledger.stocks)
+                if (st != null && Res.IsGatherable(st.resource)) list.Add(st.resource);
+            return list;
+        }
+
+        /// **The positions standing here that somebody could be put in.**
+        /// One entry per building with a job, so two sawmills offer two.
+        public List<string> Positions()
+        {
+            var list = new List<string>();
+            foreach (var b in built)
+                if (b != null && BuildPlans.HasPosition(b.Id) && !list.Contains(b.Id))
+                    list.Add(b.Id);
+            return list;
+        }
+
+        /// **What this camp could build next.** A plan already standing here
+        /// is offered again only if it is worth having twice -- a second store
+        /// hut is, a second fire is not.
+        public List<BuildPlan> Buildable()
+        {
+            var list = new List<BuildPlan>();
+            foreach (var p in BuildPlans.AtACamp)
+            {
+                if (p.kind == BuildKind.Fire) continue;      // the fire is how you got here
+                list.Add(p);
+            }
+            return list;
+        }
+
+        /// The building this hand is assigned to, or null if they belong to
+        /// the fire.
+        public Building WorkplaceOf(OutpostHand h)
+        {
+            if (h == null || h.order != OutpostOrder.Work || string.IsNullOrEmpty(h.target))
+                return null;
+            foreach (var b in built) if (b != null && b.Id == h.target) return b;
+            return null;
+        }
+
+        /// How far off the fire they stand. Close enough to be warming their
+        /// hands at it, far enough that four of them are four people and not
+        /// one blob at this zoom.
+        public const float FireRingRadius = 2.9f;
 
         /// How much wood a camp clears when it is founded. Room to walk round
         /// the fire and stack what came down, nothing more.
@@ -445,7 +720,15 @@ namespace SeaSick.World
         /// Everything this place can keep. Land more than this on one voyage
         /// and the surplus stays on the ground and is not there when you get
         /// back.
-        public int StoreCapacity
+        /// **What this place keeps OF EACH THING.**
+        ///
+        /// It used to be one number for one resource, because timber was all
+        /// an island had. Kevin, 2026-09-19: *"crew on the island can gather
+        /// resources up to 10 of each without a storage unit."* So the fire's
+        /// ten, and every store hut's twenty, apply to each kind separately --
+        /// which is also what makes a second resource worth gathering rather
+        /// than a competitor for the same ten slots.
+        public int KeepsOfEach
         {
             get
             {
@@ -454,6 +737,10 @@ namespace SeaSick.World
                 return n;
             }
         }
+
+        /// The old name, kept because home's voyage panel still asks in the
+        /// singular and means the same thing there: home keeps one pile.
+        public int StoreCapacity => KeepsOfEach;
 
         public IReadOnlyList<Building> Built => built;
 
@@ -558,6 +845,18 @@ namespace SeaSick.World
             // belongs to the survey rather than to a constant.
             if (ledger == null)
                 ledger = OutpostLedger.For(ClearingCentre, settlement.AreaHectares);
+
+            // **What else this island has, the populator already decided.**
+            // `WorldSettings.kinds` gives every island one of Timber, Stone,
+            // Ore or Spice and scatters props of it with `ResourceNode`s on
+            // them, unlocked further from home. So the Gather menu's contents
+            // are a fact about the place rather than a fixed list -- and
+            // seeding the stock here is the one moment the ledger is allowed
+            // to learn it, because after this it must work with the island
+            // unloaded.
+            string kind = Island != null ? Island.ResourceName : null;
+            if (!string.IsNullOrEmpty(kind) && kind != Res.Timber && Res.IsGatherable(kind))
+                ledger.SeedStock(kind, settlement.AreaHectares);
         }
 
         /// What a NEW outpost is sited under, published once by the world
@@ -937,12 +1236,15 @@ namespace SeaSick.World
         /// green on one rule and a raise that refuses on another is the bug
         /// this whole shape exists to prevent.
         public Building Raise(BuildPlan plan, Vector3 at)
+            => Raise(plan, at, AutoYaw(at));
+
+        public Building Raise(BuildPlan plan, Vector3 at, float yaw)
         {
-            if (!CanPlace(plan, at, out _, out float lo, out float hi)) return null;
+            if (!CanPlace(plan, at, yaw, out _, out float lo, out float hi)) return null;
 
             float len = plan.footprint.x, wid = plan.footprint.y;
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
-            Quaternion facing = FacingAt(at);
+            Quaternion facing = Quaternion.Euler(0f, yaw, 0f);
 
             Vector3 p = at;
             p.y = hi;
@@ -956,6 +1258,10 @@ namespace SeaSick.World
         /// Door toward the middle of the clearing, as the spiral does. A fire
         /// has no door, but a hut sited by hand should not have its back to
         /// the rest of the camp any more than one sited by the spiral.
+        /// The facing a building gets when nobody has chosen one: door toward
+        /// the middle of the camp. The player can turn it from there.
+        public float AutoYaw(Vector3 at) => FacingAt(at).eulerAngles.y;
+
         Quaternion FacingAt(Vector3 at)
         {
             Vector3 toCentre = CampCentre - at;
@@ -976,9 +1282,12 @@ namespace SeaSick.World
         /// the ground. What the ground still gets to refuse is beach, water,
         /// a slope nothing will stand on, and somewhere already occupied.
         public bool CanPlace(BuildPlan plan, Vector3 at, out string why)
-            => CanPlace(plan, at, out why, out _, out _);
+            => CanPlace(plan, at, AutoYaw(at), out why, out _, out _);
 
-        public bool CanPlace(BuildPlan plan, Vector3 at, out string why,
+        public bool CanPlace(BuildPlan plan, Vector3 at, float yaw, out string why)
+            => CanPlace(plan, at, yaw, out why, out _, out _);
+
+        public bool CanPlace(BuildPlan plan, Vector3 at, float yaw, out string why,
             out float lo, out float hi)
         {
             lo = hi = 0f;
@@ -999,7 +1308,7 @@ namespace SeaSick.World
             }
 
             float len = plan.footprint.x, wid = plan.footprint.y;
-            if (!Corners(at, FacingAt(at), len, wid, out lo, out hi))
+            if (!Corners(at, Quaternion.Euler(0f, yaw, 0f), len, wid, out lo, out hi))
             {
                 why = height(at.x, at.z) < minHeight
                     ? "too low -- that is beach"

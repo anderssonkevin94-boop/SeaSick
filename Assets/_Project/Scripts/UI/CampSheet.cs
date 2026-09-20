@@ -52,6 +52,10 @@ namespace SeaSick.UI
             // carrying other uncommitted work and every object added to it is
             // a merge nobody wants; this needs no serialised state.
             if (CampSiting.Instance == null) gameObject.AddComponent<CampSiting>();
+            // The crew list rides along for the same reason: no serialised
+            // state, and `Sea.unity` is carrying other people's uncommitted
+            // work.
+            if (GetComponent<CampCrewList>() == null) gameObject.AddComponent<CampCrewList>();
         }
 
         /// The island she is lying at, if this sheet has anything to say.
@@ -129,7 +133,7 @@ namespace SeaSick.UI
                 string refusal = CampSiting.Refusal;
                 GUI.Label(new Rect(inner.x, stop.yMax + HudLayout.Gap, inner.width, lineH),
                     string.IsNullOrEmpty(refusal)
-                        ? "tap the ground inside the ring"
+                        ? "tap the ground inside the ring   ·   R turns it 45°, shift+R back"
                         : "✕ " + refusal, body);
                 return;
             }
@@ -238,13 +242,13 @@ namespace SeaSick.UI
                 // than none, and the tick is free when nothing has elapsed.
                 outpost.CatchUp();
                 var l = outpost.Ledger;
-                sb.Append("   ·   ").Append(l.timber).Append(" / ").Append(l.ceiling)
+                sb.Append("   ·   ").Append(l.Timber).Append(" / ").Append(l.ceilingPer)
                   .Append(" timber");
-                int cutting = l.HandsOn(OutpostOrder.Cut);
+                int cutting = l.HandsOn(OutpostOrder.Gather);
                 sb.Append("   ·   ").Append(cutting)
                   .Append(cutting == 1 ? " hand cutting" : " hands cutting");
-                if (l.standing < 1f) sb.Append("   ·   the wood is cut out");
-                else if (l.timber >= l.ceiling) sb.Append("   ·   the pile is full");
+                if (l.Wood.standing < 1f) sb.Append("   ·   the wood is cut out");
+                else if (l.Timber >= l.ceilingPer) sb.Append("   ·   the pile is full");
             }
             else sb.Append("   ·   no camp");
             return sb.ToString();

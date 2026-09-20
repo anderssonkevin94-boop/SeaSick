@@ -262,7 +262,11 @@ namespace SeaSick.Crew
                 // through the tick, the bodies deliver through here, and the
                 // two never double-count because a hand who lives here is a
                 // row and a hand walking about is not.
-                if (l.Building)
+                // Only the stuff it is actually built OUT of. A hand carrying
+                // ore past a half-built shed is not paying for it, and before
+                // resources were per-kind this branch happily let him.
+                if (l.Building
+                    && carriedResource == World.BuildPlans.Named(l.pending.planId).resource)
                 {
                     l.pending.done++;
                     carriedResource = null;
@@ -272,9 +276,11 @@ namespace SeaSick.Crew
                     return;
                 }
 
-                if (camp.HasCamp && l.timber < l.ceiling)
+                // **Per resource, not per camp.** Ten of each is what the fire
+                // watches over, so a hand carrying ore past a full timber pile
+                // still has somewhere to put it.
+                if (camp.HasCamp && l.Add(carriedResource, 1) > 0)
                 {
-                    l.timber++;
                     carriedResource = null;
                     return;
                 }

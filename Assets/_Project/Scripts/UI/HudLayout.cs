@@ -55,6 +55,11 @@ namespace SeaSick.UI
             Wind,
             Ship,
             Perf,
+            /// The island's crew and their orders, while she lies at a camp.
+            /// **In the column, not at a rect of its own** -- the first
+            /// version picked its own corner and `HudOverlapProbe` caught it
+            /// sitting on 240x60 px of the minimap for thirty frames.
+            CampCrew,
 
             // --- the left tab rail, downward ---
             RailSettings,
@@ -75,7 +80,8 @@ namespace SeaSick.UI
         static Column ColumnOf(Slot s) => s switch
         {
             Slot.Crew => Column.TopLeft,
-            Slot.Map or Slot.Wind or Slot.Ship or Slot.Perf => Column.TopRight,
+            Slot.Map or Slot.Wind or Slot.Ship or Slot.Perf
+                or Slot.CampCrew => Column.TopRight,
             Slot.RailSettings or Slot.RailYard or Slot.RailHome => Column.Rail,
             Slot.Nav or Slot.Broadside => Column.BottomLeft,
             _ => Column.BottomRight,

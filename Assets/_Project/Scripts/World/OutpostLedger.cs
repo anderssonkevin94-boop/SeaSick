@@ -3,19 +3,28 @@ using UnityEngine;
 
 namespace SeaSick.World
 {
-    /// What one hand has been told to do at an outpost.
+    /// What one hand at an outpost has been told to do.
+    ///
+    /// **The order carries a TARGET now**, because "cut wood" was the only job
+    /// there was and is not any more. Gathering needs to know what; working
+    /// needs to know where.
     public enum OutpostOrder
     {
         /// Standing about. What a hand does when nobody has told it anything,
-        /// and what it falls back to when the pile is full or the wood is cut.
+        /// and what it falls back to when its pile is full or its stock is
+        /// gone.
         Idle,
-        /// Felling timber into the outpost's pile.
-        Cut,
+        /// Taking something out of the ground: `target` is the resource.
+        /// This was `Cut`, back when timber was all there was.
+        Gather,
         /// Cutting and carrying wood into whatever is sited here but not yet
-        /// built. **The same work at the same rate as `Cut`** -- the only
-        /// difference is where the logs land, which is what makes a half-built
-        /// camp cost exactly what it looks like it costs.
+        /// built. **The same work at the same rate as gathering timber** --
+        /// the only difference is where the logs land, which is what makes a
+        /// half-built camp cost exactly what it looks like it costs.
         Build,
+        /// Assigned to a building: `target` is the plan id. What they produce
+        /// is the building's business, not theirs.
+        Work,
     }
 
     /// One hand left at an outpost.
@@ -29,12 +38,36 @@ namespace SeaSick.World
         public string name;
         public OutpostOrder order = OutpostOrder.Idle;
 
+        /// What they are gathering, or which building they are assigned to.
+        /// Empty for Idle and for Build, which has only ever one thing to
+        /// work on.
+        public string target = "";
+
         /// **Carried, unused, on purpose.** Kevin's call 2026-09-13: a hand can
         /// eventually refuse or leave when starving or badly treated, but for
         /// this pass they only get angry. Nothing reads this yet; it is here
         /// from the start so the save format does not have to change when
         /// something does.
         public float mood = 1f;
+
+        /// What to call what they are doing, for the list on the right.
+        public string Doing
+        {
+            get
+            {
+                switch (order)
+                {
+                    case OutpostOrder.Gather:
+                        return string.IsNullOrEmpty(target)
+                            ? "gathering" : "gathering " + target.ToLowerInvariant();
+                    case OutpostOrder.Build: return "building";
+                    case OutpostOrder.Work:
+                        string post = BuildPlans.PositionAt(target);
+                        return string.IsNullOrEmpty(post) ? "working" : post;
+                    default: return "idle";
+                }
+            }
+        }
     }
 
     /// Something the player has SITED here but nobody has finished building.
@@ -61,6 +94,12 @@ namespace SeaSick.World
         /// anyone can see, so the fraction lives beside it.
         public int done;
         public float donePart;
+
+        /// Which way it faces, world degrees. **Carried here rather than
+        /// recomputed**, because since 2026-09-19 the player turns it by hand
+        /// in 45-degree steps, and a blueprint that came back from a save
+        /// facing a direction nobody chose would be a different building.
+        public float yaw;
 
         public Vector3 At => new Vector3(x, 0f, z);
         public bool Complete => done >= needed;
@@ -113,40 +152,140 @@ namespace SeaSick.World
             return n;
         }
 
+        public int HandsOn(OutpostOrder order, string target)
+        {
+            int n = 0;
+            foreach (var h in hands)
+                if (h != null && h.order == order && h.target == target) n++;
+            return n;
+        }
+
+        public OutpostHand Hand(string who)
+        {
+            foreach (var h in hands) if (h != null && h.name == who) return h;
+            return null;
+        }
+
         // --- what it holds ---------------------------------------------------
 
-        /// Whole logs on the ground. What the ship comes to collect.
-        public int timber;
-
-        /// Sub-log accrual, kept so a short tick is not rounded away to
-        /// nothing. Without it, ticking often would produce less than ticking
-        /// rarely, and the two have to agree — see `Tick`.
-        public float timberPart;
-
-        /// What this place can keep. A campfire holds ten; a storehouse is how
-        /// you raise it. **This ceiling is the whole reason the loop does not
-        /// become an idle game**: hands fill it and stop, so the only way to
-        /// get more out of an island is to invest in it.
-        public int ceiling = CampfireCeiling;
-
-        /// Timber still standing within reach of the camp, in logs.
+        /// **What is on the ground here, per resource.**
         ///
-        /// Settled 2026-09-13: it depletes and regrows slowly. Without a stock
-        /// a camp produces from nothing for ever and the ceiling is left doing
-        /// all the balancing on its own.
-        public float standing;
-        public float standingMax;
+        /// It used to be one integer called `timber`, because timber was the
+        /// only thing an island had. Kevin, 2026-09-19: *"crew on the island
+        /// can gather resources up to 10 of each without a storage unit."*
+        /// So the ceiling is PER RESOURCE and the pile is a list.
+        public List<OutpostStore> stores = new List<OutpostStore>();
 
-        // --- food, carried but not yet wired ---------------------------------
+        /// What is left in the ground, per resource. Seeded from the survey.
+        public List<OutpostStock> stocks = new List<OutpostStock>();
 
-        /// **Declared now, consumed in Phase 2.** Food is settled as local —
-        /// berries and wheat off the island itself, no supply run — and
-        /// over-capacity hands eat stores and can starve. None of that is wired
-        /// here: this pass is the tick, and adding a resource whose per-island
-        /// yield has no reader yet would be inventing numbers. The fields exist
-        /// so the save format is already the right shape.
-        public float food;
-        public float foodPart;
+        /// **What this place can keep OF EACH THING.** A campfire watches over
+        /// ten of anything; a storehouse is how you raise it. This ceiling is
+        /// the whole reason the loop does not become an idle game: hands fill
+        /// it and stop, so the only way to get more out of an island is to
+        /// invest in it.
+        public int ceilingPer = CampfireCeiling;
+
+        public OutpostStore Store(string resource, bool create = false)
+        {
+            foreach (var s in stores) if (s != null && s.resource == resource) return s;
+            if (!create) return null;
+            var made = new OutpostStore { resource = resource };
+            stores.Add(made);
+            return made;
+        }
+
+        public OutpostStock Stock(string resource, bool create = false)
+        {
+            foreach (var s in stocks) if (s != null && s.resource == resource) return s;
+            if (!create) return null;
+            var made = new OutpostStock
+            {
+                resource = resource,
+                regrowPerDay = Res.RegrowPerDay(resource),
+            };
+            stocks.Add(made);
+            return made;
+        }
+
+        public int CountOf(string resource)
+        {
+            var s = Store(resource);
+            return s != null ? s.whole : 0;
+        }
+
+        /// Room left for this resource, in whole units.
+        public int RoomFor(string resource) =>
+            Mathf.Max(0, ceilingPer - CountOf(resource));
+
+        /// Put whole units in, refusing what will not fit. Returns what was
+        /// taken.
+        public int Add(string resource, int n)
+        {
+            if (n <= 0) return 0;
+            int took = Mathf.Min(RoomFor(resource), n);
+            if (took <= 0) return 0;
+            Store(resource, true).whole += took;
+            return took;
+        }
+
+        /// Take whole units out. Returns what was actually there.
+        public int Take(string resource, int n)
+        {
+            var s = Store(resource);
+            if (s == null || n <= 0) return 0;
+            int got = Mathf.Min(s.whole, n);
+            s.whole -= got;
+            return got;
+        }
+
+        /// Everything on the ground, all kinds together — what a hold has to
+        /// have room for.
+        public int Total
+        {
+            get
+            {
+                int n = 0;
+                foreach (var s in stores) if (s != null) n += s.whole;
+                return n;
+            }
+        }
+
+        /// Timber, by name, because half the game still asks for it directly.
+        public int Timber => CountOf(Res.Timber);
+
+        /// The sub-log accrual on the timber pile. Only the probes care, and
+        /// they care a great deal: it is what makes ticking often and ticking
+        /// rarely agree.
+        public float TimberPart()
+        {
+            var s = Store(Res.Timber);
+            return s != null ? s.part : 0f;
+        }
+
+        /// **Timber taken out of the GROUND here, ever.** Not what is in the
+        /// pile — what has been cut, including everything carried off by the
+        /// ship and everything burnt into a building.
+        ///
+        /// This is the number the wood is drawn from. Kevin, playing it:
+        /// *"the trees never disappear. i assume they would since they're cut
+        /// down."* They did not, because gathering only ever decremented an
+        /// abstract stock. The plan settled this on 2026-09-13 and it was
+        /// never built: **fell deterministically, nearest the camp outward,
+        /// and store only a COUNT** — then the whole visible state reproduces
+        /// from one integer on any visit, whatever the terrain did in between.
+        public float timberTaken;
+
+        /// How many trees have been felled to represent that. Whole trees, so
+        /// a visit that arrives to find the mesh untouched knows exactly how
+        /// many to take down.
+        public int treesFelled;
+
+        /// **Declared now, consumed in a later pass.** Food is settled as
+        /// local — berries and wheat off the island itself, no supply run —
+        /// and over-capacity hands eat stores and can starve. None of that is
+        /// wired: a farm now MAKES `Res.Food`, but nothing eats it yet.
+        public float foodEaten;
 
         // --- what is built ---------------------------------------------------
 
@@ -154,12 +293,18 @@ namespace SeaSick.World
         /// is what a save would restore them from.
         public List<string> built = new List<string>();
 
+        public int CountBuilt(string planId)
+        {
+            int n = 0;
+            foreach (var b in built) if (b == planId) n++;
+            return n;
+        }
+
         /// What is sited here and not yet finished, or null.
         ///
         /// One at a time, deliberately. A camp with three half-built sheds in
         /// it is a camp that has told the player nothing about what it is
-        /// doing, and the first building on an island is a fire -- there is
-        /// nothing to queue behind it.
+        /// doing.
         public PendingBuild pending;
 
         /// Is there a blueprint here waiting on wood?
@@ -167,7 +312,7 @@ namespace SeaSick.World
 
         /// Sited, paid for, and waiting for somebody to stand it up. The
         /// arithmetic can finish a building while its island is unloaded, so
-        /// the raise happens when the scene next has somewhere to put it --
+        /// the raise happens when the scene next has somewhere to put it —
         /// see `Outpost.CatchUp`.
         public bool ReadyToRaise => pending != null && pending.Complete;
 
@@ -193,10 +338,12 @@ namespace SeaSick.World
         /// save — without the answer depending on how often it asked.
         public const float QuantumDays = 0.1f;
 
-        /// Logs a hand fells in a day. **A guess, never played.**
+        /// Logs a hand fells in a day. **A guess, never played.** Still the
+        /// unit everything else is priced against — see `Res.GatherRate`,
+        /// which sets the other resources relative to it.
         public const float TimberPerHandPerDay = 4f;
 
-        /// What a campfire watches over. Settled at ten.
+        /// What a campfire watches over, of each thing. Settled at ten.
         public const int CampfireCeiling = 10;
 
         /// Timber-grade logs per hectare of the ground the camp works.
@@ -205,23 +352,37 @@ namespace SeaSick.World
         /// worth felling, and a stock nobody can exhaust is not a stock.
         public const float StandingPerHectare = 40f;
 
-        /// Share of the stock that comes back in a day. **A guess, never
-        /// played.** At 2% a stripped camp is back to half in about a month of
-        /// game days, which is meant to be long enough to move on and come
-        /// back rather than long enough to forget.
+        /// Share of the timber stock that comes back in a day. **A guess.**
         public const float RegrowthPerDay = 0.02f;
 
         /// Seed a fresh ledger for a camp on this ground.
+        ///
+        /// Timber comes from the surveyed area, because how much wood stands
+        /// within reach is a property of the place. Anything else the island
+        /// offers is added by `Outpost` once it knows what the populator put
+        /// there — the ledger must not go looking at the scene.
         public static OutpostLedger For(Vector3 at, float workedHectares)
         {
             var l = new OutpostLedger();
             l.SetKey(at);
-            l.standingMax = Mathf.Max(1f, workedHectares * StandingPerHectare);
-            l.standing = l.standingMax;
-            l.ceiling = CampfireCeiling;
+            l.ceilingPer = CampfireCeiling;
+            l.SeedStock(Res.Timber, workedHectares);
             l.lastTicked = TimeOfDay.Seconds;
             return l;
         }
+
+        /// Put a resource's stock on the ground here, sized by the worked area.
+        public void SeedStock(string resource, float hectares)
+        {
+            var s = Stock(resource, true);
+            s.standingMax = Mathf.Max(1f, hectares * Res.PerHectare(resource));
+            s.standing = s.standingMax;
+            s.regrowPerDay = Res.RegrowPerDay(resource);
+        }
+
+        /// The timber stock, which enough of the game asks for by name that it
+        /// is worth not making everybody look it up.
+        public OutpostStock Wood => Stock(Res.Timber, true);
 
         // --- the tick --------------------------------------------------------
 
@@ -274,10 +435,15 @@ namespace SeaSick.World
             // Regrowth first, so a camp that stripped its ground last step has
             // something to cut this one rather than the order of operations
             // deciding the answer.
-            if (standingMax > 0f && standing < standingMax)
-                standing = Mathf.Min(standingMax, standing + standingMax * RegrowthPerDay * days);
+            foreach (var s in stocks)
+            {
+                if (s == null || s.regrowPerDay <= 0f) continue;
+                if (s.standing < s.standingMax)
+                    s.standing = Mathf.Min(s.standingMax,
+                        s.standing + s.standingMax * s.regrowPerDay * days);
+            }
 
-            // **Building comes before stockpiling, and draws from the same
+            // **Building comes before everything, and draws on the same
             // standing timber.** A camp that has not been built yet has
             // nowhere to stockpile TO -- the ceiling is what the fire watches
             // over and there is no fire -- so a hand told to build is not
@@ -288,12 +454,14 @@ namespace SeaSick.World
                 int builders = HandsOn(OutpostOrder.Build);
                 if (builders > 0)
                 {
+                    var wood = Wood;
                     float wantB = builders * TimberPerHandPerDay * days;
                     float roomB = (pending.needed - pending.done) - pending.donePart;
-                    float gotB = Mathf.Min(wantB, Mathf.Min(standing, roomB));
+                    float gotB = Mathf.Min(wantB, Mathf.Min(wood.standing, roomB));
                     if (gotB > 0f)
                     {
-                        standing -= gotB;
+                        wood.standing -= gotB;
+                        timberTaken += gotB;
                         pending.donePart += gotB;
                         int wholeB = Mathf.FloorToInt(pending.donePart);
                         if (wholeB > 0)
@@ -305,42 +473,117 @@ namespace SeaSick.World
                 }
             }
 
-            int cutters = HandsOn(OutpostOrder.Cut);
-            if (cutters <= 0) return;
-
-            float room = (ceiling - timber) - timberPart;
-            if (room <= 0f) return;
-
-            float want = cutters * TimberPerHandPerDay * days;
-            float got = Mathf.Min(want, Mathf.Min(standing, room));
-            if (got <= 0f) return;
-
-            standing -= got;
-            timberPart += got;
-
-            int whole = Mathf.FloorToInt(timberPart);
-            if (whole > 0)
+            // --- gathering ---------------------------------------------------
+            //
+            // One pass per HAND rather than per resource, so two hands on the
+            // same thing share one stock and one ceiling without this loop
+            // having to know that they are two.
+            foreach (var h in hands)
             {
-                timber += whole;
-                timberPart -= whole;
+                if (h == null || h.order != OutpostOrder.Gather) continue;
+                if (string.IsNullOrEmpty(h.target)) continue;
+
+                var stock = Stock(h.target);
+                if (stock == null || stock.standing <= 0f) continue;
+
+                var store = Store(h.target, true);
+                float room = (ceilingPer - store.whole) - store.part;
+                if (room <= 0f) continue;
+
+                float want = Res.GatherRate(h.target) * days;
+                float got = Mathf.Min(want, Mathf.Min(stock.standing, room));
+                if (got <= 0f) continue;
+
+                stock.standing -= got;
+                if (h.target == Res.Timber) timberTaken += got;
+                store.part += got;
+                int whole = Mathf.FloorToInt(store.part);
+                if (whole > 0) { store.whole += whole; store.part -= whole; }
+            }
+
+            // --- working at a building ---------------------------------------
+            //
+            // **A position turns one thing into another.** A sawyer takes
+            // timber and makes boards; a smith takes ore and makes tools; a
+            // farmhand takes nothing at all, because the field is the input.
+            // The conversion lives on the PLAN, so a building is the whole
+            // description of what its job is worth.
+            foreach (var h in hands)
+            {
+                if (h == null || h.order != OutpostOrder.Work) continue;
+                if (string.IsNullOrEmpty(h.target)) continue;
+                // Assigned to something that is not standing here. Can happen
+                // to a saved hand whose building was never restored; produce
+                // nothing rather than guessing.
+                if (!built.Contains(h.target)) continue;
+
+                var plan = BuildPlans.Named(h.target);
+                if (string.IsNullOrEmpty(plan.makes) || plan.rate <= 0f) continue;
+
+                var made = Store(plan.makes, true);
+                float room = (ceilingPer - made.whole) - made.part;
+                if (room <= 0f) continue;
+
+                float want = Mathf.Min(plan.rate * days, room);
+                if (want <= 0f) continue;
+
+                // An input is consumed one for one, and a hand with nothing to
+                // work on produces nothing. Deliberate, and the point of the
+                // chain: a sawmill on an island with no timber is a shed.
+                if (!string.IsNullOrEmpty(plan.takes))
+                {
+                    var from = Store(plan.takes);
+                    float have = from != null ? from.whole + from.part : 0f;
+                    want = Mathf.Min(want, have);
+                    if (want <= 0f) continue;
+
+                    from.part -= want;
+                    while (from.part < 0f && from.whole > 0) { from.whole--; from.part += 1f; }
+                    if (from.part < 0f) from.part = 0f;
+                }
+
+                made.part += want;
+                int whole = Mathf.FloorToInt(made.part);
+                if (whole > 0) { made.whole += whole; made.part -= whole; }
             }
         }
 
-        /// How much of the ceiling is taken, for anything drawing a gauge.
-        public float Fill01 => ceiling > 0 ? Mathf.Clamp01(timber / (float)ceiling) : 0f;
+        /// How full this resource's pile is, for anything drawing a gauge.
+        public float Fill01(string resource) => ceilingPer > 0
+            ? Mathf.Clamp01(CountOf(resource) / (float)ceilingPer) : 0f;
 
-        /// Nothing more to do here: the pile is full, or the wood is gone.
-        /// A camp still building is never stalled -- there is always the one
-        /// job left.
-        public bool Stalled => !Building && (timber >= ceiling || standing < 1f);
+        /// Nothing more for this hand to do: their pile is full, or their
+        /// stock is gone, or the thing they work at has nothing to work on.
+        public bool Stalled(OutpostHand h)
+        {
+            if (h == null) return true;
+            if (h.order == OutpostOrder.Build) return pending == null || pending.Complete;
+            if (h.order == OutpostOrder.Gather)
+            {
+                var stock = Stock(h.target);
+                return RoomFor(h.target) <= 0 || stock == null || stock.standing < 1f;
+            }
+            if (h.order == OutpostOrder.Work)
+            {
+                var plan = BuildPlans.Named(h.target);
+                if (string.IsNullOrEmpty(plan.makes)) return true;
+                if (RoomFor(plan.makes) <= 0) return true;
+                return !string.IsNullOrEmpty(plan.takes) && CountOf(plan.takes) <= 0;
+            }
+            return true;
+        }
 
         /// Put every hand here on the same order. Used when a blueprint goes
         /// down (everybody builds it) and when it is finished (everybody goes
-        /// back to cutting): the alternative is a per-hand order interface
-        /// before there is anything to choose between.
-        public void OrderAll(OutpostOrder order)
+        /// back to what an island is for).
+        public void OrderAll(OutpostOrder order, string target = "")
         {
-            foreach (var h in hands) if (h != null) h.order = order;
+            foreach (var h in hands)
+            {
+                if (h == null) continue;
+                h.order = order;
+                h.target = target;
+            }
         }
     }
 }

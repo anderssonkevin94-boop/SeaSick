@@ -461,3 +461,228 @@ half not gated — it needs a real tap.
 covers the bottom 36% of the screen and the steer zone is the bottom 45%, so
 there was a band where a tap meant for the ground — siting, or pressing on a
 crewman — also put the rudder over and left it there.
+
+## PHASE 2 — POSITIONS, RESOURCES AND THE ORDERS LIST — 2026-09-19
+
+Kevin: *"after sending the crew to the island and they've built the campfire
+they should stand around the campfire. when they landed at the island the crew
+currently assigned to the island's name pop up on a list to the right. when
+pressing their name you get options: 1. assign -> (name of assignable position,
+farm, blacksmith etc). 2. gather -> list of gatherable resources. 3. build ->
+list of buildable buildings. crew on the island can gather resources up to 10
+of each without a storage unit. they will pile them close to the campfire."*
+
+Both of the calls this needed went the ambitious way: **all six kit buildings**,
+and **assigned hands produce their building's output**.
+
+### The gather list was already a fact about the island
+
+`WorldSettings.kinds` has been giving every island one of **Timber, Stone, Ore,
+Spice** since long before this, scattered as props with `ResourceNode`s on them
+and unlocked by distance from home. Nothing had to be invented: the menu shows
+what the populator put there, so two islands offer different work. What IS new
+is the far side of a building — **Boards, Tools, Food, Meals** — which are made,
+never found.
+
+### The ledger went multi-resource
+
+`timber` and `ceiling` became `stores` (a list of `OutpostStore`) and
+`ceilingPer`, plus `stocks` (`OutpostStock`, what is left in the ground). A list
+rather than a dictionary because `JsonUtility` cannot serialise a dictionary and
+this object exists to be savable.
+
+- **Ten of EACH, which is what Kevin asked for**, and it is what makes a second
+  resource worth gathering rather than a competitor for the same ten slots.
+- **Timber regrows; rock does not.** `regrowPerDay` is per resource per place,
+  so a mining island is used up and a wooded one is farmed.
+- Orders carry a **target**: `Gather` names a resource, `Work` names a building.
+  `Cut` is gone.
+
+### A position converts
+
+Each plan carries `takes`, `makes`, `rate` and `position`. A sawyer turns timber
+into boards, a smith turns ore into tools, a farmhand needs no input because the
+field is the input, a cook turns food into meals. A hand assigned to a building
+with nothing to work on produces nothing, deliberately: **a sawmill on an island
+with no timber is a shed.**
+
+### The six buildings wear the kit
+
+`SettlementKitV1` had been sitting unwired since 2026-09-17.
+`SettlementToResources` copies the seven prefabs the camp can raise into
+`Resources/Settlement` (copies, not moves — the originals stay where the art
+pass put them), and `BuildingFactory.Raise` dresses a plan that names one and
+extrudes primitives for one that does not. **Both leave by the same door**, so
+the blueprint, the ghost, the four-corner test and the footing are identical
+either way — which is what let six authored buildings join a system built for
+primitives without touching any of it.
+
+**The footprints are measured, not guessed**: the game bounds out of the kit's
+own `unity-import-validation.txt`, so the ground is tested at the corners the
+building actually stands on and the blueprint is the size of the thing.
+
+### The crew stand round the fire
+
+They did not before: `Station` dropped each hand at a random point within 2.2 m
+of wherever the camp centre was AT THE TIME — which for a hand left before the
+fire was built was the blueprint — and never moved them again. `ArrangeHands`
+computes an even ring at 2.9 m facing in, and re-runs whenever the camp changes:
+on arrival, on stationing, when the fire is lit, when an order changes. **A hand
+assigned to a building stands at that building instead**, which is the whole
+visible difference between four idlers and a camp with a sawyer in it.
+
+### What is gathered is piled beside the fire
+
+`CampPiles` draws one stack per resource in a ring at 5.2 m — outside the crew's
+2.9 m — with the angle taken from the resource NAME, so the same thing lands in
+the same place at every camp and a player can read a camp from the air. Timber
+and boards are cross-piled logs; everything else is a heap of sacks. Drawn from
+the ledger and owning nothing, like `BuildSite` and the parked crew.
+
+### The list on the right
+
+`CampCrewList`: the hands who LIVE here, each row saying what they are doing,
+and three verbs under whichever is open. It is the counterpart to `CampSheet`,
+not a replacement — **the bottom sheet is about movement and this is about
+work**, and keeping them apart is what stops either becoming a menu of
+everything. Build hands straight to `CampSiting`, because where a building goes
+is the one thing a list cannot ask.
+
+**`HudOverlapProbe` caught it twice and was right both times.** First at a
+hand-picked rect, sitting on 240x60 px of the minimap for thirty frames; then,
+after being given a `Slot`, at the bottom of the screen on the helm — because
+`ColumnOf` maps slots with an explicit switch and anything unlisted falls
+through to bottom-right. **Ask the layout for a place; never pick one.**
+
+### Gates
+
+`RunProbe.Ledger()` — 28 green, pure arithmetic. Each resource has its own
+ceiling; a full pile does not block another; rock does not regrow; **a worked-out
+seam stops below the ceiling for ever** (one hectare of ore is 9 units against a
+ceiling of 10); a sawyer makes boards and eats the timber; a forge with no ore
+makes nothing; a farmhand needs no input; and all of it is still path-independent
+over 8 days across 1 call and 320.
+
+`RunProbe.Camp()` — 51 green, in play mode, on the steamer. The fire wears the
+kit model; three hands stand 2.90–2.90 m from it with the closest pair 5.02 m
+apart; ten timber draw ten logs 5.2 m from the fire; a sawmill goes up, a hand is
+assigned, walks to it (4.4 m from the mill against 5.6 m from the fire) and turns
+timber into boards.
+
+### Two gates that were wrong, and both in the same way
+
+A gate whose PREMISE the numbers destroy reads as a code failure. Seeding one
+hectare of ore gave 9 units against a ceiling of 10, so "each resource reaches
+its ceiling" failed on an island that had simply run out — and the fix was three
+hectares plus a separate gate for the worked-out seam, which is a better pair.
+Then "six timber draw six logs" failed at ten, because the camp already held the
+four its own clearing gave it. **Measure against what the ledger holds, not
+against what the test put in.**
+
+### Still open
+
+- Nothing eats `Food` yet, and `supports` on the shelter moves no number —
+  starvation and over-capacity are the next pass, and the fields are declared.
+- The kitchen chain (food -> meals) has no consumer either.
+- Stationed hands still do not ANIMATE the work; they stand where they belong
+  and the tick does the producing.
+- **None of it has been played.** Every rate is a guess.
+
+## WHAT PLAY FOUND — 2026-09-19/20
+
+Kevin played it and brought back three things. All three were real; two were
+bugs and one was a feature that had been designed on 2026-09-13 and never built.
+
+### 1. "i never saw the people on the island"
+
+**`Station` switched a hand off, and only `ShowHands(true)` ever switched one
+on — and that fires when she ANCHORS.** So anybody left ashore while you were
+already standing there winked out, and nothing brought them back until you had
+sailed away and returned. Being watched is a state the outpost keeps now
+(`Outpost.Watched`), so anything that adds a body can ask whether to draw it.
+
+### 2. "i can tell that things get done, but no one is doing it"
+
+Fair: they stood in a ring like ornaments while the pile filled itself.
+**`CampWorker`** walks them out to the nearest standing tree, has them work it,
+and carries something back to the fire — and **produces nothing at all**, which
+is the entire design. A camp that paid differently while somebody watched it
+would undo the reason the ledger exists.
+
+It moves the transform and never touches `CrewAgent`'s state machine, which is
+safe for one reason worth writing down: **a parked hand's state is `Station`,
+and `Station` does nothing** — and `CrewAgent`'s walk cycle is driven by how
+fast the body is ACTUALLY moving rather than by which state it is in, so the
+legs come along for free. Measured: 5.8 m walked in four seconds of being
+watched. Only exists while she is here; `ShowHands(false)` takes it away.
+
+### 3. "the trees never disappear. i assume they would since they're cut down"
+
+They did not, because gathering only ever decremented an abstract stock. The
+plan settled this on 2026-09-13 — *fell deterministically, nearest-to-camp
+outward, store only a COUNT* — and it was never built.
+
+`OutpostLedger.timberTaken` is now the cumulative timber out of the GROUND, and
+`Outpost.SyncFelling` takes trees down nearest-first until `treesFelled` matches
+it. **One tree per log.** The stock is 40 logs a hectare against the ~230 trees a
+hectare the scenery draws, so a worked-out camp thins its wood rather than
+shaving the island: measured, stumps out to 19.8 m and standing timber from
+22.3 m — a widening ring, exactly the picture the plan asked for.
+
+Because it is a pure function of the ledger, a camp worked for twenty days while
+you were elsewhere is found with twenty days of stumps on the next visit,
+whatever the terrain streamer did in between.
+
+### And rotation, asked for at the same time
+
+*"i'd like an option to rotate them by 45 degrees in a complete rotation."*
+**R turns the ghost, shift+R turns it back, eight steps to the circle.** The yaw
+is carried on `PendingBuild`, so a blueprint comes back from a save facing the
+way it was put down, and `CanPlace` tests the corners at that angle — a
+rotation that lived only in the ghost would look right and build wrong.
+Automatic until it is touched (door toward the middle of the camp, as the spiral
+did), then frozen and turned from there — the same rule as `IslandCam.Driven`.
+Measured: a shelter asked for 135° stands at 135°, 0.0° out.
+
+### The interaction this created, which the probe caught
+
+"Reported 4 logs out of the clearing, mesh says 8 came down." Building the fire
+consumed four logs of standing timber, so `SyncFelling` felled four trees for
+them — somewhere else — while `FellWithin` felled four more for the site. **The
+same wood twice.** The clearing now counts toward `treesFelled`, which is the
+story it always had: making camp fells the wood it stands on. And the gate was
+sharpened to count the stumps INSIDE the clearing rather than the change across
+the whole island, because now that the crew cut real trees to pay for a build,
+those two numbers are honestly different.
+
+### Gates
+
+`RunProbe.Camp()` — **58 green, 0 failed**, in play mode on the steamer.
+Three of three hands drawn and carrying a `CampWorker`; 5.8 m walked; 10 logs
+cut takes 9 trees down; the clearing widens from the camp; a shelter stands
+where it was turned.
+
+### Still open after this
+
+- Only TIMBER thins the island. Stone, Ore and Spice are `ResourceNode` props
+  from the populator and are not yet removed as they are gathered — same trick,
+  different mechanism, not done.
+- Assigned hands stand at their building but do not animate the work there; the
+  walking loop is for gatherers and builders.
+
+### The second hole in the same bug — 2026-09-20
+
+Found by the question "is this ready to play", not by the probe.
+
+`SurveyWhatIsNear` is the only per-frame path that calls `ShowHands(true)`, and
+it runs **only while she is UNDER WAY**. The survey takes seconds to finish
+after the anchor is down — 7.9 s measured on Island_1 — so on a FIRST visit the
+outpost does not exist at either moment that would have woken it, and `Watched`
+stays false for as long as she lies there. Anybody stationed then is switched
+off and never drawn: **the same fault Kevin reported, one door further in.**
+`AnchorController.Update` now wakes the camp while Anchored or Ashore.
+
+**And the gate had been green through both versions**, because the probe called
+`ShowHands(true)` itself right after stationing — so it was measuring the
+probe's own action, not the game's arrival path. The crutch is gone and the gate
+is still green, which now means something.

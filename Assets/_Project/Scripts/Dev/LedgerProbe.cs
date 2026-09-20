@@ -58,29 +58,29 @@ public class LedgerProbe : MonoBehaviour
         lumpy.Tick(t0 + span);
 
         sb.AppendLine("PATH INDEPENDENCE over 12 game days, 2 hands cutting:");
-        sb.AppendLine($"  one call      timber {once.timber,3}  standing {once.standing,7:F2}  part {once.timberPart:F4}");
-        sb.AppendLine($"  480 calls     timber {many.timber,3}  standing {many.standing,7:F2}  part {many.timberPart:F4}");
-        sb.AppendLine($"  5 ragged      timber {lumpy.timber,3}  standing {lumpy.standing,7:F2}  part {lumpy.timberPart:F4}");
+        sb.AppendLine($"  one call      timber {once.Timber,3}  standing {once.Wood.standing,7:F2}  part {once.TimberPart():F4}");
+        sb.AppendLine($"  480 calls     timber {many.Timber,3}  standing {many.Wood.standing,7:F2}  part {many.TimberPart():F4}");
+        sb.AppendLine($"  5 ragged      timber {lumpy.Timber,3}  standing {lumpy.Wood.standing,7:F2}  part {lumpy.TimberPart():F4}");
 
         Gate(sb, ref fails, "one-call-equals-many", Same(once, many),
-            $"{once.timber}/{once.standing:F3} vs {many.timber}/{many.standing:F3}");
+            $"{once.Timber}/{once.Wood.standing:F3} vs {many.Timber}/{many.Wood.standing:F3}");
         Gate(sb, ref fails, "one-call-equals-ragged", Same(once, lumpy),
-            $"{once.timber}/{once.standing:F3} vs {lumpy.timber}/{lumpy.standing:F3}");
+            $"{once.Timber}/{once.Wood.standing:F3} vs {lumpy.Timber}/{lumpy.Wood.standing:F3}");
 
         // --- 2. idempotence --------------------------------------------------
 
         var idem = Working(t0);
         idem.Tick(t0 + 5.0 * day);
-        int afterFirst = idem.timber;
+        int afterFirst = idem.Timber;
         double stampAfterFirst = idem.lastTicked;
         for (int i = 0; i < 20; i++) idem.Tick(t0 + 5.0 * day);
 
         sb.AppendLine();
         sb.AppendLine($"IDEMPOTENCE: {afterFirst} logs, then 20 more calls at the same instant "
-            + $"-> {idem.timber} logs");
+            + $"-> {idem.Timber} logs");
         Gate(sb, ref fails, "ticking-twice-does-nothing",
-            idem.timber == afterFirst && System.Math.Abs(idem.lastTicked - stampAfterFirst) < 1e-9,
-            $"{afterFirst} -> {idem.timber}");
+            idem.Timber == afterFirst && System.Math.Abs(idem.lastTicked - stampAfterFirst) < 1e-9,
+            $"{afterFirst} -> {idem.Timber}");
 
         // --- 3. the clock running backwards ----------------------------------
         //
@@ -89,25 +89,25 @@ public class LedgerProbe : MonoBehaviour
 
         var back = Working(t0);
         back.Tick(t0 + 4.0 * day);
-        int beforeScrub = back.timber;
+        int beforeScrub = back.Timber;
         back.Tick(t0);                      // the clock jumps backwards
         back.Tick(t0 + 0.5 * day);
         sb.AppendLine();
         sb.AppendLine($"CLOCK SCRUBBED BACK: {beforeScrub} logs, wound back, half a day on "
-            + $"-> {back.timber} logs");
+            + $"-> {back.Timber} logs");
         Gate(sb, ref fails, "no-free-timber-from-a-scrub",
-            back.timber <= beforeScrub + 2, $"{beforeScrub} -> {back.timber}");
+            back.Timber <= beforeScrub + 2, $"{beforeScrub} -> {back.Timber}");
 
         // --- 4. the ceiling is the whole design ------------------------------
 
         var full = Working(t0);
         full.Tick(t0 + 400.0 * day);
         sb.AppendLine();
-        sb.AppendLine($"CEILING after 400 days: timber {full.timber} against a ceiling of {full.ceiling}");
-        Gate(sb, ref fails, "ceiling-holds", full.timber <= full.ceiling,
-            $"{full.timber} logs, ceiling {full.ceiling}");
-        Gate(sb, ref fails, "ceiling-is-reached", full.timber == full.ceiling,
-            $"{full.timber} of {full.ceiling} after 400 days");
+        sb.AppendLine($"CEILING after 400 days: timber {full.Timber} against a ceiling of {full.ceilingPer}");
+        Gate(sb, ref fails, "ceiling-holds", full.Timber <= full.ceilingPer,
+            $"{full.Timber} logs, ceiling {full.ceilingPer}");
+        Gate(sb, ref fails, "ceiling-is-reached", full.Timber == full.ceilingPer,
+            $"{full.Timber} of {full.ceilingPer} after 400 days");
 
         // --- 5. depletion has to actually bite -------------------------------
         //
@@ -115,13 +115,13 @@ public class LedgerProbe : MonoBehaviour
         // unreachable then "depletes and regrows" is a claim, not a mechanic.
 
         var strip = Working(t0, hectares: 0.5f);
-        float startStanding = strip.standing;
+        float startStanding = strip.Wood.standing;
         int daysToStrip = 0;
         for (int d = 1; d <= 400; d++)
         {
-            strip.ceiling = 100000;         // take the ceiling out of the question
+            strip.ceilingPer = 100000;         // take the ceiling out of the question
             strip.Tick(t0 + d * (double)day);
-            if (strip.standing < 1f) { daysToStrip = d; break; }
+            if (strip.Wood.standing < 1f) { daysToStrip = d; break; }
         }
         sb.AppendLine();
         sb.AppendLine($"DEPLETION on half a hectare ({startStanding:F0} logs standing), "
@@ -129,19 +129,23 @@ public class LedgerProbe : MonoBehaviour
             + $"({daysToStrip * day / 60f:F1} real minutes at the current day length)");
         Gate(sb, ref fails, "the-wood-can-run-out", daysToStrip > 0,
             daysToStrip > 0 ? $"stripped on day {daysToStrip}"
-                            : $"still {strip.standing:F1} standing after 400 days");
+                            : $"still {strip.Wood.standing:F1} standing after 400 days");
         Gate(sb, ref fails, "but-not-instantly", daysToStrip == 0 || daysToStrip >= 3,
             $"stripped in {daysToStrip} days");
 
         // --- 6. and it has to come back --------------------------------------
 
-        var regrow = new OutpostLedger { standingMax = 100f, standing = 0f, lastTicked = t0 };
+        var regrow = new OutpostLedger { lastTicked = t0 };
+        var regrowWood = regrow.Wood;
+        regrowWood.standingMax = 100f;
+        regrowWood.standing = 0f;
+        regrowWood.regrowPerDay = OutpostLedger.RegrowthPerDay;
         regrow.Tick(t0 + 30.0 * day);
         sb.AppendLine();
-        sb.AppendLine($"REGROWTH from bare: {regrow.standing:F1} of {regrow.standingMax:F0} "
+        sb.AppendLine($"REGROWTH from bare: {regrow.Wood.standing:F1} of {regrow.Wood.standingMax:F0} "
             + $"after 30 game days");
-        Gate(sb, ref fails, "the-wood-comes-back", regrow.standing > 20f,
-            $"{regrow.standing:F1} after 30 days");
+        Gate(sb, ref fails, "the-wood-comes-back", regrow.Wood.standing > 20f,
+            $"{regrow.Wood.standing:F1} after 30 days");
 
         // --- 7. it has to survive a save -------------------------------------
         //
@@ -175,7 +179,7 @@ public class LedgerProbe : MonoBehaviour
         control.Tick(t0 + 9.0 * day);
         control.hands[0].mood = 0.42f;
         Gate(sb, ref fails, "a-restored-ledger-carries-on", Same(after, control),
-            $"restored {after.timber}/{after.standing:F2} vs control {control.timber}/{control.standing:F2}");
+            $"restored {after.Timber}/{after.Wood.standing:F2} vs control {control.Timber}/{control.Wood.standing:F2}");
 
         // --- 8. identity is positional ---------------------------------------
 
@@ -212,14 +216,14 @@ public class LedgerProbe : MonoBehaviour
         sb.AppendLine();
         sb.AppendLine($"BLUEPRINT ({BuildPlans.Campfire.cost} logs, 1 hand building) "
             + "over 3 game days:");
-        sb.AppendLine($"  one call      done {b1.pending.done}  part {b1.pending.donePart:F4}  standing {b1.standing:F2}");
-        sb.AppendLine($"  240 calls     done {b2.pending.done}  part {b2.pending.donePart:F4}  standing {b2.standing:F2}");
-        sb.AppendLine($"  4 ragged      done {b3.pending.done}  part {b3.pending.donePart:F4}  standing {b3.standing:F2}");
+        sb.AppendLine($"  one call      done {b1.pending.done}  part {b1.pending.donePart:F4}  standing {b1.Wood.standing:F2}");
+        sb.AppendLine($"  240 calls     done {b2.pending.done}  part {b2.pending.donePart:F4}  standing {b2.Wood.standing:F2}");
+        sb.AppendLine($"  4 ragged      done {b3.pending.done}  part {b3.pending.donePart:F4}  standing {b3.Wood.standing:F2}");
 
         Gate(sb, ref fails, "build-is-path-independent",
             SameBuild(b1, b2) && SameBuild(b1, b3),
-            $"{b1.pending.done}/{b1.standing:F3} vs {b2.pending.done}/{b2.standing:F3} "
-            + $"vs {b3.pending.done}/{b3.standing:F3}");
+            $"{b1.pending.done}/{b1.Wood.standing:F3} vs {b2.pending.done}/{b2.Wood.standing:F3} "
+            + $"vs {b3.pending.done}/{b3.Wood.standing:F3}");
 
         Gate(sb, ref fails, "a-finished-build-stops-eating-wood",
             b1.pending.Complete && b1.pending.done == BuildPlans.Campfire.cost,
@@ -244,8 +248,8 @@ public class LedgerProbe : MonoBehaviour
         // stockpile INTO — in the game the ceiling is zero before the first
         // building — and a builder who also filled a pile would be paid twice.
         Gate(sb, ref fails, "building-does-not-also-fill-the-pile",
-            b1.timber == 0 && b1.timberPart < 1e-4f,
-            $"pile {b1.timber} logs while building");
+            b1.Timber == 0 && b1.TimberPart() < 1e-4f,
+            $"pile {b1.Timber} logs while building");
 
         // The wood comes off the island. A camp sited on bare rock cannot
         // build itself out of nothing.
@@ -257,8 +261,8 @@ public class LedgerProbe : MonoBehaviour
         // failed on ground that was only bare for the first quantum, which is
         // not what it says it is measuring.
         var bare = Building(t0);
-        bare.standing = 0f;
-        bare.standingMax = 0f;
+        bare.Wood.standing = 0f;
+        bare.Wood.standingMax = 0f;
         bare.Tick(t0 + 10.0 * day);
         Gate(sb, ref fails, "a-build-draws-on-standing-timber",
             bare.pending.done == 0 && !bare.pending.Complete,
@@ -269,7 +273,7 @@ public class LedgerProbe : MonoBehaviour
         // hand could have cut. This is the term that makes a worked-out island
         // worth leaving and coming back to rather than worth abandoning.
         var thin = Building(t0);
-        thin.standing = 0f;
+        thin.Wood.standing = 0f;
         thin.Tick(t0 + 1.0 * day);
         float grew = OutpostLedger.StandingPerHectare * OutpostLedger.RegrowthPerDay;
         Gate(sb, ref fails, "a-stripped-camp-builds-at-the-rate-it-regrows",
@@ -290,6 +294,120 @@ public class LedgerProbe : MonoBehaviour
             $"{half.pending.done}/{half.pending.needed} logs at "
             + $"({half.pending.x:F1}, {half.pending.z:F1}) restored intact");
 
+        // --- 10. many resources, and a ceiling for each ----------------------
+        //
+        // Kevin, 2026-09-19: *"crew on the island can gather resources up to
+        // 10 of each without a storage unit."* So two hands after two
+        // different things do not compete for the same ten slots, and neither
+        // starves the other's stock.
+
+        // **Three hectares, not one, and that is not a fudge.** A hectare of
+        // ore is `Res.PerHectare(Ore)` = 9 units and ore does not regrow, so
+        // on one hectare the ISLAND is the limit and the ceiling is never
+        // reached -- which is true, interesting, and not what this gate is
+        // about. Give it enough ground that the ceiling is the binding
+        // constraint, and test the other thing separately below.
+        var two = new OutpostLedger { lastTicked = t0 };
+        two.SeedStock(Res.Timber, 3f);
+        two.SeedStock(Res.Ore, 3f);
+        two.hands.Add(new OutpostHand { name = "Bo",   order = OutpostOrder.Gather, target = Res.Timber });
+        two.hands.Add(new OutpostHand { name = "Sten", order = OutpostOrder.Gather, target = Res.Ore });
+        two.Tick(t0 + 40.0 * day);
+
+        sb.AppendLine();
+        sb.AppendLine($"TWO RESOURCES, 40 days, one hand on each, ceiling {two.ceilingPer} of each:");
+        sb.AppendLine($"  timber {two.CountOf(Res.Timber)}   ore {two.CountOf(Res.Ore)}   "
+            + $"total on the ground {two.Total}");
+        Gate(sb, ref fails, "each-resource-has-its-own-ceiling",
+            two.CountOf(Res.Timber) == two.ceilingPer && two.CountOf(Res.Ore) == two.ceilingPer,
+            $"{two.CountOf(Res.Timber)} timber and {two.CountOf(Res.Ore)} ore, "
+            + $"{two.ceilingPer} allowed of each");
+        Gate(sb, ref fails, "a-full-pile-does-not-block-another",
+            two.Total == two.ceilingPer * 2,
+            $"{two.Total} on the ground against {two.ceilingPer * 2} the two ceilings allow");
+
+        // Ore does not grow back. That is what makes a mining island a thing
+        // you use up rather than a thing you farm.
+        var oreStock = two.Stock(Res.Ore);
+        Gate(sb, ref fails, "rock-does-not-regrow",
+            oreStock != null && oreStock.standing < oreStock.standingMax - 0.5f,
+            $"{oreStock?.standing:F1} of {oreStock?.standingMax:F1} ore left after 40 days");
+
+        // And the other half of that: on a THIN seam the island runs out
+        // first, and the pile stops below the ceiling for ever. One hectare
+        // holds 9 units of ore against a ceiling of 10, so a camp there can
+        // never fill its own store hut -- which is the honest consequence of
+        // a stock that does not come back.
+        var thinSeam = new OutpostLedger { lastTicked = t0 };
+        thinSeam.SeedStock(Res.Ore, 1f);
+        thinSeam.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Gather, target = Res.Ore });
+        thinSeam.Tick(t0 + 200.0 * day);
+        sb.AppendLine($"  a ONE-hectare seam, worked for 200 days: "
+            + $"{thinSeam.CountOf(Res.Ore)} ore of a possible {thinSeam.ceilingPer}, "
+            + $"{thinSeam.Stock(Res.Ore).standing:F1} left in the ground");
+        Gate(sb, ref fails, "a-worked-out-seam-stops-below-the-ceiling",
+            thinSeam.CountOf(Res.Ore) < thinSeam.ceilingPer
+            && thinSeam.Stock(Res.Ore).standing < 1f,
+            $"{thinSeam.CountOf(Res.Ore)} of {thinSeam.ceilingPer}, "
+            + $"the island held {Res.PerHectare(Res.Ore):F0}");
+
+        // --- 11. a position turns one thing into another ---------------------
+
+        var mill = new OutpostLedger { lastTicked = t0, ceilingPer = 30 };
+        mill.SeedStock(Res.Timber, 4f);
+        mill.built.Add(BuildPlans.Sawmill.id);
+        mill.hands.Add(new OutpostHand { name = "Bo",   order = OutpostOrder.Gather, target = Res.Timber });
+        mill.hands.Add(new OutpostHand { name = "Sten", order = OutpostOrder.Work,   target = BuildPlans.Sawmill.id });
+        mill.Tick(t0 + 6.0 * day);
+
+        sb.AppendLine();
+        sb.AppendLine($"A SAWYER, 6 days, one hand cutting and one at the mill "
+            + $"({BuildPlans.Sawmill.rate:F0} boards/day):");
+        sb.AppendLine($"  timber {mill.CountOf(Res.Timber)}   boards {mill.CountOf(Res.Boards)}");
+        Gate(sb, ref fails, "a-sawyer-makes-boards", mill.CountOf(Res.Boards) > 0,
+            $"{mill.CountOf(Res.Boards)} boards after 6 days");
+        Gate(sb, ref fails, "and-eats-the-timber-to-do-it",
+            mill.CountOf(Res.Boards) + mill.CountOf(Res.Timber) < 6f * 2f * OutpostLedger.TimberPerHandPerDay,
+            $"{mill.CountOf(Res.Timber)} timber + {mill.CountOf(Res.Boards)} boards is less than "
+            + "what two hands would have cut if nothing was consumed");
+
+        // A position with nothing to work on produces nothing, which is the
+        // whole point of the chain: a forge on an island with no ore is a shed.
+        var forge = new OutpostLedger { lastTicked = t0 };
+        forge.built.Add(BuildPlans.Blacksmith.id);
+        forge.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Work, target = BuildPlans.Blacksmith.id });
+        forge.Tick(t0 + 20.0 * day);
+        Gate(sb, ref fails, "a-forge-with-no-ore-makes-nothing",
+            forge.CountOf(Res.Tools) == 0,
+            $"{forge.CountOf(Res.Tools)} tools out of no ore at all");
+
+        // A farm's input is the ground, so it needs nothing but a farmhand.
+        var farm = new OutpostLedger { lastTicked = t0 };
+        farm.built.Add(BuildPlans.Farm.id);
+        farm.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Work, target = BuildPlans.Farm.id });
+        farm.Tick(t0 + 3.0 * day);
+        Gate(sb, ref fails, "a-farmhand-needs-no-input",
+            farm.CountOf(Res.Food) > 0,
+            $"{farm.CountOf(Res.Food)} food in 3 days at {BuildPlans.Farm.rate:F0}/day");
+
+        // And all of it is still path-independent, which is the property the
+        // whole absentee loop rests on and the one most easily broken by
+        // adding a second pass over the hands.
+        var mixA = Mixed(t0);
+        mixA.Tick(t0 + 8.0 * day);
+        var mixB = Mixed(t0);
+        for (int i = 1; i <= 320; i++) mixB.Tick(t0 + 8.0 * day * i / 320.0);
+        bool same2 = mixA.CountOf(Res.Timber) == mixB.CountOf(Res.Timber)
+            && mixA.CountOf(Res.Boards) == mixB.CountOf(Res.Boards)
+            && mixA.CountOf(Res.Food) == mixB.CountOf(Res.Food)
+            && Mathf.Abs(mixA.Wood.standing - mixB.Wood.standing) < 1e-3f;
+        sb.AppendLine();
+        sb.AppendLine($"A MIXED CAMP over 8 days, one call vs 320:");
+        sb.AppendLine($"  one call   timber {mixA.CountOf(Res.Timber)}  boards {mixA.CountOf(Res.Boards)}  food {mixA.CountOf(Res.Food)}");
+        sb.AppendLine($"  320 calls  timber {mixB.CountOf(Res.Timber)}  boards {mixB.CountOf(Res.Boards)}  food {mixB.CountOf(Res.Food)}");
+        Gate(sb, ref fails, "production-is-path-independent-too", same2,
+            "gathering, sawing and farming all land on the same state");
+
         sb.AppendLine();
         sb.AppendLine(fails == 0
             ? "PASS — the ledger answers the same however often it is asked"
@@ -303,7 +421,7 @@ public class LedgerProbe : MonoBehaviour
     {
         var l = OutpostLedger.For(Vector3.zero, hectares);
         l.lastTicked = at;
-        l.ceiling = 0;                     // no fire yet, so nothing keeps anything
+        l.ceilingPer = 0;                     // no fire yet, so nothing keeps anything
         l.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Build });
         l.pending = new PendingBuild
         {
@@ -318,23 +436,39 @@ public class LedgerProbe : MonoBehaviour
     static bool SameBuild(OutpostLedger a, OutpostLedger b)
         => a.pending.done == b.pending.done
         && Mathf.Abs(a.pending.donePart - b.pending.donePart) < 1e-4f
-        && Mathf.Abs(a.standing - b.standing) < 1e-3f;
+        && Mathf.Abs(a.Wood.standing - b.Wood.standing) < 1e-3f;
+
+    /// A camp with a bit of everything in it: two cutting, a sawyer and a
+    /// farmhand. The case where the tick has to do three different things in
+    /// one quantum and still land on the same answer whenever it is asked.
+    static OutpostLedger Mixed(double at)
+    {
+        var l = new OutpostLedger { lastTicked = at, ceilingPer = 30 };
+        l.SeedStock(Res.Timber, 3f);
+        l.built.Add(BuildPlans.Sawmill.id);
+        l.built.Add(BuildPlans.Farm.id);
+        l.hands.Add(new OutpostHand { name = "Bo",   order = OutpostOrder.Gather, target = Res.Timber });
+        l.hands.Add(new OutpostHand { name = "Sten", order = OutpostOrder.Gather, target = Res.Timber });
+        l.hands.Add(new OutpostHand { name = "Ola",  order = OutpostOrder.Work,   target = BuildPlans.Sawmill.id });
+        l.hands.Add(new OutpostHand { name = "Nils", order = OutpostOrder.Work,   target = BuildPlans.Farm.id });
+        return l;
+    }
 
     /// Two hands cutting on a hectare of ground, at a known instant.
     static OutpostLedger Working(double at, float hectares = 1f)
     {
         var l = OutpostLedger.For(Vector3.zero, hectares);
         l.lastTicked = at;
-        l.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Cut });
-        l.hands.Add(new OutpostHand { name = "Sten", order = OutpostOrder.Cut });
+        l.hands.Add(new OutpostHand { name = "Bo",   order = OutpostOrder.Gather, target = Res.Timber });
+        l.hands.Add(new OutpostHand { name = "Sten", order = OutpostOrder.Gather, target = Res.Timber });
         return l;
     }
 
     /// Same state, to the resolution anything downstream could notice.
     static bool Same(OutpostLedger a, OutpostLedger b)
-        => a.timber == b.timber
-        && Mathf.Abs(a.timberPart - b.timberPart) < 1e-4f
-        && Mathf.Abs(a.standing - b.standing) < 1e-3f;
+        => a.Timber == b.Timber
+        && Mathf.Abs(a.TimberPart() - b.TimberPart()) < 1e-4f
+        && Mathf.Abs(a.Wood.standing - b.Wood.standing) < 1e-3f;
 
     /// `detail` must read as a MEASUREMENT, not as a complaint -- it prints
     /// on a pass as well as a failure, and "[ok] ceiling-holds 10 > 10" is a

@@ -320,8 +320,8 @@ public class CampProbe : MonoBehaviour
             target.GetComponentInChildren<BuildSite>() != null,
             "no BuildSite under the island");
         Gate(sb, ref fails, "an-unbuilt-camp-keeps-nothing",
-            outpost.StoreCapacity == 0,
-            $"keeps {outpost.StoreCapacity} before the fire is lit");
+            outpost.KeepsOfEach == 0,
+            $"keeps {outpost.KeepsOfEach} before the fire is lit");
 
         // **The blueprint does not clear its own ground**, and an earlier
         // version did: the probe's spot had four trees on it, a campfire costs
@@ -370,7 +370,7 @@ public class CampProbe : MonoBehaviour
 
         // Everybody goes back to cutting once there is somewhere to cut into.
         Gate(sb, ref fails, "a-finished-camp-puts-its-hands-back-on-the-wood",
-            builder.order == OutpostOrder.Cut,
+            builder.order == OutpostOrder.Gather,
             $"the builder is on {builder.order}");
         outpost.Ledger.hands.Remove(builder);
 
@@ -479,26 +479,297 @@ public class CampProbe : MonoBehaviour
         sb.AppendLine($"  reported {felled} logs out of the clearing it stands in");
         sb.AppendLine($"  trees standing in the MESH: {standingBefore} -> {standingAfter} "
             + $"({downInMesh} came down)");
-        sb.AppendLine($"  keeps {outpost.StoreCapacity}, ledger ceiling {outpost.Ledger?.ceiling}, "
-            + $"pile {outpost.Ledger?.timber}");
+        sb.AppendLine($"  keeps {outpost.KeepsOfEach}, ledger ceiling {outpost.Ledger?.ceilingPer}, "
+            + $"pile {outpost.Ledger?.Timber}");
 
         Gate(sb, ref fails, "the-camp-exists", outpost.HasCamp, "no campfire raised");
         Gate(sb, ref fails, "the-fire-is-on-the-ground",
             target.GetComponentInChildren<Campfire>() != null, "no Campfire in the scene");
+        // **Counted inside the clearing, not across the whole island.**
+        // Since the crew cut real trees for the wood they build with, the
+        // total change in the mesh over a build is the clearing PLUS whatever
+        // they felled to pay for it. What this gate is about is the clearing,
+        // so it counts the stumps that are actually in it.
+        int downInClearing = 0;
+        if (wood != null)
+            for (int i = 0; i < wood.TreeCount; i++)
+                if (wood.TreeAt(i).felled
+                    && SeaSick.World.Island.FlatDistance(
+                        wood.TreeAt(i).baseAt, outpost.CampCentre) <= Outpost.CampClearingRadius)
+                    downInClearing++;
         Gate(sb, ref fails, "making-camp-fells-its-own-site",
-            wood == null || downInMesh == felled,
-            $"reported {felled}, mesh says {downInMesh}");
+            wood == null || downInClearing == felled,
+            $"reported {felled}, {downInClearing} stumps inside the {Outpost.CampClearingRadius:F1} m clearing "
+            + $"({downInMesh} came down on the island altogether)");
         Gate(sb, ref fails, "a-camp-gives-the-place-a-ceiling",
-            outpost.StoreCapacity == OutpostLedger.CampfireCeiling,
-            $"keeps {outpost.StoreCapacity}, expected {OutpostLedger.CampfireCeiling}");
+            outpost.KeepsOfEach == OutpostLedger.CampfireCeiling,
+            $"keeps {outpost.KeepsOfEach}, expected {OutpostLedger.CampfireCeiling}");
         Gate(sb, ref fails, "one-definition-of-the-ceiling",
-            outpost.Ledger != null && outpost.Ledger.ceiling == outpost.StoreCapacity,
-            $"ledger {outpost.Ledger?.ceiling} vs outpost {outpost.StoreCapacity}");
+            outpost.Ledger != null && outpost.Ledger.ceilingPer == outpost.KeepsOfEach,
+            $"ledger {outpost.Ledger?.ceilingPer} vs outpost {outpost.KeepsOfEach}");
 
         // Making camp twice must not raise a second fire.
         int again = outpost.MakeCamp();
         Gate(sb, ref fails, "camp-is-made-once", again < 0 && outpost.CountOf("Campfire") == 1,
             $"second attempt returned {again}, {outpost.CountOf("Campfire")} fires");
+
+        // --- the camp as a PLACE: models, people, piles ----------------------
+        //
+        // Kevin, 2026-09-19: the crew should stand round the fire once it is
+        // built, and what they gather should be piled beside it. Both are
+        // things you would see and neither is a number, so both are measured
+        // off the scene rather than off the ledger.
+
+        var fireB = fireGo != null ? fireGo.GetComponentInParent<Building>() : null;
+        var model = fireB != null ? fireB.transform.Find("Model") : null;
+        int modelRenderers = model != null
+            ? model.GetComponentsInChildren<MeshRenderer>(true).Length : 0;
+
+        sb.AppendLine();
+        sb.AppendLine("THE CAMP AS A PLACE:");
+        sb.AppendLine($"  the fire wears {(model != null ? $"the kit model, {modelRenderers} renderers" : "extruded primitives")}");
+        Gate(sb, ref fails, "the-fire-wears-the-authored-kit",
+            model != null && modelRenderers > 0,
+            model != null ? $"{modelRenderers} renderers under Model"
+                          : "no Model child -- Resources/Settlement did not load");
+
+        // Station three and look at where they are standing. A ring, facing
+        // in, evenly spaced -- not a random scatter round wherever the camp
+        // centre happened to be when each of them was left.
+        var roster3 = Object.FindFirstObjectByType<SeaSick.Crew.CrewRoster>();
+        var stood = new System.Collections.Generic.List<SeaSick.Crew.CrewAgent>();
+        if (roster3 != null)
+            foreach (var hand in roster3.All)
+            {
+                if (stood.Count >= 3) break;
+                if (hand == null || !hand.IsAboard) continue;
+                if (outpost.Station(hand)) stood.Add(hand);
+            }
+        // **No `ShowHands(true)` here, and that is the point.** The first
+        // version of this called it right after stationing, so the gate below
+        // passed because the PROBE had drawn them -- not because the game
+        // would. It is the game's own arrival path that has to have woken this
+        // camp, which is what the gate is really about.
+        roster3?.Refresh();
+        for (int f = 0; f < 4; f++) yield return null;
+
+        float nearest = float.MaxValue, furthest = 0f, minGap = float.MaxValue;
+        foreach (var a in stood)
+        {
+            float d = SeaSick.World.Island.FlatDistance(a.transform.position, outpost.CampCentre);
+            nearest = Mathf.Min(nearest, d);
+            furthest = Mathf.Max(furthest, d);
+            foreach (var b2 in stood)
+                if (b2 != a)
+                    minGap = Mathf.Min(minGap,
+                        SeaSick.World.Island.FlatDistance(a.transform.position, b2.transform.position));
+        }
+
+        sb.AppendLine($"  {stood.Count} hands stationed: {nearest:F2}-{furthest:F2} m from the fire "
+            + $"(ring is {Outpost.FireRingRadius:F1} m), closest pair {minGap:F2} m apart");
+        Gate(sb, ref fails, "they-stand-round-the-fire",
+            stood.Count >= 2 && Mathf.Abs(nearest - Outpost.FireRingRadius) < 0.6f
+            && Mathf.Abs(furthest - Outpost.FireRingRadius) < 0.6f,
+            $"{nearest:F2}-{furthest:F2} m against a {Outpost.FireRingRadius:F1} m ring");
+        Gate(sb, ref fails, "and-not-on-top-of-each-other",
+            stood.Count < 2 || minGap > 1.2f,
+            $"closest pair {minGap:F2} m apart");
+
+        // Piles: put something on the ground and see it appear beside the fire.
+        //
+        // **Against what the ledger HOLDS, not against what was added.** The
+        // camp already had the four logs its own clearing gave it, so the
+        // first version of this gate asked for six and got the correct ten.
+        outpost.Ledger.Add(Res.Timber, 6);
+        int held = outpost.Ledger.CountOf(Res.Timber);
+        var piles = CampPiles.EnsureOn(outpost);
+        piles.Refresh();
+        yield return null;
+
+        var pile = outpost.GetComponentInChildren<CampPiles>(true);
+        Transform stack = pile != null ? pile.transform.Find("Pile_" + Res.Timber) : null;
+        int logsDrawn = stack != null ? stack.childCount : 0;
+        float pileGap = stack != null
+            ? SeaSick.World.Island.FlatDistance(stack.position, outpost.CampCentre) : -1f;
+        sb.AppendLine($"  {held} timber on the ground: {logsDrawn} drawn, "
+            + $"{pileGap:F1} m from the fire");
+        Gate(sb, ref fails, "what-is-gathered-is-piled-by-the-fire",
+            logsDrawn == held && pileGap > Outpost.FireRingRadius && pileGap < 9f,
+            $"{logsDrawn} drawn of {held} held, at {pileGap:F1} m");
+
+        // --- the three things Kevin found by playing it ----------------------
+        //
+        // 1. "i never saw the people on the island"
+        // 2. "the trees never disappear. i assume they would since they're cut down"
+        // 3. rotating a building before it is placed
+
+        sb.AppendLine();
+        sb.AppendLine("WHAT PLAY FOUND:");
+
+        int drawnNow = 0, withBody = 0;
+        foreach (var a in outpost.Parked())
+        {
+            if (a == null || outpost.HandNamed(a.DisplayName) == null) continue;
+            if (a.gameObject.activeInHierarchy) drawnNow++;
+            if (a.GetComponent<CampWorker>() != null) withBody++;
+        }
+        sb.AppendLine($"  stationed while she lies here: {drawnNow} of {stood.Count} drawn, "
+            + $"{withBody} with a body to walk it");
+        Gate(sb, ref fails, "a-hand-left-in-front-of-you-stays-visible",
+            drawnNow == stood.Count && stood.Count > 0,
+            $"{drawnNow} of {stood.Count} still drawn after being stationed");
+        Gate(sb, ref fails, "and-has-something-driving-them",
+            withBody == stood.Count,
+            $"{withBody} of {stood.Count} carry a CampWorker");
+
+        // They must actually MOVE. A ring of statues was the complaint.
+        var mover = stood.Count > 0 ? stood[0] : null;
+        Vector3 wasAt = mover != null ? mover.transform.position : Vector3.zero;
+        if (mover != null)
+        {
+            outpost.OrderGather(outpost.HandNamed(mover.DisplayName), Res.Timber);
+            for (int f = 0; f < 240; f++) yield return null;   // a few seconds of walking
+        }
+        float wandered = mover != null
+            ? SeaSick.World.Island.FlatDistance(mover.transform.position, wasAt) : 0f;
+        sb.AppendLine($"  {(mover != null ? mover.DisplayName : "nobody")} moved {wandered:F2} m "
+            + "in four seconds of being watched");
+        Gate(sb, ref fails, "they-are-seen-to-be-working", wandered > 1.5f,
+            $"{wandered:F2} m walked");
+
+        // --- the wood thins as it is cut -------------------------------------
+        //
+        // Felling is driven by `ledger.timberTaken`, so it is a pure function
+        // of the ledger and happens on a visit whatever the terrain did while
+        // the player was away.
+
+        int treesBefore = wood != null ? wood.TreeCount - wood.FelledInMesh() : -1;
+        float takenBefore = outpost.Ledger.timberTaken;
+        outpost.Ledger.stores.Clear();                 // room to cut into
+        outpost.Ledger.lastTicked = TimeOfDay.Seconds;
+        outpost.Ledger.Tick(TimeOfDay.Seconds + 2.0 * TimeOfDay.DayLength);
+        outpost.CatchUp();
+        yield return null;
+
+        int treesAfter = wood != null ? wood.TreeCount - wood.FelledInMesh() : -1;
+        float cut = outpost.Ledger.timberTaken - takenBefore;
+        int down = treesBefore - treesAfter;
+        sb.AppendLine($"  two days of cutting: {cut:F1} logs out of the ground, "
+            + $"{down} trees came down in the MESH ({treesBefore} -> {treesAfter})");
+        Gate(sb, ref fails, "cutting-timber-takes-trees-down", down > 0,
+            $"{down} trees for {cut:F1} logs");
+        Gate(sb, ref fails, "one-tree-per-log",
+            wood == null || Mathf.Abs(down - Mathf.FloorToInt(outpost.Ledger.timberTaken)
+                + Mathf.FloorToInt(takenBefore)) <= 1,
+            $"{down} down against {cut:F1} cut");
+
+        // Nearest the camp outward, so the clearing widens rather than the
+        // island going patchy at random.
+        float furthestDown = 0f, nearestStanding = float.MaxValue;
+        if (wood != null)
+            for (int i = 0; i < wood.TreeCount; i++)
+            {
+                var t = wood.TreeAt(i);
+                float d = SeaSick.World.Island.FlatDistance(t.baseAt, outpost.CampCentre);
+                if (t.felled) furthestDown = Mathf.Max(furthestDown, d);
+                else nearestStanding = Mathf.Min(nearestStanding, d);
+            }
+        sb.AppendLine($"  furthest stump {furthestDown:F1} m, nearest tree still standing "
+            + $"{nearestStanding:F1} m");
+        Gate(sb, ref fails, "the-clearing-widens-from-the-camp",
+            wood == null || nearestStanding >= furthestDown - 6f,
+            $"stumps out to {furthestDown:F1} m, standing wood from {nearestStanding:F1} m");
+
+        // --- a position, and somebody in it ----------------------------------
+        //
+        // Raise a sawmill the fast way (the blueprint path is already gated
+        // above), assign a hand to it, and check the two halves: they STAND
+        // there, and the ledger turns timber into boards.
+
+        Vector3 millAt = outpost.CampCentre + new Vector3(11f, 0f, 4f);
+        millAt.y = outpost.GroundAt(millAt);
+        bool millPlaced = false;
+        for (int ring = 0; ring < 6 && !millPlaced; ring++)
+            for (int i = 0; i < 12 && !millPlaced; i++)
+            {
+                float a3 = i * Mathf.PI * 2f / 12f + ring * 0.7f;
+                float rad = 10f + ring * 4f;
+                var q = outpost.CampCentre + new Vector3(Mathf.Cos(a3) * rad, 0f, Mathf.Sin(a3) * rad);
+                q.y = outpost.GroundAt(q);
+                if (outpost.CanPlace(BuildPlans.Sawmill, q, out _)) { millAt = q; millPlaced = true; }
+            }
+
+        var millB = millPlaced ? outpost.Raise(BuildPlans.Sawmill, millAt) : null;
+        if (millB != null) outpost.Ledger.built.Add(BuildPlans.Sawmill.id);
+        yield return null;
+
+        var sawyer = stood.Count > 0 ? outpost.HandNamed(stood[0].DisplayName) : null;
+        bool assigned = sawyer != null && outpost.Assign(sawyer, BuildPlans.Sawmill.id);
+        yield return null;
+
+        float toMill = millB != null && stood.Count > 0
+            ? SeaSick.World.Island.FlatDistance(stood[0].transform.position, millB.transform.position)
+            : -1f;
+        float toFire = stood.Count > 0
+            ? SeaSick.World.Island.FlatDistance(stood[0].transform.position, outpost.CampCentre)
+            : -1f;
+
+        sb.AppendLine();
+        sb.AppendLine("A POSITION, AND SOMEBODY IN IT:");
+        sb.AppendLine($"  sawmill raised {(millB != null ? "yes" : "NO")} at "
+            + $"{SeaSick.World.Island.FlatDistance(millAt, outpost.CampCentre):F0} m from the fire");
+        sb.AppendLine($"  {(assigned ? sawyer.name + " assigned: " + sawyer.Doing : "nobody assigned")}"
+            + $"   ·   {toMill:F1} m from the mill, {toFire:F1} m from the fire");
+
+        Gate(sb, ref fails, "a-second-building-goes-up", millB != null,
+            millPlaced ? "raised" : "nowhere within 30 m would take a sawmill");
+
+        // **Turned by hand, 45 degrees at a time.** Sited with an explicit
+        // yaw and checked on the thing that actually stood up -- a rotation
+        // that lived only in the ghost would look right and build wrong.
+        float wantYaw = Mathf.Repeat(outpost.AutoYaw(millAt) + 135f, 360f);
+        Vector3 hutAt = millAt;
+        bool hutPlaced = false;
+        for (int ring = 0; ring < 6 && !hutPlaced; ring++)
+            for (int i = 0; i < 12 && !hutPlaced; i++)
+            {
+                float a4 = i * Mathf.PI * 2f / 12f + ring * 1.3f;
+                float rad = 12f + ring * 4f;
+                var q = outpost.CampCentre + new Vector3(Mathf.Cos(a4) * rad, 0f, Mathf.Sin(a4) * rad);
+                q.y = outpost.GroundAt(q);
+                if (outpost.CanPlace(BuildPlans.Hut, q, wantYaw, out _)) { hutAt = q; hutPlaced = true; }
+            }
+        var hutB = hutPlaced ? outpost.Raise(BuildPlans.Hut, hutAt, wantYaw) : null;
+        float gotYaw = hutB != null ? hutB.transform.eulerAngles.y : -1f;
+        float yawErr = hutB != null ? Mathf.Abs(Mathf.DeltaAngle(gotYaw, wantYaw)) : 999f;
+        sb.AppendLine($"  a shelter turned to {wantYaw:F0}°: it stands at {gotYaw:F0}° "
+            + $"({yawErr:F1}° out)");
+        Gate(sb, ref fails, "a-building-stands-the-way-it-was-turned",
+            hutB != null && yawErr < 0.5f,
+            hutB != null ? $"{yawErr:F1}° out" : "nowhere would take a shelter at that angle");
+        Gate(sb, ref fails, "a-hand-can-be-assigned-to-it",
+            assigned && sawyer.order == OutpostOrder.Work,
+            assigned ? $"{sawyer.name} is {sawyer.Doing}" : "Assign refused");
+        Gate(sb, ref fails, "and-goes-and-stands-there",
+            millB != null && toMill < toFire && toMill < 7f,
+            $"{toMill:F1} m from the mill against {toFire:F1} m from the fire");
+
+        // And the arithmetic half: boards, out of the timber on the ground.
+        outpost.Ledger.Add(Res.Timber, 8);
+        int timberBefore = outpost.Ledger.CountOf(Res.Timber);
+        outpost.Ledger.lastTicked = TimeOfDay.Seconds;
+        outpost.Ledger.Tick(TimeOfDay.Seconds + 2.0 * TimeOfDay.DayLength);
+        sb.AppendLine($"  two game days later: timber {timberBefore} -> "
+            + $"{outpost.Ledger.CountOf(Res.Timber)}, boards {outpost.Ledger.CountOf(Res.Boards)}");
+        Gate(sb, ref fails, "an-assigned-hand-produces",
+            outpost.Ledger.CountOf(Res.Boards) > 0,
+            $"{outpost.Ledger.CountOf(Res.Boards)} boards in two days");
+
+        // Put the borrowed hands back before the rest of the probe counts crew.
+        foreach (var a in stood)
+            if (a != null && anchor != null) outpost.Recall(a, anchor.transform);
+        roster3?.Refresh();
+        yield return null;
 
         // --- and it has to actually produce ----------------------------------
         //
@@ -506,21 +777,21 @@ public class CampProbe : MonoBehaviour
         // thing that produces; nobody has to be standing here.
 
         var l = outpost.Ledger;
-        l.timber = 0; l.timberPart = 0f;
+        l.stores.Clear();
         l.hands.Clear();
-        l.hands.Add(new OutpostHand { name = "probe-1", order = OutpostOrder.Cut });
-        l.hands.Add(new OutpostHand { name = "probe-2", order = OutpostOrder.Cut });
+        l.hands.Add(new OutpostHand { name = "probe-1", order = OutpostOrder.Gather, target = Res.Timber });
+        l.hands.Add(new OutpostHand { name = "probe-2", order = OutpostOrder.Gather, target = Res.Timber });
         l.lastTicked = TimeOfDay.Seconds;
 
         double twoDays = TimeOfDay.Seconds + 2.0 * TimeOfDay.DayLength;
-        l.ceiling = outpost.StoreCapacity;
+        l.ceilingPer = outpost.KeepsOfEach;
         l.Tick(twoDays);
 
         sb.AppendLine();
         sb.AppendLine($"TWO HANDS, TWO GAME DAYS with nobody watching: "
-            + $"{l.timber} logs of a possible {l.ceiling}, {l.standing:F0} still standing");
-        Gate(sb, ref fails, "an-absent-camp-produces", l.timber > 0,
-            $"{l.timber} logs after two days");
+            + $"{l.Timber} logs of a possible {l.ceilingPer}, {l.Wood.standing:F0} still standing");
+        Gate(sb, ref fails, "an-absent-camp-produces", l.Timber > 0,
+            $"{l.Timber} logs after two days");
 
         // --- leave two hands, sail away, come back ---------------------------
         //
@@ -533,7 +804,7 @@ public class CampProbe : MonoBehaviour
         foreach (var c in roster.All) if (c != null && c.IsAboard) aboardBefore++;
 
         l.hands.Clear();
-        l.timber = 0; l.timberPart = 0f;
+        l.stores.Clear();
         l.lastTicked = TimeOfDay.Seconds;
 
         // NOT filtered on `IsAboard`. Landing still sends the whole crew
@@ -624,10 +895,10 @@ public class CampProbe : MonoBehaviour
 
         sb.AppendLine();
         sb.AppendLine($"BACK AFTER THREE GAME DAYS ({(landedAgain ? "landed" : "could not land: " + why2)}):");
-        sb.AppendLine($"  pile {l.timber} / {l.ceiling}   standing {l.standing:F0}   "
+        sb.AppendLine($"  pile {l.Timber} / {l.ceilingPer}   standing {l.Wood.standing:F0}   "
             + $"bodies drawn {drawnBack} of {left}");
-        Gate(sb, ref fails, "work-was-done-while-she-was-away", l.timber > 0,
-            $"{l.timber} logs after three days away");
+        Gate(sb, ref fails, "work-was-done-while-she-was-away", l.Timber > 0,
+            $"{l.Timber} logs after three days away");
         Gate(sb, ref fails, "the-hands-are-still-there", l.hands.Count == left,
             $"{l.hands.Count} of {left} still in the ledger");
         // **Not `!landedAgain || ...`.** That is how a gate passes because the

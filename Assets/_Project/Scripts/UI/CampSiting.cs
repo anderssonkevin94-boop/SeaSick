@@ -53,6 +53,31 @@ namespace SeaSick.UI
         Vector3 at;
         bool valid;
 
+        /// **Which way it faces, in eighths of a turn.**
+        ///
+        /// Kevin, 2026-09-19: *"with the buildings, i'd like an option to
+        /// rotate them by 45 degrees in a complete rotation to get more
+        /// freedom in how i build my settlement."* R turns it, shift+R turns
+        /// it back, eight steps to the full circle.
+        ///
+        /// Automatic until it is touched — the door faces the middle of the
+        /// camp, which is what the spiral did and what a building sited by
+        /// hand should still do unless somebody says otherwise. The first
+        /// press freezes that facing and turns from there. Same rule as
+        /// `IslandCam.Driven`, and for the same reason: an untouched thing
+        /// should be exactly what was composed for it.
+        int turns;
+        bool turned;
+        float heldYaw;
+
+        /// What the ghost is facing right now.
+        public float Yaw => turned
+            ? heldYaw + turns * 45f
+            : (outpost != null ? outpost.AutoYaw(at) : 0f);
+
+        /// Eight steps to the circle.
+        public const int Steps = 8;
+
         void Awake() { Instance = this; }
         void OnDestroy() { if (Instance == this) Instance = null; }
 
@@ -64,6 +89,8 @@ namespace SeaSick.UI
             Instance.outpost = target;
             Instance.plan = what;
             Instance.ship = shipTransform;
+            Instance.turns = 0;
+            Instance.turned = false;
             Instance.BuildRing();
         }
 
@@ -87,6 +114,15 @@ namespace SeaSick.UI
             var keys = Keyboard.current;
             if (keys != null && keys.escapeKey.wasPressedThisFrame) { Cancel(); return; }
 
+            if (keys != null && keys.rKey.wasPressedThisFrame)
+            {
+                // Freeze whatever it was facing, then turn from there, so the
+                // first press does not also swing it round to north.
+                if (!turned) { turned = true; heldYaw = outpost.AutoYaw(at); turns = 0; }
+                bool back = keys.leftShiftKey.isPressed || keys.rightShiftKey.isPressed;
+                turns = (turns + (back ? Steps - 1 : 1)) % Steps;
+            }
+
             var pointer = Pointer.current;
             if (pointer == null) return;
             Vector2 screen = pointer.position.ReadValue();
@@ -107,6 +143,9 @@ namespace SeaSick.UI
 
             at = ground;
             valid = Test(at, out string why);
+            // `Yaw` reads `at`, so the ghost and the test are always asking
+            // about the same rectangle on the same ground.
+
             Refusal = why;
 
             Place(at);
@@ -114,7 +153,7 @@ namespace SeaSick.UI
 
             if (valid && pointer.press.wasPressedThisFrame)
             {
-                int wanted = outpost.Site(plan, at, out string siteWhy);
+                int wanted = outpost.Site(plan, at, Yaw, out string siteWhy);
                 if (wanted < 0)
                 {
                     // Refused at the last moment by a test the preview does
@@ -160,7 +199,7 @@ namespace SeaSick.UI
                 why = $"too far from the ship ({d:F0} m of {SiteRadius:F0})";
                 return false;
             }
-            return outpost.CanPlace(plan, p, out why);
+            return outpost.CanPlace(plan, p, Yaw, out why);
         }
 
         void Place(Vector3 p)
@@ -170,7 +209,7 @@ namespace SeaSick.UI
                 ghost = BuildingFactory.Ghost(plan, null, p, Quaternion.identity, 0f, 0.5f);
                 ghost.name = "SitingGhost";
             }
-            ghost.transform.position = p;
+            ghost.transform.SetPositionAndRotation(p, Quaternion.Euler(0f, Yaw, 0f));
             BuildingFactory.Tint(ghost,
                 valid ? BuildingFactory.GhostChalk : BuildingFactory.GhostRefused, 0.5f);
         }

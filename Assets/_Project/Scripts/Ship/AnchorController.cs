@@ -292,6 +292,20 @@ namespace SeaSick.Ship
             // close enough that this island is the one she means.
             if (CurrentState == State.Underway) SurveyWhatIsNear();
 
+            // **The outpost may not have existed when she arrived.** The
+            // survey runs for seconds after the anchor is down -- measured at
+            // 7.9 s on Island_1 -- and `SurveyWhatIsNear` only runs while she
+            // is UNDER WAY, so on a first visit nothing was left to wake the
+            // camp's hands and `Watched` stayed false for as long as she lay
+            // there. Anybody stationed then was switched off and never drawn.
+            // That is the same fault Kevin reported, one door further in.
+            if (CurrentState == State.Anchored || CurrentState == State.Ashore)
+            {
+                var camp = CurrentIsland != null && !CurrentIsland.IsHome
+                    ? Outpost.Of(CurrentIsland) : null;
+                if (camp != null && !camp.Watched) { camp.CatchUp(); camp.ShowHands(true); }
+            }
+
             switch (CurrentState)
             {
                 case State.Dropping:
