@@ -113,6 +113,12 @@ namespace SeaSick.World
             // the buildings the moment a storehouse went up; instead the
             // buildings ARE the ledger's ceiling, pushed in before every tick.
             ledger.ceilingPer = KeepsOfEach;
+            // A camp restored from a save written before stone was a price
+            // has no seam in its books. See `EnsureStoneStock`.
+            EnsureStoneStock();
+            // The fire may have been lit (or restored) since the survey, and
+            // the boulders belong round it. No-op after the first call.
+            PlaceCampStone();
             ReconcileWood();
             ReconcileCrops();
             ledger.Tick(TimeOfDay.Seconds);
@@ -258,6 +264,10 @@ namespace SeaSick.World
                 // anything else comes back at its own size (0).
                 length = plan.kind == BuildKind.Pier ? plan.footprint.x : 0f,
                 needed = Mathf.Max(0, plan.cost),
+                // **The second half of the price, 2026-09-21.** Zero on the
+                // campfire, so the first thing anybody builds is paid in
+                // logs exactly as it always was.
+                stoneNeeded = Mathf.Max(0, plan.stoneCost),
             };
 
             // Making camp is everybody's job: there is no fire yet to idle
@@ -472,6 +482,8 @@ namespace SeaSick.World
             {
                 ledger.pending.done = ledger.pending.needed;
                 ledger.pending.donePart = 0f;
+                ledger.pending.stoneDone = ledger.pending.stoneNeeded;
+                ledger.pending.stoneDonePart = 0f;
                 FinishPending();
             }
             if (!HasCamp) { why = "the fire would not stand there"; return -1; }
@@ -1467,8 +1479,128 @@ namespace SeaSick.World
             string kind = Island != null ? Island.ResourceName : null;
             if (!string.IsNullOrEmpty(kind) && kind != Res.Timber && Res.IsGatherable(kind))
                 ledger.SeedStock(kind, workedHa);
+
+            // **And stone, wherever you are, 2026-09-21.** Kevin: *"all
+            // buildings require at least wood and stone."* A price you
+            // cannot pay on three islands in four is not a price, it is a
+            // wall -- so every island has SOME rock in it, and the populator
+            // puts a few boulders on the ground to say so.
+            //
+            // A third of the seam an ore-and-stone island gets, because the
+            // island whose KIND is Stone has to stay worth sailing to: a few
+            // boulders behind the camp are enough to finish the buildings
+            // you raise there and nothing like enough to load a hold with.
+            EnsureStoneStock();
             EnsureFoodStock();
+            PlaceCampStone();
         }
+
+        /// Share of a Stone island's density that an island of any other
+        /// kind gets, so that its own buildings can be paid for. See
+        /// `EnsureStoneStock`.
+        public const float ScatteredStoneShare = 1f / 3f;
+
+        /// **Every camp can quarry SOME stone**, 2026-09-21. Kevin: *"all
+        /// buildings require at least wood and stone."*
+        ///
+        /// A stock rather than a special case: the ledger already knows how
+        /// to hold standing rock, pay a blueprint out of it and let
+        /// `GatherSync` hide boulders as it falls, so stone on an ordinary
+        /// island is the same object a Stone island's seam is, seeded a
+        /// third as rich (`ScatteredStoneShare`) -- enough to raise what you
+        /// build there, nowhere near enough to fill a hold with.
+        ///
+        /// **Called from `CatchUp`, not only from `Configure`, and that is
+        /// the whole reason it is a method.** A camp restored from a save
+        /// brings its own ledger, written before stone existed, and
+        /// `Configure`'s seeding never touches it -- so the camp would stand
+        /// there with boulders round it and no seam in the books, and every
+        /// blueprint after the fire would stall on "NO STONE LEFT". Seeding
+        /// where the ledger is next ticked catches both paths with one line.
+        public void EnsureStoneStock()
+        {
+            if (ledger == null || Island == null) return;
+            if (Island.ResourceName == Res.Stone) return;   // it has a proper seam
+            if (ledger.Stock(Res.Stone) != null) return;
+            ledger.SeedStock(Res.Stone, WorkedHectares() * ScatteredStoneShare);
+        }
+
+        /// **Put the island's few boulders where the camp can see them.**
+        ///
+        /// The populator scatters three to six of them anywhere on the
+        /// island above the beach, which is right for an island's LOOK and
+        /// useless as a quarry: on a 147 m island the nearest one measured
+        /// 121 m from the fire, and a builder walking 240 m for one stone is
+        /// a builder who reads as broken. Nothing at populate time knows
+        /// where the camp will be -- the clearing is surveyed here, at
+        /// `Configure`, which is the first moment anybody does.
+        ///
+        /// So they are MOVED rather than re-made: same objects, same
+        /// `ResourceNode`s, same `GatherSync` ordering, just stood in a ring
+        /// outside the clearing where a man can walk out to one and back.
+        /// Idempotent -- a boulder already inside the ring is left alone, so
+        /// re-surveying (or a second visit) moves nothing.
+        ///
+        /// A Stone island is skipped entirely: its seam is the reason to
+        /// sail there and it belongs where the ground put it.
+        void PlaceCampStone()
+        {
+            if (Island == null || height == null) return;
+            if (Island.ResourceName == Res.Stone) return;
+
+            // **Round the FIRE, not round the survey.** The clearing is
+            // where a camp could have gone; the campfire is where the player
+            // put it, and on the first island this was measured on those two
+            // were 177 m apart -- so a ring laid on the clearing left every
+            // boulder as far from the builders as the populator had. The
+            // camp centre is only known once the fire is lit, which is why
+            // this is also called from `CatchUp` and not only from
+            // `Configure`.
+            Vector3 centre = hasCampCentre ? campCentre : ClearingCentre;
+            if ((stonePlacedAt - centre).sqrMagnitude < 1f) return;
+            stonePlacedAt = centre;
+
+            campStone.Clear();
+            foreach (var n in ResourceNode.All)
+                if (n != null && n.Home == Island && n.Resource == Res.Stone) campStone.Add(n);
+            if (campStone.Count == 0) return;
+
+            // Outside the clearing, so a boulder is never standing where a
+            // building will go, and within a walk of it.
+            float near = Mathf.Max(ClearingRadius + 4f, 14f);
+            float far = near + 14f;
+            // A bearing that depends only on WHERE this island is, so the
+            // ring reproduces on every visit and across a save.
+            float turn = Mathf.Abs(centre.GetHashCode() % 360) * Mathf.Deg2Rad;
+
+            for (int i = 0; i < campStone.Count; i++)
+            {
+                var n = campStone[i];
+                Vector3 d = n.transform.position - centre;
+                d.y = 0f;
+                if (d.magnitude <= far) continue;           // already within reach
+
+                float a = turn + (i / (float)campStone.Count) * Mathf.PI * 2f;
+                for (int k = 0; k < 8; k++)
+                {
+                    float ang = a + k * 0.55f;
+                    float r = Mathf.Lerp(near, far, ((i * 0.37f + k * 0.19f) % 1f));
+                    Vector3 at = centre
+                        + new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * r;
+                    float h = height(at.x, at.z);
+                    if (h < minHeight) continue;            // beach, or in the water
+                    at.y = h;
+                    n.transform.position = at;
+                    break;
+                }
+            }
+            campStone.Clear();
+        }
+
+        static readonly List<ResourceNode> campStone = new List<ResourceNode>();
+        /// The centre the boulders were last laid round, so `CatchUp` can
+        /// call this every time and do nothing every time but the first.
+        Vector3 stonePlacedAt = new Vector3(float.NaN, float.NaN, float.NaN);
 
         // --- the wheat ---------------------------------------------------------
 
@@ -1503,10 +1635,12 @@ namespace SeaSick.World
             EnsureFoodStock();
             var stock = ledger.Stock(Res.Food);
             if (stock == null) return;
-            stock.standingMax = crops.BedCount;
-            int standing = crops.Standing;
+            // In yield units: a wheat bed is 1, a berry bush 0.5. Capacity
+            // is every bed; what can be taken now is what stands.
+            stock.standingMax = crops.TotalUnits;
+            float standing = crops.StandingUnits;
             if (stock.standing > standing) stock.standing = standing;
-            else if (stock.standing < 1f && standing >= 1)
+            else if (stock.standing < 1f && standing >= 1f)
                 stock.standing = Mathf.Min(1f, standing);
         }
 

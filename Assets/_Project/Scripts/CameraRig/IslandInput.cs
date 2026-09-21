@@ -213,6 +213,14 @@ namespace SeaSick.CameraRig
 
                 HandleOrbit(mouse, altHeld);
                 HandleWheel(mouse);
+
+                // **The idle cursor.** Nothing pressed, nothing held: the
+                // one thing left to show is whether the point under the
+                // pointer is tappable at all (the campfire's "build"). Fed
+                // every idle frame rather than once, because the cursor has
+                // to track the mouse the same way `HoldAt` tracks a drag.
+                if (pmode == PMode.Idle && !UIBlocker.Blocked(mouse.position.ReadValue()))
+                    hand.HoverAt(mouse.position.ReadValue());
             }
 
             HandleKeys(keys, Time.unscaledDeltaTime);
@@ -319,7 +327,18 @@ namespace SeaSick.CameraRig
                 {
                     var who = hand.PickAt(pos, forPickup: false);
                     if (who != null) cam.FollowThis(who.transform);
-                    else cam.StopFollowing();
+                    else
+                    {
+                        // Nobody there to follow -- but a tap that landed on
+                        // a standing building (the campfire, or anything
+                        // else already raised) opens its own menu on the
+                        // sheet. `Hand` has already resolved what is under
+                        // this point for its own cursor; ask it rather than
+                        // resolving a second answer that could disagree.
+                        var t = hand.Preview(pos);
+                        if (t.building != null) BuildMenuRequest.Open(hand.Camp, t.building);
+                        else cam.StopFollowing();
+                    }
                 }
             }
 

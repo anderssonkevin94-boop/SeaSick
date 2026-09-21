@@ -138,6 +138,8 @@ namespace SeaSick.UI
 
                 y = Verbs(camp, h, inner.x, y, inner.width, rowH);
             }
+            if (showBuild && open == null)
+                y = BuildBlock(camp, inner.x, y, inner.width, rowH * 0.86f, HudLayout.Unit);
         }
 
         /// The three verbs, and whichever list is open under them.
@@ -184,6 +186,15 @@ namespace SeaSick.UI
                 }
             }
 
+            y = BuildBlock(camp, x, y, w, subH, indent);
+            return y;
+        }
+
+        /// The build list: under an open hand's row, or on its own when the
+        /// player tapped the fire (Kevin, 2026-09-21: "press on the campfire
+        /// to get the options menu for building").
+        float BuildBlock(Outpost camp, float x, float y, float w, float subH, float indent)
+        {
             y = Verb1(ref verb, Verb.Build, "build  ▸", x + indent, y, w - indent, subH);
             if (verb == Verb.Build)
             {
@@ -193,20 +204,27 @@ namespace SeaSick.UI
                     foreach (var plan in camp.Buildable())
                     {
                         if (GUI.Button(new Rect(x + indent * 2f, y, w - indent * 2f, subH),
-                                $"{plan.label} — {plan.cost} timber", sub))
+                                plan.stoneCost > 0
+                                    ? $"{plan.label} — {plan.cost} timber {plan.stoneCost} stone"
+                                    : $"{plan.label} — {plan.cost} timber", sub))
                         {
                             // Straight into siting mode: a building is put
                             // WHERE the player says, which is the one thing
                             // this list cannot ask on its own.
                             var motor = Object.FindFirstObjectByType<ShipMotor>();
                             CampSiting.Begin(camp, plan, motor != null ? motor.transform : null);
-                            open = null; verb = Verb.None;
+                            open = null; verb = Verb.None; showBuild = false;
                         }
                         y += subH + 2f;
                     }
             }
             return y;
         }
+
+        /// A tap on the fire opens the build list at camp level, no hand needed.
+        bool showBuild;
+        public void OpenBuild() { showBuild = true; open = null; verb = Verb.Build; }
+        public void CloseBuild() { showBuild = false; if (open == null) verb = Verb.None; }
 
         float Verb1(ref Verb current, Verb which, string label,
             float x, float y, float w, float h)

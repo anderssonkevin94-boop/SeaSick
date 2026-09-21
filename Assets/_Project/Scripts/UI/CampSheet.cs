@@ -160,6 +160,14 @@ namespace SeaSick.UI
             Showing = isle != null;
 
             if (isle != shownFor) { shownFor = isle; Expanded = false; }
+            // A tap on the fire: open the sheet straight onto the build list.
+            if (BuildMenuRequest.Consume(out var tappedCamp, out var tapped)
+                && isle != null && tappedCamp == Outpost.Of(isle))
+            {
+                Expanded = true;
+                var list = GetComponent<CampCrewList>();
+                if (list != null && tapped != null && tapped.Id == BuildPlans.Campfire.id) list.OpenBuild();
+            }
             if (!Expanded) return;
 
             // Out of the way the moment somebody reaches for the island. The
@@ -619,12 +627,37 @@ namespace SeaSick.UI
             {
                 var p = l.pending;
                 int building = l.HandsOn(OutpostOrder.Build);
-                sb.Append("   ·   camp sited   ·   ").Append(p.done).Append(" / ")
-                  .Append(p.needed).Append(" logs");
+                if (p.stoneNeeded > 0)
+                {
+                    // **Two prices, two counters, 2026-09-21.** A building
+                    // costs logs AND stone now, and one blended bar would
+                    // hide the only thing the player can act on: WHICH of
+                    // the two the site is short of. So the line names the
+                    // price once and then reports each part against it --
+                    // "hut · 5 timber 2 stone · 3/5 · 0/2".
+                    var plan = BuildPlans.Named(p.planId);
+                    sb.Append("   ·   ")
+                      .Append(string.IsNullOrEmpty(plan.label) ? "building" : plan.label)
+                      .Append("   ·   ").Append(p.needed).Append(" timber ")
+                      .Append(p.stoneNeeded).Append(" stone")
+                      .Append("   ·   ").Append(p.done).Append("/").Append(p.needed)
+                      .Append("   ·   ").Append(p.stoneDone).Append("/").Append(p.stoneNeeded);
+                }
+                else
+                {
+                    sb.Append("   ·   camp sited   ·   ").Append(p.done).Append(" / ")
+                      .Append(p.needed).Append(" logs");
+                }
                 sb.Append("   ·   ").Append(building)
                   .Append(building == 1 ? " hand building" : " hands building");
                 if (building == 0) sb.Append("   ·   nobody is building it");
-                else if (l.BuildStarved)
+                // Which pile is empty, not just that one is. A blueprint
+                // stalled on stone will never move however much wood the
+                // player cuts, and the old single message sent them to do
+                // exactly that.
+                else if (l.StoneStarved)
+                    sb.Append("   ·   NO STONE LEFT — nothing piled, nothing standing");
+                else if (l.TimberStarved)
                     sb.Append("   ·   NO TIMBER LEFT — nothing piled, nothing standing");
                 headline = sb.ToString();
                 return;
@@ -685,7 +718,9 @@ namespace SeaSick.UI
             if (outpost == null || l == null) return k;
             k = k * 31 + (outpost.HasCamp ? 1 : 0);
             k = k * 31 + (outpost.Building ? 1 : 0);
-            if (l.pending != null) k = k * 31 + l.pending.done * 397 + l.pending.needed;
+            if (l.pending != null)
+                k = k * 31 + l.pending.done * 397 + l.pending.needed
+                           + l.pending.stoneDone * 1063 + l.pending.stoneNeeded * 7;
             // Whole units and the ceiling — what the line prints. The sub-unit
             // accrual moves every tick and changes nothing anybody can read.
             k = k * 31 + CampLoading.CountsKey(l);
@@ -698,6 +733,7 @@ namespace SeaSick.UI
             // The two tails the headline adds, as the booleans they are drawn
             // from rather than the floats underneath them.
             k = k * 31 + (l.Wood.standing < 1f ? 1 : 0);
+            k = k * 31 + (l.StoneStarved ? 2 : 0) + (l.TimberStarved ? 1 : 0);
             return k;
         }
 

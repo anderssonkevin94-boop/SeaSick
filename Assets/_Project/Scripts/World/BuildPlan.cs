@@ -43,6 +43,24 @@ namespace SeaSick.World
         /// can reach the raw one by accident.
         public int cost => BuildPlans.PlaytestCostCap > 0
             ? Mathf.Min(baseCost, BuildPlans.PlaytestCostCap) : baseCost;
+
+        /// **Stone it costs to raise, as priced.** Kevin, 2026-09-21: *"the
+        /// buildings require wood and stone ... all buildings require at
+        /// least wood and stone."* Every plan but the campfire wants both,
+        /// and the campfire is the exception on purpose: it is the FIRST
+        /// thing you build, before there is a pile, a quarry or anybody to
+        /// work one, so pricing it in stone would price the loop's own door.
+        ///
+        /// `resource` above still names the timber part; stone is the second
+        /// part and does not need naming, because there are exactly two and
+        /// every reader knows which is which.
+        public int baseStoneCost;
+        /// What anything actually pays, under the same playtest cap `cost` is
+        /// under. Every stone price below is already inside it, so today this
+        /// is `baseStoneCost` -- but it goes through the cap so that a raised
+        /// stone price can never escape an experiment the timber price is in.
+        public int stoneCost => BuildPlans.PlaytestCostCap > 0
+            ? Mathf.Min(baseStoneCost, BuildPlans.PlaytestCostCap) : baseStoneCost;
         /// Units of stores it adds to what this place can keep, PER RESOURCE.
         public int storeCapacity;
         /// Metres: length along the ridge, then width across it.
@@ -142,6 +160,7 @@ namespace SeaSick.World
         public static readonly BuildPlan Storehouse = new BuildPlan
         {
             id = "Storehouse",
+            baseStoneCost = 4,
             label = "storehouse",
             blurb = "keeps 40 more out of the weather",
             resource = Res.Timber,
@@ -165,6 +184,9 @@ namespace SeaSick.World
         public static readonly BuildPlan Campfire = new BuildPlan
         {
             id = "Campfire",
+            // **No stone.** The one plan that stays timber-only: see
+            // `BuildPlan.baseStoneCost`.
+            baseStoneCost = 0,
             kind = BuildKind.Fire,
             label = "make camp",
             blurb = "a fire, and somewhere to keep ten of anything",
@@ -201,6 +223,7 @@ namespace SeaSick.World
         public static readonly BuildPlan Storage = new BuildPlan
         {
             id = "Storage",
+            baseStoneCost = 3,
             label = "store hut",
             blurb = "keeps 20 more of each thing",
             resource = Res.Timber,
@@ -214,6 +237,7 @@ namespace SeaSick.World
         public static readonly BuildPlan Hut = new BuildPlan
         {
             id = "Hut",
+            baseStoneCost = 2,
             label = "shelter",
             blurb = "somewhere for four hands to live",
             resource = Res.Timber,
@@ -228,6 +252,7 @@ namespace SeaSick.World
         public static readonly BuildPlan Sawmill = new BuildPlan
         {
             id = "Sawmill",
+            baseStoneCost = 3,
             label = "sawmill",
             blurb = "a sawyer turns timber into boards",
             resource = Res.Timber,
@@ -262,6 +287,7 @@ namespace SeaSick.World
         public static readonly BuildPlan Farm = new BuildPlan
         {
             id = "Farm",
+            baseStoneCost = 2,
             label = "farm plot",
             blurb = "a farmhand grows food out of the ground",
             resource = Res.Timber,
@@ -293,6 +319,7 @@ namespace SeaSick.World
         public static readonly BuildPlan Blacksmith = new BuildPlan
         {
             id = "Blacksmith",
+            baseStoneCost = 4,
             label = "forge",
             blurb = "a smith turns ore into tools",
             resource = Res.Timber,
@@ -309,6 +336,7 @@ namespace SeaSick.World
         public static readonly BuildPlan Kitchen = new BuildPlan
         {
             id = "Kitchen",
+            baseStoneCost = 3,
             label = "kitchen",
             blurb = "a cook turns food into meals",
             resource = Res.Timber,
@@ -335,6 +363,7 @@ namespace SeaSick.World
         public static readonly BuildPlan Pier = new BuildPlan
         {
             id = "Pier",
+            baseStoneCost = 2,
             kind = BuildKind.Pier,
             label = "pier",
             blurb = "planks out to deep water, so she can lie alongside",

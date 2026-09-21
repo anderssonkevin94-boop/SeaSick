@@ -626,8 +626,24 @@ namespace SeaSick.Terrain
                                                       SeaSick.World.WorldScale.ScrubMax, rScrubA);
                             float sb = target / Mathf.Max(0.2f, scrub0[v].height);
                             var sc = new Vector3(sb * (0.85f + 0.35f * rRockB), sb, sb * (0.85f + 0.35f * rRockC));
+                            // Indexed as a berry bed too -- same welded mesh,
+                            // just the vertex range recorded, so an island
+                            // with no wheat still has something to gather
+                            // (`SceneryCrops.Bed.kind == Berry`).
+                            int sv0 = cb.v0.Count, sv1 = cb.v1.Count;
                             StampBoth(cb, scrub0[v], scrub1[v], at, rYaw * Mathf.PI * 2f, sc, sc);
                             cb.Grow(at, scrub0[v].radius * sb * 1.3f, target);
+                            cropIndex.Add(new SceneryCrops.Bed
+                            {
+                                at = at,
+                                kit = v,
+                                kind = SceneryCrops.BedKind.Berry,
+                                cell = cb.index,
+                                vertStart = sv0,
+                                vertCount = cb.v0.Count - sv0,
+                                lod1Start = sv1,
+                                lod1Count = cb.v1.Count - sv1,
+                            });
                             bushes++;
                         }
                         continue;
@@ -943,6 +959,7 @@ namespace SeaSick.Terrain
                             {
                                 at = new Vector3(mx, mh, mz),
                                 kit = v,
+                                kind = SceneryCrops.BedKind.Wheat,
                                 cell = cb.index,
                                 vertStart = bv0,
                                 vertCount = cb.v0.Count - bv0,

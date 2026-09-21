@@ -103,6 +103,20 @@ namespace SeaSick.World
         public int done;
         public float donePart;
 
+        /// **The stone part, 2026-09-21.** Kevin: *"the buildings require
+        /// wood and stone, so stone needs to be minable."* Same three fields
+        /// as the timber part and paid by the same shape of arithmetic (haul
+        /// from the pile, else quarry what stands), kept SEPARATE rather than
+        /// folded into one number because the sheet has to be able to say
+        /// which of the two a stalled blueprint is waiting on.
+        ///
+        /// **A save written before this existed restores all three as 0**,
+        /// which reads exactly as "this one wanted no stone" -- so an old
+        /// half-built hut finishes on the timber it was already owed.
+        public int stoneNeeded;
+        public int stoneDone;
+        public float stoneDonePart;
+
         /// Which way it faces, world degrees. **Carried here rather than
         /// recomputed**, because since 2026-09-19 the player turns it by hand
         /// in 45-degree steps, and a blueprint that came back from a save
@@ -113,9 +127,30 @@ namespace SeaSick.World
         public float length;
 
         public Vector3 At => new Vector3(x, 0f, z);
-        public bool Complete => done >= needed;
-        public float Fill01 => needed > 0
-            ? Mathf.Clamp01((done + donePart) / needed) : 1f;
+        /// Both parts, or the building is a drawing. A plan with no stone
+        /// price is complete on its timber exactly as it always was.
+        public bool Complete => done >= needed && stoneDone >= stoneNeeded;
+
+        /// **One bar over both piles.** The drawing fills on what has been
+        /// delivered against what it wants, timber and stone summed -- so a
+        /// hut at 5/5 logs and 0/2 stone reads five sevenths built, which is
+        /// the truth. When the stone price is zero this is the old
+        /// `(done + donePart) / needed` to the bit.
+        public float Fill01
+        {
+            get
+            {
+                float want = needed + stoneNeeded;
+                if (want <= 0f) return 1f;
+                return Mathf.Clamp01(
+                    (done + donePart + stoneDone + stoneDonePart) / want);
+            }
+        }
+
+        /// The timber part, on its own -- what the log stack beside the
+        /// blueprint is drawn from.
+        public bool TimberPaid => done >= needed;
+        public bool StonePaid => stoneDone >= stoneNeeded;
     }
 
     /// **A building that stands here, and WHERE.**
@@ -505,6 +540,13 @@ namespace SeaSick.World
         /// Three times the felling rate: the wood is already down and it is
         /// lying five metres away. A guess like the rest.
         public const float HaulPerHandPerDay = 12f;
+        /// **Stone a day one builder quarries out of standing rock**, when
+        /// there is none piled to carry. Under the felling rate (4) because
+        /// a boulder is four strikes where a tree is three -- the same
+        /// relation `Res.GatherRate` already prices Stone at against Timber,
+        /// rounded up to a whole number a player can count in days. **A
+        /// guess, never played**, 2026-09-21.
+        public const float StonePerHandPerDay = 3f;
         /// Food a day one farmhand brings in off a farm's field
         /// (`BuildPlans.Farm.rate`). Half again the felling rate: the wheat
         /// is planted in rows beside the camp, not found. **A guess, never
@@ -515,9 +557,27 @@ namespace SeaSick.World
         /// nothing left standing to cut: the drawing will wait for the wood to
         /// regrow, which is days per log. The sheet says so, because a stalled
         /// blueprint is otherwise indistinguishable from a slow one.
-        public bool BuildStarved =>
-            pending != null && !pending.Complete
+        public bool BuildStarved => TimberStarved || StoneStarved;
+
+        /// The blueprint still wants logs and there are none to be had.
+        public bool TimberStarved =>
+            pending != null && !pending.Complete && !pending.TimberPaid
             && CountOf(Res.Timber) <= 0 && Wood.standing < 1f;
+
+        /// **The same, for the stone part.** An island whose seam is worked
+        /// out and whose pile is empty cannot finish a building however much
+        /// wood is standing -- and a sheet that said "NO TIMBER LEFT" at it
+        /// would be sending the player to cut trees they do not need.
+        public bool StoneStarved
+        {
+            get
+            {
+                if (pending == null || pending.Complete || pending.StonePaid) return false;
+                if (CountOf(Res.Stone) > 0) return false;
+                var seam = Stock(Res.Stone);
+                return seam == null || seam.standing < 1f;
+            }
+        }
 
         /// What a campfire watches over, of each thing. Settled at ten.
         public const int CampfireCeiling = 10;
@@ -636,6 +696,61 @@ namespace SeaSick.World
             lastTicked += steps * quantum;
         }
 
+        /// **Pay the stone part of the blueprint out of `labour` hand-days**,
+        /// pile first and then the seam, spending what it uses. Shaped to
+        /// match the timber block above line for line, because two parts of
+        /// one price that are paid by different-looking arithmetic are two
+        /// things that will drift.
+        void PayStone(ref float labour)
+        {
+            if (pending == null) return;
+            float roomS = (pending.stoneNeeded - pending.stoneDone) - pending.stoneDonePart;
+            if (roomS <= 0f || labour <= 0f) return;
+
+            var pile = Store(Res.Stone);
+            if (pile != null && pile.whole > 0)
+            {
+                float canHaul = labour * HaulPerHandPerDay;
+                int hauled = Mathf.FloorToInt(Mathf.Min(canHaul, Mathf.Min(pile.whole, roomS)));
+                if (hauled > 0)
+                {
+                    pile.whole -= hauled;
+                    pending.stoneDone += hauled;
+                    roomS -= hauled;
+                    labour -= hauled / HaulPerHandPerDay;
+                }
+            }
+
+            var seam = Stock(Res.Stone);
+            if (seam == null || roomS <= 0f || labour <= 0f) return;
+            float want = labour * StonePerHandPerDay;
+            float got = Mathf.Min(want, Mathf.Min(seam.standing, roomS));
+            if (got <= 0f) return;
+            seam.standing -= got;
+            pending.stoneDonePart += got;
+            int whole = Mathf.FloorToInt(pending.stoneDonePart);
+            if (whole > 0)
+            {
+                pending.stoneDone += whole;
+                pending.stoneDonePart -= whole;
+            }
+            labour -= got / StonePerHandPerDay;
+        }
+
+        /// **What a builder here should be fetching right now**: logs until
+        /// the timber part is paid, then stone, then nothing. One answer, so
+        /// the arithmetic (`Step`), the body (`CampWorker`) and the mime all
+        /// agree about which material a man is carrying.
+        public string BuilderWants
+        {
+            get
+            {
+                if (pending == null || pending.Complete) return null;
+                if (!pending.TimberPaid) return Res.Timber;
+                return pending.StonePaid ? null : Res.Stone;
+            }
+        }
+
         /// One quantum of work. The only place the outpost's state changes.
         void Step(float days)
         {
@@ -700,7 +815,32 @@ namespace SeaSick.World
                             pending.done += wholeB;
                             pending.donePart -= wholeB;
                         }
+                        labour -= gotB / TimberPerHandPerDay;
                     }
+
+                    // --- and then the stone, 2026-09-21 ----------------------
+                    //
+                    // **The second part of the price, in the same two steps
+                    // and the same order**: what is already quarried and
+                    // lying by the fire goes in at the haul rate, and only
+                    // then does anybody take a pick to standing rock.
+                    //
+                    // It runs AFTER the timber out of whatever hand-days the
+                    // timber part left over, which is what makes a plan with
+                    // `stoneNeeded == 0` bit-identical to the old path: the
+                    // block below sees `roomS <= 0` and returns having
+                    // touched nothing. A builder therefore finishes the logs
+                    // first and starts on the rock in the same tick -- the
+                    // body walking out to a boulder follows, because
+                    // `CampWorker` asks the ledger the same question
+                    // (`BuilderWants`) the arithmetic just answered.
+                    //
+                    // Note `Stock(Res.Stone)` is read WITHOUT creating: an
+                    // empty stock conjured here would be a seam of zero on
+                    // an island with rocks on it, and `GatherSync` reads
+                    // `standing < 1` as "worked out" and would hide every
+                    // boulder on the island.
+                    PayStone(ref labour);
                 }
             }
 

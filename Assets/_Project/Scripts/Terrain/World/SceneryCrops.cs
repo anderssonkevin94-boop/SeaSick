@@ -27,10 +27,16 @@ namespace SeaSick.Terrain
     /// rows down, each as a small standalone mesh using the same kit pieces.
     public class SceneryCrops : MonoBehaviour
     {
+        /// What a bed grows. Wheat is the rich source (see `YieldOf`); berry
+        /// is the scrub bush indexed alongside it -- present on islands with
+        /// no wheat, so there is always something to gather.
+        public enum BedKind { Wheat, Berry }
+
         public struct Bed
         {
             public Vector3 at;                       // ground point the mat stands on
-            public int kit;                          // 0..2, which Crop_ piece
+            public int kit;                          // 0..2, which Crop_/Scrub_ piece
+            public BedKind kind;                      // Wheat or Berry
             public int cell;                         // index into `cells` (welded) or -1
             public int vertStart, vertCount;         // LOD0 run in the cell's mesh
             public int lod1Start, lod1Count;         // LOD1 run (0 if none)
@@ -42,14 +48,25 @@ namespace SeaSick.Terrain
         /// How much of a mat is left standing after it is cut.
         public const float StubbleScale = 0.25f;
 
+        /// A picked berry bush is not cut to stubble -- it is stripped: it
+        /// keeps most of its height and just goes bare-twig.
+        public const float BerryPickedScale = 0.85f;
+
+        /// The colour a berry bush's vertices lerp toward when picked.
+        static readonly Color32 TwigBrown = new Color32(92, 68, 46, 255);
+
+        /// How much a picked bush's colour moves toward `TwigBrown`.
+        const float TwigBlend = 0.65f;
+
         readonly List<Bed> beds = new List<Bed>();
         List<SceneryWood.Cell> cells;
         Island island;
 
-        /// Original vertex runs of harvested beds, so `Regrow` restores the
-        /// mat exactly rather than re-inflating a guess.
-        readonly Dictionary<int, (Vector3[] v0, Vector3[] v1)> kept
-            = new Dictionary<int, (Vector3[], Vector3[])>();
+        /// Original vertex runs (and, for berries, original colours) of
+        /// harvested beds, so `Regrow` restores the mat exactly rather than
+        /// re-inflating a guess.
+        readonly Dictionary<int, (Vector3[] v0, Vector3[] v1, Color32[] c0, Color32[] c1)> kept
+            = new Dictionary<int, (Vector3[], Vector3[], Color32[], Color32[])>();
 
         public Island Island => island;
         public int BedCount => beds.Count;
@@ -60,6 +77,38 @@ namespace SeaSick.Terrain
             get { int n = 0; for (int i = 0; i < beds.Count; i++) if (!beds[i].harvested) n++; return n; }
         }
         public int Harvested => beds.Count - Standing;
+
+        /// Food units one bed is worth: wheat is the rich source, berry is
+        /// the fallback that keeps a wheatless island fed but poorer.
+        public float YieldOf(int i)
+            => (i >= 0 && i < beds.Count && beds[i].kind == BedKind.Berry) ? 0.5f : 1.0f;
+
+        /// Sum of `YieldOf` over every bed still standing -- the units
+        /// figure `Outpost.ReconcileCrops` can use in place of a raw bed
+        /// count once it wants wheat and berry to weigh differently.
+        /// Every bed's yield, picked or not: the field's capacity, which is
+        /// what the ledger's ceiling should be. `StandingUnits` is what is
+        /// there to take right now.
+        public float TotalUnits
+        {
+            get
+            {
+                float u = 0f;
+                for (int i = 0; i < beds.Count; i++) u += YieldOf(i);
+                return u;
+            }
+        }
+
+        public float StandingUnits
+        {
+            get
+            {
+                float u = 0f;
+                for (int i = 0; i < beds.Count; i++)
+                    if (!beds[i].harvested) u += YieldOf(i);
+                return u;
+            }
+        }
 
         /// Wire the welded index. `cells` is the SAME list the wood was
         /// configured with, so both share one cached vertex array per cell
@@ -78,47 +127,77 @@ namespace SeaSick.Terrain
 
         // --- harvest / regrow ------------------------------------------------
 
-        /// Squash bed `i` to stubble. Idempotent.
+        /// Lerp a colour toward `TwigBrown` by `TwigBlend`, alpha untouched.
+        static Color32 Twiggy(Color32 src) => new Color32(
+            (byte)Mathf.RoundToInt(Mathf.Lerp(src.r, TwigBrown.r, TwigBlend)),
+            (byte)Mathf.RoundToInt(Mathf.Lerp(src.g, TwigBrown.g, TwigBlend)),
+            (byte)Mathf.RoundToInt(Mathf.Lerp(src.b, TwigBrown.b, TwigBlend)),
+            src.a);
+
+        /// Squash bed `i`. Wheat goes to stubble; a berry bush is stripped
+        /// instead -- it keeps most of its height and just goes bare-twig.
+        /// Idempotent.
         public void Harvest(int i)
         {
             if (i < 0 || i >= beds.Count || beds[i].harvested) return;
             var b = beds[i];
+            bool berry = b.kind == BedKind.Berry;
+            float scale = berry ? BerryPickedScale : StubbleScale;
             if (b.instance != null)
             {
                 var s = b.instance.transform.localScale;
-                b.instance.transform.localScale = new Vector3(s.x, s.y * StubbleScale, s.z);
+                b.instance.transform.localScale = new Vector3(s.x, s.y * scale, s.z);
             }
             else if (cells != null && b.cell >= 0 && b.cell < cells.Count)
             {
                 var c = cells[b.cell];
                 Vector3[] k0 = null, k1 = null;
+                Color32[] kc0 = null, kc1 = null;
                 if (c.v0 == null && c.lod0 != null) c.v0 = c.lod0.vertices;
                 if (c.v1 == null && c.lod1 != null) c.v1 = c.lod1.vertices;
+                Color32[] col0 = berry && c.lod0 != null ? c.lod0.colors32 : null;
+                Color32[] col1 = berry && c.lod1 != null ? c.lod1.colors32 : null;
                 if (c.v0 != null && b.vertCount > 0)
                 {
                     k0 = new Vector3[b.vertCount];
+                    if (col0 != null) kc0 = new Color32[b.vertCount];
                     for (int v = 0; v < b.vertCount && b.vertStart + v < c.v0.Length; v++)
                     {
-                        var p = c.v0[b.vertStart + v];
+                        int vi = b.vertStart + v;
+                        var p = c.v0[vi];
                         k0[v] = p;
-                        p.y = b.at.y + (p.y - b.at.y) * StubbleScale;
-                        c.v0[b.vertStart + v] = p;
+                        p.y = b.at.y + (p.y - b.at.y) * scale;
+                        c.v0[vi] = p;
+                        if (col0 != null && vi < col0.Length)
+                        {
+                            kc0[v] = col0[vi];
+                            col0[vi] = Twiggy(col0[vi]);
+                        }
                     }
                     c.lod0.SetVertices(c.v0);
+                    if (col0 != null) c.lod0.SetColors(col0);
                 }
                 if (c.v1 != null && b.lod1Count > 0)
                 {
                     k1 = new Vector3[b.lod1Count];
+                    if (col1 != null) kc1 = new Color32[b.lod1Count];
                     for (int v = 0; v < b.lod1Count && b.lod1Start + v < c.v1.Length; v++)
                     {
-                        var p = c.v1[b.lod1Start + v];
+                        int vi = b.lod1Start + v;
+                        var p = c.v1[vi];
                         k1[v] = p;
-                        p.y = b.at.y + (p.y - b.at.y) * StubbleScale;
-                        c.v1[b.lod1Start + v] = p;
+                        p.y = b.at.y + (p.y - b.at.y) * scale;
+                        c.v1[vi] = p;
+                        if (col1 != null && vi < col1.Length)
+                        {
+                            kc1[v] = col1[vi];
+                            col1[vi] = Twiggy(col1[vi]);
+                        }
                     }
                     c.lod1.SetVertices(c.v1);
+                    if (col1 != null) c.lod1.SetColors(col1);
                 }
-                kept[i] = (k0, k1);
+                kept[i] = (k0, k1, kc0, kc1);
             }
             b.harvested = true;
             float regrow = Res.RegrowPerDay(Res.Food);
@@ -134,8 +213,9 @@ namespace SeaSick.Terrain
             var b = beds[i];
             if (b.instance != null)
             {
+                float scale = b.kind == BedKind.Berry ? BerryPickedScale : StubbleScale;
                 var s = b.instance.transform.localScale;
-                b.instance.transform.localScale = new Vector3(s.x, s.y / StubbleScale, s.z);
+                b.instance.transform.localScale = new Vector3(s.x, s.y / scale, s.z);
             }
             else if (kept.TryGetValue(i, out var k) && cells != null && b.cell >= 0 && b.cell < cells.Count)
             {
@@ -151,6 +231,20 @@ namespace SeaSick.Terrain
                     for (int v = 0; v < k.v1.Length && b.lod1Start + v < c.v1.Length; v++)
                         c.v1[b.lod1Start + v] = k.v1[v];
                     c.lod1.SetVertices(c.v1);
+                }
+                if (k.c0 != null && c.lod0 != null)
+                {
+                    var col0 = c.lod0.colors32;
+                    for (int v = 0; v < k.c0.Length && b.vertStart + v < col0.Length; v++)
+                        col0[b.vertStart + v] = k.c0[v];
+                    c.lod0.SetColors(col0);
+                }
+                if (k.c1 != null && c.lod1 != null)
+                {
+                    var col1 = c.lod1.colors32;
+                    for (int v = 0; v < k.c1.Length && b.lod1Start + v < col1.Length; v++)
+                        col1[b.lod1Start + v] = k.c1[v];
+                    c.lod1.SetColors(col1);
                 }
                 kept.Remove(i);
             }

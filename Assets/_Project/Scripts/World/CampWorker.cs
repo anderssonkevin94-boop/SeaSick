@@ -492,8 +492,9 @@ namespace SeaSick.World
                     // since 2026-09-20 (`OutpostLedger.Step`, haul then cut),
                     // and a man walking past ten logs to fell a fresh one is
                     // the animation contradicting the arithmetic.
-                    hauling = r.order == OutpostOrder.Build && PileHasTimber();
-                    target = hauling ? PileSpot(Res.Timber) : FindSomethingToWorkAt(r);
+                    string wantB = WhatFor(r);
+                    hauling = r.order == OutpostOrder.Build && PileHas(wantB);
+                    target = hauling ? PileSpot(wantB) : FindSomethingToWorkAt(r);
                     phase = Phase.Going;
                     return;
 
@@ -650,12 +651,20 @@ namespace SeaSick.World
         bool Cutting(OutpostHand r)
         {
             if (r == null) return false;
-            if (r.order == OutpostOrder.Build) return !PileHasTimber();
+            // **A builder only cuts while it is LOGS he is short of.** Once
+            // the timber part of the blueprint is paid the ledger's answer
+            // changes to stone (`OutpostLedger.BuilderWants`), and a man at
+            // a tree would then be swinging for something the arithmetic is
+            // no longer buying -- so he leaves the wood and goes to the
+            // rocks through the ordinary errand loop instead.
+            if (r.order == OutpostOrder.Build)
+                return WhatFor(r) == Res.Timber && !PileHas(Res.Timber);
             return r.order == OutpostOrder.Gather && r.target == Res.Timber;
         }
 
-        bool PileHasTimber() =>
-            camp != null && camp.Ledger != null && camp.Ledger.CountOf(Res.Timber) > 0;
+        bool PileHas(string resource) =>
+            !string.IsNullOrEmpty(resource) && camp != null && camp.Ledger != null
+            && camp.Ledger.CountOf(resource) > 0;
 
         bool Claim() => camp.ClaimTree(this, out claimedTree, out claimAt);
 
@@ -817,10 +826,24 @@ namespace SeaSick.World
 
         // --- what to mime -----------------------------------------------------
 
-        /// What this row is after. Building is always timber: a blueprint is
-        /// paid in logs whatever else the island has.
-        static string WhatFor(OutpostHand r) =>
-            r.order == OutpostOrder.Build ? Res.Timber : r.target;
+        /// **What this row is after.** A gatherer is after what they were
+        /// told to get; a builder is after whatever half of the blueprint's
+        /// price is still unpaid -- logs first, then stone
+        /// (`OutpostLedger.BuilderWants`), which is the same order and the
+        /// same answer the ledger's own `Step` uses. Asking the ledger
+        /// rather than deciding here is the whole of why the body and the
+        /// books cannot disagree about which material a builder is carrying.
+        ///
+        /// Falls back to timber when there is no blueprint left to read, so
+        /// a builder in the frame between finishing and being re-ordered
+        /// mimes an axe rather than nothing.
+        string WhatFor(OutpostHand r)
+        {
+            if (r == null) return null;
+            if (r.order != OutpostOrder.Build) return r.target;
+            string want = camp != null && camp.Ledger != null ? camp.Ledger.BuilderWants : null;
+            return string.IsNullOrEmpty(want) ? Res.Timber : want;
+        }
 
         /// The swing that suits the material. An axe for wood, a pick-like
         /// hammer for the things that come out of rock, a hoe for what is
@@ -907,7 +930,17 @@ namespace SeaSick.World
             if (!string.IsNullOrEmpty(what) && what != Res.Timber)
             {
                 ResourceNode near = null;
-                float best = Reach * Reach;
+                // **A builder is not bounded by `Reach`.** A gatherer who
+                // has to walk further than 34 m is a gatherer the player
+                // told to do the wrong thing, and pottering by the fire says
+                // so. A builder was told to build THIS drawing, the ledger
+                // is already paying for the stone whatever the distance, and
+                // the handful of boulders a camp has stand just outside the
+                // clearing -- which on a wide clearing is past 34 m. So he
+                // walks to the nearest one wherever it is, and the body goes
+                // on agreeing with the books.
+                float best = r.order == OutpostOrder.Build
+                    ? float.MaxValue : Reach * Reach;
                 foreach (var n in ResourceNode.All)
                 {
                     if (n == null || n.Harvested || n.Resource != what) continue;

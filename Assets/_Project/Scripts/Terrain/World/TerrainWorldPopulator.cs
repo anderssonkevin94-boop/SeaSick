@@ -317,6 +317,31 @@ namespace SeaSick.Terrain
             b.transform.localPosition = new Vector3(0f, Height(f.centre.x, f.centre.y) + beaconH * 0.75f, 0f);
 
             var props = BuildProps(root.transform, island, kind.name, meanR);
+
+            // **A few boulders on every island, 2026-09-21.** Kevin: *"the
+            // buildings require wood and stone, so stone needs to be
+            // minable. All buildings require at least wood and stone."*
+            //
+            // The island's KIND is still the thing it is worth sailing to
+            // for -- a Stone island gets the full seam above and none of
+            // this. Everywhere else gets three to six rocks, which is a
+            // camp's own building material lying about and not a cargo: at
+            // `ResourceNode.DefaultUnitsPerProp` four apiece that is twelve
+            // to twenty-four stone on the ground, against a hut's two and a
+            // storehouse's four. The ledger's Stone stock is seeded to match
+            // in `Outpost.Configure` (`ScatteredStoneShare`).
+            //
+            // They go in the SAME list and are registered the same way, so
+            // `GatherSync` hides them as the seam is worked exactly as it
+            // hides a Stone island's own -- it keys on the resource, never
+            // on which call made the prop.
+            if (kind.name != World.Res.Stone)
+            {
+                var rocks = BuildProps(root.transform, island, World.Res.Stone, meanR,
+                                       Random.Range(ScatteredStoneMin, ScatteredStoneMax + 1));
+                props.AddRange(rocks);
+            }
+
             island.RegisterProps(props);
             island.Configure(kind.name, props.Count, meanR, false, false);
             Dress(root.transform, root.transform.position, meanR, island, index);
@@ -369,10 +394,19 @@ namespace SeaSick.Terrain
 
         /// Props stand on ground that is above the beach band and not too
         /// steep, inside the shoreline on their bearing.
-        List<GameObject> BuildProps(Transform parent, Island island, string kind, float meanR)
+        /// Boulders scattered on an island whose kind is not Stone, fewest
+        /// and most. See the call site.
+        public const int ScatteredStoneMin = 3;
+        public const int ScatteredStoneMax = 6;
+
+        /// `want` overrides the density count, for the handful of boulders
+        /// every island gets on top of its own kind.
+        List<GameObject> BuildProps(Transform parent, Island island, string kind, float meanR,
+                                    int want = 0)
         {
             var list = new List<GameObject>();
-            int count = Mathf.Clamp(Mathf.RoundToInt(meanR * world.propsPerRadius), 5, 26);
+            int count = want > 0 ? want
+                : Mathf.Clamp(Mathf.RoundToInt(meanR * world.propsPerRadius), 5, 26);
             for (int i = 0, attempts = 0; i < count && attempts < count * 12; attempts++)
             {
                 float ang = Random.Range(0f, Mathf.PI * 2f);

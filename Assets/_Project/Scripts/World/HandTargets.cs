@@ -529,7 +529,11 @@ namespace SeaSick.World
                     verbIs = "build the " + arg;
                     break;
                 case HandTarget.Kind.Fire:
-                    verbIs = named ? who + " — rest by the fire" : "rest by the fire";
+                    // Held: dropping somebody here idles them by the fire.
+                    // Empty-handed: nothing to drop, so the same spot's
+                    // affordance is the tap that opens the build menu --
+                    // see `BuildMenuRequest` and `Hand.OnGUI`'s hover case.
+                    verbIs = named ? who + " — rest by the fire" : "build";
                     break;
                 case HandTarget.Kind.Ship:
                     verbIs = "back aboard";

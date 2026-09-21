@@ -806,7 +806,15 @@ namespace SeaSick.UI
         /// nobody can read.
         void OnGUI()
         {
-            if (Held == null) return;
+            // Empty-handed, the Hand still has one thing to say: the
+            // campfire is tappable. `IslandInput` drives `HoverAt` every
+            // idle frame so `memo` is live even with nobody held; every
+            // other empty-handed target says nothing here (the ground, a
+            // tree, a ship's rail have no affordance without a body to
+            // drop), so this is the one exception, not a general hover
+            // prompt.
+            bool holding = Held != null;
+            if (!holding && memo.kind != HandTarget.Kind.Fire) return;
             // Bid on EVERY event. A caller that bids only on Repaint owns the
             // slot on repaint frames and has lost it by the mouse-up.
             if (!Prompts.Claim(Prompts.Rank.Hand)) return;
