@@ -783,3 +783,138 @@ air pays nothing; 0 bytes held) · `CampLife` 21.
   lying on the helm all along. Portrait not yet looked at. The IMGUI lists
   still allocate per event.
 - Pile positions are replicated in `CampWorker.PileSpot` from `CampPiles`.
+
+## THE SECOND PLAY, AND THE SINK — 2026-09-20/21 (Phase 2 of the named loop)
+
+Kevin flew Phase 1 and brought back four things; all four were real. Then
+Phase 2 was built on top of them: the ladder costs something, and a camp's
+pile can be carried down to the boat. Nothing below is committed yet.
+
+### 1. "they gathered logs for it but it never built"
+
+They had. Ten logs sat beside the fire while the builders walked past them to
+cut fresh ones, and on a small island the fresh ones ran out at 6 of 24 — the
+sawmill stood as a drawing for ever. Two faults, one symptom:
+
+- **`OutpostLedger.Step` now hauls from the pile FIRST**, then cuts. A builder
+  carries `HaulPerHandPerDay = 12` logs a day from the pile (three times the
+  felling rate: the wood is already down and five metres away), and only what
+  is left of his day goes on standing timber. `CampWorker` walks the same
+  order — a builder goes to the pile while it has anything in it — so the
+  animation stops contradicting the arithmetic.
+- **Standing timber is the island's, not the clearing's.** The stock was seeded
+  from the FLAT ground the survey found, which is a fact about where you can
+  build and not about how much wood there is. `Outpost.WorkedHectares` seeds it
+  from `0.6·πr²` of the island's disc (the rest is beach, rock and meadow),
+  floored at the clearing.
+- A build that can no longer finish says so: `OutpostLedger.BuildStarved`
+  (nothing piled, nothing standing) makes the `CampSheet` headline read
+  **NO TIMBER LEFT**, because a starved blueprint is otherwise indistinguishable
+  from a slow one. And `BuildSite`'s log stack scales with `Fill01` rather than
+  one log per delivery capped at sixteen — a sawmill wanting 24 used to show a
+  full stack at two thirds and then sit there looking finished and unbuilt.
+
+### 2. "works but its a bit too slow" — the wheel
+
+`IslandInput.HandleWheel` divided by 120 regardless. Input System 1.11+
+defaults to `ScrollDeltaBehavior.UniformAcrossAllPlatforms`, about one unit a
+notch everywhere, so the zoom ran at a hundredth of its speed and was only
+usable because a Mac's smooth scrolling sends a great many events. It now
+divides only when the setting is the old platform-specific range. Feel:
+`wheelStep` 1.22, `wheelMaxPerFrame` 4 (a trackpad flick reporting a dozen
+notches is a lurch, not a zoom), `IslandCam.zoomRate` 1.8.
+
+### 3. Trees fell at random while the villagers chopped somewhere else
+
+`SyncFelling` dropped the ledger's trees nearest-first the moment they were
+paid for, and `CampWorker` chose its own trunk — two pictures of one number.
+**The fix is a WAIT, not a new chooser.** Which trees come down, and how many,
+is still decided entirely by `fellOrder` from `CampCentre`, walked
+front-first, because that is what lets a camp worked twenty days while you
+were elsewhere be found with the right ring of stumps (D2). What changed is
+who stands where and WHEN the front tree drops:
+
+- Workers take the NEXT trees in the order — `Outpost.NextToFell` /
+  `ClaimTree` / `ReleaseTree`, the k-th hand to ask gets the k-th standing
+  entry, never two men on one trunk.
+- Watched, the front tree falls only when its claimant is `Working` at it
+  (`CampWorker.IsFellingNow`), or it has been owed longer than
+  `Feel.fellGraceSeconds` (10 s — a tree that will not fall reads worse than
+  one that falls unattended), or the backlog exceeds `cutters + 2`
+  (`Feel.fellBacklogSlack`: the clock was scrubbed, or she has just arrived) —
+  then the whole debt is taken at once. **The loop breaks rather than skips**,
+  so the felled set never has a hole in it and stays reproducible from an
+  integer. Unwatched, it is exactly what it always was.
+- **Known gap:** a builder hauling from the pile is not `Cutting`, so he holds
+  no claim and is not counted in `cutters`; the slack of two covers him today.
+
+### 4. "i want villagers / items to retain some momentum if i drop them mid grab"
+
+`Hand` keeps a ring of the hand's last twelve positions (`HeldMotion`, no
+garbage) and lets go with the mean velocity of the last 100 ms — with the
+sample before the last one always counted unless older than 350 ms, the same
+frame-rate trap `IslandCam.MeanVelocity` fell into on the portrait run. Under
+`throwMinSpeed` 1.5 m/s letting go is a PLACEMENT, exactly as before; above it
+`CampWorker.Throw` gives ballistic flight (`Phase.Flying`, `throwRise` 0.35
+of the speed upward, `throwMaxSpeed` 18). **A throw is a picture, never an
+order.** The order is still resolved and written by `Hand.DropAt` at the
+RELEASE point, in the release frame, so preview == commit holds; landing
+writes nothing; and `TickFlight` stops the horizontal motion at the last point
+that was over the island, so he cannot come down in the sea.
+
+### The sink — `Ship/ShipPrices.cs`
+
+Phase 2 as promised on 2026-09-20: the ladder is no longer free.
+
+- Rungs 1–6 timber; 7–11 boards (+stone — a sawmill has to be standing and
+  manned before rung 7 can be paid for at all); 12–16 boards + tools; 17–19
+  tools + spice, the outer ring. Fits are priced on their own table
+  (`ForFit`). **Every number is a first guess, none played** — set against
+  the hold she has at the rung before, so a rung is one or two voyages, and
+  to be tuned from the `SinkProbe` PACING table.
+- `Shipyard.Move` and `Shipyard.Upgrade` bill through the `Purse`
+  (`VoyageManager`, found once): **physical gate first, then the bill**, so
+  "needs 12 boards" is never said about a hull that would hog. The refusal
+  is a sentence. Both refuse anywhere but home — *"she has to be at her own
+  pier"* — the stores are ashore, however full the hold is.
+- **The design rule the file exists to hold:** price `Move` and `Upgrade`,
+  NEVER `Apply`, `Undo` or the panel's dev buttons — that is the path every
+  probe puts her on a rung by, and there is deliberately no "free for probes"
+  switch. The bay `+`/`−` buttons (`AddCell`/`RemoveCell`) bill nothing: the
+  board is what you do with the hull you paid for.
+- `VoyageManager` banks per resource (it always did — a dictionary); `SpendBanked`
+  and `BeginVoyage` are public now so the yard pays through the same call the
+  buildings use (the visible `Stockpile` comes down with the number) and a
+  probe can press the button the player presses.
+
+### Camp → hold — `World/CampLoading.cs`
+
+Until now `OutpostLedger.Take` had zero callers: the loop's fourth step —
+*return and load* — was a sentence in the GDD. **The player loads; a camp
+never ships home by itself** (risk #2, "the sailing becomes transport"), so
+nothing here runs off the tick — no `Update`, a coroutine only while a load is
+in progress.
+
+- `RoomAboard` is the one place that knows the marked line from the physical
+  `MaxHold`; `LoadNow` moves units synchronously; `Begin` / `BeginOne` /
+  `Cancel` drive the carry at 0.15 s a unit (a shade quicker than the 0.18 s
+  unload, same scaled clock). One unit at a time, `Take` → `AddLoot` →
+  visual, and a unit the hold refuses goes straight back on the ground —
+  `CampLoadProbe` gates units-out == units-in per resource across a fill.
+- Best-first order: Tools, Spice, Boards, Ore, Stone, Meals, Food, Timber — the
+  chain's own ranking until `ShipPrices` is what sorts it.
+- `CampSheet`: the folded bar's action slot offers **⬆ Load** once there is a
+  camp, something in it and room aboard, and turns into **✕ Stop** while they
+  carry; the open sheet grows a row per kind so you can take the tools and
+  leave the firewood. The headline lists every kind, not just timber.
+- `World/CargoVisual.cs` draws Boards, Tools, Food and Meals as their own
+  shapes, coloured from `Res.Colour` — a hold of tools no longer looks like a
+  hold of firewood.
+
+### Still open
+
+- **All of it is uncommitted and unplayed** — the prices most of all.
+- **Phone-shape HUD overlap pass not run**: Load and the crew ▲ share the bar
+  row; `HudOverlapProbe` at 1080x2340 with the bar in each of its states.
+- The hauling builder's missing claim (above).
+- Stone, Ore and Spice props are still not removed as they are gathered.

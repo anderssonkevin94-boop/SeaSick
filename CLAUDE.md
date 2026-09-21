@@ -10,9 +10,9 @@
 
 ## AI workflow (important)
 This project is built with a split AI workflow to conserve credits:
-- **Claude Code:** architecture, C# systems, git, debugging, code review, project infrastructure
-- **Coplay (GPT models) inside Unity:** scene wiring, asset placement, visual/UI iteration, asset generation
-- Coplay MCP tools are available to Claude Code when the Unity Editor is open with the SeaSick project loaded (`check_compile_errors`, `get_unity_logs`, `play_game`, scene/prefab tools, etc.)
+- **Claude Code:** architecture, C# systems, git, debugging, code review, project infrastructure, and (since 2026-09-21) scene wiring, visual checks and probe runs through the Unity CLI
+- **Unity CLI (`~/.unity/bin/unity`, on PATH via `.zshrc`)** is the editor bridge. It talks to the OPEN editor through the `com.unity.pipeline` package (pinned in `Packages/manifest.json`). Set `UNITY_NO_BANNER=1 UNITY_NON_INTERACTIVE=1 UNITY_NO_PAGER=1` for scripted use. Key commands: `unity status`, `unity list` (discover commands; never guess names), `unity cmd eval --json --code '<C#>'` (runs against the project's compiled assemblies, so `RunProbe.X()` launchers work as-is), `unity cmd console --json level=error tail=N`, `unity cmd console_status --json` (compile-failure flag), `unity cmd recompile` + `recompile_status`, `editor_play` / `editor_stop`, `capture_game_view` / `capture_scene_view` (PNG), `run_tests`, `batch` (transactional scene edits). Do not launch a second batch-mode editor against the open project.
+- **Coplay** is being retired (Kevin is cancelling the subscription). Its MCP tools may still appear while the plugin package is installed; do not depend on them. Its only capability the CLI lacks is generative asset creation, which this project never used (models come from Blender).
 - **`docs/DEV-TOOLS.md`** — index of every probe and setup script, the edit/verify loop, and the measurement traps this project has actually hit. Read it before writing a new probe or trusting a measurement.
 
 ## Folder structure
@@ -34,7 +34,7 @@ Third-party/imported assets stay out of `_Project`.
 - Never commit `Library/`, `Temp/`, `Logs/`, `UserSettings/` (gitignored)
 - Binary assets (models, textures, audio) go through Git LFS (see `.gitattributes`)
 - `git-lfs` and `gh` are installed at `~/.local/bin` (add to PATH if missing: `export PATH="$HOME/.local/bin:$PATH"`)
-- Always verify the project compiles (Coplay `check_compile_errors` or batch-mode run) before committing
+- Always verify the project compiles (`unity cmd console_status --json` compile flag / `tools/compilecheck.sh`, or the batch-mode run below when the editor is closed) before committing
 
 ## Headless validation
 Run a compile/import check without opening the editor GUI:

@@ -1,23 +1,33 @@
 # Dev tools
 
 Everything here lives in `Assets/_Project/Scripts/Dev/Editor/` and is driven
-through the Coplay MCP bridge with `execute_script`.
+through the **Unity CLI** (`unity cmd ...`, see CLAUDE.md) against the open
+editor. Until 2026-09-21 it was driven through the Coplay MCP bridge with
+`execute_script`; the notes below that mention Coplay describe that era and its
+traps (fresh-assembly compile, focus requirement). The CLI's `eval` runs
+against the project's already-compiled assemblies, so the fresh-assembly trap
+is gone, and `RunProbe` launchers are called directly.
 
 ## The loop
 
+Shell setup once: `export PATH="$HOME/.unity/bin:$PATH" UNITY_NO_BANNER=1 UNITY_NON_INTERACTIVE=1 UNITY_NO_PAGER=1`
+
 1. Edit C# / shaders with normal file tools.
-2. `execute_script RefreshOnly.cs` — Unity does **not** pick up external edits
-   without an explicit `AssetDatabase.Refresh`.
-3. `check_compile_errors` — **C# only**. A broken shader reports "No compile
-   errors" and then renders magenta; the real message is in
-   `~/Library/Logs/Unity/Editor.log`, `grep "Shader error in"`.
-4. `execute_script <setup script>` to push values into the scene.
-5. `play_game` → `execute_script <probe>` → read its output file with Bash →
-   `stop_game`.
+2. `unity cmd recompile` then poll `unity cmd recompile_status --json` — Unity
+   does **not** pick up external edits without an explicit refresh.
+3. `unity cmd console_status --json` — its compile-failure flag is **C# only**.
+   A broken shader reports clean and then renders magenta; the real message is
+   in `~/Library/Logs/Unity/Editor.log`, `grep "Shader error in"`.
+4. `unity cmd eval --json --code 'SetupX.Apply();'` (or `eval_file --file`) to
+   push values into the scene.
+5. `unity cmd editor_play` → `unity cmd eval --json --code 'RunProbe.Surf();'`
+   → read the probe's output file with Bash → `unity cmd editor_stop`.
+   `unity cmd console --json level=error tail=20` reads the console;
+   `capture_game_view` / `capture_scene_view` give a PNG for visual checks.
 
 **Never edit anything under `Assets/` while a probe coroutine is running** —
 Unity auto-refreshes, the domain reloads, and the coroutine dies silently while
-`execute_script` still reports success.
+the launching command still reports success.
 
 Each `execute_script` compiles a **fresh assembly**, so a MonoBehaviour created
 in one call cannot be found by type in the next. Probes write results to a file.
