@@ -76,6 +76,24 @@ namespace SeaSick.World
                 }
             }
         }
+
+        /// Furious, not just short-tempered. `OutpostLedger.AngryCount` counts
+        /// this; nothing else reads it yet.
+        public bool Angry => mood < 0.5f;
+
+        /// One word for the row, or none. "angry" once `mood` has crossed
+        /// the line `WorkFactor` starts docking labour at; "hungry" a while
+        /// before that, when they are still pulling full weight but it has
+        /// been going short; "" for a hand nobody has starved.
+        public string MoodWord
+        {
+            get
+            {
+                if (Angry) return "angry";
+                if (mood < 0.95f) return "hungry";
+                return "";
+            }
+        }
     }
 
     /// Something the player has SITED here but nobody has finished building.
@@ -408,6 +426,79 @@ namespace SeaSick.World
         /// this is what every hand, farmhand or not, consumes. **A
         /// placeholder, never played.**
         public const float EatPerHandPerDay = 1f;
+
+        // --- upkeep: mood, 2026-09-22 ------------------------------------
+        //
+        // Kevin's design, settled: the campfire IS the provisions gauge and
+        // failure is gradual -- stores run out, hands stop pulling full
+        // weight and forage for themselves instead, and they get ANGRY.
+        // That is the whole punishment; nobody leaves.
+
+        /// How much a day wholly unfed knocks a hand's mood down. Two
+        /// unfed days take a content hand (mood 1) to furious (mood 0).
+        /// **A guess, never played.**
+        public const float MoodDropPerHungryDay = 0.5f;
+
+        /// How much a day fully fed brings mood back up. Four fed days
+        /// walk a furious hand back to content. **A guess, never played.**
+        public const float MoodRecoverPerFedDay = 0.25f;
+
+        /// Days of food in the pile, per hand, that reads as a bright
+        /// fire on `Health01`. **A guess, never played.**
+        public const float DaysOfFoodForBrightFire = 3f;
+
+        /// **How much of a day's work this hand actually does, applied to
+        /// PRODUCTION only -- never to eating.** A hand at mood 0.5 or
+        /// better works flat out; below that they spend the rest of the
+        /// day foraging for themselves instead of the camp, scaling to
+        /// nothing at mood 0. So a starving camp does not stop dead, it
+        /// just gets slower, which is what makes the decline something the
+        /// player can see coming and catch.
+        public static float WorkFactor(OutpostHand h) =>
+            h == null ? 0f : Mathf.Clamp01(h.mood / 0.5f);
+
+        /// `WorkFactor`, except that **a hand bringing in food is never
+        /// docked** -- foraging IS gathering food, so a starving camp told
+        /// to gather berries or work its farm can still eat its way back.
+        /// Without this a camp that ran out once could never recover: the
+        /// hungrier they got the less food they brought in.
+        public static float WorkFactorOn(OutpostHand h, string produces) =>
+            produces == Res.Food ? (h == null ? 0f : 1f) : WorkFactor(h);
+
+        /// Is anybody here going hungry right now -- the pile has nothing
+        /// in it and there is somebody to feed. What `Step`'s eating block
+        /// is about to find, a step early, for anything that wants to warn
+        /// ahead of the tick rather than after it.
+        public bool Hungry
+        {
+            get
+            {
+                if (hands.Count == 0) return false;
+                var food = Store(Res.Food);
+                return food == null || (food.whole == 0 && food.part <= 0f);
+            }
+        }
+
+        /// **What `Outpost` pushes to `Campfire.health01`.** Three days of
+        /// food banked, per hand, reads as a bright fire; an outpost with
+        /// nobody home reads as full so an empty camp does not look like a
+        /// dying one.
+        public float Health01 => hands.Count == 0
+            ? 1f
+            : Mathf.Clamp01((CountOf(Res.Food) + (Store(Res.Food)?.part ?? 0f))
+                / (hands.Count * EatPerHandPerDay * DaysOfFoodForBrightFire));
+
+        /// How many hands here are furious. What the sheet counts against
+        /// the roster.
+        public int AngryCount
+        {
+            get
+            {
+                int n = 0;
+                foreach (var h in hands) if (h != null && h.Angry) n++;
+                return n;
+            }
+        }
 
         /// Days of accumulated progress toward the next recruit spends.
         public const float DaysPerRecruit = 3f;
@@ -869,8 +960,10 @@ namespace SeaSick.World
             bool wasComplete = pending != null && pending.Complete;
             if (pending != null && !pending.Complete)
             {
-                int builders = HandsOn(OutpostOrder.Build);
-                if (builders > 0)
+                float builders = 0f;
+                foreach (var h in hands)
+                    if (h != null && h.order == OutpostOrder.Build) builders += WorkFactor(h);
+                if (builders > 0f)
                 {
                     float labour = builders * days;          // hand-days to spend
                     float roomB = (pending.needed - pending.done) - pending.donePart;
@@ -962,7 +1055,7 @@ namespace SeaSick.World
                 float room = (ceilingPer - store.whole) - store.part;
                 if (room <= 0f) continue;
 
-                float want = Res.GatherRate(h.target) * days;
+                float want = Res.GatherRate(h.target) * days * WorkFactorOn(h, h.target);
                 float got = Mathf.Min(want, Mathf.Min(stock.standing, room));
                 if (got <= 0f) continue;
 
@@ -997,7 +1090,7 @@ namespace SeaSick.World
                 float room = (ceilingPer - made.whole) - made.part;
                 if (room <= 0f) continue;
 
-                float want = Mathf.Min(plan.rate * days, room);
+                float want = Mathf.Min(plan.rate * days * WorkFactorOn(h, plan.makes), room);
                 if (want <= 0f) continue;
 
                 // An input is consumed one for one, and a hand with nothing to
@@ -1059,9 +1152,27 @@ namespace SeaSick.World
                     foodEaten += eaten;
                     away.eaten += eaten;
                 }
-                // Nobody starves or leaves on this yet -- record the debt
-                // for the neglect/anger pass and stop there.
+                // Nobody starves or leaves on this yet -- the debt still
+                // gets recorded for the sheet.
                 if (eaten < need) { hungerDays += days; away.hungryDays += days; }
+
+                // **Mood, per quantum, so D2 (path independence) holds
+                // exactly as the rest of `Step` does.** `fed01` is how much
+                // of today's need this quantum actually paid; a hand not
+                // fully fed slides toward angry at `MoodDropPerHungryDay`,
+                // scaled by how short they went, and a hand fully fed
+                // climbs back at `MoodRecoverPerFedDay`. A hand restored
+                // from an old save already has `mood = 1f` (the field's
+                // default), which reads as a content hand with no history
+                // to make up.
+                float fed01 = need > 0f ? eaten / need : 1f;
+                foreach (var h in hands)
+                {
+                    if (h == null) continue;
+                    h.mood = fed01 >= 1f
+                        ? Mathf.Min(1f, h.mood + MoodRecoverPerFedDay * days)
+                        : Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days * (1f - fed01));
+                }
             }
 
             // --- upkeep: recruiting ---------------------------------------------
@@ -1137,7 +1248,7 @@ namespace SeaSick.World
                 if (h.order == OutpostOrder.Gather)
                 {
                     if (h.target != resource || Stalled(h)) continue;
-                    rate += Res.GatherRate(resource);
+                    rate += Res.GatherRate(resource) * WorkFactorOn(h, resource);
                     continue;
                 }
 
@@ -1146,8 +1257,11 @@ namespace SeaSick.World
                     if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
                     var plan = BuildPlans.Named(h.target);
                     if (plan.rate <= 0f || Stalled(h)) continue;
-                    if (plan.makes == resource) rate += plan.rate;
-                    else if (plan.takes == resource) rate -= plan.rate;
+                    if (plan.makes == resource) rate += plan.rate * WorkFactorOn(h, resource);
+                    // Consumption scales with the same factor -- an angry
+                    // worker draws down the input no faster than they make
+                    // the output.
+                    else if (plan.takes == resource) rate -= plan.rate * WorkFactorOn(h, plan.makes);
                 }
                 // Build hauls from the pile into the blueprint -- a transfer,
                 // not production, so it never shows up here.
@@ -1176,7 +1290,7 @@ namespace SeaSick.World
                 if (h.order == OutpostOrder.Gather)
                 {
                     if (h.target != resource || Stalled(h)) continue;
-                    rate += Res.GatherRate(resource);
+                    rate += Res.GatherRate(resource) * WorkFactorOn(h, resource);
                     continue;
                 }
 
@@ -1185,7 +1299,7 @@ namespace SeaSick.World
                     if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
                     var plan = BuildPlans.Named(h.target);
                     if (plan.rate <= 0f || plan.makes != resource || Stalled(h)) continue;
-                    rate += plan.rate;
+                    rate += plan.rate * WorkFactorOn(h, resource);
                 }
             }
 

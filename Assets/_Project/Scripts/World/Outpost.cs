@@ -146,6 +146,7 @@ namespace SeaSick.World
             ReconcileWood();
             ReconcileCrops();
             ledger.Tick(TimeOfDay.Seconds);
+            FeedTheFire();
 
             // The arithmetic can finish a building on an island nobody is
             // looking at, so the raise cannot live in the tick -- it needs a
@@ -164,6 +165,27 @@ namespace SeaSick.World
             // now. Same reason the raise cannot live in the tick: the
             // arithmetic recruits, but only a scene can put a body in.
             EnsureBornBodies();
+        }
+
+        /// **The campfire is the provisions gauge** (settled 2026-09-13, wired
+        /// 2026-09-22). Three days of food for everyone here is a bright fire;
+        /// an empty pile is embers. Pushed here, after the tick, because this
+        /// is the one place the scene is made to agree with the ledger -- and
+        /// the light is only found once, since it never moves.
+        Campfire fire;
+        void FeedTheFire()
+        {
+            if (fire == null)
+            {
+                foreach (var b in built)
+                {
+                    if (b == null) continue;
+                    fire = b.GetComponentInChildren<Campfire>(true);
+                    if (fire != null) break;
+                }
+                if (fire == null) return;
+            }
+            fire.health01 = ledger.Health01;
         }
 
         /// **While the trees can be seen, they are the authority on whether

@@ -138,7 +138,13 @@ namespace SeaSick.UI
                 if (h == null) continue;
                 bool isOpen = open == h.name;
                 var r = new Rect(inner.x, y, inner.width, rowH);
-                if (GUI.Button(r, $"{h.name}   ·   {h.Doing}",
+                // "angry" / "hungry" after what they are doing: the mood is
+                // the consequence of the food pile, and the row is where the
+                // player looks for why a camp is slow.
+                string mood = h.MoodWord;
+                if (GUI.Button(r, mood.Length > 0
+                        ? $"{h.name}   ·   {h.Doing}   ·   {mood}"
+                        : $"{h.name}   ·   {h.Doing}",
                         isOpen ? UITheme.ButtonPressed : row))
                 {
                     open = isOpen ? null : h.name;

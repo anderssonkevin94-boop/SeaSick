@@ -822,6 +822,12 @@ namespace SeaSick.UI
                   .Append(cutting == 1 ? " hand cutting" : " hands cutting");
                 if (l.Wood.standing < 1f) sb.Append("   ·   the wood is cut out");
                 else if (l.Timber >= l.ceilingPer) sb.Append("   ·   the pile is full");
+                // The camp's stomach, last and loudest. An empty food pile is
+                // the one thing on this bar that stops every other number.
+                if (l.Hungry) sb.Append("   ·   NO FOOD — they forage instead of working");
+                else if (l.AngryCount > 0)
+                    sb.Append("   ·   ").Append(l.AngryCount)
+                      .Append(l.AngryCount == 1 ? " hand is angry" : " hands are angry");
             }
             else sb.Append("   ·   no camp");
             headline = sb.ToString();
@@ -901,6 +907,7 @@ namespace SeaSick.UI
             }
             long k = isleKey;
             if (outpost == null || l == null) return k;
+            k = k * 31 + (l.Hungry ? 1 : 0) + l.AngryCount * 7;
             k = k * 31 + (outpost.HasCamp ? 1 : 0);
             k = k * 31 + (outpost.Building ? 1 : 0);
             if (l.pending != null)
