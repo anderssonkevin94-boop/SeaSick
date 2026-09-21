@@ -543,6 +543,19 @@ namespace SeaSick.UI
                 if (existing == null) { Cancel(); return true; }
 
                 camp.CatchUp();
+                // **A villager born here is a new mouth, not a returning
+                // hand.** `Recall` gives a berth back that was never given up;
+                // this one has to be found, and can be refused.
+                if (existing.born)
+                {
+                    if (!camp.CarryAboard(a, Hull, out why)) return false;
+                    var rb = Roster();
+                    if (rb != null) rb.Refresh();
+                    heldPuppeted = false;
+                    Release(VillagerActing.Mode.None);
+                    Refresh(camp);
+                    return true;
+                }
                 if (!camp.Recall(a, Hull)) { why = "she will not take them back"; return false; }
                 var r = Roster();
                 if (r != null) r.Refresh();

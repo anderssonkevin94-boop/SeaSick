@@ -68,6 +68,32 @@ namespace SeaSick.Crew
         public CrewMemberDef Def => def;
         public string DisplayName => def != null ? def.displayName : name;
 
+        /// **Give a body somebody to be.** For figures made at runtime --
+        /// villagers recruited by a camp (`BornVillager`) -- whose def is a
+        /// fresh instance rather than an authored asset. The authored crew
+        /// keep the def the scene gave them and never call this.
+        public void SetDef(CrewMemberDef who)
+        {
+            if (who == null) return;
+            def = who;
+        }
+
+        /// **This is your deck now.**
+        ///
+        /// `ship` is read off the parent in Awake, which is right for a hand
+        /// who was born a child of the hull and wrong for one who was born at
+        /// a camp: his "ship" would be the outpost, and `PutBackOnStation`
+        /// would walk him off the deck and back into the fire ring. Carrying
+        /// somebody aboard therefore says so, and the spot he is standing on
+        /// becomes the post he keeps.
+        public void BoardShip(Transform hull, Vector3 stationLocalPos)
+        {
+            ship = hull;
+            stationLocal = stationLocalPos;
+            railLocal = stationLocalPos + new Vector3(0.6f, 0f, 0f);
+            PutBackOnStation();
+        }
+
         /// Standing at their post and free to work it. Bailing, ashore, or
         /// over the side means no — this is the single question every ship
         /// system asks before it does anything. Being sick is NOT a reason.

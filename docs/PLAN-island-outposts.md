@@ -1112,3 +1112,28 @@ plus one `farm_NN_Crop_MM` module per bed with a `Plant_slot_MM` empty — and
 six-bed model and is a one-line `prefab` switch once it is copied into
 `Resources/Settlement`. Nothing eats Food yet; `foodEaten` is still declared
 and unread. **All guesses, none played.**
+
+### Huts fill themselves — 2026-09-21
+
+Food now gets eaten, and a camp grows its own crew. `BuildPlan.houses` (Hut =
+2, everything else 0, including the campfire and the home storehouse) sums
+over `built` into `OutpostLedger.HousingCapacity`; `Housed` is `hands.Count`.
+Inside `Step`, after production, every hand ashore eats `EatPerHandPerDay`
+(1) Food a day from the pile — per quantum, so D2 still holds — and an
+unfed quantum banks its shortfall in `hungerDays` rather than starving or
+evicting anybody; that is still the parked neglect/anger feature GDD 6
+names, just with somewhere true to read from once it is built. Then, only
+while `Housed < HousingCapacity` and the pile holds at least
+`RecruitFoodCost` (3) Food, `recruitProgress` accrues in days; at
+`DaysPerRecruit` (3) it spends the 3 Food and appends a new `OutpostHand`
+with `order = Idle`, `born = true` (so `Outpost` knows this row has no crew
+body yet — that is its job, not the ledger's), and a name from the new
+`VillagerNames` list (~24 storybook names), picked off a hash of the
+camp's key and roster size so the same camp reaching the same headcount
+twice — live, or replayed from a save — names its newcomer the same both
+times. `RecruitLine` gives the sheet one line ("3 of 4 beds · a new hand in
+1.2 days" / "no beds" / "no food to feed a newcomer"). All new fields
+default sensibly for an old save (`recruitProgress`, `hungerDays` at 0,
+`born` false). **Placeholder numbers, none played** — `Outpost.cs`,
+`CampWorker.cs` and the UI still need to give the born rows a body and show
+`RecruitLine` on the sheet.

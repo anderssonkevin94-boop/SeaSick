@@ -81,6 +81,19 @@ namespace SeaSick.Save
 
         /// 0 = under way, 1 = anchored off an island, 2 = alongside at home.
         public int anchor;
+
+        /// **The hands she is carrying who were never in the scene.**
+        ///
+        /// The authored crew come back for free: the ship is rebuilt from her
+        /// rung and the bodies are her own children. A villager recruited at a
+        /// camp (`OutpostHand.born`) and then carried aboard is not -- his
+        /// body was cloned at runtime, and without his name written down here
+        /// he would simply not be on the ship the next time she sailed.
+        ///
+        /// Names only: the figure is a clone of a hand already aboard, so
+        /// there is nothing else about him to keep. Empty in an old save,
+        /// which is exactly right -- an old save has none.
+        public List<string> crewNames = new List<string>();
     }
 
     [System.Serializable]

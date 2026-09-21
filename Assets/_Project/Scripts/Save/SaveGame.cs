@@ -185,6 +185,25 @@ namespace SeaSick.Save
                          && anchor.CurrentIsland != null) s.anchor = 1;
             }
 
+            // Villagers born at a camp. A born row that is still a born row
+            // re-grows its own body on load (`Outpost.EnsureBornBodies`), so
+            // only the ones the ledger will NOT re-create are written here:
+            // carried aboard, or landed again as an ordinary hand.
+            var bornRows = new HashSet<string>();
+            foreach (var o in Outpost.All)
+            {
+                if (o == null || o.Ledger == null || o.Ledger.hands == null) continue;
+                foreach (var h in o.Ledger.hands)
+                    if (h != null && !string.IsNullOrEmpty(h.name) && h.born)
+                        bornRows.Add(h.name);
+            }
+            foreach (var v in BornVillager.All())
+            {
+                if (v == null || string.IsNullOrEmpty(v.bornName)) continue;
+                if (bornRows.Contains(v.bornName)) continue;
+                if (!s.crewNames.Contains(v.bornName)) s.crewNames.Add(v.bornName);
+            }
+
             // --- the hold and the stores ----------------------------------
             foreach (var kv in voyage.HeldStores)
                 if (kv.Value > 0) d.hold.Add(new StoreEntry { resource = kv.Key, count = kv.Value });
@@ -324,6 +343,20 @@ namespace SeaSick.Save
             }
             Vector3 at = new Vector3(data.ship.x, data.ship.y, data.ship.z);
             Warp(motor, at, data.ship.yaw);
+
+            // 4a. The hands she is carrying who were born at a camp. BEFORE
+            // the outposts, because `RestoreOutpost` looks aboard by name for
+            // a body to walk ashore -- a villager landed again as an ordinary
+            // hand has a row in some ledger and nobody to wear it until he is
+            // standing on the deck to be found.
+            if (data.ship.crewNames != null)
+                foreach (var who in data.ship.crewNames)
+                {
+                    if (string.IsNullOrEmpty(who)) continue;
+                    if (BornVillager.Board(who, motor.transform) == null)
+                        Debug.LogWarning("SaveGame: could not re-make " + who
+                            + ", who was aboard");
+                }
 
             // 5. The outposts.
             int restored = 0;

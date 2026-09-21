@@ -66,6 +66,13 @@ namespace SeaSick.World
         /// is a later pass.
         public int supports;
 
+        /// **Beds: how many hands this plan houses, 2026-09-21.** Zero on
+        /// everything that is not a hut -- the campfire houses nobody, and
+        /// so does the storehouse at home -- so `OutpostLedger.HousingCapacity`
+        /// can sum this over every plan raised without a special case for
+        /// what a hut is. Placeholder number, balance later.
+        public int houses;
+
         // --- the farm's field, 2026-09-21 ------------------------------------
         //
         // **Wheat on the island is gathered by hand; a farm is wheat that
@@ -214,6 +221,7 @@ namespace SeaSick.World
             footprint = new Vector2(4.84f, 4.93f),
             ridge = 3.81f,
             supports = 4,
+            houses = 2,
             prefab = "Settlement/hut_01",
         };
 

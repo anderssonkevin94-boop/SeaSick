@@ -50,6 +50,14 @@ namespace SeaSick.World
         /// something does.
         public float mood = 1f;
 
+        /// **Recruited, not shipped, 2026-09-21.** True for a hand
+        /// `OutpostLedger.Step` grew from a full pile and an empty bed --
+        /// they have a name and a row but no crew body yet. `Outpost` reads
+        /// this to know which rows still need one raised for them; it
+        /// defaults false so an existing save (every hand in it came off
+        /// the ship) does not suddenly read as newborn.
+        public bool born = false;
+
         /// What to call what they are doing, for the list on the right.
         public string Doing
         {
@@ -133,6 +141,44 @@ namespace SeaSick.World
         public float length;
 
         public Vector3 At => new Vector3(x, 0f, z);
+    }
+
+    /// **Names for a hand nobody shipped, 2026-09-21.**
+    ///
+    /// A cast of twenty came off the manifest with names already; a hand
+    /// recruited on the beach has to get one from somewhere. Picked
+    /// deterministically off a hash of the camp's key and its roster size
+    /// rather than `Random`, so the SAME camp reaching the SAME headcount
+    /// twice -- once live, once replayed from a save -- names its newcomer
+    /// the same both times.
+    public static class VillagerNames
+    {
+        /// ~24 short storybook names, the register the manifest's own crew
+        /// names are already in.
+        static readonly string[] Names =
+        {
+            "Ash", "Bram", "Cass", "Dorrit", "Edda", "Finch", "Gale", "Hollis",
+            "Ivo", "Jory", "Kess", "Lark", "Mabel", "Nye", "Orin", "Pell",
+            "Quill", "Rowan", "Sable", "Tam", "Ursa", "Vane", "Wren", "Yara",
+        };
+
+        /// The name for the next hand this ledger recruits. Skips anybody
+        /// already on the roster, so a small camp does not double up long
+        /// before the 24 run out.
+        public static string NextFor(OutpostLedger ledger)
+        {
+            int seed = ledger.keyX * 73856093 ^ ledger.keyZ * 19349663
+                ^ ledger.hands.Count * 83492791;
+            uint h = unchecked((uint)seed);
+            for (int i = 0; i < Names.Length; i++)
+            {
+                string candidate = Names[(int)((h + (uint)i) % (uint)Names.Length)];
+                if (ledger.Hand(candidate) == null) return candidate;
+            }
+            // All 24 taken by one camp: keep recruiting rather than stall
+            // on a naming collision nobody designed for.
+            return "Hand " + (ledger.hands.Count + 1);
+        }
     }
 
     /// **The outpost IS this object. The crew you can see are a rendering of
@@ -314,6 +360,73 @@ namespace SeaSick.World
         /// and over-capacity hands eat stores and can starve. None of that is
         /// wired: a farm now MAKES `Res.Food`, but nothing eats it yet.
         public float foodEaten;
+
+        // --- upkeep: eating and recruiting, 2026-09-21 ------------------------
+        //
+        // GDD 6, Upkeep: "huts cap supported hands ... neglected hands get
+        // angry." This is the first half of that -- feeding what is
+        // already here, and growing the roster to fill the beds a hut
+        // buys. The anger is still parked on `OutpostHand.mood`.
+
+        /// Food one hand ashore eats per game day. Distinct from
+        /// `FoodPerHandPerDay` above, which is what one FARMHAND produces --
+        /// this is what every hand, farmhand or not, consumes. **A
+        /// placeholder, never played.**
+        public const float EatPerHandPerDay = 1f;
+
+        /// Days of accumulated progress toward the next recruit spends.
+        public const float DaysPerRecruit = 3f;
+
+        /// Food the pile must hold before a recruit will start accruing --
+        /// and what recruiting the hand actually spends.
+        public const int RecruitFoodCost = 3;
+
+        /// Days accrued toward the next hand. Reset (less `DaysPerRecruit`)
+        /// each time a hand is born. Does not accrue without a free bed and
+        /// food in the pile -- see `Step`.
+        public float recruitProgress;
+
+        /// **Shortfall, in days, that has gone unfed.** Nobody starves or
+        /// leaves on this yet -- that is the parked "neglect/anger" feature
+        /// GDD 6 names -- but the debt is counted from the day it is first
+        /// owed, so the feature has something true to read when it is built.
+        public float hungerDays;
+
+        /// Beds this camp has, summed over every plan raised here.
+        /// `built` and `raised` grow one entry per building together (see
+        /// `Outpost.Raise`), so `built` alone is enough to count from.
+        public int HousingCapacity
+        {
+            get
+            {
+                int n = 0;
+                foreach (var id in built) n += BuildPlans.Named(id).houses;
+                return n;
+            }
+        }
+
+        /// Hands living here, housed or not -- `hands.Count` by another
+        /// name, for the sheet.
+        public int Housed => hands.Count;
+
+        /// How far along the next recruit is, 0..1.
+        public float RecruitProgress01 => DaysPerRecruit > 0f
+            ? Mathf.Clamp01(recruitProgress / DaysPerRecruit) : 0f;
+
+        /// One line for the sheet: what stands between this camp and its
+        /// next hand.
+        public string RecruitLine
+        {
+            get
+            {
+                int cap = HousingCapacity;
+                if (cap <= 0) return "no beds";
+                if (Housed >= cap) return $"{Housed} of {cap} beds";
+                if (CountOf(Res.Food) < RecruitFoodCost) return "no food to feed a newcomer";
+                float daysLeft = Mathf.Max(0f, DaysPerRecruit - recruitProgress);
+                return $"{Housed} of {cap} beds · a new hand in {daysLeft:0.#} days";
+            }
+        }
 
         // --- what is built ---------------------------------------------------
 
@@ -680,6 +793,55 @@ namespace SeaSick.World
                 made.part += want;
                 int whole = Mathf.FloorToInt(made.part);
                 if (whole > 0) { made.whole += whole; made.part -= whole; }
+            }
+
+            // --- upkeep: eating -----------------------------------------------
+            //
+            // Runs after production, so a farmhand's own harvest this same
+            // quantum is there to be eaten from -- and every quantum, not
+            // once a day, so D2 holds (ten days in one `Tick` call and ten
+            // calls of one day each spend identical food).
+            int eaters = hands.Count;
+            if (eaters > 0)
+            {
+                var food = Store(Res.Food);
+                float need = eaters * EatPerHandPerDay * days;
+                float have = food != null ? food.whole + food.part : 0f;
+                float eaten = Mathf.Min(need, have);
+                if (eaten > 0f)
+                {
+                    food.part -= eaten;
+                    while (food.part < 0f && food.whole > 0) { food.whole--; food.part += 1f; }
+                    if (food.part < 0f) food.part = 0f;
+                    foodEaten += eaten;
+                }
+                // Nobody starves or leaves on this yet -- record the debt
+                // for the neglect/anger pass and stop there.
+                if (eaten < need) hungerDays += days;
+            }
+
+            // --- upkeep: recruiting ---------------------------------------------
+            //
+            // A free bed and food in the pile are both required before
+            // progress accrues at all -- Kevin's call: recruiting should
+            // read as something the camp EARNS, not a clock that runs
+            // regardless. Checked against the pile AFTER eating, so a camp
+            // that just fed its last hand on its last three Food does not
+            // also recruit off the same three.
+            if (Housed < HousingCapacity && CountOf(Res.Food) >= RecruitFoodCost)
+            {
+                recruitProgress += days;
+                if (recruitProgress >= DaysPerRecruit)
+                {
+                    recruitProgress -= DaysPerRecruit;
+                    Take(Res.Food, RecruitFoodCost);
+                    hands.Add(new OutpostHand
+                    {
+                        name = VillagerNames.NextFor(this),
+                        order = OutpostOrder.Idle,
+                        born = true,
+                    });
+                }
             }
         }
 

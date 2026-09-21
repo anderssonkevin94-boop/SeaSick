@@ -130,6 +130,10 @@ namespace SeaSick.World
             // The piles beside the fire are drawn from the stores, so they
             // want to exist wherever the stores are being looked at.
             if (HasCamp) CampPiles.EnsureOn(this);
+            // A hut that filled itself while nobody was here has people in it
+            // now. Same reason the raise cannot live in the tick: the
+            // arithmetic recruits, but only a scene can put a body in.
+            EnsureBornBodies();
         }
 
         /// **While the trees can be seen, they are the authority on whether
@@ -551,6 +555,135 @@ namespace SeaSick.World
         /// The parked bodies belonging to this outpost, active or not.
         public Crew.CrewAgent[] Parked() => GetComponentsInChildren<Crew.CrewAgent>(true);
 
+        /// The body wearing this name here, or null.
+        public Crew.CrewAgent BodyNamed(string who)
+        {
+            if (string.IsNullOrEmpty(who)) return null;
+            foreach (var a in Parked()) if (a != null && a.DisplayName == who) return a;
+            return null;
+        }
+
+        /// **Give a row born here a body.** Kevin: *"let's have the huts fill
+        /// themselves."*
+        ///
+        /// The ledger recruits (see `OutpostHand.born`); this is the other
+        /// half -- the same authored figure the ship's hands wear, cloned the
+        /// way `Shipyard.ManCrew` clones, parked in the fire ring like any
+        /// stationed hand, and switched off unless somebody is here to see
+        /// him. He is NOT on the ship's books: no berth, no roster row, and
+        /// nothing aboard knows he exists until he is carried there.
+        public Crew.CrewAgent SpawnVillager(string who)
+        {
+            if (string.IsNullOrEmpty(who)) return null;
+            var already = BodyNamed(who);
+            if (already != null) return already;
+
+            var a = Crew.BornVillager.Make(who, transform);
+            if (a == null)
+            {
+                Debug.LogWarning("Outpost.SpawnVillager: nobody in the scene to copy for " + who);
+                return null;
+            }
+            a.gameObject.SetActive(Watched);
+            ArrangeHands();
+            if (Watched) PuppetsToWork();
+            return a;
+        }
+
+        /// **Every born row has a body.** Free to call as often as you like:
+        /// it reads the rows, and does nothing at all unless one of them is
+        /// born and bodiless -- which is the ordinary case on every tick.
+        ///
+        /// Called from `CatchUp` (so a camp that recruited while the player
+        /// was away has people in it the moment she comes back) and from
+        /// `ShowHands`, which is the moment they are looked at.
+        public void EnsureBornBodies()
+        {
+            if (ledger == null || ledger.hands == null) return;
+            Crew.CrewAgent[] bodies = null;
+            foreach (var h in ledger.hands)
+            {
+                if (h == null || string.IsNullOrEmpty(h.name)) continue;
+                if (!h.born) continue;
+                if (bodies == null) bodies = Parked();
+                bool have = false;
+                foreach (var a in bodies)
+                    if (a != null && a.DisplayName == h.name) { have = true; break; }
+                if (have) continue;
+                if (SpawnVillager(h.name) != null) bodies = Parked();
+            }
+        }
+
+        /// **Take a villager born here away with the ship.**
+        ///
+        /// `Recall` is for a hand the ship already owns: his berth was never
+        /// given up, so taking him back costs nothing. A villager born at the
+        /// camp is a new mouth on a fixed number of hammocks, so this is the
+        /// one crossing that can be refused -- and it is refused with the
+        /// number, because "she carries five" is the sentence that tells the
+        /// player to go and buy quarters.
+        ///
+        /// On success the row goes (he left the island) and the body becomes
+        /// ship's crew: reparented under the hull, told which deck is his, and
+        /// counted by `CrewRoster` like anybody else.
+        static Crew.CrewRoster RosterOn(Transform ship) =>
+            ship == null ? null
+                : (ship.GetComponentInParent<Crew.CrewRoster>()
+                   ?? ship.GetComponentInChildren<Crew.CrewRoster>(true));
+
+        /// **Is there a hammock free?** Null when there is; otherwise the
+        /// sentence the Hand's prompt shows before the player even lets go,
+        /// so a refused carry is something you can see coming.
+        ///
+        /// Counts the bodies that are actually switched on: `ManCrew` leaves
+        /// the hands a bigger rung once had lying inactive under the hull,
+        /// and a count that included them would tell a half-crewed ship she
+        /// was full.
+        public static string BerthRefusal(Transform ship)
+        {
+            if (ship == null) return "no ship alongside";
+            var roster = RosterOn(ship);
+            var yard = ship.GetComponentInParent<SeaSick.Ship.Shipyard>()
+                       ?? ship.GetComponentInChildren<SeaSick.Ship.Shipyard>(true);
+            int aboard = 0;
+            if (roster != null)
+                foreach (var c in roster.All)
+                    if (c != null && c.gameObject.activeSelf) aboard++;
+            int berths = yard != null ? Mathf.Max(1, yard.Berths) : int.MaxValue;
+            return aboard >= berths ? "no berth aboard — she carries " + aboard : null;
+        }
+
+        public bool CarryAboard(Crew.CrewAgent hand, Transform ship, out string why)
+        {
+            why = "";
+            if (hand == null || ship == null || ledger == null)
+            { why = "nobody to take aboard"; return false; }
+            var row = HandNamed(hand.DisplayName);
+            if (row == null) { why = "he is not one of this camp's"; return false; }
+
+            why = BerthRefusal(ship);
+            if (!string.IsNullOrEmpty(why)) return false;
+            why = "";
+
+            var roster = RosterOn(ship);
+            // Read BEFORE he is reparented, or the post is computed with him
+            // already counted among the hands it is meant to stand clear of.
+            Vector3 station = Crew.BornVillager.FreeStation(ship);
+
+            ledger.hands.Remove(row);
+            row.born = false;
+            CampWorker.Remove(hand);
+            hand.transform.SetParent(ship, true);
+            hand.gameObject.SetActive(true);
+
+            if (station == Vector3.zero) station = hand.transform.localPosition;
+            hand.BoardShip(ship, station);
+            hand.Rest();
+            roster?.Refresh();
+            ArrangeHands();
+            return true;
+        }
+
         /// Show the hands who live here, or put them away again.
         ///
         /// Called when the ship arrives and when she leaves: a camp you are
@@ -571,6 +704,10 @@ namespace SeaSick.World
         public void ShowHands(bool visible)
         {
             Watched = visible;
+            // Before the sweep below, or a villager recruited while she was
+            // away is spawned switched-off and stays that way until the next
+            // arrival.
+            if (visible) EnsureBornBodies();
             foreach (var a in Parked())
             {
                 if (a == null) continue;

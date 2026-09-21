@@ -415,13 +415,14 @@ namespace SeaSick.UI
             // Ashore: tap to take them back.
             int j = 0;
             var parked = outpost.Parked();
+            AshoreLabels(l);
             foreach (var ashore in l.hands)
             {
                 if (ashore == null) continue;
                 if (j >= perCol) break;
                 var r = new Rect(inner.x + colW + colGap, listTop + j * (rowH + 2f), colW, rowH);
                 UIBlocker.Block(r);
-                if (GUI.Button(r, ashore.name, row))
+                if (GUI.Button(r, ashoreNames[j], row))
                 {
                     var him = Find(parked, ashore.name);
                     if (him != null && anchor != null
@@ -431,9 +432,67 @@ namespace SeaSick.UI
                 j++;
             }
 
-            if (l.hands.Count > perCol || (roster != null && i >= perCol))
-                GUI.Label(new Rect(inner.x, inner.yMax - lineH, inner.width, lineH),
-                    "…", body);
+            // **What the beds are doing, under the two columns.** The camp
+            // recruits into the ashore column on its own now (see
+            // `OutpostLedger.RecruitLine`), and a hand appearing out of
+            // nowhere with nothing to explain it is a bug the player reports.
+            // The overflow ellipsis shares the line: both are about the list
+            // above them, and a sheet on a phone has one line to spare.
+            bool over = l.hands.Count > perCol || (roster != null && i >= perCol);
+            string foot = RecruitFoot(l, over);
+            if (!string.IsNullOrEmpty(foot))
+                GUI.Label(new Rect(inner.x, inner.yMax - lineH, inner.width, lineH), foot, body);
+        }
+
+        // The ashore column, labelled once per change rather than once per
+        // event: `OutpostHand.name` plus a tag is a fresh string every read.
+        string[] ashoreNames = new string[0];
+        long ashoreKey = long.MinValue;
+
+        void AshoreLabels(OutpostLedger l)
+        {
+            long k = 17;
+            foreach (var h in l.hands)
+            {
+                if (h == null) continue;
+                k = k * 31 + (h.name != null ? h.name.GetHashCode() : 0);
+                k = k * 31 + (h.born ? 1 : 0);
+            }
+            if (k == ashoreKey && ashoreNames.Length >= l.hands.Count) return;
+            ashoreKey = k;
+            if (ashoreNames.Length < l.hands.Count) ashoreNames = new string[l.hands.Count];
+            int n = 0;
+            foreach (var h in l.hands)
+            {
+                if (h == null) continue;
+                // **Who came out of a hut rather than off the ship.** Small,
+                // because it stops being news the moment you have looked at
+                // it -- but it is the only thing on screen that says the camp
+                // grew while you were away.
+                ashoreNames[n++] = h.born ? h.name + " ·new" : h.name;
+            }
+        }
+
+        string recruitFoot = "";
+        string recruitFrom = "";
+        bool recruitOver;
+
+        int recruitFrame = -1;
+
+        string RecruitFoot(OutpostLedger l, bool overflow)
+        {
+            // `RecruitLine` interpolates a fresh string every read, so it is
+            // read once a FRAME, not once an event -- the same trick the view
+            // readout above plays for the same reason.
+            if (recruitFrame == Time.frameCount && overflow == recruitOver) return recruitFoot;
+            recruitFrame = Time.frameCount;
+            string line = l.RecruitLine;
+            if (line == recruitFrom && overflow == recruitOver) return recruitFoot;
+            recruitFrom = line;
+            recruitOver = overflow;
+            recruitFoot = string.IsNullOrEmpty(line) ? (overflow ? "…" : "")
+                : (overflow ? "…  " + line : line);
+            return recruitFoot;
         }
 
         // Where the sheet may lie, remembered from the last Repaint.

@@ -124,6 +124,13 @@ namespace SeaSick.World
                     t.centre = onHull;
                     t.extent = hullRadius;
                     t.verb = Verb(HandTarget.Kind.Ship, who, null);
+                    // A villager born at the camp has no berth waiting for
+                    // him, so this is the one drop on her deck that can be
+                    // refused -- and the refusal is on the cursor before the
+                    // player lets go, with the number that explains it.
+                    var born = outpost != null ? outpost.HandNamed(who) : null;
+                    if (born != null && born.born)
+                        t.refusal = Outpost.BerthRefusal(ship);
                     return t;
                 }
             }
