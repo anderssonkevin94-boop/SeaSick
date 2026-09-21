@@ -1277,3 +1277,58 @@ raider back); island character does not set danger (no `Rock01` /
 leave people on" is unbuilt); a raider is never seen to land; `raiders` on
 an unloaded island is the count at the last visit; no probe gates any of
 it; a real tower model.
+
+## THE LIVE RAID — 2026-09-22
+
+Kevin, on the clock raid: *"i like the idea of raids … but i want them to
+be more interactive, to happen when i as the player is there. they can
+still beach and try to steal resources while i fight the ships … the watch
+towers should have a canon in them that fires on the raiders — the raiders
+will also fire on / try to destroy the watch towers."* And: keep raids
+while away too, to make defences worth building — frequency to be decided
+after he has felt this one.
+
+- **Trigger — `Combat/RaidDirector`** (static, ticked from `Outpost.Update`
+  only while `Watched && HasCamp`, forgotten on departure). 25 s after
+  you land at a camp with something piled, if the island's raider is alive
+  and not already raiding (`EnemyShip.IdleAt`), it is sent to the nearest
+  shore with 5 m of water (`Outpost.ShoreNear`: sixteen headings from the
+  fire, half-metre steps to 120 m, shortest wins; `shore` is 1.5 m back up
+  the sand). Once per visit.
+- **The run — `EnemyShip.Duty.Raid`.** Goal is the water point; the alert
+  / chase / stand-down transitions are suspended; the island `Avoid` bend
+  and `KeepClear` island shove are skipped for her HOME island (reef, hull
+  and player shoves stay). Within 8 m of the point or under 3 m of water
+  she is `Beached`: throttle to zero, still rides the sea, still fires.
+  `Health01 < 0.5` → `EndRaid` (recall the party, `Duty.Return`).
+- **The party — `RaidParty` + `RaidWalker`.** Three bodies from
+  `BornVillager.Make("raider", null)` (unparented: the ship rides the
+  swell), spaced along the shore. Each walks to the most valuable pile
+  (`CampLoading.BestFirst`), takes one unit through `ledger.Take` — loot
+  leaves the books only in a raider's hands — carries it (`VillagerActing
+  .Carry`) to the shore, repeats. Eight units or 120 s → the ship
+  withdraws. Ship sunk → they drop what they carry back on the pile
+  (`ledger.Add`) and walk into the sea. `ledger.raids++` on a recall.
+- **The tower — `WatchtowerGun`** on every raised Watchtower
+  (`BuildingFactory.Arm`; stripped from blueprint ghosts, which register
+  nothing). `IHittable` (6 hp, capsule up the tower) and `IFriendly`, a
+  marker the player's battery (`CannonBattery.NearestHostile`), lock and
+  aim assist skip — a player ball can still physically hit it. A `Cannon`
+  on top yaws to the nearest raider in 90 m and, **only while a lookout is
+  on watch**, fires every 4 s. Raiders in `TryFire` now choose the nearest
+  of the player and the towers, preferring a tower while raiding. A dead
+  tower goes through `Outpost.Demolish`: out of `built`, its `raised` row
+  out, its lookout idle, the object destroyed.
+- **The tell — `RaidBanner`** in the toast row from `CampSheet`: with a
+  lookout, *the lookout: RAIDERS making for the beach* the moment she
+  turns; the live *RAID — 3 ashore · 4 taken · sink the ship*; then for 8 s
+  the result (*got away with 5* / *fled with nothing* / *you sank them —
+  the loot is back on the pile*).
+
+**Numbers, all guesses:** 25 s, 3 bodies, 8 units, 120 s, 6 hp, 4 s, 90 m,
+half hull. **Still open:** the beached hull bobs at sea level rather than
+sitting in the sand; a raider approaching from the far side can clip her
+home island's shore (the shove is off for the whole island, not just near
+the site); withdrawing from a beach pops her back to the island radius in
+one frame; `RaidLine` on the sheet still talks about the away clock; the
+tower has no real model and its gun uses URP/Lit; no probe.
