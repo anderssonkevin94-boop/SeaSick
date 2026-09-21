@@ -76,9 +76,7 @@ namespace SeaSick.UI
 
         /// What the ghost is facing right now. A pier faces the sea and
         /// nothing the player does turns it -- see `Outpost.SnapPier`.
-        public float Yaw => IsPier ? snappedYaw
-            : turned ? heldYaw + turns * 45f
-            : (outpost != null ? outpost.AutoYaw(at) : 0f);
+        public float Yaw => IsPier ? snappedYaw : heldYaw + turns * 45f;
 
         bool IsPier => plan.kind == BuildKind.Pier;
 
@@ -132,8 +130,17 @@ namespace SeaSick.UI
             Instance.plan = what;
             Instance.ship = shipTransform;
             Instance.turns = 0;
-            Instance.turned = false;
+            Instance.turned = true;
+            // The facing is fixed the moment siting begins: door toward the
+            // camp from where the fire is, and from then on only R turns it
+            // (Kevin, 2026-09-22: a drawing that swung round the fire as
+            // the cursor moved was unwanted).
+            Instance.heldYaw = Instance.outpost != null
+                ? Instance.outpost.AutoYaw(Instance.outpost.CampCentre + Vector3.forward * 10f) : 0f;
             Instance.moving = movePending;
+            // A drawing being moved keeps the facing it had.
+            if (movePending && target.Ledger != null && target.Ledger.pending != null)
+                Instance.heldYaw = target.Ledger.pending.yaw;
             // **The press that started this mode must not also finish it.**
             // See `IslandInput.TapDownFrame`: an IMGUI button is clicked in
             // `OnGUI`, after every `Update` of that frame, and the Input
@@ -169,7 +176,7 @@ namespace SeaSick.UI
             {
                 // Freeze whatever it was facing, then turn from there, so the
                 // first press does not also swing it round to north.
-                if (!turned) { turned = true; heldYaw = outpost.AutoYaw(at); turns = 0; }
+                if (!turned) { turned = true; heldYaw = 0f; turns = 0; }
                 bool back = keys.leftShiftKey.isPressed || keys.rightShiftKey.isPressed;
                 turns = (turns + (back ? Steps - 1 : 1)) % Steps;
             }
