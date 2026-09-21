@@ -113,6 +113,7 @@ namespace SeaSick.World
             // the buildings the moment a storehouse went up; instead the
             // buildings ARE the ledger's ceiling, pushed in before every tick.
             ledger.ceilingPer = KeepsOfEach;
+            ReconcileWood();
             ledger.Tick(TimeOfDay.Seconds);
 
             // The arithmetic can finish a building on an island nobody is
@@ -126,6 +127,42 @@ namespace SeaSick.World
             // The piles beside the fire are drawn from the stores, so they
             // want to exist wherever the stores are being looked at.
             if (HasCamp) CampPiles.EnsureOn(this);
+        }
+
+        /// **While the trees can be seen, they are the authority on whether
+        /// there is timber.** (2026-09-21)
+        ///
+        /// The ledger's stock is an abstraction seeded off hectares
+        /// (`OutpostLedger.SeedStock`) so that a camp can be worked with the
+        /// island unloaded; the wood is ~230 trees a hectare against the
+        /// stock's 40. Left alone the two disagree in both directions: the
+        /// books say "cut out" with a hundred trees standing round the fire,
+        /// so a builder swings at a tree that will never fall; or a small
+        /// islet's mesh runs out first and the books go on paying logs out of
+        /// nothing while the hands potter. Kevin's ask -- *gather the
+        /// resources necessary, as long as those resources exist on the
+        /// island* -- only means anything if "exist" is what he can see.
+        ///
+        /// So, whenever the wood is loaded, the stock may never exceed the
+        /// trees standing, and a stock that has run dry with trees still up
+        /// is refilled from them. Both pulls are toward the mesh and
+        /// idempotent, so ticking a watched camp and ticking it unwatched
+        /// still land on the same books (D2); what changes is that the
+        /// island's stock IS its trees, one log each, which is what
+        /// `FellOwed` already assumed. Unloaded, nothing here runs and the
+        /// abstraction carries on as before.
+        void ReconcileWood()
+        {
+            var wood = WoodHere();
+            if (wood == null || wood.TreeCount == 0) return;
+            int standing = 0;
+            for (int i = 0; i < wood.TreeCount; i++)
+                if (!wood.TreeAt(i).felled) standing++;
+
+            var stock = ledger.Wood;
+            if (stock.standing > standing) stock.standing = standing;
+            else if (stock.standing < 1f && standing >= 1)
+                stock.standing = Mathf.Min(Mathf.Max(1f, stock.standingMax), standing);
         }
 
         /// Is there a camp here at all, or only ground that would take one?
@@ -867,17 +904,27 @@ namespace SeaSick.World
         ///
         /// The k-th hand to ask gets the k-th entry of the order, so the trees
         /// being worked are always the ones the ledger is about to take down,
-        /// and two men are never sent to the same trunk. Returns false when
-        /// there is nothing standing within `maxDistance` of the camp -- the
-        /// wood in reach is cut out, and a man who went on chopping a tree
-        /// that will never fall would be the animation lying about the numbers.
+        /// and two men are never sent to the same trunk.
+        ///
+        /// **The whole island, nearest first** (2026-09-21). This used to stop
+        /// at `CampWorker.Reach` and hand back "nothing", and a man with
+        /// nothing walked in circles by the fire -- Kevin: *"when I assign
+        /// people to build and there are no resources to build with they just
+        /// walk around aimlessly. Instead they should gather the resources
+        /// necessary (as long as those resources exist on the island)."* The
+        /// order already IS the ledger's, measured from the camp outward and
+        /// walked front-first, and the ledger fells past any reach the moment
+        /// the near wood is gone; so the reach was the one thing making the
+        /// man and the books disagree. Now he walks as far as the next tree
+        /// is, and the only false answer is an island with nothing left
+        /// standing -- which is when `OutpostLedger.BuildStarved` says so too
+        /// (`ReconcileWood`).
         ///
         /// He stays enrolled either way: a hand between errands is still a
         /// hand cutting wood here, and dropping him out of the count for the
         /// second and a half he spends walking home would let rule (c) empty
         /// the wood behind his back.
-        public bool ClaimTree(CampWorker w, float maxDistance,
-            out int treeIndex, out Vector3 baseAt)
+        public bool ClaimTree(CampWorker w, out int treeIndex, out Vector3 baseAt)
         {
             treeIndex = -1;
             baseAt = Vector3.zero;
@@ -888,21 +935,14 @@ namespace SeaSick.World
             BuildFellOrder(wood);
             PruneClaims();
 
-            Vector3 c = CampCentre;
-            float max2 = maxDistance * maxDistance;
             for (int k = 0; k < fellOrder.Length; k++)
             {
                 int i = fellOrder[k];
                 if (wood.TreeAt(i).felled) continue;
-                Vector3 p = wood.TreeAt(i).baseAt;
-                float dx = p.x - c.x, dz = p.z - c.z;
-                // The order IS by distance, so the first one out of reach means
-                // every one after it is too.
-                if (dx * dx + dz * dz > max2) break;
                 if (ClaimedByAnother(i, w)) continue;
                 Enrol(w, i);
                 treeIndex = i;
-                baseAt = p;
+                baseAt = wood.TreeAt(i).baseAt;
                 return true;
             }
             Enrol(w, -1);

@@ -29,7 +29,16 @@ namespace SeaSick.World
         /// haul; they should know what for before they spend it.
         public string blurb;
         public string resource;
-        public int cost;
+        /// What the plan was PRICED at -- the number the rationale comments
+        /// below argue for. Nothing pays this directly; see `cost`.
+        public int baseCost;
+        /// **Logs it costs to raise, and the only number anything pays.**
+        /// `BuildPlans.PlaytestCostCap` sits between this and `baseCost`, so
+        /// while the cap is on every reader -- the ledger's blueprint, the
+        /// Build menu, the probes -- sees the capped price, and none of them
+        /// can reach the raw one by accident.
+        public int cost => BuildPlans.PlaytestCostCap > 0
+            ? Mathf.Min(baseCost, BuildPlans.PlaytestCostCap) : baseCost;
         /// Units of stores it adds to what this place can keep, PER RESOURCE.
         public int storeCapacity;
         /// Metres: length along the ridge, then width across it.
@@ -62,20 +71,29 @@ namespace SeaSick.World
     /// Everything that can be built, in the order it is offered.
     public static class BuildPlans
     {
+        /// **TEMP for playtesting, 2026-09-21.** Kevin: *"set the limit at 5
+        /// for each building (temporarily)."* While this is above zero every
+        /// plan's `cost` is `min(baseCost, PlaytestCostCap)`; the priced
+        /// numbers below stay in source untouched and come straight back when
+        /// this is set to **0 = off**. The fire is priced under the cap (4),
+        /// so `LedgerProbe`'s one-hand-one-day gate is unaffected either way.
+        public const int PlaytestCostCap = 5;
+
         /// **The first building in the game.**
         ///
         /// Cost is set against the hold, not against a spreadsheet: she
         /// carries 24 to the marked line and 38 stuffed with deck cargo, so
         /// a storehouse is one full hold and a log over. **Two voyages,
         /// never one** -- and the second one has to come home, which is the
-        /// decision the whole loop is made of.
+        /// decision the whole loop is made of. (**Capped at 5 for the
+        /// playtest** -- see `PlaytestCostCap`; the 25 is what it goes back to.)
         public static readonly BuildPlan Storehouse = new BuildPlan
         {
             id = "Storehouse",
             label = "storehouse",
             blurb = "keeps 40 more out of the weather",
             resource = Res.Timber,
-            cost = 25,
+            baseCost = 25,
             storeCapacity = 40,
             footprint = new Vector2(8f, 5f),
             ridge = WorldScale.Storehouse,
@@ -99,7 +117,7 @@ namespace SeaSick.World
             label = "make camp",
             blurb = "a fire, and somewhere to keep ten of anything",
             resource = Res.Timber,
-            cost = 4,
+            baseCost = 4,
             storeCapacity = OutpostLedger.CampfireCeiling,
             footprint = new Vector2(3.13f, 1.78f),
             ridge = 0.84f,
@@ -119,6 +137,10 @@ namespace SeaSick.World
         // as days of one man's work: a hut is three, a store five, a farm
         // four, a sawmill six, a smithy seven. **All guesses, none played.**
         //
+        // **And, for the playtest, none of them charged**: `PlaytestCostCap`
+        // holds every one of these at five logs until it is switched off. The
+        // numbers below are the design; the cap is the experiment.
+        //
         // The footprints and ridges are NOT guesses. They are the measured
         // game bounds out of the kit's own import validation, so the four
         // corners the ground is tested at are the corners the building
@@ -130,7 +152,7 @@ namespace SeaSick.World
             label = "store hut",
             blurb = "keeps 20 more of each thing",
             resource = Res.Timber,
-            cost = 20,
+            baseCost = 20,
             storeCapacity = 20,
             footprint = new Vector2(6.46f, 5.14f),
             ridge = 3.84f,
@@ -143,7 +165,7 @@ namespace SeaSick.World
             label = "shelter",
             blurb = "somewhere for four hands to live",
             resource = Res.Timber,
-            cost = 12,
+            baseCost = 12,
             footprint = new Vector2(4.84f, 4.93f),
             ridge = 3.81f,
             supports = 4,
@@ -156,7 +178,7 @@ namespace SeaSick.World
             label = "sawmill",
             blurb = "a sawyer turns timber into boards",
             resource = Res.Timber,
-            cost = 24,
+            baseCost = 24,
             footprint = new Vector2(7.56f, 5.85f),
             ridge = 3.84f,
             position = "sawyer",
@@ -172,7 +194,7 @@ namespace SeaSick.World
             label = "farm plot",
             blurb = "a farmhand grows food out of the ground",
             resource = Res.Timber,
-            cost = 16,
+            baseCost = 16,
             footprint = new Vector2(4.66f, 4.69f),
             ridge = 1.01f,
             position = "farmhand",
@@ -187,7 +209,7 @@ namespace SeaSick.World
             label = "forge",
             blurb = "a smith turns ore into tools",
             resource = Res.Timber,
-            cost = 28,
+            baseCost = 28,
             footprint = new Vector2(6.53f, 5.85f),
             ridge = 4.29f,
             position = "smith",
@@ -203,7 +225,7 @@ namespace SeaSick.World
             label = "kitchen",
             blurb = "a cook turns food into meals",
             resource = Res.Timber,
-            cost = 18,
+            baseCost = 18,
             footprint = new Vector2(6.26f, 6.12f),
             ridge = 4.18f,
             position = "cook",

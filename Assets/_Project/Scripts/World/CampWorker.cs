@@ -107,7 +107,10 @@ namespace SeaSick.World
         const float RestSeconds = 1.1f;
         /// Long enough to read as picking a log up off a stack.
         const float LoadSeconds = 0.9f;
-        /// How far they will wander for something to work at.
+        /// How far they will wander for a PROP to work at -- stone, ore,
+        /// spice. Trees are not bounded by this any more: a cutter is handed
+        /// the ledger's next tree wherever on the island it stands
+        /// (`Outpost.ClaimTree`, 2026-09-21).
         const float Reach = 34f;
 
         /// How long a stint at a building lasts before the made goods are
@@ -136,7 +139,7 @@ namespace SeaSick.World
         public static void Attach(Outpost outpost, Crew.CrewAgent hand)
         {
             if (outpost == null || hand == null) return;
-            var w = hand.GetComponent<CampWorker>();
+            var w = Live(hand);
 
             // **Only a NEW worker gets its state seeded.** `PuppetsToWork` is
             // called after every single order write, and the first version of
@@ -162,7 +165,7 @@ namespace SeaSick.World
 
         public static void Remove(Crew.CrewAgent hand)
         {
-            var w = hand != null ? hand.GetComponent<CampWorker>() : null;
+            var w = Live(hand);
             if (w == null) return;
             w.Drop();
             // Hand his tree back BEFORE the component goes: `Destroy` is
@@ -173,14 +176,40 @@ namespace SeaSick.World
             hand.Puppeted = false;
             var act = hand.GetComponent<VillagerActing>();
             if (act != null) { act.Set(VillagerActing.Mode.None); Destroy(act); }
+            // **Dead the moment we say so, not at the end of the frame.**
+            // `Destroy` is deferred, and until it lands `GetComponent` still
+            // hands this component back -- so an `Attach` in the same frame
+            // (leave and arrive in one call; a re-order the frame a row
+            // vanished) found it, took it for a live worker, skipped the
+            // seeding, and then watched it be destroyed under the body. The
+            // hand had no worker at all after that: nobody claimed a tree,
+            // `cutters` read 0, and every tree the ledger paid for was flushed
+            // instead of cut (CampLifeProbe, 2026-09-21: "4 came down, 0 with
+            // a man swinging at them"). `Live` is the other half.
+            w.enabled = false;
             Destroy(w);
+        }
+
+        /// The worker on this body that is actually alive. A component
+        /// `Remove` has handed to `Destroy` is disabled first and skipped here,
+        /// so a body can be stripped and re-puppeted in one frame and end up
+        /// with exactly one working `CampWorker` on it.
+        static CampWorker Live(Crew.CrewAgent hand)
+        {
+            if (hand == null) return null;
+            var w = hand.GetComponent<CampWorker>();
+            if (w == null || w.enabled) return w;
+            // The first one is dying; look past it. Rare enough that the
+            // array this allocates is not worth avoiding.
+            foreach (var c in hand.GetComponents<CampWorker>())
+                if (c != null && c.enabled) return c;
+            return null;
         }
 
         // --- contract surface ------------------------------------------------
 
         /// The worker on this body, or null if it is not being puppeted.
-        public static CampWorker Of(Crew.CrewAgent hand) =>
-            hand != null ? hand.GetComponent<CampWorker>() : null;
+        public static CampWorker Of(Crew.CrewAgent hand) => Live(hand);
 
         /// Move where this hand belongs WITHOUT teleporting them there: they
         /// walk to it on their next rest. What `Outpost.ArrangeHands` calls
@@ -525,10 +554,12 @@ namespace SeaSick.World
         /// - His tree is taken by the flush while he is still walking to it
         ///   (the clock was scrubbed, or she has just arrived). He re-claims
         ///   where he stands rather than finishing his walk to a stump.
-        /// - Nothing is standing within `Reach` of the camp -- the wood here
-        ///   is cut out. He goes back to the fire and waits, because a man
-        ///   swinging at a tree that will never fall is worse than a man
-        ///   doing nothing.
+        /// - Nothing is standing anywhere on the island -- the wood is cut
+        ///   out. He goes back to the fire and waits, because a man swinging
+        ///   at a tree that will never fall is worse than a man doing
+        ///   nothing. (Until 2026-09-21 this fired at `Reach`, and a builder
+        ///   whose near wood was gone pottered while trees stood forty metres
+        ///   off; now he walks to them.)
         /// - It does not fall for `Feel.chopPatience`. The usual reason is a
         ///   full pile, and the ledger has stopped paying; he walks home, has
         ///   a breather and comes back at it.
@@ -544,13 +575,15 @@ namespace SeaSick.World
                     if (wait > 0f) { if (there) FaceRest(dt, 0f); return; }
                     if (!Claim())
                     {
-                        // Nothing standing in reach: the wood here is cut out,
-                        // or the whole island is. He potters about near the
-                        // fire and asks again in a moment -- the timber grows
-                        // back. A man who simply STOPPED would be the more
-                        // literal reading of "idle by the fire" and the wrong
-                        // one: a camp of statues is what `CampWorker` exists
-                        // to have stopped being.
+                        // Nothing standing anywhere on the island (or every
+                        // tree left has a man on it already). He potters about
+                        // near the fire and asks again in a moment. A man who
+                        // simply STOPPED would be the more literal reading of
+                        // "idle by the fire" and the wrong one: a camp of
+                        // statues is what `CampWorker` exists to have stopped
+                        // being. This is the only potter a cutter or a builder
+                        // ever does now, and the sheet's "NO TIMBER LEFT"
+                        // agrees with it (`Outpost.ReconcileWood`).
                         Vector2 off = Random.insideUnitCircle.normalized * Random.Range(6f, 12f);
                         target = Stand(camp.CampCentre + new Vector3(off.x, 0f, off.y));
                         phase = Phase.Going;
@@ -624,7 +657,7 @@ namespace SeaSick.World
         bool PileHasTimber() =>
             camp != null && camp.Ledger != null && camp.Ledger.CountOf(Res.Timber) > 0;
 
-        bool Claim() => camp.ClaimTree(this, Reach, out claimedTree, out claimAt);
+        bool Claim() => camp.ClaimTree(this, out claimedTree, out claimAt);
 
         /// His tree went down without him. Take the next one from where he is
         /// standing rather than walking the rest of the way to a stump.
