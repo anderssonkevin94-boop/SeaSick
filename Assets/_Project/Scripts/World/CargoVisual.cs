@@ -7,6 +7,18 @@ namespace SeaSick.World
     /// block of stone, an ore chunk, a spice bundle — and stacks them.
     /// Used both for the ship's hold and the stockpile at home, so a resource
     /// looks the same wherever it is.
+    ///
+    /// **Four of the eight resources were logs (2026-09-20).** The switch
+    /// below had cases for Stone, Ore and Spice and a `default` that built a
+    /// log, which was right while timber was the only thing an island made.
+    /// It stopped being right the day a camp could turn timber into boards,
+    /// ore into tools and a field into food: a hold full of tools looked
+    /// exactly like a hold full of firewood, and the whole point of the stack
+    /// at the stern is that *you can tell at a glance what you're carrying*.
+    /// Boards, Tools, Food and Meals have their own shapes now, coloured from
+    /// `Res.Colour` so a pile beside the fire and a crate on the deck are the
+    /// same colour — `CampPiles` draws from the same table. Timber, Stone, Ore
+    /// and Spice are untouched, because they are already in front of Kevin.
     public static class CargoVisual
     {
         static readonly Dictionary<string, Material> materials = new Dictionary<string, Material>();
@@ -54,6 +66,68 @@ namespace SeaSick.World
                     tie.transform.localPosition = new Vector3(0f, 0.78f, 0f);
                     break;
                 }
+                case "Boards":
+                {
+                    // A flat stack of sawn planks, cross-piled the way the
+                    // camp's own timber stack is. Four courses is enough to
+                    // read as "cut and stacked" rather than "a log".
+                    var pale = Mat("boards", Res.Colour("Boards"));
+                    for (int i = 0; i < 4; i++)
+                    {
+                        var plank = Prim(PrimitiveType.Cube, root.transform,
+                            new Vector3(1.25f, 0.11f, 0.72f), pale);
+                        plank.transform.localPosition = new Vector3(0f, 0.09f + i * 0.14f, 0f);
+                        plank.transform.localRotation =
+                            Quaternion.Euler(0f, Random.Range(-4f, 4f), 0f);
+                    }
+                    break;
+                }
+                case "Tools":
+                {
+                    // A small dark crate with a batten round it — the one
+                    // thing in the hold that is worth more than its volume,
+                    // so it is the smallest thing in the hold.
+                    var body = Mat("tools", Res.Colour("Tools"));
+                    var crate = Prim(PrimitiveType.Cube, root.transform,
+                        new Vector3(0.82f, 0.68f, 0.82f), body);
+                    crate.transform.localPosition = new Vector3(0f, 0.34f, 0f);
+                    crate.transform.localRotation =
+                        Quaternion.Euler(0f, Random.Range(-10f, 10f), 0f);
+                    var band = Prim(PrimitiveType.Cube, crate.transform,
+                        new Vector3(1.06f, 0.22f, 1.06f),
+                        Mat("toolsband", Shade(Res.Colour("Tools"), 0.55f)));
+                    band.transform.localPosition = new Vector3(0f, 0.05f, 0f);
+                    break;
+                }
+                case "Food":
+                {
+                    // A sack, tied at the neck. Green-brown, because what is
+                    // in it came out of a field an hour ago.
+                    var cloth = Mat("food", Res.Colour("Food"));
+                    var sack = Prim(PrimitiveType.Sphere, root.transform,
+                        new Vector3(0.92f, 0.78f, 0.78f), cloth);
+                    sack.transform.localPosition = new Vector3(0f, 0.36f, 0f);
+                    var neck = Prim(PrimitiveType.Sphere, root.transform,
+                        new Vector3(0.34f, 0.30f, 0.30f),
+                        Mat("foodtie", Shade(Res.Colour("Food"), 0.65f)));
+                    neck.transform.localPosition = new Vector3(0f, 0.74f, 0f);
+                    break;
+                }
+                case "Meals":
+                {
+                    // A lidded pot. Food is what the island grew; meals are
+                    // what somebody cooked, and the lid is the whole
+                    // difference in one shape.
+                    var ware = Mat("meals", Res.Colour("Meals"));
+                    var pot = Prim(PrimitiveType.Cylinder, root.transform,
+                        new Vector3(0.80f, 0.28f, 0.80f), ware);
+                    pot.transform.localPosition = new Vector3(0f, 0.28f, 0f);
+                    var lid = Prim(PrimitiveType.Cylinder, root.transform,
+                        new Vector3(0.88f, 0.05f, 0.88f),
+                        Mat("mealslid", Shade(Res.Colour("Meals"), 0.7f)));
+                    lid.transform.localPosition = new Vector3(0f, 0.60f, 0f);
+                    break;
+                }
                 default: // Timber — a log lying across the deck
                 {
                     var log = Prim(PrimitiveType.Cylinder, root.transform,
@@ -65,6 +139,11 @@ namespace SeaSick.World
             }
             return root;
         }
+
+        /// The same colour, darker — for a band, a tie or a lid, so a shape
+        /// reads as two parts without a second entry in `Res.Colour`.
+        static Color Shade(Color c, float by) =>
+            new Color(c.r * by, c.g * by, c.b * by, c.a);
 
         static GameObject Prim(PrimitiveType type, Transform parent, Vector3 scale, Material mat)
         {

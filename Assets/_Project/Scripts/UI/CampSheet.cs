@@ -1,6 +1,7 @@
 using System.Text;
 using SeaSick.Crew;
 using SeaSick.Ship;
+using SeaSick.Voyage;
 using SeaSick.World;
 using UnityEngine;
 
@@ -35,6 +36,19 @@ namespace SeaSick.UI
     /// mind, or open the crew lists). It opens when asked and **folds itself
     /// away the moment a hand takes hold of the land or of a villager**,
     /// because at that moment it has said what it had to say.
+    ///
+    /// **And it is where you LOAD (2026-09-20).** The fourth step of the loop
+    /// — *return and load* — had no button anywhere in the game: a camp's pile
+    /// could grow to its ceiling and stay there for ever. The bar's action slot
+    /// now offers ⬆ Load once there is a camp, something in it and room
+    /// aboard, and turns into ✕ Stop while the crew are carrying; the open
+    /// sheet grows a row per kind so you can take the tools and leave the
+    /// firewood. Siting and making camp keep the slot, because until there is
+    /// a camp there is nothing to load. **The headline lists every kind now**,
+    /// not just timber — a camp with a sawmill and a seam in it was reporting
+    /// one of the three things it was holding. Every string on the bar is
+    /// built only when what it says changes: `OnGUI` runs several times a
+    /// frame and this one draws on all of them.
     public class CampSheet : MonoBehaviour
     {
         [Tooltip("Fraction of the safe area the sheet may take WHEN OPEN. The island has to stay visible above it.")]
@@ -49,9 +63,51 @@ namespace SeaSick.UI
         AnchorController anchor;
         CrewRoster roster;
         ShipMotor motor;
+        VoyageManager voyage;
+        ShipHold hold;
 
         GUIStyle title, row, body;
         readonly StringBuilder sb = new StringBuilder();
+
+        // --- every string this bar draws, built only when it changes ----------
+        //
+        // IMGUI runs OnGUI once per EVENT, so a line interpolated in the draw
+        // is built three or four times a frame to say the same thing. See
+        // `HudLabel` for the measurement that made this a house rule.
+        //
+        // The headline and the per-kind rows come off the SAME key -- the
+        // camp's stores, its ceiling and its orders -- because they are two
+        // renderings of one thing and a key each is a way for them to disagree.
+        long headKey = long.MinValue;
+        string headline = "";
+        int storeRows;
+        string[] storeRes = new string[0];
+        string[] storeNames = new string[0];
+        string[] storeCounts = new string[0];
+
+        /// The loading line, which moves while the crew carry.
+        readonly HudLabel loadingText = new HudLabel();
+        readonly HudLabel roomText = new HudLabel();
+        readonly HudLabel refusalText = new HudLabel();
+
+        // The view readout, asked for once a frame rather than once an event.
+        // `IslandCam.Readout` formats a fresh string every time it is read, so
+        // the cheapest thing this sheet can do about it is read it less often.
+        int viewFrame = -1;
+        string viewLine = "";
+
+        /// The one line on the bar built out of a constant. It was
+        /// interpolated in the draw, which is once per event for a sentence
+        /// that can never change.
+        static readonly string MakeCampLine =
+            $"a fire where you want it — {BuildPlans.Campfire.cost} logs, "
+            + "cut by whoever you leave";
+
+        /// `CatchUp` is idempotent within a frame -- the tick advances on a
+        /// grid of game time -- but it still walks the scene looking for a
+        /// blueprint and a pile every time it is asked. Once a frame is all
+        /// the honesty this needs.
+        int caughtUpFrame = -1;
 
         /// Set while the sheet is on screen, so anything else drawing in the
         /// bottom of the frame can stand aside rather than overlap it. The HUD
@@ -64,6 +120,12 @@ namespace SeaSick.UI
             if (anchor == null) anchor = Object.FindFirstObjectByType<AnchorController>();
             roster = Object.FindFirstObjectByType<CrewRoster>();
             motor = Object.FindFirstObjectByType<ShipMotor>();
+            voyage = Object.FindFirstObjectByType<VoyageManager>();
+            // The hold is the ship's, and this sheet lives on her: the stack
+            // at the stern has to grow as the pile by the fire comes down, or
+            // the goods evaporate into a number half-way down the beach.
+            hold = anchor != null ? anchor.GetComponent<ShipHold>() : null;
+            if (hold == null) hold = Object.FindFirstObjectByType<ShipHold>();
 
             // Siting mode rides along with the sheet that starts it rather
             // than being a second thing to place in `Sea.unity`. The scene is
@@ -74,6 +136,9 @@ namespace SeaSick.UI
             // state, and `Sea.unity` is carrying other people's uncommitted
             // work.
             if (GetComponent<CampCrewList>() == null) gameObject.AddComponent<CampCrewList>();
+            // And the loader, which is only somewhere for the carrying
+            // coroutine to live. Same rule again.
+            if (GetComponent<CampLoading>() == null) gameObject.AddComponent<CampLoading>();
         }
 
         /// The island she is lying at, if this sheet has anything to say.
@@ -149,10 +214,16 @@ namespace SeaSick.UI
             float btnY = wide ? inner.y : inner.y + lineH;
             float right = inner.xMax;
 
+            // Everything the bar and the rows say about the stores, rebuilt
+            // only when the stores have moved. Before the buttons, because
+            // three of them read it.
+            RefreshText(isle, outpost);
+
             // The fold, furthest right where a thumb finds it.
             if (hasLists)
             {
                 var tog = new Rect(right - toggleW, btnY, toggleW, btnH);
+                UIBlocker.Block(tog);
                 if (GUI.Button(tog, open ? "▼  hide" : "▲  crew", UITheme.Button))
                     Expanded = !open;
                 right = tog.x - HudLayout.Gap;
@@ -166,28 +237,69 @@ namespace SeaSick.UI
             else if (CampSiting.Placing)
             {
                 var stop = new Rect(right - actionW, btnY, actionW, btnH);
+                UIBlocker.Block(stop);
                 if (GUI.Button(stop, "✕   Never mind", UITheme.Button)) CampSiting.End();
                 right = stop.x - HudLayout.Gap;
                 string refusal = CampSiting.Refusal;
-                say = string.IsNullOrEmpty(refusal)
-                    ? "tap the ground inside the ring   ·   R turns it 45°"
-                    : "✕ " + refusal;
+                if (string.IsNullOrEmpty(refusal))
+                    say = "tap the ground inside the ring   ·   R turns it 45°";
+                else
+                {
+                    // The refusal changes as the cursor moves, which is a
+                    // reason to rebuild it when it changes and not a reason to
+                    // rebuild it on every mouse-move EVENT.
+                    if (refusalText.Changed(refusal.GetHashCode()))
+                        refusalText.Set("✕ " + refusal);
+                    say = refusalText.Content.text;
+                }
             }
             else if (!outpost.HasCamp && !outpost.Building)
             {
                 var btn = new Rect(right - actionW, btnY, actionW, btnH);
+                UIBlocker.Block(btn);
                 if (GUI.Button(btn, "🔥   Make camp", UITheme.Button))
                     CampSiting.Begin(outpost, BuildPlans.Campfire,
                         motor != null ? motor.transform : null);
                 right = btn.x - HudLayout.Gap;
-                say = $"a fire where you want it — {BuildPlans.Campfire.cost} logs, "
-                    + "cut by whoever you leave";
+                say = MakeCampLine;
+            }
+            // **Loading, which is the fourth step of the loop and had no button
+            // at all until 2026-09-20.** It comes last in the chain on purpose:
+            // siting and making camp are how a place becomes loadable, so a
+            // slot they want is a slot that is not about carrying anything yet.
+            else if (CampLoading.LoadingFrom(outpost))
+            {
+                var stop = new Rect(right - actionW, btnY, actionW, btnH);
+                UIBlocker.Block(stop);
+                if (GUI.Button(stop, "✕   Stop", UITheme.Button)) CampLoading.Cancel();
+                right = stop.x - HudLayout.Gap;
+                say = loadingText.Content.text;
+            }
+            else if (outpost.HasCamp && outpost.Ledger != null && outpost.Ledger.Total > 0)
+            {
+                int room = CampLoading.RoomAboard(voyage);
+                if (room > 0)
+                {
+                    var btn = new Rect(right - actionW, btnY, actionW, btnH);
+                    UIBlocker.Block(btn);
+                    if (GUI.Button(btn, "⬆   Load", UITheme.Button))
+                        CampLoading.Begin(outpost, voyage, hold);
+                    right = btn.x - HudLayout.Gap;
+                    say = roomText.Content.text;
+                }
+                // No room, so no button -- and the reason matters, because one
+                // of the two is a decision the player can take and the other is
+                // the end of the voyage. The deck-cargo toggle lives one row up
+                // in the prompt stack (`AnchorController.DrawDeckCargoToggle`),
+                // which is where this line is pointing.
+                else if (voyage != null && !voyage.TakeDeckCargo)
+                    say = "the hold is at her line — deck cargo takes more";
+                else say = "she is stuffed — nothing more will fit aboard";
             }
 
             // What this place is; and under it (or instead of it, on a phone's
             // single text line) what it is asking.
             float textW = wide ? Mathf.Max(0f, right - inner.x) : inner.width;
-            string headline = HeadlineFor(isle, outpost);
             if (wide)
             {
                 bool two = !string.IsNullOrEmpty(say);
@@ -207,20 +319,68 @@ namespace SeaSick.UI
 
             float y = btnY + btnH + HudLayout.Gap;
 
+            var l = outpost.Ledger;
+            float rowH = HudLayout.Unit * 2.2f;
+            float storeH = HudLayout.Unit * 1.9f;
+
+            // **What she is standing over, kind by kind, with a way to take
+            // just that one.** Above the crew columns because it is the
+            // question you came back to answer: the ⬆ Load in the bar takes
+            // the lot best-first, and this is how you take the tools and leave
+            // the firewood.
+            //
+            // It yields to the crew, not the other way round: the lists are
+            // what the sheet is FOR, so at least three names stay visible and
+            // the rows take whatever is over. A phone gives up the view
+            // readout for them instead — that line is a dev instrument and
+            // this is the feature.
+            if (viewFrame != Time.frameCount)
+            {
+                viewFrame = Time.frameCount;
+                string now = anchor != null ? anchor.ViewReadout : null;
+                viewLine = string.IsNullOrEmpty(now) ? ""
+                    : now + "   ·   drag the land, wheel zooms, right-drag turns, End recentres";
+            }
+            string view = viewLine;
+            bool showView = !string.IsNullOrEmpty(view) && (wide || storeRows == 0);
+            float top = y + (showView ? lineH : 0f);
+            float keepBelow = lineH + 3f * (rowH + 2f);      // headers + three names
+            int rows = Mathf.Clamp(
+                Mathf.FloorToInt((inner.yMax - top - keepBelow) / storeH), 0, storeRows);
+
             // What the view is doing, in the unit the dock shot is authored in
             // (165 m), so what is on screen can be compared with the authored
             // number rather than guessed at. Per the project's own rule: for a
             // look call, draw the numbers on the picture.
-            string view = anchor != null ? anchor.ViewReadout : null;
-            if (!string.IsNullOrEmpty(view))
+            if (showView)
             {
-                GUI.Label(new Rect(inner.x, y, inner.width, lineH),
-                    view + "   ·   drag the land, wheel zooms, right-drag turns, End recentres", body);
+                GUI.Label(new Rect(inner.x, y, inner.width, lineH), view, body);
                 y += lineH;
             }
 
-            var l = outpost.Ledger;
-            float rowH = HudLayout.Unit * 2.2f;
+            if (rows > 0)
+            {
+                float loadW = Mathf.Min(HudLayout.Unit * 6f, inner.width * 0.3f);
+                float nameW = (inner.width - loadW - HudLayout.Gap) * 0.62f;
+                float countW = inner.width - loadW - HudLayout.Gap - nameW;
+                bool canTake = CampLoading.RoomAboard(voyage) > 0 && !CampLoading.Busy;
+                for (int k = 0; k < rows; k++)
+                {
+                    GUI.Label(new Rect(inner.x, y, nameW, storeH), storeNames[k], body);
+                    GUI.Label(new Rect(inner.x + nameW, y, countW, storeH), storeCounts[k], body);
+                    var lr = new Rect(inner.xMax - loadW, y + 1f, loadW, storeH - 2f);
+                    UIBlocker.Block(lr);
+                    GUI.enabled = canTake;
+                    if (GUI.Button(lr, "load", row))
+                        CampLoading.BeginOne(outpost, voyage, hold, storeRes[k]);
+                    GUI.enabled = true;
+                    y += storeH;
+                }
+                UITheme.Rect(new Rect(inner.x, y + HudLayout.Gap * 0.5f, inner.width, 1f),
+                    UITheme.Track);
+                y += HudLayout.Gap;
+            }
+
             float colGap = HudLayout.Gap;
             float colW = (inner.width - colGap) * 0.5f;
 
@@ -241,6 +401,7 @@ namespace SeaSick.UI
                     if (hand == null || !hand.IsAboard) continue;
                     if (i >= perCol) break;
                     var r = new Rect(inner.x, listTop + i * (rowH + 2f), colW, rowH);
+                    UIBlocker.Block(r);
                     if (GUI.Button(r, hand.DisplayName, row))
                     {
                         if (outpost.Station(hand) && roster != null) roster.Refresh();
@@ -257,6 +418,7 @@ namespace SeaSick.UI
                 if (ashore == null) continue;
                 if (j >= perCol) break;
                 var r = new Rect(inner.x + colW + colGap, listTop + j * (rowH + 2f), colW, rowH);
+                UIBlocker.Block(r);
                 if (GUI.Button(r, ashore.name, row))
                 {
                     var him = Find(parked, ashore.name);
@@ -321,8 +483,70 @@ namespace SeaSick.UI
             return null;
         }
 
+        /// **Every string this sheet draws, built only when it changes.**
+        ///
+        /// `OnGUI` runs once per EVENT — Layout, Repaint, and one more for
+        /// every mouse move — so the headline was being interpolated three or
+        /// four times a frame to produce the same sentence, and the per-kind
+        /// rows would have been four more. The key is what the strings SAY:
+        /// which camp, what it holds, what it can hold, and who is doing what.
+        ///
+        /// The loading line is keyed separately because it moves on its own
+        /// clock while the crew carry, and the stores it reads are moving with
+        /// it — one key for both would rebuild everything every 0.15 s.
+        void RefreshText(Island isle, Outpost outpost)
+        {
+            // Settle the books before reading them, ONCE a frame. A stale
+            // number is worse than none; four identical ticks are worse than
+            // one, and the second one in a frame does nothing anyway.
+            if (outpost != null && caughtUpFrame != Time.frameCount)
+            {
+                caughtUpFrame = Time.frameCount;
+                outpost.CatchUp();
+            }
+
+            var l = outpost != null ? outpost.Ledger : null;
+            long key = HeadKey(isle, outpost, l);
+            if (key != headKey)
+            {
+                headKey = key;
+                BuildHeadline(isle, outpost, l);
+                BuildRows(l);
+            }
+
+            // The bar's own line while a load is running, and the one that
+            // offers it. Both are read out of `HudLabel.Content.text`, so the
+            // string handed to `GUI.Label` is the same instance every event —
+            // which is what stops IMGUI regenerating its text mesh.
+            if (CampLoading.LoadingFrom(outpost))
+            {
+                string what = CampLoading.Loading;
+                int room = CampLoading.RoomAboard(voyage);
+                if (loadingText.Changed(HudLabel.Key(CampLoading.Moved, room,
+                        what != null ? what.GetHashCode() : 0)))
+                    loadingText.Set($"loading — {CampLoading.Moved} aboard, "
+                        + $"room for {room}   ·   {CampLoading.Lower(what)}");
+            }
+            else if (voyage != null)
+            {
+                int room = CampLoading.RoomAboard(voyage);
+                if (roomText.Changed(HudLabel.Key(room, voyage.TotalHeld,
+                        voyage.TakeDeckCargo ? 1 : 0)))
+                    roomText.Set($"{voyage.TotalHeld} aboard, room for {room}"
+                        + "   ·   ⬆ takes the lot, best first");
+            }
+        }
+
         /// What the player sailed back to read.
-        string HeadlineFor(Island isle, Outpost outpost)
+        ///
+        /// **It lists every kind now.** It reported timber and only timber,
+        /// which was the whole truth while an island had nothing else — and
+        /// was actively misleading from the day a sawmill could turn that
+        /// timber into boards and a seam could give up ore: a camp holding
+        /// three things said it was holding one. `CampLoading.Summary` builds
+        /// the list, so the bar, the piles and the loader all name a resource
+        /// the same way.
+        void BuildHeadline(Island isle, Outpost outpost, OutpostLedger l)
         {
             sb.Clear();
             sb.Append(isle.name);
@@ -332,27 +556,22 @@ namespace SeaSick.UI
             // on its own would be a progress bar with no verb attached.
             if (outpost != null && outpost.Building)
             {
-                outpost.CatchUp();
-                var p = outpost.Ledger.pending;
-                int building = outpost.Ledger.HandsOn(OutpostOrder.Build);
+                var p = l.pending;
+                int building = l.HandsOn(OutpostOrder.Build);
                 sb.Append("   ·   camp sited   ·   ").Append(p.done).Append(" / ")
                   .Append(p.needed).Append(" logs");
                 sb.Append("   ·   ").Append(building)
                   .Append(building == 1 ? " hand building" : " hands building");
                 if (building == 0) sb.Append("   ·   nobody is building it");
-                else if (outpost.Ledger.BuildStarved)
+                else if (l.BuildStarved)
                     sb.Append("   ·   NO TIMBER LEFT — nothing piled, nothing standing");
-                return sb.ToString();
+                headline = sb.ToString();
+                return;
             }
 
-            if (outpost != null && outpost.HasCamp && outpost.Ledger != null)
+            if (outpost != null && outpost.HasCamp && l != null)
             {
-                // Bring it up to now before reporting: a stale number is worse
-                // than none, and the tick is free when nothing has elapsed.
-                outpost.CatchUp();
-                var l = outpost.Ledger;
-                sb.Append("   ·   ").Append(l.Timber).Append(" / ").Append(l.ceilingPer)
-                  .Append(" timber");
+                sb.Append("   ·   ").Append(CampLoading.Summary(l));
                 int cutting = l.HandsOn(OutpostOrder.Gather);
                 sb.Append("   ·   ").Append(cutting)
                   .Append(cutting == 1 ? " hand cutting" : " hands cutting");
@@ -360,8 +579,81 @@ namespace SeaSick.UI
                 else if (l.Timber >= l.ceilingPer) sb.Append("   ·   the pile is full");
             }
             else sb.Append("   ·   no camp");
-            return sb.ToString();
+            headline = sb.ToString();
         }
+
+        /// One row per kind the camp is actually holding. A kind that has been
+        /// carried away entirely drops off the list, exactly as its pile
+        /// beside the fire does.
+        void BuildRows(OutpostLedger l)
+        {
+            storeRows = 0;
+            if (l == null) return;
+            if (storeRes.Length < l.stores.Count)
+            {
+                storeRes = new string[l.stores.Count];
+                storeNames = new string[l.stores.Count];
+                storeCounts = new string[l.stores.Count];
+            }
+            foreach (var s in l.stores)
+            {
+                if (s == null || s.whole <= 0 || string.IsNullOrEmpty(s.resource)) continue;
+                storeRes[storeRows] = s.resource;
+                storeNames[storeRows] = CampLoading.Lower(s.resource);
+                storeCounts[storeRows] = s.whole + " / " + l.ceilingPer;
+                storeRows++;
+            }
+        }
+
+        // The island's name, hashed once. **`Object.name` allocates a fresh
+        // string on every read** — it marshals out of native — so hashing it
+        // per event would have made this key the thing it was written to
+        // avoid. It cannot change without the island changing.
+        Island keyedIsle;
+        int isleKey;
+
+        /// Everything the headline and the rows can say, in one number.
+        long HeadKey(Island isle, Outpost outpost, OutpostLedger l)
+        {
+            if (isle != keyedIsle)
+            {
+                keyedIsle = isle;
+                isleKey = isle != null ? isle.name.GetHashCode() : 0;
+            }
+            long k = isleKey;
+            if (outpost == null || l == null) return k;
+            k = k * 31 + (outpost.HasCamp ? 1 : 0);
+            k = k * 31 + (outpost.Building ? 1 : 0);
+            if (l.pending != null) k = k * 31 + l.pending.done * 397 + l.pending.needed;
+            // Whole units and the ceiling — what the line prints. The sub-unit
+            // accrual moves every tick and changes nothing anybody can read.
+            k = k * 31 + CampLoading.CountsKey(l);
+            foreach (var h in l.hands)
+            {
+                if (h == null) continue;
+                k = k * 31 + (int)h.order;
+                if (!string.IsNullOrEmpty(h.target)) k = k * 31 + h.target.GetHashCode();
+            }
+            // The two tails the headline adds, as the booleans they are drawn
+            // from rather than the floats underneath them.
+            k = k * 31 + (l.Wood.standing < 1f ? 1 : 0);
+            return k;
+        }
+
+        /// The headline as it is drawn, for a probe that has to check the bar
+        /// agrees with the ledger. Cached: calling it in a loop costs nothing
+        /// while nothing has moved, which is the property the gate measures.
+        public string HeadlineFor(Island isle, Outpost outpost)
+        {
+            RefreshText(isle, outpost);
+            return headline;
+        }
+
+        /// How many per-kind rows the open sheet has to offer, and what they
+        /// say. For the same probe.
+        public int StoreRowCount => storeRows;
+        public string StoreRowText(int i) =>
+            i >= 0 && i < storeRows ? storeNames[i] + "  " + storeCounts[i] : "";
 
         void EnsureStyles()
         {
