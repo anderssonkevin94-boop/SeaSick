@@ -117,19 +117,29 @@ namespace SeaSick.Crew
             if (all.Length == 0) return 0;
 
             int placed = 0;
-            for (int p = 0; p < BailPriority.Length && p < all.Length; p++)
+            // The table names the five berths of the gun ship. A smaller crew
+            // simply has no one at the higher indices (this used to index past
+            // the array every frame on a two-hand skiff); a larger crew's extra
+            // hands are all spare, so they come after the table's own spare.
+            for (int p = 0; p < BailPriority.Length; p++)
             {
-                var c = all[BailPriority[p]];
-                if (c == null || !c.IsAboard) continue;
-
-                if (placed < wanted)
-                {
-                    c.StartBailing();
-                    if (c.IsBailing) placed++;
-                }
-                else c.StopBailing();
+                int i = BailPriority[p];
+                if (i < all.Length) Consider(all[i], wanted, ref placed);
             }
+            for (int i = BailPriority.Length; i < all.Length; i++)
+                Consider(all[i], wanted, ref placed);
             return placed;
+        }
+
+        static void Consider(CrewAgent c, int wanted, ref int placed)
+        {
+            if (c == null || !c.IsAboard) return;
+            if (placed < wanted)
+            {
+                c.StartBailing();
+                if (c.IsBailing) placed++;
+            }
+            else c.StopBailing();
         }
 
         /// Order to pull hands in. Index 4 is the spare (no gun), then the two
