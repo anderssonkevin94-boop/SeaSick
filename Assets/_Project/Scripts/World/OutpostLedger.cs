@@ -342,6 +342,18 @@ namespace SeaSick.World
         /// unit everything else is priced against — see `Res.GatherRate`,
         /// which sets the other resources relative to it.
         public const float TimberPerHandPerDay = 4f;
+        /// Logs a day one builder carries from the pile into a blueprint.
+        /// Three times the felling rate: the wood is already down and it is
+        /// lying five metres away. A guess like the rest.
+        public const float HaulPerHandPerDay = 12f;
+
+        /// **A build that cannot finish by itself.** Nothing in the pile and
+        /// nothing left standing to cut: the drawing will wait for the wood to
+        /// regrow, which is days per log. The sheet says so, because a stalled
+        /// blueprint is otherwise indistinguishable from a slow one.
+        public bool BuildStarved =>
+            pending != null && !pending.Complete
+            && CountOf(Res.Timber) <= 0 && Wood.standing < 1f;
 
         /// What a campfire watches over, of each thing. Settled at ten.
         public const int CampfireCeiling = 10;
@@ -454,9 +466,33 @@ namespace SeaSick.World
                 int builders = HandsOn(OutpostOrder.Build);
                 if (builders > 0)
                 {
-                    var wood = Wood;
-                    float wantB = builders * TimberPerHandPerDay * days;
+                    float labour = builders * days;          // hand-days to spend
                     float roomB = (pending.needed - pending.done) - pending.donePart;
+
+                    // **The pile first.** Kevin, 2026-09-20: *"they gathered
+                    // logs for it but it never built."* They had: ten logs sat
+                    // beside the fire while the builders walked past them to
+                    // cut fresh ones, and on a small island the fresh ones ran
+                    // out at 6 of 24 and the sawmill stood as a drawing for
+                    // ever. Timber already cut is carried five metres, which
+                    // is also why it goes in faster than timber still growing.
+                    var pile = Store(Res.Timber);
+                    if (pile != null && pile.whole > 0 && roomB > 0f && labour > 0f)
+                    {
+                        float canHaul = labour * HaulPerHandPerDay;
+                        int hauled = Mathf.FloorToInt(Mathf.Min(canHaul, Mathf.Min(pile.whole, roomB)));
+                        if (hauled > 0)
+                        {
+                            pile.whole -= hauled;
+                            pending.done += hauled;
+                            roomB -= hauled;
+                            labour -= hauled / HaulPerHandPerDay;
+                        }
+                    }
+
+                    // Then whatever is left of the day goes on cutting.
+                    var wood = Wood;
+                    float wantB = Mathf.Max(0f, labour) * TimberPerHandPerDay;
                     float gotB = Mathf.Min(wantB, Mathf.Min(wood.standing, roomB));
                     if (gotB > 0f)
                     {

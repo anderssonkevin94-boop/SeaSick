@@ -27,6 +27,16 @@ namespace SeaSick.UI
     /// ledger, still producing, because a man in the air is a man who has
     /// been told something, not a man who has stopped.
     ///
+    /// **A throw is a picture, never an order.** Kevin, 2026-09-20: *"i want
+    /// villagers / items to retain some momentum if i drop them mid grab."*
+    /// Let go while the hand is moving and the body carries on with the hand's
+    /// velocity, arcs, lands and staggers — but the order was resolved,
+    /// written and finished at the RELEASE point, in the release frame, before
+    /// the body left the hand. Nothing about where he comes down writes
+    /// anything, nothing writes twice, and he cannot come down in the sea.
+    /// Preview equals commit is the rule the whole file is shaped round and
+    /// the throw is not allowed anywhere near it.
+    ///
     /// **A steady cursor allocates nothing.** Every list this would rebuild —
     /// the parked bodies, the roster, what the island can grow — is cached and
     /// refreshed on a PRESS rather than on a frame, and the words in the
@@ -81,6 +91,43 @@ namespace SeaSick.UI
 
             /// How hard the body is pulled after the cursor, per second.
             public static float Spring = 16f;
+
+            // --- the throw ---------------------------------------------------
+            //
+            // Kevin, 2026-09-20: *"i want villagers / items to retain some
+            // momentum if i drop them mid grab."*
+
+            /// Seconds of hand movement the launch speed is averaged over.
+            /// One frame is a sample of a hand, not a measurement of one.
+            public static float throwSample = 0.1f;
+
+            /// ...and the sample before the last one counts however old it is,
+            /// up to this. **The window alone makes a throw frame-rate
+            /// dependent**: under about twelve frames a second no second
+            /// sample is ever inside 100 ms, the span is zero and letting go
+            /// throws nothing at all. `IslandCam.MeanVelocity` was caught by
+            /// exactly this on the portrait run and carries the same pair of
+            /// numbers; a hand that had already stopped still throws nothing,
+            /// because it goes on recording the same place every frame.
+            public static float throwStale = 0.35f;
+
+            /// What the hand's own speed is worth, and the ceiling on it. The
+            /// ceiling is not paranoia: a warped cursor, a dropped frame or a
+            /// probe stepping a gesture in one call all produce a perfectly
+            /// arithmetic several hundred metres a second, and an unclamped
+            /// launch would put a villager in the next archipelago.
+            public static float throwGain = 1f;
+            public static float throwMaxSpeed = 18f;
+
+            /// Under this, letting go is a PLACEMENT and behaves exactly as it
+            /// always did — set down, in place, on the spot the cursor named.
+            /// A careful hand must stay careful.
+            public static float throwMinSpeed = 1.5f;
+
+            /// How much of the launch speed goes upward. A purely horizontal
+            /// throw from head height is a short skid; a little loft is what
+            /// makes it read as a throw.
+            public static float throwRise = 0.35f;
         }
 
         /// **How far ABOVE the pointer the body hangs, as a share of screen
@@ -278,6 +325,65 @@ namespace SeaSick.UI
         bool heldPuppeted;
         Vector3 bodyAt;
 
+        /// **How fast the hand is moving, in world metres a second.**
+        ///
+        /// Sampled off the point the hand is OVER — the ground under the
+        /// cursor — and emphatically not off the held body, which is a spring
+        /// chasing that point. The body's first frames after a pick-up are one
+        /// long snap across the gap between where a man was standing and where
+        /// the cursor is, and measuring those would throw somebody every time
+        /// you picked them up at arm's length: a still hand would have a
+        /// velocity of thirty metres a second. The hand is what is moving;
+        /// the body inherits it.
+        ///
+        /// Owned as its own little thing so the day something other than a
+        /// villager can be held, it is already tracked. Allocated once: a ring
+        /// of twelve samples, no garbage per frame, which the Hand's own
+        /// allocation gate cares about.
+        sealed class HeldMotion
+        {
+            const int N = 12;
+            readonly float[] when = new float[N];
+            readonly Vector3[] at = new Vector3[N];
+            int n;
+
+            public void Reset() { n = 0; }
+
+            public void Push(Vector3 point)
+            {
+                when[n % N] = Time.unscaledTime;
+                at[n % N] = point;
+                n++;
+            }
+
+            /// Mean speed over the last `window` seconds, with the sample
+            /// before the last one always counted unless it is older than
+            /// `stale`. See `Hand.Feel.throwStale` for why that second rule
+            /// exists at all.
+            public Vector3 Mean(float window, float stale)
+            {
+                int count = Mathf.Min(n, N);
+                if (count < 2) return Vector3.zero;
+                float now = Time.unscaledTime;
+                int newest = (n - 1) % N;
+                int oldest = newest;
+                for (int i = 1; i < count; i++)
+                {
+                    int k = ((n - 1 - i) % N + N) % N;
+                    float age = now - when[k];
+                    if (i == 1 ? age > stale : age > window) break;
+                    oldest = k;
+                }
+                float dt = when[newest] - when[oldest];
+                if (dt < 1e-3f) return Vector3.zero;
+                Vector3 v = (at[newest] - at[oldest]) / dt;
+                v.y = 0f;
+                return v;
+            }
+        }
+
+        readonly HeldMotion motion = new HeldMotion();
+
         /// Lift this hand. Writes nothing.
         ///
         /// The body is unparented as it comes up, because she rolls at anchor
@@ -308,6 +414,7 @@ namespace SeaSick.UI
 
             tr.SetParent(null, true);
             bodyAt = tr.position;
+            motion.Reset();
             return true;
         }
 
@@ -325,6 +432,9 @@ namespace SeaSick.UI
             float k = 1f - Mathf.Exp(-Feel.Spring * Mathf.Max(0f, Time.unscaledDeltaTime));
             bodyAt = Vector3.Lerp(bodyAt, want, k);
             Held.transform.position = bodyAt;
+
+            // Where the HAND is, not where the body has got to. See HeldMotion.
+            motion.Push(t.point);
 
             Draw(t);
         }
@@ -415,6 +525,16 @@ namespace SeaSick.UI
             var a = Held;
             var camp = Camp;
 
+            // **Where he is at the instant of release, read before anything
+            // else runs.** `Station` and every order method call
+            // `ArrangeHands`, which stands a body with no `CampWorker` on it
+            // straight into the ring round the fire -- so a hand taken off the
+            // deck and thrown would otherwise leave from the campfire rather
+            // than from the player's own cursor. For a still drop this is
+            // thrown away a few lines down; for a throw it is the launch
+            // point.
+            Vector3 releaseFrom = a.transform.position;
+
             if (t.kind == HandTarget.Kind.Ship)
             {
                 // Ship's crew put back on the ship: nothing happened. Not even
@@ -449,11 +569,36 @@ namespace SeaSick.UI
                 row = camp.HandNamed(heldName);
             }
 
+            // **The order is already decided by the time this is read.**
+            // `Apply` writes the row from the target resolved at the release
+            // point, in this frame; the launch below only decides how the body
+            // gets to the ground afterwards. A throw is pure show: it never
+            // writes anything, and nothing about where he lands is allowed to
+            // write anything either, or the preview the cursor showed would
+            // stop being the promise the drop keeps.
+            Vector3 launch = Launch();
             Apply(camp, row, t, a);
-            SetDown(camp, a, t.point);
-            Release(VillagerActing.Mode.Land);
+            SetDown(camp, a, t.point, releaseFrom, launch);
+            Release(launch == Vector3.zero
+                ? VillagerActing.Mode.Land : VillagerActing.Mode.Dangle);
             Refresh(camp);
             return true;
+        }
+
+        /// **What letting go throws at.** Zero for a hand that was standing
+        /// still, which is the old behaviour exactly: set him down on the spot.
+        Vector3 Launch()
+        {
+            Vector3 v = motion.Mean(Feel.throwSample, Feel.throwStale) * Feel.throwGain;
+            float speed = v.magnitude;
+            if (speed < Feel.throwMinSpeed) return Vector3.zero;
+            if (speed > Feel.throwMaxSpeed)
+            {
+                v *= Feel.throwMaxSpeed / speed;
+                speed = Feel.throwMaxSpeed;
+            }
+            v.y = speed * Feel.throwRise;
+            return v;
         }
 
         /// **What a drop means, as one switch.** Every branch is a call the
@@ -491,23 +636,37 @@ namespace SeaSick.UI
             }
         }
 
-        /// Stand the body where it was let go.
+        /// Stand the body where it was let go — or, if the hand was moving,
+        /// let it carry on.
         ///
         /// Last, after every ledger write: `OrderGather`, `Assign` and
         /// `Station` all call `ArrangeHands`, which stands the whole camp back
         /// in its ring. Putting the body down first would have it teleported
         /// out from under the player's own thumb.
-        void SetDown(Outpost camp, Crew.CrewAgent a, Vector3 at)
+        ///
+        /// **A thrown body leaves from where it IS, not from where the cursor
+        /// was.** The player has been watching a man hang off the pointer for
+        /// the last second; snapping him to the drop point and then launching
+        /// him would be a jump the eye catches. The order, meanwhile, has
+        /// already been written against the cursor — those two things are
+        /// allowed to disagree by a metre and a half of spring lag, because
+        /// one is a promise and the other is a picture.
+        void SetDown(Outpost camp, Crew.CrewAgent a, Vector3 at, Vector3 from, Vector3 launch)
         {
             var tr = a.transform;
             if (tr.parent != camp.transform) tr.SetParent(camp.transform, true);
 
-            at.y = camp.GroundAt(at);
-            tr.position = at;
-            Vector3 face = camp.CampCentre - at;
-            face.y = 0f;
-            if (face.sqrMagnitude > 0.01f)
-                tr.rotation = Quaternion.LookRotation(face.normalized, Vector3.up);
+            bool thrown = launch != Vector3.zero;
+
+            if (!thrown)
+            {
+                at.y = camp.GroundAt(at);
+                tr.position = at;
+                Vector3 face = camp.CampCentre - at;
+                face.y = 0f;
+                if (face.sqrMagnitude > 0.01f)
+                    tr.rotation = Quaternion.LookRotation(face.normalized, Vector3.up);
+            }
 
             // `Station` switches a body off unless the camp is being watched,
             // and the one thing that is certainly true here is that somebody
@@ -517,15 +676,29 @@ namespace SeaSick.UI
             // The landing pose goes on BEFORE the worker is handed the body,
             // so a hand dropped from ten metres up is seen to arrive rather
             // than to appear already walking. `Restore` sets it again a moment
-            // later and that is the same value, not a second decision.
+            // later and that is the same value, not a second decision. A man
+            // in the air goes on dangling until he hits the ground.
             var landing = VillagerActing.On(a);
-            if (landing != null) landing.Set(VillagerActing.Mode.Land);
+            if (landing != null)
+                landing.Set(thrown ? VillagerActing.Mode.Dangle : VillagerActing.Mode.Land);
 
             // Gives him a walking body if he has none, and re-homes the one he
             // has to where he now stands -- dropped here, so work from here.
+            // **Attach first, then throw**: somebody taken off the deck and
+            // stationed by this very drop has no `CampWorker` until this line
+            // runs, and nothing but the worker can fly him.
             camp.PuppetsToWork();
             var w = CampWorker.Of(a);
-            if (w != null) w.PutDown(at);
+            if (w == null)
+            {
+                // Nobody to fly him — the camp is not being watched, so there
+                // is nobody to see the throw either. Set him down.
+                at.y = camp.GroundAt(at);
+                tr.position = at;
+                return;
+            }
+            if (thrown) w.Throw(from, launch);
+            else w.PutDown(at);
         }
 
         /// Put them back where they were. Writes nothing.
@@ -567,6 +740,9 @@ namespace SeaSick.UI
             var act = VillagerActing.On(a);
             if (act != null) act.Set(mode);
             heldName = null;
+            // Nothing is in the hand, so nothing is moving. A trail left lying
+            // about would be a throw inherited by the next person picked up.
+            motion.Reset();
             if (cursor != null) cursor.Hide();
         }
 

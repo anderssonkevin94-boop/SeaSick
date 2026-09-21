@@ -16,6 +16,15 @@ namespace SeaSick.World
     /// avoid. So it walks, it waits, it carries something back, and it touches
     /// no state at all.
     ///
+    /// **That holds for the felling too, and it is the whole of the
+    /// 2026-09-20 pass.** Kevin: *"when collecting wood they seem to cut at
+    /// random areas while other, random trees disappear."* A man now walks to
+    /// the tree the LEDGER's order says is next (`Outpost.ClaimTree`) and
+    /// swings at it until it goes over — but he never fells it. The fall is
+    /// still `Outpost.SyncFelling` paying out `timberTaken`; what changed is
+    /// that it now waits for him to be standing there. Which trees come down,
+    /// and how many, is untouched.
+    ///
     /// It READS the ledger in three places and writes it in none: the row's
     /// order and target (what to mime), `Ledger.pending` (where a blueprint
     /// is), and `Ledger.Stalled(row)` (whether to mime anything at all). A
@@ -50,12 +59,54 @@ namespace SeaSick.World
         Phase phase;
         Building preferred;    // the Hand's choice of WHICH sawmill
 
-        enum Phase { Resting, Going, Working, Coming, Held, Landing }
+        int claimedTree = -1;  // the trunk the camp gave him, by index
+        Vector3 claimAt;       // and where it stands
+        float chopFor;         // how long he has been swinging at it
+        bool hauling;          // carrying from the pile rather than cutting
+
+        Vector3 flyVel;        // thrown: metres a second, integrated here
+        Vector3 flyOverLand;   // the last point under him that was island
+        float flySpin, flyFor;
+
+        enum Phase { Resting, Going, Working, Coming, Held, Landing, Flying }
+
+        /// **Tunables, as plain statics.** This component is added at runtime
+        /// by `Outpost.PuppetsToWork`, so a `[SerializeField]` on it is a dial
+        /// nobody can turn. Same shape as `Hand.Feel`, which owns the other
+        /// half of the throw.
+        public static class Feel
+        {
+            /// Metres per second squared on a thrown villager. Earth, times a
+            /// little, because a real 9.81 arc over eighteen metres reads
+            /// floaty at the zoom a camp is watched from.
+            public static float throwGravity = 9.81f * 1.35f;
+
+            /// e-folds a second of air drag. Small: this is a man, not a
+            /// feather, and all it is for is stopping a clamped launch from
+            /// carrying him the length of the island.
+            public static float throwDrag = 0.35f;
+
+            /// Degrees a second of tumble about his own right axis.
+            public static float throwSpinMin = 140f, throwSpinMax = 320f;
+
+            /// Ground below this is beach or water, and nobody gets thrown
+            /// into the sea -- the horizontal motion stops over the last of
+            /// the island and he slides down onto it.
+            public static float throwShoreY = 0.5f;
+
+            /// How long a man will swing at a tree that is not coming down
+            /// before he walks back to the fire and has another go. The pile
+            /// being full is the usual reason; an eternal chop at a tree the
+            /// ledger has no use for is the animation lying about the numbers.
+            public static float chopPatience = 30f;
+        }
 
         [Tooltip("Metres a second. Slower than the shore party's 6.5 — nobody at their own camp is in a hurry.")]
         const float Speed = 2.6f;
         const float SwingSeconds = 2.4f;
         const float RestSeconds = 1.1f;
+        /// Long enough to read as picking a log up off a stack.
+        const float LoadSeconds = 0.9f;
         /// How far they will wander for something to work at.
         const float Reach = 34f;
 
@@ -114,6 +165,11 @@ namespace SeaSick.World
             var w = hand != null ? hand.GetComponent<CampWorker>() : null;
             if (w == null) return;
             w.Drop();
+            // Hand his tree back BEFORE the component goes: `Destroy` is
+            // deferred to the end of the frame, so a worker who merely stopped
+            // existing would still be holding the front of the felling order
+            // for everybody else.
+            w.ReleaseClaim();
             hand.Puppeted = false;
             var act = hand.GetComponent<VillagerActing>();
             if (act != null) { act.Set(VillagerActing.Mode.None); Destroy(act); }
@@ -148,8 +204,61 @@ namespace SeaSick.World
         public void PickedUp()
         {
             Drop();
+            ReleaseClaim();
             phase = Phase.Held;
             acting?.Set(VillagerActing.Mode.Dangle);
+        }
+
+        /// **Let go of him while the hand was moving.**
+        ///
+        /// Kevin, 2026-09-20: *"i want villagers / items to retain some
+        /// momentum if i drop them mid grab."* Black & White 2 throws: you
+        /// swing a man at the place you want him and he arrives there, rather
+        /// than being set down like a chess piece wherever the cursor stopped.
+        ///
+        /// **This is show and nothing else.** The order was resolved, written
+        /// and committed by `Hand.DropAt` at the RELEASE point, in the release
+        /// frame, before this is called -- the preview the cursor showed is
+        /// what got written, and where he comes to rest cannot change it. A
+        /// throw never writes a second order on landing, and landing in the
+        /// sea is not a thing that can happen: `TickFlight` stops the
+        /// horizontal motion at the last point that was over the island and
+        /// lets him slide down onto it.
+        ///
+        /// Touchdown goes through the existing `PutDown`, so a thrown man and
+        /// a placed man recover identically -- stagger, then re-plan from the
+        /// order he is CARRYING, which is the one the drop just gave him.
+        public void Throw(Vector3 from, Vector3 velocity)
+        {
+            Drop();
+            ReleaseClaim();
+            transform.position = from;
+            flyVel = velocity;
+            flyOverLand = new Vector3(from.x, Ground(from), from.z);
+            flySpin = Random.Range(Feel.throwSpinMin, Feel.throwSpinMax)
+                * (Random.value < 0.5f ? -1f : 1f);
+            flyFor = 0f;
+            phase = Phase.Flying;
+            acting?.Set(VillagerActing.Mode.Dangle);
+        }
+
+        /// **Is this man swinging at THIS tree right now?**
+        ///
+        /// The one question `Outpost.SyncFelling` asks of a body before it
+        /// drops a trunk. Deliberately says nothing about distance: he is at
+        /// the tree because `Stand` put him a pace off its base and `Walk` got
+        /// him there, and a distance test here would make the probe's gate --
+        /// which measures exactly that distance -- agree with itself.
+        public bool IsFellingNow(int treeIndex)
+            => phase == Phase.Working && claimedTree >= 0 && claimedTree == treeIndex
+               && isActiveAndEnabled;
+
+        /// Hand the claimed trunk back to the camp so somebody else can have
+        /// it.
+        void ReleaseClaim()
+        {
+            if (camp != null) camp.ReleaseTree(this);
+            claimedTree = -1;
         }
 
         /// The Hand has set them down here: stagger, recover, carry on.
@@ -197,7 +306,7 @@ namespace SeaSick.World
             return spot;
         }
 
-        void OnDisable() { Drop(); }
+        void OnDisable() { Drop(); ReleaseClaim(); }
 
         void Drop()
         {
@@ -258,6 +367,11 @@ namespace SeaSick.World
 
             float dt = Time.deltaTime;
 
+            // In the air, and nothing else is true of him: no order to read,
+            // no home to walk to, no row lookup. He is a body on a ballistic
+            // arc until he touches the ground, and then he is a man again.
+            if (phase == Phase.Flying) { TickFlight(dt); return; }
+
             if (phase == Phase.Landing)
             {
                 landLeft -= dt;
@@ -297,6 +411,12 @@ namespace SeaSick.World
                 lastOrder = r.order;
                 lastTarget = r.target;
                 Drop();
+                // **Only let go of the tree if the new job is not cutting.**
+                // A man re-told to cut timber keeps his claim across the
+                // change: dropping out of the camp's claim table even for one
+                // frame would read to `SyncFelling` as "nobody is cutting
+                // here" and empty the front of the wood behind him.
+                if (!Cutting(r)) ReleaseClaim();
                 phase = Phase.Resting;
                 wait = 0f;
             }
@@ -322,6 +442,10 @@ namespace SeaSick.World
         /// the pile it belongs on, rest, repeat.
         void TickErrand(OutpostHand r, float dt)
         {
+            // Cutting is its own loop now: the man does not choose the tree
+            // and does not decide when it falls. See `TickCutting`.
+            if (Cutting(r)) { TickCutting(r, dt); return; }
+
             switch (phase)
             {
                 case Phase.Resting:
@@ -334,7 +458,13 @@ namespace SeaSick.World
                     if (Walk(home, dt)) FaceRest(dt, 0f);
                     wait -= dt;
                     if (wait > 0f) return;
-                    target = FindSomethingToWorkAt(r);
+                    // **A builder goes to the PILE first.** The ledger has
+                    // paid blueprints out of the timber lying beside the fire
+                    // since 2026-09-20 (`OutpostLedger.Step`, haul then cut),
+                    // and a man walking past ten logs to fell a fresh one is
+                    // the animation contradicting the arithmetic.
+                    hauling = r.order == OutpostOrder.Build && PileHasTimber();
+                    target = hauling ? PileSpot(Res.Timber) : FindSomethingToWorkAt(r);
                     phase = Phase.Going;
                     return;
 
@@ -342,8 +472,9 @@ namespace SeaSick.World
                     acting?.Set(VillagerActing.Mode.None);
                     if (!Walk(target, dt)) return;
                     phase = Phase.Working;
-                    wait = SwingSeconds * Random.Range(0.85f, 1.35f);
-                    acting?.Set(ModeFor(WhatFor(r)));
+                    // Hoisting a log off a stack is a moment, not a shift.
+                    wait = hauling ? LoadSeconds : SwingSeconds * Random.Range(0.85f, 1.35f);
+                    acting?.Set(hauling ? VillagerActing.Mode.None : ModeFor(WhatFor(r)));
                     return;
 
                 case Phase.Working:
@@ -366,6 +497,220 @@ namespace SeaSick.World
                     wait = RestSeconds;
                     return;
             }
+        }
+
+        /// **Cutting wood: the tree that comes down is the one he is swinging
+        /// at, and it comes down while he is swinging at it.**
+        ///
+        /// Kevin, 2026-09-20: *"when collecting wood they seem to cut at
+        /// random areas while other, random trees disappear, not wanted
+        /// behavior."* He was describing two independent choosers. This
+        /// component used to walk each man to "the nearest standing tree",
+        /// while `Outpost.SyncFelling` took trees down nearest-the-CAMP the
+        /// instant the ledger's count rose -- two orderings that agree only by
+        /// accident, and with three hands out they bunched on one trunk
+        /// besides.
+        ///
+        /// So he does not choose any more. **The camp hands him the front of
+        /// the felling order** (`Outpost.ClaimTree`), which is the tree the
+        /// ledger is about to take down anyway, and no two men are ever given
+        /// the same one. He walks to it, he stands a pace off it on a bearing
+        /// of his own so three cutters ring a trunk rather than standing
+        /// inside one another, and he swings **until it falls** -- he never
+        /// fells it himself. The fall is still the ledger's, which is D2 and
+        /// is not negotiable; all he does is be there for it.
+        ///
+        /// Three things can go otherwise, and all three are ordinary:
+        ///
+        /// - His tree is taken by the flush while he is still walking to it
+        ///   (the clock was scrubbed, or she has just arrived). He re-claims
+        ///   where he stands rather than finishing his walk to a stump.
+        /// - Nothing is standing within `Reach` of the camp -- the wood here
+        ///   is cut out. He goes back to the fire and waits, because a man
+        ///   swinging at a tree that will never fall is worse than a man
+        ///   doing nothing.
+        /// - It does not fall for `Feel.chopPatience`. The usual reason is a
+        ///   full pile, and the ledger has stopped paying; he walks home, has
+        ///   a breather and comes back at it.
+        void TickCutting(OutpostHand r, float dt)
+        {
+            switch (phase)
+            {
+                case Phase.Resting:
+                {
+                    acting?.Set(VillagerActing.Mode.None);
+                    bool there = Walk(home, dt);
+                    wait -= dt;
+                    if (wait > 0f) { if (there) FaceRest(dt, 0f); return; }
+                    if (!Claim())
+                    {
+                        // Nothing standing in reach: the wood here is cut out,
+                        // or the whole island is. He potters about near the
+                        // fire and asks again in a moment -- the timber grows
+                        // back. A man who simply STOPPED would be the more
+                        // literal reading of "idle by the fire" and the wrong
+                        // one: a camp of statues is what `CampWorker` exists
+                        // to have stopped being.
+                        Vector2 off = Random.insideUnitCircle.normalized * Random.Range(6f, 12f);
+                        target = Stand(camp.CampCentre + new Vector3(off.x, 0f, off.y));
+                        phase = Phase.Going;
+                        return;
+                    }
+                    target = Stand(claimAt);
+                    phase = Phase.Going;
+                    return;
+                }
+
+                case Phase.Going:
+                    acting?.Set(VillagerActing.Mode.None);
+                    // Somebody else's flush had it. Turn round where he is.
+                    if (claimedTree >= 0 && camp.TreeIsFelled(claimedTree)) { Reclaim(); return; }
+                    if (!Walk(target, dt)) return;
+                    if (claimedTree < 0)
+                    {
+                        // He was only stretching his legs.
+                        phase = Phase.Resting;
+                        wait = RestSeconds;
+                        return;
+                    }
+                    phase = Phase.Working;
+                    chopFor = 0f;
+                    acting?.Set(VillagerActing.Mode.Chop);
+                    return;
+
+                case Phase.Working:
+                    // His claim was taken off him while he was swinging -- a
+                    // new order, or the camp letting him go. No log: he never
+                    // saw one fall.
+                    if (claimedTree < 0) { Drop(); phase = Phase.Resting; wait = RestSeconds; return; }
+                    Face(claimAt - transform.position, dt);
+                    if (camp.TreeIsFelled(claimedTree))
+                    {
+                        // It went over while he was swinging at it. Shoulder a
+                        // log and take it where it belongs -- the pile, or the
+                        // blueprint if he is building.
+                        carrying = Res.Timber;
+                        dropAt = Dropoff(r, carrying);
+                        phase = Phase.Coming;
+                        acting?.Set(VillagerActing.Mode.Carry, carrying);
+                        return;
+                    }
+                    chopFor += dt;
+                    if (chopFor < Feel.chopPatience) return;
+                    Drop();
+                    phase = Phase.Resting;
+                    wait = RestSeconds;
+                    return;
+
+                case Phase.Coming:
+                    if (!Walk(dropAt, dt)) return;
+                    Drop();
+                    phase = Phase.Resting;
+                    wait = RestSeconds;
+                    return;
+            }
+        }
+
+        /// Is this row cutting standing timber? Gatherers of timber always
+        /// are; a builder is whenever the pile has nothing left to carry, and
+        /// that is the same order the ledger's own step takes (haul, then cut).
+        bool Cutting(OutpostHand r)
+        {
+            if (r == null) return false;
+            if (r.order == OutpostOrder.Build) return !PileHasTimber();
+            return r.order == OutpostOrder.Gather && r.target == Res.Timber;
+        }
+
+        bool PileHasTimber() =>
+            camp != null && camp.Ledger != null && camp.Ledger.CountOf(Res.Timber) > 0;
+
+        bool Claim() => camp.ClaimTree(this, Reach, out claimedTree, out claimAt);
+
+        /// His tree went down without him. Take the next one from where he is
+        /// standing rather than walking the rest of the way to a stump.
+        void Reclaim()
+        {
+            if (Claim()) { target = Stand(claimAt); return; }
+            Drop();
+            phase = Phase.Resting;
+            wait = RestSeconds;
+        }
+
+        // --- thrown ------------------------------------------------------------
+
+        /// One step of a ballistic arc, and the rule that he cannot leave the
+        /// island on it.
+        ///
+        /// The clamp is not a safety net bolted on: a villager who could be
+        /// thrown into the sea would be a villager the player can delete by
+        /// accident, and the ledger row would go on producing from a body
+        /// floating off the shore. So the moment the point under him stops
+        /// being island -- too low to be anything but beach and water, or past
+        /// the shore on this bearing -- the horizontal motion stops at the last
+        /// point that WAS island and he falls onto that instead.
+        void TickFlight(float dt)
+        {
+            if (dt <= 0f) return;
+
+            flyVel += Vector3.down * Feel.throwGravity * dt;
+            flyVel *= Mathf.Exp(-Feel.throwDrag * dt);
+
+            Vector3 next = transform.position + flyVel * dt;
+            float ground;
+            if (OverLand(next, out ground))
+            {
+                flyOverLand = new Vector3(next.x, ground, next.z);
+            }
+            else
+            {
+                next.x = flyOverLand.x;
+                next.z = flyOverLand.z;
+                flyVel.x = 0f;
+                flyVel.z = 0f;
+                ground = flyOverLand.y;
+            }
+
+            if (next.y <= ground)
+            {
+                next.y = ground;
+                PutDown(next);
+                return;
+            }
+
+            transform.position = next;
+            flyFor += dt;
+
+            // Facing the way he is going, turning over his own right axis.
+            Vector3 dir = flyVel;
+            dir.y = 0f;
+            if (dir.sqrMagnitude > 0.01f)
+                transform.rotation = Quaternion.LookRotation(dir.normalized, Vector3.up)
+                    * Quaternion.Euler(flySpin * flyFor, 0f, 0f);
+        }
+
+        /// Is the ground under this point island a man can land on?
+        bool OverLand(Vector3 at, out float ground)
+        {
+            ground = Ground(at);
+            if (ground < Feel.throwShoreY) return false;
+            var isle = camp != null ? camp.Island : null;
+            if (isle != null && isle.HasProfile
+                && Island.FlatDistance(at, isle.transform.position) > isle.RadiusToward(at))
+                return false;
+            return true;
+        }
+
+        /// The height field, the way the rest of the island interface asks for
+        /// it. **Null-safe by design**: `GroundPick.Height` is a
+        /// non-serialisable static and a script recompile in play mode nulls
+        /// it, at which point `GroundAt` hands back the point's own height and
+        /// a throw simply lands where it was let go -- which is the old
+        /// behaviour, and the right thing to degrade to.
+        float Ground(Vector3 at)
+        {
+            var h = CameraRig.GroundPick.Height;
+            if (h != null) return h(at.x, at.z);
+            return camp != null ? camp.GroundAt(at) : at.y;
         }
 
         /// **A hand in a position.** Walk to the door, work the shift, carry
@@ -499,35 +844,29 @@ namespace SeaSick.World
             return at;
         }
 
-        /// Something on this island worth walking to.
+        /// Something on this island worth walking to — **stone, ore and spice,
+        /// and nothing else.**
         ///
-        /// For timber, the nearest tree still standing — which means the ring
-        /// of stumps the camp has already cut pushes them further out as the
-        /// days go by, for free. For anything else, the nearest unharvested
-        /// prop of that kind. Falls back to a spot near the fire rather than
-        /// refusing to move: a hand with nothing to walk to should still look
-        /// like somebody at a camp, not like a statue.
+        /// Timber used to come out of here too, as "the nearest tree still
+        /// standing", and that is exactly the half of Kevin's complaint about
+        /// random trees: it was a second opinion about which tree mattered,
+        /// competing with the ledger's. Cutting goes through `TickCutting` and
+        /// the camp's claim table now. Everything else is unchanged: the
+        /// nearest unharvested prop of the kind the row is after, falling back
+        /// to a spot near the fire rather than refusing to move, because a
+        /// hand with nothing to walk to should still look like somebody at a
+        /// camp and not like a statue.
         ///
         /// **Measured from the CAMP, not from the man.** It is the camp that
         /// works outward, and asking from where each hand happens to be
         /// standing would send somebody who has just walked home back to the
-        /// same tree the pile came from.
+        /// same place the pile came from.
         Vector3 FindSomethingToWorkAt(OutpostHand r)
         {
             string what = WhatFor(r);
             Vector3 from = camp.CampCentre;
 
-            if (what == Res.Timber)
-            {
-                // Through the grid rather than a scan of every tree: the wood
-                // is a few hundred trunks and this ran once a trip, but the
-                // Hand asks the same question every frame the cursor moves and
-                // there is no reason for two answers to the same question.
-                if (trees == null || trees.Wood == null) trees = TreeIndex.For(camp);
-                if (trees != null && trees.NearestStanding(from, Reach, out Vector3 baseAt))
-                    return Stand(baseAt);
-            }
-            else if (!string.IsNullOrEmpty(what))
+            if (!string.IsNullOrEmpty(what) && what != Res.Timber)
             {
                 ResourceNode near = null;
                 float best = Reach * Reach;
@@ -546,8 +885,6 @@ namespace SeaSick.World
             Vector2 off = Random.insideUnitCircle.normalized * Random.Range(6f, 12f);
             return Stand(camp.CampCentre + new Vector3(off.x, 0f, off.y));
         }
-
-        TreeIndex trees;
 
         /// Beside the thing, not inside it — and on a bearing of this hand's
         /// own, so three cutters sent to the same trunk ring it instead of

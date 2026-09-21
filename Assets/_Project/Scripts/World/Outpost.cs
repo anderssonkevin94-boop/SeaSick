@@ -503,7 +503,23 @@ namespace SeaSick.World
             // Arriving is the one moment their positions are looked at, and
             // orders may have changed while nobody could see them.
             if (visible) { ArrangeHands(); PuppetsToWork(); }
-            else foreach (var a in Parked()) CampWorker.Remove(a);
+            else
+            {
+                foreach (var a in Parked()) CampWorker.Remove(a);
+                // **Settle the felling before we stop looking.** While the
+                // camp is watched the mesh is allowed to lag the ledger by a
+                // few trees and a few seconds, because a tree comes down when
+                // a man swings at it rather than when the arithmetic says so.
+                // The moment nobody is here that licence ends: with the
+                // workers gone this drops everything still owed, nearest-first,
+                // so she never sails leaving a debt the next visit would pay
+                // as trees vanishing out of a wood nobody is standing in.
+                //
+                // It has to be HERE rather than in `StowCampHands`, which
+                // catches up first and lowers the flag second -- at that point
+                // the camp is still watched and the lag is still legal.
+                SyncFelling();
+            }
         }
 
         /// Put a walking, carrying body on every hand who is drawn.
@@ -608,7 +624,9 @@ namespace SeaSick.World
             }
         }
 
-        /// **Take the wood down to match what has been cut.**
+        /// **Take the wood down to match what has been cut** -- and, while
+        /// somebody is standing here watching, take down the tree a man is
+        /// actually swinging at.
         ///
         /// One tree per log, nearest the camp outward. The stock is 40 logs a
         /// hectare against the ~230 trees a hectare the scenery draws, so even
@@ -620,50 +638,346 @@ namespace SeaSick.World
         /// is a pure function of the ledger and works on any visit however the
         /// terrain streamed in between. Cheap: it does nothing at all unless
         /// somebody has cut something since the last call.
+        ///
+        /// ## What changed 2026-09-20, and what did NOT
+        ///
+        /// Kevin, playing it: *"when collecting wood they seem to cut at
+        /// random areas while other, random trees disappear, not wanted
+        /// behavior."* Both halves were true. A tree came down the instant the
+        /// ledger's count rose, nearest-first, while each `CampWorker` walked
+        /// independently to whatever trunk happened to be nearest him -- so the
+        /// tree a man was chopping and the tree that vanished were never the
+        /// same tree.
+        ///
+        /// The fix is a WAIT, not a new chooser. **Which trees come down, and
+        /// how many, is still decided entirely by the ledger** -- the order is
+        /// still `fellOrder`, still measured from `CampCentre`, still walked
+        /// front-first -- because that is what lets a camp worked for twenty
+        /// days while you were three islands away be found with the right ring
+        /// of stumps whatever the terrain streamer did in between (D2). What
+        /// is new is WHEN the front tree drops while the camp is being watched:
+        ///
+        /// - **(a)** the man who claimed it is standing at it swinging, or
+        /// - **(b)** it has been owed longer than `Feel.fellGraceSeconds` --
+        ///   he is still walking to it, and after ten seconds a tree that will
+        ///   not fall reads worse than one that falls unattended, or
+        /// - **(c)** the ledger has run more than `cutters + fellBacklogSlack`
+        ///   trees ahead of the mesh, which means somebody scrubbed the clock
+        ///   or she has just arrived: take the whole debt at once.
+        ///
+        /// Unwatched, or with nobody cutting, this is exactly what it always
+        /// was: drop everything owed, nearest-first, in one call.
+        ///
+        /// **The loop BREAKS rather than skipping**, and that is the load-
+        /// bearing line. If a man on the second tree could drop his while the
+        /// first still stood, the felled set would have a hole in it, and a
+        /// hole is not reproducible from an integer -- come back after the
+        /// island streamed out and the mesh would fell the prefix instead and
+        /// show you a different wood. So the front of the order is the only
+        /// tree that can ever fall next, and the claim table hands the front of
+        /// the order to somebody.
         public void SyncFelling()
         {
             if (ledger == null) return;
             int want = Mathf.FloorToInt(ledger.timberTaken);
-            if (want <= ledger.treesFelled) return;
+            if (want <= ledger.treesFelled) { owedSince = -1f; return; }
 
-            var wood = GetComponentInChildren<Terrain.SceneryWood>();
+            var wood = WoodHere();
             if (wood == null || wood.TreeCount == 0) return;
+            BuildFellOrder(wood);
+            PruneClaims();
 
-            // The order is by distance from the camp and never changes, so the
-            // same ledger always takes the same trees down -- which is what
-            // makes this reproducible rather than merely plausible.
-            if (fellOrder == null || fellOrder.Length != wood.TreeCount)
+            int cutters = claimHands.Count;
+            int backlog = want - ledger.treesFelled;
+
+            // Nobody here to see it, nobody cutting, or the arithmetic has run
+            // so far ahead that waiting would read as a bug rather than as a
+            // man walking: settle the whole debt now.
+            if (!Watched || cutters == 0 || backlog > cutters + Feel.fellBacklogSlack)
             {
-                var idx = new int[wood.TreeCount];
-                var d2 = new float[wood.TreeCount];
-                Vector3 c = CampCentre;
-                for (int i = 0; i < idx.Length; i++)
-                {
-                    idx[i] = i;
-                    Vector3 p = wood.TreeAt(i).baseAt - c;
-                    p.y = 0f;
-                    d2[i] = p.sqrMagnitude;
-                }
-                System.Array.Sort(d2, idx);
-                fellOrder = idx;
-                fellCursor = 0;
+                FellOwed(wood, want, true);
+                owedSince = -1f;
+                return;
             }
+
+            if (owedSince < 0f) owedSince = Time.unscaledTime;
+            FellOwed(wood, want, false);
+            if (ledger.treesFelled >= want) owedSince = -1f;
+        }
+
+        /// The one loop that takes trees down. `atOnce` is the old behaviour:
+        /// everything owed, front to back, no questions. Otherwise the front
+        /// tree has to be earned -- see `SyncFelling`.
+        void FellOwed(Terrain.SceneryWood wood, int want, bool atOnce)
+        {
+            bool overdue = !atOnce && Time.unscaledTime - owedSince > Feel.fellGraceSeconds;
 
             while (ledger.treesFelled < want && fellCursor < fellOrder.Length)
             {
-                int i = fellOrder[fellCursor++];
-                if (wood.TreeAt(i).felled) continue;
+                int i = fellOrder[fellCursor];
+                if (wood.TreeAt(i).felled) { fellCursor++; continue; }
+
+                if (atOnce) FlushedTrees++;
+                else
+                {
+                    bool atIt = SomebodyChopping(i);
+                    if (!atIt && !overdue) break;
+                    if (!atIt)
+                    {
+                        // The grace ran out. One tree per expiry, then the
+                        // clock starts again -- a stretch where nobody is
+                        // cutting should dribble, not empty the wood.
+                        FlushedTrees++;
+                        overdue = false;
+                    }
+                }
+
                 wood.Fell(i);
                 ledger.treesFelled++;
+                fellCursor++;
+                owedSince = Time.unscaledTime;
             }
+
             // The island ran out of trees before the ledger ran out of logs.
             // Stop asking: the stock is the authority on how much wood there
             // was, and the mesh is only the picture of it.
             if (fellCursor >= fellOrder.Length) ledger.treesFelled = want;
         }
 
+        /// **The order trees come down in: nearest the camp, outward.**
+        ///
+        /// Rebuilt when the wood changes under it (the island streamed out and
+        /// back) and when the camp MOVES -- which it can, because only the
+        /// fire says where the camp is and the fire is raised where the player
+        /// sited it. An order measured from a stale centre would fell a ring
+        /// round somewhere nobody lives.
+        void BuildFellOrder(Terrain.SceneryWood wood)
+        {
+            Vector3 c = CampCentre;
+            if (fellOrder != null && fellOrder.Length == wood.TreeCount
+                && ReferenceEquals(fellOrderWood, wood)
+                && (fellOrderFrom - c).sqrMagnitude < 0.25f) return;
+
+            var idx = new int[wood.TreeCount];
+            var d2 = new float[wood.TreeCount];
+            for (int i = 0; i < idx.Length; i++)
+            {
+                idx[i] = i;
+                Vector3 p = wood.TreeAt(i).baseAt - c;
+                p.y = 0f;
+                d2[i] = p.sqrMagnitude;
+            }
+            System.Array.Sort(d2, idx);
+            fellOrder = idx;
+            // From the front: trees already down are skipped, so starting over
+            // costs one pass and cannot double-fell anything.
+            fellCursor = 0;
+            fellOrderFrom = c;
+            fellOrderWood = wood;
+        }
+
         int[] fellOrder;
         int fellCursor;
+        Vector3 fellOrderFrom;
+        Terrain.SceneryWood fellOrderWood;
+        Terrain.SceneryWood woodCache;
+        float owedSince = -1f;
+
+        /// Trees this outpost took down with nobody swinging at them: the
+        /// arrival flush, the clock being scrubbed, and the grace running out.
+        /// **Counted for the probes**, which gate that a camp working at the
+        /// pace of its own day never needs one.
+        public int FlushedTrees { get; private set; }
+
+        /// Trees the ledger has paid for and the mesh has not yet shown. Zero
+        /// is the only acceptable answer the moment she stops looking.
+        public int TreesOwed => ledger == null
+            ? 0 : Mathf.Max(0, Mathf.FloorToInt(ledger.timberTaken) - ledger.treesFelled);
+
+        /// The welded wood on this island, cached. `GetComponentInChildren` was
+        /// being run on a path that is now touched every frame a camp is
+        /// watched, and the wood does not move.
+        Terrain.SceneryWood WoodHere()
+        {
+            if (woodCache == null) woodCache = GetComponentInChildren<Terrain.SceneryWood>();
+            return woodCache;
+        }
+
+        // --- who is on which tree ---------------------------------------------
+
+        /// **Tunables, as plain statics.** An `Outpost` is added at runtime by
+        /// the survey, so a `[SerializeField]` here would be a dial nobody can
+        /// turn -- the same reason `Hand.Feel` and `CampWorker.Feel` are shaped
+        /// this way.
+        public static class Feel
+        {
+            /// How long a tree the ledger has paid for may stand with nobody
+            /// swinging at it. Long enough to cover the walk out from the fire
+            /// at camp pace; short enough that a watched camp never looks
+            /// stuck.
+            public static float fellGraceSeconds = 10f;
+
+            /// How far the ledger may run ahead of the mesh, over and above
+            /// one tree per hand cutting, before the lag is abandoned and the
+            /// whole debt is taken at once. Two is slack for the hand who is
+            /// carrying and the hand who is walking back.
+            public static int fellBacklogSlack = 2;
+        }
+
+        /// The hands with a tree claimed here, and which tree each one is on.
+        /// Two lists rather than a dictionary: there are never more than a
+        /// handful, and a scan of four entries is cheaper than a hash.
+        readonly List<CampWorker> claimHands = new List<CampWorker>();
+        readonly List<int> claimTrees = new List<int>();
+
+        /// How many hands are cutting wood here and can be SEEN to be. What
+        /// rule (c) measures its slack against.
+        public int CuttingHands { get { PruneClaims(); return claimHands.Count; } }
+
+        /// **The slot-th tree the deterministic order has not taken down yet.**
+        ///
+        /// This is the whole of what a worker is allowed to know about which
+        /// tree is next: the order belongs to the ledger, and a man who chose
+        /// his own trunk is the bug Kevin reported.
+        public int NextToFell(int slot)
+            => NextToFell(slot, out int i, out _) ? i : -1;
+
+        public bool NextToFell(int slot, out int treeIndex, out Vector3 baseAt)
+        {
+            treeIndex = -1;
+            baseAt = Vector3.zero;
+            var wood = WoodHere();
+            if (wood == null || wood.TreeCount == 0 || slot < 0) return false;
+            BuildFellOrder(wood);
+
+            int seen = 0;
+            for (int k = 0; k < fellOrder.Length; k++)
+            {
+                int i = fellOrder[k];
+                if (wood.TreeAt(i).felled) continue;
+                if (seen++ < slot) continue;
+                treeIndex = i;
+                baseAt = wood.TreeAt(i).baseAt;
+                return true;
+            }
+            return false;
+        }
+
+        /// **Give this hand the front-most tree nobody else is on.**
+        ///
+        /// The k-th hand to ask gets the k-th entry of the order, so the trees
+        /// being worked are always the ones the ledger is about to take down,
+        /// and two men are never sent to the same trunk. Returns false when
+        /// there is nothing standing within `maxDistance` of the camp -- the
+        /// wood in reach is cut out, and a man who went on chopping a tree
+        /// that will never fall would be the animation lying about the numbers.
+        ///
+        /// He stays enrolled either way: a hand between errands is still a
+        /// hand cutting wood here, and dropping him out of the count for the
+        /// second and a half he spends walking home would let rule (c) empty
+        /// the wood behind his back.
+        public bool ClaimTree(CampWorker w, float maxDistance,
+            out int treeIndex, out Vector3 baseAt)
+        {
+            treeIndex = -1;
+            baseAt = Vector3.zero;
+            if (w == null) return false;
+
+            var wood = WoodHere();
+            if (wood == null || wood.TreeCount == 0) { Enrol(w, -1); return false; }
+            BuildFellOrder(wood);
+            PruneClaims();
+
+            Vector3 c = CampCentre;
+            float max2 = maxDistance * maxDistance;
+            for (int k = 0; k < fellOrder.Length; k++)
+            {
+                int i = fellOrder[k];
+                if (wood.TreeAt(i).felled) continue;
+                Vector3 p = wood.TreeAt(i).baseAt;
+                float dx = p.x - c.x, dz = p.z - c.z;
+                // The order IS by distance, so the first one out of reach means
+                // every one after it is too.
+                if (dx * dx + dz * dz > max2) break;
+                if (ClaimedByAnother(i, w)) continue;
+                Enrol(w, i);
+                treeIndex = i;
+                baseAt = p;
+                return true;
+            }
+            Enrol(w, -1);
+            return false;
+        }
+
+        /// This hand has stopped cutting: picked up, re-ordered, recalled or
+        /// switched off with the camp.
+        public void ReleaseTree(CampWorker w)
+        {
+            for (int k = claimHands.Count - 1; k >= 0; k--)
+                if (claimHands[k] == null || ReferenceEquals(claimHands[k], w))
+                { claimHands.RemoveAt(k); claimTrees.RemoveAt(k); }
+        }
+
+        /// The tree this hand has claimed, or -1.
+        public int TreeClaimedBy(CampWorker w)
+        {
+            for (int k = 0; k < claimHands.Count; k++)
+                if (ReferenceEquals(claimHands[k], w)) return claimTrees[k];
+            return -1;
+        }
+
+        /// Is this tree down? Asked by the man standing at it, which is how he
+        /// knows to pick up a log -- he does not fell it, he sees it fall.
+        public bool TreeIsFelled(int treeIndex)
+        {
+            var wood = WoodHere();
+            if (wood == null || treeIndex < 0 || treeIndex >= wood.TreeCount) return true;
+            return wood.TreeAt(treeIndex).felled;
+        }
+
+        /// Where a tree stands, for anything that has to walk to one.
+        public bool TreeBase(int treeIndex, out Vector3 at)
+        {
+            at = Vector3.zero;
+            var wood = WoodHere();
+            if (wood == null || treeIndex < 0 || treeIndex >= wood.TreeCount) return false;
+            at = wood.TreeAt(treeIndex).baseAt;
+            return true;
+        }
+
+        void Enrol(CampWorker w, int treeIndex)
+        {
+            for (int k = 0; k < claimHands.Count; k++)
+                if (ReferenceEquals(claimHands[k], w)) { claimTrees[k] = treeIndex; return; }
+            claimHands.Add(w);
+            claimTrees.Add(treeIndex);
+        }
+
+        bool ClaimedByAnother(int treeIndex, CampWorker w)
+        {
+            for (int k = 0; k < claimHands.Count; k++)
+                if (claimTrees[k] == treeIndex && !ReferenceEquals(claimHands[k], w)) return true;
+            return false;
+        }
+
+        bool SomebodyChopping(int treeIndex)
+        {
+            for (int k = 0; k < claimHands.Count; k++)
+            {
+                var w = claimHands[k];
+                if (w != null && w.IsFellingNow(treeIndex)) return true;
+            }
+            return false;
+        }
+
+        /// Workers die with their bodies -- `CampWorker.Remove` destroys the
+        /// component, and a destroyed component still sits in this list until
+        /// somebody looks.
+        void PruneClaims()
+        {
+            for (int k = claimHands.Count - 1; k >= 0; k--)
+                if (claimHands[k] == null) { claimHands.RemoveAt(k); claimTrees.RemoveAt(k); }
+        }
 
         /// Ground height here, for anything that has to stand something on it.
         /// The height field is the authority everywhere in this codebase; this
@@ -908,8 +1222,18 @@ namespace SeaSick.World
             // Seed the ledger off the ground that was just surveyed: how much
             // timber stands within reach is a property of the place, so it
             // belongs to the survey rather than to a constant.
+            //
+            // **The island's wood, not the clearing's.** This used to be the
+            // FLAT ground the survey found, which is a fact about where you can
+            // build and not about how much timber there is -- a wooded islet
+            // with half a hectare of level ground was given twenty logs, spent
+            // fourteen of them on a fire and a first pile, and could never
+            // finish a sawmill. Hands walk the whole island for a tree; the
+            // stock is the whole island's, less the share that is beach, rock
+            // and meadow.
+            float workedHa = WorkedHectares();
             if (ledger == null)
-                ledger = OutpostLedger.For(ClearingCentre, settlement.AreaHectares);
+                ledger = OutpostLedger.For(ClearingCentre, workedHa);
 
             // **What else this island has, the populator already decided.**
             // `WorldSettings.kinds` gives every island one of Timber, Stone,
@@ -921,7 +1245,19 @@ namespace SeaSick.World
             // unloaded.
             string kind = Island != null ? Island.ResourceName : null;
             if (!string.IsNullOrEmpty(kind) && kind != Res.Timber && Res.IsGatherable(kind))
-                ledger.SeedStock(kind, settlement.AreaHectares);
+                ledger.SeedStock(kind, workedHa);
+        }
+
+        /// Share of an island's disc that is worth working. The rest is
+        /// beach, bare rock and open ground.
+        const float WorkedShare = 0.6f;
+
+        float WorkedHectares()
+        {
+            float flat = site != null ? site.AreaHectares : 0f;
+            if (Island == null) return flat;
+            float r = Island.Radius;
+            return Mathf.Max(flat, WorkedShare * Mathf.PI * r * r / 10000f);
         }
 
         /// What a NEW outpost is sited under, published once by the world

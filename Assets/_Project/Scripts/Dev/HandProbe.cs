@@ -406,6 +406,258 @@ public class HandProbe : MonoBehaviour
         }
         else sb.AppendLine("  ground: SKIPPED — no clear ground found near the camp");
 
+        // =====================================================================
+        // 3b. THE THROW
+        // =====================================================================
+        //
+        // Kevin, 2026-09-20: *"i want villagers / items to retain some
+        // momentum if i drop them mid grab."*
+        //
+        // The whole risk in this feature is that it is a SHOW change sitting
+        // on top of the one rule the Hand exists to keep: the order is what
+        // the cursor promised at the release point, written in the release
+        // frame. So every gate below is a pair — he flies, AND the books say
+        // what they would have said if he had been set down like a chess
+        // piece. The drops in every other section of this probe are made with
+        // a STILL hand and must behave exactly as they always did, which the
+        // first gate here is the explicit statement of.
+
+        sb.AppendLine();
+        sb.AppendLine("THE THROW:");
+
+        if (haveBare)
+        {
+            Vector2 s = ToScreen(lens, bare, out _);
+            hand.PickUp(resident);
+            for (int f = 0; f < 10; f++) { hand.HoldAt(s); yield return null; }
+            var stillPv = hand.Preview(s);
+            bool stillOk = hand.DropAt(s, out string stillWhy);
+            float stillErr = Island.FlatDistance(resident.transform.position, bare);
+            if (hand.Holding) hand.Cancel();
+            sb.AppendLine($"  still : ten frames on one spot -> drop {stillOk}, "
+                + $"body {stillErr * 100f:F1} cm from the spot ({stillPv.kind})");
+            Gate("a-still-drop-still-lands-where-it-was-let-go",
+                stillOk && stillErr < 0.3f,
+                stillOk ? $"{stillErr:F2} m out" : "refused: " + stillWhy);
+        }
+        else sb.AppendLine("  still : SKIPPED — no clear ground found near the camp");
+
+        // --- a moving release, aimed at a tree, carrying inland ---------------
+        //
+        // The sweep ENDS on the tree, so the order is a concrete one that a
+        // landing spot twenty metres further on could not have produced. The
+        // direction is toward the island's middle, so the arc has land under
+        // it whatever the shape of the place.
+        if (haveTree)
+        {
+            Vector3 inland = target.transform.position - treeAt;
+            inland.y = 0f;
+            inland = inland.sqrMagnitude > 1f ? inland.normalized : Vector3.forward;
+            Vector3 runUp = treeAt - inland * 26f;
+            runUp.y = camp.GroundAt(runUp);
+
+            // Stand him down somewhere harmless first, so "gathering timber"
+            // afterwards is a change and not a coincidence.
+            {
+                Vector2 sFire = ToScreen(lens, camp.CampCentre, out _);
+                yield return Do(hand, resident, sFire);
+            }
+
+            Vector2 sFrom = ToScreen(lens, runUp, out bool fromSeen);
+            Vector2 sTo = ToScreen(lens, treeAt, out bool toSeen);
+            if (!fromSeen || !toSeen)
+            {
+                sb.AppendLine("  throw : SKIPPED — the run-up is not on screen at this shot");
+            }
+            else
+            {
+                string beforeJson = JsonUtility.ToJson(camp.Ledger);
+                yield return Sling(hand, resident, sFrom, sTo, 16);
+
+                var atDrop = camp.HandNamed(who);
+                OutpostOrder orderAtDrop = atDrop != null ? atDrop.order : OutpostOrder.Idle;
+                string targetAtDrop = atDrop != null ? atDrop.target : "";
+                string dropJson = JsonUtility.ToJson(camp.Ledger);
+                var flier = CampWorker.Of(resident);
+                bool flew = flier != null && flier.PhaseName == "Flying";
+
+                yield return Land(resident);
+                Vector3 restAt = resident.transform.position;
+                string landJson = JsonUtility.ToJson(camp.Ledger);
+                var afterLand = camp.HandNamed(who);
+
+                float carried = Island.FlatDistance(restAt, releaseAt);
+                Vector3 went = restAt - releaseAt;
+                went.y = 0f;
+                float along = went.sqrMagnitude > 0.01f
+                    ? Vector3.Dot(went.normalized, inland) : 0f;
+                float restGround = camp.GroundAt(restAt);
+                float fromMiddle = Island.FlatDistance(restAt, target.transform.position);
+                bool onLand = restGround > 0.5f && fromMiddle <= target.RadiusToward(restAt);
+
+                sb.AppendLine($"  throw : preview {pv.kind} -> drop {dropOk}, flying {flew}; "
+                    + $"carried {carried:F1} m, {along * 100f:F0}% along the sweep");
+                sb.AppendLine($"          came to rest on ground {restGround:F1} m up, "
+                    + $"{fromMiddle:F0} m from the middle of a {target.Radius:F0} m island");
+                sb.AppendLine($"          row at the drop {orderAtDrop} {targetAtDrop}, "
+                    + $"after landing {afterLand?.order} {afterLand?.target}");
+
+                Gate("a-moving-release-throws-them",
+                    dropOk && flew && carried > 3f && along > 0.5f,
+                    $"drop {dropOk}, flying {flew}, {carried:F1} m at {along * 100f:F0}% along");
+                Gate("and-they-come-to-rest-on-land", onLand,
+                    $"ground {restGround:F1} m, {fromMiddle:F0} m out of {target.RadiusToward(restAt):F0}");
+                // **The order is the cursor's, not the landing spot's.** He
+                // was let go over a tree and came down twenty metres past it
+                // on bare ground; a second resolve on touchdown would read
+                // that ground and quietly stand him down.
+                Gate("a-throw-writes-the-order-the-cursor-promised",
+                    pv.kind == HandTarget.Kind.Tree
+                    && orderAtDrop == OutpostOrder.Gather && targetAtDrop == Res.Timber,
+                    $"preview {pv.kind}, row {orderAtDrop} {targetAtDrop}");
+                Gate("and-writes-nothing-at-all-when-he-lands",
+                    dropJson == landJson && afterLand != null
+                    && afterLand.order == orderAtDrop && afterLand.target == targetAtDrop,
+                    dropJson == landJson ? "the row changed on touchdown"
+                                         : "the ledger moved while he was in the air");
+
+                // He has an order. He must get on with it.
+                Vector3 settled = resident.transform.position;
+                float moved = 0f;
+                float workBy = Time.realtimeSinceStartup + 3f;
+                while (Time.realtimeSinceStartup < workBy)
+                {
+                    yield return null;
+                    moved = Mathf.Max(moved, Island.FlatDistance(resident.transform.position, settled));
+                }
+                sb.AppendLine($"          {moved:F2} m walked in the three seconds after he got up");
+                Gate("and-he-picks-himself-up-and-gets-on-with-it", moved > 0.8f,
+                    $"{moved:F2} m in 3 s (phase {CampWorker.Of(resident)?.PhaseName})");
+
+                // --- and the books cannot tell the two apart -----------------
+                //
+                // Same order, same target, one set down and one thrown, both
+                // from the same restored ledger. Restored the way the D2
+                // section below does it.
+                JsonUtility.FromJsonOverwrite(beforeJson, camp.Ledger);
+                yield return Do(hand, resident, sTo);
+                string placedJson = JsonUtility.ToJson(camp.Ledger);
+
+                JsonUtility.FromJsonOverwrite(beforeJson, camp.Ledger);
+                yield return Sling(hand, resident, sFrom, sTo, 16);
+                yield return Land(resident);
+                string thrownJson = JsonUtility.ToJson(camp.Ledger);
+
+                sb.AppendLine($"          set down vs thrown: "
+                    + $"{(placedJson == thrownJson ? "identical books" : "DIFFERENT")}");
+                if (placedJson != thrownJson)
+                {
+                    sb.AppendLine("            placed: " + (placedJson.Length > 300
+                        ? placedJson.Substring(0, 300) + "…" : placedJson));
+                    sb.AppendLine("            thrown: " + (thrownJson.Length > 300
+                        ? thrownJson.Substring(0, 300) + "…" : thrownJson));
+                }
+                Gate("a-thrown-order-pays-exactly-what-a-placed-one-pays",
+                    placedJson == thrownJson,
+                    "the same order written two ways came out with different books");
+            }
+        }
+        else sb.AppendLine("  throw : SKIPPED — no standing tree clear of the camp's buildings");
+
+        // --- thrown at the sea, which is not somewhere he may land ------------
+        //
+        // A villager who could be thrown into the water would be a villager
+        // the player can delete by accident, and his ledger row would go on
+        // producing from a body floating off the beach. The drop itself is on
+        // LAND — the sea is refused outright, gated below — so what is being
+        // tested here is the ARC: let go at the shore, moving seaward, and he
+        // must stop over the last of the island and come down on it.
+        {
+            Vector3 out0 = anchor.transform.position - target.transform.position;
+            out0.y = 0f;
+            out0 = out0.sqrMagnitude > 1f ? out0.normalized : Vector3.forward;
+
+            // The beach she landed on lies on THIS bearing -- and so does she.
+            // `HandTargets.Resolve` tests her deck first, within a hull radius
+            // of the ray, so a shore point a few metres short of an anchored
+            // hull answers "back aboard" -- and a drop that RECALLS him is not
+            // a throw at all (2026-09-21: this gate read "rests on ground
+            // -2.2 m, 103 m out of a 100 m shore", which was his station on
+            // her deck, and the ship gate after it read able 8 -> 8 because he
+            // was already aboard). The resolver's answer is required to be
+            // land here, and if the shore under her is all deck the search
+            // swings round to the next bearing.
+            Vector3 shoreAt = default;
+            Vector2 sShore = default;
+            bool shoreOk = false;
+            HandTarget shorePv = default;
+            Vector3 outDir = out0;
+            float[] swings = { 0f, 40f, -40f, 80f, -80f, 120f, -120f };
+            foreach (float swing in swings)
+            {
+                if (shoreOk) break;
+                outDir = Quaternion.Euler(0f, swing, 0f) * out0;
+                Vector3 lastLand = default;
+                bool haveShore = false;
+                for (float r = 6f; r < target.Radius + 40f; r += 2f)
+                {
+                    Vector3 p = target.transform.position + outDir * r;
+                    p.y = camp.GroundAt(p);
+                    if (p.y > 1.5f) { lastLand = p; haveShore = true; continue; }
+                    if (haveShore) break;          // the last land on this bearing
+                }
+
+                // Back off until the resolver will actually take a drop there
+                // -- on LAND, not on her deck.
+                for (int back = 0; back < 10 && haveShore; back++)
+                {
+                    Vector3 p = lastLand - outDir * (back * 2f);
+                    p.y = camp.GroundAt(p);
+                    sShore = ToScreen(lens, p, out bool seen);
+                    if (!seen) continue;
+                    var probe = hand.Preview(sShore);
+                    if (!probe.Allowed || probe.kind == HandTarget.Kind.Water
+                        || probe.kind == HandTarget.Kind.Ship) continue;
+                    shoreAt = p;
+                    shorePv = probe;
+                    shoreOk = true;
+                    break;
+                }
+            }
+
+            if (!shoreOk)
+            {
+                sb.AppendLine("  seaward: SKIPPED — no shore point on screen that will take a drop");
+            }
+            else
+            {
+                Vector3 runUp = shoreAt - outDir * 26f;
+                runUp.y = camp.GroundAt(runUp);
+                Vector2 sFrom = ToScreen(lens, runUp, out bool seen2);
+                if (!seen2)
+                {
+                    sb.AppendLine("  seaward: SKIPPED — the run-up is not on screen");
+                }
+                else
+                {
+                    yield return Sling(hand, resident, sFrom, sShore, 16);
+                    yield return Land(resident);
+                    Vector3 restAt = resident.transform.position;
+                    float restGround = camp.GroundAt(restAt);
+                    float fromMiddle = Island.FlatDistance(restAt, target.transform.position);
+                    float shoreHere = target.RadiusToward(restAt);
+                    float carried = Island.FlatDistance(restAt, releaseAt);
+                    sb.AppendLine($"  seaward: let go over {shorePv.kind}, drop resolved {pv.kind} "
+                        + $"({(dropOk ? "taken" : "refused: " + dropWhy)}); thrown {carried:F1} m at the water — "
+                        + $"rests on ground {restGround:F1} m up, {fromMiddle:F0} m out "
+                        + $"of a {shoreHere:F0} m shore");
+                    Gate("a-throw-at-the-sea-comes-to-rest-on-land",
+                        dropOk && restGround > 0.5f && fromMiddle <= shoreHere,
+                        $"drop {dropOk}, ground {restGround:F1} m, {fromMiddle:F0} m against {shoreHere:F0}");
+                }
+            }
+        }
+
         // --- the sea ------------------------------------------------------------
         //
         // On a bearing WELL AWAY from where she is lying. A point chosen out
@@ -610,6 +862,52 @@ public class HandProbe : MonoBehaviour
                 $"{bytes} bytes over 120 frames' worth of holding");
         }
 
+        // =====================================================================
+        // AND THE THING HE WAS DROPPED ON GETS BUILT
+        //
+        // Kevin, first play of the Hand: *"i dropped several workers on it and
+        // they gathered logs for it but it never built."* Every gate above
+        // stops at the ORDER being written. `LandProbe`'s lesson again: the
+        // half after the prompt is the half that was broken. Last, because
+        // finishing the build changes the camp the sections above measured.
+        // =====================================================================
+        if (camp.Building)
+        {
+            var p = camp.Ledger.pending;
+            string planId = p.planId;
+            var plan = BuildPlans.Named(planId);
+            int stoodBefore = camp.CountOf(planId);
+            var builder = camp.HandNamed(who);
+            if (builder != null) camp.OrderBuild(builder);
+
+            float days = Mathf.Max(2f, p.needed / OutpostLedger.TimberPerHandPerDay * 1.5f);
+            camp.Ledger.lastTicked = TimeOfDay.Seconds;
+            camp.Ledger.Tick(TimeOfDay.Seconds + days * TimeOfDay.DayLength);
+            camp.CatchUp();
+            yield return null;
+            camp.CatchUp();
+            yield return null;
+
+            int stoodAfter = camp.CountOf(planId);
+            sb.AppendLine();
+            sb.AppendLine($"BUILDING THE {plan.label.ToUpperInvariant()} ({p.needed} logs, one hand, {days:F1} days):");
+            if (camp.Ledger.pending != null)
+            {
+                var q = camp.Ledger.pending;
+                Vector3 at = q.At; at.y = camp.GroundAt(at);
+                bool could = camp.CanPlace(plan, at, q.yaw, out string whyNot);
+                sb.AppendLine($"  STILL A DRAWING: {q.done} / {q.needed} logs in it, "
+                    + $"{camp.Ledger.Wood.standing:F1} timber left standing, "
+                    + $"{camp.Ledger.HandsOn(OutpostOrder.Build)} hand(s) building; "
+                    + $"CanPlace now says {(could ? "yes" : "NO — " + whyNot)}");
+            }
+            else sb.AppendLine($"  it stands: {stoodBefore} -> {stoodAfter}, "
+                + $"camp still at {camp.CampCentre.x:F0},{camp.CampCentre.z:F0}");
+            Gate("a-blueprint-somebody-was-dropped-on-gets-built",
+                camp.Ledger.pending == null && stoodAfter == stoodBefore + 1,
+                camp.Ledger.pending != null ? "still a drawing" : $"{stoodBefore} -> {stoodAfter}");
+        }
+
         TimeOfDay.Paused = wasPaused;
         Finish(null);
     }
@@ -637,6 +935,52 @@ public class HandProbe : MonoBehaviour
         hand.HoldAt(screen);
         dropOk = hand.DropAt(screen, out dropWhy);
         if (hand.Holding) hand.Cancel();
+    }
+
+    /// Where the body was at the instant the hand let go. Not the same point
+    /// as the cursor's: the body is spring-chased and lags a metre or so at a
+    /// hard sweep, and the distance a throw CARRIES has to be measured from
+    /// where he actually was, not from where he was being aimed.
+    Vector3 releaseAt;
+
+    /// **Lift, sweep the cursor across the ground, and let go at speed.**
+    ///
+    /// The straight screen path over several frames is exactly what
+    /// `IslandInput` feeds the Hand when a finger or a mouse drags, so this is
+    /// not a private copy of the gesture. The six frames on the start point
+    /// first are not padding: the body is a spring chasing the cursor, and
+    /// without them the sweep would begin mid-snap.
+    System.Collections.IEnumerator Sling(Hand hand, SeaSick.Crew.CrewAgent who,
+        Vector2 from, Vector2 to, int frames)
+    {
+        pv = default;
+        dropOk = false;
+        dropWhy = "";
+        releaseAt = Vector3.zero;
+        if (!hand.PickUp(who)) { dropWhy = "could not lift them"; yield break; }
+        for (int f = 0; f < 6; f++) { hand.HoldAt(from); yield return null; }
+        for (int f = 1; f <= frames; f++)
+        {
+            hand.HoldAt(Vector2.Lerp(from, to, f / (float)frames));
+            yield return null;
+        }
+        pv = hand.Preview(to);
+        releaseAt = who.transform.position;
+        dropOk = hand.DropAt(to, out dropWhy);
+        if (hand.Holding) hand.Cancel();
+    }
+
+    /// Wait out the arc. Six seconds is three times the longest a clamped
+    /// throw can stay up.
+    System.Collections.IEnumerator Land(SeaSick.Crew.CrewAgent who)
+    {
+        float by = Time.realtimeSinceStartup + 6f;
+        while (Time.realtimeSinceStartup < by)
+        {
+            var w = CampWorker.Of(who);
+            if (w == null || w.PhaseName != "Flying") yield break;
+            yield return null;
+        }
     }
 
     // =====================================================================

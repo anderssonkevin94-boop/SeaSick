@@ -254,8 +254,16 @@ public class CampLifeProbe : MonoBehaviour
         int samples = 0, wide = 0;
         float sumErr = 0f, worstErr = 0f;
         Vector3 prev = bodyB.transform.position;
-        float faceUntil = Time.realtimeSinceStartup + 3f;
-        while (Time.realtimeSinceStartup < faceUntil)
+        // Sampled while he is WALKING, up to forty seconds of looking for
+        // it. Three seconds from the order used to be enough because the
+        // order sent him off at once; since the felling claims (2026-09-20)
+        // a man re-told to cut timber keeps his tree and goes on swinging at
+        // it until it falls, so the three seconds after the order can be
+        // three seconds of standing still (2026-09-21: "0 moving frames").
+        // The gate waits for him, thresholds unchanged.
+        float faceStart = Time.realtimeSinceStartup;
+        float faceUntil = faceStart + 40f;
+        while (Time.realtimeSinceStartup < faceUntil && samples < 30)
         {
             yield return null;
             Vector3 now = bodyB.transform.position;
@@ -275,7 +283,7 @@ public class CampLifeProbe : MonoBehaviour
 
         sb.AppendLine();
         sb.AppendLine("WHICH WAY HE IS FACING:");
-        sb.AppendLine($"  {samples} moving frames over 3 s: mean {meanErr:F1}° off his velocity, "
+        sb.AppendLine($"  {samples} moving frames over {Time.realtimeSinceStartup - faceStart:F0} s: mean {meanErr:F1}° off his velocity, "
             + $"worst {worstErr:F0}°, {wideShare * 100f:F0}% past 25°");
         // Not "never past 25°": a turn at the end of a leg is a transient the
         // 8 Hz smoothing is *supposed* to produce. A fight with another writer
@@ -371,13 +379,23 @@ public class CampLifeProbe : MonoBehaviour
         Gate("and-back-at-work-inside-two-seconds", moved > 0.8f,
             $"{moved:F2} m in 2 s");
 
-        // --- 6. D2: thirty seconds of villagers changes nothing ---------------
-
-        // Nobody but the camp's own puppets may be on this island for the next
-        // thirty seconds. A shore-party hand walking a log into the pile is
-        // the SHIP paying the camp — a real feature, gated elsewhere — and it
-        // would read here as the villagers cheating. `PutBackOnStation` moves
-        // them without delivering anything, which `ReturnAboard` would.
+        // =====================================================================
+        // 6. THE TREE THAT COMES DOWN IS THE ONE SOMEBODY IS CHOPPING
+        // =====================================================================
+        //
+        // Kevin, 2026-09-20: *"when collecting wood they seem to cut at random
+        // areas while other, random trees disappear, not wanted behavior."*
+        // Two choosers: each hand walked to the nearest trunk to HIM, and
+        // `SyncFelling` took trees down nearest the CAMP the instant the
+        // ledger's count rose. Now the camp hands out the front of its own
+        // felling order and the fall waits for the man to be standing at it.
+        //
+        // Nobody but the camp's own puppets may be on this island from here
+        // on. A shore-party hand walking a log into the pile is the SHIP
+        // paying the camp — a real feature, gated elsewhere — and it would
+        // read here as the villagers cheating, and its felled trees would read
+        // as the order going ragged. `PutBackOnStation` moves them without
+        // delivering anything, which `ReturnAboard` would.
         int wereAshore = 0;
         if (roster != null)
             foreach (var c in roster.All)
@@ -387,6 +405,292 @@ public class CampLifeProbe : MonoBehaviour
 
         var wood = target.GetComponentInChildren<SeaSick.Terrain.SceneryWood>();
         bool wasPaused = TimeOfDay.Paused;
+
+        sb.AppendLine();
+        sb.AppendLine("WHO IS STANDING AT THE TREE WHEN IT GOES OVER:");
+        if (wood == null || wood.TreeCount == 0)
+        {
+            sb.AppendLine("  SKIPPED — no welded wood on this island");
+            Gate("this-island-has-wood-to-cut", false, "no SceneryWood under it");
+        }
+        else
+        {
+            // Two hands on timber. The sawyer stays at his mill, which is the
+            // point: an assigned hand is not a cutter and must not claim a
+            // tree.
+            camp.OrderGather(camp.HandNamed(bodyB.DisplayName), Res.Timber);
+            camp.OrderGather(camp.HandNamed(bodyC.DisplayName), Res.Timber);
+
+            // Room to cut into. The ceiling is ten of each and the camp is
+            // holding whatever the earlier sections left it; a full pile is a
+            // camp that has stopped paying for wood, and this section is about
+            // what happens when it does.
+            camp.Ledger.stores.Clear();
+
+            // **Start from a settled mesh.** The sections above ran for a
+            // minute and a half of real time with the clock going, so the camp
+            // may well be standing here owing a tree or two -- which is legal
+            // and is the feature, but it would land inside the stretch below
+            // as a flush that the stretch did not cause. Leaving and coming
+            // straight back is the game's own way of settling it, and it also
+            // puts every body in a known place.
+            camp.CatchUp();
+            camp.ShowHands(false);
+            camp.ShowHands(true);
+            for (int f = 0; f < 4; f++) yield return null;
+
+            // **The clock is scrubbed by hand, not scaled.** A probe that
+            // relied on `TimeOfDay.Scale` would be measuring whether a
+            // SkyDirector happened to be in the scene and how fast the editor
+            // was running that afternoon. This advances game time off REAL
+            // time at a rate chosen so that two hands fell one tree about
+            // every fourteen seconds — deliberately slower than a man's walk
+            // out and back, because the thing being gated is that somebody is
+            // there when it falls.
+            TimeOfDay.Paused = true;
+            double clock = TimeOfDay.Seconds;
+            camp.Ledger.lastTicked = clock;
+            camp.CatchUp();
+            yield return null;
+
+            const float SecondsPerTree = 14f;
+            double gamePerReal =
+                TimeOfDay.DayLength / (2.0 * OutpostLedger.TimberPerHandPerDay) / SecondsPerTree;
+
+            // Room in the pile, or nothing is owed and nothing falls: the
+            // sawyer section put eight logs on a ten-log pile and the day
+            // since then filled the rest (2026-09-21: "0 came down in 62 s").
+            // Emptied BEFORE the snapshot so the replay below starts from the
+            // same books.
+            camp.Ledger.stores.Clear();
+            // And the clearing paid for. Making camp fells its clearing and
+            // books those trees against `treesFelled` before a log has been
+            // cut, so the first `LastClearingFelled` logs out of the ground
+            // owe no tree -- by design, see the-ledger-owes-one-tree-per-log.
+            // Sixty-two seconds here is five ledger quanta of two hands, 4.0
+            // logs, and a four-tree clearing ate exactly that (2026-09-21:
+            // "0 came down, 0 flushed" with timberTaken 4.0 at the end of
+            // the loop). Start the loop with the debt settled.
+            camp.Ledger.timberTaken = Mathf.Max(camp.Ledger.timberTaken, camp.Ledger.treesFelled);
+            string startLedger = JsonUtility.ToJson(camp.Ledger);
+            double startClock = clock;
+            int felledAtStart = camp.Ledger.treesFelled;
+            int flushAtStart = camp.FlushedTrees;
+
+            // Two arrays, and the second one is not redundant. `wasDown` is
+            // walked and written as fells are spotted; `preDown` is the
+            // baseline and is never touched again. The distance gate at the
+            // end has to be about the trees THIS section took down: a shore
+            // party working the island before the probe reached it leaves real
+            // stumps forty metres out, and they are nothing to do with the
+            // camp's order.
+            var wasDown = new bool[wood.TreeCount];
+            var preDown = new bool[wood.TreeCount];
+            for (int i = 0; i < wood.TreeCount; i++)
+                preDown[i] = wasDown[i] = wood.TreeAt(i).felled;
+
+            // Two snapshots of what each body is doing, because a tree can
+            // also come down in somebody else's `CatchUp` — `CampSheet.OnGUI`
+            // calls it every GUI event — which lands AFTER this loop's step
+            // and before the next one, by which time the man who was swinging
+            // at it has shouldered his log and started walking. The snapshot
+            // taken immediately before each `CatchUp` is the honest answer to
+            // "who was at it"; keeping the previous one too covers the fell
+            // that happened in the frame's GUI pass.
+            var bodies = new SeaSick.Crew.CrewAgent[] { stood[0], stood[1], stood[2] };
+            var phaseNow = new string[3];
+            var phaseWas = new string[3];
+            var atNow = new Vector3[3];
+            var atWas = new Vector3[3];
+
+            int fellSlow = 0, attendedSlow = 0, loneSlow = 0;
+            int sameTree = 0;
+            float worstAttendedGap = 0f;
+
+            float slowUntil = Time.realtimeSinceStartup + 62f;
+            while (Time.realtimeSinceStartup < slowUntil)
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    phaseWas[i] = phaseNow[i];
+                    atWas[i] = atNow[i];
+                    var w = CampWorker.Of(bodies[i]);
+                    phaseNow[i] = w != null ? w.PhaseName : "-";
+                    atNow[i] = bodies[i] != null ? bodies[i].transform.position : Vector3.zero;
+                }
+
+                // Two men must never be sent to the same trunk.
+                var wB = CampWorker.Of(bodyB);
+                var wC = CampWorker.Of(bodyC);
+                int tB = wB != null ? camp.TreeClaimedBy(wB) : -1;
+                int tC = wC != null ? camp.TreeClaimedBy(wC) : -1;
+                if (tB >= 0 && tB == tC) sameTree++;
+
+                int flushWas = camp.FlushedTrees;
+                clock += Time.unscaledDeltaTime * gamePerReal;
+                TimeOfDay.Scrub(clock);
+                camp.CatchUp();
+                int flushDelta = camp.FlushedTrees - flushWas;
+
+                for (int i = 0; i < wood.TreeCount; i++)
+                {
+                    if (wasDown[i] || !wood.TreeAt(i).felled) continue;
+                    wasDown[i] = true;
+                    fellSlow++;
+                    Vector3 root = wood.TreeAt(i).baseAt;
+                    float gap = 99f;
+                    for (int k = 0; k < 3; k++)
+                    {
+                        if (phaseNow[k] == "Working")
+                            gap = Mathf.Min(gap, Island.FlatDistance(atNow[k], root));
+                        if (phaseWas[k] == "Working")
+                            gap = Mathf.Min(gap, Island.FlatDistance(atWas[k], root));
+                    }
+                    if (gap < 3f) { attendedSlow++; worstAttendedGap = Mathf.Max(worstAttendedGap, gap); }
+                    else if (flushDelta > 0) { }        // counted as a flush below
+                    else loneSlow++;
+                }
+
+                yield return null;
+            }
+            int flushSlow = camp.FlushedTrees - flushAtStart;
+
+            sb.AppendLine($"  a tree about every {SecondsPerTree:F0} s for 62 s: "
+                + $"{fellSlow} came down, {attendedSlow} with a man swinging at them "
+                + $"(worst {worstAttendedGap:F2} m), {flushSlow} flushed, {loneSlow} with nobody near");
+            sb.AppendLine($"  the two cutters claimed the same trunk on {sameTree} frames");
+
+            // A section that felled nothing proved nothing, which is a failure
+            // and not a pass — the trap `CampProbe.she-got-back` is a note
+            // about.
+            Gate("watching-a-camp-fells-several-trees", fellSlow >= 2,
+                $"{fellSlow} trees in 62 s of cutting");
+            Gate("every-tree-that-fell-had-a-man-swinging-at-it",
+                fellSlow >= 2 && attendedSlow + flushSlow >= fellSlow && loneSlow == 0,
+                $"{attendedSlow} attended + {flushSlow} flushed of {fellSlow}, {loneSlow} unexplained");
+            Gate("and-at-the-pace-of-the-day-none-of-them-were-flushed",
+                flushSlow == 0, $"{flushSlow} trees came down with nobody at them");
+            Gate("two-cutters-never-claim-the-same-tree", sameTree == 0,
+                $"{sameTree} frames with both men on one trunk");
+
+            // --- and a scrubbed clock catches the mesh up at once -------------
+            //
+            // Rule (c): the ledger running far ahead of the mesh is not a man
+            // walking, it is a jump, and the wait would read as a bug. Three
+            // days at once, with the pile emptied so the ceiling does not stop
+            // the cutting before it starts.
+            double clockBeforeClear = clock;
+            camp.Ledger.stores.Clear();
+            clock += 3.0 * TimeOfDay.DayLength;
+            TimeOfDay.Scrub(clock);
+            int flushBeforeJump = camp.FlushedTrees;
+            camp.CatchUp();
+            yield return null;
+            int owedAfterJump = camp.TreesOwed;
+            int jumpFlush = camp.FlushedTrees - flushBeforeJump;
+            sb.AppendLine($"  three days scrubbed past in one call: {jumpFlush} trees flushed, "
+                + $"{owedAfterJump} still owed");
+            Gate("a-scrubbed-clock-catches-the-mesh-up-at-once",
+                owedAfterJump == 0 && jumpFlush > 0,
+                $"{owedAfterJump} owed, {jumpFlush} flushed");
+
+            // --- she sails: nothing may be left owed -------------------------
+            //
+            // The game's own leave path, in the game's own order — see
+            // `AnchorController.StowCampHands`, which catches up first and
+            // lowers the flag second. That ORDER is why the flush lives inside
+            // `ShowHands(false)`: at the moment of the `CatchUp` the camp is
+            // still being watched and the lag is still legal.
+            camp.CatchUp();
+            camp.ShowHands(false);
+            yield return null;
+
+            int owedOnSailing = camp.TreesOwed;
+            int newDown = 0;
+            float furthestNew = 0f, nearestStanding = float.MaxValue;
+            for (int i = 0; i < wood.TreeCount; i++)
+            {
+                bool down = wood.TreeAt(i).felled;
+                float d = Island.FlatDistance(wood.TreeAt(i).baseAt, camp.CampCentre);
+                if (down && !preDown[i]) { newDown++; furthestNew = Mathf.Max(furthestNew, d); }
+                if (!down) nearestStanding = Mathf.Min(nearestStanding, d);
+            }
+            int felledDelta = camp.Ledger.treesFelled - felledAtStart;
+
+            sb.AppendLine($"  after she stops looking: {owedOnSailing} owed, "
+                + $"treesFelled {felledAtStart} -> {camp.Ledger.treesFelled} "
+                + $"(timberTaken {camp.Ledger.timberTaken:F2}), {newDown} new stumps in the mesh");
+            sb.AppendLine($"  this camp's stumps out to {furthestNew:F1} m, nearest tree still "
+                + $"standing {nearestStanding:F1} m");
+
+            Gate("nothing-is-owed-when-she-sails", owedOnSailing == 0,
+                $"{owedOnSailing} trees the ledger paid for and the mesh has not shown");
+            // **Plus the clearing credit, and that is not slop.** Making camp
+            // fells the wood it stands on and books those trees against
+            // `treesFelled` without them ever having been logs out of the
+            // standing stock — which is the fix for the day the probe reported
+            // "4 logs out of the clearing, 8 trees down". So the honest
+            // statement is: the mesh is never BEHIND the books, and is never
+            // ahead of them by more than that one clearing.
+            int owedByLogs = Mathf.FloorToInt(camp.Ledger.timberTaken);
+            Gate("the-ledger-owes-one-tree-per-log",
+                camp.Ledger.treesFelled >= owedByLogs
+                && camp.Ledger.treesFelled - owedByLogs <= camp.LastClearingFelled,
+                $"{camp.Ledger.treesFelled} felled against {owedByLogs} logs out of the "
+                + $"ground and a {camp.LastClearingFelled}-tree clearing");
+            // **The SET, not the count.** Nearest-to-the-camp outward with no
+            // holes in it is what makes the wood a pure function of one
+            // integer: come back after the island has streamed out and in, and
+            // the same ledger reproduces the same stumps. A hole would be
+            // invisible today and a different wood tomorrow.
+            Gate("the-wood-that-is-down-is-the-nearest-first-set",
+                felledDelta > 0 && newDown == felledDelta
+                && nearestStanding >= furthestNew - 0.01f,
+                $"{newDown} stumps against {felledDelta} on the books; a tree still stands at "
+                + $"{nearestStanding:F2} m inside a stump at {furthestNew:F2} m");
+
+            // --- D2's companion: the choreography moved no number -------------
+            //
+            // The same span of game time, ticked once with nobody looking,
+            // against what the watched camp came out with. Measured AFTER the
+            // flush on purpose: `treesFelled` is allowed to lag while she is
+            // standing there, and comparing mid-lag would be gating the
+            // feature against itself.
+            string watchedJson = JsonUtility.ToJson(camp.Ledger);
+            JsonUtility.FromJsonOverwrite(startLedger, camp.Ledger);
+            TimeOfDay.Scrub(startClock);
+            camp.CatchUp();
+            // The same two legs the watched camp had, with the pile emptied
+            // between them at the same instant. A replay that skipped the
+            // clear ran into the ceiling the watched camp never met, and read
+            // "DIFFERENT" for a difference the probe itself had made.
+            TimeOfDay.Scrub(clockBeforeClear);
+            camp.CatchUp();
+            camp.Ledger.stores.Clear();
+            TimeOfDay.Scrub(clock);
+            camp.CatchUp();
+            string unwatchedJson = JsonUtility.ToJson(camp.Ledger);
+            JsonUtility.FromJsonOverwrite(watchedJson, camp.Ledger);
+
+            sb.AppendLine($"  the same span ticked with nobody looking: "
+                + $"{(watchedJson == unwatchedJson ? "identical" : "DIFFERENT")}");
+            if (watchedJson != unwatchedJson)
+            {
+                sb.AppendLine("    watched:   " + Clip(watchedJson));
+                sb.AppendLine("    unwatched: " + Clip(unwatchedJson));
+            }
+            Gate("choreographing-the-felling-changed-no-number",
+                watchedJson == unwatchedJson,
+                "the watched camp and the unwatched one came out with different books");
+
+            // Put the bodies back and let them settle, because the section
+            // below is about what they do while somebody is watching.
+            camp.ShowHands(true);
+            for (int f = 0; f < 4; f++) yield return null;
+        }
+
+        // --- 7. D2: thirty seconds of villagers changes nothing ---------------
+
         TimeOfDay.Paused = true;
         // One catch-up FIRST, so the snapshot is taken after whatever the
         // arithmetic owed itself — otherwise the ceiling `CatchUp` pushes in

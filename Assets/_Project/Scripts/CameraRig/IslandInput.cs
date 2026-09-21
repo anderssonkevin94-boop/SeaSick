@@ -83,7 +83,9 @@ namespace SeaSick.CameraRig
             /// `GestureClassifier.WheelFactor` zooms IN — factor below 1 —
             /// as the wheel rolls the positive way, matching
             /// `IslandCam.ZoomAt`'s own convention.
-            public static float wheelStep = 1.15f;
+            public static float wheelStep = 1.22f;
+            /// Most notches honoured in a single frame. See `HandleWheel`.
+            public static float wheelMaxPerFrame = 4f;
 
             /// Within this fraction of a screen edge, a held villager drags
             /// the frame along with the finger, so the far side of an
@@ -376,11 +378,20 @@ namespace SeaSick.CameraRig
             float scrollY = mouse.scroll.ReadValue().y;
             if (Mathf.Abs(scrollY) < 0.01f) return;
 
-            // Input System reports wheel motion in native units, 120 per
-            // detent on a notched mouse; a macOS trackpad instead gives
-            // small continuous values. Both fall out of the same continuous
-            // exponential, so neither needs its own code path.
-            float detents = scrollY / 120f;
+            // **One notch is 1, not 120.** Input System 1.11 and later default
+            // to `ScrollDeltaBehavior.UniformAcrossAllPlatforms`, which hands
+            // over about one unit a notch everywhere; 120 a notch is the old
+            // Windows-native range and only comes back if somebody asks for
+            // `KeepPlatformSpecificInputRange`. The first version divided by
+            // 120 regardless, so the zoom ran at a hundredth of its speed and
+            // was only usable at all because a Mac's smooth scrolling sends a
+            // great many events. Kevin: *"works but its a bit too slow."*
+            bool uniform = InputSystem.settings.scrollDeltaBehavior
+                           == InputSettings.ScrollDeltaBehavior.UniformAcrossAllPlatforms;
+            float detents = uniform ? scrollY : scrollY / 120f;
+            // A flick on a trackpad can report a dozen notches in one frame;
+            // more than a few at once is a lurch rather than a zoom.
+            detents = Mathf.Clamp(detents, -Feel.wheelMaxPerFrame, Feel.wheelMaxPerFrame);
             cam.ZoomAt(pos, GestureClassifier.WheelFactor(detents));
         }
 

@@ -340,6 +340,8 @@ namespace SeaSick.UI
                 sb.Append("   ·   ").Append(building)
                   .Append(building == 1 ? " hand building" : " hands building");
                 if (building == 0) sb.Append("   ·   nobody is building it");
+                else if (outpost.Ledger.BuildStarved)
+                    sb.Append("   ·   NO TIMBER LEFT — nothing piled, nothing standing");
                 return sb.ToString();
             }
 

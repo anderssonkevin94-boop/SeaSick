@@ -65,7 +65,7 @@ namespace SeaSick.CameraRig
         [Tooltip("Where it starts, and what it returns to at a new island. The authored dock shot's own zoom.")]
         [SerializeField] float defaultGround = 165f;
         [Tooltip("Fraction of the current zoom added or removed per second of held input. Proportional, so a step feels the same close in and far out.")]
-        [SerializeField] float zoomRate = 0.9f;
+        [SerializeField] float zoomRate = 1.8f;
 
         [Header("Panning")]
         [Tooltip("Metres per second at the DEFAULT zoom. Scaled by how far out you are, so the frame crosses the view at the same rate however wide it is.")]

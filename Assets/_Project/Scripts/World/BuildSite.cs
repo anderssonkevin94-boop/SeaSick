@@ -122,7 +122,13 @@ namespace SeaSick.World
             for (int i = stack.childCount - 1; i >= 0; i--)
                 Destroy(stack.GetChild(i).gameObject);
 
-            int n = Mathf.Min(p.done, MaxDrawnLogs);
+            // **A full stack means DONE.** It used to be one drawn log per log
+            // delivered, capped at sixteen -- so a sawmill wanting 24 showed a
+            // full stack at two thirds and then sat there looking finished
+            // and unbuilt. The stack is the progress bar; it fills with it.
+            int n = p.needed <= MaxDrawnLogs
+                ? Mathf.Min(p.done, MaxDrawnLogs)
+                : Mathf.Clamp(Mathf.FloorToInt(p.Fill01 * MaxDrawnLogs), p.done > 0 ? 1 : 0, MaxDrawnLogs);
             for (int i = 0; i < n; i++)
             {
                 int row = i / 3, col = i % 3;
