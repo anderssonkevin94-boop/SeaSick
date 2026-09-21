@@ -71,6 +71,7 @@ namespace SeaSick.World
                 // LIGHT is the whole reason a camp reads from the water at
                 // night, so it is added whatever the geometry came from.
                 if (plan.kind == BuildKind.Fire) Firelight(root.transform);
+                else Lamp(root.transform, plan);
                 root.AddComponent<Building>().Configure(plan);
                 return root;
             }
@@ -129,6 +130,7 @@ namespace SeaSick.World
             Box(root.transform, dark, new Vector3(0.18f, 2.0f, 1.1f),
                 new Vector3(-len * 0.5f - 0.05f, 0.35f + 1.0f, 0f));
 
+            Lamp(root.transform, plan);
             root.AddComponent<Building>().Configure(plan);
             return root;
         }
@@ -270,10 +272,35 @@ namespace SeaSick.World
             var l = lightGo.AddComponent<Light>();
             l.type = LightType.Point;
             l.color = new Color(1f, 0.62f, 0.28f);
-            l.range = 14f;
-            l.intensity = 2.2f;
+            l.range = 18f;
+            l.intensity = 5f;
             l.shadows = LightShadows.None;   // one more shadow caster per camp is not worth it
             lightGo.AddComponent<Campfire>();
+        }
+
+        /// **A lit window.** Every building that is not the fire gets one
+        /// warm lamp under its eaves (Kevin, 2026-09-21: "add light sources to
+        /// the campfire and the buildings so I can see at night"). Smaller
+        /// and steadier than the fire, and gated by the same night curve, so
+        /// a camp at night is one big fire and a ring of small windows.
+        /// The mobile pipeline lights four per object; a hut lit by its own
+        /// lamp, the fire and two neighbours is within that.
+        static void Lamp(Transform root, BuildPlan plan)
+        {
+            float len = plan.footprint.x, wid = plan.footprint.y;
+            var lightGo = new GameObject("Lamp");
+            lightGo.transform.SetParent(root, false);
+            // Just outside the door wall, at lintel height, so the pool falls
+            // on the ground in front rather than being swallowed by the walls.
+            lightGo.transform.localPosition = new Vector3(0f, 1.7f, wid * 0.5f + 0.4f);
+            var l = lightGo.AddComponent<Light>();
+            l.type = LightType.Point;
+            l.color = new Color(1f, 0.72f, 0.42f);
+            l.range = Mathf.Clamp(6f + Mathf.Max(len, wid), 8f, 12f);
+            l.intensity = 2.4f;
+            l.shadows = LightShadows.None;
+            var fire = lightGo.AddComponent<Campfire>();
+            fire.flicker = 0.07f;
         }
 
         static GameObject Box(Transform parent, Material mat, Vector3 size, Vector3 at)

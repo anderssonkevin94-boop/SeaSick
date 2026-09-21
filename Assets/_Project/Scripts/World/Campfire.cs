@@ -18,7 +18,10 @@ namespace SeaSick.World
         [Range(0f, 1f)] public float health01 = 1f;
 
         [SerializeField] float baseIntensity = 2.2f;
-        [SerializeField] float flicker = 0.18f;
+        public float flicker = 0.18f;
+
+        [Tooltip("How much of the light is left in full daylight. A fire by day is embers; it still marks the camp.")]
+        [SerializeField, Range(0f, 1f)] float byDay = 0.15f;
 
         Light lamp;
         float seed;
@@ -41,7 +44,12 @@ namespace SeaSick.World
             // A neglected fire is dim, not out: going out entirely would hide
             // the very camp the player has to be told about.
             float dim = Mathf.Lerp(0.32f, 1f, Mathf.Clamp01(health01));
-            lamp.intensity = baseIntensity * dim * f;
+            // Firelight is for the night. By day the sun owns the ground and
+            // a full-strength point light only reads as a bug in the shading.
+            var sky = SkyDirector.Instance;
+            float night = sky != null ? Mathf.Clamp01(sky.Night01) : 1f;
+            float when = Mathf.Lerp(byDay, 1f, night);
+            lamp.intensity = baseIntensity * dim * f * when;
         }
     }
 }

@@ -250,14 +250,13 @@ namespace SeaSick.World
                 needed = Mathf.Max(0, plan.cost),
             };
 
-            // Making camp is everybody's job. A LATER building takes whoever is
-            // not already in a position: a sawyer pulled off his mill every
-            // time a hut is drawn is the list undoing what the Hand just did.
+            // Making camp is everybody's job: there is no fire yet to idle
+            // by. A LATER building orders NOBODY (Kevin, 2026-09-21: "when
+            // assigning someone a task everyone assumes that task -- if
+            // they're idle they just hang out by the fire"). The drawing
+            // waits for the Hand to drop a man on it (`OrderBuild`), and the
+            // rest of the camp goes on with what it was doing, idle included.
             if (plan.kind == BuildKind.Fire) ledger.OrderAll(OutpostOrder.Build);
-            else
-                foreach (var h in ledger.hands)
-                    if (h != null && h.order != OutpostOrder.Work)
-                    { h.order = OutpostOrder.Build; h.target = ""; }
             EnsureBlueprint();
             // A plan that costs nothing is finished the moment it is sited.
             // Nothing does today; the dev path (`MakeCamp`) reaches the same
