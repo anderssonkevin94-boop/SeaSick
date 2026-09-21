@@ -359,11 +359,13 @@ namespace SeaSick.World
             // Everybody goes back to cutting. With the fire lit there is
             // finally somewhere to cut INTO.
             //
-            // The BUILDERS do. Everybody used to, which reset a sawyer and a
-            // farmhand to cutting timber every time a hut was finished.
+            // The BUILDERS go idle, by the fire. They used to be sent to cut
+            // timber, which after the fire is the whole camp swinging axes
+            // nobody ordered (Kevin, 2026-09-21: idle hands hang out by the
+            // fire; a job is what the Hand gives one man).
             foreach (var h in ledger.hands)
                 if (h != null && h.order == OutpostOrder.Build)
-                { h.order = OutpostOrder.Gather; h.target = Res.Timber; }
+                { h.order = OutpostOrder.Idle; h.target = ""; }
             // And they stand round it, which is the moment the camp stops
             // being a clearing and starts being somewhere people are.
             ArrangeHands();
@@ -390,10 +392,10 @@ namespace SeaSick.World
         {
             if (ledger == null || ledger.pending == null) return false;
             ledger.pending = null;
-            // Whoever was building goes back to cutting; nobody else is moved.
+            // Whoever was building goes idle by the fire; nobody else is moved.
             foreach (var h in ledger.hands)
                 if (h != null && h.order == OutpostOrder.Build)
-                { h.order = OutpostOrder.Gather; h.target = Res.Timber; }
+                { h.order = OutpostOrder.Idle; h.target = ""; }
             if (blueprint != null) { blueprint.Retire(); blueprint = null; }
             return true;
         }
