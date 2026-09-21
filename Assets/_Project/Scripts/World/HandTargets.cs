@@ -526,7 +526,12 @@ namespace SeaSick.World
                     verbIs = named ? "put " + who + " at the " + arg : "the " + arg;
                     break;
                 case HandTarget.Kind.Blueprint:
-                    verbIs = "build the " + arg;
+                    // Held: dropping somebody here sets him building it.
+                    // Empty-handed: the drawing is tappable, and what the
+                    // tap opens is the blueprint's own panel -- what it
+                    // still wants, and cancel / move (Kevin, 2026-09-21).
+                    // Same shape as the fire's "build", one line below.
+                    verbIs = named ? "build the " + arg : "blueprint";
                     break;
                 case HandTarget.Kind.Fire:
                     // Held: dropping somebody here idles them by the fire.

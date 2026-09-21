@@ -103,8 +103,28 @@ namespace SeaSick.UI
         void Awake() { Instance = this; }
         void OnDestroy() { if (Instance == this) Instance = null; }
 
+        /// **The frame placing began on.** Every tap whose press went down
+        /// at or before it is somebody else's tap -- see `Update`.
+        int beganFrame = -1;
+
+        /// **Moving a blueprint that is already paid for**, rather than
+        /// siting a new one. Kevin, 2026-09-21: the drawing's own panel
+        /// offers *cancel* and *move*, and a move must not cost the wood
+        /// again. The one flag the commit reads; everything else about the
+        /// mode is identical.
+        bool moving;
+
+        /// Is the current placement a MOVE of the standing blueprint? The
+        /// sheet says "never mind" differently for it: escaping a move
+        /// leaves the drawing where it was.
+        public static bool Moving => Placing && Instance.moving;
+
         /// Start placing. Harmless to call again while already placing.
         public static void Begin(Outpost target, BuildPlan what, Transform shipTransform)
+            => Begin(target, what, shipTransform, false);
+
+        public static void Begin(Outpost target, BuildPlan what, Transform shipTransform,
+            bool movePending)
         {
             if (Instance == null || target == null) return;
             Instance.Cancel();
@@ -113,6 +133,14 @@ namespace SeaSick.UI
             Instance.ship = shipTransform;
             Instance.turns = 0;
             Instance.turned = false;
+            Instance.moving = movePending;
+            // **The press that started this mode must not also finish it.**
+            // See `IslandInput.TapDownFrame`: an IMGUI button is clicked in
+            // `OnGUI`, after every `Update` of that frame, and the Input
+            // System can report the very same release a frame later -- so
+            // without this the release that opened siting mode was also the
+            // tap that sited the building, under the button.
+            Instance.beganFrame = Time.frameCount;
             Instance.BuildRing();
         }
 
@@ -121,6 +149,7 @@ namespace SeaSick.UI
         void Cancel()
         {
             plan = default;
+            moving = false;
             outpost = null;
             Refusal = "";
             valid = false;
@@ -203,9 +232,11 @@ namespace SeaSick.UI
             // That is also why this stays the file's only `Test` call: a
             // second one at `TapAt` would just be re-asking the same
             // question about the same point.
-            if (valid && IslandInput.TapThisFrame)
+            // A tap whose press went down before this mode existed belongs
+            // to whatever started it (the build button), not to the ground.
+            if (valid && IslandInput.TapThisFrame && IslandInput.TapDownFrame > beganFrame)
             {
-                int wanted = outpost.Site(sited, at, Yaw, out string siteWhy);
+                int wanted = outpost.Site(sited, at, Yaw, moving, out string siteWhy);
                 if (wanted < 0)
                 {
                     // Refused at the last moment by a test the preview does

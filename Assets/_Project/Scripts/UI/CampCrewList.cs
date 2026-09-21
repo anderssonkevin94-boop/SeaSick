@@ -91,6 +91,17 @@ namespace SeaSick.UI
                 extras += 3;                                   // the three verbs
                 if (verb != Verb.None) extras += OptionCount(camp, verb);
             }
+            // **The fire's own build list is rows too.** Until 2026-09-21
+            // this counted only the rows under an OPEN hand, so a build list
+            // opened by tapping the campfire (`open == null`) was drawn
+            // BELOW the panel it was measured for -- and a panel that does
+            // not cover its own buttons is a panel that does not BLOCK them:
+            // `UIBlocker` never claimed that strip, `IslandInput.BeginPress`
+            // did not latch the press as UI, and the same press/release that
+            // clicked "storage -- 5 timber 3 stone" was also a tap on the
+            // ground under it. That is half of the blueprint siting itself
+            // (the other half is the frame guard in `CampSiting`).
+            else if (showBuild) extras += 1 + OptionCount(camp, Verb.Build);
             float panelH = pad * 2f + HudLayout.Unit * 1.6f
                     + hands.Count * (rowH + 2f) + extras * (rowH * 0.86f + 2f);
             panelH = Mathf.Min(panelH, safe.height * 0.72f);
@@ -203,7 +214,12 @@ namespace SeaSick.UI
                 else
                     foreach (var plan in camp.Buildable())
                     {
-                        if (GUI.Button(new Rect(x + indent * 2f, y, w - indent * 2f, subH),
+                        var pr = new Rect(x + indent * 2f, y, w - indent * 2f, subH);
+                        // Claimed one by one as well as by the panel: a row
+                        // the panel's own height arithmetic ever misses again
+                        // is still a row the world cannot be tapped through.
+                        UIBlocker.Block(pr);
+                        if (GUI.Button(pr,
                                 plan.stoneCost > 0
                                     ? $"{plan.label} — {plan.cost} timber {plan.stoneCost} stone"
                                     : $"{plan.label} — {plan.cost} timber", sub))
@@ -230,7 +246,9 @@ namespace SeaSick.UI
             float x, float y, float w, float h)
         {
             bool on = current == which;
-            if (GUI.Button(new Rect(x, y, w, h), label, on ? UITheme.ButtonPressed : sub))
+            var vr = new Rect(x, y, w, h);
+            UIBlocker.Block(vr);
+            if (GUI.Button(vr, label, on ? UITheme.ButtonPressed : sub))
                 current = on ? Verb.None : which;
             return y + h + 2f;
         }

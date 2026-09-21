@@ -34,6 +34,22 @@ namespace SeaSick.CameraRig
         public static bool TapThisFrame { get; private set; }
         public static Vector2 TapAt { get; private set; }
 
+        /// **The frame the tap's press went DOWN on**, which is a different
+        /// number from the frame it comes up on and the one that matters to
+        /// anything started BY a press.
+        ///
+        /// The self-placing blueprint, 2026-09-21: the IMGUI mouse-up that
+        /// clicked "storage — 5 timber 3 stone" is dispatched in `OnGUI`,
+        /// after every `Update` has run, so `CampSiting.Begin` happens at the
+        /// END of the frame the button was released in. If the Input System
+        /// only sees that release on the NEXT frame's update — it queues
+        /// events and a release arriving after the update is read one frame
+        /// late — `EndPress` raises a tap into a siting mode that did not
+        /// exist when the finger went down, and the building lands under the
+        /// button. `CampSiting` refuses any tap whose press began at or
+        /// before the frame it was told to start placing.
+        public static int TapDownFrame { get; private set; } = -1;
+
         /// Is the Hand currently holding somebody? Exposed for anything that
         /// wants to know without reaching into `Hand` itself (the prompt
         /// line, chiefly).
@@ -125,6 +141,8 @@ namespace SeaSick.CameraRig
         PMode pmode = PMode.Idle;
         Vector2 pressDownPos;
         float pressDownTime;
+        /// The frame this press went down on. See `TapDownFrame`.
+        int pressDownFrame = -1;
         Crew.CrewAgent pickupCandidate;
 
         // --- RMB / MMB / Alt+LMB orbit ------------------------------------
@@ -151,6 +169,7 @@ namespace SeaSick.CameraRig
         int oneFingerId = -1;
         Vector2 oneFingerDown;
         float oneFingerDownTime;
+        int oneFingerDownFrame = -1;
         bool oneFingerUILatched;
         Crew.CrewAgent oneFingerCandidate;
         OneFingerSub oneSub;
@@ -239,6 +258,7 @@ namespace SeaSick.CameraRig
 
             pressDownPos = pos;
             pressDownTime = Time.unscaledTime;
+            pressDownFrame = Time.frameCount;
             // Rule 4: while siting a building, Hand pick-up is off — every
             // LMB drag during that mode grabs the land, never a villager.
             pickupCandidate = CampSiting.Placing ? null : hand.PickAt(pos, forPickup: true);
@@ -292,7 +312,7 @@ namespace SeaSick.CameraRig
                     // Never travelled past the slop: a tap. Left for
                     // `CampSiting` to consume while it is placing; otherwise
                     // acted on here (follow / fly-to).
-                    RegisterTap(pos, allowConsequence: !CampSiting.Placing);
+                    RegisterTap(pos, pressDownFrame, allowConsequence: !CampSiting.Placing);
                     break;
 
                 case PMode.GrabbingLand:
@@ -314,10 +334,11 @@ namespace SeaSick.CameraRig
             pickupCandidate = null;
         }
 
-        void RegisterTap(Vector2 pos, bool allowConsequence)
+        void RegisterTap(Vector2 pos, int downFrame, bool allowConsequence)
         {
             TapThisFrame = true;
             TapAt = pos;
+            TapDownFrame = downFrame;
 
             if (allowConsequence)
             {
@@ -337,6 +358,11 @@ namespace SeaSick.CameraRig
                         // resolving a second answer that could disagree.
                         var t = hand.Preview(pos);
                         if (t.building != null) BuildMenuRequest.Open(hand.Camp, t.building);
+                        // A tap on the DRAWING is a question about the
+                        // drawing: what it still wants, and whether to give
+                        // it up or put it somewhere else. Kevin, 2026-09-21.
+                        else if (t.kind == World.HandTarget.Kind.Blueprint)
+                            BuildMenuRequest.OpenBlueprint(hand.Camp);
                         else cam.StopFollowing();
                     }
                 }
@@ -517,6 +543,7 @@ namespace SeaSick.CameraRig
             oneFingerId = tp.id;
             oneFingerDown = tp.pos;
             oneFingerDownTime = Time.unscaledTime;
+            oneFingerDownFrame = Time.frameCount;
             oneFingerUILatched = UIBlocker.Blocked(tp.pos);
             oneSub = OneFingerSub.Pending;
             touchMode = TouchMode.OneFinger;
@@ -578,7 +605,7 @@ namespace SeaSick.CameraRig
                 switch (oneSub)
                 {
                     case OneFingerSub.Pending:
-                        RegisterTap(releasePos, allowConsequence: !CampSiting.Placing);
+                        RegisterTap(releasePos, oneFingerDownFrame, allowConsequence: !CampSiting.Placing);
                         break;
                     case OneFingerSub.Grabbing:
                         cam.GrabEnd();

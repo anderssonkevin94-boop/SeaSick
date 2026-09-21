@@ -159,14 +159,33 @@ namespace SeaSick.UI
             var isle = Subject();
             Showing = isle != null;
 
-            if (isle != shownFor) { shownFor = isle; Expanded = false; }
+            if (isle != shownFor) { shownFor = isle; Expanded = false; showBlueprint = false; }
             // A tap on the fire: open the sheet straight onto the build list.
             if (BuildMenuRequest.Consume(out var tappedCamp, out var tapped)
                 && isle != null && tappedCamp == Outpost.Of(isle))
             {
                 Expanded = true;
+                showBlueprint = false;
                 var list = GetComponent<CampCrewList>();
                 if (list != null && tapped != null && tapped.Id == BuildPlans.Campfire.id) list.OpenBuild();
+            }
+            // **A tap on the DRAWING.** Kevin, 2026-09-21: *"the blueprint
+            // should be pressable where it states how many resources it
+            // still needs and the option to cancel the build / move it."*
+            if (BuildMenuRequest.ConsumeBlueprint(out var bpCamp)
+                && isle != null && bpCamp == Outpost.Of(isle))
+            {
+                Expanded = true;
+                showBlueprint = true;
+                var list = GetComponent<CampCrewList>();
+                if (list != null) list.CloseBuild();
+            }
+            // Nothing pending: there is no drawing to be a panel about.
+            if (showBlueprint)
+            {
+                var camp = isle != null ? Outpost.Of(isle) : null;
+                if (camp == null || camp.Ledger == null || camp.Ledger.pending == null)
+                    showBlueprint = false;
             }
             if (!Expanded) return;
 
@@ -368,6 +387,19 @@ namespace SeaSick.UI
                 y += lineH;
             }
 
+            // **The blueprint's own panel**, in the sheet's open area and in
+            // place of the store rows: they answer different questions and a
+            // sheet that tries to answer both at once is the menu-of-
+            // everything this pair of panels exists to avoid.
+            if (showBlueprint && l != null && l.pending != null)
+            {
+                rows = 0;
+                y = BlueprintPanel(outpost, l, inner, y, lineH, btnH);
+                UITheme.Rect(new Rect(inner.x, y + HudLayout.Gap * 0.5f, inner.width, 1f),
+                    UITheme.Track);
+                y += HudLayout.Gap;
+            }
+
             if (rows > 0)
             {
                 float loadW = Mathf.Min(HudLayout.Unit * 6f, inner.width * 0.3f);
@@ -424,8 +456,14 @@ namespace SeaSick.UI
             int j = 0;
             var parked = outpost.Parked();
             AshoreLabels(l);
-            foreach (var ashore in l.hands)
+            // **By index, not by enumerator.** `Recall` takes the hand OUT
+            // of `l.hands`, and a list modified inside its own `foreach`
+            // throws -- which is exactly what the console caught twice
+            // (`InvalidOperationException` out of this loop) the last time
+            // somebody tapped a name in the ashore column.
+            for (int k = 0; k < l.hands.Count; k++)
             {
+                var ashore = l.hands[k];
                 if (ashore == null) continue;
                 if (j >= perCol) break;
                 var r = new Rect(inner.x + colW + colGap, listTop + j * (rowH + 2f), colW, rowH);
@@ -434,8 +472,13 @@ namespace SeaSick.UI
                 {
                     var him = Find(parked, ashore.name);
                     if (him != null && anchor != null
-                        && outpost.Recall(him, anchor.transform) && roster != null)
-                        roster.Refresh();
+                        && outpost.Recall(him, anchor.transform))
+                    {
+                        if (roster != null) roster.Refresh();
+                        // The list under this loop just got shorter; the
+                        // rest of the column is redrawn next event.
+                        break;
+                    }
                 }
                 j++;
             }
@@ -450,6 +493,73 @@ namespace SeaSick.UI
             string foot = RecruitFoot(l, over);
             if (!string.IsNullOrEmpty(foot))
                 GUI.Label(new Rect(inner.x, inner.yMax - lineH, inner.width, lineH), foot, body);
+        }
+
+        // --- the blueprint panel ---------------------------------------------
+
+        /// Open, because the player tapped the drawing. Cleared when the row
+        /// it is about is gone (raised, cancelled, or a different island).
+        bool showBlueprint;
+        readonly HudLabel blueprintTitle = new HudLabel();
+        readonly HudLabel blueprintNeeds = new HudLabel();
+        readonly HudLabel blueprintHands = new HudLabel();
+
+        /// What the drawing still wants, who is at it, and the two things the
+        /// player can do about it. Returns the y it finished at.
+        float BlueprintPanel(Outpost outpost, OutpostLedger l, Rect inner,
+            float y, float lineH, float btnH)
+        {
+            var p = l.pending;
+            var plan = BuildPlans.Named(p.planId).WithLength(p.length);
+
+            if (blueprintTitle.Changed(p.planId != null ? p.planId.GetHashCode() : 0))
+                blueprintTitle.Set(plan.label + "   ·   blueprint");
+
+            int timber = Mathf.Max(0, p.needed - p.done);
+            int stone = Mathf.Max(0, p.stoneNeeded - p.stoneDone);
+            if (blueprintNeeds.Changed(HudLabel.Key(timber, stone)))
+                blueprintNeeds.Set(
+                    timber == 0 && stone == 0 ? "everything it wants is here"
+                    : stone == 0 ? $"needs {timber} more timber"
+                    : timber == 0 ? $"needs {stone} more stone"
+                    : $"needs {timber} more timber, {stone} more stone");
+
+            int builders = 0;
+            foreach (var h in l.hands)
+                if (h != null && h.order == OutpostOrder.Build) builders++;
+            if (blueprintHands.Changed(builders))
+                blueprintHands.Set(builders == 0 ? "nobody is building it"
+                    : builders == 1 ? "1 hand building" : builders + " hands building");
+
+            GUI.Label(new Rect(inner.x, y, inner.width, lineH), blueprintTitle.Content, title);
+            y += lineH;
+            GUI.Label(new Rect(inner.x, y, inner.width, lineH), blueprintNeeds.Content, body);
+            y += lineH;
+            GUI.Label(new Rect(inner.x, y, inner.width, lineH), blueprintHands.Content, body);
+            y += lineH;
+
+            float bw = Mathf.Min(HudLayout.Unit * 9f, (inner.width - HudLayout.Gap) * 0.5f);
+            var cancel = new Rect(inner.x, y, bw, btnH);
+            var move = new Rect(inner.x + bw + HudLayout.Gap, y, bw, btnH);
+            UIBlocker.Block(cancel);
+            UIBlocker.Block(move);
+            if (GUI.Button(cancel, "✕   Cancel", UITheme.Button))
+            {
+                // The wood and stone already carried here go back on the
+                // pile; whoever was building goes idle by the fire.
+                outpost.CancelPending();
+                showBlueprint = false;
+            }
+            // **Move keeps what has been paid.** The drawing stays where it
+            // is until the new spot is tapped, so escaping the move leaves
+            // the camp exactly as it was.
+            else if (GUI.Button(move, "✥   Move", UITheme.Button))
+            {
+                CampSiting.Begin(outpost, plan,
+                    motor != null ? motor.transform : null, movePending: true);
+                showBlueprint = false;
+            }
+            return y + btnH;
         }
 
         // The ashore column, labelled once per change rather than once per

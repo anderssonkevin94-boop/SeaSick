@@ -41,6 +41,37 @@ namespace SeaSick.UI
             Frame = Time.frameCount;
         }
 
+        /// **The same mailbox, for the DRAWING.**
+        ///
+        /// Kevin, 2026-09-21: *"the blueprint should be pressable where it
+        /// states how many resources it still needs and the option to cancel
+        /// the build / move it."* A blueprint has no `Building` -- it is a
+        /// row in the ledger (`OutpostLedger.pending`) and a `BuildSite`
+        /// drawing of it -- so it cannot ride in `Building` above. Its own
+        /// slot, cleared by its own `Consume`, and the same one-frame rule.
+        public static Outpost Blueprint;
+        public static int BlueprintFrame = -1;
+
+        public static void OpenBlueprint(Outpost o)
+        {
+            if (o == null) return;
+            Blueprint = o;
+            BlueprintFrame = Time.frameCount;
+        }
+
+        public static bool ConsumeBlueprint(out Outpost o)
+        {
+            if (BlueprintFrame == Time.frameCount && Blueprint != null)
+            {
+                o = Blueprint;
+                Blueprint = null;
+                BlueprintFrame = -1;
+                return true;
+            }
+            o = null;
+            return false;
+        }
+
         /// Read and clear. False (with both `out` params null) if nothing
         /// was raised this frame -- a request from an earlier frame that
         /// nobody consumed is stale and must not fire late.

@@ -227,6 +227,56 @@ namespace SeaSick.World
             => Site(plan, at, AutoYaw(at), out why);
 
         public int Site(BuildPlan plan, Vector3 at, float yaw, out string why)
+            => Site(plan, at, yaw, false, out why);
+
+        /// **Site it, or MOVE what is already sited.**
+        ///
+        /// Kevin, 2026-09-21: the blueprint's own panel offers *move*, and a
+        /// drawing that has had three logs carried to it must still have them
+        /// when it lands somewhere else -- the wood was cut and carried, and
+        /// picking the drawing up does not put it back in the tree. So with
+        /// `keepProgress` the pending row for THE SAME PLAN is lifted whole:
+        /// only x, z and yaw change, `done/donePart/stoneDone/stoneDonePart`
+        /// ride along, and a refusal at the new spot leaves the old row and
+        /// its drawing exactly where they were.
+        public int Site(BuildPlan plan, Vector3 at, float yaw, bool keepProgress, out string why)
+        {
+            if (ledger == null) { why = "this ground was never surveyed"; return -1; }
+            PendingBuild carried = null;
+            if (keepProgress && ledger.pending != null && ledger.pending.planId == plan.id)
+            {
+                carried = ledger.pending;
+                // Out of the way for the tests below, which refuse outright
+                // when something is pending -- and put back, untouched, if
+                // the new ground says no.
+                ledger.pending = null;
+                if (blueprint != null) { blueprint.Retire(); blueprint = null; }
+            }
+            int placed = SiteFresh(plan, at, yaw, out why);
+            if (carried != null)
+            {
+                if (placed < 0)
+                {
+                    ledger.pending = carried;
+                    EnsureBlueprint();
+                }
+                else if (ledger.pending != null)
+                {
+                    ledger.pending.done = Mathf.Min(carried.done, ledger.pending.needed);
+                    ledger.pending.donePart = carried.donePart;
+                    ledger.pending.stoneDone = Mathf.Min(carried.stoneDone, ledger.pending.stoneNeeded);
+                    ledger.pending.stoneDonePart = carried.stoneDonePart;
+                    if (blueprint != null) blueprint.Refresh(ledger.pending);
+                    // Paid in full already? Then moving it finishes it.
+                    if (ledger.ReadyToRaise) FinishPending();
+                    return ledger.pending != null
+                        ? ledger.pending.needed - ledger.pending.done : 0;
+                }
+            }
+            return placed;
+        }
+
+        int SiteFresh(BuildPlan plan, Vector3 at, float yaw, out string why)
         {
             if (ledger == null) { why = "this ground was never surveyed"; return -1; }
             if (ledger.pending != null) { why = "something is already being built here"; return -1; }
@@ -437,12 +487,23 @@ namespace SeaSick.World
         public bool CancelPending()
         {
             if (ledger == null || ledger.pending == null) return false;
+            var p = ledger.pending;
+            var plan = PlanFor(p.planId, p.length);
+            // **What was carried here comes back on to the pile.** Kevin,
+            // 2026-09-21: giving a build up is a decision, not a punishment.
+            // Whole units only -- half a log in somebody's arms is not a
+            // thing the pile can hold, and the same rounding the drawing
+            // draws by (`done`, not `done + donePart`) is the one the player
+            // has been watching all along.
+            ledger.Add(Res.Timber, p.done);
+            if (p.stoneDone > 0) ledger.Add(Res.Stone, p.stoneDone);
             ledger.pending = null;
             // Whoever was building goes idle by the fire; nobody else is moved.
             foreach (var h in ledger.hands)
                 if (h != null && h.order == OutpostOrder.Build)
                 { h.order = OutpostOrder.Idle; h.target = ""; }
             if (blueprint != null) { blueprint.Retire(); blueprint = null; }
+            Save.SaveGame.Autosave("the " + plan.label + " was given up");
             return true;
         }
 

@@ -814,7 +814,11 @@ namespace SeaSick.UI
             // drop), so this is the one exception, not a general hover
             // prompt.
             bool holding = Held != null;
-            if (!holding && memo.kind != HandTarget.Kind.Fire) return;
+            // Empty-handed, two things are tappable: the fire (the build
+            // menu) and the DRAWING (its own panel -- what it still wants,
+            // cancel, move). Everything else empty-handed still says nothing.
+            if (!holding && memo.kind != HandTarget.Kind.Fire
+                         && memo.kind != HandTarget.Kind.Blueprint) return;
             // Bid on EVERY event. A caller that bids only on Repaint owns the
             // slot on repaint frames and has lost it by the mouse-up.
             if (!Prompts.Claim(Prompts.Rank.Hand)) return;
