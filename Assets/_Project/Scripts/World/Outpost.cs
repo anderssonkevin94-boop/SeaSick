@@ -774,8 +774,22 @@ namespace SeaSick.World
         /// adds a body can ask whether to draw it.
         public bool Watched { get; private set; }
 
+        /// The "while you were gone" record from the most recent arrival, or
+        /// null if there is nothing to show (never left, or nothing
+        /// happened worth a card). Set by `ShowHands(true)`.
+        public OutpostLedger.Absence LastReturn { get; private set; }
+
+        /// `Time.unscaledTime` when `LastReturn` was set, so the UI can time
+        /// how long its card has been sitting there.
+        public float ReturnedAt { get; private set; }
+
+        /// The UI has shown (or the player dismissed) the card.
+        public void DismissReturn() => LastReturn = null;
+
         public void ShowHands(bool visible)
         {
+            bool arriving = visible && !Watched;
+            bool leaving = !visible && Watched;
             Watched = visible;
             // Before the sweep below, or a villager recruited while she was
             // away is spawned switched-off and stays that way until the next
@@ -793,7 +807,19 @@ namespace SeaSick.World
             // Arriving is the one moment their positions are looked at, and
             // orders may have changed while nobody could see them.
             if (visible) { ArrangeHands(); PuppetsToWork(); }
-            else
+            if (arriving)
+            {
+                // `CatchUp()` has already run (every caller ticks before
+                // showing), so the ledger is current and this closes off
+                // exactly the time she was gone.
+                var rec = ledger?.EndAbsence();
+                if (rec != null && rec.Anything)
+                {
+                    LastReturn = rec;
+                    ReturnedAt = Time.unscaledTime;
+                }
+            }
+            if (!visible)
             {
                 foreach (var a in Parked()) CampWorker.Remove(a);
                 // **Settle the felling before we stop looking.** While the
@@ -810,6 +836,10 @@ namespace SeaSick.World
                 // the camp is still watched and the lag is still legal.
                 SyncFelling();
                 SyncHarvest();
+                // Open the record of what happens while she's gone. `CatchUp`
+                // has already run (every caller ticks before hiding), so
+                // nothing before this moment leaks into the absence.
+                if (leaving) ledger?.BeginAbsence(TimeOfDay.Seconds);
             }
         }
 

@@ -210,6 +210,7 @@ namespace SeaSick.UI
 
             var safe = HudLayout.Safe;
             var outpost = Outpost.Of(isle);
+            ReturnSummary.Draw(outpost, TimeOfDay.Seconds);   // "while you were gone" card, on arrival
 
             float pad = HudLayout.Unit;
             float lineH = HudLayout.Unit * 1.6f;

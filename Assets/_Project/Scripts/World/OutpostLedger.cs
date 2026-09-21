@@ -519,6 +519,98 @@ namespace SeaSick.World
         /// arithmetic path-independent.
         public double lastTicked;
 
+        /// **What happened while nobody was standing here.** Opened when the
+        /// ship sails (`Outpost.ShowHands(false)`) and closed when she
+        /// returns, so the game can say what the camp did in between. Never
+        /// null: JsonUtility restores a reference-type field as a fresh
+        /// default object on an old save, and a fresh `Absence` has
+        /// `sinceSeconds == 0`, which `Open` already reads as "nothing open".
+        public Absence away = new Absence();
+
+        /// One open-ended record of an absence: what was gathered, made,
+        /// eaten, raised and recruited between a departure and the next
+        /// arrival. `[System.Serializable]` so it rides along inside the
+        /// ledger's own JsonUtility save.
+        [System.Serializable]
+        public class Absence
+        {
+            /// `TimeOfDay.Seconds` the ship left. **0 means no absence is
+            /// open** -- an old save, or a camp nobody has left yet.
+            public double sinceSeconds;
+
+            // Parallel lists rather than a dictionary: JsonUtility cannot
+            // serialize one, and this is small enough that a linear find on
+            // arrival costs nothing.
+            public List<string> res = new List<string>();
+            public List<float> got = new List<float>();
+
+            public float eaten;
+            public float hungryDays;
+
+            /// Blueprint plan ids that went from building to `Complete`
+            /// while away.
+            public List<string> raised = new List<string>();
+            /// Names of hands recruited while away.
+            public List<string> born = new List<string>();
+
+            /// Is there an absence in progress?
+            public bool Open => sinceSeconds > 0.0;
+
+            /// Worth showing the player at all, or just a quiet return.
+            public bool Anything
+            {
+                get
+                {
+                    if (raised.Count > 0 || born.Count > 0) return true;
+                    if (eaten > 0f || hungryDays > 0f) return true;
+                    for (int i = 0; i < got.Count; i++) if (got[i] >= 1f) return true;
+                    return false;
+                }
+            }
+
+            /// Find or create this resource's row and add to it.
+            public void Add(string resource, float amount)
+            {
+                if (string.IsNullOrEmpty(resource) || amount == 0f) return;
+                for (int i = 0; i < res.Count; i++)
+                {
+                    if (res[i] != resource) continue;
+                    got[i] += amount;
+                    return;
+                }
+                res.Add(resource);
+                got.Add(amount);
+            }
+
+            /// How many whole days this absence has run, as of `nowSeconds`.
+            public float DaysAway(double nowSeconds)
+            {
+                if (!Open || TimeOfDay.DayLength <= 0f) return 0f;
+                double elapsed = nowSeconds - sinceSeconds;
+                return elapsed <= 0.0 ? 0f : (float)(elapsed / TimeOfDay.DayLength);
+            }
+        }
+
+        /// Open a fresh absence record. The caller ticks the ledger up to
+        /// `nowSeconds` FIRST (`Outpost.CatchUp` does), so nothing that
+        /// happened before departure leaks into the record.
+        public void BeginAbsence(double nowSeconds)
+        {
+            away = new Absence { sinceSeconds = nowSeconds };
+        }
+
+        /// Close the open absence and hand back what it holds. The caller
+        /// ticks the ledger up to now FIRST, so the record covers the whole
+        /// time she was gone, right up to this return. Returns null if
+        /// there was nothing open (an old save, or two arrivals in a row).
+        public Absence EndAbsence()
+        {
+            if (!away.Open) return null;
+            var closed = away;
+            away = new Absence();
+            return closed;
+        }
+
         // --- the numbers, none of which have been played ---------------------
 
         /// Seconds of game time in one step. A day is `TimeOfDay.DayLength`
@@ -771,6 +863,10 @@ namespace SeaSick.World
             // over and there is no fire -- so a hand told to build is not
             // choosing between two piles, they are the reason there will be
             // one.
+            // Captured before the building block touches `pending`, so the
+            // completion check below can tell "finished just now" from
+            // "was already sitting there ready to raise".
+            bool wasComplete = pending != null && pending.Complete;
             if (pending != null && !pending.Complete)
             {
                 int builders = HandsOn(OutpostOrder.Build);
@@ -843,6 +939,11 @@ namespace SeaSick.World
                     PayStone(ref labour);
                 }
             }
+            // The record of who's away doesn't care whether the raise was
+            // seen -- `Outpost.FinishPending` handles standing the mesh up
+            // separately, on the next `CatchUp`. This just notes that it
+            // happened during the absence.
+            if (pending != null && !wasComplete && pending.Complete) away.raised.Add(pending.planId);
 
             // --- gathering ---------------------------------------------------
             //
@@ -870,6 +971,7 @@ namespace SeaSick.World
                 store.part += got;
                 int whole = Mathf.FloorToInt(store.part);
                 if (whole > 0) { store.whole += whole; store.part -= whole; }
+                away.Add(h.target, got);
             }
 
             // --- working at a building ---------------------------------------
@@ -933,6 +1035,7 @@ namespace SeaSick.World
                 made.part += want;
                 int whole = Mathf.FloorToInt(made.part);
                 if (whole > 0) { made.whole += whole; made.part -= whole; }
+                away.Add(plan.makes, want);
             }
 
             // --- upkeep: eating -----------------------------------------------
@@ -954,10 +1057,11 @@ namespace SeaSick.World
                     while (food.part < 0f && food.whole > 0) { food.whole--; food.part += 1f; }
                     if (food.part < 0f) food.part = 0f;
                     foodEaten += eaten;
+                    away.eaten += eaten;
                 }
                 // Nobody starves or leaves on this yet -- record the debt
                 // for the neglect/anger pass and stop there.
-                if (eaten < need) hungerDays += days;
+                if (eaten < need) { hungerDays += days; away.hungryDays += days; }
             }
 
             // --- upkeep: recruiting ---------------------------------------------
@@ -975,12 +1079,14 @@ namespace SeaSick.World
                 {
                     recruitProgress -= DaysPerRecruit;
                     Take(Res.Food, RecruitFoodCost);
+                    string name = VillagerNames.NextFor(this);
                     hands.Add(new OutpostHand
                     {
-                        name = VillagerNames.NextFor(this),
+                        name = name,
                         order = OutpostOrder.Idle,
                         born = true,
                     });
+                    away.born.Add(name);
                 }
             }
         }
