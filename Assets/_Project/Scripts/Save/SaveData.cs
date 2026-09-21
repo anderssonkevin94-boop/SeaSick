@@ -95,6 +95,15 @@ namespace SeaSick.Save
         public float campX, campY, campZ;
         public bool hasCampCentre;
 
+        /// The island the camp is ON, by its centre. The land mask under a
+        /// shore camp resolved to the neighbouring islet once (2026-09-21:
+        /// a camp on Island_1 came back inside Island_3's outpost, and the
+        /// sheet offered to make a new camp on Island_1), so the mask is the
+        /// fallback now, not the rule. Islands are deterministic from the
+        /// seed, so a centre is as stable as the world itself.
+        public bool hasIsle;
+        public float isleX, isleZ;
+
         /// True for outpost zero. Home is never surveyed on load; it is
         /// there from the world build and adopts the ledger in place.
         public bool isHome;

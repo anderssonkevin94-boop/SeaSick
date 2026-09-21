@@ -205,12 +205,16 @@ namespace SeaSick.Save
                     || (l.raised != null && l.raised.Count > 0) || l.pending != null;
                 if (!worth) continue;
                 Vector3 c = o.CampCentre;
+                var isle = o.Island;
                 d.outposts.Add(new OutpostSave
                 {
                     ledger = l,
                     campX = c.x, campY = c.y, campZ = c.z,
                     hasCampCentre = o.HasCampCentre,
                     isHome = o.IsHome,
+                    hasIsle = isle != null,
+                    isleX = isle != null ? isle.transform.position.x : 0f,
+                    isleZ = isle != null ? isle.transform.position.z : 0f,
                 });
             }
             return d;
@@ -375,7 +379,10 @@ namespace SeaSick.Save
             if (os.isHome) o = Outpost.Home;
             else
             {
-                var isle = IslandAt(pop, os.ledger.keyX, os.ledger.keyZ);
+                // The island she camped on, by its own centre; the land mask
+                // under the camp key only when a save predates that field.
+                var isle = os.hasIsle ? IslandCentred(os.isleX, os.isleZ) : null;
+                if (isle == null) isle = IslandAt(pop, os.ledger.keyX, os.ledger.keyZ);
                 if (isle == null)
                 {
                     Debug.LogWarning("SaveGame: no island under camp key ("
@@ -436,6 +443,22 @@ namespace SeaSick.Save
         /// The island whose land mask holds this point, or the nearest one
         /// when the point fell in a cell the scan called water (the mask is
         /// 24 m cells; a camp key is a metre).
+        /// The island whose centre is (near enough) here. Centres are hundreds
+        /// of metres apart, so 25 m is "this one" with room for float noise
+        /// and a hand-edited save; anything further is a different world.
+        public static Island IslandCentred(float x, float z)
+        {
+            Island best = null; float bestD = 25f;
+            foreach (var isle in Island.All)
+            {
+                if (isle == null) continue;
+                var p = isle.transform.position;
+                float d = Mathf.Sqrt((p.x - x) * (p.x - x) + (p.z - z) * (p.z - z));
+                if (d < bestD) { bestD = d; best = isle; }
+            }
+            return best;
+        }
+
         public static Island IslandAt(TerrainWorldPopulator pop, float x, float z)
         {
             if (pop != null && pop.LandMask != null && pop.MaskCell > 0f)
