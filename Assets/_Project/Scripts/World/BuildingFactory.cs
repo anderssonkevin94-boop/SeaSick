@@ -272,8 +272,8 @@ namespace SeaSick.World
             var l = lightGo.AddComponent<Light>();
             l.type = LightType.Point;
             l.color = new Color(1f, 0.62f, 0.28f);
-            l.range = 18f;
-            l.intensity = 5f;
+            l.range = 22f;
+            l.intensity = 12f;
             l.shadows = LightShadows.None;   // one more shadow caster per camp is not worth it
             lightGo.AddComponent<Campfire>();
         }
@@ -296,8 +296,8 @@ namespace SeaSick.World
             var l = lightGo.AddComponent<Light>();
             l.type = LightType.Point;
             l.color = new Color(1f, 0.72f, 0.42f);
-            l.range = Mathf.Clamp(6f + Mathf.Max(len, wid), 8f, 12f);
-            l.intensity = 2.4f;
+            l.range = Mathf.Clamp(8f + Mathf.Max(len, wid), 10f, 14f);
+            l.intensity = 5f;
             l.shadows = LightShadows.None;
             var fire = lightGo.AddComponent<Campfire>();
             fire.flicker = 0.07f;
