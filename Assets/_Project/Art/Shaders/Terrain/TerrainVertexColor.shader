@@ -50,6 +50,7 @@ Shader "SeaSick/Terrain Vertex Color"
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
             #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
@@ -276,19 +277,25 @@ Shader "SeaSick/Terrain Vertex Color"
                 float authoredMask = _AuthoredFormLighting * lerp(0.62, 1.0, saturate(i.color.a));
                 float3 authored = albedo * (max(ambient * 0.42, float3(0.10,0.10,0.10)) + light.color * authoredTint);
                 col = lerp(col, authored, authoredMask);
-                // Point lights: the campfire and the lamps. Lambert, no cel
-                // band, so a fire reads as a warm pool and not as a second
-                // sun; the pipeline lights four of these per object.
-                #if defined(_ADDITIONAL_LIGHTS)
+                // Point lights: the campfire and the lamps. URP's own falloff
+                // is inverse-square, which lights a fire's stone ring and
+                // nothing past it; a camp has to read from the water, so
+                // this is a stylised linear fade over ~22 m with wrapped
+                // Lambert (the slope behind the fire still glows). Works in
+                // both the Forward and the Forward+ (cluster) paths.
+                #if defined(_ADDITIONAL_LIGHTS) || USE_CLUSTER_LIGHT_LOOP
                 {
+                    InputData inputData = (InputData)0;
+                    inputData.positionWS = i.positionWS;
+                    inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(i.positionCS);
                     uint lightCount = GetAdditionalLightsCount();
-                    for (uint li = 0u; li < lightCount; li++)
-                    {
-                        Light pl = GetAdditionalLight(li, i.positionWS);
-                        col += albedo * pl.color * pl.distanceAttenuation * saturate(dot(n, pl.direction));
-                    }
-                }
-                #endif
+                    LIGHT_LOOP_BEGIN(lightCount)
+                        Light pl = GetAdditionalLight(lightIndex, i.positionWS);
+                        #if USE_CLUSTER_LIGHT_LOOP
+                            int pidx = lightIndex;
+                        #else
+                            int pidx = GetPerObjectLightIndex(lightIndex);
+                        #endif
                 col = MixFog(col, i.fog);
                 return half4(col, 1);
             }

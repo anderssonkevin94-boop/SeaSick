@@ -273,9 +273,22 @@ namespace SeaSick.World
             l.type = LightType.Point;
             l.color = new Color(1f, 0.62f, 0.28f);
             l.range = 22f;
-            l.intensity = 12f;
+            l.intensity = 4f;                // the shaders fade linearly over the range; 4 is a bright pool
             l.shadows = LightShadows.None;   // one more shadow caster per camp is not worth it
             lightGo.AddComponent<Campfire>();
+
+            // The flame itself: an unlit ember the light cannot be seen
+            // without. From the deck at night the point light is a pool on
+            // the shore; this is the orange dot in the middle of it.
+            var flame = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Object.Destroy(flame.GetComponent<Collider>());
+            flame.name = "Flame";
+            flame.transform.SetParent(root, false);
+            flame.transform.localPosition = new Vector3(0f, 0.35f, 0f);
+            flame.transform.localScale = new Vector3(0.55f, 0.7f, 0.55f);
+            var fm = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            fm.color = new Color(1f, 0.55f, 0.15f);
+            flame.GetComponent<MeshRenderer>().sharedMaterial = fm;
         }
 
         /// **A lit window.** Every building that is not the fire gets one
@@ -297,7 +310,7 @@ namespace SeaSick.World
             l.type = LightType.Point;
             l.color = new Color(1f, 0.72f, 0.42f);
             l.range = Mathf.Clamp(8f + Mathf.Max(len, wid), 10f, 14f);
-            l.intensity = 5f;
+            l.intensity = 1.6f;              // linear fade in the shaders; a window, not a second fire
             l.shadows = LightShadows.None;
             var fire = lightGo.AddComponent<Campfire>();
             fire.flicker = 0.07f;
