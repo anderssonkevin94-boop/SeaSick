@@ -65,6 +65,7 @@ namespace SeaSick.Terrain
             mat.SetFloat("_PaintStudy", 0f);
             go.AddComponent<MeshRenderer>().sharedMaterial = mat;
             go.AddComponent<MeshCollider>().sharedMesh = mesh;
+            go.layer = LandLayer.Index;   // the hull ignores this layer; see LandLayer
             return go;
         }
 

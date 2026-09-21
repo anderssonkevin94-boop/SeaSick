@@ -15,8 +15,8 @@ namespace SeaSick.Ship
         // at all, not watching a progress timer tick down.
         [SerializeField] float dropTime = 0f;
         [SerializeField] float weighTime = 0f;
-        [Tooltip("How far off the shoreline the ship lies when moored.")]
-        [SerializeField] float berthDistance = 11f;
+        [Tooltip("Water under the hull, metres, within which she counts as off a shore and may anchor. The whole shoreline, not a radius from the island's centre.")]
+        [SerializeField] float landingDepth = 12f;
         [Tooltip("How close to her berth she has to be before the dock will take her. About two ship lengths.")]
         [SerializeField] float dockRange = 55f;
         [Tooltip("How far from the shore party real scenery trees are stood up as harvestable.")]
@@ -40,7 +40,7 @@ namespace SeaSick.Ship
         /// tied up -- she is already well outside the home island's centre
         /// at the end of a 46 m pier, so a distance check called the voyage
         /// finished on the first frame.
-        public bool AtHomeDock => CurrentDock != null && !landingPending
+        public bool AtHomeDock => CurrentDock != null && CurrentDock.IsHome && !landingPending
             && (CurrentState == State.Anchored || CurrentState == State.Ashore);
 
         /// Has the spawn-time berthing had its frame? A load has to wait for
@@ -185,23 +185,58 @@ namespace SeaSick.Ship
             islandCam != null && chaseCam != null && chaseCam.Overview.HasValue
                 ? islandCam.Readout : null;
 
+        /// **Off a shore, by the water under her -- not by a radius.**
+        ///
+        /// This used to be `RadiusToward + 30 m` from the island's CENTRE:
+        /// the same 46-sector radial profile `HullIntegrity` retired for
+        /// being up to 934 m out on a lobed island. Landing therefore
+        /// needed her run onto the sand on some bearings and was offered
+        /// in deep water on others, and Kevin could not land without
+        /// beaching. Now she is "in range" wherever the shore depth field
+        /// says there is less than `landingDepth` of water under the hull:
+        /// the same grid the ocean shoals on and the hull grounds on, so
+        /// the prompt appears where the beach is. `HasBeachToward` still
+        /// refuses a cliff. The old radius stays only as the fallback for a
+        /// scene with no field.
         Island IslandInRange()
         {
             var isle = Island.Nearest(transform.position);
             if (isle == null) return null;
+            float depth = WaterDepthUnder(transform.position);
+            if (!float.IsNaN(depth)) return depth <= landingDepth ? isle : null;
             float reach = isle.RadiusToward(transform.position) + 30f;
             return Island.FlatDistance(transform.position, isle.transform.position) <= reach
                 ? isle : null;
+        }
+
+        /// Metres of water under `p` at mean level, from the shore grid where
+        /// it reaches and the exact field elsewhere; NaN with neither.
+        static float WaterDepthUnder(Vector3 p)
+        {
+            var rf = Ocean.RegionField.Instance;
+            if (rf != null && rf.ShoreN > 0)
+            {
+                var shore = rf.Shore;
+                if (shore.IsCreated && shore.Length >= rf.ShoreN * rf.ShoreN)
+                {
+                    float d = rf.Params.ShoreWetDepth(
+                        new Unity.Mathematics.float2(p.x, p.z), shore).z;
+                    if (d < 1e8f) return d;
+                }
+            }
+            if (Island.TerrainHeight != null) return -Island.TerrainHeight(p.x, p.z);
+            return float.NaN;
         }
 
         /// You can only put a boat ashore on a beach — cliff faces drop sheer
         /// into the water, so the approach bearing matters.
         bool CanLandHere(Island isle) => isle != null && isle.HasBeachToward(transform.position);
 
-        /// Her own berth, if she is close enough to take it.
+        /// The nearest berth, home's or a camp pier's, if she is close
+        /// enough to take it.
         public Dock DockInRange()
         {
-            var d = Dock.Home;
+            var d = Dock.Nearest(transform.position);
             return d != null && d.DistanceFrom(transform.position) <= dockRange ? d : null;
         }
 
@@ -221,9 +256,19 @@ namespace SeaSick.Ship
         {
             CurrentDock = d;
             CurrentIsland = Island.Nearest(d.Berth);
+            // A camp's pier is a landing like any beach: the ground gets
+            // surveyed and the hands who live here wake up. Home has no
+            // outpost to wake.
+            if (CurrentIsland != null && !CurrentIsland.IsHome)
+            {
+                Outpost.BeginSurvey(CurrentIsland, this);
+                var here = Outpost.Of(CurrentIsland);
+                if (here != null) { here.CatchUp(); here.ShowHands(true); }
+            }
             motor.Anchored = true;
             CurrentState = State.Anchored;
-            SeaSick.Save.SaveGame.Autosave("alongside at home");
+            SeaSick.Save.SaveGame.Autosave(d.IsHome ? "alongside at home"
+                : "alongside at " + (CurrentIsland != null ? CurrentIsland.name : "a pier"));
         }
 
         /// Put her on her home berth, tied up, from wherever she happens to be.
@@ -399,28 +444,26 @@ namespace SeaSick.Ship
                 motor.AnchorPoint = Vector3.Lerp(motor.AnchorPoint, target,
                     1f - Mathf.Exp(-berthSpeed * dt));
                 motor.MooringHeading = CurrentDock.Heading.eulerAngles.y;
-                // The plank reaches the pier, not the island — until it knows
-                // how to do that, it stays inboard rather than stabbing at a
-                // beach thirty metres away.
-                if (gangway != null) gangway.Withdraw();
+                // At a camp's pier the plank lands on the pier's root. At
+                // home it stays inboard as before: the home pier has its own
+                // arrival and the plank was never part of it.
+                if (gangway != null)
+                {
+                    if (CurrentDock.IsHome) gangway.Withdraw();
+                    else gangway.ExtendTo(CurrentDock.Landing);
+                }
                 return;
             }
             motor.MooringHeading = null;
 
-            Vector3 c = CurrentIsland.transform.position;
-            Vector3 out2 = transform.position - c;
-            out2.y = 0f;
-            if (out2.sqrMagnitude < 0.01f) return;
-            float bearing = Mathf.Atan2(out2.x, out2.z);
-            float shore = CurrentIsland.RadiusAt(bearing);
-
-            Vector3 berth = c + out2.normalized * (shore + berthDistance);
-            berth.y = motor.AnchorPoint.y;
-            // Walk the anchor spring's target rather than the transform: the
-            // rigidbody does the moving, so berthing can't fight the physics.
-            motor.AnchorPoint = Vector3.Lerp(motor.AnchorPoint, berth,
-                1f - Mathf.Exp(-berthSpeed * dt));
-
+            // **Off a beach she lies where she stopped.** This used to walk
+            // the anchor point to `RadiusAt(bearing) + 11 m` from the
+            // island's centre -- a berth on the radial profile, which is
+            // metres to hundreds of metres off the real waterline, so the
+            // spring dragged her onto the sand or out to sea after the
+            // player had already chosen where to stop. `ShipMotor.Anchored`
+            // took the anchor point where she was when it was set; that is
+            // the berth.
             if (gangway != null) gangway.Extend(CurrentIsland);
         }
 
@@ -433,7 +476,9 @@ namespace SeaSick.Ship
             // Lying at the dock is the one moment the player is not steering,
             // so it is the one moment the camera can leave the water and show
             // them what they came home to.
-            bool atDock = CurrentDock != null
+            // The composed shot is home's; a camp's pier takes the camp's
+            // bird's-eye below, like any landing there.
+            bool atDock = CurrentDock != null && CurrentDock.IsHome
                 && (CurrentState == State.Anchored || CurrentState == State.Ashore)
                 && CurrentDock.DistanceFrom(transform.position) < dockRange;
             if (atDock && CurrentIsland != null)

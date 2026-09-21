@@ -13,7 +13,73 @@ namespace SeaSick.World
     /// alongside it means matching both.
     public class Dock : MonoBehaviour
     {
+        /// The home pier's dock: the one the voyage closes on, and the one
+        /// the spawn berths at. Null until the world build raises it.
         public static Dock Home { get; private set; }
+
+        /// **Every dock that exists right now**, home included. A pier a
+        /// camp raises registers here on enable and leaves on disable, so
+        /// tearing the pier down (a load re-raising a ledger, a probe
+        /// cleaning up) removes its berth with it.
+        public static readonly System.Collections.Generic.List<Dock> All =
+            new System.Collections.Generic.List<Dock>();
+
+        /// The dock whose berth is nearest `pos`, flat, or null with none.
+        public static Dock Nearest(Vector3 pos)
+        {
+            Dock best = null;
+            float bestD = float.MaxValue;
+            foreach (var d in All)
+            {
+                if (d == null) continue;
+                float dd = d.DistanceFrom(pos);
+                if (dd < bestD) { bestD = dd; best = d; }
+            }
+            return best;
+        }
+
+        /// Is this the home pier? Set by the world build through `Configure`;
+        /// a runtime pier (`Create`) never is, so `Home` cannot wander onto a
+        /// camp's jetty however early it is raised.
+        public bool IsHome => isHome;
+        [SerializeField] bool isHome;
+
+        /// **Stand a dock up at runtime**, for a pier a camp has built.
+        ///
+        /// `root` is the land end of the pier (where the gangway lands and a
+        /// shore party forms up), `head` its sea end, `berth` where the
+        /// ship's centre lies when tied up, `seaward` the unit direction
+        /// land-to-water along the pier (her heading at the berth: bow out).
+        /// `deckY` is the deck's world height and `berthDepth` the water
+        /// under the berth. The component goes on `host` -- normally the
+        /// pier's own GameObject, so destroying the pier destroys the dock
+        /// and unregisters it -- or on a new GameObject under `host == null`.
+        /// Tear one down with `Remove`.
+        public static Dock Create(GameObject host, Vector3 root, Vector3 head, Vector3 berth,
+            Vector3 seaward, float deckY, float berthDepth)
+        {
+            if (host == null) host = new GameObject("Dock");
+            var d = host.AddComponent<Dock>();
+            d.isHome = false;
+            d.root = root;
+            d.head = head;
+            d.berth = berth;
+            seaward.y = 0f;
+            d.seaward = seaward.sqrMagnitude > 1e-6f
+                ? new Vector2(seaward.normalized.x, seaward.normalized.z)
+                : new Vector2(0f, 1f);
+            d.deckY = deckY;
+            d.berthDepth = berthDepth;
+            return d;
+        }
+
+        /// Take a runtime dock down without taking its host with it. Home is
+        /// refused: the voyage closes on it.
+        public static void Remove(Dock d)
+        {
+            if (d == null || d.isHome) return;
+            Destroy(d);
+        }
 
         [SerializeField] Vector3 berth;
         [SerializeField] Vector3 head;
@@ -115,10 +181,21 @@ namespace SeaSick.World
             seaward = site.seaward;
             berthDepth = site.berthDepth;
             deckY = deck;
+            isHome = true;
+            if (Home == null) Home = this;
         }
 
-        void OnEnable() { if (Home == null) Home = this; }
-        void OnDisable() { if (Home == this) Home = null; }
+        void OnEnable()
+        {
+            if (!All.Contains(this)) All.Add(this);
+            if (isHome && Home == null) Home = this;
+        }
+
+        void OnDisable()
+        {
+            All.Remove(this);
+            if (Home == this) Home = null;
+        }
 
         /// How far off her berth she is, flat. The mooring code eases her in
         /// on this, and the camera uses it to decide she has arrived.

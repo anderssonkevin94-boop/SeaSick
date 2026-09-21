@@ -69,7 +69,137 @@ namespace SeaSick.Ship
         {
             motor = GetComponent<ShipMotor>();
             buoyancy = GetComponent<SeaSick.Ocean.BuoyantBody>();
+            body = GetComponent<Rigidbody>();
             crew = GetComponentsInChildren<CrewAgent>(true);
+
+            // The hull ignores the ground's colliders from the first frame.
+            // `Shipyard.Refit` sets this too, but only when a rung is
+            // applied -- a ship that boots on the collider the scene saved
+            // never passes through it (measured: excludeLayers was 0 at
+            // play start), so the bootstrap lives with the grounding it
+            // makes room for.
+            foreach (var c in GetComponentsInChildren<Collider>(true))
+                c.excludeLayers = c.excludeLayers | SeaSick.Terrain.LandLayer.Mask;
+        }
+
+        Rigidbody body;
+
+        [Header("Shore")]
+        [Tooltip("m/s² of seaward push while the keel is over the sand, so she slides off rather than sits on it.")]
+        [SerializeField] float seawardPush = 1.2f;
+
+        /// **Land is a wall, not a ramp.**
+        ///
+        /// The terrain's colliders are on the Land layer and the hull's
+        /// collider excludes it (`LandLayer`), so PhysX no longer lets her
+        /// climb a beach. This is the ONLY thing that stops her at the shore
+        /// now, and it runs every physics step, on the rigidbody, the way a
+        /// wall would: the velocity component INTO the land is cancelled --
+        /// what is left runs along the shore, so she slides to a stop on the
+        /// beach instead of up it -- and a gentle seaward push eases her back
+        /// into water. Her position is never written. Contact below
+        /// `freeImpactSpeed` costs nothing; faster contact bills the hull as
+        /// a reef would (`Aground` did both before, with a teleport).
+        ///
+        /// Three points along the keel, not one: the centre clears a beach
+        /// the bow is already twenty metres up, and it was the bow the
+        /// colliders used to lift. The first point over the sand wins, and
+        /// the push comes from ITS gradient, so a bow on the beach is pushed
+        /// off the beach the bow is on.
+        void FixedUpdate()
+        {
+            if (motor == null || body == null || motor.Anchored) return;
+            if (Island.TerrainHeight == null) return;
+            HoldOffTheLand();
+        }
+
+        void HoldOffTheLand()
+        {
+            float half = motor.HullLength * 0.4f;
+            Vector3 fwd = transform.forward; fwd.y = 0f;
+            fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
+            Vector3 c = transform.position;
+
+            Vector3 outward = Vector3.zero;
+            bool grounded = GroundedAt(c + fwd * half, out outward)
+                         || GroundedAt(c, out outward)
+                         || GroundedAt(c - fwd * half, out outward);
+            if (!grounded) return;
+
+            Vector3 v = body.linearVelocity;
+            Vector3 flatV = v; flatV.y = 0f;
+            float closingSpeed = -Vector3.Dot(flatV, outward);
+
+            // The wall: nothing gets through it. Whatever ran along it stays.
+            if (closingSpeed > 0f) v += outward * closingSpeed;
+            // And off it, gently. Capped so the push never becomes a launch:
+            // once she is moving seaward at walking pace it stops adding.
+            float seawardNow = Vector3.Dot(v, outward);
+            if (seawardNow < 1.5f)
+                v += outward * Mathf.Min(seawardPush * Time.fixedDeltaTime, 1.5f - seawardNow);
+            body.linearVelocity = v;
+
+            if (closingSpeed > freeImpactSpeed && Time.time - LastImpactTime > 0.5f)
+                Bill(closingSpeed, 1f);
+        }
+
+        /// The hull's share of a contact at `closingSpeed`, and the crew's.
+        void Bill(float closingSpeed, float damageScale)
+        {
+            float excess = closingSpeed - freeImpactSpeed;
+            integrity = Mathf.Clamp01(integrity - excess * damagePerImpactSpeed * damageScale);
+            LastImpactTime = Time.time;
+            LastImpactSpeed = closingSpeed;
+
+            // Everyone gets thrown across the deck.
+            float shock = crewShock * Mathf.Clamp01(excess / 8f);
+            if (crew == null) crew = GetComponentsInChildren<CrewAgent>(true);
+            foreach (var c in crew) if (c != null) c.Jolt(shock);
+        }
+
+        /// Is there sand under the keel at `p`, and which way is deep water?
+        /// The grid cheaply rejects open water and gives the gradient; the
+        /// exact field confirms the touch. See `GroundedOnLand` for the
+        /// budget this shape keeps.
+        bool GroundedAt(Vector3 p, out Vector3 outward)
+        {
+            outward = Vector3.zero;
+            float surface = buoyancy != null ? buoyancy.MeanWaterHeight : 0f;
+            float need = surface - groundingDraft;
+
+            bool grid = ShoreGrid(out var prm, out var shore);
+            if (grid)
+            {
+                float g = GridGround(p, prm, shore);
+                if (!float.IsNaN(g) && g <= need - gridTrustDepth) return false;
+            }
+            if (Ground(p) <= need) return false;
+
+            outward = Downhill(p, grid, prm, shore);
+            return true;
+        }
+
+        /// Straight downhill on the height field at `p`, flat and unit.
+        Vector3 Downhill(Vector3 p, bool grid, in RegionFieldParams prm, NativeArray<float> shore)
+        {
+            const float E = 4f;
+            float gx, gz;
+            if (!grid || !GridSlope(p, E, prm, shore, out gx, out gz))
+            {
+                gx = Ground(p + Vector3.right * E) - Ground(p - Vector3.right * E);
+                gz = Ground(p + Vector3.forward * E) - Ground(p - Vector3.forward * E);
+            }
+            Vector3 down = new Vector3(-gx, 0f, -gz);
+            if (down.sqrMagnitude < 1e-6f)
+            {
+                // Flat shallows: no gradient to follow, so fall back to away
+                // from the nearest island's centre.
+                var isle = Island.Nearest(p);
+                down = isle != null ? p - isle.transform.position : Vector3.forward;
+                down.y = 0f;
+                if (down.sqrMagnitude < 1e-6f) down = Vector3.forward;
+            }
+            return down.normalized;
         }
 
         void Update()
@@ -100,12 +230,8 @@ namespace SeaSick.Ship
             // Skipped while she is anchored: deliberately putting her ashore
             // is not running aground, and the shore party moors her 11 m off
             // a beach where the water is inches deep.
-            if (!motor.Anchored && GroundedOnLand(out Vector3 landOut, out Vector3 landFix))
-            {
-                Aground(landOut, landFix, 1f);
-                return;
-            }
-
+            // Land itself is handled in `FixedUpdate` -- see `HoldOffTheLand`.
+            // Reefs and other hulls keep the shove below.
             if (reef != null && Intrudes(reef.transform.position, reef.Radius))
             {
                 obstaclePos = reef.transform.position;
@@ -258,24 +384,7 @@ namespace SeaSick.Ship
 
             if (Ground(p) <= need) return false;
 
-            const float E = 4f;
-            float gx, gz;
-            if (!grid || !GridSlope(p, E, prm, shore, out gx, out gz))
-            {
-                gx = Ground(p + Vector3.right * E) - Ground(p - Vector3.right * E);
-                gz = Ground(p + Vector3.forward * E) - Ground(p - Vector3.forward * E);
-            }
-            Vector3 down = new Vector3(-gx, 0f, -gz);
-            if (down.sqrMagnitude < 1e-6f)
-            {
-                // Flat shallows: no gradient to follow, so fall back to away
-                // from the nearest island's centre.
-                var isle = Island.Nearest(p);
-                down = isle != null ? p - isle.transform.position : Vector3.forward;
-                down.y = 0f;
-                if (down.sqrMagnitude < 1e-6f) down = Vector3.forward;
-            }
-            outward = down.normalized;
+            outward = Downhill(p, grid, prm, shore);
 
             Vector3 q = p;
             bool approx = false;
@@ -308,16 +417,7 @@ namespace SeaSick.Ship
             motor.KillVelocityAlong(outward);
 
             if (closingSpeed > freeImpactSpeed && Time.time - LastImpactTime > 0.5f)
-            {
-                float excess = closingSpeed - freeImpactSpeed;
-                integrity = Mathf.Clamp01(integrity - excess * damagePerImpactSpeed * damageScale);
-                LastImpactTime = Time.time;
-                LastImpactSpeed = closingSpeed;
-
-                // Everyone gets thrown across the deck.
-                float shock = crewShock * Mathf.Clamp01(excess / 8f);
-                foreach (var c in crew) if (c != null) c.Jolt(shock);
-            }
+                Bill(closingSpeed, damageScale);
         }
 
         /// Metres of water she needs under her before she touches.

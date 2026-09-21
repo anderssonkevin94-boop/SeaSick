@@ -55,6 +55,13 @@ namespace SeaSick.Ship
             shoreTarget = isle.SurfacePoint(ang, isle.RadiusAt(ang) * 0.97f);
         }
 
+        /// Run the plank out to a fixed point -- the root of a pier.
+        public void ExtendTo(Vector3 landing)
+        {
+            wanted = true;
+            shoreTarget = landing;
+        }
+
         public void Withdraw() { wanted = false; }
 
         void LateUpdate()

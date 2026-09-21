@@ -358,6 +358,7 @@ namespace SeaSick.Terrain
         {
             var go = new GameObject("Chunk");
             go.transform.SetParent(transform, false);
+            go.layer = LandLayer.Index;   // the hull ignores this layer; see LandLayer
             var ch = new Chunk
             {
                 go = go,
