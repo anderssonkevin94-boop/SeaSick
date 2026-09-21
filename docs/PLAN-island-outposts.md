@@ -1236,3 +1236,44 @@ in one file plus three hooks.
 Still open: mood lives on the ledger row, so it resets when a hand
 re-boards (the plan wanted it on `CrewMemberDef`); the return card does not
 mention anger; no probe gates any of it.
+
+## TEETH — 2026-09-22 (Phase 3)
+
+Kevin said build on. The gate was written on 2026-09-13: **a lost camp must
+read as the player's mistake, not a dice roll.** So a raid is a CLOCK, not a
+roll, and the sheet prints the date.
+
+- **Who raids.** The raiders that already patrol islands
+  (`TerrainWorldPopulator.BuildRaiders`, one per resource island, eight in
+  the world). `EnemyShip.CountAt(island)` counts the ALIVE ones whose
+  `Home` is this island and `Outpost.CatchUp` pushes that into
+  `OutpostLedger.raiders` before every tick, like `ceilingPer`. The ships
+  are the authority: sink the raider and the camp is safe; the minimap
+  already draws its patrol ring.
+- **When.** Only while the ship is away (`away.Open` — the same record the
+  return card reads) and only while something is piled (`Total > 0`).
+  `threat` banks `ThreatRatePerDay` per day; at `DaysToRaid` (4) `Raid()`
+  fires and the clock restarts. While she is there, raiders are ships she
+  can fight, and a lookout on watch lets `threat` decay a day per day.
+- **What.** 40 % of every pile's whole units (`RaidShare`, at least one),
+  through `Take`, into `Absence.raidRes/raidGot` so the card says *raiders
+  took 12 timber, 4 boards* (*raided 2 times — they took …*). Every hand
+  loses 0.25 mood. Buildings are untouched — first pass.
+- **The watchtower.** `BuildPlans.Watchtower`: 12 timber + 6 stone (capped
+  by `PlaytestCostCap`), `position = "lookout"`, takes and makes nothing.
+  The kit has no tower, so it is extruded 2.6 × 2.6 × 7.5 m — a tall shed,
+  placeholder. Manned (`Guard` = summed `WorkFactor` of hands on the
+  lookout, so an angry lookout is half a lookout) the rate is 0; unmanned
+  it is halved. `Stalled` exempts the lookout, since making nothing is the
+  job.
+- **The tell.** Headline: *1 raider offshore · a raid 4 days after you sail
+  · a watchtower and a lookout stop it* / *post a lookout* / *the lookout
+  keeps them off* / *nothing here to take*.
+
+**Placeholders, none played:** 4 days, 40 %, 0.25, the tower's price and
+shape. **Still open:** raider deaths are not saved (a reload brings every
+raider back); island character does not set danger (no `Rock01` /
+`Verdancy01` on `Island` — the plan's "richest islands are the worst to
+leave people on" is unbuilt); a raider is never seen to land; `raiders` on
+an unloaded island is the count at the last visit; no probe gates any of
+it; a real tower model.
