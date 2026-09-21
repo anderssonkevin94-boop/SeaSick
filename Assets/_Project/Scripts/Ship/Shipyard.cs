@@ -169,6 +169,22 @@ namespace SeaSick.Ship
             PushToGame();
         }
 
+        /// One bay decision WITHOUT the refurnish. A save replays every cell
+        /// at once and pays for the furniture and the push once, through
+        /// `Refurnish`; `SetUse` would rebuild the deck per cell.
+        public void SetUseQuiet(string bay, string tier, BayUse u)
+        {
+            if (Fleet != null && u == BayUse.Battery) return;
+            cells[Key(bay, tier)] = u;
+        }
+
+        /// What `SetUse` does after it has written the cell.
+        public void Refurnish()
+        {
+            if (furnish) Furnish();
+            PushToGame();
+        }
+
         /// Cycle a cell: empty -> hold -> battery -> quarters -> ballast ->
         /// empty.
         ///

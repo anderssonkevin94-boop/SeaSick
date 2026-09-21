@@ -71,6 +71,59 @@ namespace SeaSick.Voyage
         readonly Dictionary<string, int> held = new Dictionary<string, int>();
         readonly Dictionary<string, int> banked = new Dictionary<string, int>();
 
+        /// The hold and the stores, read-only, for the save. Every other
+        /// reader asks by name (`AmountOf`, `Banked`); a save has to walk them.
+        public IReadOnlyDictionary<string, int> HeldStores => held;
+        public IReadOnlyDictionary<string, int> BankedStores => banked;
+
+        /// **Put a saved hold and saved stores back**, and make the pictures
+        /// agree: the stack at the stern and the piles on the beach are both
+        /// rebuilt from the numbers, because neither re-syncs by itself.
+        ///
+        /// Runs AFTER `Start` and after the yard has applied the saved rung,
+        /// so `BeginVoyage` has already had its one chance to wipe the hold
+        /// and `SetHoldCapacity` has already been told the saved size.
+        public void RestoreStores(IEnumerable<KeyValuePair<string, int>> hold,
+                                  IEnumerable<KeyValuePair<string, int>> stores)
+        {
+            held.Clear();
+            TotalHeld = 0;
+            if (hold != null)
+                foreach (var kv in hold)
+                {
+                    if (string.IsNullOrEmpty(kv.Key) || kv.Value <= 0) continue;
+                    held[kv.Key] = kv.Value;
+                    TotalHeld += kv.Value;
+                }
+            if (ship != null)
+            {
+                ship.CargoLoad = HoldFill;
+                var shipHold = ship.GetComponent<Ship.ShipHold>();
+                if (shipHold != null)
+                {
+                    shipHold.ClearVisuals();
+                    foreach (var kv in held)
+                        for (int i = 0; i < kv.Value; i++) shipHold.AddVisual(kv.Key);
+                }
+            }
+
+            banked.Clear();
+            if (stores != null)
+                foreach (var kv in stores)
+                {
+                    if (string.IsNullOrEmpty(kv.Key) || kv.Value <= 0) continue;
+                    banked[kv.Key] = kv.Value;
+                }
+            var pile = World.Stockpile.Instance;
+            if (pile != null)
+            {
+                pile.Clear();
+                foreach (var kv in banked)
+                    for (int i = 0; i < kv.Value; i++) pile.Deposit(kv.Key);
+            }
+            panelVersion++;
+        }
+
         CrewAgent[] crew;
         AnchorController anchor;
         bool hasLeftHome;
@@ -197,6 +250,10 @@ namespace SeaSick.Voyage
             held.Clear();
             TotalHeld = 0;
             if (ship != null) ship.CargoLoad = 0f;
+            // Casting off is a moment worth keeping. A no-op until the player
+            // has chosen New or Continue, so the call from `Start` cannot
+            // overwrite a save with a fresh world.
+            Save.SaveGame.Autosave("cast off");
         }
 
         int TotalPukes()

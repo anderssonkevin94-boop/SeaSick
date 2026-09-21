@@ -107,6 +107,28 @@ namespace SeaSick.World
             ? Mathf.Clamp01((done + donePart) / needed) : 1f;
     }
 
+    /// **A building that stands here, and WHERE.**
+    ///
+    /// `OutpostLedger.built` is the list of plan ids and it is what every
+    /// count reads; this is the row a save restores the object from. It is a
+    /// separate list rather than a change to `built` because the probes write
+    /// `built` by hand (`l.built.Add(id)`) and a schema that broke them all
+    /// on the day the save arrived would be the save system's first bug.
+    /// `Outpost.Raise` records one of these for everything it stands up, and
+    /// `Outpost.Adopt` re-raises from it -- at the spot, not from the spiral,
+    /// which would move every hut on load.
+    [System.Serializable]
+    public class BuiltBuilding
+    {
+        public string planId;
+        /// World metres. Height is re-read from the field on load.
+        public float x, z;
+        /// World degrees, the way `PendingBuild.yaw` is.
+        public float yaw;
+
+        public Vector3 At => new Vector3(x, 0f, z);
+    }
+
     /// **The outpost IS this object. The crew you can see are a rendering of
     /// it.**
     ///
@@ -120,10 +142,10 @@ namespace SeaSick.World
     /// Plain serialisable data with no MonoBehaviour and no scene reference:
     /// an outpost has to keep working while its island is three kilometres
     /// astern and its terrain has streamed out, and it has to survive a save.
-    /// There is no save system yet (see docs/PLAN-island-outposts.md, D4) —
-    /// this is built to be savable before there is a writer for it, because
-    /// retro-fitting serialisation onto live component state is the expensive
-    /// version of this job.
+    /// It was built to be savable before there was a writer for it (D4),
+    /// because retro-fitting serialisation onto live component state is the
+    /// expensive version of this job; since 2026-09-21 `Save/SaveGame`
+    /// writes it into the save file exactly as it is.
     [System.Serializable]
     public class OutpostLedger
     {
@@ -297,6 +319,23 @@ namespace SeaSick.World
         {
             int n = 0;
             foreach (var b in built) if (b == planId) n++;
+            return n;
+        }
+
+        /// Where each building was stood up. See `BuiltBuilding`: `built` is
+        /// the count, this is the spot. Written by `Outpost.Raise`, read by
+        /// `Outpost.Adopt`, and by nothing else.
+        public List<BuiltBuilding> raised = new List<BuiltBuilding>();
+
+        public void RecordRaised(string planId, Vector3 at, float yaw)
+        {
+            raised.Add(new BuiltBuilding { planId = planId, x = at.x, z = at.z, yaw = yaw });
+        }
+
+        public int CountRaised(string planId)
+        {
+            int n = 0;
+            foreach (var b in raised) if (b != null && b.planId == planId) n++;
             return n;
         }
 

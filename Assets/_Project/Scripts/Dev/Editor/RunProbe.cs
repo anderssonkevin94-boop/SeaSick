@@ -102,6 +102,12 @@ public static class RunProbe
     /// A camp's stores go into the hold unit for unit -- nothing made, nothing
     /// lost, never past the line unless deck cargo is on, and never by itself.
     public static void CampLoad() => Call("CampLoadProbe");
+    // --- save and load (2026-09-21) -------------------------------------------
+    /// Everything a playtest builds -- rung, fit, bays, hold, stores, a camp
+    /// with a raised building, a blueprint, hands and felled trees -- goes to
+    /// a temp file and comes back where it stood. Play mode, Sea.unity.
+    /// Logs/SaveProbe.txt.
+    public static void Save() => Call("SaveProbe");
     /// A rung costs goods that were sailed home: refused at sea, refused short,
     /// banked per resource, paid exactly, and `Apply` stays free for the rig.
     public static void Sink() => Call("SinkProbe");
@@ -313,9 +319,27 @@ public static class RunProbe
         Debug.LogError("RunProbe: could not find " + type + "." + method);
     }
 
+    /// The New / Continue overlay freezes the game until somebody picks, and
+    /// a probe is not somebody. Every play-mode launcher goes through here,
+    /// so every probe finds the world running, on a fresh voyage, with the
+    /// player's own save file untouched (a skipped boot never autosaves).
+    static void SkipBoot()
+    {
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var t = asm.GetType("SeaSick.Save.GameBoot");
+            if (t == null) continue;
+            var m = t.GetMethod("Skip",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (m != null) m.Invoke(null, null);
+            return;
+        }
+    }
+
     static void Call(string type, string method = "Execute")
     {
         if (!Application.isPlaying) { Debug.LogError("RunProbe: not in play mode"); return; }
+        SkipBoot();
         foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
         {
             var t = asm.GetType(type);

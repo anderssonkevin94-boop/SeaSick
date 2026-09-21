@@ -180,6 +180,12 @@ namespace SeaSick.World
         Vector3 campCentre;
         bool hasCampCentre;
 
+        /// Has the player put a fire (or its blueprint) down here, or is
+        /// `CampCentre` still the survey's guess? A save carries the answer:
+        /// a loaded camp whose centre fell back to the clearing would key
+        /// itself somewhere nobody lives.
+        public bool HasCampCentre => hasCampCentre;
+
         /// The blueprint standing here, if one is drawn. Rebuilt from the
         /// ledger whenever the island is loaded -- never the only copy.
         BuildSite blueprint;
@@ -363,6 +369,10 @@ namespace SeaSick.World
             // being a clearing and starts being somewhere people are.
             ArrangeHands();
             CampPiles.EnsureOn(this);
+            // A building standing up is the moment Kevin asked to be kept:
+            // *"build buildings, have them tweaked, and see the changes next
+            // time I play."*
+            Save.SaveGame.Autosave("a " + plan.label + " was raised");
         }
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
@@ -1661,7 +1671,12 @@ namespace SeaSick.World
                 var go = BuildingFactory.Raise(plan, transform, p, facing, hi - lo);
                 var b = go.GetComponent<Building>();
                 built.Add(b);
-                reserved.Add(new Vector4(p.x, p.y, p.z, halfDiag + spacing * 0.5f));
+                var res = new Vector4(p.x, p.y, p.z, halfDiag + spacing * 0.5f);
+                reserved.Add(res);
+                buildingReservations.Add(res);
+                // The spiral chose the spot; the save must not let it choose
+                // again. See `OutpostLedger.raised`.
+                if (ledger != null) ledger.RecordRaised(plan.id, p, facing.eulerAngles.y);
                 return b;
             }
             return null;
@@ -1692,8 +1707,126 @@ namespace SeaSick.World
             var go = BuildingFactory.Raise(plan, transform, p, facing, hi - lo);
             var b = go.GetComponent<Building>();
             built.Add(b);
-            reserved.Add(new Vector4(p.x, p.y, p.z, halfDiag + spacing * 0.5f));
+            var res = new Vector4(p.x, p.y, p.z, halfDiag + spacing * 0.5f);
+            reserved.Add(res);
+            buildingReservations.Add(res);
+            if (ledger != null) ledger.RecordRaised(plan.id, p, yaw);
             return b;
+        }
+
+        /// The reservations `Raise` made, as opposed to the ones the world
+        /// build handed in through `Reserve` (the beacon, the head of the
+        /// pier). Tracked so `Adopt` can drop exactly those and no others.
+        readonly HashSet<Vector4> buildingReservations = new HashSet<Vector4>();
+
+        // --- a save coming back ----------------------------------------------
+
+        /// **Install a saved ledger and make the ground agree with it.**
+        ///
+        /// The ledger is the outpost (D2), so restoring one is: take the rows,
+        /// then draw what they describe -- every building at the spot it was
+        /// raised at, the blueprint if there is one, the piles, and the wood
+        /// thinned to `treesFelled`. Nothing is paid for: the wood was cut in
+        /// the session that saved it.
+        ///
+        /// The bodies are NOT restored here. A hand row is a name; the
+        /// `CrewAgent` that wears it is aboard the freshly booted ship, and
+        /// `Rehome` walks each one over after this. Order matters the other
+        /// way too: `TimeOfDay` must already be scrubbed to the saved clock
+        /// before `CatchUp` runs at the end, or a ledger saved at day 3 and
+        /// ticked from day 0 pays out three days of phantom timber.
+        public bool Adopt(OutpostLedger saved, Vector3 savedCampCentre, bool savedHasCampCentre)
+        {
+            if (saved == null || !Sited) return false;
+
+            // What stood here before -- home's storehouses from THIS boot,
+            // or nothing -- comes down first. A save replaces; it does not
+            // add, and two storehouses on one plot is what "load" would
+            // otherwise mean at home.
+            if (blueprint != null) { blueprint.Retire(); blueprint = null; }
+            foreach (var old in built) if (old != null) Destroy(old.gameObject);
+            built.Clear();
+            reserved.RemoveAll(buildingReservations.Contains);
+            buildingReservations.Clear();
+
+            ledger = saved;
+            // JsonUtility cannot say "null": a ledger with no blueprint comes
+            // back with an EMPTY one, and an empty one has `needed == 0`, which
+            // reads as complete, which would raise a campfire nobody sited.
+            if (ledger.pending != null && string.IsNullOrEmpty(ledger.pending.planId))
+                ledger.pending = null;
+            if (ledger.raised == null) ledger.raised = new List<BuiltBuilding>();
+            if (ledger.built == null) ledger.built = new List<string>();
+            if (ledger.hands == null) ledger.hands = new List<OutpostHand>();
+            if (ledger.stores == null) ledger.stores = new List<OutpostStore>();
+            if (ledger.stocks == null) ledger.stocks = new List<OutpostStock>();
+
+            hasCampCentre = savedHasCampCentre;
+            if (savedHasCampCentre)
+            {
+                campCentre = savedCampCentre;
+                if (height != null) campCentre.y = height(campCentre.x, campCentre.z);
+            }
+            // The order the wood comes down in is measured from the centre,
+            // and the centre just moved.
+            fellOrder = null;
+
+            // Every building at its own spot. The list is copied and cleared
+            // first because `Raise` records again into it; a spot the ground
+            // no longer takes (a terrain parameter moved between sessions)
+            // falls back to the spiral, and says so, rather than vanishing.
+            var spots = new List<BuiltBuilding>(ledger.raised);
+            ledger.raised.Clear();
+            foreach (var r in spots)
+            {
+                if (r == null || string.IsNullOrEmpty(r.planId)) continue;
+                var plan = PlanNamed(r.planId);
+                Vector3 at = r.At;
+                if (height != null) at.y = height(at.x, at.z);
+                var b = Raise(plan, at, r.yaw);
+                if (b == null)
+                {
+                    b = Raise(plan);
+                    Debug.LogWarning("Outpost.Adopt: " + plan.label + " would not stand at ("
+                        + r.x.ToString("F0") + "," + r.z.ToString("F0") + ") any more -- "
+                        + (b != null ? "re-sited by the spiral" : "DROPPED"));
+                }
+            }
+            // Rows that count a building nobody recorded a spot for (a probe
+            // that wrote `built` by hand) still get one, from the spiral.
+            var wanted = new Dictionary<string, int>();
+            foreach (var id in ledger.built)
+            {
+                if (string.IsNullOrEmpty(id)) continue;
+                wanted.TryGetValue(id, out int n);
+                wanted[id] = n + 1;
+            }
+            foreach (var kv in wanted)
+                for (int i = CountOf(kv.Key); i < kv.Value; i++)
+                    if (Raise(PlanNamed(kv.Key)) == null) break;
+
+            ledger.ceilingPer = KeepsOfEach;
+            // The rest is what arrival does: blueprint, felling, piles.
+            CatchUp();
+            return true;
+        }
+
+        /// **Give a saved hand its body back.**
+        ///
+        /// `Station` is the player's act: it writes the row, and it refuses a
+        /// name that already has one -- which after a load is every name. This
+        /// is the other half only: the row is already here, so park the body
+        /// the way `Station` would have, and change no number by doing so.
+        public bool Rehome(Crew.CrewAgent hand)
+        {
+            if (hand == null || ledger == null) return false;
+            if (HandNamed(hand.DisplayName) == null) return false;
+            hand.ReturnAboard();
+            hand.transform.SetParent(transform, true);
+            hand.gameObject.SetActive(Watched);
+            ArrangeHands();
+            if (Watched) PuppetsToWork();
+            return true;
         }
 
         /// Door toward the middle of the clearing, as the spiral does. A fire

@@ -127,5 +127,14 @@ namespace SeaSick.World
 
         public int CountOf(string resource) =>
             piles.TryGetValue(resource, out var list) ? list.Count : 0;
+
+        /// Every pile down to nothing. A load rebuilds them from the saved
+        /// stores; a probe wipes them between the save and the load.
+        public void Clear()
+        {
+            foreach (var kv in piles)
+                foreach (var go in kv.Value) if (go != null) Destroy(go);
+            piles.Clear();
+        }
     }
 }

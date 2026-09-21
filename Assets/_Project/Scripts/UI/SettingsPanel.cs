@@ -151,6 +151,24 @@ namespace SeaSick.UI
             y = Toggle(body, y, rowH, RowPerf, HudVisibility.Perf,
                        v => HudVisibility.Perf = v);
 
+            // The playtest save. One button, one file; what it wrote is on
+            // the console, and the next launch offers CONTINUE.
+            y += u * 0.5f;
+            var saveRow = new Rect(body.x, y, body.width, rowH);
+            UIBlocker.Block(saveRow);
+            if (GUI.Button(saveRow, "SAVE", UITheme.Button))
+                saveNote = Save.SaveGame.Save("the settings drawer")
+                    ? "saved  " + System.DateTime.Now.ToString("HH:mm:ss")
+                    : "could not save -- see the console";
+            y += rowH + u * 0.15f;
+            GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
+                      string.IsNullOrEmpty(saveNote)
+                          ? (Save.SaveGame.Exists ? "a save exists; CONTINUE is offered on launch"
+                                                  : "no save yet")
+                          : saveNote,
+                      UITheme.Small);
+            y += u * 1.6f;
+
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
             y += u * 1.0f;
             UITheme.Rect(new Rect(body.x, y, body.width, 1f), UITheme.Track);
@@ -212,6 +230,8 @@ namespace SeaSick.UI
             UIBlocker.Block(toolBody);
             t.DrawTool(toolBody);
         }
+
+        string saveNote = "";
 
         /// Each row's two faces, { off, on }, built at load.
         ///

@@ -43,6 +43,21 @@ namespace SeaSick.Ship
         public bool AtHomeDock => CurrentDock != null && !landingPending
             && (CurrentState == State.Anchored || CurrentState == State.Ashore);
 
+        /// Has the spawn-time berthing had its frame? A load has to wait for
+        /// it, or `BerthAtHome` fires a frame after the ship was put back
+        /// where the save left her.
+        public bool StartedDocked => startedDocked || !startAtHomeDock;
+
+        /// Anchor her off this island from outside, as a load does after it
+        /// has stood her where the save left her. Under way only; the timed
+        /// drop and the survey run exactly as they would for the button.
+        public bool MoorAt(Island isle)
+        {
+            if (isle == null || CurrentState != State.Underway) return false;
+            DropAnchor(isle);
+            return true;
+        }
+
         ShipMotor motor;
         HullIntegrity hull;
         ShipHold hold;
@@ -208,6 +223,7 @@ namespace SeaSick.Ship
             CurrentIsland = Island.Nearest(d.Berth);
             motor.Anchored = true;
             CurrentState = State.Anchored;
+            SeaSick.Save.SaveGame.Autosave("alongside at home");
         }
 
         /// Put her on her home berth, tied up, from wherever she happens to be.
@@ -628,6 +644,7 @@ namespace SeaSick.Ship
             motor.Anchored = true;
             timer = dropTime;
             CurrentState = timer > 0f ? State.Dropping : State.Anchored;
+            SeaSick.Save.SaveGame.Autosave("anchored off " + (isle != null ? isle.name : "nothing"));
         }
 
         void SendAshore()

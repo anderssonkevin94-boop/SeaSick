@@ -44,4 +44,4 @@ MonoBehaviour:
   maxRaiders: 8
   raiderMinIslandRadius: 60
   patrolClearance: 78
-  seed: 0
+  seed: 260921

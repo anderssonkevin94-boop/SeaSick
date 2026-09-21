@@ -50,6 +50,9 @@ genuinely worth more than small ones, and gives a reason to move on and return.
   `UI/HudVisibility.cs` and `Ship/ShipLadder.cs`, neither game state. Build the
   ledger as a plain serialisable struct from day one. A save must also carry the
   world seed + `worldOffset`, the ship's rung/fittings, and home.
+  _Built 2026-09-21 — see "Save and load" at the end of this file. The ledger
+  went in exactly as it was; the two things it was missing were building
+  positions and the camp centre._
 - **D5 — SETTLED 2026-09-13: a bottom sheet.** Orders live in a thumb-height
   sheet in the lower third, where `HudLayout`'s prompt slot already sits. Not a
   full overlay (it would hide the island you just flew up to look at) and not
@@ -918,3 +921,135 @@ in progress.
   row; `HudOverlapProbe` at 1080x2340 with the bar in each of its states.
 - The hauling builder's missing claim (above).
 - Stone, Ore and Spice props are still not removed as they are gathered.
+
+## Save and load — 2026-09-21
+
+Kevin: *"When playtesting I need to test the progression of the game. I need
+to be able to save in game and, when launching the game again, press New or
+Load. This way I can build buildings, have them tweaked, and see the changes
+next time I play."* Built as `Scripts/Save/` — three files, one JSON, no
+slots. D4 said the ledger would be savable before there was a writer for it,
+and it was: the ledger went into the file unchanged.
+
+### What is saved (`SaveData`, `JsonUtility`, version 1)
+
+`Application.persistentDataPath + "/seasick-save.json"`.
+
+- `worldSeed` — `WorldSettings.seed`. **The asset had `seed: 0`**, so
+  `TerrainWorldPopulator` never called `Random.InitState` and every launch
+  re-rolled island kinds, props, reefs and raiders — a camp keyed to a spice
+  island would have come back on a stone one. It is `260921` now (terrain and
+  trees were already seeded, 1337). A save from another seed is refused with
+  a console warning and the launch falls back to New; the file is left alone.
+- `timeSeconds` — `TimeOfDay.Seconds`.
+- `ship` — rung (`Shipyard.NodeIndex`), the five `FitTrack` levels, every
+  non-empty bay cell as `{bay, tier, use}` (kept apart, because `Shipyard.Key`
+  joins them with an underscore), position, yaw, and an anchor state:
+  0 under way, 1 anchored off an island, 2 alongside at home. Ashore is saved
+  as anchored; the crew come back aboard.
+- `hold` and `banked` — per resource, from `VoyageManager`.
+- `outposts` — per outpost the **whole `OutpostLedger`**, plus
+  `Outpost.CampCentre` / `HasCampCentre` (they were private and unserialised),
+  plus `isHome`. The ledger gained one list: **`raised`, a `BuiltBuilding`
+  `{planId, x, z, yaw}` per building**, written by both `Outpost.Raise`
+  overloads. `built` (the bare id list every count reads and every probe
+  writes by hand) is untouched, so nothing else changed; `Adopt` raises from
+  `raised` and spirals only for `built` rows nobody recorded a spot for.
+  Without it huts would have moved on load — `Raise(plan)` re-derives spots
+  from a golden-angle spiral. Home's storehouses (raised by `TryBuild`) are
+  in `raised` and not in `built`, exactly as they were live.
+- Not saved, on purpose: crew sickness (cosmetic), the steamer toggle, HUD
+  prefs, felled-tree *lists* (`SyncFelling` re-fells nearest-first until
+  `treesFelled` matches — the whole point of storing a count), surveyed
+  islands nobody touched (the survey is lazy and repeatable).
+
+### The key
+
+The persistent identity of a camp is `OutpostLedger.keyX/keyZ`, rounded camp
+XZ (D3, never an island index). On load the island is found by looking the
+key up in the populator's flood-fill `LandMask` (24 m cells, with a one-ring
+search for a key on a cell the scan called water), falling back to
+`Island.Nearest`. Home is found as `Outpost.Home`, not by key.
+
+### Restore order (`SaveGame.Restore`, a coroutine on `GameBoot`)
+
+It is load-bearing and it is this:
+
+0. Wait for `TerrainWorldPopulator.Done`, one more frame for every `Start`,
+   and for `AnchorController.StartedDocked` (the spawn-time berthing writes
+   the ship's pose on its own first frame; racing it loses).
+1. **`TimeOfDay.Scrub(timeSeconds)` first.** Every ledger's `CatchUp` ticks
+   from its `lastTicked` to *now*; a ledger saved on day 3 and ticked from
+   day 0 pays out three days of phantom timber.
+2. Ship: `Shipyard.Apply(rung)` (the free path every probe uses), then
+   `Fit.SetLevel` per track and `ClampTo(Node)`, then the cells through the
+   new `SetUseQuiet` and one `Refurnish` (one furnish, one `PushToGame`,
+   which also tells the voyage the hold size). Skipped when the steamer has
+   the hull (`SuppressApplyOnStart`).
+3. Hold and stores: `VoyageManager.RestoreStores` (new seam). It rebuilds
+   the stack at the stern and the piles on the beach from the numbers, since
+   neither `ShipHold` nor `Stockpile` re-syncs by itself. It runs after
+   `Start`, so `BeginVoyage`'s wipe has already happened.
+4. Pose: cast off from the pier she boots tied to, then `SaveGame.Warp` —
+   transform and rigidbody, still, on the water's own height, as
+   `BerthAtHome` does.
+5. Outposts: home adopts in place; any other camp's island is surveyed the
+   way anchoring surveys it (`Outpost.BeginSurvey`, awaited on
+   `Outpost.Surveying`), then **`Outpost.Adopt(ledger, campCentre, has)`**:
+   takes down whatever stood there, installs the ledger, re-nulls a
+   blueprint JsonUtility revived as an empty object (an empty `PendingBuild`
+   has `needed == 0`, which reads as complete, which would raise a fire
+   nobody sited), re-raises every `raised` row at its spot, spirals for
+   unrecorded `built` rows, and calls `CatchUp` (blueprint, felling, piles).
+   Then the bodies: each hand row is matched by `CrewMemberDef.displayName`
+   to a `CrewAgent` under the ship and walked over by **`Outpost.Rehome`**,
+   which is `Station` without the row-write and the refusal.
+6. **The anchor last**, so the camp she lies off is awake to see her:
+   `BerthAtHome` for state 2, `AnchorController.MoorAt(Island)` (new,
+   public `DropAnchor`) for state 1.
+
+### New / Continue
+
+No title scene, so `Save/GameBoot` is an IMGUI overlay that installs itself
+(`RuntimeInitializeOnLoadMethod`, only into a scene with a `VoyageManager`)
+and freezes the game with `Time.timeScale = 0` — which also freezes
+`TimeOfDay`, whose owner advances it by `deltaTime`. NEW VOYAGE deletes the
+file; CONTINUE runs the restore; with no file there is one button. Sized off
+`HudLayout.Unit`, so the same fraction of the screen in both shapes.
+
+Bypasses: `GameBoot.Interactive = false` (a launcher), `-new` / `-continue`
+on the command line (`GameBoot.Forced`), and **`GameBoot.Skip()`, which
+`RunProbe.Call` now invokes before every play-mode probe**: it dismisses the
+overlay as New *without* deleting the file and sets `SaveGame.Suppressed`,
+so a probe that anchors forty times never writes the player's save. Every
+existing probe therefore boots exactly as before, one reflection call later.
+
+### When it saves
+
+`SaveGame.Autosave` on anchor drop and coming alongside (`AnchorController`),
+on cast-off (`VoyageManager.BeginVoyage`), when a building finishes
+(`Outpost.FinishPending`), on `OnApplicationQuit` and pause; plus a SAVE
+button in the settings drawer (`SaveGame.Save`, not gated on `Suppressed`).
+Autosaves are no-ops until `GameBoot.Decided` — the `Start`-time
+`BeginVoyage` would otherwise overwrite the save with a fresh world before
+the player had pressed anything — and while a restore is running. One
+console line per write and per read, with the path.
+
+### The gate
+
+`Dev/SaveProbe` (`RunProbe.Save`): rung 14, a rudder, three quarters and a
+hold cell, 7 timber + 3 boards aboard, 9 timber banked, a camp on the
+nearest beach with a store hut raised at a chosen yaw, a hut sited, two
+hands on two orders, three trees felled → temp file → wipe (hands recalled,
+fresh ledger adopted, rung 12, empty hold, under way 300 m off, clock at 0)
+→ `SaveGame.Restore` → every field compared. Not yet run; the first run is
+the first thing to do with this.
+
+### Still open
+
+- Unplayed. The overlay has not been looked at in either shape.
+- `ManCrew` clones `have[0]` for extra berths, so two bodies can share a
+  `displayName`; `Rehome` takes the first match and the clone stays aboard.
+  Pre-existing, and the same thing happens live after `Station`.
+- A camp whose island the survey now refuses is dropped with a warning
+  rather than kept as a ghost row.

@@ -1160,3 +1160,39 @@ switches off the camera it is there to tune.
   `.inputactions` asset; all read `Keyboard/Mouse/Pointer.current`, and
   `IslandInput` reads `Touchscreen.current` raw. Note `TouchPhase` is ambiguous
   between `UnityEngine` and `UnityEngine.InputSystem` — qualify it.
+
+## 2026-09-21 — the save
+
+### `SaveProbe` (`RunProbe.Save`)
+
+Play mode, `Sea.unity`, `Logs/SaveProbe.txt`. Builds a rung, a fitting,
+bays, a hold, stores, and a camp on the nearest beach (store hut at a chosen
+yaw, a sited hut, two hands on two orders, three felled trees); writes it to
+a temp file through `SaveGame.SaveTo`; wipes the live scene back to a fresh
+boot; runs the same `SaveGame.Restore` the CONTINUE button runs; compares
+every field. Gates are named for the thing that must be equal
+(`a-saved-camp-comes-back-where-it-stood`, `no-phantom-backlog-was-paid`).
+It never touches the player's own file.
+
+### The New / Continue overlay, and every other probe
+
+`GameBoot` freezes the game with `Time.timeScale = 0` until somebody picks.
+`RunProbe.Call` invokes `GameBoot.Skip()` by reflection before every play-mode
+probe, so a probe finds the world running on a fresh voyage and autosaves
+are off for the session (`SaveGame.Suppressed`). **A probe launched any
+other way** (an editor script calling `Execute` directly) will sit frozen
+until it calls `GameBoot.Skip()` itself, or sets `GameBoot.Interactive =
+false` before play.
+
+### Traps this pass added to the pile
+
+- **`JsonUtility` cannot say null.** A null class-typed field comes back as
+  a default-constructed object. `OutpostLedger.pending` is one: empty, it
+  has `needed == 0`, which reads as complete, which raises a campfire nobody
+  sited. `Outpost.Adopt` re-nulls it. Any new nullable row needs the same.
+- **`WorldSettings.seed` was 0**, and everything that read the world through
+  `UnityEngine.Random` re-rolled per launch while looking perfectly stable
+  inside one session. A determinism claim has to be checked across two
+  launches, not two frames.
+- **`ShipHold` and `Stockpile` do not follow the numbers.** Both are manual
+  stacks; a restore rebuilds them unit by unit.
