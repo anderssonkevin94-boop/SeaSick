@@ -40,6 +40,10 @@ namespace SeaSick.UI
         /// Is the player placing something right now?
         public static bool Placing => Instance != null && Instance.plan.id != null;
 
+        /// ...and is it a pier, which the sheet explains differently: there is
+        /// no R to turn it, and the thing to tap is the beach.
+        public static bool PlacingPier => Placing && Instance.IsPier;
+
         /// Why the spot under the pointer is refused, or "" if it is good.
         /// The sheet prints this; the ghost's colour says the same thing
         /// faster.
@@ -70,10 +74,28 @@ namespace SeaSick.UI
         bool turned;
         float heldYaw;
 
-        /// What the ghost is facing right now.
-        public float Yaw => turned
-            ? heldYaw + turns * 45f
+        /// What the ghost is facing right now. A pier faces the sea and
+        /// nothing the player does turns it -- see `Outpost.SnapPier`.
+        public float Yaw => IsPier ? snappedYaw
+            : turned ? heldYaw + turns * 45f
             : (outpost != null ? outpost.AutoYaw(at) : 0f);
+
+        bool IsPier => plan.kind == BuildKind.Pier;
+
+        /// **A pier is sited by the beach, not by the thumb.** The pointer
+        /// picks a stretch of shore; `Outpost.SnapPier` walks to the
+        /// waterline, turns to face out and runs the planks out to deep
+        /// water. What it chose -- the centre, the heading, the length --
+        /// is held here and is what the ghost draws and the tap commits.
+        float snappedYaw;
+        /// The plan as it will be raised: `BuildPlans.Pier` at the length
+        /// the beach asked for. Everything else uses `plan` unchanged.
+        BuildPlan sited;
+        /// Length the ghost was built at, so a pier that grows as the
+        /// pointer moves along the beach gets a new ghost, not a stretched one.
+        float ghostLength;
+        Vector3 ghostAt;
+        float ghostYaw;
 
         /// Eight steps to the circle.
         public const int Steps = 8;
@@ -142,7 +164,26 @@ namespace SeaSick.UI
             }
 
             at = ground;
-            valid = Test(at, out string why);
+            sited = plan;
+            string why;
+            if (IsPier)
+            {
+                // The ring rule first, about the point the player is
+                // actually pointing at; then the snap, which replaces `at`
+                // with the pier's centre and decides yaw and length.
+                valid = false;
+                if (!TooFar(at, out why))
+                {
+                    bool snapped = outpost.SnapPier(ground, out Vector3 centre,
+                        out snappedYaw, out sited, out why);
+                    // Even a refused snap says where it was trying to go, and
+                    // a red ghost THERE explains the refusal better than one
+                    // under the pointer.
+                    at = centre;
+                    if (snapped) valid = outpost.CanPlace(sited, at, snappedYaw, out why);
+                }
+            }
+            else valid = Test(at, out why);
             // `Yaw` reads `at`, so the ghost and the test are always asking
             // about the same rectangle on the same ground.
 
@@ -164,7 +205,7 @@ namespace SeaSick.UI
             // question about the same point.
             if (valid && IslandInput.TapThisFrame)
             {
-                int wanted = outpost.Site(plan, at, Yaw, out string siteWhy);
+                int wanted = outpost.Site(sited, at, Yaw, out string siteWhy);
                 if (wanted < 0)
                 {
                     // Refused at the last moment by a test the preview does
@@ -203,22 +244,41 @@ namespace SeaSick.UI
         {
             // The ring first: it is the rule the player can SEE, so it should
             // be the reason they are given when both are broken.
+            if (TooFar(p, out why)) return false;
+            return outpost.CanPlace(plan, p, Yaw, out why);
+        }
+
+        bool TooFar(Vector3 p, out string why)
+        {
             float d = Vector3.Distance(
                 new Vector3(p.x, 0f, p.z), new Vector3(ship.position.x, 0f, ship.position.z));
             if (d > SiteRadius)
             {
                 why = $"too far from the ship ({d:F0} m of {SiteRadius:F0})";
-                return false;
+                return true;
             }
-            return outpost.CanPlace(plan, p, Yaw, out why);
+            why = "";
+            return false;
         }
 
         void Place(Vector3 p)
         {
+            // A pier ghost is rebuilt when it moves, not just re-posed: its
+            // posts were cut to the ground under THAT spot, and its length
+            // is the beach's choice. Forty primitives, only on a frame the
+            // snapped spot actually changed.
+            if (ghost != null && IsPier
+                && (!Mathf.Approximately(ghostLength, sited.footprint.x)
+                    || (ghostAt - p).sqrMagnitude > 0.5f * 0.5f
+                    || Mathf.Abs(Mathf.DeltaAngle(ghostYaw, Yaw)) > 2f))
+            { Destroy(ghost); ghost = null; }
             if (ghost == null)
             {
-                ghost = BuildingFactory.Ghost(plan, null, p, Quaternion.identity, 0f, 0.5f);
+                ghost = BuildingFactory.Ghost(sited, null, p, Quaternion.Euler(0f, Yaw, 0f), 0f, 0.5f);
                 ghost.name = "SitingGhost";
+                ghostLength = sited.footprint.x;
+                ghostAt = p;
+                ghostYaw = Yaw;
             }
             ghost.transform.SetPositionAndRotation(p, Quaternion.Euler(0f, Yaw, 0f));
             BuildingFactory.Tint(ghost,

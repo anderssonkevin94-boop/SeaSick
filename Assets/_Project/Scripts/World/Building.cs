@@ -10,8 +10,10 @@ namespace SeaSick.World
         [SerializeField] string id;
         [SerializeField] string label;
         [SerializeField] int storeCapacity;
+        [SerializeField] BuildKind kind;
 
         public string Id => id;
+        public BuildKind Kind => kind;
         public string Label => label;
         public int StoreCapacity => storeCapacity;
 
@@ -20,6 +22,7 @@ namespace SeaSick.World
             id = plan.id;
             label = plan.label;
             storeCapacity = plan.storeCapacity;
+            kind = plan.kind;
         }
     }
 }

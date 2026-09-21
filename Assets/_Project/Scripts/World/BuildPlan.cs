@@ -17,6 +17,10 @@ namespace SeaSick.World
         /// A ring of stones and a few logs, with a light in it. Not a
         /// building -- the mark that somebody means to stay.
         Fire,
+        /// Planks on posts, out from the beach into water deep enough to
+        /// lie alongside. Half of it stands over the sea, so it is sited,
+        /// tested and stood up by its own rules -- see `Outpost.SnapPier`.
+        Pier,
     }
 
     public struct BuildPlan
@@ -66,6 +70,19 @@ namespace SeaSick.World
         /// one. Loaded at raise time and quietly fallen back on, so a missing
         /// asset costs a plainer building and never a broken camp.
         public string prefab;
+
+        /// **This plan, at a different length along the ridge.** A pier is
+        /// as long as the beach makes it (14 m, or up to 24 m out to water
+        /// that will float a hull), and everything downstream -- the ghost,
+        /// the stakes, the corner test, the planks -- reads `footprint.x`.
+        /// So the chosen length is carried IN the plan rather than beside
+        /// it, and none of those readers has to know a pier is different.
+        public BuildPlan WithLength(float length)
+        {
+            var copy = this;
+            if (length > 0f) copy.footprint.x = length;
+            return copy;
+        }
     }
 
     /// Everything that can be built, in the order it is offered.
@@ -235,6 +252,40 @@ namespace SeaSick.World
             prefab = "Settlement/kitchen",
         };
 
+        /// **A pier, 2026-09-21.** Kevin: *"I'd like a pier asset to be
+        /// buildable to make it easier to dock with the island."*
+        ///
+        /// Nobody works at it and it keeps nothing: what it buys is a berth.
+        /// Three metres wide and fourteen long as priced, but the beach has
+        /// the last word on the length -- `Outpost.SnapPier` runs it out as
+        /// far as 24 m to reach 2.5 m of water, and refuses a beach that
+        /// never gets there. Eight logs, two days of one man: the planks
+        /// are cheap, the posts are what cost. **A guess, never played.**
+        /// (Capped at 5 for the playtest -- see `PlaytestCostCap`.)
+        public static readonly BuildPlan Pier = new BuildPlan
+        {
+            id = "Pier",
+            kind = BuildKind.Pier,
+            label = "pier",
+            blurb = "planks out to deep water, so she can lie alongside",
+            resource = Res.Timber,
+            baseCost = 8,
+            footprint = new Vector2(PierLength, PierWidth),
+            ridge = PierDeck,
+        };
+
+        /// Metres of pier as priced; the beach may ask for more.
+        public const float PierLength = 14f;
+        /// The furthest the planks will run out looking for water.
+        public const float PierLongest = 24f;
+        public const float PierWidth = 3f;
+        /// Deck height above MEAN WATER, world metres -- not above the
+        /// ground, since the ground under a pier runs from beach to sea bed.
+        public const float PierDeck = 1.2f;
+        /// Water under the sea end, metres. Enough for any hull on the ladder
+        /// to lie alongside without touching.
+        public const float PierBerthDepth = 2.5f;
+
         /// What sizes the HOME village clearing. Not the camp list: home is
         /// the one place with a hand-composed shot to fit buildings into.
         public static readonly BuildPlan[] All = { Storehouse };
@@ -246,7 +297,7 @@ namespace SeaSick.World
         /// same blueprint, so keeping it in the list is what stops it becoming
         /// a special case.
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Hut, Farm, Sawmill, Kitchen, Blacksmith };
+            { Campfire, Storage, Hut, Farm, Sawmill, Kitchen, Blacksmith, Pier };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.

@@ -83,6 +83,19 @@ namespace SeaSick.World
                 return root;
             }
 
+            if (plan.kind == BuildKind.Pier)
+            {
+                PierDeck(root.transform, plan);
+                // The lamp on the landward post: the pool falls on the beach
+                // where the crew step off, and reads from the water as the
+                // one light that is at the shore rather than up the hill.
+                Lamp(root.transform, plan,
+                    new Vector3(-len * 0.5f + 0.6f, 2.1f, wid * 0.5f + 0.2f));
+                root.AddComponent<Building>().Configure(plan);
+                root.AddComponent<Pier>().Configure(plan);
+                return root;
+            }
+
             var timber = Mat("wall", new Color(0.42f, 0.31f, 0.20f));
             var dark = Mat("beam", new Color(0.25f, 0.18f, 0.12f));
             var thatch = Mat("thatch", new Color(0.34f, 0.33f, 0.22f));
@@ -152,6 +165,10 @@ namespace SeaSick.World
 
             var b = root.GetComponent<Building>();
             if (b != null) Object.Destroy(b);
+            // A ghost pier is not a berth. It never registered (only
+            // `Outpost.Raise` does that), so this is tidiness, not safety.
+            var pier = root.GetComponent<Pier>();
+            if (pier != null) Object.Destroy(pier);
             foreach (var f in root.GetComponentsInChildren<Campfire>(true))
                 Object.Destroy(f);
             // The light goes with its GameObject: an unlit fire that still
@@ -298,14 +315,14 @@ namespace SeaSick.World
         /// a camp at night is one big fire and a ring of small windows.
         /// The mobile pipeline lights four per object; a hut lit by its own
         /// lamp, the fire and two neighbours is within that.
-        static void Lamp(Transform root, BuildPlan plan)
+        static void Lamp(Transform root, BuildPlan plan, Vector3? at = null)
         {
             float len = plan.footprint.x, wid = plan.footprint.y;
             var lightGo = new GameObject("Lamp");
             lightGo.transform.SetParent(root, false);
             // Just outside the door wall, at lintel height, so the pool falls
             // on the ground in front rather than being swallowed by the walls.
-            lightGo.transform.localPosition = new Vector3(0f, 1.7f, wid * 0.5f + 0.4f);
+            lightGo.transform.localPosition = at ?? new Vector3(0f, 1.7f, wid * 0.5f + 0.4f);
             var l = lightGo.AddComponent<Light>();
             l.type = LightType.Point;
             l.color = new Color(1f, 0.72f, 0.42f);
@@ -315,6 +332,76 @@ namespace SeaSick.World
             var fire = lightGo.AddComponent<Campfire>();
             fire.flicker = 0.07f;
         }
+
+        /// **Planks on posts.** Local +X runs land to sea, the deck is at
+        /// local y = 0 -- which `Outpost.CanPlacePier` puts at
+        /// `BuildPlans.PierDeck` above mean water, NOT above the ground: the
+        /// ground under a pier is beach at one end and sea bed at the
+        /// other. Each post is cut to the ground under it, off the world
+        /// height field, so the same pier stands on any beach; the sea bed
+        /// is clamped at `PostDeepest` because a post to a 30 m bottom is a
+        /// draw call for nothing anybody sees.
+        ///
+        /// Nothing here has a collider (see `Dress`): the ship's grounding
+        /// reads the height field, and the dock the pier registers is what
+        /// stops her, not the planks.
+        static void PierDeck(Transform root, BuildPlan plan)
+        {
+            float len = plan.footprint.x, wid = plan.footprint.y;
+            var plank = Mat("plank", new Color(0.50f, 0.38f, 0.24f));
+            var post = Mat("post", new Color(0.22f, 0.16f, 0.11f));
+            var rail = Mat("beam", new Color(0.25f, 0.18f, 0.12f));
+
+            // The deck, as planks: one box a plank wide every plank, with a
+            // finger of gap, so it reads as laid rather than poured.
+            const float PlankW = 0.5f, Gap = 0.06f;
+            int planks = Mathf.Max(1, Mathf.RoundToInt(len / PlankW));
+            float pw = len / planks;
+            for (int i = 0; i < planks; i++)
+            {
+                float x = -len * 0.5f + (i + 0.5f) * pw;
+                Box(root, plank, new Vector3(pw - Gap, 0.14f, wid), new Vector3(x, -0.07f, 0f));
+            }
+            // Two stringers under the planks, running the length.
+            for (int s = -1; s <= 1; s += 2)
+                Box(root, rail, new Vector3(len, 0.2f, 0.22f),
+                    new Vector3(0f, -0.24f, s * (wid * 0.5f - 0.3f)));
+
+            // Posts every three metres each side, from the deck down to
+            // whatever is under them. Height is read in WORLD space at each
+            // post's own footprint, so the pier's rotation does not matter.
+            var ground = Island.TerrainHeight;
+            float deckY = root.position.y;
+            for (float x = -len * 0.5f + 0.4f; x <= len * 0.5f - 0.2f + 1e-3f; x += 3f)
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    var local = new Vector3(x, 0f, s * (wid * 0.5f - 0.25f));
+                    Vector3 w = root.TransformPoint(local);
+                    float g = ground != null ? ground(w.x, w.z) : 0f;
+                    g = Mathf.Max(g, PostDeepest);
+                    float top = 0.25f;                     // proud of the deck, as a bollard
+                    float bottom = g - deckY - 0.3f;       // driven a little into the ground
+                    float h = top - bottom;
+                    Box(root, post, new Vector3(0.3f, h, 0.3f),
+                        new Vector3(local.x, bottom + h * 0.5f, local.z));
+                }
+
+            // A short ramp at the land end, down toward the beach. Its foot
+            // is at the ground under the land end, so it meets the sand
+            // however high the deck stands above it there.
+            Vector3 landW = root.TransformPoint(new Vector3(-len * 0.5f, 0f, 0f));
+            float landG = ground != null ? ground(landW.x, landW.z) : 0f;
+            float drop = Mathf.Clamp(deckY - landG, 0.3f, 2.5f);
+            const float Run = 2.4f;
+            float slope = Mathf.Sqrt(Run * Run + drop * drop);
+            var ramp = Box(root, plank, new Vector3(slope, 0.14f, wid * 0.8f),
+                new Vector3(-len * 0.5f - Run * 0.5f, -drop * 0.5f - 0.07f, 0f));
+            ramp.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(drop, Run) * Mathf.Rad2Deg);
+        }
+
+        /// World y a pier post stops at: deeper than this and it is
+        /// invisible under the water anyway.
+        public const float PostDeepest = -6f;
 
         static GameObject Box(Transform parent, Material mat, Vector3 size, Vector3 at)
         {

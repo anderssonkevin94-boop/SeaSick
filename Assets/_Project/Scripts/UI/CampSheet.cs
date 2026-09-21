@@ -242,7 +242,9 @@ namespace SeaSick.UI
                 right = stop.x - HudLayout.Gap;
                 string refusal = CampSiting.Refusal;
                 if (string.IsNullOrEmpty(refusal))
-                    say = "tap the ground inside the ring   ·   R turns it 45°";
+                    say = CampSiting.PlacingPier
+                        ? "tap the beach inside the ring   ·   the pier runs out to deep water"
+                        : "tap the ground inside the ring   ·   R turns it 45°";
                 else
                 {
                     // The refusal changes as the cursor moves, which is a

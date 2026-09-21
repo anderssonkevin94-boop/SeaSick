@@ -100,6 +100,9 @@ namespace SeaSick.World
         /// in 45-degree steps, and a blueprint that came back from a save
         /// facing a direction nobody chose would be a different building.
         public float yaw;
+        /// Metres along the ridge, for a plan whose length the ground chose
+        /// (a pier). 0 means the plan's own footprint. See `BuildPlan.WithLength`.
+        public float length;
 
         public Vector3 At => new Vector3(x, 0f, z);
         public bool Complete => done >= needed;
@@ -125,6 +128,9 @@ namespace SeaSick.World
         public float x, z;
         /// World degrees, the way `PendingBuild.yaw` is.
         public float yaw;
+        /// Metres along the ridge, the way `PendingBuild.length` is: 0 for
+        /// a plan of its own size, the chosen length for a pier.
+        public float length;
 
         public Vector3 At => new Vector3(x, 0f, z);
     }
@@ -327,9 +333,10 @@ namespace SeaSick.World
         /// `Outpost.Adopt`, and by nothing else.
         public List<BuiltBuilding> raised = new List<BuiltBuilding>();
 
-        public void RecordRaised(string planId, Vector3 at, float yaw)
+        public void RecordRaised(string planId, Vector3 at, float yaw, float length = 0f)
         {
-            raised.Add(new BuiltBuilding { planId = planId, x = at.x, z = at.z, yaw = yaw });
+            raised.Add(new BuiltBuilding
+                { planId = planId, x = at.x, z = at.z, yaw = yaw, length = length });
         }
 
         public int CountRaised(string planId)

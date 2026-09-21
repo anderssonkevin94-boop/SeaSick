@@ -247,6 +247,9 @@ namespace SeaSick.World
                 x = spot.x,
                 z = spot.z,
                 yaw = yaw,
+                // A pier's length was chosen by the beach, not the plan;
+                // anything else comes back at its own size (0).
+                length = plan.kind == BuildKind.Pier ? plan.footprint.x : 0f,
                 needed = Mathf.Max(0, plan.cost),
             };
 
@@ -281,7 +284,7 @@ namespace SeaSick.World
             if (blueprint != null && blueprint.PlanId == ledger.pending.planId) return;
             if (blueprint != null) blueprint.Retire();
 
-            var plan = PlanNamed(ledger.pending.planId);
+            var plan = PlanFor(ledger.pending.planId, ledger.pending.length);
             Vector3 at = ledger.pending.At;
             at.y = height(at.x, at.z);
             if (!CanPlace(plan, at, ledger.pending.yaw, out _, out float lo, out float hi))
@@ -302,7 +305,7 @@ namespace SeaSick.World
         void FinishPending()
         {
             if (ledger == null || ledger.pending == null) return;
-            var plan = PlanNamed(ledger.pending.planId);
+            var plan = PlanFor(ledger.pending.planId, ledger.pending.length);
             Vector3 at = ledger.pending.At;
             if (height != null) at.y = height(at.x, at.z);
 
@@ -375,6 +378,32 @@ namespace SeaSick.World
             // time I play."*
             Save.SaveGame.Autosave("a " + plan.label + " was raised");
         }
+
+        /// A ledger row's plan at the length the row recorded. Only a pier
+        /// records one; every other row says 0 and gets the plan as priced.
+        static BuildPlan PlanFor(string id, float length)
+            => PlanNamed(id).WithLength(length);
+
+        // --- the pier and the dock ------------------------------------------
+        //
+        // **HOOK for the dock registry (one-line wiring, coordinator).** A
+        // pier is where the ship ties up, and the thing that knows how to be
+        // tied up to is `Dock`, which is being given a runtime create/remove
+        // API in another branch. This file does not call it: it raises the
+        // pier, hands the `Building` (which carries a `Pier` component with
+        // `SeaEnd`, `Heading` and `Berth`) to whoever is listening, and tells
+        // the same listener when the pier is torn down -- through
+        // `Pier.OnDestroy`, so every Destroy path (`Adopt`, a scene unload)
+        // reports exactly once. Expected wiring:
+        //
+        //   Outpost.RegisterPierDock   = b => Dock.Create(b.GetComponent<Pier>().Berth,
+        //                                    b.GetComponent<Pier>().Heading, b.transform);
+        //   Outpost.UnregisterPierDock = b => Dock.Remove(...);
+        //
+        /// Called once per pier RAISED (never for a ghost or a blueprint).
+        public static System.Func<Building, Dock> RegisterPierDock;
+        /// Called once per registered pier when its GameObject is destroyed.
+        public static System.Action<Building> UnregisterPierDock;
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs. Lives on `BuildPlans` now, because the ledger has to
@@ -1635,6 +1664,9 @@ namespace SeaSick.World
         public Building Raise(BuildPlan plan)
         {
             if (!Sited) return null;
+            // A pier has no "somewhere in the clearing": it stands where the
+            // beach meets water deep enough, and only `SnapPier` knows where.
+            if (plan.kind == BuildKind.Pier) return null;
 
             float len = plan.footprint.x, wid = plan.footprint.y;
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
@@ -1711,7 +1743,15 @@ namespace SeaSick.World
             var res = new Vector4(p.x, p.y, p.z, halfDiag + spacing * 0.5f);
             reserved.Add(res);
             buildingReservations.Add(res);
-            if (ledger != null) ledger.RecordRaised(plan.id, p, yaw);
+            if (ledger != null) ledger.RecordRaised(plan.id, p, yaw,
+                plan.kind == BuildKind.Pier ? plan.footprint.x : 0f);
+            // The dock hook -- see `RegisterPierDock`. Only a RAISED pier
+            // registers; a ghost is made by the factory, not by this method.
+            if (plan.kind == BuildKind.Pier)
+            {
+                var pier = go.GetComponent<Pier>();
+                if (pier != null) pier.Register(b);
+            }
             return b;
         }
 
@@ -1781,7 +1821,7 @@ namespace SeaSick.World
             foreach (var r in spots)
             {
                 if (r == null || string.IsNullOrEmpty(r.planId)) continue;
-                var plan = PlanNamed(r.planId);
+                var plan = PlanFor(r.planId, r.length);
                 Vector3 at = r.At;
                 if (height != null) at.y = height(at.x, at.z);
                 var b = Raise(plan, at, r.yaw);
@@ -1869,6 +1909,10 @@ namespace SeaSick.World
             why = "";
             if (!Sited) { why = "this ground was never surveyed"; return false; }
 
+            // A pier is half over water by design, so the shore, corner and
+            // beach tests below would all refuse it. It has its own.
+            if (plan.kind == BuildKind.Pier) return CanPlacePier(plan, at, yaw, out why, out lo, out hi);
+
             // On this island at all. The height test below rejects open water
             // on its own, but it cannot tell the player WHY, and "out past the
             // shore" is the mistake a top-down view makes easiest to make.
@@ -1891,6 +1935,151 @@ namespace SeaSick.World
                 return false;
             }
 
+            float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
+            if (!Clear(at, halfDiag)) { why = "something already stands there"; return false; }
+            return true;
+        }
+
+        /// **Where a pier would go if the player points HERE.**
+        ///
+        /// The player chooses a stretch of beach and nothing else: the pier
+        /// walks itself down to the waterline, turns to face straight out to
+        /// sea, and runs out until there is `PierBerthDepth` of water under
+        /// its end. R does not turn it and the tap does not fix its length.
+        ///
+        /// Walk: from the picked point, downhill along the height field until
+        /// the ground crosses mean water (uphill instead if the pick was
+        /// already wet). The heading is the downhill direction at that
+        /// crossing, measured on a 4 m stencil so a ripple in the sand does
+        /// not swing a 14 m pier; where the beach is too flat to have a
+        /// downhill, "away from the island's middle" stands in. The land end
+        /// is `PierLandIn` metres back up the beach from the crossing; the
+        /// sea end is the first whole metre from `PierLength` to
+        /// `PierLongest` with the berth depth under it.
+        ///
+        /// Returns the pier's CENTRE (y = deck height), heading as the yaw
+        /// `Raise` takes, and the length as a plan (`WithLength`); or false
+        /// with a reason, and the best guess it had so a ghost can still be
+        /// drawn red where the player is pointing.
+        public bool SnapPier(Vector3 picked, out Vector3 centre, out float yaw,
+            out BuildPlan plan, out string why)
+        {
+            plan = BuildPlans.Pier;
+            yaw = 0f;
+            centre = picked;
+            centre.y = BuildPlans.PierDeck;
+            why = "";
+            if (!Sited) { why = "this ground was never surveyed"; return false; }
+
+            // Which way is the sea. Downhill, or failing that radially out.
+            Vector3 seaward = Downhill(picked, 2f);
+            if (seaward.sqrMagnitude < 1e-6f)
+            {
+                seaward = Island != null ? picked - Island.transform.position : Vector3.forward;
+                seaward.y = 0f;
+                if (seaward.sqrMagnitude < 1e-6f) seaward = Vector3.forward;
+                seaward.Normalize();
+            }
+
+            // Find the waterline along that direction.
+            const float Step = 0.5f, Reach = 60f;
+            bool wet = height(picked.x, picked.z) < 0f;
+            Vector3 dir = wet ? -seaward : seaward;
+            Vector3 a = picked, b = picked;
+            bool crossed = false;
+            for (float d = Step; d <= Reach; d += Step)
+            {
+                b = picked + dir * d;
+                if ((height(b.x, b.z) < 0f) != wet) { crossed = true; break; }
+                a = b;
+            }
+            if (!crossed)
+            {
+                why = wet ? "that is open water -- point at a beach"
+                          : "no shore within reach of that spot";
+                return false;
+            }
+            for (int i = 0; i < 6; i++)             // bisect to ~1 cm
+            {
+                Vector3 m = (a + b) * 0.5f;
+                if ((height(m.x, m.z) < 0f) == wet) a = m; else b = m;
+            }
+            Vector3 shore = (a + b) * 0.5f;
+
+            // Heading: straight out from the beach at the crossing.
+            Vector3 heading = Downhill(shore, 4f);
+            if (heading.sqrMagnitude < 1e-6f) heading = seaward;
+            if (Vector3.Dot(heading, seaward) < 0f) heading = -heading;   // never back up the beach
+
+            Vector3 land = shore - heading * PierLandIn;
+            float landH = height(land.x, land.z);
+            if (landH <= 0.05f) { why = "there is no beach here to land a pier on"; return false; }
+            if ((landH - height(shore.x, shore.z)) / PierLandIn > PierLandSlope)
+            { why = "the beach is too steep for a pier"; return false; }
+
+            // Run out to water deep enough.
+            float length = -1f;
+            for (float L = BuildPlans.PierLength; L <= BuildPlans.PierLongest + 1e-3f; L += 1f)
+            {
+                Vector3 e = land + heading * L;
+                if (-height(e.x, e.z) >= BuildPlans.PierBerthDepth) { length = L; break; }
+            }
+            yaw = YawAlong(heading);
+            if (length < 0f)
+            {
+                plan = plan.WithLength(BuildPlans.PierLongest);
+                centre = land + heading * (BuildPlans.PierLongest * 0.5f);
+                centre.y = BuildPlans.PierDeck;
+                why = "the water here is too shallow for a pier";
+                return false;
+            }
+            plan = plan.WithLength(length);
+            centre = land + heading * (length * 0.5f);
+            centre.y = BuildPlans.PierDeck;
+            return true;
+        }
+
+        /// Metres of pier that stand on the sand, back from the waterline.
+        public const float PierLandIn = 3f;
+        /// Steepest beach (rise per metre) a pier's land end will take.
+        /// Far looser than a hut's: it is a ramp, not a floor.
+        public const float PierLandSlope = 0.5f;
+
+        /// Downhill direction of the height field at `p`, flat, unit length;
+        /// zero where the ground is level to within a millimetre per metre.
+        Vector3 Downhill(Vector3 p, float stencil)
+        {
+            float gx = height(p.x + stencil, p.z) - height(p.x - stencil, p.z);
+            float gz = height(p.x, p.z + stencil) - height(p.x, p.z - stencil);
+            var g = new Vector3(gx, 0f, gz) / (2f * stencil);
+            return g.magnitude < 1e-3f ? Vector3.zero : -g.normalized;
+        }
+
+        /// The yaw whose facing puts local +X (the ridge, land to sea) along
+        /// `heading`: `Quaternion.Euler(0, yaw, 0) * Vector3.right`.
+        static float YawAlong(Vector3 heading)
+            => Mathf.Atan2(-heading.z, heading.x) * Mathf.Rad2Deg;
+
+        /// **Can a pier of `plan.footprint.x` metres stand at this centre and
+        /// yaw?** The same question `SnapPier` has just answered, asked again
+        /// of the answer -- so a saved pier, a blueprint and a fresh siting
+        /// all go through one test, and a ghost that goes green here is a
+        /// pier that `Raise` will stand.
+        bool CanPlacePier(BuildPlan plan, Vector3 at, float yaw, out string why,
+            out float lo, out float hi)
+        {
+            // Deck height is world, not ground: `Raise` puts the root at `hi`
+            // and the factory hangs the posts down from there. Zero footing.
+            lo = hi = BuildPlans.PierDeck;
+            why = "";
+            float len = plan.footprint.x, wid = plan.footprint.y;
+            Vector3 heading = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+            Vector3 land = at - heading * (len * 0.5f);
+            Vector3 sea = at + heading * (len * 0.5f);
+            if (height(land.x, land.z) <= 0.05f)
+            { why = "there is no beach here to land a pier on"; return false; }
+            if (-height(sea.x, sea.z) < BuildPlans.PierBerthDepth)
+            { why = "the water here is too shallow for a pier"; return false; }
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
             if (!Clear(at, halfDiag)) { why = "something already stands there"; return false; }
             return true;

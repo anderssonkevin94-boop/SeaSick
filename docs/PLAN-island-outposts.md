@@ -1053,3 +1053,32 @@ the first thing to do with this.
   Pre-existing, and the same thing happens live after `Station`.
 - A camp whose island the survey now refuses is dropped with a warning
   rather than kept as a ghost row.
+
+### A pier — 2026-09-21
+
+Kevin: *"I'd like a pier asset to be buildable to make it easier to dock with
+the island."* One more plan in the camp's Build list (`BuildPlans.Pier`,
+last), and the first building that is not a box on the ground: planks on
+posts, 3 m wide, from the beach out into water a hull can lie in. **It costs 8
+timber** (5 while `PlaytestCostCap` is on), nobody works at it and it keeps
+nothing — what it buys is a berth.
+
+**Siting rule: the player picks the beach; the beach picks the pier.** From
+the tapped point `Outpost.SnapPier` walks downhill to the waterline (uphill
+if the tap was wet), takes the downhill direction there as the heading, puts
+the land end 3 m back up the sand (refused if that is not above water, or the
+beach rises more than 0.5 m per metre), then runs the sea end out from 14 m a
+metre at a time to 24 m until there is 2.5 m of water under it — and refuses
+with *"the water here is too shallow for a pier"* if there never is. R does
+nothing; the ghost is drawn at the snapped spot, at the chosen length,
+rebuilt as the pointer moves along the shore. `CanPlace` asks the same
+question of the answer, so blueprint, raise and a saved row all go through
+one test. The deck stands at 1.2 m above mean water (`BuildPlans.PierDeck`),
+never terrain-relative; each post is cut to the ground under it (sea bed
+clamped at −6 m). The length rides in the plan (`BuildPlan.WithLength`) and in
+the ledger row (`length` on `PendingBuild` and `BuiltBuilding`), so
+`Adopt` re-raises a pier at its own spot, heading and length; an old save
+without the field reads 0 and gets the 14 m plan. **Docking is not wired
+here**: a raised pier's `Pier` component (`SeaEnd`, `Heading`, `Berth`) goes
+out through `Outpost.RegisterPierDock` / `UnregisterPierDock`, one line for
+the dock registry to hook when it lands.
