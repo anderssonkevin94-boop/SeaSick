@@ -828,6 +828,10 @@ namespace SeaSick.UI
                 else if (l.AngryCount > 0)
                     sb.Append("   ·   ").Append(l.AngryCount)
                       .Append(l.AngryCount == 1 ? " hand is angry" : " hands are angry");
+                // Raiders, last: the one warning about what happens AFTER you
+                // sail, in days, so a lost pile was a date you read and left.
+                string raid = l.RaidLine;
+                if (!string.IsNullOrEmpty(raid)) sb.Append("   ·   ").Append(raid);
             }
             else sb.Append("   ·   no camp");
             headline = sb.ToString();
@@ -908,6 +912,7 @@ namespace SeaSick.UI
             long k = isleKey;
             if (outpost == null || l == null) return k;
             k = k * 31 + (l.Hungry ? 1 : 0) + l.AngryCount * 7;
+            k = k * 31 + l.raiders * 13 + Mathf.RoundToInt(l.DaysUntilRaid * 10f) + (l.HasWatchtower ? 5 : 0) + Mathf.RoundToInt(l.Guard * 100f) * 3;
             k = k * 31 + (outpost.HasCamp ? 1 : 0);
             k = k * 31 + (outpost.Building ? 1 : 0);
             if (l.pending != null)

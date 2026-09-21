@@ -108,6 +108,7 @@ namespace SeaSick.UI
             AppendGathered(a, sb);
             AppendRaised(a, sb);
             AppendBorn(a, sb);
+            AppendRaided(a, sb);
 
             if (a.eaten >= 1f)
                 sb.Append('\n').Append("ate ").Append(Mathf.FloorToInt(a.eaten)).Append(" food");
@@ -127,6 +128,25 @@ namespace SeaSick.UI
                 any = true;
                 sb.Append(Mathf.FloorToInt(a.got[i])).Append(' ').Append(Lower(a.res[i]));
             }
+        }
+
+        /// "raiders took 12 timber, 4 boards" -- the line the watchtower
+        /// exists to make unnecessary. Twice: "raided twice — took ...".
+        static void AppendRaided(OutpostLedger.Absence a, StringBuilder sb)
+        {
+            if (a.raids <= 0) return;
+            sb.Append('\n');
+            if (a.raids == 1) sb.Append("raiders took ");
+            else sb.Append("raided ").Append(a.raids).Append(" times — they took ");
+            bool any = false;
+            for (int i = 0; i < a.raidGot.Count; i++)
+            {
+                if (a.raidGot[i] <= 0) continue;
+                if (any) sb.Append(", ");
+                any = true;
+                sb.Append(a.raidGot[i]).Append(' ').Append(Lower(a.raidRes[i]));
+            }
+            if (!any) sb.Append("nothing");
         }
 
         static void AppendRaised(OutpostLedger.Absence a, StringBuilder sb)

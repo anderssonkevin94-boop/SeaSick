@@ -145,6 +145,10 @@ namespace SeaSick.World
             PlaceCampStone();
             ReconcileWood();
             ReconcileCrops();
+            // The raiders are ships, and the ships are the authority: the
+            // ledger is told how many are offshore and never guesses. Sink
+            // them and the clock stops.
+            ledger.raiders = Combat.EnemyShip.CountAt(Island);
             ledger.Tick(TimeOfDay.Seconds);
             FeedTheFire();
 

@@ -350,6 +350,38 @@ namespace SeaSick.World
             prefab = "Settlement/kitchen",
         };
 
+        /// **The fourth building that earns its place by preventing rather
+        /// than producing, 2026-09-22.** Every plan above turns a hand into a
+        /// pile; the watchtower turns a hand into a camp raiders leave alone.
+        /// It costs timber and stone like the rest and makes nothing --
+        /// `takes` and `makes` are both null, because the thing it spends is
+        /// somebody's whole day standing watch, not a pile.
+        ///
+        /// The effect lives in `OutpostLedger.threat`, not here: manned, the
+        /// watchtower halts threat outright; unmanned, it only halves the
+        /// rate it would otherwise climb at; and a camp with no watchtower at
+        /// all is the one a raid actually strikes. `OutpostLedger.WatchtowerId`
+        /// reads this plan's `id` string, so it must stay exactly
+        /// "Watchtower".
+        ///
+        /// Tall and narrow on purpose -- a lookout, not a room -- and the kit
+        /// has no tower model to wear, so like the pier it stands extruded
+        /// from `footprint` and `ridge` rather than an authored prefab.
+        /// **A guess, never played.**
+        public static readonly BuildPlan Watchtower = new BuildPlan
+        {
+            id = "Watchtower",
+            kind = BuildKind.Hut,
+            baseStoneCost = 6,
+            label = "watchtower",
+            blurb = "a lookout on watch keeps the raiders off the piles",
+            resource = Res.Timber,
+            baseCost = 12,
+            footprint = new Vector2(2.6f, 2.6f),
+            ridge = 7.5f,
+            position = "lookout",
+        };
+
         /// **A pier, 2026-09-21.** Kevin: *"I'd like a pier asset to be
         /// buildable to make it easier to dock with the island."*
         ///
@@ -396,7 +428,7 @@ namespace SeaSick.World
         /// same blueprint, so keeping it in the list is what stops it becoming
         /// a special case.
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Hut, Farm, Sawmill, Kitchen, Blacksmith, Pier };
+            { Campfire, Storage, Hut, Farm, Sawmill, Kitchen, Blacksmith, Watchtower, Pier };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.

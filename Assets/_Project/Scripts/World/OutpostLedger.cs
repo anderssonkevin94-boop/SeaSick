@@ -601,6 +601,122 @@ namespace SeaSick.World
         /// see `Outpost.CatchUp`.
         public bool ReadyToRaise => pending != null && pending.Complete;
 
+        // --- raiders, 2026-09-22 -----------------------------------------------
+        //
+        // Phase 3 "teeth": a camp on an island with raiders offshore, nobody
+        // watching it, with something piled, gets raided on a clock the sheet
+        // can print in days. A manned watchtower stops the clock; an unmanned
+        // one halves it. It is a mistake the player can see coming, not a
+        // dice roll -- see `RaidLine`.
+
+        /// Raiders patrolling this island right now. **Pushed in by
+        /// `Outpost.CatchUp` before every tick**, like `ceilingPer` -- the
+        /// ledger never computes this, it only reacts to it.
+        public int raiders;
+
+        /// Days of unwatched exposure banked toward the next raid.
+        public float threat;
+
+        /// Lifetime raid count.
+        public int raids;
+
+        /// Days of exposure a fresh camp can bank before a raid lands.
+        /// **A placeholder, never played.**
+        public const float DaysToRaid = 4f;
+
+        /// Share of each pile's whole units a raid takes, at least one unit
+        /// when the pile has any. **A placeholder, never played.**
+        public const float RaidShare = 0.4f;
+
+        /// Mood every hand loses when the camp is raided. **A placeholder,
+        /// never played.**
+        public const float RaidMoodHit = 0.25f;
+
+        /// Matches the id `BuildPlans.Watchtower` is being wired up with
+        /// elsewhere -- kept as a string here rather than a reference to
+        /// that plan, which may not exist yet.
+        public const string WatchtowerId = "Watchtower";
+
+        /// Has a watchtower been raised here at all -- built, not manned.
+        public bool HasWatchtower => built.Contains(WatchtowerId);
+
+        /// Labour standing lookout right now, clamped to one -- a single
+        /// hand at full mood is all the guard a camp needs.
+        public float Guard
+        {
+            get
+            {
+                float g = 0f;
+                foreach (var h in hands)
+                    if (h != null && h.order == OutpostOrder.Work && h.target == WatchtowerId)
+                        g += WorkFactor(h);
+                return Mathf.Clamp01(g);
+            }
+        }
+
+        /// Days of exposure this camp banks per day, at its current orders.
+        /// Zero with nobody offshore, nothing to take, or a manned lookout --
+        /// a raid is never a clock running on a camp that cannot be raided.
+        public float ThreatRatePerDay
+        {
+            get
+            {
+                if (raiders <= 0 || Total <= 0 || Guard >= 1f) return 0f;
+                return (1f - Guard) * (HasWatchtower ? 0.5f : 1f);
+            }
+        }
+
+        /// Days until the next raid at the current rate, or -1 when none is
+        /// coming.
+        public float DaysUntilRaid
+        {
+            get
+            {
+                float rate = ThreatRatePerDay;
+                if (rate <= 0f) return -1f;
+                return (DaysToRaid - threat) / rate;
+            }
+        }
+
+        /// **What the sheet prints for this camp's raid risk**, or null when
+        /// there is nobody offshore to make it a risk at all.
+        public string RaidLine
+        {
+            get
+            {
+                if (raiders <= 0) return null;
+                int n = raiders;
+                string who = n == 1 ? "raider" : "raiders";
+                if (Guard >= 1f)
+                    return $"{n} {who} offshore   ·   the lookout keeps them off";
+                if (Total <= 0)
+                    return $"{n} {who} offshore   ·   nothing here to take";
+                float d = DaysUntilRaid;
+                string fix = HasWatchtower
+                    ? "post a lookout"
+                    : "a watchtower and a lookout stop it";
+                return $"{n} {who} offshore   ·   a raid {d:0.#} days after you sail   ·   " + fix;
+            }
+        }
+
+        /// **The raid itself.** Takes a share of every pile that has
+        /// anything in it, records what was lost against the open absence,
+        /// and knocks every hand's mood down -- the cost of nobody watching.
+        void Raid()
+        {
+            foreach (var s in stores)
+            {
+                if (s == null || s.whole <= 0) continue;
+                int took = Mathf.Max(1, Mathf.FloorToInt(s.whole * RaidShare));
+                took = Take(s.resource, took);
+                if (took > 0) away.AddRaided(s.resource, took);
+            }
+            foreach (var h in hands)
+                if (h != null) h.mood = Mathf.Max(0f, h.mood - RaidMoodHit);
+            raids++;
+            away.raids++;
+        }
+
         // --- the clock -------------------------------------------------------
 
         /// `TimeOfDay.Seconds` this ledger has been advanced to. Double for the
@@ -644,6 +760,14 @@ namespace SeaSick.World
             /// Names of hands recruited while away.
             public List<string> born = new List<string>();
 
+            /// **Raiders, 2026-09-22.** Parallel lists like `res`/`got`, for
+            /// the same JsonUtility reason -- what a raid took, per resource,
+            /// while nobody was standing here to stop it.
+            public List<string> raidRes = new List<string>();
+            public List<int> raidGot = new List<int>();
+            /// How many times this camp was raided during the absence.
+            public int raids;
+
             /// Is there an absence in progress?
             public bool Open => sinceSeconds > 0.0;
 
@@ -654,6 +778,7 @@ namespace SeaSick.World
                 {
                     if (raised.Count > 0 || born.Count > 0) return true;
                     if (eaten > 0f || hungryDays > 0f) return true;
+                    if (raids > 0) return true;
                     for (int i = 0; i < got.Count; i++) if (got[i] >= 1f) return true;
                     return false;
                 }
@@ -671,6 +796,20 @@ namespace SeaSick.World
                 }
                 res.Add(resource);
                 got.Add(amount);
+            }
+
+            /// Find or create this resource's raided row and add to it.
+            public void AddRaided(string resource, int n)
+            {
+                if (string.IsNullOrEmpty(resource) || n == 0) return;
+                for (int i = 0; i < raidRes.Count; i++)
+                {
+                    if (raidRes[i] != resource) continue;
+                    raidGot[i] += n;
+                    return;
+                }
+                raidRes.Add(resource);
+                raidGot.Add(n);
             }
 
             /// How many whole days this absence has run, as of `nowSeconds`.
@@ -1200,6 +1339,27 @@ namespace SeaSick.World
                     away.born.Add(name);
                 }
             }
+
+            // --- raiders, 2026-09-22 --------------------------------------------
+            //
+            // Only banks or bites while the ship is away -- with her there
+            // the raiders are ships she can fight, not a clock on the camp.
+            // A lookout on watch while you are home lets the camp relax
+            // instead of just holding steady, which is why the threat comes
+            // back down rather than only ever climbing.
+            if (away.Open)
+            {
+                threat += ThreatRatePerDay * days;
+                if (threat >= DaysToRaid)
+                {
+                    Raid();
+                    threat -= DaysToRaid;
+                }
+            }
+            else if (Guard >= 1f)
+            {
+                threat = Mathf.Max(0f, threat - days);
+            }
         }
 
         /// How full this resource's pile is, for anything drawing a gauge.
@@ -1219,6 +1379,9 @@ namespace SeaSick.World
             }
             if (h.order == OutpostOrder.Work)
             {
+                // A lookout makes nothing and that is the job -- never
+                // stalled for having nothing to show for standing watch.
+                if (h.target == WatchtowerId) return false;
                 var plan = BuildPlans.Named(h.target);
                 if (string.IsNullOrEmpty(plan.makes)) return true;
                 if (RoomFor(plan.makes) <= 0) return true;

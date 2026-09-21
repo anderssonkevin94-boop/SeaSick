@@ -24,6 +24,19 @@ namespace SeaSick.Combat
     {
         public static readonly List<EnemyShip> All = new List<EnemyShip>();
 
+        /// Raiders alive and patrolling this island. What a camp's ledger is
+        /// told before every tick (`Outpost.CatchUp`), so a raid is a fact
+        /// about ships the player can see on the minimap and sink, never a
+        /// roll.
+        public static int CountAt(SeaSick.World.Island island)
+        {
+            if (island == null) return 0;
+            int n = 0;
+            foreach (var r in All)
+                if (r != null && r.Alive && r.Home == island) n++;
+            return n;
+        }
+
         public enum Duty { Patrol, Block, Chase, Return }
 
         [Header("Hull")]
