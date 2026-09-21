@@ -100,7 +100,12 @@ public class UpgradeProbe : MonoBehaviour
                     + $"  sails {(rig != null ? rig.SailCount : 0)}");
         for (int k = 0; k < 3; k++)
         {
-            bool ok = yard.Upgrade(FitTrack.SailArea);
+            // The free path: `Upgrade` now costs cargo and refuses at sea, and
+            // this probe measures what a level DOES, not whether it can be bought.
+            int next = yard.Fit.Level(FitTrack.SailArea) + 1;
+            yard.Fit.SetLevel(FitTrack.SailArea, next);
+            yard.PushToGame();
+            bool ok = yard.Fit.Level(FitTrack.SailArea) == next;
             yield return null;
             sb.AppendLine($"level {yard.Fit.Level(FitTrack.SailArea)}: "
                         + $"top {motor.MaxSpeed:F2} m/s  accel {motor.AccelerationNow:F2}  "

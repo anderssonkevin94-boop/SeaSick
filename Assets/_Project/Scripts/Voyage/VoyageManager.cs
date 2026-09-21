@@ -84,6 +84,11 @@ namespace SeaSick.Voyage
         float completedWorst;
         string completedHaul = "";
         int completedSpoiled;
+        /// Per resource, in `ResOrder`: "4 timber · 2 boards". Fixed the
+        /// moment she ties up, because the room that was short is the room
+        /// there WAS, and building a storehouse afterwards must not rewrite
+        /// the tally of the voyage that paid for it.
+        string completedSpoiledDetail = "";
         string buildNote = "";
 
         // --- The home panel's strings ---------------------------------------
@@ -103,8 +108,67 @@ namespace SeaSick.Voyage
         string tallyLine = "";
         string spoiledLine = "";
         string storesLine = "";
+        /// True when ANY one pile is at its ceiling, which is what the warning
+        /// colour means now that the ceiling is per resource. A total against a
+        /// total could not say "the timber is full and the boards are not".
+        bool storesFull;
         string[] planLabels = new string[0];
         string[] planBlurbs = new string[0];
+
+        // --- one fixed order for every list of resources ---------------------
+        //
+        // **The order used to be the dictionary's**, which is to say the order
+        // things happened to be inserted in, which is to say none at all. That
+        // was invisible while timber was the only thing a hold ever carried
+        // and became a silent bug the moment a camp could make boards: the old
+        // landing shared ONE pool of room across every kind, so whichever
+        // resource enumerated first ate the space and the rest spoiled on the
+        // sand with no reason the player could see. Room is per resource now
+        // (below), but the ORDER still has to be fixed, or the tally and the
+        // stores line reshuffle themselves between voyages.
+        //
+        // Raw materials in the order the world unlocks them by ring, then the
+        // made goods, then food. Anything a later pass invents lands after
+        // these, sorted by name, so it is stable without being listed here.
+        static readonly string[] ResOrder =
+        {
+            World.Res.Timber, World.Res.Stone, World.Res.Ore, World.Res.Spice,
+            World.Res.Boards, World.Res.Tools, World.Res.Food, World.Res.Meals,
+        };
+
+        /// **Cheapest over the side first.** Jettisoning is a decision taken
+        /// at the helm in seconds with the deck awash, so the game picks what
+        /// goes: raw bulk before anything a camp spent a day making, and a
+        /// crate of tools or a sack of spice is the last thing to swim.
+        static readonly string[] DumpOrder =
+        {
+            World.Res.Timber, World.Res.Stone, World.Res.Food, World.Res.Meals,
+            World.Res.Ore, World.Res.Boards, World.Res.Spice, World.Res.Tools,
+        };
+
+        /// Scratch for the two orderings below — reused, because both of them
+        /// run while the home panel is up and IMGUI is drawing.
+        readonly List<string> ordered = new List<string>();
+
+        /// The keys of `d`, in `ResOrder`, with anything unlisted after them
+        /// in name order. The returned list is the shared scratch: read it
+        /// out before calling this again.
+        List<string> InOrder(Dictionary<string, int> d)
+        {
+            ordered.Clear();
+            foreach (var r in ResOrder) if (d.ContainsKey(r)) ordered.Add(r);
+            int known = ordered.Count;
+            foreach (var kv in d) if (!Listed(kv.Key)) ordered.Add(kv.Key);
+            if (ordered.Count > known)
+                ordered.Sort(known, ordered.Count - known, System.StringComparer.Ordinal);
+            return ordered;
+        }
+
+        static bool Listed(string r)
+        {
+            foreach (var k in ResOrder) if (k == r) return true;
+            return false;
+        }
 
         GUIStyle centerLabel, cargoLabel;
 
@@ -116,7 +180,11 @@ namespace SeaSick.Voyage
             BeginVoyage();
         }
 
-        void BeginVoyage()
+        /// **Cast off.** The "set sail" button on the home panel and the
+        /// spacebar both land here, and so does `Start`. Public so a probe can
+        /// press the button the player presses rather than setting the phase
+        /// behind the game's back — see `SinkProbe`.
+        public void BeginVoyage()
         {
             // One button, one intention: ending the tally IS casting off.
             if (phase == Phase.Home && anchor != null) anchor.CastOff();
@@ -152,27 +220,55 @@ namespace SeaSick.Voyage
             ship.CargoLoad = HoldFill;
         }
 
-        public void AddSalvage(int amount) => AddLoot(amount, "Timber");
+        /// Barrels and spars out of the water. Timber, because that is what a
+        /// wreck is made of — through `World.Res` rather than a literal, so a
+        /// rename cannot leave salvage banking into a resource nothing else
+        /// has heard of.
+        public void AddSalvage(int amount) => AddLoot(amount, World.Res.Timber);
 
         public int AmountOf(string resource) => held.TryGetValue(resource, out int n) ? n : 0;
 
         /// Over the side. The escape valve for a ship that is going under —
         /// costs you the payoff, buys back freeboard immediately. The player's
         /// decision, at the helm, in seconds.
+        ///
+        /// **What goes first is not "whatever the dictionary says".** It used
+        /// to be, and with one cargo kind nobody could tell; with a hold
+        /// carrying timber, boards and tools it meant a panicking captain
+        /// might throw the forge's whole week over the side and keep the logs.
+        /// `DumpOrder` is cheapest first, so the thing you lose is the thing
+        /// you can cut more of.
         public int Jettison(int amount)
         {
             if (TotalHeld <= 0 || amount <= 0) return 0;
             int dumped = 0;
-            var keys = new List<string>(held.Keys);
-            foreach (var k in keys)
+            foreach (var k in DumpOrder)
             {
                 if (amount <= 0) break;
-                int take = Mathf.Min(amount, held[k]);
-                held[k] -= take;
+                if (!held.TryGetValue(k, out int have)) continue;
+                int take = Mathf.Min(amount, have);
+                held[k] = have - take;
                 TotalHeld -= take;
                 amount -= take;
                 dumped += take;
                 if (held[k] <= 0) held.Remove(k);
+            }
+            // Anything a later pass invented and did not list. Allocates, and
+            // only on the path where the listed eight did not cover the load.
+            if (amount > 0 && held.Count > 0)
+            {
+                var rest = new List<string>(held.Keys);
+                rest.Sort(System.StringComparer.Ordinal);
+                foreach (var k in rest)
+                {
+                    if (amount <= 0) break;
+                    int take = Mathf.Min(amount, held[k]);
+                    held[k] -= take;
+                    TotalHeld -= take;
+                    amount -= take;
+                    dumped += take;
+                    if (held[k] <= 0) held.Remove(k);
+                }
             }
             ship.CargoLoad = HoldFill;
 
@@ -266,23 +362,51 @@ namespace SeaSick.Voyage
             // surplus is not a penalty message, it is the reason the first
             // building exists — and you have to see it land short once
             // before the storehouse means anything.
-            int room = Mathf.Max(0, StoreCapacity - BankedTotal);
+            //
+            // **N OF EACH, not N in total.** This used to pool one
+            // `StoreCapacity - BankedTotal` across the whole hold and walk the
+            // `held` dictionary in whatever order it felt like, so a hold with
+            // thirty logs and twelve boards in it banked the logs, filled the
+            // beach with them and left the boards — a week of a sawyer's work
+            // — on the sand, with the panel saying only "12 left on the sand"
+            // and no hint that the LOGS were what ate the room. Camps have
+            // kept N of each since 2026-09-19 (`Outpost.KeepsOfEach`, Kevin:
+            // *"crew on the island can gather resources up to 10 of each"*);
+            // home is the same place under a different name and now keeps the
+            // same way. It is also what makes carrying a second thing home
+            // worth the passage instead of a competitor for the first's slots.
+            int cap = StoreCapacity;
             var sb = new StringBuilder();
+            var spoil = new StringBuilder();
             var landed = new List<string>();
             completedSpoiled = 0;
-            foreach (var kv in held)
+            foreach (var res in InOrder(held))
             {
+                int got = held[res];
+                // Room is asked PER RESOURCE, against what is already in that
+                // pile — so a beach full of timber costs the timber nothing
+                // it was not already going to lose, and costs the boards
+                // nothing at all.
+                int take = Mathf.Min(got, Mathf.Max(0, cap - Banked(res)));
+                int lost = got - take;
+
                 if (sb.Length > 0) sb.Append("   ");
-                sb.Append($"+{kv.Value} {kv.Key}");
-                int take = Mathf.Min(kv.Value, room);
-                room -= take;
-                completedSpoiled += kv.Value - take;
+                sb.Append($"+{got} {res.ToLowerInvariant()}");
+                if (lost > 0) sb.Append($" ({take} kept)");
+
+                if (lost > 0)
+                {
+                    completedSpoiled += lost;
+                    if (spoil.Length > 0) spoil.Append(" · ");
+                    spoil.Append($"{lost} {res.ToLowerInvariant()}");
+                }
                 if (take <= 0) continue;
-                banked.TryGetValue(kv.Key, out int cur);
-                banked[kv.Key] = cur + take;
-                for (int i = 0; i < take; i++) landed.Add(kv.Key);
+                banked.TryGetValue(res, out int cur);
+                banked[res] = cur + take;
+                for (int i = 0; i < take; i++) landed.Add(res);
             }
             completedHaul = sb.Length > 0 ? sb.ToString() : "empty hold";
+            completedSpoiledDetail = spoil.ToString();
 
             // Carry it ashore piece by piece so the pile visibly grows rather
             // than the haul evaporating into a number.
@@ -299,10 +423,25 @@ namespace SeaSick.Voyage
 
         // --- The stores, and what they buy ----------------------------------
 
-        /// Everything home can keep, which grows as the village is built.
+        /// **What home keeps OF EACH THING**, which grows as the village is
+        /// built. Thirty of timber AND thirty of boards, not thirty between
+        /// them — see the note in `CompleteVoyage`.
+        ///
+        /// The name is the old one and the number is unchanged: `Outpost`
+        /// renamed the same quantity `KeepsOfEach` in 2026-09-19 and kept
+        /// `StoreCapacity` as an alias. This reads the explicit name so that
+        /// what it means is written down at the only place that uses it, and
+        /// so nothing here has to be revisited if the alias ever goes.
+        ///
+        /// Every reader of this is asking a per-resource question — `LoopProbe`
+        /// lands one kind and compares the spoilage against it; the panel
+        /// quotes it beside each pile.
         public int StoreCapacity => World.Outpost.Home != null
-            ? World.Outpost.Home.StoreCapacity : fallbackStoreCapacity;
+            ? World.Outpost.Home.KeepsOfEach : fallbackStoreCapacity;
 
+        /// Everything in every pile added up. **Not a capacity question** —
+        /// there is no total ceiling any more — so this is a readout and a
+        /// convenience for probes, never the thing room is measured against.
         public int BankedTotal
         {
             get { int n = 0; foreach (var kv in banked) n += kv.Value; return n; }
@@ -310,6 +449,13 @@ namespace SeaSick.Voyage
 
         public int Banked(string resource) =>
             banked.TryGetValue(resource, out int n) ? n : 0;
+
+        /// What the last homecoming could not keep, and which piles it was.
+        /// Read-only, and read by `SinkProbe`: a gate that re-derived the
+        /// spoilage from the loot it put in the hold would agree with itself
+        /// whatever the panel said.
+        public int Spoiled => completedSpoiled;
+        public string SpoiledDetail => completedSpoiledDetail;
 
         /// Raise a building and pay for it out of the stores.
         ///
@@ -331,7 +477,7 @@ namespace SeaSick.Voyage
             if (raised == null) { buildNote = "no room left in the clearing"; return false; }
 
             SpendBanked(plan.resource, plan.cost);
-            buildNote = $"{plan.label} raised — home keeps {StoreCapacity}";
+            buildNote = $"{plan.label} raised — home keeps {StoreCapacity} of each";
             panelVersion++;   // "build" becomes "build another"; see RefreshPanelText
             return true;
         }
@@ -339,7 +485,13 @@ namespace SeaSick.Voyage
         /// Off the beach and into the building. The visible pile has to come
         /// down with the number, or the stores read as spent in the panel and
         /// untouched on the ground two metres away.
-        void SpendBanked(string resource, int amount)
+        ///
+        /// Public since the yard began charging for rungs (`ShipPrices`): a
+        /// hull is the second thing the stores buy, and it has to be paid for
+        /// through the same call the buildings use or the pile and the number
+        /// part company again. It does not check — `ShipPrices.TrySpend` and
+        /// `TryBuild` check, and both clamp here anyway.
+        public void SpendBanked(string resource, int amount)
         {
             banked.TryGetValue(resource, out int have);
             int take = Mathf.Min(have, amount);
@@ -347,6 +499,7 @@ namespace SeaSick.Voyage
             if (banked[resource] <= 0) banked.Remove(resource);
             var pile = World.Stockpile.Instance;
             if (pile != null) pile.Withdraw(resource, take);
+            panelVersion++;   // the stores moved; see RefreshPanelText
         }
 
         System.Collections.IEnumerator UnloadAshore(List<string> units)
@@ -400,14 +553,21 @@ namespace SeaSick.Voyage
                 : $"worst {completedWorst:P0} sick   ·   {completedPukes}× to the rail";
             tallyLine = $"{m}:{sec:00}   ·   {crewLine}";
 
+            // Named, because which pile overflowed is the whole information.
+            // "12 left on the sand" told the player a number; "12 boards left
+            // on the sand" tells them to build a store hut before the next
+            // time the sawmill has been running.
             spoiledLine = completedSpoiled > 0
-                ? $"{completedSpoiled} left on the sand — nowhere to keep it"
+                ? $"{completedSpoiledDetail} left on the sand — nowhere to keep it"
                 : "";
 
-            // Stores against what they can BE — a bare number cannot tell you
-            // the beach is full, and being full is the whole reason the
-            // buttons below it exist.
-            storesLine = $"stores {total} / {cap}   ·   {BankSummary()}";
+            // Stores against what they can BE, PER PILE — a bare total cannot
+            // tell you the timber is full while the boards have room, and
+            // which of them is full is the whole reason the buttons below it
+            // exist.
+            storesLine = $"stores — {BankSummary()}";
+            storesFull = false;
+            foreach (var kv in banked) if (kv.Value >= cap) { storesFull = true; break; }
 
             var plans = World.BuildPlans.All;
             if (planLabels.Length != plans.Length)
@@ -483,9 +643,11 @@ namespace SeaSick.Voyage
 
             // Stores against what they can BE — a bare number cannot tell you
             // the beach is full, and being full is the whole reason the
-            // buttons below it exist.
+            // buttons below it exist. `storesFull` is "any one pile is at its
+            // ceiling", worked out in RefreshPanelText; comparing two totals
+            // here would never go amber once the piles were separate.
             var fullWas = GUI.color;
-            if (BankedTotal >= StoreCapacity) GUI.color = SeaSick.UI.UITheme.Warn;
+            if (storesFull) GUI.color = SeaSick.UI.UITheme.Warn;
             GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
                 storesLine, SeaSick.UI.UITheme.Small2Centered);
             GUI.color = fullWas;
@@ -532,14 +694,17 @@ namespace SeaSick.Voyage
             return sb.ToString();
         }
 
+        /// "timber 30/30 · boards 12/30" — every pile against its OWN ceiling,
+        /// in `ResOrder`. Built inside `RefreshPanelText` and nowhere else.
         string BankSummary()
         {
             if (banked.Count == 0) return "nothing yet";
+            int cap = StoreCapacity;
             var sb = new StringBuilder();
-            foreach (var kv in banked)
+            foreach (var res in InOrder(banked))
             {
-                if (sb.Length > 0) sb.Append("   ");
-                sb.Append($"{kv.Key} {kv.Value}");
+                if (sb.Length > 0) sb.Append(" · ");
+                sb.Append($"{res.ToLowerInvariant()} {banked[res]}/{cap}");
             }
             return sb.ToString();
         }

@@ -375,12 +375,40 @@ namespace SeaSick.Ship
 
         // --- the three moves ---------------------------------------------------
 
-        public bool CanMove(string move) => ShipLadder.Blocked(nodeIndex, move) == null;
-        public string WhyNot(string move) => ShipLadder.Blocked(nodeIndex, move);
+        /// **Where the yard's bill is sent.** The stores live at home, so the
+        /// purse is the `VoyageManager` — the same object `Update` below
+        /// watches the hold through, and the same field, so a scene with one
+        /// is scanned for it once. A scene with NONE (the ocean and ladder
+        /// labs) gets a null purse, and `ShipPrices` reads a null purse as
+        /// "no price": every hull instrument in `Scripts/Dev` runs there.
+        SeaSick.Voyage.VoyageManager Purse => voyage != null
+            ? voyage
+            : (voyage = FindFirstObjectByType<SeaSick.Voyage.VoyageManager>());
+
+        public bool CanMove(string move) => WhyNot(move) == null;
+
+        /// **One reason string, structural first and then the bill.**
+        /// Everything that asks whether she can be re-lofted comes through
+        /// here, so nothing can grey a button out for one reason and refuse
+        /// it for another. Order matters: a move the corridor forbids is
+        /// forbidden whatever is in the stores, and saying "needs 12 boards"
+        /// about a hull that would hog is a lie that costs a voyage.
+        public string WhyNot(string move)
+        {
+            string why = ShipLadder.Blocked(nodeIndex, move);
+            if (why != null) return why;
+            return ShipPrices.CannotAfford(ShipPrices.ForRung(nodeIndex + 1), Purse);
+        }
 
         public bool Move(string move)
         {
-            if (!CanMove(move)) { Status = WhyNot(move); return false; }
+            string why = ShipLadder.Blocked(nodeIndex, move);
+            if (why != null) { Status = why; return false; }
+            // Re-checked and paid HERE rather than in `Apply`: `Apply` is the
+            // free dev path every probe drives the ladder through. See the
+            // design rule in `ShipPrices`.
+            if (!ShipPrices.TrySpend(ShipPrices.ForRung(nodeIndex + 1), Purse, out why))
+            { Status = why; return false; }
             Apply(nodeIndex + 1);
             return true;
         }
@@ -755,13 +783,25 @@ namespace SeaSick.Ship
             var n = Node;
             string why = fit.Blocked(track, n);
             if (why != null) { Status = why; return false; }
+            // Physical gate first, bill second — same order as `Move`, and for
+            // the same reason: "needs 10 timber" about a suit of sails the
+            // hull cannot stand up to would send the player for the wrong
+            // thing. `SetLevel` stays free, as `Apply` does.
+            if (!ShipPrices.TrySpend(ShipPrices.ForFit(track, fit.Level(track) + 1),
+                                     Purse, out why))
+            { Status = why; return false; }
             fit.SetLevel(track, fit.Level(track) + 1);
             Status = $"{track}: {ShipFit.Name(track, fit.Level(track))}";
             PushToGame();
             return true;
         }
 
-        public string WhyNotFit(FitTrack t) => fit.Blocked(t, Node);
+        public string WhyNotFit(FitTrack t)
+        {
+            string why = fit.Blocked(t, Node);
+            if (why != null) return why;
+            return ShipPrices.CannotAfford(ShipPrices.ForFit(t, fit.Level(t) + 1), Purse);
+        }
 
         public void PushToGame()
         {

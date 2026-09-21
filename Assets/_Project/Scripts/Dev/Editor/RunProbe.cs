@@ -98,6 +98,13 @@ public static class RunProbe
     /// The people at a camp walk to their work, act it, carry to the pile,
     /// and change no number by doing so.
     public static void CampLife() => Call("CampLifeProbe");
+    // --- the sink (2026-09-20) -----------------------------------------------
+    /// A camp's stores go into the hold unit for unit -- nothing made, nothing
+    /// lost, never past the line unless deck cargo is on, and never by itself.
+    public static void CampLoad() => Call("CampLoadProbe");
+    /// A rung costs goods that were sailed home: refused at sea, refused short,
+    /// banked per resource, paid exactly, and `Apply` stays free for the rig.
+    public static void Sink() => Call("SinkProbe");
     public static void VillageBuild() => Call("VillageProbe", "Build");
     public static void VillageShot() => Call("VillageProbe", "Shot");
     public static void Loop() => Call("LoopProbe");

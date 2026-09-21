@@ -261,7 +261,8 @@ public static class LadderCheck
         // the skiff and see what survives.
         yard.Apply(19);
         foreach (SeaSick.Ship.FitTrack t in System.Enum.GetValues(typeof(SeaSick.Ship.FitTrack)))
-            for (int k = 0; k < 3; k++) yard.Upgrade(t);
+            for (int k = 0; k < 3; k++) yard.Fit.SetLevel(t, yard.Fit.Level(t) + 1); // free path; Upgrade now costs cargo
+        yard.PushToGame();
         sb.AppendLine($"\nthree-decker fitted out: "
             + string.Join(", ", System.Array.ConvertAll(
                 (SeaSick.Ship.FitTrack[])System.Enum.GetValues(typeof(SeaSick.Ship.FitTrack)),

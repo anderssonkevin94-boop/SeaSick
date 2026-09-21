@@ -38,11 +38,18 @@ namespace SeaSick.UI
         string rungText = "", dimsText = "", handlingText = "";
         string cellsText = "", crewText = "", portsText = "";
         string moveWhy;                                       // the one reason line
+        /// What the next rung is and what it costs, with what is in store
+        /// beside it — the price tag under the three hull buttons.
+        string nextText = "";
+        bool nextAfford = true;
         readonly bool[] canMove = new bool[Moves.Length];
         readonly string[] quantityReading = new string[5];    // by BayUse
         readonly string[] quantityWhy = new string[5];
         readonly string[] trackWhy = new string[5];           // by FitTrack
         readonly string[] trackButton = new string[5];
+        /// What the row says under the button: the price, or the reason, or
+        /// both. See the block that fills it in `RefreshText`.
+        readonly string[] trackNote = new string[5];
         string[] tierShort = new string[0];
         int tierShortFor = int.MinValue;
 
@@ -102,6 +109,25 @@ namespace SeaSick.UI
                 k = k * 31 + Mathf.RoundToInt(motor.MaxTurnRate * 10f);
                 k = k * 31 + Mathf.RoundToInt(motor.AccelerationNow * 100f);
             }
+            // --- and the PURSE, or every price on this panel goes stale -------
+            //
+            // The key above is "what the ship is", and while the ladder was
+            // free that was everything the panel said. It is not any more: a
+            // button's enabled state and its reason now depend on what is in
+            // the stores and on whether she is alongside, and neither of those
+            // moves the ship. A voyage landing thirty boards would have left
+            // every row greyed out with "needs 12 boards — home has 0" until
+            // the player happened to press something that re-lofted her.
+            //
+            // This project has had exactly this bug once before and it is in
+            // the trap log; it costs five dictionary lookups an event to not
+            // have it again.
+            if (voyage != null)
+            {
+                foreach (var res in SeaSick.Ship.ShipPrices.Priced)
+                    k = k * 31 + voyage.Banked(res);
+                k = k * 31 + (voyage.AtHome ? 1 : 0);
+            }
             if (k == textKey) return;
             textKey = k;
 
@@ -114,7 +140,8 @@ namespace SeaSick.UI
                   + $"accel {motor.AccelerationNow:F2} m/s²"
                 : null;
 
-            // ONE reason line, for the move the corridor is currently refusing.
+            // ONE reason line, for the move the corridor — or the purse — is
+            // currently refusing. `WhyNot` answers both now, in that order.
             moveWhy = null;
             for (int i = 0; i < Moves.Length; i++)
             {
@@ -123,17 +150,62 @@ namespace SeaSick.UI
                 if (moveWhy == null && !string.IsNullOrEmpty(why)) moveWhy = why;
             }
 
+            // --- the price tag ------------------------------------------------
+            //
+            // The rung she is buying is always `node + 1` whichever of the
+            // three buttons is the one that is open, so there is one price and
+            // one line, not three. Naming the hull it buys is what makes the
+            // cost mean something: "12 boards and 20 timber" is a number,
+            // "Long sloop — 12 boards and 20 timber" is a decision.
+            var next = ShipLadder.Node(n.node + 1);
+            var price = SeaSick.Ship.ShipPrices.ForRung(n.node + 1);
+            if (next == null)
+            {
+                nextText = "she is as big as the yard can build";
+                nextAfford = true;
+            }
+            else
+            {
+                string store = SeaSick.Ship.ShipPrices.InStore(price, voyage);
+                nextText = price.Has
+                    ? (store != null
+                        ? $"next: {next.label} — {price}   ·   {store}"
+                        : $"next: {next.label} — {price}")
+                    : $"next: {next.label} — free";
+                nextAfford = SeaSick.Ship.ShipPrices.CannotAfford(price, voyage) == null;
+            }
+
             quantityReading[(int)SeaSick.Ship.BayUse.Battery] = $"{yard.Guns} a side";
             quantityReading[(int)SeaSick.Ship.BayUse.Quarters] = $"{yard.Berths} of 20";
             quantityReading[(int)SeaSick.Ship.BayUse.Hold] = $"{yard.Cargo} cargo";
             for (int i = 0; i < 5; i++)
                 quantityWhy[i] = yard.WhyNotAdd((SeaSick.Ship.BayUse)i);
 
+            // One line under each fitting row, and it has to carry BOTH kinds
+            // of answer without saying either of them twice.
+            //
+            // `Fit.Blocked` is the physical gate — masts, beam, length — and
+            // `WhyNotFit` is that gate first and then the purse. When the hull
+            // refuses, the price is still worth showing (it is what the player
+            // is saving toward), so the two are joined. When the purse
+            // refuses, its own sentence already quotes the price and what is
+            // in store, so it stands alone. When neither refuses, the line is
+            // the price: a button you can press must still say what it costs.
             for (int i = 0; i < 5; i++)
             {
                 var t = (SeaSick.Ship.FitTrack)i;
+                int lvl = yard.Fit.Level(t);
                 trackWhy[i] = yard.WhyNotFit(t);
-                trackButton[i] = ShipFitName(t, yard.Fit.Level(t));
+                trackButton[i] = ShipFitName(t, lvl);
+
+                var p = SeaSick.Ship.ShipPrices.ForFit(t, lvl + 1);
+                string cost = p.Has ? p.ToString() : null;
+                string physical = yard.Fit.Blocked(t, n);
+                trackNote[i] = lvl >= SeaSick.Ship.ShipFit.MaxLevel
+                    ? null
+                    : physical != null
+                        ? (cost != null ? $"{cost}   ·   {physical}" : physical)
+                        : (trackWhy[i] ?? cost);
             }
 
             cellsText = $"{n.bays} bays × {n.tiers} tiers = {n.cells} cells   "
@@ -240,6 +312,15 @@ namespace SeaSick.UI
             Move("Raise", 2, u);
             GUILayout.EndHorizontal();
 
+            // What the next rung is and what it costs, under the buttons that
+            // buy it. Tinted `Bad` when it cannot be had — the one piece of
+            // state on this panel that changes without the ship changing, so
+            // it is also the one the text cache had to be taught about.
+            var priceWas = GUI.color;
+            if (!nextAfford) GUI.color = UITheme.Bad;
+            GUILayout.Label(nextText, UITheme.Small);
+            GUI.color = priceWas;
+
             // ONE reason line, for the move the corridor is currently refusing.
             // Three paragraphs of explanation pushed the board -- the thing
             // this panel exists for -- clean off the bottom of the screen.
@@ -327,7 +408,16 @@ namespace SeaSick.UI
                 GUILayout.EndHorizontal();
             }
 
+            // --- the dev row -------------------------------------------------
+            //
+            // **These four are FREE and must stay free**, and the label says
+            // so out loud so nobody reads them as the game. They go through
+            // `Apply`/`Undo`, which is the path every probe and every ladder
+            // walker in `Scripts/Dev` drives the hull with; pricing them would
+            // turn each of those instruments into a test of the stores. See
+            // the design rule at the top of `ShipPrices`.
             GUILayout.Space(u * 0.4f);
+            GUILayout.Label("dev — free", UITheme.Small);
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("◀ undo", UITheme.Button, GUILayout.Height(u * 1.8f)))
             { yard.Undo(); Say(yard.Status); }
@@ -403,8 +493,14 @@ namespace SeaSick.UI
             { yard.Upgrade(t); Say(yard.Status); }
             GUI.enabled = true;
             GUILayout.EndHorizontal();
-            if (why != null && lvl < SeaSick.Ship.ShipFit.MaxLevel)
-                GUILayout.Label(why, UITheme.Small);
+            string note = trackNote[(int)t];
+            if (note != null)
+            {
+                var noteWas = GUI.color;
+                if (why != null) GUI.color = UITheme.Bad;
+                GUILayout.Label(note, UITheme.Small);
+                GUI.color = noteWas;
+            }
         }
 
         static string ShipFitName(SeaSick.Ship.FitTrack t, int lvl)
