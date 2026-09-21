@@ -1202,3 +1202,37 @@ building already gets its own panel.
   absence correctly, but a camp only ever passed never gets one.
 - Then: upkeep consequences (dim fire, hunger, anger — `hungerDays` and
   `Absence.hungryDays` are the numbers to read), raiders / watchtower.
+
+## UPKEEP CONSEQUENCES — 2026-09-22
+
+Kevin skipped the playtest of the felt close and said build on. The design
+was already his (2026-09-13): **the campfire is the provisions gauge,
+failure is gradual, hands get angry and that is all.** Built as written,
+in one file plus three hooks.
+
+- **The fire.** `OutpostLedger.Health01` = food in the pile over three
+  days' eating for everyone here (`DaysOfFoodForBrightFire = 3`), 1 for an
+  empty camp so a place with nobody home does not read as dying.
+  `Outpost.FeedTheFire` pushes it to `Campfire.health01` after every tick;
+  the light is found once among `built`. `Campfire` already dimmed to 0.32,
+  never out, for exactly this.
+- **Mood, per hand, per quantum.** `OutpostHand.mood` (carried unused
+  since 09-13) now slides down 0.5 a day while unfed, scaled by how short
+  the quantum went, and back up 0.25 a day when fully fed. Two unfed days:
+  furious. Four fed days: content. Old saves read 1.
+- **Work.** `WorkFactor(h) = clamp01(mood / 0.5)` scales gathering,
+  working and building (builders are a sum of factors now, not a count).
+  A camp does not stop dead, it slows, which is what makes the decline
+  catchable. **A hand bringing in food is never docked** (`WorkFactorOn`):
+  foraging IS gathering food, and without the exemption a camp that ran
+  out once could never eat its way back. `RatePerDay` mirrors all of it.
+- **The tell.** Headline: *NO FOOD — they forage instead of working*, or
+  *2 hands are angry*. Ashore row: `name · gathering timber · hungry`
+  (mood < 0.95) / `· angry` (mood < 0.5). No crew tint (that channel is
+  seasickness). The behavioural tell the plan recommended — an angry hand
+  does not come down to meet the boat — is NOT built.
+
+**Placeholders, none played:** 0.5 / 0.25 / 3 days / the 0.5 anger line.
+Still open: mood lives on the ledger row, so it resets when a hand
+re-boards (the plan wanted it on `CrewMemberDef`); the return card does not
+mention anger; no probe gates any of it.
