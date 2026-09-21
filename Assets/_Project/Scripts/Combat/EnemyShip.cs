@@ -37,7 +37,11 @@ namespace SeaSick.Combat
             return n;
         }
 
-        public enum Duty { Patrol, Block, Chase, Return }
+        /// Raid is a duty, not a mode flag, because everything that makes a
+        /// raider tick already switches on duty — one more case keeps the
+        /// beaching ship inside the same state machine the player has been
+        /// reading since the first patrol.
+        public enum Duty { Patrol, Block, Chase, Return, Raid }
 
         [Header("Hull")]
         [SerializeField] float hitRadius = 4.2f;   // half-beam-ish; length comes from HitAxis
@@ -55,6 +59,13 @@ namespace SeaSick.Combat
         [SerializeField] float alertRange = 260f;   // player this close to the island: block
         [SerializeField] float chaseRange = 130f;   // this close: go for them
         [SerializeField] float standDownRange = 340f;
+
+        [Header("Raid")]
+        // Two ways to know she has arrived, because neither is reliable alone:
+        // the site's water point can be a few metres off after the hull has
+        // been shoved about, and the terrain sampler is not always installed.
+        [SerializeField] float beachStop = 8f;    // this close to Site.water counts as beached
+        [SerializeField] float beachDepth = 3f;   // ...or this little water under her
 
         [Header("Guns")]
         [SerializeField] float gunRange = 60f;
@@ -133,6 +144,61 @@ namespace SeaSick.Combat
         public Duty Current { get; private set; } = Duty.Patrol;
         public Island Home => home;
         public float PatrolRadius => orbitRadius;
+
+        // ---------------------------------------------------------------- raid
+
+        /// The landing party, once she has grounded. Owned by its own
+        /// GameObject rather than parented here, so sinking the ship does not
+        /// delete the men on the beach — they see `!ship.Alive` themselves,
+        /// drop what they are carrying and run.
+        RaidParty party;
+
+        public bool Raiding => Current == Duty.Raid;
+        /// Grounded and holding: sails come off, guns stay manned.
+        public bool Beached { get; private set; }
+        public RaidSite Site { get; private set; }
+
+        /// Send her at a camp. Called by RaidDirector, which picks the site.
+        public void BeginRaid(RaidSite site)
+        {
+            if (!Alive) return;
+            Site = site;
+            Current = Duty.Raid;
+            Beached = false;
+            party = null;
+        }
+
+        /// Call the party back and put to sea. Duty.Return is deliberate: it
+        /// already falls through into the patrol orbit, so a beaten raider
+        /// rejoins the ring she came from without a second exit path.
+        public void EndRaid()
+        {
+            if (!Raiding) return;
+            party?.Recall();
+            party = null;
+            Beached = false;
+            Current = Duty.Return;
+        }
+
+        /// A raider off `isle` with nothing better to do — who the director
+        /// taps for the next raid. First fit, not nearest: they all share one
+        /// orbit, so "nearest" would be noise.
+        public static EnemyShip IdleAt(Island isle)
+        {
+            if (isle == null) return null;
+            foreach (var r in All)
+                if (r != null && r.Alive && r.Home == isle && !r.Raiding) return r;
+            return null;
+        }
+
+        /// Metres of water under a point, or +inf when nothing has published a
+        /// terrain sampler — an unknown bottom must never read as shallow, or
+        /// a raider beaches herself in the middle of the sea.
+        static float DepthAt(Vector3 p)
+        {
+            var h = Island.TerrainHeight;
+            return h != null ? -h(p.x, p.z) : float.PositiveInfinity;
+        }
 
         /// One registry handle per raider instead of a main-thread
         /// `SampleImmediate` per raider per frame. See RideSea for the
@@ -381,6 +447,27 @@ namespace SeaSick.Combat
             Vector3 centre = home != null ? home.transform.position : Vector3.zero;
             Vector3 pos = transform.position;
 
+            // A raid outranks every other duty. None of the alert/chase/
+            // stand-down transitions below may run while she is on one: a
+            // raider that switched to Chase halfway to the beach would turn
+            // the raid into the same patrol skirmish it was meant to replace,
+            // and the player would never see a landing.
+            if (Raiding)
+            {
+                // Half her hull gone and she is done — the player can break a
+                // raid by fighting the ship, which is the whole bargain.
+                if (Health01 < 0.5f) { EndRaid(); return CircleGoal(centre, pos); }
+
+                if (!Beached
+                    && (Flat(Site.water - pos).sqrMagnitude <= beachStop * beachStop
+                        || DepthAt(pos) < beachDepth))
+                {
+                    Beached = true;
+                    party = RaidParty.Begin(this);
+                }
+                return Site.water;
+            }
+
             float playerToIsland = player != null
                 ? Flat(player.transform.position - centre).magnitude : float.MaxValue;
 
@@ -425,16 +512,21 @@ namespace SeaSick.Combat
                     return centre + toPlayer * standoff;
 
                 default:
-                    // Steer to a point further round the circle than we are
-                    // now, which gives a smooth orbit instead of the in-out
-                    // weave you get from chasing the nearest point on it.
-                    Vector3 fromCentre = Flat(pos - centre);
-                    if (fromCentre.sqrMagnitude < 1f) fromCentre = Vector3.forward;
-                    float ang = Mathf.Atan2(fromCentre.x, fromCentre.z) * Mathf.Rad2Deg
-                                + orbitLeadDeg * patrolSign;
-                    return centre + new Vector3(
-                        Mathf.Sin(ang * Mathf.Deg2Rad), 0f, Mathf.Cos(ang * Mathf.Deg2Rad)) * orbitRadius;
+                    return CircleGoal(centre, pos);
             }
+        }
+
+        /// Steer to a point further round the circle than we are now, which
+        /// gives a smooth orbit instead of the in-out weave you get from
+        /// chasing the nearest point on it.
+        Vector3 CircleGoal(Vector3 centre, Vector3 pos)
+        {
+            Vector3 fromCentre = Flat(pos - centre);
+            if (fromCentre.sqrMagnitude < 1f) fromCentre = Vector3.forward;
+            float ang = Mathf.Atan2(fromCentre.x, fromCentre.z) * Mathf.Rad2Deg
+                        + orbitLeadDeg * patrolSign;
+            return centre + new Vector3(
+                Mathf.Sin(ang * Mathf.Deg2Rad), 0f, Mathf.Cos(ang * Mathf.Deg2Rad)) * orbitRadius;
         }
 
         /// Bearing to the goal, bent away from anything solid in the way.
@@ -454,7 +546,10 @@ namespace SeaSick.Combat
             // bearing we are actually approaching from. A raider's own island
             // is still solid — orbiting it must not mean sailing through it.
             var isle = Island.Nearest(probe);
-            if (isle != null)
+            // On a raid the camp's own shore is the destination, not a hazard.
+            // Avoidance would bend her round the island forever and she would
+            // never land. Every other island, and every reef, still turns her.
+            if (isle != null && !(Raiding && isle == home))
                 dir = Avoid(pos, dir, isle.transform.position, isle.RadiusToward(probe));
 
             var reef = Reef.Nearest(probe);
@@ -508,6 +603,11 @@ namespace SeaSick.Combat
             // Hard turns cost way, same as the player's hull.
             float target = maxSpeed * sea
                            * Mathf.Lerp(1f, 0.72f, Mathf.Clamp01(Mathf.Abs(delta) / 60f));
+
+            // Aground: she holds. The wind is still on her sails in the fiction
+            // but her keel is in the sand, so the wanted speed is zero
+            // outright rather than whatever the polar would have given her.
+            if (Beached) target = 0f;
 
             speed = Mathf.MoveTowards(speed, target, acceleration * dt);
             transform.position += Forward() * speed * dt;
@@ -565,27 +665,56 @@ namespace SeaSick.Combat
             }
         }
 
-        /// Fire when a side bears and the player is in reach. Same bargain the
-        /// player has: no firing arc without giving up the bow.
+        /// Fire when a side bears and something is in reach — the player's
+        /// hull or a watchtower. Same bargain the player has: no firing arc
+        /// without giving up the bow, whatever she is shooting at.
         void TryFire()
         {
-            if (player == null || Time.time < readyAt) return;
+            if (Time.time < readyAt) return;
 
-            Vector3 to = Flat(player.transform.position - transform.position);
-            float dist = to.magnitude;
-            if (dist > gunRange || dist < 1f) return;
+            // Nearest target in reach, of the two kinds a raider has: the
+            // player's hull and any watchtower still standing. Nearest rather
+            // than "player first", because a raider that sails past a tower
+            // shooting at her to keep plinking at a distant player reads as
+            // not noticing she is being shot.
+            Vector3 pos = transform.position;
+
+            float playerRange = float.MaxValue;
+            if (player != null)
+            {
+                float d = Flat(player.transform.position - pos).magnitude;
+                if (d <= gunRange && d >= 1f) playerRange = d;
+            }
+
+            float towerRange = float.MaxValue;
+            WatchtowerGun tower = null;
+            var towers = WatchtowerGun.All;
+            for (int i = 0; towers != null && i < towers.Count; i++)
+            {
+                var t = towers[i];
+                if (t == null || !t.Alive) continue;
+                float d = Flat(t.HitCentre - pos).magnitude;
+                if (d > gunRange || d < 1f || d >= towerRange) continue;
+                towerRange = d; tower = t;
+            }
+
+            // On a raid the tower wins whenever one bears at all: the guns on
+            // the hill are what stops a landing, so silencing them is the
+            // raid's own business and the player is a distraction from it.
+            bool atTower = tower != null && (Raiding || towerRange < playerRange);
+            if (!atTower) tower = null;
+            if (tower == null && playerRange == float.MaxValue) return;
+
+            float dist = atTower ? towerRange : playerRange;
+            Vector3 aim = AimPoint(tower, dist);
+            Vector3 to = Flat(aim - pos);
+            if (to.sqrMagnitude < 0.01f) return;
 
             float rel = Vector3.SignedAngle(Forward(), to, Vector3.up);
             bool starboard = rel >= 0f;
             if (Mathf.Abs(Mathf.DeltaAngle(rel, starboard ? 90f : -90f)) > fireArcDeg) return;
 
             readyAt = Time.time + reloadTime;
-
-            // Lead only partly — see leadFactor.
-            float flight = dist / Mathf.Max(1f, muzzleSpeed);
-            Vector3 aim = player.transform.position
-                          + player.Velocity * (leadFactor * flight)
-                          + Vector3.up * 1.6f;
 
             var guns = starboard ? starGuns : portGuns;
             Vector3 beam = starboard ? transform.right : -transform.right;
@@ -612,6 +741,20 @@ namespace SeaSick.Combat
             gunHeelVel += recoilRoll * (starboard ? 1f : -1f);
         }
 
+        /// Where to point the guns for one target. A tower does not move, so
+        /// there is nothing to lead and its own hit centre is the aim point; a
+        /// ship gets the partial lead that makes changing course a real dodge
+        /// (see leadFactor). Passing null means "the player".
+        Vector3 AimPoint(WatchtowerGun tower, float dist)
+        {
+            if (tower != null) return tower.HitCentre;
+
+            float flight = dist / Mathf.Max(1f, muzzleSpeed);
+            return player.transform.position
+                   + player.Velocity * (leadFactor * flight)
+                   + Vector3.up * 1.6f;
+        }
+
         /// The shoreline is solid, not merely discouraged. Islands are not
         /// circles, so the radius is taken on the bearing the raider is
         /// actually sitting on.
@@ -620,7 +763,13 @@ namespace SeaSick.Combat
             Vector3 pos = transform.position;
 
             var isle = Island.Nearest(pos);
-            if (isle != null) Shove(isle.transform.position, isle.RadiusToward(pos), hullMargin);
+            // Same exemption as Steer, and a harder one: this shove is the
+            // solid shoreline, so leaving it on would physically hold her off
+            // the sand she is trying to run up. When EndRaid fires it comes
+            // back and pushes her out again, which is exactly the shove off
+            // the beach she wants anyway.
+            if (isle != null && !(Raiding && isle == home))
+                Shove(isle.transform.position, isle.RadiusToward(pos), hullMargin);
 
             var reef = Reef.Nearest(pos);
             if (reef != null) Shove(reef.transform.position, reef.Radius, hullMargin * 0.5f);
@@ -669,6 +818,15 @@ namespace SeaSick.Combat
                 diedAt = Time.time;
                 HitTargets.Unregister(this);
                 Ocean.DynamicWaterSim.Splash(transform.position, 18f, 2.6f);
+
+                // Sunk mid-raid: deliberately NOT a Recall. A recall is an
+                // orderly withdrawal; this is the ship going down under the
+                // men on the beach, and the party reads `!ship.Alive` itself,
+                // drops the loot and runs. Site is left as it was so they can
+                // still find the shore they came up. Nothing is destroyed
+                // here — Sink takes this GameObject, and the party lives on
+                // its own object precisely so it outlives her.
+                if (Raiding) { Beached = false; Current = Duty.Return; }
             }
             return true;
         }

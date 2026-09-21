@@ -114,6 +114,12 @@ namespace SeaSick.Ship
         }
 
         bool built;
+        bool authoredBattery;
+        Crew.CrewAgent AssignedCrew(int index)
+        {
+            var hand = roster == null ? null : roster.GunCrew(authoredBattery ? index / 2 : index);
+            return hand != null && hand.gameObject.activeInHierarchy ? hand : null;
+        }
 
         Material MakeWood()
         {
@@ -141,6 +147,7 @@ namespace SeaSick.Ship
         /// Shipyard on her still wants.
         public void Fit(IList<Vector3> starboardLocal)
         {
+            authoredBattery = false;
             foreach (var c in allGuns)
                 if (c != null) Destroy(c.gameObject);
             port.Clear(); starboard.Clear(); allGuns.Clear();
@@ -186,6 +193,30 @@ namespace SeaSick.Ship
             PostGunCrews();
         }
 
+        public void FitAuthored(FleetVisual visual)
+        {
+            authoredBattery = true;
+            foreach (var c in allGuns) if (c != null) { c.gameObject.SetActive(false); Destroy(c.gameObject); }
+            port.Clear(); starboard.Clear(); allGuns.Clear();
+            motor = GetComponent<ShipMotor>();
+            fittedMidZ = 0;
+            foreach (var template in visual.gunTemplates) fittedMidZ += template.localPosition.z;
+            if (visual.gunTemplates.Length > 0) fittedMidZ /= visual.gunTemplates.Length;
+            hasFittedMid = visual.gunTemplates.Length > 0;
+            foreach (var template in visual.gunTemplates)
+            {
+                var go = Instantiate(template.gameObject, transform, false);
+                go.name = "Fitted" + template.name;
+                go.SetActive(true);
+                var cannon = go.AddComponent<Cannon>();
+                cannon.BuildAuthored(go.GetComponent<FleetGun>());
+                (go.transform.localPosition.x > 0 ? starboard : port).Add(cannon);
+                allGuns.Add(cannon);
+            }
+            built = true;
+            PostGunCrews();
+        }
+
         float fittedMidZ;
         bool hasFittedMid;
 
@@ -205,7 +236,7 @@ namespace SeaSick.Ship
 
             for (int i = 0; i < allGuns.Count; i++)
             {
-                var hand = roster.GunCrew(i);
+                var hand = AssignedCrew(i);
                 if (hand == null || allGuns[i] == null) continue;
 
                 Vector3 gun = allGuns[i].transform.localPosition;
@@ -304,7 +335,7 @@ namespace SeaSick.Ship
                 if (gun == null) continue;
                 if (roster == null) { gun.Manned = true; gun.ReloadScale = 1f; continue; }
 
-                var hand = roster.GunCrew(i);
+                var hand = AssignedCrew(i);
                 gun.Manned = hand != null && hand.Available;
                 gun.ReloadScale = hand != null ? hand.WorkRate01 : 0f;
             }
@@ -341,7 +372,7 @@ namespace SeaSick.Ship
             // The player's hull is a target now, so every lookup has to say
             // who is asking or the guns train on their own ship.
             if (self == null) self = GetComponent<Combat.PlayerHull>();
-            var target = Combat.HitTargets.Nearest(transform.position, out float dist, self);
+            var target = NearestHostile(transform.position, out float dist, self);
             if (target != null && dist <= GunRange * 1.4f)
             {
                 Vector3 toTarget = target.HitCentre - transform.position;
@@ -352,6 +383,26 @@ namespace SeaSick.Ship
             }
 
             foreach (var c in side) if (c != null) c.TrainOn(aim, dt);
+        }
+
+        /// `HitTargets.Nearest` with friendlies (watchtowers) excluded — the
+        /// player's own guns train on raiders, never on the towers helping
+        /// them fight. Local rather than a change to `HitTargets`, since a
+        /// raider's own guns are meant to see everything.
+        static Combat.IHittable NearestHostile(Vector3 pos, out float distance, Combat.IHittable ignore)
+        {
+            Combat.IHittable best = null;
+            float bestSq = float.MaxValue;
+            foreach (var t in Combat.HitTargets.All)
+            {
+                if (t == null || !t.Alive || ReferenceEquals(t, ignore) || t is Combat.IFriendly) continue;
+                Vector3 d = t.HitCentre - pos;
+                d.y = 0f;
+                float sq = d.sqrMagnitude;
+                if (sq < bestSq) { bestSq = sq; best = t; }
+            }
+            distance = best != null ? Mathf.Sqrt(bestSq) : float.PositiveInfinity;
+            return best;
         }
 
         void OnGUI()

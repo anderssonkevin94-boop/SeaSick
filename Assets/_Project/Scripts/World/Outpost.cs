@@ -890,6 +890,7 @@ namespace SeaSick.World
                 // has already run (every caller ticks before hiding), so
                 // nothing before this moment leaks into the absence.
                 if (leaving) ledger?.BeginAbsence(TimeOfDay.Seconds);
+                if (leaving) Combat.RaidDirector.Forget(this);
             }
         }
 
@@ -1357,6 +1358,93 @@ namespace SeaSick.World
         /// The height field is the authority everywhere in this codebase; this
         /// is just the polite way to ask an outpost for it.
         public float GroundAt(Vector3 at) => height != null ? height(at.x, at.z) : at.y;
+
+        // --- the live raid, 2026-09-22 -----------------------------------------
+
+        /// **The nearest shore to a point, as a raider would use it**: `shore`
+        /// is dry sand a step above the waterline, `water` is where a hull
+        /// can stop with ~5 m under it. Sixteen headings out from `from`,
+        /// half-metre steps to 120 m, the shortest wins. False if no heading
+        /// reaches water that deep -- a camp in the middle of a big island
+        /// is not raidable from its own fire, and says so.
+        public bool ShoreNear(Vector3 from, out Vector3 shore, out Vector3 water)
+        {
+            shore = from; water = from;
+            if (height == null) return false;
+            const float Step = 0.5f, Reach = 120f, WantDepth = 5f, LandUp = 1.5f;
+            float best = float.MaxValue;
+            for (int k = 0; k < 16; k++)
+            {
+                float a = k * (Mathf.PI * 2f / 16f);
+                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                Vector3 land = from; bool haveLand = false;
+                for (float d = Step; d <= Reach; d += Step)
+                {
+                    Vector3 q = from + dir * d;
+                    float h = height(q.x, q.z);
+                    if (!haveLand)
+                    {
+                        if (h >= 0f) land = q;
+                        else haveLand = true;   // crossed the waterline
+                    }
+                    if (haveLand && -h >= WantDepth)
+                    {
+                        if (d < best)
+                        {
+                            best = d;
+                            // Back up the beach a little so the party lands
+                            // on sand, not in the wash.
+                            Vector3 s = land - dir * LandUp;
+                            s.y = height(s.x, s.z);
+                            shore = s;
+                            q.y = 0f;
+                            water = q;
+                        }
+                        break;
+                    }
+                }
+            }
+            return best < float.MaxValue;
+        }
+
+        /// **A building is gone**: the raiders have knocked the watchtower
+        /// down, or anything else that can end a building later. The books
+        /// and the ground agree again: one `built` id out, its `raised` row
+        /// (nearest by position) out, anybody assigned to it idle, the object
+        /// destroyed. The ledger's ceiling follows on the next `CatchUp`.
+        public void Demolish(Building b)
+        {
+            if (b == null) return;
+            string id = b.Id;
+            built.Remove(b);
+            if (ledger != null)
+            {
+                ledger.built.Remove(id);
+                int bestI = -1; float bestD = float.MaxValue;
+                for (int i = 0; i < ledger.raised.Count; i++)
+                {
+                    var r = ledger.raised[i];
+                    if (r == null || r.planId != id) continue;
+                    float d = (r.At - new Vector3(b.transform.position.x, 0f, b.transform.position.z)).sqrMagnitude;
+                    if (d < bestD) { bestD = d; bestI = i; }
+                }
+                if (bestI >= 0) ledger.raised.RemoveAt(bestI);
+                if (!ledger.built.Contains(id))
+                    foreach (var h in ledger.hands)
+                        if (h != null && h.order == OutpostOrder.Work && h.target == id)
+                        { h.order = OutpostOrder.Idle; h.target = ""; }
+            }
+            Destroy(b.gameObject);
+            if (Watched) { ArrangeHands(); PuppetsToWork(); }
+        }
+
+        /// The raid director only thinks about a camp somebody is standing
+        /// at: a raid is something you FIGHT, so it happens in front of you.
+        /// (What happens while you are away is the ledger's clock.)
+        void Update()
+        {
+            if (Watched && HasCamp) Combat.RaidDirector.Consider(this, Time.deltaTime);
+        }
 
         // --- telling one hand what to do -------------------------------------
 

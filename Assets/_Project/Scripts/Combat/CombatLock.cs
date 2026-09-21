@@ -98,7 +98,7 @@ namespace SeaSick.Combat
 
             foreach (var t in HitTargets.All)
             {
-                if (t == null || !t.Alive || ReferenceEquals(t, self) || t is PlayerHull) continue;
+                if (t == null || !t.Alive || ReferenceEquals(t, self) || t is PlayerHull || t is IFriendly) continue;
                 Vector3 d = t.HitCentre - transform.position;
                 d.y = 0f;
                 float sq = d.sqrMagnitude;

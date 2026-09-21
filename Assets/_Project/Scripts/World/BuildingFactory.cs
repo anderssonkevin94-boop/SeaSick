@@ -74,6 +74,7 @@ namespace SeaSick.World
                 if (plan.kind == BuildKind.Fire) Firelight(root.transform);
                 else Lamp(root.transform, plan);
                 root.AddComponent<Building>().Configure(plan);
+                Arm(root, plan);
                 return root;
             }
 
@@ -146,7 +147,17 @@ namespace SeaSick.World
 
             Lamp(root.transform, plan);
             root.AddComponent<Building>().Configure(plan);
+            Arm(root, plan);
             return root;
+        }
+
+        /// A watchtower carries a gun and can be shot at. Both exits of
+        /// `Raise` come through here, for the same reason they share the
+        /// `Building` line above.
+        static void Arm(GameObject root, BuildPlan plan)
+        {
+            if (plan.id == OutpostLedger.WatchtowerId)
+                root.AddComponent<Combat.WatchtowerGun>();
         }
 
         /// **The blueprint: what it will look like, standing there not built.**
@@ -172,6 +183,10 @@ namespace SeaSick.World
             if (pier != null) Object.Destroy(pier);
             foreach (var f in root.GetComponentsInChildren<Campfire>(true))
                 Object.Destroy(f);
+            // A ghost tower has no gun and cannot be shot: `WatchtowerGun`
+            // registers itself as a target in OnEnable, so it goes now.
+            foreach (var g in root.GetComponentsInChildren<Combat.WatchtowerGun>(true))
+                Object.DestroyImmediate(g);
             // The light goes with its GameObject: an unlit fire that still
             // lights the trees is the one tell that would read as a bug.
             foreach (var l in root.GetComponentsInChildren<Light>(true))

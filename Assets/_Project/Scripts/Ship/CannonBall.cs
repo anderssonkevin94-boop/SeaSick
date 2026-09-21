@@ -128,6 +128,13 @@ namespace SeaSick.Ship
 
             Vector3 dir = velocity / speed;
 
+            // The player never gets assisted onto a watchtower or anything
+            // else on their own side — aim assist is a courtesy for fighting
+            // raiders, not a reason to shell your own camp. A ball can still
+            // hit a friendly by SweepFirst if it is genuinely on course;
+            // that is friendly fire, not assist.
+            bool skipFriendlies = owner is PlayerHull;
+
             IHittable best = null;
             Vector3 bestIdeal = Vector3.zero;
             float bestMiss = float.MaxValue;
@@ -136,6 +143,7 @@ namespace SeaSick.Ship
             foreach (var h in HitTargets.All)
             {
                 if (h == null || !h.Alive || ReferenceEquals(h, owner)) continue;
+                if (skipFriendlies && h is IFriendly) continue;
 
                 Vector3 to = h.HitCentre - from;
                 Vector3 flat = new Vector3(to.x, 0f, to.z);

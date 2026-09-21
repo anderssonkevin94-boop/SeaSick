@@ -1,0 +1,60 @@
+using UnityEngine;
+
+namespace SeaSick.UI
+{
+    /// The one line a watched camp shows about the raid it's living through
+    /// (or just finished) -- a warning while a raider is standing off, a
+    /// scoreline while her party is on the sand, and a verdict for a few
+    /// seconds after the ship has gone. Kept as a static drawer beside
+    /// `ReturnSummary`, same `OnGUI`/`HudLayout.ToastRow` idiom, so the two
+    /// toasts never fight for the same row.
+    public static class RaidBanner
+    {
+        static readonly HudLabel label = new HudLabel();
+
+        /// Called every OnGUI event from `CampSheet.OnGUI`. Costs nothing
+        /// when there's nothing to say.
+        public static void Draw(World.Outpost outpost)
+        {
+            if (outpost == null) return;
+
+            string text;
+            int phase;
+
+            var incoming = SeaSick.Combat.RaidDirector.Incoming(outpost);
+            if (incoming != null && !incoming.Beached)
+            {
+                if (!SeaSick.Combat.RaidDirector.WarnedOf(outpost)) return;
+                text = "the lookout: RAIDERS making for the beach";
+                phase = 1;
+            }
+            else if (SeaSick.Combat.RaidParty.Active != null && SeaSick.Combat.RaidParty.Active.Camp == outpost)
+            {
+                var party = SeaSick.Combat.RaidParty.Active;
+                text = $"RAID — {party.Ashore} ashore · {party.Stolen} taken · sink the ship";
+                phase = 2;
+            }
+            else
+            {
+                string last = SeaSick.Combat.RaidDirector.LastResult(outpost);
+                if (string.IsNullOrEmpty(last)) return;
+                text = last;
+                phase = 3;
+            }
+
+            int stolen = SeaSick.Combat.RaidParty.Active != null ? SeaSick.Combat.RaidParty.Active.Stolen : 0;
+            int ashore = SeaSick.Combat.RaidParty.Active != null ? SeaSick.Combat.RaidParty.Active.Ashore : 0;
+            long key = HudLabel.Key(outpost.GetInstanceID(), stolen, ashore, phase);
+            if (label.Changed(key)) label.Set(text);
+
+            var style = UITheme.Toast;
+            float width = Mathf.Min(HudLayout.Safe.width - HudLayout.Unit * 2f, HudLayout.Unit * 30f);
+            float height = HudLayout.Unit * 2.2f;
+
+            var rect = HudLayout.ToastRow(height, width);
+            UITheme.Rect(rect, UITheme.PanelSolid);
+            var inset = new Rect(rect.x + HudLayout.Pad, rect.y, rect.width - HudLayout.Pad * 2f, rect.height);
+            GUI.Label(inset, label.Content, style);
+        }
+    }
+}
