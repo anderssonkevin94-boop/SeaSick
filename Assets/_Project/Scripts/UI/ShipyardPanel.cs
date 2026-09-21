@@ -128,6 +128,12 @@ namespace SeaSick.UI
                     k = k * 31 + voyage.Banked(res);
                 k = k * 31 + (voyage.AtHome ? 1 : 0);
             }
+            // The yard's outlook, tacked onto the price line below. `TargetLine`
+            // caches its own string, so asking every event is cheap; what is
+            // not cheap is re-formatting `nextText` every event, which is what
+            // folding the outlook's hash into this key avoids.
+            string outlook = SeaSick.Ship.TargetLine.Outlook(voyage, yard);
+            k = k * 31 + (outlook != null ? outlook.GetHashCode() : 0);
             if (k == textKey) return;
             textKey = k;
 
@@ -174,6 +180,8 @@ namespace SeaSick.UI
                     : $"next: {next.label} — free";
                 nextAfford = SeaSick.Ship.ShipPrices.CannotAfford(price, voyage) == null;
             }
+            if (!string.IsNullOrEmpty(outlook))
+                nextText += "   ·   " + outlook;
 
             quantityReading[(int)SeaSick.Ship.BayUse.Battery] = $"{yard.Guns} a side";
             quantityReading[(int)SeaSick.Ship.BayUse.Quarters] = $"{yard.Berths} of 20";

@@ -65,8 +65,9 @@ namespace SeaSick.UI
         ShipMotor motor;
         VoyageManager voyage;
         ShipHold hold;
+        Shipyard yard;
 
-        GUIStyle title, row, body;
+        GUIStyle title, row, body, rate;
         readonly StringBuilder sb = new StringBuilder();
 
         // --- every string this bar draws, built only when it changes ----------
@@ -84,6 +85,20 @@ namespace SeaSick.UI
         string[] storeRes = new string[0];
         string[] storeNames = new string[0];
         string[] storeCounts = new string[0];
+
+        /// The rate column, keyed SEPARATELY from `storeRows` above: a rate is
+        /// a property of the camp's ORDERS, and the rows are a property of its
+        /// PILES. Folding them into one key would rebuild every rate string
+        /// each time a hand drops a log, which is every tick, for a number
+        /// that only moves when an order changes.
+        string[] storeRates = new string[0];
+        int rateFrame = -1;
+        long ratesKey = long.MinValue;
+
+        /// The target line under the store rows — read once a frame, since
+        /// `TargetLine` caches internally but the call still walks outposts.
+        int targetFrame = -1;
+        string targetLine = "";
 
         /// The loading line, which moves while the crew carry.
         readonly HudLabel loadingText = new HudLabel();
@@ -126,6 +141,7 @@ namespace SeaSick.UI
             // the goods evaporate into a number half-way down the beach.
             hold = anchor != null ? anchor.GetComponent<ShipHold>() : null;
             if (hold == null) hold = Object.FindFirstObjectByType<ShipHold>();
+            yard = Object.FindFirstObjectByType<Shipyard>();
 
             // Siting mode rides along with the sheet that starts it rather
             // than being a second thing to place in `Sea.unity`. The scene is
@@ -375,6 +391,7 @@ namespace SeaSick.UI
             bool showView = !string.IsNullOrEmpty(view) && (wide || storeRows == 0);
             float top = y + (showView ? lineH : 0f);
             float keepBelow = lineH + 3f * (rowH + 2f);      // headers + three names
+            if (outpost.HasCamp) keepBelow += lineH;         // the target line, drawn after the stores
             int rows = Mathf.Clamp(
                 Mathf.FloorToInt((inner.yMax - top - keepBelow) / storeH), 0, storeRows);
 
@@ -403,14 +420,20 @@ namespace SeaSick.UI
 
             if (rows > 0)
             {
+                RefreshRates(l);
+
                 float loadW = Mathf.Min(HudLayout.Unit * 6f, inner.width * 0.3f);
-                float nameW = (inner.width - loadW - HudLayout.Gap) * 0.62f;
-                float countW = inner.width - loadW - HudLayout.Gap - nameW;
+                float rateW = HudLayout.Unit * 5f;
+                float remaining = inner.width - loadW - rateW - HudLayout.Gap;
+                float nameW = remaining * 0.62f;
+                float countW = remaining - nameW;
                 bool canTake = CampLoading.RoomAboard(voyage) > 0 && !CampLoading.Busy;
                 for (int k = 0; k < rows; k++)
                 {
                     GUI.Label(new Rect(inner.x, y, nameW, storeH), storeNames[k], body);
                     GUI.Label(new Rect(inner.x + nameW, y, countW, storeH), storeCounts[k], body);
+                    if (k < storeRates.Length && !string.IsNullOrEmpty(storeRates[k]))
+                        GUI.Label(new Rect(inner.x + nameW + countW, y, rateW, storeH), storeRates[k], rate);
                     var lr = new Rect(inner.xMax - loadW, y + 1f, loadW, storeH - 2f);
                     UIBlocker.Block(lr);
                     GUI.enabled = canTake;
@@ -422,6 +445,23 @@ namespace SeaSick.UI
                 UITheme.Rect(new Rect(inner.x, y + HudLayout.Gap * 0.5f, inner.width, 1f),
                     UITheme.Track);
                 y += HudLayout.Gap;
+            }
+
+            // **The target line.** Not the piles — where the voyage is
+            // pointed. A camp that is only sited has no economy to aim, so it
+            // says nothing until there is a fire.
+            if (outpost.HasCamp)
+            {
+                if (targetFrame != Time.frameCount)
+                {
+                    targetFrame = Time.frameCount;
+                    targetLine = TargetLine.ForSheet(voyage, yard);
+                }
+                if (!string.IsNullOrEmpty(targetLine))
+                {
+                    GUI.Label(new Rect(inner.x, y, inner.width, lineH), targetLine, body);
+                    y += lineH;
+                }
             }
 
             float colGap = HudLayout.Gap;
@@ -799,6 +839,7 @@ namespace SeaSick.UI
                 storeRes = new string[l.stores.Count];
                 storeNames = new string[l.stores.Count];
                 storeCounts = new string[l.stores.Count];
+                storeRates = new string[l.stores.Count];
             }
             foreach (var s in l.stores)
             {
@@ -807,6 +848,39 @@ namespace SeaSick.UI
                 storeNames[storeRows] = CampLoading.Lower(s.resource);
                 storeCounts[storeRows] = s.whole + " / " + l.ceilingPer;
                 storeRows++;
+            }
+        }
+
+        /// The "+4/day" column, rebuilt at most once a frame and only when the
+        /// RATES themselves move. Keyed apart from `headKey`/`BuildRows`
+        /// above on purpose: a pile ticking up or down is not an order
+        /// changing, and this column is about orders.
+        void RefreshRates(OutpostLedger l)
+        {
+            if (rateFrame == Time.frameCount) return;
+            rateFrame = Time.frameCount;
+
+            if (l == null || storeRows == 0) { ratesKey = long.MinValue; return; }
+            if (storeRates.Length < storeRes.Length) storeRates = new string[storeRes.Length];
+
+            // Rounded to one decimal (×10) before it folds into the key, so a
+            // sub-decimal twitch that never reaches the printed digit does
+            // not cost a rebuild — the same idea as `HudLabel.Key`.
+            long key = 0L;
+            for (int k = 0; k < storeRows; k++)
+            {
+                int r = Mathf.RoundToInt(l.RatePerDay(storeRes[k]) * 10f);
+                key ^= (long)(r + k) * 2654435761L ^ ((long)k * 83492791L);
+            }
+            if (key == ratesKey) return;
+            ratesKey = key;
+
+            for (int k = 0; k < storeRows; k++)
+            {
+                float perDay = l.RatePerDay(storeRes[k]);
+                if (Mathf.Abs(perDay) < 0.05f) { storeRates[k] = ""; continue; }
+                string sign = perDay > 0f ? "+" : "−";
+                storeRates[k] = sign + Mathf.Abs(perDay).ToString("0.#") + "/day";
             }
         }
 
@@ -869,6 +943,7 @@ namespace SeaSick.UI
             title = new GUIStyle(UITheme.Small2Centered) { alignment = TextAnchor.MiddleLeft };
             body = new GUIStyle(UITheme.Small2Centered) { alignment = TextAnchor.MiddleLeft };
             row = new GUIStyle(UITheme.Button);
+            rate = new GUIStyle(body) { alignment = TextAnchor.MiddleRight };
         }
     }
 }

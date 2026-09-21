@@ -35,6 +35,30 @@ namespace SeaSick.World
         static readonly List<Outpost> all = new List<Outpost>();
         public static IReadOnlyList<Outpost> All => all;
 
+        /// Summed `MakeRatePerDay` for `resource` over every camp that
+        /// exists -- "how fast is this being made, across the whole
+        /// archipelago," for the target line. Allocation-free.
+        public static float MakeRateAcrossCamps(string resource)
+        {
+            float rate = 0f;
+            foreach (var o in all)
+                if (o != null && o.HasCamp && o.Ledger != null)
+                    rate += o.Ledger.MakeRatePerDay(resource);
+            return rate;
+        }
+
+        /// Summed pile of `resource` sitting in every camp's stores right
+        /// now -- what has already been made and is just waiting for a
+        /// voyage to carry it home.
+        public static int PiledAcrossCamps(string resource)
+        {
+            int total = 0;
+            foreach (var o in all)
+                if (o != null && o.HasCamp && o.Ledger != null)
+                    total += o.Ledger.CountOf(resource);
+            return total;
+        }
+
         /// Islands whose ground has been surveyed and found wanting.
         ///
         /// A refusal has to be remembered or it is not lazy at all: `Of`

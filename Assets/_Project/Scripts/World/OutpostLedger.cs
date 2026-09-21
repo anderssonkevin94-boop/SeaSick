@@ -1120,6 +1120,78 @@ namespace SeaSick.World
             return true;
         }
 
+        /// **Net units per game-day this camp changes `resource` by, at its
+        /// CURRENT orders, sign included.** Mirrors `Step` and `Stalled` term
+        /// for term so the readout never disagrees with what a quantum
+        /// actually pays -- a gatherer stalled on a full pile or a worked-out
+        /// stock does not count, same as `Step` would skip them. Read-only,
+        /// allocation-free: called once a frame per resource.
+        public float RatePerDay(string resource)
+        {
+            float rate = 0f;
+
+            foreach (var h in hands)
+            {
+                if (h == null) continue;
+
+                if (h.order == OutpostOrder.Gather)
+                {
+                    if (h.target != resource || Stalled(h)) continue;
+                    rate += Res.GatherRate(resource);
+                    continue;
+                }
+
+                if (h.order == OutpostOrder.Work)
+                {
+                    if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
+                    var plan = BuildPlans.Named(h.target);
+                    if (plan.rate <= 0f || Stalled(h)) continue;
+                    if (plan.makes == resource) rate += plan.rate;
+                    else if (plan.takes == resource) rate -= plan.rate;
+                }
+                // Build hauls from the pile into the blueprint -- a transfer,
+                // not production, so it never shows up here.
+            }
+
+            // Every quantum eats regardless of whether the pile can pay --
+            // an empty pile just means they go hungry, and the drain is the
+            // whole point of the readout.
+            if (resource == Res.Food && hands.Count > 0)
+                rate -= hands.Count * EatPerHandPerDay;
+
+            return rate;
+        }
+
+        /// Only the positive terms of `RatePerDay` -- what is being made or
+        /// gathered, ignoring what it costs to make it. "How fast is this
+        /// being produced," for the target line.
+        public float MakeRatePerDay(string resource)
+        {
+            float rate = 0f;
+
+            foreach (var h in hands)
+            {
+                if (h == null) continue;
+
+                if (h.order == OutpostOrder.Gather)
+                {
+                    if (h.target != resource || Stalled(h)) continue;
+                    rate += Res.GatherRate(resource);
+                    continue;
+                }
+
+                if (h.order == OutpostOrder.Work)
+                {
+                    if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
+                    var plan = BuildPlans.Named(h.target);
+                    if (plan.rate <= 0f || plan.makes != resource || Stalled(h)) continue;
+                    rate += plan.rate;
+                }
+            }
+
+            return rate;
+        }
+
         /// Put every hand here on the same order. Used when a blueprint goes
         /// down (everybody builds it) and when it is finished (everybody goes
         /// back to what an island is for).
