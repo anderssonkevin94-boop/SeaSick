@@ -49,6 +49,7 @@ Shader "SeaSick/Terrain Vertex Color"
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
@@ -275,6 +276,19 @@ Shader "SeaSick/Terrain Vertex Color"
                 float authoredMask = _AuthoredFormLighting * lerp(0.62, 1.0, saturate(i.color.a));
                 float3 authored = albedo * (max(ambient * 0.42, float3(0.10,0.10,0.10)) + light.color * authoredTint);
                 col = lerp(col, authored, authoredMask);
+                // Point lights: the campfire and the lamps. Lambert, no cel
+                // band, so a fire reads as a warm pool and not as a second
+                // sun; the pipeline lights four of these per object.
+                #if defined(_ADDITIONAL_LIGHTS)
+                {
+                    uint lightCount = GetAdditionalLightsCount();
+                    for (uint li = 0u; li < lightCount; li++)
+                    {
+                        Light pl = GetAdditionalLight(li, i.positionWS);
+                        col += albedo * pl.color * pl.distanceAttenuation * saturate(dot(n, pl.direction));
+                    }
+                }
+                #endif
                 col = MixFog(col, i.fog);
                 return half4(col, 1);
             }
