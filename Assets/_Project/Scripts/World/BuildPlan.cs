@@ -66,6 +66,34 @@ namespace SeaSick.World
         /// is a later pass.
         public int supports;
 
+        // --- the farm's field, 2026-09-21 ------------------------------------
+        //
+        // **Wheat on the island is gathered by hand; a farm is wheat that
+        // grows by the camp.** A farm is the one building whose input is not
+        // a pile but a FIELD, and the field is described here so that the
+        // ledger (which bounds the farmhand by it), the raise hook (which
+        // plants it) and the scenery (which draws it) all read one set of
+        // numbers. Zero on every plan that is not a farm.
+
+        /// Beds of wheat this building plants when it is raised. The kit's
+        /// farms have 4/6/8 crop modules of their own (`farm_01/02/03`) and
+        /// `BuildingFactory` names them `Bed_00..`; the coordinator plants
+        /// gatherable beds through `SceneryCrops.Plant` with this count.
+        public int beds;
+        /// Units of Food one bed holds standing. `beds * unitsPerBed` is what
+        /// raising the farm adds to the camp's standing Food
+        /// (`OutpostLedger.AddStanding`).
+        public int unitsPerBed;
+        /// Share of the field that grows back in a day, the way
+        /// `OutpostStock.regrowPerDay` is. Linear on `standingMax`, so a
+        /// field of 24 at 0.25 comes back 6 a day -- one farmhand's harvest.
+        public float bedRegrowPerDay;
+        /// Metres between planted beds, for beds laid out beside the building
+        /// in two rows rather than in the kit's own slots.
+        public float bedSpacing;
+        /// What the whole field holds when it is raised, in units of Food.
+        public float FieldStanding => beds * unitsPerBed;
+
         /// Path under `Resources/` of the authored model, or null to extrude
         /// one. Loaded at raise time and quietly fallen back on, so a missing
         /// asset costs a plainer building and never a broken camp.
@@ -205,6 +233,24 @@ namespace SeaSick.World
             prefab = "Settlement/sawmill",
         };
 
+        /// **The farm, 2026-09-21.** GDD 6: *"food is local ... wheat feeds
+        /// a settlement."* A farmhand takes nothing from the piles: the field
+        /// is the input. It is the same shape as the sawmill -- `position`,
+        /// `makes`, `rate`, one Work order with `target = "Farm"` -- with the
+        /// field described by `beds`, `unitsPerBed` and `bedRegrowPerDay`.
+        ///
+        /// **The numbers.** Six beds of four is 24 Food standing when it is
+        /// raised; a farmhand harvests `OutpostLedger.FoodPerHandPerDay` (6)
+        /// a day, and the field grows back a quarter of itself a day, which
+        /// is also 6. So one farm keeps exactly one farmhand busy, and a
+        /// second farmhand on the same farm strips it in four days and then
+        /// shares the regrowth. Into the camp stores, under the same ceiling
+        /// as everything else. **All guesses, none played.**
+        ///
+        /// `farm_01` wears four crop modules; `farm_02` is the six-bed kit
+        /// model (6.24 x 4.69 m) and is the one to switch to once it is in
+        /// `Resources/Settlement`. The plan says six either way, because the
+        /// field is planted from the plan, not counted off the model.
         public static readonly BuildPlan Farm = new BuildPlan
         {
             id = "Farm",
@@ -216,9 +262,25 @@ namespace SeaSick.World
             ridge = 1.01f,
             position = "farmhand",
             makes = Res.Food,
-            rate = 3f,
+            rate = OutpostLedger.FoodPerHandPerDay,
+            beds = FarmBeds,
+            unitsPerBed = FarmUnitsPerBed,
+            bedRegrowPerDay = FarmRegrowPerDay,
+            bedSpacing = FarmBedSpacing,
             prefab = "Settlement/farm_01",
         };
+
+        /// Beds a farm plants. Six: the kit's `farm_02` count, and a field
+        /// that one hand can keep up with.
+        public const int FarmBeds = 6;
+        /// Food standing in one bed when it is full.
+        public const int FarmUnitsPerBed = 4;
+        /// Share of the field that grows back in a day. A quarter: 24 * 0.25
+        /// is 6, one farmhand's day.
+        public const float FarmRegrowPerDay = 0.25f;
+        /// Metres between beds laid out beside the building, two rows of
+        /// three. The kit's own slots are 1.8 m apart across the aisle.
+        public const float FarmBedSpacing = 1.8f;
 
         public static readonly BuildPlan Blacksmith = new BuildPlan
         {

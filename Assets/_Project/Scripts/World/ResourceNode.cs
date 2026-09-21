@@ -12,10 +12,30 @@ namespace SeaSick.World
 
         [SerializeField] string resource = "Timber";
         [SerializeField] int hitsToHarvest = 3;
+        /// How many ledger units one prop stands for. A rock disappears every
+        /// four stone -- see `GatherSync`, which hides `floor(taken / this)`
+        /// props nearest the camp. Timber does not use it (trees are felled
+        /// one log each by `Outpost.SyncFelling`).
+        [SerializeField] int unitsPerProp = DefaultUnitsPerProp;
+
+        public const int DefaultUnitsPerProp = 4;
 
         public string Resource => resource;
         public int HitsToHarvest => hitsToHarvest;
-        public bool Harvested { get; private set; }
+        public int UnitsPerProp => Mathf.Max(1, unitsPerProp);
+
+        /// Gone, as far as anyone looking for something to work is concerned:
+        /// either a crew member took it (`Harvest`) or the ledger's arithmetic
+        /// has already used it up (`SetGathered`).
+        public bool Harvested => harvested || Gathered;
+        bool harvested;
+
+        /// **Hidden by `GatherSync` to match the ledger**, renderers off, the
+        /// object still active. It stays in `All` on purpose: the ledger's
+        /// `taken` can come back down (spice regrows), and then the same prop
+        /// has to come back -- a deactivated object would have left the list
+        /// and the sync could never find it again.
+        public bool Gathered { get; private set; }
         /// Claimed by one crew member so three of them don't converge on the
         /// same tree and two come away empty-handed.
         public CrewClaim Claim { get; private set; }
@@ -81,9 +101,28 @@ namespace SeaSick.World
             shakeStrength = 1f;
         }
 
+        /// Show or hide this prop to agree with the outpost ledger. Idempotent.
+        /// Toggles the renderers and colliders rather than the GameObject so
+        /// the node keeps its place in `All` (see `Gathered`). A gathered prop
+        /// is not a valid target: `Harvested` reads true, so `FindFree`,
+        /// `HandTargets.NearestNode` and `CampWorker` all skip it.
+        public void SetGathered(bool gathered)
+        {
+            if (Gathered == gathered) return;
+            Gathered = gathered;
+            if (gathered) Claim = default;
+            if (renderers == null) renderers = GetComponentsInChildren<Renderer>(true);
+            if (colliders == null) colliders = GetComponentsInChildren<Collider>(true);
+            foreach (var r in renderers) if (r != null) r.enabled = !gathered;
+            foreach (var c in colliders) if (c != null) c.enabled = !gathered;
+        }
+
+        Renderer[] renderers;
+        Collider[] colliders;
+
         public void Harvest()
         {
-            Harvested = true;
+            harvested = true;
             Claim = default;
             // A scenery tree has to come down in the MESH -- there is nothing
             // to deactivate, because this object was never what was drawn.

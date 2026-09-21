@@ -286,7 +286,7 @@ namespace SeaSick.World
         /// it.
         void ReleaseClaim()
         {
-            if (camp != null) camp.ReleaseTree(this);
+            if (camp != null) { camp.ReleaseTree(this); camp.ReleaseBed(this); }
             claimedTree = -1;
         }
 
@@ -898,6 +898,11 @@ namespace SeaSick.World
         {
             string what = WhatFor(r);
             Vector3 from = camp.CampCentre;
+
+            // Wheat: the camp hands out the bed the ledger will cut next,
+            // nearest the fire outward, one hand a bed (`Outpost.ClaimBed`).
+            if (what == Res.Food && camp.ClaimBed(this, out _, out Vector3 bedAt))
+                return Stand(bedAt);
 
             if (!string.IsNullOrEmpty(what) && what != Res.Timber)
             {

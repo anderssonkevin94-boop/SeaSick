@@ -254,6 +254,26 @@ namespace SeaSick.World
                 return t;
             }
 
+            // --- a bed of wheat ------------------------------------------------
+            // Resolved as a Node carrying Food, so the drop is the same
+            // `OrderGather` a stone or a spice prop gets.
+            var crops = outpost != null ? outpost.GetComponentInChildren<Terrain.SceneryCrops>() : null;
+            if (crops != null)
+            {
+                int bed = crops.NearestStanding(p, Mathf.Min(reach, 3f));
+                if (bed >= 0)
+                {
+                    t.kind = HandTarget.Kind.Node;
+                    t.resource = Res.Food;
+                    t.centre = crops.BedAt(bed).at;
+                    t.extent = Mathf.Max(1.4f, reach * 0.5f);
+                    t.verb = Verb(HandTarget.Kind.Node, who, Res.Food);
+                    t.refusal = cannotLand ?? (Gatherable(outpost, Res.Food)
+                        ? null : Refuse(Res.Food));
+                    return t;
+                }
+            }
+
             // --- ore, stone, spice ---------------------------------------------
             var node = NearestNode(outpost, p, reach);
             if (node != null)

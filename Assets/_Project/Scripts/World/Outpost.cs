@@ -114,6 +114,7 @@ namespace SeaSick.World
             // buildings ARE the ledger's ceiling, pushed in before every tick.
             ledger.ceilingPer = KeepsOfEach;
             ReconcileWood();
+            ReconcileCrops();
             ledger.Tick(TimeOfDay.Seconds);
 
             // The arithmetic can finish a building on an island nobody is
@@ -124,6 +125,8 @@ namespace SeaSick.World
             if (ledger.ReadyToRaise) FinishPending();
             else if (ledger.Building) EnsureBlueprint();
             SyncFelling();
+            GatherSync.Sync(this);   // stone, ore and spice props go as the seam is worked
+            SyncHarvest();
             // The piles beside the fire are drawn from the stores, so they
             // want to exist wherever the stores are being looked at.
             if (HasCamp) CampPiles.EnsureOn(this);
@@ -596,6 +599,7 @@ namespace SeaSick.World
                 // catches up first and lowers the flag second -- at that point
                 // the camp is still watched and the lag is still legal.
                 SyncFelling();
+                SyncHarvest();
             }
         }
 
@@ -1326,6 +1330,165 @@ namespace SeaSick.World
             string kind = Island != null ? Island.ResourceName : null;
             if (!string.IsNullOrEmpty(kind) && kind != Res.Timber && Res.IsGatherable(kind))
                 ledger.SeedStock(kind, workedHa);
+            EnsureFoodStock();
+        }
+
+        // --- the wheat ---------------------------------------------------------
+
+        /// The wheat dressed onto this island, cached like the wood.
+        Terrain.SceneryCrops CropsHere()
+        {
+            if (cropsCache == null) cropsCache = GetComponentInChildren<Terrain.SceneryCrops>();
+            return cropsCache;
+        }
+        Terrain.SceneryCrops cropsCache;
+
+        /// **An island with wheat on it has a Food stock.** Seeded by the
+        /// same hectare rule as every other resource (`Res.PerHectare`) so
+        /// the camp can be worked unloaded, and then, whenever the beds can
+        /// be seen, sized to them: one bed is one unit of Food, exactly as
+        /// `ReconcileWood` makes the trees the authority on timber.
+        void EnsureFoodStock()
+        {
+            if (ledger == null) return;
+            var crops = CropsHere();
+            if (crops == null || crops.BedCount == 0) return;
+            if (ledger.Stock(Res.Food) == null)
+                ledger.SeedStock(Res.Food, WorkedHectares());
+        }
+
+        /// Beds are the authority on Food while they are loaded: the ceiling
+        /// is the bed count, and the stock can never exceed what stands.
+        void ReconcileCrops()
+        {
+            var crops = CropsHere();
+            if (crops == null || crops.BedCount == 0) return;
+            EnsureFoodStock();
+            var stock = ledger.Stock(Res.Food);
+            if (stock == null) return;
+            stock.standingMax = crops.BedCount;
+            int standing = crops.Standing;
+            if (stock.standing > standing) stock.standing = standing;
+            else if (stock.standing < 1f && standing >= 1)
+                stock.standing = Mathf.Min(1f, standing);
+        }
+
+        /// How many beds the books say have been cut: the Food stock's
+        /// shortfall from its ceiling. Regrowth closes the gap, and the
+        /// beds stand up again from the back of the order.
+        public int BedsOwed
+        {
+            get
+            {
+                var stock = ledger != null ? ledger.Stock(Res.Food) : null;
+                if (stock == null) return 0;
+                return Mathf.Clamp(Mathf.FloorToInt(stock.standingMax - stock.standing + 1e-3f),
+                                   0, Mathf.RoundToInt(stock.standingMax));
+            }
+        }
+
+        /// **Make the field agree with the books**: harvested beds are a
+        /// prefix of the nearest-the-camp order, exactly `BedsOwed` long.
+        /// Pure in the ledger, like `SyncFelling`; a bed comes down the
+        /// moment the Food count pays for it and stands back up when the
+        /// regrowth has paid it back.
+        public void SyncHarvest()
+        {
+            if (ledger == null) return;
+            var crops = CropsHere();
+            if (crops == null || crops.BedCount == 0) return;
+            if (ledger.Stock(Res.Food) == null) return;
+            BuildHarvestOrder(crops);
+            int want = BedsOwed;
+            for (int k = 0; k < harvestOrder.Length; k++)
+            {
+                int i = harvestOrder[k];
+                if (k < want) crops.Harvest(i);
+                else crops.Regrow(i);
+            }
+        }
+
+        void BuildHarvestOrder(Terrain.SceneryCrops crops)
+        {
+            Vector3 c = CampCentre;
+            if (harvestOrder != null && harvestOrder.Length == crops.BedCount
+                && ReferenceEquals(harvestOrderCrops, crops)
+                && (harvestOrderFrom - c).sqrMagnitude < 0.25f) return;
+            var idx = new int[crops.BedCount];
+            var d2 = new float[crops.BedCount];
+            for (int i = 0; i < idx.Length; i++)
+            {
+                idx[i] = i;
+                Vector3 p = crops.BedAt(i).at - c;
+                p.y = 0f;
+                d2[i] = p.sqrMagnitude;
+            }
+            System.Array.Sort(d2, idx);
+            harvestOrder = idx;
+            harvestOrderFrom = c;
+            harvestOrderCrops = crops;
+        }
+
+        int[] harvestOrder;
+        Vector3 harvestOrderFrom;
+        Terrain.SceneryCrops harvestOrderCrops;
+
+        readonly List<CampWorker> bedHands = new List<CampWorker>();
+        readonly List<int> bedClaims = new List<int>();
+
+        /// **Give this hand the front-most standing bed nobody else is on**,
+        /// which is the bed the ledger will cut next. False with nothing
+        /// standing.
+        public bool ClaimBed(CampWorker w, out int bedIndex, out Vector3 at)
+        {
+            bedIndex = -1;
+            at = Vector3.zero;
+            var crops = CropsHere();
+            if (w == null || crops == null || crops.BedCount == 0) return false;
+            BuildHarvestOrder(crops);
+            for (int k = bedHands.Count - 1; k >= 0; k--)
+                if (bedHands[k] == null) { bedHands.RemoveAt(k); bedClaims.RemoveAt(k); }
+            for (int k = 0; k < harvestOrder.Length; k++)
+            {
+                int i = harvestOrder[k];
+                if (crops.BedAt(i).harvested) continue;
+                bool taken = false;
+                for (int j = 0; j < bedHands.Count; j++)
+                    if (bedClaims[j] == i && !ReferenceEquals(bedHands[j], w)) { taken = true; break; }
+                if (taken) continue;
+                int slot = bedHands.IndexOf(w);
+                if (slot < 0) { bedHands.Add(w); bedClaims.Add(i); }
+                else bedClaims[slot] = i;
+                bedIndex = i;
+                at = crops.BedAt(i).at;
+                return true;
+            }
+            return false;
+        }
+
+        public void ReleaseBed(CampWorker w)
+        {
+            for (int k = bedHands.Count - 1; k >= 0; k--)
+                if (bedHands[k] == null || ReferenceEquals(bedHands[k], w))
+                { bedHands.RemoveAt(k); bedClaims.RemoveAt(k); }
+        }
+
+        public bool BedIsHarvested(int bedIndex)
+        {
+            var crops = CropsHere();
+            if (crops == null || bedIndex < 0 || bedIndex >= crops.BedCount) return true;
+            return crops.BedAt(bedIndex).harvested;
+        }
+
+        /// **Farm hook.** Called with the building the moment a farm plot is
+        /// RAISED (never for a ghost). The farm system plants its beds here
+        /// through `Terrain.SceneryCrops.Plant`.
+        public static System.Action<Building> PlantFarmBeds;
+
+        void AfterRaised(BuildPlan plan, Building b)
+        {
+            if (b == null) return;
+            if (plan.id == BuildPlans.Farm.id) PlantFarmBeds?.Invoke(b);
         }
 
         /// Share of an island's disc that is worth working. The rest is
@@ -1710,6 +1873,7 @@ namespace SeaSick.World
                 // The spiral chose the spot; the save must not let it choose
                 // again. See `OutpostLedger.raised`.
                 if (ledger != null) ledger.RecordRaised(plan.id, p, facing.eulerAngles.y);
+                AfterRaised(plan, b);
                 return b;
             }
             return null;
@@ -1752,6 +1916,7 @@ namespace SeaSick.World
                 var pier = go.GetComponent<Pier>();
                 if (pier != null) pier.Register(b);
             }
+            AfterRaised(plan, b);
             return b;
         }
 

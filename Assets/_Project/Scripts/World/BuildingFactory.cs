@@ -66,6 +66,7 @@ namespace SeaSick.World
             // the same things out with it.**
             if (Dress(root.transform, plan))
             {
+                if (plan.beds > 0) NameBeds(root.transform);
                 Footing(root.transform, plan, footing);
                 // The kit's fire is a ring of stones and nothing else. The
                 // LIGHT is the whole reason a camp reads from the water at
@@ -264,6 +265,61 @@ namespace SeaSick.World
         }
 
         static readonly HashSet<string> warned = new HashSet<string>();
+
+        // --- the farm's beds, 2026-09-21 ------------------------------------
+
+        /// What a kit farm's crop modules are called once it is raised:
+        /// `Bed_00`, `Bed_01`, ... in the kit's own slot order.
+        public const string BedPrefix = "Bed_";
+        /// What its planting markers are called: `BedSlot_00`, ... -- the
+        /// empty at the centre of each bed, where a planted crop goes.
+        public const string BedSlotPrefix = "BedSlot_";
+
+        /// **The kit's beds ARE separable.** `farm_01/02/03` come out of
+        /// Blender as one structure mesh plus one crop module per bed
+        /// (`farm_01_Crop_00` ...), each with a `Plant_slot_NN` empty on it,
+        /// so the crop can be hidden, swapped or replanted one bed at a time.
+        /// The FBX keeps Blender's `.006` suffixes, so the match is on the
+        /// stem. Renamed rather than tagged: a name survives a prefab
+        /// variant, a save and a `Find`, and the kit's next export.
+        static void NameBeds(Transform root)
+        {
+            var crops = new List<Transform>();
+            var slots = new List<Transform>();
+            foreach (var t in root.GetComponentsInChildren<Transform>(true))
+            {
+                if (t.name.Contains("_Crop_")) crops.Add(t);
+                else if (Stem(t.name).StartsWith("Plant_slot_", System.StringComparison.Ordinal)) slots.Add(t);
+            }
+            crops.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+            slots.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+            for (int i = 0; i < crops.Count; i++) crops[i].name = BedPrefix + i.ToString("00");
+            for (int i = 0; i < slots.Count; i++) slots[i].name = BedSlotPrefix + i.ToString("00");
+        }
+
+        static string Stem(string name)
+        {
+            int dot = name.LastIndexOf('.');
+            return dot > 0 ? name.Substring(0, dot) : name;
+        }
+
+        /// The crop modules of a raised farm, in slot order. Four on
+        /// `farm_01`, six on `farm_02`, eight on `farm_03`; empty for
+        /// anything that is not a farm or was extruded.
+        public static List<Transform> BedsOf(Transform building) => Named(building, BedPrefix);
+
+        /// The planting markers of a raised farm, in slot order.
+        public static List<Transform> BedSlotsOf(Transform building) => Named(building, BedSlotPrefix);
+
+        static List<Transform> Named(Transform building, string prefix)
+        {
+            var found = new List<Transform>();
+            if (building == null) return found;
+            foreach (var t in building.GetComponentsInChildren<Transform>(true))
+                if (t.name.StartsWith(prefix, System.StringComparison.Ordinal)) found.Add(t);
+            found.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+            return found;
+        }
 
         /// A slab under an authored model, for the same reason the extruded
         /// ones have one: the ground is never flattened, so a building sits at

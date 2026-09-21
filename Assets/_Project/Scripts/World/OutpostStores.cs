@@ -62,7 +62,7 @@ namespace SeaSick.World
         /// lying about on an island. The rest are made at a building by
         /// somebody assigned to it.
         public static readonly string[] Gatherable =
-            { Timber, Stone, Ore, Spice };
+            { Timber, Stone, Ore, Spice, Food };
 
         public static bool IsGatherable(string r)
         {
@@ -81,6 +81,7 @@ namespace SeaSick.World
             Stone => 2.5f,
             Ore => 2f,
             Spice => 3f,
+            Food => 3f,          // a bed of wheat is a morning's work
             _ => 2f,
         };
 
@@ -95,6 +96,7 @@ namespace SeaSick.World
             Stone => 14f,
             Ore => 9f,
             Spice => 7f,
+            Food => 12f,         // seed only: where the beds can be SEEN they set the ceiling
             _ => 10f,
         };
 
@@ -102,6 +104,7 @@ namespace SeaSick.World
         {
             Timber => 0.02f,
             Spice => 0.01f,      // it grows; slowly
+            Food => 0.05f,       // wheat stands again in twenty days
             _ => 0f,             // rock does not
         };
 

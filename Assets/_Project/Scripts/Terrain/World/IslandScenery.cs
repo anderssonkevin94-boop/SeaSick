@@ -173,6 +173,8 @@ namespace SeaSick.Terrain
             bool kit = SceneryKit.Available;
             bool individualTrees = terrain != null && terrain.individualTrees;
             var index = new List<SceneryWood.Tree>();
+            // Every wheat mat, for `SceneryCrops`: a bed is one unit of Food.
+            var cropIndex = new List<SceneryCrops.Bed>();
             var individuals = new List<(string id, Vector3 at, float yaw, Vector3 scale)>();
             var cellMap = new Dictionary<long, CellBuild>();
             var cellList = new List<CellBuild>();
@@ -933,9 +935,20 @@ namespace SeaSick.Terrain
                             // so its skirt never shows as a slab of earth
                             // standing on the grass -- which is exactly what
                             // it did before it was buried.
+                            int bv0 = cb.v0.Count, bv1 = cb.v1.Count;
                             StampBoth(cb, crop0[v], crop1[v],
                                       new Vector3(mx, mh - 0.12f, mz), rYaw2 * Mathf.PI * 2f, msc, msc);
                             cb.Grow(new Vector3(mx, mh, mz), crop0[v].radius * ms, target);
+                            cropIndex.Add(new SceneryCrops.Bed
+                            {
+                                at = new Vector3(mx, mh, mz),
+                                kit = v,
+                                cell = cb.index,
+                                vertStart = bv0,
+                                vertCount = cb.v0.Count - bv0,
+                                lod1Start = bv1,
+                                lod1Count = cb.v1.Count - bv1,
+                            });
                             crops++; any = true;
                         }
                     }
@@ -1010,6 +1023,10 @@ namespace SeaSick.Terrain
                 wcells.Add(new SceneryWood.Cell { r0=high,r1=low,centre=item.at,radius=6f*item.scale.x });
             }
             go.AddComponent<SceneryWood>().Configure(wcells, index, isle);
+            // Same cell list as the wood: one cached vertex array per cell,
+            // shared, so a felling and a harvest never overwrite each other.
+            if (cropIndex.Count > 0)
+                go.AddComponent<SceneryCrops>().Configure(wcells, cropIndex, isle);
             go.AddComponent<SceneryLod>().Configure(wcells, terrain);
             return go;
         }

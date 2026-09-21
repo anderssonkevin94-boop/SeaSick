@@ -392,6 +392,11 @@ namespace SeaSick.World
         /// Three times the felling rate: the wood is already down and it is
         /// lying five metres away. A guess like the rest.
         public const float HaulPerHandPerDay = 12f;
+        /// Food a day one farmhand brings in off a farm's field
+        /// (`BuildPlans.Farm.rate`). Half again the felling rate: the wheat
+        /// is planted in rows beside the camp, not found. **A guess, never
+        /// played**, 2026-09-21.
+        public const float FoodPerHandPerDay = 6f;
 
         /// **A build that cannot finish by itself.** Nothing in the pile and
         /// nothing left standing to cut: the drawing will wait for the wood to
@@ -436,6 +441,37 @@ namespace SeaSick.World
             s.standingMax = Mathf.Max(1f, hectares * Res.PerHectare(resource));
             s.standing = s.standingMax;
             s.regrowPerDay = Res.RegrowPerDay(resource);
+        }
+
+        /// **Put more of a resource in the ground here.** A farm's field:
+        /// raising one adds `beds * unitsPerBed` of standing Food, planted
+        /// and ready, and lifts the ceiling it regrows to by the same. Called
+        /// from the raise hook, never from `Step`, so the ledger still learns
+        /// about the scene only at the moments the scene tells it.
+        ///
+        /// Merges into a stock that already exists -- wild wheat gathered by
+        /// hand and a farm's rows are one Food stock -- and the regrowth
+        /// becomes the faster of the two, because a field that has been
+        /// planted does not come back slower for having wild wheat beside it.
+        /// `regrowPerDay` below zero leaves the stock's own rate alone.
+        public OutpostStock AddStanding(string resource, float amount, float regrowPerDay = -1f)
+        {
+            var s = Stock(resource, true);
+            if (amount > 0f)
+            {
+                s.standingMax += amount;
+                s.standing = Mathf.Min(s.standingMax, s.standing + amount);
+            }
+            if (regrowPerDay >= 0f) s.regrowPerDay = Mathf.Max(s.regrowPerDay, regrowPerDay);
+            return s;
+        }
+
+        /// What a raised plan adds to the ground: a farm's field, or nothing.
+        /// One call for the raise hook, so the numbers stay on the plan.
+        public OutpostStock AddField(BuildPlan plan)
+        {
+            if (plan.beds <= 0 || string.IsNullOrEmpty(plan.makes)) return null;
+            return AddStanding(plan.makes, plan.FieldStanding, plan.bedRegrowPerDay);
         }
 
         /// The timber stock, which enough of the game asks for by name that it
@@ -623,6 +659,23 @@ namespace SeaSick.World
                     while (from.part < 0f && from.whole > 0) { from.whole--; from.part += 1f; }
                     if (from.part < 0f) from.part = 0f;
                 }
+                // **No input means the ground is the input**, and if the
+                // ground is tracked it is drawn down exactly as a gatherer
+                // draws it: a farmhand harvests the standing Food that
+                // raising the farm put there (`AddStanding`), and the field
+                // grows back at the top of the next step. A ledger that has no
+                // stock for what the building makes -- an older save, a
+                // probe's bare farm -- is not bounded at all, as before.
+                else
+                {
+                    var field = Stock(plan.makes);
+                    if (field != null)
+                    {
+                        want = Mathf.Min(want, field.standing);
+                        if (want <= 0f) continue;
+                        field.standing -= want;
+                    }
+                }
 
                 made.part += want;
                 int whole = Mathf.FloorToInt(made.part);
@@ -650,7 +703,11 @@ namespace SeaSick.World
                 var plan = BuildPlans.Named(h.target);
                 if (string.IsNullOrEmpty(plan.makes)) return true;
                 if (RoomFor(plan.makes) <= 0) return true;
-                return !string.IsNullOrEmpty(plan.takes) && CountOf(plan.takes) <= 0;
+                if (!string.IsNullOrEmpty(plan.takes)) return CountOf(plan.takes) <= 0;
+                // The field is the input: stripped bare is stalled, until it
+                // grows back.
+                var field = Stock(plan.makes);
+                return field != null && field.standing <= 0f;
             }
             return true;
         }

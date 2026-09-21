@@ -1082,3 +1082,33 @@ without the field reads 0 and gets the 14 m plan. **Docking is not wired
 here**: a raised pier's `Pier` component (`SeaEnd`, `Heading`, `Berth`) goes
 out through `Outpost.RegisterPierDock` / `UnregisterPierDock`, one line for
 the dock registry to hook when it lands.
+
+### Wheat and the farm — 2026-09-21
+
+GDD 6: *"food is local … wheat feeds a settlement."* **Wheat on the island is
+gathered by hand; a farm is wheat that grows by the camp.** The Farm is the
+sawmill's shape (`position = "farmhand"`, `makes = Food`, one Work order with
+`target = "Farm"`) and takes nothing from the piles: its input is a FIELD,
+described on the plan — `beds = 6`, `unitsPerBed = 4`, `bedRegrowPerDay =
+0.25`, `bedSpacing = 1.8 m`, `FieldStanding = 24`. When the farm is raised
+the coordinator calls `ledger.AddField(plan)` (= `AddStanding(Res.Food, 24,
+0.25)`), which creates or grows the camp's Food stock: `standingMax += 24`,
+`standing += 24`, regrowth the faster of what was there and 0.25/day. Wild
+wheat gathered by hand and a farm's rows are one Food stock. In `Step`, a
+Work order whose plan has no `takes` now draws its `makes` down from the
+stock of that resource exactly as a gatherer does (`want = min(rate·days,
+room, standing)`), and the field regrows at the top of the next quantum —
+both per-quantum, so D2 holds: ten days in one call and ten calls of a day
+give the same food. A ledger with no Food stock (a probe's bare farm, an
+older save) is unbounded, as before, so `LedgerProbe`'s
+`a-farmhand-needs-no-input` is untouched. `Stalled` reports a farmhand on a
+stripped field. The numbers: `OutpostLedger.FoodPerHandPerDay = 6` (the
+farm's `rate`), and 24 × 0.25 is also 6 a day, so **one farm keeps exactly
+one farmhand busy**; a second strips it in four days and then shares the
+regrowth. The kit's beds are separable — each farm FBX is one structure mesh
+plus one `farm_NN_Crop_MM` module per bed with a `Plant_slot_MM` empty — and
+`BuildingFactory.NameBeds` renames them `Bed_00..` / `BedSlot_00..` on raise
+(`BedsOf(t)` / `BedSlotsOf(t)`). `farm_01` wears four; `farm_02` is the
+six-bed model and is a one-line `prefab` switch once it is copied into
+`Resources/Settlement`. Nothing eats Food yet; `foodEaten` is still declared
+and unread. **All guesses, none played.**
