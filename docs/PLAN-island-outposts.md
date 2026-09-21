@@ -1137,3 +1137,68 @@ default sensibly for an old save (`recruitProgress`, `hungerDays` at 0,
 `born` false). **Placeholder numbers, none played** — `Outpost.cs`,
 `CampWorker.cs` and the UI still need to give the born rows a body and show
 `RecruitLine` on the sheet.
+
+## THE FELT CLOSE — 2026-09-22
+
+Kevin agreed the loop lacked a felt close: you sailed back and the pile was
+bigger, and nothing said so. Three things, in the order the plan named them,
+all compile-clean and **none played yet**.
+
+### "While you were gone" — `OutpostLedger.Absence`, `UI/ReturnSummary.cs`
+
+The ledger keeps one `Absence` record (`away`, public, so JsonUtility saves
+it inside the ledger; an old save reads it back as a fresh object with
+`sinceSeconds == 0`, which is "nothing open"). `Step` writes into it on every
+quantum — units gathered or made per resource, food eaten, days short,
+blueprints that went to `Complete`, hands recruited by name — and it is
+reset on every DEPARTURE, so it is always "since she last left".
+`Outpost.ShowHands` is the one place that knows the transition: `!Watched →
+true` is arrival, `Watched → false` is departure. Every caller already runs
+`CatchUp()` first, so the record covers exactly the absence. `EndAbsence`
+hands the record to `Outpost.LastReturn` only if `Anything` is in it.
+
+The card is drawn from `CampSheet.OnGUI` in `HudLayout.ToastRow` (0.22 of
+the safe height, word-wrapped, panel-solid) for 14 s or until tapped.
+**Not the prompt slot**: `Prompts.Rank.Toast` loses to the anchor prompt,
+which is up at exactly the moment this has something to say. **The clock
+runs from the first draw, not the arrival**: arrival fires at landing range
+while she is still under way, and a card timed from the water's edge could
+be gone before she anchored to read it.
+
+### The target line — `Ship/TargetLine.cs`
+
+The yard priced a rung against the home bank alone; the sheet said nothing.
+Now both say where the voyage is pointed: *next: Long sloop — 24 boards and
+8 stone · still to make 15 boards · ~5 days across your camps*. "In hand"
+counts what is banked, aboard (`VoyageManager.AmountOf`) and piled in any
+camp (`Outpost.PiledAcrossCamps`); what is left is divided by the summed
+make-rate of every camp (`Outpost.MakeRateAcrossCamps`), and the longer of
+the two resources' waits is the number. Three tails: *gathered — sail it
+home*, the days, or *nobody is making boards*. The sheet draws the whole
+line under the store rows; the yard appends the tail to its own price line.
+Cached on a key of every number in it, like everything else on the bar.
+
+### Per-resource rates — `OutpostLedger.RatePerDay`
+
+Each store row gains a right-aligned `+4/day` / `−1.5/day` column. The rate
+is derived by walking the hands with the same terms `Step` and `Stalled`
+use — a gatherer on a full pile or a worked-out stock counts for nothing,
+a sawyer is `+rate` boards and `−rate` timber, every hand eats one Food a
+day whether or not the pile can pay — so the column cannot disagree with
+what a quantum actually pays. Keyed apart from the pile rows on purpose: a
+rate is a property of the ORDERS, and rebuilding it each time a log lands
+would be the per-event string building the sheet was rewritten to stop.
+This is the "production readout" the plan asked for, per resource rather
+than per building: the sheet has no building list, and a hand tapping a
+building already gets its own panel.
+
+### Still open
+
+- **All three unplayed.** The wording, the 14 s, the card's height on a
+  phone, and whether "~5 days" reads as a promise or an estimate.
+- Sailing OUT of landing range without anchoring never calls
+  `ShowHands(false)` (pre-existing), so a fly-past leaves the hands drawn
+  and `Watched` true; the next real departure by cast-off still opens the
+  absence correctly, but a camp only ever passed never gets one.
+- Then: upkeep consequences (dim fire, hunger, anger — `hungerDays` and
+  `Absence.hungryDays` are the numbers to read), raiders / watchtower.
