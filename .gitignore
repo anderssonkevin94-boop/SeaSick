@@ -45,3 +45,6 @@ crashlytics-build.properties
 # Blender scripts are exec-loaded and imported; the bytecode cache is noise.
 __pycache__/
 *.pyc
+
+# Player builds (Xcode project etc.)
+/Builds/
