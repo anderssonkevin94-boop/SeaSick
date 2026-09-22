@@ -238,23 +238,11 @@ namespace SeaSick.Terrain
                 island.Configure(homeKind.name, 0f, meanR, true, true);
                 root.AddComponent<Stockpile>();
                 Home = island;
-                // A mast one ship-length tall, standing ON the ground.
-                //
-                // It was 46, and MakeBeacon scales a Unity cylinder -- which
-                // is two units tall -- so that was a 92 m column, sunk 12 m
-                // into the hill and reaching 80 m over it. On the old home
-                // island, a 111 m peak, that read as a tower on a summit. On
-                // a 5.7 m one it is a girder through the middle of the
-                // picture, fourteen times the relief of the land it marks.
-                // Tied to the ship instead, it is a landmark you can judge
-                // your distance off, which is what a beacon is for.
-                const float BeaconHeight = SeaSick.World.WorldScale.ShipLength;
-                var beacon = IslandPropFactory.MakeBeacon(new Color(1f, 0.55f, 0.25f),
-                    BeaconHeight * 0.5f, 2.6f);
-                beacon.transform.SetParent(root.transform, false);
-                beacon.transform.localPosition = new Vector3(0f,
-                    Height(f.centre.x, f.centre.y) + BeaconHeight * 0.5f, 0f);
-
+                // **No beacon (Kevin, 2026-09-22, first phone session: "all
+                // of the islands have what seems to be a pillar of light...
+                // I would like for that to be gone").** The home island had a
+                // ship-length orange mast here; it read as a shaft of light
+                // and told the player nothing the chart does not.
                 // The dock goes in BEFORE the scenery, because the scenery
                 // bake is what a keep-out would have to be handed -- and
                 // because a pier with trees growing through it is exactly the
@@ -318,10 +306,9 @@ namespace SeaSick.Terrain
             }
 
             var kind = PickKind(ring);
-            float beaconH = Mathf.Lerp(26f, 60f, Mathf.Clamp01(meanR / 200f));
-            var b = IslandPropFactory.MakeBeacon(kind.beaconColor, beaconH, 2.2f);
-            b.transform.SetParent(root.transform, false);
-            b.transform.localPosition = new Vector3(0f, Height(f.centre.x, f.centre.y) + beaconH * 0.75f, 0f);
+            // No resource beacon either (see the home island above). Its
+            // colour was the one at-sea tell of the island's kind; the chart
+            // and a landing say it now.
 
             var props = BuildProps(root.transform, island, kind.name, meanR);
 
