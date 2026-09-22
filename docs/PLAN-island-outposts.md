@@ -1332,3 +1332,30 @@ home island's shore (the shove is off for the whole island, not just near
 the site); withdrawing from a beach pops her back to the island radius in
 one frame; `RaidLine` on the sheet still talks about the away clock; the
 tower has no real model and its gun uses URP/Lit; no probe.
+
+## RAIDERS IN THE FLEET'S CLOTHES — 2026-09-22
+
+Kevin: *"how expensive would it be to implement the 5 mid versions of those
+ships as the enemy ships?"* Cheap: `FleetVisual.Build(node)` already stands
+a stage up from `Resources/Ships/FleetV3`, and the raider's red tint was
+already a property block over whatever renderers it had.
+
+- `EnemyShip.Spawn(..., int ladderNode)`; `BuildFromFleet` builds the
+  stage under the hull root, records each gun port's muzzle as a child
+  transform BEFORE stripping `FleetVisual`/`FleetGun`/colliders, tints
+  every renderer but the sails (name or parent contains "Sail"), sizes
+  `length` and `hitRadius` off `ShipLadder.Node`. A volley fires at most
+  `maxShotsPerVolley` (4) from the target's side. No `Cannon` components,
+  so no recoil puff this pass. The player-clone look survives behind
+  node −1.
+- **Float height: none.** The fleet art is authored waterline at Y = 0 and
+  `RideSea` already sets the origin on the wave; `freeboard` would have
+  lifted her out.
+- `TerrainWorldPopulator.BuildRaiders` maps ring-from-home onto nodes 7..11
+  (Long sloop → Guild escort); with eight raiders on the nearest islands
+  the live world posted nodes 7, 8 and 9.
+- Verified live at noon from a probe camera: `raider-armed-escort.png`.
+
+**Open:** sails do not animate on raiders; speed is not per stage; the
+five mid hulls are 67k–89k triangles each — fine on the desktop, and the
+phone wants a lower `maxRaiders` or a distance cull before it is measured.
