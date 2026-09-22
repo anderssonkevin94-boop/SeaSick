@@ -336,12 +336,36 @@ namespace SeaSick.Ocean
             // a convergence detail. One evaluation, no gate risk.
             envC = region.EvaluateCascades(p, islands, shore, weather);
             d = SampleDisp(p, envC.xy);
-            result.height = d.y;
-            result.displacement = new float3(d.x, d.y, d.z);
+            // The shore swell, at the FINAL surface position `q` -- not at the
+            // converged source `p`. Both twins must agree on WHERE they
+            // evaluate it, and only the surface position is unique: at a fold
+            // the surface is multi-valued, so two different sources land on the
+            // same XZ and "the undisplaced coordinate" is not one place.
+            // Measured, evaluating at the source put 206 of 5000 fold points
+            // over the gate's reporting threshold against 1 before; at the
+            // surface position it is 1 again.
+            //
+            // Height only, so it plays no part in the inversion above and costs
+            // the Newton loop nothing.
+            float shoreward = region.ShorewardHeight(q, shore);
+            float3 artShore=region.ShoreWetDepth(q,shore);
+            float4 art = GraphicWaveDetail.Evaluate(q,region.shorewardTime)
+                * artShore.y * math.smoothstep(0f,8f,artShore.z);
+            // The art waves are 32 m and 14.5 m long -- cascade 1's band -- so
+            // a hull feels them through the SAME filter, and everything small
+            // enough to ride the drawn surface (restFilter = 1) still does.
+            // They came in raw: a 0.8 m pointed wave every 4.5 s in every sea
+            // state, flat calm included, against a brig whose own roll period
+            // is 4.4 s. Measured at rest in the calmest water there is: a
+            // steady roll of +-13 degrees with hullFeelsCascade0/1 both at 0.
+            art *= hullFilter.y;
+            result.height = d.y + shoreward + art.x;
+            result.displacement = new float3(d.x, d.y + shoreward + art.x, d.z);
             result.residual = rLen;
 
             float4 derivs = SampleDeriv(p, envC.xy);
             float2 slope = derivs.xy / math.max(new float2(1f, 1f) + derivs.zw, 0.1f);
+            slope += art.yz;
             result.normal = math.normalize(new float3(-slope.x, 1f, -slope.y));
 
             // Foam from the turbulence readback (nearest texel is plenty --
@@ -373,6 +397,7 @@ namespace SeaSick.Ocean
                 if (speed > 8f) vel *= 8f / speed;
                 result.velocity = vel;
             }
+            result.velocity.y += art.w;
             return result;
         }
     }

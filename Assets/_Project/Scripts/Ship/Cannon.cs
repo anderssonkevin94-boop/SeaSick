@@ -33,6 +33,7 @@ namespace SeaSick.Ship
         [SerializeField] float aimAssistWindow = 8f;
         [SerializeField] float aimAssistCap = 2.5f;
 
+        float authoredMuzzle = .9f;
         Transform barrelPivot;
         Transform barrel;
         ParticleSystem smoke;
@@ -55,7 +56,7 @@ namespace SeaSick.Ship
         public float ReloadFraction => Mathf.Clamp01(1f - reloadLeft / reloadTime);
         /// Straight out of the muzzle, angled up a touch.
         public Vector3 MuzzlePoint => barrel != null
-            ? barrel.position + barrel.forward * 0.9f
+            ? barrel.position + barrel.forward * authoredMuzzle
             : transform.position;
         public Vector3 FireDirection => AimRotation() * Vector3.forward;
         public float MuzzleSpeed => muzzleSpeed;
@@ -181,6 +182,22 @@ namespace SeaSick.Ship
             smoke = BuildSmoke();
         }
 
+        public void BuildAuthored(FleetGun art)
+        {
+            restLocalRotation = transform.localRotation;
+            authoredMuzzle = art.muzzleLength;
+            var pivot = new GameObject("BarrelPivot");
+            pivot.transform.SetParent(transform, false);
+            pivot.transform.localPosition = Vector3.up * art.pivotHeight;
+            barrelPivot = pivot.transform;
+            barrel = art.barrel;
+            barrel.SetParent(barrelPivot, false);
+            barrel.localPosition = Vector3.zero;
+            barrel.localRotation = Quaternion.identity;
+            smoke = BuildSmoke();
+            smoke.transform.localPosition = Vector3.forward * authoredMuzzle;
+        }
+
         ParticleSystem BuildSmoke()
         {
             var go = new GameObject("MuzzleSmoke");
@@ -232,6 +249,15 @@ namespace SeaSick.Ship
             mat.SetColor("_BaseColor", Color.white);
             ps.GetComponent<ParticleSystemRenderer>().sharedMaterial = mat;
             return ps;
+        }
+
+        void OnDestroy()
+        {
+            if (smoke != null)
+            {
+                var material = smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial;
+                if (material != null) Destroy(material);
+            }
         }
 
         static GameObject Prim(PrimitiveType type, Transform parent, Vector3 scale, Material mat)

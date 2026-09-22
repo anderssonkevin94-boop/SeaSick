@@ -36,6 +36,13 @@ namespace SeaSick.Ship
             halfHeights.Clear();
             seats.Clear();
             if (hullVisual == null) return;
+            var fleet = hullVisual.GetComponent<FleetVisual>();
+            if (fleet != null)
+            {
+                foreach (var pivot in fleet.sailPivots)
+                { pivots.Add(pivot); halfHeights.Add(0); seats.Add(pivot.localPosition); }
+                Apply(); return;
+            }
 
             var sails = new List<Transform>();
             foreach (var t in hullVisual.GetComponentsInChildren<Transform>())
@@ -80,7 +87,8 @@ namespace SeaSick.Ship
         /// deck — it gets taller and wider, it does not sink into the ship.
         public void SetArea(float scale)
         {
-            area = Mathf.Clamp(scale, 0.5f, 2f);
+            area = pivots.Count > 0 && pivots[0] != null && pivots[0].GetComponentInParent<FleetVisual>() != null
+                ? 1f : Mathf.Clamp(scale, 0.5f, 2f);
             Apply();
         }
 

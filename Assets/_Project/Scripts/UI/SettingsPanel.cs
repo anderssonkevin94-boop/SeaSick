@@ -189,6 +189,22 @@ namespace SeaSick.UI
                       UITheme.Small);
             y += u * 1.6f;
 
+            y = Toggle(body, y, rowH, RowShoreward,
+                       SeaSick.Ocean.RegionField.ShorewardEnabled,
+                       v => SeaSick.Ocean.RegionField.ShorewardEnabled = v);
+            GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
+                      "off = swell runs past islands with a notch in it",
+                      UITheme.Small);
+            y += u * 1.6f;
+
+            y = Toggle(body, y, rowH, RowStorm,
+                       SeaSick.Ocean.RegionField.WanderingStorm,
+                       v => SeaSick.Ocean.RegionField.WanderingStorm = v);
+            GUI.Label(new Rect(body.x + u * 0.3f, y, body.width, u * 1.3f),
+                      "off = the storm sits at a fixed distance west, forever",
+                      UITheme.Small);
+            y += u * 1.6f;
+
             var tools = DevTools.All;
             if (tools.Count == 0)
             {
@@ -244,6 +260,8 @@ namespace SeaSick.UI
         static readonly string[] RowCrew = { "◎  crew", "◉  crew" };
         static readonly string[] RowPerf = { "◎  performance readout", "◉  performance readout" };
         static readonly string[] RowWavePhase = { "◎  smooth wave phase", "◉  smooth wave phase" };
+        static readonly string[] RowShoreward = { "◎  shoreward band", "◉  shoreward band" };
+        static readonly string[] RowStorm = { "◎  wandering storm", "◉  wandering storm" };
 
         /// A row that reads as on or off without a checkbox glyph: the pressed
         /// style IS the state, the same way the oars and ease-her buttons at

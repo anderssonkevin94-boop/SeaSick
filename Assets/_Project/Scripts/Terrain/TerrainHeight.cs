@@ -875,7 +875,7 @@ namespace SeaSick.Terrain
         /// applied BEFORE the beach blend so the blend sees real altitudes —
         /// every shoreline climbs from the seabed through the 0..beachHeight
         /// band, and that band is guaranteed smooth whatever the curve does.
-        public static TerrainSample Evaluate(in float2 p, in TerrainParams prm, in NativeArray<float> lut, bool includeAuthoredGround = true)
+        static TerrainSample EvaluateBase(in float2 p, in TerrainParams prm, in NativeArray<float> lut)
         {
             TerrainSample s;
             // The mask comes FIRST now: both the ridges and the massif are
@@ -934,6 +934,42 @@ namespace SeaSick.Terrain
                 s.terraced = math.lerp(s.terraced, hh, home);
                 s.smooth = math.lerp(s.smooth, hh, home);
             }
+            return s;
+        }
+
+        // Inland terrain uses broad, continuous triangular planes before the
+        // terrace profile. The same function serves mesh, collision, scatter,
+        // navigation and depth queries; no decorative geometry hides old ground.
+        public static TerrainSample Evaluate(in float2 p, in TerrainParams prm, in NativeArray<float> lut, bool includeAuthoredGround = true)
+        {
+            var s = EvaluateBase(p, prm, lut);
+            float home = HomeIsleWeight(p, prm);
+            if (prm.storybookLandforms != 0 && home < .9999f && s.height > prm.seaLevel + 8f)
+            {
+                const float span = 24f;
+                // Shear the lattice to avoid a square checkerboard of faces.
+                float2 q = new float2(p.x + .37f * p.y, p.y) / span;
+                float2 cell = math.floor(q), f = math.frac(q);
+                float2 a, b, c;
+                float3 weights;
+                if (f.x + f.y <= 1f)
+                {
+                    a = cell; b = cell + new float2(1,0); c = cell + new float2(0,1);
+                    weights = new float3(1f-f.x-f.y, f.x, f.y);
+                }
+                else
+                {
+                    a = cell + 1f; b = cell + new float2(0,1); c = cell + new float2(1,0);
+                    weights = new float3(f.x+f.y-1f, 1f-f.x, 1f-f.y);
+                }
+                float3 heights = new float3(
+                    EvaluateBase(PlanePoint(a, span), prm, lut).height,
+                    EvaluateBase(PlanePoint(b, span), prm, lut).height,
+                    EvaluateBase(PlanePoint(c, span), prm, lut).height);
+                // Do not let a macro triangle drag a cliff into a low beach.
+                float inland = math.smoothstep(8f, 18f, s.height-prm.seaLevel);
+                s.height = math.lerp(s.height, math.max(prm.seaLevel + 8f, math.dot(heights, weights)), inland * (1f-home));
+            }
             if (prm.storybookLandforms != 0)
             {
                 float h = s.height - prm.seaLevel;
@@ -945,18 +981,22 @@ namespace SeaSick.Terrain
                     float inland = math.smoothstep(4f, 10f, h);
                     float relief = math.max(0f, h - 7f) * 1.65f;
                     float level = relief / 16f;
-                    float terrace = (math.floor(level) + math.smoothstep(.67f, .94f, math.frac(level))) * 16f;
+                    // Straight cliff ramps and broad shelves, like the authored home.
+                    // This is shared by mesh, collision and placement queries.
+                    float terrace = (math.floor(level) + math.saturate((math.frac(level) - .67f) / .27f)) * 16f;
                     float shaped = 7f + math.lerp(terrace, relief, .08f);
                     s.height = prm.seaLevel + math.lerp(h, shaped, inland * (1f - home));
 
                 }
             }
             // The streamed grid stays submerged under the separate authored mesh.
-            // Gameplay and ocean depth queries retain the exact island surface.
             if (!includeAuthoredGround && HomePlateauSurface.Enabled(prm))
                 s.height = math.lerp(s.height, prm.seaLevel + prm.seabedDepth, home);
             return s;
         }
+
+        static float2 PlanePoint(float2 cell, float span)
+            => new float2(cell.x - .37f * cell.y, cell.y) * span;
 
         /// Height only.
         public static float Height(in float2 p, in TerrainParams prm, in NativeArray<float> lut)

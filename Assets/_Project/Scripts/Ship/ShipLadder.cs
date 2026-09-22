@@ -134,7 +134,8 @@ namespace SeaSick.Ship
             get
             {
                 if (data != null) return data;
-                var txt = Resources.Load<TextAsset>(Path);
+                var txt = Resources.Load<TextAsset>("Ships/FleetV3/ladder");
+                if (txt == null) txt = Resources.Load<TextAsset>(Path);
                 if (txt == null)
                 {
                     Debug.LogError($"ShipLadder: no manifest at Resources/{Path}. "

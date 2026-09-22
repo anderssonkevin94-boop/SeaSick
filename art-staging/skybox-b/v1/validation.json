@@ -1,0 +1,13 @@
+{
+  "native_resolution": [
+    1774,
+    887
+  ],
+  "projection": "2:1 equirectangular",
+  "raw_edge_mean_absolute_difference_8bit": 1.5050732807215332,
+  "shader_edge_difference_8bit": 0.0,
+  "pole_treatment": "At y=+/-1 shader weight is 1: fixed sample independent of longitude.",
+  "unity_touched": false,
+  "unity_shader_compiled": false,
+  "standalone_webgl_preview_rendered": true
+}

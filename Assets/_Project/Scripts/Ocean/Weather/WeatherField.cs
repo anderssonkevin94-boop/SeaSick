@@ -168,17 +168,93 @@ namespace SeaSick.Ocean
         /// read it.
         public float Patch01(float2 p) => Sample(p * InvTileMetres + PatchOffset);
 
+        /// Evolve the storm cells instead of sliding them rigidly past.
+        ///
+        /// A/B switch, and the whole point of the change. OFF reproduces the
+        /// single-layer lookup below EXACTLY -- it is the same expression,
+        /// character for character -- so the off leg of a probe run is a true
+        /// baseline and not a re-tuned approximation of one.
+        ///
+        /// SAFE TO CHANGE WITHOUT TOUCHING THE PARITY CONTRACT: Cell01 is C#
+        /// only (see below). The patch scale is the one with a GPU twin, seven
+        /// call sites and a DivergenceProbe gate on it; nothing here goes near
+        /// that.
+        ///
+        /// MEASURED AND LEFT OFF. VoyageVarietyProbe, eight crossings of the
+        /// same route: correlation between consecutive voyages 0.9966 -> 0.9869
+        /// (nothing), and the spread of per-voyage roughness got WORSE, 34% ->
+        /// 28%, with mean Hs falling 22.4 -> 20.5. It was tuning a term the
+        /// code had already throttled: `lull` carries (1 - stormSteady * storm)
+        /// and stormSteady is 0.88, so out west the cells keep 12% of their
+        /// authority. RegionField.WanderingStorm is what actually worked.
+        /// Kept, off, so the dead end stays measured instead of being
+        /// rediscovered.
+        public static bool EvolvingCells;
+
+        /// Per-layer scale, drift-speed multiplier, heading offset in degrees,
+        /// and a constant corner of the tile to read from. Three layers at
+        /// incommensurate scales and headings: the point is that they SLIDE
+        /// RELATIVE TO ONE ANOTHER, so their sum reorganises continuously
+        /// where one rigid layer can only ever translate.
+        static readonly float[] CellLayerScale = { 1.00f, 1.90f, 0.55f };
+        static readonly float[] CellLayerSpeed = { 1.00f, 1.45f, 0.70f };
+        static readonly float[] CellLayerTurn  = { 0f, 37f, -49f };
+        static readonly float2[] CellLayerAt =
+        {
+            new float2(0.317f, 0.611f),
+            new float2(0.713f, 0.229f),
+            new float2(0.141f, 0.887f),
+        };
+        /// Averaging three roughly independent samples divides the spread by
+        /// sqrt(3) and would quietly make every voyage a mild one. This puts
+        /// it back, so the change alters WHEN you meet a storm and not HOW
+        /// OFTEN -- the distribution is the difficulty curve and must survive.
+        const float CellVarianceRestore = 1.7320508f;
+
         /// 0..1 storm-cell weight at a world position and time. C# only: this
         /// drives the spectrum, which is global, so it is only ever read at
         /// the ship and never needs a GPU twin.
+        ///
+        /// A single layer TRANSLATES: the pattern is rigid, so the same route
+        /// meets the same weather until the field has slid a whole cell past,
+        /// which at 20 km cells and 5 m/s takes 67 minutes. Measured, a
+        /// five-minute crossing moves it 8 % -- two voyages back to back are
+        /// the same sea, which is exactly the complaint.
+        ///
+        /// Three layers at different scales, speeds and headings cannot do
+        /// that. There is no offset at which the sum repeats, so the field
+        /// reorganises in place rather than sliding, and the rate does not
+        /// depend on where you are in the world -- which is why this is layers
+        /// and not the rotation I first reached for. A rotation about the
+        /// origin moves a point by r * dTheta, so the weather would churn far
+        /// from home and sit still near it.
+        ///
+        /// Still a closed form in t with no accumulation, so the field stays a
+        /// pure function of (seed, OceanTime, position) and OceanTime.Scrub
+        /// keeps every probe repeatable. Cost is three bilinear reads of a
+        /// baked tile, once per frame at the ship.
         public float Cell01(float2 p, double t)
         {
             float inv = cellMetres > 0f ? 1f / cellMetres : 0f;
-            float2 off = MeanderedOffset(t, cellDriftSpeed, cellHeadingDeg, inv);
-            // A different scale and a different drift off the same tile. Read
-            // 8x coarser than the patches, so a "cell" is several kilometres
-            // even though the tile's own features are hundreds of metres.
-            return Sample(p * inv + off + new float2(0.317f, 0.611f));
+            if (!EvolvingCells)
+            {
+                float2 off = MeanderedOffset(t, cellDriftSpeed, cellHeadingDeg, inv);
+                // A different scale and a different drift off the same tile. Read
+                // 8x coarser than the patches, so a "cell" is several kilometres
+                // even though the tile's own features are hundreds of metres.
+                return Sample(p * inv + off + new float2(0.317f, 0.611f));
+            }
+
+            float acc = 0f;
+            for (int i = 0; i < CellLayerScale.Length; i++)
+            {
+                float s = inv * CellLayerScale[i];
+                float2 o = MeanderedOffset(t, cellDriftSpeed * CellLayerSpeed[i],
+                                           cellHeadingDeg + CellLayerTurn[i], s);
+                acc += Sample(p * s + o + CellLayerAt[i]);
+            }
+            acc /= CellLayerScale.Length;
+            return Mathf.Clamp01(0.5f + (acc - 0.5f) * CellVarianceRestore);
         }
 
         /// Wrapped bilinear, matching hardware Repeat filtering exactly: texel

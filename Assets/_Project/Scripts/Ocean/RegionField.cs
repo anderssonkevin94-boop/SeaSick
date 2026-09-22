@@ -27,6 +27,13 @@ namespace SeaSick.Ocean
         public int weatherN;         // texels per edge, 0 = no field
         public float3 patchLo;       // what the field's low end multiplies each cascade by
         public float3 patchHi;       // and its high end. patchHi.x MUST stay 1.
+        // Shoreward band -- the swell the depth cap removed, turned toward the
+        // beach. See ShorewardHeight. Strength 0 switches it off entirely.
+        public float shorewardStrength;
+        public float shorewardFalloff;  // exponent on the bite; pushes the band inshore
+        public float shorewardOmega;    // rad/s of the shore swell
+        public float shorewardSlope;    // nominal beach slope for the WKB phase
+        public float shorewardTime;     // ocean seconds
 
         public static RegionFieldParams Neutral => new RegionFieldParams
         {
@@ -48,6 +55,11 @@ namespace SeaSick.Ocean
             weatherN = 0,
             patchLo = new float3(1f, 1f, 1f),
             patchHi = new float3(1f, 1f, 1f),
+            shorewardStrength = 0f,
+            shorewardFalloff = 2f,
+            shorewardOmega = 0f,
+            shorewardSlope = 0.03f,
+            shorewardTime = 0f,
         };
 
         /// islands: xy = centre, z = radius. shore: terrain heights on the
@@ -211,6 +223,60 @@ namespace SeaSick.Ocean
         /// texture in sheltered water but must be perfectly gone over land)
         /// and the depth limit needs the third. Outside the grid the sea is
         /// untouched and nominally bottomless.
+        /// The swell the depth cap took, turned toward the beach.
+        /// MUST match ShorewardHeight in RegionField.hlsl.
+        ///
+        /// The envelope can only ever SCALE a wave at a given position, so a
+        /// crest running past an island gets a notch punched in it where the
+        /// shelf is and sails on regardless -- "it cuts a large wave off as it
+        /// passes by". Real water does the opposite: a crest over the shelf
+        /// slows (c = sqrt(g d)), the rest of it does not, and the wave BENDS
+        /// until its crests lie along the depth contours and it rolls onto the
+        /// beach. Islands focus wave energy; ours ignores them.
+        ///
+        /// A scalar per-cascade envelope cannot rotate anything, so this does
+        /// not try. It adds a separate shore swell whose crests ARE the depth
+        /// contours -- which is what a fully refracted wave train looks like --
+        /// and pays for it out of exactly what the cap removed.
+        ///
+        /// The phase is the WKB solution for a plane beach, and it is worth
+        /// writing down because it is not a fudge. In shallow water
+        /// k = omega / sqrt(g d); on a beach of slope s, depth d is s*x, so
+        ///
+        ///     phase = integral k dx = (2 omega / (s sqrt(g))) * sqrt(d)
+        ///
+        /// Crests are therefore level sets of depth (parallel to the contours,
+        /// which is the refracted end state) and they run SHOREWARD, because a
+        /// crest holds phase + omega*t constant and t only increases. It also
+        /// gets the wavelength right for free: at Hs-scale defaults the band
+        /// comes out at 98 m in 12 m of water against the shallow-water
+        /// prediction T*sqrt(g d) = 97.6 m.
+        ///
+        /// KNOWN LIMIT: on a perfectly flat shelf depth carries no shoreward
+        /// direction, so the phase goes constant and the band heaves as one
+        /// piston instead of rolling. It wants bathymetry with a slope to it.
+        ///
+        /// Height only, deliberately: with no horizontal displacement it never
+        /// enters the sampler's Newton inversion, whose budget is already spent
+        /// at 0.29 of 0.4 ms and ten iterations.
+        public float ShorewardHeight(float2 p, NativeArray<float> shore)
+        {
+            if (shorewardStrength <= 0f || shoreN <= 0 || waveHs <= 0.01f
+                || breakFraction <= 0f) return 0f;
+            float3 swd = ShoreWetDepth(p, shore);
+            float depth = swd.z;
+            // The depth at which the cap stops binding at all. Past it the cap
+            // took nothing, so there is nothing for this to spend.
+            float capDepth = waveHs / breakFraction;
+            float bite = math.saturate(1f - depth / capDepth);
+            if (bite <= 0f) return 0f;
+            float amp = breakFraction * depth * math.pow(bite, shorewardFalloff)
+                        * swd.y * shorewardStrength;
+            float k = 2f * shorewardOmega / (shorewardSlope * 3.132092f); // sqrt(9.81)
+            return amp * math.sin(k * math.sqrt(math.max(depth, 0f))
+                                  + shorewardOmega * shorewardTime);
+        }
+
         public float3 ShoreWetDepth(float2 p, NativeArray<float> shore)
         {
             float2 uv = (p - shoreOrigin) * shoreInvSize;
@@ -252,7 +318,20 @@ namespace SeaSick.Ocean
     /// state SeaStateController targets (M6).
     public class RegionField : MonoBehaviour
     {
-        public const int MaxIslands = 24;
+        /// MUST match the array length in RegionField.hlsl.
+        ///
+        /// It was 24 against a world of 34 islands, and on 2026-09-14 the world
+        /// became 65 -- so 41 of them had NO shelter term at all, chosen by
+        /// nothing better than flood-fill discovery order. Two thirds of the
+        /// archipelago was open sea right up to the beach.
+        ///
+        /// Raising it alone would have been a perf regression: the island loop
+        /// runs inside EvaluateCascades, which the sampler calls up to eight
+        /// times per query inside its Newton loop, against a budget that is
+        /// already spent. 65 islands there is 2.7x the work of 24. So the cap
+        /// went up only as headroom, and the SELECTION became proximity-based
+        /// -- see SelectIslands, which normally binds far fewer than 24.
+        public const int MaxIslands = 48;
 
         // Reused by PublishNeutralIfAbsent, which runs every frame there is no
         // RegionField in the scene; an all-zero array, so sharing it is safe.
@@ -273,6 +352,26 @@ namespace SeaSick.Ocean
 
         [Tooltip("Bind home to VoyageManager.HomePoint and islands from the generated world. Probes that set their own geography disable this implicitly.")]
         [SerializeField] bool autoBindWorld = true;
+        [Tooltip("Islands whose nearest water is beyond this from the view are left out of the shelter set. 1500 m: the term only touches cascades 1-2, and a 60 m shelter band around an island further off than this is sub-pixel at deck level on a portrait screen. Measured at the world's density it puts ~20 islands in range, so the cap never binds and the hot loop is SHORTER than the old hard 24.")]
+        [SerializeField] float islandSelectRadius = 1500f;
+        [Tooltip("Re-pick the island set when the view has moved this far, metres.")]
+        [SerializeField] float islandRebindDistance = 250f;
+        [Tooltip("Whose surroundings the island set is chosen around. Falls back to the main camera.")]
+        [SerializeField] Transform islandFocus;
+        Vector2 lastSelectAt;
+        bool haveSelected;
+        int islandsConsidered, islandsDropped;
+        /// How many islands the world offered, how many were in range, and how
+        /// many the cap threw away. `ReadIslands` prints these -- a cap that is
+        /// silently binding is exactly the bug this replaced.
+        public int IslandsConsidered => islandsConsidered;
+        public int IslandsDropped => islandsDropped;
+        public int IslandCount => islandCount;
+        /// Read back off the live component, never off the source. A NEW
+        /// [SerializeField] keeps whatever initialiser it was born with, and a
+        /// later edit to that initialiser does not reach a component the editor
+        /// already has loaded -- this project has lost days to that twice.
+        public float IslandSelectRadius => islandSelectRadius;
         bool manualBound;
         bool worldBound;
 
@@ -285,6 +384,38 @@ namespace SeaSick.Ocean
         [Range(0f, 0.4f)] [SerializeField] float chopFloor = 0.12f;
         [Tooltip("A wave may not be taller than this fraction of the water under it. The real breaking index is about 0.78; below that leaves margin for the hull and the camera.")]
         [Range(0.1f, 0.8f)] [SerializeField] float breakFraction = 0.55f;
+
+        [Header("Shoreward band")]
+        /// Live A/B for the whole feature. Wired to the settings drawer; this
+        /// is a look call and the look only exists in a full sea near land,
+        /// which is a place you have to sail to.
+        /// OFF BY DEFAULT AS OF 2026-09-17, and it must stay off until the
+        /// phase field below is done properly.
+        ///
+        /// Kevin switched it on while sailing and it threw the ship into an
+        /// island and flung her into the air. That is the aliasing limit
+        /// already recorded below, showing its physical face: the band's real
+        /// wavelength is T*sqrt(g*d) * (slopeAssumed / slopeActual), so on the
+        /// STEEP flank of an island -- exactly where this feature is supposed
+        /// to work -- the wavelength collapses and the band becomes
+        /// high-frequency noise about two metres tall. The hull then sits on a
+        /// surface with an enormous local slope and the buoyancy probes do
+        /// what they are told. `BuoyantBody` will happily deliver
+        /// maxBurialAccel 14 m/s^2 against that.
+        ///
+        /// Flipping the switch is ALSO a discontinuity in its own right: the
+        /// water under her steps by up to the band's full amplitude in one
+        /// frame. Any future version wants a ramp on the toggle as well as a
+        /// bounded slope.
+        public static bool ShorewardEnabled;
+        [Tooltip("Height of the shore swell as a fraction of what the depth cap allows. The cap itself bounds it, so this is a fraction of a fraction: at 1 the band stands as tall as the breaking limit permits and nothing taller can exist in that depth anyway.")]
+        [Range(0f, 1f)] [SerializeField] float shorewardStrength = 0.35f;
+        [Tooltip("Exponent on the bite. Higher pushes the band inshore, where the cap is taking the most.")]
+        [Range(0.5f, 6f)] [SerializeField] float shorewardFalloff = 2f;
+        [Tooltip("Period of the shore swell, seconds. With the WKB phase this sets the wavelength honestly: lambda = T*sqrt(g*depth), so 9 s is about 98 m in 12 m of water.")]
+        [Range(3f, 20f)] [SerializeField] float shorewardPeriod = 9f;
+        [Tooltip("Nominal beach slope the WKB phase assumes. Smaller means longer crests and more of them stacked up the shelf. Not read off the terrain: the shore grid is 16 m per texel and its gradient is too coarse to trust.")]
+        [Range(0.005f, 0.2f)] [SerializeField] float shorewardSlope = 0.03f;
 
         // Pulled from the renderer and the weather field each frame rather
         // than pushed, so the data flows one way and nothing has to remember
@@ -307,6 +438,11 @@ namespace SeaSick.Ocean
         readonly Vector4[] lastPublishedIslands = new Vector4[MaxIslands];
         int lastPublishedIslandCount = -1;
 
+        struct IsleHit { public Vector2 pos; public float radius; public float gap; }
+        // Reused every re-select; this runs while sailing and must not allocate.
+        readonly System.Collections.Generic.List<IsleHit> scratch =
+            new System.Collections.Generic.List<IsleHit>(128);
+
         // Shader.PropertyToID cache for Publish()'s per-frame globals. Every
         // Shader.SetGlobal* call below used to hash its string name each
         // frame; PropertyToID does that hash once here instead.
@@ -316,6 +452,8 @@ namespace SeaSick.Ocean
         static readonly int ShoreRectId = Shader.PropertyToID("_Ocean_ShoreRect");
         static readonly int ShoalId = Shader.PropertyToID("_Ocean_Shoal");
         static readonly int DepthLimitId = Shader.PropertyToID("_Ocean_DepthLimit");
+        static readonly int ShorewardId = Shader.PropertyToID("_Ocean_Shoreward");
+        static readonly int ShorewardTimeId = Shader.PropertyToID("_Ocean_ShorewardTime");
         static readonly int WeatherId = Shader.PropertyToID("_Ocean_Weather");
         static readonly int PatchLoId = Shader.PropertyToID("_Ocean_PatchLo");
         static readonly int PatchHiId = Shader.PropertyToID("_Ocean_PatchHi");
@@ -379,6 +517,11 @@ namespace SeaSick.Ocean
             weatherN = weatherN,
             patchLo = patchLo,
             patchHi = patchHi,
+            shorewardStrength = ShorewardEnabled ? shorewardStrength : 0f,
+            shorewardFalloff = shorewardFalloff,
+            shorewardOmega = 2f * Mathf.PI / Mathf.Max(1f, shorewardPeriod),
+            shorewardSlope = Mathf.Max(0.002f, shorewardSlope),
+            shorewardTime = (float)OceanTime.Now,
         };
 
         void OnEnable()
@@ -424,10 +567,108 @@ namespace SeaSick.Ocean
             Params.Evaluate(new float2(p.x, p.y), islands, shore, weather);
 
         /// 0 at/inside stormNear along the storm bearing, 1 beyond stormFar.
-        public float StormWeight(Vector2 p)
+        /// Let the storm itself move, instead of being a fixed ramp westward.
+        ///
+        /// A/B switch. OFF is the shipped expression character for character.
+        ///
+        /// MEASURED, and this is why it exists. `VoyageVarietyProbe` sailed the
+        /// same 3 km westward route eight times and the Hs profiles came back
+        /// at a Pearson correlation of **0.9966** -- consecutive crossings were
+        /// not similar, they were the SAME CROSSING with a scale factor on it.
+        /// The reason was right here: `storm` had no time argument, so the
+        /// ceiling at any point was identical on every voyage forever. And
+        /// because `lull` carries a `(1 - stormSteady * storm)` factor with
+        /// stormSteady at 0.88, the weather cells keep only 12% of their
+        /// authority once `storm` reaches 1 -- so out west, which is where the
+        /// game is actually played, the sea was very nearly a pure function of
+        /// distance from home and nothing could move it.
+        ///
+        /// Making the cells evolve was tried first and measured: correlation
+        /// 0.9966 -> 0.9869, which is nothing, because it was tuning a term the
+        /// code had already almost switched off.
+        ///
+        /// ON. Measured over eight crossings of the same 3 km westward route:
+        ///
+        ///                       corr   rms diff   voyage spread   mean Hs
+        ///   shipped            0.9966     19%          34%         22.4 m
+        ///   evolving cells     0.9869     21%          28%         20.5 m
+        ///   WANDERING STORM    0.9141     51%          75%         22.0 m
+        ///   both               0.8988     51%          67%         20.4 m
+        ///
+        /// Both together is WORSE than the storm alone on the number that
+        /// matters -- how much one crossing differs from the next in overall
+        /// roughness -- and it drags the mean down with it. WeatherField.
+        /// EvolvingCells stays off; do not re-walk it.
+        public static bool WanderingStorm = true;
+
+        [Tooltip("Degrees the storm's bearing wanders either side of the authored one. A day is 180 s in this game, so a 30 degree swing over ~20 minutes of play is a front turning over a couple of days -- slow weather, not a spinning compass.")]
+        [Range(0f, 80f)] [SerializeField] float stormTurnRange = 30f;
+        [SerializeField] float stormTurnPeriod = 1300f;
+        [Tooltip("How far the storm FRONT advances and retreats along its bearing, as a log ratio: 0.9 swings the front between about 0.4x and 2.5x its authored distance. The ramp keeps its width and slides bodily, so a westward run meets the weather at a different range depending on when it sails.")]
+        [Range(0f, 1.6f)] [SerializeField] float stormFrontLogRange = 0.9f;
+        [SerializeField] float stormFrontPeriod = 640f;
+
+        /// Two incommensurate sinusoids, mean zero, so the AVERAGE difficulty
+        /// at a given distance is unchanged -- this alters when you meet the
+        /// storm, not how often. Closed form in t with no accumulation, so the
+        /// field stays a pure function of (position, OceanTime) and
+        /// OceanTime.Scrub keeps every probe repeatable.
+        static float Osc(double t, float period, float ratio)
         {
-            float along = Vector2.Dot(p - home, stormBearing.normalized);
-            return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(stormNear, stormFar, along));
+            float a = Mathf.Sin((float)(t / Mathf.Max(1f, period)) * 2f * Mathf.PI);
+            float b = Mathf.Sin((float)(t / Mathf.Max(1f, period * (1f + ratio))) * 2f * Mathf.PI);
+            return (a + 0.6f * b) / 1.6f;
+        }
+
+        /// Mean of cos(A * x) over a symmetric swing, to second order --
+        /// enough at these angles (30 deg gives 0.966 against an exact 0.968)
+        /// and it costs no trig at run time.
+        static float MeanCos(float degrees)
+        {
+            float a = degrees * Mathf.Deg2Rad;
+            return Mathf.Max(0.5f, 1f - 0.25f * a * a);
+        }
+
+        public float StormWeight(Vector2 p) => StormWeight(p, OceanTime.Now);
+
+        /// C# only -- the GPU never sees this; it feeds the spectrum, which is
+        /// global. Grep the shaders before assuming otherwise.
+        public float StormWeight(Vector2 p, double t)
+        {
+            Vector2 bearing = stormBearing.normalized;
+            float near = stormNear, far = stormFar;
+            if (WanderingStorm)
+            {
+                float rad = stormTurnRange * Osc(t, stormTurnPeriod, 0.37f) * Mathf.Deg2Rad;
+                float c = Mathf.Cos(rad), s = Mathf.Sin(rad);
+                bearing = new Vector2(bearing.x * c - bearing.y * s,
+                                      bearing.x * s + bearing.y * c);
+                // Slide the ramp bodily and keep its WIDTH: a front that also
+                // got steeper or shallower would be two changes at once and
+                // the probe could not tell which one moved the numbers.
+                //
+                // GEOMETRIC, not additive, and that is a correction to a
+                // measured mistake. An additive swing has to be clamped so an
+                // advancing front cannot cross home, and the clamp bit about a
+                // third of the time -- always pushing the front OUTWARD, which
+                // measured as mean Hs 22.4 -> 20.0, an 11% quieter game nobody
+                // asked for. A log-symmetric swing cannot go negative, needs no
+                // clamp, and has the authored distance as its geometric mean.
+                // Log is also the right space here: every other gradient in
+                // this weather system runs in log metres for the same reason.
+                float width = Mathf.Max(50f, stormFar - stormNear);
+                near = stormNear * Mathf.Exp(stormFrontLogRange * Osc(t, stormFrontPeriod, 0.61f));
+                far = near + width;
+            }
+            float along = Vector2.Dot(p - home, bearing);
+            // A rotation can only ever SHORTEN the along-bearing distance
+            // (cos <= 1), so a wandering bearing quietly pushes every point
+            // further from the storm and eases the whole game. Divide by the
+            // mean cosine of the swing to put that back -- the wander then
+            // changes WHERE the storm is without changing how much storm there
+            // is on average.
+            if (WanderingStorm) along /= MeanCos(stormTurnRange);
+            return Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(near, far, along));
         }
 
         void LateUpdate()
@@ -460,28 +701,118 @@ namespace SeaSick.Ocean
             }
 
             // The world is generated at runtime, so home and islands can only
-            // be picked up once they exist. One-shot; probes that set their own
-            // geography (SetHome/AddIsland) win and this never fires.
-            if (autoBindWorld && !manualBound && !worldBound)
+            // be picked up once they exist. Probes that set their own geography
+            // (SetHome/AddIsland) win and this never fires.
+            if (autoBindWorld && !manualBound)
             {
-                var voyage = FindFirstObjectByType<Voyage.VoyageManager>();
-                var isles = World.Island.All;
-                if (voyage != null && voyage.HomePoint != null && isles.Count > 0)
+                if (!worldBound)
                 {
-                    home = new Vector2(voyage.HomePoint.position.x, voyage.HomePoint.position.z);
-                    islandCount = 0;
-                    foreach (var isle in isles)
+                    var voyage = FindFirstObjectByType<Voyage.VoyageManager>();
+                    if (voyage != null && voyage.HomePoint != null && World.Island.All.Count > 0)
                     {
-                        if (isle == null || islandCount >= MaxIslands) continue;
-                        var p = isle.transform.position;
-                        islands[islandCount] = new float4(p.x, p.z, isle.MaxRadius, 0f);
-                        islandsGpu[islandCount] = new Vector4(p.x, p.z, isle.MaxRadius, 0f);
-                        islandCount++;
+                        home = new Vector2(voyage.HomePoint.position.x, voyage.HomePoint.position.z);
+                        worldBound = true;
+                        SelectIslands(FocusXZ());
                     }
-                    worldBound = true;
+                }
+                else
+                {
+                    // Re-pick as the view travels. Safe to change the SET while
+                    // sailing because of the margin argument in SelectIslands:
+                    // every island that is dropped was contributing exactly
+                    // 1.0, so the envelope does not move when it goes.
+                    Vector2 f = FocusXZ();
+                    if (!haveSelected || Vector2.Distance(f, lastSelectAt) > islandRebindDistance)
+                        SelectIslands(f);
                 }
             }
             Publish();
+        }
+
+        Vector2 FocusXZ()
+        {
+            Transform t = islandFocus != null ? islandFocus
+                        : (Camera.main != null ? Camera.main.transform : null);
+            if (t == null) return home;
+            var p = t.position;
+            return new Vector2(p.x, p.z);
+        }
+
+        /// The nearest islands to the view, not the first ones the flood fill
+        /// happened to label.
+        ///
+        /// WHY DROPPING THE REST IS FREE, AND NOT AN APPROXIMATION: an island's
+        /// term is `smoothstep(0, shoreFalloff, distance - radius)`, which is
+        /// exactly 1.0 -- no effect whatever -- once the query is more than
+        /// `shoreFalloff` (60 m) beyond the island's radius. So an island far
+        /// from everything being drawn multiplies the envelope by one, and
+        /// leaving it out is a no-op rather than a simplification. That is what
+        /// makes it safe to change the set WHILE SAILING without stepping the
+        /// envelope, which would otherwise be the exact fault this ocean is
+        /// already being investigated for.
+        ///
+        /// `islandSelectRadius` is measured from the VIEW and must therefore
+        /// cover everything drawn, not just the water under the hull. 3 km is
+        /// past the displacement fade, and the shelter term only touches
+        /// cascades 1 and 2 -- short waves the clipmap cannot resolve at that
+        /// range anyway.
+        ///
+        /// Sorted nearest-first so that if the cap ever does bind, what it
+        /// throws away is the farthest and least consequential. It also
+        /// normally binds FEWER than the old hard 24: at the world's island
+        /// density only a dozen or so are ever in range, so the hot loop gets
+        /// shorter as well as more correct.
+        public void SelectIslands(Vector2 focus) => SelectIslands(focus, islandSelectRadius);
+
+        /// `radius` override exists so a probe can A/B the hot loop's LENGTH
+        /// without touching the serialized field -- which it could not reach
+        /// anyway, see IslandSelectRadius.
+        public void SelectIslands(Vector2 focus, float radius)
+        {
+            var isles = World.Island.All;
+            islandsConsidered = isles.Count;
+            islandsDropped = 0;
+            scratch.Clear();
+            for (int i = 0; i < isles.Count; i++)
+            {
+                var isle = isles[i];
+                if (isle == null) continue;
+                var p = isle.transform.position;
+                float r = isle.MaxRadius;
+                float gap = Vector2.Distance(new Vector2(p.x, p.z), focus) - r;
+                if (gap > radius) continue;
+                scratch.Add(new IsleHit { pos = new Vector2(p.x, p.z), radius = r, gap = gap });
+            }
+            scratch.Sort((a, b) => a.gap.CompareTo(b.gap));
+
+            islandCount = 0;
+            for (int i = 0; i < scratch.Count; i++)
+            {
+                if (islandCount >= MaxIslands)
+                {
+                    // Everything still in this list passed the range test, so
+                    // anything the cap throws away is an island we had already
+                    // judged close enough to matter. Counting only the ones
+                    // within `shoreFalloff` of the FOCUS was the lenient
+                    // version of this check and it reported a comfortable zero
+                    // while the cap was in fact binding on 17 islands.
+                    islandsDropped++;
+                    continue;
+                }
+                var h = scratch[i];
+                islands[islandCount] = new float4(h.pos.x, h.pos.y, h.radius, 0f);
+                islandsGpu[islandCount] = new Vector4(h.pos.x, h.pos.y, h.radius, 0f);
+                islandCount++;
+            }
+            for (int i = islandCount; i < MaxIslands; i++)
+                islandsGpu[i] = Vector4.zero;
+
+            if (islandsDropped > 0)
+                Debug.LogWarning($"RegionField: island cap {MaxIslands} is binding — "
+                    + $"{islandsDropped} island(s) close enough to shelter water were dropped.");
+
+            lastSelectAt = focus;
+            haveSelected = true;
         }
 
         public void Publish()
@@ -514,6 +845,15 @@ namespace SeaSick.Ocean
                 new Vector4(shoalDepthZero, shoalDepthFull, chopFloor, 0f));
             Shader.SetGlobalVector(DepthLimitId,
                 new Vector4(breakFraction, waveHs, 0f, 0f));
+            // Same four numbers the Burst twin reads off Params, pushed the
+            // same frame -- a shoreward band the boat feels but you cannot see
+            // (or the reverse) is the parity failure this contract exists for.
+            Shader.SetGlobalVector(ShorewardId, new Vector4(
+                ShorewardEnabled ? shorewardStrength : 0f,
+                shorewardFalloff,
+                2f * Mathf.PI / Mathf.Max(1f, shorewardPeriod),
+                Mathf.Max(0.002f, shorewardSlope)));
+            Shader.SetGlobalFloat(ShorewardTimeId, (float)OceanTime.Now);
             Shader.SetGlobalVector(WeatherId,
                 new Vector4(weatherInvTile, weatherOffset.x, weatherOffset.y, weatherN));
             Shader.SetGlobalVector(PatchLoId,
@@ -546,6 +886,7 @@ namespace SeaSick.Ocean
             // kernel including it does nothing at all.
             Shader.SetGlobalVector("_Ocean_Shoal", Vector4.zero);
             Shader.SetGlobalVector("_Ocean_DepthLimit", Vector4.zero);
+            Shader.SetGlobalVector("_Ocean_Shoreward", Vector4.zero);
             Shader.SetGlobalVector("_Ocean_Weather", Vector4.zero);
             Shader.SetGlobalVector("_Ocean_PatchLo", new Vector4(1f, 1f, 1f, 0f));
             Shader.SetGlobalVector("_Ocean_PatchHi", new Vector4(1f, 1f, 1f, 0f));

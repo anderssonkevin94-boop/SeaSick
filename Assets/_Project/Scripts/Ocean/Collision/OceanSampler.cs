@@ -101,6 +101,15 @@ namespace SeaSick.Ocean
             return CurrentField().Sample(new float3(worldPos.x, worldPos.y, worldPos.z));
         }
 
+        /// The same one-shot query through a hull filter: the surface as a
+        /// SHIP feels it rather than as it is drawn. See
+        /// `OceanPhysicsDriver.HullFilterNow`.
+        public static OceanSample SampleImmediate(Vector3 worldPos, float2 hullFilter)
+        {
+            ImmediateCalls++;
+            return CurrentField(hullFilter).Sample(new float3(worldPos.x, worldPos.y, worldPos.z));
+        }
+
         /// The real API: batch every query of the physics step into one job.
         public static JobHandle SampleBatch(
             NativeArray<float3> queries,

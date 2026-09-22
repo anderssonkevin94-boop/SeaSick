@@ -11,6 +11,7 @@ namespace SeaSick.Ship
         [SerializeField] float wakeFullRate = 85f;
         [SerializeField] float shoulderRate = 75f;
 
+        SurfaceWake surfaceWake;
         ShipMotor motor;
         Rigidbody rb;
         ParticleSystem bowSpray;
@@ -118,12 +119,16 @@ namespace SeaSick.Ship
             // hull's spray at 1.4x the steamer's, not 1.9x.
             sizeScale = Mathf.Sqrt(hullLength / 24.2f);
             if (emitterRoot != null) ApplyRig();
+            if (surfaceWake != null) surfaceWake.Configure(hullLength, hullBeam);
         }
 
         void Start()
         {
             motor = GetComponent<ShipMotor>();
             rb = GetComponent<Rigidbody>();
+            surfaceWake = GetComponent<SurfaceWake>();
+            if (!surfaceWake) surfaceWake = gameObject.AddComponent<SurfaceWake>();
+            surfaceWake.Configure(hullLength, hullBeam);
 
             // Every emitter hangs off this rather than off the hull directly,
             // so the whole rig can be held at the waterline as she settles.
@@ -360,17 +365,18 @@ namespace SeaSick.Ship
             float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
             // Spray kicks in hard when the bow drops onto a wave face.
             float slam = Mathf.Clamp01(-motor.SurfAccel / 2.5f);
-            SetRate(bowSpray, sprayFullRate * (Mathf.Pow(s01, 1.4f) + slam * 0.8f));
-            SetRate(wake, wakeFullRate * s01);
-            SetRate(shoulderPort, shoulderRate * s01);
-            SetRate(shoulderStar, shoulderRate * s01);
-            SetRate(sternWash, wakeFullRate * 0.8f * s01);
+            SetRate(bowSpray, sprayFullRate * (Mathf.Pow(s01, 1.4f) * 0.12f + slam * 0.35f));
+            // Continuous foam is the water-following SurfaceWake mesh.
+            // Keep these legacy emitters silent; impact spray remains airborne.
+            SetRate(wake, 0);
+            SetRate(shoulderPort, 0);
+            SetRate(shoulderStar, 0);
+            SetRate(sternWash, 0);
 
             // The wake arms need real way before there is a wake at all, and
             // they lengthen with speed — a fast hull throws a longer, denser V.
-            float wakeK = Mathf.Clamp01((s01 - 0.12f) / 0.88f);
-            SetRate(wakeLinePort, wakeLineFullRate * wakeK);
-            SetRate(wakeLineStar, wakeLineFullRate * wakeK);
+            SetRate(wakeLinePort, 0);
+            SetRate(wakeLineStar, 0);
 
             BowEntry();
             WaveImpacts();

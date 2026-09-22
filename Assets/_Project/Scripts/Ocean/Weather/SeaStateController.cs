@@ -334,8 +334,10 @@ namespace SeaSick.Ocean
         /// than a hand-copy of it that stops matching and stops gating.
         public float TargetHsAt(Vector2 p, double t)
         {
+            // `t`, not the live clock: the storm moves now, and TargetHsAt is
+            // asked about other times by probes that must stay repeatable.
             float storm = RegionField.Instance != null
-                ? RegionField.Instance.StormWeight(p) : 0f;
+                ? RegionField.Instance.StormWeight(p, t) : 0f;
 
             // The open sea's own slow breathing, in metres. This is the quiet
             // level -- the bottom a lull can reach, not the sea itself.

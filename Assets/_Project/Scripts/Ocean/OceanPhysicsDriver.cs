@@ -39,6 +39,14 @@ namespace SeaSick.Ocean
 
         float2 HullFilter() => new float2(hullFeelsCascade0, hullFeelsCascade1);
 
+        /// The filter the hull probes are sampled through, for the one other
+        /// thing that has to agree with them: the motor's read of the face she
+        /// is on. Raw if there is no driver, which is what it always was.
+        public static float2 HullFilterNow =>
+            instance != null ? instance.HullFilter() : OceanSampler.NoHullFilter;
+        static OceanPhysicsDriver instance;
+        void OnEnable() => instance = this;
+
         void FixedUpdate()
         {
             if (!OceanSampler.Ready) return;

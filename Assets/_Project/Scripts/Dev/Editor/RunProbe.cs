@@ -20,6 +20,13 @@ public static class RunProbe
     public static void HomeTab() => Call("HomeTabProbe");
     public static void Look() => Call("IslandLook");
     public static void Ripple() => Call("RippleStressProbe");
+    // What heavy weather COSTS her, over an Hs ladder of 2/5/9/14/22/35/50 m.
+    // Not a survival gate -- PlayerHull.Alive is hardcoded true and roll is
+    // spring-clamped, so "does she live" can only come back green. This reads
+    // the price instead: broach, overspeed, surf, bilge, hull, roughness,
+    // heel, way, sea resistance and crew labour, per sea state, running
+    // down-sea in searched-for deep water. Play mode, Sea.unity, ~9 min.
+    public static void StormCost() => Call("StormCostProbe");
     /// The needle gate under a jittering frame time, old sub-step vs fixed.
     public static void RippleJitter() => Call("RippleStressProbe", "Jitter");
 
@@ -52,7 +59,16 @@ public static class RunProbe
     }
     public static void Peek() => Call("ChunkPeek");
     public static void Cost() => Call("CostProbe");
+    public static void Shadows() => Call("ShadowCostProbe");
     public static void Drive() => Call("DriveProbe");
+    // How she HANDLES: one launcher per play session. Sway = roll/pitch decay
+    // and the three-heading roughness table; Helm = turn build, circle, speed
+    // cost, drift, heel, time to speed; Controls = rungs 0 and 19 plus the
+    // brig beam-on at severity 0.75. /tmp/seasick-handling-<mode>.txt.
+    public static void HandlingSway() => Call("HandlingProbe", "Sway");
+    public static void HandlingHelm() => Call("HandlingProbe", "Helm");
+    public static void HandlingTrace() => Call("HandlingProbe", "Trace");
+    public static void HandlingControls() => Call("HandlingProbe", "Controls");
     public static void Scale() => Call("ScaleCheck");
     public static void Ruler() => Call("ScaleRuler");
     public static void Float() => Call("HullFloatProbe");
@@ -157,11 +173,100 @@ public static class RunProbe
     public static void Smooth() => Call("SmoothProbe");
     public static void StepRebuildSweep() => Call("StepProbe", "RebuildSweep");
     public static void StepRebuildSweepUnsliced() => Call("StepProbe", "RebuildSweepUnsliced");
+
+    // "If I sail the same route twice, do I meet the same sea?" PURE FIELD
+    // MATH at chosen ocean times -- it does not sail, so nothing in it moves
+    // with the frame rate and the run is valid on a remote editor throttled
+    // to 10 fps. Play mode, Sea.unity. /tmp/seasick-voyagevariety.txt.
+    public static void VoyageVariety() => Call("VoyageVarietyProbe");
+    // The same measurement at crossings of 180 / 300 / 600 s, side by side.
+    // The answer plainly depends on how long a crossing is, so one duration
+    // cannot settle it.
+    public static void VoyageVarietySweep() => Call("VoyageVarietyProbe", "Sweep");
     // The ocean's parity gate and its cost ledger. Both name SeaSick.Ocean
     // and Unity.Collections, which is the reference set the ad-hoc compile
     // does not have; through the project assembly they run. Play mode,
     // OceanLab for Divergence.
     public static void Divergence() => Call("DivergenceProbe");
+
+    /// The parity gate with the shoreward band forced off and on. The band is
+    /// added in BOTH twins and in OceanVerify, so the gate is what proves the
+    /// three agree -- run the off leg first and check it reproduces the last
+    /// recorded numbers before reading anything into the on leg.
+    /// Voyage variety, one leg per change, so the two can be told apart.
+    /// Baseline is the shipped expressions character for character.
+    public static void VoyageBaseline() => VoyageWith(false, false);
+    public static void VoyageCells()    => VoyageWith(true, false);
+    public static void VoyageStorm()    => VoyageWith(false, true);
+    public static void VoyageBoth()     => VoyageWith(true, true);
+
+    static void VoyageWith(bool cells, bool storm)
+    {
+        SetStatic("SeaSick.Ocean.WeatherField", "EvolvingCells", cells);
+        SetStatic("SeaSick.Ocean.RegionField", "WanderingStorm", storm);
+        Debug.Log($"RunProbe: EvolvingCells={cells}  WanderingStorm={storm}");
+        Call("VoyageVarietyProbe");
+    }
+
+    static void SetStatic(string type, string field, bool value)
+    {
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var ty = asm.GetType(type);
+            if (ty == null) continue;
+            var f = ty.GetField(field,
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (f == null) continue;
+            f.SetValue(null, value);
+            return;
+        }
+        Debug.LogError("RunProbe: could not set " + type + "." + field);
+    }
+
+    /// The parity gate with the shoreward band forced off and on. The band is
+    /// added in BOTH twins and in OceanVerify, so the gate is what proves the
+    /// three agree -- run the off leg first and check it reproduces the last
+    /// recorded numbers before reading anything into the on leg.
+    /// The same voyage-variety measurement with the storm cells rigid (today)
+    /// and evolving (the change). The OFF leg is the shipped expression
+    /// character for character, so it is a true baseline.
+    public static void VoyageRigid() => VoyageWith(false);
+    public static void VoyageEvolving() => VoyageWith(true);
+
+    static void VoyageWith(bool on)
+    {
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var t = asm.GetType("SeaSick.Ocean.WeatherField");
+            if (t == null) continue;
+            var f = t.GetField("EvolvingCells",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (f == null) { Debug.LogError("RunProbe: no WeatherField.EvolvingCells"); return; }
+            f.SetValue(null, on);
+            Debug.Log("RunProbe: EvolvingCells = " + on);
+            break;
+        }
+        Call("VoyageVarietyProbe");
+    }
+
+    public static void DivergenceNoBand() => DivergenceWith(false);
+    public static void DivergenceBand() => DivergenceWith(true);
+
+    static void DivergenceWith(bool on)
+    {
+        foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var t = asm.GetType("SeaSick.Ocean.RegionField");
+            if (t == null) continue;
+            var f = t.GetField("ShorewardEnabled",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+            if (f == null) continue;
+            f.SetValue(null, on);
+            Debug.Log("RunProbe: ShorewardEnabled = " + on);
+            break;
+        }
+        Call("DivergenceProbe");
+    }
     public static void Perf() => Call("PerfProbe");
     public static void FFT() => CallEditor("FFTUnit");
     // The water shader's contact sheets. docs/DEV-TOOLS.md said to hand the
