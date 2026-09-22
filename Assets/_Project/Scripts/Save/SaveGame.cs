@@ -201,6 +201,12 @@ namespace SeaSick.Save
             {
                 if (v == null || string.IsNullOrEmpty(v.bornName)) continue;
                 if (bornRows.Contains(v.bornName)) continue;
+                // A raider is a `BornVillager` because that is how a body gets
+                // made at runtime, not because he is one of ours. Without this
+                // a raid in progress at the save writes "raider" into the
+                // ship's crew list and the load boards him -- Kevin's save has
+                // exactly that in it.
+                if (v.GetComponent<SeaSick.Combat.RaidWalker>() != null) continue;
                 if (!s.crewNames.Contains(v.bornName)) s.crewNames.Add(v.bornName);
             }
 
@@ -380,6 +386,9 @@ namespace SeaSick.Save
                 foreach (var who in data.ship.crewNames)
                 {
                     if (string.IsNullOrEmpty(who)) continue;
+                    // Written by a build from before raiders were kept out of
+                    // this list (see the writer). Not crew; never was.
+                    if (who == "raider") continue;
                     if (BornVillager.Board(who, motor.transform) == null)
                         Debug.LogWarning("SaveGame: could not re-make " + who
                             + ", who was aboard");
@@ -393,6 +402,15 @@ namespace SeaSick.Save
                 yield return RestoreOutpost(os, pop, motor, host);
                 if (os.ledger == LastAdopted) restored++;
             }
+            // 5a. **Nobody answers to somebody else's name.** Two naming
+            // paths meet on a load -- the yard clones her berths full in step
+            // 2, the save boards her camp-born hands in 4a, and a save
+            // written by a build that named every clone after the man it
+            // copied (fixed 2026-09-22) arrives with three of them. The
+            // authored cast and anybody a ledger row is holding keep their
+            // names; the rest are re-drawn from the pool.
+            CrewNames.Deduplicate();
+
             var roster = motor.GetComponent<CrewRoster>();
             if (roster != null) roster.Refresh();
 

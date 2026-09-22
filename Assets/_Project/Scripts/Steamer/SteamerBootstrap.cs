@@ -244,13 +244,23 @@ namespace SeaSick.Steamer
             if (hands.Length > 0)
             {
                 var live = new System.Collections.Generic.List<SeaSick.Crew.CrewAgent>(hands);
+                // A clone is a different person: `Instantiate` copies the
+                // serialised `CrewMemberDef`, so without christening him the
+                // new hand wears the template's NAME as well as his coat and
+                // the crew list reads "Pip, Bo, Bo, Bo" (Kevin, 2026-09-22).
+                // Same hat as `Shipyard.ManCrew`, same rule: no name that is
+                // already worn aboard or written in a camp's ledger.
+                System.Collections.Generic.HashSet<string> taken = null;
                 for (int i = live.Count; i < Hands; i++)
                 {
                     var clone = Object.Instantiate(hands[0].gameObject,
                                                    hands[0].transform.parent);
-                    clone.name = $"Hand{i:00}";
                     clone.SetActive(true);
-                    live.Add(clone.GetComponent<SeaSick.Crew.CrewAgent>());
+                    var agent = clone.GetComponent<SeaSick.Crew.CrewAgent>();
+                    if (taken == null) taken = SeaSick.Crew.CrewNames.InUse();
+                    if (agent != null) SeaSick.Crew.CrewNames.Christen(agent, i, taken);
+                    else clone.name = $"Hand{i:00}";
+                    live.Add(agent);
                 }
                 for (int i = 0; i < live.Count; i++)
                     if (live[i] != null) live[i].gameObject.SetActive(i < Hands);

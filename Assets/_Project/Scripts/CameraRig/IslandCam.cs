@@ -235,6 +235,16 @@ namespace SeaSick.CameraRig
         Vector3? focus;
         Transform following;
 
+        // --- the one eased path besides a fly-to: `PanToWorld` --------------
+
+        bool easingPan;
+        Vector3 easeFromFocus;
+        Vector3 easeToFocus;
+        float easeFromGround;
+        float easeToGround;
+        float easeElapsed;
+        float easeDuration;
+
         // --- the hands-on state ----------------------------------------------
 
         /// **Latched the first time a gesture arrives**, and the reason there
@@ -674,6 +684,7 @@ namespace SeaSick.CameraRig
             flingFor = 0f;
             wantPan = Pan;
             wantGround = Ground;
+            easingPan = false;
         }
 
         /// END: hand the shot back to the composition the dock authored.
@@ -715,6 +726,52 @@ namespace SeaSick.CameraRig
             var c = Chase();
             if (c != null) wantGround = Mathf.Clamp(
                 c.OverviewGroundForHeight(heightMetres), minGround, maxGround);
+            Driven = true;
+        }
+
+        /// **Ease onto a world point over `seconds`, arriving at `heightMetres`
+        /// above it — `LookAt`'s own destination, travelled to smoothly
+        /// instead of cut to.**
+        ///
+        /// For a press that should read as "the camera is going there"
+        /// (the ashore rail's tokens): a `LookAt` pop reads as the sheet
+        /// simply appearing about somewhere else, which loses the "that
+        /// one, over there" the press was asking for.
+        ///
+        /// The start point is read off whatever is actually on screen right
+        /// now — the existing `focus`, or the rig's own last composed aim
+        /// when nothing has taken hold of the view yet — the same trick
+        /// `Latch` uses and for the same reason: a hand-off with no pop.
+        ///
+        /// Counts as driving, exactly like `LookAt`, but NOT as taking hold:
+        /// `handsOn` stays false, so a gesture that arrives mid-ease still
+        /// latches cleanly off the rig's own composition rather than off a
+        /// half-finished pan. `KillMotion`, which every gesture entry point
+        /// calls first, drops the ease outright — so the player's next drag
+        /// takes over from wherever the ease had gotten to, not fights it.
+        public void PanToWorld(Vector3 point, float heightMetres, float seconds)
+        {
+            var c = Chase();
+            float targetGround = c != null
+                ? Mathf.Clamp(c.OverviewGroundForHeight(heightMetres), minGround, maxGround)
+                : Mathf.Clamp(heightMetres, minGround, maxGround);
+
+            Vector3 startFocus;
+            if (focus.HasValue) startFocus = focus.Value;
+            else if (c != null && c.OverviewLevel > 0.5f) startFocus = c.LastOverviewAim;
+            else startFocus = point;
+
+            easeFromFocus = startFocus;
+            easeFromGround = Ground;
+            easeToFocus = point;
+            easeToGround = targetGround;
+            easeElapsed = 0f;
+            easeDuration = Mathf.Max(0.01f, seconds);
+            easingPan = true;
+
+            following = null;
+            wantPan = Pan = Vector3.zero;
+            focus = startFocus;
             Driven = true;
         }
 
@@ -776,6 +833,21 @@ namespace SeaSick.CameraRig
 
             float dt = Time.unscaledDeltaTime;
             Glide(dt);
+
+            // `PanToWorld`'s ease, stepped toward its target. Smoothstepped
+            // rather than the exponential `Settle` uses elsewhere: this is
+            // the one path with a stated DURATION rather than a decay rate,
+            // because it is answering "take me there in about this long"
+            // instead of "chase this continuously".
+            if (easingPan)
+            {
+                easeElapsed += dt;
+                float u = Mathf.Clamp01(easeElapsed / easeDuration);
+                float e = u * u * (3f - 2f * u);
+                focus = Vector3.Lerp(easeFromFocus, easeToFocus, e);
+                wantGround = Mathf.Lerp(easeFromGround, easeToGround, e);
+                if (u >= 1f) easingPan = false;
+            }
 
             // Whoever is being followed drags the centre with them.
             if (following != null)

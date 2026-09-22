@@ -47,13 +47,11 @@ namespace SeaSick.Crew
 
             // His own def, not a shared asset: `Shipyard.Refit` writes
             // `ironStomach` straight into `CrewAgent.Def`, so a villager
-            // sharing the template's asset would edit the whole crew.
-            var src = template.Def;
-            var def = ScriptableObject.CreateInstance<CrewMemberDef>();
-            def.displayName = displayName;
-            if (src != null) { def.role = src.role; def.ironStomach = src.ironStomach; }
-            else def.role = CrewRole.Deckhand;
-            agent.SetDef(def);
+            // sharing the template's asset would edit the whole crew. Built
+            // through `CrewNames` so the def is stamped as a runtime one --
+            // that stamp is how a body wearing a name out of the hat is told
+            // from one of the authored cast when two names collide.
+            agent.SetDef(CrewNames.MakeDef(displayName, template.Def));
 
             var tag = clone.GetComponent<BornVillager>();
             if (tag == null) tag = clone.AddComponent<BornVillager>();

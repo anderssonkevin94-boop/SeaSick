@@ -233,29 +233,35 @@ namespace SeaSick.World
     public static class VillagerNames
     {
         /// ~24 short storybook names, the register the manifest's own crew
-        /// names are already in.
-        static readonly string[] Names =
-        {
-            "Ash", "Bram", "Cass", "Dorrit", "Edda", "Finch", "Gale", "Hollis",
-            "Ivo", "Jory", "Kess", "Lark", "Mabel", "Nye", "Orin", "Pell",
-            "Quill", "Rowan", "Sable", "Tam", "Ursa", "Vane", "Wren", "Yara",
-        };
+        /// names are already in. They live in `Crew.CrewNames` since
+        /// 2026-09-22: the ship's yard names her new berths out of the same
+        /// hat, and two hats meant two people called Bo.
+        static string[] Names => SeaSick.Crew.CrewNames.Pool;
 
         /// The name for the next hand this ledger recruits. Skips anybody
-        /// already on the roster, so a small camp does not double up long
-        /// before the 24 run out.
+        /// already on this roster AND anybody already answering to that name
+        /// anywhere else -- aboard, or at another camp -- so a hand carried
+        /// onto the ship never meets his own name there.
         public static string NextFor(OutpostLedger ledger)
         {
             int seed = ledger.keyX * 73856093 ^ ledger.keyZ * 19349663
                 ^ ledger.hands.Count * 83492791;
             uint h = unchecked((uint)seed);
+            var used = SeaSick.Crew.CrewNames.InUse();
             for (int i = 0; i < Names.Length; i++)
             {
                 string candidate = Names[(int)((h + (uint)i) % (uint)Names.Length)];
-                if (ledger.Hand(candidate) == null) return candidate;
+                if (ledger.Hand(candidate) == null && !used.Contains(candidate))
+                    return candidate;
             }
-            // All 24 taken by one camp: keep recruiting rather than stall
-            // on a naming collision nobody designed for.
+            // All 24 spoken for: keep recruiting rather than stall on a
+            // naming collision nobody designed for.
+            for (int i = 1; i < 999; i++)
+            {
+                string candidate = "Hand " + i;
+                if (ledger.Hand(candidate) == null && !used.Contains(candidate))
+                    return candidate;
+            }
             return "Hand " + (ledger.hands.Count + 1);
         }
     }

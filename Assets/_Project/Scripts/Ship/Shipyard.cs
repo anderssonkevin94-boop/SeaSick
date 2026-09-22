@@ -918,12 +918,28 @@ namespace SeaSick.Ship
             int want = Mathf.Max(1, Berths);       // she always has a helmsman
             var live = new List<Crew.CrewAgent>(have);
 
+            // **A clone is a different person.** The body is copied; the name
+            // is NOT. Instantiate brings the serialised `CrewMemberDef` field
+            // with it, which is the template's authored asset -- so before
+            // 2026-09-22 every berth she gained was filled by another Bo, and
+            // the crew list read "Pip, Bo, Bo, Bo". Each new hand is christened
+            // out of the shared pool instead, skipping every name already worn
+            // aboard or written in a camp's ledger, and gets a def instance of
+            // his own (the yard writes `ironStomach` into `Def`, so a shared
+            // asset was editing the whole crew as well as naming them).
+            System.Collections.Generic.HashSet<string> taken = null;
             for (int i = live.Count; i < want; i++)
             {
                 var clone = Instantiate(have[0].gameObject, have[0].transform.parent);
-                clone.name = $"Hand{i:00}";
                 clone.SetActive(true);
-                live.Add(clone.GetComponent<Crew.CrewAgent>());
+                var agent = clone.GetComponent<Crew.CrewAgent>();
+                if (taken == null) taken = global::SeaSick.Crew.CrewNames.InUse();
+                // Seeded off the berth, so the same berth on the same ship
+                // draws the same name every session and the hands she clones
+                // need no row in the save file to keep their names.
+                if (agent != null) global::SeaSick.Crew.CrewNames.Christen(agent, i, taken);
+                else clone.name = $"Hand{i:00}";
+                live.Add(agent);
             }
             for (int i = 0; i < live.Count; i++)
                 if (live[i] != null) live[i].gameObject.SetActive(i < want);

@@ -134,10 +134,17 @@ namespace SeaSick.UI.Sheets
         /// Open the hand's sheet — by finding their BODY, the same way
         /// `CampWorker` and `Outpost` pair a ledger row to an agent: on
         /// `CrewAgent.DisplayName`. A row with no body yet does nothing.
+        ///
+        /// Also swings the island camera to wherever that body actually is,
+        /// so the tap answers "where are they" and not only "what are they
+        /// doing". Found among `camp.Parked()` means ashore; found only by
+        /// the fallback scene-wide search means the search had to reach past
+        /// the island to find them — the ship.
         static void OpenHand(string who)
         {
             var camp = Camp();
             CrewAgent found = null;
+            bool aboard = false;
             if (camp != null)
             {
                 var parked = camp.Parked();
@@ -148,11 +155,40 @@ namespace SeaSick.UI.Sheets
             if (found == null)
                 foreach (var a in Object.FindObjectsByType<CrewAgent>(
                              FindObjectsInactive.Exclude, FindObjectsSortMode.None))
-                    if (a != null && a.DisplayName == who) { found = a; break; }
+                    if (a != null && a.DisplayName == who) { found = a; aboard = true; break; }
 
             if (found == null) return;
+
+            PanCameraTo(found, aboard);
+
             var sheet = Sheets.TryCreateFor(found);
             if (sheet != null) Sheets.Open(sheet);
+        }
+
+        /// Ease the island view onto the hand — their own body ashore, or
+        /// the ship if `aboard`, since a body still parked below decks has
+        /// nothing ashore worth looking at. `PanToWorld`'s own clamp keeps
+        /// the height no closer than the camera's minimum; the player's next
+        /// drag takes over from wherever the ease has gotten to, the same
+        /// way any other gesture cancels a fling.
+        static void PanCameraTo(CrewAgent found, bool aboard)
+        {
+            var isleCam = Object.FindFirstObjectByType<CameraRig.IslandCam>();
+            if (isleCam == null) return;
+
+            Vector3 point;
+            if (aboard)
+            {
+                var anchor = Sheets.Anchor;
+                if (anchor == null) return;
+                point = anchor.transform.position;
+            }
+            else
+            {
+                point = found.transform.position;
+            }
+
+            isleCam.PanToWorld(point, CameraRig.IslandCam.BlueprintHeight, 0.6f);
         }
 
         /// Short text glyphs, never emoji — the HUD's type is a serif and a
