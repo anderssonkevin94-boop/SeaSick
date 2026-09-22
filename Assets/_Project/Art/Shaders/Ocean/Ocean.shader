@@ -60,6 +60,7 @@ Shader "SeaSick/Ocean"
         _SpecPowerNear ("Spec Power Near", Float) = 420
         _SpecPowerFar ("Spec Power Far", Float) = 48
         _SpecStrength ("Spec Strength", Range(0, 2)) = 0.75
+        _PaintedStrength ("Painted — illustration strength", Range(0, 1)) = 0
         _GraphicLight ("Graphic — wave face lighting", Range(0, 1)) = 0
         _SurfaceDetail ("Graphic — small surface normals", Range(0, 1)) = 1
         _ReflectionStrength ("Graphic — sky reflection", Range(0, 1)) = 1
@@ -205,6 +206,13 @@ Shader "SeaSick/Ocean"
             // and none means _SS_Night is 0, which is broad daylight.
             float _SS_NightBodyDim;
             float _SS_NightSkyMix;
+            // Kevin, 2026-09-22: the coastal water stayed the same turquoise
+            // at every hour. rgb = the light at the water's surface now over
+            // the same light at midday (so exactly 1,1,1 at noon), w = how
+            // far to apply it. Same _SS_LayerOff phrasing as the night terms:
+            // an UNSET global is (0,0,0,0), w = 0, no tint, and the shader
+            // renders the noon coast it always did.
+            float4 _SS_ShoreLight;
             // ---- dev uniforms, behind _SEASICK_DEBUG ------------------------
             // All six of these exist to make a probe able to read one of the
             // shader's own inputs off the framebuffer. They are worth having
@@ -308,6 +316,8 @@ Shader "SeaSick/Ocean"
                 return SAMPLE_TEXTURE2D_LOD(_Ocean_SimTex, sampler_Ocean_SimTex, uv, 0).rg;
             }
 
+            #include "GraphicWaveDetail.hlsl"
+
             // ---- hull water clip -------------------------------------------
             // In mountainous seas the surface rises above the deck and renders
             // straight through it, so you see the sea inside the boat. Rather
@@ -330,7 +340,7 @@ Shader "SeaSick/Ocean"
             half _FoamSnap, _FoamCrestGain, _FoamRelief, _FoamSparkle;
             half _FoamBandLift, _FoamLiftFar, _FoamTrailFloor, _FoamTrailGain;
             half _GraphicLight, _ReflectionStrength, _FoamBreakup, _FoamEdge;
-            half _SurfaceDetail;
+            half _SurfaceDetail, _PaintedStrength;
             half _SurfStrength, _SurfBreakFrac, _SurfSwashDepth;
             half _SpecPowerNear, _SpecPowerFar, _SpecStrength;
             half _MurkDepth, _RefractStrength, _ShoalDepth, _ShoalStrength;
@@ -425,6 +435,27 @@ Shader "SeaSick/Ocean"
                 }
             }
 
+            // World-space filtered long/mid wave slope for the graphic style.
+            // The finest cascade is deliberately excluded from pigment/crest
+            // detection; it still displaces the water and drives physics.
+            //
+            // `artEnv` is the shore envelope, passed IN rather than sampled
+            // here. The four taps that call this sit 0.65 m apart -- 1.3 m
+            // across the whole stencil -- and the shore grid does not resolve
+            // anything like that, so all four were reading the same texel and
+            // running the same pair of smoothsteps on it. One lookup, shared.
+            float2 GraphicSlope(float2 p,float3 weights,float artEnv)
+            {
+                float4 d=0;
+                [unroll] for(int c=0;c<2;c++){
+                    float4 v=SAMPLE_TEXTURE2D_ARRAY_LOD(_Ocean_Derivatives,
+                        sampler_Ocean_Derivatives,p/_Ocean_PatchSizes[c],c,0);
+                    d+=v*weights[c];
+                }
+                float ah,af;float2 ag;ArtSurface(p,ah,ag,af);
+                return d.xy/max(1.0+d.zw,.25)+ag*artEnv;
+            }
+
             // Two octaves of value noise, world-anchored: tears the raw
             // Jacobian foam so it reads as spume, not maths.
             //
@@ -508,7 +539,18 @@ Shader "SeaSick/Ocean"
                 float3 wC = CascadeWeightsAt(dist);
                 float dispLen;
                 float3 disp = SampleDisplacement(ws.xz, fade, envC, wC, dispLen);
+                // The shore swell rides ON TOP of the spectral sea, evaluated
+                // at the DISPLACED position -- where the water actually ends
+                // up. That is the only coordinate the Burst twin can agree on,
+                // because at a fold the undisplaced source is not unique.
+                disp.y += ShorewardHeight(ws.xz + disp.xz) * fade;
                 disp.y += SampleSim(ws.xz).r; // wakes & splash rings
+                float artH,artFoam;float2 artSlope;
+                float2 artXZ=ws.xz+disp.xz;
+                ArtSurface(artXZ,artH,artSlope,artFoam);
+                float3 artShore=ShoreWetDepth(artXZ);
+                float artEnvelope=artShore.y*smoothstep(0,8,artShore.z);
+                disp.y+=artH*artEnvelope*fade;
                 ws += disp;
                 o.positionWS = ws;
                 o.heightY = disp.y;
@@ -613,7 +655,7 @@ Shader "SeaSick/Ocean"
                 // the foam block unchanged.
                 float4 dv;
                 float3 fold;
-                float3 shadingBands = float3(1.0, lerp(0.5, 1.0, _SurfaceDetail), _SurfaceDetail);
+                float3 shadingBands = float3(1.0, lerp(0.5, 1.0, _SurfaceDetail), lerp(_SurfaceDetail,_SurfaceDetail*_SurfaceDetail,_PaintedStrength));
                 SampleDerivsAndFold(xz, input.wC * fade * input.envC * shadingBands,
                                     wJ * input.envC, dv, fold);
                 float2 slope = dv.xy / max(float2(1.0, 1.0) + dv.zw, 0.15);
@@ -624,6 +666,35 @@ Shader "SeaSick/Ocean"
                     SampleSim(xz + float2(simTexel, 0)).r - sim.r,
                     SampleSim(xz + float2(0, simTexel)).r - sim.r) / simTexel;
                 slope += simSlope;
+                float2 graphicDx=0,graphicDz=0;
+                // **Everything this block feeds already vanishes with
+                // distance.** `graphicCrest` is multiplied by
+                // (1 - smoothstep(90,220,dist)) and is exactly zero past
+                // 220 m; `paintedBody` has flattened to a constant by 420 m.
+                // Ungated, the block ran four GraphicSlope taps -- sixteen
+                // ArtWave evaluations, each an acos, a sqrt and eight
+                // sin/cos, plus eight derivative fetches -- at EVERY ocean
+                // pixel out to the horizon, and then multiplied the answer by
+                // zero. The sea fills the screen and nearly all of it is far
+                // away, so that was the bulk of the frame.
+                //
+                // Faded, not cut: a hard `dist < 220` would pop a ring into
+                // the water where the broad slope stopped being blended.
+                float paint=_PaintedStrength*(1.0-smoothstep(220.0,420.0,dist));
+                if(paint>.001){
+                    float3 weights=input.wC*fade*input.envC*float3(1,.65,0);
+                    const float stepMetres=.65;
+                    float3 artShore=ShoreWetDepth(xz);
+                    float artEnv=artShore.y*smoothstep(0,8,artShore.z);
+                    float2 gx0=GraphicSlope(xz-float2(stepMetres,0),weights,artEnv);
+                    float2 gx1=GraphicSlope(xz+float2(stepMetres,0),weights,artEnv);
+                    float2 gz0=GraphicSlope(xz-float2(0,stepMetres),weights,artEnv);
+                    float2 gz1=GraphicSlope(xz+float2(0,stepMetres),weights,artEnv);
+                    float2 broadSlope=(gx0+gx1+gz0+gz1)*.25;
+                    graphicDx=(gx1-gx0)/(2*stepMetres);
+                    graphicDz=(gz1-gz0)/(2*stepMetres);
+                    slope=lerp(slope,broadSlope,paint);
+                }
                 float3 n = normalize(float3(-slope.x, 1.0, -slope.y));
 
                 Light sun = GetMainLight();
@@ -635,6 +706,21 @@ Shader "SeaSick/Ocean"
                 float storm = saturate(_SS_Storminess);
                 half3 deep = lerp(_DeepColor.rgb, _StormDeep.rgb, storm);
                 half3 shallow = lerp(_ShallowColor.rgb, _StormShallow.rgb, storm);
+                // The coast's colour, by the hour. `shoreTint` is a full
+                // multiplier — it carries both the hue of the light and how
+                // much of it there is.
+                half3 shoreTint = lerp(half3(1.0, 1.0, 1.0),
+                                       _SS_ShoreLight.rgb, saturate(_SS_ShoreLight.w));
+                // The shallow colour is the top of the deep/shallow body
+                // ramp, and the body is ALREADY dimmed by _SS_NightBodyDim
+                // further down. Multiplying the tint in whole here would dim
+                // it twice and the sea would go to nothing. So the shallow end
+                // takes the tint's HUE only, renormalised to its own
+                // brightness: at dusk the crests warm, and how dark they get
+                // stays the night dim's job.
+                half shoreLum = max(dot(shoreTint, half3(0.30, 0.59, 0.11)), 1e-3);
+                shallow *= lerp(half3(1.0, 1.0, 1.0), shoreTint / shoreLum,
+                                0.75 * saturate(_SS_ShoreLight.w));
                 half3 subsurf = lerp(_SubsurfaceColor.rgb, _StormSubsurface.rgb, storm);
 
                 // Body colour: deep in troughs, lifted on crests. The scale
@@ -664,6 +750,24 @@ Shader "SeaSick/Ocean"
                 // quantization: hard tone bands crawl when a wave rolls.
                 float faceLight = smoothstep(-0.2, 0.85, dot(n, L));
                 body *= lerp(1.0, lerp(0.72, 1.12, faceLight), _GraphicLight);
+                // Approved study treatment: pigment follows the live FFT face,
+                // with no independent noise islands. Normalize height for storms.
+                float studyHeight=input.heightY*2.0/max(localHs,1.0);
+                float facing=saturate(dot(n,L));
+                float faceSignal=.70+(facing-saturate(L.y))*1.3+.065*studyHeight;
+                float pigmentAA=max(fwidth(faceSignal)*.85,.003);
+                float midPlane=smoothstep(.61-pigmentAA,.61+pigmentAA,faceSignal);
+                float lightPlane=smoothstep(.77-pigmentAA,.77+pigmentAA,faceSignal);
+                float tipPlane=smoothstep(.88-pigmentAA,.88+pigmentAA,faceSignal);
+                half3 middleColor=lerp(deep,shallow,.52);
+                half3 paintedBody=lerp(deep*.74,middleColor*.80,midPlane);
+                paintedBody=lerp(paintedBody,shallow*.86,lightPlane);
+                paintedBody=lerp(paintedBody,shallow*1.07,tipPlane*.55);
+                paintedBody*=.84+.23*smoothstep(.38,.96,facing)
+                    +.06*smoothstep(-1,1.1,studyHeight);
+                paintedBody*=lerp(half3(1,1,1),sun.color,.18);
+                paintedBody=lerp(paintedBody,middleColor*.83,smoothstep(100,420,dist)*.88);
+                body=lerp(body,paintedBody,_PaintedStrength);
 
                 // The body colour carries no diffuse and no normal term — it
                 // is authored, not lit — so unlike the specular and the
@@ -695,8 +799,17 @@ Shader "SeaSick/Ocean"
                 //   first and the last thing visible is a blue-green ghost --
                 //   which is why deep water hides its floor without a fade
                 //   having to be authored.
+                //   Kevin, 2026-09-22: the shoal colour takes `shoreTint` in
+                //   FULL, hue and brightness both, and it is applied here
+                //   rather than up with the body because the shoal tint is
+                //   laid on AFTER _SS_NightBodyDim — it never went through the
+                //   night dim at all, which is exactly why the coast went on
+                //   glowing noon turquoise under a black sky. Warm and dim at
+                //   dusk; at night it lands on a cold blue-grey a shade off
+                //   the night sea, so the shoal still says "there is a bottom
+                //   here" without being the brightest thing in the frame.
                 float shoal = 1.0 - saturate(swd.z / max(_ShoalDepth, 0.5));
-                body = lerp(body, _ShoalColor.rgb,
+                body = lerp(body, _ShoalColor.rgb * shoreTint,
                             shoal * shoal * _ShoalStrength * swd.y);
 
                 // Everything from here to the `body = lerp(...)` below is the
@@ -742,7 +855,7 @@ Shader "SeaSick/Ocean"
                 trans *= 1.0 - saturate(SS_REFRACT_OFF);
                 // Meet the hull, do not dissolve into her.
                 trans *= 1.0 - hullShield;
-                body = lerp(body, SampleSceneColor(suv + refr), trans);
+                body = lerp(body, SampleSceneColor(suv + refr), trans * lerp(1.0, 0.45, _PaintedStrength));
                 #endif // _REFRACTION
 
                 // The signature: sun behind a steep, choppy crest glows jade
@@ -945,9 +1058,49 @@ Shader "SeaSick/Ocean"
                 float edgeWidth = max(fwidth(foamAmt) * 1.5, 0.06);
                 float shapedFoam = smoothstep(0.28 - edgeWidth, 0.52 + edgeWidth, foamAmt);
                 foamAmt = lerp(foamAmt, shapedFoam, _FoamEdge);
+                // Fixed metre-space differences of the SAME filtered surface
+                // used by the pigment. No second screen derivative: it amplified
+                // texel/pixel noise into the speckled foam in the rejected pass.
+                float2 gradX=graphicDx,gradZ=graphicDz;
+                // Follow the bent waves' local travel direction rather than
+                // a fixed axis. The mask remains on the combined surface peak.
+                //
+                // `ArtTravelDirection` is three more ridge evaluations, and
+                // past 220 m every one of them is multiplied by a zero
+                // crestFade below. Skipping it there is most of the ocean.
+                // The branch wraps a VALUE only: everything that takes a
+                // screen derivative (the fwidth terms) stays outside it, or
+                // the quads straddling the boundary would differentiate a
+                // register no lane had written.
+                float crestFade=1.0-smoothstep(90.0,220.0,dist);
+                float2 ridgeDir=float2(0.0,1.0);
+                if(crestFade>.001) ridgeDir=ArtTravelDirection(xz);
+                float ridgeCurvature=dot(gradX*ridgeDir.x+gradZ*ridgeDir.y,ridgeDir);
+                float crestDistance=dot(slope,ridgeDir)/max(-ridgeCurvature,.025);
+                float width=.20+.12*saturate(.5+studyHeight*.6);
+                // Negative signed distance is the forward, descending crest face.
+                float boundary=width-abs(crestDistance+width*.65);
+                float crestAA=max(fwidth(boundary)*.65,.012);
+                float graphicCrest=smoothstep(-crestAA,crestAA,boundary)
+                    *smoothstep(.018,.075,-ridgeCurvature)
+                    *smoothstep(.08,.30,studyHeight)
+                    *crestFade;
+                float cleanShore=max(graphicCrest*breakers,swash*.8)
+                    *swd.y*_SurfStrength*(1-saturate(SS_SURF_OFF));
+                float graphicFoam=max(graphicCrest,max(cleanShore,sim.g));
+                float graphicAA=max(fwidth(graphicFoam)*.35,.005);
+                graphicFoam=smoothstep(.38-graphicAA,.38+graphicAA,graphicFoam);
+                foamAmt=lerp(foamAmt,graphicFoam*(1-SS_LAYER_OFF.w),_PaintedStrength);
 
                 half3 col = lerp(body, sky, fresnel * _ReflectionStrength * (1.0 - foamAmt) * (1.0 - SS_LAYER_OFF.y));
-                col += spec * sun.color;
+                // Keep the sky hue without letting its pale reflection wash out
+                // the authored blues. Wide satin glints replace pinprick sparkle.
+                half3 paintedReflection = lerp(body, sky * body * 1.7, 0.25);
+                col = lerp(col, lerp(body, paintedReflection,
+                    fresnel * _ReflectionStrength * (1.0 - foamAmt) * (1.0 - SS_LAYER_OFF.y)), _PaintedStrength);
+                float satin = smoothstep(0.80, 0.97, saturate(dot(n, H)));
+                satin *= _SpecStrength * 0.04 * (1.0 - 0.6 * storm) * (1.0 - SS_LAYER_OFF.z);
+                col += lerp(spec, satin, _PaintedStrength) * sun.color;
                 // The 0.45 term rides sun.color and so dims itself once the
                 // moon takes over the key light, but the 0.55 is flat ambient
                 // and knows nothing about the sun having set -- the same fault

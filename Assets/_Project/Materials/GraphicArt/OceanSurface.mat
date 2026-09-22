@@ -19,16 +19,16 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties:
+  m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
     - _FoamBandLift: 0.75508475
-    - _FoamBreakup: 0.18
+    - _FoamBreakup: 0.3
     - _FoamCrestGain: 1.101695
-    - _FoamEdge: 0.7
+    - _FoamEdge: 0.88
     - _FoamJThreshold: 0.33983052
     - _FoamLiftFar: 420.00003
     - _FoamNoiseScale: 0.08347457
@@ -37,29 +37,30 @@ Material:
     - _FoamSparkle: 0
     - _FoamTrailFloor: 0.2
     - _FoamTrailGain: 1.8
-    - _GraphicLight: 0.8
+    - _GraphicLight: 0.85
     - _HullShield: 1.6
     - _MurkDepth: 35.61
+    - _PaintedStrength: 1
     - _PeakMaskScale: 0.55
-    - _ReflectionStrength: 0.85
+    - _ReflectionStrength: 0.09
     - _RefractStrength: 0.22
     - _ShoalDepth: 12.6
     - _ShoalStrength: 0.58
     - _SpecPowerFar: 60
     - _SpecPowerNear: 160
-    - _SpecStrength: 1.15
-    - _SubsurfaceStrength: 0.65
+    - _SpecStrength: 0
+    - _SubsurfaceStrength: 0.08
     - _SurfBreakFrac: 0.78
     - _SurfStrength: 0.7
     - _SurfSwashDepth: 0.8
-    - _SurfaceDetail: 0.5
+    - _SurfaceDetail: 0.25
     m_Colors:
-    - _DeepColor: {r: 0.025, g: 0.17, b: 0.4, a: 1}
-    - _FoamColor: {r: 0.94, g: 0.97, b: 0.94, a: 1}
+    - _DeepColor: {r: 0.035, g: 0.26, b: 0.54, a: 1}
+    - _FoamColor: {r: 0.86, g: 0.95, b: 0.96, a: 1}
     - _LightColor: {r: 0.24999997, g: 0.54999995, b: 0.6, a: 1}
     - _MurkExtinction: {r: 4.55, g: 1.81, b: 1.57, a: 1}
-    - _ShallowColor: {r: 0.045, g: 0.37, b: 0.64, a: 1}
-    - _ShoalColor: {r: 0.08, g: 0.65, b: 0.65, a: 1}
+    - _ShallowColor: {r: 0.09, g: 0.49, b: 0.74, a: 1}
+    - _ShoalColor: {r: 0.065, g: 0.64, b: 0.6, a: 1}
     - _StormDeep: {r: 0.035, g: 0.07, b: 0.16, a: 1}
     - _StormShallow: {r: 0.07, g: 0.18, b: 0.28, a: 1}
     - _StormSubsurface: {r: 0.08, g: 0.3, b: 0.34, a: 1}

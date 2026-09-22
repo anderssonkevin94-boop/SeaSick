@@ -589,7 +589,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: af03232cffec546dda81c3c9fbd0a696, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.WorldArtStyle
   shipPalette: {fileID: 2800000, guid: 0ab4fe49025e4488fa904cfeed1bfd5b, type: 3}
   sceneryMaterial: {fileID: 2100000, guid: 457d8b1d90bde447f8d8d62df0a14919, type: 2}
@@ -685,13 +685,14 @@ MonoBehaviour:
   duskFogStart: 320
   duskFogEnd: 1250
   duskHorizonSharp: 2.6
-  nightZenith: {r: 0.014, g: 0.022, b: 0.048, a: 1}
-  nightHorizon: {r: 0.055, g: 0.075, b: 0.118, a: 1}
-  nightGround: {r: 0.01, g: 0.014, b: 0.023, a: 1}
+  nightZenith: {r: 0.034, g: 0.05, b: 0.095, a: 1}
+  nightHorizon: {r: 0.105, g: 0.135, b: 0.196, a: 1}
+  nightGround: {r: 0.026, g: 0.034, b: 0.052, a: 1}
   moonColor: {r: 0.62, g: 0.72, b: 1, a: 1}
-  moonIntensity: 0.2
-  newMoonFloor: 0.25
-  nightAmbient: 0.18
+  moonIntensity: 0.28
+  newMoonFloor: 0.45
+  moonSetShare: 0.45
+  nightAmbient: 0.44
   nightOvercast: 0.06
   nightHorizonSharp: 2.2
   nightFogStart: 240
@@ -700,7 +701,7 @@ MonoBehaviour:
   moonHalo: 0.35
   starBrightness: 1
   starDensity: 0.948
-  nightSeaDim: 0.3
+  nightSeaDim: 0.27
   nightSeaSkyMix: 0.93
   stormZenith: {r: 0.075, g: 0.088, b: 0.105, a: 1}
   stormHorizon: {r: 0.3, g: 0.325, b: 0.345, a: 1}
@@ -1088,10 +1089,21 @@ MonoBehaviour:
   stormNear: 500
   stormFar: 2800
   autoBindWorld: 1
+  islandSelectRadius: 1500
+  islandRebindDistance: 250
+  islandFocus: {fileID: 0}
   shoalDepthFull: 8
   shoalDepthZero: 0.5
   chopFloor: 0.12
   breakFraction: 0.55
+  shorewardStrength: 0.35
+  shorewardFalloff: 2
+  shorewardPeriod: 9
+  shorewardSlope: 0.03
+  stormTurnRange: 30
+  stormTurnPeriod: 1300
+  stormFrontLogRange: 0.9
+  stormFrontPeriod: 640
 --- !u!114 &1016993464
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2407,7 +2419,7 @@ MonoBehaviour:
   maxSpeed: 14.9906645
   acceleration: 2.6
   keelGrip: 2.2
-  surfOvershoot: 1.25
+  surfOvershoot: 1.12
   overspeedDragScale: 0.35
   waveDrift: 1.3
   minTurnRate: 15
@@ -2417,8 +2429,8 @@ MonoBehaviour:
   surfGain: 1.6
   surfResponse: 2.2
   surfDragRelief: 0.25
-  broachOnsetSlope: 0.2
-  broachFullSlope: 0.5
+  broachOnsetSlope: 0.14
+  broachFullSlope: 0.35
   broachRudderLoss: 0.55
   broachGripLoss: 0.45
   broachYawRate: 22
@@ -2512,7 +2524,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.AnchorController
   dropTime: 0
   weighTime: 0
-  berthDistance: 11
+  landingDepth: 12
   dockRange: 55
   woodReach: 130
   startAtHomeDock: 1
@@ -2536,14 +2548,15 @@ MonoBehaviour:
   hullMargin: 7
   freeImpactSpeed: 2.5
   damagePerImpactSpeed: 0.035
-  crewShock: 0.12
+  crewShock: 0.06
   reefDamageScale: 1.35
   ramDamageScale: 0.55
   enemyHullRadius: 9
   damagePerShot: 0.085
-  shotShock: 0.1
+  shotShock: 0.05
   repairRate: 0.05
   timberPerHullPoint: 12
+  seawardPush: 1.2
 --- !u!114 &2143489891
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2743,6 +2756,8 @@ MonoBehaviour:
   forwardDragFactor: 0.005
   lateralDragFactor: 0.25
   angularDragTorque: 91353.125
+  rollDampingRatio: 0.5
+  pitchDampingRatio: 0.55
   reservePerMetre: 1.5
   maxReserve: 2.5
   plowDragFactor: 0.15

@@ -103,19 +103,31 @@ namespace SeaSick.World
         // way without them, you just might not see stones if you aren't
         // looking. Night is attention and risk, not a wall.
         [Header("Clear — night")]
-        [SerializeField] Color nightZenith  = new Color(0.014f, 0.022f, 0.048f);
-        [SerializeField] Color nightHorizon = new Color(0.055f, 0.075f, 0.118f);
-        [SerializeField] Color nightGround  = new Color(0.010f, 0.014f, 0.023f);
+        // Kevin, 2026-09-22: never pitch black. He played a night and could
+        // not read the island silhouette, the deck or a wave face. These three
+        // were authored as "dark" in isolation; against a moon that had set
+        // and a 0.18 ambient scale they multiplied down to nothing. Raised so
+        // that the sky itself is a legible moonlit blue-grey, and then held
+        // there by NightFloor() below, which no knob combination can defeat.
+        [SerializeField] Color nightZenith  = new Color(0.034f, 0.050f, 0.095f);
+        [SerializeField] Color nightHorizon = new Color(0.105f, 0.135f, 0.196f);
+        [SerializeField] Color nightGround  = new Color(0.026f, 0.034f, 0.052f);
         [SerializeField] Color moonColor    = new Color(0.62f, 0.72f, 1f);
         [Tooltip("Full-moon intensity, against the sun's 1.15. Low enough to " +
                  "read as night, high enough to pick out a wave face.")]
-        [SerializeField] float moonIntensity = 0.20f;
+        [SerializeField] float moonIntensity = 0.28f;
         [Tooltip("How much light a new moon still gives — starlight, really.")]
-        [Range(0f, 1f)] [SerializeField] float newMoonFloor = 0.25f;
+        [Range(0f, 1f)] [SerializeField] float newMoonFloor = 0.45f;
+        [Tooltip("How much of the moon's light is still there once the moon " +
+                 "itself has SET. Kevin, 2026-09-22: never pitch black — a " +
+                 "set moon used to zero the key light outright, so half of " +
+                 "every night had no directional light at all. Skyglow is " +
+                 "real and it is what keeps a wave face readable.")]
+        [Range(0f, 1f)] [SerializeField] float moonSetShare = 0.45f;
         [Tooltip("THE darkness knob. Scales the ambient that lights every " +
                  "underside at night; the sky ambient follows the horizon " +
                  "colour on its own.")]
-        [SerializeField] float nightAmbient = 0.18f;
+        [SerializeField] float nightAmbient = 0.44f;
         [SerializeField] float nightOvercast = 0.06f;
         [SerializeField] float nightHorizonSharp = 2.2f;
         [SerializeField] float nightFogStart = 240f;
@@ -131,7 +143,7 @@ namespace SeaSick.World
         [Tooltip("How far the SEA's body colour is dimmed at full night. The " +
                  "body carries no diffuse term, so nothing else about it knows " +
                  "the sun has set.")]
-        [Range(0.05f, 1f)] [SerializeField] float nightSeaDim = 0.30f;
+        [Range(0.05f, 1f)] [SerializeField] float nightSeaDim = 0.27f;
         [Tooltip("How far the sea leans on the authored horizon instead of the " +
                  "stale daylight reflection probe, at full night.")]
         [Range(0.55f, 1f)] [SerializeField] float nightSeaSkyMix = 0.93f;
@@ -192,7 +204,83 @@ namespace SeaSick.World
         /// the fog is set to it, so the sea meets the sky without a seam.
         public Color HorizonColor { get; private set; }
 
+        /// Kevin, 2026-09-22: the coastal water stayed the same turquoise at
+        /// every hour. The shoal and shallow colours are authored material
+        /// constants, so nothing about them knew the sun had moved — at dusk
+        /// the whole coast stayed noon-bright mint against an orange sky, and
+        /// at midnight it glowed.
+        ///
+        /// This is the one number that fixes it: what the light at the water's
+        /// surface is doing NOW, divided by what it is doing at midday, so it
+        /// is exactly (1,1,1) at noon and the shader's noon look is preserved
+        /// bit for bit. Warm and dim at dusk, a cold fraction at night.
+        /// Floored at MoonlitShoreFloor for the same reason everything else
+        /// here is floored.
+        static readonly Color MoonlitShoreFloor = new Color(0.20f, 0.26f, 0.35f);
+
+        // Kevin, 2026-09-22: never pitch black.
+        //
+        // Every knob above is a MULTIPLIER or a small authored colour, and at
+        // full night four of them stack: the night palette, the storm's
+        // stormNightScale, nightAmbient, and a moon that may simply have set.
+        // 0.06 * 0.12 * 0.18 * 0 is black, and no single slider is obviously
+        // wrong when it happens. So the floor lives here, once, applied after
+        // every blend — a moonlit night in a stylised game, where the island
+        // silhouette, the deck and the wave faces stay readable and the
+        // lantern is worth having rather than the only thing there is.
+        //
+        // These are absolute linear colours at FULL night and are faded in by
+        // Night01, so daylight (where every value is far above them) is
+        // untouched by construction.
+        static readonly Color SkyZenithFloor  = new Color(0.026f, 0.038f, 0.072f);
+        static readonly Color SkyHorizonFloor = new Color(0.082f, 0.105f, 0.155f);
+        static readonly Color SkyGroundFloor  = new Color(0.020f, 0.027f, 0.042f);
+        static readonly Color AmbSkyFloor     = new Color(0.042f, 0.058f, 0.098f);
+        static readonly Color AmbEquatorFloor = new Color(0.062f, 0.085f, 0.140f);
+        static readonly Color AmbGroundFloor  = new Color(0.034f, 0.046f, 0.076f);
+        /// Fog is set to the horizon colour, so fog to black is a black wall
+        /// a few hundred metres out. It gets the same floor the horizon does.
+        static readonly Color FogFloor        = new Color(0.082f, 0.105f, 0.155f);
+        /// The key light can never be off at night. Against the sun's 1.15
+        /// this is deep moonlight, not a second sun.
+        const float NightKeyFloor = 0.085f;
+        /// The sea's body colour carries no diffuse term, so this scalar is
+        /// the ONLY thing standing between the water and black. Clamped so no
+        /// value of nightSeaDim can take the water's body away.
+        const float SeaDimFloor = 0.24f;
+        /// Below this the key light would be shining UP from a set moon. Its
+        /// elevation is lifted to here instead, which turns a set moon into a
+        /// soft overhead skyglow with the moon's own bearing. The moon DISC
+        /// is drawn from _SS_MoonDir, which is untouched, so the moon still
+        /// sets on screen — only the light it leaves behind is honest.
+        const float MinKeyElevation = 0.12f;
+
+        /// Kevin, 2026-09-22: a moonlit night is BLUE. Measured on the first
+        /// pass: the night land came out at 0.155 of noon — dim enough — but
+        /// with a blue:red of 1.6 against an albedo that is grass, which still
+        /// reads as day-green, because SCALING the daylight ambient only ever
+        /// makes a dim DAY. The hue has to move to the moon's, not just the
+        /// level. Desaturating toward moonlight costs luminance, which is why
+        /// nightAmbient went up at the same time: same brightness, moonlit
+        /// colour.
+        static readonly Color NightAmbientTint = new Color(0.50f, 0.66f, 1.00f);
+        const float NightAmbientHueShift = 0.80f;
+
+        /// Component-wise "no darker than", faded in by `amount`.
+        static Color AtLeast(Color c, Color floor, float amount)
+        {
+            return new Color(
+                Mathf.Lerp(c.r, Mathf.Max(c.r, floor.r), amount),
+                Mathf.Lerp(c.g, Mathf.Max(c.g, floor.g), amount),
+                Mathf.Lerp(c.b, Mathf.Max(c.b, floor.b), amount),
+                c.a);
+        }
+
         Material skyInstance;
+        AdventureLighting artLighting;
+        // Runtime comparison switch; production loads the shared Resources profile.
+        public bool UseArtLighting { get; set; } = true;
+        bool HasArtLighting => UseArtLighting && artLighting != null && artLighting.applyToGame;
 
         // Write-on-change cache for the material and ambient/fog writes Apply
         // makes every frame. The profiler put that LateUpdate at 0.07-0.15 ms,
@@ -255,6 +343,7 @@ namespace SeaSick.World
         const float RoseSampleInterval = 0.25f;
         static readonly int SkyWindId   = Shader.PropertyToID("_SS_SkyWind");
         static readonly int SkyHorizonId = Shader.PropertyToID("_SS_SkyHorizon");
+        static readonly int ShoreLightId = Shader.PropertyToID("_SS_ShoreLight");
         static readonly int StorminessId = Shader.PropertyToID("_SS_Storminess");
 
         /// One coherent set of sky values. Time of day picks one of these, and
@@ -285,6 +374,8 @@ namespace SeaSick.World
         void Awake()
         {
             Instance = this;
+            if (!GetComponent<VolumetricSunlight>()) gameObject.AddComponent<VolumetricSunlight>();
+            artLighting = Resources.Load<AdventureLighting>("AdventureLighting");
             if (sun == null)
             {
                 sun = RenderSettings.sun;
@@ -438,6 +529,13 @@ namespace SeaSick.World
                 overcast = clearOvercast, horizonSharp = clearHorizonSharp,
                 fogStart = clearFogStart, fogEnd = clearFogEnd,
             };
+            if (HasArtLighting)
+            {
+                day.light = artLighting.sunlight;
+                day.intensity = artLighting.sunIntensity;
+                day.fogStart = artLighting.fogStart;
+                day.fogEnd = artLighting.fogEnd;
+            }
             var dusk = new Palette
             {
                 zenith = duskZenith, horizon = duskHorizon, ground = duskGround,
@@ -445,6 +543,15 @@ namespace SeaSick.World
                 overcast = duskOvercast, horizonSharp = duskHorizonSharp,
                 fogStart = duskFogStart, fogEnd = duskFogEnd,
             };
+            if (HasArtLighting)
+            {
+                bool morning = TimeOfDay.Time01 < .5f;
+                dusk.zenith = morning ? new Color(.20f,.29f,.52f) : new Color(.15f,.18f,.39f);
+                dusk.horizon = morning ? artLighting.sunriseHorizon : artLighting.sunsetHorizon;
+                dusk.light = morning ? artLighting.sunriseLight : artLighting.sunsetLight;
+                dusk.intensity = morning ? .98f : .85f;
+                dusk.fogStart = 420f; dusk.fogEnd = 1500f;
+            }
             var night = new Palette
             {
                 zenith = nightZenith, horizon = nightHorizon, ground = nightGround,
@@ -459,7 +566,7 @@ namespace SeaSick.World
             // around the crossing rather than a hard switch.
             float dayness = Mathf.SmoothStep(0f, 1f,
                 Mathf.InverseLerp(-0.02f, 0.18f, sunElevation));
-            float glow = Mathf.Clamp01(1f - Mathf.Abs(sunElevation) / 0.17f);
+            float glow = Mathf.Clamp01(1f - Mathf.Abs(sunElevation) / (HasArtLighting ? artLighting.goldenHourElevation : .17f));
             glow = glow * glow * (3f - 2f * glow);
 
             Night01 = 1f - dayness;
@@ -539,6 +646,11 @@ namespace SeaSick.World
             // disc from _SS_SunDir and the moon from _SS_MoonDir; if they came
             // off the light instead, the sun would follow the moon all night.
             Vector3 sunDir = TimeOfDay.SunDirection(time01, latitudeDeg);
+            if (HasArtLighting && sunDir.y > 0f)
+            {
+                sunDir.y *= artLighting.sunHeightScale;
+                sunDir.Normalize();
+            }
             Vector3 moonDir = TimeOfDay.MoonDirection(time01, latitudeDeg, day, synodicDays);
             float phase = TimeOfDay.MoonPhase01(day, synodicDays);
             SunDirection = sunDir;
@@ -546,9 +658,14 @@ namespace SeaSick.World
 
             // A moon under the horizon lights nothing; a new moon still leaves
             // starlight rather than a void.
+            // Kevin, 2026-09-22: never pitch black. This used to multiply by
+            // Clamp01(moonDir.y / 0.12) — a hard zero for every hour the moon
+            // spent below the horizon, which is most of them. A set moon now
+            // leaves moonSetShare of its light as skyglow instead.
+            float moonUp = Mathf.Clamp01(moonDir.y / 0.12f);
             float moonLight = moonIntensity
                             * Mathf.Lerp(newMoonFloor, 1f, phase)
-                            * Mathf.Clamp01(moonDir.y / 0.12f);
+                            * Mathf.Lerp(moonSetShare, 1f, moonUp);
 
             var p = ClearPalette(sunDir.y, moonLight);
             // Held before the storm blend overwrites it: the horizon rose
@@ -580,11 +697,21 @@ namespace SeaSick.World
             };
             p = Palette.Lerp(p, storm, t);
 
+            // Kevin, 2026-09-22: never pitch black — THE clamp. Everything
+            // above this line is free to multiply itself down; nothing below
+            // it ever sees black. Applied after the storm blend on purpose: a
+            // midnight storm is the case that actually reached zero.
+            p.zenith  = AtLeast(p.zenith,  SkyZenithFloor,  Night01);
+            p.horizon = AtLeast(p.horizon, SkyHorizonFloor, Night01);
+            p.ground  = AtLeast(p.ground,  SkyGroundFloor,  Night01);
+
             // Storm dims the key light by a RATIO, not to a fixed value. An
             // absolute 0.34 would have made a midnight storm brighter than a
             // clear night, because the moon only gives 0.20.
-            float stormDim = Mathf.Lerp(1f, stormSunIntensity / Mathf.Max(0.01f, clearSunIntensity), t);
+            float stormDim = Mathf.Lerp(1f, stormSunIntensity / Mathf.Max(0.01f, HasArtLighting && Night01 < .001f ? artLighting.sunIntensity : clearSunIntensity), t);
             float intensity = p.intensity * stormDim;
+            // The moon may be new, set, and behind a storm all at once.
+            intensity = Mathf.Max(intensity, NightKeyFloor * Night01);
 
             HorizonColor = p.horizon;
 
@@ -616,6 +743,14 @@ namespace SeaSick.World
             if (sun != null)
             {
                 Vector3 toBody = SunIsUp ? sunDir : moonDir;
+                // A set moon would aim the key light up through the sea floor
+                // and light every underside. Lift its elevation instead —
+                // continuous (a max, then a renormalise), so nothing snaps.
+                if (!SunIsUp && toBody.y < MinKeyElevation)
+                {
+                    toBody.y = MinKeyElevation;
+                    if (toBody.sqrMagnitude > 1e-6f) toBody.Normalize();
+                }
                 if (toBody.sqrMagnitude > 1e-6f)
                     sun.transform.rotation = Quaternion.LookRotation(-toBody.normalized);
                 sun.color = p.light;
@@ -630,11 +765,27 @@ namespace SeaSick.World
             // horizon colour; the other two are fixed colours and need the
             // night scale applied by hand.
             float ambientScale = Mathf.Lerp(1f, nightAmbient, Night01);
-            Color skyAmb = p.horizon * Mathf.Lerp(0.95f, 0.62f, t);
+            float artDay = HasArtLighting ? 1f-Night01 : 0f;
+            Color equator = HasArtLighting ? Color.Lerp(clearAmbientEquator, artLighting.ambientEquator, artDay) : clearAmbientEquator;
+            Color ground = HasArtLighting ? Color.Lerp(clearAmbientGround, artLighting.ambientGround, artDay) : clearAmbientGround;
+            // Hue first, level second — see NightAmbientTint. Applied before
+            // ambientScale so the two compose in one direction only.
+            float hueShift = Night01 * NightAmbientHueShift;
+            equator = Color.Lerp(equator, NightAmbientTint * equator.grayscale, hueShift);
+            ground  = Color.Lerp(ground,  NightAmbientTint * ground.grayscale,  hueShift);
+
+            Color skyAmb = p.horizon * Mathf.Lerp(HasArtLighting ? Mathf.Lerp(.95f, artLighting.skyFill, artDay) : .95f, .62f, t);
             Color equatorAmb = Color.Lerp(
-                clearAmbientEquator, new Color(0.115f, 0.135f, 0.135f), t) * ambientScale;
+                equator, new Color(0.115f, 0.135f, 0.135f), t) * ambientScale;
             Color groundAmb = Color.Lerp(
-                clearAmbientGround, new Color(0.045f, 0.055f, 0.058f), t) * ambientScale;
+                ground, new Color(0.045f, 0.055f, 0.058f), t) * ambientScale;
+
+            // Kevin, 2026-09-22: never pitch black. The ambient is what lights
+            // the deck, the undersides and the shadowed face of the island —
+            // it is the difference between a dark scene and no scene.
+            skyAmb     = AtLeast(skyAmb,     AmbSkyFloor,     Night01);
+            equatorAmb = AtLeast(equatorAmb, AmbEquatorFloor, Night01);
+            groundAmb  = AtLeast(groundAmb,  AmbGroundFloor,  Night01);
 
             // Write-on-change, same reasoning as the material block above.
             if (!cacheValid || Changed(cAmbientSky, skyAmb))
@@ -643,8 +794,11 @@ namespace SeaSick.World
             { RenderSettings.ambientEquatorColor = equatorAmb; cAmbientEquator = equatorAmb; }
             if (!cacheValid || Changed(cAmbientGround, groundAmb))
             { RenderSettings.ambientGroundColor = groundAmb; cAmbientGround = groundAmb; }
-            if (!cacheValid || Changed(cFogColor, p.horizon))
-            { RenderSettings.fogColor = p.horizon; cFogColor = p.horizon; }
+            // Fog to black is a black wall a few hundred metres out, which is
+            // what a night storm looked like. Same floor as the horizon.
+            Color fogCol = AtLeast(p.horizon, FogFloor, Night01);
+            if (!cacheValid || Changed(cFogColor, fogCol))
+            { RenderSettings.fogColor = fogCol; cFogColor = fogCol; }
 
             // The cache is now current for everything written above, whether
             // or not this call actually touched a given property.
@@ -657,6 +811,27 @@ namespace SeaSick.World
                 ? SeaSick.Ocean.SeaStateController.Instance.WindDirection : Vector2.right;
             Shader.SetGlobalVector(SkyWindId, new Vector4(wind.x, wind.y, 0f, 0f));
             Shader.SetGlobalVector(SkyHorizonId, p.horizon);
+
+            // Kevin, 2026-09-22: the coast follows the light. Key light plus
+            // sky fill at this hour, over the same sum at midday. The .w is
+            // how far the shader applies it, and it is phrased so that an
+            // UNSET global (0) means "no tint at all" — the _SS_LayerOff rule:
+            // anything that never receives this renders exactly the noon
+            // coast it always did.
+            // The noon reference has to come from the SAME source the midday
+            // palette does, or the tint is not exactly 1 at noon and the
+            // coast shifts a few percent warm for no reason anyone asked for.
+            Color litNow  = p.light * intensity + p.horizon * 0.9f;
+            Color litNoon = (HasArtLighting
+                              ? artLighting.sunlight * artLighting.sunIntensity
+                              : clearSun * clearSunIntensity)
+                          + clearHorizon * 0.9f;
+            Color shore = new Color(
+                Mathf.Clamp(litNow.r / Mathf.Max(litNoon.r, 1e-3f), MoonlitShoreFloor.r, 1.25f),
+                Mathf.Clamp(litNow.g / Mathf.Max(litNoon.g, 1e-3f), MoonlitShoreFloor.g, 1.25f),
+                Mathf.Clamp(litNow.b / Mathf.Max(litNoon.b, 1e-3f), MoonlitShoreFloor.b, 1.25f),
+                1f);
+            Shader.SetGlobalVector(ShoreLightId, new Vector4(shore.r, shore.g, shore.b, 1f));
             Shader.SetGlobalFloat(StorminessId, t);
 
             Shader.SetGlobalVector(SunDirId, sunDir);
@@ -668,7 +843,10 @@ namespace SeaSick.World
             Shader.SetGlobalFloat(NightId, Night01);
             // Sent alongside _SS_Night, never separately: the ocean reads all
             // three or none, and none means daylight.
-            Shader.SetGlobalFloat(NightSeaDimId, nightSeaDim);
+            // Kevin, 2026-09-22: never pitch black. The sea's body colour has
+            // no diffuse term, so this scalar alone decides whether the water
+            // keeps a colour at night or becomes a hole in the frame.
+            Shader.SetGlobalFloat(NightSeaDimId, Mathf.Max(nightSeaDim, SeaDimFloor));
             Shader.SetGlobalFloat(NightSeaMixId, nightSeaSkyMix);
 
             // The two ends the skyline blends between, per direction. Sending
