@@ -10,7 +10,8 @@ namespace SeaSick.UI
     /// Kevin's flow, 2026-09-19: anchored at an island, you choose to make
     /// camp, and instead of a camp appearing you get a blueprint on the end of
     /// your thumb. You put it somewhere within reach of the ship, it stays
-    /// there as a drawing, and the hands you leave behind build it.
+    /// there as a drawing, and the hands you leave behind build it. Kevin,
+    /// 2026-09-22: the reach is measured from the campfire once it stands.
     ///
     /// This is the interface half of that. It owns exactly three things — the
     /// preview ghost, the ring on the ground, and the tap — and it owns no
@@ -25,14 +26,15 @@ namespace SeaSick.UI
     /// put a camp is mostly looking at the island.
     public class CampSiting : MonoBehaviour
     {
-        /// **How far from the ship you may site something, metres.**
+        /// **How far from the camp centre you may site something, metres.**
         ///
-        /// Kevin's rule: only within a certain radius of the ship. The number
-        /// is a guess and wants a dial — the median island is 78 m in radius
-        /// and the default island shot holds 165 m of ground, so 80 m from a
-        /// ship lying off the beach reaches a good part of a typical island
-        /// without letting you develop the far side of a big one from the
-        /// water.
+        /// Kevin's rule: only within a certain radius of the camp. When a camp
+        /// has been sited (HasCamp is true), the circle is drawn around the
+        /// campfire (CampCentre); otherwise it is drawn around the ship. The
+        /// number is a guess and wants a dial — the median island is 78 m in
+        /// radius and the default island shot holds 165 m of ground, so 80 m
+        /// from a campfire reaches a good part of a typical island without
+        /// letting you develop the far side of a big one.
         public static float SiteRadius = 80f;
 
         public static CampSiting Instance { get; private set; }
@@ -286,13 +288,22 @@ namespace SeaSick.UI
             return outpost.CanPlace(plan, p, Yaw, out why);
         }
 
+        /// The centre of the siting circle: the campfire if a camp stands, else the ship.
+        Vector3 Centre()
+        {
+            if (outpost != null && outpost.HasCamp) return outpost.CampCentre;
+            return ship != null ? ship.position : Vector3.zero;
+        }
+
         bool TooFar(Vector3 p, out string why)
         {
+            Vector3 c = Centre();
             float d = Vector3.Distance(
-                new Vector3(p.x, 0f, p.z), new Vector3(ship.position.x, 0f, ship.position.z));
+                new Vector3(p.x, 0f, p.z), new Vector3(c.x, 0f, c.z));
             if (d > SiteRadius)
             {
-                why = $"too far from the ship ({d:F0} m of {SiteRadius:F0})";
+                string from = outpost != null && outpost.HasCamp ? "camp" : "ship";
+                why = $"too far from the {from} ({d:F0} m of {SiteRadius:F0})";
                 return true;
             }
             why = "";
@@ -328,7 +339,7 @@ namespace SeaSick.UI
             if (ghost != null && ghost.activeSelf != on) ghost.SetActive(on);
         }
 
-        /// The ring on the ground round the ship: the reach, drawn where the
+        /// The ring on the ground round the camp centre: the reach, drawn where the
         /// decision is being made rather than written in the sheet.
         ///
         /// Sampled against the height field so it climbs the beach instead of
@@ -351,7 +362,7 @@ namespace SeaSick.UI
             const int Segments = 96;
             ring.positionCount = Segments;
             var h = GroundPick.Height;
-            Vector3 c = ship != null ? ship.position : Vector3.zero;
+            Vector3 c = Centre();
             for (int i = 0; i < Segments; i++)
             {
                 float a = i * Mathf.PI * 2f / Segments;
