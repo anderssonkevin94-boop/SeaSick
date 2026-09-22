@@ -32,6 +32,12 @@ namespace SeaSick.World
 
         FaunaLod field;
         Vector3 anchor;
+        /// **A gull that follows the ship.** Kevin, 2026-09-22: *"will they
+        /// fly around on the ocean too?"* Real gulls follow a boat for the
+        /// wake, so a few follow her: the anchor is re-read from `follow`
+        /// every frame, a little astern, and the circle rides along.
+        Transform follow;
+        float followAstern;
         float radius, alt, phase, spin;
         float alarm;      // seconds of alarm left
         float ease;       // 0 calm .. 1 alarmed, so the change is not a snap
@@ -50,9 +56,23 @@ namespace SeaSick.World
             Fly(0f);
         }
 
+        /// Circle a moving thing instead of a fixed shore point.
+        public void Follow(Transform what, float astern)
+        {
+            follow = what;
+            followAstern = astern;
+        }
+
         void Update()
         {
             float dt = Time.deltaTime;
+            if (follow != null)
+            {
+                Vector3 back = follow.forward; back.y = 0f;
+                if (back.sqrMagnitude > 0.001f) back.Normalize();
+                anchor = follow.position - back * followAstern;
+                anchor.y = 0f;
+            }
 
             // The ship check rides `FaunaLod`'s one-second scan, so this costs
             // a compare rather than a search.

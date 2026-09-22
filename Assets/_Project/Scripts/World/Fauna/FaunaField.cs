@@ -197,6 +197,27 @@ namespace SeaSick.World
             }
         }
 
+        /// **Gulls over the open sea.** Three that follow the ship's wake at
+        /// three heights and two turns, so the ocean is never birdless where
+        /// the player is. No `FaunaLod` (nothing to gate: they are always
+        /// where the observer is) and no alarm (the ship is what they want).
+        public static GameObject FollowShip(Transform ship, int count = 3, int seed = 7)
+        {
+            if (ship == null) return null;
+            var rng = new System.Random(seed);
+            var root = new GameObject("WakeGulls");
+            for (int i = 0; i < count; i++)
+            {
+                var go = Body(Animal.Kind.Goat, root.transform, gull: true);
+                var g = go.AddComponent<Gull>();
+                g.Bind(ship.position, Mathf.Lerp(10f, 18f, (float)rng.NextDouble()),
+                       Mathf.Lerp(7f, 14f, (float)rng.NextDouble()),
+                       (float)rng.NextDouble() * Mathf.PI * 2f, i % 2 == 0 ? 1f : -1f);
+                g.Follow(ship, Mathf.Lerp(6f, 14f, (float)rng.NextDouble()));
+            }
+            return root;
+        }
+
         // ---- bodies ---------------------------------------------------------
 
         static readonly Dictionary<string, GameObject> models = new Dictionary<string, GameObject>();

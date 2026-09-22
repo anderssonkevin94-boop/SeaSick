@@ -93,6 +93,9 @@ namespace SeaSick.Terrain
             BuildMonsters(home);
             BuildReefs(home);
             BuildRaiders();
+            // The ship's own gulls, over the open sea. Kevin, 2026-09-22.
+            var player = Object.FindFirstObjectByType<SeaSick.Ship.ShipMotor>();
+            if (player != null) FaunaField.FollowShip(player.transform);
             Done = true;
         }
 

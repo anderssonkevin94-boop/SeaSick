@@ -56,17 +56,23 @@ def srgb_to_linear(c):
 
 
 PAL = {k: _hex(v) for k, v in {
-    # goat -- grey-white body, dark legs/face, tan-dark horns
-    "goatBody": "#D9D5C9",
-    "goatBodyLo": "#B8B3A5",
+    # goat -- off-white body, grey-brown face stripe + legs, near-black horns
+    "goatBody": "#DEDACE",
+    "goatBodyLo": "#C2BCAC",
     "goatDark": "#3B342D",
-    "goatHorn": "#5B4E3C",
-    # boar -- dark brown, pale snout, bristle ridge, pale tusks
-    "boarBody": "#4A3220",
+    "goatFace": "#6E5F4C",
+    "goatLeg": "#5C5040",
+    "goatHoof": "#221D18",
+    "goatHorn": "#2B241C",
+    "goatEar": "#D69A93",
+    # boar -- dark brown, lighter flanks, pale snout, ivory tusks
+    "boarBody": "#4A3120",
     "boarBodyLo": "#332217",
+    "boarFlank": "#6B4C30",
     "boarSnout": "#C9AD87",
     "boarTusk": "#EDE6D6",
     "boarBristle": "#241811",
+    "boarHoof": "#14100C",
     # gull -- white body, grey wings, black tips, yellow beak
     "gullBody": "#F5F3EC",
     "gullBodyLo": "#D8D4C6",
@@ -187,6 +193,66 @@ class Builder(object):
         self.face([(x, y, z0) for x, y in poly_xy], cc, away=ctr)
         self.face([(x, y, z1) for x, y in poly_xy], cc, away=ctr)
 
+    def taper_z(self, z0, q0, z1, q1, col):
+        """Box whose two z-ends have DIFFERENT half-sizes/centres -- the cheap
+        way off a box silhouette. `q = (cx, hw, y0, y1)` per end. `col` may be
+        one colour or six, ordered [near, far, bottom, right, top, left]."""
+        def quad(z, q):
+            cx, hw, y0, y1 = q
+            return [(cx - hw, y0, z), (cx + hw, y0, z),
+                    (cx + hw, y1, z), (cx - hw, y1, z)]
+        self.block(quad(z0, q0), quad(z1, q1), col)
+
+    @staticmethod
+    def chamf_sec(cx, hw, y0, y1, chamf, cy0=None):
+        """A cross-section (x, y) hexagon: a rectangle whose TOP and BOTTOM
+        edges are inset by `chamf`, so an extrusion of it reads as a carved
+        barrel rather than a box. Returns 6 points, bottom edge first."""
+        c0 = chamf if cy0 is None else cy0
+        return [(-(hw - c0), y0), (hw - c0, y0), (hw, y0 + c0),
+                (hw, y1 - chamf), (hw - chamf, y1), (-(hw - chamf), y1),
+                (-hw, y1 - chamf), (-hw, y0 + c0)]
+
+    def hull_z(self, sections, cols, cap_col=None):
+        """Skin a run of (z, section) cross-sections along z, quad by quad, and
+        cap the ends. All sections need the same vertex count. `cols` is one
+        colour or one per section EDGE (edge i spans point i -> i+1)."""
+        def col_of(i):
+            return cols[i % len(cols)] if isinstance(cols, (list, tuple)) else cols
+        for s in range(len(sections) - 1):
+            z0, p0 = sections[s]
+            z1, p1 = sections[s + 1]
+            n = len(p0)
+            cx = sum(p[0] for p in p0 + p1) / (2 * n)
+            cy = sum(p[1] for p in p0 + p1) / (2 * n)
+            axis = (cx, cy, 0.5 * (z0 + z1))
+            for i in range(n):
+                j = (i + 1) % n
+                self.face([(p0[i][0], p0[i][1], z0), (p0[j][0], p0[j][1], z0),
+                           (p1[j][0], p1[j][1], z1), (p1[i][0], p1[i][1], z1)],
+                          col_of(i), away=axis)
+        cc = cap_col or col_of(0)
+        z0, p0 = sections[0]
+        z1, p1 = sections[-1]
+        ctr = (0.0, sum(q[1] for q in p0) / len(p0), z0)
+        self.face([(x, y, z0) for x, y in p0], cc,
+                  away=(ctr[0], ctr[1], z0 + 0.05))
+        ctr = (0.0, sum(q[1] for q in p1) / len(p1), z1)
+        self.face([(x, y, z1) for x, y in p1], cc,
+                  away=(ctr[0], ctr[1], z1 - 0.05))
+
+    def limb(self, pts, radii, col, hoof=None, hoof_col=None):
+        """A leg: a polyline of tapered 4-sided segments (so the knee reads as
+        a real bend), optionally capped by a small hoof box."""
+        for i in range(len(pts) - 1):
+            self.cyl(pts[i], pts[i + 1], radii[i], radii[i + 1], 4, col,
+                     cap0=(i == 0), cap1=False, phase=math.pi * 0.25)
+        if hoof:
+            x, y, z = pts[-1]
+            hw, hh, hl = hoof
+            self.box(x - hw, x + hw, y - hh, y, z - hl, z + hl * 1.6,
+                     hoof_col or col)
+
     def wedge_head(self, cx, z0, z1, hw_back, y0, y1_back, nose_hw, nose_y,
                     col, nose_col=None):
         """A head that tapers from a back rectangle down to a front edge (the
@@ -286,69 +352,122 @@ def clear_scene():
 
 # --------------------------------------------------------------------- goat --
 def build_goat():
+    """~0.8 m at the shoulder, ~1.3 m nose to rump. Origin at the feet,
+    nose toward +z."""
     b = Builder()
-    # legs: four tapered frusta (cyl with n=4), narrow hoof -> wider at belly
-    leg_y = 0.42
-    for x, z in ((-0.13, 0.42), (0.13, 0.42), (-0.13, -0.42), (0.13, -0.42)):
-        b.cyl((x, 0.0, z), (x, leg_y, z), 0.045, 0.075, 4, "goatDark")
-    # torso: chamfered-top box via a hexagon cross-section prism
-    hw, y0, y1, chamf = 0.20, 0.40, 0.78, 0.09
-    poly = [(-hw, y0), (hw, y0), (hw, y1 - chamf), (hw - chamf, y1),
-            (-(hw - chamf), y1), (-hw, y1 - chamf)]
-    b.prism_z(poly, -0.55, 0.35, "goatBody", cap_col="goatBodyLo")
-    # neck + head: a wedge tapering forward and down to the muzzle
-    b.wedge_head(0.0, 0.35, 0.85, 0.13, 0.55, 0.85, 0.05, 0.62,
-                 "goatDark", nose_col="goatDark")
-    # ears: tiny flat triangles off the head sides
+    sec = Builder.chamf_sec
+    # --- barrel body: deepest at the chest, tapering to a narrow rump, with a
+    # slight belly sag through the middle. Flanks a shade darker than the back.
+    side = ["goatBodyLo", "goatBody", "goatBodyLo", "goatBody",
+            "goatBody", "goatBody", "goatBodyLo", "goatBody"]
+    b.hull_z([(-0.55, sec(0.0, 0.150, 0.455, 0.735, 0.055)),
+              (-0.28, sec(0.0, 0.180, 0.385, 0.772, 0.065)),
+              (0.02, sec(0.0, 0.196, 0.378, 0.792, 0.075)),
+              (0.24, sec(0.0, 0.192, 0.398, 0.796, 0.075)),
+              (0.36, sec(0.0, 0.150, 0.455, 0.762, 0.060))],
+             side, cap_col="goatBodyLo")
+    # --- neck: a tapered block climbing forward at ~45 deg off the shoulders
+    b.taper_z(0.28, (0.0, 0.118, 0.575, 0.790),
+              0.58, (0.0, 0.088, 0.815, 1.000), "goatBody")
+    # --- head: a long wedge, flat forehead, squared muzzle in the face stripe
+    b.taper_z(0.55, (0.0, 0.080, 0.846, 1.006),
+              0.72, (0.0, 0.066, 0.834, 0.966),
+              ["goatBody", "goatFace", "goatBody", "goatBody",
+               "goatFace", "goatBody"])
+    b.taper_z(0.71, (0.0, 0.062, 0.834, 0.946),
+              0.86, (0.0, 0.048, 0.826, 0.906), "goatFace")
+    # --- ears: flat wedges angled out and back, pink on the inside
     for sx in (-1, 1):
-        b.face([(sx * 0.13, 0.75, 0.55), (sx * 0.24, 0.78, 0.50),
-                (sx * 0.13, 0.70, 0.48)], "goatDark",
-               hint=(sx * 1.0, 0.1, -0.1))
-    # horns: short back-swept tapered spikes
+        root_hi = (sx * 0.084, 0.992, 0.598)
+        root_lo = (sx * 0.084, 0.930, 0.556)
+        tip = (sx * 0.162, 0.986, 0.486)
+        b.face([root_hi, root_lo, tip], "goatBody", hint=(sx * 0.9, 0.3, -0.2))
+        b.face([root_hi, root_lo, tip], "goatEar", hint=(-sx * 0.9, -0.3, 0.2))
+    # --- horns: three tapered segments, each swept further back than the last
     for sx in (-1, 1):
-        b.cyl((sx * 0.09, 0.82, 0.62), (sx * 0.13, 1.02, 0.48), 0.025, 0.006,
-              4, "goatHorn")
-    # tail
-    b.cyl((0.0, 0.62, -0.55), (0.0, 0.72, -0.66), 0.03, 0.01, 4, "goatDark")
+        pts = [(sx * 0.055, 1.010, 0.655), (sx * 0.066, 1.155, 0.618),
+               (sx * 0.076, 1.248, 0.520), (sx * 0.086, 1.268, 0.408)]
+        rad = [0.027, 0.020, 0.013, 0.005]
+        for i in range(3):
+            b.cyl(pts[i], pts[i + 1], rad[i], rad[i + 1], 4, "goatHorn",
+                  cap0=(i == 0), cap1=(i == 2), phase=math.pi * 0.25)
+    # --- beard: a short wedge hanging off the jaw
+    b.taper_z(0.735, (0.0, 0.042, 0.760, 0.822),
+              0.845, (0.0, 0.024, 0.672, 0.800), "goatFace")
+    # --- tail: short and upturned
+    b.cyl((0.0, 0.690, -0.530), (0.0, 0.818, -0.605), 0.036, 0.012, 4,
+          "goatBody", phase=math.pi * 0.25)
+    # --- legs: upper + lower at an angle so the knee reads, dark hooves
+    for sx in (-1, 1):
+        b.limb([(sx * 0.118, 0.470, 0.215), (sx * 0.118, 0.245, 0.248),
+                (sx * 0.118, 0.062, 0.222)], [0.058, 0.042, 0.032],
+               "goatLeg", hoof=(0.040, 0.062, 0.036), hoof_col="goatHoof")
+        b.limb([(sx * 0.126, 0.470, -0.378), (sx * 0.126, 0.262, -0.428),
+                (sx * 0.126, 0.062, -0.372)], [0.062, 0.044, 0.032],
+               "goatLeg", hoof=(0.040, 0.062, 0.036), hoof_col="goatHoof")
     print("TRIS goat %d" % b.tri_count())
     return b
 
 
 # --------------------------------------------------------------------- boar --
 def build_boar():
+    """~0.7 m at the shoulder hump, ~1.4 m nose to rump. Origin at the feet,
+    nose toward +z, head carried LOW."""
     b = Builder()
-    leg_y = 0.34
-    for x, z in ((-0.16, 0.48), (0.16, 0.48), (-0.16, -0.48), (0.16, -0.48)):
-        b.cyl((x, 0.0, z), (x, leg_y, z), 0.05, 0.085, 4, "boarBody")
-    # stocky torso, chamfered top
-    hw, y0, y1, chamf = 0.24, 0.33, 0.70, 0.10
-    poly = [(-hw, y0), (hw, y0), (hw, y1 - chamf), (hw - chamf, y1),
-            (-(hw - chamf), y1), (-hw, y1 - chamf)]
-    b.prism_z(poly, -0.65, 0.45, "boarBody", cap_col="boarBodyLo")
-    # bristle ridge along the spine: a row of small flat fins
-    for t in (-0.5, -0.25, 0.0, 0.25):
-        zc = -0.5 + t * 0.9
-        b.face([(0.0, 0.70, zc - 0.06), (0.0, 0.70, zc + 0.06),
-                (0.0, 0.86, zc)], "boarBristle", hint=(0.0, 0.3, 0.0))
-    # head: blunt wedge, dark, with a pale snout block on the front tip
-    b.wedge_head(0.0, 0.45, 0.70, 0.16, 0.38, 0.66, 0.10, 0.40,
-                 "boarBody", nose_col="boarBody")
-    snout_near = [(-0.10, 0.30, 0.68), (0.10, 0.30, 0.68),
-                  (0.10, 0.50, 0.68), (-0.10, 0.50, 0.68)]
-    snout_far = [(-0.08, 0.32, 0.80), (0.08, 0.32, 0.80),
-                 (0.08, 0.46, 0.80), (-0.08, 0.46, 0.80)]
-    b.block(snout_near, snout_far, "boarSnout")
-    # tusks: tiny pale curved spikes either side of the snout
+    sec = Builder.chamf_sec
+    # --- heavy body: light rump, deepest at the shoulders, pronounced hump.
+    side = ["boarBodyLo", "boarFlank", "boarFlank", "boarBody",
+            "boarBody", "boarBody", "boarFlank", "boarFlank"]
+    b.hull_z([(-0.620, sec(0.0, 0.160, 0.370, 0.560, 0.055)),
+              (-0.340, sec(0.0, 0.205, 0.330, 0.620, 0.070)),
+              (-0.060, sec(0.0, 0.232, 0.310, 0.678, 0.085)),
+              (0.140, sec(0.0, 0.245, 0.300, 0.716, 0.095)),
+              (0.380, sec(0.0, 0.196, 0.322, 0.628, 0.075))],
+             side, cap_col="boarBodyLo")
+    # --- bristle ridge: a thin raised strip of wedges down the spine
+    for zc, ytop in ((-0.44, 0.578), (-0.26, 0.612), (-0.06, 0.678),
+                     (0.12, 0.716), (0.30, 0.664)):
+        lo = ytop - 0.030
+        tri = [(0.0, lo, zc - 0.075), (0.0, lo, zc + 0.075),
+               (0.0, ytop + 0.085, zc + 0.020)]
+        b.face(tri, "boarBristle", hint=(1.0, 0.0, 0.0))
+        b.face(tri, "boarBristle", hint=(-1.0, 0.0, 0.0))
+    # --- head: a big wedge slung low off the shoulders, nose at knee height
+    b.taper_z(0.300, (0.0, 0.182, 0.300, 0.616),
+              0.540, (0.0, 0.140, 0.204, 0.470),
+              ["boarBody", "boarBody", "boarBody", "boarFlank",
+               "boarBody", "boarFlank"])
+    # --- snout: a long taper ending in a pale flat disc
+    b.taper_z(0.525, (0.0, 0.086, 0.186, 0.386),
+              0.775, (0.0, 0.062, 0.172, 0.302),
+              ["boarBody", "boarSnout", "boarBody", "boarBody",
+               "boarBody", "boarBody"])
+    # --- tusks: two short ivory segments curving up out of the lower jaw
     for sx in (-1, 1):
-        b.cyl((sx * 0.08, 0.32, 0.78), (sx * 0.13, 0.42, 0.82), 0.018, 0.004,
-              4, "boarTusk")
-    # ears
+        pts = [(sx * 0.070, 0.190, 0.680), (sx * 0.090, 0.268, 0.752),
+               (sx * 0.102, 0.352, 0.744)]
+        rad = [0.024, 0.015, 0.005]
+        for i in range(2):
+            b.cyl(pts[i], pts[i + 1], rad[i], rad[i + 1], 4, "boarTusk",
+                  cap0=(i == 0), cap1=(i == 1), phase=math.pi * 0.25)
+    # --- ears: small triangles, dark outside, flank-brown inside
     for sx in (-1, 1):
-        b.face([(sx * 0.16, 0.66, 0.44), (sx * 0.27, 0.70, 0.36),
-                (sx * 0.16, 0.60, 0.32)], "boarBody",
-               hint=(sx * 1.0, 0.15, -0.1))
-    # tail: short curl
-    b.cyl((0.0, 0.50, -0.65), (0.0, 0.58, -0.74), 0.025, 0.008, 4, "boarBody")
+        tri = [(sx * 0.148, 0.508, 0.476), (sx * 0.148, 0.416, 0.410),
+               (sx * 0.256, 0.576, 0.396)]
+        b.face(tri, "boarFlank", hint=(sx * 0.6, 0.8, -0.2))
+        b.face(tri, "boarBody", hint=(-sx * 0.6, -0.8, 0.2))
+    # --- tail: thin, with a tuft on the end
+    b.cyl((0.0, 0.520, -0.612), (0.0, 0.558, -0.730), 0.018, 0.011, 4,
+          "boarBody", phase=math.pi * 0.25)
+    b.box(-0.032, 0.032, 0.512, 0.578, -0.790, -0.726, "boarBristle")
+    # --- legs: short and thick, a visible knee, near-black hooves
+    for sx in (-1, 1):
+        b.limb([(sx * 0.136, 0.360, 0.142), (sx * 0.136, 0.208, 0.166),
+                (sx * 0.136, 0.068, 0.146)], [0.068, 0.050, 0.038],
+               "boarBody", hoof=(0.044, 0.068, 0.038), hoof_col="boarHoof")
+        b.limb([(sx * 0.142, 0.360, -0.418), (sx * 0.142, 0.216, -0.454),
+                (sx * 0.142, 0.068, -0.406)], [0.072, 0.052, 0.038],
+               "boarBody", hoof=(0.044, 0.068, 0.038), hoof_col="boarHoof")
     print("TRIS boar %d" % b.tri_count())
     return b
 
@@ -427,7 +546,21 @@ def setup_render(scene):
     scene.render.film_transparent = False
 
 
-def render_one(name, ob, out_dir, scene, eye, target, lens=45, res=(800, 600)):
+def render_one(name, ob, out_dir, scene, eye, target, lens=45, res=(800, 600),
+               light=None, sun_deg=None):
+    """`light` aims the shadow direction, `sun_deg` swings the workbench key
+    light in WORLD space (off by default -- it is view-relative otherwise).
+    Both are restored afterwards, so a render that passes neither is bit-for-bit
+    the render this scene would have produced without them."""
+    sh = scene.display.shading
+    prev_light = tuple(scene.display.light_direction)
+    prev_ws = sh.use_world_space_lighting
+    prev_rot = sh.studiolight_rotate_z
+    if light is not None:
+        scene.display.light_direction = light
+    if sun_deg is not None:
+        sh.use_world_space_lighting = True
+        sh.studiolight_rotate_z = math.radians(sun_deg)
     cam_data = bpy.data.cameras.new(name + "Cam")
     cam = bpy.data.objects.new(name + "Cam", cam_data)
     scene.collection.objects.link(cam)
@@ -443,6 +576,9 @@ def render_one(name, ob, out_dir, scene, eye, target, lens=45, res=(800, 600)):
     bpy.ops.render.render(write_still=True)
     bpy.data.objects.remove(cam, do_unlink=True)
     bpy.data.cameras.remove(cam_data)
+    scene.display.light_direction = prev_light
+    sh.use_world_space_lighting = prev_ws
+    sh.studiolight_rotate_z = prev_rot
     return path
 
 
@@ -512,12 +648,18 @@ def main():
             for o in all_obs:
                 o.hide_render = o is not ob
 
+        # goat/boar: three-quarter front, a little above, close enough that the
+        # animal fills ~60% of the frame, sun from the front-left of the shot.
+        # (Blender frame: +X = nose, +Y = the animal's left, +Z = up.)
+        sun = (0.54, -0.11, 0.84)
         solo(ob_goat)
         print("render", render_one("goat", ob_goat, out_dir, scene,
-                                    (2.6, 1.2, 2.8), (0.0, 0.45, 0.0), 32))
+                                    (2.75, 1.72, 1.70), (0.02, 0.0, 0.60), 50,
+                                    light=sun, sun_deg=285))
         solo(ob_boar)
         print("render", render_one("boar", ob_boar, out_dir, scene,
-                                    (2.8, 1.2, 3.0), (0.0, 0.45, 0.0), 32))
+                                    (2.85, 1.80, 1.60), (0.02, 0.0, 0.46), 50,
+                                    light=sun, sun_deg=285))
         solo(ob_gull)
         print("render", render_one("gull", ob_gull, out_dir, scene,
                                     (2.0, 1.0, 2.0), (0.0, 0.0, 0.0), 32))
