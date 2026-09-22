@@ -1384,3 +1384,35 @@ crew and pier in proportion. **Regenerate at real launch proportions
 still the uncommitted 2026-09-18 work (plus `ShipMotor` / `BuoyantBody` /
 `Shipyard` guard hunks), so the scale change lives there with it. Kevin's
 call whether the steamer is now the ship and gets committed as one.
+
+## WILD ANIMALS — 2026-09-22
+
+Kevin: *"next, id like to add wild animals on the island."* Ambient in this
+pass; hunting (a Gather order that turns a herd into Food, the herd
+regrowing like wheat) is the next.
+
+- **Art.** `tools/blender/fauna.py`, headless, the steamer's export
+  settings: goat (114 tris), boar (130), gull in flight (78), vertex
+  colour, `Resources/Fauna`. First-pass blocks — readable at the god's-eye
+  distance, crude up close. Previews in `docs/art-direction/fauna/`.
+- **Placement — `World/Fauna/FaunaField`**, called from the populator's
+  `Dress` so every island goes through it. Rock and verdancy at the centre
+  (the numbers the wood already reads) pick the herds: goats above 0.35
+  rock, boar above 0.45 verdancy, gulls on every non-home island over
+  60 m; herd sizes capped by island radius (a 60 m islet gets two).
+  Points above `sand + SandBlend + 0.5`, slope-tested (goats take 1.6,
+  boar 0.8), 25 m clear of a camp, herd members within 8 m of an anchor.
+- **Behaviour — `Animal`, `Gull`, `FaunaLod`.** Graze 3–8 s → wander on a
+  12 m leash → graze; flee crew within 12 m or a ship moving within 40 m
+  at 4.5 m/s for 3–5 s (goats bend uphill); rest when `Night01 > 0.6`.
+  Gulls: 6 m/s banked loops, 20–40 m radius, 12–25 m up, alarm when the
+  ship is inside 60 m. `FaunaLod` toggles renderers and behaviours per
+  island once a second beyond 300 m of the streamer's target, and does
+  the island's one `FindObjectsByType<CrewAgent>` a second for the herd.
+- **Live:** 65 islands, 218 goats, 310 boar, 449 gulls; no exceptions;
+  `boar-herd-live.png`.
+
+**Open:** the models want a real pass (they are boxes with cones); no
+hunting; no sound; ~1000 animals exist as GameObjects (cheap while gated,
+unmeasured on the phone); animals ignore buildings other than the camp
+keep-out; crew do not react to them.
