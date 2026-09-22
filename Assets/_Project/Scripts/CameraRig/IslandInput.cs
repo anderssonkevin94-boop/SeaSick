@@ -177,6 +177,14 @@ namespace SeaSick.CameraRig
         int twoFingerAId = -1, twoFingerBId = -1;
         Vector2 twoFingerPrevA, twoFingerPrevB;
 
+        /// Fingers that went down on UI. Latched by id at `Began` and kept
+        /// until that finger lifts, so a swipe that starts on the sheet and
+        /// wanders off it never becomes a pan — while a swipe that started
+        /// on the land keeps working right across the card. See
+        /// `GatherTouches`.
+        readonly System.Collections.Generic.HashSet<int> uiOwnedTouches =
+            new System.Collections.Generic.HashSet<int>();
+
         void Awake()
         {
             cam = GetComponent<IslandCam>();
@@ -376,6 +384,13 @@ namespace SeaSick.CameraRig
         {
             if (orbitSource == OrbitSource.None)
             {
+                // Rule 3 again: an orbit that would BEGIN over UI never
+                // begins. Only `wasPressedThisFrame` can start one, so
+                // refusing here latches for the whole press without any
+                // extra state — and an orbit already under way is left
+                // alone, so dragging across the sheet does not cancel it.
+                if (UIBlocker.Blocked(mouse.position.ReadValue())) return;
+
                 if (mouse.rightButton.wasPressedThisFrame) BeginOrbit(mouse, OrbitSource.Right);
                 else if (mouse.middleButton.wasPressedThisFrame) BeginOrbit(mouse, OrbitSource.Middle);
                 else if (altHeld && mouse.leftButton.wasPressedThisFrame) BeginOrbit(mouse, OrbitSource.AltLeft);
@@ -486,6 +501,28 @@ namespace SeaSick.CameraRig
                 var phase = t.phase.ReadValue();
                 int id = t.touchId.ReadValue();
                 Vector2 pos = t.position.ReadValue();
+
+                // **Rule 3, for touch, applied before anything else sees the
+                // finger.** Testing at `Began` and latching by id is what
+                // makes the one-finger grab AND the two-finger pinch obey it
+                // at once: a finger the sheet owns is simply not in
+                // `liveTouches`, so `liveTouches.Count >= 2` cannot fire off
+                // `BeginTwoFinger` because the player put a second thumb on
+                // the card. Touch ids are recycled, so a `Began` that is NOT
+                // over UI has to clear any stale claim on the same id.
+                if (phase == UnityEngine.InputSystem.TouchPhase.Began)
+                {
+                    if (UIBlocker.Blocked(pos)) uiOwnedTouches.Add(id);
+                    else uiOwnedTouches.Remove(id);
+                }
+                if (uiOwnedTouches.Contains(id))
+                {
+                    if (phase == UnityEngine.InputSystem.TouchPhase.Ended
+                        || phase == UnityEngine.InputSystem.TouchPhase.Canceled)
+                        uiOwnedTouches.Remove(id);
+                    continue;
+                }
+
                 if (phase == UnityEngine.InputSystem.TouchPhase.Began
                     || phase == UnityEngine.InputSystem.TouchPhase.Moved
                     || phase == UnityEngine.InputSystem.TouchPhase.Stationary)

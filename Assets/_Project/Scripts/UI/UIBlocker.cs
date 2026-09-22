@@ -89,11 +89,42 @@ namespace SeaSick.UI
             return cached;
         }
 
+        /// **The sheet is not an IMGUI control, so it cannot call `Block`.**
+        ///
+        /// `SheetHost` draws the sheet with UI Toolkit, and a runtime UI
+        /// Toolkit panel does not stop anything else from reading
+        /// `Mouse.current` / `Touchscreen.current` — it only consumes events
+        /// for scripts that ask an `EventSystem` or `panel.Pick`. Nothing in
+        /// `CameraRig` does, so a swipe that started on the card panned the
+        /// island underneath it (Kevin, phone, 2026-09-22).
+        ///
+        /// It is read here rather than pushed from `SheetHost` on purpose:
+        /// `Block`'s list is cleared by whichever claimant calls first in a
+        /// frame, so a registrant outside the IMGUI pass has to land at
+        /// exactly the right point in the frame to survive. Pulling the two
+        /// statics the host already publishes has no such ordering to get
+        /// wrong, and no staleness — `FrameRect` is written in `LateUpdate`,
+        /// before the next frame's input read.
+        ///
+        /// It is deliberately NOT added to `Claimed`: that list is the
+        /// overlap probe's inventory of INTERACTIVE IMGUI controls, and the
+        /// sheet frame covers a third of the screen, so every control the
+        /// probe found inside it would read as a collision. `HudLayout`
+        /// already keeps the IMGUI HUD out of the frame via `ClaimSheet`.
+        ///
+        /// GUI space (origin top-left), which is what `FrameRect` already is.
+        public static bool SheetBlocked(Vector2 guiPoint)
+        {
+            return Sheets.SheetHost.FrameOpen
+                && Sheets.SheetHost.FrameRect.Contains(guiPoint);
+        }
+
         /// pointerPos is Input System screen space (origin bottom-left).
         public static bool Blocked(Vector2 pointerPos)
         {
-            if (Time.frameCount - frame > 1) return false;
             var gui = new Vector2(pointerPos.x, Screen.height - pointerPos.y);
+            if (SheetBlocked(gui)) return true;
+            if (Time.frameCount - frame > 1) return false;
             foreach (var r in rects)
                 if (r.Contains(gui)) return true;
             return false;

@@ -42,7 +42,7 @@ namespace SeaSick.UI.Sheets
         VisualElement tabs;
         VisualElement body;
         VisualElement actions;
-        ScrollView scroll;
+        VisualElement page;
         VisualElement tail;
         VisualElement tailDot;
 
@@ -194,13 +194,23 @@ namespace SeaSick.UI.Sheets
             tabs.style.display = DisplayStyle.None;
             card.Add(tabs);
 
-            scroll = new ScrollView(ScrollViewMode.Vertical);
-            scroll.AddToClassList("sheet-scroll");
-            card.Add(scroll);
-
+            // **No scroll view. The body is a horizontal pager.**
+            //
+            // Kevin, on the phone, 2026-09-22: *"you need to scroll down to
+            // see all the options and that's a huge no no. All the
+            // information should be available on screen. If it doesn't fit
+            // you can swipe left to right for new windows."* So the body
+            // clips, every page is built to fit the band exactly (see
+            // `BandHeight`), and the tab strip's entries ARE the pages:
+            // swiping the body moves between them.
             body = new VisualElement();
             body.AddToClassList(SheetTheme.Body);
-            scroll.Add(body);
+            card.Add(body);
+            body.RegisterCallback<PointerDownEvent>(OnBodyDown, TrickleDown.TrickleDown);
+            body.RegisterCallback<PointerMoveEvent>(OnBodyMove, TrickleDown.TrickleDown);
+            body.RegisterCallback<PointerUpEvent>(OnBodyUp, TrickleDown.TrickleDown);
+            body.RegisterCallback<PointerCancelEvent>(OnBodyCancel, TrickleDown.TrickleDown);
+            body.RegisterCallback<PointerCaptureOutEvent>(_ => CancelDrag());
 
             actions = new VisualElement();
             actions.style.display = DisplayStyle.None;
@@ -258,9 +268,11 @@ namespace SeaSick.UI.Sheets
 
                 if (count > 1)
                 {
-                    tabs.Add(SheetKit.Tabs(labels, want, PickTab, framed.Accent));
+                    tabs.Add(SheetKit.Strip(labels, want, PickTab, framed.Accent));
                     tabs.style.display = DisplayStyle.Flex;
+                    stripCount = count;
                 }
+                else stripCount = 0;
                 FillTab(s);
             }
             else
@@ -274,10 +286,10 @@ namespace SeaSick.UI.Sheets
 
             card.style.display = DisplayStyle.Flex;
             shadow.style.display = DisplayStyle.Flex;
-            scroll.scrollOffset = Vector2.zero;
         }
 
         ISheetFramed framed;
+        int stripCount;
 
         /// A tab press: the sheet is told, the choice is remembered for the
         /// session, and only the BODY and the action row are rebuilt. The
@@ -291,11 +303,21 @@ namespace SeaSick.UI.Sheets
             if (labels == null || index < 0 || index >= labels.Length) return;
             if (index == framed.Tab) return;
 
+            // Tapping a tab travels the same way a swipe does, so the strip
+            // and the gesture agree about which direction the pages lie in.
+            Slide(index > framed.Tab ? 1 : -1, index, 0f);
+        }
+
+        /// Move to `index` without animating -- the commit half of a swipe
+        /// and of a tab press both land here.
+        void GoTo(int index)
+        {
+            var s = Sheets.Current;
+            if (framed == null || s == null) return;
             framed.SetTab(index);
             Sheets.RememberTab(s.GetType(), index);
-            if (tabs.childCount > 0) SheetKit.SetTabs(tabs[0], index, framed.TabLabels);
+            if (tabs.childCount > 0) SheetKit.SetStrip(tabs[0], index, framed.TabLabels);
             FillTab(s);
-            scroll.scrollOffset = Vector2.zero;
         }
 
         /// Body and action row for whatever tab is live now.
@@ -303,8 +325,18 @@ namespace SeaSick.UI.Sheets
         {
             body.Clear();
             actions.Clear();
+            // Every page is one element, so the pager has exactly one thing
+            // to translate. It fills the band and clips -- a page that does
+            // not fit is a page the sheet should have split, not a page the
+            // frame should scroll.
+            page = new VisualElement();
+            page.style.flexDirection = FlexDirection.Column;
+            page.style.flexGrow = 1f;
+            page.style.flexShrink = 1f;
+            page.style.overflow = Overflow.Hidden;
+            body.Add(page);
             var content = s.Build();
-            if (content != null) body.Add(content);
+            if (content != null) page.Add(content);
 
             var row = framed.BuildActions();
             if (row != null)
@@ -321,14 +353,249 @@ namespace SeaSick.UI.Sheets
         void RelabelTabs()
         {
             if (framed == null || tabs.childCount == 0) return;
-            SheetKit.SetTabs(tabs[0], framed.Tab, framed.TabLabels);
+            var labels = framed.TabLabels;
+            int count = labels != null ? labels.Length : 0;
+            // **A page COUNT change rebuilds the strip.** Labels move with the
+            // camp ("hands 1/2" becomes "hands 1/3" when a recruit arrives),
+            // and a strip with the wrong number of entries is a strip that
+            // cannot reach the last page.
+            if (count != stripCount)
+            {
+                tabs.Clear();
+                stripCount = count;
+                if (count > 1)
+                {
+                    int at = Mathf.Clamp(framed.Tab, 0, count - 1);
+                    if (at != framed.Tab) { GoTo(at); return; }
+                    tabs.Add(SheetKit.Strip(labels, at, PickTab, framed.Accent));
+                    tabs.style.display = DisplayStyle.Flex;
+                }
+                else tabs.style.display = DisplayStyle.None;
+                return;
+            }
+            SheetKit.SetStrip(tabs[0], framed.Tab, labels);
         }
+
+        // --- the pager ---------------------------------------------------
+
+        /// A press has to travel this far sideways before it stops being a
+        /// tap on a row and becomes a page turn. 20 px: far enough that a
+        /// thumb pressing a button never crosses it, near enough that a
+        /// deliberate swipe is caught before it feels dead.
+        public const float SwipeArm = 20f;
+
+        /// Past a quarter of the body's width, the page commits rather than
+        /// snapping back -- or past this speed, however short the throw.
+        public const float CommitFrac = 0.25f;
+        public const float FlickPxPerSecond = 600f;
+
+        int dragPointer = -1;
+        bool dragArmed, dragging;
+        float dragX0, dragY0, dragDx, dragT0;
+        bool animating;
+        float animDeadline;
+
+        int PageCount
+        {
+            get
+            {
+                var labels = framed != null ? framed.TabLabels : null;
+                return labels != null ? labels.Length : 1;
+            }
+        }
+
+        void OnBodyDown(PointerDownEvent e)
+        {
+            dragPointer = e.pointerId;
+            dragX0 = e.position.x;
+            dragY0 = e.position.y;
+            dragDx = 0f;
+            dragging = false;
+            dragT0 = Time.unscaledTime;
+            dragArmed = !animating && PageCount > 1;
+        }
+
+        void OnBodyMove(PointerMoveEvent e)
+        {
+            if (!dragArmed || e.pointerId != dragPointer) return;
+            float dx = e.position.x - dragX0;
+            float dy = e.position.y - dragY0;
+            if (!dragging)
+            {
+                if (Mathf.Abs(dx) < SwipeArm) return;
+                // **A vertical drag is not swallowed.** There is nothing left
+                // to scroll, but eating it would kill the camera drag that
+                // starts under a docked card's edge -- and a gesture that
+                // does nothing AND blocks something else is the worst of both.
+                if (Mathf.Abs(dy) > Mathf.Abs(dx)) { dragArmed = false; return; }
+                dragging = true;
+                // Capturing here is what turns the press on a button into a
+                // swipe: the button never sees the release, so it never
+                // fires, and the page follows the finger instead.
+                body.CapturePointer(e.pointerId);
+            }
+            dragDx = dx;
+            Shift(page, dx);
+            e.StopPropagation();
+        }
+
+        void OnBodyUp(PointerUpEvent e) { EndDrag(e.pointerId); }
+        void OnBodyCancel(PointerCancelEvent e) { EndDrag(e.pointerId); }
+
+        void CancelDrag()
+        {
+            if (!dragging) { dragArmed = false; dragPointer = -1; return; }
+            dragging = false; dragArmed = false; dragPointer = -1;
+            Animate(page, dragDx, 0f, 0.12f, null);
+        }
+
+        void EndDrag(int id)
+        {
+            if (id != dragPointer) return;
+            bool was = dragging;
+            dragging = false; dragArmed = false; dragPointer = -1;
+            if (body.HasPointerCapture(id)) body.ReleasePointer(id);
+            if (!was) return;
+
+            float w = Mathf.Max(1f, body.resolvedStyle.width);
+            float dt = Mathf.Max(0.001f, Time.unscaledTime - dragT0);
+            float vel = dragDx / dt;
+            bool commit = Mathf.Abs(dragDx) > w * CommitFrac
+                          || (Mathf.Abs(vel) > FlickPxPerSecond && Mathf.Abs(dragDx) > SwipeArm);
+            int dir = dragDx < 0f ? 1 : -1;
+            int next = (framed != null ? framed.Tab : 0) + dir;
+            if (!commit || next < 0 || next >= PageCount)
+            {
+                Animate(page, dragDx, 0f, 0.14f, null);
+                return;
+            }
+            Slide(dir, next, dragDx);
+        }
+
+        /// The old page leaves the way the finger was going, the new one
+        /// comes in behind it. `dir` is +1 for the next page.
+        void Slide(int dir, int next, float fromDx)
+        {
+            if (framed == null) return;
+            float w = Mathf.Max(1f, body.resolvedStyle.width);
+            animating = true;
+            animDeadline = Time.unscaledTime + 1f;
+            var outgoing = page;
+            Animate(outgoing, fromDx, -dir * w, 0.13f, () =>
+            {
+                GoTo(next);
+                // Placed before the first tick, or the new page flashes at
+                // rest for one frame before it slides in.
+                Shift(page, dir * w);
+                if (page != null) Animate(page, dir * w, 0f, 0.15f, () => animating = false);
+                else animating = false;
+            });
+        }
+
+        static void Shift(VisualElement e, float px)
+        {
+            if (e == null) return;
+            e.style.translate = new Translate(
+                new Length(px, LengthUnit.Pixel), new Length(0f, LengthUnit.Pixel));
+        }
+
+        /// A per-frame lerp rather than `experimental.animation`, because the
+        /// element being animated is destroyed by the page swap in the middle
+        /// of the sequence and a scheduled item on a dead element simply
+        /// stops -- which the deadline in `LateUpdate` then clears.
+        void Animate(VisualElement e, float from, float to, float secs, System.Action done)
+        {
+            if (e == null) { done?.Invoke(); return; }
+            float t0 = Time.unscaledTime;
+            IVisualElementScheduledItem item = null;
+            item = e.schedule.Execute(() =>
+            {
+                float t = secs <= 0f ? 1f : Mathf.Clamp01((Time.unscaledTime - t0) / secs);
+                float k = 1f - (1f - t) * (1f - t);        // ease out
+                Shift(e, Mathf.Lerp(from, to, k));
+                if (t < 1f) return;
+                if (item != null) item.Pause();
+                done?.Invoke();
+            }).Every(16);
+        }
+
+        // --- the band ------------------------------------------------------
+
+        /// **The chrome of the frame, in panel units.** Every one of these is
+        /// the sum of the paddings and heights in `Sheets.uss`, and they are
+        /// here rather than measured because a sheet has to know how many
+        /// rows fit BEFORE it builds the page that holds them -- a measured
+        /// answer is always one frame late, and one frame late is a page that
+        /// overflows on the frame it is opened.
+        public const float HeadPx = 56f;      // 12 pad + 34 badge + 10 margin
+        public const float StripPx = 45f;     // 44 tab + 1 rule
+        public const float ActionsPx = 61f;   // 10 pad + 38 button + 12 pad + 1 rule
+        public const float BodyPadPx = 26f;   // 12 top + 14 bottom
+        public const float BorderPx = 4f;     // 2 px of card border, top and bottom
+
+        /// The panel is scaled by its own match rule, so a screen pixel is
+        /// this many panel units. 1 until the panel has laid itself out once.
+        public static float PanelScale
+        {
+            get
+            {
+                var h = Instance;
+                if (h == null || h.root == null) return 1f;
+                float w = h.root.resolvedStyle.width;
+                return w > 1f && Screen.width > 0 ? w / Screen.width : 1f;
+            }
+        }
+
+        /// The frame's size in SCREEN pixels, from the safe area alone --
+        /// the same arithmetic `Place` does, available before the first
+        /// `LateUpdate` so a sheet can be paginated as it is built.
+        public static Vector2 FrameSizeScreen()
+        {
+            var safe = Screen.safeArea;
+            if (safe.width < 1f || safe.height < 1f)
+                safe = new Rect(0f, 0f, Screen.width, Screen.height);
+            return HudLayout.Wide
+                ? new Vector2(safe.width * Third - Margin * 2f, safe.height - Margin * 2f)
+                : new Vector2(safe.width - Margin * 2f, safe.height * Third - Margin * 2f);
+        }
+
+        /// **How tall a page may be, in panel units.**
+        ///
+        /// The strip and the action row are always subtracted, even on a
+        /// sheet that shows neither: a page built to the slack of a
+        /// one-section sheet would overflow the moment that sheet grew a
+        /// second page, and every sheet in this game grows.
+        public static float BandHeight
+        {
+            get
+            {
+                float h = FrameSizeScreen().y * PanelScale
+                          - (BorderPx + HeadPx + StripPx + ActionsPx + BodyPadPx);
+                return Mathf.Max(80f, h);
+            }
+        }
+
+        /// How many `rowPx`-tall rows fit on one page once `reservePx` (an
+        /// eyebrow, a note) has been taken off the top. Never zero, so a
+        /// pagination loop cannot spin.
+        public static int RowsThatFit(float rowPx, float reservePx = 0f) =>
+            Mathf.Max(1, Mathf.FloorToInt((BandHeight - reservePx) / Mathf.Max(1f, rowPx)));
+
+        /// Does a block of `px` panel units fit one page, with `reservePx`
+        /// already spoken for?
+        public static bool Fits(float px, float reservePx = 0f) =>
+            px + reservePx <= BandHeight;
 
         void LateUpdate()
         {
             if (Instance == null) Instance = this;
             EnsureBuilt();
             if (root == null) return;
+            // A page swap destroys the element a slide is running on, and a
+            // scheduler on a dead element never reports finishing. Without
+            // this, one interrupted swipe would lock the pager for the rest
+            // of the session.
+            if (animating && Time.unscaledTime > animDeadline) animating = false;
 
             bool on = Sheets.SuppressLegacy;
             place.Tick(on, root);

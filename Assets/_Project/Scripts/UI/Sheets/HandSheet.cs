@@ -18,22 +18,46 @@ namespace SeaSick.UI.Sheets
     /// reason `CampCrewList` keys its open row on `h.name`.
     public class HandSheet : ISheetFramed
     {
-        // --- the frame (2026-09-22, "one sheet, tabs") ----------------------
+        // --- the frame (2026-09-22, "pages you swipe between") --------------
         //
         // Two sections, and they answer different questions: "orders" is what
         // you can TELL them, "about" is who they are and why they are in the
         // mood they are in. The two verbs that are neither -- stand down, and
         // back aboard -- are the pinned action row, reachable from both.
-        public const int TabOrders = 0;
-        public const int TabAbout = 1;
-
+        //
+        // **Orders is as many pages as it takes.** A camp with a sawmill, a
+        // quarry and five seams offers more verbs than a phone's bottom third
+        // can hold, and the answer is more pages, never a scroll: "orders
+        // 1/2", "orders 2/2", "about".
         int tab = -1;
-        static readonly string[] tabLabels = { "orders", "about" };
 
-        public int Tab => tab;
+        readonly SheetPager orders = new SheetPager();
+        int orderPages = 1;
+        string[] labels = { "orders", "about" };
+        long planKey = long.MinValue;
+
+        public int Tab { get { Plan(); return tab; } }
         public void SetTab(int index) { tab = index; }
-        public string[] TabLabels => tabLabels;
+        public string[] TabLabels { get { Plan(); return labels; } }
         public Color Accent => SheetTheme.Brass;
+
+        /// The page index of the "about" section -- the last one, whatever
+        /// the orders ran to.
+        int AboutPage => orderPages;
+
+        /// **The body the camera should watch.** `Sheets.Open` reads this and
+        /// puts `IslandCam` on him, so a hand who walks off to a seam while
+        /// his card is open stays in the frame (Kevin, 2026-09-22: "I want
+        /// the camera to follow them"). Null before his body is raised, which
+        /// simply means nothing to follow yet.
+        public Transform FollowTarget
+        {
+            get
+            {
+                var body = outpost != null ? outpost.BodyNamed(who) : null;
+                return body != null ? body.transform : null;
+            }
+        }
 
         readonly Outpost outpost;
         readonly string who;
@@ -84,8 +108,7 @@ namespace SeaSick.UI.Sheets
             stand = SheetKit.Btn("stand down", () =>
             {
                 outpost.OrderIdle(Hand);
-                verbsKey = long.MinValue;
-                Refresh();
+                Dirty();
             });
             stand.SetEnabled(h != null && h.order != OutpostOrder.Idle);
 
@@ -101,12 +124,12 @@ namespace SeaSick.UI.Sheets
         public VisualElement Build()
         {
             doing = null; cause = null; verbs = null;
-            verbsKey = long.MinValue;
+            Plan();
 
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
 
-            if (tab == TabAbout)
+            if (tab >= AboutPage)
             {
                 var h = Hand;
                 root.Add(SheetKit.Row(
@@ -119,11 +142,44 @@ namespace SeaSick.UI.Sheets
             else
             {
                 verbs = SheetBits.Holder();
+                verbs.Add(orders.Build(Mathf.Max(0, tab)));
                 root.Add(verbs);
             }
 
             Refresh();
             return root;
+        }
+
+        // --- the page plan --------------------------------------------------
+        //
+        // Worked out from the band the frame actually has (`SheetHost`), so
+        // the same hand is two pages of verbs on a phone and one on a desk
+        // without a number being written down twice.
+
+        void Plan()
+        {
+            var l = outpost != null ? outpost.Ledger : null;
+            var h = Hand;
+            if (l == null || h == null) return;
+
+            long key = (l.built.Count * 31L + l.stocks.Count) * 31L
+                       + (l.pending != null ? 1 : 0) * 7919L
+                       + (int)h.order * 131L
+                       + (h.target != null ? h.target.GetHashCode() : 0)
+                       + Mathf.RoundToInt(SheetHost.BandHeight) * 1000003L;
+            if (key == planKey) return;
+            planKey = key;
+
+            BuildOrderRows(l, h);
+            orders.Lay(SheetHost.BandHeight);
+            orderPages = orders.Pages;
+
+            if (labels.Length != orderPages + 1) labels = new string[orderPages + 1];
+            for (int i = 0; i < orderPages; i++)
+                labels[i] = SheetKit.PageLabel("orders", i, orderPages);
+            labels[orderPages] = "about";
+
+            if (tab >= labels.Length) tab = labels.Length - 1;
         }
 
         public void Refresh()
@@ -141,16 +197,15 @@ namespace SeaSick.UI.Sheets
             if (verbs == null) return;
 
             // The verb lists change only when the camp does -- a building
-            // raised, a seam worked out, a blueprint sited. Keyed on exactly
-            // that, so pressing one of them does not rebuild the list under
-            // the finger that is pressing it.
-            long key = (l.built.Count * 31L + l.stocks.Count) * 31L
-                       + (l.pending != null ? 1 : 0) * 7919L
-                       + (int)h.order * 131L
-                       + (h.target != null ? h.target.GetHashCode() : 0);
-            if (key == verbsKey) return;
-            verbsKey = key;
-            BuildVerbs(l, h);
+            // raised, a seam worked out, a blueprint sited. `Plan` is keyed
+            // on exactly that (plus the band), so pressing one of them does
+            // not rebuild the list under the finger that is pressing it.
+            long before = planKey;
+            Plan();
+            if (planKey == before && verbsKey == planKey) return;
+            verbsKey = planKey;
+            verbs.Clear();
+            verbs.Add(orders.Build(Mathf.Clamp(tab, 0, orderPages - 1)));
         }
 
         /// The mood word and, where the ledger knows one, what caused it.
@@ -174,89 +229,121 @@ namespace SeaSick.UI.Sheets
 
         // --- the three verbs, out of the same three lists ------------------------
 
-        void BuildVerbs(OutpostLedger l, OutpostHand h)
+        void BuildOrderRows(OutpostLedger l, OutpostHand h)
         {
-            verbs.Clear();
+            orders.Clear();
 
             // ASSIGN -- `Outpost.Positions()` (Outpost.cs:1716), pressed with
             // `Outpost.Assign` (CampCrewList.cs:177).
-            verbs.Add(SheetKit.Eyebrow("put to work"));
+            orders.Add(SheetKit.EyebrowPx, () => SheetKit.Eyebrow("put to work"));
             var posts = outpost.Positions();
             if (posts.Count == 0)
-                verbs.Add(SheetKit.Note("Nothing here to work at"));
+                orders.Add(SheetKit.NotePx, () => SheetKit.Note("Nothing here to work at"));
             foreach (var id in posts)
             {
                 string planId = id;
-                var plan = BuildPlans.Named(planId);
-                bool already = h.order == OutpostOrder.Work && h.target == planId;
-                var b = SheetKit.Btn($"{plan.position} at the {plan.label}", () =>
+                orders.Add(SheetKit.QuietPx, () =>
                 {
-                    outpost.Assign(Hand, planId);
-                    verbsKey = long.MinValue;
-                    Refresh();
-                }, false, true);
-                b.SetEnabled(!already);
-                verbs.Add(b);
+                    var hand = Hand;
+                    var plan = BuildPlans.Named(planId);
+                    bool already = hand != null && hand.order == OutpostOrder.Work
+                                   && hand.target == planId;
+                    var b = SheetKit.Btn($"{plan.position} at the {plan.label}", () =>
+                    {
+                        outpost.Assign(Hand, planId);
+                        Dirty();
+                    }, false, true);
+                    b.SetEnabled(!already);
+                    b.style.marginBottom = 4f;
+                    return b;
+                });
             }
 
             // GATHER -- `Outpost.Gatherable()` (Outpost.cs:1705), pressed with
             // `Outpost.OrderGather` (CampCrewList.cs:198). A worked-out stock
             // is still listed: an empty seam is information, and hiding it
             // would look like the menu was broken.
-            verbs.Add(SheetKit.Eyebrow("send out for"));
+            orders.Add(SheetKit.EyebrowPx, () => SheetKit.Eyebrow("send out for"));
             foreach (var res in outpost.Gatherable())
             {
                 string r = res;
-                var stock = l.Stock(r);
-                float standing = stock != null ? stock.standing : 0f;
-                string tail = standing < 1f
-                    ? " — worked out"
-                    : $" — {l.CountOf(r)}/{l.ceilingPer} kept";
-                bool already = h.order == OutpostOrder.Gather && h.target == r;
-                var b = SheetKit.Btn(CampLoading.Lower(r) + tail, () =>
+                orders.Add(SheetKit.QuietPx, () =>
                 {
-                    outpost.OrderGather(Hand, r);
-                    verbsKey = long.MinValue;
-                    Refresh();
-                }, false, true);
-                b.SetEnabled(!already);
-                verbs.Add(b);
+                    var led = outpost.Ledger;
+                    var hand = Hand;
+                    var stock = led != null ? led.Stock(r) : null;
+                    float standing = stock != null ? stock.standing : 0f;
+                    string tail = standing < 1f
+                        ? " — worked out"
+                        : $" — {(led != null ? led.CountOf(r) : 0)}/{(led != null ? led.ceilingPer : 0)} kept";
+                    bool already = hand != null && hand.order == OutpostOrder.Gather
+                                   && hand.target == r;
+                    var b = SheetKit.Btn(CampLoading.Lower(r) + tail, () =>
+                    {
+                        outpost.OrderGather(Hand, r);
+                        Dirty();
+                    }, false, true);
+                    b.SetEnabled(!already);
+                    b.style.marginBottom = 4f;
+                    return b;
+                });
             }
 
             // BUILD -- the drawing that is already up takes this hand
             // (`Outpost.OrderBuild`, Outpost.cs:1680); the list below sites a
             // new one, straight into `CampSiting` the way the crew list's
             // build verb does (CampCrewList.cs:236).
-            verbs.Add(SheetKit.Eyebrow("build"));
+            orders.Add(SheetKit.EyebrowPx, () => SheetKit.Eyebrow("build"));
             if (outpost.Building)
             {
-                var p = l.pending;
-                var plan = BuildPlans.Named(p.planId);
-                bool already = h.order == OutpostOrder.Build;
-                var b = SheetKit.Btn($"work on the {plan.label}", () =>
+                orders.Add(SheetKit.QuietPx, () =>
                 {
-                    outpost.OrderBuild(Hand);
-                    verbsKey = long.MinValue;
-                    Refresh();
-                }, false, true);
-                b.SetEnabled(!already);
-                verbs.Add(b);
+                    var led = outpost.Ledger;
+                    var p = led != null ? led.pending : null;
+                    if (p == null) return null;
+                    var hand = Hand;
+                    var plan = BuildPlans.Named(p.planId);
+                    bool already = hand != null && hand.order == OutpostOrder.Build;
+                    var b = SheetKit.Btn($"work on the {plan.label}", () =>
+                    {
+                        outpost.OrderBuild(Hand);
+                        Dirty();
+                    }, false, true);
+                    b.SetEnabled(!already);
+                    b.style.marginBottom = 4f;
+                    return b;
+                });
             }
             else
             {
                 foreach (var plan in outpost.Buildable())
                 {
                     var p = plan;
-                    verbs.Add(SheetKit.Btn(p.stoneCost > 0
-                        ? $"{p.label} — {p.cost} timber {p.stoneCost} stone"
-                        : $"{p.label} — {p.cost} timber", () =>
+                    orders.Add(SheetKit.QuietPx, () =>
                     {
-                        CampSiting.Begin(outpost, p, SheetBits.ShipTransform);
-                        Sheets.Close();
-                    }, false, true));
+                        var b = SheetKit.Btn(p.stoneCost > 0
+                            ? $"{p.label} — {p.cost} timber {p.stoneCost} stone"
+                            : $"{p.label} — {p.cost} timber", () =>
+                        {
+                            CampSiting.Begin(outpost, p, SheetBits.ShipTransform);
+                            Sheets.Close();
+                        }, false, true);
+                        b.style.marginBottom = 4f;
+                        return b;
+                    });
                 }
             }
+        }
 
+        /// A press changed what the verbs say. Both keys go back so the next
+        /// `Refresh` re-cuts the pages as well as re-drawing them -- an order
+        /// taken can shorten the list, and a page plan that does not move
+        /// with it is a strip pointing at a page that is no longer there.
+        void Dirty()
+        {
+            planKey = long.MinValue;
+            verbsKey = long.MinValue;
+            Refresh();
         }
 
         /// `Outpost.Recall(body, ship)` -- the same call the ashore column

@@ -292,8 +292,11 @@ namespace SeaSick.UI
                 string refusal = CampSiting.Refusal;
                 if (string.IsNullOrEmpty(refusal))
                     say = CampSiting.PlacingPier
-                        ? "tap the beach inside the ring   ·   the pier runs out to deep water"
-                        : "tap the ground inside the ring   ·   R turns it 45°";
+                        // Kevin, 2026-09-22: the tap moves the drawing now and
+                        // only ✓ builds, so the bar says what the three
+                        // buttons under the blueprint are for.
+                        ? "tap the beach to move it, then ✓   ·   the pier runs out to deep water"
+                        : "move it with a tap, then ✓   ·   ↻ turns it 45°";
                 else
                 {
                     // The refusal changes as the cursor moves, which is a

@@ -78,7 +78,7 @@ namespace SeaSick.UI
 
         /// What the ghost is facing right now. A pier faces the sea and
         /// nothing the player does turns it -- see `Outpost.SnapPier`.
-        public float Yaw => IsPier ? snappedYaw : heldYaw + turns * 45f;
+        public float Yaw => IsPier ? snappedYaw : heldYaw + turns * TurnStep;
 
         bool IsPier => plan.kind == BuildKind.Pier;
 
@@ -99,6 +99,20 @@ namespace SeaSick.UI
 
         /// Eight steps to the circle.
         public const int Steps = 8;
+
+        /// **One turn of the ↻ button, degrees.** Kevin asked for 45° steps;
+        /// R on the keyboard and the button both step by this and nothing
+        /// else names the number.
+        public const float TurnStep = 360f / Steps;
+
+        /// **Where the player last said "here".**
+        ///
+        /// Kevin, 2026-09-22: the drawing is no longer glued to the pointer
+        /// and a tap no longer builds. A tap on open ground MOVES this point;
+        /// everything else about the mode (the snap, the tests, the ghost) is
+        /// recomputed from it every frame, so the camera can pan and zoom
+        /// under a drawing that stays exactly where it was put.
+        Vector3 want;
 
         void Awake() { Instance = this; }
         void OnDestroy() { if (Instance == this) Instance = null; }
@@ -150,7 +164,41 @@ namespace SeaSick.UI
             // without this the release that opened siting mode was also the
             // tap that sited the building, under the button.
             Instance.beganFrame = Time.frameCount;
+            Instance.want = Instance.StartPoint();
             Instance.BuildRing();
+        }
+
+        /// **Where the drawing appears before anyone has moved it.**
+        ///
+        /// It has to appear somewhere: the thumb is not carrying it any more.
+        /// A blueprint being moved starts on itself; anything else starts on
+        /// the middle of the screen, which is what the player is looking at —
+        /// pulled back inside the ring when the middle of the screen is off
+        /// the reach, so the first thing the player sees is a legal spot and
+        /// a live ✓ rather than a red refusal.
+        Vector3 StartPoint()
+        {
+            if (moving && outpost != null && outpost.Ledger != null
+                && outpost.Ledger.pending != null)
+                return OnGround(outpost.Ledger.pending.x, outpost.Ledger.pending.z);
+
+            Vector3 c = Centre();
+            var cam = Camera.main;
+            if (cam != null && GroundPick.FromScreen(cam,
+                    new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out Vector3 mid))
+            {
+                var d = new Vector2(mid.x - c.x, mid.z - c.z);
+                if (d.magnitude <= SiteRadius * 0.95f) return mid;
+                d = d.normalized * (SiteRadius * 0.6f);
+                return OnGround(c.x + d.x, c.z + d.y);
+            }
+            return c;
+        }
+
+        static Vector3 OnGround(float x, float z)
+        {
+            var h = GroundPick.Height;
+            return new Vector3(x, h != null ? h(x, z) : 0f, z);
         }
 
         public static void End() { if (Instance != null) Instance.Cancel(); }
@@ -175,48 +223,74 @@ namespace SeaSick.UI
             if (keys != null && keys.escapeKey.wasPressedThisFrame) { Cancel(); return; }
 
             if (keys != null && keys.rKey.wasPressedThisFrame)
-            {
-                // Freeze whatever it was facing, then turn from there, so the
-                // first press does not also swing it round to north.
-                if (!turned) { turned = true; heldYaw = 0f; turns = 0; }
-                bool back = keys.leftShiftKey.isPressed || keys.rightShiftKey.isPressed;
-                turns = (turns + (back ? Steps - 1 : 1)) % Steps;
-            }
+                Turn(keys.leftShiftKey.isPressed || keys.rightShiftKey.isPressed);
 
-            var pointer = Pointer.current;
-            if (pointer == null) return;
-            Vector2 screen = pointer.position.ReadValue();
+            // **A tap on open ground MOVES the drawing. It does not build.**
+            // Kevin, 2026-09-22: the only thing that builds is ✓.
+            //
+            // `IslandInput` only raises `TapThisFrame` for a press that went
+            // down and came up inside the drag slop, and it does so on THIS
+            // frame before this `Update` runs (`DefaultExecutionOrder(-50)`),
+            // so `TapAt` is this frame's point. A tap whose press went down
+            // before the mode existed belongs to whatever started it (the
+            // build button), not to the ground — and a tap inside a claimed
+            // rect (the sheet, or the three buttons below the ghost) is not a
+            // tap on the ground at all.
+            //
+            // Only taps: a DRAG on the land is the camera pan, and stealing
+            // it to slide the blueprint would take the island's one way of
+            // looking around while siting.
+            if (IslandInput.TapThisFrame && IslandInput.TapDownFrame > beganFrame
+                && !UIBlocker.Blocked(IslandInput.TapAt)
+                && GroundPick.FromScreen(Camera.main, IslandInput.TapAt, out Vector3 ground))
+                want = ground;
 
-            // The sheet is a thumb-height slab across the bottom of the
-            // screen and the ground behind it is not pickable. Without this
-            // the button that STARTS siting is also a tap on the ground
-            // directly under it, and the camp lands wherever the button was.
-            if (UIBlocker.Blocked(screen)) return;
+            Evaluate();
 
-            if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 ground))
-            {
-                Refusal = "that is not ground";
-                valid = false;
-                ShowGhost(false);
-                return;
-            }
+            // Desktop: Enter is the ✓.
+            if (keys != null && (keys.enterKey.wasPressedThisFrame
+                                 || keys.numpadEnterKey.wasPressedThisFrame))
+                Confirm();
+        }
 
-            at = ground;
+        /// One 45° step. Public and static so the ↻ button and R press the
+        /// same thing.
+        public static void Rotate() { if (Instance != null) Instance.Turn(false); }
+
+        void Turn(bool back)
+        {
+            // Freeze whatever it was facing, then turn from there, so the
+            // first press does not also swing it round to north.
+            if (!turned) { turned = true; heldYaw = 0f; turns = 0; }
+            turns = (turns + (back ? Steps - 1 : 1)) % Steps;
+        }
+
+        /// **Everything the mode knows, recomputed from `want`.**
+        ///
+        /// It still owns no rules: whether the spot will take the building is
+        /// `Outpost.CanPlace`, the same call the raise makes. This runs every
+        /// frame rather than only when `want` moves because the ground itself
+        /// can change under a standing drawing (something else gets sited),
+        /// and a ✓ that is live against a stale answer is the bug this file
+        /// exists to prevent.
+        void Evaluate()
+        {
+            at = want;
             sited = plan;
             string why;
             if (IsPier)
             {
-                // The ring rule first, about the point the player is
-                // actually pointing at; then the snap, which replaces `at`
-                // with the pier's centre and decides yaw and length.
+                // The ring rule first, about the point the player actually
+                // picked; then the snap, which replaces `at` with the pier's
+                // centre and decides yaw and length.
                 valid = false;
-                if (!TooFar(at, out why))
+                if (!TooFar(want, out why))
                 {
-                    bool snapped = outpost.SnapPier(ground, out Vector3 centre,
+                    bool snapped = outpost.SnapPier(want, out Vector3 centre,
                         out snappedYaw, out sited, out why);
                     // Even a refused snap says where it was trying to go, and
                     // a red ghost THERE explains the refusal better than one
-                    // under the pointer.
+                    // out on the grass.
                     at = centre;
                     if (snapped) valid = outpost.CanPlace(sited, at, snappedYaw, out why);
                 }
@@ -229,35 +303,46 @@ namespace SeaSick.UI
 
             Place(at);
             ShowGhost(true);
+        }
 
-            // **Commit on tap, not on press.** LMB now grabs the land to pan
-            // it, so committing on press would drop a building every time
-            // the player panned while choosing a spot. `IslandInput` only
-            // raises `TapThisFrame` for a press that went down and came up
-            // inside the drag slop, and it does so on THIS frame, before
-            // this `Update` runs (`DefaultExecutionOrder(-50)`) — so `at`
-            // and `valid`, both computed above from this same frame's
-            // pointer position, already describe the ground at `TapAt`.
-            // That is also why this stays the file's only `Test` call: a
-            // second one at `TapAt` would just be re-asking the same
-            // question about the same point.
-            // A tap whose press went down before this mode existed belongs
-            // to whatever started it (the build button), not to the ground.
-            if (valid && IslandInput.TapThisFrame && IslandInput.TapDownFrame > beganFrame)
+        /// **The only way a building gets placed.** The ✓ button, or Enter.
+        public static void Confirm() { if (Instance != null) Instance.Commit(); }
+
+        /// Is the ✓ live? False draws it muted; `Refusal` says why.
+        public static bool CanConfirm => Placing && Instance.valid;
+
+        /// Where the drawing stands, for the buttons to sit under.
+        public static Vector3 GhostAt => Placing ? Instance.at : Vector3.zero;
+
+        void Commit()
+        {
+            if (!valid) return;
+            int wanted = outpost.Site(sited, at, Yaw, moving, out string siteWhy);
+            if (wanted < 0)
             {
-                int wanted = outpost.Site(sited, at, Yaw, moving, out string siteWhy);
-                if (wanted < 0)
-                {
-                    // Refused at the last moment by a test the preview does
-                    // not run (something else was sited in the same frame).
-                    // Say it and stay in the mode rather than dropping the
-                    // player back to a sheet with no explanation.
-                    Refusal = siteWhy;
-                    return;
-                }
+                // Refused at the last moment by a test the preview does not
+                // run (something else was sited in the same frame). Say it
+                // and stay in the mode rather than dropping the player back
+                // to a sheet with no explanation.
+                Refusal = siteWhy;
+                return;
+            }
 
-                DropTheViewOn(outpost);
-                Cancel();
+            DropTheViewOn(outpost);
+            Cancel();
+        }
+
+        /// **The three thumbs under the drawing** — see `SitingButtons`. The
+        /// mode draws them itself rather than the sheet doing it, because
+        /// they are anchored to the ghost and the ghost is this file's.
+        void OnGUI()
+        {
+            if (plan.id == null || outpost == null) return;
+            switch (SitingButtons.Draw(at, valid, Refusal))
+            {
+                case SitingButtons.Press.Cancel: Cancel(); break;
+                case SitingButtons.Press.Rotate: Turn(false); Evaluate(); break;
+                case SitingButtons.Press.Confirm: Commit(); break;
             }
         }
 

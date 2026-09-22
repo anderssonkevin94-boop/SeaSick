@@ -1219,19 +1219,8 @@ namespace SeaSick.World
             float roomS = (pending.stoneNeeded - pending.stoneDone) - pending.stoneDonePart;
             if (roomS <= 0f || labour <= 0f) return;
 
-            var pile = Store(Res.Stone);
-            if (pile != null && pile.whole > 0)
-            {
-                float canHaul = labour * HaulPerHandPerDay;
-                int hauled = Mathf.FloorToInt(Mathf.Min(canHaul, Mathf.Min(pile.whole, roomS)));
-                if (hauled > 0)
-                {
-                    pile.whole -= hauled;
-                    pending.stoneDone += hauled;
-                    roomS -= hauled;
-                    labour -= hauled / HaulPerHandPerDay;
-                }
-            }
+            Haul(Store(Res.Stone), ref pending.stoneDone, ref pending.stoneDonePart,
+                ref roomS, ref labour);
 
             var seam = Stock(Res.Stone);
             if (seam == null || roomS <= 0f || labour <= 0f) return;
@@ -1267,15 +1256,70 @@ namespace SeaSick.World
             float room = (pending.brickNeeded - pending.brickDone) - pending.brickDonePart;
             if (room <= 0f || labour <= 0f) return;
 
-            var pile = Store(Res.Brick);
-            if (pile == null || pile.whole <= 0) return;
+            Haul(Store(Res.Brick), ref pending.brickDone, ref pending.brickDonePart,
+                ref room, ref labour);
+        }
 
-            float canHaul = labour * HaulPerHandPerDay;
-            int hauled = Mathf.FloorToInt(Mathf.Min(canHaul, Mathf.Min(pile.whole, room)));
-            if (hauled <= 0) return;
-            pile.whole -= hauled;
-            pending.brickDone += hauled;
-            labour -= hauled / HaulPerHandPerDay;
+        /// **Carry from a pile into the blueprint, fractions and all.**
+        ///
+        /// Kevin, 2026-09-22: *"villagers carry 10 stone to a shelter that
+        /// only has 0/2 continuously."* This block used to floor the carry to
+        /// a whole unit and throw the remainder away:
+        /// `FloorToInt(min(labour * HaulPerHandPerDay, ...))`. One quantum is
+        /// `QuantumDays` (0.1) of a day and the haul rate is 12 a day, so one
+        /// hand at FULL strength carries 1.2 units a quantum -- a hair over
+        /// the one unit the floor needs. Dock that hand at all (`WorkFactor`
+        /// scales with mood, and a hand goes "hungry" under 0.95) and the
+        /// figure drops under 1.0, floors to **zero, every quantum, for
+        /// ever**: the pile stays full, the counter never moves, and the
+        /// bodies go on walking the load over because `BuilderWants` still
+        /// says the site is short.
+        ///
+        /// Timber hid it, which is why it showed up on stone. A builder who
+        /// hauls nothing falls through to CUTTING, and the cut accrues into
+        /// `donePart` fractionally -- so the timber part always inched
+        /// forward. Stone's seam is a third as rich (`ScatteredStoneShare`)
+        /// and is usually worked out by the time a second building is sited,
+        /// leaving the pile as the only source; brick has no seam at all.
+        ///
+        /// So the carry accrues into the same `*DonePart` field the cut uses,
+        /// and the pile is debited in the same fractions through its own
+        /// `part`. At full strength this is the old behaviour plus the
+        /// remainder that used to be dropped; below it, it is the difference
+        /// between slow
+        /// and stopped. `room` and `labour` are spent by what was carried, so
+        /// a site that wants 2 takes 2 out of a pile of 10 and the builder's
+        /// remaining hand-days go on to the next part of the price.
+        static void Haul(OutpostStore pile, ref int done, ref float part,
+            ref float room, ref float labour)
+        {
+            if (pile == null || pile.whole <= 0 || room <= 0f || labour <= 0f) return;
+            // Bounded by what is lying there, what the site still wants, and
+            // how much of the day is left -- so carrying to a site that wants
+            // 2 out of a pile of 10 delivers 2 and leaves 8 on the pile.
+            float have = pile.whole + pile.part;
+            float got = Mathf.Min(labour * HaulPerHandPerDay, Mathf.Min(have, room));
+            if (got <= 0f) return;
+
+            // **Off the pile in the same fractions it goes into the site**,
+            // through `OutpostStore.part`, which exists for exactly this --
+            // the sub-unit accrual gathering already uses. Units leaving the
+            // ground therefore equal units entering the blueprint to the
+            // fraction, which a floored debit against a fractional credit
+            // would not.
+            have -= got;
+            pile.whole = Mathf.Max(0, Mathf.FloorToInt(have));
+            pile.part = Mathf.Max(0f, have - pile.whole);
+
+            part += got;
+            int whole = Mathf.FloorToInt(part);
+            if (whole > 0)
+            {
+                done += whole;
+                part -= whole;
+            }
+            room -= got;
+            labour -= got / HaulPerHandPerDay;
         }
 
         /// **What a builder here should be fetching right now**: logs until
@@ -1349,18 +1393,8 @@ namespace SeaSick.World
                     // ever. Timber already cut is carried five metres, which
                     // is also why it goes in faster than timber still growing.
                     var pile = Store(Res.Timber);
-                    if (pile != null && pile.whole > 0 && roomB > 0f && labour > 0f)
-                    {
-                        float canHaul = labour * HaulPerHandPerDay;
-                        int hauled = Mathf.FloorToInt(Mathf.Min(canHaul, Mathf.Min(pile.whole, roomB)));
-                        if (hauled > 0)
-                        {
-                            pile.whole -= hauled;
-                            pending.done += hauled;
-                            roomB -= hauled;
-                            labour -= hauled / HaulPerHandPerDay;
-                        }
-                    }
+                    Haul(pile, ref pending.done, ref pending.donePart,
+                        ref roomB, ref labour);
 
                     // Then whatever is left of the day goes on cutting.
                     var wood = Wood;

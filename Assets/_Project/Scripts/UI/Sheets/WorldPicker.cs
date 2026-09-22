@@ -87,6 +87,32 @@ namespace SeaSick.UI.Sheets
             var cam = Camera.main;
             if (cam == null) return;
 
+            // **The crew are asked FIRST, and they are asked in screen space.**
+            //
+            // Kevin, on the phone, 2026-09-22: *"when pressing on the villager
+            // his information / commands I can give him should be the 1/3
+            // screen UI"* -- and tapping one did nothing, while tapping his
+            // token in the crew list opened the sheet. The reason is that a
+            // villager has NO COLLIDER: `Hand.PickAt` is deliberately
+            // projection rather than physics ("giving twenty of them one so
+            // that a cursor can be aimed would be paying the physics engine
+            // for an interface", Hand.cs:228). So the raycast below could
+            // never hit a hand -- it hit the beach he was standing on, found
+            // no sheet for the terrain, and closed whatever was open.
+            //
+            // Asking `Hand` is also the only way the two agree: the cursor
+            // that highlights a villager and the tap that opens his sheet now
+            // resolve the same man, with the same generous follow radius
+            // (`Feel.FollowRadius01` of the screen height, which is the
+            // thumb-sized target a 1.8 m body at island zoom does not have).
+            var hand = Hand.Instance;
+            var who = hand != null ? hand.PickAt(screen, forPickup: false) : null;
+            if (who != null)
+            {
+                var hers = Sheets.TryCreateFor(who);
+                if (hers != null) { Sheets.Open(hers); return; }
+            }
+
             // Triggers included on purpose: `Pickable` hangs a trigger sphere
             // on anything tappable that has no collider of its own.
             if (Physics.Raycast(cam.ScreenPointToRay(screen), out var hit, 6000f,

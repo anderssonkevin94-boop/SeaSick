@@ -31,10 +31,16 @@ namespace SeaSick.UI.Sheets
         // being buttons that grow the card. They are the build and ship tabs.
         // Nothing was dropped -- every store, order, hand, plan and manifest
         // line the sheet had is still here, on one of the four.
-        public const int TabCamp = 0;
-        public const int TabHands = 1;
-        public const int TabBuild = 2;
-        public const int TabShip = 3;
+        // 2026-09-22, "pages you swipe between": a tab is a PAGE, and a
+        // section that would not fit the band becomes as many pages as it
+        // takes. Nothing scrolls and nothing is dropped.
+        const int PgCamp = 0;      // the piles, and what is going up
+        const int PgOrders = 1;    // rations, priority, the watch, the next hand
+        const int PgHands = 2;
+        const int PgBuild = 3;
+        const int PgShip = 4;      // the manifest's three sections, embedded
+        const int PgCargo = 5;
+        const int PgCrew = 6;
 
         readonly Outpost outpost;
         readonly string focus;
@@ -47,35 +53,159 @@ namespace SeaSick.UI.Sheets
             outpost = o;
             this.focus = focus;
             islandName = o != null && o.Island != null ? o.Island.name : "the camp";
-            // The watch is an ORDER, and the orders live on the camp tab. A
-            // tap on the watchtower therefore pins that tab rather than
-            // taking whichever one the session was left on -- the host only
-            // restores a remembered tab when `Tab` is still -1.
-            if (focus == FocusLookout) tab = TabCamp;
+            // The watch is an ORDER, and which PAGE the orders are on depends
+            // on the band -- their own page on a phone, the bottom of the
+            // camp page on a desk. `Plan` resolves it (see `OrdersPage`) and
+            // pins `tab` there before the host reads it; this only has to
+            // stop the session's remembered page winning, which a non-negative
+            // `tab` does.
+            if (focus == FocusLookout) tab = 0;
         }
 
         // --- the frame ---------------------------------------------------------
 
-        public int Tab => tab;
+        public int Tab { get { Plan(); return tab; } }
         public void SetTab(int index) { tab = index; }
         public Color Accent => SheetTheme.Ember;
 
-        readonly string[] labels = { "camp", "hands", "build", "ship" };
+        /// One entry per page: which section it is, and which page OF that
+        /// section. `part` on `PgCamp` doubles as "the orders block is on
+        /// this page too", which is what happens on a desk where the band is
+        /// tall enough to carry both.
+        struct Pg { public int kind; public int part; }
 
-        /// Short and sentence-case, with the one count worth carrying: how
-        /// many hands live here, so the roster can be read without opening
-        /// it. Rebuilt into the same array every time, because the host
-        /// re-labels the strip four times a second and an allocation per
-        /// refresh is an allocation per refresh.
-        public string[] TabLabels
+        readonly List<Pg> pages = new List<Pg>();
+        string[] labels = { "camp" };
+        long planKey = long.MinValue;
+
+        int handsPerPage = 5, buildPerPage = 5;
+        int handPart, buildPart;
+        bool campCarriesOrders;
+
+        public string[] TabLabels { get { Plan(); return labels; } }
+
+        /// **The page plan, out of the band the frame actually has.**
+        ///
+        /// Every count here is read, never assumed: how many store tiles the
+        /// camp is showing, how many hands live on it, how many plans it can
+        /// afford, how much cargo and crew the manifest has. The band comes
+        /// from `SheetHost`, which is the safe area and the frame's own
+        /// chrome and nothing else -- so the same camp is five pages on a
+        /// phone and three on a desk without a number being written twice.
+        void Plan()
+        {
+            var l = L;
+            if (outpost == null || l == null) return;
+
+            bool alongside = CampLoading.Alongside(outpost);
+            float band = SheetHost.BandHeight;
+            int storeTiles = ShownCount(l);
+            int handCount = l.hands.Count;
+            int planCount = outpost.Building ? 1 : CountBuildable();
+            int cargo = alongside ? ship.CargoCount : 0;
+            int crew = alongside ? ship.CrewRows : 0;
+
+            long key = Mathf.RoundToInt(band) * 1000003L
+                       + storeTiles * 7919L + handCount * 131L + planCount * 31L
+                       + cargo * 17L + crew * 7L + (alongside ? 1L : 0L)
+                       + (outpost.Building ? 3L : 0L);
+            if (key == planKey) return;
+            planKey = key;
+
+            // What the two halves of the camp page cost, in panel units.
+            // `SheetKit`'s constants are the USS heights rounded up, so this
+            // is arithmetic on the stylesheet rather than a guess at it.
+            float storeRows = storeTiles <= 4 ? 1f : 2f;
+            float campPx = storeRows * SheetKit.StorePx + SheetKit.NotePx;
+            float ordersPx = SheetKit.EyebrowPx + SheetKit.SegPx + SheetKit.TextPx
+                             + SheetKit.SegPx + SheetKit.QuietPx + SheetKit.TextPx
+                             + SheetKit.BarPx;
+            campCarriesOrders = campPx + SheetKit.RulePx + ordersPx <= band;
+
+            handsPerPage = SheetHost.RowsThatFit(SheetKit.RowPx, SheetKit.EyebrowPx);
+            buildPerPage = SheetHost.RowsThatFit(SheetKit.QuietPx + 4f, SheetKit.EyebrowPx);
+            int handPages = SheetKit.PageCount(Mathf.Max(1, handCount), handsPerPage);
+            int buildPages = SheetKit.PageCount(Mathf.Max(1, planCount), buildPerPage);
+
+            pages.Clear();
+            pages.Add(new Pg { kind = PgCamp, part = campCarriesOrders ? 1 : 0 });
+            if (!campCarriesOrders) pages.Add(new Pg { kind = PgOrders, part = 0 });
+            for (int i = 0; i < handPages; i++) pages.Add(new Pg { kind = PgHands, part = i });
+            for (int i = 0; i < buildPages; i++) pages.Add(new Pg { kind = PgBuild, part = i });
+            pages.Add(new Pg { kind = PgShip, part = 0 });
+            if (alongside)
+            {
+                for (int i = 0; i < ship.CargoPages; i++)
+                    pages.Add(new Pg { kind = PgCargo, part = i });
+                for (int i = 0; i < ship.CrewPages; i++)
+                    pages.Add(new Pg { kind = PgCrew, part = i });
+            }
+
+            if (labels.Length != pages.Count) labels = new string[pages.Count];
+            int hp = 0, bp = 0, cp = 0, rp = 0;
+            for (int i = 0; i < pages.Count; i++)
+            {
+                switch (pages[i].kind)
+                {
+                    case PgCamp: labels[i] = "camp"; break;
+                    case PgOrders: labels[i] = "orders"; break;
+                    case PgHands:
+                        labels[i] = handPages > 1
+                            ? SheetKit.PageLabel("hands", hp, handPages)
+                            : (handCount > 0 ? "hands · " + handCount : "hands");
+                        hp++;
+                        break;
+                    case PgBuild:
+                        labels[i] = SheetKit.PageLabel("build", bp, buildPages); bp++; break;
+                    case PgShip: labels[i] = "ship"; break;
+                    case PgCargo:
+                        labels[i] = SheetKit.PageLabel("cargo", cp, ship.CargoPages); cp++; break;
+                    default:
+                        labels[i] = SheetKit.PageLabel("crew", rp, ship.CrewPages); rp++; break;
+                }
+            }
+
+            // A tap on the watchtower is a question about the watch, and the
+            // watch lives in the orders block -- which is its own page on a
+            // phone and part of the camp page on a desk. Resolved here rather
+            // than in the constructor, because only the plan knows which.
+            if (focus == FocusLookout && !focusDone)
+            {
+                focusDone = true;
+                tab = OrdersPage;
+            }
+            if (tab >= pages.Count) tab = pages.Count - 1;
+        }
+
+        bool focusDone;
+
+        /// The page the rations / priority / watch / recruit block is on.
+        int OrdersPage
         {
             get
             {
-                var l = L;
-                int n = l != null ? l.hands.Count : 0;
-                labels[TabHands] = n > 0 ? "hands · " + n : "hands";
-                return labels;
+                for (int i = 0; i < pages.Count; i++)
+                    if (pages[i].kind == PgOrders
+                        || (pages[i].kind == PgCamp && pages[i].part == 1)) return i;
+                return 0;
             }
+        }
+
+        Pg Live
+        {
+            get
+            {
+                Plan();
+                if (pages.Count == 0) return new Pg { kind = PgCamp, part = 1 };
+                return pages[Mathf.Clamp(tab, 0, pages.Count - 1)];
+            }
+        }
+
+        int CountBuildable()
+        {
+            int n = 0;
+            foreach (var _ in outpost.Buildable()) n++;
+            return n;
         }
 
         public VisualElement BuildHeader() =>
@@ -85,8 +215,11 @@ namespace SeaSick.UI.Sheets
         /// build tabs are made of rows that ARE their own actions -- a pill
         /// group, a "change", a plan with its price on it -- and a pinned row
         /// under them would be a second place to look for the same verbs.
-        public VisualElement BuildActions() =>
-            tab == TabShip ? ship.BuildActions() : null;
+        public VisualElement BuildActions()
+        {
+            int k = Live.kind;
+            return k == PgShip || k == PgCargo || k == PgCrew ? ship.BuildActions() : null;
+        }
 
         public string Title => islandName;
 
@@ -138,30 +271,30 @@ namespace SeaSick.UI.Sheets
         public VisualElement Build()
         {
             Forget();
+            var page = Live;
+            handPart = page.kind == PgHands ? page.part : 0;
+            buildPart = page.kind == PgBuild ? page.part : 0;
+
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
 
-            switch (tab)
+            switch (page.kind)
             {
-                case TabHands: BuildHands(root); break;
-                case TabBuild: BuildBuild(root); break;
-                case TabShip: BuildShip(root); break;
-                default: BuildCamp(root); break;
+                case PgOrders: BuildOrders(root); break;
+                case PgHands: BuildHands(root); break;
+                case PgBuild: BuildBuild(root); break;
+                case PgShip: BuildShip(root, ShipSheet.SecHold, 0); break;
+                case PgCargo: BuildShip(root, ShipSheet.SecCargo, page.part); break;
+                case PgCrew: BuildShip(root, ShipSheet.SecCrew, page.part); break;
+                default:
+                    BuildCamp(root);
+                    // On a desk the band carries the piles AND the orders, so
+                    // the camp is one page rather than two half-empty ones.
+                    if (page.part == 1) { root.Add(SheetKit.Rule()); BuildOrders(root); }
+                    break;
             }
 
             Refresh();
-
-            // A tap on the watchtower is a question about the watch, so the
-            // sheet opens looking at that row. One frame later, because the
-            // panel has not laid itself out yet and a scroll before layout
-            // scrolls nothing.
-            if (focus == FocusLookout && tab == TabCamp && lookoutHolder != null)
-                lookoutHolder.schedule.Execute(() =>
-                {
-                    var sv = lookoutHolder.GetFirstAncestorOfType<ScrollView>();
-                    if (sv != null) sv.ScrollTo(lookoutHolder);
-                }).ExecuteLater(1);
-
             return root;
         }
 
@@ -190,9 +323,16 @@ namespace SeaSick.UI.Sheets
 
             noteHolder = SheetBits.Holder();
             root.Add(noteHolder);
+        }
 
-            root.Add(SheetKit.Rule());
-
+        // --- page: orders --------------------------------------------------
+        //
+        // The four standing orders: how much they eat, what they work on
+        // first, who is at the tower, and when the next hand arrives. Its own
+        // page on a phone, the bottom of the camp page on a desk -- the plan
+        // decides, out of the band.
+        void BuildOrders(VisualElement root)
+        {
             root.Add(SheetKit.Eyebrow("orders"));
 
             rationsHolder = SheetBits.Holder();
@@ -222,6 +362,13 @@ namespace SeaSick.UI.Sheets
             root.Add(handsHolder);
         }
 
+        /// The rows this page of the roster covers.
+        void Slice(int count, int part, int perPage, out int from, out int to)
+        {
+            from = Mathf.Clamp(part * perPage, 0, Mathf.Max(0, count));
+            to = Mathf.Min(count, from + perPage);
+        }
+
         // --- tab: build ---------------------------------------------------------
 
         /// **The build list is a tab, not a drawer.** It used to hang off a
@@ -248,11 +395,14 @@ namespace SeaSick.UI.Sheets
                 buildListHolder.Add(SheetKit.Note("Something is already going up"));
                 return;
             }
-            int n = 0;
+            Slice(CountBuildable(), buildPart, buildPerPage, out int bFrom, out int bTo);
+            int n = 0, seen = 0;
             foreach (var plan in outpost.Buildable())
             {
                 var p = plan;
                 n++;
+                int at = seen++;
+                if (at < bFrom || at >= bTo) continue;
                 string price = p.stoneCost > 0
                     ? $"{p.label} — {p.cost} timber {p.stoneCost} stone"
                     : $"{p.label} — {p.cost} timber";
@@ -279,14 +429,14 @@ namespace SeaSick.UI.Sheets
         /// it rather than copying it.
         readonly ShipSheet ship = new ShipSheet();
 
-        void BuildShip(VisualElement root)
+        void BuildShip(VisualElement root, int section, int part)
         {
             if (!CampLoading.Alongside(outpost))
             {
                 root.Add(SheetKit.Note("She is not lying alongside"));
                 return;
             }
-            root.Add(ship.BuildWhole());
+            root.Add(ship.BuildSection(section, part, ship.CargoPerPage, ship.CrewPerPage));
         }
 
         public void Refresh()
@@ -299,24 +449,36 @@ namespace SeaSick.UI.Sheets
             // idempotent within a frame (`Outpost.CatchUp`).
             outpost.CatchUp();
 
-            switch (tab)
+            switch (Live.kind)
             {
-                case TabHands:
+                case PgHands:
                     Hands(l);
                     break;
-                case TabBuild:
+                case PgBuild:
                     // Keyed on what the list SAYS: the stores it prices
                     // against, and whether a drawing is already up.
                     long bkey = l.Total * 31L + (outpost.Building ? 1 : 0) * 7919L
                                 + l.built.Count * 131L;
+                    bkey = bkey * 31L + buildPart;
                     if (bkey != buildKey) { buildKey = bkey; FillBuildList(); }
                     break;
-                case TabShip:
+                case PgShip:
+                case PgCargo:
+                case PgCrew:
                     if (CampLoading.Alongside(outpost)) ship.Refresh();
+                    break;
+                case PgOrders:
+                    RationsBlock(l);
+                    PriorityBlock(l);
+                    Lookout(l);
+                    Recruit(l);
                     break;
                 default:
                     Stores(l);
                     Note(l);
+                    // The camp page carries the orders too where the band is
+                    // tall enough; the blocks below are no-ops when their
+                    // holders were not built.
                     RationsBlock(l);
                     PriorityBlock(l);
                     Lookout(l);
@@ -340,6 +502,17 @@ namespace SeaSick.UI.Sheets
         static readonly string[] Sometimes =
             { Res.Ore, Res.Spice, Res.Game, Res.Boards, Res.Tools, Res.Brick, Res.Arrows };
         readonly List<string> shown = new List<string>();
+
+        /// How many store tiles the camp page will show -- the same rule
+        /// `Stores` follows, asked before the page is built so the plan can
+        /// tell a one-row tile band from a two-row one.
+        static int ShownCount(OutpostLedger l)
+        {
+            int n = Always.Length;
+            foreach (var r in Sometimes)
+                if (l.CountOf(r) > 0 || AnyWorkerMakes(l, r)) n++;
+            return n;
+        }
 
         static bool AnyWorkerMakes(OutpostLedger l, string res)
         {
@@ -653,7 +826,8 @@ namespace SeaSick.UI.Sheets
 
         void Hands(OutpostLedger l)
         {
-            long key = l.hands.Count * 1000003L + l.HousingCapacity;
+            long key = l.hands.Count * 1000003L + l.HousingCapacity
+                       + handPart * 100003L + handsPerPage * 17L;
             foreach (var h in l.hands)
             {
                 if (h == null) continue;
@@ -669,6 +843,7 @@ namespace SeaSick.UI.Sheets
             // recruit line above it, and the two said different things about
             // the same camp ("4 hands ashore · 2 beds" over "4 of 2 beds").
             // The recruit line owns the beds now; this owns the roster.
+            Slice(l.hands.Count, handPart, handsPerPage, out int hFrom, out int hTo);
             if (bedsEyebrow != null)
                 bedsEyebrow.text = l.hands.Count == 1
                     ? "1 hand ashore"
@@ -682,8 +857,9 @@ namespace SeaSick.UI.Sheets
                 return;
             }
 
-            foreach (var h in l.hands)
+            for (int i = hFrom; i < hTo; i++)
             {
+                var h = l.hands[i];
                 if (h == null) continue;
                 var who = h;      // the closure's own copy; rows outlive the loop
                 string mood = who.MoodWord;
@@ -692,7 +868,7 @@ namespace SeaSick.UI.Sheets
                 // pushed the row past the 40 px it is allowed, so each hand
                 // took two rows' worth of sheet and the roster ran off the
                 // bottom. Name, then what they are doing, then the verb.
-                handsHolder.Add(SheetKit.Row(
+                handsHolder.Add(SheetKit.ListRow(
                     SheetKit.Token(SheetBits.Initial(who.name), who.Angry,
                         SheetBits.JobGlyph(who), () => OpenHand(who.name)),
                     SheetKit.Text(who.name, true),

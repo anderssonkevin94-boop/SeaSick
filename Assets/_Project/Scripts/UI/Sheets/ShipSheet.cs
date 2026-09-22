@@ -30,16 +30,95 @@ namespace SeaSick.UI.Sheets
         // and who is SAILING. The action row -- everyone ashore, cast off --
         // is pinned under both, because those two are about the ship whatever
         // you happen to be looking at.
-        public const int TabHold = 0;
-        public const int TabCrew = 1;
+        // 2026-09-22, "pages you swipe between": the manifest is three
+        // sections, and the two that are LISTS page themselves. A camp
+        // holding eight kinds and a crew of ten used to be a scroll; it is
+        // now "cargo 1/2", "cargo 2/2", "crew 1/2".
+        public const int SecHold = 0;
+        public const int SecCargo = 1;
+        public const int SecCrew = 2;
 
         int tab = -1;
-        static readonly string[] tabLabels = { "hold", "crew" };
+        string[] labels = { "hold", "cargo", "crew" };
+        int cargoPages = 1, crewPages = 1;
+        int cargoPerPage = 99, crewPerPage = 99;
+        int cargoPart, crewPart;
+        long shipPlanKey = long.MinValue;
 
-        public int Tab => tab;
+        public int Tab { get { Plan(); return tab; } }
         public void SetTab(int index) { tab = index; }
-        public string[] TabLabels => tabLabels;
+        public string[] TabLabels { get { Plan(); return labels; } }
         public Color Accent => SheetTheme.Sea;
+
+        /// **How many rows each list section has**, so the camp sheet can
+        /// page the manifest inside its own frame with the same arithmetic
+        /// this sheet uses standing alone.
+        public int CargoCount
+        {
+            get
+            {
+                var l = Camp != null ? Camp.Ledger : null;
+                if (l == null) return 0;
+                int n = 0;
+                foreach (var st in l.stores)
+                    if (st != null && st.whole > 0 && !string.IsNullOrEmpty(st.resource)) n++;
+                return n;
+            }
+        }
+
+        public int CrewRows
+        {
+            get
+            {
+                var roster = SheetBits.Roster;
+                int aboard = 0;
+                if (roster != null)
+                    foreach (var a in roster.All) if (a != null && a.IsAboard) aboard++;
+                var l = Camp != null ? Camp.Ledger : null;
+                int ashore = l != null ? l.hands.Count : 0;
+                return Mathf.Max(aboard, ashore);
+            }
+        }
+
+        /// Cut the two list sections into pages that fit the band, and name
+        /// the pages. Keyed, because the host asks four times a second.
+        void Plan()
+        {
+            int cargo = CargoCount, crew = CrewRows;
+            long key = cargo * 1000003L + crew * 131L
+                       + Mathf.RoundToInt(SheetHost.BandHeight) * 31L;
+            if (key == shipPlanKey) return;
+            shipPlanKey = key;
+
+            cargoPerPage = SheetHost.RowsThatFit(SheetKit.RowPx, SheetKit.EyebrowPx);
+            crewPerPage = SheetHost.RowsThatFit(SheetKit.RowPx, SheetKit.EyebrowPx);
+            cargoPages = SheetKit.PageCount(Mathf.Max(1, cargo), cargoPerPage);
+            crewPages = SheetKit.PageCount(Mathf.Max(1, crew), crewPerPage);
+
+            int n = 1 + cargoPages + crewPages;
+            if (labels.Length != n) labels = new string[n];
+            labels[0] = "hold";
+            for (int i = 0; i < cargoPages; i++)
+                labels[1 + i] = SheetKit.PageLabel("cargo", i, cargoPages);
+            for (int i = 0; i < crewPages; i++)
+                labels[1 + cargoPages + i] = SheetKit.PageLabel("crew", i, crewPages);
+            if (tab >= n) tab = n - 1;
+        }
+
+        /// Which section (and which page of it) index `page` is.
+        public void SectionOf(int page, out int section, out int part)
+        {
+            Plan();
+            if (page <= 0) { section = SecHold; part = 0; return; }
+            if (page - 1 < cargoPages) { section = SecCargo; part = page - 1; return; }
+            section = SecCrew;
+            part = Mathf.Clamp(page - 1 - cargoPages, 0, crewPages - 1);
+        }
+
+        public int CargoPages { get { Plan(); return cargoPages; } }
+        public int CrewPages { get { Plan(); return crewPages; } }
+        public int CargoPerPage { get { Plan(); return cargoPerPage; } }
+        public int CrewPerPage { get { Plan(); return crewPerPage; } }
 
         public VisualElement BuildHeader()
         {
@@ -109,27 +188,39 @@ namespace SeaSick.UI.Sheets
         public VisualElement Build()
         {
             Forget();
+            SectionOf(Mathf.Max(0, tab), out int section, out int part);
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
-            root.Add(tab == TabCrew ? CrewSection() : HoldSection());
+            root.Add(Section(section, part, cargoPerPage, crewPerPage));
             Refresh();
             return root;
         }
 
-        /// **Both sections at once, for the camp sheet's "ship" tab.** The
-        /// fire embeds the manifest rather than copying it, and a tab inside
-        /// a tab is a place a thumb gets lost -- so when it is embedded the
-        /// two sections simply stack and the frame's own scroll carries them.
-        public VisualElement BuildWhole()
+        /// **One section, at one page of it.** The camp sheet builds the same
+        /// three sections inside its own frame, so there is one manifest in
+        /// the game and two frames that show it rather than two copies.
+        public VisualElement Section(int section, int part, int cargoPer, int crewPer)
+        {
+            cargoPart = part; crewPart = part;
+            cargoPerPage = Mathf.Max(1, cargoPer);
+            crewPerPage = Mathf.Max(1, crewPer);
+            switch (section)
+            {
+                case SecCargo: return CargoSection();
+                case SecCrew: return CrewSection();
+                default: return HoldSection();
+            }
+        }
+
+        /// One section for an embedding frame. The fire's manifest pages go
+        /// through here, so `Forget` is done for the caller exactly as it is
+        /// in `Build`.
+        public VisualElement BuildSection(int section, int part, int cargoPer, int crewPer)
         {
             Forget();
-            var root = new VisualElement();
-            root.style.flexDirection = FlexDirection.Column;
-            root.Add(HoldSection());
-            root.Add(SheetKit.Rule());
-            root.Add(CrewSection());
+            var e = Section(section, part, cargoPer, crewPer);
             Refresh();
-            return root;
+            return e;
         }
 
         void Forget()
@@ -158,15 +249,23 @@ namespace SeaSick.UI.Sheets
             root.Add(loadBtn);
 
             root.Add(SheetKit.Rule());
-            root.Add(SheetKit.Eyebrow("stop at"));
-            stopAtHolder = SheetBits.Holder();
-            root.Add(stopAtHolder);
-
-            root.Add(SheetKit.Rule());
             deckHolder = SheetBits.Holder();
             root.Add(deckHolder);
             repairHolder = SheetBits.Holder();
             root.Add(repairHolder);
+            return root;
+        }
+
+        /// What stays ashore: one row per kind the camp is holding, paged.
+        VisualElement CargoSection()
+        {
+            var root = new VisualElement();
+            root.style.flexDirection = FlexDirection.Column;
+            root.Add(SheetKit.Eyebrow(cargoPages > 1
+                ? $"stop at · {cargoPart + 1} of {cargoPages}"
+                : "stop at"));
+            stopAtHolder = SheetBits.Holder();
+            root.Add(stopAtHolder);
             return root;
         }
 
@@ -293,7 +392,7 @@ namespace SeaSick.UI.Sheets
                     if (s != null && s.whole > 0 && !string.IsNullOrEmpty(s.resource))
                         kinds.Add(s.resource);
 
-            long key = kinds.Count;
+            long key = kinds.Count * 31L + cargoPart * 1000003L + cargoPerPage;
             foreach (var k in kinds)
                 key = key * 31 + k.GetHashCode() + l.CountOf(k) * 7 + CampLoading.StopAt(k) * 131;
             if (key == stopKey) return;
@@ -306,13 +405,15 @@ namespace SeaSick.UI.Sheets
                 stopAtHolder.Add(SheetKit.Note("The camp is holding nothing"));
                 return;
             }
-            foreach (var kind in kinds)
+            int from = cargoPart * cargoPerPage;
+            int to = Mathf.Min(kinds.Count, from + cargoPerPage);
+            for (int ki = from; ki < to; ki++)
             {
-                string res = kind;
+                string res = kinds[ki];
                 int ashore = l.CountOf(res);
                 int cap = CampLoading.StopAt(res);
                 int sel = cap < 0 ? 0 : cap <= 0 ? 2 : 1;
-                stopAtHolder.Add(SheetKit.Row(
+                stopAtHolder.Add(SheetKit.ListRow(
                     SheetKit.Text(CampLoading.Lower(res), false, false, 13f),
                     SheetKit.Text(ashore.ToString(), false, true, 13f),
                     SheetKit.Segmented(StopOptions, sel, i =>
@@ -414,7 +515,8 @@ namespace SeaSick.UI.Sheets
             var roster = SheetBits.Roster;
             var l = camp != null ? camp.Ledger : null;
 
-            long key = (l != null ? l.hands.Count : 0) * 1000003L;
+            long key = (l != null ? l.hands.Count : 0) * 1000003L
+                       + crewPart * 100003L + crewPerPage * 17L;
             if (roster != null)
                 foreach (var a in roster.All)
                     if (a != null && a.IsAboard)
@@ -430,20 +532,29 @@ namespace SeaSick.UI.Sheets
             if (aboardCol == null || ashoreCol == null) return;
             aboardCol.Clear();
             int aboard = 0;
+            // **Both columns are cut at the same page.** The page is the
+            // band's worth of rows, so a crew of twelve is "crew 1/2" and
+            // "crew 2/2" rather than a list running off the bottom of a card
+            // that no longer scrolls.
+            int fromA = crewPart * crewPerPage, toA = fromA + crewPerPage;
+            int seenA = 0;
             if (roster != null)
                 foreach (var a in roster.All)
                 {
                     if (a == null || !a.IsAboard) continue;
                     var hand = a;
                     aboard++;
+                    int at = seenA++;
+                    if (at < fromA || at >= toA) continue;
                     var arrow = SheetKit.Btn("→", () => Station(hand), false, true);
                     arrow.SetEnabled(camp != null && (camp.HasCamp || camp.Building));
-                    aboardCol.Add(SheetKit.Row(
+                    aboardCol.Add(SheetKit.ListRow(
                         SheetKit.Token(SheetBits.Initial(hand.DisplayName), false, "⚓"),
                         SheetKit.Text(hand.DisplayName, false, false, 13f),
                         arrow));
                 }
-            if (aboard == 0) aboardCol.Add(SheetKit.Text("nobody aboard", false, true, 12f));
+            if (aboardCol.childCount == 0)
+                aboardCol.Add(SheetKit.Text(aboard == 0 ? "nobody aboard" : "—", false, true, 12f));
 
             // Ashore: the arrow takes them back (`Outpost.Recall`,
             // CampSheet.cs:519). **By name, never by enumerator** -- `Recall`
@@ -453,19 +564,24 @@ namespace SeaSick.UI.Sheets
             if (l == null || l.hands.Count == 0)
                 ashoreCol.Add(SheetKit.Text("nobody ashore", false, true, 12f));
             else
-                for (int k = 0; k < l.hands.Count; k++)
+            {
+                int fromB = crewPart * crewPerPage, toB = fromB + crewPerPage;
+                for (int k = fromB; k < Mathf.Min(l.hands.Count, toB); k++)
                 {
                     var h = l.hands[k];
                     if (h == null) continue;
                     string who = h.name;
                     var arrow = SheetKit.Btn("←", () => Recall(who), false, true);
                     arrow.SetEnabled(camp != null && camp.BodyNamed(who) != null);
-                    ashoreCol.Add(SheetKit.Row(
+                    ashoreCol.Add(SheetKit.ListRow(
                         SheetKit.Token(SheetBits.Initial(who), h.Angry,
                             SheetBits.JobGlyph(h)),
                         SheetKit.Text(who, false, false, 13f),
                         arrow));
                 }
+                if (ashoreCol.childCount == 0)
+                    ashoreCol.Add(SheetKit.Text("—", false, true, 12f));
+            }
 
             if (everyoneAshore != null)
                 everyoneAshore.SetEnabled(aboard > 0 && camp != null

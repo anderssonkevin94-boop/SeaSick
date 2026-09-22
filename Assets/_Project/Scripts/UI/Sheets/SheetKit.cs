@@ -338,6 +338,131 @@ namespace SeaSick.UI.Sheets
             return bar;
         }
 
+        /// **The strip the frame actually shows.** Five 44 px tabs is as much
+        /// as a thumb can aim at across a phone, so a sheet with more pages
+        /// than that gets the compact form -- arrows, the live page's name,
+        /// and a dot per page -- rather than six tabs nobody can hit. Either
+        /// way the swipe on the body is the primary control and this is the
+        /// map of where you are in it.
+        public const int MaxTabs = 5;
+
+        public static VisualElement Strip(string[] labels, int selected,
+                                          Action<int> pick, Color accent)
+        {
+            if (labels != null && labels.Length > MaxTabs)
+                return Compact(labels, selected, pick, accent);
+            return Tabs(labels, selected, pick, accent);
+        }
+
+        public static void SetStrip(VisualElement strip, int selected, string[] labels)
+        {
+            if (strip == null) return;
+            if (strip.ClassListContains(SheetTheme.TabsCompact)) SetCompact(strip, selected, labels);
+            else SetTabs(strip, selected, labels);
+        }
+
+        /// The live page index, carried on the strip itself so the arrows can
+        /// read it without a captured copy going stale.
+        class StripAt { public int at; }
+
+        static VisualElement Compact(string[] labels, int selected,
+                                     Action<int> pick, Color accent)
+        {
+            var bar = new VisualElement();
+            bar.AddToClassList(SheetTheme.Tabs);
+            bar.AddToClassList(SheetTheme.TabsCompact);
+            var state = new StripAt { at = selected };
+            bar.userData = state;
+            if (labels == null || labels.Length == 0) return bar;
+
+            var back = new Button(() => pick?.Invoke(state.at - 1)) { text = "‹" };
+            back.AddToClassList(SheetTheme.TabArrow);
+            back.name = "back";
+            bar.Add(back);
+
+            var now = new Label(labels[Mathf.Clamp(selected, 0, labels.Length - 1)]);
+            now.AddToClassList(SheetTheme.TabNow);
+            now.name = "now";
+            bar.Add(now);
+
+            var dots = new VisualElement();
+            dots.AddToClassList(SheetTheme.Dots);
+            dots.name = "dots";
+            for (int i = 0; i < labels.Length; i++)
+            {
+                int index = i;
+                var d = new VisualElement();
+                d.AddToClassList(SheetTheme.Dot);
+                if (i == selected) d.style.backgroundColor = accent;
+                d.RegisterCallback<ClickEvent>(_ => pick?.Invoke(index));
+                dots.Add(d);
+            }
+            dots.userData = accent;
+            bar.Add(dots);
+
+            var fwd = new Button(() => pick?.Invoke(state.at + 1)) { text = "›" };
+            fwd.AddToClassList(SheetTheme.TabArrow);
+            fwd.name = "fwd";
+            bar.Add(fwd);
+
+            SetCompact(bar, selected, labels);
+            return bar;
+        }
+
+        static void SetCompact(VisualElement bar, int selected, string[] labels)
+        {
+            if (bar == null) return;
+            int count = labels != null ? labels.Length : 0;
+            if (bar.userData is StripAt st) st.at = selected;
+
+            var now = bar.Q<Label>("now");
+            if (now != null && labels != null && count > 0)
+                now.text = labels[Mathf.Clamp(selected, 0, count - 1)] ?? "";
+
+            var dots = bar.Q<VisualElement>("dots");
+            if (dots != null)
+            {
+                var accent = dots.userData is Color c ? c : SheetTheme.Brass;
+                for (int i = 0; i < dots.childCount; i++)
+                    dots[i].style.backgroundColor = i == selected
+                        ? accent
+                        : new Color(31f / 255f, 45f / 255f, 56f / 255f, 0.25f);
+            }
+
+            var back = bar.Q<Button>("back");
+            if (back != null) back.SetEnabled(selected > 0);
+            var fwd = bar.Q<Button>("fwd");
+            if (fwd != null) fwd.SetEnabled(selected < count - 1);
+        }
+
+        // ------------------------------------------------------------------
+        // Paginated lists
+        // ------------------------------------------------------------------
+
+        /// **The height of one row in a paginated list.** Fixed, because the
+        /// page count is divided out of it (`SheetHost.RowsThatFit`): a row
+        /// that grows to fit its text is a row that pushes the last one off
+        /// a page that no longer scrolls.
+        public const float RowPx = 40f;
+
+        /// A row of that exact height. Same children as `Row`, same gaps.
+        public static VisualElement ListRow(params VisualElement[] children)
+        {
+            var e = Row(children);
+            e.AddToClassList(SheetTheme.ListRow);
+            return e;
+        }
+
+        /// "hands", "hands 2/3" -- the label a paged section wears in the
+        /// strip. One page keeps its plain name.
+        public static string PageLabel(string name, int part, int parts) =>
+            parts <= 1 ? name : $"{name} {part + 1}/{parts}";
+
+        /// How many pages `count` rows need at `perPage` a page. Never zero:
+        /// an empty list still has one page, and that page says so.
+        public static int PageCount(int count, int perPage) =>
+            Mathf.Max(1, Mathf.CeilToInt(count / (float)Mathf.Max(1, perPage)));
+
         /// Re-mark which tab is live, and re-label them (the count on
         /// "hands · 3" moves with the camp), without rebuilding the strip.
         public static void SetTabs(VisualElement tabs, int selected, string[] labels = null)
@@ -406,6 +531,28 @@ namespace SeaSick.UI.Sheets
             return e;
         }
 
+        // ------------------------------------------------------------------
+        // Heights, for pagination
+        // ------------------------------------------------------------------
+        //
+        // What each piece of a card costs in panel units, so a sheet can work
+        // out how many of them fit the band BEFORE it builds them. They are
+        // the sums of `Sheets.uss` (a quiet button is 26 px plus the 4 px it
+        // is given below it, a note is 9 + 12 + 9 + a line), rounded UP:
+        // guessing high loses a row at the bottom of a page, guessing low
+        // puts a row off the edge of a card that no longer scrolls.
+
+        public const float EyebrowPx = 18f;
+        public const float TextPx = 18f;
+        public const float QuietPx = 30f;
+        public const float ButtonPx = 42f;
+        public const float SegPx = 36f;
+        public const float NotePx = 46f;
+        public const float RulePx = 18f;
+        public const float StorePx = 74f;
+        public const float BarPx = 14f;
+        public const float BigPx = 38f;
+
         /// The inset box that carries a card's one status sentence — what is
         /// going up, who is on it, how long. One line, never a log.
         public static VisualElement Note(string text)
@@ -426,6 +573,80 @@ namespace SeaSick.UI.Sheets
         {
             if (note == null || note.childCount < 2) return;
             if (note[1] is Label l) l.text = text ?? "";
+        }
+    }
+
+    /// **A list of rows cut into pages that fit the band.**
+    ///
+    /// The one piece of machinery Kevin's *"you can swipe left to right for
+    /// new windows"* actually needs: a section hands over its rows and what
+    /// each one costs, this works out where the page breaks fall, and the
+    /// sheet then builds one page at a time. Nothing is dropped and nothing
+    /// scrolls -- a row that will not fit page 1 is the first row of page 2.
+    ///
+    /// Rows are handed over as FACTORIES rather than as elements, because a
+    /// page is rebuilt on every swipe and building all of them up front to
+    /// throw most away is the cost this whole redesign exists to avoid.
+    public class SheetPager
+    {
+        readonly System.Collections.Generic.List<float> heights =
+            new System.Collections.Generic.List<float>();
+        readonly System.Collections.Generic.List<System.Func<VisualElement>> rows =
+            new System.Collections.Generic.List<System.Func<VisualElement>>();
+        readonly System.Collections.Generic.List<int> starts =
+            new System.Collections.Generic.List<int>();
+
+        public void Clear() { heights.Clear(); rows.Clear(); starts.Clear(); }
+
+        public void Add(float px, System.Func<VisualElement> make)
+        {
+            if (make == null) return;
+            heights.Add(px);
+            rows.Add(make);
+        }
+
+        public int RowCount => rows.Count;
+
+        /// Cut the rows into pages of at most `band` units each. A single row
+        /// taller than the band still gets its own page -- it is clipped
+        /// rather than lost, and a clipped row is a bug in the row's height,
+        /// which is a thing a reader can find.
+        public void Lay(float band)
+        {
+            starts.Clear();
+            if (rows.Count == 0) { starts.Add(0); return; }
+            float used = 0f;
+            starts.Add(0);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                float h = heights[i];
+                if (i > starts[starts.Count - 1] && used + h > band)
+                {
+                    starts.Add(i);
+                    used = 0f;
+                }
+                used += h;
+            }
+        }
+
+        /// How many pages the last `Lay` produced. Always at least one.
+        public int Pages => Mathf.Max(1, starts.Count);
+
+        /// One page, as a column of its rows.
+        public VisualElement Build(int page)
+        {
+            var col = new VisualElement();
+            col.style.flexDirection = FlexDirection.Column;
+            if (starts.Count == 0) return col;
+            page = Mathf.Clamp(page, 0, starts.Count - 1);
+            int from = starts[page];
+            int to = page + 1 < starts.Count ? starts[page + 1] : rows.Count;
+            for (int i = from; i < to; i++)
+            {
+                var e = rows[i]();
+                if (e != null) col.Add(e);
+            }
+            return col;
         }
     }
 }

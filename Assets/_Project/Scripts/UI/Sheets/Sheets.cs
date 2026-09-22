@@ -38,6 +38,7 @@ namespace SeaSick.UI.Sheets
             if (sheet == null) { Close(); return; }
             if (ReferenceEquals(sheet, current)) return;
             current = sheet;
+            AimCamera(sheet);
             Changed?.Invoke();
         }
 
@@ -45,7 +46,27 @@ namespace SeaSick.UI.Sheets
         {
             if (current == null) return;
             current = null;
+            AimCamera(null);
             Changed?.Invoke();
+        }
+
+        /// **A sheet about a person points the camera at that person.**
+        ///
+        /// Kevin, 2026-09-22: *"I want the camera to follow them."* A hand
+        /// walks off to a seam while you are reading his orders, and a card
+        /// about somebody who has left the frame is a card about nobody. Every
+        /// other sheet is about a thing that stays put, so opening one -- or
+        /// closing the hand's -- lets the camera go again.
+        ///
+        /// Called from `Open` and `Close` rather than from the two places a
+        /// hand sheet is raised (his token in the crew list, and his body in
+        /// the world), so the two cannot drift.
+        static void AimCamera(ISheet sheet)
+        {
+            var hand = sheet as HandSheet;
+            var who = hand != null ? hand.FollowTarget : null;
+            if (who != null) CameraRig.IslandCam.Follow(who);
+            else CameraRig.IslandCam.StopFollow();
         }
 
         // --- which tab each kind of sheet was left on ---

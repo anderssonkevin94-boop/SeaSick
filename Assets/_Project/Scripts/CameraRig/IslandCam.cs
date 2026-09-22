@@ -282,6 +282,7 @@ namespace SeaSick.CameraRig
 
         void Awake()
         {
+            live = this;
             Ground = wantGround = defaultGround;
             // The view's input and the Hand live beside it, added here for the
             // reason this component is added at runtime itself: nothing about
@@ -297,7 +298,25 @@ namespace SeaSick.CameraRig
                 gameObject.AddComponent<IslandCamTuner>();
         }
 
-        void OnDisable() { Engaged = false; }
+        void OnDisable() { Engaged = false; if (live == this) live = null; }
+
+        /// The one island camera in the scene, for the static entry points
+        /// below. Set in Awake, cleared in OnDisable.
+        static IslandCam live;
+
+        /// Follow a hand from anywhere (the sheets: a villager's sheet opening
+        /// from the crew list or a world tap, 2026-09-22). No-op unless the
+        /// island view is engaged, so a sheet opened at sea moves nothing.
+        public static void Follow(Transform who)
+        {
+            if (live != null && Engaged) live.FollowThis(who);
+        }
+
+        /// Let go from anywhere; the view stays where it is.
+        public static void StopFollow()
+        {
+            if (live != null) live.StopFollowing();
+        }
 
         // =====================================================================
         // THE HANDS-ON VIEW

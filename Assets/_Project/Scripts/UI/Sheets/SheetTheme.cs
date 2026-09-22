@@ -79,6 +79,12 @@ namespace SeaSick.UI.Sheets
         public const string Tab = "sheet-tab";
         public const string TabOn = "sheet-tab--on";
         public const string TabMark = "sheet-tab-mark";
+        public const string TabsCompact = "sheet-tabs--compact";
+        public const string TabArrow = "sheet-tab-arrow";
+        public const string TabNow = "sheet-tab-now";
+        public const string Dots = "sheet-dots";
+        public const string Dot = "sheet-dot";
+        public const string ListRow = "sheet-list-row";
         public const string Actions = "sheet-actions";
         public const string Chip = "sheet-chip";
         public const string ChipStripe = "sheet-chip-stripe";
