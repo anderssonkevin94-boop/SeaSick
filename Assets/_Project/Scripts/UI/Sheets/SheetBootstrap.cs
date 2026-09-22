@@ -33,6 +33,20 @@ namespace SeaSick.UI.Sheets
             // camp sheet, and the build list is a block inside it.
             Sheets.Register<Campfire>(f => FireFor(SheetBits.OutpostOf(f)));
 
+            // **A length of wall is its own thing, 2026-09-23.** Before
+            // the `Building` rule below, because a `WallSegment` IS a
+            // `Building` and `Sheets.Register` resolves by the component
+            // that was hit -- a wall that opened the camp sheet would have
+            // no door for the gate (D5: "tap a built segment -> its
+            // sheet -> make this a gate").
+            Sheets.Register<WallSegment>(w =>
+            {
+                if (w == null) return null;
+                var camp = w.Camp != null ? w.Camp : SheetBits.OutpostOf(w);
+                if (camp == null) return null;
+                return new WallSheet(camp, w);
+            });
+
             // A finished building is a room in the same house: it opens the
             // camp's own sheet rather than a sheet per shed. The watchtower is
             // the one exception, and only because it has a decision on it --
@@ -41,6 +55,14 @@ namespace SeaSick.UI.Sheets
             Sheets.Register<Building>(b =>
             {
                 if (b == null) return null;
+                // A wall has its own sheet, registered above; which one
+                // `Sheets` reaches for depends on how it looks the
+                // component up, so this says it outright.
+                if (b is WallSegment seg)
+                {
+                    var wcamp = seg.Camp != null ? seg.Camp : SheetBits.OutpostOf(seg);
+                    return wcamp != null ? new WallSheet(wcamp, seg) : null;
+                }
                 var camp = SheetBits.OutpostOf(b);
                 return FireFor(camp, b.Id == OutpostLedger.WatchtowerId
                     ? FireSheet.FocusLookout : null);

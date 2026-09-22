@@ -273,6 +273,11 @@ namespace SeaSick.CameraRig
             // press-down — never re-tested mid-press — so the drag and the
             // camera pan can never both own the same press. Everything else
             // falls through and pans or taps exactly as before.
+            //
+            // The wall tool is inside this rule rather than beside it: a
+            // palisade run keeps `CampSiting.Placing` true and `GrabsGhost`
+            // asks `WallSiting` whether the press landed on the loose post.
+            // One question, one owner of the press — see `UI/WallSiting.cs`.
             if (CampSiting.Placing && CampSiting.GrabsGhost(pos))
             {
                 CampSiting.BeginDrag(pos);

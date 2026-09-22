@@ -214,6 +214,141 @@ namespace SeaSick.World
             return root;
         }
 
+        // --- the wall (Phase 1, 2026-09-23) ----------------------------------
+
+        /// **A palisade segment, or a gate, between two posts.**
+        ///
+        /// Kept as cheap as the brief asks: a stretched box for the run, a
+        /// post at each end, and that is the whole segment. NOT a log per
+        /// log -- a camp ringed by sixty metres of palisade would be three
+        /// hundred GameObjects and three hundred draw calls on a phone, for
+        /// a fence that reads as a fence from the deck at fifty metres
+        /// either way.
+        ///
+        /// Both states are built at once and one of them is switched off:
+        /// a segment is broken and mended several times in a raid, and
+        /// rebuilding the mesh each time is work done in the frame the
+        /// player is least able to spare it.
+        ///
+        /// `a` and `b` are the posts at ground height. The object is placed
+        /// at the midpoint and turned along the run, so everything hung off
+        /// its transform (the sheet's anchor, a hauler's target) is about
+        /// the middle of the segment.
+        public static GameObject RaiseWall(Transform parent, Vector3 a, Vector3 b,
+            bool gate, out Transform whole, out Transform broken)
+        {
+            Vector3 mid = 0.5f * (a + b);
+            Vector3 run = b - a;
+            run.y = 0f;
+            float len = Mathf.Max(0.5f, run.magnitude);
+            Quaternion facing = run.sqrMagnitude > 0.0001f
+                ? Quaternion.LookRotation(run.normalized, Vector3.up)
+                : Quaternion.identity;
+
+            var root = new GameObject(gate ? "Gate" : "Palisade");
+            root.transform.SetParent(parent, true);
+            root.transform.SetPositionAndRotation(mid, facing);
+
+            // The posts stand at BOTH states' ends: a breached wall still
+            // has its posts in the ground, which is what makes the gap read
+            // as a hole in something rather than as nothing being there.
+            float postH = gate ? BuildPlans.GateHeight : BuildPlans.PalisadeHeight;
+            float railH = gate ? BuildPlans.PalisadeHeight : BuildPlans.PalisadeHeight;
+            float drop = 0.35f;        // buried, so a segment on a slope has no daylight under it
+
+            var wholeGo = new GameObject("Whole");
+            wholeGo.transform.SetParent(root.transform, false);
+            var brokenGo = new GameObject("Broken");
+            brokenGo.transform.SetParent(root.transform, false);
+            whole = wholeGo.transform;
+            broken = brokenGo.transform;
+
+            // Local Z runs along the segment; the post positions are the
+            // two ends of it, lifted to the local floor.
+            float half = len * 0.5f;
+            float aUp = a.y - mid.y, bUp = b.y - mid.y;
+
+            foreach (var holder in new[] { wholeGo.transform, brokenGo.transform })
+            {
+                Box(holder, "Post_A", new Vector3(0f, aUp + postH * 0.5f - drop, -half),
+                    new Vector3(0.34f, postH + drop, 0.34f), PostMat);
+                Box(holder, "Post_B", new Vector3(0f, bUp + postH * 0.5f - drop, half),
+                    new Vector3(0.34f, postH + drop, 0.34f), PostMat);
+            }
+
+            if (gate)
+            {
+                // A gate is the gap plus a lintel across the top of it. The
+                // "whole" one has the lintel; the broken one has the posts
+                // and nothing over them.
+                float lintelY = Mathf.Max(aUp, bUp) + postH - 0.25f;
+                Box(wholeGo.transform, "Lintel", new Vector3(0f, lintelY, 0f),
+                    new Vector3(0.28f, 0.42f, len), PostMat);
+            }
+            else
+            {
+                float midUp = 0.5f * (aUp + bUp);
+                Box(wholeGo.transform, "Run", new Vector3(0f, midUp + railH * 0.5f - drop, 0f),
+                    new Vector3(0.28f, railH + drop, len), WallMat);
+
+                // **Broken = the middle third missing.** Two stubs, each a
+                // third of the run, left standing against their own post.
+                float third = len / 3f;
+                Box(brokenGo.transform, "Stub_A",
+                    new Vector3(0f, midUp + railH * 0.42f - drop, -half + third * 0.5f),
+                    new Vector3(0.28f, railH * 0.84f + drop, third), WallMat);
+                Box(brokenGo.transform, "Stub_B",
+                    new Vector3(0f, midUp + railH * 0.42f - drop, half - third * 0.5f),
+                    new Vector3(0.28f, railH * 0.84f + drop, third), WallMat);
+            }
+
+            // **One collider for the whole segment**, on the root: the
+            // pieces have theirs destroyed (they are drawings), and a tap
+            // has to land on the SEGMENT to open its sheet -- which is how
+            // a gate is placed (D5: "tap a built segment -> its sheet").
+            // Sized to the run and kept whether or not the middle is
+            // standing: a breach is still a thing you can tap to see how
+            // the repair is going.
+            var box = root.AddComponent<BoxCollider>();
+            box.center = new Vector3(0f, postH * 0.5f, 0f);
+            box.size = new Vector3(1.2f, postH, len);
+
+            return root;
+        }
+
+        /// The same drawing, translucent: what a wall SITE stands as while
+        /// it is being stocked. Built through `RaiseWall` for the same
+        /// reason `Ghost` is built through `Raise` -- a ghost assembled
+        /// separately is a second description of the same thing.
+        public static GameObject WallGhost(Transform parent, Vector3 a, Vector3 b,
+            bool gate, float alpha)
+        {
+            var root = RaiseWall(parent, a, b, gate, out var whole, out var broken);
+            root.name = gate ? "Blueprint_gate" : "Blueprint_palisade";
+            if (broken != null) Object.Destroy(broken.gameObject);
+            // A drawing is not a thing you bump into, and the SITE's own
+            // collider is what the tap has to find.
+            var box = root.GetComponent<BoxCollider>();
+            if (box != null) Object.Destroy(box);
+            Tint(root, alpha);
+            return root;
+        }
+
+        static Material WallMat => Mat("PalisadeRun", new Color(0.46f, 0.36f, 0.24f));
+        static Material PostMat => Mat("PalisadePost", new Color(0.38f, 0.29f, 0.19f));
+
+        static void Box(Transform parent, string name, Vector3 at, Vector3 scale, Material m)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = name;
+            var col = go.GetComponent<Collider>();
+            if (col != null) Object.Destroy(col);
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = at;
+            go.transform.localScale = scale;
+            go.GetComponent<MeshRenderer>().sharedMaterial = m;
+        }
+
         /// Chalk: what a blueprint is drawn in unless somebody says otherwise.
         public static readonly Color GhostChalk = new Color(0.62f, 0.78f, 0.92f);
         /// What a ghost turns when it is standing somewhere it cannot be

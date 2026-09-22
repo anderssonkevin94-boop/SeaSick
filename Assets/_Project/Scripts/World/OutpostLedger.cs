@@ -204,6 +204,31 @@ namespace SeaSick.World
         /// it. See the note there.
         public bool phased;
 
+        // --- the wall half (Phase 1, 2026-09-23) -----------------------------
+
+        /// **This row is a WALL SEGMENT, not a building on a plot.**
+        ///
+        /// A wall site goes through the whole of the existing pipeline --
+        /// it is queued in `sites`, stocked by the haulers, raised by
+        /// `Outpost.FinishReady` -- and the only thing that differs is
+        /// that its ground is a LINE rather than a rectangle. So rather
+        /// than a second queue with a second set of rules (and a second
+        /// set of bugs), it is the same row with three more fields on it,
+        /// and `x`/`z` are the segment's MIDPOINT so every reader that
+        /// already knows where a site is (the hauler's destination, the
+        /// sheet's anchor, the blueprint's transform) goes on being right
+        /// without knowing walls exist.
+        ///
+        /// A save written before this reads all three back as their
+        /// constructed values -- `false` and two zero vectors -- which is
+        /// exactly "this one was not a wall".
+        public bool isWall;
+        /// The two posts, world metres, ground-snapped. For a GATE row,
+        /// the posts of the segment it replaces.
+        public Vector3 postA, postB;
+
+        public float WallLength => (postB - postA).magnitude;
+
         public Vector3 At => new Vector3(x, 0f, z);
 
         /// **Every material is in.** What `Complete` used to mean, and what
@@ -297,6 +322,29 @@ namespace SeaSick.World
         public float length;
 
         public Vector3 At => new Vector3(x, 0f, z);
+    }
+
+    /// **A wall segment that STANDS, in the record (2026-09-23).**
+    ///
+    /// `BuiltBuilding` cannot carry one: a building is a point and a yaw,
+    /// a segment is two posts, and a segment also has a state a building
+    /// does not (how much of it is left). `Outpost.Adopt` re-creates one
+    /// `WallSegment` per row here and re-marks the pathing grid from them,
+    /// so a camp loaded mid-raid comes back with its breach still in it.
+    [System.Serializable]
+    public class BuiltWall
+    {
+        /// World metres. Heights are re-read from the field on load, the
+        /// way `BuiltBuilding` re-reads its own.
+        public float ax, az, bx, bz;
+        public bool isGate;
+        /// What is left of it. 0 means breached; a save written with a
+        /// breached segment brings the breach back.
+        public float hp;
+        public float maxHp;
+
+        public Vector3 A => new Vector3(ax, 0f, az);
+        public Vector3 B => new Vector3(bx, 0f, bz);
     }
 
     /// **Names for a hand nobody shipped, 2026-09-21.**
@@ -743,6 +791,12 @@ namespace SeaSick.World
             raised.Add(new BuiltBuilding
                 { planId = planId, x = at.x, z = at.z, yaw = yaw, length = length });
         }
+
+        /// **Every segment standing on this island, breached or not.**
+        /// Written by `Outpost.RaiseWall` and by `WallSegment.Damage`, read
+        /// by `Outpost.Adopt`. The objects on the ground are the live copy;
+        /// this is what a save restores them from.
+        public List<BuiltWall> builtWalls = new List<BuiltWall>();
 
         public int CountRaised(string planId)
         {

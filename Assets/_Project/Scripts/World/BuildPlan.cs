@@ -547,6 +547,84 @@ namespace SeaSick.World
         /// to lie alongside without touching.
         public const float PierBerthDepth = 2.5f;
 
+        // --- the fortification (Phase 1, 2026-09-23) -------------------------
+
+        /// **A run of sharpened logs between two posts.**
+        ///
+        /// Kevin: *"I see in my mind walls, watch towers..."* and then D1:
+        /// *"1 log / 2 m of palisade, hauled like any site."* So the price
+        /// is not on the plan -- it is on the SEGMENT, because a segment is
+        /// as long as the player dragged it. `PalisadeCost` is the only
+        /// thing that prices one; `baseCost` here is zero and nothing reads
+        /// it, which is deliberate: a wall row whose `needed` came from the
+        /// plan instead of from its own length would be a wall you could
+        /// make cheaper by drawing it longer.
+        ///
+        /// No stone. Stone wall is a later tier (D1), and a palisade is
+        /// logs in the ground.
+        ///
+        /// **Not in `AtACamp`.** Everything in that list is offered by the
+        /// build page and sited by tapping ONE point; a wall is two points
+        /// and its own tool (D5, the connect-the-dots run). It is found by
+        /// `Named` through `Fortifications` instead, which is all a saved
+        /// ledger row needs.
+        public static readonly BuildPlan Palisade = new BuildPlan
+        {
+            id = "palisade",
+            kind = BuildKind.Hut,
+            label = "palisade",
+            blurb = "a run of sharpened logs — raiders break it or use the gate",
+            resource = Res.Timber,
+            baseCost = 0,
+            baseStoneCost = 0,
+            // Post-to-post, so the length is the segment's and this is only
+            // how WIDE a wall is: two metres of footing either side of the
+            // line is what `Outpost.CanPlaceWall` keeps clear of a hut.
+            footprint = new Vector2(2f, 1.2f),
+            ridge = PalisadeHeight,
+        };
+
+        /// **A way through your own wall.** D3: automatic -- open to the
+        /// camp's people, shut to a raiding party, nothing to toggle. Four
+        /// logs, flat, because a gate is a fixed thing whatever the segment
+        /// it replaces was: two taller posts and a lintel.
+        public static readonly BuildPlan Gate = new BuildPlan
+        {
+            id = "gate",
+            kind = BuildKind.Hut,
+            label = "gate",
+            blurb = "your people walk through it; raiders do not",
+            resource = Res.Timber,
+            baseCost = 4,
+            baseStoneCost = 0,
+            footprint = new Vector2(2f, 1.2f),
+            ridge = GateHeight,
+        };
+
+        /// Metres of palisade per log (D1: 1 log / 2 m).
+        public const float MetresPerPalisadeLog = 2f;
+
+        /// How tall a palisade stands, world metres. Taller than a man
+        /// (`WorldScale`'s crew are ~1.8 m) and short enough that a camp
+        /// behind one is still a camp you can see into from the deck.
+        public const float PalisadeHeight = 2.6f;
+        /// A gate's posts, which stand proud of the wall so a run reads as
+        /// having a door in it from the water.
+        public const float GateHeight = 3.6f;
+
+        /// **What a segment of this length costs in timber.** Ceil, so a
+        /// three-metre stub still costs two logs and nothing is ever free.
+        /// Through the playtest cap like every other price, so a wall
+        /// cannot escape an experiment the buildings are inside.
+        public static int PalisadeCost(float metres)
+        {
+            int logs = Mathf.CeilToInt(Mathf.Max(0f, metres) / MetresPerPalisadeLog);
+            return PlaytestCostCap > 0 ? Mathf.Min(logs, PlaytestCostCap) : logs;
+        }
+
+        /// The two plans that go on a wall line rather than on a plot.
+        public static readonly BuildPlan[] Fortifications = { Palisade, Gate };
+
         /// What sizes the HOME village clearing. Not the camp list: home is
         /// the one place with a hand-composed shot to fit buildings into.
         public static readonly BuildPlan[] All = { Storehouse };
@@ -565,6 +643,7 @@ namespace SeaSick.World
         public static BuildPlan Named(string id)
         {
             foreach (var p in AtACamp) if (p.id == id) return p;
+            foreach (var p in Fortifications) if (p.id == id) return p;
             foreach (var p in All) if (p.id == id) return p;
             return default;
         }

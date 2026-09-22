@@ -422,6 +422,31 @@ namespace SeaSick.UI.Sheets
             }
             if (n == 0)
                 buildListHolder.Add(SheetKit.Note("Nothing the camp can afford yet"));
+
+            // **The wall and its gate, 2026-09-23.** They sit under the
+            // buildings and outside the paging, because they are not sited
+            // the way a building is: a palisade is drawn as a RUN of
+            // segments (D5, "connect the dots"), and a gate is not sited
+            // at all -- you tap a length of wall that already stands.
+            // Listing them here anyway is the point: the build page is
+            // where a player looks for "what can this camp make", and a
+            // fortification missing from it is a feature nobody finds.
+            buildListHolder.Add(SheetKit.Eyebrow("fortify"));
+            var wallRow = SheetKit.Btn(
+                $"palisade — 1 timber per {BuildPlans.MetresPerPalisadeLog:0.#} m",
+                () =>
+                {
+                    Outpost.BeginWallSiting?.Invoke(outpost);
+                    Sheets.Close();
+                }, false, true);
+            wallRow.SetEnabled(Outpost.BeginWallSiting != null);
+            buildListHolder.Add(wallRow);
+
+            var gateRow = SheetKit.Btn($"gate — {BuildPlans.Gate.cost} timber",
+                () => { }, false, true);
+            gateRow.SetEnabled(false);
+            buildListHolder.Add(gateRow);
+            buildListHolder.Add(SheetKit.Note("Tap a length of wall to put a gate in it."));
         }
 
         // --- tab: ship ------------------------------------------------------------

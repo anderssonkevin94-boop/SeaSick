@@ -1339,7 +1339,14 @@ namespace SeaSick.World
                 routeAt = 0;
                 // A failed plan leaves `route` empty, which IS the straight
                 // line. Nobody can be stranded by this call.
-                hasRoute = map != null && map.Plan(here, to, route) && route.Count > 0;
+                // **A hand, explicitly.** Walls block a hand and gates do
+                // not; a raider gets the same call with `Walker.Raider`
+                // and is stopped by both (D3). `Plan` still means this,
+                // and is left standing for anything that has not learnt to
+                // say whose feet it is.
+                hasRoute = map != null
+                    && map.Route(here, to, CampPath.Walker.Hand, route)
+                    && route.Count > 0;
                 if (!hasRoute) route.Clear();
             }
 

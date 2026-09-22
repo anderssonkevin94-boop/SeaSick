@@ -72,18 +72,30 @@ namespace SeaSick.World
         /// every wall they are technically allowed to touch.
         public static float SlopePenalty = 3f;
 
-        /// Desired metres per cell. The real cell size is derived from this
-        /// and the island's size, then clamped by `MaxCells`.
-        public static float DesiredCell = 5f;
+        /// **Metres per cell, and now an EXACT number rather than a wish
+        /// (2026-09-23).** It used to be "desired": the grid stretched to
+        /// cover the island and the real cell size fell out of the
+        /// division, so it was 3.1 m here and 4.7 m there. Walls cannot
+        /// live on a grid like that -- `Outpost.WallPostStep` snaps a post
+        /// to a 2 m step and the segment between two posts is rasterised
+        /// into cells, so a cell that is not exactly 2 m puts the blocked
+        /// cells somewhere the player did not draw the wall. So the cell is
+        /// fixed and the EXTENT is what gives (see `Build`).
+        public static float DesiredCell = 2f;
 
         /// Hard cap on the grid's side length in cells. This, not the island,
-        /// is what bounds the build cost on a phone.
-        public static int MaxCells = 112;
+        /// is what bounds the build cost on a phone. 160 cells of 2 m is a
+        /// 320 m square centred on the camp -- more than twice the hundred
+        /// metres a hand's errands cover, and 25 600 cells is about 1.3 MB
+        /// of arrays and ~25 k height samples to build.
+        public static int MaxCells = 160;
 
         /// Ceiling on A* expansions per query. A route that needs more than
         /// this is a route across the whole island, and the straight-line
         /// fallback is a better answer than a frame spike.
-        public static int MaxExpansions = 4000;
+        /// Raised with the cell size: the same hundred-metre walk is two
+        /// and a half times as many cells at 2 m as it was at 5 m.
+        public static int MaxExpansions = 9000;
 
         /// Plans allowed to start in one frame, across every camp. Villagers
         /// re-plan on independent timers, so this only ever bites when a
@@ -114,6 +126,21 @@ namespace SeaSick.World
             return true;
         }
 
+        // --- who is walking ---------------------------------------------------
+
+        /// **Two kinds of feet, one map (2026-09-23).** A gate is open to
+        /// the camp's own people and shut to a raiding party, which is the
+        /// whole of decision D3 ("gates are automatic") -- so a cell is not
+        /// simply blocked, it is blocked FOR SOMEBODY. Rocks and standing
+        /// wall block both; a gate blocks only the raider.
+        public enum Walker { Hand, Raider }
+
+        const byte BlockHand = 1;
+        const byte BlockRaider = 2;
+        const byte BlockBoth = BlockHand | BlockRaider;
+
+        static byte MaskFor(Walker who) => who == Walker.Hand ? BlockHand : BlockRaider;
+
         // --- the grid --------------------------------------------------------
 
         Outpost camp;
@@ -123,7 +150,12 @@ namespace SeaSick.World
         float cell;             // metres per cell
         Vector2 origin;         // world XZ of cell (0,0)'s CENTRE
         float[] hs;             // ground height per cell
-        bool[] open;            // walkable?
+        bool[] open;            // walkable ground (slope and sea only)?
+        /// Per-cell block flags -- rocks, walls, gates. Kept apart from
+        /// `open` because `open` is a property of the GROUND and is only
+        /// ever recomputed by a rebuild, while these are put up and knocked
+        /// down all through a raid.
+        byte[] block;
         float[] pen;            // 1 + SlopePenalty * (slope/limit)^2
 
         // A* scratch, allocated once and reused. `stamp` is what lets a query
@@ -138,6 +170,17 @@ namespace SeaSick.World
         int heapCount;
 
         readonly List<int> cells = new List<int>();
+
+        /// Which block flag the CURRENT query cares about. Set at the top of
+        /// every query and read by `Nearest`, `Clear` and `Search`; the
+        /// searches are strictly one-at-a-time (single-threaded, no
+        /// coroutine yields inside one) so a field is honest here and an
+        /// argument threaded through five call sites would only be noise.
+        byte mask = BlockHand;
+
+        /// Can this walker stand in this cell? Ground first, then whatever
+        /// has been put on top of it.
+        bool Walk(int i) => open[i] && (block[i] & mask) == 0;
 
         /// The pathing map for this camp, added to the island on first ask.
         public static CampPath For(Outpost camp)
@@ -180,16 +223,36 @@ namespace SeaSick.World
             // errands are local; what is off the map falls back to the old
             // straight line, which is no worse than today.
             var isle = camp.Island;
-            float half = isle != null ? isle.MaxRadius + 40f : 160f;
-            half = Mathf.Clamp(half, 80f, 260f);
+            float want = isle != null ? isle.MaxRadius + 40f : 160f;
+            want = Mathf.Clamp(want, 80f, 260f);
 
-            n = Mathf.Clamp(Mathf.CeilToInt(2f * half / DesiredCell), 32, MaxCells);
-            cell = 2f * half / n;
-            origin = new Vector2(c.x - half + cell * 0.5f, c.z - half + cell * 0.5f);
+            // **The cell is fixed at 2 m and the EXTENT gives.** A wall post
+            // snaps to a 2 m step (`Outpost.WallPostStep`) and the segment
+            // between two posts is rasterised into these cells; a cell size
+            // derived from the island's radius would put a wall's blocked
+            // cells beside the wall rather than under it. So an island
+            // bigger than `MaxCells * cell` across is simply not covered to
+            // its shore -- the grid stays centred on the camp, as it always
+            // was, and what falls off the edge falls back to the straight
+            // line exactly as it did before.
+            cell = Mathf.Max(0.5f, DesiredCell);
+            n = Mathf.Clamp(Mathf.CeilToInt(2f * want / cell), 32, MaxCells);
+            if ((n & 1) == 1) n++;                 // even, so the camp sits on a cell edge
+            float half = 0.5f * n * cell;
+
+            // **And the grid is aligned to the WORLD's 2 m lattice**, not to
+            // the camp: `Outpost.SnapPost` rounds a world position to a
+            // multiple of the step, so unless cell centres land on multiples
+            // of the step too, a snapped post is half a cell off the cell it
+            // is meant to be the centre of.
+            origin = new Vector2(
+                Mathf.Round((c.x - half + cell * 0.5f) / cell) * cell,
+                Mathf.Round((c.z - half + cell * 0.5f) / cell) * cell);
 
             int count = n * n;
             hs = new float[count];
             open = new bool[count];
+            block = new byte[count];
             pen = new float[count];
 
             // One height sample per cell. This is the whole cost of the map.
@@ -214,13 +277,22 @@ namespace SeaSick.World
                     float h = hs[i];
                     if (h <= SeaLevelY) { open[i] = false; pen[i] = 1f; continue; }
 
+                    // **Measured over a two-cell stencil, 2026-09-23.** The
+                    // comment above is the reason: a mean 38° over about
+                    // five metres is what a man cannot walk up, and now
+                    // that a cell is 2 m the immediate neighbour would be
+                    // measuring the ground's roughness rather than its
+                    // shape -- which would close cells all over a hillside
+                    // the hands have been crossing happily for a month.
+                    int r = Mathf.Max(1, Mathf.RoundToInt(2f / cell));
+                    float span = r * cell;
                     float dx = 0f, dz = 0f;
-                    if (x > 0) dx = Mathf.Max(dx, Mathf.Abs(h - hs[i - 1]));
-                    if (x < n - 1) dx = Mathf.Max(dx, Mathf.Abs(h - hs[i + 1]));
-                    if (y > 0) dz = Mathf.Max(dz, Mathf.Abs(h - hs[i - n]));
-                    if (y < n - 1) dz = Mathf.Max(dz, Mathf.Abs(h - hs[i + n]));
+                    if (x >= r) dx = Mathf.Max(dx, Mathf.Abs(h - hs[i - r]));
+                    if (x < n - r) dx = Mathf.Max(dx, Mathf.Abs(h - hs[i + r]));
+                    if (y >= r) dz = Mathf.Max(dz, Mathf.Abs(h - hs[i - r * n]));
+                    if (y < n - r) dz = Mathf.Max(dz, Mathf.Abs(h - hs[i + r * n]));
 
-                    float slope = Mathf.Max(dx, dz) / cell;
+                    float slope = Mathf.Max(dx, dz) / span;
                     open[i] = slope <= limit;
                     float k = slope / limit;
                     pen[i] = 1f + SlopePenalty * k * k;
@@ -243,6 +315,12 @@ namespace SeaSick.World
             heap = new int[slots];
             heapF = new float[slots];
             search = 0;
+
+            // Rocks first (they never move), then whatever wall is already
+            // standing -- a grid rebuilt mid-raid must come back knowing
+            // about the palisade it was built under.
+            MarkRocks();
+            ReMarkWalls();
 
             watch.Stop();
             LastBuildMs = (float)watch.Elapsed.TotalMilliseconds;
@@ -273,11 +351,22 @@ namespace SeaSick.World
         /// the search gave up — and the caller should walk straight at the
         /// target, which is what it did before this file existed.
         public bool Plan(Vector3 from, Vector3 to, List<Vector3> corners)
+            => Route(from, to, Walker.Hand, corners);
+
+        /// **The same walk, for somebody in particular (2026-09-23).** A
+        /// hand walks through its own camp's gates; a raider does not, and
+        /// has to break a segment to get in. Everything else about the two
+        /// searches is identical, which is the point -- a raider that
+        /// pathed by a different rule from the hands would climb the
+        /// mountains the hands learnt not to climb.
+        public bool Route(Vector3 from, Vector3 to, Walker who, List<Vector3> corners)
         {
+            if (corners == null) corners = new List<Vector3>();
             corners.Clear();
             if (!built) Build();
             if (hs == null) return false;
 
+            mask = MaskFor(who);
             int a = Nearest(from), b = Nearest(to);
             if (a < 0 || b < 0) return false;
             if (a == b) { corners.Add(to); return true; }
@@ -355,14 +444,14 @@ namespace SeaSick.World
                     int nx = cx + DX[d], ny = cy + DY[d];
                     if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
                     int nb = ny * n + nx;
-                    if (!open[nb]) continue;
+                    if (!Walk(nb)) continue;
 
                     // No squeezing through the gap between two blocked cells:
                     // a diagonal is only a step if both of its orthogonals are
                     // walkable too.
                     if (d >= 4)
                     {
-                        if (!open[cy * n + nx] || !open[ny * n + cx]) continue;
+                        if (!Walk(cy * n + nx) || !Walk(ny * n + cx)) continue;
                     }
 
                     float step = (d >= 4 ? 1.41421356f : 1f) * cell * pen[nb];
@@ -423,7 +512,7 @@ namespace SeaSick.World
         {
             int i = Index(at);
             if (i < 0) return -1;
-            if (open[i]) return i;
+            if (Walk(i)) return i;
 
             int cx = i % n, cy = i / n;
             for (int r = 1; r <= 6; r++)
@@ -438,7 +527,7 @@ namespace SeaSick.World
                         int x = cx + dx;
                         if (x < 0 || x >= n) continue;
                         int j = y * n + x;
-                        if (open[j]) return j;
+                        if (Walk(j)) return j;
                     }
                 }
             }
@@ -458,7 +547,7 @@ namespace SeaSick.World
 
             while (guard-- > 0)
             {
-                if (!open[y0 * n + x0]) return false;
+                if (!Walk(y0 * n + x0)) return false;
                 if (x0 == x1 && y0 == y1) return true;
                 int e2 = 2 * err;
                 if (e2 > -dy) { err -= dy; x0 += sx; }
@@ -468,6 +557,157 @@ namespace SeaSick.World
             }
             return false;
         }
+
+        // --- walls, gates and rocks ------------------------------------------
+
+        /// **Cheap reachability: can this walker get there at all?**
+        ///
+        /// A raid party's first question is not "which way in" but "is
+        /// there a way in" -- if the camp is ringed and the gate is shut,
+        /// the answer is no and the party goes and breaks a segment
+        /// instead. Same A* as `Route`, stopped the moment the goal is
+        /// popped and with no string-pull afterwards, because nobody is
+        /// going to walk this one.
+        public bool HasRoute(Vector3 from, Vector3 to, Walker who)
+        {
+            if (!built) Build();
+            if (hs == null) return false;
+            mask = MaskFor(who);
+            int a = Nearest(from), b = Nearest(to);
+            if (a < 0 || b < 0) return false;
+            if (a == b) return true;
+            return Search(a, b);
+        }
+
+        /// **Put a raised segment on the map, or take it off.**
+        ///
+        /// Rasterised as a supercover line between the two posts, one cell
+        /// wide -- the same walk `Clear` does, so a segment can never be
+        /// slipped through diagonally. A gate blocks the raider only; a
+        /// palisade blocks everybody. Called on raise, on breach, on
+        /// repair and on the swap from wall to gate; nothing else rebuilds
+        /// the grid, which is the point (`docs/PLAN-fortress-harbour.md`
+        /// Phase 1: "rebuild the affected cells on raise/cancel, not the
+        /// whole grid").
+        public void MarkWall(WallSegment seg, bool blocked)
+        {
+            if (seg == null) return;
+            MarkLine(seg.A, seg.B, seg.IsGate ? BlockRaider : BlockBoth, blocked);
+        }
+
+        /// The same for a line the caller describes itself -- what a wall
+        /// SITE uses to keep the ground it is drawn on to itself.
+        public void MarkLine(Vector3 a, Vector3 b, byte flags, bool blocked)
+        {
+            if (!built) Build();
+            if (hs == null) return;
+
+            int ia = Index(a), ib = Index(b);
+            if (ia < 0 || ib < 0) return;
+            int x0 = ia % n, y0 = ia / n, x1 = ib % n, y1 = ib / n;
+            int dx = Mathf.Abs(x1 - x0), dy = Mathf.Abs(y1 - y0);
+            int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+            int err = dx - dy;
+            int guard = dx + dy + 2;
+            while (guard-- > 0)
+            {
+                int i = y0 * n + x0;
+                if (blocked) block[i] |= flags; else block[i] = (byte)(block[i] & ~flags);
+                if (x0 == x1 && y0 == y1) break;
+                int e2 = 2 * err;
+                if (e2 > -dy) { err -= dy; x0 += sx; }
+                else if (e2 < dx) { err += dx; y0 += sy; }
+            }
+        }
+
+        /// Re-lay every standing segment. Called at the end of a build, so
+        /// a grid thrown away and remade (a camp centre that moved, a dev
+        /// reset) comes back knowing about the wall.
+        void ReMarkWalls()
+        {
+            if (camp == null) return;
+            var walls = camp.Walls;
+            if (walls == null) return;
+            for (int i = 0; i < walls.Count; i++)
+            {
+                var w = walls[i];
+                if (w == null || w.Breached) continue;
+                MarkLine(w.A, w.B, w.IsGate ? BlockRaider : BlockBoth, true);
+            }
+        }
+
+        /// **Rocks are obstacles now (D4, 2026-09-23).** Kevin's decision
+        /// was "rocks become blocked cells for everyone; trees are felled
+        /// at raise time as today", so this is the one place props reach
+        /// the map.
+        ///
+        /// **What it can see, and what it cannot.** A stone or ore prop is
+        /// a real `ResourceNode` GameObject with a position and a radius,
+        /// so those are marked exactly. The boulders the island's scenery
+        /// scatters are NOT objects at all -- `IslandScenery` bakes them
+        /// straight into a cell's combined mesh (`SceneryKit`), and there
+        /// is no index of them the way `SceneryWood` indexes trees. Rather
+        /// than guess at them from the terrain's rock field (a second
+        /// opinion about where the rocks are, which is the fault this whole
+        /// file exists to avoid), `RockProbe` is left as the door: fill it
+        /// in when the scenery grows an index and every camp's grid picks
+        /// the rocks up on its next build.
+        public static System.Func<float, float, bool> RockProbe;
+
+        /// Metres of clearance marked round a rock prop, on top of its own
+        /// radius. Half a cell, so a boulder that sits on a cell boundary
+        /// closes both of the cells it is actually in and no more.
+        public static float RockClearance = 1f;
+
+        void MarkRocks()
+        {
+            var isle = camp != null ? camp.Island : null;
+            var nodes = ResourceNode.All;
+            for (int k = 0; k < nodes.Count; k++)
+            {
+                var node = nodes[k];
+                if (node == null) continue;
+                if (isle != null && node.Home != null && node.Home != isle) continue;
+                // Timber is a tree and a tree is not an obstacle (D4); what
+                // is left is stone and ore, which are rocks.
+                if (node.Resource == Res.Timber) continue;
+                MarkDisc(node.transform.position, RockClearance, BlockBoth);
+            }
+
+            if (RockProbe == null) return;
+            for (int y = 0; y < n; y++)
+            {
+                float wz = origin.y + y * cell;
+                int row = y * n;
+                for (int x = 0; x < n; x++)
+                    if (RockProbe(origin.x + x * cell, wz)) block[row + x] |= BlockBoth;
+            }
+        }
+
+        void MarkDisc(Vector3 at, float radius, byte flags)
+        {
+            int cx = Mathf.RoundToInt((at.x - origin.x) / cell);
+            int cy = Mathf.RoundToInt((at.z - origin.y) / cell);
+            int r = Mathf.Max(0, Mathf.CeilToInt(radius / cell));
+            for (int y = cy - r; y <= cy + r; y++)
+            {
+                if (y < 0 || y >= n) continue;
+                for (int x = cx - r; x <= cx + r; x++)
+                {
+                    if (x < 0 || x >= n) continue;
+                    float dx = origin.x + x * cell - at.x;
+                    float dz = origin.y + y * cell - at.z;
+                    if (dx * dx + dz * dz > radius * radius) continue;
+                    block[y * n + x] |= flags;
+                }
+            }
+        }
+
+        /// Metres per cell, once the grid is up. `Outpost.WallPostStep` is
+        /// the number a post snaps to and this is the number the cells are;
+        /// they are the same number by construction, and this is how a
+        /// caller can check.
+        public float CellSize => cell;
 
         // --- binary heap ------------------------------------------------------
 

@@ -46,6 +46,24 @@ namespace SeaSick.UI
         /// no R to turn it, and the thing to tap is the beach.
         public static bool PlacingPier => Placing && Instance.IsPier;
 
+        /// **...or is it a WALL, which is not one blueprint at all.**
+        ///
+        /// Kevin's connect-the-dots design (`docs/PLAN-fortress-harbour.md`
+        /// D5) makes a palisade a RUN of segments the player walks round the
+        /// camp, so it gets its own tool — `WallSiting` — rather than a
+        /// fourth shape of "where does this rectangle go". This mode stays
+        /// `Placing` for its whole life, though, so every guard elsewhere
+        /// that asks whether the player is placing something (the Hand's
+        /// pick-up, the tap's consequence, the camp bar) goes on getting the
+        /// right answer without knowing walls exist.
+        public static bool PlacingWall => Placing && Instance.wallMode;
+
+        /// **The plan id that arms the wall tool.** The World half's
+        /// `BuildPlans.Palisade.id`, named here rather than reached for, so
+        /// this file compiles against the contract and not against the order
+        /// the two halves happen to land in.
+        public const string WallPlanId = "palisade";
+
         /// Why the spot under the pointer is refused, or "" if it is good.
         /// The sheet prints this; the ghost's colour says the same thing
         /// faster.
@@ -149,6 +167,11 @@ namespace SeaSick.UI
         /// true the press belongs to siting, not to the camera.
         bool dragging;
 
+        /// Is this run a wall? Set once in `Begin` from the plan's id, and
+        /// the only branch in this file: every wall-shaped question goes
+        /// straight to `WallSiting` and every other line below is untouched.
+        bool wallMode;
+
         /// Where the drawing sat relative to the ground point the finger went
         /// down on, in world XZ. Kept so a grab near the edge of the
         /// footprint does not snap the building's centre under the thumb.
@@ -201,6 +224,19 @@ namespace SeaSick.UI
             // without this the release that opened siting mode was also the
             // tap that sited the building, under the button.
             Instance.beganFrame = Time.frameCount;
+
+            // **The wall fork.** A palisade is a run of posts, not a
+            // rectangle on the end of a thumb, so the ghost, the start
+            // point and the yaw all belong to `WallSiting` from here. The
+            // ring still gets built: the reach rule is the same rule.
+            Instance.wallMode = what.id == WallPlanId;
+            if (Instance.wallMode)
+            {
+                WallSiting.Begin(target, what, shipTransform);
+                Instance.BuildRing();
+                return;
+            }
+
             Instance.want = Instance.StartPoint();
             Instance.BuildRing();
         }
@@ -258,6 +294,9 @@ namespace SeaSick.UI
         {
             var s = Instance;
             if (s == null || s.plan.id == null) return false;
+            // A wall's grab target is its loose post, not a footprint —
+            // same question, asked of the tool that owns the answer.
+            if (s.wallMode) return WallSiting.GrabsPost(screen);
             if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return false;
             return s.NearGhost(g);
         }
@@ -285,6 +324,7 @@ namespace SeaSick.UI
         {
             var s = Instance;
             if (s == null || s.plan.id == null) return;
+            if (s.wallMode) { s.dragging = true; WallSiting.BeginDrag(screen); return; }
             s.dragging = true;
             s.grabOffset = Vector2.zero;
             if (GroundPick.FromScreen(Camera.main, screen, out Vector3 g))
@@ -298,6 +338,7 @@ namespace SeaSick.UI
         {
             var s = Instance;
             if (s == null || !s.dragging || s.plan.id == null) return;
+            if (s.wallMode) { WallSiting.DragTo(screen); return; }
             if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return;
             s.want = OnGround(g.x + s.grabOffset.x, g.z + s.grabOffset.y);
             s.Evaluate();
@@ -305,13 +346,19 @@ namespace SeaSick.UI
 
         /// Let go. The drawing stays where it was dropped — dropping is not
         /// building, ✓ is still the only thing that builds.
-        public static void EndDrag() { if (Instance != null) Instance.dragging = false; }
+        public static void EndDrag()
+        {
+            if (Instance == null) return;
+            Instance.dragging = false;
+            if (Instance.wallMode) WallSiting.EndDrag();
+        }
 
         /// Is the drawing on the end of a finger right now?
         public static bool Dragging => Placing && Instance.dragging;
 
         void Cancel()
         {
+            if (wallMode) { wallMode = false; WallSiting.End(); }
             plan = default;
             moving = false;
             dragging = false;
@@ -328,6 +375,16 @@ namespace SeaSick.UI
         {
             if (plan.id == null) return;
             if (outpost == null || ship == null) { Cancel(); return; }
+
+            // **A wall run is somebody else's frame.** Escape, Enter, the
+            // tap and the ghost all belong to `WallSiting`; when it says it
+            // has finished, the whole mode goes down with it.
+            if (wallMode)
+            {
+                if (!WallSiting.Tick(beganFrame)) { Cancel(); return; }
+                Refusal = WallSiting.Refusal;
+                return;
+            }
 
             var keys = Keyboard.current;
             if (keys != null && keys.escapeKey.wasPressedThisFrame) { Cancel(); return; }
@@ -420,13 +477,21 @@ namespace SeaSick.UI
         }
 
         /// **The only way a building gets placed.** The ✓ button, or Enter.
-        public static void Confirm() { if (Instance != null) Instance.Commit(); }
+        public static void Confirm()
+        {
+            if (Instance == null) return;
+            if (Instance.wallMode) WallSiting.Confirm();
+            else Instance.Commit();
+        }
 
         /// Is the ✓ live? False draws it muted; `Refusal` says why.
-        public static bool CanConfirm => Placing && Instance.valid;
+        public static bool CanConfirm =>
+            Placing && (Instance.wallMode ? WallSiting.CanConfirm : Instance.valid);
 
-        /// Where the drawing stands, for the buttons to sit under.
-        public static Vector3 GhostAt => Placing ? Instance.at : Vector3.zero;
+        /// Where the drawing stands, for the buttons to sit under. For a
+        /// wall that is the midpoint of the segment being stretched.
+        public static Vector3 GhostAt =>
+            Placing ? (Instance.wallMode ? WallSiting.ButtonsAt : Instance.at) : Vector3.zero;
 
         void Commit()
         {
@@ -452,6 +517,7 @@ namespace SeaSick.UI
         void OnGUI()
         {
             if (plan.id == null || outpost == null) return;
+            if (wallMode) { WallSiting.DrawGUI(); return; }
             switch (SitingButtons.Draw(at, valid, Refusal))
             {
                 case SitingButtons.Press.Cancel: Cancel(); break;

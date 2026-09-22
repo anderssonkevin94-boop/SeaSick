@@ -89,6 +89,52 @@ namespace SeaSick.World
             return site;
         }
 
+        /// **The drawing of a WALL segment (2026-09-23).** Same object,
+        /// same row, same log stack -- only the ghost is a line between two
+        /// posts rather than a hut on a plot, and the stakes are the posts
+        /// themselves, which the wall's own drawing already has.
+        ///
+        /// The root sits at the segment's MIDPOINT, which is where a
+        /// hauler walks to and where the sheet hangs: `PendingBuild.x/z`
+        /// are that same midpoint, so nothing downstream has to know this
+        /// site is a wall.
+        public static BuildSite PlaceWall(Outpost owner, BuildPlan plan,
+            Vector3 postA, Vector3 postB, bool gate)
+        {
+            Vector3 mid = 0.5f * (postA + postB);
+            Vector3 run = postB - postA;
+            run.y = 0f;
+            float len = Mathf.Max(0.5f, run.magnitude);
+            Quaternion facing = run.sqrMagnitude > 0.0001f
+                ? Quaternion.LookRotation(run.normalized, Vector3.up)
+                : Quaternion.identity;
+
+            var root = new GameObject("BuildSite_" + plan.id);
+            root.transform.SetParent(owner.transform, true);
+            root.transform.SetPositionAndRotation(mid, facing);
+
+            var site = root.AddComponent<BuildSite>();
+            site.outpost = owner;
+            site.PlanId = plan.id;
+            site.ghost = BuildingFactory.WallGhost(root.transform, postA, postB,
+                gate, AlphaEmpty);
+
+            // The drawing has to be tappable -- it is how the site's sheet
+            // is opened, the same as any other blueprint.
+            var box = root.AddComponent<BoxCollider>();
+            box.center = new Vector3(0f, BuildPlans.PalisadeHeight * 0.5f, 0f);
+            box.size = new Vector3(1.2f, BuildPlans.PalisadeHeight, len);
+
+            // The log stack goes beside the middle of the run, a metre off
+            // the line, so it never sits inside the wall it is paying for.
+            var stackGo = new GameObject("Delivered");
+            stackGo.transform.SetParent(root.transform, false);
+            stackGo.transform.localPosition = new Vector3(1.4f, 0f, 0f);
+            site.stack = stackGo.transform;
+
+            return site;
+        }
+
         static void Stake(Transform parent, Vector3 at)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);

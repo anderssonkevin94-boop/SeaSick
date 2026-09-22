@@ -559,6 +559,22 @@ namespace SeaSick.World
                 if (BlueprintFor(row) != null) continue;
 
                 var plan = PlanFor(row.planId, row.length);
+
+                // **A wall site's drawing is its own line.** It is not
+                // tested against `CanPlace` at all -- a segment was tested
+                // by `CanPlaceWall` when it was drawn, and re-testing it
+                // here against the rectangle rules would refuse every
+                // segment in a run to the one beside it.
+                if (row.isWall)
+                {
+                    var wallSite = BuildSite.PlaceWall(this, plan, row.postA, row.postB,
+                        row.planId == BuildPlans.Gate.id);
+                    wallSite.Bind(row);
+                    wallSite.Refresh(row);
+                    blueprints.Add(wallSite);
+                    continue;
+                }
+
                 Vector3 at = row.At;
                 at.y = height(at.x, at.z);
                 // It is in the queue, so `Clear` would refuse it to itself.
@@ -623,6 +639,23 @@ namespace SeaSick.World
             // would refuse the building it IS. Put back on a refusal.
             int wasAt = ledger.sites.IndexOf(row);
             if (wasAt >= 0) ledger.sites.RemoveAt(wasAt);
+
+            // **A wall row is raised along its LINE, not on its plot.**
+            // Everything above is the same (the drawing comes down, the row
+            // leaves the queue so nothing refuses itself); what differs is
+            // that the thing standing up has two ends.
+            if (row.isWall)
+            {
+                var seg = RaiseWall(row);
+                if (seg == null)
+                {
+                    ledger.sites.Insert(Mathf.Clamp(wasAt < 0 ? 0 : wasAt, 0, ledger.sites.Count), row);
+                    EnsureBlueprints();
+                    return false;
+                }
+                Save.SaveGame.Autosave("a " + plan.label + " was raised");
+                return true;
+            }
 
             var b = Raise(plan, at, row.yaw);
             if (b == null)
@@ -2921,6 +2954,8 @@ namespace SeaSick.World
             // add, and two storehouses on one plot is what "load" would
             // otherwise mean at home.
             RetireAllBlueprints();
+            foreach (var w in walls) if (w != null) Destroy(w.gameObject);
+            walls.Clear();
             foreach (var old in built) if (old != null) Destroy(old.gameObject);
             built.Clear();
             reserved.RemoveAll(buildingReservations.Contains);
@@ -2990,6 +3025,16 @@ namespace SeaSick.World
             foreach (var kv in wanted)
                 for (int i = CountOf(kv.Key); i < kv.Value; i++)
                     if (Raise(PlanNamed(kv.Key)) == null) break;
+
+            // **Every segment back on its own two posts.** Before
+            // `CatchUp`, because `EnsureBlueprints` draws wall SITES and a
+            // repair site wants the breached segment it is mending to
+            // already be standing behind it.
+            if (ledger.builtWalls == null) ledger.builtWalls = new List<BuiltWall>();
+            ledger.builtWalls.RemoveAll(w => w == null);
+            var savedWalls = new List<BuiltWall>(ledger.builtWalls);
+            ledger.builtWalls.Clear();
+            foreach (var w in savedWalls) StandWall(w);
 
             ledger.ceilingPer = KeepsOfEach;
             // The rest is what arrival does: blueprint, felling, piles.
@@ -3248,6 +3293,16 @@ namespace SeaSick.World
 
         bool Clear(Vector3 p, float halfDiag, out string why)
         {
+            if (!ClearOfReserved(p, halfDiag, out why)) return false;
+            return ClearOfPlans(p, halfDiag, out why);
+        }
+
+        /// The hand-placed keep-outs and the ground the standing buildings
+        /// reserved. Split out because a WALL has to ask this one without
+        /// asking the other (`CanPlaceWall` tests the queue and the other
+        /// segments by LINE, which a disc cannot do).
+        bool ClearOfReserved(Vector3 p, float halfDiag, out string why)
+        {
             why = "";
             foreach (var r in reserved)
             {
@@ -3266,6 +3321,12 @@ namespace SeaSick.World
                     return false;
                 }
             }
+            return true;
+        }
+
+        bool ClearOfPlans(Vector3 p, float halfDiag, out string why)
+        {
+            why = "";
 
             // **And every drawing already queued, 2026-09-22.** A blueprint
             // is not in `reserved` -- it is a promise, and a promise that
@@ -3285,13 +3346,452 @@ namespace SeaSick.World
                     float rHalf = 0.5f * Mathf.Sqrt(rl * rl + rw * rw) + spacing * 0.5f;
                     float dx = p.x - row.x, dz = p.z - row.z;
                     float need = halfDiag + rHalf;
+                    if (row.isWall)
+                    {
+                        // A wall row is a LINE, not a disc round its
+                        // midpoint: measuring a 12 m segment as a circle
+                        // would refuse a hut six metres off either end of
+                        // it and allow one standing on the middle.
+                        if (WallSegment.FlatDistance(row.postA, row.postB, p)
+                            < halfDiag + WallClearance)
+                        {
+                            why = "the wall going up there is in the way";
+                            return false;
+                        }
+                        continue;
+                    }
                     if (dx * dx + dz * dz < need * need)
                     {
                         why = $"too close to the {plan.label} going up there";
                         return false;
                     }
                 }
+
+            // **And every segment that STANDS.** A raised wall is not in
+            // `reserved` either -- it has no sensible centre and no
+            // sensible radius -- so the line is tested directly.
+            for (int i = 0; i < walls.Count; i++)
+            {
+                var w = walls[i];
+                if (w == null) continue;
+                if (w.FlatDistanceTo(p) < halfDiag + WallClearance)
+                {
+                    why = w.IsGate ? "the gate is in the way" : "the wall is in the way";
+                    return false;
+                }
+            }
             return true;
+        }
+
+        /// Metres a building keeps off a wall line. A palisade is a thin
+        /// thing but nobody builds a hut flush against one, and the footing
+        /// of a segment on a slope reaches a little either side of the line.
+        public const float WallClearance = 1.6f;
+
+
+        // === WALLS AND GATES (Phase 1, 2026-09-23) ==========================
+        //
+        // `docs/PLAN-fortress-harbour.md`, and Kevin's own siting design
+        // (D5, "connect the dots"). The whole of the wall's economy is the
+        // build queue it already had: a segment is a `PendingBuild` with
+        // two posts on it, stocked and raised by the same code that stocks
+        // and raises a hut. What is new here is only the three things a
+        // rectangle on a plot never had to answer -- where a post snaps,
+        // whether a LINE can stand, and what happens to the pathing grid
+        // when it does.
+
+        /// **The snap grid for a post, metres, and it is not a taste
+        /// decision.** A segment's blocked cells are rasterised into
+        /// `CampPath`, whose cells are exactly this size -- so a post that
+        /// did not land on a cell centre would put the wall's obstacle a
+        /// metre from the wall. If one of these two numbers ever changes,
+        /// both change.
+        public const float WallPostStep = 2f;
+
+        /// **The longest one segment may be.** Longer runs are split by the
+        /// siting tool into several sites, which is the point: a segment is
+        /// one site in the queue, so a sixty-metre wall is five things the
+        /// hands can be hauling to at once rather than one thing they
+        /// finish in a week.
+        public const float MaxWallSegment = 12f;
+
+        /// Shorter than this is a tap, not a drag.
+        public const float MinWallSegment = 0.5f;
+
+        /// Every RAISED segment on this island, breached or not. Kept apart
+        /// from `built` on purpose: `CountOf`, `Demolish`, the store
+        /// ceiling and the assign menus are all about buildings with rooms
+        /// in them, and a hundred metres of fence in that list would answer
+        /// every one of those questions wrongly.
+        readonly List<WallSegment> walls = new List<WallSegment>();
+
+        public IReadOnlyList<WallSegment> Walls => walls;
+
+        /// **HOOK for the wall siting tool (one line, the UI's to wire).**
+        /// The build page lists the palisade, but the tool that draws a run
+        /// is `UI/WallSiting`, which this file must not know about any more
+        /// than it knows about `CampSiting`. Expected wiring, beside the
+        /// dock hook above:
+        ///
+        ///   Outpost.BeginWallSiting = camp => WallSiting.Begin(camp);
+        ///
+        /// Null means the tool is not installed, and the build page's
+        /// palisade row greys itself out rather than throwing.
+        public static System.Action<Outpost> BeginWallSiting;
+
+        /// **Snap a point to the wall lattice.** XZ to the 2 m step, Y to
+        /// the ground there. The lattice is the WORLD's, not the camp's, so
+        /// two runs drawn on either side of a camp meet exactly.
+        public Vector3 SnapPost(Vector3 world)
+        {
+            float x = Mathf.Round(world.x / WallPostStep) * WallPostStep;
+            float z = Mathf.Round(world.z / WallPostStep) * WallPostStep;
+            return new Vector3(x, GroundAt(new Vector3(x, 0f, z)), z);
+        }
+
+        /// **Can a segment stand between these two posts?**
+        ///
+        /// The same shape of answer `CanPlace` gives -- true, or false with
+        /// a sentence naming the rule -- because the siting tool paints the
+        /// line green or red and prints exactly this string under the
+        /// thumb.
+        public bool CanPlaceWall(Vector3 a, Vector3 b, out string why)
+        {
+            why = "";
+            if (!Sited) { why = "this ground was never surveyed"; return false; }
+
+            a = SnapPost(a);
+            b = SnapPost(b);
+            Vector3 flat = b - a;
+            flat.y = 0f;
+            float len = flat.magnitude;
+            if (len <= MinWallSegment) { why = "that is not a length of wall"; return false; }
+            if (len > MaxWallSegment + 0.01f)
+            {
+                why = $"one length of wall is {MaxWallSegment:F0} m at most";
+                return false;
+            }
+
+            // Both posts on the island, not out past the shore. Same test
+            // and the same words `CanPlace` uses.
+            if (Island != null && Island.HasProfile)
+                foreach (var post in new[] { a, b })
+                    if (Island.FlatDistance(post, Island.transform.position)
+                        > Island.RadiusToward(post))
+                    { why = "that is past the shore"; return false; }
+
+            // **The beach rule, per post** -- `Corners`' rule, applied to
+            // the two ends instead of to four corners. A palisade with its
+            // foot in the surf is a palisade the sea takes.
+            if (a.y < minHeight || b.y < minHeight)
+            {
+                why = "one end of it is down on the beach";
+                return false;
+            }
+
+            // **The slope ALONG the run**, which is the only slope a line
+            // has. Same limit a building stands on, because a wall on
+            // ground steeper than that has daylight under half of it.
+            float rise = Mathf.Abs(b.y - a.y);
+            if (rise / len > BuildSlope)
+            {
+                float deg = Mathf.Atan(rise / len) * Mathf.Rad2Deg;
+                why = $"too steep -- {deg:F0}° along it, and {BuildSlopeDegrees:F0}° is the limit";
+                return false;
+            }
+
+            // Not through anything that stands.
+            for (int i = 0; i < built.Count; i++)
+            {
+                var bld = built[i];
+                if (bld == null) continue;
+                Vector2 fp = bld.Footprint;
+                float halfDiag = 0.5f * Mathf.Sqrt(fp.x * fp.x + fp.y * fp.y);
+                if (WallSegment.FlatDistance(a, b, bld.transform.position)
+                    < halfDiag + WallClearance)
+                { why = $"the {bld.Label} is in the way"; return false; }
+            }
+
+            // Nor through anything queued.
+            if (ledger != null && ledger.sites != null)
+                foreach (var row in ledger.sites)
+                {
+                    if (row == null || string.IsNullOrEmpty(row.planId)) continue;
+                    if (row == IgnoreSite) continue;
+                    if (row.isWall)
+                    {
+                        if (TooCloseLines(a, b, row.postA, row.postB))
+                        { why = "there is already a wall going up there"; return false; }
+                        continue;
+                    }
+                    var plan = PlanFor(row.planId, row.length);
+                    float rl = plan.footprint.x, rw = plan.footprint.y;
+                    float rHalf = 0.5f * Mathf.Sqrt(rl * rl + rw * rw);
+                    if (WallSegment.FlatDistance(a, b, row.At) < rHalf + WallClearance)
+                    { why = $"the {plan.label} going up there is in the way"; return false; }
+                }
+
+            // Nor through another segment. Sharing a POST is not crossing:
+            // that is what a run is (D5, "a post is shared between
+            // adjoining segments").
+            for (int i = 0; i < walls.Count; i++)
+            {
+                var w = walls[i];
+                if (w == null) continue;
+                if (TooCloseLines(a, b, w.A, w.B))
+                { why = w.IsGate ? "the gate is in the way" : "there is already a wall there"; return false; }
+            }
+
+            // And not on the fire itself or anything else that reserved
+            // ground -- the head of the pier, the beacon. **Only the
+            // reservations**: the rest of `Clear` tests the walls and the
+            // queue as discs, and it has already been done properly, by
+            // line, above.
+            if (!ClearOfReserved(0.5f * (a + b), len * 0.5f + 0.2f, out string blocked))
+            { why = blocked; return false; }
+
+            return true;
+        }
+
+        /// Do two wall lines foul each other? Endpoints that coincide are a
+        /// shared post and are allowed; anything else inside a post step is
+        /// two walls in one place.
+        static bool TooCloseLines(Vector3 a0, Vector3 a1, Vector3 b0, Vector3 b1)
+        {
+            const float Same = 0.1f;
+            bool shares =
+                (a0 - b0).sqrMagnitude < Same || (a0 - b1).sqrMagnitude < Same ||
+                (a1 - b0).sqrMagnitude < Same || (a1 - b1).sqrMagnitude < Same;
+            float d = WallSegment.FlatDistance(a0, a1, b0, b1);
+            if (!shares) return d < WallPostStep * 0.5f;
+            // Sharing a post, so the distance is zero by construction. What
+            // is left to refuse is a segment doubled back ON another one,
+            // which shows up as both far ends also being close.
+            float far = Mathf.Min(
+                WallSegment.FlatDistance(b0, b1, (a0 - b0).sqrMagnitude < Same ? a1 : a0),
+                WallSegment.FlatDistance(a0, a1, (b0 - a0).sqrMagnitude < Same ? b1 : b0));
+            return far < WallPostStep * 0.5f;
+        }
+
+        /// **Queue one segment.** Null with a reason if the ground refuses
+        /// it; otherwise the row is in the queue at once and the hands can
+        /// start hauling to it while the player goes on drawing (D5).
+        public PendingBuild SiteWall(Vector3 a, Vector3 b, out string why)
+        {
+            if (ledger == null) { why = "this ground was never surveyed"; return null; }
+            ledger.MigratePending();
+            a = SnapPost(a);
+            b = SnapPost(b);
+            if (!CanPlaceWall(a, b, out why)) return null;
+            var row = QueueWallRow(BuildPlans.Palisade, a, b);
+            why = "";
+            return row;
+        }
+
+        /// The row itself, shared by siting, the gate and the repair. It
+        /// does NOT test the ground: a gate and a repair are both on a line
+        /// that already proved itself.
+        PendingBuild QueueWallRow(BuildPlan plan, Vector3 a, Vector3 b)
+        {
+            Vector3 mid = 0.5f * (a + b);
+            float len = Vector3.Distance(new Vector3(a.x, 0f, a.z), new Vector3(b.x, 0f, b.z));
+            Vector3 run = b - a;
+            run.y = 0f;
+            var row = new PendingBuild
+            {
+                planId = plan.id,
+                isWall = true,
+                postA = a,
+                postB = b,
+                x = mid.x,
+                z = mid.z,
+                yaw = run.sqrMagnitude > 0.0001f
+                    ? Quaternion.LookRotation(run.normalized, Vector3.up).eulerAngles.y : 0f,
+                length = len,
+                // **The palisade is priced by the metre (D1), the gate is
+                // priced flat.** `BuildPlan.cost` is zero on the palisade
+                // precisely so nothing can price a wall by the plan.
+                needed = plan.id == BuildPlans.Palisade.id
+                    ? BuildPlans.PalisadeCost(len) : Mathf.Max(0, plan.cost),
+                stoneNeeded = Mathf.Max(0, plan.stoneCost),
+                brickNeeded = Mathf.Max(0, plan.brickCost),
+                phased = true,
+            };
+            ledger.sites.Add(row);
+            EnsureBlueprints();
+            if (ledger.ReadyToRaise) FinishReady();
+            return row;
+        }
+
+        /// **Make this segment a gate.** The segment goes on standing while
+        /// the gate is stocked (D5) and is swapped for it when the site is
+        /// raised -- so a camp does not open a hole in its own wall the
+        /// moment the player decides it wants a door.
+        public PendingBuild MakeGate(WallSegment seg)
+        {
+            if (seg == null || ledger == null || seg.IsGate) return null;
+            ledger.MigratePending();
+            foreach (var row in ledger.sites)
+                if (row != null && row.isWall && row.planId == BuildPlans.Gate.id
+                    && (row.postA - seg.A).sqrMagnitude < 0.05f
+                    && (row.postB - seg.B).sqrMagnitude < 0.05f) return row;
+            return QueueWallRow(BuildPlans.Gate, seg.A, seg.B);
+        }
+
+        /// **A breach is a repair site.** Queued once per breach (the
+        /// segment only crosses zero once), on the same posts, and stocked
+        /// and built like anything else -- which is the acceptance test's
+        /// last step: *"the hands rebuild it after"*.
+        public PendingBuild QueueRepair(WallSegment seg)
+        {
+            if (seg == null || ledger == null) return null;
+            ledger.MigratePending();
+            foreach (var row in ledger.sites)
+                if (row != null && row.isWall
+                    && (row.postA - seg.A).sqrMagnitude < 0.05f
+                    && (row.postB - seg.B).sqrMagnitude < 0.05f) return row;
+            // A breached gate is repaired as the gate it is; anything else
+            // is a palisade again.
+            return QueueWallRow(seg.IsGate ? BuildPlans.Gate : BuildPlans.Palisade,
+                seg.A, seg.B);
+        }
+
+        /// The segment on these posts, or null. Posts are on the 2 m
+        /// lattice, so "the same posts" is an exact question.
+        public WallSegment WallOn(Vector3 a, Vector3 b)
+        {
+            for (int i = 0; i < walls.Count; i++)
+            {
+                var w = walls[i];
+                if (w == null) continue;
+                if ((w.A - a).sqrMagnitude < 0.05f && (w.B - b).sqrMagnitude < 0.05f) return w;
+                if ((w.A - b).sqrMagnitude < 0.05f && (w.B - a).sqrMagnitude < 0.05f) return w;
+            }
+            return null;
+        }
+
+        /// The standing segment nearest this point within `within` metres,
+        /// or null. What a raid party asks when it wants something to break.
+        public WallSegment NearestWall(Vector3 to, float within = 400f)
+        {
+            WallSegment best = null;
+            float bestD = within;
+            for (int i = 0; i < walls.Count; i++)
+            {
+                var w = walls[i];
+                if (w == null || w.Breached) continue;
+                float d = w.FlatDistanceTo(to);
+                if (d >= bestD) continue;
+                bestD = d;
+                best = w;
+            }
+            return best;
+        }
+
+        /// **Stand a queued wall row up.** Mends what is already there
+        /// where there is something (a repair), swaps a wall for a gate
+        /// where the row is a gate, and otherwise puts a new segment on the
+        /// ground. Null means the ground refused it and the row goes back
+        /// in the queue.
+        WallSegment RaiseWall(PendingBuild row)
+        {
+            if (row == null || !row.isWall) return null;
+            Vector3 a = SnapPost(row.postA), b = SnapPost(row.postB);
+            bool gate = row.planId == BuildPlans.Gate.id;
+
+            var existing = WallOn(a, b);
+            if (existing != null)
+            {
+                if (gate && !existing.IsGate)
+                {
+                    var go = BuildingFactory.RaiseWall(transform, a, b, true,
+                        out var gWhole, out var gBroken);
+                    // The visuals live under the segment that is already
+                    // standing; the factory root is only their carrier.
+                    gWhole.SetParent(existing.transform, false);
+                    gBroken.SetParent(existing.transform, false);
+                    gWhole.SetPositionAndRotation(go.transform.position, go.transform.rotation);
+                    gBroken.SetPositionAndRotation(go.transform.position, go.transform.rotation);
+                    Destroy(go);
+                    existing.BecomeGate(gWhole, gBroken);
+                }
+                else existing.Mend();
+                ClearGroundAlong(a, b);
+                return existing;
+            }
+
+            var root = BuildingFactory.RaiseWall(transform, a, b, gate,
+                out var whole, out var broken);
+            var seg = root.AddComponent<WallSegment>();
+            seg.Configure(BuildPlans.Named(row.planId));
+            float maxHp = WallSegment.HpFor(Vector3.Distance(
+                new Vector3(a.x, 0f, a.z), new Vector3(b.x, 0f, b.z)), gate);
+            var bw = new BuiltWall
+            {
+                ax = a.x, az = a.z, bx = b.x, bz = b.z,
+                isGate = gate, hp = maxHp, maxHp = maxHp,
+            };
+            ledger.builtWalls.Add(bw);
+            seg.Row = bw;
+            seg.Configure(this, a, b, gate, maxHp, maxHp, whole, broken);
+            walls.Add(seg);
+
+            ClearGroundAlong(a, b);
+            var map = CampPath.For(this);
+            if (map != null) map.MarkWall(seg, true);
+            return seg;
+        }
+
+        /// The same, from a saved row. No ledger row is written (it is the
+        /// ledger row) and no autosave is fired.
+        void StandWall(BuiltWall w)
+        {
+            if (w == null || !Sited) return;
+            Vector3 a = new Vector3(w.ax, GroundAt(new Vector3(w.ax, 0f, w.az)), w.az);
+            Vector3 b = new Vector3(w.bx, GroundAt(new Vector3(w.bx, 0f, w.bz)), w.bz);
+            var root = BuildingFactory.RaiseWall(transform, a, b, w.isGate,
+                out var whole, out var broken);
+            var seg = root.AddComponent<WallSegment>();
+            seg.Configure(BuildPlans.Named(w.isGate ? BuildPlans.Gate.id : BuildPlans.Palisade.id));
+            float maxHp = w.maxHp > 0f ? w.maxHp : WallSegment.HpFor(
+                Vector3.Distance(new Vector3(a.x, 0f, a.z), new Vector3(b.x, 0f, b.z)), w.isGate);
+            seg.Row = w;
+            w.maxHp = maxHp;
+            seg.Configure(this, a, b, w.isGate, w.hp, maxHp, whole, broken);
+            walls.Add(seg);
+            ledger.builtWalls.Add(w);
+
+            // A breached segment comes back breached, and a breached
+            // segment blocks nobody.
+            var map = CampPath.For(this);
+            if (map != null && !seg.Breached) map.MarkWall(seg, true);
+        }
+
+        /// **Take the grass out from under a run.** `SceneryGround` only
+        /// knows how to clear a rectangle (`ClearFootprintNear`), which is
+        /// exactly what a segment is once it is turned along its own run --
+        /// so the wall gets the same treatment a hut gets and nothing in
+        /// the terrain code has to learn what a wall is.
+        void ClearGroundAlong(Vector3 a, Vector3 b)
+        {
+            Vector3 run = b - a;
+            run.y = 0f;
+            float len = run.magnitude;
+            if (len < 0.01f) return;
+            var facing = Quaternion.LookRotation(run.normalized, Vector3.up)
+                * Quaternion.Euler(0f, 90f, 0f);
+            Terrain.SceneryGround.ClearFootprintNear(
+                0.5f * (a + b), facing, new Vector2(len, 1.2f), 0.4f);
+        }
+
+        /// Forget a segment that has been torn down. The object destroys
+        /// itself; this is the record.
+        public void ForgetWall(WallSegment seg)
+        {
+            if (seg == null) return;
+            walls.Remove(seg);
+            if (ledger != null && ledger.builtWalls != null && seg.Row != null)
+                ledger.builtWalls.Remove(seg.Row);
         }
 
         /// The four corners of the footprint, measured off the height field.

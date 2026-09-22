@@ -291,12 +291,16 @@ namespace SeaSick.UI
                 right = stop.x - HudLayout.Gap;
                 string refusal = CampSiting.Refusal;
                 if (string.IsNullOrEmpty(refusal))
-                    say = CampSiting.PlacingPier
-                        // Kevin, 2026-09-22: the tap moves the drawing now and
-                        // only ✓ builds, so the bar says what the three
-                        // buttons under the blueprint are for.
-                        ? "tap the beach to move it, then ✓   ·   the pier runs out to deep water"
-                        : "move it with a tap, then ✓   ·   ↻ turns it 45°";
+                    // Kevin, 2026-09-22: the tap moves the drawing now and
+                    // only ✓ builds, so the bar says what the buttons under
+                    // the blueprint are for. A wall is the third shape of
+                    // that sentence — it is a run you keep drawing, so its
+                    // line has to say that ✓ does not end the tool.
+                    say = CampSiting.PlacingWall
+                        ? "plant a post, drag the next, ✓ to build it and go on   ·   ✕ to stop"
+                        : CampSiting.PlacingPier
+                            ? "tap the beach to move it, then ✓   ·   the pier runs out to deep water"
+                            : "move it with a tap, then ✓   ·   ↻ turns it 45°";
                 else
                 {
                     // The refusal changes as the cursor moves, which is a

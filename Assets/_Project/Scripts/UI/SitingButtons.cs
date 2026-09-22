@@ -47,13 +47,20 @@ namespace SeaSick.UI
 
         /// Where the cluster sits this frame, or an empty rect when the ghost
         /// is behind the camera and there is nowhere honest to put it.
-        public static Rect Cluster(Vector3 world)
+        public static Rect Cluster(Vector3 world) => Cluster(world, 3);
+
+        /// ...for a cluster of `count` buttons. A wall has no rotation, so
+        /// its cluster is two wide (✕ ✓) unless the run has come back round
+        /// near its own first post, when the middle button becomes "close
+        /// the ring" — see `WallSiting`.
+        public static Rect Cluster(Vector3 world, int count)
         {
             var cam = Camera.main;
             if (cam == null) return new Rect();
 
+            count = Mathf.Clamp(count, 1, 3);
             float d = Diameter, g = Gap;
-            float w = d * 3f + g * 2f;
+            float w = d * count + g * (count - 1);
             var safe = HudLayout.Safe;
 
             Vector3 sp = cam.WorldToScreenPoint(world);
@@ -104,36 +111,66 @@ namespace SeaSick.UI
         /// is out of the ring or on ground that will not take it, and the
         /// reason is already on the sheet.
         public static Press Draw(Vector3 world, bool canConfirm, string reason)
+            => Draw(world, canConfirm, reason, true, "↻");
+
+        /// ...with the middle button optional, and its glyph the caller's.
+        ///
+        /// A wall segment cannot be rotated — it IS its two posts — so the
+        /// wall tool draws two buttons, and promotes the middle one to
+        /// "close the ring" (⭯) only on the frames where the run has come
+        /// back near the post it started from. Same `Press.Rotate` on the
+        /// way out: this file reports which of the three was pressed and
+        /// decides nothing about what that means.
+        public static Press Draw(Vector3 world, bool canConfirm, string reason,
+            bool withMiddle, string middleGlyph)
         {
             Build();
-            var row = Cluster(world);
+            int count = withMiddle ? 3 : 2;
+            var row = Cluster(world, count);
             if (row.width <= 0f) return Press.None;
 
             float d = Diameter, g = Gap;
             var cancel = new Rect(row.x, row.y, d, d);
             var rotate = new Rect(row.x + d + g, row.y, d, d);
-            var confirm = new Rect(row.x + (d + g) * 2f, row.y, d, d);
+            var confirm = new Rect(row.x + (d + g) * (withMiddle ? 2f : 1f), row.y, d, d);
 
             // Claimed every OnGUI, pressed or not: a tap that lands here must
             // never also reach the ground pick underneath or the helm.
             UIBlocker.Block(cancel);
-            UIBlocker.Block(rotate);
+            if (withMiddle) UIBlocker.Block(rotate);
             UIBlocker.Block(confirm);
 
             var press = Press.None;
             if (Tap(cancel, "✕", UITheme.Bad, true)) press = Press.Cancel;
-            if (Tap(rotate, "↻", UITheme.Text, true)) press = Press.Rotate;
+            if (withMiddle && Tap(rotate, middleGlyph, UITheme.Text, true)) press = Press.Rotate;
             if (Tap(confirm, "✓", UITheme.Good, canConfirm) && canConfirm) press = Press.Confirm;
 
             if (!canConfirm && !string.IsNullOrEmpty(reason))
-            {
-                var say = new Rect(row.center.x - HudLayout.Unit * 9f, row.yMax + g * 0.5f,
-                                   HudLayout.Unit * 18f, HudLayout.Unit * 1.4f);
-                UITheme.Rect(say, UITheme.Panel);
-                GUI.Label(say, "✕ " + reason, UITheme.Small2Centered);
-            }
+                Say(row.center.x, row.yMax + g * 0.5f, "✕ " + reason);
 
             return press;
+        }
+
+        /// **A line of help where the buttons would be**, for a tool that
+        /// has nothing to confirm yet. The wall tool spends its first moment
+        /// with no posts planted and therefore no segment to put buttons
+        /// under; an empty screen there reads as a tool that did not arm.
+        public static void Hint(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            Build();
+            var safe = HudLayout.Safe;
+            float y = Mathf.Min(HudLayout.BottomClustersTop, safe.yMax - HudLayout.Unit * 6f)
+                      - HudLayout.Unit * 2f;
+            Say(safe.center.x, Mathf.Max(safe.y + Gap, y), text);
+        }
+
+        static void Say(float centreX, float y, string text)
+        {
+            var say = new Rect(centreX - HudLayout.Unit * 9f, y,
+                               HudLayout.Unit * 18f, HudLayout.Unit * 1.4f);
+            UITheme.Rect(say, UITheme.Panel);
+            GUI.Label(say, text, UITheme.Small2Centered);
         }
 
         static bool Tap(Rect r, string mark, Color tint, bool live)
