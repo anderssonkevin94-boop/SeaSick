@@ -56,7 +56,13 @@ namespace SeaSick.Steamer
         /// at new proportions once the size has been played.
         public const float PlaytestScale = 0.42f;
 
-        public static bool Selected => PlayerPrefs.GetInt(PrefKey, 0) == 1;
+        /// In the editor the default is the ladder ship, so a fresh checkout
+        /// plays the scene as authored and the menu opts INTO the steamer. A
+        /// player build has no menu and no way to set the preference, and
+        /// the steamer is the ship being played (2026-09-22, first iPhone
+        /// build came up with the brig), so there the default flips.
+        public static bool Selected =>
+            PlayerPrefs.GetInt(PrefKey, Application.isEditor ? 0 : 1) == 1;
 
         /// Before any Awake: the yard's `Start` must already know not to
         /// build a rung that the conversion would then have to find and undo.

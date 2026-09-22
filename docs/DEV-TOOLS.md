@@ -1198,3 +1198,46 @@ false` before play.
   launches, not two frames.
 - **`ShipHold` and `Stockpile` do not follow the numbers.** Both are manual
   stacks; a restore rebuilds them unit by unit.
+
+## 2026-09-22 — the game on an iPhone
+
+### `tools/build-ios.sh [--dev]`
+Headless iOS player. Runs `SeaSick.Dev.Build.IOS` (`Scripts/Dev/Editor/Build.cs`)
+in batchmode and writes an Xcode project to `Builds/iOS/` (gitignored), in
+APPEND mode so the signing team Kevin picked in Xcode survives a rebuild.
+Then in Xcode: `open Builds/iOS/Unity-iPhone.xcodeproj`, select the phone
+next to the scheme, Run. `--dev` makes a development player (the on-screen
+Development Console, profiler attach). Refuses while the editor is open —
+batchmode cannot share the project.
+
+To read the phone's log from the Mac (this RELAUNCHES the app, and killing
+the capture closes it, so say so if Kevin is holding the phone):
+`xcrun devicectl device process launch --console --terminate-existing --device <udid> com.kevinandersson.seasick`,
+udid from `xcrun devicectl list devices`.
+
+### Traps this session added to the pile
+- **Unity exits 0 without doing anything.** After the macOS 27 update Rosetta 2
+  was gone and the editor logged "Canceling DisplayDialog: Rosetta 2 isn't
+  installed" and returned success. The script checks that the `.xcodeproj`
+  exists, not the exit code. `softwareupdate --install-rosetta` is Kevin's to run.
+- **The update also deleted `Library/`.** First batchmode run reimports
+  everything (~15 min); `tools/compilecheck.sh` cannot run until it has, it
+  needs `Library/ScriptAssemblies`. Package compile errors about
+  `UnityEditor.GUID` on that first pass are the API updater doing its job and
+  go away on the second Bee pass — read the LAST "Tundra build failed" block,
+  not the first.
+- **`Shader.Find` returns null in a player.** A build only ships shaders some
+  built asset references. No material in the project used the URP particle or
+  unlit shaders, so SpeedJuice, StormSpray, Cannon, SelectionRing... all did
+  `new Material(null)` in Start and then threw every frame — the red console
+  on the first phone build. Fix: `Resources/Shaders/Keepalive/` holds one
+  do-nothing material per (shader, keyword set) the code enables at runtime;
+  its README says when to add one. Keyword variants matter as much as the
+  shader: `_ALPHATEST_ON` on the cutout material is what keeps the round
+  spray from coming back as squares.
+- **The steamer is a PlayerPrefs switch.** `SteamerBootstrap.Selected` defaulted
+  to the ladder ship, so a fresh device sailed the brig. It now defaults ON
+  outside the editor; the editor menu still opts in.
+- **Throttle on a phone is the telegraph arrows,** not a swipe. `HelmInput`
+  reads touch only for the tiller (bottom 45% of the screen, x = rudder); W/S
+  are keyboard. Kevin's first instinct was to swipe.
