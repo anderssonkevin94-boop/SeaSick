@@ -4,6 +4,7 @@ using SeaSick.Ship;
 using SeaSick.Voyage;
 using SeaSick.World;
 using UnityEngine;
+using SheetsHud = global::SeaSick.UI.Sheets.Sheets;
 
 namespace SeaSick.UI
 {
@@ -168,6 +169,8 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
+            if (SheetsHud.ChartActive) return;   // the chart instrument replaced this
+
             if (motor == null) return;
             if (!HudVisibility.Minimap) return;
             int u = HudLayout.Unit;

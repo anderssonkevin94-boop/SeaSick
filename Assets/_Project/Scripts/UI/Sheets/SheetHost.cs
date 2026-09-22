@@ -45,6 +45,7 @@ namespace SeaSick.UI.Sheets
 
         PlaceLabel place;
         AshoreRail rail;
+        ChartInstrument chart;
         SelectionRing ring;
 
         ISheet built;
@@ -56,7 +57,17 @@ namespace SeaSick.UI.Sheets
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot()
         {
+            // **The scene is asked, not just the static.** Domain reload is
+            // off in this project, so `Instance` survives a play session and
+            // comes back as a destroyed object — which reads as null, so this
+            // happily built a SECOND host on top of the one already there.
+            // The duplicate then took the early-exit in `Awake`, never built
+            // its tree and never claimed `Instance`, and the HUD came up as a
+            // UIDocument with an empty root: no error, no panel, nothing.
             if (Instance != null) return;
+            var existing = FindFirstObjectByType<SheetHost>(FindObjectsInactive.Include);
+            if (existing != null) { Instance = existing; return; }
+
             var go = new GameObject("SheetHUD");
             DontDestroyOnLoad(go);
             go.AddComponent<SheetHost>();
@@ -65,8 +76,23 @@ namespace SeaSick.UI.Sheets
 
         void Awake()
         {
-            if (Instance != null && Instance != this) { Destroy(this); return; }
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
+            EnsureBuilt();
+        }
+
+        /// **Building is lazy and idempotent, not an `Awake` step.**
+        ///
+        /// A host whose `Awake` was skipped or which lost the race to another
+        /// copy used to sit there for the whole session as a live component
+        /// with an empty panel. Doing the work here, and calling it from
+        /// `LateUpdate` as well, means the HUD cannot end up half-created:
+        /// whatever object wins, the first frame it ticks it is complete.
+        bool chromeBuilt;
+
+        void EnsureBuilt()
+        {
+            if (chromeBuilt) return;
 
             var settings = Resources.Load<PanelSettings>("UI/SheetPanel");
             if (settings == null)
@@ -76,7 +102,8 @@ namespace SeaSick.UI.Sheets
                 return;
             }
 
-            doc = gameObject.AddComponent<UIDocument>();
+            doc = GetComponent<UIDocument>();
+            if (doc == null) doc = gameObject.AddComponent<UIDocument>();
             doc.panelSettings = settings;
             // The document is created empty and filled here rather than from a
             // UXML tree: every element in it is data-driven, and a UXML file
@@ -94,7 +121,13 @@ namespace SeaSick.UI.Sheets
 
             place = new PlaceLabel(root);
             rail = new AshoreRail(root);
-            ring = gameObject.AddComponent<SelectionRing>();
+            // The chart is NOT gated on `SuppressLegacy`: it is the instrument
+            // at sea as much as at anchor, which is the whole reason it can
+            // replace the minimap and the compass tape rather than sit beside
+            // them.
+            chart = new ChartInstrument(root);
+            if (ring == null) ring = gameObject.AddComponent<SelectionRing>();
+            chromeBuilt = true;
         }
 
         void OnEnable() { Sheets.Changed += OnSheetChanged; }
@@ -185,11 +218,17 @@ namespace SeaSick.UI.Sheets
 
         void LateUpdate()
         {
+            if (Instance == null) Instance = this;
+            EnsureBuilt();
             if (root == null) return;
 
             bool on = Sheets.SuppressLegacy;
             place.Tick(on, root);
             rail.Tick(on, root);
+            chart.Tick(root);
+            // Claimed here rather than inside the instrument, so the flag is
+            // true for exactly as long as something is actually drawing.
+            Sheets.ChartActive = true;
 
             // A pickable with no collider can never be tapped, and a campfire
             // is a bare mesh with a Light on it. Rather than demanding every
@@ -231,106 +270,61 @@ namespace SeaSick.UI.Sheets
             float mT = (Screen.height - safe.yMax) * scale + 12f;
             float mB = safe.yMin * scale + 12f;
 
-            if (HudLayout.Wide) PlaceBeside(s, W, H, mL, mR, mT, mB);
+            if (HudLayout.Wide) PlaceRight(W, H, mR, mT, mB);
             else PlaceDocked(W, H, mL, mR, mB);
         }
 
-        void PlaceBeside(ISheet s, float W, float H, float mL, float mR, float mT, float mB)
+        /// **The card is a column on the right, not a label on the object.**
+        ///
+        /// It used to be placed beside the thing it was about, with a tail
+        /// back to it. Kevin, playing it: *"the menu system on the island
+        /// should always be pinned on the right side of the screen. It moves
+        /// around when I zoom in and out and move around."* That is the whole
+        /// argument — a card anchored in the WORLD is a card that slides out
+        /// from under the finger every time the camera breathes, and the
+        /// camera on this island is never still. Which object the card is
+        /// about is now said by the ring on the ground, which costs the player
+        /// nothing to look at and does not move the buttons.
+        ///
+        /// So the only thing still read off the world is `AnchorWorld`, and
+        /// only by `SelectionRing`. The tail is gone with the placement that
+        /// needed it.
+        void PlaceRight(float W, float H, float mR, float mT, float mB)
         {
             card.RemoveFromClassList(SheetTheme.Docked);
 
             float w = Mathf.Clamp(W * 0.32f, 400f, 440f);
-            w = Mathf.Min(w, W - mL - mR);
             card.style.width = w;
-            card.style.right = StyleKeyword.Auto;
+            card.style.left = StyleKeyword.Auto;
             card.style.bottom = StyleKeyword.Auto;
+            card.style.right = Mathf.Max(16f, mR + 4f);
 
-            // **The floor is the legacy prompt stack, not the screen edge.**
+            // The top is under the ashore rail, which shares this corner and
+            // is the one thing allowed to sit above the card -- it is four
+            // discs, it is read at a glance, and burying it under a sheet
+            // would be hiding the crew behind the crew's own sheet.
+            float top = mT;
+            float railBottom = rail != null ? rail.BottomPanelY : 0f;
+            if (railBottom > 0f) top = Mathf.Max(top, railBottom + 10f);
+
+            // The floor is the legacy prompt stack, not the screen edge.
             // "Cast off (space)" is drawn bottom-centre by `AnchorController`
             // and is the one control the sheet HUD deliberately leaves to
             // IMGUI, so a card allowed to run to the bottom margin covers the
-            // way out. `BottomClustersTop` is where those clusters begin, in
-            // screen pixels, reported by the panels that drew them.
-            float floorPanel = H - mB;
+            // way out.
+            float floor = H - mB;
             float clusters = HudLayout.BottomClustersTop;
             if (clusters > 0f)
-                floorPanel = Mathf.Min(floorPanel, clusters * (H / Mathf.Max(1f, Screen.height)) - 10f);
-            float ceiling = mT;
-            card.style.maxHeight = Mathf.Max(160f, floorPanel - ceiling);
+                floor = Mathf.Min(floor, clusters * (H / Mathf.Max(1f, Screen.height)) - 10f);
 
-            var cam = Camera.main;
-            Vector2 p;
-            bool infront = false;
-            if (cam != null)
-            {
-                var sp = cam.WorldToScreenPoint(s.AnchorWorld);
-                infront = sp.z > 0f;
-                p = ToPanel(new Vector2(sp.x, sp.y));
-            }
-            else p = new Vector2(W * 0.5f, H * 0.5f);
+            card.style.top = top;
+            card.style.maxHeight = Mathf.Max(160f, floor - top);
 
             float h = card.resolvedStyle.height;
-            if (h <= 1f) h = 200f;
+            Shadow(W - card.style.right.value.value - w, top, w, h);
 
-            // **Beside, on whichever side of the object has more room — and
-            // never ON it.** Preferring the right unconditionally put the
-            // ship's manifest straight over the ship: she was in the right
-            // half of a wide window, the card was 430 px, and it was allowed
-            // to clamp back across its own anchor rather than go left. The
-            // side is chosen by measuring both gaps first, and whichever wins
-            // the card is then held clear of the anchor point.
-            const float gap = 40f;
-            float roomRight = (W - mR) - p.x;
-            float roomLeft = p.x - mL;
-            bool right = roomRight >= roomLeft;
-            if (!infront) { right = false; }
-
-            float x = right ? p.x + gap : p.x - gap - w;
-            x = Mathf.Clamp(x, mL, Mathf.Max(mL, W - w - mR));
-
-            // The clamp above can drag the card back over the anchor when
-            // neither side really fits. If it has, push it off the point in
-            // whichever direction still has somewhere to go.
-            if (infront && x < p.x + gap && x + w > p.x - gap)
-            {
-                float toRight = Mathf.Min(p.x + gap, W - w - mR);
-                float toLeft = Mathf.Max(p.x - gap - w, mL);
-                bool canRight = toRight >= p.x + gap - 0.5f;
-                bool canLeft = toLeft + w <= p.x - gap + 0.5f;
-                if (canRight && (right || !canLeft)) { x = toRight; right = true; }
-                else if (canLeft) { x = toLeft; right = false; }
-            }
-
-            float y = Mathf.Clamp(p.y - h * 0.5f, ceiling, Mathf.Max(ceiling, floorPanel - h));
-
-            card.style.left = x;
-            card.style.top = y;
-            Shadow(x, y, w, h);
-
-            // The tail: a hairline from the card's near edge out to the
-            // object, with a small dot where it lands. Rotated rather than
-            // drawn, because UI Toolkit has no line and a rotated 2 px element
-            // is one draw with no mesh of its own.
-            if (!infront || p.x < 0f || p.x > W || p.y < 0f || p.y > H)
-            {
-                tail.style.display = DisplayStyle.None;
-                tailDot.style.display = DisplayStyle.None;
-                return;
-            }
-            float ex = right ? x : x + w;
-            float ey = Mathf.Clamp(p.y, y + 12f, y + h - 12f);
-            var d = new Vector2(p.x - ex, p.y - ey);
-            float len = d.magnitude;
-            tail.style.display = len > 6f ? DisplayStyle.Flex : DisplayStyle.None;
-            tail.style.left = ex;
-            tail.style.top = ey;
-            tail.style.width = len;
-            tail.style.rotate = new StyleRotate(
-                new Rotate(new Angle(Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg, AngleUnit.Degree)));
-
-            tailDot.style.display = DisplayStyle.Flex;
-            tailDot.style.left = p.x - 4.5f;
-            tailDot.style.top = p.y - 4.5f;
+            tail.style.display = DisplayStyle.None;
+            tailDot.style.display = DisplayStyle.None;
         }
 
         void PlaceDocked(float W, float H, float mL, float mR, float mB)

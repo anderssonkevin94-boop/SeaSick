@@ -55,7 +55,9 @@ namespace SeaSick.UI.Sheets
             // the reference width, and this is the caption beside it.
             float scale = root.resolvedStyle.width / Mathf.Max(1f, Screen.width);
             var safe = Screen.safeArea;
-            box.style.left = safe.xMin * scale + 196f;
+            // Clear of the chart instrument, which is 210 px of dial in the
+            // same corner: 14 (its own margin) + 210 + 16 of air.
+            box.style.left = safe.xMin * scale + 240f;
             box.style.top = (Screen.height - safe.yMax) * scale + 18f;
 
             if (Time.unscaledTime < nextEval) return;

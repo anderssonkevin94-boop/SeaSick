@@ -236,6 +236,15 @@ namespace SeaSick.Save
                     isleZ = isle != null ? isle.transform.position.z : 0f,
                 });
             }
+
+            // --- the chart -------------------------------------------------
+            //
+            // What she has seen and where she has been. Both are cheap and
+            // both are pure knowledge: a save without them loads into a world
+            // the player has already explored with a chart that says they
+            // have not.
+            d.seen = Discovery.Capture();
+            UI.Sheets.ChartData.CaptureTrack(d.trackX, d.trackZ, d.trackAt);
             return d;
         }
 
@@ -260,6 +269,16 @@ namespace SeaSick.Save
                 if (d.hold == null) d.hold = new List<StoreEntry>();
                 if (d.banked == null) d.banked = new List<StoreEntry>();
                 if (d.outposts == null) d.outposts = new List<OutpostSave>();
+                // Added after version 1 shipped and deliberately NOT a
+                // version bump: `JsonUtility` leaves a field its JSON does
+                // not mention at the value the constructor gave it, so an
+                // older save reads back as an empty chart rather than as a
+                // refusal. Bumping would have thrown away Kevin's saves to
+                // add a drawing.
+                if (d.seen == null) d.seen = new List<SeenSave>();
+                if (d.trackX == null) d.trackX = new List<float>();
+                if (d.trackZ == null) d.trackZ = new List<float>();
+                if (d.trackAt == null) d.trackAt = new List<double>();
                 return d;
             }
             catch (System.Exception e)
@@ -316,6 +335,14 @@ namespace SeaSick.Save
 
             // 1. The clock. FIRST: every ledger below catches up to it.
             TimeOfDay.Scrub(data.timeSeconds);
+
+            // 1a. The chart, straight after the clock and before the camps.
+            // `Discovery.Apply` is monotonic, so the outposts raised in step
+            // 5 marking their own islands as landed cannot undo it -- and the
+            // track is aged against the clock that was just scrubbed, so it
+            // has to come after the scrub and not before it.
+            Discovery.Apply(data.seen);
+            UI.Sheets.ChartData.RestoreTrack(data.trackX, data.trackZ, data.trackAt);
 
             // 2. The ship. `Apply` is the free path every probe uses; the
             // fittings are clamped to the rung the way the yard would.

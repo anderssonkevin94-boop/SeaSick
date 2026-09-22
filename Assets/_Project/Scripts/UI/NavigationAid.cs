@@ -2,6 +2,7 @@ using SeaSick.Ship;
 using SeaSick.Voyage;
 using SeaSick.World;
 using UnityEngine;
+using SheetsHud = global::SeaSick.UI.Sheets.Sheets;
 
 namespace SeaSick.UI
 {
@@ -39,6 +40,7 @@ namespace SeaSick.UI
             // discarded passes were the game's biggest source of GC garbage.
             if (motor == null || voyage == null || voyage.HomePoint == null) return;
             if (!HudVisibility.Compass) return;
+            if (SheetsHud.ChartActive) return;   // the chart's rim carries the bearings now
 
             int u = HudLayout.Unit;
             // Centred at the top, narrowed to clear the crew pips and the

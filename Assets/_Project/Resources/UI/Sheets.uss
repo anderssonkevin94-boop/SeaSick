@@ -401,3 +401,55 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
 }
+
+/* ---------------- the chart instrument ----------------
+ *
+ * The dial itself is one Painter2D mesh; only the four cardinals and the tab
+ * under it are real elements, because Painter2D cannot draw text and these
+ * letters want the same storybook serif as the rest of the HUD.
+ */
+
+.chart {
+    position: absolute;
+}
+
+.chart-cardinal {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    color: rgb(31, 45, 56);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf");
+    -unity-text-align: middle-center;
+}
+
+.chart-cardinal--n {
+    font-size: 13px;
+}
+
+.chart-tab {
+    position: absolute;
+    left: 0;
+    flex-direction: row;
+    align-items: center;
+    background-color: rgb(244, 232, 207);
+    border-radius: 999px;
+    border-width: 2px;
+    border-color: rgb(31, 45, 56);
+    padding-left: 11px;
+    padding-right: 11px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+.chart-tab-text {
+    font-size: 12px;
+    color: rgb(31, 45, 56);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+    white-space: nowrap;
+}
+
+.chart-tab-weather {
+    color: rgb(107, 91, 158);
+    margin-left: 8px;
+}

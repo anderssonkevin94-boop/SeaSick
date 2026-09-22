@@ -42,6 +42,14 @@ namespace SeaSick.UI.Sheets
             bar.Add(label);
         }
 
+        /// Where the rail ends, in panel units, or 0 when it is not showing.
+        /// The card hangs off this: the two share the right-hand corner and
+        /// the rail is the one that stays on top, so it has to be able to say
+        /// how much of the corner it is using.
+        public float BottomPanelY =>
+            bar != null && bar.resolvedStyle.display != DisplayStyle.None
+                ? bar.layout.yMax : 0f;
+
         public void Tick(bool on, VisualElement root)
         {
             if (!on)

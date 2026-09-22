@@ -45,6 +45,23 @@ namespace SeaSick.Save
         public List<StoreEntry> banked = new List<StoreEntry>();
 
         public List<OutpostSave> outposts = new List<OutpostSave>();
+
+        /// **What the player has seen of the archipelago** — one row per
+        /// island that is more than `Seen.Never`. The world is deterministic
+        /// from `worldSeed`, so which islands EXIST needs no saving; which
+        /// ones are on the chart is knowledge, and knowledge is save state.
+        /// See `SeaSick.World.Discovery`.
+        public List<SeenSave> seen = new List<SeenSave>();
+
+        /// **The ship's wake**, as three parallel lists — the same shape
+        /// `OutpostLedger.Absence` uses, and for the same reason:
+        /// `JsonUtility` will not serialize a dictionary or a `Vector2`
+        /// list's worth of structure any more happily than this. `trackAt`
+        /// is `TimeOfDay.Seconds` per sample, so the chart can still age the
+        /// buffer out to one game day after a load.
+        public List<float> trackX = new List<float>();
+        public List<float> trackZ = new List<float>();
+        public List<double> trackAt = new List<double>();
     }
 
     [System.Serializable]

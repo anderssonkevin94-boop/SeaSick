@@ -74,16 +74,19 @@ namespace SeaSick.UI
             // nav line stand down, because the sheet the player opens on the
             // hull says both, better.
             bool sheets = SheetsHud.SuppressLegacy;
+            // The nav line answered "how fast, how far home, how full" -- the
+            // first two are on the chart's tab and rim now, so it goes with
+            // the minimap and the compass tape rather than outliving them.
+            bool navGone = sheets || SheetsHud.ChartActive;
             var crewRect = HudVisibility.Crew ? ReserveCrew(u) : Rect.zero;
             var shipRect = sheets ? Rect.zero : ReserveShip(u);
-            var navRect = sheets ? Rect.zero : ReserveNav(u);
+            var navRect = navGone ? Rect.zero : ReserveNav(u);
 
             if (Event.current.type != EventType.Repaint) return;
 
             if (HudVisibility.Crew) DrawCrew(crewRect, u);
-            if (sheets) return;
-            DrawShip(shipRect, u);
-            DrawNav(navRect, u);
+            if (!sheets) DrawShip(shipRect, u);
+            if (!navGone) DrawNav(navRect, u);
         }
 
         /// Top-left: one slim bar per crew member. Colour is how green the sea

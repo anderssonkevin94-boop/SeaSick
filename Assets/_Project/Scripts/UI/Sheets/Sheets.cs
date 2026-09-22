@@ -98,6 +98,35 @@ namespace SeaSick.UI.Sheets
             return null;
         }
 
+        // --- the chart ---
+
+        /// The chart's own sheet, registered the same way the object sheets
+        /// are. It is separate from `Register<T>` because the chart is not
+        /// opened by tapping a thing in the world — it is opened by tapping
+        /// the instrument, which is HUD, so there is no component to key on.
+        static Func<ISheet> chartFactory;
+
+        public static void RegisterChart(Func<ISheet> factory) => chartFactory = factory;
+
+        /// Open the chart if anything has registered one. Returns false when
+        /// nothing has, so the instrument can be built and shipped before the
+        /// sheet behind it exists rather than waiting on it.
+        public static bool TryOpenChart()
+        {
+            if (chartFactory == null) return false;
+            var s = chartFactory();
+            if (s == null) return false;
+            Open(s);
+            return true;
+        }
+
+        /// True while the chart instrument is the thing drawing the compass,
+        /// the map and the nav line. Unlike `SuppressLegacy` this is NOT about
+        /// lying at a camp: the instrument is up at sea as well, which is
+        /// exactly where the old minimap and compass tape used to be the only
+        /// instruments. `ChartInstrument` owns this flag.
+        public static bool ChartActive { get; internal set; }
+
         // --- is the sheet HUD the HUD right now? ---
 
         /// True while she is lying at an island that has a camp — the one
@@ -116,6 +145,32 @@ namespace SeaSick.UI.Sheets
         static bool suppress;
         static float nextEval;
         static AnchorController anchor;
+
+        /// **Statics outlive play mode here — the clock does not.**
+        ///
+        /// Domain reload is off in this project, so everything above survives
+        /// a play session while `Time.unscaledTime` restarts at zero. A
+        /// session that ran for five minutes therefore left `nextEval` at
+        /// ~300, and the NEXT session spent its first five minutes with the
+        /// throttle permanently closed, serving whatever `suppress` happened
+        /// to be when the last one stopped. The symptom is the worst kind:
+        /// the sheet HUD and the legacy IMGUI panels both draw, on top of
+        /// each other, and only on the second and later runs — so it looks
+        /// like a guard that does not work rather than a clock that moved.
+        ///
+        /// `GameBoot` documents the same trap for its own statics. Anything
+        /// static that stores a TIME has to be reset here.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetForPlay()
+        {
+            nextEval = 0f;
+            suppress = false;
+            anchor = null;
+            current = null;
+            ChartActive = false;
+            factories.Clear();
+            chartFactory = null;
+        }
 
         static void Evaluate()
         {
