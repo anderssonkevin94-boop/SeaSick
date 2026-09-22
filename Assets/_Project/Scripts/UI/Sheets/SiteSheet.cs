@@ -133,12 +133,16 @@ namespace SeaSick.UI.Sheets
             if (l == null || p == null) return;
             outpost.CatchUp();
 
-            int pct = Mathf.RoundToInt(p.Fill01 * 100f);
+            // **Both phases in one bar, 2026-09-23.** `Progress01` is the
+            // stocking in its first half and the raising in its second, so
+            // "everything delivered, nobody has started" reads 50 % -- the
+            // number the site's own phase line says in words underneath.
+            int pct = Mathf.RoundToInt(p.Progress01 * 100f);
             if (pct != ringKey)
             {
                 ringKey = pct;
                 if (big != null) big.text = pct + "%";
-                SheetBits.Swap(ring, SheetKit.Bar(p.Fill01, SheetTheme.Timber, 10f));
+                SheetBits.Swap(ring, SheetKit.Bar(p.Progress01, SheetTheme.Timber, 10f));
             }
 
             int builders = l.HandsOn(OutpostOrder.Build);
@@ -168,6 +172,9 @@ namespace SeaSick.UI.Sheets
             int brickLeft = Mathf.Max(0, p.brickNeeded - p.brickDone);
             long key = ((((long)p.done * 31 + p.stoneDone) * 31 + p.needed * 7 + p.stoneNeeded)
                        * 31 + builders) * 31 + (p.brickDone * 31 + p.brickNeeded);
+            // The building phase moves without any counter moving, so the
+            // key has to carry it or the sheet freezes at "stocked".
+            key = key * 31 + Mathf.RoundToInt(p.Build01 * 100f);
             if (key != chipsKey && chips != null)
             {
                 chipsKey = key;
@@ -190,9 +197,16 @@ namespace SeaSick.UI.Sheets
                         row.Add(SheetKit.Text($"{p.brickDone} of {p.brickNeeded} bricks", false, false, 12f));
                     chips.Add(SheetKit.Row(row.ToArray()));
                 }
-                string need = timberLeft == 0 && stoneLeft == 0 && brickLeft == 0
-                    ? "Stocked, everything it wants is here."
-                    : NeedSentence(timberLeft, stoneLeft, brickLeft);
+                // **The phase, in the site's own words** -- "stocking 3/6
+                // logs, 2/2 stone" or "building 40%". One string, shared
+                // with the camp page (`FireSheet.Note`), so the two cannot
+                // say different things about the same drawing.
+                chips.Add(SheetKit.Text(Cap(p.PhaseLine), true, false, 13f));
+                string need = !p.Stocked
+                    ? NeedSentence(timberLeft, stoneLeft, brickLeft)
+                    : p.Complete
+                        ? "Everything is in and it is going up."
+                        : "Everything it wants is here; now they raise it.";
                 chips.Add(SheetKit.Note(crew + ". " + need));
             }
 
@@ -222,7 +236,18 @@ namespace SeaSick.UI.Sheets
             // (BuildPlan.cs:86) -- so it only holds this clock at "ready to
             // raise" until the stores cover it; it never slows the estimate.
             int brickLeft = Mathf.Max(0, p.brickNeeded - p.brickDone);
-            if (timberLeft == 0 && stoneLeft == 0 && brickLeft == 0) return "ready to raise";
+            // **The building phase has its own clock, 2026-09-23.** A
+            // stocked site is not "ready to raise" any more -- it is being
+            // raised, and how long that takes is hand-days over hands.
+            if (p.Stocked)
+            {
+                if (p.Complete) return "ready to raise";
+                if (builders <= 0) return Nobody;
+                float left = (p.LabourNeeded - p.built) / builders;
+                if (left < 0.4f) return "nearly up";
+                if (left < 0.75f) return "about half a day of building left";
+                return $"about {left:0.#} days of building left";
+            }
             if (builders <= 0) return Nobody;
 
             float days = 0f;
@@ -230,6 +255,9 @@ namespace SeaSick.UI.Sheets
                 days += timberLeft / (builders * OutpostLedger.TimberPerHandPerDay);
             if (stoneLeft > 0 && OutpostLedger.StonePerHandPerDay > 0f)
                 days += stoneLeft / (builders * OutpostLedger.StonePerHandPerDay);
+            // ...and then they build it. Part of the wait, so the number
+            // does not jump when the last log lands.
+            days += (p.LabourNeeded - p.built) / builders;
 
             if (days < 0.75f) return "about half a day left";
             if (days < 1.5f) return "about a day left";

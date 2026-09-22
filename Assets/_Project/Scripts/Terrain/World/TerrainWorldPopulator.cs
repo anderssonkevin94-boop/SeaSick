@@ -289,7 +289,16 @@ namespace SeaSick.Terrain
                     village.Configure(settlement, Height,
                         terrain != null ? terrain.sandHeight + 1.2f : 4.4f,
                         Dock.ViewHalfWidth);
-                    village.Reserve(root.transform.position, 8f);      // the beacon
+                    // **No keep-out at the island's root any more
+                    // (2026-09-23).** It reserved 8 m for the beacon --
+                    // which stopped spawning on 2026-09-22, see above --
+                    // and the island's root is the middle of the village
+                    // clearing, so it was an invisible 8 m disc punched
+                    // through the best ground in the camp. Kevin: *"I
+                    // can't place blueprints on a lot of areas that look
+                    // clear."* This was one of them.
+                    // The head of the pier stays: that one is a real
+                    // structure the player can see.
                     if (site.found) village.Reserve(site.root, 14f);   // the head of the pier
                 }
 

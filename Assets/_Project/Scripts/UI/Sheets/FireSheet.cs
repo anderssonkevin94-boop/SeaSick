@@ -632,6 +632,8 @@ namespace SeaSick.UI.Sheets
                 if (q == null) continue;
                 key = key * 31L + (q.planId != null ? q.planId.GetHashCode() : 0);
                 key = key * 31L + q.done * 31L + q.stoneDone * 7L + q.brickDone;
+                // The building phase moves without a counter moving.
+                key = key * 31L + Mathf.RoundToInt(q.Build01 * 100f);
             }
             if (key == noteKey) return;
             noteKey = key;
@@ -674,13 +676,12 @@ namespace SeaSick.UI.Sheets
                 var plan = BuildPlans.Named(q.planId).WithLength(q.length);
                 string label = string.IsNullOrEmpty(plan.label) ? "something" : plan.label;
 
-                // "2/2 stone, 3/6 logs" -- what is IN it, per material it
-                // wants. A part it never wanted is not printed.
-                var parts = new List<string>(3);
-                if (q.needed > 0) parts.Add($"{Mathf.Min(q.done, q.needed)}/{q.needed} logs");
-                if (q.stoneNeeded > 0) parts.Add($"{Mathf.Min(q.stoneDone, q.stoneNeeded)}/{q.stoneNeeded} stone");
-                if (q.brickNeeded > 0) parts.Add($"{Mathf.Min(q.brickDone, q.brickNeeded)}/{q.brickNeeded} brick");
-                string stock = parts.Count == 0 ? "no cost" : string.Join(", ", parts);
+                // **The phase, 2026-09-23**: "stocking 3/6 logs, 2/2
+                // stone" while they fetch, then "building 40%" while they
+                // raise it. One string (`PendingBuild.PhaseLine`), shared
+                // with the drawing's own sheet, so the camp page and the
+                // blueprint cannot say different things.
+                string stock = q.PhaseLine;
 
                 // Only the site being SERVED gets the crew on it; the ones
                 // behind it in the queue are waiting their turn and say so,

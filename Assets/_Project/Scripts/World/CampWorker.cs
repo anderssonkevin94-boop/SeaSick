@@ -70,6 +70,11 @@ namespace SeaSick.World
         Vector3 claimAt;       // and where it stands
         float chopFor;         // how long he has been swinging at it
         bool hauling;          // carrying from the pile rather than cutting
+        /// **Standing the thing up rather than fetching for it, 2026-09-23.**
+        /// True for a builder whose site has every material in: he walks to
+        /// the drawing, swings a hammer at it and carries nothing. See
+        /// `PendingBuild.built` -- the ledger's second phase, mimed.
+        bool raising;
         Animal quarry;         // the beast he has claimed, if he is hunting
 
         Vector3 flyVel;        // thrown: metres a second, integrated here
@@ -526,6 +531,23 @@ namespace SeaSick.World
                     // since 2026-09-20 (`OutpostLedger.Step`, haul then cut),
                     // and a man walking past ten logs to fell a fresh one is
                     // the animation contradicting the arithmetic.
+                    // **The build phase first.** A site with everything in
+                    // it is being RAISED, and there is nothing left to
+                    // fetch for it -- the man goes to the drawing and works
+                    // on it. Same order the ledger spends its hand-days in
+                    // (`OutpostLedger.Step`), so the picture and the books
+                    // agree about what the camp is doing.
+                    var focus = camp != null && camp.Ledger != null ? camp.Ledger.Focus : null;
+                    raising = r.order == OutpostOrder.Build && focus != null && focus.Stocked;
+                    if (raising)
+                    {
+                        Vector3 sp = focus.At;
+                        sp.y = camp.GroundAt(sp);
+                        target = sp;
+                        hauling = false;
+                        phase = Phase.Going;
+                        return;
+                    }
                     string wantB = WhatFor(r);
                     hauling = r.order == OutpostOrder.Build && PileHas(wantB);
                     target = hauling ? PileSpot(wantB) : FindSomethingToWorkAt(r);
@@ -538,13 +560,24 @@ namespace SeaSick.World
                     phase = Phase.Working;
                     // Hoisting a log off a stack is a moment, not a shift.
                     wait = hauling ? LoadSeconds : SwingSeconds * Random.Range(0.85f, 1.35f);
-                    acting?.Set(hauling ? VillagerActing.Mode.None : ModeFor(WhatFor(r)));
+                    acting?.Set(raising ? VillagerActing.Mode.Hammer
+                        : hauling ? VillagerActing.Mode.None : ModeFor(WhatFor(r)));
                     return;
 
                 case Phase.Working:
                     Face(target - transform.position, dt);
                     wait -= dt;
                     if (wait > 0f) return;
+                    // Raising it: he swings at the frame and walks nothing
+                    // anywhere. The progress is the ledger's
+                    // (`OutpostLedger.PayBuild`); this is the picture of it.
+                    if (raising)
+                    {
+                        Drop();
+                        phase = Phase.Resting;
+                        wait = RestSeconds * 0.5f;
+                        return;
+                    }
                     // What they carry back is what the row says they are
                     // after — the only place this component reads an order
                     // for anything but a picture.
@@ -555,6 +588,17 @@ namespace SeaSick.World
                     return;
 
                 case Phase.Coming:
+                    // **Re-aimed every step, 2026-09-23.** Kevin: *"if the
+                    // building needed 1 more wood and all 4 villagers were
+                    // carrying wood to the building site they deposited the
+                    // wood even though the amount was already reached."*
+                    // Four men set off with the site short of one log; by
+                    // the time the second arrives it is short of none.
+                    // `Dropoff` asks the ledger which site still WANTS what
+                    // is on this man's shoulder, so the other three turn
+                    // mid-walk and take it to the pile (or to the next
+                    // drawing that is short of it) instead.
+                    dropAt = Dropoff(r, carrying);
                     if (!Walk(dropAt, dt)) return;
                     Drop();
                     phase = Phase.Resting;
@@ -853,7 +897,16 @@ namespace SeaSick.World
             // no longer buying -- so he leaves the wood and goes to the
             // rocks through the ordinary errand loop instead.
             if (r.order == OutpostOrder.Build)
+            {
+                // **A builder raising a stocked site is not cutting,
+                // 2026-09-23.** `WhatFor` falls back to Timber when the
+                // ledger has nothing left to fetch, so without this a
+                // builder in the BUILDING phase with an empty timber pile
+                // walked off to fell a tree instead of standing the hut up.
+                var f = camp != null && camp.Ledger != null ? camp.Ledger.Focus : null;
+                if (f != null && f.Stocked) return false;
                 return WhatFor(r) == Res.Timber && !PileHas(Res.Timber);
+            }
             return r.order == OutpostOrder.Gather && r.target == Res.Timber;
         }
 
@@ -1083,11 +1136,15 @@ namespace SeaSick.World
         /// the stack that resource belongs on.
         Vector3 Dropoff(OutpostHand r, string resource)
         {
-            // **The oldest site that still wants materials** -- `Focus` is
-            // the queue's one answer (2026-09-22), the same row
-            // `BuilderWants` names the material out of, so the man walks to
-            // the drawing whose need he is carrying.
-            var site = r.order == OutpostOrder.Build ? camp.Ledger?.Focus : null;
+            // **The oldest site that still wants THIS material** --
+            // `OutpostLedger.SiteWanting`, 2026-09-23. It used to be
+            // `Focus`, which is "the site the camp is on" and says nothing
+            // about whether that site is still short of the thing in this
+            // man's arms: it is the answer that walked a fourth log to a
+            // site that wanted one. Null (nobody wants it) falls through to
+            // the pile, which is where a surplus belongs.
+            var site = r != null && r.order == OutpostOrder.Build && camp.Ledger != null
+                ? camp.Ledger.SiteWanting(resource) : null;
             if (site != null)
             {
                 Vector3 p = site.At;

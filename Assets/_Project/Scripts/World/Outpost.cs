@@ -85,7 +85,17 @@ namespace SeaSick.World
         [SerializeField] int openCapacity = 30;
 
         [Tooltip("Metres between buildings -- room to walk round one, which is what a village looks like from above.")]
-        [SerializeField] float spacing = 6f;
+        /// **Air between two buildings' footprints, metres.**
+        ///
+        /// Kevin, 2026-09-23: *"I can't place blueprints on a lot of areas
+        /// that look clear."* This was 6 m, and it is added to the
+        /// CIRCUMSCRIBED circle of each footprint on BOTH sides -- so two
+        /// 8x5 huts (half-diagonal 4.7 m each) needed 12.4 m between their
+        /// centres, which on a phone screen is two huts that look a whole
+        /// hut apart and still refuse. The footprint is already generous
+        /// (a circle round a rectangle), so the constant only has to be a
+        /// path between them. 1.5 m is a man with a log.
+        [SerializeField] float spacing = 1.5f;
 
         readonly List<Building> built = new List<Building>();
         readonly List<Vector4> reserved = new List<Vector4>();   // xyz = point, w = radius
@@ -426,6 +436,11 @@ namespace SeaSick.World
                 // `BuildPlan.baseBrickCost`.
                 landed.brickDone = Mathf.Min(carried.brickDone, landed.brickNeeded);
                 landed.brickDonePart = carried.brickDonePart;
+                // The labour travels with the materials: picking a
+                // half-raised frame up and setting it down eight metres
+                // away does not un-build it.
+                landed.phased = true;
+                landed.built = Mathf.Min(carried.built, landed.LabourNeeded);
                 var drawn = BlueprintFor(landed);
                 if (drawn != null) drawn.Refresh(landed);
                 // Paid in full already? Then moving it finishes it.
@@ -488,6 +503,9 @@ namespace SeaSick.World
                 // without re-threading the blueprint. See
                 // `BuildPlan.baseBrickCost`.
                 brickNeeded = Mathf.Max(0, plan.brickCost),
+                // Born into the two phases; `MigratePending` only has work
+                // to do on rows that came out of an older save.
+                phased = true,
             };
             // Newest goes last: the queue is served oldest first.
             ledger.sites.Add(row);
@@ -1775,9 +1793,38 @@ namespace SeaSick.World
         /// The raid director only thinks about a camp somebody is standing
         /// at: a raid is something you FIGHT, so it happens in front of you.
         /// (What happens while you are away is the ledger's clock.)
+        /// Seconds between the self-ticks below.
+        const float CatchUpEvery = 0.25f;
+        float nextCatchUp;
+
         void Update()
         {
-            if (Watched && HasCamp) Combat.RaidDirector.Consider(this, Time.deltaTime);
+            // **The books settle on their own while a camp is watched,
+            // 2026-09-23.** Kevin: *"when the hut was completed it remained
+            // a blueprint even after it was completed, until I pressed on
+            // it."* `CatchUp` is what runs the tick AND what stands a
+            // finished site up (`FinishReady`), and until today nothing
+            // called it on its own: it rode on a sheet refresh, a Hand
+            // order, a crew delivery or an anchor drop. So a hut finished
+            // by the arithmetic sat there as a drawing until the player
+            // touched something. The tick itself advances on a fixed
+            // quantum of game time, so this adds reconciliation passes,
+            // not simulation -- and the camp page already ran one of them
+            // every frame whenever it was up.
+            if (!Watched) return;
+            // Four times a second, not sixty: `CatchUp` reconciles the
+            // props and the bodies as well as running the tick, and the
+            // tick itself only advances on a 0.1-day quantum anyway. A hut
+            // that finishes a quarter of a second before it stands up is a
+            // hut that stood up when it was finished; sixty passes of prop
+            // reconciliation a second on a phone is not.
+            nextCatchUp -= Time.unscaledDeltaTime;
+            if (nextCatchUp <= 0f)
+            {
+                nextCatchUp = CatchUpEvery;
+                CatchUp();
+            }
+            if (HasCamp) Combat.RaidDirector.Consider(this, Time.deltaTime);
         }
 
         // --- telling one hand what to do -------------------------------------
@@ -3025,16 +3072,19 @@ namespace SeaSick.World
             }
 
             float len = plan.footprint.x, wid = plan.footprint.y;
-            if (!Corners(at, Quaternion.Euler(0f, yaw, 0f), len, wid, out lo, out hi))
+            if (!Corners(at, Quaternion.Euler(0f, yaw, 0f), len, wid, out lo, out hi,
+                    out string footing))
             {
-                why = height(at.x, at.z) < minHeight
-                    ? "too low -- that is beach"
-                    : "the ground is too steep there";
+                // The corner test knows which of the two it tripped on and
+                // by how much; guessing from the CENTRE's height (what this
+                // used to do) reported "too steep" for a hut whose downhill
+                // corner was in the sand.
+                why = footing;
                 return false;
             }
 
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
-            if (!Clear(at, halfDiag)) { why = "something already stands there"; return false; }
+            if (!Clear(at, halfDiag, out string blocked)) { why = blocked; return false; }
             return true;
         }
 
@@ -3179,7 +3229,7 @@ namespace SeaSick.World
             if (-height(sea.x, sea.z) < BuildPlans.PierBerthDepth)
             { why = "the water here is too shallow for a pier"; return false; }
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
-            if (!Clear(at, halfDiag)) { why = "something already stands there"; return false; }
+            if (!Clear(at, halfDiag, out string blockedP)) { why = blockedP; return false; }
             return true;
         }
 
@@ -3194,13 +3244,27 @@ namespace SeaSick.World
         /// frame, because a stale one is a hole in the overlap rule.
         public PendingBuild IgnoreSite { get; set; }
 
-        bool Clear(Vector3 p, float halfDiag)
+        bool Clear(Vector3 p, float halfDiag) => Clear(p, halfDiag, out _);
+
+        bool Clear(Vector3 p, float halfDiag, out string why)
         {
+            why = "";
             foreach (var r in reserved)
             {
                 float dx = p.x - r.x, dz = p.z - r.z;
                 float need = halfDiag + r.w;
-                if (dx * dx + dz * dz < need * need) return false;
+                if (dx * dx + dz * dz < need * need)
+                {
+                    // **Say which kind of thing.** A reservation is either
+                    // a building that stands here (`buildingReservations`)
+                    // or a hand-placed keep-out -- the head of the pier.
+                    // "Something already stands there" over an invisible
+                    // keep-out is the refusal Kevin could not read.
+                    why = buildingReservations.Contains(r)
+                        ? "something already stands there"
+                        : $"that is inside the harbour's keep-out ({r.w:F0} m)";
+                    return false;
+                }
             }
 
             // **And every drawing already queued, 2026-09-22.** A blueprint
@@ -3221,7 +3285,11 @@ namespace SeaSick.World
                     float rHalf = 0.5f * Mathf.Sqrt(rl * rl + rw * rw) + spacing * 0.5f;
                     float dx = p.x - row.x, dz = p.z - row.z;
                     float need = halfDiag + rHalf;
-                    if (dx * dx + dz * dz < need * need) return false;
+                    if (dx * dx + dz * dz < need * need)
+                    {
+                        why = $"too close to the {plan.label} going up there";
+                        return false;
+                    }
                 }
             return true;
         }
@@ -3233,8 +3301,35 @@ namespace SeaSick.World
         /// as a whole.
         bool Corners(Vector3 p, Quaternion facing, float len, float wid,
             out float lo, out float hi)
+            => Corners(p, facing, len, wid, out lo, out hi, out _);
+
+        /// **The steepest ground a building will stand on, degrees.**
+        ///
+        /// Was `SettlementSite.BuildableSlope` (0.176, a hair under TEN
+        /// degrees) -- the threshold the world survey uses to find a flat
+        /// patch big enough for a whole village. Using the survey's number
+        /// for a single hut is what made Kevin's "areas that look clear"
+        /// refuse: this island style is sleek low hills (see the island
+        /// style v2 work), and almost nothing on one is under ten degrees.
+        ///
+        /// The honest limit is "ground the people who live here can walk",
+        /// which is `CampPath.MaxSlopeDegrees` (38). Pulled in a little
+        /// from that, because a floor is not a footpath and a hut on a 38
+        /// degree slope would need a storey of stilts under one corner.
+        /// This still refuses a cliff: 30 degrees over an 8x5 hut's 9.4 m
+        /// diagonal is a 5.4 m step, which is as far as the footing will
+        /// stretch.
+        public const float BuildSlopeDegrees = 30f;
+
+        /// The same limit as a rise-over-run, which is what the corners are
+        /// measured in.
+        public static float BuildSlope => Mathf.Tan(BuildSlopeDegrees * Mathf.Deg2Rad);
+
+        bool Corners(Vector3 p, Quaternion facing, float len, float wid,
+            out float lo, out float hi, out string fail)
         {
             lo = float.MaxValue; hi = float.MinValue;
+            fail = "";
             for (int sx = -1; sx <= 1; sx += 2)
                 for (int sz = -1; sz <= 1; sz += 2)
                 {
@@ -3243,9 +3338,20 @@ namespace SeaSick.World
                     if (h < lo) lo = h;
                     if (h > hi) hi = h;
                 }
-            if (lo < minHeight) return false;
+            if (lo < minHeight)
+            {
+                fail = "a corner of it is down on the beach";
+                return false;
+            }
             float span = Mathf.Sqrt(len * len + wid * wid);
-            return (hi - lo) / span <= Terrain.SettlementSite.BuildableSlope;
+            float slope = (hi - lo) / span;
+            if (slope > BuildSlope)
+            {
+                float deg = Mathf.Atan(slope) * Mathf.Rad2Deg;
+                fail = $"too steep -- {deg:F0}° across it, and {BuildSlopeDegrees:F0}° is the limit";
+                return false;
+            }
+            return true;
         }
     }
 }

@@ -43,6 +43,16 @@ namespace SeaSick.World
         const float AlphaEmpty = 0.22f;
         const float AlphaFull = 0.55f;
 
+        /// **How solid it gets while it is being RAISED (2026-09-23).** The
+        /// stocking phase fills it from `AlphaEmpty` to `AlphaFull`; the
+        /// building phase carries it from there to here, so a player can
+        /// tell the two apart at a glance -- a drawing getting less
+        /// see-through while nothing is being carried to it is a building
+        /// going up. It still stops short of 1: the moment it IS the
+        /// building, this object is destroyed and the real mesh stands in
+        /// its place (`Outpost.RaiseRow`).
+        const float AlphaRaising = 0.85f;
+
         /// Logs drawn in the stack beside it. The cost is small and the stack
         /// is the gauge, so every log delivered shows up as one more log.
         const int MaxDrawnLogs = 16;
@@ -117,10 +127,15 @@ namespace SeaSick.World
         /// last one.
         public void Refresh(PendingBuild p)
         {
-            float fill = p.Fill01;
+            // `Progress01` is the stocking in its first half and the
+            // raising in its second, so one number drives the whole ramp.
+            float fill = p.Progress01;
             if (ghost != null && Mathf.Abs(fill - drawnFill) > 0.02f)
             {
-                BuildingFactory.Tint(ghost, Mathf.Lerp(AlphaEmpty, AlphaFull, fill));
+                float a = fill <= 0.5f
+                    ? Mathf.Lerp(AlphaEmpty, AlphaFull, fill * 2f)
+                    : Mathf.Lerp(AlphaFull, AlphaRaising, (fill - 0.5f) * 2f);
+                BuildingFactory.Tint(ghost, a);
                 drawnFill = fill;
             }
 

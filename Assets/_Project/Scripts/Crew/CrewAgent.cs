@@ -308,7 +308,11 @@ namespace SeaSick.Crew
                 if (l.Building
                     && carriedResource == World.BuildPlans.Named(l.Pending.planId).resource)
                 {
-                    l.Pending.done++;
+                    // Through the ledger's door, not a bare increment: the
+                    // oldest site short of this material takes it, and a
+                    // site already stocked spills it to the pile instead of
+                    // counting past its need (Kevin, 2026-09-23).
+                    l.DeliverToSite(carriedResource, 1);
                     carriedResource = null;
                     // The last log finishes it, and the fire should be alight
                     // before the man has walked away from it.

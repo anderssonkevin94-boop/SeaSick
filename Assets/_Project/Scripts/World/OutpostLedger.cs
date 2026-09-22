@@ -184,11 +184,45 @@ namespace SeaSick.World
         /// (a pier). 0 means the plan's own footprint. See `BuildPlan.WithLength`.
         public float length;
 
+        /// **Hand-days of LABOUR spent standing it up, 2026-09-23.**
+        ///
+        /// Kevin: *"first the villagers should gather all the resources
+        /// necessary to build the building, THEN they start actually
+        /// building it which shouldn't take super long."* So a site has two
+        /// phases and this is the second one's clock. It accrues ONLY once
+        /// `Stocked` is true (`OutpostLedger.PayBuild`), which is the whole
+        /// of the change: before today the build-time half was folded into
+        /// the haul and a site was "done" the instant the last log landed.
+        ///
+        /// Measured in hand-days, so three builders spend it three times as
+        /// fast without this field knowing how many there are.
+        public float built;
+
+        /// **One-shot migration marker.** False in every save written before
+        /// the two phases existed; `OutpostLedger.MigratePending` reads it
+        /// once, decides what `built` should be for that old row, and sets
+        /// it. See the note there.
+        public bool phased;
+
         public Vector3 At => new Vector3(x, 0f, z);
-        /// Both parts, or the building is a drawing. A plan with no stone
-        /// price is complete on its timber exactly as it always was.
-        public bool Complete => done >= needed && stoneDone >= stoneNeeded
+
+        /// **Every material is in.** What `Complete` used to mean, and what
+        /// the STOCKING phase ends on. A plan with no stone price is stocked
+        /// on its timber exactly as it always was.
+        public bool Stocked => done >= needed && stoneDone >= stoneNeeded
             && brickDone >= brickNeeded;
+
+        /// Hand-days of labour this plan's size asks for once it is stocked.
+        public float LabourNeeded => OutpostLedger.LabourFor(this);
+
+        /// How far through the BUILDING phase, 0..1.
+        public float Build01 => LabourNeeded <= 0f
+            ? 1f : Mathf.Clamp01(built / LabourNeeded);
+
+        /// Stocked AND stood up: the row may leave the queue and become a
+        /// building. Two phases, so this is no longer the same question as
+        /// "has everything been delivered" -- that is `Stocked`.
+        public bool Complete => Stocked && built >= LabourNeeded;
 
         /// **One bar over both piles.** The drawing fills on what has been
         /// delivered against what it wants, timber and stone summed -- so a
@@ -204,6 +238,32 @@ namespace SeaSick.World
                 return Mathf.Clamp01(
                     (done + donePart + stoneDone + stoneDonePart
                      + brickDone + brickDonePart) / want);
+            }
+        }
+
+        /// **Both phases as one bar, 0..1.** The first half is the stocking,
+        /// the second half is the labour -- so a site at "everything
+        /// delivered, nobody has lifted a hammer" reads 50 %, which is the
+        /// truth and is also the moment Kevin wants to be able to see.
+        public float Progress01 => Stocked
+            ? 0.5f + 0.5f * Build01
+            : 0.5f * Fill01;
+
+        /// **What the site is doing, in the words the sheets print.**
+        /// "stocking 3/6 logs, 2/2 stone" then "building 40%".
+        public string PhaseLine
+        {
+            get
+            {
+                if (Stocked)
+                    return built >= LabourNeeded
+                        ? "going up"
+                        : $"building {Mathf.RoundToInt(Build01 * 100f)}%";
+                var parts = new System.Collections.Generic.List<string>(3);
+                if (needed > 0) parts.Add($"{Mathf.Min(done, needed)}/{needed} logs");
+                if (stoneNeeded > 0) parts.Add($"{Mathf.Min(stoneDone, stoneNeeded)}/{stoneNeeded} stone");
+                if (brickNeeded > 0) parts.Add($"{Mathf.Min(brickDone, brickNeeded)}/{brickNeeded} brick");
+                return parts.Count == 0 ? "stocking" : "stocking " + string.Join(", ", parts);
             }
         }
 
@@ -728,6 +788,34 @@ namespace SeaSick.World
             // re-null it.
             if (!string.IsNullOrEmpty(pending.planId)) sites.Insert(0, pending);
             pending = null;
+            PhaseOldRows();
+        }
+
+        /// **An old save into the two phases, 2026-09-23.**
+        ///
+        /// Before today "everything delivered" WAS "finished", so a saved
+        /// row that is `Stocked` was, in that save's own terms, done -- it
+        /// was sitting there waiting for `Outpost.FinishReady` to find a
+        /// scene to stand it in. Giving it its labour outright keeps that
+        /// promise: it raises on the next `CatchUp`, exactly as it would
+        /// have. A row that was NOT stocked had no build progress to carry
+        /// (the old `donePart` is a fraction of a LOG, not a fraction of a
+        /// day's work), so it starts the building phase at zero.
+        ///
+        /// One shot per row, marked by `PendingBuild.phased`, so calling
+        /// this from `MigratePending` -- which is called from everywhere --
+        /// costs one bool test per site after the first time.
+        void PhaseOldRows()
+        {
+            if (sites == null) return;
+            for (int i = 0; i < sites.Count; i++)
+            {
+                var s = sites[i];
+                if (s == null || s.phased) continue;
+                s.phased = true;
+                if (s.Stocked) s.built = LabourFor(s);
+                else s.built = 0f;
+            }
         }
 
         /// **The site the camp is working on**: the oldest one that is not
@@ -744,6 +832,81 @@ namespace SeaSick.World
                     if (sites[i] != null && !sites[i].Complete) return sites[i];
                 return null;
             }
+        }
+
+        /// **The oldest site still short of materials, 2026-09-23.**
+        ///
+        /// `Focus` used to answer this, back when a site stopped wanting
+        /// anything the moment it was paid for. With a building phase a
+        /// site can be the focus (it is being stood up) and want nothing,
+        /// and a hauler asking `Focus` where to put a log would walk it to
+        /// a finished stack. This is the haul question; `Focus` is the
+        /// "which site is the camp on" question.
+        public PendingBuild StockingFocus
+        {
+            get
+            {
+                if (sites == null) return null;
+                for (int i = 0; i < sites.Count; i++)
+                    if (sites[i] != null && !sites[i].Stocked) return sites[i];
+                return null;
+            }
+        }
+
+        /// **The oldest site that still wants THIS material, or null.**
+        ///
+        /// Kevin, 2026-09-23: *"if the building needed 1 more wood and all 4
+        /// villagers were carrying wood ... they deposited the wood even
+        /// though the amount was already reached."* This is the answer a
+        /// hauler re-asks every step of the walk home: the moment the need
+        /// is met it returns the NEXT site that wants it, or null, and null
+        /// means the camp pile. Nothing is ever carried into a site that is
+        /// not short of it.
+        public PendingBuild SiteWanting(string resource)
+        {
+            if (sites == null || string.IsNullOrEmpty(resource)) return null;
+            for (int i = 0; i < sites.Count; i++)
+                if (RemainingOf(sites[i], resource) > 0) return sites[i];
+            return null;
+        }
+
+        /// Whole units of `resource` this site is still short of. 0 for a
+        /// material it never wanted, and never negative.
+        public static int RemainingOf(PendingBuild p, string resource)
+        {
+            if (p == null || string.IsNullOrEmpty(resource)) return 0;
+            if (resource == Res.Timber) return Mathf.Max(0, p.needed - p.done);
+            if (resource == Res.Stone) return Mathf.Max(0, p.stoneNeeded - p.stoneDone);
+            if (resource == Res.Brick) return Mathf.Max(0, p.brickNeeded - p.brickDone);
+            return 0;
+        }
+
+        /// **Put whole delivered units where they belong.**
+        ///
+        /// The one door a BODY walking a load in should use: units go into
+        /// the oldest site short of that material, up to what it is short
+        /// of, and the surplus lands on the camp pile instead of pushing a
+        /// counter past its need. Nothing is dropped -- the pile takes the
+        /// remainder whether or not it is over the fire's ceiling, because
+        /// a log that has been carried here exists.
+        public int DeliverToSite(string resource, int n)
+        {
+            if (string.IsNullOrEmpty(resource) || n <= 0) return 0;
+            MigratePending();
+            int left = n;
+            while (left > 0)
+            {
+                var site = SiteWanting(resource);
+                if (site == null) break;
+                int room = RemainingOf(site, resource);
+                int take = Mathf.Min(room, left);
+                if (resource == Res.Timber) site.done += take;
+                else if (resource == Res.Stone) site.stoneDone += take;
+                else if (resource == Res.Brick) site.brickDone += take;
+                left -= take;
+            }
+            if (left > 0) Store(resource, true).whole += left;
+            return n;
         }
 
         /// The row a sheet means when it says "the blueprint" without naming
@@ -1155,6 +1318,36 @@ namespace SeaSick.World
         /// rounded up to a whole number a player can count in days. **A
         /// guess, never played**, 2026-09-21.
         public const float StonePerHandPerDay = 3f;
+
+        /// **How long one pair of hands takes to stand up a hut once every
+        /// stick of it is on the ground, in game-days, 2026-09-23.**
+        ///
+        /// Kevin: the building phase *"shouldn't take super long"*. Half a
+        /// day for a plan of the reference size, scaled by how much stuff
+        /// the plan is made of and clamped either side so the cheapest thing
+        /// on the list is not instant and the most expensive is not a week.
+        /// Three builders spend three hand-days a day, so three hands do it
+        /// in a third of the time -- that falls out of the unit, not out of
+        /// a special case.
+        public const float BuildDaysPerHand = 0.5f;
+
+        /// Materials a plan of the reference size is made of. A hut is 6
+        /// logs + 2 stone = 8, so a hut is a shade over the reference and
+        /// costs about 0.67 hand-days to raise.
+        public const float ReferenceMaterials = 6f;
+
+        /// Hand-days of labour a site's BUILDING phase costs.
+        /// `Mathf.Clamp` either side: nothing under a quarter-day (a
+        /// campfire is four logs and should still be a job), nothing over
+        /// one and a half (a 24-log sawmill).
+        public static float LabourFor(PendingBuild p)
+        {
+            if (p == null) return 0f;
+            float stuff = Mathf.Max(0, p.needed) + Mathf.Max(0, p.stoneNeeded)
+                + Mathf.Max(0, p.brickNeeded);
+            if (stuff <= 0f) return 0f;          // a free plan is free to raise
+            return BuildDaysPerHand * Mathf.Clamp(stuff / ReferenceMaterials, 0.5f, 3f);
+        }
         /// Food a day one farmhand brings in off a farm's field
         /// (`BuildPlans.Farm.rate`). Half again the felling rate: the wheat
         /// is planted in rows beside the camp, not found. **A guess, never
@@ -1172,7 +1365,7 @@ namespace SeaSick.World
         {
             get
             {
-                var f = Focus;
+                var f = StockingFocus;
                 return f != null && !f.TimberPaid
                     && CountOf(Res.Timber) <= 0 && Wood.standing < 1f;
             }
@@ -1186,7 +1379,7 @@ namespace SeaSick.World
         {
             get
             {
-                var f = Focus;
+                var f = StockingFocus;
                 if (f == null || f.StonePaid) return false;
                 if (CountOf(Res.Stone) > 0) return false;
                 var seam = Stock(Res.Stone);
@@ -1356,6 +1549,54 @@ namespace SeaSick.World
             labour -= gotB / TimberPerHandPerDay;
         }
 
+        /// **The second phase: spend hand-days standing it up.**
+        ///
+        /// Only ever called on a `Stocked` site, and it takes no materials
+        /// at all -- everything it is made of is already on the ground.
+        /// `labour` is hand-days, so three builders in one tick hand this
+        /// three times as much and it finishes in a third of the time
+        /// without knowing there are three of them.
+        void PayBuild(PendingBuild pending, ref float labour)
+        {
+            if (pending == null || labour <= 0f) return;
+            float want = pending.LabourNeeded - pending.built;
+            if (want <= 0f) return;
+            float spend = Mathf.Min(labour, want);
+            pending.built += spend;
+            labour -= spend;
+        }
+
+        /// **Nothing in a site above what the site asked for, 2026-09-23.**
+        ///
+        /// The arithmetic (`Haul`) has always clamped to `room`, but a BODY
+        /// can put a whole unit in from outside the tick -- `CrewAgent` does
+        /// exactly that when a ship's hand walks a log into a blueprint. If
+        /// one lands on a counter that was already full, the surplus is
+        /// moved to the camp pile here, at the top of the tick, before
+        /// anything reads a count. Never destroyed: the pile takes it even
+        /// past the fire's ceiling, because the log exists.
+        void ReconcileSites()
+        {
+            if (sites == null) return;
+            for (int i = 0; i < sites.Count; i++)
+            {
+                var s = sites[i];
+                if (s == null) continue;
+                Spill(ref s.done, s.needed, Res.Timber);
+                Spill(ref s.stoneDone, s.stoneNeeded, Res.Stone);
+                Spill(ref s.brickDone, s.brickNeeded, Res.Brick);
+                if (s.built > s.LabourNeeded) s.built = s.LabourNeeded;
+            }
+        }
+
+        void Spill(ref int done, int need, string resource)
+        {
+            if (done <= need) return;
+            int extra = done - need;
+            done = need;
+            Store(resource, true).whole += extra;
+        }
+
         void PayStone(PendingBuild pending, ref float labour)
         {
             if (pending == null) return;
@@ -1475,7 +1716,10 @@ namespace SeaSick.World
             {
                 // **The OLDEST unstocked site, and only that one.** The
                 // queue's whole rule, in the one place every body reads.
-                var p = Focus;
+                // **`StockingFocus`, not `Focus`, since 2026-09-23.** A
+                // site in its BUILDING phase is the focus and wants
+                // nothing; the haulers should be filling the next one.
+                var p = StockingFocus;
                 if (p == null) return null;
                 if (!p.TimberPaid) return Res.Timber;
                 if (!p.StonePaid) return Res.Stone;
@@ -1486,6 +1730,11 @@ namespace SeaSick.World
         /// One quantum of work. The only place the outpost's state changes.
         void Step(float days)
         {
+            // Anything a body over-delivered since the last tick goes on the
+            // pile before a single count is read. See `ReconcileSites`.
+            MigratePending();
+            ReconcileSites();
+
             // Regrowth first, so a camp that stripped its ground last step has
             // something to cut this one rather than the order of operations
             // deciding the answer.
@@ -1536,6 +1785,20 @@ namespace SeaSick.World
                     var site = sites[si];
                     if (site == null || site.Complete) continue;
 
+                    // **Two phases, 2026-09-23.** Stock it first -- every
+                    // log, every stone -- and only then does anybody start
+                    // building. No labour accrues into a site that is still
+                    // short of something, which is the whole of Kevin's
+                    // note: *"first the villagers should gather all the
+                    // resources necessary to build the building, THEN they
+                    // start actually building it."*
+                    if (site.Stocked)
+                    {
+                        PayBuild(site, ref labour);
+                        if (site.Complete) away.raised.Add(site.planId);
+                        continue;
+                    }
+
                     PayTimber(site, ref labour);
                     // --- and then the stone, 2026-09-21 ----------------------
                     //
@@ -1555,6 +1818,11 @@ namespace SeaSick.World
                     // arithmetic just answered.
                     PayStone(site, ref labour);
                     PayBrick(site, ref labour);
+
+                    // Stocked by this very tick, with the day not spent?
+                    // Then they start building it now rather than standing
+                    // about until the next quantum.
+                    if (site.Stocked) PayBuild(site, ref labour);
 
                     // The record of who's away doesn't care whether the raise
                     // was seen -- `Outpost.FinishReady` handles standing the
