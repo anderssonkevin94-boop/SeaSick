@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using SeaSick.World;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -141,8 +142,13 @@ namespace SeaSick.UI.Sheets
 
             int timberLeft = Mathf.Max(0, p.needed - p.done);
             int stoneLeft = Mathf.Max(0, p.stoneNeeded - p.stoneDone);
-            long key = (((long)p.done * 31 + p.stoneDone) * 31 + p.needed * 7 + p.stoneNeeded)
-                       * 31 + builders;
+            // Brick is `BuildPlan.brickCost` reaching the site -- zero on
+            // every plan today (BuildPlan.cs:80), so `p.brickNeeded` is zero
+            // and this whole branch is dormant until an upgrade actually
+            // prices itself in bricks.
+            int brickLeft = Mathf.Max(0, p.brickNeeded - p.brickDone);
+            long key = ((((long)p.done * 31 + p.stoneDone) * 31 + p.needed * 7 + p.stoneNeeded)
+                       * 31 + builders) * 31 + (p.brickDone * 31 + p.brickNeeded);
             if (key != chipsKey)
             {
                 chipsKey = key;
@@ -152,17 +158,23 @@ namespace SeaSick.UI.Sheets
                 // timber and 3 stone" is the same sentence twice, and on a
                 // site nobody has carried a log to yet the first of them is
                 // pure noise.
-                if (p.done > 0 || p.stoneDone > 0)
-                    chips.Add(SheetKit.Row(
+                if (p.done > 0 || p.stoneDone > 0 || p.brickDone > 0)
+                {
+                    var row = new List<VisualElement>
+                    {
                         SheetKit.Text($"{p.done} of {p.needed} timber", false, false, 12f),
                         p.stoneNeeded > 0
                             ? SheetKit.Text($"{p.stoneDone} of {p.stoneNeeded} stone", false, false, 12f)
-                            : SheetKit.Text("", false, true, 12f)));
-                chips.Add(SheetKit.Note(crew + ". " + (
-                    timberLeft == 0 && stoneLeft == 0 ? "Stocked, everything it wants is here."
-                    : stoneLeft == 0 ? $"Needs {timberLeft} timber."
-                    : timberLeft == 0 ? $"Needs {stoneLeft} stone."
-                    : $"Needs {timberLeft} timber, {stoneLeft} stone.")));
+                            : SheetKit.Text("", false, true, 12f),
+                    };
+                    if (p.brickNeeded > 0)
+                        row.Add(SheetKit.Text($"{p.brickDone} of {p.brickNeeded} bricks", false, false, 12f));
+                    chips.Add(SheetKit.Row(row.ToArray()));
+                }
+                string need = timberLeft == 0 && stoneLeft == 0 && brickLeft == 0
+                    ? "Stocked, everything it wants is here."
+                    : NeedSentence(timberLeft, stoneLeft, brickLeft);
+                chips.Add(SheetKit.Note(crew + ". " + need));
             }
 
             if (addHand != null)
@@ -186,7 +198,12 @@ namespace SeaSick.UI.Sheets
             if (p == null) return "not started";
             int timberLeft = Mathf.Max(0, p.needed - p.done);
             int stoneLeft = Mathf.Max(0, p.stoneNeeded - p.stoneDone);
-            if (timberLeft == 0 && stoneLeft == 0) return "ready to raise";
+            // Brick has no per-hand pace below -- `OutpostLedger.PayBrick`
+            // pays it straight out of the pile, never off a hand's back
+            // (BuildPlan.cs:86) -- so it only holds this clock at "ready to
+            // raise" until the stores cover it; it never slows the estimate.
+            int brickLeft = Mathf.Max(0, p.brickNeeded - p.brickDone);
+            if (timberLeft == 0 && stoneLeft == 0 && brickLeft == 0) return "ready to raise";
             if (builders <= 0) return Nobody;
 
             float days = 0f;
@@ -202,6 +219,23 @@ namespace SeaSick.UI.Sheets
 
         static string Cap(string s) =>
             string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
+
+        /// "Needs 5 timber, 3 stone and 2 bricks." -- one clause per short
+        /// pile that is still owed, joined the way a person would say them.
+        /// Bricks come last: they are the one thing here nobody can walk out
+        /// and gather (BuildPlan.cs:86), so the list ends on the part that is
+        /// waiting on the fire's own stores rather than on a hand's back.
+        static string NeedSentence(int timberLeft, int stoneLeft, int brickLeft)
+        {
+            var parts = new List<string>(3);
+            if (timberLeft > 0) parts.Add($"{timberLeft} timber");
+            if (stoneLeft > 0) parts.Add($"{stoneLeft} stone");
+            if (brickLeft > 0) parts.Add($"{brickLeft} bricks");
+            if (parts.Count == 0) return "Stocked, everything it wants is here.";
+            if (parts.Count == 1) return $"Needs {parts[0]}.";
+            if (parts.Count == 2) return $"Needs {parts[0]}, {parts[1]}.";
+            return $"Needs {parts[0]}, {parts[1]} and {parts[2]}.";
+        }
 
         // --- the three verbs ------------------------------------------------------
 

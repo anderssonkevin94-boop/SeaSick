@@ -21,6 +21,13 @@ namespace SeaSick.World
         /// lie alongside. Half of it stands over the sea, so it is sited,
         /// tested and stood up by its own rules -- see `Outpost.SnapPier`.
         Pier,
+        /// **A working yard rather than a room, 2026-09-22.** An open-fronted
+        /// stone shed with a cut face beside it and squared brick stacked at
+        /// the front. It is a `BuildKind` rather than a detail hung off the
+        /// plan id because what a quarry looks like is not a hut with an
+        /// ornament on it: three walls, no fourth, and a low roof. Sited,
+        /// tested and footed exactly like a hut -- only the geometry differs.
+        Quarry,
     }
 
     public struct BuildPlan
@@ -61,6 +68,29 @@ namespace SeaSick.World
         /// stone price can never escape an experiment the timber price is in.
         public int stoneCost => BuildPlans.PlaytestCostCap > 0
             ? Mathf.Min(baseStoneCost, BuildPlans.PlaytestCostCap) : baseStoneCost;
+
+        /// **The third part of a price, and nothing charges it yet,
+        /// 2026-09-22.** Kevin asked for a quarry that makes "bricks for
+        /// future building upgrades" -- so the brick has to be spendable
+        /// before there is anything to spend it on, or the upgrade pass
+        /// arrives and has to thread a whole new material through the
+        /// blueprint, the site, the sheet and the save at the same time as
+        /// it designs what an upgrade is.
+        ///
+        /// Zero on every plan below. `PendingBuild.brickNeeded` is therefore
+        /// zero on every site, `OutpostLedger.PayBrick` sees no room and
+        /// returns having touched nothing, and every reader that prints a
+        /// price is gated on `> 0` -- so today this changes nothing at all,
+        /// which is exactly the property that makes it safe to land now.
+        ///
+        /// **Paid from the pile only, never from the ground.** Timber can be
+        /// cut and stone can be quarried where the blueprint stands; a brick
+        /// cannot be found on an island at all. Somebody made it at a quarry
+        /// and it is lying by the fire, or the building waits.
+        public int baseBrickCost;
+        /// What anything pays, under the same playtest cap as the other two.
+        public int brickCost => BuildPlans.PlaytestCostCap > 0
+            ? Mathf.Min(baseBrickCost, BuildPlans.PlaytestCostCap) : baseBrickCost;
         /// Units of stores it adds to what this place can keep, PER RESOURCE.
         public int storeCapacity;
         /// Metres: length along the ridge, then width across it.
@@ -382,6 +412,43 @@ namespace SeaSick.World
             position = "lookout",
         };
 
+        /// **The quarry, 2026-09-22.** Kevin: *"we need a stone quarry
+        /// building that takes rough stone and turns them into bricks for
+        /// future building upgrades."*
+        ///
+        /// The sawmill's shape exactly, one material along: a quarryman takes
+        /// Stone off the pile and puts Brick back, one for one, at two a day.
+        /// Two rather than the sawmill's three because a stone is cut, not
+        /// sawn -- and because the pile it eats from fills at 2.5 a day
+        /// (`Res.GatherRate`), so one quarryman and one stone-gatherer very
+        /// nearly balance and the pair of them is a legible unit of work.
+        ///
+        /// Twenty-two logs and six stone: a shade under the sawmill's
+        /// twenty-four because there is less roof on it, and the most stone
+        /// of any camp building except the watchtower, because a yard for
+        /// cutting rock is mostly rock. **All guesses, none played.**
+        /// (Capped at 5 for the playtest -- see `PlaytestCostCap`.)
+        ///
+        /// No kit model to wear, so like the watchtower and the pier it
+        /// stands extruded -- as `BuildKind.Quarry`, which is a three-walled
+        /// shed with a cut face and a brick stack rather than a hut.
+        public static readonly BuildPlan Quarry = new BuildPlan
+        {
+            id = "Quarry",
+            kind = BuildKind.Quarry,
+            baseStoneCost = 6,
+            label = "quarry",
+            blurb = "a quarryman cuts rough stone into brick",
+            resource = Res.Timber,
+            baseCost = 22,
+            footprint = new Vector2(7.4f, 5.8f),
+            ridge = 2.9f,
+            position = "quarryman",
+            takes = Res.Stone,
+            makes = Res.Brick,
+            rate = 2f,
+        };
+
         /// **A pier, 2026-09-21.** Kevin: *"I'd like a pier asset to be
         /// buildable to make it easier to dock with the island."*
         ///
@@ -428,7 +495,7 @@ namespace SeaSick.World
         /// same blueprint, so keeping it in the list is what stops it becoming
         /// a special case.
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Hut, Farm, Sawmill, Kitchen, Blacksmith, Watchtower, Pier };
+            { Campfire, Storage, Hut, Farm, Sawmill, Quarry, Kitchen, Blacksmith, Watchtower, Pier };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.

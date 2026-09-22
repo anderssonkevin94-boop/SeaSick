@@ -67,6 +67,15 @@ namespace SeaSick.World
         /// Made, not found. A camp with nobody assigned never sees these.
         public const string Boards = "Boards";
         public const string Tools = "Tools";
+        /// **Rough stone, cut square, 2026-09-22.** Kevin: *"a stone quarry
+        /// building that takes rough stone and turns them into bricks for
+        /// future building upgrades."* The far side of a quarryman exactly as
+        /// Boards is the far side of a sawyer -- gathered stone goes in, a
+        /// squared brick comes out, and nothing builds out of them yet. That
+        /// is on purpose: `BuildPlan.brickCost` exists and is zero everywhere,
+        /// so the good is in the world and priced at nothing until an upgrade
+        /// asks for it.
+        public const string Brick = "Brick";
         public const string Food = "Food";
         public const string Meals = "Meals";
 
@@ -131,6 +140,10 @@ namespace SeaSick.World
             Ore => new Color(0.48f, 0.40f, 0.26f),
             Spice => new Color(0.75f, 0.35f, 0.55f),
             Boards => new Color(0.66f, 0.50f, 0.30f),
+            // Fired clay gone grey with the dust of the yard it was cut in:
+            // warm enough not to be read as another pile of rough stone,
+            // grey enough to be read as masonry rather than as food.
+            Brick => new Color(0.62f, 0.42f, 0.35f),
             Tools => new Color(0.40f, 0.44f, 0.50f),
             Food => new Color(0.55f, 0.62f, 0.28f),
             Game => new Color(0.42f, 0.20f, 0.16f),

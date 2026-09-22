@@ -80,12 +80,18 @@ namespace SeaSick.World
         /// missing, I can't see their gathered versions anywhere."* They
         /// were there, just unreadable as stone or food specifically, so
         /// each family now gets its own silhouette.
-        enum PileShape { Logs, Cairn, Sacks, Heap }
+        enum PileShape { Logs, Cairn, Courses, Sacks, Heap }
 
         static PileShape ShapeFor(string resource)
         {
             if (resource == Res.Timber || resource == Res.Boards) return PileShape.Logs;
             if (resource == Res.Stone || resource == Res.Ore) return PileShape.Cairn;
+            // **Brick is the opposite of a cairn and that is the whole
+            // point**, 2026-09-22: rough stone lies where it was tipped,
+            // brick is stacked by somebody who cut it square. A pile of
+            // brick beside a pile of stone should read, at a glance and from
+            // the air, as the same material after a day's work.
+            if (resource == Res.Brick) return PileShape.Courses;
             if (resource == Res.Food || resource == Res.Game) return PileShape.Sacks;
             return PileShape.Heap;
         }
@@ -129,6 +135,9 @@ namespace SeaSick.World
                         break;
                     case PileShape.Cairn:
                         BuildCairnBlock(stack, mat, i, row, col, seed);
+                        break;
+                    case PileShape.Courses:
+                        BuildBrickCourse(stack, mat, row, col);
                         break;
                     case PileShape.Sacks:
                         BuildSack(stack, resource, i, row, col);
@@ -202,6 +211,27 @@ namespace SeaSick.World
             go.transform.localPosition = new Vector3(
                 (col - 1) * 0.5f, 0.12f + row * 0.20f,
                 ((i % 5) - 2) * 0.14f);
+        }
+
+        /// Brick: neat staggered courses. Flat cubes of one size laid in
+        /// rows of three, every other row shifted half a brick along, the
+        /// way a course is actually bonded -- so the silhouette is a low
+        /// rectangular block with a stepped edge, which is nothing else in
+        /// the camp. No jitter and no rotation at all: the irregularity is
+        /// what says "rock", and a brick stack has to say the opposite.
+        static void BuildBrickCourse(Transform stack, Material mat, int row, int col)
+        {
+            var go = NewPrimitive(stack, PrimitiveType.Cube, mat);
+            go.transform.localScale = new Vector3(0.36f, 0.12f, 0.18f);
+            // Half a brick's shift on the odd courses, and a hair of gap
+            // between bricks so the row reads as laid rather than as one
+            // long slab.
+            float stagger = (row % 2 == 1) ? 0.19f : 0f;
+            go.transform.localRotation = Quaternion.identity;
+            go.transform.localPosition = new Vector3(
+                (col - 1) * 0.38f + stagger,
+                0.07f + row * 0.13f,
+                0f);
         }
 
         /// Food/game: squashed sacks with a darker "band" (a second, smaller

@@ -161,6 +161,20 @@ namespace SeaSick.World
         public int stoneDone;
         public float stoneDonePart;
 
+        /// **The brick part, 2026-09-22.** Same three fields again, and
+        /// zero on every plan there is -- see `BuildPlan.baseBrickCost` for
+        /// why it exists before anything charges it. A save written before
+        /// this existed restores all three as 0, which reads exactly as
+        /// "this one wanted no brick", the same way the stone part did.
+        ///
+        /// **The one that cannot be paid out of the ground.** Timber is cut
+        /// and stone is quarried where the blueprint stands; a brick was
+        /// made at a quarry by somebody and is either on the pile or it is
+        /// not. `OutpostLedger.PayBrick` has no seam half at all.
+        public int brickNeeded;
+        public int brickDone;
+        public float brickDonePart;
+
         /// Which way it faces, world degrees. **Carried here rather than
         /// recomputed**, because since 2026-09-19 the player turns it by hand
         /// in 45-degree steps, and a blueprint that came back from a save
@@ -173,7 +187,8 @@ namespace SeaSick.World
         public Vector3 At => new Vector3(x, 0f, z);
         /// Both parts, or the building is a drawing. A plan with no stone
         /// price is complete on its timber exactly as it always was.
-        public bool Complete => done >= needed && stoneDone >= stoneNeeded;
+        public bool Complete => done >= needed && stoneDone >= stoneNeeded
+            && brickDone >= brickNeeded;
 
         /// **One bar over both piles.** The drawing fills on what has been
         /// delivered against what it wants, timber and stone summed -- so a
@@ -184,10 +199,11 @@ namespace SeaSick.World
         {
             get
             {
-                float want = needed + stoneNeeded;
+                float want = needed + stoneNeeded + brickNeeded;
                 if (want <= 0f) return 1f;
                 return Mathf.Clamp01(
-                    (done + donePart + stoneDone + stoneDonePart) / want);
+                    (done + donePart + stoneDone + stoneDonePart
+                     + brickDone + brickDonePart) / want);
             }
         }
 
@@ -195,6 +211,7 @@ namespace SeaSick.World
         /// blueprint is drawn from.
         public bool TimberPaid => done >= needed;
         public bool StonePaid => stoneDone >= stoneNeeded;
+        public bool BrickPaid => brickDone >= brickNeeded;
     }
 
     /// **A building that stands here, and WHERE.**
@@ -1181,6 +1198,35 @@ namespace SeaSick.World
             labour -= got / StonePerHandPerDay;
         }
 
+        /// **Pay the brick part out of `labour` hand-days -- from the pile
+        /// and from nowhere else.**
+        ///
+        /// The haul half of `PayStone` with the seam half deleted rather than
+        /// left empty, because there is no seam: nobody quarries a brick out
+        /// of a hillside. A site short of brick therefore stalls until
+        /// somebody makes some, which is the whole point of putting a good
+        /// on the far side of a building.
+        ///
+        /// Runs last, out of whatever the timber and stone parts left, so a
+        /// plan with `brickNeeded == 0` is bit-identical to the old path --
+        /// `room <= 0` and it returns having touched nothing.
+        void PayBrick(ref float labour)
+        {
+            if (pending == null) return;
+            float room = (pending.brickNeeded - pending.brickDone) - pending.brickDonePart;
+            if (room <= 0f || labour <= 0f) return;
+
+            var pile = Store(Res.Brick);
+            if (pile == null || pile.whole <= 0) return;
+
+            float canHaul = labour * HaulPerHandPerDay;
+            int hauled = Mathf.FloorToInt(Mathf.Min(canHaul, Mathf.Min(pile.whole, room)));
+            if (hauled <= 0) return;
+            pile.whole -= hauled;
+            pending.brickDone += hauled;
+            labour -= hauled / HaulPerHandPerDay;
+        }
+
         /// **What a builder here should be fetching right now**: logs until
         /// the timber part is paid, then stone, then nothing. One answer, so
         /// the arithmetic (`Step`), the body (`CampWorker`) and the mime all
@@ -1191,7 +1237,8 @@ namespace SeaSick.World
             {
                 if (pending == null || pending.Complete) return null;
                 if (!pending.TimberPaid) return Res.Timber;
-                return pending.StonePaid ? null : Res.Stone;
+                if (!pending.StonePaid) return Res.Stone;
+                return pending.BrickPaid ? null : Res.Brick;
             }
         }
 
@@ -1305,6 +1352,7 @@ namespace SeaSick.World
                     // `standing < 1` as "worked out" and would hide every
                     // boulder on the island.
                     PayStone(ref labour);
+                    PayBrick(ref labour);
                 }
             }
             // The record of who's away doesn't care whether the raise was

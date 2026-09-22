@@ -230,7 +230,9 @@ namespace SeaSick.UI
                         // is still a row the world cannot be tapped through.
                         UIBlocker.Block(pr);
                         if (GUI.Button(pr,
-                                plan.stoneCost > 0
+                                plan.brickCost > 0
+                                    ? $"{plan.label} — {plan.cost} timber {plan.stoneCost} stone {plan.brickCost} brick"
+                                    : plan.stoneCost > 0
                                     ? $"{plan.label} — {plan.cost} timber {plan.stoneCost} stone"
                                     : $"{plan.label} — {plan.cost} timber", sub))
                         {

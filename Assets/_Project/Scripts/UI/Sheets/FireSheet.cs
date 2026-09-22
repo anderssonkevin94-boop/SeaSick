@@ -176,16 +176,36 @@ namespace SeaSick.UI.Sheets
         /// Timber, stone and food always; anything else only when the camp
         /// actually holds some, the same rule `CampSheet.BuildRows` follows --
         /// a kind that has been carried away entirely drops off the list.
+        /// Boards, Tools and Brick are made, not found, so "holds some" is
+        /// not the only way one earns its place here -- a quarryman with an
+        /// empty brick pile is still worth a tile, so a hand assigned to a
+        /// building that makes the kind counts too (`AnyWorkerMakes`).
         static readonly string[] Always = { Res.Timber, Res.Stone, Res.Food };
-        static readonly string[] Sometimes = { Res.Ore, Res.Spice, Res.Game };
+        static readonly string[] Sometimes =
+            { Res.Ore, Res.Spice, Res.Game, Res.Boards, Res.Tools, Res.Brick };
         readonly List<string> shown = new List<string>();
+
+        static bool AnyWorkerMakes(OutpostLedger l, string res)
+        {
+            foreach (var h in l.hands)
+            {
+                if (h == null || h.order != OutpostOrder.Work) continue;
+                if (BuildPlans.Named(h.target).makes == res) return true;
+            }
+            return false;
+        }
 
         void Stores(OutpostLedger l)
         {
             shown.Clear();
             foreach (var r in Always) shown.Add(r);
-            foreach (var r in Sometimes) if (l.CountOf(r) > 0) shown.Add(r);
+            foreach (var r in Sometimes)
+                if (l.CountOf(r) > 0 || AnyWorkerMakes(l, r)) shown.Add(r);
 
+            // More than four stores wraps to a second row -- the tile row was
+            // never meant to hold more than the four gatherables it shipped
+            // with, and a quarry (or a sawmill and a smithy both running) can
+            // now put five or six kinds on the fire at once.
             long key = l.ceilingPer * 1000003L + l.hands.Count;
             foreach (var r in shown)
             {
@@ -235,10 +255,32 @@ namespace SeaSick.UI.Sheets
                 }
                 if (rate.Length > 0) small += " · " + rate;
 
-                cols[i] = SheetKit.Store(CampLoading.Lower(res), big, small,
+                // Brick reads oddly in the singular a pile of stone or timber
+                // does not -- "1 brick" is fine, but the tile's own label sits
+                // above a count and wants the plural, the same way the store
+                // shelf itself would say "bricks".
+                string label = res == Res.Brick ? "bricks" : CampLoading.Lower(res);
+                cols[i] = SheetKit.Store(label, big, small,
                     l.Fill01(res), SheetBits.Colour(res));
             }
-            SheetBits.Swap(storesHolder, SheetKit.Row(cols));
+
+            // Four to a row, same as the row always shipped with; a fifth
+            // kind (a quarry running alongside a sawmill, say) starts a
+            // second row rather than squeezing a fifth tile into the first.
+            if (cols.Length <= 4)
+            {
+                SheetBits.Swap(storesHolder, SheetKit.Row(cols));
+            }
+            else
+            {
+                int firstRow = (cols.Length + 1) / 2;
+                firstRow = Mathf.Min(firstRow, 4);
+                var top = new VisualElement[firstRow];
+                var bottom = new VisualElement[cols.Length - firstRow];
+                System.Array.Copy(cols, 0, top, 0, firstRow);
+                System.Array.Copy(cols, firstRow, bottom, 0, bottom.Length);
+                SheetBits.Swap(storesHolder, SheetKit.Col(SheetKit.Row(top), SheetKit.Row(bottom)));
+            }
         }
 
         // --- what is going up --------------------------------------------------

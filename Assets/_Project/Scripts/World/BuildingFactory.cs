@@ -98,6 +98,15 @@ namespace SeaSick.World
                 return root;
             }
 
+            if (plan.kind == BuildKind.Quarry)
+            {
+                QuarryYard(root.transform, plan, footing);
+                Lamp(root.transform, plan);
+                root.AddComponent<Building>().Configure(plan);
+                Arm(root, plan);
+                return root;
+            }
+
             var timber = Mat("wall", new Color(0.42f, 0.31f, 0.20f));
             var dark = Mat("beam", new Color(0.25f, 0.18f, 0.12f));
             var thatch = Mat("thatch", new Color(0.34f, 0.33f, 0.22f));
@@ -484,6 +493,158 @@ namespace SeaSick.World
             go.transform.localPosition = at;
             go.GetComponent<MeshRenderer>().sharedMaterial = mat;
             return go;
+        }
+
+        /// **A quarry, 2026-09-22: a yard, not a room.**
+        ///
+        /// Kevin asked for a building that turns rough stone into brick, and
+        /// the one thing it must not look like is another shed with a
+        /// different sign on it. So the silhouette carries the job: a LOW
+        /// open-fronted stone shed (three walls, the fourth side left open
+        /// onto the work, held up on two posts), a CUT FACE beside it -- a
+        /// few flattened blocks stepped back the way rock is taken off a
+        /// bench -- and a STACK OF BRICK at the front, which is the only
+        /// thing in the camp that is both squared and stacked.
+        ///
+        /// Read from the air that is: grey mass, a notch of shadow where the
+        /// front should be, a stepped face, and a small neat orange block.
+        /// The brick stack is the same courses `CampPiles` lays the Brick
+        /// pile in, deliberately -- the building and its output rhyme.
+        ///
+        /// The open side is local -X, which is where the extruded hut puts
+        /// its door, so `Outpost.Raise` turning the building's -X toward the
+        /// middle of the clearing faces the working front at the village
+        /// exactly as it faces a hut's door at it. Nothing about siting,
+        /// footing or the corner test changes.
+        static void QuarryYard(Transform root, BuildPlan plan, float footing)
+        {
+            float len = plan.footprint.x;    // along the ridge, open at -X
+            float wid = plan.footprint.y;
+            float ridge = plan.ridge;
+
+            var rock = Mat("quarrystone", new Color(0.52f, 0.51f, 0.48f));
+            var cut = Mat("quarrycut", new Color(0.60f, 0.59f, 0.55f));
+            var beam = Mat("beam", new Color(0.25f, 0.18f, 0.12f));
+            var roof = Mat("thatch", new Color(0.34f, 0.33f, 0.22f));
+            var stone = Mat("footing", new Color(0.44f, 0.44f, 0.42f));
+            var brick = Mat("brick", Res.Colour(Res.Brick));
+
+            // The slab, exactly as the hut gets one and for the same reason:
+            // the ground is never flattened.
+            float slab = 0.6f + Mathf.Max(0f, footing);
+            Box(root, stone, new Vector3(len + 0.7f, slab, wid + 0.7f),
+                new Vector3(0f, 0.35f - slab * 0.5f, 0f));
+
+            // **Three walls.** Low -- a shed to keep rain off cut stone, not
+            // a room to stand up in -- and thick, because they are rubble.
+            float wallH = ridge * 0.52f;
+            const float Thick = 0.55f;
+            float wallY = 0.35f + wallH * 0.5f;
+
+            // Back wall, the closed gable at +X.
+            Box(root, rock, new Vector3(Thick, wallH, wid),
+                new Vector3(len * 0.5f - Thick * 0.5f, wallY, 0f));
+            // The two long sides, stopping short of the open front so the
+            // opening reads as an opening rather than as a missing wall.
+            float sideLen = len * 0.72f;
+            for (int s = -1; s <= 1; s += 2)
+                Box(root, rock, new Vector3(sideLen, wallH, Thick),
+                    new Vector3(len * 0.5f - sideLen * 0.5f, wallY,
+                        s * (wid * 0.5f - Thick * 0.5f)));
+
+            // Two posts holding the open front up. Without them the roof
+            // floats over the opening and the whole thing reads as ruined.
+            for (int s = -1; s <= 1; s += 2)
+                Box(root, beam, new Vector3(0.3f, wallH + 0.25f, 0.3f),
+                    new Vector3(-len * 0.5f + 0.35f, 0.35f + (wallH + 0.25f) * 0.5f,
+                        s * (wid * 0.5f - 0.35f)));
+
+            // **The gloom inside**, which is what actually makes the front
+            // read as OPEN. Without it you see the back wall straight
+            // through the opening in the same grey as the front, and the
+            // whole thing reads as a fourth wall with two posts stuck on it.
+            // A dark box filling the interior is a shadow the toon shader
+            // will not draw for us.
+            //
+            // It starts half a metre off the floor rather than at it: the
+            // brick stacked inside is the one warm thing in the silhouette
+            // and a gloom that reached the ground would swallow it.
+            var gloom = Mat("quarrygloom", new Color(0.16f, 0.15f, 0.14f));
+            const float GloomFloor = 0.45f;
+            float gloomH = Mathf.Max(0.3f, wallH * 0.94f - GloomFloor);
+            Box(root, gloom,
+                new Vector3(len - Thick - 0.4f, gloomH, wid - Thick * 2f - 0.1f),
+                new Vector3(-Thick * 0.25f, 0.35f + GloomFloor + gloomH * 0.5f, 0f));
+
+            // A low roof, two shallow panels on a ridge along the length --
+            // the hut's roof at half the rise, which is what makes it read
+            // as a shed from the side.
+            float eave = 0.35f + wallH;
+            float rise = Mathf.Max(0.35f, ridge - eave);
+            float half = wid * 0.5f;
+            float slope = Mathf.Sqrt(half * half + rise * rise);
+            float pitch = Mathf.Atan2(rise, half) * Mathf.Rad2Deg;
+            for (int sgn = -1; sgn <= 1; sgn += 2)
+            {
+                var panel = Box(root, roof,
+                    new Vector3(len + 0.7f, 0.2f, slope * 1.06f),
+                    new Vector3(0f, eave + rise * 0.5f, sgn * half * 0.5f));
+                panel.transform.localRotation = Quaternion.Euler(sgn * pitch, 0f, 0f);
+            }
+            Box(root, beam, new Vector3(len + 0.8f, 0.22f, 0.3f),
+                new Vector3(0f, ridge, 0f));
+
+            // --- the cut face ------------------------------------------------
+            //
+            // Five flattened blocks stepping back and up along one flank,
+            // the way a bench is worked: the lowest is the widest and the
+            // ones above it are set back, so the profile is a stair and not
+            // a heap. Deterministic, no jitter -- this is rock that has been
+            // CUT, and a jittered version of it is the cairn beside the fire.
+            float faceZ = wid * 0.5f + 1.5f;
+            for (int i = 0; i < 5; i++)
+            {
+                float h = 0.55f - i * 0.07f;
+                float w = 2.6f - i * 0.35f;
+                var b = Box(root, cut, new Vector3(w, h, 1.5f - i * 0.18f),
+                    new Vector3(len * 0.12f + i * 0.22f,
+                        0.2f + i * (h * 0.82f),
+                        faceZ + i * 0.28f));
+                // A degree or two off square: cut, but cut by hand.
+                b.transform.localRotation = Quaternion.Euler(0f, 3f * i, 1.5f);
+            }
+            // Two loose blocks at the foot of the face, just prised off.
+            for (int i = 0; i < 2; i++)
+            {
+                var b = Box(root, rock, new Vector3(0.7f, 0.42f, 0.6f),
+                    new Vector3(len * 0.12f - 1.7f - i * 0.95f, 0.21f,
+                        faceZ - 0.4f + i * 0.5f));
+                b.transform.localRotation = Quaternion.Euler(0f, 24f + i * 41f, 0f);
+            }
+
+            // --- the brick, stacked at the front -----------------------------
+            //
+            // Six of them, two courses of three, the odd course offset half a
+            // brick -- the same bond `CampPiles.BuildBrickCourse` lays the
+            // pile in, at the same size, so the goods by the fire and the
+            // goods at the yard are plainly the same thing.
+            const float BrickL = 0.36f, BrickH = 0.12f, BrickW = 0.18f;
+            // **On the slab, just inside the open front**, not out on the
+            // grass: the ground is never flattened, so anything set down
+            // outside the footing either floats at one corner or is buried
+            // at the other, and a six-brick stack is far too small to
+            // survive either. Inside the opening it stands on a known floor,
+            // and the gloom behind it is what the orange reads against.
+            Vector3 stackAt = new Vector3(-len * 0.5f + 1.0f, 0.35f, -wid * 0.26f);
+            for (int i = 0; i < 6; i++)
+            {
+                int row = i / 3, col = i % 3;
+                Box(root, brick, new Vector3(BrickL, BrickH, BrickW),
+                    stackAt + new Vector3(
+                        (col - 1) * 0.38f + (row % 2 == 1 ? 0.19f : 0f),
+                        BrickH * 0.5f + row * (BrickH + 0.01f),
+                        0f));
+            }
         }
 
         /// A ring of stones with a few logs leaning in, and a light.

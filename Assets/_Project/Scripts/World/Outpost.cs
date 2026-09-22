@@ -369,6 +369,11 @@ namespace SeaSick.World
                     ledger.pending.donePart = carried.donePart;
                     ledger.pending.stoneDone = Mathf.Min(carried.stoneDone, ledger.pending.stoneNeeded);
                     ledger.pending.stoneDonePart = carried.stoneDonePart;
+                    // The third part travels with the other two. Nothing
+                    // charges brick yet, so today this always moves 0 -- see
+                    // `BuildPlan.baseBrickCost`.
+                    ledger.pending.brickDone = Mathf.Min(carried.brickDone, ledger.pending.brickNeeded);
+                    ledger.pending.brickDonePart = carried.brickDonePart;
                     if (blueprint != null) blueprint.Refresh(ledger.pending);
                     // Paid in full already? Then moving it finishes it.
                     if (ledger.ReadyToRaise) FinishPending();
@@ -421,6 +426,11 @@ namespace SeaSick.World
                 // campfire, so the first thing anybody builds is paid in
                 // logs exactly as it always was.
                 stoneNeeded = Mathf.Max(0, plan.stoneCost),
+                // **The third part of the price, 2026-09-22.** Zero on every
+                // plan there is; it exists so an upgrade can ask for brick
+                // without re-threading the blueprint. See
+                // `BuildPlan.baseBrickCost`.
+                brickNeeded = Mathf.Max(0, plan.brickCost),
             };
 
             // Making camp is everybody's job: there is no fire yet to idle
@@ -648,6 +658,8 @@ namespace SeaSick.World
                 ledger.pending.donePart = 0f;
                 ledger.pending.stoneDone = ledger.pending.stoneNeeded;
                 ledger.pending.stoneDonePart = 0f;
+                ledger.pending.brickDone = ledger.pending.brickNeeded;
+                ledger.pending.brickDonePart = 0f;
                 FinishPending();
             }
             if (!HasCamp) { why = "the fire would not stand there"; return -1; }

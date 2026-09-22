@@ -563,12 +563,13 @@ namespace SeaSick.UI
 
             int timber = Mathf.Max(0, p.needed - p.done);
             int stone = Mathf.Max(0, p.stoneNeeded - p.stoneDone);
-            if (blueprintNeeds.Changed(HudLabel.Key(timber, stone)))
-                blueprintNeeds.Set(
-                    timber == 0 && stone == 0 ? "everything it wants is here"
-                    : stone == 0 ? $"needs {timber} more timber"
-                    : timber == 0 ? $"needs {stone} more stone"
-                    : $"needs {timber} more timber, {stone} more stone");
+            // **The brick part only when there IS one, 2026-09-22.** No plan
+            // charges brick yet (`BuildPlan.baseBrickCost`), so this is 0 on
+            // every site and the line below reads word for word as it did.
+            int brick = Mathf.Max(0, p.brickNeeded - p.brickDone);
+            if (blueprintNeeds.Changed(HudLabel.Key(timber, stone) * 31 + brick))
+                blueprintNeeds.Set(Wants(timber, stone, brick));
+
 
             int builders = 0;
             foreach (var h in l.hands)
@@ -607,6 +608,32 @@ namespace SeaSick.UI
             }
             return y + btnH;
         }
+        /// What a blueprint is still short of, named one material at a time
+        /// and only when it is short of it. Three parts and a price that may
+        /// charge any one, two or all of them, so the sentence is built out
+        /// of the parts that are non-zero rather than out of a branch per
+        /// combination -- which at three materials would be seven branches
+        /// and at four would be fifteen.
+        static string Wants(int timber, int stone, int brick)
+        {
+            if (timber == 0 && stone == 0 && brick == 0)
+                return "everything it wants is here";
+            var parts = new System.Text.StringBuilder("needs ");
+            int said = 0;
+            if (timber > 0) { parts.Append(timber).Append(" more timber"); said++; }
+            if (stone > 0)
+            {
+                if (said > 0) parts.Append(", ");
+                parts.Append(stone).Append(" more stone"); said++;
+            }
+            if (brick > 0)
+            {
+                if (said > 0) parts.Append(", ");
+                parts.Append(brick).Append(" more brick");
+            }
+            return parts.ToString();
+        }
+
 
         // The ashore column, labelled once per change rather than once per
         // event: `OutpostHand.name` plus a tag is a fresh string every read.
@@ -798,6 +825,11 @@ namespace SeaSick.UI
                       .Append(p.stoneNeeded).Append(" stone")
                       .Append("   ·   ").Append(p.done).Append("/").Append(p.needed)
                       .Append("   ·   ").Append(p.stoneDone).Append("/").Append(p.stoneNeeded);
+                    // A third material only when one is charged; nothing
+                    // charges brick yet, so this never fires today.
+                    if (p.brickNeeded > 0)
+                        sb.Append(" ").Append(p.brickNeeded).Append(" brick")
+                          .Append("   ·   ").Append(p.brickDone).Append("/").Append(p.brickNeeded);
                 }
                 else
                 {
@@ -922,7 +954,8 @@ namespace SeaSick.UI
             k = k * 31 + (outpost.Building ? 1 : 0);
             if (l.pending != null)
                 k = k * 31 + l.pending.done * 397 + l.pending.needed
-                           + l.pending.stoneDone * 1063 + l.pending.stoneNeeded * 7;
+                           + l.pending.stoneDone * 1063 + l.pending.stoneNeeded * 7
+                           + l.pending.brickDone * 2081 + l.pending.brickNeeded * 11;
             // Whole units and the ceiling — what the line prints. The sub-unit
             // accrual moves every tick and changes nothing anybody can read.
             k = k * 31 + CampLoading.CountsKey(l);

@@ -67,7 +67,10 @@ namespace SeaSick.World
         /// should be sorted by it and this comment should go.
         public static readonly string[] BestFirst =
         {
-            Res.Tools, Res.Spice, Res.Boards, Res.Ore,
+            // Brick sits right behind Boards for the same reason Boards sits
+            // ahead of Timber: a brick is stone that has already had a day's
+            // work put into it, so carrying it home beats carrying the rock.
+            Res.Tools, Res.Spice, Res.Boards, Res.Brick, Res.Ore,
             Res.Stone, Res.Meals, Res.Food, Res.Timber,
         };
 
