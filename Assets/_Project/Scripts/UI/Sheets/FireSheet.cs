@@ -18,22 +18,75 @@ namespace SeaSick.UI.Sheets
     /// and mood word comes out of `OutpostLedger`, and every button is the
     /// same `Outpost` / `CampSiting` call the legacy panels make. The only
     /// arithmetic in this file is division for display.
-    public class FireSheet : ISheet
+    public class FireSheet : ISheetFramed
     {
         /// Passed as `focus` to open with the lookout row expanded -- what a
         /// tap on the watchtower itself asks for.
         public const string FocusLookout = "lookout";
 
+        // --- the four tabs (2026-09-22, "one sheet, tabs") -------------------
+        //
+        // Kevin, after three mockups on the phone: the camp sheet is ONE
+        // frame with four tabs, and "Raise a building" and "Load ship" stop
+        // being buttons that grow the card. They are the build and ship tabs.
+        // Nothing was dropped -- every store, order, hand, plan and manifest
+        // line the sheet had is still here, on one of the four.
+        public const int TabCamp = 0;
+        public const int TabHands = 1;
+        public const int TabBuild = 2;
+        public const int TabShip = 3;
+
         readonly Outpost outpost;
         readonly string focus;
         readonly string islandName;
+
+        int tab = -1;
 
         public FireSheet(Outpost o, string focus = null)
         {
             outpost = o;
             this.focus = focus;
             islandName = o != null && o.Island != null ? o.Island.name : "the camp";
+            // The watch is an ORDER, and the orders live on the camp tab. A
+            // tap on the watchtower therefore pins that tab rather than
+            // taking whichever one the session was left on -- the host only
+            // restores a remembered tab when `Tab` is still -1.
+            if (focus == FocusLookout) tab = TabCamp;
         }
+
+        // --- the frame ---------------------------------------------------------
+
+        public int Tab => tab;
+        public void SetTab(int index) { tab = index; }
+        public Color Accent => SheetTheme.Ember;
+
+        readonly string[] labels = { "camp", "hands", "build", "ship" };
+
+        /// Short and sentence-case, with the one count worth carrying: how
+        /// many hands live here, so the roster can be read without opening
+        /// it. Rebuilt into the same array every time, because the host
+        /// re-labels the strip four times a second and an allocation per
+        /// refresh is an allocation per refresh.
+        public string[] TabLabels
+        {
+            get
+            {
+                var l = L;
+                int n = l != null ? l.hands.Count : 0;
+                labels[TabHands] = n > 0 ? "hands · " + n : "hands";
+                return labels;
+            }
+        }
+
+        public VisualElement BuildHeader() =>
+            SheetKit.Header("the camp", Title, SheetTheme.Ember, "🔥", () => Sheets.Close());
+
+        /// **The action row is the ship tab's alone.** The camp, hands and
+        /// build tabs are made of rows that ARE their own actions -- a pill
+        /// group, a "change", a plan with its price on it -- and a pinned row
+        /// under them would be a second place to look for the same verbs.
+        public VisualElement BuildActions() =>
+            tab == TabShip ? ship.BuildActions() : null;
 
         public string Title => islandName;
 
@@ -62,9 +115,6 @@ namespace SeaSick.UI.Sheets
         Label bedsEyebrow;
         VisualElement handsHolder;
         VisualElement buildListHolder;
-        Button loadBtn;
-
-        bool buildOpen;
 
         // Keys, so a block is rebuilt when what it SAYS has changed and not
         // once a frame. The same idea as `CampSheet.HeadKey` -- IMGUI's reason
@@ -78,15 +128,63 @@ namespace SeaSick.UI.Sheets
         long recruitKey = long.MinValue;
         long handsKey = long.MinValue;
 
+        /// **The body of the LIVE tab, and only that.**
+        ///
+        /// The host calls this again on every tab change, so each call starts
+        /// by dropping the element references the last tab left behind --
+        /// otherwise `Refresh` would keep writing into a tree that is no
+        /// longer in the card, which costs nothing visible and hides a real
+        /// fault for a week.
         public VisualElement Build()
         {
-            buildOpen = false;
+            Forget();
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
 
-            root.Add(SheetKit.Header("the camp", Title, SheetTheme.Ember, "🔥",
-                () => Sheets.Close()));
+            switch (tab)
+            {
+                case TabHands: BuildHands(root); break;
+                case TabBuild: BuildBuild(root); break;
+                case TabShip: BuildShip(root); break;
+                default: BuildCamp(root); break;
+            }
 
+            Refresh();
+
+            // A tap on the watchtower is a question about the watch, so the
+            // sheet opens looking at that row. One frame later, because the
+            // panel has not laid itself out yet and a scroll before layout
+            // scrolls nothing.
+            if (focus == FocusLookout && tab == TabCamp && lookoutHolder != null)
+                lookoutHolder.schedule.Execute(() =>
+                {
+                    var sv = lookoutHolder.GetFirstAncestorOfType<ScrollView>();
+                    if (sv != null) sv.ScrollTo(lookoutHolder);
+                }).ExecuteLater(1);
+
+            return root;
+        }
+
+        /// Every cached element and every cache key, back to nothing. Called
+        /// on each `Build`, so a stale reference cannot outlive its tab and a
+        /// key cannot suppress the first fill of a freshly built block.
+        void Forget()
+        {
+            storesHolder = noteHolder = rationsHolder = priorityHolder = null;
+            lookoutHolder = recruitBar = handsHolder = buildListHolder = null;
+            rationsLine = recruitLine = bedsEyebrow = null;
+            storesKey = noteKey = lookoutKey = recruitKey = handsKey = long.MinValue;
+            rationsKey = priorityKey = -99;
+            buildKey = long.MinValue;
+        }
+
+        // --- tab: camp ----------------------------------------------------------
+
+        /// What the fire is holding, what it is doing with it, and the four
+        /// standing orders. Everything on this tab was on the old sheet above
+        /// the roster.
+        void BuildCamp(VisualElement root)
+        {
             storesHolder = SheetBits.Holder();
             root.Add(storesHolder);
 
@@ -95,7 +193,6 @@ namespace SeaSick.UI.Sheets
 
             root.Add(SheetKit.Rule());
 
-            // --- orders ---------------------------------------------------
             root.Add(SheetKit.Eyebrow("orders"));
 
             rationsHolder = SheetBits.Holder();
@@ -113,40 +210,83 @@ namespace SeaSick.UI.Sheets
             root.Add(recruitLine);
             recruitBar = SheetBits.Holder();
             root.Add(recruitBar);
+        }
 
-            root.Add(SheetKit.Rule());
+        // --- tab: hands ---------------------------------------------------------
 
-            // --- who lives here -------------------------------------------
+        void BuildHands(VisualElement root)
+        {
             bedsEyebrow = SheetKit.Eyebrow("hands ashore");
             root.Add(bedsEyebrow);
             handsHolder = SheetBits.Holder();
             root.Add(handsHolder);
+        }
 
-            root.Add(SheetKit.Rule());
+        // --- tab: build ---------------------------------------------------------
 
-            // --- the two things you came down here to do -------------------
-            loadBtn = SheetKit.Btn("Load ship", OpenShip);
-            root.Add(SheetKit.Row(
-                SheetKit.Btn("Raise a building", ToggleBuildList, true),
-                loadBtn));
-
+        /// **The build list is a tab, not a drawer.** It used to hang off a
+        /// "Raise a building" button that grew the card by however many plans
+        /// the camp could afford; on a phone that pushed the roster off the
+        /// bottom and moved every button under the thumb. Same list, same
+        /// `CampSiting.Begin`, same prices -- it simply has its own third of
+        /// the screen now.
+        void BuildBuild(VisualElement root)
+        {
+            root.Add(SheetKit.Eyebrow("raise a building"));
             buildListHolder = SheetBits.Holder();
             root.Add(buildListHolder);
+        }
 
-            Refresh();
-
-            // A tap on the watchtower is a question about the watch, so the
-            // sheet opens looking at that row. One frame later, because the
-            // panel has not laid itself out yet and a scroll before layout
-            // scrolls nothing.
-            if (focus == FocusLookout && lookoutHolder != null)
-                lookoutHolder.schedule.Execute(() =>
+        void FillBuildList()
+        {
+            if (buildListHolder == null) return;
+            var l = L;
+            buildListHolder.Clear();
+            if (l == null) return;
+            if (outpost.Building)
+            {
+                buildListHolder.Add(SheetKit.Note("Something is already going up"));
+                return;
+            }
+            int n = 0;
+            foreach (var plan in outpost.Buildable())
+            {
+                var p = plan;
+                n++;
+                string price = p.stoneCost > 0
+                    ? $"{p.label} — {p.cost} timber {p.stoneCost} stone"
+                    : $"{p.label} — {p.cost} timber";
+                buildListHolder.Add(SheetKit.Btn(price, () =>
                 {
-                    var sv = lookoutHolder.GetFirstAncestorOfType<ScrollView>();
-                    if (sv != null) sv.ScrollTo(lookoutHolder);
-                }).ExecuteLater(1);
+                    CampSiting.Begin(outpost, p, SheetBits.ShipTransform);
+                    // Siting takes the whole screen's attention; a sheet lying
+                    // over the ground you are about to tap is the bug the old
+                    // bottom bar had.
+                    Sheets.Close();
+                }, false, true));
+            }
+            if (n == 0)
+                buildListHolder.Add(SheetKit.Note("Nothing the camp can afford yet"));
+        }
 
-            return root;
+        // --- tab: ship ------------------------------------------------------------
+
+        /// **The manifest, inside the camp's frame.** "Load ship" used to
+        /// open a second sheet; the decision it is about -- how much you dare
+        /// take -- belongs to the same visit to the beach, so it is a tab.
+        /// The content is `ShipSheet`'s own, built by `ShipSheet`, so the two
+        /// cannot drift: there is one manifest in the game and this embeds
+        /// it rather than copying it.
+        readonly ShipSheet ship = new ShipSheet();
+
+        void BuildShip(VisualElement root)
+        {
+            if (!CampLoading.Alongside(outpost))
+            {
+                root.Add(SheetKit.Note("She is not lying alongside"));
+                return;
+            }
+            root.Add(ship.BuildWhole());
         }
 
         public void Refresh()
@@ -159,17 +299,33 @@ namespace SeaSick.UI.Sheets
             // idempotent within a frame (`Outpost.CatchUp`).
             outpost.CatchUp();
 
-            Stores(l);
-            Note(l);
-            RationsBlock(l);
-            PriorityBlock(l);
-            Lookout(l);
-            Recruit(l);
-            Hands(l);
-
-            if (loadBtn != null)
-                loadBtn.SetEnabled(CampLoading.Alongside(outpost));
+            switch (tab)
+            {
+                case TabHands:
+                    Hands(l);
+                    break;
+                case TabBuild:
+                    // Keyed on what the list SAYS: the stores it prices
+                    // against, and whether a drawing is already up.
+                    long bkey = l.Total * 31L + (outpost.Building ? 1 : 0) * 7919L
+                                + l.built.Count * 131L;
+                    if (bkey != buildKey) { buildKey = bkey; FillBuildList(); }
+                    break;
+                case TabShip:
+                    if (CampLoading.Alongside(outpost)) ship.Refresh();
+                    break;
+                default:
+                    Stores(l);
+                    Note(l);
+                    RationsBlock(l);
+                    PriorityBlock(l);
+                    Lookout(l);
+                    Recruit(l);
+                    break;
+            }
         }
+
+        long buildKey = long.MinValue;
 
         // --- the piles ---------------------------------------------------------
 
@@ -490,7 +646,7 @@ namespace SeaSick.UI.Sheets
             if (room)
                 SheetBits.Swap(recruitBar, SheetKit.Bar(l.RecruitProgress01, SheetTheme.Moss));
             else
-                recruitBar.Clear();
+                { if (recruitBar != null) recruitBar.Clear(); }
         }
 
         // --- who lives here ------------------------------------------------------
@@ -518,6 +674,7 @@ namespace SeaSick.UI.Sheets
                     ? "1 hand ashore"
                     : $"{l.hands.Count} hands ashore";
 
+            if (handsHolder == null) return;
             handsHolder.Clear();
             if (l.hands.Count == 0)
             {
@@ -551,49 +708,5 @@ namespace SeaSick.UI.Sheets
             Sheets.Open(new HandSheet(outpost, who));
         }
 
-        // --- the footer -----------------------------------------------------------
-
-        /// **The build list is this sheet's, not a mode.** `CampCrewList`'s
-        /// build verb drops straight into siting (CampCrewList.cs:236); so
-        /// does every row here, with the same `CampSiting.Begin` and the same
-        /// ship transform, because WHERE a building goes is the one thing a
-        /// list cannot answer.
-        void ToggleBuildList()
-        {
-            buildOpen = !buildOpen;
-            if (!buildOpen) { buildListHolder.Clear(); return; }
-
-            var l = L;
-            buildListHolder.Clear();
-            if (l == null) return;
-            if (outpost.Building)
-            {
-                buildListHolder.Add(SheetKit.Note("Something is already going up"));
-                return;
-            }
-            foreach (var plan in outpost.Buildable())
-            {
-                var p = plan;
-                string price = p.stoneCost > 0
-                    ? $"{p.label} — {p.cost} timber {p.stoneCost} stone"
-                    : $"{p.label} — {p.cost} timber";
-                buildListHolder.Add(SheetKit.Btn(price, () =>
-                {
-                    CampSiting.Begin(outpost, p, SheetBits.ShipTransform);
-                    buildOpen = false;
-                    buildListHolder.Clear();
-                    // Siting takes the whole screen's attention; a sheet lying
-                    // over the ground you are about to tap is the bug the old
-                    // bottom bar had.
-                    Sheets.Close();
-                }, false, true));
-            }
-        }
-
-        void OpenShip()
-        {
-            if (outpost == null || !CampLoading.Alongside(outpost)) return;
-            Sheets.Open(new ShipSheet());
-        }
     }
 }

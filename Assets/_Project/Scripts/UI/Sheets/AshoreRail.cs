@@ -74,7 +74,17 @@ namespace SeaSick.UI.Sheets
             float mapH = HudLayout.HeightOf(HudLayout.Slot.Map);
             float top = (Screen.height - safe.yMax) * scale + 14f;
             if (mapH > 0f) top += (mapH + HudLayout.Gap) * scale;
-            bar.style.right = (Screen.width - safe.xMax) * scale + 14f;
+            // **The rail yields the corner to the frame, on a desk.** Since
+            // 2026-09-22 the sheet is a FIXED region — the right third of a
+            // landscape window, full height — so the corner the rail used to
+            // share with a short card is now occupied top to bottom. It used
+            // to be the card that moved (`PlaceRight` read `BottomPanelY`);
+            // a frame that moves is the thing Kevin rejected, so the four
+            // discs step left of it instead.
+            float right = (Screen.width - safe.xMax) * scale + 14f;
+            if (HudLayout.Wide && SheetHost.FrameOpen)
+                right += safe.width * SheetHost.Third * scale;
+            bar.style.right = right;
             bar.style.top = top;
 
             if (Time.unscaledTime < nextEval) return;

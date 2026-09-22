@@ -38,7 +38,10 @@ namespace SeaSick.UI.Sheets
         VisualElement layer;
         VisualElement shadow;
         VisualElement card;
+        VisualElement head;
+        VisualElement tabs;
         VisualElement body;
+        VisualElement actions;
         ScrollView scroll;
         VisualElement tail;
         VisualElement tailDot;
@@ -171,8 +174,25 @@ namespace SeaSick.UI.Sheets
 
             card = new VisualElement();
             card.AddToClassList(SheetTheme.Card);
+            card.AddToClassList(SheetTheme.Frame);
             card.style.display = DisplayStyle.None;
             layer.Add(card);
+
+            // **The four bands of the standard frame, in order.** The header
+            // and the tab strip are ABOVE the scroll view and the action row
+            // is below it, so the only thing that ever moves when the body is
+            // long is the body: the title stays readable and the verbs stay
+            // under the thumb. A sheet that does not implement `ISheetFramed`
+            // leaves head/tabs/actions empty and puts its whole tree in the
+            // body, exactly as before.
+            head = new VisualElement();
+            head.AddToClassList(SheetTheme.FrameHead);
+            head.style.display = DisplayStyle.None;
+            card.Add(head);
+
+            tabs = new VisualElement();
+            tabs.style.display = DisplayStyle.None;
+            card.Add(tabs);
 
             scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.AddToClassList("sheet-scroll");
@@ -181,6 +201,10 @@ namespace SeaSick.UI.Sheets
             body = new VisualElement();
             body.AddToClassList(SheetTheme.Body);
             scroll.Add(body);
+
+            actions = new VisualElement();
+            actions.style.display = DisplayStyle.None;
+            card.Add(actions);
 
             // The 1px inner rule, last so it sits over the body, and inert so
             // it never eats a press meant for a button under it.
@@ -195,7 +219,15 @@ namespace SeaSick.UI.Sheets
         void OnSheetChanged()
         {
             built = null;
+            framed = null;
             body.Clear();
+            head.Clear();
+            tabs.Clear();
+            actions.Clear();
+            head.style.display = DisplayStyle.None;
+            tabs.style.display = DisplayStyle.None;
+            actions.style.display = DisplayStyle.None;
+
             var s = Sheets.Current;
             if (s == null)
             {
@@ -206,14 +238,90 @@ namespace SeaSick.UI.Sheets
                 return;
             }
 
-            var content = s.Build();
-            if (content != null) body.Add(content);
+            framed = s as ISheetFramed;
+            if (framed != null)
+            {
+                // **The remembered tab, unless the sheet asked for one.** A
+                // sheet opened by the watchtower comes in with `Tab` already
+                // set and the session's memory does not get to override it —
+                // the player tapped the tower to ask about the watch.
+                int want = framed.Tab;
+                if (want < 0) want = Sheets.RecallTab(s.GetType());
+                var labels = framed.TabLabels;
+                int count = labels != null ? labels.Length : 0;
+                if (count > 0) want = Mathf.Clamp(want, 0, count - 1); else want = 0;
+                framed.SetTab(want);
+                Sheets.RememberTab(s.GetType(), want);
+
+                var h = framed.BuildHeader();
+                if (h != null) { head.Add(h); head.style.display = DisplayStyle.Flex; }
+
+                if (count > 1)
+                {
+                    tabs.Add(SheetKit.Tabs(labels, want, PickTab, framed.Accent));
+                    tabs.style.display = DisplayStyle.Flex;
+                }
+                FillTab(s);
+            }
+            else
+            {
+                var content = s.Build();
+                if (content != null) body.Add(content);
+            }
+
             built = s;
             nextRefresh = Time.unscaledTime + 0.25f;
 
             card.style.display = DisplayStyle.Flex;
             shadow.style.display = DisplayStyle.Flex;
             scroll.scrollOffset = Vector2.zero;
+        }
+
+        ISheetFramed framed;
+
+        /// A tab press: the sheet is told, the choice is remembered for the
+        /// session, and only the BODY and the action row are rebuilt. The
+        /// header and the strip itself stay put, so the card does not blink
+        /// and the finger does not come down on a button that has moved.
+        void PickTab(int index)
+        {
+            var s = Sheets.Current;
+            if (framed == null || s == null) return;
+            var labels = framed.TabLabels;
+            if (labels == null || index < 0 || index >= labels.Length) return;
+            if (index == framed.Tab) return;
+
+            framed.SetTab(index);
+            Sheets.RememberTab(s.GetType(), index);
+            if (tabs.childCount > 0) SheetKit.SetTabs(tabs[0], index, framed.TabLabels);
+            FillTab(s);
+            scroll.scrollOffset = Vector2.zero;
+        }
+
+        /// Body and action row for whatever tab is live now.
+        void FillTab(ISheet s)
+        {
+            body.Clear();
+            actions.Clear();
+            var content = s.Build();
+            if (content != null) body.Add(content);
+
+            var row = framed.BuildActions();
+            if (row != null)
+            {
+                actions.Add(row);
+                actions.style.display = DisplayStyle.Flex;
+            }
+            else actions.style.display = DisplayStyle.None;
+        }
+
+        /// Re-label the strip without rebuilding it — "hands · 3" becomes
+        /// "hands · 4" when a recruit arrives, and the tab under the finger
+        /// is the same element it was.
+        void RelabelTabs()
+        {
+            if (framed == null || tabs.childCount == 0) return;
+            SheetKit.SetTabs(tabs[0], framed.Tab, framed.TabLabels);
         }
 
         void LateUpdate()
@@ -241,14 +349,15 @@ namespace SeaSick.UI.Sheets
             }
 
             var s = Sheets.Current;
-            if (s == null) return;
+            if (s == null) { FrameOpen = false; return; }
 
-            if (!s.StillValid) { Sheets.Close(); return; }
+            if (!s.StillValid) { Sheets.Close(); FrameOpen = false; return; }
 
             if (Time.unscaledTime >= nextRefresh)
             {
                 nextRefresh = Time.unscaledTime + 0.25f;
                 s.Refresh();
+                RelabelTabs();
             }
 
             Place(s);
@@ -256,89 +365,89 @@ namespace SeaSick.UI.Sheets
 
         // --- placement ---
 
+        /// **The frame, in screen pixels, GUI space (origin top-left).**
+        ///
+        /// The one number the IMGUI HUD needs about the sheet. `HudLayout`
+        /// keeps every panel it issues out of this rect, which is why the
+        /// minimap column, the anchor prompt and the legacy bottom bar no
+        /// longer have to know that a sheet exists — they only have to know
+        /// where it is. Zero-sized and `FrameOpen == false` while nothing is
+        /// open.
+        public static Rect FrameRect { get; private set; }
+        public static bool FrameOpen { get; private set; }
+
+        /// The fraction of the short axis the frame takes: the bottom third
+        /// upright, the right third on a desk. One number, because the shape
+        /// of the frame is the whole point of "one sheet, tabs" — a card that
+        /// sizes itself to its content is a card that moves its own buttons.
+        public const float Third = 1f / 3f;
+
+        /// The inner margin between the frame and the edges of its region.
+        public const float Margin = 12f;
+
+        /// **One rect, computed in screen pixels, then converted once.**
+        ///
+        /// It used to be two placement methods that each did their own
+        /// arithmetic in panel units, and the card's height came from its
+        /// CONTENT — which is exactly what Kevin rejected on the phone: a
+        /// sheet that is a different size every time you open it. The frame
+        /// is now a function of the safe area and nothing else, so opening
+        /// the build tab and opening the hands tab put the card in the same
+        /// place to the pixel.
         void Place(ISheet s)
         {
             float W = root.resolvedStyle.width;
             float H = root.resolvedStyle.height;
             if (W <= 1f || H <= 1f) return;
 
-            // The safe area arrives in screen pixels; the panel is scaled.
-            float scale = W / Mathf.Max(1f, Screen.width);
             var safe = Screen.safeArea;
-            float mL = safe.xMin * scale + 12f;
-            float mR = (Screen.width - safe.xMax) * scale + 12f;
-            float mT = (Screen.height - safe.yMax) * scale + 12f;
-            float mB = safe.yMin * scale + 12f;
+            if (safe.width < 1f || safe.height < 1f)
+                safe = new Rect(0f, 0f, Screen.width, Screen.height);
 
-            if (HudLayout.Wide) PlaceRight(W, H, mR, mT, mB);
-            else PlaceDocked(W, H, mL, mR, mB);
-        }
+            // Screen space, origin BOTTOM-left, as `Screen.safeArea` is.
+            float x, yBottom, w, h;
+            if (HudLayout.Wide)
+            {
+                float band = safe.width * Third;
+                w = band - Margin * 2f;
+                h = safe.height - Margin * 2f;
+                x = safe.xMax - band + Margin;
+                yBottom = safe.yMin + Margin;
+                card.RemoveFromClassList(SheetTheme.Docked);
+            }
+            else
+            {
+                float band = safe.height * Third;
+                w = safe.width - Margin * 2f;
+                h = band - Margin * 2f;
+                x = safe.xMin + Margin;
+                yBottom = safe.yMin + Margin;
+                card.AddToClassList(SheetTheme.Docked);
+            }
 
-        /// **The card is a column on the right, not a label on the object.**
-        ///
-        /// It used to be placed beside the thing it was about, with a tail
-        /// back to it. Kevin, playing it: *"the menu system on the island
-        /// should always be pinned on the right side of the screen. It moves
-        /// around when I zoom in and out and move around."* That is the whole
-        /// argument — a card anchored in the WORLD is a card that slides out
-        /// from under the finger every time the camera breathes, and the
-        /// camera on this island is never still. Which object the card is
-        /// about is now said by the ring on the ground, which costs the player
-        /// nothing to look at and does not move the buttons.
-        ///
-        /// So the only thing still read off the world is `AnchorWorld`, and
-        /// only by `SelectionRing`. The tail is gone with the placement that
-        /// needed it.
-        void PlaceRight(float W, float H, float mR, float mT, float mB)
-        {
-            card.RemoveFromClassList(SheetTheme.Docked);
+            // GUI space (origin top-left), for `HudLayout`.
+            FrameRect = new Rect(x, Screen.height - (yBottom + h), w, h);
+            FrameOpen = true;
+            // Told once a frame, to the IMGUI HUD's own space. It used to be
+            // the other way round — the card read `BottomClustersTop` and got
+            // out of the prompt stack's way — and that made the sheet's size
+            // depend on the HUD's, which is the loop a fixed frame exists to
+            // cut. The sheet is the fixed thing now; the HUD moves.
+            HudLayout.ClaimSheet(FrameRect);
 
-            float w = Mathf.Clamp(W * 0.32f, 400f, 440f);
-            card.style.width = w;
-            card.style.left = StyleKeyword.Auto;
+            // Panel space. The panel is scaled by its match rule, so every
+            // screen pixel above becomes `scale` panel units — the y flip is
+            // already done, because the card is positioned from the top.
+            float scale = W / Mathf.Max(1f, Screen.width);
+            card.style.left = x * scale;
+            card.style.right = StyleKeyword.Auto;
+            card.style.top = FrameRect.y * scale;
             card.style.bottom = StyleKeyword.Auto;
-            card.style.right = Mathf.Max(16f, mR + 4f);
+            card.style.width = w * scale;
+            card.style.height = h * scale;
+            card.style.maxHeight = StyleKeyword.None;
 
-            // The top is under the ashore rail, which shares this corner and
-            // is the one thing allowed to sit above the card -- it is four
-            // discs, it is read at a glance, and burying it under a sheet
-            // would be hiding the crew behind the crew's own sheet.
-            float top = mT;
-            float railBottom = rail != null ? rail.BottomPanelY : 0f;
-            if (railBottom > 0f) top = Mathf.Max(top, railBottom + 10f);
-
-            // The floor is the legacy prompt stack, not the screen edge.
-            // "Cast off (space)" is drawn bottom-centre by `AnchorController`
-            // and is the one control the sheet HUD deliberately leaves to
-            // IMGUI, so a card allowed to run to the bottom margin covers the
-            // way out.
-            float floor = H - mB;
-            float clusters = HudLayout.BottomClustersTop;
-            if (clusters > 0f)
-                floor = Mathf.Min(floor, clusters * (H / Mathf.Max(1f, Screen.height)) - 10f);
-
-            card.style.top = top;
-            card.style.maxHeight = Mathf.Max(160f, floor - top);
-
-            float h = card.resolvedStyle.height;
-            Shadow(W - card.style.right.value.value - w, top, w, h);
-
-            tail.style.display = DisplayStyle.None;
-            tailDot.style.display = DisplayStyle.None;
-        }
-
-        void PlaceDocked(float W, float H, float mL, float mR, float mB)
-        {
-            card.AddToClassList(SheetTheme.Docked);
-            card.style.left = mL - 12f;
-            card.style.right = mR - 12f;
-            card.style.width = StyleKeyword.Auto;
-            card.style.top = StyleKeyword.Auto;
-            card.style.bottom = Mathf.Max(0f, mB - 12f);
-            card.style.maxHeight = H * 0.55f;
-
-            float h = card.resolvedStyle.height;
-            Shadow(card.resolvedStyle.left, H - (mB - 12f) - h, card.resolvedStyle.width, h);
+            Shadow(x * scale, FrameRect.y * scale, w * scale, h * scale);
 
             tail.style.display = DisplayStyle.None;
             tailDot.style.display = DisplayStyle.None;

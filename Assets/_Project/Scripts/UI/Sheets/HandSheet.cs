@@ -16,8 +16,25 @@ namespace SeaSick.UI.Sheets
     /// **Kept by name, not by reference.** The rows are rebuilt from the
     /// ledger and a cached row is a row that outlives the hand -- the same
     /// reason `CampCrewList` keys its open row on `h.name`.
-    public class HandSheet : ISheet
+    public class HandSheet : ISheetFramed
     {
+        // --- the frame (2026-09-22, "one sheet, tabs") ----------------------
+        //
+        // Two sections, and they answer different questions: "orders" is what
+        // you can TELL them, "about" is who they are and why they are in the
+        // mood they are in. The two verbs that are neither -- stand down, and
+        // back aboard -- are the pinned action row, reachable from both.
+        public const int TabOrders = 0;
+        public const int TabAbout = 1;
+
+        int tab = -1;
+        static readonly string[] tabLabels = { "orders", "about" };
+
+        public int Tab => tab;
+        public void SetTab(int index) { tab = index; }
+        public string[] TabLabels => tabLabels;
+        public Color Accent => SheetTheme.Brass;
+
         readonly Outpost outpost;
         readonly string who;
 
@@ -53,26 +70,57 @@ namespace SeaSick.UI.Sheets
         VisualElement verbs;
         long verbsKey = long.MinValue;
 
-        public VisualElement Build()
+        public VisualElement BuildHeader() =>
+            SheetKit.Header("hand", Title, SheetTheme.Brass,
+                SheetBits.JobGlyph(Hand), () => Sheets.Close());
+
+        /// **Standing them down and sending them back aboard are pinned.**
+        /// They were the last two rows of a long list of verbs, which on a
+        /// phone meant scrolling past every job on the island to stop
+        /// somebody doing one.
+        public VisualElement BuildActions()
         {
             var h = Hand;
+            stand = SheetKit.Btn("stand down", () =>
+            {
+                outpost.OrderIdle(Hand);
+                verbsKey = long.MinValue;
+                Refresh();
+            });
+            stand.SetEnabled(h != null && h.order != OutpostOrder.Idle);
+
+            back = SheetKit.Btn("back aboard", BackAboard);
+            back.SetEnabled(SheetBits.Anchor != null && outpost != null
+                            && outpost.BodyNamed(who) != null);
+            return SheetKit.Actions(stand, back);
+        }
+
+        Button stand;
+        Button back;
+
+        public VisualElement Build()
+        {
+            doing = null; cause = null; verbs = null;
+            verbsKey = long.MinValue;
+
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
 
-            root.Add(SheetKit.Header("hand", Title, SheetTheme.Brass,
-                SheetBits.JobGlyph(h), () => Sheets.Close()));
-
-            root.Add(SheetKit.Row(
-                SheetKit.Token(SheetBits.Initial(who), h != null && h.Angry,
-                    SheetBits.JobGlyph(h)),
-                SheetKit.Col(
-                    doing = SheetKit.Text("", true),
-                    cause = SheetKit.Text("", false, true, 12f))));
-
-            root.Add(SheetKit.Rule());
-
-            verbs = SheetBits.Holder();
-            root.Add(verbs);
+            if (tab == TabAbout)
+            {
+                var h = Hand;
+                root.Add(SheetKit.Row(
+                    SheetKit.Token(SheetBits.Initial(who), h != null && h.Angry,
+                        SheetBits.JobGlyph(h)),
+                    SheetKit.Col(
+                        doing = SheetKit.Text("", true),
+                        cause = SheetKit.Text("", false, true, 12f))));
+            }
+            else
+            {
+                verbs = SheetBits.Holder();
+                root.Add(verbs);
+            }
 
             Refresh();
             return root;
@@ -87,6 +135,10 @@ namespace SeaSick.UI.Sheets
 
             if (doing != null) doing.text = Cap(h.Doing);
             if (cause != null) cause.text = Mood(l, h);
+            if (stand != null) stand.SetEnabled(h.order != OutpostOrder.Idle);
+            if (back != null)
+                back.SetEnabled(SheetBits.Anchor != null && outpost.BodyNamed(who) != null);
+            if (verbs == null) return;
 
             // The verb lists change only when the camp does -- a building
             // raised, a seam worked out, a blueprint sited. Keyed on exactly
@@ -205,21 +257,6 @@ namespace SeaSick.UI.Sheets
                 }
             }
 
-            // IDLE and ABOARD. Standing them down is the only way back out of
-            // an order without giving another one.
-            verbs.Add(SheetKit.Rule());
-            var stand = SheetKit.Btn("stand down", () =>
-            {
-                outpost.OrderIdle(Hand);
-                verbsKey = long.MinValue;
-                Refresh();
-            }, false, true);
-            stand.SetEnabled(h.order != OutpostOrder.Idle);
-            verbs.Add(stand);
-
-            var back = SheetKit.Btn("back aboard", BackAboard, false, true);
-            back.SetEnabled(SheetBits.Anchor != null && outpost.BodyNamed(who) != null);
-            verbs.Add(back);
         }
 
         /// `Outpost.Recall(body, ship)` -- the same call the ashore column

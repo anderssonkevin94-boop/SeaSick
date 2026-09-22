@@ -71,5 +71,17 @@ namespace SeaSick.UI.Sheets
         public const string TokenJob = "sheet-token-job";
         public const string TokenLetter = "sheet-token-letter";
         public const string Docked = "sheet-card--docked";
+
+        // --- the standard frame (2026-09-22, "one sheet, tabs") ---
+        public const string Frame = "sheet-frame";
+        public const string FrameHead = "sheet-frame-head";
+        public const string Tabs = "sheet-tabs";
+        public const string Tab = "sheet-tab";
+        public const string TabOn = "sheet-tab--on";
+        public const string TabMark = "sheet-tab-mark";
+        public const string Actions = "sheet-actions";
+        public const string Chip = "sheet-chip";
+        public const string ChipStripe = "sheet-chip-stripe";
+        public const string ChipValue = "sheet-chip-value";
     }
 }

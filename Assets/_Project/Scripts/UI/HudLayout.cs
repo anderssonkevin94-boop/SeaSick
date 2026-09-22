@@ -207,9 +207,72 @@ namespace SeaSick.UI
             }
             // One entry per name per frame: IMGUI runs OnGUI several times a
             // frame and a panel declares itself on each pass.
+            r = AvoidSheet(r);
             int at = issuedNames.IndexOf(name);
             if (at >= 0) issuedRects[at] = r;
             else { issuedNames.Add(name); issuedRects.Add(r); }
+            return r;
+        }
+
+        // --- the sheet ------------------------------------------------------
+        //
+        // The island HUD is two toolkits: this one, and the UI Toolkit panel
+        // that draws the sheets. Neither can see the other by laying out, so
+        // one of them has to be told — and since 2026-09-22 the sheet is the
+        // easy one to be told about, because it is a FIXED region of the
+        // screen (the bottom third upright, the right third on a desk) rather
+        // than a card that resizes itself to its content.
+
+        /// Where the open sheet is, in this class's own space (GUI, origin
+        /// top-left), or an empty rect. Set by `SheetHost` every frame it
+        /// places the frame; read here and nowhere else.
+        public static Rect SheetRect => SheetOpen ? sheetRect : new Rect();
+        static Rect sheetRect;
+        static int sheetFrame = -1;
+
+        /// True while a sheet is open and has reported its frame. It goes
+        /// false on its own within a frame of the sheet closing — the same
+        /// staleness rule every slot here follows, so a sheet host that stops
+        /// ticking cannot leave a hole in the HUD forever.
+        public static bool SheetOpen => Time.frameCount - sheetFrame <= 1
+                                        && sheetRect.width > 1f && sheetRect.height > 1f;
+
+        /// Called by `SheetHost` once per frame while a sheet is open.
+        public static void ClaimSheet(Rect r)
+        {
+            sheetRect = r;
+            sheetFrame = Time.frameCount;
+        }
+
+        /// **Nothing the HUD issues may land on the sheet.**
+        ///
+        /// Applied in `Declare`, which every rect passes through — slots,
+        /// the compass tape, the toast, the anchor prompt — so a panel does
+        /// not have to know the sheet exists to stay off it. The push is
+        /// along the axis the sheet is docked on: upright it sits across the
+        /// bottom, so a bottom cluster goes UP; on a desk it is a column on
+        /// the right, so the minimap column goes LEFT.
+        ///
+        /// It never pushes a panel off the safe area. A HUD squeezed to
+        /// nothing is worse than an overlap, and `HudOverlapProbe` will say
+        /// so in the one case where it happens.
+        static Rect AvoidSheet(Rect r)
+        {
+            if (!SheetOpen) return r;
+            var s = sheetRect;
+            if (!r.Overlaps(s)) return r;
+
+            var safe = Safe;
+            if (Wide)
+            {
+                float x = s.xMin - Gap - r.width;
+                r.x = Mathf.Max(safe.x, x);
+            }
+            else
+            {
+                float y = s.yMin - Gap - r.height;
+                r.y = Mathf.Max(safe.y, y);
+            }
             return r;
         }
 
@@ -309,7 +372,16 @@ namespace SeaSick.UI
                 // reserve again the moment they draw.
                 if (reserve <= 0f) reserve = lastBottomReserve;
                 else lastBottomReserve = reserve;
-                return safe.yMax - Pad - reserve;
+                float top = safe.yMax - Pad - reserve;
+
+                // **Upright, the sheet is the bottom of the screen.** It
+                // takes the bottom third, so a centred prompt that stopped at
+                // the clusters would still land on it. `AvoidSheet` would
+                // move the prompt afterwards, but everything that sizes
+                // itself against this line (the settings drawer) needs the
+                // honest answer BEFORE it picks a height.
+                if (SheetOpen && !Wide) top = Mathf.Min(top, sheetRect.yMin - Gap);
+                return top;
             }
         }
         static float lastBottomReserve;

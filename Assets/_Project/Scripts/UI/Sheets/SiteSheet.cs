@@ -19,8 +19,35 @@ namespace SeaSick.UI.Sheets
     /// destroys the drawing when the row is raised, and `StillValid` is that
     /// object plus the row: a sheet about a promise that has been kept has
     /// nothing left to say.
-    public class SiteSheet : ISheet
+    public class SiteSheet : ISheetFramed
     {
+        // --- the frame (2026-09-22, "one sheet, tabs") ----------------------
+        //
+        // **One section, so no tab strip.** A drawing on the ground is one
+        // fact -- how far along it is -- and three verbs. A strip with a
+        // single tab on it would be a label dressed as a control, so the
+        // frame simply leaves it out.
+        public string[] TabLabels => null;
+        public int Tab => 0;
+        public void SetTab(int index) { }
+        public Color Accent => SheetTheme.Timber;
+
+        public VisualElement BuildHeader() =>
+            SheetKit.Header("going up", Title, SheetTheme.Timber, "⚒",
+                () => Sheets.Close());
+
+        /// The three verbs, pinned: staff it, call it off, put it somewhere
+        /// else. Same calls as before -- they have simply stopped being the
+        /// last thing you scroll to.
+        public VisualElement BuildActions()
+        {
+            addHand = SheetKit.Btn("Add a hand", AddHand, true);
+            return SheetKit.Actions(
+                addHand,
+                SheetKit.Btn("Cancel", CancelBuild, false, true),
+                SheetKit.Btn("Move", MoveBuild, false, true));
+        }
+
         readonly Outpost outpost;
         readonly BuildSite site;
         readonly string planId;
@@ -75,11 +102,12 @@ namespace SeaSick.UI.Sheets
 
         public VisualElement Build()
         {
+            big = null; who = null; ring = null; chips = null;
+            chipsKey = long.MinValue;
+            ringKey = -99;
+
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
-
-            root.Add(SheetKit.Header("going up", Title, SheetTheme.Timber, "⚒",
-                () => Sheets.Close()));
 
             // **A ring is a bar you have not drawn yet.** The percentage is
             // the number the player reads; the bar under it is what makes it
@@ -94,14 +122,6 @@ namespace SeaSick.UI.Sheets
 
             chips = SheetBits.Holder();
             root.Add(chips);
-
-            root.Add(SheetKit.Rule());
-
-            addHand = SheetKit.Btn("Add a hand", AddHand, true);
-            root.Add(SheetKit.Row(
-                addHand,
-                SheetKit.Btn("Cancel", CancelBuild, false, true),
-                SheetKit.Btn("Move", MoveBuild, false, true)));
 
             Refresh();
             return root;
@@ -149,7 +169,7 @@ namespace SeaSick.UI.Sheets
             int brickLeft = Mathf.Max(0, p.brickNeeded - p.brickDone);
             long key = ((((long)p.done * 31 + p.stoneDone) * 31 + p.needed * 7 + p.stoneNeeded)
                        * 31 + builders) * 31 + (p.brickDone * 31 + p.brickNeeded);
-            if (key != chipsKey)
+            if (key != chipsKey && chips != null)
             {
                 chipsKey = key;
                 chips.Clear();

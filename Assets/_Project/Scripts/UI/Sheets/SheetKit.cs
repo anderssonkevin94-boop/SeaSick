@@ -301,6 +301,111 @@ namespace SeaSick.UI.Sheets
                 seg[i].EnableInClassList(SheetTheme.SegOn, i == selected);
         }
 
+        /// **The tab strip at the top of the standard frame.**
+        ///
+        /// Not `Segmented`, and the difference is what each one is for: a
+        /// segmented group is a SETTING with three values (full / half /
+        /// none), pill-shaped and small; a tab strip is which part of the
+        /// sheet you are LOOKING at, and it has to be hit with a thumb. Every
+        /// tab is therefore at least 44 px tall — the one number this project
+        /// treats as a floor on anything a finger aims at — and the live one
+        /// is marked in the sheet's own accent rather than in brass, so the
+        /// fire's tabs read ember and the ship's read sea.
+        ///
+        /// Labels are sentence-case and short: "camp", "hands · 3", "build".
+        public static VisualElement Tabs(string[] labels, int selected,
+                                         Action<int> pick, Color accent)
+        {
+            var bar = new VisualElement();
+            bar.AddToClassList(SheetTheme.Tabs);
+            if (labels == null) return bar;
+            for (int i = 0; i < labels.Length; i++)
+            {
+                int index = i;
+                var b = new Button(() => pick?.Invoke(index)) { text = labels[i] ?? "" };
+                b.AddToClassList(SheetTheme.Tab);
+                // The underline is a child rather than a border, because a
+                // border on the button itself would move the label by two
+                // pixels every time the tab changed.
+                var mark = new VisualElement();
+                mark.AddToClassList(SheetTheme.TabMark);
+                mark.style.backgroundColor = accent;
+                mark.pickingMode = PickingMode.Ignore;
+                b.Add(mark);
+                if (i == selected) b.AddToClassList(SheetTheme.TabOn);
+                bar.Add(b);
+            }
+            return bar;
+        }
+
+        /// Re-mark which tab is live, and re-label them (the count on
+        /// "hands · 3" moves with the camp), without rebuilding the strip.
+        public static void SetTabs(VisualElement tabs, int selected, string[] labels = null)
+        {
+            if (tabs == null) return;
+            for (int i = 0; i < tabs.childCount; i++)
+            {
+                tabs[i].EnableInClassList(SheetTheme.TabOn, i == selected);
+                if (labels != null && i < labels.Length && tabs[i] is Button b)
+                    b.text = labels[i] ?? "";
+            }
+        }
+
+        /// **One fact, boxed.** A store's number, an order's state, a count —
+        /// the compact form a tab's body uses where a full `Store` tile would
+        /// eat a third of the frame. Label over value, and nothing else.
+        public static VisualElement Chip(string label, string value, Color tint)
+        {
+            var box = new VisualElement();
+            box.AddToClassList(SheetTheme.Chip);
+            box.pickingMode = PickingMode.Ignore;
+            var stripe = new VisualElement();
+            stripe.AddToClassList(SheetTheme.ChipStripe);
+            stripe.style.backgroundColor = tint;
+            stripe.pickingMode = PickingMode.Ignore;
+            box.Add(stripe);
+            var col = new VisualElement();
+            col.style.flexDirection = FlexDirection.Column;
+            col.style.flexShrink = 1f;
+            var eb = Eyebrow(label);
+            eb.style.marginBottom = 0f;
+            col.Add(eb);
+            var v = new Label(value ?? "");
+            v.AddToClassList(SheetTheme.ChipValue);
+            v.pickingMode = PickingMode.Ignore;
+            col.Add(v);
+            box.Add(col);
+            return box;
+        }
+
+        /// Re-point a `Chip` without rebuilding it.
+        public static void SetChip(VisualElement chip, string value)
+        {
+            if (chip == null || chip.childCount < 2) return;
+            var col = chip[1];
+            if (col.childCount > 1 && col[1] is Label v) v.text = value ?? "";
+        }
+
+        /// The row pinned at the bottom of the frame. It wraps, because a tab
+        /// with three verbs on a 1056 px phone frame and on a 616 px desk
+        /// column is the same three verbs.
+        public static VisualElement Actions(params VisualElement[] children)
+        {
+            var e = new VisualElement();
+            e.AddToClassList(SheetTheme.Actions);
+            if (children == null) return e;
+            foreach (var c in children)
+            {
+                if (c == null) continue;
+                c.style.flexGrow = 1f;
+                c.style.flexShrink = 1f;
+                c.style.marginRight = 8f;
+                e.Add(c);
+            }
+            if (e.childCount > 0) e[e.childCount - 1].style.marginRight = 0f;
+            return e;
+        }
+
         /// The inset box that carries a card's one status sentence — what is
         /// going up, who is on it, how long. One line, never a log.
         public static VisualElement Note(string text)

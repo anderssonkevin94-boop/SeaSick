@@ -20,9 +20,42 @@ namespace SeaSick.UI.Sheets
     /// **Nothing here moves a unit.** `CampLoading` carries, `VoyageManager`
     /// counts, `AnchorController` casts off; this reads them and presses
     /// their buttons.
-    public class ShipSheet : ISheet
+    public class ShipSheet : ISheetFramed
     {
         public string Title => "Manifest";
+
+        // --- the frame (2026-09-22, "one sheet, tabs") ----------------------
+        //
+        // Two natural sections and therefore two tabs: what she is CARRYING
+        // and who is SAILING. The action row -- everyone ashore, cast off --
+        // is pinned under both, because those two are about the ship whatever
+        // you happen to be looking at.
+        public const int TabHold = 0;
+        public const int TabCrew = 1;
+
+        int tab = -1;
+        static readonly string[] tabLabels = { "hold", "crew" };
+
+        public int Tab => tab;
+        public void SetTab(int index) { tab = index; }
+        public string[] TabLabels => tabLabels;
+        public Color Accent => SheetTheme.Sea;
+
+        public VisualElement BuildHeader()
+        {
+            var a = Anchor;
+            return SheetKit.Header(
+                a != null && a.CurrentDock != null ? "at the pier" : "at anchor",
+                Title, SheetTheme.Sea, "⚓", () => Sheets.Close());
+        }
+
+        public VisualElement BuildActions()
+        {
+            everyoneAshore = SheetKit.Btn("Everyone ashore", EveryoneAshore);
+            return SheetKit.Actions(
+                everyoneAshore,
+                SheetKit.Btn("Cast off", CastOff, true));
+        }
 
         AnchorController Anchor => SheetBits.Anchor;
         VoyageManager Voyage => SheetBits.Voyage;
@@ -70,15 +103,49 @@ namespace SeaSick.UI.Sheets
         int repairKey = -99;
         long crewKey = long.MinValue;
 
+        /// The body of the live tab. Called again on every tab change, so
+        /// it drops the last tab's element references first -- the same rule
+        /// `FireSheet` follows, and for the same reason.
         public VisualElement Build()
+        {
+            Forget();
+            var root = new VisualElement();
+            root.style.flexDirection = FlexDirection.Column;
+            root.Add(tab == TabCrew ? CrewSection() : HoldSection());
+            Refresh();
+            return root;
+        }
+
+        /// **Both sections at once, for the camp sheet's "ship" tab.** The
+        /// fire embeds the manifest rather than copying it, and a tab inside
+        /// a tab is a place a thumb gets lost -- so when it is embedded the
+        /// two sections simply stack and the frame's own scroll carries them.
+        public VisualElement BuildWhole()
+        {
+            Forget();
+            var root = new VisualElement();
+            root.style.flexDirection = FlexDirection.Column;
+            root.Add(HoldSection());
+            root.Add(SheetKit.Rule());
+            root.Add(CrewSection());
+            Refresh();
+            return root;
+        }
+
+        void Forget()
+        {
+            eyebrowLine = null; holdBig = null; holdBar = null; loadBtn = null;
+            stopAtHolder = deckHolder = repairHolder = aboardCol = ashoreCol = null;
+            holdKey = stopKey = crewKey = long.MinValue;
+            deckKey = repairKey = -99;
+        }
+
+        /// What she is carrying, what would go aboard next, what stays
+        /// ashore, whether the deck is loaded and whether the hull is sound.
+        VisualElement HoldSection()
         {
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
-
-            var a = Anchor;
-            root.Add(SheetKit.Header(
-                a != null && a.CurrentDock != null ? "at the pier" : "at anchor",
-                Title, SheetTheme.Sea, "⚓", () => Sheets.Close()));
 
             eyebrowLine = SheetKit.Text("", false, true, 12f);
             root.Add(eyebrowLine);
@@ -100,21 +167,19 @@ namespace SeaSick.UI.Sheets
             root.Add(deckHolder);
             repairHolder = SheetBits.Holder();
             root.Add(repairHolder);
+            return root;
+        }
 
-            root.Add(SheetKit.Rule());
+        /// Who is aboard and who is ashore, with the arrow that moves them.
+        VisualElement CrewSection()
+        {
+            var root = new VisualElement();
+            root.style.flexDirection = FlexDirection.Column;
             aboardCol = SheetBits.Holder();
             ashoreCol = SheetBits.Holder();
             root.Add(SheetKit.Row(
                 SheetKit.Col(SheetKit.Eyebrow("aboard"), aboardCol),
                 SheetKit.Col(SheetKit.Eyebrow("ashore"), ashoreCol)));
-
-            root.Add(SheetKit.Rule());
-            everyoneAshore = SheetKit.Btn("Everyone ashore", EveryoneAshore);
-            root.Add(SheetKit.Row(
-                everyoneAshore,
-                SheetKit.Btn("Cast off", CastOff, true)));
-
-            Refresh();
             return root;
         }
 
@@ -234,6 +299,7 @@ namespace SeaSick.UI.Sheets
             if (key == stopKey) return;
             stopKey = key;
 
+            if (stopAtHolder == null) return;
             stopAtHolder.Clear();
             if (kinds.Count == 0)
             {
@@ -281,6 +347,7 @@ namespace SeaSick.UI.Sheets
                 Refresh();
             }, false, !v.TakeDeckCargo);
 
+            if (deckHolder == null) return;
             deckHolder.Clear();
             deckHolder.Add(btn);
             if (v.TakeDeckCargo)
@@ -299,6 +366,7 @@ namespace SeaSick.UI.Sheets
         {
             var a = Anchor;
             var hull = a != null ? a.GetComponent<HullIntegrity>() : null;
+            if (repairHolder == null) return;
             if (hull == null) { repairHolder.Clear(); repairKey = -99; return; }
 
             var v = Voyage;
@@ -359,6 +427,7 @@ namespace SeaSick.UI.Sheets
 
             // Aboard: the arrow leaves them here (`Outpost.Station`,
             // CampSheet.cs:493).
+            if (aboardCol == null || ashoreCol == null) return;
             aboardCol.Clear();
             int aboard = 0;
             if (roster != null)

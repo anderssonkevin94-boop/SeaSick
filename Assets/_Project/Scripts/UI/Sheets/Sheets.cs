@@ -48,6 +48,28 @@ namespace SeaSick.UI.Sheets
             Changed?.Invoke();
         }
 
+        // --- which tab each kind of sheet was left on ---
+
+        /// **Per sheet TYPE, for the session.** Reopening the fire lands on
+        /// the tab you were last looking at, which is the whole reason a
+        /// four-tab camp sheet is not four taps' work every time: you come
+        /// back down the beach to the build list you left open.
+        ///
+        /// Keyed on the type rather than on the instance, because a sheet is
+        /// rebuilt from scratch every time the object is tapped — an instance
+        /// key would remember nothing. Cleared with everything else in
+        /// `ResetForPlay`, so a session never inherits the last one's tabs.
+        static readonly Dictionary<Type, int> lastTab = new Dictionary<Type, int>();
+
+        public static int RecallTab(Type sheetType) =>
+            sheetType != null && lastTab.TryGetValue(sheetType, out var i) ? i : 0;
+
+        public static void RememberTab(Type sheetType, int index)
+        {
+            if (sheetType == null || index < 0) return;
+            lastTab[sheetType] = index;
+        }
+
         // --- the registry ---
 
         /// Type -> "make a sheet for this component". Keyed on the EXACT
@@ -170,6 +192,7 @@ namespace SeaSick.UI.Sheets
             ChartActive = false;
             factories.Clear();
             chartFactory = null;
+            lastTab.Clear();
         }
 
         static void Evaluate()

@@ -44,8 +44,53 @@ namespace SeaSick.UI.Sheets
     /// only children are the things Painter2D cannot draw — words — and they
     /// are absolutely positioned over it and re-placed whenever the fit
     /// changes.
-    public class ChartSheet : ISheet
+    public class ChartSheet : ISheetFramed
     {
+        // --- the frame (2026-09-22, "one sheet, tabs") ----------------------
+        //
+        // **One section, so no tab strip.** The chart IS the sheet; there is
+        // nothing to tab between. It takes the standard frame for the two
+        // things the frame is for: the title stays put while the chart is
+        // dragged, and the three verbs stay under the thumb instead of
+        // scrolling away under a map that is taller than the card.
+        public string[] TabLabels => null;
+        public int Tab => 0;
+        public void SetTab(int index) { }
+        public Color Accent => SheetTheme.Sea;
+
+        public VisualElement BuildHeader()
+        {
+            var head = SheetKit.Header("the chart", "", SheetTheme.Sea, "N",
+                () => Sheets.Close());
+            eyebrow = head.Q<Label>(className: SheetTheme.Eyebrow);
+            title = head.Q<Label>(className: SheetTheme.Title);
+            return head;
+        }
+
+        /// The chart's three verbs, pinned at the bottom of the frame. The
+        /// host calls this after `Build`, so `chart` is already up and the
+        /// track toggle's repaint has something to repaint.
+        public VisualElement BuildActions()
+        {
+            trackBtn = SheetKit.Btn("track · last day", () =>
+            {
+                showTrack = !showTrack;
+                // The button says what it will do next, not what it is: on a
+                // 400 px card there is no room for a pill and a label both.
+                trackBtn.text = showTrack ? "track · last day" : "track · off";
+                chart.MarkDirtyRepaint();
+            }, false, true);
+
+            // A readout that is also the way out of a selection: pressing the
+            // name drops it, which is the only "never mind" the sheet has.
+            pickBtn = SheetKit.Btn("—", () => { selected = null; wordsKey = long.MinValue; Refresh(); });
+            courseBtn = SheetKit.Btn("Set course", OnCourse, true);
+
+            var row = SheetKit.Actions(trackBtn, pickBtn, courseBtn);
+            Refresh();
+            return row;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         public static void Register() => ChartHook.Factory = () => new ChartSheet();
 
@@ -98,11 +143,6 @@ namespace SeaSick.UI.Sheets
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
 
-            var head = SheetKit.Header("the chart", "", SheetTheme.Sea, "N", () => Sheets.Close());
-            eyebrow = head.Q<Label>(className: SheetTheme.Eyebrow);
-            title = head.Q<Label>(className: SheetTheme.Title);
-            root.Add(head);
-
             chart = new VisualElement();
             chart.style.width = Length.Percent(100f);
             chart.style.height = 220f;
@@ -125,21 +165,6 @@ namespace SeaSick.UI.Sheets
             root.Add(SheetKit.Text("Tap an island for its name. Tap a flame to set course.",
                 false, true, 12f));
 
-            trackBtn = SheetKit.Btn("track · last day", () =>
-            {
-                showTrack = !showTrack;
-                // The button says what it will do next, not what it is: on a
-                // 400 px card there is no room for a pill and a label both.
-                trackBtn.text = showTrack ? "track · last day" : "track · off";
-                chart.MarkDirtyRepaint();
-            }, false, true);
-
-            // A readout that is also the way out of a selection: pressing the
-            // name drops it, which is the only "never mind" the sheet has.
-            pickBtn = SheetKit.Btn("—", () => { selected = null; wordsKey = long.MinValue; Refresh(); });
-            courseBtn = SheetKit.Btn("Set course", OnCourse, true);
-
-            root.Add(SheetKit.Row(trackBtn, pickBtn, courseBtn));
 
             Refresh();
             return root;
