@@ -1186,20 +1186,114 @@ namespace SeaSick.World
         /// Walk toward a point, facing the way they are going. True on arrival
         /// — and true immediately if they are already there, so a caller can
         /// use it as "am I in place yet".
+        ///
+        /// **Every errand in this file walks through here**, which is why the
+        /// routing went in here and nowhere else: hauling, building, felling,
+        /// hunting and going home all got a route the day this one function
+        /// learnt to ask for one. See `CampPath` for why the map is a grid
+        /// over the camp's own height field rather than a baked NavMesh.
+        ///
+        /// The arrival test is unchanged and is still about the REAL target,
+        /// never a waypoint, so nothing upstream can be surprised by it.
         bool Walk(Vector3 to, float dt)
         {
             Vector3 here = transform.position;
             Vector3 d = to - here;
             d.y = 0f;
             float dist = d.magnitude;
-            if (dist < 0.35f) return true;
+            if (dist < 0.35f) { ClearRoute(); return true; }
 
-            Vector3 step = d / dist * Mathf.Min(Speed * dt, dist);
+            // Where to head THIS frame: the next corner of the route if there
+            // is one, otherwise the target itself — which is exactly the
+            // straight line this used to be, and is what a failed plan falls
+            // back to.
+            Vector3 aim = NextCorner(here, to, dist, dt);
+
+            Vector3 leg = aim - here;
+            leg.y = 0f;
+            float legLen = leg.magnitude;
+            if (legLen < 0.0001f) return false;
+
+            Vector3 step = leg / legLen * Mathf.Min(Speed * dt, legLen);
             Vector3 next = here + step;
             next.y = camp.GroundAt(next);
             transform.position = next;
-            Face(d, dt);
+            Face(leg, dt);
             return false;
+        }
+
+        // --- routing -----------------------------------------------------------
+
+        /// The corners left to walk, and which one is next. Empty means "no
+        /// route" and the walk is the old straight line.
+        readonly System.Collections.Generic.List<Vector3> route
+            = new System.Collections.Generic.List<Vector3>();
+        int routeAt;
+        Vector3 routeFor;        // the destination this route was planned for
+        bool hasRoute;
+        float routeAge;
+
+        /// Seconds before a route is re-planned even though the destination
+        /// has not moved. Cheap insurance against a stale map; long enough
+        /// that a camp of hands is nowhere near the per-frame plan budget.
+        const float RePlanSeconds = 1.2f;
+
+        /// How far a destination may drift before the route is thrown away.
+        /// A hunted beast moves every frame, so this is what stops `TickHunting`
+        /// re-planning sixty times a second.
+        const float RePlanMoved = 2.5f;
+
+        /// Close enough to a waypoint to call it passed. Wider than the
+        /// arrival tolerance on purpose: a corner is a suggestion, and
+        /// pivoting exactly over one looks like a man checking a map.
+        const float CornerReach = 1.4f;
+
+        void ClearRoute()
+        {
+            route.Clear();
+            routeAt = 0;
+            hasRoute = false;
+        }
+
+        Vector3 NextCorner(Vector3 here, Vector3 to, float dist, float dt)
+        {
+            // Close in, or a hop not worth a search: go straight. Most steps
+            // a camp ever takes are this one.
+            if (dist < 6f) { ClearRoute(); return to; }
+
+            routeAge += dt;
+
+            bool stale = !hasRoute
+                || routeAt >= route.Count
+                || routeAge >= RePlanSeconds
+                || Vector3.SqrMagnitude(new Vector3(to.x - routeFor.x, 0f, to.z - routeFor.z))
+                       > RePlanMoved * RePlanMoved;
+
+            if (stale && CampPath.Budget())
+            {
+                var map = CampPath.For(camp);
+                routeAge = 0f;
+                routeFor = to;
+                routeAt = 0;
+                // A failed plan leaves `route` empty, which IS the straight
+                // line. Nobody can be stranded by this call.
+                hasRoute = map != null && map.Plan(here, to, route) && route.Count > 0;
+                if (!hasRoute) route.Clear();
+            }
+
+            if (!hasRoute || routeAt >= route.Count) return to;
+
+            // Retire corners we are already on top of, and never let the last
+            // one stand in for the target.
+            while (routeAt < route.Count - 1)
+            {
+                Vector3 c = route[routeAt];
+                float dx = c.x - here.x, dz = c.z - here.z;
+                if (dx * dx + dz * dz > CornerReach * CornerReach) break;
+                routeAt++;
+            }
+
+            return routeAt >= route.Count - 1 ? to : route[routeAt];
         }
 
         /// Turn toward a direction, smoothed. Every facing in this file goes
