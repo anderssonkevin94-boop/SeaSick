@@ -1426,3 +1426,36 @@ geometry. And *"will they fly around on the ocean too?"* — three gulls now
 follow the ship's wake (`Gull.Follow`, `FaunaField.FollowShip` from the
 populator after the raiders), no LOD and no alarm since the ship is what
 they want. Captures: `goat-herd-live.png`, `wake-gulls-live.png`.
+
+## HUNTING — 2026-09-22
+
+Kevin: *"add hunting so the crew can turn the animals into food."* Built on
+the timber pattern, because that is the pattern: **the ledger produces, the
+scene agrees with it, the worker mimes.**
+
+- **The books.** `Res.Game`, gatherable, stock counted in ANIMALS.
+  `Outpost.EnsureGameStock` seeds it from the island's live herd (never
+  on an island without one, so home cannot hunt), `ReconcileGame` keeps
+  it ≤ the animals alive while loaded and refills it when it runs dry with
+  beasts still standing. A hunter (`Gather`, target Game) drains it at
+  `GatherRate(Game)` 0.5 animals/day and the yield lands in the **Food**
+  store at `MeatPerAnimal` 4 — so one hunter is 2 Food a day, a wheat
+  gatherer 3, and he eats 1. Regrow 1 %/day. `Stalled` reads the Food
+  pile's room; `RatePerDay(Food)` counts him; `Doing` says *hunting*.
+- **The kill.** `SyncHunting`, after the tick, only while watched: while
+  more animals stand than the books say, `Die()` the claimed one, else the
+  nearest to the fire, never more than the difference. `Animal.Die` flops
+  90° over 0.4 s, unlists from its `FaunaLod`, destroys after 3 s.
+- **The mime.** `CampWorker.TickHunting`: claim the nearest unclaimed
+  animal (`Hunted`, and a hunted animal no longer flees crew — it still
+  flees the ship), walk to where it IS each frame, 2 s of `Hammer` (there
+  is no spear pose), carry Food to the Food pile, repeat. The carry
+  resource is split from the swing resource (`Carries` vs `WhatFor`) so
+  every pile lookup sees Food. The worker never kills.
+- **The order.** Drop a villager on an animal (`HandTargets`, Node/Game,
+  verb *hunt*; refusal *nobody can hunt here yet*), or the crew list's
+  Gather menu once the stock is seeded.
+
+**Verified on a bare ledger** (eval, no scene): rate 1.0 Food/day net,
+herd 6 → 5.16 in two days, pile 5 → 6.99. **Unplayed:** the walk, the
+flop, the club, and whether 0.5 a day feels like hunting.
