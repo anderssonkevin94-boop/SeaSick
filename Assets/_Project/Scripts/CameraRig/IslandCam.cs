@@ -739,12 +739,24 @@ namespace SeaSick.CameraRig
         /// existed — which `CampProbe` measures to within 4 m.
         public void LookAt(Vector3 point, float heightMetres)
         {
+            var c = Chase();
+            LookAtGround(point, c != null ? c.OverviewGroundForHeight(heightMetres)
+                                          : heightMetres);
+        }
+
+        /// The same thing asked for in the unit the shot is AUTHORED in —
+        /// metres of ground up the frame — for a caller that worked out its
+        /// coverage from something that has to fit in the frame rather than
+        /// from a height. `AnchorController` frames the campfire siting ring
+        /// this way: the ring's diameter decides the zoom, and converting it
+        /// to a height and back would only lose the fit.
+        public void LookAtGround(Vector3 point, float groundMetres)
+        {
             focus = point;
             following = null;
             wantPan = Pan = Vector3.zero;
-            var c = Chase();
-            if (c != null) wantGround = Mathf.Clamp(
-                c.OverviewGroundForHeight(heightMetres), minGround, maxGround);
+            easingPan = false;
+            wantGround = Mathf.Clamp(groundMetres, minGround, maxGround);
             Driven = true;
         }
 

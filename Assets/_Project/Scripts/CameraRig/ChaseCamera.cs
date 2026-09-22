@@ -538,6 +538,28 @@ namespace SeaSick.CameraRig
             return span * 2f * Mathf.Tan(overviewFov * 0.5f * Mathf.Deg2Rad);
         }
 
+        /// **Metres of ground up the frame that hold a circle of `radius`
+        /// ACROSS the frame, at whatever shape the window actually is.**
+        ///
+        /// The overview's zoom is authored as metres up the FRAME HEIGHT, so
+        /// on a phone held upright a coverage that comfortably holds a 160 m
+        /// ring vertically holds only `ground · 0.46` of it horizontally —
+        /// which is how the campfire ring ended up wider than the screen. The
+        /// fit therefore has to be taken on the narrow axis, and on a phone
+        /// that is the width.
+        ///
+        /// Same aspect clamp the ship-slide uses (`narrowestAspect`), so an
+        /// ultrawide desk window does not tighten the shot past 16:9.
+        public float OverviewGroundForRing(float radius, float margin)
+        {
+            float aspect = Mathf.Min(
+                Mathf.Max(0.2f, cam != null ? cam.aspect : 1f), narrowestAspect);
+            float across = 2f * Mathf.Max(1f, radius) * Mathf.Max(1f, margin);
+            // Up the frame: `across`. Across the frame: `across / aspect`.
+            // Whichever is bigger is the one that has to fit.
+            return Mathf.Max(across, across / aspect);
+        }
+
         /// And back again, so anything reporting the view can say how high it
         /// is without re-deriving the same triangle.
         public float OverviewHeightForGround(float groundMetres)

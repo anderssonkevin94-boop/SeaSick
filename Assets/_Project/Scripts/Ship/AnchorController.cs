@@ -476,6 +476,15 @@ namespace SeaSick.Ship
             if (gangway != null) gangway.Extend(CurrentIsland);
         }
 
+        /// **The island whose siting ring the overview has already been
+        /// seated on.** The latch, not a measurement: see `UpdateCameraFocus`.
+        Island ringFramedAt;
+
+        /// How much wider than the siting ring to frame it. 1.15 leaves the
+        /// ring at 87 % of the narrow axis — clear of the edges, without
+        /// backing off so far that the shore stops reading.
+        const float ringMargin = 1.15f;
+
         /// While the crew are ashore, pull the camera back to frame them —
         /// otherwise they wander out of shot and the player misses the work.
         void UpdateCameraFocus()
@@ -572,29 +581,109 @@ namespace SeaSick.Ship
                 // her on it, the land beyond) without a second set of authored
                 // constants to drift out of step.
                 var outpost = Outpost.Of(CurrentIsland);
-                Vector3 aim = outpost != null && outpost.Sited
-                    ? outpost.ClearingCentre
-                    : CurrentIsland.transform.position;
 
-                Vector3 seaward = transform.position - aim;
+                // **A campless island is framed on the SITING RING, not on the
+                // island.**
+                //
+                // Kevin on the phone, 2026-09-22: "when landing on an island
+                // the camera pans to a spot in the middle of the island
+                // instead of the radius where I can place the initial
+                // campfire." He is describing two rules that were never made
+                // to agree. This shot aimed at `ClearingCentre` (the survey's
+                // clearing, inland) or at the island's own centre; the only
+                // ground that will take the first campfire is
+                // `CampSiting`'s ring, and with no camp standing that ring is
+                // drawn around the SHIP -- which is at the shore, a whole
+                // island radius away from where the camera was looking. On a
+                // portrait screen the ring was frequently not in the frame at
+                // all, so the player was shown a place they could not build
+                // and no sight of the place they could.
+                //
+                // The centre is asked of `CampSiting` rather than restated
+                // here, so the circle that is drawn and the circle that is
+                // framed cannot drift apart.
+                bool camp = outpost != null && (outpost.HasCamp || outpost.Building);
+                Vector3 ringAt = SeaSick.UI.CampSiting.RingCentre(outpost, transform);
+                float ringR = SeaSick.UI.CampSiting.RingRadius;
+
+                Vector3 aim = camp
+                    ? (outpost != null && outpost.Sited
+                        ? outpost.ClearingCentre
+                        : CurrentIsland.transform.position)
+                    : ringAt;
+
+                // The vantage is taken from the ISLAND, not from the aim
+                // point: with the ring framed the aim IS the ship, and
+                // `ship - ship` is a zero direction with no composition in it
+                // at all. Measured from the island's centre it is the same
+                // "water in the near edge, land beyond" look as before.
+                Vector3 seaward = transform.position - CurrentIsland.transform.position;
                 seaward.y = 0f;
 
-                // What has to fit. The settlement's own ViewRadius when the
-                // ground has been surveyed -- the same number home frames by --
-                // and the island otherwise.
+                // What has to fit. With no camp that is the siting ring; once
+                // one stands it is the settlement's own ViewRadius when the
+                // ground has been surveyed -- the same number home frames by
+                // -- and the island otherwise.
                 var settle = CurrentIsland.GetComponent<Settlement>();
-                float reach = settle != null ? settle.ViewRadius
-                                             : Mathf.Max(70f, CurrentIsland.Radius);
+                float reach = !camp
+                    ? ringR
+                    : (settle != null ? settle.ViewRadius
+                                      : Mathf.Max(70f, CurrentIsland.Radius));
+
+                // The zoom that holds the whole ring, on the NARROW axis of
+                // whatever shape the window is. On a phone that is the width,
+                // and it is the only fit that works: the overview's coverage
+                // is metres up the FRAME, and portrait is 0.46 as wide as it
+                // is tall, so a coverage picked to hold 160 m vertically holds
+                // 74 m across. See ChaseCamera.OverviewGroundForRing.
+                float ringGround = !camp
+                    ? chaseCam.OverviewGroundForRing(ringR, ringMargin)
+                    : 0f;
 
                 var shot = new SeaSick.CameraRig.ChaseCamera.IslandShot
                 {
                     centre = aim,
                     radius = reach,
                     from = seaward,
+                    ground = ringGround,
+                    // Nothing may quietly widen or slide this one: the legibility
+                    // clamp would pull the coverage back in (it stops at 309 m of
+                    // ground and the ring needs 399), and the ship-slide would
+                    // drag the frame off the very circle it is centred on -- she
+                    // IS the centre.
+                    free = !camp,
                 };
                 if (islandCam != null)
                 {
                     islandCam.Focus(CurrentIsland);
+
+                    // **ONE SHOT, ON AN EVENT.** Landing at a campless island
+                    // seats the player's own view on the ring once; after that
+                    // the view is theirs to pan and zoom, so this must not run
+                    // every frame or a drag would snap back under the thumb.
+                    // The latch is the same single-owner shape as the berth
+                    // test above: the composition changes when she LANDS, when
+                    // the ring's owner changes (a fire is sited -> `camp`), and
+                    // at no other time. No per-frame distance or difference
+                    // test decides it.
+                    if (!camp && ringFramedAt != CurrentIsland)
+                    {
+                        islandCam.LookAtGround(aim, ringGround);
+                        ringFramedAt = CurrentIsland;
+                    }
+                    else if (camp && ringFramedAt == CurrentIsland)
+                    {
+                        // A fire now stands where the ring was. Hand the view
+                        // to the camp, which is exactly what `CampSiting`'s
+                        // own commit does -- said here as well so the same
+                        // thing happens when a camp arrives by any other road
+                        // (a build finishing, a save adopting one) and the
+                        // view is never left latched on the ship for ever.
+                        islandCam.LookAt(outpost.CampCentre,
+                            SeaSick.CameraRig.IslandCam.BlueprintHeight);
+                        ringFramedAt = null;
+                    }
+
                     shot = islandCam.Apply(shot);
                 }
                 chaseCam.Overview = shot;
@@ -602,6 +691,7 @@ namespace SeaSick.Ship
             else
             {
                 chaseCam.Overview = null;
+                ringFramedAt = null;   // she left; the next landing frames afresh
                 if (islandCam != null) islandCam.Focus(null);
             }
 

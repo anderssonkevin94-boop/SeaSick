@@ -392,11 +392,28 @@ namespace SeaSick.UI
         }
 
         /// The centre of the siting circle: the campfire if a camp stands, else the ship.
-        Vector3 Centre()
+        Vector3 Centre() => RingCentre(outpost, ship);
+
+        /// **The siting ring, for anything that has to AGREE with it.**
+        ///
+        /// Kevin on the phone, 2026-09-22: landing at a fresh island panned
+        /// the camera to the middle of the island, while the only ground that
+        /// would take the campfire was a ring around the SHIP, at the shore —
+        /// frequently off the screen entirely. The camera was composing
+        /// against `Outpost.ClearingCentre` and the ring against the ship, and
+        /// nothing made the two ask the same question.
+        ///
+        /// So the rule lives here, once, and `AnchorController` frames what
+        /// this returns rather than a second copy of the rule that can drift.
+        public static Vector3 RingCentre(Outpost outpost, Transform ship)
         {
             if (outpost != null && outpost.HasCamp) return outpost.CampCentre;
-            return ship != null ? ship.position : Vector3.zero;
+            if (ship != null) return ship.position;
+            return outpost != null ? outpost.CampCentre : Vector3.zero;
         }
+
+        /// ...and how wide it is. Same number `TooFar` refuses on.
+        public static float RingRadius => SiteRadius;
 
         bool TooFar(Vector3 p, out string why)
         {
