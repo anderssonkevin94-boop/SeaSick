@@ -134,6 +134,26 @@ namespace SeaSick.UI
         /// wants that row so it lifts the right one out of the queue.
         PendingBuild movingRow;
 
+        /// **Thumb slack on the grab test, metres.**
+        ///
+        /// Kevin on the phone, 2026-09-23: *"when placing the blueprint I
+        /// should be able to hold and drag it to move it around. now I can
+        /// only click and press."* So a press that lands on the drawing
+        /// carries it. "On the drawing" is measured on the GROUND — the
+        /// ghost's footprint radius plus this — rather than against the
+        /// ghost's colliders, because the ghost has none and because a thumb
+        /// covers more ground than a small hut's roof.
+        public static float GrabSlack = 1.2f;
+
+        /// Is the drawing on the end of a finger right now? While this is
+        /// true the press belongs to siting, not to the camera.
+        bool dragging;
+
+        /// Where the drawing sat relative to the ground point the finger went
+        /// down on, in world XZ. Kept so a grab near the edge of the
+        /// footprint does not snap the building's centre under the thumb.
+        Vector2 grabOffset;
+
         /// Is the current placement a MOVE of the standing blueprint? The
         /// sheet says "never mind" differently for it: escaping a move
         /// leaves the drawing where it was.
@@ -219,10 +239,82 @@ namespace SeaSick.UI
 
         public static void End() { if (Instance != null) Instance.Cancel(); }
 
+        // =================================================================
+        // HOLD AND DRAG THE DRAWING
+        //
+        // `IslandInput` owns the devices; this owns the question "is that
+        // press on the drawing?" and the answer "then here is where it went".
+        // The decision is made ONCE, at press-down, and the touch is handed
+        // over for its whole life — the same shape as `uiOwnedTouches` — so
+        // the camera pan and the blueprint drag can never both be running.
+        // =================================================================
+
+        /// **Does a press here pick the drawing up?** Ground-picks the press
+        /// point and measures the flat distance to the drawing. False when
+        /// nothing is being sited, when the ray misses the ground, or when
+        /// the press is out on the grass — in which case the press keeps
+        /// doing what it did before (pan, or a tap that moves the ghost).
+        public static bool GrabsGhost(Vector2 screen)
+        {
+            var s = Instance;
+            if (s == null || s.plan.id == null) return false;
+            if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return false;
+            return s.NearGhost(g);
+        }
+
+        bool NearGhost(Vector3 g)
+        {
+            // The footprint as DRAWN: a pier's ghost is as long as the beach
+            // asked for, which is not `plan.footprint`. Before the first
+            // `Evaluate` there is no snapped plan yet, so fall back to the
+            // plan itself.
+            Vector2 f = sited.footprint.sqrMagnitude > 0.0001f
+                ? sited.footprint : plan.footprint;
+            float r = 0.5f * Mathf.Sqrt(f.x * f.x + f.y * f.y) + GrabSlack;
+            // `want` is the point the player indicated; `at` is where the
+            // ghost actually stands (the same point except for a snapped
+            // pier). Either one being under the thumb is a grab.
+            return Mathf.Min(Flat(g, want), Flat(g, at)) <= r;
+        }
+
+        static float Flat(Vector3 a, Vector3 b)
+            => Mathf.Sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z));
+
+        /// Take hold. Called at press-down, once, after `GrabsGhost` said yes.
+        public static void BeginDrag(Vector2 screen)
+        {
+            var s = Instance;
+            if (s == null || s.plan.id == null) return;
+            s.dragging = true;
+            s.grabOffset = Vector2.zero;
+            if (GroundPick.FromScreen(Camera.main, screen, out Vector3 g))
+                s.grabOffset = new Vector2(s.want.x - g.x, s.want.z - g.z);
+        }
+
+        /// Follow the finger. `Evaluate` here rather than only in `Update`
+        /// so the ring and the colour are answering about the spot the
+        /// drawing is on THIS frame, not the one it left.
+        public static void DragTo(Vector2 screen)
+        {
+            var s = Instance;
+            if (s == null || !s.dragging || s.plan.id == null) return;
+            if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return;
+            s.want = OnGround(g.x + s.grabOffset.x, g.z + s.grabOffset.y);
+            s.Evaluate();
+        }
+
+        /// Let go. The drawing stays where it was dropped — dropping is not
+        /// building, ✓ is still the only thing that builds.
+        public static void EndDrag() { if (Instance != null) Instance.dragging = false; }
+
+        /// Is the drawing on the end of a finger right now?
+        public static bool Dragging => Placing && Instance.dragging;
+
         void Cancel()
         {
             plan = default;
             moving = false;
+            dragging = false;
             movingRow = null;
             if (outpost != null) outpost.IgnoreSite = null;
             outpost = null;
@@ -258,7 +350,11 @@ namespace SeaSick.UI
             // Only taps: a DRAG on the land is the camera pan, and stealing
             // it to slide the blueprint would take the island's one way of
             // looking around while siting.
-            if (IslandInput.TapThisFrame && IslandInput.TapDownFrame > beganFrame
+            // ...and a press that is CARRYING the drawing is not a tap on the
+            // ground either: `IslandInput` never raises one for it (the drag
+            // owns the press from press-down to release), and this says so
+            // twice rather than letting a drop double as a move.
+            if (!dragging && IslandInput.TapThisFrame && IslandInput.TapDownFrame > beganFrame
                 && !UIBlocker.Blocked(IslandInput.TapAt)
                 && GroundPick.FromScreen(Camera.main, IslandInput.TapAt, out Vector3 ground))
                 want = ground;

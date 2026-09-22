@@ -137,7 +137,7 @@ namespace SeaSick.CameraRig
 
         // --- mouse / single-pointer press state --------------------------
 
-        enum PMode { Idle, UILatched, Pending, GrabbingLand, HoldingVillager }
+        enum PMode { Idle, UILatched, Pending, GrabbingLand, HoldingVillager, DraggingSite }
         PMode pmode = PMode.Idle;
         Vector2 pressDownPos;
         float pressDownTime;
@@ -165,7 +165,7 @@ namespace SeaSick.CameraRig
         enum TouchMode { None, OneFinger, TwoFinger, WaitLift }
         TouchMode touchMode = TouchMode.None;
 
-        enum OneFingerSub { Pending, Grabbing, Holding }
+        enum OneFingerSub { Pending, Grabbing, Holding, DraggingSite }
         int oneFingerId = -1;
         Vector2 oneFingerDown;
         float oneFingerDownTime;
@@ -267,6 +267,20 @@ namespace SeaSick.CameraRig
             pressDownPos = pos;
             pressDownTime = Time.unscaledTime;
             pressDownFrame = Time.frameCount;
+
+            // **Rule 6 (2026-09-23): while siting, a press that lands ON the
+            // drawing carries the drawing.** Decided here, once, at
+            // press-down — never re-tested mid-press — so the drag and the
+            // camera pan can never both own the same press. Everything else
+            // falls through and pans or taps exactly as before.
+            if (CampSiting.Placing && CampSiting.GrabsGhost(pos))
+            {
+                CampSiting.BeginDrag(pos);
+                pickupCandidate = null;
+                pmode = PMode.DraggingSite;
+                return;
+            }
+
             // Rule 4: while siting a building, Hand pick-up is off — every
             // LMB drag during that mode grabs the land, never a villager.
             pickupCandidate = CampSiting.Placing ? null : hand.PickAt(pos, forPickup: true);
@@ -278,6 +292,10 @@ namespace SeaSick.CameraRig
             switch (pmode)
             {
                 case PMode.UILatched:
+                    return;
+
+                case PMode.DraggingSite:
+                    CampSiting.DragTo(pos);
                     return;
 
                 case PMode.Pending:
@@ -325,6 +343,14 @@ namespace SeaSick.CameraRig
 
                 case PMode.GrabbingLand:
                     cam.GrabEnd();
+                    break;
+
+                case PMode.DraggingSite:
+                    // Dropped: the drawing stays where it was let go, and
+                    // NO tap is raised — a drag that also registered a tap
+                    // would move the ghost a second time, to wherever the
+                    // finger happened to leave the glass.
+                    CampSiting.EndDrag();
                     break;
 
                 case PMode.HoldingVillager:
@@ -587,6 +613,19 @@ namespace SeaSick.CameraRig
 
             if (oneFingerUILatched) return;
             cam.KillMotion();
+
+            // Rule 6, for the thumb: a finger that goes down on the drawing
+            // is the siting's finger for as long as it is on the glass. The
+            // three buttons are `UIBlocker` rects and were already tested
+            // above, so ✕ ↻ ✓ still win over the ghost behind them.
+            if (CampSiting.Placing && CampSiting.GrabsGhost(tp.pos))
+            {
+                CampSiting.BeginDrag(tp.pos);
+                oneFingerCandidate = null;
+                oneSub = OneFingerSub.DraggingSite;
+                return;
+            }
+
             oneFingerCandidate = CampSiting.Placing ? null : hand.PickAt(tp.pos, forPickup: true);
         }
 
@@ -620,6 +659,11 @@ namespace SeaSick.CameraRig
                         EdgePan(pos);
                         return; // a second finger cannot interrupt a hold
                     }
+                    else if (oneSub == OneFingerSub.DraggingSite)
+                    {
+                        CampSiting.DragTo(pos);
+                        return; // ...nor a carried drawing: no pinch mid-drag
+                    }
 
                     // A second finger landing while this one is still
                     // undecided, or already panning the land, hands off to
@@ -646,6 +690,10 @@ namespace SeaSick.CameraRig
                         break;
                     case OneFingerSub.Grabbing:
                         cam.GrabEnd();
+                        break;
+                    case OneFingerSub.DraggingSite:
+                        // Dropped where the thumb left it, and no tap.
+                        CampSiting.EndDrag();
                         break;
                     case OneFingerSub.Holding:
                         // No hover on touch, so a refused drop cannot wait
@@ -721,6 +769,7 @@ namespace SeaSick.CameraRig
         {
             if (pmode == PMode.GrabbingLand) cam.GrabEnd();
             else if (pmode == PMode.HoldingVillager && hand != null) hand.Cancel();
+            else if (pmode == PMode.DraggingSite) CampSiting.EndDrag();
             pmode = PMode.Idle;
             pickupCandidate = null;
 
@@ -734,6 +783,7 @@ namespace SeaSick.CameraRig
             {
                 if (oneSub == OneFingerSub.Grabbing) cam.GrabEnd();
                 else if (oneSub == OneFingerSub.Holding && hand != null) hand.Cancel();
+                else if (oneSub == OneFingerSub.DraggingSite) CampSiting.EndDrag();
             }
             else if (touchMode == TouchMode.TwoFinger) cam.OrbitEnd();
             touchMode = TouchMode.None;
