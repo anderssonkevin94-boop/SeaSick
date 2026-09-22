@@ -98,6 +98,15 @@ namespace SeaSick.World
                 return root;
             }
 
+            if (plan.kind == BuildKind.Fletcher)
+            {
+                FletcherShop(root.transform, plan, footing);
+                Lamp(root.transform, plan);
+                root.AddComponent<Building>().Configure(plan);
+                Arm(root, plan);
+                return root;
+            }
+
             if (plan.kind == BuildKind.Quarry)
             {
                 QuarryYard(root.transform, plan, footing);
@@ -494,6 +503,145 @@ namespace SeaSick.World
             go.GetComponent<MeshRenderer>().sharedMaterial = mat;
             return go;
         }
+
+        /// **The fletcher's, 2026-09-22: a bench, a bundle and a butt.**
+        ///
+        /// A small timber hut -- the plainest building in the camp, because a
+        /// fletcher needs a roof and a flat surface and nothing else -- with
+        /// a lean-to working bench along the open side, a bundle of five
+        /// shafts leaning by the door, and a straw target butt standing three
+        /// metres off in the clear.
+        ///
+        /// **The butt is what carries the building.** Everything else here
+        /// could be a shed; a round straw disc on a post, out in the open
+        /// where nothing else in the camp puts anything, says at a glance
+        /// what is made inside. It is the only prop this factory places
+        /// outside its own footprint, which is exactly why it reads.
+        ///
+        /// Local -X is the door, as everywhere else, so `Outpost.Raise`
+        /// turning it toward the clearing puts the bench, the bundle and the
+        /// butt on the village side.
+        static void FletcherShop(Transform root, BuildPlan plan, float footing)
+        {
+            float len = plan.footprint.x, wid = plan.footprint.y;
+            float ridge = plan.ridge;
+
+            var timber = Mat("wall", new Color(0.42f, 0.31f, 0.20f));
+            var beam = Mat("beam", new Color(0.25f, 0.18f, 0.12f));
+            var thatch = Mat("thatch", new Color(0.34f, 0.33f, 0.22f));
+            var stone = Mat("footing", new Color(0.44f, 0.44f, 0.42f));
+            var straw = Mat("butt", new Color(0.78f, 0.70f, 0.44f));
+            var shaft = Mat("shaft", Res.Colour(Res.Arrows));
+
+            // Slab, walls, posts and roof: the plain hut, unchanged, because
+            // the fletcher's IS a plain hut and the character is in what
+            // stands beside it.
+            float slab = 0.6f + Mathf.Max(0f, footing);
+            Box(root, stone, new Vector3(len + 0.7f, slab, wid + 0.7f),
+                new Vector3(0f, 0.35f - slab * 0.5f, 0f));
+
+            float wallH = ridge * 0.55f;
+            Box(root, timber, new Vector3(len, wallH, wid),
+                new Vector3(0f, 0.35f + wallH * 0.5f, 0f));
+            for (int sx = -1; sx <= 1; sx += 2)
+                for (int sz = -1; sz <= 1; sz += 2)
+                    Box(root, beam, new Vector3(0.3f, wallH + 0.3f, 0.3f),
+                        new Vector3(sx * len * 0.5f, 0.35f + wallH * 0.5f, sz * wid * 0.5f));
+
+            float eave = 0.35f + wallH;
+            float rise = Mathf.Max(0.6f, ridge - eave);
+            float half = wid * 0.5f;
+            float slope = Mathf.Sqrt(half * half + rise * rise);
+            float pitch = Mathf.Atan2(rise, half) * Mathf.Rad2Deg;
+            for (int sgn = -1; sgn <= 1; sgn += 2)
+            {
+                var panel = Box(root, thatch,
+                    new Vector3(len + 0.8f, 0.24f, slope * 1.06f),
+                    new Vector3(0f, eave + rise * 0.5f, sgn * half * 0.5f));
+                panel.transform.localRotation = Quaternion.Euler(sgn * pitch, 0f, 0f);
+            }
+            Box(root, beam, new Vector3(len + 0.9f, 0.26f, 0.34f),
+                new Vector3(0f, ridge, 0f));
+            Box(root, beam, new Vector3(0.18f, 2.0f, 1.1f),
+                new Vector3(-len * 0.5f - 0.05f, 0.35f + 1.0f, 0f));
+
+            // --- the lean-to bench -------------------------------------------
+            //
+            // A worktop on two legs against the door wall, under a single
+            // sloped board propped off the eave: the shelter a man works
+            // under when the bench will not fit indoors.
+            const float BenchTop = 0.95f;
+            float bx = -len * 0.5f - 0.75f;
+            Box(root, timber, new Vector3(1.3f, 0.12f, wid * 0.62f),
+                new Vector3(bx, 0.35f + BenchTop, 0f));
+            for (int sz = -1; sz <= 1; sz += 2)
+                Box(root, beam, new Vector3(0.14f, BenchTop, 0.14f),
+                    new Vector3(bx, 0.35f + BenchTop * 0.5f, sz * wid * 0.24f));
+            var lean = Box(root, thatch, new Vector3(1.9f, 0.14f, wid * 0.7f),
+                new Vector3(bx - 0.15f, 0.35f + wallH * 0.92f, 0f));
+            lean.transform.localRotation = Quaternion.Euler(0f, 0f, 22f);
+
+            // --- the bundle of shafts by the door ----------------------------
+            //
+            // Five thin cylinders standing in a slight fan, leaning on the
+            // door post. The same shape `CampPiles` gives an Arrows pile, so
+            // the shop and its output rhyme the way the quarry and its brick
+            // do.
+            for (int i = 0; i < 5; i++)
+            {
+                var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                var c = go.GetComponent<Collider>();
+                if (c != null) Object.Destroy(c);
+                go.transform.SetParent(root, false);
+                go.transform.localScale = new Vector3(0.05f, 0.55f, 0.05f);
+                go.transform.localRotation = Quaternion.Euler(
+                    (i - 2) * 3.5f, i * 26f, 9f + (i - 2) * 4f);
+                go.transform.localPosition = new Vector3(
+                    -len * 0.5f + 0.18f, 0.35f + 0.5f,
+                    wid * 0.28f + (i - 2) * 0.055f);
+                go.GetComponent<MeshRenderer>().sharedMaterial = shaft;
+            }
+
+            // --- the target butt, three metres off the door ------------------
+            //
+            // A post, a flattened cylinder of straw on it, and a dark boss at
+            // the centre so the disc reads as a TARGET rather than as a
+            // wheel leaning against nothing.
+            Vector3 butt = new Vector3(-len * 0.5f - ButtStandoff, 0f, -wid * 0.22f);
+            Box(root, beam, new Vector3(0.16f, 1.25f, 0.16f),
+                butt + new Vector3(0f, 0.35f + 0.625f, 0f));
+            Box(root, beam, new Vector3(0.5f, 0.12f, 0.5f),
+                butt + new Vector3(0f, 0.35f + 0.06f, 0f));
+
+            var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            var dc = disc.GetComponent<Collider>();
+            if (dc != null) Object.Destroy(dc);
+            disc.transform.SetParent(root, false);
+            disc.transform.localScale = new Vector3(0.95f, 0.1f, 0.95f);
+            // Cylinders stand on end; a butt faces the shooter, so it is
+            // tipped onto its rim with its face toward the door.
+            disc.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+            disc.transform.localPosition = butt + new Vector3(0f, 0.35f + 1.35f, 0f);
+            disc.GetComponent<MeshRenderer>().sharedMaterial = straw;
+
+            var boss = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            var bc = boss.GetComponent<Collider>();
+            if (bc != null) Object.Destroy(bc);
+            boss.transform.SetParent(root, false);
+            boss.transform.localScale = new Vector3(0.34f, 0.13f, 0.34f);
+            boss.transform.localRotation = disc.transform.localRotation;
+            boss.transform.localPosition = disc.transform.localPosition
+                + new Vector3(0.03f, 0f, 0f);
+            boss.GetComponent<MeshRenderer>().sharedMaterial =
+                Mat("buttboss", new Color(0.55f, 0.24f, 0.20f));
+        }
+
+        /// Metres from the door wall to the target butt. Three, as asked:
+        /// far enough to be plainly a thing you shoot AT, close enough that
+        /// `Outpost.Raise`'s clearance check on the footprint still leaves
+        /// room for it (the spiral reserves `halfDiag + spacing`, which on a
+        /// hut-sized plan is comfortably past this).
+        public const float ButtStandoff = 3f;
 
         /// **A quarry, 2026-09-22: a yard, not a room.**
         ///

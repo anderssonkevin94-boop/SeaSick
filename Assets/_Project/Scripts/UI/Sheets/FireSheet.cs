@@ -176,13 +176,13 @@ namespace SeaSick.UI.Sheets
         /// Timber, stone and food always; anything else only when the camp
         /// actually holds some, the same rule `CampSheet.BuildRows` follows --
         /// a kind that has been carried away entirely drops off the list.
-        /// Boards, Tools and Brick are made, not found, so "holds some" is
+        /// Boards, Tools, Brick and Arrows are made, not found, so "holds some" is
         /// not the only way one earns its place here -- a quarryman with an
         /// empty brick pile is still worth a tile, so a hand assigned to a
         /// building that makes the kind counts too (`AnyWorkerMakes`).
         static readonly string[] Always = { Res.Timber, Res.Stone, Res.Food };
         static readonly string[] Sometimes =
-            { Res.Ore, Res.Spice, Res.Game, Res.Boards, Res.Tools, Res.Brick };
+            { Res.Ore, Res.Spice, Res.Game, Res.Boards, Res.Tools, Res.Brick, Res.Arrows };
         readonly List<string> shown = new List<string>();
 
         static bool AnyWorkerMakes(OutpostLedger l, string res)
@@ -394,9 +394,17 @@ namespace SeaSick.UI.Sheets
             // raid figures are infinite whenever nothing can raid this camp,
             // and `Mathf.RoundToInt(Infinity)` is an int with no meaning --
             // which made this key thrash and the line rebuild every refresh.
+            // **The quiver is part of this line, 2026-09-22.** A posted
+            // lookout with arrows looses a volley when a raid lands
+            // (`OutpostLedger.LookoutVolley`), so the arrows the camp holds
+            // change what this row is promising -- and therefore have to be
+            // in the key, or the promise would go stale the moment a
+            // fletcher finished one.
+            int quiver = l.CountOf(Res.Arrows);
             long key = (tower ? 1L : 0L) * 7
                        + (post != null ? post.name.GetHashCode() : 0) * 31L
                        + (idle != null ? 3 : 0)
+                       + quiver * 10007L
                        + Tenths(l.RaidDaysIfWatched) * 131L
                        + Tenths(l.RaidDaysUnwatched) * 1031L;
             if (key == lookoutKey) return;
@@ -415,11 +423,15 @@ namespace SeaSick.UI.Sheets
                 // `RaidDaysIfWatched` is infinite -- and "raids every Infinity
                 // days" is the arithmetic leaking through a sentence. The
                 // sentence says what infinity MEANS here.
-                made = SheetKit.Text(
-                    float.IsInfinity(l.RaidDaysIfWatched) || float.IsNaN(l.RaidDaysIfWatched)
-                        ? $"{post.name} at the tower · no raids while she keeps watch"
-                        : $"{post.name} at the tower · raids every {l.RaidDaysIfWatched:0.#} days",
-                    false, true, 12f);
+                string watch = float.IsInfinity(l.RaidDaysIfWatched) || float.IsNaN(l.RaidDaysIfWatched)
+                    ? $"{post.name} at the tower · no raids while she keeps watch"
+                    : $"{post.name} at the tower · raids every {l.RaidDaysIfWatched:0.#} days";
+                // What she has to shoot with, when there is anything. Named
+                // only when the camp holds some: a lookout with an empty
+                // quiver is the line as it always read.
+                if (quiver > 0)
+                    watch += quiver == 1 ? " · 1 arrow" : $" · {quiver} arrows";
+                made = SheetKit.Text(watch, false, true, 12f);
             }
             else
             {

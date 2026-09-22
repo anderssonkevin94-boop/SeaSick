@@ -80,7 +80,7 @@ namespace SeaSick.World
         /// missing, I can't see their gathered versions anywhere."* They
         /// were there, just unreadable as stone or food specifically, so
         /// each family now gets its own silhouette.
-        enum PileShape { Logs, Cairn, Courses, Sacks, Heap }
+        enum PileShape { Logs, Cairn, Courses, Bundle, Sacks, Heap }
 
         static PileShape ShapeFor(string resource)
         {
@@ -92,6 +92,10 @@ namespace SeaSick.World
             // brick beside a pile of stone should read, at a glance and from
             // the air, as the same material after a day's work.
             if (resource == Res.Brick) return PileShape.Courses;
+            // Arrows stand; nothing else in a camp does. A bundle upright in
+            // the grass is the one silhouette here that is taller than it is
+            // wide, so the quiver reads from the air without a label.
+            if (resource == Res.Arrows) return PileShape.Bundle;
             if (resource == Res.Food || resource == Res.Game) return PileShape.Sacks;
             return PileShape.Heap;
         }
@@ -138,6 +142,9 @@ namespace SeaSick.World
                         break;
                     case PileShape.Courses:
                         BuildBrickCourse(stack, mat, row, col);
+                        break;
+                    case PileShape.Bundle:
+                        BuildShaft(stack, mat, i, n);
                         break;
                     case PileShape.Sacks:
                         BuildSack(stack, resource, i, row, col);
@@ -233,6 +240,29 @@ namespace SeaSick.World
                 0.07f + row * 0.13f,
                 0f);
         }
+
+        /// Arrows: a standing bundle of thin shafts in a slight fan, bound
+        /// at the waist. Capped at eight drawn however many the camp holds --
+        /// past that a bundle stops being countable and starts being a bush,
+        /// and the tile by the fire is where the number lives anyway.
+        static void BuildShaft(Transform stack, Material mat, int i, int n)
+        {
+            if (i >= MaxBundle) return;
+            var go = NewPrimitive(stack, PrimitiveType.Cylinder, mat);
+            go.transform.localScale = new Vector3(0.04f, 0.9f, 0.04f);
+            // The fan: each shaft leans a little further out than the last,
+            // around a ring, so the bundle splays at the top and gathers at
+            // the foot the way a sheaf actually stands.
+            float a = i * Mathf.PI * 2f / Mathf.Max(1, Mathf.Min(n, MaxBundle));
+            const float Lean = 7f;
+            go.transform.localRotation = Quaternion.Euler(
+                Mathf.Sin(a) * Lean, i * 31f, Mathf.Cos(a) * Lean);
+            go.transform.localPosition = new Vector3(
+                Mathf.Cos(a) * 0.07f, 0.9f, Mathf.Sin(a) * 0.07f);
+        }
+
+        /// Shafts drawn in one bundle, whatever the pile holds.
+        const int MaxBundle = 8;
 
         /// Food/game: squashed sacks with a darker "band" (a second, smaller
         /// sphere sharing its centre) rather than a bare coloured cube.

@@ -63,7 +63,14 @@ namespace SeaSick.Combat
                 ? Vector3.Cross(shoreDir.normalized, Vector3.up)
                 : Vector3.right;
 
-            for (int i = 0; i < PartySize; i++)
+            // Kevin, 2026-09-22: a posted lookout with arrows looses a
+            // volley as the party wades in -- two arrows drop one raider
+            // before he reaches the beach, and a party of none never lands.
+            int loosed = party.Camp.Ledger != null ? party.Camp.Ledger.LookoutVolley() : 0;
+            int size = Mathf.Max(0, PartySize - loosed / 2);
+            if (size == 0) { Destroy(go); return null; }
+
+            for (int i = 0; i < size; i++)
             {
                 var agent = Crew.BornVillager.Make("raider", null);
                 if (agent == null) continue;
@@ -73,7 +80,7 @@ namespace SeaSick.Combat
                 walker.camp = party.Camp;
                 walker.site = site;
 
-                float offset = (i - (PartySize - 1) * 0.5f) * Spacing;
+                float offset = (i - (size - 1) * 0.5f) * Spacing;
                 Vector3 at = site.shore + tangent * offset;
                 at.y = party.Camp.GroundAt(at);
                 agent.transform.position = at;

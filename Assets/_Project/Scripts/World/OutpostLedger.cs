@@ -738,6 +738,48 @@ namespace SeaSick.World
         /// never played.**
         public const float RaidMoodHit = 0.25f;
 
+        // --- what arrows buy, 2026-09-22 ---------------------------------------
+        //
+        // Kevin: *"build a fletcher's building as well for bow and arrow."*
+        // Two effects, and both of them SPEND the arrows, because a good that
+        // only accumulates is a number and not a decision.
+
+        /// What a quiver is worth to a hunter: half again as many animals a
+        /// day, at one arrow an animal. **A guess, never played.**
+        public const float BowKillBonus = 1.5f;
+
+        /// Arrows a posted lookout will loose at one raid.
+        public const int VolleyArrows = 5;
+
+        /// What each arrow loosed takes off the raid's share, as a fraction
+        /// of the pile. Five arrows at a tenth each turns `RaidShare` from
+        /// 0.4 into 0.2 -- a full volley halves what a raid carries off, and
+        /// no volley leaves the old number untouched to the bit.
+        public const float VolleyShareOff = 0.1f;
+
+        /// **The lookout looses, and the raid carries less off.**
+        ///
+        /// The rule, in one sentence: *a posted lookout with arrows spends up
+        /// to five of them, and every arrow spent takes a tenth off the share
+        /// a raid takes.* No lookout, no watchtower or no arrows and nothing
+        /// happens at all -- `RaidShare` stands, exactly as it did before the
+        /// fletcher existed.
+        ///
+        /// Returns the arrows actually loosed, so the caller can say so.
+        ///
+        /// A posted lookout with arrows looses up to five. The away-clock
+        /// raid spends them in `Raid()` against its share; the live raid
+        /// spends them in `Combat.RaidParty.Begin`, two arrows a raider.
+        public int LookoutVolley(int maxArrows = VolleyArrows)
+        {
+            if (!LookoutPosted) return 0;
+            var quiver = Store(Res.Arrows);
+            if (quiver == null || quiver.whole <= 0) return 0;
+            int loosed = Mathf.Min(maxArrows, quiver.whole);
+            quiver.whole -= loosed;
+            return loosed;
+        }
+
         /// Matches the id `BuildPlans.Watchtower` is being wired up with
         /// elsewhere -- kept as a string here rather than a reference to
         /// that plan, which may not exist yet.
@@ -843,10 +885,19 @@ namespace SeaSick.World
         /// and knocks every hand's mood down -- the cost of nobody watching.
         void Raid()
         {
+            // **The volley first, Kevin 2026-09-22.** The lookout is already
+            // standing there -- with a quiver she does something about it.
+            // Loosed BEFORE a single pile is touched, so the arrows spent are
+            // not themselves part of what the raid takes.
+            int loosed = LookoutVolley();
+            float share = Mathf.Clamp(RaidShare - loosed * VolleyShareOff, 0f, RaidShare);
+
             foreach (var s in stores)
             {
                 if (s == null || s.whole <= 0) continue;
-                int took = Mathf.Max(1, Mathf.FloorToInt(s.whole * RaidShare));
+                // Still at least one unit off any pile that has anything:
+                // a volley blunts a raid, it does not turn one away.
+                int took = Mathf.Max(1, Mathf.FloorToInt(s.whole * share));
                 took = Take(s.resource, took);
                 if (took > 0) away.AddRaided(s.resource, took);
             }
@@ -1391,8 +1442,44 @@ namespace SeaSick.World
 
                 float want = Res.GatherRate(h.target) * days * WorkFactorOn(h, into)
                     * PriorityMultiplier(into);
+
+                // **A hunter with arrows, Kevin 2026-09-22.** *"build a
+                // fletcher's building as well for bow and arrow."* A bow is
+                // the difference between walking an animal down and taking
+                // it at forty paces, so a quiver is worth `BowKillBonus` on
+                // the kill rate -- and it is SPENT doing it, one arrow the
+                // animal. The quiver is therefore a thing the camp burns
+                // through, not a stock that sits there: stop making arrows
+                // and the hunt quietly falls back to half again slower.
+                //
+                // The bonus is taken only as far as the arrows reach. A
+                // hunter with two arrows left and four animals' worth of day
+                // in him shoots two and walks the rest down, which is what
+                // makes running dry read as a slope rather than a cliff.
+                var quiver = hunting ? Store(Res.Arrows) : null;
+                float arrowsHeld = quiver != null ? quiver.whole + quiver.part : 0f;
+                if (hunting && arrowsHeld > 0f)
+                {
+                    float plain = want;
+                    float armed = want * BowKillBonus;
+                    // One arrow per animal taken, so the most the bow can add
+                    // is the arrows in the quiver.
+                    want = Mathf.Min(armed, plain + arrowsHeld);
+                }
+
                 float got = Mathf.Min(want, Mathf.Min(stock.standing, room));
                 if (got <= 0f) continue;
+
+                // Spend the quiver against what was actually killed, after
+                // the herd and the larder have had their say -- a hunter
+                // stopped by a full Food pile has not loosed an arrow.
+                if (hunting && quiver != null && arrowsHeld > 0f)
+                {
+                    float spend = Mathf.Min(got, arrowsHeld);
+                    quiver.part -= spend;
+                    while (quiver.part < 0f && quiver.whole > 0) { quiver.whole--; quiver.part += 1f; }
+                    if (quiver.part < 0f) quiver.part = 0f;
+                }
 
                 stock.standing -= got;
                 if (h.target == Res.Timber) timberTaken += got;
@@ -1433,14 +1520,24 @@ namespace SeaSick.World
                 // An input is consumed one for one, and a hand with nothing to
                 // work on produces nothing. Deliberate, and the point of the
                 // chain: a sawmill on an island with no timber is a shed.
+                // **One input buys `plan.Yield` outputs, 2026-09-22.** It was
+                // flatly one for one until the fletcher, who turns one log
+                // into three arrows. `Yield` reads 1 for every plan that
+                // never mentions it, so the sawmill, the forge, the kitchen
+                // and the quarry come through this block spending exactly
+                // what they spent before, to the bit.
                 if (!string.IsNullOrEmpty(plan.takes))
                 {
                     var from = Store(plan.takes);
                     float have = from != null ? from.whole + from.part : 0f;
-                    want = Mathf.Min(want, have);
+                    float yield = plan.Yield;
+                    // Clamp the OUTPUT by what the input can buy, not by the
+                    // input itself -- one log left is three arrows, not one.
+                    want = Mathf.Min(want, have * yield);
                     if (want <= 0f) continue;
 
-                    from.part -= want;
+                    float spent = want / yield;
+                    from.part -= spent;
                     while (from.part < 0f && from.whole > 0) { from.whole--; from.part += 1f; }
                     if (from.part < 0f) from.part = 0f;
                 }
@@ -1642,9 +1739,19 @@ namespace SeaSick.World
                     // pile at all.
                     if (h.target == Res.Game)
                     {
-                        if (resource != Res.Food || Stalled(h)) continue;
-                        rate += Res.GatherRate(Res.Game) * Res.MeatPerAnimal
-                                * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
+                        if (Stalled(h)) continue;
+                        // **The bow shows on BOTH lines, 2026-09-22.** A
+                        // hunter with arrows kills half again as many animals
+                        // and spends one apiece, so Food reads higher and
+                        // Arrows reads as a drain. Mirrors `Step` term for
+                        // term, which is the only way a readout stays honest
+                        // about a good that is consumed rather than kept.
+                        bool armed = CountOf(Res.Arrows) > 0;
+                        float kills = Res.GatherRate(Res.Game)
+                                      * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
+                        if (armed) kills *= BowKillBonus;
+                        if (resource == Res.Food) rate += kills * Res.MeatPerAnimal;
+                        else if (resource == Res.Arrows && armed) rate -= kills;
                         continue;
                     }
                     if (h.target != resource || Stalled(h)) continue;
@@ -1663,7 +1770,13 @@ namespace SeaSick.World
                     // Consumption scales with the same factor -- an angry
                     // worker draws down the input no faster than they make
                     // the output.
-                    else if (plan.takes == resource) rate -= plan.rate * WorkFactorOn(h, plan.makes);
+                    // Divided by the yield for the same reason `Step`
+                    // divides: a fletcher making three arrows a day is
+                    // drawing ONE log a day off the pile, and a readout that
+                    // said three would have the player cutting twice what
+                    // the bench can use.
+                    else if (plan.takes == resource)
+                        rate -= plan.rate * WorkFactorOn(h, plan.makes) / plan.Yield;
                 }
                 // Build hauls from the pile into the blueprint -- a transfer,
                 // not production, so it never shows up here.
@@ -1702,8 +1815,14 @@ namespace SeaSick.World
                     if (h.target == Res.Game)
                     {
                         if (resource != Res.Food || Stalled(h)) continue;
-                        rate += Res.GatherRate(Res.Game) * Res.MeatPerAnimal
-                                * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
+                        // The bow, as `Step` and `RatePerDay` have it. This
+                        // readout is the POSITIVE terms only, so the arrows
+                        // it costs are deliberately not subtracted here --
+                        // only the meat they buy is.
+                        float kills = Res.GatherRate(Res.Game)
+                                      * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
+                        if (CountOf(Res.Arrows) > 0) kills *= BowKillBonus;
+                        rate += kills * Res.MeatPerAnimal;
                         continue;
                     }
                     if (h.target != resource || Stalled(h)) continue;

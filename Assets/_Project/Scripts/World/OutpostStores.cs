@@ -76,6 +76,17 @@ namespace SeaSick.World
         /// so the good is in the world and priced at nothing until an upgrade
         /// asks for it.
         public const string Brick = "Brick";
+
+        /// **Made out of timber and spent by the people who use them,
+        /// 2026-09-22.** Kevin: *"build a fletcher's building as well for bow
+        /// and arrow."* The first made good that is CONSUMED rather than
+        /// carried home: a hunter spends one per animal and shoots half again
+        /// as well for it (`OutpostLedger.Step`), and a posted lookout spends
+        /// up to five in a volley that cuts what a raid takes
+        /// (`OutpostLedger.LookoutVolley`). So a full quiver is not a number
+        /// going up -- it is two other numbers that get better while it
+        /// lasts.
+        public const string Arrows = "Arrows";
         public const string Food = "Food";
         public const string Meals = "Meals";
 
@@ -144,6 +155,10 @@ namespace SeaSick.World
             // warm enough not to be read as another pile of rough stone,
             // grey enough to be read as masonry rather than as food.
             Brick => new Color(0.62f, 0.42f, 0.35f),
+            // Pale ash shafts and paler fletching: the one made good that is
+            // lighter than anything the ground gives up, so a bundle of them
+            // reads against the timber and the stone either side of it.
+            Arrows => new Color(0.84f, 0.80f, 0.68f),
             Tools => new Color(0.40f, 0.44f, 0.50f),
             Food => new Color(0.55f, 0.62f, 0.28f),
             Game => new Color(0.42f, 0.20f, 0.16f),

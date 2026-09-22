@@ -28,6 +28,13 @@ namespace SeaSick.World
         /// ornament on it: three walls, no fourth, and a low roof. Sited,
         /// tested and footed exactly like a hut -- only the geometry differs.
         Quarry,
+        /// **A bench, a butt and a bundle of shafts, 2026-09-22.** A small
+        /// hut with a lean-to working bench at the open side and a target
+        /// butt set out in front of it. Like the quarry it is a `BuildKind`
+        /// rather than an ornament on a hut, because what says "fletcher" is
+        /// the butt standing three metres off in the open -- a thing no
+        /// other building in the camp has outside its own footprint.
+        Fletcher,
     }
 
     public struct BuildPlan
@@ -110,6 +117,27 @@ namespace SeaSick.World
         public string makes;
         /// Units made per assigned hand per day. **Every one is a guess.**
         public float rate;
+
+        /// **Units of `makes` got out of ONE unit of `takes`, 2026-09-22.**
+        ///
+        /// Every building until the fletcher converted one for one, so the
+        /// ledger's Work loop simply consumed as many inputs as it made
+        /// outputs and nobody had to say so. A fletcher does not: Kevin asked
+        /// for a bow-and-arrow building, and one log is plainly a fistful of
+        /// arrows rather than one arrow. So the ratio moves out of the loop's
+        /// assumption and onto the plan, where the rest of the conversion
+        /// already lives.
+        ///
+        /// **Zero means one**, deliberately. `BuildPlan` is a struct, so
+        /// every plan that does not mention this field gets 0 from the
+        /// default initialiser and every SAVE that predates the field reads
+        /// back the same -- and both have to keep meaning "one for one".
+        /// Read it through `Yield`, never raw.
+        public float yieldPerInput;
+        /// `yieldPerInput`, with 0 and anything negative read as one for one.
+        /// The sawmill, the forge, the kitchen and the quarry all come
+        /// through here unchanged.
+        public float Yield => yieldPerInput > 0f ? yieldPerInput : 1f;
         /// Hands this building supports living here. Declared now; starvation
         /// is a later pass.
         public int supports;
@@ -449,6 +477,41 @@ namespace SeaSick.World
             rate = 2f,
         };
 
+        /// **The fletcher's, 2026-09-22.** Kevin: *"build a fletcher's
+        /// building as well for bow and arrow."*
+        ///
+        /// The first building whose output is SPENT rather than stacked. A
+        /// fletcher takes timber and makes arrows at three a day out of one
+        /// log a day (`yieldPerInput = 3`), and what the arrows buy is in
+        /// `OutpostLedger.Step`: a hunter with a quiver kills half again as
+        /// much and spends an arrow an animal, and a posted lookout looses a
+        /// volley of up to five that cuts what a raid carries off.
+        ///
+        /// **Cheap and small on purpose.** Eighteen logs and two stone, the
+        /// hut's own footprint: it is not a mill or a forge, it is a bench
+        /// under a roof, and it has to be affordable at the point in a camp
+        /// where the herd is thinning and there are raiders offshore --
+        /// which is exactly when a player would want one and would have
+        /// spent everything else. **All guesses, none played.**
+        /// (Capped at 5 for the playtest -- see `PlaytestCostCap`.)
+        public static readonly BuildPlan Fletcher = new BuildPlan
+        {
+            id = "Fletcher",
+            kind = BuildKind.Fletcher,
+            baseStoneCost = 2,
+            label = "fletcher's",
+            blurb = "a fletcher makes arrows from timber; the hunt and the watch both want them",
+            resource = Res.Timber,
+            baseCost = 18,
+            footprint = new Vector2(4.84f, 4.93f),
+            ridge = 3.2f,
+            position = "fletcher",
+            takes = Res.Timber,
+            makes = Res.Arrows,
+            rate = 3f,
+            yieldPerInput = 3f,
+        };
+
         /// **A pier, 2026-09-21.** Kevin: *"I'd like a pier asset to be
         /// buildable to make it easier to dock with the island."*
         ///
@@ -495,7 +558,7 @@ namespace SeaSick.World
         /// same blueprint, so keeping it in the list is what stops it becoming
         /// a special case.
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Hut, Farm, Sawmill, Quarry, Kitchen, Blacksmith, Watchtower, Pier };
+            { Campfire, Storage, Hut, Farm, Sawmill, Quarry, Fletcher, Kitchen, Blacksmith, Watchtower, Pier };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.

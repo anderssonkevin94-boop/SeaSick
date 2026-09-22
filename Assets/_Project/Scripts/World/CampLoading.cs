@@ -70,7 +70,10 @@ namespace SeaSick.World
             // Brick sits right behind Boards for the same reason Boards sits
             // ahead of Timber: a brick is stone that has already had a day's
             // work put into it, so carrying it home beats carrying the rock.
-            Res.Tools, Res.Spice, Res.Boards, Res.Brick, Res.Ore,
+            // Arrows sit behind Tools and ahead of everything else made:
+            // they are the smallest, dearest thing the camp produces and the
+            // only one the ship would sail home to spend somewhere else.
+            Res.Tools, Res.Arrows, Res.Spice, Res.Boards, Res.Brick, Res.Ore,
             Res.Stone, Res.Meals, Res.Food, Res.Timber,
         };
 
