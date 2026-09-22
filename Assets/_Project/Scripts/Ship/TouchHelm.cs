@@ -82,6 +82,13 @@ namespace SeaSick.Ship
         /// How far past the rim still counts as a grab — a thumb pad is wide
         /// and the rim is where the grip is.
         const float GrabFrac = 1.18f;
+        /// The gesture zone is the whole lower part of the screen, not just
+        /// the wheel (Kevin, 2026-09-22, phone: "the steering needs to be
+        /// applicable on the whole bottom half of the screen, it's way too
+        /// small of an area right now"). The wheel is the picture of the
+        /// helm; a thumb anywhere below this fraction of the screen height
+        /// that is not on another control is on the helm.
+        const float ZoneFrac = 0.5f;
         /// Degrees the DRAWN wheel turns at full rudder. Purely visual.
         const float MaxWheelDeg = 120f;
 
@@ -213,8 +220,14 @@ namespace SeaSick.Ship
             if (id == wheelId) { Drag(g); seenWheel = true; return; }
             if (!began || wheelId != NoTouch) return;
 
+            // On the wheel itself, or anywhere in the bottom half that no
+            // other HUD control has claimed (the ladder, the helm panel, the
+            // sheets and the rail all register with UIBlocker; the wheel does
+            // too, which is why it is tested first).
             float r = wheelRect.width * 0.5f;
-            if (Vector2.Distance(g, wheelRect.center) > r * GrabFrac) return;
+            bool onWheel = Vector2.Distance(g, wheelRect.center) <= r * GrabFrac;
+            bool inZone = g.y >= Screen.height * (1f - ZoneFrac) && !UIBlocker.Blocked(g);
+            if (!onWheel && !inZone) return;
 
             wheelId = id;
             axis = Axis.Undecided;
