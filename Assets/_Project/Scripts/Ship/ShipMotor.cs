@@ -64,6 +64,10 @@ namespace SeaSick.Ship
 
         [Header("Load & freeboard")]
 
+        [Header("Burn (overdrive)")]
+        [Tooltip("How far past full ahead the burn notch reaches. The telegraph's top tier: more thrust and a higher ceiling, at a cost the hold pays. 1.35 is a third again on top of her rated speed.")]
+        [SerializeField, Range(1f, 2f)] float overdrive = 1.35f;
+
         [Header("Oars")]
         [SerializeField] float rowSpeed = 9f;
 
@@ -249,6 +253,10 @@ namespace SeaSick.Ship
         public float WindStrength { get; private set; } = 1f;
         public float GustFactor01 { get; private set; }
         public float MaxSpeed => maxSpeed;
+        /// The ceiling `ThrottleOrder` is clamped to. Above 1 is the burn tier.
+        public float Overdrive => overdrive;
+        /// True while the telegraph is past full ahead. The HUD reads this.
+        public bool Burning => ThrottleOrder > 1.001f;
         /// False on a hull with no canvas: wind still exists in the world and
         /// still drives the sea state, it just does not act on this hull.
         public bool WindDriven => windDriven;
@@ -526,7 +534,10 @@ namespace SeaSick.Ship
 
         void TrimSails(float dt)
         {
-            ThrottleOrder = Mathf.Clamp(ThrottleOrder, -1f, 1f);
+            // Ahead clamps at the OVERDRIVE ceiling, not at 1: the burn notch
+            // is an order above full ahead, and the ramp walks to it the same
+            // way it walks to any other.
+            ThrottleOrder = Mathf.Clamp(ThrottleOrder, -1f, overdrive);
             if (roster == null) { Throttle = ThrottleOrder; return; }
             Throttle = Mathf.MoveTowards(
                 Throttle, ThrottleOrder, sailTrimRate * roster.Labour01 * dt);
@@ -773,9 +784,15 @@ namespace SeaSick.Ship
             // ghost along at steerageWay of full, which is right for canvas
             // and wrong for an engine: stop has to mean stop, or she cannot
             // be held off a beach.
-            float demand = Mathf.Clamp(Throttle, -1f, 1f);
+            // Burn is a MULTIPLIER on her rated speed rather than more of the
+            // same demand: past full ahead there is no more sail to set, so
+            // the extra has to lift the target and the hard ceiling with it or
+            // the overspeed brake quietly eats the whole tier.
+            float order = Mathf.Clamp(Throttle, -1f, overdrive);
+            float burnMul = order > 1f ? order : 1f;
+            float demand = Mathf.Clamp(order, -1f, 1f);
             float power = demand >= 0f ? demand : demand * asternFraction;
-            float targetSpeed = effMaxSpeed * power * SeaResistance01;
+            float targetSpeed = effMaxSpeed * power * SeaResistance01 * burnMul;
             // Pace her to the sea. A hull driven flat out into a head sea
             // does not go faster, she goes wetter -- she launches off a crest
             // and lands on her forefoot. Easing gives up way on purpose so
@@ -806,14 +823,14 @@ namespace SeaSick.Ship
                 overspeedDragScale * surfDragRelief, SurfBoost01);
             float pull = forwardWay > targetSpeed
                 ? acceleration * overspeedDrag
-                : acceleration;
+                : acceleration * burnMul;
             if (Anchored) pull = acceleration * 2.5f;
             float dv = Mathf.Clamp(targetSpeed - forwardWay,
                 -pull * heaviness * dt, pull * heaviness * dt);
             rb.AddForce(forward * (dv / dt * mass), ForceMode.Force);
 
             // Hard ceiling so a surf run can't build without limit.
-            float ceiling = effMaxSpeed * surfOvershoot;
+            float ceiling = effMaxSpeed * surfOvershoot * burnMul;
             if (forwardWay > ceiling)
                 rb.AddForce(forward * ((ceiling - forwardWay) / dt * mass * 0.5f), ForceMode.Force);
 
