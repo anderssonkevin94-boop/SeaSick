@@ -72,7 +72,14 @@ namespace SeaSick.World
             // goats on it is a petting zoo, and the size of a herd is one of
             // the few honest size cues the player gets from a distance.
             float r = island.MaxRadius;
-            float sizeScale = Mathf.Clamp01((r - 50f) / 250f);          // 0 at 50 m, 1 at 300 m
+            // Kevin, 2026-09-22: the HERD is sized off the mean shore, not the
+            // farthest one. `MaxRadius` is the single longest spit an island
+            // has, so a 47 m crescent with one 250 m tail was counted as a big
+            // island and given a big herd standing on a sliver of land. The
+            // gulls below still read `MaxRadius`: they want coast to circle,
+            // and a spit is coast.
+            float meanR = island.Radius > 1f ? island.Radius : r;
+            float sizeScale = Mathf.Clamp01((meanR - 50f) / 250f);      // 0 at 50 m, 1 at 300 m
             int sizeCap = Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(2f, 12f, sizeScale)));
 
             if (!island.IsHome && rockiness > GoatRockiness)
@@ -147,6 +154,75 @@ namespace SeaSick.World
             hit = about; return false;
         }
 
+        /// **Somewhere on this island a herd can stand**, sampled against the
+        /// shore distance on each BEARING rather than against a disc, so a
+        /// crescent is as easy to land a herd on as a dome. Sixty tries with a
+        /// widening slope allowance: an island whose every slope is a wall
+        /// still gets its goats, because a rocky island with no goats on it
+        /// reads as a bug and a goat on a steep shoulder reads as a goat.
+        public static bool TryAnchor(FaunaLod f, float maxSlope, System.Random rng,
+                                     out Vector3 hit, out float usedSlope)
+        {
+            hit = f != null ? f.Centre : Vector3.zero;
+            usedSlope = maxSlope;
+            if (f == null || f.Island == null) return false;
+
+            for (int pass = 0; pass < 3; pass++)
+            {
+                usedSlope = maxSlope * (1f + pass);         // 1x, 2x, 3x
+                for (int i = 0; i < 60; i++)
+                {
+                    float ang = (float)rng.NextDouble() * Mathf.PI * 2f;
+                    float d = Mathf.Sqrt((float)rng.NextDouble()) * f.Island.RadiusAt(ang) * 0.8f;
+                    var p = f.Centre + new Vector3(Mathf.Sin(ang), 0f, Mathf.Cos(ang)) * d;
+                    if (!PointOk(f, p, usedSlope)) continue;
+                    p.y = f.Height(p.x, p.z);
+                    hit = p; return true;
+                }
+            }
+            // Kevin, 2026-09-22: last resort -- a deterministic sweep for the
+            // HIGHEST ground the island has, instead of another roll of the
+            // same dice. Four islands out of sixty-five still came up empty
+            // after the three passes above (one of them rock 0.88, green 0.74
+            // -- an island that qualifies for both herds and carried neither),
+            // and they are all tiny or nearly all beach: random sampling was
+            // never going to find the one shoulder that stands clear. The
+            // summit passes the shore and sand tests or nothing does, and a
+            // goat on the only high ground there is reads as the island's
+            // goat. Slope is not tested at all here; standing somewhere odd
+            // beats an island where nothing lives.
+            usedSlope = maxSlope * 4f;
+            Vector3 best = f.Centre; float bestH = float.NegativeInfinity;
+            for (int b = 0; b < 32; b++)
+            {
+                float ang = b / 32f * Mathf.PI * 2f;
+                var dir = new Vector3(Mathf.Sin(ang), 0f, Mathf.Cos(ang));
+                float shore = f.Island.RadiusAt(ang) * 0.8f;
+                for (int k = 0; k <= 8; k++)
+                {
+                    var p = f.Centre + dir * (shore * k / 8f);
+                    if (f.CampKeepOut > 0f)
+                    {
+                        Vector3 cd = p - f.CampAt; cd.y = 0f;
+                        if (cd.sqrMagnitude < f.CampKeepOut * f.CampKeepOut) continue;
+                    }
+                    float h = f.Height(p.x, p.z);
+                    if (h <= bestH) continue;
+                    bestH = h; best = p;
+                }
+            }
+            // Above the top of the beach, give or take half a metre: below
+            // that the "island" is a sandbar and an animal on it is drowned.
+            if (bestH > f.SandTop - 0.5f)
+            {
+                best.y = bestH;
+                hit = best; return true;
+            }
+
+            usedSlope = maxSlope;
+            return false;
+        }
+
         static void Herd(FaunaLod f, Animal.Kind kind, int count, System.Random rng)
         {
             float slope = kind == Animal.Kind.Goat ? GoatMaxSlope : BoarMaxSlope;
@@ -154,11 +230,31 @@ namespace SeaSick.World
             // The anchor is what the herd belongs to: find it first, out on
             // the island somewhere, then hang the members off it. Without an
             // anchor a herd disperses into a scatter within a minute.
-            if (!TryPoint(f, f.Centre, f.Island.MaxRadius * 0.8f, slope, rng, out var anchor)) return;
+            //
+            // Kevin, 2026-09-22: this used to draw the anchor from a DISC of
+            // `MaxRadius * 0.8` about the centre, and `PointOk` then threw out
+            // anything past the shore on its own bearing. On a crescent or a
+            // spit -- which is most of them; one measured island had a mean
+            // shore of 41 m and a max of 228 m -- almost every one of the 40
+            // tries landed in open water, the anchor was never found, and the
+            // herd returned in silence. That is why an island could be rocky
+            // AND green and still carry nothing but gulls. `TryAnchor` samples
+            // the island's own outline instead, so the shape stops mattering.
+            if (!TryAnchor(f, slope, rng, out var anchor, out slope)) return;
 
+            int placed = 0;
             for (int i = 0; i < count; i++)
             {
-                if (!TryPoint(f, anchor, HerdSpread, slope, rng, out var at)) continue;
+                // Kevin, 2026-09-22: the anchor is standable by construction,
+                // so the first member stands ON it if the spread finds nothing
+                // -- a herd that found its ground and then placed nobody was
+                // the second way an island came out empty.
+                if (!TryPoint(f, anchor, HerdSpread, slope, rng, out var at))
+                {
+                    if (placed > 0) continue;
+                    at = anchor;
+                }
+                placed++;
                 var go = Body(kind, f.Root);
                 go.transform.position = at;
                 go.transform.rotation = Quaternion.Euler(0f, (float)rng.NextDouble() * 360f, 0f);
