@@ -1,0 +1,1 @@
+PASS 1024 CPU/GPU samples; maximum height error 4.112255E-05 m; gradient 1.645292E-05; analytic velocity vs time difference 0.0005797744 m/s. Does not measure complete FFT readback lag or clipmap interpolation.

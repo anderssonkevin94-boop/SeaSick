@@ -1,0 +1,93 @@
+Shader "SeaSick/Studies/DirectionalOcean"
+{
+ Properties {
+ _Deep("Trough blue",Color)=(.035,.26,.54,1)
+ _Mid("Wave blue",Color)=(.045,.38,.66,1)
+ _Light("Lit face blue",Color)=(.09,.49,.74,1)
+ _Foam("Foam",Color)=(.86,.95,.96,1)
+ _StudyTime("Study time",Float)=0
+ _Sharpness("Crest sharpness",Range(0,0.4))=.27
+ _Amplitude("Wave height multiplier",Range(.2,2))=1
+ }
+ SubShader {
+ Tags {"RenderPipeline"="UniversalPipeline" "RenderType"="Opaque"}
+ Pass {
+ HLSLPROGRAM
+ #pragma vertex Vert
+ #pragma fragment Frag
+ #pragma multi_compile_fog
+ #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+ #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+ CBUFFER_START(UnityPerMaterial)
+ half4 _Deep,_Mid,_Light,_Foam;
+ float _StudyTime,_Sharpness,_Amplitude;
+ CBUFFER_END
+ struct A {float4 positionOS:POSITION;};
+ struct V {float4 positionCS:SV_POSITION;float3 world:TEXCOORD0;float2 baseXZ:TEXCOORD1;float fog:TEXCOORD2;};
+ float Hash(float p){return frac(sin(p*127.1)*43758.5453);}
+ float Noise(float p){float f=frac(p);return lerp(Hash(floor(p)),Hash(floor(p)+1),f*f*(3-2*f));}
+ // Shared displacement and derivative: colored faces and foam describe the
+ // very same peaked waves that change the mesh silhouette.
+ void Wave(float2 p,float2 d,float wavelength,float amp,float offset,inout float h,inout float2 gradient,inout float foam){
+  d=normalize(d);float2 crossDir=float2(-d.y,d.x);float across=dot(p,crossDir);
+  float k=6.2831853/wavelength;
+  float phase=k*dot(p,d)+.28*sin(across*.17+offset)-sqrt(9.81*k)*_StudyTime+offset;
+  float s=sin(phase),c=cos(phase);
+  h+=amp*(s-_Sharpness*cos(2*phase));
+  float2 phaseGradient=k*d+.0476*cos(across*.17+offset)*crossDir;
+  gradient+=amp*(c+2*_Sharpness*sin(2*phase))*phaseGradient;
+  // Only the approaching edge of an actual crest can turn white. Breakup
+  // varies along that crest, never draws closed noise contours on flat water.
+  float threshold=lerp(.92,.997,Noise(across*.27+offset*8));
+  float crest=smoothstep(threshold,threshold+.015,s)*smoothstep(-.06,.08,c);
+  float cycle=floor((phase+1.5708)/6.2831853);
+  float broken=smoothstep(.57,.79,Noise(across*.28+offset*13+cycle*2.7));
+  foam=max(foam,crest*broken*saturate((amp-.04)*4));
+ }
+ void Surface(float2 p,out float h,out float2 gradient,out float foam){
+  h=0;gradient=0;foam=0;
+  Wave(p,float2(.20,1),24,.48,0,h,gradient,foam);
+  Wave(p,float2(-.18,1),10.8,.23,2.1,h,gradient,foam);
+  Wave(p,float2(.45,1),5.4,.105,4.3,h,gradient,foam);
+  Wave(p,float2(-.55,1),2.6,.035,1.7,h,gradient,foam);
+  h*=_Amplitude;gradient*=_Amplitude;
+ }
+ V Vert(A i){V o;float3 p=TransformObjectToWorld(i.positionOS.xyz);float h,f;float2 g;Surface(p.xz,h,g,f);o.baseXZ=p.xz;p.y+=h;o.world=p;o.positionCS=TransformWorldToHClip(p);o.fog=ComputeFogFactor(o.positionCS.z);return o;}
+ half4 Frag(V i):SV_Target {
+  float h,foam;float2 g;Surface(i.baseXZ,h,g,foam);
+  float3 n=normalize(float3(-g.x,1,-g.y));
+  // Three closely related pigment values, selected by the actual wave face.
+  float face=dot(n,normalize(float3(-.45,.65,-.6)));
+  float aa=max(fwidth(face)*1.4,.026);
+  float middle=smoothstep(.53-aa,.53+aa,face);
+  float light=smoothstep(.77-aa,.77+aa,face);
+  half3 color=lerp(_Deep.rgb,_Mid.rgb,middle);
+  color=lerp(color,_Light.rgb,light*.82);
+  color*=.95+.08*saturate(h+.5);
+  float dist=distance(_WorldSpaceCameraPos,i.world);
+  float3 view=normalize(_WorldSpaceCameraPos-i.world);
+  color=lerp(color,_Light.rgb,pow(1-saturate(dot(n,view)),5)*.22);
+  // Distant white lines lose coverage before becoming flickering pixels.
+  foam*=1-smoothstep(90,220,dist);
+  // Study wake: fragmented Kelvin shoulders and scattered churn, composited
+  // on the displaced surface, with no billboard or separate hovering plane.
+  float aft=-i.baseXZ.y-4.5;
+  float spread=1.5+max(aft,0)*.18;
+  float edge=abs(i.baseXZ.x)-spread-.35*sin(aft*.65);
+  float arm=exp(-edge*edge/max(.12+aft*.012,.05));
+  arm*=smoothstep(.25,.50,Noise(aft*.70+sign(i.baseXZ.x)*12));
+  float2 q=i.baseXZ*float2(1.4,.65)+float2(0,_StudyTime*.3);
+  float row=floor(q.y),f=frac(q.y);f=f*f*(3-2*f);
+  float churnNoise=lerp(Noise(q.x+row*13),Noise(q.x+(row+1)*13),f);
+  float churn=smoothstep(.47,.53,churnNoise)*(1-smoothstep(.35,.90,abs(i.baseXZ.x)/spread));
+  float wake=max(arm,churn*.9)*smoothstep(0,1.2,aft)*(1-smoothstep(16,48,aft));
+  foam=max(foam,wake);
+  float foamAA=max(fwidth(foam)*.8,.015);
+  foam=smoothstep(.32-foamAA,.44+foamAA,foam);
+  color=lerp(color,_Foam.rgb,saturate(foam));
+  return half4(MixFog(color,i.fog),1);
+ }
+ ENDHLSL
+ }
+ }
+}

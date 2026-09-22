@@ -1,0 +1,9 @@
+{
+  "hull_length_m": 46.0,
+  "beam_m": 13.0,
+  "cannons": 72,
+  "masts": 3,
+  "square_sails": 12,
+  "crew_height_m": 1.7,
+  "purpose": "Exterior scale study, not production or gameplay validated"
+}

@@ -1,5 +1,9 @@
 # SeaSick graphic adventure art pass
 
+**Ship fleet revision (2026-09-17):** [Revised fleet gallery](fleet-v3/index.html) and [ship construction / progression rules](SHIP-FLEET-RULES.md). These are standalone Blender studies; the earlier fleet gallery is superseded by this review revision.
+
+**Latest session (2026-09-17):** [Standalone crew and settlement handoff](SESSION-HANDOFF.md). Current restriction: leave Unity untouched; new assets await explicit import authorization.
+
 **Island rebuild:** see [the standalone asset library and gameplay checks](STORYBOOK-ISLANDS.md). The newer storybook kit replaces the first-pass scenery described below.
 
 The Option B treatment is applied to **Sea.unity**. `ArtDirectionLab.unity` remains available for look development. The actual twenty-node fleet retains its original meshes, rigging, sockets, displacement data and physics.

@@ -1,0 +1,22 @@
+Approved fleet Unity import
+Bow +Z, metres, waterline Y=0; baked vertex colours; native meshes and prefabs.
+01 Fishing skiff: 19492 triangles, 0 cannons, 1 sails; 9 x 2.9 m
+02 Voyager skiff: 20716 triangles, 0 cannons, 1 sails; 11.5 x 2.9 m
+03 Painted skiff: 20718 triangles, 0 cannons, 1 sails; 11.5 x 3.7 m
+04 Decked launch: 33710 triangles, 2 cannons, 1 sails; 11.5 x 3.7 m
+05 Coastal launch: 34654 triangles, 2 cannons, 1 sails; 15 x 3.7 m
+06 Broad voyager: 38798 triangles, 4 cannons, 1 sails; 15 x 4.8 m
+07 Coastal sloop: 55186 triangles, 4 cannons, 2 sails; 15 x 4.8 m
+08 Long sloop: 67250 triangles, 6 cannons, 3 sails; 18 x 4.8 m
+09 Merchant sloop: 77208 triangles, 6 cannons, 4 sails; 18 x 6.1 m
+10 Armed escort: 82104 triangles, 8 cannons, 4 sails; 18 x 6.1 m
+11 Long escort: 85616 triangles, 10 cannons, 4 sails; 22 x 6.1 m
+12 Guild escort: 89108 triangles, 12 cannons, 4 sails; 22 x 7.4 m
+13 Adventure brig: 92244 triangles, 14 cannons, 4 sails; 26 x 7.8 m
+14 Long brig: 97037 triangles, 16 cannons, 4 sails; 29 x 7.8 m
+15 Guild brig: 107525 triangles, 16 cannons, 4 sails; 29 x 9 m
+16 Compact two-decker: 108612 triangles, 16 cannons, 4 sails; 29 x 9 m
+17 Ocean two-decker: 119407 triangles, 18 cannons, 5 sails; 32 x 9 m
+18 Grand voyager: 133879 triangles, 20 cannons, 6 sails; 32 x 9.5 m
+19 Admiral voyager: 137535 triangles, 22 cannons, 6 sails; 34 x 9.5 m
+20 Sea Crown: 141946 triangles, 24 cannons, 6 sails; 34 x 9.5 m

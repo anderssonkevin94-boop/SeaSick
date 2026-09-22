@@ -1,0 +1,11 @@
+Live archipelago review
+Non-home islands sharing terrain treatment: 64
+Material: TerrainVertexColor; authored lighting=1
+6000 deterministic world samples finite; 5727 low beach/seabed samples unchanged, max error=0 m.
+Streamed mesh/height samples=1089 maximum error=0.009494781 m
+Island_4 centre=(-780.00, 0.00, -111.00) radius=132 resource=— loaded=304 pending=0
+Streamed mesh/height samples=289 maximum error=0.00668335 m
+Island_61 centre=(1476.00, 0.00, 2457.00) radius=324 resource=Spice loaded=289 pending=0
+Streamed mesh/height samples=289 maximum error=0.002354622 m
+Island_30 centre=(-588.00, 0.00, -2247.00) radius=606 resource=Ore loaded=289 pending=0
+PASS: three live islands rendered; desktop and portrait.

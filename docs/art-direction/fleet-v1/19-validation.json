@@ -1,0 +1,25 @@
+{
+  "stage": 19,
+  "node": 18,
+  "name": "Admiral voyager",
+  "length": 34,
+  "beam": 9.5,
+  "freeboard": 5.1,
+  "draft": 3.3,
+  "gun_rows": [
+    6,
+    5
+  ],
+  "cannons": 22,
+  "tiers": [
+    3,
+    3
+  ],
+  "masts": 2,
+  "feature": "Twenty-two guns, three stern lanterns and a richer blue-green hull with gold inlay.",
+  "image": "19.png",
+  "model": "19.blend",
+  "objects": 491,
+  "render": "19.png",
+  "complete": true
+}

@@ -1,0 +1,222 @@
+[
+  {
+    "stage": 1,
+    "scene": "Fleet_01_Fishing skiff",
+    "objects": 60,
+    "expected_cannons": 0,
+    "actual_cannons": 0,
+    "expected_square_sails": 1,
+    "actual_square_sails": 1,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 2,
+    "scene": "Fleet_02_Voyager skiff",
+    "objects": 68,
+    "expected_cannons": 0,
+    "actual_cannons": 0,
+    "expected_square_sails": 1,
+    "actual_square_sails": 1,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 3,
+    "scene": "Fleet_03_Painted skiff",
+    "objects": 69,
+    "expected_cannons": 0,
+    "actual_cannons": 0,
+    "expected_square_sails": 1,
+    "actual_square_sails": 1,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 4,
+    "scene": "Fleet_04_Decked launch",
+    "objects": 96,
+    "expected_cannons": 0,
+    "actual_cannons": 0,
+    "expected_square_sails": 1,
+    "actual_square_sails": 1,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 5,
+    "scene": "Fleet_05_Coastal launch",
+    "objects": 111,
+    "expected_cannons": 0,
+    "actual_cannons": 0,
+    "expected_square_sails": 1,
+    "actual_square_sails": 1,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 6,
+    "scene": "Fleet_06_Broad voyager",
+    "objects": 116,
+    "expected_cannons": 0,
+    "actual_cannons": 0,
+    "expected_square_sails": 1,
+    "actual_square_sails": 1,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 7,
+    "scene": "Fleet_07_Coastal sloop",
+    "objects": 173,
+    "expected_cannons": 0,
+    "actual_cannons": 0,
+    "expected_square_sails": 2,
+    "actual_square_sails": 2,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 8,
+    "scene": "Fleet_08_Long sloop",
+    "objects": 255,
+    "expected_cannons": 0,
+    "actual_cannons": 0,
+    "expected_square_sails": 3,
+    "actual_square_sails": 3,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 9,
+    "scene": "Fleet_09_Merchant sloop",
+    "objects": 280,
+    "expected_cannons": 0,
+    "actual_cannons": 0,
+    "expected_square_sails": 4,
+    "actual_square_sails": 4,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 10,
+    "scene": "Fleet_10_Armed escort",
+    "objects": 378,
+    "expected_cannons": 6,
+    "actual_cannons": 6,
+    "expected_square_sails": 4,
+    "actual_square_sails": 4,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 11,
+    "scene": "Fleet_11_Long escort",
+    "objects": 415,
+    "expected_cannons": 8,
+    "actual_cannons": 8,
+    "expected_square_sails": 4,
+    "actual_square_sails": 4,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 12,
+    "scene": "Fleet_12_Guild escort",
+    "objects": 460,
+    "expected_cannons": 10,
+    "actual_cannons": 10,
+    "expected_square_sails": 4,
+    "actual_square_sails": 4,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 13,
+    "scene": "Fleet_13_Adventure brig",
+    "objects": 884,
+    "expected_cannons": 12,
+    "actual_cannons": 12,
+    "expected_square_sails": 4,
+    "actual_square_sails": 4,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 14,
+    "scene": "Fleet_14_Long brig",
+    "objects": 435,
+    "expected_cannons": 14,
+    "actual_cannons": 14,
+    "expected_square_sails": 4,
+    "actual_square_sails": 4,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 15,
+    "scene": "Fleet_15_Guild brig",
+    "objects": 493,
+    "expected_cannons": 16,
+    "actual_cannons": 16,
+    "expected_square_sails": 4,
+    "actual_square_sails": 4,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 16,
+    "scene": "Fleet_16_Compact two-decker",
+    "objects": 403,
+    "expected_cannons": 16,
+    "actual_cannons": 16,
+    "expected_square_sails": 4,
+    "actual_square_sails": 4,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 17,
+    "scene": "Fleet_17_Ocean two-decker",
+    "objects": 422,
+    "expected_cannons": 18,
+    "actual_cannons": 18,
+    "expected_square_sails": 5,
+    "actual_square_sails": 5,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 18,
+    "scene": "Fleet_18_Grand voyager",
+    "objects": 478,
+    "expected_cannons": 20,
+    "actual_cannons": 20,
+    "expected_square_sails": 6,
+    "actual_square_sails": 6,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 19,
+    "scene": "Fleet_19_Admiral voyager",
+    "objects": 491,
+    "expected_cannons": 22,
+    "actual_cannons": 22,
+    "expected_square_sails": 6,
+    "actual_square_sails": 6,
+    "has_camera": true,
+    "render_exists": true
+  },
+  {
+    "stage": 20,
+    "scene": "Fleet_20_Sea Crown",
+    "objects": 506,
+    "expected_cannons": 24,
+    "actual_cannons": 24,
+    "expected_square_sails": 6,
+    "actual_square_sails": 6,
+    "has_camera": true,
+    "render_exists": true
+  }
+]

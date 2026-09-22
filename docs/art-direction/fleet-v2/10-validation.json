@@ -1,0 +1,25 @@
+{
+  "stage": 10,
+  "node": 9,
+  "name": "Armed escort",
+  "length": 18,
+  "beam": 6.1,
+  "freeboard": 1.85,
+  "draft": 1.35,
+  "gun_rows": [
+    0,
+    3
+  ],
+  "cannons": 6,
+  "tiers": [
+    2,
+    2
+  ],
+  "masts": 2,
+  "feature": "Six bright red gun carriages give the merchant hull an escort identity.",
+  "image": "10.png",
+  "model": "10.blend",
+  "objects": 516,
+  "render": "10.png",
+  "complete": true
+}

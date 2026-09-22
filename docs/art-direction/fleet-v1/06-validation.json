@@ -1,0 +1,21 @@
+{
+  "stage": 6,
+  "node": 5,
+  "name": "Broad voyager",
+  "length": 15,
+  "beam": 4.8,
+  "freeboard": 1.45,
+  "draft": 1.0,
+  "gun_rows": [],
+  "cannons": 0,
+  "tiers": [
+    1
+  ],
+  "masts": 1,
+  "feature": "A canvas stern shelter, crafted rails and organized deck stowage.",
+  "image": "06.png",
+  "model": "06.blend",
+  "objects": 116,
+  "render": "06.png",
+  "complete": true
+}

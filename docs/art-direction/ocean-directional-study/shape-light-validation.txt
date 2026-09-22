@@ -1,0 +1,4 @@
+PASS Unity shader rendered without errors. Foam disabled in main and low-angle reviews.
+PASS opposite sun changes water-only crop by mean 19.863/255 at fixed geometry/time/camera.
+PASS 24 frames each at original and low camera, desktop and portrait stills, and foam-restored still.
+Study boat follows an analytic visual proxy, not gameplay buoyancy. No production ocean changes.

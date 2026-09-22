@@ -1,0 +1,25 @@
+{
+  "stage": 13,
+  "node": 12,
+  "name": "Adventure brig",
+  "length": 26,
+  "beam": 7.8,
+  "freeboard": 2.65,
+  "draft": 2.5,
+  "gun_rows": [
+    3,
+    4
+  ],
+  "cannons": 14,
+  "tiers": [
+    2,
+    2
+  ],
+  "masts": 2,
+  "feature": "Fourteen cannons, rebuilt fleet proportions and a raised enclosed battery.",
+  "image": "13.png",
+  "model": "13.blend",
+  "objects": 603,
+  "render": "13.png",
+  "complete": true
+}

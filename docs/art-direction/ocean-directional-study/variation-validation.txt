@@ -1,0 +1,3 @@
+PASS analytic grouped-wave gradient vs central finite difference: 1000 positions/times, max absolute error 1.19e-10.
+PASS Unity rendered desktop, portrait, and 24 successive phases without shader errors.
+Foam lifecycle is analytic age since crest passage, not a persistent simulation buffer.

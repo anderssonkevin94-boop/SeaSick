@@ -1,0 +1,25 @@
+{
+  "stage": 16,
+  "node": 15,
+  "name": "Compact two-decker",
+  "length": 29,
+  "beam": 9.0,
+  "freeboard": 4.65,
+  "draft": 3.0,
+  "gun_rows": [
+    4,
+    4
+  ],
+  "cannons": 16,
+  "tiers": [
+    2,
+    2
+  ],
+  "masts": 2,
+  "feature": "Two enclosed gun decks, a three-window stern gallery and open working deck.",
+  "image": "16.png",
+  "model": "16.blend",
+  "objects": 403,
+  "render": "16.png",
+  "complete": true
+}

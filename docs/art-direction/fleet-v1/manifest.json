@@ -1,0 +1,408 @@
+[
+  {
+    "stage": 1,
+    "node": 0,
+    "name": "Fishing skiff",
+    "length": 9,
+    "beam": 2.9,
+    "freeboard": 0.8,
+    "draft": 0.55,
+    "gun_rows": [],
+    "cannons": 0,
+    "tiers": [
+      1
+    ],
+    "masts": 1,
+    "feature": "An open working boat: thwarts, fishing basket, plain canvas and a tiller.",
+    "image": "01.png",
+    "model": "01.blend"
+  },
+  {
+    "stage": 2,
+    "node": 1,
+    "name": "Voyager skiff",
+    "length": 11.5,
+    "beam": 2.9,
+    "freeboard": 0.9,
+    "draft": 0.6,
+    "gun_rows": [],
+    "cannons": 0,
+    "tiers": [
+      1
+    ],
+    "masts": 1,
+    "feature": "A stronger stem, extended rowing benches and a proper cargo rack.",
+    "image": "02.png",
+    "model": "02.blend"
+  },
+  {
+    "stage": 3,
+    "node": 2,
+    "name": "Painted skiff",
+    "length": 11.5,
+    "beam": 3.7,
+    "freeboard": 1.0,
+    "draft": 0.65,
+    "gun_rows": [],
+    "cannons": 0,
+    "tiers": [
+      1
+    ],
+    "masts": 1,
+    "feature": "A teal sheer stripe, shaped bow cap and carefully finished gunwales.",
+    "image": "03.png",
+    "model": "03.blend"
+  },
+  {
+    "stage": 4,
+    "node": 3,
+    "name": "Decked launch",
+    "length": 11.5,
+    "beam": 3.7,
+    "freeboard": 1.25,
+    "draft": 0.8,
+    "gun_rows": [],
+    "cannons": 0,
+    "tiers": [
+      1
+    ],
+    "masts": 1,
+    "feature": "First continuous deck, framed hatch and a raised steering platform.",
+    "image": "04.png",
+    "model": "04.blend"
+  },
+  {
+    "stage": 5,
+    "node": 4,
+    "name": "Coastal launch",
+    "length": 15,
+    "beam": 3.7,
+    "freeboard": 1.3,
+    "draft": 0.85,
+    "gun_rows": [],
+    "cannons": 0,
+    "tiers": [
+      1
+    ],
+    "masts": 1,
+    "feature": "A bowsprit, small jib and lantern mark the first coastal voyager.",
+    "image": "05.png",
+    "model": "05.blend"
+  },
+  {
+    "stage": 6,
+    "node": 5,
+    "name": "Broad voyager",
+    "length": 15,
+    "beam": 4.8,
+    "freeboard": 1.45,
+    "draft": 1.0,
+    "gun_rows": [],
+    "cannons": 0,
+    "tiers": [
+      1
+    ],
+    "masts": 1,
+    "feature": "A canvas stern shelter, crafted rails and organized deck stowage.",
+    "image": "06.png",
+    "model": "06.blend"
+  },
+  {
+    "stage": 7,
+    "node": 6,
+    "name": "Coastal sloop",
+    "length": 15,
+    "beam": 4.8,
+    "freeboard": 1.55,
+    "draft": 1.1,
+    "gun_rows": [],
+    "cannons": 0,
+    "tiers": [
+      2
+    ],
+    "masts": 1,
+    "feature": "First enclosed cabin, arched amber windows and a wheel.",
+    "image": "07.png",
+    "model": "07.blend"
+  },
+  {
+    "stage": 8,
+    "node": 7,
+    "name": "Long sloop",
+    "length": 18,
+    "beam": 4.8,
+    "freeboard": 1.65,
+    "draft": 1.2,
+    "gun_rows": [],
+    "cannons": 0,
+    "tiers": [
+      1,
+      2
+    ],
+    "masts": 2,
+    "feature": "A second mast, proper quarterdeck and a longer, cleaner sail silhouette.",
+    "image": "08.png",
+    "model": "08.blend"
+  },
+  {
+    "stage": 9,
+    "node": 8,
+    "name": "Merchant sloop",
+    "length": 18,
+    "beam": 6.1,
+    "freeboard": 1.8,
+    "draft": 1.3,
+    "gun_rows": [],
+    "cannons": 0,
+    "tiers": [
+      2,
+      2
+    ],
+    "masts": 2,
+    "feature": "A fuller cabin, twin stern lanterns and the first carved wave at the bow.",
+    "image": "09.png",
+    "model": "09.blend"
+  },
+  {
+    "stage": 10,
+    "node": 9,
+    "name": "Armed escort",
+    "length": 18,
+    "beam": 6.1,
+    "freeboard": 1.85,
+    "draft": 1.35,
+    "gun_rows": [
+      0,
+      3
+    ],
+    "cannons": 6,
+    "tiers": [
+      2,
+      2
+    ],
+    "masts": 2,
+    "feature": "Six bright red gun carriages give the merchant hull an escort identity.",
+    "image": "10.png",
+    "model": "10.blend"
+  },
+  {
+    "stage": 11,
+    "node": 10,
+    "name": "Long escort",
+    "length": 22,
+    "beam": 6.1,
+    "freeboard": 2.0,
+    "draft": 1.5,
+    "gun_rows": [
+      0,
+      4
+    ],
+    "cannons": 8,
+    "tiers": [
+      2,
+      2
+    ],
+    "masts": 2,
+    "feature": "Eight guns, a larger stair landing and decorated quarterdeck rails.",
+    "image": "11.png",
+    "model": "11.blend"
+  },
+  {
+    "stage": 12,
+    "node": 11,
+    "name": "Guild escort",
+    "length": 22,
+    "beam": 7.4,
+    "freeboard": 2.15,
+    "draft": 1.65,
+    "gun_rows": [
+      0,
+      5
+    ],
+    "cannons": 10,
+    "tiers": [
+      2,
+      2
+    ],
+    "masts": 2,
+    "feature": "Ten guns, an inset stern crest and brass window surrounds.",
+    "image": "12.png",
+    "model": "12.blend"
+  },
+  {
+    "stage": 13,
+    "node": 12,
+    "name": "Adventure brig",
+    "length": 26,
+    "beam": 7.8,
+    "freeboard": 2.65,
+    "draft": 2.5,
+    "gun_rows": [
+      3,
+      3
+    ],
+    "cannons": 12,
+    "tiers": [
+      2,
+      2
+    ],
+    "masts": 2,
+    "feature": "The approved V14 brig: carved timber, fitted cabin and twelve cartoon cannons.",
+    "image": "13.png",
+    "model": "13.blend"
+  },
+  {
+    "stage": 14,
+    "node": 13,
+    "name": "Long brig",
+    "length": 29,
+    "beam": 7.8,
+    "freeboard": 2.9,
+    "draft": 2.5,
+    "gun_rows": [
+      4,
+      3
+    ],
+    "cannons": 14,
+    "tiers": [
+      2,
+      2
+    ],
+    "masts": 2,
+    "feature": "Fourteen guns, a projecting stern balcony and forked command pennant.",
+    "image": "14.png",
+    "model": "14.blend"
+  },
+  {
+    "stage": 15,
+    "node": 14,
+    "name": "Guild brig",
+    "length": 29,
+    "beam": 9.0,
+    "freeboard": 3.1,
+    "draft": 2.6,
+    "gun_rows": [
+      4,
+      4
+    ],
+    "cannons": 16,
+    "tiers": [
+      2,
+      2
+    ],
+    "masts": 2,
+    "feature": "Sixteen guns, gilt bulwark piping and brass-capped balcony balusters.",
+    "image": "15.png",
+    "model": "15.blend"
+  },
+  {
+    "stage": 16,
+    "node": 15,
+    "name": "Compact two-decker",
+    "length": 29,
+    "beam": 9.0,
+    "freeboard": 4.65,
+    "draft": 3.0,
+    "gun_rows": [
+      4,
+      4
+    ],
+    "cannons": 16,
+    "tiers": [
+      2,
+      2
+    ],
+    "masts": 2,
+    "feature": "Two enclosed gun decks, a three-window stern gallery and open working deck.",
+    "image": "16.png",
+    "model": "16.blend"
+  },
+  {
+    "stage": 17,
+    "node": 16,
+    "name": "Ocean two-decker",
+    "length": 32,
+    "beam": 9.0,
+    "freeboard": 4.8,
+    "draft": 3.1,
+    "gun_rows": [
+      5,
+      4
+    ],
+    "cannons": 18,
+    "tiers": [
+      2,
+      3
+    ],
+    "masts": 2,
+    "feature": "Eighteen guns, an extra topsail tier and a carved sea-bird figurehead.",
+    "image": "17.png",
+    "model": "17.blend"
+  },
+  {
+    "stage": 18,
+    "node": 17,
+    "name": "Grand voyager",
+    "length": 32,
+    "beam": 9.5,
+    "freeboard": 4.95,
+    "draft": 3.2,
+    "gun_rows": [
+      5,
+      5
+    ],
+    "cannons": 20,
+    "tiers": [
+      3,
+      3
+    ],
+    "masts": 2,
+    "feature": "Twenty guns, projecting side galleries and curved carved roof brows.",
+    "image": "18.png",
+    "model": "18.blend"
+  },
+  {
+    "stage": 19,
+    "node": 18,
+    "name": "Admiral voyager",
+    "length": 34,
+    "beam": 9.5,
+    "freeboard": 5.1,
+    "draft": 3.3,
+    "gun_rows": [
+      6,
+      5
+    ],
+    "cannons": 22,
+    "tiers": [
+      3,
+      3
+    ],
+    "masts": 2,
+    "feature": "Twenty-two guns, three stern lanterns and a richer blue-green hull with gold inlay.",
+    "image": "19.png",
+    "model": "19.blend"
+  },
+  {
+    "stage": 20,
+    "node": 19,
+    "name": "Sea Crown",
+    "length": 34,
+    "beam": 9.5,
+    "freeboard": 5.2,
+    "draft": 3.3,
+    "gun_rows": [
+      6,
+      6
+    ],
+    "cannons": 24,
+    "tiers": [
+      3,
+      3
+    ],
+    "masts": 2,
+    "feature": "Twenty-four guns: crowned stern gallery, paired command pennants and a gilded wave figurehead.",
+    "image": "20.png",
+    "model": "20.blend"
+  }
+]

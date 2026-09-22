@@ -1,0 +1,25 @@
+{
+  "stage": 12,
+  "node": 11,
+  "name": "Guild escort",
+  "length": 22,
+  "beam": 7.4,
+  "freeboard": 2.15,
+  "draft": 1.65,
+  "gun_rows": [
+    0,
+    5
+  ],
+  "cannons": 10,
+  "tiers": [
+    2,
+    2
+  ],
+  "masts": 2,
+  "feature": "Ten guns, an inset stern crest and brass window surrounds.",
+  "image": "12.png",
+  "model": "12.blend",
+  "objects": 460,
+  "render": "12.png",
+  "complete": true
+}

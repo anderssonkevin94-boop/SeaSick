@@ -1,0 +1,24 @@
+{
+  "stage": 5,
+  "node": 4,
+  "name": "Coastal launch",
+  "length": 15,
+  "beam": 3.7,
+  "freeboard": 1.3,
+  "draft": 0.85,
+  "gun_rows": [
+    0,
+    1
+  ],
+  "cannons": 2,
+  "tiers": [
+    1
+  ],
+  "masts": 1,
+  "feature": "Two deck cannons, a longer hull, bowsprit and small jib.",
+  "image": "05.png",
+  "model": "05.blend",
+  "objects": 171,
+  "render": "05.png",
+  "complete": true
+}

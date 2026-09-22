@@ -1,0 +1,137 @@
+[
+  {
+    "id": "blacksmith",
+    "triangles": 1072,
+    "mesh_modules": 2,
+    "worker_count": 2,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "campfire_01",
+    "triangles": 160,
+    "mesh_modules": 2,
+    "worker_count": 1,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "campfire_02",
+    "triangles": 396,
+    "mesh_modules": 2,
+    "worker_count": 1,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "campfire_03",
+    "triangles": 480,
+    "mesh_modules": 2,
+    "worker_count": 1,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "campfire_04",
+    "triangles": 884,
+    "mesh_modules": 2,
+    "worker_count": 1,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "campfire_05",
+    "triangles": 1272,
+    "mesh_modules": 2,
+    "worker_count": 1,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "farm_01",
+    "triangles": 1644,
+    "mesh_modules": 5,
+    "worker_count": 2,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "farm_02",
+    "triangles": 2340,
+    "mesh_modules": 7,
+    "worker_count": 3,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "farm_03",
+    "triangles": 3036,
+    "mesh_modules": 9,
+    "worker_count": 4,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "hut_01",
+    "triangles": 882,
+    "mesh_modules": 3,
+    "worker_count": 0,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "hut_02",
+    "triangles": 1170,
+    "mesh_modules": 3,
+    "worker_count": 0,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "hut_03",
+    "triangles": 1414,
+    "mesh_modules": 3,
+    "worker_count": 0,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "kitchen",
+    "triangles": 1058,
+    "mesh_modules": 2,
+    "worker_count": 3,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "sawmill",
+    "triangles": 1116,
+    "mesh_modules": 2,
+    "worker_count": 3,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  },
+  {
+    "id": "storage",
+    "triangles": 1592,
+    "mesh_modules": 2,
+    "worker_count": 1,
+    "standing_body_radius_checked_m": 0.4,
+    "potential_geometry_conflicts": [],
+    "overlapping_worker_reservations": []
+  }
+]

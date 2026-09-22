@@ -1,0 +1,25 @@
+{
+  "stage": 8,
+  "node": 7,
+  "name": "Long sloop",
+  "length": 18,
+  "beam": 4.8,
+  "freeboard": 1.65,
+  "draft": 1.2,
+  "gun_rows": [
+    0,
+    3
+  ],
+  "cannons": 6,
+  "tiers": [
+    1,
+    2
+  ],
+  "masts": 2,
+  "feature": "Six deck cannons and a second mast on a longer hull.",
+  "image": "08.png",
+  "model": "08.blend",
+  "objects": 472,
+  "render": "08.png",
+  "complete": true
+}

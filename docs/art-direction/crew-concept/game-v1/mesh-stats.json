@@ -1,0 +1,10 @@
+{
+  "source_triangles": 42486,
+  "lod0_triangles": 4670,
+  "lod1_triangles": 2335,
+  "lod0_vertices": 2435,
+  "materials": 1,
+  "texture_size": "64x64",
+  "rigged": false,
+  "notes": "Static game mesh candidate. Skinning/topology validation for animation remains. Unity untouched."
+}

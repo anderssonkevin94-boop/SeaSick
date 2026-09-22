@@ -1,0 +1,1 @@
+PASS live SkyDirector material retains GraphicAdventureDay texture and strength 1. Shader: SeaSick/Sky; overcast: 0.04; sun direction: (0.64, 0.61, -0.48, 0.00); night: 0

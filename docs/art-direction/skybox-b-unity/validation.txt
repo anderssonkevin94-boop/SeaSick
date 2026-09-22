@@ -1,0 +1,6 @@
+Sky integration: shader render and image comparisons
+PASS day: old/new mean difference 27.149686/255
+PASS storm: old/new mean difference 0.000020/255
+PASS night: old/new mean difference 0.000096/255
+PASS dusk: old/new mean difference 0.000000/255
+PASS shader compiled; panorama bound; day/portrait rendered; storm/night/dusk preserved.

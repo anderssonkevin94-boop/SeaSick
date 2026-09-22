@@ -1,0 +1,22 @@
+{
+  "stage": 9,
+  "node": 8,
+  "name": "Merchant sloop",
+  "length": 18,
+  "beam": 6.1,
+  "freeboard": 1.8,
+  "draft": 1.3,
+  "gun_rows": [],
+  "cannons": 0,
+  "tiers": [
+    2,
+    2
+  ],
+  "masts": 2,
+  "feature": "A fuller cabin, twin stern lanterns and the first carved wave at the bow.",
+  "image": "09.png",
+  "model": "09.blend",
+  "objects": 280,
+  "render": "09.png",
+  "complete": true
+}

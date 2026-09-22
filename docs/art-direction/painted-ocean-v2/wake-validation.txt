@@ -1,0 +1,1 @@
+Controlled 8 m/s path over live ocean; mesh vertices 864; shader error False. Day, night and portrait rendered. This checks foam appearance, not sailing physics.

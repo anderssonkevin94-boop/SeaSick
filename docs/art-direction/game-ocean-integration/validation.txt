@@ -1,0 +1,1 @@
+PASS live gameplay ocean rendered at desktop and portrait sizes. Existing FFT retained, with depth-faded pointed detail shared by rendered height and CPU buoyancy. Day/night/storm-light shots change sky controls only, not simulation state. Active material: OceanSurface (clipmap); painted=1; Hs=5.497946

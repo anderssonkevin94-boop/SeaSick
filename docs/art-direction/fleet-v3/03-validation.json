@@ -1,0 +1,21 @@
+{
+  "stage": 3,
+  "node": 2,
+  "name": "Painted skiff",
+  "length": 11.5,
+  "beam": 3.7,
+  "freeboard": 1.0,
+  "draft": 0.65,
+  "gun_rows": [],
+  "cannons": 0,
+  "tiers": [
+    1
+  ],
+  "masts": 1,
+  "feature": "A teal sheer stripe, shaped bow cap and carefully finished gunwales.",
+  "image": "03.png",
+  "model": "03.blend",
+  "objects": 69,
+  "render": "03.png",
+  "complete": true
+}

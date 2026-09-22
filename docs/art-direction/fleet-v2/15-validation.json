@@ -1,0 +1,25 @@
+{
+  "stage": 15,
+  "node": 14,
+  "name": "Guild brig",
+  "length": 29,
+  "beam": 9.0,
+  "freeboard": 3.1,
+  "draft": 2.6,
+  "gun_rows": [
+    4,
+    4
+  ],
+  "cannons": 16,
+  "tiers": [
+    2,
+    2
+  ],
+  "masts": 2,
+  "feature": "Sixteen guns, gilt bulwark piping and brass-capped balcony balusters.",
+  "image": "15.png",
+  "model": "15.blend",
+  "objects": 678,
+  "render": "15.png",
+  "complete": true
+}

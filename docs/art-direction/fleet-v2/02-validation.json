@@ -1,0 +1,21 @@
+{
+  "stage": 2,
+  "node": 1,
+  "name": "Voyager skiff",
+  "length": 11.5,
+  "beam": 2.9,
+  "freeboard": 0.9,
+  "draft": 0.6,
+  "gun_rows": [],
+  "cannons": 0,
+  "tiers": [
+    1
+  ],
+  "masts": 1,
+  "feature": "A stronger stem, extended rowing benches and a proper cargo rack.",
+  "image": "02.png",
+  "model": "02.blend",
+  "objects": 68,
+  "render": "02.png",
+  "complete": true
+}

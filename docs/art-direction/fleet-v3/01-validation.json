@@ -1,0 +1,21 @@
+{
+  "stage": 1,
+  "node": 0,
+  "name": "Fishing skiff",
+  "length": 9,
+  "beam": 2.9,
+  "freeboard": 0.8,
+  "draft": 0.55,
+  "gun_rows": [],
+  "cannons": 0,
+  "tiers": [
+    1
+  ],
+  "masts": 1,
+  "feature": "An open working boat: thwarts, fishing basket, plain canvas and a tiller.",
+  "image": "01.png",
+  "model": "01.blend",
+  "objects": 60,
+  "render": "01.png",
+  "complete": true
+}

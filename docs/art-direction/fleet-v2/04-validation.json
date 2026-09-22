@@ -1,0 +1,21 @@
+{
+  "stage": 4,
+  "node": 3,
+  "name": "Decked launch",
+  "length": 11.5,
+  "beam": 3.7,
+  "freeboard": 1.25,
+  "draft": 0.8,
+  "gun_rows": [],
+  "cannons": 0,
+  "tiers": [
+    1
+  ],
+  "masts": 1,
+  "feature": "First continuous deck, framed hatch and a raised steering platform.",
+  "image": "04.png",
+  "model": "04.blend",
+  "objects": 124,
+  "render": "04.png",
+  "complete": true
+}

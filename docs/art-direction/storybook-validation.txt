@@ -1,2 +1,5 @@
 Individual tree harvest: removed=True, neighbour intact=True, felled count=1
 Home land connected at slope <=0.70: 7330 samples; trees reachable=158/158; highest reached=43.11097
+Home land connected at slope <=0.70: 7172 samples; trees reachable=131/138; highest reached=30.99668
+Home land connected at slope <=0.70: 7391 samples; trees reachable=149/149; highest reached=42.3
+Connected plateau: 84 triangle centroids checked; maximum collider/height error=1.525879E-05 m; render and collision share exact mesh.

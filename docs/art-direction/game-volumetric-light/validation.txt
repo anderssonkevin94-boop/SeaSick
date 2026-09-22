@@ -1,0 +1,1 @@
+PASS: live Unity game captures, volume on/off at sunrise, noon, sunset, night and storm; portrait. Shader compiled. Medium = 32 samples, mobile defaults off. Full-resolution bounded volume, no device GPU benchmark. Ocean composites after atmosphere to preserve displaced water silhouette and existing ocean colour/fog. Moving cloud shadows not yet implemented.

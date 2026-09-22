@@ -1,0 +1,24 @@
+{
+  "stage": 7,
+  "node": 6,
+  "name": "Coastal sloop",
+  "length": 15,
+  "beam": 4.8,
+  "freeboard": 1.55,
+  "draft": 1.1,
+  "gun_rows": [
+    0,
+    2
+  ],
+  "cannons": 4,
+  "tiers": [
+    2
+  ],
+  "masts": 1,
+  "feature": "Four deck cannons, integrated cabin and fully railed quarterdeck.",
+  "image": "07.png",
+  "model": "07.blend",
+  "objects": 341,
+  "render": "07.png",
+  "complete": true
+}

@@ -1,0 +1,25 @@
+{
+  "stage": 14,
+  "node": 13,
+  "name": "Long brig",
+  "length": 29,
+  "beam": 7.8,
+  "freeboard": 2.9,
+  "draft": 2.5,
+  "gun_rows": [
+    4,
+    4
+  ],
+  "cannons": 16,
+  "tiers": [
+    2,
+    2
+  ],
+  "masts": 2,
+  "feature": "Sixteen cannons, longer hull, projecting stern balcony and command pennant.",
+  "image": "14.png",
+  "model": "14.blend",
+  "objects": 638,
+  "render": "14.png",
+  "complete": true
+}

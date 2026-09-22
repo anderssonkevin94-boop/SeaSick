@@ -1,0 +1,24 @@
+{
+  "stage": 4,
+  "node": 3,
+  "name": "Decked launch",
+  "length": 11.5,
+  "beam": 3.7,
+  "freeboard": 1.25,
+  "draft": 0.8,
+  "gun_rows": [
+    0,
+    1
+  ],
+  "cannons": 2,
+  "tiers": [
+    1
+  ],
+  "masts": 1,
+  "feature": "Two deck cannons, a continuous deck and a fully guarded stern.",
+  "image": "04.png",
+  "model": "04.blend",
+  "objects": 156,
+  "render": "04.png",
+  "complete": true
+}

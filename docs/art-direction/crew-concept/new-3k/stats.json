@@ -1,0 +1,9 @@
+{
+  "triangles": 1710,
+  "faces": 1710,
+  "vertices": 907,
+  "materials": 1,
+  "textures": 0,
+  "rigged": false,
+  "construction": "New manually specified topology; continuous head/neck mesh; no prior character geometry, remeshing or decimation."
+}

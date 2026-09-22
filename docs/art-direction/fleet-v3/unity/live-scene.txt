@@ -1,0 +1,1 @@
+Live stage 13; position (6.46, -0.81, -11.42); rotation (0.60, 106.56, 5.92); mass 276300; GM 1.354597; load sinkage -0.0004654479; cannons 14

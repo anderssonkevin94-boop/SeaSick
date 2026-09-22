@@ -1,0 +1,13 @@
+{
+  "stages": [
+    12,
+    13,
+    14
+  ],
+  "ortho_scale": 35.10368728637695,
+  "resolution": [
+    960,
+    720
+  ],
+  "identical_camera_rotation": true
+}

@@ -1,0 +1,25 @@
+{
+  "stage": 17,
+  "node": 16,
+  "name": "Ocean two-decker",
+  "length": 32,
+  "beam": 9.0,
+  "freeboard": 4.8,
+  "draft": 3.1,
+  "gun_rows": [
+    5,
+    4
+  ],
+  "cannons": 18,
+  "tiers": [
+    2,
+    3
+  ],
+  "masts": 2,
+  "feature": "Eighteen guns, an extra topsail tier and a carved sea-bird figurehead.",
+  "image": "17.png",
+  "model": "17.blend",
+  "objects": 736,
+  "render": "17.png",
+  "complete": true
+}

@@ -1,0 +1,1220 @@
+{
+  "units": "metres",
+  "coordinates": "Blender Z-up; GLB converts to Y-up",
+  "status": "Standalone static design assets; no Unity import, gameplay scripts, collisions or animations",
+  "stage_interpretation": "5 campfire / 3 hut / 3 farm total stages",
+  "character_height_m": 1.93,
+  "assets": [
+    {
+      "id": "campfire_01",
+      "footprint_m": [
+        5.0,
+        5.0
+      ],
+      "description": "Landing fire",
+      "triangles": 160,
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "position_z_up": [
+            0,
+            -1.6,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -2.55,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "stage": 1
+    },
+    {
+      "id": "campfire_02",
+      "footprint_m": [
+        5.5,
+        5.5
+      ],
+      "description": "Stone-ring camp",
+      "triangles": 396,
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "position_z_up": [
+            0,
+            -1.6,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -2.8,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "stage": 2
+    },
+    {
+      "id": "campfire_03",
+      "footprint_m": [
+        6.0,
+        6.0
+      ],
+      "description": "Cooking camp",
+      "triangles": 480,
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "position_z_up": [
+            0,
+            -1.6,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.05,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "stage": 3
+    },
+    {
+      "id": "campfire_04",
+      "footprint_m": [
+        6.5,
+        6.5
+      ],
+      "description": "Gathering camp",
+      "triangles": 884,
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "position_z_up": [
+            0,
+            -1.6,
+            0.12
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.3,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "stage": 4
+    },
+    {
+      "id": "campfire_05",
+      "footprint_m": [
+        7.0,
+        7.0
+      ],
+      "description": "Permanent settlement hearth",
+      "triangles": 1272,
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "position_z_up": [
+            0,
+            -1.6,
+            0.12
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.55,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "stage": 5
+    },
+    {
+      "id": "hut_01",
+      "footprint_m": [
+        6.0,
+        6.4
+      ],
+      "description": "Timber shelter for 2 residents",
+      "triangles": 882,
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.0500000000000003,
+            0.0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_00",
+          "role": "resident",
+          "position_z_up": [
+            -1.53,
+            -0.7500000000000002,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_01",
+          "role": "resident",
+          "position_z_up": [
+            1.53,
+            -0.7500000000000002,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "residents": 2
+    },
+    {
+      "id": "hut_02",
+      "footprint_m": [
+        7.754000091552735,
+        8.4
+      ],
+      "description": "Timber shelter for 4 residents",
+      "triangles": 1170,
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -4.05,
+            0.0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_00",
+          "role": "resident",
+          "position_z_up": [
+            -2.1799999999999997,
+            -1.7500000000000002,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_01",
+          "role": "resident",
+          "position_z_up": [
+            2.1799999999999997,
+            -1.7500000000000002,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_02",
+          "role": "resident",
+          "position_z_up": [
+            -2.1799999999999997,
+            0.5499999999999996,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_03",
+          "role": "resident",
+          "position_z_up": [
+            2.1799999999999997,
+            0.5499999999999996,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "residents": 4
+    },
+    {
+      "id": "hut_03",
+      "footprint_m": [
+        8.953999900817871,
+        10.879999542236328
+      ],
+      "description": "Timber shelter for 6 residents",
+      "triangles": 1414,
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -5.1499999999999995,
+            0.0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_00",
+          "role": "resident",
+          "position_z_up": [
+            -2.7800000000000002,
+            -2.8499999999999996,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_01",
+          "role": "resident",
+          "position_z_up": [
+            2.7800000000000002,
+            -2.8499999999999996,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_02",
+          "role": "resident",
+          "position_z_up": [
+            -2.7800000000000002,
+            -0.5499999999999998,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_03",
+          "role": "resident",
+          "position_z_up": [
+            2.7800000000000002,
+            -0.5499999999999998,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_04",
+          "role": "resident",
+          "position_z_up": [
+            -2.7800000000000002,
+            1.75,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Resident_05",
+          "role": "resident",
+          "position_z_up": [
+            2.7800000000000002,
+            1.75,
+            0.85
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "residents": 6
+    },
+    {
+      "id": "farm_01",
+      "footprint_m": [
+        6.4539999008178714,
+        6.4
+      ],
+      "description": "4 independent planting slots with central tending aisle",
+      "triangles": 1644,
+      "markers": [
+        {
+          "name": "Plant_slot_00",
+          "role": "planting_slot",
+          "position_z_up": [
+            -0.9,
+            -1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Tend_pair_00",
+          "role": "worker",
+          "position_z_up": [
+            -0.9,
+            0,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_01",
+          "role": "planting_slot",
+          "position_z_up": [
+            0.9,
+            -1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Tend_pair_01",
+          "role": "worker",
+          "position_z_up": [
+            0.9,
+            0,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_02",
+          "role": "planting_slot",
+          "position_z_up": [
+            -0.9,
+            1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_03",
+          "role": "planting_slot",
+          "position_z_up": [
+            0.9,
+            1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.1,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "planting_slots": 4
+    },
+    {
+      "id": "farm_02",
+      "footprint_m": [
+        8.254000091552735,
+        6.4
+      ],
+      "description": "6 independent planting slots with central tending aisle",
+      "triangles": 2340,
+      "markers": [
+        {
+          "name": "Plant_slot_00",
+          "role": "planting_slot",
+          "position_z_up": [
+            -1.8,
+            -1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Tend_pair_00",
+          "role": "worker",
+          "position_z_up": [
+            -1.8,
+            0,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_01",
+          "role": "planting_slot",
+          "position_z_up": [
+            0.0,
+            -1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Tend_pair_01",
+          "role": "worker",
+          "position_z_up": [
+            0.0,
+            0,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_02",
+          "role": "planting_slot",
+          "position_z_up": [
+            1.8,
+            -1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Tend_pair_02",
+          "role": "worker",
+          "position_z_up": [
+            1.8,
+            0,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_03",
+          "role": "planting_slot",
+          "position_z_up": [
+            -1.8,
+            1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_04",
+          "role": "planting_slot",
+          "position_z_up": [
+            0.0,
+            1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_05",
+          "role": "planting_slot",
+          "position_z_up": [
+            1.8,
+            1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.1,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "planting_slots": 6
+    },
+    {
+      "id": "farm_03",
+      "footprint_m": [
+        10.054000282287598,
+        6.4
+      ],
+      "description": "8 independent planting slots with central tending aisle",
+      "triangles": 3036,
+      "markers": [
+        {
+          "name": "Plant_slot_00",
+          "role": "planting_slot",
+          "position_z_up": [
+            -2.7,
+            -1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Tend_pair_00",
+          "role": "worker",
+          "position_z_up": [
+            -2.7,
+            0,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_01",
+          "role": "planting_slot",
+          "position_z_up": [
+            -0.9,
+            -1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Tend_pair_01",
+          "role": "worker",
+          "position_z_up": [
+            -0.9,
+            0,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_02",
+          "role": "planting_slot",
+          "position_z_up": [
+            0.9,
+            -1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Tend_pair_02",
+          "role": "worker",
+          "position_z_up": [
+            0.9,
+            0,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_03",
+          "role": "planting_slot",
+          "position_z_up": [
+            2.7,
+            -1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Tend_pair_03",
+          "role": "worker",
+          "position_z_up": [
+            2.7,
+            0,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_04",
+          "role": "planting_slot",
+          "position_z_up": [
+            -2.7,
+            1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_05",
+          "role": "planting_slot",
+          "position_z_up": [
+            -0.9,
+            1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_06",
+          "role": "planting_slot",
+          "position_z_up": [
+            0.9,
+            1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Plant_slot_07",
+          "role": "planting_slot",
+          "position_z_up": [
+            2.7,
+            1.5,
+            0.18
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.1,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ],
+      "planting_slots": 8
+    },
+    {
+      "id": "sawmill",
+      "footprint_m": [
+        9.849999809265137,
+        8.3
+      ],
+      "description": "Open timber sawing shed with separate feeding and sawing positions",
+      "triangles": 1116,
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.9,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Sawyer",
+          "role": "worker",
+          "position_z_up": [
+            0.64,
+            0,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Log_feeder",
+          "role": "worker",
+          "position_z_up": [
+            -2.35,
+            -0.45,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Finish_carpenter",
+          "role": "worker",
+          "position_z_up": [
+            1.9,
+            -0.6,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            -1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "footprint_m": [
+        8.160000228881836,
+        7.5
+      ],
+      "description": "Dry store with central circulation aisle and packing station",
+      "triangles": 1592,
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.5,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Storekeeper",
+          "role": "worker",
+          "position_z_up": [
+            1.7,
+            -0.8,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            -1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Delivery",
+          "role": "delivery",
+          "position_z_up": [
+            0,
+            -1.3,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ]
+    },
+    {
+      "id": "blacksmith",
+      "footprint_m": [
+        8.0,
+        8.3
+      ],
+      "description": "Open-sided forge with anvil, quench tub and masonry flue",
+      "triangles": 1072,
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.9,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Smith",
+          "role": "worker",
+          "position_z_up": [
+            1.25,
+            -1.35,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Forge_tender",
+          "role": "worker",
+          "position_z_up": [
+            -1.7,
+            -0.5,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ]
+    },
+    {
+      "id": "kitchen",
+      "footprint_m": [
+        7.7,
+        8.0
+      ],
+      "description": "Communal kitchen with prep bench, stove and serving counter",
+      "triangles": 1058,
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "position_z_up": [
+            0,
+            -3.75,
+            0
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Cook",
+          "role": "worker",
+          "position_z_up": [
+            -1.6,
+            -0.25,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Prep_cook",
+          "role": "worker",
+          "position_z_up": [
+            1.7,
+            -0.2,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        },
+        {
+          "name": "Server",
+          "role": "worker",
+          "position_z_up": [
+            0.85,
+            -1.1,
+            0.26
+          ],
+          "facing_z_up": [
+            0,
+            -1,
+            0
+          ],
+          "clearance_radius_m": 0.55
+        }
+      ]
+    }
+  ]
+}

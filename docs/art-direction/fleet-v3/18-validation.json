@@ -1,0 +1,25 @@
+{
+  "stage": 18,
+  "node": 17,
+  "name": "Grand voyager",
+  "length": 32,
+  "beam": 9.5,
+  "freeboard": 4.95,
+  "draft": 3.2,
+  "gun_rows": [
+    5,
+    5
+  ],
+  "cannons": 20,
+  "tiers": [
+    3,
+    3
+  ],
+  "masts": 2,
+  "feature": "Twenty guns, integrated window galleries, gilt cornices and carved pilasters.",
+  "image": "18.png",
+  "model": "18.blend",
+  "objects": 819,
+  "render": "18.png",
+  "complete": true
+}

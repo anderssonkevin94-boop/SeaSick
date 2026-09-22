@@ -1,0 +1,168 @@
+{
+    "MonoBehaviour": {
+        "m_Enabled": true,
+        "m_EditorHideFlags": 0,
+        "m_Name": "",
+        "m_EditorClassIdentifier": "Assembly-CSharp::SeaSick.World.SkyDirector",
+        "ship": {
+            "instanceID": 0
+        },
+        "sun": {
+            "instanceID": 0
+        },
+        "severityFloor": 0.550000011920929,
+        "severityWeight": 0.5,
+        "response": 0.3499999940395355,
+        "forceStorm": -1.0,
+        "dayLength": 180.0,
+        "startTime01": 0.30000001192092898,
+        "timeScale": 1.0,
+        "pinTime": -1.0,
+        "latitudeDeg": 38.0,
+        "synodicDays": 29.5,
+        "clearZenith": {
+            "r": 0.18000000715255738,
+            "g": 0.4300000071525574,
+            "b": 0.7599999904632568,
+            "a": 1.0
+        },
+        "clearHorizon": {
+            "r": 0.6499999761581421,
+            "g": 0.800000011920929,
+            "b": 0.9100000262260437,
+            "a": 1.0
+        },
+        "clearGround": {
+            "r": 0.27000001072883608,
+            "g": 0.3499999940395355,
+            "b": 0.4300000071525574,
+            "a": 1.0
+        },
+        "clearSun": {
+            "r": 1.0,
+            "g": 0.9399999976158142,
+            "b": 0.8199999928474426,
+            "a": 1.0
+        },
+        "clearSunIntensity": 1.25,
+        "clearAmbientEquator": {
+            "r": 0.5699999928474426,
+            "g": 0.6299999952316284,
+            "b": 0.7200000286102295,
+            "a": 1.0
+        },
+        "clearAmbientGround": {
+            "r": 0.28999999165534975,
+            "g": 0.3400000035762787,
+            "b": 0.41999998688697817,
+            "a": 1.0
+        },
+        "clearOvercast": 0.03999999910593033,
+        "clearFogStart": 600.0,
+        "clearFogEnd": 1500.0,
+        "clearHorizonSharp": 1.600000023841858,
+        "duskZenith": {
+            "r": 0.11500000208616257,
+            "g": 0.16500000655651093,
+            "b": 0.33500000834465029,
+            "a": 1.0
+        },
+        "duskHorizon": {
+            "r": 0.9300000071525574,
+            "g": 0.5199999809265137,
+            "b": 0.30000001192092898,
+            "a": 1.0
+        },
+        "duskGround": {
+            "r": 0.14499999582767487,
+            "g": 0.125,
+            "b": 0.125,
+            "a": 1.0
+        },
+        "duskSun": {
+            "r": 1.0,
+            "g": 0.6000000238418579,
+            "b": 0.3400000035762787,
+            "a": 1.0
+        },
+        "duskSunIntensity": 0.800000011920929,
+        "duskOvercast": 0.10000000149011612,
+        "duskFogStart": 320.0,
+        "duskFogEnd": 1250.0,
+        "duskHorizonSharp": 2.5999999046325685,
+        "nightZenith": {
+            "r": 0.014000000432133675,
+            "g": 0.02199999988079071,
+            "b": 0.04800000041723251,
+            "a": 1.0
+        },
+        "nightHorizon": {
+            "r": 0.054999999701976779,
+            "g": 0.07500000298023224,
+            "b": 0.11800000071525574,
+            "a": 1.0
+        },
+        "nightGround": {
+            "r": 0.009999999776482582,
+            "g": 0.014000000432133675,
+            "b": 0.023000000044703485,
+            "a": 1.0
+        },
+        "moonColor": {
+            "r": 0.6200000047683716,
+            "g": 0.7200000286102295,
+            "b": 1.0,
+            "a": 1.0
+        },
+        "moonIntensity": 0.20000000298023225,
+        "newMoonFloor": 0.25,
+        "nightAmbient": 0.18000000715255738,
+        "nightOvercast": 0.05999999865889549,
+        "nightHorizonSharp": 2.200000047683716,
+        "nightFogStart": 240.0,
+        "nightFogEnd": 950.0,
+        "moonSize": 0.04500000178813934,
+        "moonHalo": 0.3499999940395355,
+        "starBrightness": 1.0,
+        "starDensity": 0.9480000138282776,
+        "nightSeaDim": 0.30000001192092898,
+        "nightSeaSkyMix": 0.9300000071525574,
+        "stormZenith": {
+            "r": 0.07500000298023224,
+            "g": 0.08799999952316284,
+            "b": 0.10499999672174454,
+            "a": 1.0
+        },
+        "stormHorizon": {
+            "r": 0.30000001192092898,
+            "g": 0.32499998807907107,
+            "b": 0.3449999988079071,
+            "a": 1.0
+        },
+        "stormGround": {
+            "r": 0.08500000089406967,
+            "g": 0.10000000149011612,
+            "b": 0.10999999940395355,
+            "a": 1.0
+        },
+        "stormSun": {
+            "r": 0.6600000262260437,
+            "g": 0.699999988079071,
+            "b": 0.7599999904632568,
+            "a": 1.0
+        },
+        "stormSunIntensity": 0.3400000035762787,
+        "stormOvercast": 1.0,
+        "stormFogStart": 70.0,
+        "stormFogEnd": 430.0,
+        "stormHorizonSharp": 3.4000000953674318,
+        "stormNightScale": 0.11999999731779099,
+        "horizonRoseStrength": 1.0,
+        "horizonRoseDistance": 3000.0,
+        "horizonRoseResponse": 0.5,
+        "cloudScaleClear": 0.029999999329447748,
+        "cloudScaleStorm": 0.01899999938905239,
+        "cloudSpeedClear": 0.699999988079071,
+        "cloudSpeedStorm": 3.4000000953674318
+    }
+}

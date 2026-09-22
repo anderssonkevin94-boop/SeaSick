@@ -1,0 +1,1 @@
+PASS live SeaSick/Ocean; material OceanSurface (clipmap); Hs=5.361092; storm=0; night=0; camera=(-0.76, 20.07, -14.66); desktop 1920x1080, portrait 1080x2340. Before/after use same simulation frame. Night and storm images check water palette only, not weather simulation.

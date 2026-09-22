@@ -1,0 +1,21 @@
+{
+  "stage": 5,
+  "node": 4,
+  "name": "Coastal launch",
+  "length": 15,
+  "beam": 3.7,
+  "freeboard": 1.3,
+  "draft": 0.85,
+  "gun_rows": [],
+  "cannons": 0,
+  "tiers": [
+    1
+  ],
+  "masts": 1,
+  "feature": "A bowsprit, small jib and lantern mark the first coastal voyager.",
+  "image": "05.png",
+  "model": "05.blend",
+  "objects": 111,
+  "render": "05.png",
+  "complete": true
+}

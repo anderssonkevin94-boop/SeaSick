@@ -1,0 +1,22 @@
+{
+  "stage": 8,
+  "node": 7,
+  "name": "Long sloop",
+  "length": 18,
+  "beam": 4.8,
+  "freeboard": 1.65,
+  "draft": 1.2,
+  "gun_rows": [],
+  "cannons": 0,
+  "tiers": [
+    1,
+    2
+  ],
+  "masts": 2,
+  "feature": "A second mast, proper quarterdeck and a longer, cleaner sail silhouette.",
+  "image": "08.png",
+  "model": "08.blend",
+  "objects": 376,
+  "render": "08.png",
+  "complete": true
+}

@@ -1,0 +1,25 @@
+{
+  "stage": 20,
+  "node": 19,
+  "name": "Sea Crown",
+  "length": 34,
+  "beam": 9.5,
+  "freeboard": 5.2,
+  "draft": 3.3,
+  "gun_rows": [
+    6,
+    6
+  ],
+  "cannons": 24,
+  "tiers": [
+    3,
+    3
+  ],
+  "masts": 2,
+  "feature": "Twenty-four guns: crowned stern gallery, paired command pennants and a gilded wave figurehead.",
+  "image": "20.png",
+  "model": "20.blend",
+  "objects": 883,
+  "render": "20.png",
+  "complete": true
+}

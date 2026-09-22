@@ -1,0 +1,82 @@
+{
+  "storage": {
+    "source_triangles": 1592,
+    "zero_area_triangles": 0,
+    "surface_triangles": 1592
+  },
+  "kitchen": {
+    "source_triangles": 1058,
+    "zero_area_triangles": 0,
+    "surface_triangles": 1058
+  },
+  "campfire_01": {
+    "source_triangles": 160,
+    "zero_area_triangles": 40,
+    "surface_triangles": 120
+  },
+  "campfire_02": {
+    "source_triangles": 396,
+    "zero_area_triangles": 40,
+    "surface_triangles": 356
+  },
+  "campfire_03": {
+    "source_triangles": 480,
+    "zero_area_triangles": 40,
+    "surface_triangles": 440
+  },
+  "sawmill": {
+    "source_triangles": 1116,
+    "zero_area_triangles": 0,
+    "surface_triangles": 1116
+  },
+  "campfire_04": {
+    "source_triangles": 884,
+    "zero_area_triangles": 40,
+    "surface_triangles": 844
+  },
+  "campfire_05": {
+    "source_triangles": 1272,
+    "zero_area_triangles": 40,
+    "surface_triangles": 1232
+  },
+  "farm_02": {
+    "source_triangles": 2340,
+    "zero_area_triangles": 0,
+    "surface_triangles": 2340
+  },
+  "farm_03": {
+    "source_triangles": 3036,
+    "zero_area_triangles": 0,
+    "surface_triangles": 3036
+  },
+  "farm_01": {
+    "source_triangles": 1644,
+    "zero_area_triangles": 0,
+    "surface_triangles": 1644
+  },
+  "hut_01": {
+    "source_triangles": 882,
+    "zero_area_triangles": 0,
+    "surface_triangles": 882
+  },
+  "hut_03": {
+    "source_triangles": 1414,
+    "zero_area_triangles": 0,
+    "surface_triangles": 1414
+  },
+  "hut_02": {
+    "source_triangles": 1170,
+    "zero_area_triangles": 0,
+    "surface_triangles": 1170
+  },
+  "blacksmith": {
+    "source_triangles": 1072,
+    "zero_area_triangles": 0,
+    "surface_triangles": 1072
+  },
+  "male-coat-deckhand": {
+    "source_triangles": 2210,
+    "zero_area_triangles": 0,
+    "surface_triangles": 2210
+  }
+}

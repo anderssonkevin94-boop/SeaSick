@@ -1,0 +1,24 @@
+{
+  "stage": 6,
+  "node": 5,
+  "name": "Broad voyager",
+  "length": 15,
+  "beam": 4.8,
+  "freeboard": 1.45,
+  "draft": 1.0,
+  "gun_rows": [
+    0,
+    2
+  ],
+  "cannons": 4,
+  "tiers": [
+    1
+  ],
+  "masts": 1,
+  "feature": "Four deck cannons, a broader working deck and an open helm.",
+  "image": "06.png",
+  "model": "06.blend",
+  "objects": 217,
+  "render": "06.png",
+  "complete": true
+}

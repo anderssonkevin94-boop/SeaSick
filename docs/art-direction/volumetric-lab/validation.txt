@@ -1,0 +1,1 @@
+PASS: live Unity renders, 3 camera positions, matched volume on/off, portrait. 96 depth-clipped raymarch samples per pixel, real directional-light shadow-map occlusion. Isolated test only; no production renderer or scene changed. This prototype renders at full resolution; GPU frame-time/device profiling remains required before production adoption.
