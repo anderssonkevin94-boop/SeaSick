@@ -88,19 +88,26 @@ raiders, a dozen hands and the animals on screen.
   pier → dock → quay. Higher tiers unlock as the camp's population/ledger
   crosses lines the sheet states plainly.
 
-## Decisions to take before Phase 1 code (ask Kevin, then record here)
-- **D1** Wall cost unit: per metre of timber (proposal: 1 log / 2 m palisade,
-  hands haul like any site) — yes/no.
-- **D2** Do raiders EVER climb over? Proposal: no; they break through or use
-  an open gate. Keeps the wall a real line.
-- **D3** Gate behaviour: always open for hands, closed to raiders, no
-  open/close order (one less thing to micromanage). Proposal: yes.
-- **D4** Rocks and trees as obstacles for everyone (needed for walls anyway):
-  trees felled at raise time already; rocks become blocked cells. Proposal: yes.
-- **D5** The line tool gesture on the phone: press-drag-release on the ground
-  while the wall plan is selected (the same drag that pans the camera
-  otherwise). Proposal: while a wall plan is armed, a drag on the ground
-  draws; the camera pans by two-finger drag until you confirm or cancel.
+## Decisions — SETTLED by Kevin, 2026-09-23 00:50
+- **D1 yes** — wall cost per metre: 1 log / 2 m of palisade, hauled like any site; stone wall is a later tier.
+- **D2 yes** — raiders never climb; they break a segment or use an open gate.
+- **D3 yes** — gates are automatic: open for hands, closed to raiders, nothing to toggle.
+- **D4 yes** — rocks become blocked cells for everyone; trees are felled at raise time as today.
+- **D5, Kevin's own design — connect the dots.** *"I have it pressed, move
+  the other post around until I like it, press confirm and then continue."*
+  Arm the wall plan → tap the ground to plant the FIRST post → the NEXT post
+  follows the thumb (press and drag it, exactly like dragging a blueprint;
+  the segment between the two posts is drawn live, green/red with the
+  refusal text) → ✓ confirms that segment and the run continues from the
+  confirmed post (the next post appears already attached) → ✕ ends the run
+  (a run with no confirmed segment cancels the tool). Each confirmed segment
+  is its own site in the queue at once, so hands can start hauling while you
+  keep drawing. A post is shared between adjoining segments. **Gates are
+  placed on existing walls:** tap a built segment → its sheet → "make this a
+  gate" (a gate site that replaces the segment when built).
+- Wall segment length: post-to-post, free length, capped at ~12 m so a
+  segment is one site; longer drags split at the cap. Snap the next post to
+  the 2 m step of `CampPath` cells so the obstacle cells are exact.
 
 ## Verification
 Kevin plays it on the phone (he is the probe). Compile via
