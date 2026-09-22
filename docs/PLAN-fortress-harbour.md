@@ -45,7 +45,10 @@ raiders, a dozen hands and the animals on screen.
 
 ## Phases — each one playable on the phone on its own
 
-### Phase 1 — Walls and gates  (first; "raiders hitting a wall is the moment the vision becomes real")
+### Phase 1 — Walls and gates  — BUILT 2026-09-23 01:20, commit e6a82c1, UNPLAYED
+Known gaps: scenery boulders are not obstacles (only resource rocks are; no index of baked scenery rocks — `CampPath.RockProbe` hook waits for one); palisade cost passes through `PlaytestCostCap` (5); `RaidParty.PartySize` is 3 so a full party breaches in ~8 s; segment hp 40/m, gates ×1.5 (`WallSegment` consts). Kevin's first play decides: post grab radius 1.5 m, 2 m snap, 12 m max segment, breach time, whether raiders should prefer gates.
+
+(first; "raiders hitting a wall is the moment the vision becomes real")
 - **Siting:** a LINE tool in `CampSiting`: press on the ground, drag, release
   → a run of wall segments from A to B, snapped to a 2 m step, each segment a
   site in the queue (cost per metre: timber palisade first, stone wall as a
