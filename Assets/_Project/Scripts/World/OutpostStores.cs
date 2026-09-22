@@ -52,6 +52,18 @@ namespace SeaSick.World
         public const string Ore = "Ore";
         public const string Spice = "Spice";
 
+        /// **Counted in ANIMALS, not in meat.** A hand told to gather Game is
+        /// a hunter, and what he brings back lands in the Food pile at
+        /// `MeatPerAnimal` apiece -- so this is the only gatherable whose
+        /// stock and whose store are different things. The herd on the
+        /// ground is the authority, exactly as the trees are for Timber.
+        public const string Game = "Game";
+
+        /// Food per animal. **A guess** -- a goat feeds the camp for about as
+        /// long as four beds of wheat, which is what makes half a day's stalk
+        /// worth walking out for.
+        public const float MeatPerAnimal = 4f;
+
         /// Made, not found. A camp with nobody assigned never sees these.
         public const string Boards = "Boards";
         public const string Tools = "Tools";
@@ -62,7 +74,7 @@ namespace SeaSick.World
         /// lying about on an island. The rest are made at a building by
         /// somebody assigned to it.
         public static readonly string[] Gatherable =
-            { Timber, Stone, Ore, Spice, Food };
+            { Timber, Stone, Ore, Spice, Food, Game };
 
         public static bool IsGatherable(string r)
         {
@@ -82,6 +94,7 @@ namespace SeaSick.World
             Ore => 2f,
             Spice => 3f,
             Food => 3f,          // a bed of wheat is a morning's work
+            Game => 0.5f,        // ANIMALS a day: half a day's stalk per kill
             _ => 2f,
         };
 
@@ -97,6 +110,7 @@ namespace SeaSick.World
             Ore => 9f,
             Spice => 7f,
             Food => 12f,         // seed only: where the beds can be SEEN they set the ceiling
+            Game => 0f,          // never seeded by the hectare: the herd IS the stock
             _ => 10f,
         };
 
@@ -105,6 +119,7 @@ namespace SeaSick.World
             Timber => 0.02f,
             Spice => 0.01f,      // it grows; slowly
             Food => 0.05f,       // wheat stands again in twenty days
+            Game => 0.01f,       // a herd breeds back, slowly
             _ => 0f,             // rock does not
         };
 
@@ -118,6 +133,7 @@ namespace SeaSick.World
             Boards => new Color(0.66f, 0.50f, 0.30f),
             Tools => new Color(0.40f, 0.44f, 0.50f),
             Food => new Color(0.55f, 0.62f, 0.28f),
+            Game => new Color(0.42f, 0.20f, 0.16f),
             Meals => new Color(0.72f, 0.58f, 0.34f),
             _ => new Color(0.5f, 0.5f, 0.5f),
         };

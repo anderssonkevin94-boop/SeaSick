@@ -31,7 +31,19 @@ namespace SeaSick.World
         /// Set by `FaunaField` at spawn.
         public Kind kind;
 
-        enum State { Graze, Wander, Flee, Rest }
+        enum State { Graze, Wander, Flee, Rest, Dying }
+
+        /// **A hunter has this one.** Set by the man walking at it and read by
+        /// `Outpost.SyncHunting`, which kills the claimed animal in preference
+        /// to any other so that the beast that drops is the beast he was
+        /// stalking. While it is set the animal does not run from crew -- see
+        /// `Threatened`.
+        public bool Hunted { get; set; }
+
+        /// Killed. True the instant `Die` is called, which is three seconds
+        /// before the body is destroyed: everything that counts a herd counts
+        /// on this rather than on the object still existing.
+        public bool Dead { get; private set; }
 
         // ---- placeholder tuning ------------------------------------------
         const float GrazeMin = 3f, GrazeMax = 8f;   // s between wanders
@@ -42,6 +54,8 @@ namespace SeaSick.World
         const float NightRest = 0.6f;               // Night01 above this -> settle
         const float TurnRate = 220f;                // deg/s
         const float ScanEvery = 0.5f;               // s between threat checks
+        const float FlopSeconds = 0.4f;             // s to go over, once killed
+        const float FlopSink = 0.2f;                // m it settles into the turf
 
         FaunaLod field;
         System.Random rng;
@@ -76,6 +90,10 @@ namespace SeaSick.World
         void Update()
         {
             if (field == null) return;
+            // Dead: the flop owns the transform until it is done with it, and
+            // `Ground()` at the bottom of this would lift the carcass back out
+            // of the turf every frame.
+            if (state == State.Dying) return;
             float dt = Time.deltaTime;
 
             scan -= dt;
@@ -134,6 +152,58 @@ namespace SeaSick.World
             until = 4f;
         }
 
+        /// **Taken.** The ledger's call and nobody else's: a hunter swings at
+        /// an animal, and the books decide whether that swing landed (see
+        /// `Outpost.SyncHunting`). One kill in the numbers is one beast off
+        /// the crag, and this is the beast coming off it.
+        ///
+        /// It goes over rather than blinking out. Four tenths of a second on
+        /// its side and a hand's breadth into the turf is the whole of the
+        /// animation, and it is enough: the eye reads a shape that has stopped
+        /// standing up. Three seconds later there is nothing there, which is
+        /// long enough for the man who killed it to have shouldered the meat
+        /// and short enough that a worked crag is not a field of carcasses.
+        ///
+        /// Idempotent, because two things count the herd and either may get
+        /// here first.
+        public void Die()
+        {
+            if (Dead) return;
+            Dead = true;
+            Hunted = false;
+            // Out of the herd BEFORE the flop, not after: while it is in the
+            // list it is still a goat to everything that counts one, and the
+            // gate sweep would switch its renderers about under the fall.
+            if (field != null) field.Remove(this);
+            state = State.Dying;
+            StartCoroutine(Flop());
+            Destroy(gameObject, 3f);
+        }
+
+        System.Collections.IEnumerator Flop()
+        {
+            Quaternion from = transform.rotation;
+            // About its own forward axis, so a goat lands on its flank
+            // whichever way it happened to be facing.
+            Quaternion to = from * Quaternion.AngleAxis(90f, Vector3.forward);
+            Vector3 up = transform.position;
+            Vector3 down = up + Vector3.down * FlopSink;
+
+            for (float t = 0f; t < FlopSeconds; t += Time.deltaTime)
+            {
+                float k = Mathf.Clamp01(t / FlopSeconds);
+                transform.rotation = Quaternion.Slerp(from, to, k);
+                transform.position = Vector3.Lerp(up, down, k);
+                yield return null;
+            }
+
+            transform.rotation = to;
+            transform.position = down;
+            // Nothing left to think about. The renderers stay on: this is a
+            // carcass, and it is visible until it is destroyed.
+            enabled = false;
+        }
+
         bool Night()
         {
             var sky = SkyDirector.Instance;
@@ -149,14 +219,23 @@ namespace SeaSick.World
             Vector3 from = Vector3.zero;
             bool run = false;
 
-            var crew = field.Crew;
-            for (int i = 0; i < crew.Count; i++)
+            // **A stalked animal stands.** The flee radius is twelve metres
+            // and a hunter has to get to arm's length, so an animal that bolts
+            // from the man sent to kill it is an errand that can never finish
+            // -- he would herd it round the island for ever. It still runs
+            // from the ship, which is the one thing that would otherwise let
+            // a claim pin a goat in place through a whole landing.
+            if (!Hunted)
             {
-                var c = crew[i];
-                if (c == null || !c.isActiveAndEnabled) continue;
-                Vector3 d = me - c.transform.position; d.y = 0f;
-                if (d.sqrMagnitude > CrewFlee * CrewFlee) continue;
-                from += d.normalized; run = true;
+                var crew = field.Crew;
+                for (int i = 0; i < crew.Count; i++)
+                {
+                    var c = crew[i];
+                    if (c == null || !c.isActiveAndEnabled) continue;
+                    Vector3 d = me - c.transform.position; d.y = 0f;
+                    if (d.sqrMagnitude > CrewFlee * CrewFlee) continue;
+                    from += d.normalized; run = true;
+                }
             }
 
             if (field.ShipMoving)

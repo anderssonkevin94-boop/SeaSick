@@ -140,11 +140,15 @@ namespace SeaSick.World
             // A camp restored from a save written before stone was a price
             // has no seam in its books. See `EnsureStoneStock`.
             EnsureStoneStock();
+            // An island with a herd on it has game in its books. Same reason
+            // as the stone: a save written before hunting existed has none.
+            EnsureGameStock();
             // The fire may have been lit (or restored) since the survey, and
             // the boulders belong round it. No-op after the first call.
             PlaceCampStone();
             ReconcileWood();
             ReconcileCrops();
+            ReconcileGame();
             // The raiders are ships, and the ships are the authority: the
             // ledger is told how many are offshore and never guesses. Sink
             // them and the clock stops.
@@ -162,6 +166,7 @@ namespace SeaSick.World
             SyncFelling();
             GatherSync.Sync(this);   // stone, ore and spice props go as the seam is worked
             SyncHarvest();
+            SyncHunting();
             // The piles beside the fire are drawn from the stores, so they
             // want to exist wherever the stores are being looked at.
             if (HasCamp) CampPiles.EnsureOn(this);
@@ -226,6 +231,54 @@ namespace SeaSick.World
             if (stock.standing > standing) stock.standing = standing;
             else if (stock.standing < 1f && standing >= 1)
                 stock.standing = Mathf.Min(Mathf.Max(1f, stock.standingMax), standing);
+        }
+
+        /// **The herd is the authority on game, the way the trees are on
+        /// timber.** (2026-09-22)
+        ///
+        /// A Game stock is counted in ANIMALS, and an animal is a thing you
+        /// can walk up to and look at -- so the same two pulls the wood gets
+        /// apply here, and for the same reason. The books may never claim
+        /// more goats than are standing on the crags, or a hunter would stalk
+        /// something that was never there; and a stock that has run out with
+        /// animals still alive is refilled off them, or a herd that bred back
+        /// while the island was unloaded would be invisible to the camp.
+        /// Both pulls are toward the mesh and both are idempotent, so a
+        /// watched camp and an unwatched one land on the same books.
+        ///
+        /// The ceiling comes off the herd too, and only ever UP: a wood's
+        /// ceiling is a fact about the hectares, but nothing ever told us how
+        /// many animals this island is meant to carry except the most we have
+        /// ever seen on it.
+        void ReconcileGame()
+        {
+            var stock = ledger != null ? ledger.Stock(Res.Game) : null;
+            if (stock == null) return;
+            var fauna = FaunaHere();
+            if (fauna == null) return;
+            int alive = AliveHere(fauna);
+            if (alive <= 0) return;
+
+            if (stock.standingMax < alive) stock.standingMax = alive;
+            if (stock.standing > alive) stock.standing = alive;
+            else if (stock.standing < 1f) stock.standing = alive;
+        }
+
+        /// Live animals on this island right now. `Animal.Die` takes itself
+        /// out of the `FaunaLod`, but it flops for three seconds before it is
+        /// destroyed, so a dead one can still be in the list for a frame --
+        /// counting it would be counting a carcass as a goat.
+        static int AliveHere(FaunaLod fauna)
+        {
+            var animals = fauna.Animals;
+            if (animals == null) return 0;
+            int n = 0;
+            for (int i = 0; i < animals.Count; i++)
+            {
+                var a = animals[i];
+                if (a != null && !a.Dead) n++;
+            }
+            return n;
         }
 
         /// Is there a camp here at all, or only ground that would take one?
@@ -1175,6 +1228,17 @@ namespace SeaSick.World
             return woodCache;
         }
 
+        /// The herd on this island, cached like the wood. Null on an island
+        /// with no animals at all -- `FaunaField` destroys a root it put
+        /// nothing under -- and that null is the whole reason hunting is
+        /// never offered there.
+        public FaunaLod FaunaHere()
+        {
+            if (faunaCache == null) faunaCache = GetComponentInChildren<FaunaLod>();
+            return faunaCache;
+        }
+        FaunaLod faunaCache;
+
         // --- who is on which tree ---------------------------------------------
 
         /// **Tunables, as plain statics.** An `Outpost` is added at runtime by
@@ -1855,6 +1919,28 @@ namespace SeaSick.World
                 ledger.SeedStock(Res.Food, WorkedHectares());
         }
 
+        /// **An island with a herd on it has game; one without has none, and
+        /// never grows one.**
+        ///
+        /// Every other stock is seeded by the hectare so the camp can be
+        /// worked with the island unloaded, and then sized to the mesh when
+        /// the mesh turns up. Game cannot be: `Res.PerHectare(Game)` is zero
+        /// on purpose, because the only thing that ever says how many goats
+        /// are on a crag is the goats. So the count IS the seeding, it
+        /// happens the first time the herd is loaded, and on an island where
+        /// `FaunaHere()` is null nothing is ever written -- which is what
+        /// keeps Hunt out of the Gather menu there (see `Gatherable`).
+        void EnsureGameStock()
+        {
+            if (ledger == null) return;
+            if (ledger.Stock(Res.Game) != null) return;
+            var fauna = FaunaHere();
+            if (fauna == null) return;
+            int alive = AliveHere(fauna);
+            if (alive <= 0) return;
+            ledger.AddStanding(Res.Game, alive, Res.RegrowPerDay(Res.Game));
+        }
+
         /// Beds are the authority on Food while they are loaded: the ceiling
         /// is the bed count, and the stock can never exceed what stands.
         void ReconcileCrops()
@@ -1906,6 +1992,68 @@ namespace SeaSick.World
                 if (k < want) crops.Harvest(i);
                 else crops.Regrow(i);
             }
+        }
+
+        /// **Make the herd agree with the books.** The ledger has already
+        /// taken the animal; this is the moment it falls over.
+        ///
+        /// Unlike a bed, a kill does not come back -- `Animal.Die` is one
+        /// way, so this can only ever remove, and it removes exactly the
+        /// difference. `CeilToInt` is the line that keeps a part-stalked
+        /// animal alive: the hunter is half a day into his goat at
+        /// `standing == 3.4`, and a goat that dropped dead halfway through
+        /// being walked up on would be the arithmetic showing through.
+        ///
+        /// **Unwatched, nothing happens**, exactly as with felling. Nobody is
+        /// there to see it, the books go on being right, and the mesh catches
+        /// up on the next arrival -- when `CatchUp` calls this with the herd
+        /// loaded and the shortfall already in the ledger.
+        ///
+        /// The one it takes is the one a hunter has already claimed, if there
+        /// is one, so the animal that dies is the animal he was stalking;
+        /// otherwise the nearest to the camp, which is the same
+        /// nearest-first rule the wood and the wheat are cut by.
+        public void SyncHunting()
+        {
+            if (!Watched || ledger == null) return;
+            var stock = ledger.Stock(Res.Game);
+            if (stock == null) return;
+            var fauna = FaunaHere();
+            if (fauna == null) return;
+
+            int alive = AliveHere(fauna);
+            int want = Mathf.Max(0, Mathf.CeilToInt(stock.standing));
+            // Bounded by the count read ONCE, so a `Die` that failed to take
+            // itself out of the list cannot turn this into a cull.
+            int owed = alive - want;
+            for (int n = 0; n < owed; n++)
+            {
+                var beast = NextQuarry(fauna);
+                if (beast == null) break;
+                beast.Die();
+            }
+        }
+
+        /// The animal that dies next: the one somebody is already stalking,
+        /// else the one nearest the fire.
+        Animal NextQuarry(FaunaLod fauna)
+        {
+            var animals = fauna.Animals;
+            if (animals == null) return null;
+            Vector3 c = CampCentre;
+            Animal near = null;
+            float best = float.MaxValue;
+            for (int i = 0; i < animals.Count; i++)
+            {
+                var a = animals[i];
+                if (a == null || a.Dead) continue;
+                if (a.Hunted) return a;
+                Vector3 p = a.transform.position - c;
+                p.y = 0f;
+                float d2 = p.sqrMagnitude;
+                if (d2 < best) { best = d2; near = a; }
+            }
+            return near;
         }
 
         void BuildHarvestOrder(Terrain.SceneryCrops crops)

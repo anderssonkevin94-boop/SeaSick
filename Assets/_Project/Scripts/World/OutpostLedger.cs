@@ -66,6 +66,8 @@ namespace SeaSick.World
                 switch (order)
                 {
                     case OutpostOrder.Gather:
+                        // Nobody "gathers game". He is out after the goats.
+                        if (target == Res.Game) return "hunting";
                         return string.IsNullOrEmpty(target)
                             ? "gathering" : "gathering " + target.ToLowerInvariant();
                     case OutpostOrder.Build: return "building";
@@ -1190,20 +1192,32 @@ namespace SeaSick.World
                 var stock = Stock(h.target);
                 if (stock == null || stock.standing <= 0f) continue;
 
-                var store = Store(h.target, true);
+                // **A hunter is the one hand whose stock and whose pile are
+                // different things.** Game is counted in animals on the
+                // ground; what he carries home is meat, and meat is Food. So
+                // the take is metered in animals against the herd and paid in
+                // `MeatPerAnimal` into the Food pile -- which is also why the
+                // room he has to fill is the FOOD pile's, converted back into
+                // animals before it can limit the kill.
+                bool hunting = h.target == Res.Game;
+                string into = hunting ? Res.Food : h.target;
+
+                var store = Store(into, true);
                 float room = (ceilingPer - store.whole) - store.part;
                 if (room <= 0f) continue;
+                if (hunting) room /= Res.MeatPerAnimal;
 
-                float want = Res.GatherRate(h.target) * days * WorkFactorOn(h, h.target);
+                float want = Res.GatherRate(h.target) * days * WorkFactorOn(h, into);
                 float got = Mathf.Min(want, Mathf.Min(stock.standing, room));
                 if (got <= 0f) continue;
 
                 stock.standing -= got;
                 if (h.target == Res.Timber) timberTaken += got;
-                store.part += got;
+                float paid = hunting ? got * Res.MeatPerAnimal : got;
+                store.part += paid;
                 int whole = Mathf.FloorToInt(store.part);
                 if (whole > 0) { store.whole += whole; store.part -= whole; }
-                away.Add(h.target, got);
+                away.Add(into, paid);
             }
 
             // --- working at a building ---------------------------------------
@@ -1375,6 +1389,11 @@ namespace SeaSick.World
             if (h.order == OutpostOrder.Gather)
             {
                 var stock = Stock(h.target);
+                // The hunter fills the Food pile, so a full Food pile is what
+                // stops him -- and a herd below one animal is a herd he
+                // cannot take one out of.
+                if (h.target == Res.Game)
+                    return RoomFor(Res.Food) <= 0 || stock == null || stock.standing < 1f;
                 return RoomFor(h.target) <= 0 || stock == null || stock.standing < 1f;
             }
             if (h.order == OutpostOrder.Work)
@@ -1410,6 +1429,19 @@ namespace SeaSick.World
 
                 if (h.order == OutpostOrder.Gather)
                 {
+                    // **A hunter reads on the Food line, in meat.** His
+                    // target is Game and his rate is animals a day, so the
+                    // readout would be in the wrong units on the wrong row
+                    // if it took him at his word: half an animal a day is
+                    // two Food a day, and Game itself never moves in a
+                    // pile at all.
+                    if (h.target == Res.Game)
+                    {
+                        if (resource != Res.Food || Stalled(h)) continue;
+                        rate += Res.GatherRate(Res.Game) * Res.MeatPerAnimal
+                                * WorkFactorOn(h, Res.Food);
+                        continue;
+                    }
                     if (h.target != resource || Stalled(h)) continue;
                     rate += Res.GatherRate(resource) * WorkFactorOn(h, resource);
                     continue;
@@ -1452,6 +1484,19 @@ namespace SeaSick.World
 
                 if (h.order == OutpostOrder.Gather)
                 {
+                    // **A hunter reads on the Food line, in meat.** His
+                    // target is Game and his rate is animals a day, so the
+                    // readout would be in the wrong units on the wrong row
+                    // if it took him at his word: half an animal a day is
+                    // two Food a day, and Game itself never moves in a
+                    // pile at all.
+                    if (h.target == Res.Game)
+                    {
+                        if (resource != Res.Food || Stalled(h)) continue;
+                        rate += Res.GatherRate(Res.Game) * Res.MeatPerAnimal
+                                * WorkFactorOn(h, Res.Food);
+                        continue;
+                    }
                     if (h.target != resource || Stalled(h)) continue;
                     rate += Res.GatherRate(resource) * WorkFactorOn(h, resource);
                     continue;

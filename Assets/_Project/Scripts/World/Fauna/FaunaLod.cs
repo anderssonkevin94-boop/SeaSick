@@ -49,7 +49,18 @@ namespace SeaSick.World
         readonly List<Animal> animals = new List<Animal>();
         readonly List<Gull> gulls = new List<Gull>();
         readonly List<Renderer[]> bodies = new List<Renderer[]>();
+        /// The body each `bodies` entry was taken off, so `Remove` can find
+        /// the renderers belonging to one animal. A parallel list rather than
+        /// an index into `animals`: gulls go into `bodies` too, so the two
+        /// have never lined up.
+        readonly List<GameObject> owners = new List<GameObject>();
         public int Count => animals.Count + gulls.Count;
+
+        /// **The live herd, for anyone who needs to pick one out of it** --
+        /// the ledger choosing what a hunter's kill takes down, the cursor
+        /// deciding whether the thing under it is a goat. Goats and boar
+        /// only; the gulls are scenery and nobody hunts them.
+        public IReadOnlyList<Animal> Animals => animals;
 
         // Shared threat state, refreshed on the same one-second tick.
         CrewAgent[] crew = System.Array.Empty<CrewAgent>();
@@ -82,6 +93,24 @@ namespace SeaSick.World
             if (a != null) animals.Add(a);
             if (g != null) gulls.Add(g);
             bodies.Add(body.GetComponentsInChildren<Renderer>(true));
+            owners.Add(body);
+        }
+
+        /// **One animal is gone.** Called by `Animal.Die` before the carcass
+        /// is destroyed, and it must take the renderers with it: the gate
+        /// sweep walks `bodies` a second later and a `Renderer[]` belonging
+        /// to a destroyed object is a null-reference an island's width away
+        /// from anything the player did.
+        ///
+        /// Taking it out of `animals` here is also what makes the flop safe:
+        /// `Gate` never touches a component it cannot see, so a carcass goes
+        /// on flopping even if the player sails out of range mid-fall.
+        public void Remove(Animal a)
+        {
+            if (a == null) return;
+            animals.Remove(a);
+            int i = owners.IndexOf(a.gameObject);
+            if (i >= 0) { owners.RemoveAt(i); bodies.RemoveAt(i); }
         }
 
         /// Called once the herds are placed: stagger the first tick so a world

@@ -281,6 +281,43 @@ namespace SeaSick.World
                 }
             }
 
+            // --- a goat or a boar ------------------------------------------------
+            // Resolved as a Node carrying Game, exactly as a wheat bed is a
+            // Node carrying Food: the drop is the same `OrderGather` every
+            // other prop gets, and `CampWorker` and the ledger between them
+            // turn the claim into meat on the pile.
+            //
+            // **Before the props, and deliberately.** A goat standing on a
+            // boulder is a goat you can put somebody on; the boulder is not
+            // going anywhere, and it is the animal the player is pointing at.
+            var herd = outpost != null ? outpost.FaunaHere() : null;
+            if (herd != null)
+            {
+                var live = herd.Animals;
+                Animal beast = null;
+                float bestSq = reach * reach;
+                for (int i = 0; i < live.Count; i++)
+                {
+                    var a = live[i];
+                    if (a == null || a.Dead) continue;
+                    Vector3 d = a.transform.position - p;
+                    d.y = 0f;
+                    float m = d.sqrMagnitude;
+                    if (m < bestSq) { bestSq = m; beast = a; }
+                }
+                if (beast != null)
+                {
+                    t.kind = HandTarget.Kind.Node;
+                    t.resource = Res.Game;
+                    t.centre = beast.transform.position;
+                    t.extent = Mathf.Max(1.4f, reach * 0.5f);
+                    t.verb = Verb(HandTarget.Kind.Node, who, Res.Game);
+                    t.refusal = cannotLand ?? (Gatherable(outpost, Res.Game)
+                        ? null : Refuse(Res.Game));
+                    return t;
+                }
+            }
+
             // --- ore, stone, spice ---------------------------------------------
             var node = NearestNode(outpost, p, reach);
             if (node != null)
@@ -518,10 +555,13 @@ namespace SeaSick.World
                     verbIs = named ? who + " — cut timber" : "cut timber";
                     break;
                 case HandTarget.Kind.Node:
-                    verbIs = named
-                        ? who + " — gather " + Lower(arg)
-                        : "gather " + Lower(arg);
+                {
+                    // Nobody gathers a goat. Game is the only id in the set
+                    // that needs its own verb.
+                    string doing = Same(arg, Res.Game) ? "hunt" : "gather " + Lower(arg);
+                    verbIs = named ? who + " — " + doing : doing;
                     break;
+                }
                 case HandTarget.Kind.Workplace:
                     verbIs = named ? "put " + who + " at the " + arg : "the " + arg;
                     break;
@@ -556,7 +596,14 @@ namespace SeaSick.World
         {
             if (Same(resource, refuseFor)) return refuseIs;
             refuseFor = resource;
-            refuseIs = "there is no " + Lower(resource) + " worth working here";
+            // Game is the one id the general line is not English about: a
+            // herd is not something there is "none of worth working". The
+            // refusal it needs is about the camp, not about the crag --
+            // `Gatherable` only says no here once the stock exists, and the
+            // stock exists the moment a herd was ever loaded.
+            refuseIs = Same(resource, Res.Game)
+                ? "nobody can hunt here yet"
+                : "there is no " + Lower(resource) + " worth working here";
             return refuseIs;
         }
 

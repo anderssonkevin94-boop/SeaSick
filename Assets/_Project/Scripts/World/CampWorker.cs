@@ -25,6 +25,13 @@ namespace SeaSick.World
     /// that it now waits for him to be standing there. Which trees come down,
     /// and how many, is untouched.
     ///
+    /// **And for the hunting, 2026-09-22.** A man sent after the herd walks
+    /// the beast down and clubs it, and the beast dies when
+    /// `Outpost.SyncHunting` says so -- never because he got there. Same
+    /// division as the felling and for the same reason: a crag worth more
+    /// goats while somebody is watching it is the arithmetic showing through.
+    /// The ledger kills; he only mimes. See `TickHunting`.
+    ///
     /// It READS the ledger in three places and writes it in none: the row's
     /// order and target (what to mime), `Ledger.pending` (where a blueprint
     /// is), and `Ledger.Stalled(row)` (whether to mime anything at all). A
@@ -63,6 +70,7 @@ namespace SeaSick.World
         Vector3 claimAt;       // and where it stands
         float chopFor;         // how long he has been swinging at it
         bool hauling;          // carrying from the pile rather than cutting
+        Animal quarry;         // the beast he has claimed, if he is hunting
 
         Vector3 flyVel;        // thrown: metres a second, integrated here
         Vector3 flyOverLand;   // the last point under him that was island
@@ -105,6 +113,13 @@ namespace SeaSick.World
         const float Speed = 2.6f;
         const float SwingSeconds = 2.4f;
         const float RestSeconds = 1.1f;
+        /// A stint of clubbing at a beast. Shorter than a swing at a tree:
+        /// the kill is the ledger's, and all this has to be is long enough to
+        /// read as the man doing the work between arriving and carrying.
+        const float HuntSeconds = 2f;
+        /// Arm's length. He closes to this and no further -- walking to the
+        /// animal's own position would put him inside it.
+        const float HuntReach = 1.2f;
         /// Long enough to read as picking a log up off a stack.
         const float LoadSeconds = 0.9f;
         /// How far they will wander for a PROP to work at -- stone, ore,
@@ -282,12 +297,27 @@ namespace SeaSick.World
             => phase == Phase.Working && claimedTree >= 0 && claimedTree == treeIndex
                && isActiveAndEnabled;
 
+        /// **The beast this man is stalking, or null.** The felling pair of
+        /// this is `IsFellingNow`, and the difference is where the claim
+        /// lives: a tree is claimed in the camp's table, an animal is claimed
+        /// on the animal (`Animal.Hunted`), because the herd is the only list
+        /// of animals there is. `Outpost.SyncHunting` reads the flag rather
+        /// than asking here.
+        public Animal Quarry => quarry;
+
+        /// Is this man clubbing THIS animal right now? Same shape, and the
+        /// same deliberate silence about distance, as `IsFellingNow`.
+        public bool IsHuntingNow(Animal a)
+            => phase == Phase.Working && a != null && ReferenceEquals(a, quarry)
+               && isActiveAndEnabled;
+
         /// Hand the claimed trunk back to the camp so somebody else can have
         /// it.
         void ReleaseClaim()
         {
             if (camp != null) { camp.ReleaseTree(this); camp.ReleaseBed(this); }
             claimedTree = -1;
+            Unclaim();
         }
 
         /// The Hand has set them down here: stagger, recover, carry on.
@@ -474,6 +504,10 @@ namespace SeaSick.World
             // Cutting is its own loop now: the man does not choose the tree
             // and does not decide when it falls. See `TickCutting`.
             if (Cutting(r)) { TickCutting(r, dt); return; }
+            // Hunting likewise: the quarry walks about while he closes on it,
+            // and what he carries home is not what he was sent after. See
+            // `TickHunting`.
+            if (Hunting(r)) { TickHunting(r, dt); return; }
 
             switch (phase)
             {
@@ -514,7 +548,7 @@ namespace SeaSick.World
                     // What they carry back is what the row says they are
                     // after — the only place this component reads an order
                     // for anything but a picture.
-                    carrying = WhatFor(r);
+                    carrying = Carries(r);
                     dropAt = Dropoff(r, carrying);
                     phase = Phase.Coming;
                     acting?.Set(VillagerActing.Mode.Carry, carrying);
@@ -527,6 +561,167 @@ namespace SeaSick.World
                     wait = RestSeconds;
                     return;
             }
+        }
+
+        /// **Hunting: he walks the beast down, clubs it, and carries meat
+        /// home -- and he never kills anything.**
+        ///
+        /// Same division as the felling, for the same reason (see the class
+        /// note): the ledger owns what a camp produces, and a beast that died
+        /// because a man reached it would make a herd worth more when
+        /// somebody is watching. `Outpost.SyncHunting` takes animals off the
+        /// crag to match the books, preferring the one a hunter has claimed,
+        /// so the beast that drops is the beast he is standing over. All this
+        /// does is be there for it.
+        ///
+        /// **The target moves**, which is the one thing no other errand has
+        /// to deal with. A grazing goat drifts a dozen metres off its anchor
+        /// and a fleeing one goes twenty-five, so the walk is re-aimed at the
+        /// animal's CURRENT position every frame rather than at a spot taken
+        /// once when he set off. It does not run from him: `Animal.Hunted`
+        /// takes his own body out of that animal's flee scan the moment he
+        /// claims it, without which an errand at twelve-metre flee range and
+        /// arm's-length reach could never finish.
+        ///
+        /// **He carries Food, not Game.** The row says Game -- that is what
+        /// is standing on the island -- and the stock the yield lands in is
+        /// Food, so the pile he walks to, the load in his hands and the
+        /// stack it goes on all have to say Food. `Carries` is the split:
+        /// what he swings at and what he shoulders are two questions and
+        /// this is the one row where they have different answers.
+        void TickHunting(OutpostHand r, float dt)
+        {
+            // It died -- to his club, to another hunter's, or to a cull the
+            // ledger ran while he was walking. Let it go and take the next.
+            if (quarry != null && quarry.Dead) Unclaim();
+
+            switch (phase)
+            {
+                case Phase.Resting:
+                {
+                    acting?.Set(VillagerActing.Mode.None);
+                    bool there = Walk(home, dt);
+                    wait -= dt;
+                    if (wait > 0f) { if (there) FaceRest(dt, 0f); return; }
+                    if (!ClaimQuarry())
+                    {
+                        // Nothing alive on the island, or every beast left
+                        // has a man on it. He potters near the fire and asks
+                        // again in a moment -- the same answer the cutter
+                        // gives an island with no wood left on it.
+                        Vector2 off = Random.insideUnitCircle.normalized * Random.Range(6f, 12f);
+                        target = Stand(camp.CampCentre + new Vector3(off.x, 0f, off.y));
+                        phase = Phase.Going;
+                        return;
+                    }
+                    phase = Phase.Going;
+                    return;
+                }
+
+                case Phase.Going:
+                    acting?.Set(VillagerActing.Mode.None);
+                    if (quarry == null)
+                    {
+                        // He was only stretching his legs.
+                        if (!Walk(target, dt)) return;
+                        phase = Phase.Resting;
+                        wait = RestSeconds;
+                        return;
+                    }
+                    target = quarry.transform.position;
+                    // Arm's length, tested before the step: `Walk` stops at
+                    // 0.35 m, which is inside the animal.
+                    if (!Near(target, HuntReach)) { Walk(target, dt); return; }
+                    phase = Phase.Working;
+                    wait = HuntSeconds;
+                    // **A club, because there is no spear.** `VillagerActing`
+                    // has no hunting pose; Hammer is the overhand swing the
+                    // miners use and it is the nearest thing in the set. If a
+                    // spear ever goes in, this is the one line that changes.
+                    acting?.Set(VillagerActing.Mode.Hammer);
+                    return;
+
+                case Phase.Working:
+                    if (quarry == null)
+                    {
+                        // Claim taken off him mid-swing: a re-order, or the
+                        // beast is gone. No meat -- he never finished.
+                        Drop();
+                        phase = Phase.Resting;
+                        wait = RestSeconds;
+                        return;
+                    }
+                    Face(quarry.transform.position - transform.position, dt);
+                    wait -= dt;
+                    if (wait > 0f) return;
+                    carrying = Carries(r);
+                    dropAt = Dropoff(r, carrying);
+                    phase = Phase.Coming;
+                    acting?.Set(VillagerActing.Mode.Carry, carrying);
+                    return;
+
+                case Phase.Coming:
+                    if (!Walk(dropAt, dt)) return;
+                    Drop();
+                    phase = Phase.Resting;
+                    wait = RestSeconds;
+                    return;
+            }
+        }
+
+        /// Is this row out after the herd?
+        bool Hunting(OutpostHand r) =>
+            r != null && r.order == OutpostOrder.Gather && r.target == Res.Game;
+
+        /// **Take the nearest unclaimed beast, and hold it.**
+        ///
+        /// Nearest to the CAMP rather than to the man, for the same reason
+        /// `FindSomethingToWorkAt` measures from there: it is the camp that
+        /// works outward, and measuring from wherever somebody happens to be
+        /// standing sends a man who has just walked home straight back out to
+        /// the far side of the crag.
+        bool ClaimQuarry()
+        {
+            Unclaim();
+            var herd = camp != null ? camp.FaunaHere() : null;
+            if (herd == null) return false;
+
+            var animals = herd.Animals;
+            if (animals == null) return false;
+
+            Vector3 from = camp.CampCentre;
+            Animal best = null;
+            float bestSq = float.MaxValue;
+            for (int i = 0; i < animals.Count; i++)
+            {
+                var a = animals[i];
+                if (a == null || a.Dead || a.Hunted) continue;
+                Vector3 d = a.transform.position - from;
+                d.y = 0f;
+                float m = d.sqrMagnitude;
+                if (m < bestSq) { bestSq = m; best = a; }
+            }
+            if (best == null) return false;
+
+            quarry = best;
+            quarry.Hunted = true;
+            return true;
+        }
+
+        /// Let the beast go back to being a goat. Safe on one that has been
+        /// destroyed under him: Unity's null covers it.
+        void Unclaim()
+        {
+            if (quarry != null) quarry.Hunted = false;
+            quarry = null;
+        }
+
+        /// Flat distance test, for a target that is too small to walk to.
+        bool Near(Vector3 to, float within)
+        {
+            Vector3 d = to - transform.position;
+            d.y = 0f;
+            return d.sqrMagnitude <= within * within;
         }
 
         /// **Cutting wood: the tree that comes down is the one he is swinging
@@ -844,6 +1039,16 @@ namespace SeaSick.World
             string want = camp != null && camp.Ledger != null ? camp.Ledger.BuilderWants : null;
             return string.IsNullOrEmpty(want) ? Res.Timber : want;
         }
+
+        /// **What ends up on his shoulder**, which is not always what he was
+        /// sent after. One row splits the two: a hunter is sent after Game
+        /// and comes back with Food, because Game is counted in animals on
+        /// the crag and the yield lands in the larder (`OutpostLedger`). The
+        /// pile he walks to, the sack in his hands and the stack he sets it
+        /// on all come off this, so all three agree.
+        ///
+        /// Everything else carries what `WhatFor` says, unchanged.
+        string Carries(OutpostHand r) => Hunting(r) ? Res.Food : WhatFor(r);
 
         /// The swing that suits the material. An axe for wood, a pick-like
         /// hammer for the things that come out of rock, a hoe for what is
