@@ -70,6 +70,27 @@ namespace SeaSick.World
         public const float ScrubMin = 0.85f;
         public const float ScrubMax = 1.55f;
 
+        /// Ground foliage -- ferns, grass, scrub sprigs, driftwood -- stamped
+        /// thick around the base of every tree and loose on the shore.
+        /// Kevin, 2026-09-22: "too big and invasive... grows through
+        /// buildings and makes the camp seem busy." Cut ~37% off both ends
+        /// of the old .55-1.1 / .45-.85 ranges: still readable as fern and
+        /// grass, not a hedge a crewman would have to push through.
+        public const float GroundcoverScaleMin = 0.35f;
+        public const float GroundcoverScaleMax = 0.70f;
+        public const float ShoreGroundcoverScaleMin = 0.30f;
+        public const float ShoreGroundcoverScaleMax = 0.55f;
+
+        /// Cluster count around a tree used to be `2 + rRockA*4` (2-6, avg
+        /// ~4); this halves it to 1-3, avg ~2.
+        public const float GroundcoverClusterBase = 1f;
+        public const float GroundcoverClusterRange = 2f;
+
+        /// Shore patch grid step. Was 4.5 m; area-per-sample scales with the
+        /// square of the step, so *sqrt(2) roughly halves the patch count
+        /// for the same coverage.
+        public const float ShoreGroundcoverStep = 6.5f;
+
         // --- the ship -------------------------------------------------------
         /// Her overall length. Was authored by SetupPaddleBoat.Scale, which was
         /// the one knob that resizes her; this is here so everything else can

@@ -44,6 +44,22 @@ namespace SeaSick.Terrain
             public int lod1Start, lod1Count;       // in the cell's LOD1 mesh (0 if none)
             public bool felled;
             public GameObject instance;
+
+            /// Where this tree's vertices stood before it came down, so it can
+            /// be stood back up. Kevin, 2026-09-22: the wood regrows away from
+            /// camp, and `Fell` writes the base position over the only copy of
+            /// the shape there was -- a few dozen vectors per FELLED tree is
+            /// the whole cost of being able to undo that, and a tree that was
+            /// never cut pays nothing.
+            public Vector3[] standing0, standing1;
+
+            /// Did the OUTPOST'S BOOKS take this one down? Only those can come
+            /// back. A shore party chopping a `ResourceNode` fells whatever
+            /// trunk it walked to (`NodeHarvested`), which no ledger counted
+            /// and no ledger can reproduce -- standing one of those up because
+            /// the camp's ring happened to reach past it would be inventing a
+            /// tree out of a number that never described it.
+            public bool ledgerFelled;
         }
 
         /// One welded mesh pair and the renderers that draw it. `v0`/`v1`
@@ -95,17 +111,82 @@ namespace SeaSick.Terrain
             }
             if (c.v0 != null)
             {
+                if (trees[i].standing0 == null) trees[i].standing0 = Snapshot(c.v0, t.vertStart, t.vertCount);
                 for (int v = t.vertStart; v < t.vertStart + t.vertCount && v < c.v0.Length; v++)
                     c.v0[v] = t.baseAt;
                 c.lod0.SetVertices(c.v0);
             }
             if (c.v1 != null && t.lod1Count > 0)
             {
+                if (trees[i].standing1 == null) trees[i].standing1 = Snapshot(c.v1, t.lod1Start, t.lod1Count);
                 for (int v = t.lod1Start; v < t.lod1Start + t.lod1Count && v < c.v1.Length; v++)
                     c.v1[v] = t.baseAt;
                 c.lod1.SetVertices(c.v1);
             }
             trees[i].felled = true;
+        }
+
+        /// **Fell it for the outpost's books**, which is the only kind of
+        /// felling that can ever be undone. See `Tree.ledgerFelled`.
+        public void FellForLedger(int i)
+        {
+            if (trees == null || i < 0 || i >= trees.Length) return;
+            bool wasDown = trees[i].felled;
+            Fell(i);
+            // A tree the shore party already took stays theirs: the camp did
+            // not cut it and must not be able to grow it back.
+            if (!wasDown && trees[i].felled) trees[i].ledgerFelled = true;
+        }
+
+        /// **Stand a felled tree back up**, exactly where it was.
+        ///
+        /// Kevin, 2026-09-22: *"they should re-grow further away from camp, to
+        /// help the camp not get overgrown."* WHICH trees come back, and in
+        /// what order, is the outpost's business (`Outpost.DrawWood`) -- this
+        /// is only the undo of `Fell`, and it refuses when there is no
+        /// snapshot to put back rather than leaving a tree half-restored.
+        public void Restand(int i)
+        {
+            if (trees == null || i < 0 || i >= trees.Length) return;
+            if (!trees[i].felled || !trees[i].ledgerFelled) return;
+            var t = trees[i];
+            if (t.instance != null)
+            {
+                // The node that harvested it is gone; a fresh one is made by
+                // `Populate` when a party comes near. Leaving the old one on
+                // the object would stand a spent node up with the tree.
+                var stale = t.instance.GetComponent<ResourceNode>();
+                if (stale != null && !live.ContainsKey(i)) Destroy(stale);
+                t.instance.SetActive(true);
+                trees[i].felled = false;
+                trees[i].ledgerFelled = false;
+                return;
+            }
+            var c = cells[t.cell];
+            if (t.vertCount > 0 && (c.v0 == null || t.standing0 == null)) return;
+            if (c.v0 != null && t.standing0 != null)
+            {
+                for (int k = 0; k < t.standing0.Length && t.vertStart + k < c.v0.Length; k++)
+                    c.v0[t.vertStart + k] = t.standing0[k];
+                c.lod0.SetVertices(c.v0);
+            }
+            if (c.v1 != null && t.standing1 != null)
+            {
+                for (int k = 0; k < t.standing1.Length && t.lod1Start + k < c.v1.Length; k++)
+                    c.v1[t.lod1Start + k] = t.standing1[k];
+                c.lod1.SetVertices(c.v1);
+            }
+            trees[i].felled = false;
+            trees[i].ledgerFelled = false;
+        }
+
+        static Vector3[] Snapshot(Vector3[] src, int start, int count)
+        {
+            if (src == null || count <= 0 || start < 0 || start >= src.Length) return null;
+            int n = Mathf.Min(count, src.Length - start);
+            var snap = new Vector3[n];
+            System.Array.Copy(src, start, snap, 0, n);
+            return snap;
         }
 
         /// Trees whose LOD0 vertex run has collapsed to one point, counted
@@ -192,7 +273,9 @@ namespace SeaSick.Terrain
                 // Through the live node if there is one, so a tree a crewman
                 // has claimed does not leave a node standing on a stump.
                 if (live.TryGetValue(i, out var node) && node != null) live.Remove(i);
-                Fell(i);
+                // The clearing is booked against `ledger.treesFelled` by the
+                // caller, so it is the books' wood like any other.
+                FellForLedger(i);
                 n++;
             }
             return n;

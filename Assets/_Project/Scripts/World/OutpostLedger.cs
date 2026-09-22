@@ -410,6 +410,20 @@ namespace SeaSick.World
         /// many to take down.
         public int treesFelled;
 
+        /// **How much of that wood has grown back**, in trees, fractions and
+        /// all. Kevin, 2026-09-22: *"they should re-grow further away from
+        /// camp, to help the camp not get overgrown."*
+        ///
+        /// A second count rather than a smaller `treesFelled`, because
+        /// `timberTaken` is what has been cut EVER and the felling is driven
+        /// off it: walking `treesFelled` backwards would only make the next
+        /// tick take the same trees down again. So the two are kept apart --
+        /// what was cut, and what has come back -- and the picture is the
+        /// difference. Which trees come back is geometry and lives in
+        /// `Outpost.DrawWood`: the far ones first, never the camp's own
+        /// clearing.
+        public float treesRegrown;
+
         /// **Declared now, consumed in a later pass.** Food is settled as
         /// local — berries and wheat off the island itself, no supply run —
         /// and over-capacity hands eat stores and can starve. None of that is
@@ -1088,6 +1102,20 @@ namespace SeaSick.World
                     s.standing = Mathf.Min(s.standingMax,
                         s.standing + s.standingMax * s.regrowPerDay * days);
             }
+
+            // **And the stumps close over, from the outside in.** Kevin,
+            // 2026-09-22. The same rate the timber stock regrows at, measured
+            // against the trees that are down rather than against the stock's
+            // ceiling, so a wood that was barely touched comes back slowly and
+            // a stripped one comes back at the pace it was stripped. Held here
+            // as a number only: `Outpost.DrawWood` is what decides the far
+            // trees are the ones that come back, and it clamps this again
+            // against the camp's own clearing once the ground can be seen.
+            float woodRate = Res.RegrowPerDay(Res.Timber);
+            if (treesFelled > 0 && woodRate > 0f && treesRegrown < treesFelled)
+                treesRegrown = Mathf.Min(treesFelled,
+                    treesRegrown + treesFelled * woodRate * days);
+            else if (treesRegrown > treesFelled) treesRegrown = treesFelled;
 
             // **Building comes before everything, and draws on the same
             // standing timber.** A camp that has not been built yet has

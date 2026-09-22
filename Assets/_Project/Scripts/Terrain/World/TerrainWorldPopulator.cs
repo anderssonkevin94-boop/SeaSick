@@ -372,6 +372,18 @@ namespace SeaSick.Terrain
             int index = System.Array.IndexOf(byComponent, island);
             Dress(island.transform, island.transform.position, island.Radius, island,
                   Mathf.Max(0, index), village);
+
+            // The village's own KeepOut circle already steers new scenery
+            // wide of the whole clearing (see `Dress` above), but a re-dress
+            // rebuilds the welded cells from scratch, which drops every
+            // per-building collapse `SceneryGround.ClearFootprintNear` had
+            // already made. Kevin, 2026-09-22: re-apply one per building
+            // already standing so a flora re-tune cannot regrow a fern
+            // through a hut that was already clear of it.
+            if (village != null)
+                foreach (var b in village.Built)
+                    if (b != null)
+                        SceneryGround.ClearFootprintNear(b.transform.position, b.transform.rotation, b.Footprint, 1f);
         }
 
         /// Trees and scree, baked into one mesh. Scenery only -- the

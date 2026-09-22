@@ -1101,15 +1101,38 @@ namespace SeaSick.World
         /// show you a different wood. So the front of the order is the only
         /// tree that can ever fall next, and the claim table hands the front of
         /// the order to somebody.
+        ///
+        /// ## What changed 2026-09-22
+        ///
+        /// Kevin: *"the trees seem to appear anew after loading in."* They
+        /// did. This used to open with `if (want <= treesFelled) return;` --
+        /// an early-out that reads the ledger's two counts as a DEBT, and a
+        /// settled debt as nothing to do. That is true of the wood it fells
+        /// and false of the wood it has already felled: a mesh arrives from
+        /// the terrain streamer (or from `Adopt`) with every tree standing and
+        /// the debt already settled, so the one thing that could have thinned
+        /// it again never ran and a worked-out camp stood in fresh forest.
+        ///
+        /// So the shape is now: **draw the wood the ledger describes, then
+        /// pay down whatever is still owed.** `DrawWood` is the pure function
+        /// the comment above always claimed this was -- give it the ledger and
+        /// the geometry and it puts the same trees down on any visit, however
+        /// the terrain streamed in -- and `FellOwed` below is unchanged, still
+        /// the only thing that moves `treesFelled`, still bound by the grace
+        /// and the claim table while somebody is watching.
         public void SyncFelling()
         {
             if (ledger == null) return;
-            int want = Mathf.FloorToInt(ledger.timberTaken);
-            if (want <= ledger.treesFelled) { owedSince = -1f; return; }
 
             var wood = WoodHere();
             if (wood == null || wood.TreeCount == 0) return;
             BuildFellOrder(wood);
+            PinRegrowth();
+            DrawWood(wood);
+
+            int want = Mathf.FloorToInt(ledger.timberTaken);
+            if (want <= ledger.treesFelled) { owedSince = -1f; return; }
+
             PruneClaims();
 
             int cutters = claimHands.Count;
@@ -1157,7 +1180,7 @@ namespace SeaSick.World
                     }
                 }
 
-                wood.Fell(i);
+                wood.FellForLedger(i);
                 ledger.treesFelled++;
                 fellCursor++;
                 owedSince = Time.unscaledTime;
@@ -1167,6 +1190,82 @@ namespace SeaSick.World
             // Stop asking: the stock is the authority on how much wood there
             // was, and the mesh is only the picture of it.
             if (fellCursor >= fellOrder.Length) ledger.treesFelled = want;
+
+            // The mesh and the books agree again, so record where `DrawWood`
+            // would have to start from. Felling front-first and skipping what
+            // is already down keeps the felled set a PREFIX of the order,
+            // which is the invariant the whole file rests on.
+            drawnWood = wood;
+            drawnDown = DownWanted(wood);
+        }
+
+        /// **The trees that are down right now, as a count off the front of
+        /// the order** -- the one number the picture is made of.
+        ///
+        /// Kevin, 2026-09-22: the wood regrows away from camp. Because the
+        /// order is nearest-the-camp-first and the felled set is always a
+        /// prefix of it, "the far ones come back first" is not a second
+        /// ordering at all: it is the same prefix, SHORTER. Same trick
+        /// `GatherSync` plays with the boulders, and the same payoff -- the
+        /// whole visible state still reproduces from integers plus geometry.
+        ///
+        /// Two floors under it:
+        /// - the camp's own clearing (`Feel.campClearing`) never regrows while
+        ///   there is a fire here, which is the ask -- *"to help the camp not
+        ///   get overgrown"* -- and
+        /// - nothing beyond what was ever cut, obviously.
+        int DownWanted(Terrain.SceneryWood wood)
+        {
+            int cut = Mathf.Clamp(ledger.treesFelled, 0, wood.TreeCount);
+            int keptClear = Mathf.Min(HasCamp ? clearingTrees : 0, cut);
+            int down = ledger.treesFelled - Mathf.FloorToInt(ledger.treesRegrown);
+            return Mathf.Clamp(down, keptClear, cut);
+        }
+
+        /// The ledger accrues regrowth with no idea where the camp is
+        /// (`OutpostLedger.Step`), because an island can be worked unloaded.
+        /// The moment the ground is here, the clearing gets its say: regrowth
+        /// that would eat into it is not banked for later, it never happened.
+        void PinRegrowth()
+        {
+            if (!HasCamp) return;
+            float cap = Mathf.Max(0, ledger.treesFelled - clearingTrees);
+            if (ledger.treesRegrown > cap) ledger.treesRegrown = cap;
+        }
+
+        /// **Make the wood show what the ledger says.** Fell the prefix, stand
+        /// up everything behind it, and do neither unless something moved.
+        ///
+        /// Cheap enough for the every-frame path it sits on: `DownWanted` is
+        /// arithmetic, and the pass over the order only runs when the count
+        /// changed or the mesh is one this outpost has not drawn on yet -- a
+        /// fresh mesh from the streamer, or the order rebuilt because the camp
+        /// moved. Nothing here counts as CUTTING: `FlushedTrees` is untouched
+        /// and no log is paid, because this wood came down in a session the
+        /// ledger already booked.
+        void DrawWood(Terrain.SceneryWood wood)
+        {
+            if (fellOrder == null) return;
+            int down = DownWanted(wood);
+            bool fresh = !ReferenceEquals(drawnWood, wood);
+            if (!fresh && down == drawnDown) return;
+
+            // Beyond the high-water mark nothing can be felled, so there is
+            // nothing to stand up there either. A mesh nobody has drawn on
+            // gets the full pass once.
+            int high = fresh ? fellOrder.Length : Mathf.Max(down, drawnDown);
+            for (int k = 0; k < high && k < fellOrder.Length; k++)
+            {
+                int i = fellOrder[k];
+                if (k < down) wood.FellForLedger(i);
+                else wood.Restand(i);
+            }
+
+            drawnWood = wood;
+            drawnDown = down;
+            // A tree that just stood back up is the next one a man walks to,
+            // and the cursor may be parked past it.
+            fellCursor = 0;
         }
 
         /// **The order trees come down in: nearest the camp, outward.**
@@ -1199,12 +1298,36 @@ namespace SeaSick.World
             fellCursor = 0;
             fellOrderFrom = c;
             fellOrderWood = wood;
+
+            // **How much of the order is the camp's own clearing.** The order
+            // is nearest-first, so the trees inside `Feel.campClearing` ARE
+            // its first entries and one count says which. Kevin, 2026-09-22:
+            // these never come back while the fire is lit.
+            float clear2 = Feel.campClearing * Feel.campClearing;
+            clearingTrees = 0;
+            while (clearingTrees < d2.Length && d2[clearingTrees] <= clear2) clearingTrees++;
+
+            // A new order means a different prefix, so whatever was drawn from
+            // the old one has to be drawn again -- including standing up trees
+            // that are no longer near enough to the fire to be down.
+            drawnWood = null;
+            drawnDown = 0;
         }
 
         int[] fellOrder;
         int fellCursor;
         Vector3 fellOrderFrom;
         Terrain.SceneryWood fellOrderWood;
+
+        /// Entries at the front of `fellOrder` that stand inside the camp's
+        /// clearing. See `DownWanted`.
+        int clearingTrees;
+
+        /// The wood `DrawWood` last put a picture on, and how much of the
+        /// order it put down. Not saved: both are re-derived from the ledger
+        /// the first time a mesh is seen, which is the entire point.
+        Terrain.SceneryWood drawnWood;
+        int drawnDown;
         Terrain.SceneryWood woodCache;
         float owedSince = -1f;
 
@@ -1258,6 +1381,16 @@ namespace SeaSick.World
             /// whole debt is taken at once. Two is slack for the hand who is
             /// carrying and the hand who is walking back.
             public static int fellBacklogSlack = 2;
+
+            /// **Ground the wood never takes back.** Kevin, 2026-09-22:
+            /// *"they should re-grow further away from camp, to help the camp
+            /// not get overgrown."* Four times the clearing a camp is founded
+            /// with (`CampClearingRadius`, 7.5 m), so that the huts, the
+            /// piles, the fire ring and the walk between them stay open ground
+            /// for as long as somebody lives here -- and the wood beyond it
+            /// closes back in, which is what makes leaving a place for a
+            /// season mean something.
+            public static float campClearing = 30f;
         }
 
         /// The hands with a tree claimed here, and which tree each one is on.
@@ -2515,6 +2648,8 @@ namespace SeaSick.World
                 var go = BuildingFactory.Raise(plan, transform, p, facing, hi - lo);
                 var b = go.GetComponent<Building>();
                 built.Add(b);
+                // Kevin, 2026-09-22: the grass was growing through the huts.
+                Terrain.SceneryGround.ClearFootprintNear(p, facing, plan.footprint, 1f);
                 var res = new Vector4(p.x, p.y, p.z, halfDiag + spacing * 0.5f);
                 reserved.Add(res);
                 buildingReservations.Add(res);
@@ -2552,6 +2687,7 @@ namespace SeaSick.World
             var go = BuildingFactory.Raise(plan, transform, p, facing, hi - lo);
             var b = go.GetComponent<Building>();
             built.Add(b);
+            Terrain.SceneryGround.ClearFootprintNear(p, facing, plan.footprint, 1f);
             var res = new Vector4(p.x, p.y, p.z, halfDiag + spacing * 0.5f);
             reserved.Add(res);
             buildingReservations.Add(res);

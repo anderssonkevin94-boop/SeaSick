@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using SeaSick.World;
 
 namespace SeaSick.Terrain
 {
@@ -175,6 +176,10 @@ namespace SeaSick.Terrain
             var index = new List<SceneryWood.Tree>();
             // Every wheat mat, for `SceneryCrops`: a bed is one unit of Food.
             var cropIndex = new List<SceneryCrops.Bed>();
+            // Every ground-foliage stamp (fern, grass, scrub, driftwood), for
+            // `SceneryGround`: Kevin, 2026-09-22, so a building raised on top
+            // of one can collapse it the way a felled tree collapses.
+            var groundIndex = new List<SceneryGround.Patch>();
             var individuals = new List<(string id, Vector3 at, float yaw, Vector3 scale)>();
             var cellMap = new Dictionary<long, CellBuild>();
             var cellList = new List<CellBuild>();
@@ -706,7 +711,10 @@ namespace SeaSick.Terrain
                     if (individualTrees && place)
                     {
                         // Groundcover clusters share a habitat but never a fixed offset.
-                        int count = 2 + (int)(rRockA * 4f);
+                        // Kevin, 2026-09-22: was 2-6 (avg ~4), too thick around
+                        // every tree -- halved to 1-3 via WorldScale.
+                        int count = (int)WorldScale.GroundcoverClusterBase
+                            + (int)(rRockA * WorldScale.GroundcoverClusterRange);
                         for (int u = 0; u < count; u++)
                         {
                             float angle = rYaw * Mathf.PI * 2f + u * 2.39996f;
@@ -719,11 +727,18 @@ namespace SeaSick.Terrain
                             var under = SceneryKit.Get(id);
                             if (under == null) continue;
                             var cb = CellFor(ux, uz);
+                            int gv0 = cb.v0.Count, gv1 = cb.v1.Count;
                             var low = SceneryKit.Get(id + "_LOD1") ?? under;
-                            var scale = Vector3.one * Mathf.Lerp(.55f,1.1f,rScrubA);
+                            var scale = Vector3.one * Mathf.Lerp(WorldScale.GroundcoverScaleMin, WorldScale.GroundcoverScaleMax, rScrubA);
                             var pos = new Vector3(ux,uy-.035f,uz);
                             StampBoth(cb,under,low,pos,angle,scale,scale);
                             cb.Grow(pos,3f,3f);bushes++;
+                            groundIndex.Add(new SceneryGround.Patch
+                            {
+                                baseAt = pos, cell = cb.index,
+                                vertStart = gv0, vertCount = cb.v0.Count - gv0,
+                                lod1Start = gv1, lod1Count = cb.v1.Count - gv1,
+                            });
                         }
                     }
                     trees++;
@@ -732,8 +747,12 @@ namespace SeaSick.Terrain
 
             if (individualTrees)
             {
-                for (float gx = -meanR; gx < meanR; gx += 4.5f)
-                for (float gz = -meanR; gz < meanR; gz += 4.5f)
+                // Kevin, 2026-09-22: step was 4.5 m; sample count scales as
+                // 1/step^2, so *sqrt(2) (WorldScale.ShoreGroundcoverStep)
+                // roughly halves how many patches land for the same ground.
+                float shoreStep = WorldScale.ShoreGroundcoverStep;
+                for (float gx = -meanR; gx < meanR; gx += shoreStep)
+                for (float gz = -meanR; gz < meanR; gz += shoreStep)
                 {
                     float x = centre.x + gx + 1.6f * Mathf.Sin(gz * 1.73f), z = centre.z + gz + 1.6f * Mathf.Sin(gx * 2.31f);
                     float y = height(x,z);
@@ -744,8 +763,15 @@ namespace SeaSick.Terrain
                     if (id == "Driftwood" && patch < .7f) continue;
                     var under=SceneryKit.Get(id);if(under==null)continue;
                     var cb=CellFor(x,z);var pos=new Vector3(x,y-.03f,z);
-                    var scale=Vector3.one*Mathf.Lerp(.45f,.85f,patch);
+                    int pv0 = cb.v0.Count, pv1 = cb.v1.Count;
+                    var scale=Vector3.one*Mathf.Lerp(WorldScale.ShoreGroundcoverScaleMin, WorldScale.ShoreGroundcoverScaleMax, patch);
                     StampBoth(cb,under,SceneryKit.Get(id+"_LOD1")??under,pos,x+z,scale,scale);cb.Grow(pos,3f,3f);bushes++;
+                    groundIndex.Add(new SceneryGround.Patch
+                    {
+                        baseAt = pos, cell = cb.index,
+                        vertStart = pv0, vertCount = cb.v0.Count - pv0,
+                        lod1Start = pv1, lod1Count = cb.v1.Count - pv1,
+                    });
                 }
             }
 
@@ -1044,6 +1070,11 @@ namespace SeaSick.Terrain
             // shared, so a felling and a harvest never overwrite each other.
             if (cropIndex.Count > 0)
                 go.AddComponent<SceneryCrops>().Configure(wcells, cropIndex, isle);
+            // Ground foliage, same cell list again -- so a building raised
+            // over a fern patch can collapse it, the way felling collapses a
+            // tree. See `SceneryGround.ClearFootprintNear`.
+            if (groundIndex.Count > 0)
+                go.AddComponent<SceneryGround>().Configure(wcells, groundIndex);
             go.AddComponent<SceneryLod>().Configure(wcells, terrain);
             return go;
         }
