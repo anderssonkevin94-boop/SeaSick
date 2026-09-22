@@ -55,7 +55,9 @@ namespace SeaSick.UI
             if (anchor.CurrentState != AnchorController.State.Anchored
                 && anchor.CurrentState != AnchorController.State.Ashore) return null;
             var isle = anchor.CurrentIsland;
-            if (isle == null || isle.IsHome) return null;
+            // Kevin, 2026-09-22: no island is home any more -- the crew list
+            // works on the starting island too.
+            if (isle == null) return null;
             var camp = Outpost.Of(isle);
             if (camp == null || camp.Ledger == null) return null;
             // A blueprint counts: hands left at one are exactly the people you

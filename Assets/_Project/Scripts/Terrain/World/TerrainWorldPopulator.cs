@@ -231,7 +231,11 @@ namespace SeaSick.Terrain
 
             if (isHome)
             {
-                island.Configure("Home", 0f, meanR, true, false);
+                // Kevin, 2026-09-22: no island is home any more -- the
+                // starting island gets a real resource kind and a hill like
+                // every other island, the same way `ring` picks one below.
+                var homeKind = PickKind(ring);
+                island.Configure(homeKind.name, 0f, meanR, true, true);
                 root.AddComponent<Stockpile>();
                 Home = island;
                 // A mast one ship-length tall, standing ON the ground.
@@ -530,7 +534,7 @@ namespace SeaSick.Terrain
             Vector3 home = homePoint != null ? homePoint.position : Vector3.zero;
             foreach (var isle in Island.All)
             {
-                if (isle == null || isle.IsHome || isle.MaxRadius < world.raiderMinIslandRadius || !isle.HasResources) continue;
+                if (isle == null) continue;
                 // **Which hull a raider wears is a distance question**, like
                 // which resource an island carries: the five mid stages of the
                 // fleet (ladder nodes 7..11, Long sloop to Guild escort) laid
@@ -540,6 +544,10 @@ namespace SeaSick.Terrain
                 float ring = world.discoveryRadius > 0f
                     ? Mathf.Clamp01(Vector3.Distance(isle.transform.position, home) / world.discoveryRadius)
                     : 0f;
+                // Kevin, 2026-09-22: no island is home any more -- the
+                // innermost ring around the start point stays raider-free by
+                // distance, not by IsHome.
+                if (ring < world.raiderFreeRing || isle.MaxRadius < world.raiderMinIslandRadius || !isle.HasResources) continue;
                 int node = Mathf.Clamp(7 + Mathf.FloorToInt(ring * 5f), 7, 11);
                 for (int i = 0; i < world.raidersPerIsland && posted < world.maxRaiders; i++, posted++)
                 {

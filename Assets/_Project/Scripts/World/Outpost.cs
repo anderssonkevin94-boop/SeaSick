@@ -81,7 +81,7 @@ namespace SeaSick.World
             surveying.Clear();
         }
 
-        [Tooltip("What open ground keeps before anything is built. 30 at home — that is the beach, and the reason to build the first storehouse. ZERO anywhere else: an island with nobody on it keeps nothing, and the campfire is what first gives a place a ceiling at all.")]
+        [Tooltip("What open ground keeps before anything is built. ZERO everywhere: an island with nobody on it keeps nothing, and the campfire is what first gives a place a ceiling at all.")]
         [SerializeField] int openCapacity = 30;
 
         [Tooltip("Metres between buildings -- room to walk round one, which is what a village looks like from above.")]
@@ -1829,9 +1829,10 @@ namespace SeaSick.World
             height = terrainHeight;
             minHeight = minGroundHeight;
 
-            // Bare ground keeps nothing. Home is the exception and keeps its
-            // beach, which is the whole reason its first storehouse exists.
-            if (!IsHome) openCapacity = 0;
+            // Bare ground keeps nothing.
+            // Kevin, 2026-09-22: no island is home any more -- the starting
+            // island's beach keeps 0 like everywhere else.
+            openCapacity = 0;
 
             // Centre the clearing on a circle that FITS in the buildable
             // patch, not on its centroid: a lobed patch has a centroid that
@@ -1874,7 +1875,9 @@ namespace SeaSick.World
             // patch puts every candidate off the good ground and finds
             // nowhere to stand a fire. The floor drops to 4 m for the same
             // reason -- 14 m is a village's minimum, and a camp is a fire.
-            if (!IsHome && settlement.VillageClearing > 0.01f)
+            // Kevin, 2026-09-22: no island is home any more -- the starting
+            // island's clearing is ground-measured like every other camp.
+            if (settlement.VillageClearing > 0.01f)
                 ClearingRadius = Mathf.Clamp(
                     Mathf.Min(ClearingRadius, settlement.VillageClearing), 4f, 30f);
 

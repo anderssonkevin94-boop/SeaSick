@@ -58,6 +58,10 @@ namespace SeaSick.Terrain
         public int maxRaiders = 8;
         public float raiderMinIslandRadius = 60f;
         public float patrolClearance = 78f;
+        // Kevin, 2026-09-22: no island is home any more -- raiders skip the
+        // innermost ring by distance from the start point, not by IsHome.
+        [Range(0f, 1f), Tooltip("Islands within this fraction of discoveryRadius of the start point spawn no raiders — a player needs somewhere to make a first camp in peace.")]
+        public float raiderFreeRing = 0.12f;
 
         [Tooltip("0 = random each run; otherwise deterministic placement of reefs/props.")]
         public int seed = 0;

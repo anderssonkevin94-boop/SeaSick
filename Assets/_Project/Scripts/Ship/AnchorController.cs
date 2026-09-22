@@ -167,7 +167,9 @@ namespace SeaSick.Ship
         void SurveyWhatIsNear()
         {
             var isle = IslandInRange();
-            if (isle != null && !isle.IsHome)
+            // Kevin, 2026-09-22: no island is home any more -- the starting
+            // island surveys and wakes its hands like any other.
+            if (isle != null)
             {
                 Outpost.BeginSurvey(isle, this);
                 // Wake the hands who live here. A camp you are standing in
@@ -257,9 +259,10 @@ namespace SeaSick.Ship
             CurrentDock = d;
             CurrentIsland = Island.Nearest(d.Berth);
             // A camp's pier is a landing like any beach: the ground gets
-            // surveyed and the hands who live here wake up. Home has no
-            // outpost to wake.
-            if (CurrentIsland != null && !CurrentIsland.IsHome)
+            // surveyed and the hands who live here wake up.
+            // Kevin, 2026-09-22: no island is home any more -- the starting
+            // island wakes its hands too.
+            if (CurrentIsland != null)
             {
                 Outpost.BeginSurvey(CurrentIsland, this);
                 var here = Outpost.Of(CurrentIsland);
@@ -362,7 +365,9 @@ namespace SeaSick.Ship
             // That is the same fault Kevin reported, one door further in.
             if (CurrentState == State.Anchored || CurrentState == State.Ashore)
             {
-                var camp = CurrentIsland != null && !CurrentIsland.IsHome
+                // Kevin, 2026-09-22: no island is home any more -- the
+                // starting island's camp gets watched too.
+                var camp = CurrentIsland != null
                     ? Outpost.Of(CurrentIsland) : null;
                 if (camp != null && !camp.Watched) { camp.CatchUp(); camp.ShowHands(true); }
             }
@@ -523,9 +528,12 @@ namespace SeaSick.Ship
                 }
                 chaseCam.Overview = homeShot;
             }
-            else if (CurrentIsland != null && !CurrentIsland.IsHome
+            else if (CurrentIsland != null
                      && (CurrentState == State.Anchored || CurrentState == State.Ashore))
             {
+                // Kevin, 2026-09-22: no island is home any more -- anchored
+                // off the starting island frames like any camp; only the pier
+                // keeps its composed shot above.
                 // **The bird's-eye at any island.** Home gets the shot Kevin
                 // flew to, composed against its pier; a camp has no pier, so
                 // the vantage is taken from where the ship actually is —
@@ -677,7 +685,9 @@ namespace SeaSick.Ship
             // other path (a dev warp, a respawn) never passed through the
             // approach. Null is a real answer: some ground will not take a
             // settlement.
-            if (isle != null && !isle.IsHome)
+            // Kevin, 2026-09-22: no island is home any more -- the starting
+            // island surveys and wakes its hands like any other.
+            if (isle != null)
             {
                 Outpost.BeginSurvey(isle, this);
                 // Wake the hands who live here. A camp you are standing in
@@ -740,7 +750,9 @@ namespace SeaSick.Ship
         /// the ship has left.
         void StowCampHands()
         {
-            if (CurrentIsland == null || CurrentIsland.IsHome) return;
+            // Kevin, 2026-09-22: no island is home any more -- the starting
+            // island's hands get stowed too.
+            if (CurrentIsland == null) return;
             var here = Outpost.Of(CurrentIsland);
             if (here == null) return;
             here.CatchUp();          // settle the books before we stop looking

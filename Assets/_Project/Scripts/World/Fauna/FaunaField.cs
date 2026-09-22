@@ -82,12 +82,14 @@ namespace SeaSick.World
             float sizeScale = Mathf.Clamp01((meanR - 50f) / 250f);      // 0 at 50 m, 1 at 300 m
             int sizeCap = Mathf.Max(1, Mathf.RoundToInt(Mathf.Lerp(2f, 12f, sizeScale)));
 
-            if (!island.IsHome && rockiness > GoatRockiness)
+            // Kevin, 2026-09-22: no island is 'home' any more -- the starting
+            // island keeps its herds like every other.
+            if (rockiness > GoatRockiness)
             {
                 int n = Mathf.Min(sizeCap, 3 + Mathf.RoundToInt(rockiness * 6f));
                 Herd(lod, Animal.Kind.Goat, n, rng);
             }
-            if (!island.IsHome && verdancy > BoarVerdancy)
+            if (verdancy > BoarVerdancy)
             {
                 int n = Mathf.Min(sizeCap, 2 + Mathf.RoundToInt(verdancy * 6f));
                 Herd(lod, Animal.Kind.Boar, n, rng);

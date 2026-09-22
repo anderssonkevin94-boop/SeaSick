@@ -75,8 +75,9 @@ public class OutpostProbe : MonoBehaviour
             $"{home.ClearingRadius:F3} vs {expected:F3}");
         Gate(sb, ref fails, "home-is-outpost-zero", home.IsHome && home.Sited,
             $"isHome {home.IsHome}, sited {home.Sited}");
-        Gate(sb, ref fails, "home-capacity-30-bare",
-            home.Built.Count > 0 || home.StoreCapacity == 30,
+        // Kevin, 2026-09-22: no island is home any more; bare ground keeps nothing.
+        Gate(sb, ref fails, "home-capacity-0-bare",
+            home.Built.Count > 0 || home.StoreCapacity == 0,
             $"capacity {home.StoreCapacity} with {home.Built.Count} built");
 
         // The clearing must sit on the ground the survey chose, not near it.
