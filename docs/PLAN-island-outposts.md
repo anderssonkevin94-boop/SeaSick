@@ -1359,3 +1359,28 @@ already a property block over whatever renderers it had.
 **Open:** sails do not animate on raiders; speed is not per stage; the
 five mid hulls are 67k–89k triangles each — fine on the desktop, and the
 phone wants a lower `maxRaiders` or a distance cull before it is measured.
+
+## THE LAUNCH — 2026-09-22
+
+Kevin: *"the player ship is too big right now … proportionately to
+everything else its too large."* She was: the stern-wheeler is 32 m and
+11 m in the beam, a 430 t riverboat among 9–18 m fleet hulls, 1.8 m crew
+and 300 m islands, and longer than the escorts that raid her.
+
+**Uniform scale, 0.42, in the steamer bootstrap** (`SteamerBootstrap
+.PlaytestScale`): `HullFormData.Scaled(k)` scales every length by k, areas
+by k², volumes, mass and the section moment tables by k³, so the same
+generator output floats on its own marks at 13.5 m × 4.6 m, 0.86 m draft,
+32 t. The hull and wheel meshes get the same localScale; the paddle's top
+speed goes as √k (15.5 → 10 m/s, Froude); `PlayerHull.Configure` sizes the
+hit capsule from the hull she wears. Roll period drops as √k to ~5 s — a
+small boat is lively; unmeasured. Chase-camera distance (20.8 m) left as it
+was. Verified live at the home pier: `docs/art-direction/steamer-launch-
+0.42.png` — she sits between the fleet's decked launch and coastal launch,
+crew and pier in proportion. **Regenerate at real launch proportions
+(narrower, one funnel, lower freeboard) once the size has been played.**
+
+**Not committed with this note:** the whole `Scripts/Steamer/` folder is
+still the uncommitted 2026-09-18 work (plus `ShipMotor` / `BuoyantBody` /
+`Shipyard` guard hunks), so the scale change lives there with it. Kevin's
+call whether the steamer is now the ship and gets committed as one.

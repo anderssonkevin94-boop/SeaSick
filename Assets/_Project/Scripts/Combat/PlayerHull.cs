@@ -20,6 +20,14 @@ namespace SeaSick.Combat
         HullIntegrity hull;
 
         void Awake() { hull = GetComponent<HullIntegrity>(); }
+
+        /// The capsule a ball has to cross, from the hull she actually wears.
+        /// The serialized numbers are the brig's; the steamer sizes hers here.
+        public void Configure(float radius, float halfLen)
+        {
+            hitRadius = Mathf.Max(0.5f, radius);
+            halfLength = Mathf.Max(1f, halfLen);
+        }
         void OnEnable() { HitTargets.Register(this); }
         void OnDisable() { HitTargets.Unregister(this); }
 
