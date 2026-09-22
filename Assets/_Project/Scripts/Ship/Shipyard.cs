@@ -94,12 +94,14 @@ namespace SeaSick.Ship
             _ => 0.5f,
         };
 
-        public float CrewPerGunNow => CrewPerGun(fit.Level(FitTrack.Crew));
+        // The authored battery pairs share one named gunner across broadsides.
+        public float CrewPerGunNow => Fleet != null ? 1f : CrewPerGun(fit.Level(FitTrack.Crew));
 
         public int Cargo => Count(BayUse.Hold) * CargoPerHold;
-        public int Guns => Count(BayUse.Battery);
+        FleetVisual Fleet => visual != null ? visual.GetComponent<FleetVisual>() : null;
+        public int Guns => Fleet != null ? Node.ports_per_side : Count(BayUse.Battery);
         public int Berths => Count(BayUse.Quarters) * CrewPerQuarters;
-        public int CrewNeeded => Mathf.CeilToInt(Count(BayUse.Battery)
+        public int CrewNeeded => Mathf.CeilToInt(Guns
                                                  * CrewPerGunNow);
         public int Crew => Mathf.Min(Berths, int.MaxValue);
         public bool Undermanned => CrewNeeded > Berths;
@@ -115,6 +117,7 @@ namespace SeaSick.Ship
             {
                 var n = Node;
                 if (n == null || n.gun_rows <= 0) return 0;
+                if (Fleet != null) return Mathf.Min(CrewCeiling, n.cells, n.ports_per_side);
                 float c = CrewPerGunNow;
                 int byCrew = Mathf.FloorToInt(CrewCeiling / c);
                 int byCells = Mathf.FloorToInt(n.cells / (1f + c));
@@ -164,6 +167,7 @@ namespace SeaSick.Ship
 
         public void SetUse(string bay, string tier, BayUse u)
         {
+            if (Fleet != null && u == BayUse.Battery) { Status = "Cannons are included with hull upgrades."; return; }
             cells[Key(bay, tier)] = u;
             if (furnish) Furnish();
             PushToGame();
@@ -204,7 +208,7 @@ namespace SeaSick.Ship
         public bool CanBearGun(string bay, string tier)
         {
             var n = Node;
-            if (n == null || n.gun_rows <= 0) return false;
+            if (Fleet != null || n == null || n.gun_rows <= 0) return false;
             int bi = System.Array.IndexOf(n.bay_labels, bay);
             int ti = System.Array.IndexOf(n.tier_names, tier);
             if (bi < 0 || ti < 0) return false;
@@ -326,6 +330,7 @@ namespace SeaSick.Ship
         {
             var n = Node;
             if (n == null) return "no hull";
+            if (use == BayUse.Battery && Fleet != null) return "Cannons are included with hull upgrades; improve calibre or crew here.";
             if (use == BayUse.Battery && n.gun_rows <= 0)
                 return "she has no gun deck to run a carriage out on. Raise her.";
             if (Candidates(n, use).Count == 0)
@@ -353,6 +358,7 @@ namespace SeaSick.Ship
         /// battery low and amidships instead of scattered.
         public bool RemoveCell(BayUse use)
         {
+            if (Fleet != null && use == BayUse.Battery) { Status = "Cannons are included with hull upgrades."; return false; }
             var n = Node;
             if (n == null || Count(use) == 0)
             { Status = $"she carries no {use} to give up"; return false; }
@@ -379,8 +385,18 @@ namespace SeaSick.Ship
             return true;
         }
 
+        /// Set before the scene loads when a hull that is NOT on the ladder
+        /// is going to take this ship over (the steamer). The yard must not
+        /// dress her as a rung first: Apply would build a hull, a probe rig,
+        /// a sail plan and a gun deck that the conversion then has to find
+        /// and undo. Static, and domain reload is off, so whoever owns it
+        /// assigns it on EVERY play -- a stale true would silently leave the
+        /// sailing ship with no hull.
+        public static bool SuppressApplyOnStart;
+
         void Start()
         {
+            if (SuppressApplyOnStart) { enabled = false; return; }
             // `visual == null` guards against clobbering a rung something else
             // already applied. AddComponent runs Start at the END of the frame,
             // so a probe that adds the yard and immediately calls Apply(3) had
@@ -477,11 +493,8 @@ namespace SeaSick.Ship
                     t = transform.Find(stale);
                 }
             }
-            if (n.node == 12)
-            {
-                var approved = AdventureBrigVisual.Build(transform);
-                if (approved != null) { visual = approved.transform; return; }
-            }
+            var approved = FleetVisual.Build(transform, n.node);
+            if (approved != null) { visual = approved.transform; return; }
             var src = Resources.Load<GameObject>(n.ResourcePath);
             if (src == null)
             {
@@ -498,6 +511,14 @@ namespace SeaSick.Ship
 
         void Refit(LadderNode n)
         {
+            var captain = transform.Find("Helmsman");
+            if (Fleet != null && captain != null) captain.localPosition = Fleet.helm;
+            var collider = GetComponent<BoxCollider>();
+            if (collider == null) collider = gameObject.AddComponent<BoxCollider>();
+            collider.center = new Vector3(0, (n.RailY - n.draft) * .5f, 0);
+            collider.size = new Vector3(n.beam * .85f, n.depth, n.length * .9f);
+            // Land is not a ramp: the depth field stops her (HullIntegrity).
+            collider.excludeLayers = SeaSick.Terrain.LandLayer.Mask;
             var rb = GetComponent<Rigidbody>();
             RebuildLoad(n);
             rb.mass = Load.TotalKg;
@@ -537,6 +558,8 @@ namespace SeaSick.Ship
                 // through here and keep their scene-tuned values.
                 buoy.ConfigureWaveResponse(n.RailY, n.draft,
                     Mathf.Sqrt(n.length / TunedLoa));
+                // After ConfigureForHull: the ratio needs her inertia tensor.
+                buoy.ConfigureAttitudeDamping(rb.mass * 9.81f * Mathf.Max(0f, Load.GMm));
             }
 
             var motor = GetComponent<ShipMotor>();
@@ -657,7 +680,7 @@ namespace SeaSick.Ship
                 Guns = Guns * 2,          // a battery cell is a gun each side
                 GunLevel = fit.Level(FitTrack.Guns),
                 GunKGm = MeanGunHeight(n),
-                GunLCGm = gunAt.z,
+                GunLCGm = Fleet != null ? FleetGunMeanZ(n) : gunAt.z,
                 CrewKGm = berthAt.h,
                 CrewLCGm = berthAt.z,
                 BallastCells = Count(BayUse.Ballast),
@@ -678,8 +701,17 @@ namespace SeaSick.Ship
         /// Mean height of the battery above the keel. A gun on an upper deck is
         /// the most destabilising thing aboard, so this is what carries that
         /// decision into the physics.
+        float FleetGunMeanZ(LadderNode n)
+        { var p = GunPositions(n); float sum = 0; foreach (var v in p) sum += v.z; return p.Count > 0 ? sum / p.Count : 0; }
+
         float MeanGunHeight(LadderNode n)
         {
+            if (Fleet != null)
+            {
+                var positions = GunPositions(n);
+                float height = 0; foreach (var p in positions) height += p.y + n.draft + .47f;
+                return positions.Count > 0 ? height / positions.Count : 0;
+            }
             float sum = 0f; int c = 0;
             for (int bi = 0; bi < n.bay_labels.Length; bi++)
                 for (int ti = 0; ti < n.tier_names.Length; ti++)
@@ -780,6 +812,11 @@ namespace SeaSick.Ship
             {
                 rb.mass = Load.TotalKg;
                 rb.centerOfMass = Load.CentreOfMassLocal;
+                // Stowage moves GM, and the damping RATIO is the thing being
+                // held: a tender ship must not also become an undamped one.
+                var buoy = GetComponent<BuoyantBody>();
+                if (buoy != null)
+                    buoy.ConfigureAttitudeDamping(rb.mass * 9.81f * Mathf.Max(0f, Load.GMm));
             }
             var motor = GetComponent<ShipMotor>();
             if (motor != null) motor.SinkDepth = Load.SinkageM;
@@ -851,7 +888,8 @@ namespace SeaSick.Ship
             if (battery != null)
             {
                 battery.CalibreLevel = fit.Level(FitTrack.Guns);
-                battery.Fit(GunPositions(n));
+                if (Fleet != null) battery.FitAuthored(Fleet);
+                else battery.Fit(GunPositions(n));
             }
             // The ports she is showing are the guns she has. Same list the
             // battery was just fitted from, so the two cannot disagree.
@@ -898,8 +936,9 @@ namespace SeaSick.Ship
             if (posts.Count == 0)
             {
                 var art = visual != null ? visual.GetComponent<AdventureBrigVisual>() : null;
-                if (art == null) return;
-                posts.Add(new Vector3(0.7f, art.DeckHeight(-8.6f), -8.6f));
+                if (Fleet != null) posts.Add(Fleet.helm);
+                else if (art == null) return;
+                else posts.Add(new Vector3(0.7f, art.DeckHeight(-8.6f), -8.6f));
             }
             for (int i = 0; i < want && i < live.Count; i++)
             {
@@ -920,7 +959,7 @@ namespace SeaSick.Ship
                     {
                         var art = visual != null ? visual.GetComponent<AdventureBrigVisual>() : null;
                         outp.Add(new Vector3(n.beam * 0.20f,
-                            art != null ? art.DeckHeight(n.bay_x[bi]) : n.tier_floor[ti], n.bay_x[bi]));
+                            Fleet != null ? Fleet.DeckHeight(n.bay_x[bi]) : art != null ? art.DeckHeight(n.bay_x[bi]) : n.tier_floor[ti], n.bay_x[bi]));
                     }
             return outp;
         }
@@ -929,6 +968,13 @@ namespace SeaSick.Ship
         /// Port is mirrored by the battery.
         List<Vector3> GunPositions(LadderNode n)
         {
+            if (Fleet != null)
+            {
+                var positions = new List<Vector3>();
+                foreach (var gun in Fleet.gunTemplates)
+                    if (gun.localPosition.x > 0) positions.Add(gun.localPosition);
+                return positions;
+            }
             var outp = new List<Vector3>();
             for (int bi = 0; bi < n.bay_labels.Length; bi++)
                 for (int ti = 0; ti < n.tier_names.Length; ti++)
@@ -985,6 +1031,7 @@ namespace SeaSick.Ship
             if (furniture != null) Discard(furniture.gameObject);
             var n = Node;
             if (n == null) return;
+            if (Fleet != null) return;
             var root = new GameObject("Furniture");
             root.transform.SetParent(transform, false);
             furniture = root.transform;

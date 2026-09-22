@@ -23,6 +23,25 @@ namespace SeaSick.Ocean
         [SerializeField] float forwardDragFactor = 0.005f;
         [SerializeField] float lateralDragFactor = 0.25f;
         [SerializeField] float angularDragTorque = 30000f;
+        // Roll and pitch damping as a RATIO, not a torque. One isotropic
+        // `angularDragTorque` scaled by mass and length knows nothing about how
+        // stiff she is, so the damping ratio it bought was whatever fell out:
+        // measured on the brig in flat water, roll zeta 0.12-0.20 and pitch
+        // 0.19 -- five visible swings after every kick, a roll period of 4.6 s
+        // sitting on the 3.9-4.5 s wind sea, and a steady 13 degree roll at
+        // rest in the calmest water there is. A ratio needs the stiffness and
+        // the inertia about that axis, which `ConfigureAttitudeDamping` has;
+        // until it is called (legacy hulls, flotsam) the old term is the whole
+        // story, unchanged.
+        //
+        // These are what the DECAY leg of HandlingProbe reads back. The probe
+        // drag already damps a little, so the measured ratio lands slightly
+        // above the number here; tune against the measurement.
+        [Tooltip("Target roll damping ratio. ~0.5 settles in one visible overshoot -- which is what a broadside's recoil roll was designed around -- and takes the resonant peak off the wind sea.")]
+        [SerializeField, Range(0f, 1.5f)] float rollDampingRatio = 0.5f;
+        [Tooltip("Target pitch damping ratio. A hull's pitch is heavily damped in life: she noses into a sea once, not three times.")]
+        [SerializeField, Range(0f, 1.5f)] float pitchDampingRatio = 0.55f;
+        float rollDamping, pitchDamping;   // N m s/rad about hull-local z and x; 0 = not configured
         // The old model saturated at full probe submersion: driven any deeper,
         // the hull gained ZERO extra lift (net reserve ~6.5 m/s^2 on the
         // sloop), so charging a mountainous face buried her to the sails.
@@ -102,6 +121,25 @@ namespace SeaSick.Ocean
         /// under should cost more water than a wetting, and the green-water
         /// ingress alone is capped and cannot express the difference.
         public float BurialDepth { get; private set; }
+        /// Let a DIFFERENT float model speak through this component.
+        ///
+        /// Bilge, Breakers, HullIntegrity and ShipMotor all read the hull's
+        /// wetness from here, and a hull that floats on something other than
+        /// these probes (the steamer's strip buoyancy) still has to answer
+        /// them. It disables this component -- so nothing here runs, registers
+        /// or applies a force -- and publishes its own numbers each physics
+        /// step instead; the readers never learn the difference. `Buried`
+        /// follows `BurialDepth` exactly as the clamp derives it: past the
+        /// threshold or not.
+        public void PublishExternal(float submersion, float meanWaterHeight,
+                                    float maxRailImmersion, float burialDepth)
+        {
+            Submersion = submersion;
+            MeanWaterHeight = meanWaterHeight;
+            MaxRailImmersion = maxRailImmersion;
+            BurialDepth = Mathf.Max(0f, burialDepth);
+            Buried = BurialDepth > 0f;
+        }
         /// Clamp acceleration applied this step, m/s^2. Diagnostic.
         public float DebugBurialAccel { get; private set; }
         /// Debug decomposition of this step's drag (world space, N).
@@ -183,6 +221,51 @@ namespace SeaSick.Ocean
                 m * (d.x * d.x + d.y * d.y));
             rb.inertiaTensorRotation = Quaternion.identity;
         }
+
+        /// Roll and pitch damping from her own stiffness, so the RATIO is the
+        /// same on every rung and under every stowage: c = 2 zeta sqrt(K I).
+        ///
+        /// Roll stiffness is handed in -- m g GM, from the loading, which the
+        /// decay test confirms the rig delivers (period 4.6 s measured against
+        /// 4.65 from the book). Pitch stiffness has no book value, so it is read
+        /// off the rig itself: a probe part-way up its ramp at the float
+        /// equilibrium gains rho g V share / radius of lift per metre, and that
+        /// spring acts at the square of its distance from the centre of mass.
+        /// Keel probes are saturated and rails are dry, so they add nothing,
+        /// which is the same reason they carry no trim stiffness in
+        /// `HydrostaticLayout`. Measured on the brig: 8.5e7 N m/rad.
+        ///
+        /// Call after `ConfigureForHull` (it needs the inertia tensor) and
+        /// again whenever the loading moves GM.
+        public void ConfigureAttitudeDamping(float rollStiffness)
+        {
+            if (rb == null) rb = GetComponent<Rigidbody>();
+            if (probeSet == null) probeSet = GetComponent<BuoyancyProbeSet>();
+            if (rb == null || probeSet == null || probeSet.Probes == null) return;
+
+            float g = Physics.gravity.magnitude;
+            float pitchStiffness = 0f;
+            foreach (var p in probeSet.Probes)
+            {
+                float sub = -p.localPosition.y / Mathf.Max(0.01f, p.radius) + 0.5f;
+                if (sub <= 0f || sub >= 1f) continue;
+                float spring = waterDensity * g * totalVolume * p.volumeShare / Mathf.Max(0.01f, p.radius);
+                float arm = p.localPosition.z - centreOfMass.z;
+                pitchStiffness += spring * arm * arm;
+            }
+
+            Vector3 inertia = rb.inertiaTensor;
+            rollDamping = 2f * rollDampingRatio * Mathf.Sqrt(Mathf.Max(0f, rollStiffness) * inertia.z);
+            pitchDamping = 2f * pitchDampingRatio * Mathf.Sqrt(pitchStiffness * inertia.x);
+            RollStiffness = rollStiffness;
+            PitchStiffness = pitchStiffness;
+        }
+
+        /// N m/rad, as last configured. The motor lays her over to an ANGLE in
+        /// a turn, and an angle against a spring is a torque only if you know
+        /// the spring.
+        public float RollStiffness { get; private set; }
+        public float PitchStiffness { get; private set; }
 
         /// The half of `ConfigureForHull` that was missing: every threshold
         /// that decides when the SEA is allowed to have her is authored in
@@ -478,7 +561,16 @@ namespace SeaSick.Ocean
 
             // Submersion-scaled angular damping: a hull in the water settles,
             // a hull thrown clear of it doesn't get magic air brakes.
-            rb.AddTorque(-rb.angularVelocity * (angularDragTorque * Mathf.Clamp01(subSum)));
+            // Per axis in the HULL's frame once she has been configured: roll
+            // and pitch each get the torque their own stiffness calls for, and
+            // never less than the old isotropic term, which yaw keeps.
+            Vector3 spin = transform.InverseTransformDirection(rb.angularVelocity);
+            Vector3 damp = new Vector3(
+                Mathf.Max(angularDragTorque, pitchDamping),
+                angularDragTorque,
+                Mathf.Max(angularDragTorque, rollDamping));
+            rb.AddTorque(transform.TransformDirection(-Vector3.Scale(spin, damp))
+                * Mathf.Clamp01(subSum));
 
             ApplyBurialClamp(Time.fixedDeltaTime);
         }

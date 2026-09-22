@@ -1,0 +1,93 @@
+{
+  "_comment": "Stern-wheel paddle steamer, built to the approved reference sheet in art-staging/stern-paddle-integrated-hull-v2. Particulars seeded from docs/steamer-spec.md section 2; 'form' holds the shape parameters steamer_form.py iterated until the section-2 acceptance ranges passed. Ship frame: +z bow, +y up, +x starboard, origin = centreline / design waterline / LWL midpoint. She is BROAD (L/B under 3) because the paddle lives inside her, not on sponsons beside her.",
+  "lwl": 30.0,
+  "loa": 32.2,
+  "beam": 11.0,
+  "beamOverGuards": 11.0,
+  "draft": 2.05,
+  "depth": 4.0,
+  "freeboardStem": 3.9,
+  "freeboardWaist": 1.95,
+  "freeboardStern": 2.25,
+  "bulwarkHeight": 1.0,
+  "forecastleBulwark": 0.0,
+  "gm": 3.6,
+  "gyradiusRoll": 6.2,
+  "gyradiusPitchOverL": 0.25,
+  "gyradiusYawOverL": 0.26,
+  "wheelAxle": {
+    "x": 0.0,
+    "y": 0.72,
+    "z": -13.2
+  },
+  "wheelRadius": 1.62,
+  "wheelWidth": 4.6,
+  "wheelFloats": 8,
+  "wheelFloatDepth": 0.9,
+  "wheelDesignDip": 0.9,
+  "rudder": {
+    "x": 0.0,
+    "y": -1.0,
+    "z": -10.6
+  },
+  "rudderArea": 16.0,
+  "funnelX": 0.0,
+  "funnelZ": 0.0,
+  "funnelTopY": 7.0,
+  "helmZ": -8.6,
+  "gunZ": [
+    8.2,
+    2.6,
+    -3.0
+  ],
+  "well": {
+    "_comment": "The paddle well: the notch the wheel turns in, cut into the stern between the two hull cheeks. Open aft and open below its floor; its roof is the raised stern platform. Unlike everything else about her it is BELOW the waterline, so `HullForm` subtracts it from the sections it integrates -- the mesh and the strip tables are still one hull.",
+    "halfWidth": 2.4,
+    "fwdZ": -11.3,
+    "floorY": -1.05,
+    "platformRise": 0.62,
+    "platformFwdZ": -9.6
+  },
+  "form": {
+    "_comment": "Level-wise plan shapes: hb = bmax(y) * (1 - s^a)^b, s = distance past the parallel body / distance to the profile end at that height. (a, b) blend keel -> waterline -> deck sheer line. Aft, bD is very small: the deck plan stays nearly full beam to the stern profile, and the mesh is CUT at transomZ, which is what makes her squared stern. She has no forecastle, so forecastleBreakStrip is the whole station count.",
+    "stationCount": 13,
+    "levelCount": 17,
+    "forecastleBreakStrip": 13,
+    "bowOverhang": 2.2,
+    "sternOverhang": 0.6,
+    "sternVerticalAboveY": 0.4,
+    "transomZ": -15.0,
+    "forefootCut": 2.4,
+    "forefootExp": 2.2,
+    "sternCut": 2.8,
+    "sternLinear": 0.45,
+    "midshipExp": 3.2,
+    "topsideFlare": 0.1,
+    "parallelFwdZ": 2.5,
+    "parallelAftZ": -2.0,
+    "fwd": {
+      "aK": 1.5,
+      "bK": 1.5,
+      "aW": 1.8,
+      "bW": 1.2,
+      "aD": 3.0,
+      "bD": 0.9
+    },
+    "aft": {
+      "aK": 1.7,
+      "bK": 0.5,
+      "aW": 2.4,
+      "bW": 0.3,
+      "aD": 3.0,
+      "bD": 0.05
+    },
+    "flareExp": 0.8,
+    "stemHalfThickness": 0.08,
+    "skeg": {
+      "zAft": -10.0,
+      "zFwd": -3.5,
+      "halfThickness": 0.16
+    },
+    "sternBelowOverhang": 1.4
+  }
+}

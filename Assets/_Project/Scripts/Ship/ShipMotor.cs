@@ -256,6 +256,24 @@ namespace SeaSick.Ship
         /// ever apply, and any water force above that wins outright.
         public float Acceleration => acceleration;
         public Vector3 Velocity => rb != null ? rb.linearVelocity : Vector3.zero;
+        /// True when something else is driving and steering her (the paddle
+        /// steamer's wheels and rudder are real forces on the rigidbody). The
+        /// motor then stops being a propulsion servo and a yaw assignment --
+        /// either of which would simply overwrite what the wheels did -- and
+        /// stays what every other system needs it to be: the helm's inputs,
+        /// the sea-state readout, the anchor and the knockdown.
+        public bool ExternalDrive { get; set; }
+
+        /// The derived wave state an external drive measured for itself, so
+        /// the gauges, SpeedJuice and the crew keep reading it from the one
+        /// place they always have.
+        public void PublishExternal(float surfAccel, float lateralAccel, float broach01)
+        {
+            SurfAccel = surfAccel;
+            LateralWaveAccel = lateralAccel;
+            Broach01 = Mathf.Clamp01(broach01);
+        }
+
         public float SurfAccel { get; private set; }
         public float SurfBoost01 => Mathf.Clamp01(SurfAccel / 3.5f);
         /// How far over her top speed the water is allowed to carry her. The
@@ -651,6 +669,20 @@ namespace SeaSick.Ship
             float sideWay = Vector3.Dot(through, right);
             float speedFactor = Mathf.Clamp01(CurrentSpeed / maxSpeed);
 
+            // An externally driven hull (the steamer) makes her own thrust,
+            // yaw, grip and surf out of real forces. Everything from here to
+            // the anchor is a servo that would overwrite them -- `av.y` is an
+            // ASSIGNMENT -- so it is skipped whole, and the three instruments
+            // only this block feeds read zero rather than their last value.
+            // A jump rather than a wrapping `if` so the block keeps its indent.
+            if (ExternalDrive)
+            {
+                Overspeed01 = 0f;
+                SurfRunSeconds = 0f;
+                EaseCost01 = 0f;
+                goto ExternalDriveAnchor;
+            }
+
             // --- steering: yaw is a control axis, pitch/roll stay physical ---
             // --- the face she is on, sampled ONCE ---------------------------
             //
@@ -663,7 +695,17 @@ namespace SeaSick.Ship
             bool onFace = false;
             if (!Anchored && Ocean.OceanSampler.Ready)
             {
-                Vector3 n = Ocean.OceanSampler.SampleImmediate(transform.position).normal;
+                // Through the HULL's filter, the same one her buoyancy probes
+                // get. This read the raw surface at one point, which was
+                // harmless while the short band was gentle; the art waves put
+                // a 9 degree face under her every 4.5 s in every sea state,
+                // and one point on a 32 m wave is not what 26 m of hull is
+                // standing on. Measured in the everyday sea, beam-on: broach
+                // 0.38 and a 24 degree lurch from a mechanic that is meant
+                // to need a storm and a following sea, and a surge of
+                // +-1.4 m/s^2 along the keel at the wave period.
+                Vector3 n = Ocean.OceanSampler.SampleImmediate(transform.position,
+                    Ocean.OceanPhysicsDriver.HullFilterNow).normal;
                 if (n.y > 0.2f)
                 {
                     downSlope = new Vector3(n.x, 0f, n.z) / n.y;
@@ -806,6 +848,7 @@ namespace SeaSick.Ship
             SurfAccel = Vector3.Dot(smoothedWaveForce, forward) / mass;
             LateralWaveAccel = Vector3.Dot(smoothedWaveForce, right) / mass;
 
+            ExternalDriveAnchor:
             // --- anchor: spring back to the drop point, heave stays free ---
             if (Anchored)
             {
@@ -825,6 +868,10 @@ namespace SeaSick.Ship
                 }
             }
 
+            // Her attitude is bounded by her own flare and GM, not by a spring
+            // that would fight the strip buoyancy at 16 degrees of pitch.
+            if (ExternalDrive) goto ExternalDriveKnockdown;
+
             // --- soft attitude limits (replace the old hard clamps) ---
             float pitch = Signed(transform.eulerAngles.x);
             float roll = Signed(transform.eulerAngles.z);
@@ -836,6 +883,7 @@ namespace SeaSick.Ship
                 rb.AddTorque(forward * (-(roll - Mathf.Sign(roll) * rollCap)
                     * limitSpring * Mathf.Deg2Rad * RollInertia()), ForceMode.Force);
 
+            ExternalDriveKnockdown:
             // --- knockdown: a decaying roll torque that beats the limits ---
             if (knockdownLeft > 0f)
             {
