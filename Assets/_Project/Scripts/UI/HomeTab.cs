@@ -1,5 +1,6 @@
 using SeaSick.Ship;
 using UnityEngine;
+using SheetsHud = global::SeaSick.UI.Sheets.Sheets;
 
 namespace SeaSick.UI
 {
@@ -57,6 +58,7 @@ namespace SeaSick.UI
         void OnGUI()
         {
             if (anchor == null) return;
+            if (SheetsHud.SuppressLegacy) return;   // the ship's own sheet carries this while she lies at a camp
             // Nothing to do at her own pier.
             if (anchor.AtHomeDock) { armedUntil = -99f; return; }
 

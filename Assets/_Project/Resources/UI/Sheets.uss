@@ -1,0 +1,403 @@
+/* The sheet HUD: parchment paper, ink, brass.
+ *
+ * Every colour in here is also in SheetTheme.cs, because C# has to reach some
+ * of them (a bar's fill, a token's ring) and USS cannot be asked at runtime.
+ * When Kevin retunes, both move together -- that pairing is the only thing
+ * this file asks a reader to remember.
+ *
+ * Fonts are referenced by project path rather than through Resources: a TTF
+ * under Art/Fonts is not loadable by Resources.Load, and a stylesheet keeps a
+ * real asset reference, so the font ships with the build without a second copy.
+ */
+
+/* ---------------- root ---------------- */
+
+.sheet-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+/* ---------------- the card ---------------- */
+
+.sheet-card {
+    position: absolute;
+    background-color: rgb(244, 232, 207);
+    border-radius: 8px;
+    border-width: 2px;
+    border-color: rgb(31, 45, 56);
+    padding: 0;
+    overflow: hidden;
+}
+
+/* The inner 1px rule, inset ~6px. A second element rather than a second
+ * border, because UI Toolkit gives an element exactly one. */
+.sheet-inner {
+    position: absolute;
+    left: 6px;
+    top: 6px;
+    right: 6px;
+    bottom: 6px;
+    border-width: 1px;
+    border-color: rgba(31, 45, 56, 0.35);
+    border-radius: 4px;
+}
+
+.sheet-shadow {
+    position: absolute;
+    background-color: rgba(18, 26, 32, 0.28);
+    border-radius: 10px;
+}
+
+.sheet-body {
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    flex-direction: column;
+}
+
+/* Portrait: the card docks to the bottom edge, full width, and scrolls. */
+.sheet-card--docked {
+    border-radius: 12px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+/* `min-height: 0` is what lets the view actually scroll once the card hits
+ * its cap: without it a flex child refuses to shrink below its content and
+ * the card grows off the bottom of the screen instead. */
+.sheet-scroll {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 0;
+}
+
+/* ---------------- the tail ---------------- */
+
+.sheet-tail {
+    position: absolute;
+    height: 2px;
+    background-color: rgb(31, 45, 56);
+    transform-origin: left center;
+}
+
+.sheet-tail-dot {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 5px;
+    background-color: rgb(244, 232, 207);
+    border-width: 2px;
+    border-color: rgb(31, 45, 56);
+}
+
+/* ---------------- header ---------------- */
+
+.sheet-head {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.sheet-badge {
+    width: 34px;
+    height: 34px;
+    border-radius: 17px;
+    align-items: center;
+    justify-content: center;
+}
+
+.sheet-badge-glyph {
+    font-size: 16px;
+    color: rgb(244, 232, 207);
+    -unity-text-align: middle-center;
+}
+
+.sheet-title {
+    font-size: 22px;
+    color: rgb(31, 45, 56);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf");
+    -unity-font-style: normal;
+    white-space: nowrap;
+}
+
+.sheet-eyebrow {
+    font-size: 10px;
+    letter-spacing: 1.2px;
+    color: rgba(31, 45, 56, 0.62);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+    margin-bottom: 2px;
+}
+
+.sheet-close {
+    width: 26px;
+    height: 26px;
+    border-radius: 13px;
+    flex-shrink: 0;
+    border-width: 2px;
+    border-color: rgba(31, 45, 56, 0.45);
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(31, 45, 56);
+    font-size: 13px;
+    margin: 0;
+    padding: 0;
+}
+
+.sheet-close:hover {
+    background-color: rgba(31, 45, 56, 0.08);
+}
+
+/* ---------------- words ---------------- */
+
+.sheet-text {
+    font-size: 13px;
+    color: rgb(31, 45, 56);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    white-space: normal;
+}
+
+.sheet-muted {
+    color: rgba(31, 45, 56, 0.62);
+}
+
+.sheet-rule {
+    height: 1px;
+    background-color: rgba(31, 45, 56, 0.22);
+    margin-top: 8px;
+    margin-bottom: 8px;
+}
+
+/* ---------------- layout ---------------- */
+
+.sheet-row {
+    flex-direction: row;
+    align-items: center;
+}
+
+.sheet-col {
+    flex-direction: column;
+}
+
+/* ---------------- buttons ---------------- */
+
+.sheet-btn {
+    height: 38px;
+    border-radius: 6px;
+    border-width: 2px;
+    border-color: rgb(31, 45, 56);
+    background-color: rgba(31, 45, 56, 0.04);
+    color: rgb(31, 45, 56);
+    font-size: 13px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+    padding-left: 12px;
+    padding-right: 12px;
+    margin: 0;
+    white-space: normal;
+}
+
+.sheet-btn:hover {
+    background-color: rgba(31, 45, 56, 0.10);
+}
+
+.sheet-btn--primary {
+    background-color: rgb(201, 147, 57);
+    border-color: rgb(138, 97, 32);
+    color: rgb(31, 45, 56);
+}
+
+.sheet-btn--primary:hover {
+    background-color: rgb(214, 162, 74);
+}
+
+.sheet-btn--quiet {
+    height: 26px;
+    font-size: 11px;
+    border-width: 1px;
+    border-color: rgba(31, 45, 56, 0.45);
+    background-color: rgba(0, 0, 0, 0);
+}
+
+/* ---------------- tokens ---------------- */
+
+.sheet-token {
+    width: 34px;
+    height: 34px;
+    border-radius: 17px;
+    border-width: 2px;
+    flex-shrink: 0;
+    background-color: rgb(31, 45, 56);
+    align-items: center;
+    justify-content: center;
+}
+
+.sheet-token-letter {
+    font-size: 15px;
+    color: rgb(244, 232, 207);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf");
+    -unity-text-align: middle-center;
+}
+
+.sheet-token-job {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 7px;
+    background-color: rgb(244, 232, 207);
+    border-width: 1px;
+    border-color: rgb(31, 45, 56);
+    color: rgb(31, 45, 56);
+    font-size: 8px;
+    -unity-text-align: middle-center;
+}
+
+/* ---------------- stores ---------------- */
+
+.sheet-store {
+    flex-direction: column;
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 86px;
+    overflow: hidden;
+}
+
+.sheet-store-big {
+    font-size: 22px;
+    color: rgb(31, 45, 56);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+
+.sheet-store-small {
+    font-size: 11px;
+    color: rgba(31, 45, 56, 0.62);
+    margin-left: 4px;
+    margin-bottom: 3px;
+    flex-shrink: 1;
+}
+
+/* ---------------- bars ---------------- */
+
+.sheet-bar {
+    background-color: rgba(31, 45, 56, 0.16);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-top: 6px;
+}
+
+.sheet-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+}
+
+/* ---------------- note ---------------- */
+
+.sheet-note {
+    flex-direction: row;
+    align-items: flex-start;
+    background-color: rgba(31, 45, 56, 0.06);
+    border-width: 1px;
+    border-color: rgba(31, 45, 56, 0.30);
+    border-radius: 6px;
+    padding: 9px;
+}
+
+.sheet-note-glyph {
+    color: rgb(201, 147, 57);
+    font-size: 13px;
+    margin-right: 8px;
+}
+
+.sheet-note-text {
+    color: rgb(31, 45, 56);
+    font-size: 12px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    white-space: normal;
+    flex-shrink: 1;
+}
+
+/* ---------------- segmented ---------------- */
+
+.sheet-seg {
+    flex-direction: row;
+    background-color: rgba(31, 45, 56, 0.10);
+    border-radius: 16px;
+    padding: 3px;
+}
+
+.sheet-seg-btn {
+    height: 26px;
+    flex-grow: 1;
+    border-radius: 13px;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgba(31, 45, 56, 0.62);
+    font-size: 12px;
+    margin: 0;
+}
+
+.sheet-seg-btn--on {
+    background-color: rgb(201, 147, 57);
+    color: rgb(31, 45, 56);
+}
+
+/* ---------------- the ashore rail ---------------- */
+
+.sheet-rail {
+    position: absolute;
+    flex-direction: row;
+    align-items: center;
+    background-color: rgb(244, 232, 207);
+    border-radius: 30px;
+    border-width: 2px;
+    border-color: rgb(31, 45, 56);
+    padding: 7px;
+}
+
+.sheet-rail > .sheet-token {
+    margin-left: 4px;
+}
+
+.sheet-rail-hidden {
+    display: none;
+}
+
+.sheet-rail-label {
+    font-size: 9px;
+    letter-spacing: 1.2px;
+    color: rgba(31, 45, 56, 0.62);
+    rotate: -90deg;
+    width: 14px;
+    -unity-text-align: middle-center;
+}
+
+/* ---------------- the place label ---------------- */
+
+.sheet-place {
+    position: absolute;
+    flex-direction: column;
+    align-items: flex-start;
+    width: auto;
+}
+
+.sheet-place-name {
+    font-size: 30px;
+    white-space: nowrap;
+    width: auto;
+    color: rgb(244, 232, 207);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf");
+    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.55);
+}
+
+.sheet-place-sub {
+    font-size: 12px;
+    white-space: nowrap;
+    width: auto;
+    letter-spacing: 1.6px;
+    color: rgb(244, 232, 207);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}

@@ -3,6 +3,7 @@ using SeaSick.UI;
 using SeaSick.Voyage;
 using SeaSick.World;
 using UnityEngine;
+using SheetsHud = global::SeaSick.UI.Sheets.Sheets;
 
 namespace SeaSick.Ship
 {
@@ -70,6 +71,9 @@ namespace SeaSick.Ship
         float gatherFraction;
         float repairDebt;
         bool repairing;
+        /// The sheet HUD's door onto the repair toggle the prompt button flips.
+        public bool Repairing => repairing;
+        public void ToggleRepair() => repairing = !repairing;
         GUIStyle buttonStyle, infoStyle;
 
         // Every readout on this prompt, cached.
@@ -868,6 +872,7 @@ namespace SeaSick.Ship
 
             buttonStyle = UITheme.Button;
             infoStyle = UITheme.Small2Centered;
+            bool sheetHud = SheetsHud.SuppressLegacy;
 
             int u = HudLayout.Unit;
             float bh = u * 2.7f;
@@ -946,7 +951,13 @@ namespace SeaSick.Ship
                     UIBlocker.Block(primary);
                     if (GUI.Button(primary, "⚓  Cast off   (space)", buttonStyle)) WeighAnchor();
 
-                    if (CurrentIsland != null && CurrentIsland.HasResources)
+                    // While the sheet HUD is up, the ship's own sheet carries
+                    // the shore party, the deck cargo and the repairs. Only
+                    // "cast off" stays here, because leaving is the one
+                    // decision that is about the VOYAGE rather than the camp
+                    // -- and because a player who wants to go should never
+                    // have to find an object to tap first.
+                    if (!sheetHud && CurrentIsland != null && CurrentIsland.HasResources)
                     {
                         var secondary = stack.Next(bh);
                         UIBlocker.Block(secondary);
@@ -957,7 +968,7 @@ namespace SeaSick.Ship
                     // the lower third while she is lying at an island. Two
                     // places offering to make the same camp is the duplication
                     // the prompt slot exists to prevent.
-                    DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
+                    if (!sheetHud) DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
                     break;
                 }
 
@@ -971,9 +982,9 @@ namespace SeaSick.Ship
                     UIBlocker.Block(primary);
                     if (GUI.Button(primary, "recall crew aboard   (space)", buttonStyle)) RecallCrew();
 
-                    bool canRepair = hull != null && hull.NeedsRepair && voyage != null
+                    bool canRepair = !sheetHud && hull != null && hull.NeedsRepair && voyage != null
                         && voyage.AmountOf("Timber") > 0;
-                    if (canRepair || repairing)
+                    if (canRepair || (repairing && !sheetHud))
                     {
                         var secondary = stack.Next(bh);
                         UIBlocker.Block(secondary);
@@ -987,7 +998,7 @@ namespace SeaSick.Ship
                         if (GUI.Button(secondary, repairText.Content, buttonStyle)) repairing = !repairing;
                     }
 
-                    DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
+                    if (!sheetHud) DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
 
                     // What is left reads as a whole unit, so it only needs a
                     // new string when a unit actually comes out of the ground

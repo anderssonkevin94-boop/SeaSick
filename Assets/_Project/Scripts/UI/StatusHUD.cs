@@ -3,6 +3,7 @@ using SeaSick.Ship;
 using SeaSick.Voyage;
 using SeaSick.World;
 using UnityEngine;
+using SheetsHud = global::SeaSick.UI.Sheets.Sheets;
 
 namespace SeaSick.UI
 {
@@ -67,13 +68,20 @@ namespace SeaSick.UI
             // made this panel's place in the column depend on how often the
             // view repainted -- and `HudOverlapProbe` duly caught it drawing
             // inside the minimap at (916..1066, 14..86).
+            // The sheet HUD owns the screen while she lies at a camp. The crew
+            // pips stay -- they are the one readout that is about the people
+            // aboard rather than about the voyage -- and the ship panel and the
+            // nav line stand down, because the sheet the player opens on the
+            // hull says both, better.
+            bool sheets = SheetsHud.SuppressLegacy;
             var crewRect = HudVisibility.Crew ? ReserveCrew(u) : Rect.zero;
-            var shipRect = ReserveShip(u);
-            var navRect = ReserveNav(u);
+            var shipRect = sheets ? Rect.zero : ReserveShip(u);
+            var navRect = sheets ? Rect.zero : ReserveNav(u);
 
             if (Event.current.type != EventType.Repaint) return;
 
             if (HudVisibility.Crew) DrawCrew(crewRect, u);
+            if (sheets) return;
             DrawShip(shipRect, u);
             DrawNav(navRect, u);
         }

@@ -71,6 +71,53 @@ namespace SeaSick.World
             Res.Stone, Res.Meals, Res.Food, Res.Timber,
         };
 
+        // --- per-kind caps, 2026-09-22 -----------------------------------------
+        //
+        // Kevin, 2026-09-22: a "stop at" per resource, so the player can load
+        // "6 boards and no more" without babysitting the run. Keyed by the
+        // same resource name strings `BestFirst` uses, because that is the
+        // vocabulary the rest of this file already speaks. -1 is "no cap" and
+        // is the default for anything nobody has capped -- an uncapped load
+        // behaves exactly as it always did.
+        static readonly Dictionary<string, int> stopAt = new Dictionary<string, int>();
+
+        /// **What has actually gone aboard THIS VISIT**, per resource. Reset
+        /// on `Cancel()` and whenever a caller discovers she is no longer
+        /// `Alongside` -- see `ResetVisit`. Separate from `stopAt` so the caps
+        /// themselves survive a visit; only the count against them does not.
+        static readonly Dictionary<string, int> loadedThisVisit = new Dictionary<string, int>();
+
+        /// The cap set for this resource, or -1 for none.
+        public static int StopAt(string resource)
+        {
+            if (string.IsNullOrEmpty(resource)) return -1;
+            return stopAt.TryGetValue(resource, out int cap) ? cap : -1;
+        }
+
+        /// Set (or clear, with a negative `cap`) the per-visit cap for this
+        /// resource.
+        public static void SetStopAt(string resource, int cap)
+        {
+            if (string.IsNullOrEmpty(resource)) return;
+            if (cap < 0) stopAt.Remove(resource);
+            else stopAt[resource] = cap;
+        }
+
+        /// Units of this resource moved aboard since the last visit reset.
+        public static int LoadedThisVisit(string resource)
+        {
+            if (string.IsNullOrEmpty(resource)) return 0;
+            return loadedThisVisit.TryGetValue(resource, out int n) ? n : 0;
+        }
+
+        /// **A new visit starts.** Clears what has been carried so far --
+        /// never the caps themselves, which are a standing player choice, not
+        /// a per-trip one. Called from `Cancel()` and from the two places
+        /// that notice mid-carry she is no longer `Alongside`, which is this
+        /// file's only signal that she has cast off (there is deliberately no
+        /// `Update` here to poll for it any other way).
+        static void ResetVisit() => loadedThisVisit.Clear();
+
         // --- what a load is doing right now -----------------------------------
 
         /// True while units are being carried. The sheet's ⬆ Load becomes
@@ -180,7 +227,9 @@ namespace SeaSick.World
                 return 0;
             // A camp never ships home by itself, and that includes shipping to
             // a boat that is not there. This is the rule, not a safety check.
-            if (!Alongside(camp)) return 0;
+            // Her not being here any more is also this file's only signal
+            // that a visit has ended, so it closes one out.
+            if (!Alongside(camp)) { ResetVisit(); return 0; }
 
             camp.CatchUp();
             var l = camp.Ledger;
@@ -188,6 +237,12 @@ namespace SeaSick.World
 
             int take = Mathf.Min(want, l.CountOf(resource));
             take = Mathf.Min(take, RoomAboard(v));
+            // **The per-kind cap, 2026-09-22.** -1 (the default) never limits
+            // anything; a real cap only lets through what this visit has not
+            // already carried against it, so a kind sitting at its cap is
+            // skipped rather than counted twice.
+            int cap = StopAt(resource);
+            if (cap >= 0) take = Mathf.Min(take, Mathf.Max(0, cap - LoadedThisVisit(resource)));
             if (take <= 0) return 0;
 
             int moved = 0;
@@ -208,6 +263,7 @@ namespace SeaSick.World
                 // LateUpdate only ever REMOVES.
                 if (hold != null) hold.AddVisual(resource);
                 moved++;
+                loadedThisVisit[resource] = LoadedThisVisit(resource) + 1;
             }
             return moved;
         }
@@ -267,6 +323,7 @@ namespace SeaSick.World
         {
             if (runner != null) runner.Halt();
             else { Busy = false; Loading = null; }
+            ResetVisit();
         }
 
         void Halt()
@@ -297,7 +354,9 @@ namespace SeaSick.World
                 {
                     // Asked every unit: she can weigh anchor, the player can
                     // switch deck cargo off, and a camp can run dry mid-carry.
-                    if (!Alongside(camp)) { Done(); yield break; }
+                    // Weighing anchor also ends the visit for the per-kind
+                    // caps -- see `ResetVisit`.
+                    if (!Alongside(camp)) { ResetVisit(); Done(); yield break; }
                     if (RoomAboard(v) <= 0) { Done(); yield break; }
 
                     Loading = res;

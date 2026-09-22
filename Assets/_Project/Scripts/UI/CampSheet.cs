@@ -4,6 +4,7 @@ using SeaSick.Ship;
 using SeaSick.Voyage;
 using SeaSick.World;
 using UnityEngine;
+using SheetsHud = global::SeaSick.UI.Sheets.Sheets;
 
 namespace SeaSick.UI
 {
@@ -220,6 +221,7 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
+            if (SheetsHud.SuppressLegacy) { Showing = false; return; }   // the sheet HUD owns the camp
             var isle = Subject();
             Showing = isle != null;
             if (!Showing) return;

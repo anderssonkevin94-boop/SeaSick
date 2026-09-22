@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using SeaSick.Ship;
 using SeaSick.World;
 using UnityEngine;
+using SheetsHud = global::SeaSick.UI.Sheets.Sheets;
 
 namespace SeaSick.UI
 {
@@ -66,10 +67,11 @@ namespace SeaSick.UI
             return camp;
         }
 
-        void Update() { Showing = Subject() != null; }
+        void Update() { Showing = !SheetsHud.SuppressLegacy && Subject() != null; }
 
         void OnGUI()
         {
+            if (SheetsHud.SuppressLegacy) { Showing = false; return; }   // the ashore rail and the hand sheets replace this
             var camp = Subject();
             Showing = camp != null;
             if (!Showing) return;

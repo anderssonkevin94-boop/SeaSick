@@ -27,6 +27,30 @@ namespace SeaSick.World
         Work,
     }
 
+    /// **How much of a day's ration this camp actually issues, 2026-09-22.**
+    /// Kevin's knob: a camp you can run lean on purpose, not just one that
+    /// runs out by accident. `OutpostLedger.EatMultiplier` reads it; nothing
+    /// else needs to know the camp is short-rationing on purpose versus
+    /// simply out of food.
+    public enum Rations
+    {
+        Full,
+        Half,
+        None,
+    }
+
+    /// **Which of food or timber this camp leans on, 2026-09-22.** Kevin's
+    /// second knob: "a camp you can point." Even is the old, unweighted
+    /// arithmetic; the other two trade a fifth of one rate for a quarter of
+    /// the other, cheap enough that a player can flip it and watch the
+    /// numbers on the sheet move without the camp's shape changing.
+    public enum WorkPriority
+    {
+        Even,
+        FoodFirst,
+        TimberFirst,
+    }
+
     /// One hand left at an outpost.
     ///
     /// Keyed by `name`, which is `CrewMemberDef.displayName`. They are a cast
@@ -443,6 +467,39 @@ namespace SeaSick.World
         /// placeholder, never played.**
         public const float EatPerHandPerDay = 1f;
 
+        /// **The ration the player has set, 2026-09-22.** Plain serialised
+        /// field, not a property, so `JsonUtility` saves it the same free way
+        /// it already saves `OutpostHand.order` -- an enum round-trips as its
+        /// underlying int with no extra plumbing.
+        public Rations rations = Rations.Full;
+
+        /// What `rations` actually pays out, against `EatPerHandPerDay`.
+        public float EatMultiplier => rations switch
+        {
+            Rations.Full => 1f,
+            Rations.Half => 0.5f,
+            _ => 0f,
+        };
+
+        /// **The work priority the player has set, 2026-09-22 -- a camp you
+        /// can point.** Plain serialised field for the same JsonUtility
+        /// reason as `rations`.
+        public WorkPriority priority = WorkPriority.Even;
+
+        /// What `priority` does to one resource's rate: Food and Timber trade
+        /// a fifth for a quarter against each other; everything else, and
+        /// `Even`, is untouched. Read by both the arithmetic (`Step`) and the
+        /// readouts (`RatePerDay`/`MakeRatePerDay`) so the sheet never prints
+        /// a number the tick would not pay.
+        public float PriorityMultiplier(string resource)
+        {
+            if (priority == WorkPriority.Even) return 1f;
+            bool boostFood = priority == WorkPriority.FoodFirst;
+            if (resource == Res.Food) return boostFood ? 1.25f : 0.8f;
+            if (resource == Res.Timber) return boostFood ? 0.8f : 1.25f;
+            return 1f;
+        }
+
         // --- upkeep: mood, 2026-09-22 ------------------------------------
         //
         // Kevin's design, settled: the campfire IS the provisions gauge and
@@ -498,11 +555,21 @@ namespace SeaSick.World
         /// **What `Outpost` pushes to `Campfire.health01`.** Three days of
         /// food banked, per hand, reads as a bright fire; an outpost with
         /// nobody home reads as full so an empty camp does not look like a
-        /// dying one.
-        public float Health01 => hands.Count == 0
-            ? 1f
-            : Mathf.Clamp01((CountOf(Res.Food) + (Store(Res.Food)?.part ?? 0f))
-                / (hands.Count * EatPerHandPerDay * DaysOfFoodForBrightFire));
+        /// dying one. **Rations-honest, 2026-09-22**: the bar wants fewer
+        /// days' worth of food when a half ration means fewer days' worth is
+        /// actually spent, and a camp on no rations at all never reads
+        /// bright no matter how the pile is stacked -- nobody there is being
+        /// fed, whatever is sitting beside the fire.
+        public float Health01
+        {
+            get
+            {
+                if (hands.Count == 0) return 1f;
+                if (rations == Rations.None) return 0f;
+                return Mathf.Clamp01((CountOf(Res.Food) + (Store(Res.Food)?.part ?? 0f))
+                    / (hands.Count * EatPerHandPerDay * EatMultiplier * DaysOfFoodForBrightFire));
+            }
+        }
 
         /// How many hands here are furious. What the sheet counts against
         /// the roster.
@@ -693,6 +760,39 @@ namespace SeaSick.World
                 return (DaysToRaid - threat) / rate;
             }
         }
+
+        /// Is somebody standing lookout right now -- `Guard` at full, spelled
+        /// out for a UI that wants a bool rather than the float it is graded
+        /// from.
+        public bool LookoutPosted => Guard >= 1f;
+
+        /// **The clock's cadence with `Guard` forced to one value, 2026-09-22**
+        /// -- not "until the next raid from here," which `DaysUntilRaid`
+        /// already answers, but "how far apart raids land at this setting,"
+        /// for a sheet that wants to show the player both ends of the choice
+        /// at once. Mirrors `ThreatRatePerDay` term for term with `Guard`
+        /// substituted, so the two can never disagree about what a manned
+        /// lookout is worth.
+        float ThreatRateAt(bool guarded)
+        {
+            if (raiders <= 0 || Total <= 0 || guarded) return 0f;
+            return HasWatchtower ? 0.5f : 1f;
+        }
+
+        /// Days between raids as if nobody were watching at all.
+        public float RaidDaysUnwatched
+        {
+            get
+            {
+                float rate = ThreatRateAt(false);
+                return rate <= 0f ? float.PositiveInfinity : DaysToRaid / rate;
+            }
+        }
+
+        /// Days between raids as if a lookout were manning the tower --
+        /// which is to say never: a manned watch halts the clock outright,
+        /// the same way `Guard >= 1f` already zeroes `ThreatRatePerDay`.
+        public float RaidDaysIfWatched => float.PositiveInfinity;
 
         /// **What the sheet prints for this camp's raid risk**, or null when
         /// there is nobody offshore to make it a risk at all.
@@ -1235,7 +1335,8 @@ namespace SeaSick.World
                 if (room <= 0f) continue;
                 if (hunting) room /= Res.MeatPerAnimal;
 
-                float want = Res.GatherRate(h.target) * days * WorkFactorOn(h, into);
+                float want = Res.GatherRate(h.target) * days * WorkFactorOn(h, into)
+                    * PriorityMultiplier(into);
                 float got = Mathf.Min(want, Mathf.Min(stock.standing, room));
                 if (got <= 0f) continue;
 
@@ -1271,7 +1372,8 @@ namespace SeaSick.World
                 float room = (ceilingPer - made.whole) - made.part;
                 if (room <= 0f) continue;
 
-                float want = Mathf.Min(plan.rate * days * WorkFactorOn(h, plan.makes), room);
+                float want = Mathf.Min(plan.rate * days * WorkFactorOn(h, plan.makes)
+                    * PriorityMultiplier(plan.makes), room);
                 if (want <= 0f) continue;
 
                 // An input is consumed one for one, and a hand with nothing to
@@ -1322,7 +1424,12 @@ namespace SeaSick.World
             if (eaters > 0)
             {
                 var food = Store(Res.Food);
-                float need = eaters * EatPerHandPerDay * days;
+                // **Rations, 2026-09-22.** `EatMultiplier` is what `rations`
+                // actually pays out against `EatPerHandPerDay` -- 1, a half,
+                // or nothing. On `None` the pile is never touched at all, not
+                // even if there is plenty sitting in it: it is a choice, not
+                // a shortage.
+                float need = eaters * EatPerHandPerDay * EatMultiplier * days;
                 float have = food != null ? food.whole + food.part : 0f;
                 float eaten = Mathf.Min(need, have);
                 if (eaten > 0f)
@@ -1333,26 +1440,42 @@ namespace SeaSick.World
                     foodEaten += eaten;
                     away.eaten += eaten;
                 }
-                // Nobody starves or leaves on this yet -- the debt still
-                // gets recorded for the sheet.
-                if (eaten < need) { hungerDays += days; away.hungryDays += days; }
+                // **`None` is a hungry day by definition, 2026-09-22** --
+                // there is no ration to have fallen short of, so `need`
+                // itself is zero and the ordinary `eaten < need` test would
+                // never fire. Nobody starves or leaves on this yet -- the
+                // debt still just gets recorded for the sheet.
+                bool starved = rations == Rations.None;
+                if (starved || eaten < need) { hungerDays += days; away.hungryDays += days; }
 
                 // **Mood, per quantum, so D2 (path independence) holds
                 // exactly as the rest of `Step` does.** `fed01` is how much
-                // of today's need this quantum actually paid; a hand not
-                // fully fed slides toward angry at `MoodDropPerHungryDay`,
-                // scaled by how short they went, and a hand fully fed
-                // climbs back at `MoodRecoverPerFedDay`. A hand restored
-                // from an old save already has `mood = 1f` (the field's
-                // default), which reads as a content hand with no history
-                // to make up.
+                // of today's (rationed) need this quantum actually paid; a
+                // hand not fully fed slides toward angry at
+                // `MoodDropPerHungryDay`, scaled by how short they went, and
+                // a hand fully fed climbs back at `MoodRecoverPerFedDay`. A
+                // hand restored from an old save already has `mood = 1f`
+                // (the field's default), which reads as a content hand with
+                // no history to make up.
+                //
+                // **Half rations never recover, 2026-09-22** -- a hand fed
+                // its full (halved) ration still grumbles rather than settling,
+                // dropping at half `MoodDropPerHungryDay` instead of climbing.
+                // `None` drops every hand at the full rate regardless of what
+                // is sitting in the pile, same as the hunger-day accounting
+                // above.
                 float fed01 = need > 0f ? eaten / need : 1f;
                 foreach (var h in hands)
                 {
                     if (h == null) continue;
-                    h.mood = fed01 >= 1f
-                        ? Mathf.Min(1f, h.mood + MoodRecoverPerFedDay * days)
-                        : Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days * (1f - fed01));
+                    if (starved)
+                        h.mood = Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days);
+                    else if (fed01 >= 1f)
+                        h.mood = rations == Rations.Half
+                            ? Mathf.Max(0f, h.mood - MoodDropPerHungryDay * 0.5f * days)
+                            : Mathf.Min(1f, h.mood + MoodRecoverPerFedDay * days);
+                    else
+                        h.mood = Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days * (1f - fed01));
                 }
             }
 
@@ -1467,11 +1590,12 @@ namespace SeaSick.World
                     {
                         if (resource != Res.Food || Stalled(h)) continue;
                         rate += Res.GatherRate(Res.Game) * Res.MeatPerAnimal
-                                * WorkFactorOn(h, Res.Food);
+                                * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
                         continue;
                     }
                     if (h.target != resource || Stalled(h)) continue;
-                    rate += Res.GatherRate(resource) * WorkFactorOn(h, resource);
+                    rate += Res.GatherRate(resource) * WorkFactorOn(h, resource)
+                        * PriorityMultiplier(resource);
                     continue;
                 }
 
@@ -1480,7 +1604,8 @@ namespace SeaSick.World
                     if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
                     var plan = BuildPlans.Named(h.target);
                     if (plan.rate <= 0f || Stalled(h)) continue;
-                    if (plan.makes == resource) rate += plan.rate * WorkFactorOn(h, resource);
+                    if (plan.makes == resource)
+                        rate += plan.rate * WorkFactorOn(h, resource) * PriorityMultiplier(resource);
                     // Consumption scales with the same factor -- an angry
                     // worker draws down the input no faster than they make
                     // the output.
@@ -1492,9 +1617,11 @@ namespace SeaSick.World
 
             // Every quantum eats regardless of whether the pile can pay --
             // an empty pile just means they go hungry, and the drain is the
-            // whole point of the readout.
+            // whole point of the readout. Scaled by `EatMultiplier`, 2026-09-22,
+            // so the readout agrees with `Step`: a camp on half or no rations
+            // does not drain a full ration it was never going to spend.
             if (resource == Res.Food && hands.Count > 0)
-                rate -= hands.Count * EatPerHandPerDay;
+                rate -= hands.Count * EatPerHandPerDay * EatMultiplier;
 
             return rate;
         }
@@ -1522,11 +1649,12 @@ namespace SeaSick.World
                     {
                         if (resource != Res.Food || Stalled(h)) continue;
                         rate += Res.GatherRate(Res.Game) * Res.MeatPerAnimal
-                                * WorkFactorOn(h, Res.Food);
+                                * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
                         continue;
                     }
                     if (h.target != resource || Stalled(h)) continue;
-                    rate += Res.GatherRate(resource) * WorkFactorOn(h, resource);
+                    rate += Res.GatherRate(resource) * WorkFactorOn(h, resource)
+                        * PriorityMultiplier(resource);
                     continue;
                 }
 
@@ -1535,7 +1663,7 @@ namespace SeaSick.World
                     if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
                     var plan = BuildPlans.Named(h.target);
                     if (plan.rate <= 0f || plan.makes != resource || Stalled(h)) continue;
-                    rate += plan.rate * WorkFactorOn(h, resource);
+                    rate += plan.rate * WorkFactorOn(h, resource) * PriorityMultiplier(resource);
                 }
             }
 
