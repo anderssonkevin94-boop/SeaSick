@@ -1416,3 +1416,13 @@ regrowing like wheat) is the next.
 hunting; no sound; ~1000 animals exist as GameObjects (cheap while gated,
 unmeasured on the phone); animals ignore buildings other than the camp
 keep-out; crew do not react to them.
+
+### Second pass, and gulls at sea — 2026-09-22
+
+Kevin loved the gull and called the goat and boar boxes with cones. The
+script grew chamfered cross-sections (`chamf_sec` / `hull_z`), `taper_z`
+and jointed `limb`s; goat 316 tris, boar 298, gull byte-identical in
+geometry. And *"will they fly around on the ocean too?"* — three gulls now
+follow the ship's wake (`Gull.Follow`, `FaunaField.FollowShip` from the
+populator after the raiders), no LOD and no alarm since the ship is what
+they want. Captures: `goat-herd-live.png`, `wake-gulls-live.png`.
