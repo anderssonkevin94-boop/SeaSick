@@ -22,15 +22,28 @@ Material:
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
-    m_TexEnvs: []
+    m_TexEnvs:
+    - _AdventurePanorama:
+        m_Texture: {fileID: 2800000, guid: 5dccc01fd98b4456a83b2d6b386a44ae, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _AdventureRotation: 0
+    - _AdventureSeamWidth: 0.025
+    - _AdventureStrength: 1
+    - _CloudDrift: 0.22
     - _CloudScale: 0.03
     - _CloudSpeed: 0.9
     - _Exposure: 1
     - _HorizonSharp: 1.6
+    - _MoonHalo: 0.35
+    - _MoonSize: 0.045
     - _Overcast: 0.08
     - _Scud: 0
+    - _StarBright: 1
+    - _StarDensity: 0.948
+    - _SunShaftStrength: 0.32
     - _SunGlow: 140
     - _SunHaze: 8
     m_Colors:
@@ -38,6 +51,7 @@ Material:
     - _CloudLit: {r: 0.94, g: 0.95, b: 0.96999997, a: 1}
     - _GroundColor: {r: 0.21999997, g: 0.29999998, b: 0.33999997, a: 1}
     - _HorizonColor: {r: 0.68, g: 0.8, b: 0.88, a: 1}
+    - _MoonColor: {r: 0.92, g: 0.94, b: 1, a: 1}
     - _SunColor: {r: 1, g: 0.96, b: 0.86, a: 1}
     - _ZenithColor: {r: 0.16999996, g: 0.37999994, b: 0.65999997, a: 1}
   m_BuildTextureStacks: []

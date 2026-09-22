@@ -12,6 +12,7 @@
 #pragma kernel VerifySample
 
 #include "RegionField.hlsl"
+#include "GraphicWaveDetail.hlsl"
 
 Texture2DArray<float4> Displacement;
 SamplerState linearRepeatSampler;
@@ -51,6 +52,16 @@ void VerifySample(uint3 id : SV_DispatchThreadID)
         float3(x / _PatchSizes[2], 2), 0).y;
 
     float3 p = float3(x.x, 0, x.y) + d01;
+    // The shore swell is part of "what the renderer actually displaces by",
+    // so it belongs here or the probe reports the twins diverging by exactly
+    // the height of a feature both of them have. Evaluated at the DISPLACED
+    // position p.xz, matching Ocean.shader and the Burst twin -- see the note
+    // in SampleJobs about folds. No `fade` term, matching the rest of this
+    // kernel and the Burst twin: the probe works in near water.
+    p.y += ShorewardHeight(p.xz);
+    float ah,af;float2 ag;ArtSurface(p.xz,ah,ag,af);
+    float3 artShore=ShoreWetDepth(p.xz);
+    p.y+=ah*artShore.y*smoothstep(0,8,artShore.z);
     OutPos[id.x] = float4(p, y2);
     OutDiag[id.x] = float4(envC.x, raw01.x, raw01.y, raw01.z);
 }

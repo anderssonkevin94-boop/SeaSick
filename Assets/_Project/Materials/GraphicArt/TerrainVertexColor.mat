@@ -25,6 +25,9 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
+    - _AuthoredFormLighting: 1
+    - _PaintedSurface: 1
+    - _PaintStudy: 0
     - _CrispTerrain: 1
     - _DetailFade: 260
     - _DetailScale: 3.5

@@ -7,10 +7,12 @@
 
 float4 _Ocean_Region;       // home.xy, calmRadius, wildRadius
 float4 _Ocean_RegionScale;  // nearScale, farScale, shoreFalloff, islandCount
-float4 _Ocean_Islands[24];  // xy = centre, z = radius
+float4 _Ocean_Islands[48];  // xy = centre, z = radius
 float4 _Ocean_ShoreRect;    // origin.xy, 1/size, texels per edge (0 = none)
 float4 _Ocean_Shoal;        // depthZero, depthFull, chopFloor, unused
 float4 _Ocean_DepthLimit;   // breakFraction, waveHs, unused, unused
+float4 _Ocean_Shoreward;    // strength, falloff, omega, slope
+float _Ocean_ShorewardTime; // ocean seconds
 Texture2D _Ocean_ShoreTex;  // terrain height, RFloat, clamp, bilinear
 SamplerState sampler_Ocean_ShoreTex;
 float4 _Ocean_Weather;      // 1/tileMetres, driftOffset.xy, texels per edge (0 = none)
@@ -172,6 +174,43 @@ float3 RegionEnvelopeCascades(float2 p)
     if (_Ocean_ShoreRect.w >= 1.0 && _Ocean_DepthLimit.y > 0.01)
         cap = max(0.0, _Ocean_DepthLimit.x * swd.z / (_Ocean_DepthLimit.y * bw));
     return min(max(env, floorTerm), cap);
+}
+
+// The swell the depth cap took, turned toward the beach.
+// MUST match RegionFieldParams.ShorewardHeight in RegionField.cs.
+//
+// The envelope can only ever SCALE a wave at a given position, so a crest
+// running past an island gets a notch punched in it where the shelf is and
+// sails on regardless. Real water does the opposite: the part of the crest
+// over the shelf slows (c = sqrt(g d)), the rest does not, and the wave BENDS
+// until its crests lie along the depth contours and it rolls onto the beach.
+//
+// A scalar envelope cannot rotate anything, so this does not try. It adds a
+// separate shore swell whose crests ARE the depth contours -- the refracted
+// end state -- and pays for it out of exactly what the cap removed.
+//
+// Phase is the WKB solution for a plane beach: in shallow water
+// k = omega/sqrt(g d), and on a beach of slope s where d = s*x,
+//     phase = integral k dx = (2 omega / (s sqrt(g))) * sqrt(d).
+// Crests are level sets of depth, and they run shoreward because a crest holds
+// phase + omega*t constant while t only increases.
+//
+// Height only: with no horizontal displacement it never enters the CPU
+// sampler's Newton inversion, whose budget is already spent.
+float ShorewardHeight(float2 p)
+{
+    if (_Ocean_Shoreward.x <= 0.0 || _Ocean_ShoreRect.w < 1.0
+        || _Ocean_DepthLimit.y <= 0.01 || _Ocean_DepthLimit.x <= 0.0) return 0.0;
+    float3 swd = ShoreWetDepth(p);
+    float depth = swd.z;
+    float capDepth = _Ocean_DepthLimit.y / _Ocean_DepthLimit.x;
+    float bite = saturate(1.0 - depth / capDepth);
+    if (bite <= 0.0) return 0.0;
+    float amp = _Ocean_DepthLimit.x * depth * pow(bite, _Ocean_Shoreward.y)
+                * swd.y * _Ocean_Shoreward.x;
+    float k = 2.0 * _Ocean_Shoreward.z / (_Ocean_Shoreward.w * 3.132092); // sqrt(9.81)
+    return amp * sin(k * sqrt(max(depth, 0.0))
+                     + _Ocean_Shoreward.z * _Ocean_ShorewardTime);
 }
 
 // Cascade 0's envelope: the long swell, and what every gameplay reader means

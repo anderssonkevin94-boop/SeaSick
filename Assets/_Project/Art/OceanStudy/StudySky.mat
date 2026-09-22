@@ -1,0 +1,56 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: StudySky
+  m_Shader: {fileID: 4800000, guid: 0df28aa81d9ec4fa3a3710b7a4f30402, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _AdventurePanorama:
+        m_Texture: {fileID: 2800000, guid: 5dccc01fd98b4456a83b2d6b386a44ae, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AdventureRotation: 0
+    - _AdventureSeamWidth: 0.025
+    - _AdventureStrength: 1
+    - _CloudScale: 0.03
+    - _CloudSpeed: 0.9
+    - _Exposure: 1
+    - _HorizonSharp: 1.6
+    - _MoonHalo: 0.35
+    - _MoonSize: 0.045
+    - _Overcast: 0.08
+    - _Scud: 0
+    - _StarBright: 1
+    - _StarDensity: 0.948
+    - _SunGlow: 140
+    - _SunHaze: 8
+    m_Colors:
+    - _CloudDark: {r: 0.16999996, g: 0.17999998, b: 0.20999995, a: 1}
+    - _CloudLit: {r: 0.94, g: 0.95, b: 0.96999997, a: 1}
+    - _GroundColor: {r: 0.15, g: 0.36, b: 0.58, a: 1}
+    - _HorizonColor: {r: 0.6, g: 0.77, b: 0.88, a: 1}
+    - _MoonColor: {r: 0.92, g: 0.94, b: 1, a: 1}
+    - _SunColor: {r: 1, g: 0.96, b: 0.86, a: 1}
+    - _ZenithColor: {r: 0.16999996, g: 0.37999994, b: 0.65999997, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

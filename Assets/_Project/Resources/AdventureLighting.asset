@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5855bbdcd3a6496d8e77a23e039fa08, type: 3}
+  m_Name: AdventureLighting
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.AdventureLighting
+  applyToGame: 1
+  sunHeightScale: 0.72
+  sunlight: {r: 1, g: 0.89, b: 0.73, a: 1}
+  sunIntensity: 1.12
+  ambientEquator: {r: 0.36, g: 0.43, b: 0.6, a: 1}
+  ambientGround: {r: 0.19, g: 0.24, b: 0.33, a: 1}
+  skyFill: 0.68
+  fogStart: 950
+  fogEnd: 1500
+  goldenHourElevation: 0.32
+  sunriseHorizon: {r: 1, g: 0.58, b: 0.34, a: 1}
+  sunsetHorizon: {r: 0.98, g: 0.38, b: 0.23, a: 1}
+  sunriseLight: {r: 1, g: 0.76, b: 0.51, a: 1}
+  sunsetLight: {r: 1, g: 0.61, b: 0.36, a: 1}

@@ -139,14 +139,34 @@ Shader "SeaSick/Terrain Vertex Color"
             half4 frag(Varyings i) : SV_Target
             {
                 float3 n = normalize(i.normalWS);
-                // The heightfield's finite-difference normals bridge mesh LODs.
-                // Derivative triangle normals exposed every narrow grid strip.
+                // Smooth ground normals bridge mesh LODs; exposed rock below
+                // uses mesh planes to match the authored island cliffs.
                 float3 albedo = i.color.rgb * _Tint.rgb;
+                if (_CrispTerrain > .5 && i.positionWS.y > 0)
+                {
+                    // Classify per fragment, never interpolate tan into green
+                    // across several metres of a terrain triangle.
+                    float border = i.positionWS.y - _SandLine;
+                    float aa = max(fwidth(border), .008);
+                    float grassMask = smoothstep(-aa, aa, border);
+                    float stoneAA = max(fwidth(i.color.a), .01);
+                    float rockMask = smoothstep(.48-stoneAA,.48+stoneAA,i.color.a);
+                    // Match the authored home's linear vertex palette. Cliffs
+                    // use their real mesh planes; soft ground keeps smooth normals.
+                    float3 face = normalize(cross(ddy(i.positionWS), ddx(i.positionWS)));
+                    face *= dot(face,n) < 0 ? -1 : 1;
+                    n = normalize(lerp(n, face, rockMask * _AuthoredFormLighting));
+                    float3 meadow = float3(.24,.38,.065);
+                    float3 sand = float3(.78,.61,.33);
+                    float3 rock = float3(.57,.50,.39);
+                    albedo = lerp(lerp(sand,meadow,grassMask),rock,rockMask) * _Tint.rgb;
+                }
+
                 if (_PaintedSurface > .5)
                 {
                     // Broad painted colour shapes, with no grit or normal-map
                     // noise. Object coordinates keep marks attached to assets.
-                    float3 p = i.positionOS;
+                    float3 p = _CrispTerrain > .5 ? i.positionWS : i.positionOS;
                     float cameraDistance = distance(i.positionWS, GetCameraPositionWS());
                     float nearDetail = 1-smoothstep(110,320,cameraDistance);
                     float3 painted = albedo;
@@ -183,20 +203,6 @@ Shader "SeaSick/Terrain Vertex Color"
                     }
                     float study = lerp(1,1-smoothstep(24,36,distance(p.xz,float2(-55,32))),_PaintStudy);
                     albedo = lerp(albedo,painted,study);
-                }
-                if (_CrispTerrain > .5 && i.positionWS.y > 0)
-                {
-                    // Classify per fragment, never interpolate tan into green
-                    // across several metres of a terrain triangle.
-                    float border = i.positionWS.y - _SandLine;
-                    float aa = max(fwidth(border), .008);
-                    float grassMask = smoothstep(-aa, aa, border);
-                    float stoneAA = max(fwidth(i.color.a), .01);
-                    float rockMask = smoothstep(.48-stoneAA,.48+stoneAA,i.color.a);
-                    float3 meadow = float3(.100,.243,.030);
-                    float3 sand = float3(.674,.523,.224);
-                    float3 rock = float3(.36,.35,.29);
-                    albedo = lerp(lerp(sand,meadow,grassMask),rock,rockMask) * _Tint.rgb;
                 }
 
                 // Fade the whole detail layer out with distance. Without this
@@ -246,9 +252,10 @@ Shader "SeaSick/Terrain Vertex Color"
                 // darkest faces a coloured fill rather than crushing twice.
                 // Two broad cel bands with a small antialiased transition.
                 float sun = ndl * light.shadowAttenuation;
-                float bandWidth = max(.025, fwidth(sun) * 1.5);
-                float sculpted = smoothstep(.22 - bandWidth, .22 + bandWidth, sun);
-                float3 fill = max(ambient * .6, 0.22 * _ShadowTint.rgb);
+                float foliage = smoothstep(.015,.065,albedo.g-albedo.r);
+                float bandWidth = max(lerp(.012,.075,foliage), fwidth(sun) * 1.2);
+                float sculpted = smoothstep(.34 - bandWidth, .34 + bandWidth, sun);
+                float3 fill = max(0, SampleSH(float3(0,1,0))) * .58 * _ShadowTint.rgb;
                 float3 graphic = albedo * (fill + light.color
                     * lerp(_ShadowTint.rgb * 0.38, float3(1.02,0.97,0.85), sculpted));
                 col = lerp(col, graphic, _GraphicLight);
@@ -261,9 +268,10 @@ Shader "SeaSick/Terrain Vertex Color"
                 // the cool shadow response, while the lower ground weight keeps
                 // grass and sand readable when this is enabled on the plateau.
                 float authoredSun = saturate(ndl * light.shadowAttenuation);
-                float authoredLow = smoothstep(0.16, 0.32, authoredSun);
-                float authoredMid = smoothstep(0.48, 0.66, authoredSun);
-                float authoredHigh = smoothstep(0.58, 0.78, authoredSun);
+                float edge = max(.012,fwidth(authoredSun)*1.2);
+                float authoredLow = smoothstep(.27-edge, .27+edge, authoredSun);
+                float authoredMid = smoothstep(.60-edge, .60+edge, authoredSun);
+                float authoredHigh = smoothstep(.82-edge, .82+edge, authoredSun);
                 float3 authoredShadow = float3(0.30, 0.42, 0.85);
                 float3 authoredMidTint = float3(0.66, 0.70, 0.82);
                 float3 authoredSunTint = float3(1.08, 1.03, 0.90);
@@ -273,9 +281,9 @@ Shader "SeaSick/Terrain Vertex Color"
                 authoredTint *= lerp(0.92, 1.04, authoredHigh);
                 // Broad bands are the dominant form cue; this small continuous
                 // term preserves plane-to-plane direction variation inside them.
-                authoredTint *= lerp(0.94, 1.04, authoredSun);
+                // Keep each painted lighting band uniform.
                 float authoredMask = _AuthoredFormLighting * lerp(0.62, 1.0, saturate(i.color.a));
-                float3 authored = albedo * (max(ambient * 0.42, float3(0.10,0.10,0.10)) + light.color * authoredTint);
+                float3 authored = albedo * (max(0,SampleSH(float3(0,1,0))) * float3(.36,.42,.54) + light.color * authoredTint);
                 col = lerp(col, authored, authoredMask);
                 // Point lights: the campfire and the lamps. URP's own falloff
                 // is inverse-square, which lights a fire's stone ring and
@@ -296,6 +304,18 @@ Shader "SeaSick/Terrain Vertex Color"
                         #else
                             int pidx = GetPerObjectLightIndex(lightIndex);
                         #endif
+                        #if USE_STRUCTURED_BUFFER_FOR_LIGHT_DATA
+                            float3 lp = _AdditionalLightsBuffer[pidx].position.xyz;
+                        #else
+                            float3 lp = _AdditionalLightsPosition[pidx].xyz;
+                        #endif
+                        float fall = saturate(1.0 - distance(lp, i.positionWS) * 0.045);
+                        fall *= fall;
+                        float wrap = saturate(dot(n, pl.direction) * 0.6 + 0.4);
+                        col += albedo * pl.color * fall * wrap;
+                    LIGHT_LOOP_END
+                }
+                #endif
                 col = MixFog(col, i.fog);
                 return half4(col, 1);
             }

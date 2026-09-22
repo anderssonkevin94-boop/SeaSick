@@ -1,4 +1,4 @@
-// Procedural sky dome.
+// Weather-driven sky with an optional graphic-adventure clear-day panorama.
 //
 // Built rather than imported for two reasons. The sea has to match the sky —
 // a static cubemap would leave the water the same blue under a black storm —
@@ -34,6 +34,12 @@ Shader "SeaSick/Sky"
         _CloudScale ("Cloud Scale", Float) = 0.030
         _CloudSpeed ("Cloud Speed", Float) = 0.9
 
+        [NoScaleOffset] _AdventurePanorama ("Painted cloud source", 2D) = "white" {}
+        _AdventureStrength ("Painted cloud layer", Range(0,1)) = 0
+        _AdventureRotation ("Graphic adventure rotation", Range(0,360)) = 0
+        _AdventureSeamWidth ("Panorama wrap blend", Range(0.001,0.08)) = 0.025
+        _SunShaftStrength ("Cloud-filtered sun rays", Range(0,1)) = 0.32
+        _CloudDrift ("Painted cloud drift (degrees per second)", Float) = 0.22
         _Exposure ("Exposure", Range(0, 2)) = 1
     }
 
@@ -77,7 +83,31 @@ Shader "SeaSick/Sky"
                 float  _CloudScale;
                 float  _CloudSpeed;
                 float  _Exposure;
+                float4 _AdventurePanorama_TexelSize;
+                float _AdventureStrength, _AdventureRotation, _AdventureSeamWidth, _CloudDrift, _SunShaftStrength;
+                float _CloudReviewTime, _CloudReviewOverride;
             CBUFFER_END
+
+            TEXTURE2D(_AdventurePanorama);
+            SAMPLER(sampler_AdventurePanorama);
+
+            float3 AdventureSky(float3 dir)
+            {
+                float2 border = abs(_AdventurePanorama_TexelSize.xy) * 0.5;
+                float u = frac(atan2(dir.x,dir.z) / 6.28318530718 + 0.5 + _AdventureRotation/360.0);
+                float v = clamp(asin(clamp(dir.y,-1.0,1.0))/3.14159265359 + 0.5,border.y,1.0-border.y);
+                // Correct the longitude derivative at the wrap. Otherwise a
+                // single seam pixel selects the coarsest mip and paints a stripe.
+                float2 gx = ddx(float2(u,v)), gy = ddy(float2(u,v));
+                gx.x -= round(gx.x); gy.x -= round(gy.x);
+                float3 a = SAMPLE_TEXTURE2D_GRAD(_AdventurePanorama,sampler_AdventurePanorama,float2(clamp(u,border.x,1.0-border.x),v),gx,gy).rgb;
+                float3 b = SAMPLE_TEXTURE2D_GRAD(_AdventurePanorama,sampler_AdventurePanorama,float2(clamp(1.0-u,border.x,1.0-border.x),v),gx*float2(-1,1),gy*float2(-1,1)).rgb;
+                float weight = 0.5*(1.0-smoothstep(0.0,max(0.001,_AdventureSeamWidth),min(u,1.0-u)));
+                float3 sky = lerp(a,b,weight);
+                float poleV = dir.y>0 ? 1.0-border.y : border.y;
+                float3 pole = SAMPLE_TEXTURE2D(_AdventurePanorama,sampler_AdventurePanorama,float2(0.5,poleV)).rgb;
+                return lerp(sky,pole,smoothstep(0.96,1.0,abs(dir.y)));
+            }
 
             // Pushed by SkyDirector each frame. xyz = direction TOWARD the sun.
             float4 _SS_SunDir;
@@ -195,35 +225,19 @@ Shader "SeaSick/Sky"
             {
                 float3 sd = RotateAxis(dir, normalize(_SS_StarRot.xyz), -_SS_StarRot.w);
 
-                float3 g = sd * 90.0;
-                float3 cell = floor(g);
-                float3 f = frac(g) - 0.5;
-                float3 h = Hash33(cell);
-
-                // Most cells are empty; the ones that are not put their star
-                // somewhere inside rather than dead centre, or the field reads
-                // as a grid.
-                float present = step(_StarDensity, h.x);
-                float d = length(f - (h - 0.5) * 0.72);
-                // The falloff has to be measured against a PIXEL, not chosen
-                // for looks. A cell here is 1/90 rad across, which at this
-                // camera is under four pixels; the first version faded over
-                // 1/9 of a cell -- a star about four TENTHS of a pixel wide,
-                // so almost every one fell between sample points and the
-                // measured sky came back with no pixel above 25/255 and not a
-                // star in it. Fading over ~0.3 of a cell puts the core near a
-                // pixel across; the cube keeps it a point rather than a blob.
-                float pip = saturate(1.0 - d * 3.2);
-                pip = pip * pip * pip;
-                // h.y squared biases the field toward faint stars, which is
-                // right -- but 0.30 put most of them under the threshold where
-                // a star is distinguishable from the sky at all (measured: 25
-                // pixels above 30/255 across a whole night sky).
-                float mag = lerp(0.42, 1.0, h.y * h.y);
-
-                // Scintillation, at a different rate per star.
-                float twinkle = 0.72 + 0.28 * sin(_Time.y * 2.4 + h.z * 61.0);
-                return present * mag * pip * twinkle;
+                // A two-dimensional star chart avoids clipped specks where
+                // a 3D noise cell intersects the celestial sphere.
+                float2 chart = float2(atan2(sd.x,sd.z)/6.2831853+.5,
+                    asin(clamp(sd.y,-1,1))/3.14159265+.5)*float2(180,90);
+                float2 cell = floor(chart);
+                float3 h = Hash33(float3(cell,17));
+                float2 offset = frac(chart)-(.25+h.yz*.50);
+                float d = length(offset);
+                float radius = lerp(.045,.11,h.y*h.y);
+                float pip = 1-smoothstep(radius,radius+clamp(fwidth(d),.018,.06),d);
+                float twinkle = .88+.12*sin(_Time.y*.7+h.z*61);
+                return step(_StarDensity,h.x)*pip*lerp(.5,1.3,h.y)*twinkle
+                    * (1-smoothstep(.95,1,abs(sd.y)));
             }
 
             float SkyFbm(float2 p)
@@ -286,6 +300,20 @@ Shader "SeaSick/Sky"
                                   pow(up, 1.0 / max(0.2, _HorizonSharp)));
                 col = lerp(_GroundColor.rgb, col, smoothstep(-0.05, 0.02, dir.y));
 
+                // The painting supplies cloud colour and silhouette only. Its blue
+                // background is replaced by the dynamic day/night gradient.
+                float cloudTime = lerp(_Time.y, _CloudReviewTime, _CloudReviewOverride);
+                float cloudAngle = cloudTime * _CloudDrift * 0.01745329252;
+                float3 cloudDir = RotateAxis(dir,float3(0,1,0),cloudAngle);
+                float3 paintedCloud = AdventureSky(cloudDir);
+                float cloudShape = smoothstep(.005,.06, paintedCloud.r-paintedCloud.b*.25);
+                cloudShape *= smoothstep(.045,.20,dir.y);
+                float paintedCoverage = _AdventureStrength * (1-smoothstep(.25,.85,_Overcast));
+                // Broad blue-violet night sky, without a baked sun or moon.
+                float nightBand = exp(-pow((dir.y-.28)*3.1,2));
+                col = lerp(col,col*float3(.72,.82,1.22),_SS_Night*(1-_Overcast)*smoothstep(.02,.20,dir.y));
+                col += float3(.006,.010,.027)*nightBand*_SS_Night*(1-_Overcast);
+
                 // --- Sun ------------------------------------------------------
                 // Two terms: a wide haze that lifts the whole quarter of sky the
                 // sun is in, and a tight disc. Both are put out by cloud.
@@ -330,8 +358,40 @@ Shader "SeaSick/Sky"
                 // --- Stars ----------------------------------------------------
                 // Behind the cloud deck, so an overcast night has none.
                 col += _MoonColor.rgb * Stars(dir)
-                     * _StarBright * _SS_Night * clear
+                     * _StarBright * smoothstep(.75,1.0,_SS_Night) * clear
                      * smoothstep(-0.02, 0.10, dir.y);
+
+                // Independent painted cloud layer occludes stars and moon.
+                float pigment = saturate(dot(paintedCloud,float3(.25,.55,.20)));
+                float3 nightCloud = lerp(float3(.012,.023,.062),float3(.065,.095,.19),smoothstep(.32,.72,pigment));
+                float moonEdge = pow(saturate(dot(dir,_SS_MoonDir.xyz)),18)*moonUp;
+                nightCloud += float3(.06,.08,.12)*moonEdge*pigment;
+                float3 dayCloud = paintedCloud * lerp(float3(.77,.80,.92),float3(1,1,1),saturate(_SS_SunDir.y*4));
+                float golden = (1-smoothstep(.06,.36,abs(_SS_SunDir.y))) * (1-_Overcast);
+                float3 warmTop = _SunColor.rgb * float3(1.05,.91,.85);
+                float3 violetBase = float3(.20,.19,.32);
+                float3 sunsetCloud = lerp(violetBase,warmTop,smoothstep(.28,.80,pigment));
+                dayCloud = lerp(dayCloud,sunsetCloud,golden);
+                float nightCloudBlend = _SS_Night*(1-golden*.62);
+                col = lerp(col,lerp(dayCloud,nightCloud,nightCloudBlend),cloudShape*paintedCoverage);
+
+                // Atmospheric shafts behind world geometry. Sample the cloud
+                // openings close to the sun and extend them along that bearing.
+                // Only the sun's quarter of sky pays for these samples.
+                if (_SunShaftStrength>.001 && sd>.78 && _SS_SunDir.y>-.015 && dir.y>0)
+                {
+                    float3 tangent = dir-_SS_SunDir.xyz*dot(dir,_SS_SunDir.xyz);
+                    tangent = normalize(tangent+float3(.00001,0,0));
+                    float3 probeA = RotateAxis(normalize(_SS_SunDir.xyz+tangent*.10),float3(0,1,0),cloudAngle);
+                    float3 probeB = RotateAxis(normalize(_SS_SunDir.xyz+tangent*.18),float3(0,1,0),cloudAngle);
+                    float3 ca=AdventureSky(probeA), cb=AdventureSky(probeB);
+                    float gapA=1-smoothstep(-.025,.14,ca.r-ca.b*.25);
+                    float gapB=1-smoothstep(-.025,.14,cb.r-cb.b*.25);
+                    float radius=sqrt(saturate(1-sd*sd));
+                    float shafts=(gapA*.65+gapB*.35)*smoothstep(.025,.09,radius)*(1-smoothstep(.16,.58,radius));
+                    shafts *= (1-cloudShape*paintedCoverage)*clear*clear*sunUp*smoothstep(0,.035,dir.y);
+                    col += _SunColor.rgb*shafts*_SunShaftStrength*lerp(.35,1,golden);
+                }
 
                 // --- Cloud deck -----------------------------------------------
                 // The view direction projected onto a plane overhead. Near the
@@ -355,11 +415,13 @@ Shader "SeaSick/Sky"
                 // with enough of the frame to be legible from the deck when
                 // the sea is running 40 m.
                 density *= lerp(1.0, 0.22, roseClear);
+                density *= 1.0-paintedCoverage;
 
                 float3 cloudCol = lerp(_CloudLit.rgb, _CloudDark.rgb,
                                        saturate(density * lerp(0.65, 1.35, _Overcast)));
                 cloudCol += _SunColor.rgb * pow(sd, 24.0) * (1.0 - density) * 0.5 * clear;
                 cloudCol = lerp(cloudCol, _SS_HorizonClear.rgb, roseClear * 0.75);
+                cloudCol *= lerp(1.0,.13,_SS_Night);
 
                 // Fade the deck out at the skyline so the sea meets the sky in
                 // fog, not in an aliasing mess of stretched noise.
@@ -378,7 +440,7 @@ Shader "SeaSick/Sky"
                     sdens *= sdens;
                     // Scud tears out over the clearing too, or the ragged
                     // low cloud simply redraws the lid you just thinned.
-                    col = lerp(col, _CloudDark.rgb * 0.82,
+                    col = lerp(col, _CloudDark.rgb * 0.82 * lerp(1.0,.13,_SS_Night),
                                saturate(sdens * _Scud * lift * 0.85) * lerp(1.0, 0.25, roseClear));
                 }
 

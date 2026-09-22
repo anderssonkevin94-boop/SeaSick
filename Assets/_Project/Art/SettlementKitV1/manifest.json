@@ -1,0 +1,1251 @@
+{
+  "units": "metres",
+  "coordinates": "Unity Y-up; positions and footprints in scaled prefab-local metres",
+  "status": "Imported static visual prefabs; no runtime building or crew replacement",
+  "stage_interpretation": "5 campfire / 3 hut / 3 farm total stages",
+  "character_height_m": 1.93,
+  "assets": [
+    {
+      "id": "campfire_01",
+      "footprint_m": [
+        4.404145077720207,
+        4.404145077720207
+      ],
+      "description": "Landing fire",
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            1.4093264248704664
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            2.2461139896373057
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "stage": 1,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/campfire_01.prefab",
+      "source_triangles": 160,
+      "unity_triangles": 120
+    },
+    {
+      "id": "campfire_02",
+      "footprint_m": [
+        4.844559585492228,
+        4.844559585492228
+      ],
+      "description": "Stone-ring camp",
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            1.4093264248704664
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            2.466321243523316
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "stage": 2,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/campfire_02.prefab",
+      "source_triangles": 396,
+      "unity_triangles": 356
+    },
+    {
+      "id": "campfire_03",
+      "footprint_m": [
+        5.284974093264249,
+        5.284974093264249
+      ],
+      "description": "Cooking camp",
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            1.4093264248704664
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            2.686528497409326
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "stage": 3,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/campfire_03.prefab",
+      "source_triangles": 480,
+      "unity_triangles": 440
+    },
+    {
+      "id": "campfire_04",
+      "footprint_m": [
+        5.725388601036269,
+        5.725388601036269
+      ],
+      "description": "Gathering camp",
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.10569948186528497,
+            1.4093264248704664
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            2.906735751295337
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "stage": 4,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/campfire_04.prefab",
+      "source_triangles": 884,
+      "unity_triangles": 844
+    },
+    {
+      "id": "campfire_05",
+      "footprint_m": [
+        6.165803108808291,
+        6.165803108808291
+      ],
+      "description": "Permanent settlement hearth",
+      "markers": [
+        {
+          "name": "Fire_tender",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.10569948186528497,
+            1.4093264248704664
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            3.126943005181347
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "stage": 5,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/campfire_05.prefab",
+      "source_triangles": 1272,
+      "unity_triangles": 1232
+    },
+    {
+      "id": "hut_01",
+      "footprint_m": [
+        5.284974093264249,
+        5.637305699481866
+      ],
+      "description": "Timber shelter for 2 residents",
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            2.6865284974093266
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_00",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            1.3476683937823835,
+            0.7487046632124352,
+            0.6606217616580313
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_01",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.3476683937823835,
+            0.7487046632124352,
+            0.6606217616580313
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "residents": 2,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/hut_01.prefab",
+      "source_triangles": 882,
+      "unity_triangles": 882
+    },
+    {
+      "id": "hut_02",
+      "footprint_m": [
+        6.829948267170803,
+        7.398963730569949
+      ],
+      "description": "Timber shelter for 4 residents",
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            3.5673575129533677
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_00",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            1.9202072538860102,
+            0.7487046632124352,
+            1.5414507772020727
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_01",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.9202072538860102,
+            0.7487046632124352,
+            1.5414507772020727
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_02",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            1.9202072538860102,
+            0.7487046632124352,
+            -0.48445595854922247
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_03",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.9202072538860102,
+            0.7487046632124352,
+            -0.48445595854922247
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "residents": 4,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/hut_02.prefab",
+      "source_triangles": 1170,
+      "unity_triangles": 1170
+    },
+    {
+      "id": "hut_03",
+      "footprint_m": [
+        7.886942917818851,
+        9.583419285907647
+      ],
+      "description": "Timber shelter for 6 residents",
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            4.536269430051813
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_00",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            2.4487046632124354,
+            0.7487046632124352,
+            2.5103626943005177
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_01",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -2.4487046632124354,
+            0.7487046632124352,
+            2.5103626943005177
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_02",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            2.4487046632124354,
+            0.7487046632124352,
+            0.48445595854922263
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_03",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -2.4487046632124354,
+            0.7487046632124352,
+            0.48445595854922263
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_04",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            2.4487046632124354,
+            0.7487046632124352,
+            -1.5414507772020727
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Resident_05",
+          "role": "resident",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -2.4487046632124354,
+            0.7487046632124352,
+            -1.5414507772020727
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "residents": 6,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/hut_03.prefab",
+      "source_triangles": 1414,
+      "unity_triangles": 1414
+    },
+    {
+      "id": "farm_01",
+      "footprint_m": [
+        5.684870378958747,
+        5.637305699481866
+      ],
+      "description": "4 independent planting slots with central tending aisle",
+      "markers": [
+        {
+          "name": "Plant_slot_00",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.7927461139896373,
+            0.15854922279792746,
+            1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Tend_pair_00",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.7927461139896373,
+            0.0,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_01",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.7927461139896373,
+            0.15854922279792746,
+            1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Tend_pair_01",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.7927461139896373,
+            0.0,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_02",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.7927461139896373,
+            0.15854922279792746,
+            -1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_03",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.7927461139896373,
+            0.15854922279792746,
+            -1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            2.7305699481865284
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "planting_slots": 4,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/farm_01.prefab",
+      "source_triangles": 1644,
+      "unity_triangles": 1644
+    },
+    {
+      "id": "farm_02",
+      "footprint_m": [
+        7.270362774942823,
+        5.637305699481866
+      ],
+      "description": "6 independent planting slots with central tending aisle",
+      "markers": [
+        {
+          "name": "Plant_slot_00",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            1.5854922279792747,
+            0.15854922279792746,
+            1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Tend_pair_00",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            1.5854922279792747,
+            0.0,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_01",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.0,
+            0.15854922279792746,
+            1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Tend_pair_01",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.0,
+            0.0,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_02",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.5854922279792747,
+            0.15854922279792746,
+            1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Tend_pair_02",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.5854922279792747,
+            0.0,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_03",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            1.5854922279792747,
+            0.15854922279792746,
+            -1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_04",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.0,
+            0.15854922279792746,
+            -1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_05",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.5854922279792747,
+            0.15854922279792746,
+            -1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            2.7305699481865284
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "planting_slots": 6,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/farm_02.prefab",
+      "source_triangles": 2340,
+      "unity_triangles": 2340
+    },
+    {
+      "id": "farm_03",
+      "footprint_m": [
+        8.8558551709269,
+        5.637305699481866
+      ],
+      "description": "8 independent planting slots with central tending aisle",
+      "markers": [
+        {
+          "name": "Plant_slot_00",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            2.378238341968912,
+            0.15854922279792746,
+            1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Tend_pair_00",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            2.378238341968912,
+            0.0,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_01",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.7927461139896373,
+            0.15854922279792746,
+            1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Tend_pair_01",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.7927461139896373,
+            0.0,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_02",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.7927461139896373,
+            0.15854922279792746,
+            1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Tend_pair_02",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.7927461139896373,
+            0.0,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_03",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -2.378238341968912,
+            0.15854922279792746,
+            1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Tend_pair_03",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -2.378238341968912,
+            0.0,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_04",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            2.378238341968912,
+            0.15854922279792746,
+            -1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_05",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.7927461139896373,
+            0.15854922279792746,
+            -1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_06",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.7927461139896373,
+            0.15854922279792746,
+            -1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Plant_slot_07",
+          "role": "planting_slot",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -2.378238341968912,
+            0.15854922279792746,
+            -1.3212435233160622
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            2.7305699481865284
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "planting_slots": 8,
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/farm_03.prefab",
+      "source_triangles": 3036,
+      "unity_triangles": 3036
+    },
+    {
+      "id": "sawmill",
+      "footprint_m": [
+        8.676165635104008,
+        7.310880829015545
+      ],
+      "description": "Open timber sawing shed with separate feeding and sawing positions",
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            3.435233160621762
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Sawyer",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.5637305699481866,
+            0.2290155440414508,
+            0.0
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Log_feeder",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            2.0699481865284977,
+            0.2290155440414508,
+            0.3963730569948187
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Finish_carpenter",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.6735751295336787,
+            0.2290155440414508,
+            0.5284974093264249
+          ],
+          "facing": [
+            0,
+            0,
+            1
+          ]
+        }
+      ],
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/sawmill.prefab",
+      "source_triangles": 1116,
+      "unity_triangles": 1116
+    },
+    {
+      "id": "storage",
+      "footprint_m": [
+        7.187564968445141,
+        6.606217616580311
+      ],
+      "description": "Dry store with central circulation aisle and packing station",
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            3.0829015544041454
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Storekeeper",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.4974093264248705,
+            0.2290155440414508,
+            0.7046632124352332
+          ],
+          "facing": [
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "name": "Delivery",
+          "role": "delivery",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.2290155440414508,
+            1.145077720207254
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/storage.prefab",
+      "source_triangles": 1592,
+      "unity_triangles": 1592
+    },
+    {
+      "id": "blacksmith",
+      "footprint_m": [
+        7.046632124352332,
+        7.310880829015545
+      ],
+      "description": "Open-sided forge with anvil, quench tub and masonry flue",
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            3.435233160621762
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Smith",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.1010362694300517,
+            0.2290155440414508,
+            1.189119170984456
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Forge_tender",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            1.4974093264248705,
+            0.2290155440414508,
+            0.44041450777202074
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        }
+      ],
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/blacksmith.prefab",
+      "source_triangles": 1072,
+      "unity_triangles": 1072
+    },
+    {
+      "id": "kitchen",
+      "footprint_m": [
+        6.782383419689119,
+        7.046632124352332
+      ],
+      "description": "Communal kitchen with prep bench, stove and serving counter",
+      "markers": [
+        {
+          "name": "Entry",
+          "role": "entry",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            0.0,
+            0.0,
+            3.3031088082901556
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Cook",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            1.4093264248704664,
+            0.2290155440414508,
+            0.22020725388601037
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Prep_cook",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -1.4974093264248705,
+            0.2290155440414508,
+            0.1761658031088083
+          ],
+          "facing": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "name": "Server",
+          "role": "worker",
+          "clearance_radius_m": 0.48445595854922285,
+          "position": [
+            -0.7487046632124352,
+            0.2290155440414508,
+            0.9689119170984457
+          ],
+          "facing": [
+            0,
+            0,
+            1
+          ]
+        }
+      ],
+      "prefab": "Assets/_Project/Art/SettlementKitV1/Prefabs/kitchen.prefab",
+      "source_triangles": 1058,
+      "unity_triangles": 1058
+    }
+  ],
+  "uniform_source_scale": 0.8808290155440415
+}
