@@ -381,6 +381,19 @@ namespace SeaSick.Terrain
             IslandScenery.Build(parent, centre, meanR, Height, terrain,
                 ang => island.RadiusAt(ang), terrain.seed * 7919 + index, prm, island,
                 village != null ? (System.Func<float, float, bool>)village.KeepOut : null);
+
+            // **The animals, after the trees.** Kevin, 2026-09-22: wild animals
+            // on the islands. Which herds an island carries is read off the
+            // same two numbers its wood is (rock and verdancy at the centre),
+            // so a crag has goats and a green island has boar, and nobody
+            // rolled for it. Seeded apart from the scenery so re-tuning one
+            // does not reshuffle the other.
+            var c2 = new float2(centre.x, centre.z);
+            float rockiness = TerrainHeight.Rock01(c2, prm);
+            float verdancy = TerrainHeight.Verdancy01(c2, prm);
+            float sandTop = (terrain != null ? terrain.sandHeight : 3.2f) + TerrainChunkMesher.SandBlend;
+            FaunaField.Populate(parent, island, terrain.seed * 104729 + index,
+                rockiness, verdancy, Height, sandTop);
         }
 
         WorldSettings.ResourceKind PickKind(float ring)
