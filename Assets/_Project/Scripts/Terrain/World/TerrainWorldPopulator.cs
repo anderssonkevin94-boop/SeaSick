@@ -499,13 +499,25 @@ namespace SeaSick.Terrain
         {
             if (world.raidersPerIsland <= 0 || world.maxRaiders <= 0) return;
             int posted = 0, n = 0;
+            Vector3 home = homePoint != null ? homePoint.position : Vector3.zero;
             foreach (var isle in Island.All)
             {
                 if (isle == null || isle.IsHome || isle.MaxRadius < world.raiderMinIslandRadius || !isle.HasResources) continue;
+                // **Which hull a raider wears is a distance question**, like
+                // which resource an island carries: the five mid stages of the
+                // fleet (ladder nodes 7..11, Long sloop to Guild escort) laid
+                // out by ring from home, so the first raider you meet is the
+                // smallest and the outer ring is guarded by escorts. Kevin,
+                // 2026-09-22. The player's own hull is no longer the raider's.
+                float ring = world.discoveryRadius > 0f
+                    ? Mathf.Clamp01(Vector3.Distance(isle.transform.position, home) / world.discoveryRadius)
+                    : 0f;
+                int node = Mathf.Clamp(7 + Mathf.FloorToInt(ring * 5f), 7, 11);
                 for (int i = 0; i < world.raidersPerIsland && posted < world.maxRaiders; i++, posted++)
                 {
                     float radius = isle.MaxRadius + world.patrolClearance + i * 26f;
-                    Combat.EnemyShip.Spawn(isle, radius, (n + i) % 2 == 0 ? 1 : -1, "Raider_" + isle.name + "_" + i);
+                    Combat.EnemyShip.Spawn(isle, radius, (n + i) % 2 == 0 ? 1 : -1,
+                        "Raider_" + isle.name + "_" + i, node);
                 }
                 n++;
                 if (posted >= world.maxRaiders) break;

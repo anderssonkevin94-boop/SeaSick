@@ -92,6 +92,12 @@ namespace SeaSick.Combat
         // three dark pixels. Legibility at engagement range beats accuracy of
         // proportion.
         [SerializeField] float gunScale = 1.7f;
+        // A fleet hull fires from its own ports, and the big ones have six a
+        // side. Six balls in one breath is not a broadside, it is a wall of
+        // iron — the escort should read as heavier than a sloop, not as an
+        // instant kill. Cap the volley and spread the chosen ports along the
+        // side so the flashes still run the length of her.
+        [SerializeField] int maxShotsPerVolley = 4;
 
         [Header("Avoidance")]
         [SerializeField] float lookahead = 70f;
@@ -122,6 +128,13 @@ namespace SeaSick.Combat
         readonly List<SeaSick.Ship.Cannon> portGuns = new List<SeaSick.Ship.Cannon>();
         readonly List<SeaSick.Ship.Cannon> starGuns = new List<SeaSick.Ship.Cannon>();
 
+        // A fleet hull has no Cannon components — the art already carries its
+        // ports, so all a raider needs is the point the ball leaves from. One
+        // empty child per port, parked at the barrel's mouth, so the muzzle
+        // rides the hull for free and there is nothing to keep in sync.
+        readonly List<Transform> portMuzzles = new List<Transform>();
+        readonly List<Transform> starMuzzles = new List<Transform>();
+
         Transform hull;
         readonly List<Renderer> skin = new List<Renderer>();
         readonly List<Color> skinColor = new List<Color>();
@@ -142,6 +155,9 @@ namespace SeaSick.Combat
         public int DamageTaken => damage;
         public float Health01 => Mathf.Clamp01(1f - (float)damage / Mathf.Max(1, hitPoints));
         public Duty Current { get; private set; } = Duty.Patrol;
+        /// Which rung of the ladder she wears, or -1 for the old look (a
+        /// tinted clone of whatever the player is currently sailing).
+        public int LadderNode { get; private set; } = -1;
         public Island Home => home;
         public float PatrolRadius => orbitRadius;
 
@@ -289,9 +305,112 @@ namespace SeaSick.Combat
 
             if (!any) { Destroy(root); return false; }
 
-            // Tint through property blocks rather than material instances, so
-            // the raiders still batch with the player's hull.
+            CollectSkin(false);
+            BuildGuns();
+            return true;
+        }
+
+        /// Raiders wear the approved fleet art, red hull and white canvas.
+        ///
+        /// The ladder rung is handed down by whoever spawned her, so a raider
+        /// is a SHIP rather than a reskin: the length, the beam and the number
+        /// of ports all come off the same ladder entry the player's yard
+        /// reads, and a Guild escort looks like one because she IS one.
+        ///
+        /// `FleetVisual.Build` takes the 0-based ladder node and loads
+        /// `Ship{node + 1:00}`, so nodes 7..11 are Ship08..Ship12 — the five
+        /// mid stages, which is the band a raider should be sitting in.
+        ///
+        /// Nothing here offsets the hull vertically. The fleet meshes are
+        /// exported with the waterline at Y = 0 (see FleetAssetImport's own
+        /// header) and `Shipyard` parents them at localPosition zero for
+        /// exactly that reason; `RideSea` already puts this transform's origin
+        /// on the wave surface, so the ship floats on her marks with no
+        /// correction at all. A `freeboard` shove here would lift her out of
+        /// the sea, not settle her into it.
+        bool BuildFromFleet()
+        {
+            if (LadderNode < 0) return false;
+
+            var root = new GameObject("Hull");
+            root.transform.SetParent(transform, false);
+
+            var art = FleetVisual.Build(root.transform, LadderNode);
+            if (art == null)
+            {
+                Debug.LogWarning(
+                    $"EnemyShip: no fleet art for ladder node {LadderNode} " +
+                    "(Resources/Ships/FleetV3) — falling back to the player's hull.");
+                Destroy(root);
+                return false;
+            }
+
+            hull = root.transform;
+
+            // Read the art BEFORE it is stripped: the components are about to
+            // go, the transforms are not, so the muzzles are pulled out now
+            // and kept as plain children.
+            foreach (var template in art.gunTemplates)
+            {
+                if (template == null) continue;
+                var gun = template.GetComponent<FleetGun>();
+
+                // The barrel already sits at the pivot height and points
+                // outboard; the ball leaves its mouth. Without a barrel the
+                // port itself is the best point there is.
+                Transform from = gun != null && gun.barrel != null ? gun.barrel : template;
+                float reach = gun != null ? gun.muzzleLength : 0f;
+
+                var muzzle = new GameObject("Muzzle").transform;
+                muzzle.SetParent(from, false);
+                muzzle.localPosition = Vector3.forward * reach;
+
+                // Which side she bears on. Local x is ship-local because the
+                // whole fleet root hangs off this transform unrotated.
+                (template.localPosition.x >= 0f ? starMuzzles : portMuzzles).Add(muzzle);
+
+                // The ports are the guns, so let them be seen: `Build` parks
+                // the templates inactive because the yard uses them as
+                // patterns, and a raider has no such second pass.
+                template.gameObject.SetActive(true);
+            }
+
+            // Her hull is her own, not the player's: the ladder entry is the
+            // single source for what a rung measures.
+            var node = ShipLadder.Node(LadderNode);
+            if (node != null)
+            {
+                length = node.length;
+                hitRadius = node.beam * 0.5f + 0.6f;
+            }
+            else if (art.length > 0f) length = art.length;
+
+            // Scenery from here down — anything live on it would fight
+            // EnemyShip, exactly as on the cloned hull.
+            foreach (var mb in root.GetComponentsInChildren<MonoBehaviour>(true)) Destroy(mb);
+            foreach (var col in root.GetComponentsInChildren<Collider>(true)) Destroy(col);
+
+            CollectSkin(true);
+            // No BuildGuns: a fleet hull's ports ARE her battery.
+            return true;
+        }
+
+        /// Gather every piece that takes the raider red, and the colour it
+        /// takes. Tint through property blocks rather than material
+        /// instances, so the raiders still batch with the player's hull.
+        ///
+        /// `sparingSails` leaves the canvas out of the lists entirely rather
+        /// than tinting it back to white: a renderer that is never collected
+        /// is never touched by `Tint`, including during a hit flash, and white
+        /// sails over a red hull is the whole silhouette.
+        void CollectSkin(bool sparingSails)
+        {
             GetComponentsInChildren(true, skin);
+            if (sparingSails)
+                skin.RemoveAll(r => r != null && (IsSail(r.name)
+                    || (r.transform.parent != null && IsSail(r.transform.parent.name))));
+
+            skinColor.Clear();
             foreach (var r in skin)
             {
                 Color c = r != null && r.sharedMaterial != null
@@ -300,9 +419,11 @@ namespace SeaSick.Combat
                 skinColor.Add(Color.Lerp(c, RaiderRed, 0.68f));
             }
             Tint(0f);
-            BuildGuns();
-            return true;
         }
+
+        static bool IsSail(string name) =>
+            !string.IsNullOrEmpty(name)
+            && name.IndexOf("Sail", System.StringComparison.OrdinalIgnoreCase) >= 0;
 
         /// Real guns on the rail, so the thing shooting at you is visible.
         /// Built from the same Cannon component the player uses: the mesh, the
@@ -415,7 +536,7 @@ namespace SeaSick.Combat
             if (!built)
             {
                 built = true;
-                if (!BuildFromPlayer()) Build();
+                if (!BuildFromFleet() && !BuildFromPlayer()) Build();
             }
 
             // Built on demand: script order is not guaranteed, so nothing here
@@ -717,9 +838,30 @@ namespace SeaSick.Combat
             readyAt = Time.time + reloadTime;
 
             var guns = starboard ? starGuns : portGuns;
+            var ports = starboard ? starMuzzles : portMuzzles;
             Vector3 beam = starboard ? transform.right : -transform.right;
 
-            if (guns.Count == 0)
+            if (ports.Count > 0)
+            {
+                // A fleet hull: the art's own ports do the shooting. There is
+                // no Cannon to recoil, so she gets the roll below and nothing
+                // else — a puff at each port can wait for the pass that gives
+                // raiders smoke.
+                //
+                // Spread the picks across the side instead of taking the first
+                // few, so a capped volley still flashes bow to stern rather
+                // than bunching forward.
+                int shots = Mathf.Min(ports.Count, Mathf.Max(1, maxShotsPerVolley));
+                for (int i = 0; i < shots; i++)
+                {
+                    var muzzle = ports[shots == 1 ? ports.Count / 2
+                        : Mathf.RoundToInt(i * (ports.Count - 1f) / (shots - 1f))];
+                    if (muzzle == null) continue;
+                    SeaSick.Ship.CannonBall.FireAt(
+                        muzzle.position, aim, muzzleSpeed, spreadDeg, this);
+                }
+            }
+            else if (guns.Count == 0)
             {
                 // No hull to hang guns on: still shoot, so a fallback raider
                 // is not a harmless one.
@@ -910,8 +1052,15 @@ namespace SeaSick.Combat
             Destroy(go, 2.5f);
         }
 
-        /// Drop a raider on station off an island.
+        /// Drop a raider on station off an island, wearing the old look: a
+        /// tinted clone of the player's own hull.
         public static EnemyShip Spawn(Island island, float radius, int direction, string name)
+            => Spawn(island, radius, direction, name, -1);
+
+        /// Drop a raider on station off an island, wearing rung `ladderNode`
+        /// of the fleet art. Pass -1 for the player-clone look.
+        public static EnemyShip Spawn(Island island, float radius, int direction, string name,
+            int ladderNode)
         {
             float ang = Random.Range(0f, 360f);
             Vector3 pos = island.transform.position + new Vector3(
@@ -921,6 +1070,7 @@ namespace SeaSick.Combat
             go.transform.position = pos;
 
             var ship = go.AddComponent<EnemyShip>();
+            ship.LadderNode = ladderNode;
             ship.Configure(island, radius, direction);
 
             // Start along the orbit rather than spinning on spawn.
