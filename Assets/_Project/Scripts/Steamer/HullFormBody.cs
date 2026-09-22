@@ -78,8 +78,13 @@ namespace SeaSick.Steamer
         [SerializeField, Range(0f, 1f)] float liftBowBias = 0.1f;
         /// Yaw damping that grows with way, as a fraction of yaw inertia per
         /// m/s: the part of the old per-station lift that was worth keeping,
-        /// as a dial. At 13 m/s with the base factor this is a ~0.5 s helm.
-        [SerializeField, Range(0f, 0.5f)] float yawDampingPerSpeed = 0.12f;
+        /// as a dial.
+        ///
+        /// 0.027 (was 0.12). See `yawDampingFactor` for why the pair came
+        /// down together; this one carries most of what is left, because a
+        /// damper that grows with way is the one that keeps the circle the
+        /// same size in METRES whatever the telegraph says.
+        [SerializeField, Range(0f, 0.5f)] float yawDampingPerSpeed = 0.027f;
         [Tooltip("Linear term, m/s. Only matters in the last few cm/s, where the quadratic term has nothing left and she would otherwise drift forever.")]
         [SerializeField, Range(0f, 1f)] float crossflowLinear = 0.15f;
         [Tooltip("Lateral-area multiplier on the aft stations: skeg and deadwood. More area aft than forward is directional stability -- without it she is a weathervane pointing the wrong way.")]
@@ -94,8 +99,14 @@ namespace SeaSick.Steamer
         [SerializeField, Range(0f, 0.05f)] float surgeQuadratic = 0.006f;
 
         [Header("Yaw")]
-        [Tooltip("c_yaw = this x I_yaw, i.e. a 1/s decay rate on yaw, on top of what the cross-flow strips already give at their arms.")]
-        [SerializeField, Range(0f, 2f)] float yawDampingFactor = 0.4f;
+        [Tooltip("c_yaw = this x I_yaw, i.e. a 1/s decay rate on yaw, on top of what the cross-flow strips already give at their arms. 0.03 (was 0.4): a SPEED-INDEPENDENT yaw damper is the term that made her turn wider the slower she went, which is backwards. What is left is only enough that a drifting hull does not spin on.")]
+        [SerializeField, Range(0f, 2f)] float yawDampingFactor = 0.03f;
+
+        [Tooltip("How much of the cross-flow strips' resistance to ROTATION she keeps, 0..1. The strips' sway force is untouched at any value -- only the part of their yaw moment that comes from the hull turning under them is scaled. Flat-plate cross-flow drag read off the whole wetted profile at every station badly overpredicts N_r on a slender hull: measured 671 kN m s/rad against a real launch's ~200, which is why her yaw rate used to arrive complete in 0.14 s. 0.35 puts N_r' at about 0.003, where a real hull is.")]
+        [SerializeField, Range(0f, 1f)] float crossflowYawScale = 0.35f;
+
+        [Tooltip("Yaw added mass, as a multiple of the solid-body yaw inertia. The water a turning hull has to shove sideways turns with her; for a slender hull it is worth 0.5 to 1.0 of her own I_zz. Without it she has a real ship's yaw damping and a model boat's yaw inertia, so her head answers the helm instantly -- which is exactly the whiplash Kevin felt. 1.6 puts her yaw time constant at about L/V, where a real hull's is.")]
+        [SerializeField, Range(1f, 3f)] float yawAddedInertia = 1.6f;
 
         [Header("Published wetness")]
         [Tooltip("Metres of green water over the lowest deck edge before BurialDepth starts counting. There is no burial clamp on this hull -- this only sets where Bilge and HullIntegrity start charging her for it.")]
@@ -221,7 +232,15 @@ namespace SeaSick.Steamer
             float kPitch = data.gyradiusPitch > 0.1f ? data.gyradiusPitch : 0.25f * data.lwl;
             float kYaw = data.gyradiusYaw > 0.1f ? data.gyradiusYaw : 0.26f * data.lwl;
             float kRoll = data.gyradiusRoll > 0.1f ? data.gyradiusRoll : 5.4f;
-            rb.inertiaTensor = new Vector3(mass * kPitch * kPitch, mass * kYaw * kYaw, mass * kRoll * kRoll);
+            // Yaw carries its added mass in the tensor rather than as a
+            // torque: PhysX integrates the rotation with it, so the whole
+            // response -- the helm, a wave's yaw moment, a collision -- gets
+            // the right time constant, and every coefficient derived from
+            // `inertiaTensor.y` below scales with it for free. Roll and pitch
+            // keep their own added mass in their damping ratios, as before.
+            rb.inertiaTensor = new Vector3(mass * kPitch * kPitch,
+                mass * kYaw * kYaw * Mathf.Max(1f, yawAddedInertia),
+                mass * kRoll * kRoll);
             rb.inertiaTensorRotation = Quaternion.identity;
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.linearDamping = 0f;
@@ -619,7 +638,7 @@ namespace SeaSick.Steamer
             Submersion = Mathf.Clamp01(SubmersionRaw);
 
             // ---- pass 3: cross-flow per station ----
-            float crossTotal = 0f;
+            float crossTotal = 0f, yawGiveBack = 0f;
             float invStations = 1f / stationCount;
             Vector3 vRelCom = rb.linearVelocity - (AmbientFlow + meanOrbital);
             float u0 = Vector3.Dot(vRelCom, fwdFlat);
@@ -642,6 +661,16 @@ namespace SeaSick.Steamer
                 float f = -waterDensity * area *
                     (0.5f * crossflowCd * v * Mathf.Abs(v)
                      + crossflowLift * liftWeight * Mathf.Abs(u0) * v0 + crossflowLinear * v);
+                // The ROTATIONAL part of this station's force, separated so
+                // it can be scaled without touching her keel grip: what the
+                // strip would make if the hull were sliding bodily (v0) is
+                // kept whole, and the difference -- everything that exists
+                // only because she is turning under it -- is what
+                // `crossflowYawScale` weighs. The force she feels is `f`
+                // either way; only the moment arm's share changes.
+                float fStraight = -waterDensity * area *
+                    (0.5f * crossflowCd * v0 * Mathf.Abs(v0)
+                     + crossflowLift * liftWeight * Mathf.Abs(u0) * v0 + crossflowLinear * v0);
                 // Explicit drag can only ever take speed OFF. Half of what
                 // would stop this station's share of the hull dead in one
                 // step is far above anything the terms reach in a seaway
@@ -649,9 +678,17 @@ namespace SeaSick.Steamer
                 // the bound that keeps a velocity glitch from becoming a kick.
                 float cap = 0.5f * mass * invStations * Mathf.Max(Mathf.Abs(v), Mathf.Abs(v0)) / Mathf.Max(dt, 1e-4f);
                 f = Mathf.Clamp(f, -cap, cap);
+                fStraight = Mathf.Clamp(fStraight, -cap, cap);
                 rb.AddForceAtPosition(rightFlat * f, at);
+                // `AddForceAtPosition` has just charged her the FULL yaw
+                // moment of this strip. Give back the part of the rotational
+                // share she is not keeping; the force itself is untouched.
+                yawGiveBack += (st.z - data.com.z) * (f - fStraight);
                 crossTotal += f;
             }
+            if (crossflowYawScale < 1f)
+                rb.AddTorque(rot * new Vector3(0f,
+                    (crossflowYawScale - 1f) * yawGiveBack, 0f));
 
             // ---- surge resistance, at the CoM, along the flattened keel ----
             // Against the LENGTH-AVERAGED orbital velocity: she is 34 m long

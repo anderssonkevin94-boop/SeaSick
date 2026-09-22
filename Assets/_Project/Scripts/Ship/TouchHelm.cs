@@ -78,7 +78,21 @@ namespace SeaSick.Ship
         const float NotchTravelPx = 55f;
         /// Full rudder at this fraction of the wheel's radius of sideways
         /// travel, measured from the touch-down point.
-        const float RudderTravelFrac = 0.9f;
+        ///
+        /// Kevin, 2026-09-22, on the phone: *"the turning radius is way too
+        /// sharp on this ship … I want freedom to move without getting
+        /// whiplash."* Hard over used to arrive in 0.9 radius ≈ 90 px, which
+        /// is less than a thumb's idle wobble, so every correction was a full
+        /// helm order. 1.3 radius ≈ 130 px is a deliberate swipe.
+        const float RudderTravelFrac = 1.3f;
+        /// Shaping exponent on the travel→order curve. 1 is linear; above 1
+        /// the first quarter of the swipe is gentle and the last quarter is
+        /// where the hard-over lives, so small course corrections have room
+        /// to be small. |x|^1.6 gives a quarter of the travel ~1/8 of the
+        /// helm. The PHYSICS is fixed separately (rudder area, yaw added
+        /// inertia, yaw damping in the steamer's hull) — this only decides
+        /// how much of it one thumb asks for.
+        const float RudderCurve = 1.6f;
         /// How far past the rim still counts as a grab — a thumb pad is wide
         /// and the rim is where the grip is.
         const float GrabFrac = 1.18f;
@@ -254,7 +268,11 @@ namespace SeaSick.Ship
             if (axis == Axis.Across)
             {
                 float r = wheelRect.width * 0.5f;
-                Rudder = Mathf.Clamp(d.x / Mathf.Max(1f, r * RudderTravelFrac), -1f, 1f);
+                float travel = Mathf.Clamp(d.x / Mathf.Max(1f, r * RudderTravelFrac), -1f, 1f);
+                // Signed power curve: the sign is the side she goes, the
+                // magnitude is shaped. Mathf.Pow of a negative base is NaN,
+                // so the magnitude is raised and the sign put back by hand.
+                Rudder = Mathf.Sign(travel) * Mathf.Pow(Mathf.Abs(travel), RudderCurve);
                 return;
             }
 

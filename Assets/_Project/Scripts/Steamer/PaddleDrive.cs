@@ -60,10 +60,10 @@ namespace SeaSick.Steamer
         [Tooltip("Rudder force multiplier on top of the flat-plate lift it is derived from.")]
         [SerializeField] float rudderGain = 1.35f;
         [SerializeField] float rudderMaxDeg = 35f;
-        [Tooltip("How much of the rudder's drawn depth below the centre of mass its force acts at. 1 is the geometry. Counter-intuitively this wants to be LARGE on her: the blade leans her INTO the turn and the hull's cross-flow leans her OUT of it, and on a hull this broad the second is the bigger of the two, so the blade's lever is what is left to pay for it. Dropping this to 0.35 to 'lean her less' measured 8.1 degrees of heel where 0.6 measured 5.6.")]
+        [Tooltip("How much of the rudder's drawn depth below the centre of mass its force acts at. 1 is the geometry. Counter-intuitively this wants to be LARGE on her: the blade leans her INTO the turn and the hull's cross-flow leans her OUT of it, and on a hull this broad the second is the bigger of the two, so the blade's lever is what is left to pay for it. Dropping this to 0.35 to 'lean her less' measured 8.1 degrees of heel where 0.6 measured 5.6. THAT BALANCE HAS SINCE FLIPPED: with the rudder cut to a real blade's area (SteamerBootstrap.RudderAreaFraction) it makes ~13 kN, not 225, so the hull's cross-flow now wins and she heels about 4 degrees OUTBOARD in a hard turn -- which is what a launch does. This lever is kept high so the blade takes the edge off it rather than because it is fighting for the other side.")]
         [SerializeField, Range(0f, 1f)] float rudderHeelLever = 0.9f;
-        [Tooltip("How much of the WHEEL'S SLIP the rudder feels on top of the water already going past it. This is the whole of her low-speed handling: at rest the slip IS the rim speed, so a turn from standstill is bought with the telegraph, not the helm.")]
-        [SerializeField, Range(0f, 1f)] float raceGain = 0.55f;
+        [Tooltip("How much of the WHEEL'S SLIP the rudder feels on top of the water already going past it. This is the whole of her low-speed handling: at rest the slip IS the rim speed, so a turn from standstill is bought with the telegraph, not the helm. 0.80 (was 0.55): with the blade cut to a real rudder's area her circle became almost speed-independent in metres, and the race is the only term that gives the slow end back its bite, so a camp approach at slow ahead turns in about the same water as a run at full.")]
+        [SerializeField, Range(0f, 1f)] float raceGain = 0.80f;
         /// Full astern as a fraction of full ahead revs. Feathering floats
         /// bite as well backwards as forwards, so without this she measured
         /// as fast astern as ahead, stern-first into her own counter. Astern

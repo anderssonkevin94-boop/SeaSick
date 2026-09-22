@@ -32,7 +32,8 @@ namespace SeaSick.Ship
     [RequireComponent(typeof(ShipMotor))]
     public class HelmInput : MonoBehaviour
     {
-        [SerializeField] float engageSpeed = 3.5f;   // rudder units/s toward the order
+        [Tooltip("Rudder units/s toward the order. 2.0 = about half a second from midships to hard over, which is a steering GEAR rather than a switch: the boat's head starts to come round after the wheel is over, not with it. Was 3.5 (0.29 s) until the phone read as whiplash (Kevin, 2026-09-22).")]
+        [SerializeField] float engageSpeed = 2.0f;   // rudder units/s toward the order
         [Tooltip("Rudder units/s back to midships once nothing is steering. Slower than the engage rate on purpose: the band should be felt letting go, not snapping.")]
         [SerializeField] float recenterSpeed = 1.5f;
         [SerializeField, Range(-1f, 1f)] float testRudder = 0f; // editor/testing override

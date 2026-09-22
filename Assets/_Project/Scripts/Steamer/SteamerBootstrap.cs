@@ -56,6 +56,18 @@ namespace SeaSick.Steamer
         /// at new proportions once the size has been played.
         public const float PlaytestScale = 0.42f;
 
+        /// **Her rudder, as an area rather than as a picture.** Rudder area
+        /// over L x T: 1.5 % is a lazy merchantman, 2.5 % a handy small
+        /// craft. 1.8 % of 12.6 x 0.861 m is 0.195 m^2, which at full ahead
+        /// makes about 13 kN of side force -- the right order for a 32 t
+        /// launch, against the 225 kN the drawn 2.82 m^2 was making. Solved
+        /// against the target below, not guessed:
+        ///   full ahead  tactical diameter 58 m (4.6 L), 180 deg in 10.7 s
+        ///   half ahead  56 m, 22 s        slow ahead  59 m, 49 s
+        /// -- a circle that is the same size in METRES at any speed and a
+        /// yaw rate that is not, which is what a real hull does.
+        const float RudderAreaFraction = 0.018f;
+
         /// In the editor the default is the ladder ship, so a fresh checkout
         /// plays the scene as authored and the menu opts INTO the steamer. A
         /// player build has no menu and no way to set the preference, and
@@ -100,6 +112,20 @@ namespace SeaSick.Steamer
 
             if (PlaytestScale > 0f && Mathf.Abs(PlaytestScale - 1f) > 0.001f)
                 data = data.Scaled(PlaytestScale);
+            // The blade the generator DREW is not the blade she steers with.
+            // `hullform.json` carries 16 m^2 on a 30 m hull -- 26 % of L x T,
+            // where a real rudder is 1.5 to 2.5 % -- and `Scaled` carried
+            // that ratio faithfully down to 0.42, so the launch went to sea
+            // with a barn door. Measured: 225 kN of side force at full ahead
+            // on a 32 t boat, a 23 m turning circle (1.8 lengths) and 180
+            // degrees in 4.6 s. Kevin, 2026-09-22, on the phone: *"the
+            // turning radius is way too sharp on this ship. handling needs to
+            // be improved so I have freedom to move without getting whiplash
+            // from how fast it turns."* The HYDRODYNAMIC area is stated here
+            // as the fraction of L x T it should have been; the drawing and
+            // the mesh are untouched, because nothing but the rudder force
+            // reads this field.
+            data.rudderArea = RudderAreaFraction * data.lwl * data.draft;
             Convert(yard.gameObject, yard, data);
         }
 
