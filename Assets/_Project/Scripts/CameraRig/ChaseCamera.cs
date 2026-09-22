@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
+using ET = UnityEngine.InputSystem.EnhancedTouch;
 
 namespace SeaSick.CameraRig
 {
@@ -116,6 +118,77 @@ namespace SeaSick.CameraRig
         [SerializeField] float cruiseInRate = 0.35f;
         [SerializeField] float cruiseOutRate = 1.4f;
 
+        // Portrait framing.
+        //
+        // The desk shot (B2 off the sheet: low and astern, 15 degrees above
+        // her) is a LANDSCAPE composition — it spends the frame's width on
+        // sea either side of the hull. Held upright the width is gone and
+        // that same seat gives a strip of sea, a hull filling the middle and
+        // no read on where she is going.
+        //
+        // So the phone gets its own preset, decided 2026-09-22: further
+        // back, much higher, looking less far ahead — about 21 degrees of
+        // pitch through a 68 degree lens, which puts the horizon a fifth of
+        // the way down from the top and the hull in the lower third, with
+        // the sea she is crossing filling the tall middle of the frame.
+        //
+        // These are PRE-SCALE like the landscape set: they are multiplied by
+        // frameK, and because the tilt is a RATIO of them the composition is
+        // identical on every rung of the ladder.
+        //
+        // Nothing here has a "mode". `HudLayout.Wide` asks the window what
+        // shape it is and the HUD lays itself out on the answer; the camera
+        // asks the same question so the two can never disagree about what
+        // portrait means, and the blend below means rotating the device is a
+        // half-second move rather than a cut.
+        [Header("Portrait framing")]
+        [Tooltip("Metres astern, upright. Pre-scale, like `distance`.")]
+        [SerializeField] float portraitDistance = 24f;
+        [Tooltip("Metres up, upright. Pre-scale, like `height`.")]
+        [SerializeField] float portraitHeight = 12f;
+        [Tooltip("Metres ahead of her the look point sits, upright. Shorter than the desk's, because a tall frame already shows the sea ahead.")]
+        [SerializeField] float portraitLookAhead = 6f;
+        [Tooltip("Vertical FOV upright. A tall frame needs a taller lens; landscape keeps `fovBase`.")]
+        [SerializeField] float portraitFov = 68f;
+        [Tooltip("How fast the rig crosses between the two presets. ~2 is half a second, which reads as a move and not a cut when the device turns.")]
+        [SerializeField] float portraitBlendRate = 2f;
+
+        // Speed reads as a DOLLY upright, not as a lens.
+        //
+        // Widening the lens with speed is the classic trick and it is also
+        // the classic cause of simulator sickness — and it is worse on a
+        // phone, held close, than on a desk. Backing the seat off instead
+        // gives the same "she is really going" without touching the
+        // projection: distance and height scale TOGETHER, so the tilt is
+        // unchanged and the horizon does not move while she accelerates.
+        //
+        // It keys off the ORDER, not the speed: the telegraph is what the
+        // player just did, and a camera that leads the ship out feels like
+        // it is answering you. Keyed to the speed it would lag the engine
+        // ramp by the several seconds the stokers take.
+        [Tooltip("How much further back she sits at the burn notch, upright. 0.30 = 30% further back and 30% higher.")]
+        [Range(0f, 1f)] [SerializeField] float portraitZoomOut = 0.30f;
+        [Tooltip("Where the seat eases to when she is stopped or anchored. Under 1 = closer in, so lying still is an intimate shot.")]
+        [SerializeField] float portraitStoppedPull = 0.85f;
+        [Tooltip("How fast the seat pulls IN. Slow on purpose (~3 s): coming closer should be something you notice having happened.")]
+        [SerializeField] float portraitPullInRate = 0.33f;
+
+        // The player's own zoom.
+        //
+        // A pinch while sailing, or the wheel on a desk. Deliberately
+        // temporary: it DECAYS back to the authored framing over about
+        // twenty seconds, so a look at something on the horizon is a look
+        // and not a new camera the player has to undo. The island view has
+        // its own pinch (`IslandInput`), so this stands down whenever
+        // `IslandCam.Engaged`.
+        [Header("Player zoom (pinch / wheel)")]
+        [Range(0.2f, 1f)] [SerializeField] float userZoomMin = 0.6f;
+        [Range(1f, 3f)] [SerializeField] float userZoomMax = 1.6f;
+        [Tooltip("Seconds for a held zoom to fade back to the authored framing.")]
+        [SerializeField] float userZoomDecay = 20f;
+        [Tooltip("How much one wheel notch zooms, as a fraction.")]
+        [SerializeField] float wheelZoomStep = 0.08f;
+
         // Lock framing.
         //
         // Frames you and the target together. The camera swings toward sitting
@@ -168,6 +241,19 @@ namespace SeaSick.CameraRig
         public float FramingScale => frameK;
 
         float cruiseLevel, atSpeedFor;
+        /// 0 = desk, 1 = phone held upright. Smoothed, seeded on frame one.
+        float portrait01 = -1f;
+        /// The speed dolly, upright: multiplies distance and height together.
+        float dolly = -1f;
+        /// The player's own zoom, 1 = the authored framing.
+        float userZoom = 1f;
+
+        /// What the portrait blend is doing, for the tuner and the probe.
+        public float Portrait01 => Mathf.Max(0f, portrait01);
+        /// The seat multiplier the dolly and the player's pinch are asking for.
+        public float ZoomScale => Mathf.Max(0f, userZoom)
+            * Mathf.Lerp(1f, Mathf.Max(0f, dolly), Mathf.Max(0f, portrait01));
+
         float lockLevel;
         float heaveY;
         bool heaveSeeded;
@@ -483,6 +569,67 @@ namespace SeaSick.CameraRig
             Resolve();
         }
 
+        // `Touch.activeTouches` is empty until this is on, and it is
+        // ref-counted, so enabling it here is safe alongside HelmInput's own.
+        void OnEnable() => ET.EnhancedTouchSupport.Enable();
+        void OnDisable() => ET.EnhancedTouchSupport.Disable();
+
+        /// **The player's own zoom, and its decay.**
+        ///
+        /// A two-finger pinch while sailing, or the wheel on a desk. Both
+        /// stand down while the island view is up — that view has its own
+        /// pinch and a gesture must belong to exactly one camera.
+        ///
+        /// Touches that BEGAN on a HUD control are ignored: the sheet covers
+        /// a third of the screen and a two-finger scroll inside it is not a
+        /// request to move the camera. `UIBlocker.Blocked` wants Input System
+        /// screen space (origin bottom-left) and flips to GUI space itself,
+        /// so `startScreenPosition` goes in unmodified.
+        void PlayerZoom(float dt)
+        {
+            float mul = 1f;
+            // Not under the tuner either: `SailCamTuner` reads the same wheel
+            // to fly the seat, and two things zooming one camera off one
+            // notch is a camera nobody is steering.
+            if (!IslandCam.Engaged && !SailOverride.HasValue)
+            {
+                var touches = ET.Touch.activeTouches;
+                if (touches.Count == 2)
+                {
+                    var a = touches[0];
+                    var b = touches[1];
+                    if (!SeaSick.UI.UIBlocker.Blocked(a.startScreenPosition)
+                        && !SeaSick.UI.UIBlocker.Blocked(b.startScreenPosition))
+                    {
+                        Vector2 a1 = a.screenPosition, b1 = b.screenPosition;
+                        // `zoomFactor` is old separation over new, so fingers
+                        // spreading give a factor under 1 — which is exactly
+                        // what a seat multiplier wants: spread = come closer.
+                        TwoFinger.Solve(a1 - a.delta, b1 - b.delta, a1, b1, Screen.height,
+                            out float zf, out _, out _, out _);
+                        mul *= zf;
+                    }
+                }
+
+                var mouse = Mouse.current;
+                if (mouse != null)
+                {
+                    float w = mouse.scroll.ReadValue().y;
+                    if (Mathf.Abs(w) > 0.01f
+                        && !SeaSick.UI.UIBlocker.Blocked(mouse.position.ReadValue()))
+                        mul *= 1f - Mathf.Clamp(w / 120f, -1f, 1f) * wheelZoomStep;
+                }
+            }
+
+            if (Mathf.Abs(mul - 1f) > 1e-4f)
+                userZoom = Mathf.Clamp(userZoom * mul, userZoomMin, userZoomMax);
+            else
+                // Four time constants is 98 % of the way home, so "twenty
+                // seconds" is twenty seconds and not an asymptote.
+                userZoom = Mathf.Lerp(userZoom, 1f,
+                    1f - Mathf.Exp(-(4f / Mathf.Max(0.5f, userZoomDecay)) * dt));
+        }
+
         /// The motor was fetched once in Start, which was fine while there was
         /// one ship. The yard never changes the target, but a shore boat or a
         /// dev rig can, and a stale motor means a stale hull length.
@@ -499,6 +646,34 @@ namespace SeaSick.CameraRig
             if (target == null) return;
             float dt = Time.deltaTime;
             Resolve();
+
+            // What shape is the window? The same question the HUD asks, in
+            // the same place, so a frame the camera composes for upright is
+            // never a frame the HUD laid out wide.
+            float wantPortrait = SeaSick.UI.HudLayout.Wide ? 0f : 1f;
+            if (portrait01 < 0f) portrait01 = wantPortrait;   // seed, don't slide
+            portrait01 = Mathf.Lerp(portrait01, wantPortrait,
+                1f - Mathf.Exp(-portraitBlendRate * dt));
+
+            // The speed dolly, upright. Keyed to the ORDER so the seat leads
+            // her out instead of trailing the stokers.
+            float order01 = motor != null
+                ? Mathf.Clamp01(motor.ThrottleOrder / Mathf.Max(0.01f, motor.Overdrive))
+                : 0f;
+            bool lyingStill = motor == null
+                || motor.Anchored
+                || (Mathf.Abs(motor.ThrottleOrder) < 0.02f && motor.CurrentSpeed < 0.5f);
+            float wantDolly = lyingStill
+                ? portraitStoppedPull
+                : 1f + portraitZoomOut * order01;
+            if (dolly < 0f) dolly = wantDolly;
+            // Out at the framing rate, in at the slow one: backing off is an
+            // answer to an order and should be prompt; coming closer is the
+            // sea going quiet and should take its time.
+            float dollyRate = wantDolly < dolly ? portraitPullInRate : framingResponse;
+            dolly = Mathf.Lerp(dolly, wantDolly, 1f - Mathf.Exp(-dollyRate * dt));
+
+            PlayerZoom(dt);
 
             // How much bigger she is than the hull the framing was written
             // for. Clamped only as a guard against a garbage length — at
@@ -528,15 +703,25 @@ namespace SeaSick.CameraRig
             // one. Writing both to cam.fieldOfView made each frame's lerp
             // start from the other's answer, so the two fought and settled
             // somewhere neither had asked for.
+            //
+            // Upright the lens is FIXED: the speed boost and the surf punch
+            // both fade out with the portrait blend, because on a phone held
+            // a foot from your face a moving projection is the single
+            // sickest thing a chase camera can do — and the dolly above is
+            // already saying everything they were saying about speed.
+            float baseLens = Mathf.Lerp(fovBase, portraitFov, portrait01);
             if (motor != null)
             {
                 float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
-                float targetFov = fovBase + fovSpeedBoost * s01 * s01
-                                  + fovSurfPunch * motor.SurfBoost01;
+                float targetFov = baseLens
+                                  + (fovSpeedBoost * s01 * s01
+                                     + fovSurfPunch * motor.SurfBoost01) * (1f - portrait01);
                 sailFov = Mathf.Lerp(sailFov <= 0f ? targetFov : sailFov, targetFov,
                     1f - Mathf.Exp(-fovResponse * dt));
             }
-            else if (sailFov <= 0f) sailFov = fovBase;
+            else sailFov = sailFov <= 0f
+                ? baseLens
+                : Mathf.Lerp(sailFov, baseLens, 1f - Mathf.Exp(-fovResponse * dt));
 
             // The tuner's lens, if it is holding one. Applied after the speed
             // and surf terms so those keep working underneath it.
@@ -599,13 +784,33 @@ namespace SeaSick.CameraRig
                     bAhead = so.lookAhead; bLookH = so.lookHeight;
                     if (so.fov > 1f) sailFovOverride = so.fov;
                 }
-                else sailFovOverride = -1f;
+                else
+                {
+                    sailFovOverride = -1f;
+                    // The portrait preset, crossfaded. Under the tuner the
+                    // blend stands aside: what it is flying is what it must
+                    // print, and a hidden second set of numbers underneath
+                    // would make its readout a lie.
+                    bDist = Mathf.Lerp(bDist, portraitDistance, portrait01);
+                    bHeight = Mathf.Lerp(bHeight, portraitHeight, portrait01);
+                    bAhead = Mathf.Lerp(bAhead, portraitLookAhead, portrait01);
+                }
 
-                float back = (bDist + cruiseDistance * cruiseLevel) * frameK
+                // Cruise is a LANDSCAPE move. Upright the preset is already
+                // backed off and lifted, and easing further out from there
+                // puts her at the bottom of a tall frame with nothing in it.
+                float cruise = cruiseLevel * (1f - portrait01);
+                // The dolly and the player's pinch scale the SEAT only —
+                // distance and height together, so the tilt barely moves and
+                // the horizon stays where it was put.
+                float zoomK = Mathf.Max(0.05f, userZoom)
+                            * Mathf.Lerp(1f, dolly, portrait01);
+
+                float back = (bDist + cruiseDistance * cruise) * frameK * zoomK
                            - stormPullIn * stormLevel;
-                float up = (bHeight + cruiseHeight * cruiseLevel) * frameK
+                float up = (bHeight + cruiseHeight * cruise) * frameK * zoomK
                          - stormDrop * stormLevel;
-                float ahead = (bAhead + cruiseLookAhead * cruiseLevel) * frameK;
+                float ahead = (bAhead + cruiseLookAhead * cruise) * frameK;
 
                 anchor = shipFlat;
                 Vector3 sternDir = -flatForward;
