@@ -198,8 +198,24 @@ namespace SeaSick.UI.Sheets
                         || anchor.CurrentDock != null;
             if (!stopped) { suppress = false; return; }
 
+            // **A surveyed island is not a camp.** This read `Outpost.Of(isle)
+            // != null`, which is true the moment the SURVEY finishes -- the
+            // survey adds the `Outpost` component itself (Outpost.cs:2600),
+            // and it runs as the anchor goes down, before anything is built.
+            // So the legacy bar stood down the instant she stopped, and with
+            // it went the only "🔥 Make camp" button in the game
+            // (CampSheet.cs:310) -- while the sheet HUD had nothing to put in
+            // its place, because `SheetBootstrap.FireFor` refuses a camp with
+            // no fire and no blueprint, and there is no campfire in the world
+            // to tap. Kevin, on the phone, 2026-09-22: "I see no option at all
+            // to build the campfire."
+            //
+            // The test is the same one `FireFor` uses, so the handover is
+            // exact: the legacy bar owns the island until the fire is sited,
+            // the sheets own it from the frame the drawing goes down.
             var isle = anchor.CurrentIsland;
-            suppress = isle != null && Outpost.Of(isle) != null;
+            var camp = isle != null ? Outpost.Of(isle) : null;
+            suppress = camp != null && (camp.HasCamp || camp.Building);
         }
 
         /// The ship the sheet HUD is hung off, for anything that needs her —

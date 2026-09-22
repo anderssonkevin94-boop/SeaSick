@@ -487,9 +487,35 @@ namespace SeaSick.Ship
             // them what they came home to.
             // The composed shot is home's; a camp's pier takes the camp's
             // bird's-eye below, like any landing there.
+            //
+            // **The BERTH decides this, not a live distance.** Kevin,
+            // 2026-09-22 on the phone: arriving flipped the view back and
+            // forth between two framings about nine times before it settled.
+            // This test was the flip. `DockInRange`/`TryComeAlongside` accept
+            // the berth at `DistanceFrom <= dockRange`, so the instant
+            // `CurrentDock` is set she is sitting ON the 55 m boundary this
+            // line then re-tests every frame -- and she is a rigidbody on an
+            // FFT ocean being hauled in on a spring (`MoorAlongside` eases
+            // `motor.AnchorPoint`, the hull lags it, the swell moves her
+            // metres). So the boolean chattered for the second or two it took
+            // the spring to win, and each chatter swapped the overview between
+            // the pier's composed shot and the seaward shot below it -- two
+            // compositions the code's own note puts 136 degrees apart. No
+            // blend can hide that, because both branches hand the rig a
+            // finished seat and aim.
+            //
+            // There is nothing for the distance to protect: `CurrentDock` is
+            // written in exactly one place (`ComeAlongside`, which already
+            // made the range test) and cleared in exactly one
+            // (`GetUnderway`), and while it is set `MoorAlongside` is walking
+            // her onto the berth rather than off it. The distance could only
+            // ever fall, so re-asking it could only ever produce a false
+            // negative -- which is what it did. Dropping it makes the flip
+            // impossible by construction: the view now changes only when the
+            // ship takes a berth or lets go of one, which are events, not
+            // measurements.
             bool atDock = CurrentDock != null && CurrentDock.IsHome
-                && (CurrentState == State.Anchored || CurrentState == State.Ashore)
-                && CurrentDock.DistanceFrom(transform.position) < dockRange;
+                && (CurrentState == State.Anchored || CurrentState == State.Ashore);
             if (atDock && CurrentIsland != null)
             {
                 // The shot Kevin flew to, expressed in the DOCK's own frame

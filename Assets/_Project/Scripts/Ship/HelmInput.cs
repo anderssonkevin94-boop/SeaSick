@@ -1,40 +1,42 @@
 using SeaSick.UI;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
 
 namespace SeaSick.Ship
 {
-    /// The helm. WASD at a desk, one thumb on a phone.
+    /// The helm. WASD at a desk, two thumbs on a phone.
     ///
-    /// W and S drive: hold for ahead or astern, release and the telegraph
-    /// takes back over. A and D steer. The sail steps are gone -- she is a
-    /// paddle steamer, windDriven has been off in the scene the whole time,
-    /// and "furled / half / full" was a sailing rig's vocabulary bolted onto
-    /// an engine that PaddleDrive was already reading as a throttle. The
-    /// telegraph underneath is the same control for a thumb, and it now has
-    /// an astern notch, which canvas could never have.
+    /// W and S drive: hold for ahead or astern, release and the lever takes
+    /// back over. A and D steer, and while either is held the wheel is drawn
+    /// hard over to show it. The sail steps are gone -- she is a paddle
+    /// steamer, and "furled / half / full" was a sailing rig's vocabulary
+    /// bolted onto an engine that PaddleDrive was already reading as a
+    /// throttle.
     ///
-    /// Touch: hold anywhere in the lower steering zone; horizontal position
-    /// maps to absolute tiller position, and releasing eases the rudder back
-    /// to centre.
+    /// **Touch is a wheel and a lever now** (`TouchHelm`), not a drag zone and
+    /// two arrows. The old scheme put an ABSOLUTE tiller under any finger in
+    /// the bottom 45% of the screen -- so the rudder snapped back to midships
+    /// the moment you let go to do anything else -- and rang the engine up and
+    /// down through a pair of fingernail-sized ▲/▼ buttons in the corner. Both
+    /// are gone. The wheel HOLDS its angle and the lever LATCHES, which is
+    /// what a helm does and what leaves a thumb free.
+    ///
+    /// This class still owns the POLICY: the wheel's angle is an ORDER, and
+    /// the rudder is eased toward it at `engageSpeed` so it never snaps.
     [RequireComponent(typeof(ShipMotor))]
     public class HelmInput : MonoBehaviour
     {
-        [SerializeField, Range(0.1f, 1f)] float steerZoneHeight = 0.45f;
-        [SerializeField] float engageSpeed = 3.5f;   // rudder units/s while steering
-        [SerializeField] float recenterSpeed = 1.2f; // rudder units/s on release
+        [SerializeField] float engageSpeed = 3.5f;   // rudder units/s toward the order
         [SerializeField, Range(-1f, 1f)] float testRudder = 0f; // editor/testing override
-
-        // The engine telegraph, for thumbs. One astern notch, because
-        // backing a paddle wheel is a manoeuvre, not a way to travel.
-        static readonly float[] Orders = { -1f, 0f, 0.35f, 0.7f, 1f };
-        static readonly string[] OrderNames = { "full astern", "stop", "slow ahead", "half ahead", "full ahead" };
-        const int StopOrder = 1;
 
         ShipMotor motor;
         Breakers breakers;
         float rudder;
-        int order = StopOrder;
+
+        /// The wheel and the lever. A plain object, not a component: it has no
+        /// lifetime of its own and nothing else should be able to find it.
+        readonly TouchHelm helm = new TouchHelm();
 
         // IMGUI runs OnGUI once per EVENT, so a string built here is built
         // several times a frame — Layout, Repaint, and one more for every
@@ -42,7 +44,7 @@ namespace SeaSick.Ship
         // only strings this panel makes; everything else it draws is a
         // literal. They are rebuilt when the thing they say changes, and not
         // otherwise.
-        string orderText = "";
+        readonly GUIContent orderText = new GUIContent("");
         string orderTextFrom;          // the Label() literal it was built from
         bool orderTextMoving;
         readonly HudLabel easeText = new HudLabel();
@@ -53,43 +55,38 @@ namespace SeaSick.Ship
             breakers = GetComponent<Breakers>();
         }
 
+        // `Touch.activeTouches` is empty until this is on, and it is
+        // ref-counted, so enabling it per-component is safe even if something
+        // else in the project starts doing the same.
+        void OnEnable() => EnhancedTouchSupport.Enable();
+        void OnDisable() => EnhancedTouchSupport.Disable();
+
         void Update()
         {
-            float target = 0f;
-            bool steering = false;
+            // **Not while the island view is up.** She is anchored whenever
+            // that view is engaged, so nothing moves -- but the wheel would
+            // still take a drag meant for the ground (siting a building,
+            // pressing on a crewman) and HOLD it, and she would sail off it
+            // the moment the view closed. The same reason the arrows and WASD
+            // are guarded: R would otherwise ring down rowing at the exact
+            // moment it is also `CampSiting`'s rotate-the-ghost key.
+            bool ashore = SeaSick.CameraRig.IslandCam.Engaged;
+            helm.Sample(!ashore);
+
+            float target = helm.Rudder;
             float? drive = null;
+            float? shown = null;
 
-            var pointer = Pointer.current;
-            if (pointer != null && pointer.press.isPressed)
-            {
-                Vector2 p = pointer.position.ReadValue();
-                // **Not while the island view is up.** The sheet covers the
-                // bottom 36% of the screen and the steer zone is the bottom
-                // 45%, so there is a band where a tap meant for the ground --
-                // siting a building, or pressing on a crewman to follow them
-                // -- is also a tap on the helm. She is anchored whenever that
-                // view is engaged, so nothing moves; but the rudder would sit
-                // over and stay there, and she would sail off it.
-                if (p.y < Screen.height * steerZoneHeight && !UIBlocker.Blocked(p)
-                    && !SeaSick.CameraRig.IslandCam.Engaged)
-                {
-                    // Slight overdrive (x2.2) so full rudder doesn't need the screen edge.
-                    target = Mathf.Clamp((p.x / Screen.width - 0.5f) * 2.2f, -1f, 1f);
-                    steering = true;
-                }
-            }
-
-            // **Not while the island view is up**, for the same reason the
-            // pointer path above already guards on it: arrows and WASD
-            // would otherwise steer a ship that is anchored and cannot
-            // move, and R would ring down rowing at the exact moment it is
-            // also `CampSiting`'s rotate-the-ghost key — a key meant for a
-            // blueprint would silently flip the oars too.
             var kb = Keyboard.current;
-            if (kb != null && !SeaSick.CameraRig.IslandCam.Engaged)
+            if (kb != null && !ashore)
             {
-                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) { target = -1f; steering = true; }
-                else if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) { target = 1f; steering = true; }
+                // A held key OVERRIDES the wheel and hands it straight back on
+                // release -- the wheel is still sitting wherever it was left,
+                // so letting go of D returns the helm to the angle you set,
+                // not to midships. `shown` is what the wheel is DRAWN at, so
+                // the instrument never lies about which way she is going over.
+                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) { target = -1f; shown = -1f; }
+                else if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) { target = 1f; shown = 1f; }
 
                 if (kb.wKey.isPressed || kb.upArrowKey.isPressed) drive = 1f;
                 else if (kb.sKey.isPressed || kb.downArrowKey.isPressed) drive = -1f;
@@ -97,31 +94,35 @@ namespace SeaSick.Ship
                 if (kb.rKey.wasPressedThisFrame) motor.Rowing = !motor.Rowing;
             }
 
-            if (!Mathf.Approximately(testRudder, 0f)) { target = testRudder; steering = true; }
+            if (!Mathf.Approximately(testRudder, 0f)) { target = testRudder; shown = testRudder; }
+            helm.DisplayOverride = shown;
 
-            rudder = Mathf.MoveTowards(
-                rudder, steering ? target : 0f,
-                (steering ? engageSpeed : recenterSpeed) * Time.deltaTime);
+            // The angle on the wheel is the ORDER; the rudder is eased toward
+            // it so it never snaps, and it no longer creeps back to midships
+            // on its own. There is nothing to recentre to: a wheel that is not
+            // being touched is a wheel that has been LEFT somewhere.
+            rudder = Mathf.MoveTowards(rudder, target, engageSpeed * Time.deltaTime);
             motor.Rudder = rudder;
-            // A held key OVERRIDES the telegraph and hands it straight back
-            // on release, so the two never fight: the keys are for driving,
-            // the telegraph is for setting her going and leaving her there.
             // The engine's ramp in ShipMotor does the smoothing, and the
             // crew's condition sets how fast it ramps -- an order is still
             // only as good as whoever is below to answer it.
-            motor.ThrottleOrder = drive ?? Orders[order];
+            motor.ThrottleOrder = drive ?? helm.Throttle;
         }
 
         /// What she is being asked to do RIGHT NOW, which is the held key if
-        /// there is one -- the panel must never read "stop" while a finger on
+        /// there is one -- the lever must never read "stop" while a finger on
         /// W has her making way.
+        ///
+        /// The lever is continuous, so the words are bands rather than notches
+        /// on an array. Every branch returns an interned literal, which is
+        /// what lets `OrderText` cache on reference equality.
         string Label()
         {
             float o = motor.ThrottleOrder;
-            if (Mathf.Approximately(o, Orders[order])) return OrderNames[order];
-            if (o > 0.5f) return "full ahead";
-            if (o > 0.05f) return "ahead";
-            if (o < -0.5f) return "full astern";
+            if (o > 0.85f) return "full ahead";
+            if (o > 0.55f) return "half ahead";
+            if (o > 0.05f) return "slow ahead";
+            if (o < -0.85f) return "full astern";
             if (o < -0.05f) return "astern";
             return "stop";
         }
@@ -130,7 +131,7 @@ namespace SeaSick.Ship
         /// appending the ellipsis does, so the joined string is kept until one
         /// of its two inputs moves. Reference equality is enough: every branch
         /// of `Label()` hands back an interned literal.
-        string OrderText()
+        GUIContent OrderText()
         {
             string l = Label();
             bool moving = motor.ThrottleMoving;
@@ -138,31 +139,43 @@ namespace SeaSick.Ship
             {
                 orderTextFrom = l;
                 orderTextMoving = moving;
-                orderText = moving ? l + " …" : l;
+                orderText.text = moving ? l + " …" : l;
             }
             return orderText;
         }
 
-        void StepOrder(int delta) => order = Mathf.Clamp(order + delta, 0, Orders.Length - 1);
-
-        /// Ring down STOP from outside, and centre the rudder.
+        /// Ring down STOP from outside, and put the wheel amidships.
         ///
-        /// The telegraph is re-asserted into `motor.ThrottleOrder` every
-        /// Update, so anything that wants her stopped has to move the ORDER,
-        /// not the value the order produces — writing the value lasts exactly
-        /// one frame and then the helm quietly puts it back.
-        public void AllStop() { order = StopOrder; rudder = 0f; }
+        /// The lever is re-asserted into `motor.ThrottleOrder` every Update,
+        /// so anything that wants her stopped has to move the CONTROL, not the
+        /// value the control produces — writing the value lasts exactly one
+        /// frame and then the helm quietly puts it back. Same for the rudder:
+        /// the wheel holds its angle now, so zeroing `rudder` alone would ease
+        /// straight back to whatever the wheel was left at.
+        public void AllStop() { helm.Centre(); rudder = 0f; }
 
         void OnGUI()
         {
+            // The helm is not on screen while she lies at a camp: the island
+            // sheet docks to the bottom of a portrait phone and the wheel
+            // would be drawn under it, on a ship that is anchored anyway.
+            if (SeaSick.CameraRig.IslandCam.Engaged) return;
+
             int u = HudLayout.Unit;
+
+            // The wheel and the lever, bottom centre where a thumb is. They
+            // place themselves (`HudLayout.Slot.Wheel`) and claim their own
+            // rects with `UIBlocker`, so a tap on the helm never reaches the
+            // water underneath it.
+            helm.Draw(motor.Throttle, motor.ThrottleMoving, OrderText());
 
             // --- Point of sail: the readout that teaches the whole system ---
             float panelW = u * 10f;
-            // Taller by one bar than it was: the way gauge below the telegraph
-            // is where surfing and broaching are read, and neither had anywhere
-            // on screen to be.
-            float panelH = u * 5.7f;
+            // Shorter by the two rows the ▲/▼ buttons and the order caption
+            // used: the order lives on the lever now, where the thumb that
+            // sets it is. What is left is the readout that cannot move --
+            // what the water is doing, and what she is making of it.
+            float panelH = u * 3.9f;
             // The bottom-right cluster, placed rather than pinned to the
             // screen corner -- which on a notched phone was under the home
             // indicator, and which nothing else on screen knew the extent of.
@@ -204,22 +217,10 @@ namespace SeaSick.Ship
             var effRect = new Rect(px + u * 0.6f, py + u * 1.9f, panelW - u * 1.2f, u * 0.5f);
             UITheme.Bar(effRect, motor.SeaResistance01, UITheme.Ramp(1f - motor.SeaResistance01));
 
-            // --- Sail control ---
-            float bw = (panelW - u * 1.8f) * 0.5f;
-            var less = new Rect(px + u * 0.6f, py + u * 2.7f, bw, u * 1.6f);
-            var more = new Rect(less.xMax + u * 0.6f, less.y, bw, u * 1.6f);
-            UIBlocker.Block(less);
-            UIBlocker.Block(more);
-            if (GUI.Button(less, "▼", UITheme.Button)) StepOrder(-1);
-            if (GUI.Button(more, "▲", UITheme.Button)) StepOrder(1);
-            // The order is what you asked for; the bar under it is what the
-            // crew have actually managed. When they're sick the two disagree,
-            // and that gap IS the mechanic — it has to be on screen.
-            GUI.Label(new Rect(px, py + u * 2.9f, panelW, u * 1.2f),
-                OrderText(), UITheme.Small2Centered);
             // Astern fills the same bar backwards from a centre mark, so
-            // which way she is being driven reads without being read.
-            var barRect = new Rect(px + u * 0.6f, py + u * 4.25f, panelW - u * 1.2f, u * 0.22f);
+            // which way she is being driven reads without being read. It is
+            // the ACHIEVED throttle; the order is on the lever.
+            var barRect = new Rect(px + u * 0.6f, py + u * 2.65f, panelW - u * 1.2f, u * 0.22f);
             float t = Mathf.Clamp(motor.Throttle, -1f, 1f);
             float mid = barRect.x + barRect.width * 0.32f;
             if (t >= 0f)
@@ -229,7 +230,7 @@ namespace SeaSick.Ship
                 UITheme.Bar(new Rect(mid + (mid - barRect.x) * t, barRect.y,
                     (mid - barRect.x) * -t, barRect.height), 1f, UITheme.Warn);
 
-            DrawWayGauge(new Rect(px + u * 0.6f, py + u * 4.9f,
+            DrawWayGauge(new Rect(px + u * 0.6f, py + u * 3.2f,
                 panelW - u * 1.2f, u * 0.4f), u);
 
             // Oars and easing share the band the oars had to themselves, so

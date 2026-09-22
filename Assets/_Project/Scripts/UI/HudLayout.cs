@@ -73,9 +73,21 @@ namespace SeaSick.UI
             // --- bottom-right, upward ---
             Helm,
             HelmActions,
+
+            // --- bottom-centre, upward ---
+            /// The steering wheel and the engine lever, as one cluster.
+            ///
+            /// **A column of its own, and the reason is the thumb.** The
+            /// wheel has to be where a hand holding the phone can reach it
+            /// without letting go, which is the bottom MIDDLE -- not a corner,
+            /// where the old telegraph buttons were and where Kevin could not
+            /// use them. One slot holds both controls because they are one
+            /// instrument: splitting them into two slots would have stacked
+            /// the lever above the wheel, and the lever belongs beside it.
+            Wheel,
         }
 
-        enum Column { TopLeft, TopRight, Rail, BottomLeft, BottomRight }
+        enum Column { TopLeft, TopRight, Rail, BottomLeft, BottomRight, BottomCentre }
 
         static Column ColumnOf(Slot s) => s switch
         {
@@ -84,6 +96,7 @@ namespace SeaSick.UI
                 or Slot.CampCrew => Column.TopRight,
             Slot.RailSettings or Slot.RailYard or Slot.RailHome => Column.Rail,
             Slot.Nav or Slot.Broadside => Column.BottomLeft,
+            Slot.Wheel => Column.BottomCentre,
             _ => Column.BottomRight,
         };
 
@@ -110,7 +123,7 @@ namespace SeaSick.UI
         /// into two files and half-copied into two more.
         public static float RailTop01 => Wide ? 0.14f : 0.30f;
 
-        const int SlotCount = (int)Slot.HelmActions + 1;
+        const int SlotCount = (int)Slot.Wheel + 1;
         static readonly float[] heights = new float[SlotCount];
         static readonly float[] widths = new float[SlotCount];
         static readonly int[] seenAt = new int[SlotCount];
@@ -242,6 +255,14 @@ namespace SeaSick.UI
                 case Column.BottomLeft:
                     r = new Rect(safe.x + pad, safe.yMax - pad - offset - height, width, height);
                     break;
+                case Column.BottomCentre:
+                    // Centred on the SAFE area, not on the screen: on a
+                    // notched phone held in landscape the two are 100+ px
+                    // apart, and a wheel you steer by is the last thing on the
+                    // HUD that may sit off the middle.
+                    r = new Rect(safe.x + (safe.width - width) * 0.5f,
+                                 safe.yMax - pad - offset - height, width, height);
+                    break;
                 default:
                     r = new Rect(safe.xMax - pad - width, safe.yMax - pad - offset - height,
                                  width, height);
@@ -261,15 +282,20 @@ namespace SeaSick.UI
             get
             {
                 var safe = Safe;
-                float left = 0f, right = 0f;
+                float left = 0f, right = 0f, centre = 0f;
                 for (int j = 0; j < SlotCount; j++)
                 {
                     if (!Live(j) || heights[j] <= 0f) continue;
                     var c = ColumnOf((Slot)j);
                     if (c == Column.BottomLeft) left += heights[j] + Gap;
                     else if (c == Column.BottomRight) right += heights[j] + Gap;
+                    // The wheel is the tallest thing at the bottom of the
+                    // screen and it is CENTRED, which is exactly where a
+                    // centred prompt goes. Leaving it out of this sum is how
+                    // the anchor prompt would have landed on the helm.
+                    else if (c == Column.BottomCentre) centre += heights[j] + Gap;
                 }
-                float reserve = Mathf.Max(left, right);
+                float reserve = Mathf.Max(Mathf.Max(left, right), centre);
                 // **The frame before anything has reserved.** On the first pass
                 // after a scene load or a domain reload, whichever panel draws
                 // first sees an empty screen — and a panel that sizes itself

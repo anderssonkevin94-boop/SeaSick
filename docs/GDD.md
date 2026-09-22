@@ -26,8 +26,9 @@ The meter only ever goes up at sea. Past ~80% they start leaving their post to h
 - **Platform:** mobile, portrait, one-handed. Sessions = one voyage (target 3–8 min).
 - **Player role:** the captain — commands, never walks the deck. Crew executes.
 - **Camera:** third-person chase, ~10–15 m behind/above the ship; close enough to read whole-body acting. Automatic brief push-ins on notable events (imminent puke, mutiny stage change). No manual camera.
-- **Controls (one thumb):**
-  - Drag on lower screen = rudder / heading
+- **Controls (a thumb, or two):**
+  - **The wheel and the lever (2026-09-22).** A ship's steering wheel sits at the bottom centre and a telegraph lever stands beside it, to the right where a thumb falls. You turn the wheel by dragging round its hub — ±180° is hard over, rudder = angle/180 — and it **holds where you leave it**, like a real wheel; a double-tap on the hub brings her amidships. The lever **latches** anywhere from full astern to full ahead, with the bottom quarter of its travel holding the whole astern range (backing is a manoeuvre, not a way to travel) and a dead band that snaps to stop. Both work at once, keyed by touch id, so one thumb can steer while the other rings down. The wheel's angle is an *order*: `ShipMotor.Rudder` is still eased toward it, so nothing snaps. This replaced a drag-anywhere-in-the-bottom-45% absolute tiller that recentred the moment you let go, and a pair of fingernail-sized ▲/▼ buttons in the corner.
+  - Keyboard at a desk is unchanged: A/D steer, W/S drive, and a held key overrides the wheel or the lever and hands control straight back on release.
   - Speed emerges from sail trim and the state of the water (**not** from heading — see the 2026-08-19 wind removal)
   - Tap crew/station = small contextual order menu (trim, hold, potion, treat)
   - Tap-and-hold (tentative) = precision/zoom view
