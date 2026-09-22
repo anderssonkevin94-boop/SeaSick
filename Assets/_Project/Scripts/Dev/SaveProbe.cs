@@ -200,7 +200,7 @@ public class SaveProbe : MonoBehaviour
 
         // A hut, sited and unbuilt.
         bool sited = SiteNear(camp, BuildPlans.Hut, 18f, out string siteWhy);
-        Gate("a-hut-is-sited", sited && l.pending != null, siteWhy);
+        Gate("a-hut-is-sited", sited && l.Pending != null, siteWhy);
 
         // The clock stops here and starts again at the end. The ledger
         // ticks in 18 s quanta of real time, and a quantum crossing between
@@ -272,8 +272,8 @@ public class SaveProbe : MonoBehaviour
         if (savedCamp != null)
         {
             Gate("the-blueprint-is-in-the-file",
-                savedCamp.ledger.pending != null && savedCamp.ledger.pending.planId == BuildPlans.Hut.id,
-                "pending " + (savedCamp.ledger.pending != null ? savedCamp.ledger.pending.planId : "null"));
+                savedCamp.ledger.Pending != null && savedCamp.ledger.Pending.planId == BuildPlans.Hut.id,
+                "pending " + (savedCamp.ledger.Pending != null ? savedCamp.ledger.Pending.planId : "null"));
             Gate("the-spots-are-in-the-file", savedCamp.ledger.raised.Count == before.buildings,
                 savedCamp.ledger.raised.Count + " spots");
             Gate("the-hands-are-in-the-file", savedCamp.ledger.hands.Count == before.hands,
@@ -407,11 +407,11 @@ public class SaveProbe : MonoBehaviour
             after.buildings + " buildings for " + before.buildings + ", built rows " + l2.built.Count + " for " + before.builtRows);
 
         Gate("the-blueprint-comes-back",
-            l2.pending != null && l2.pending.planId == BuildPlans.Hut.id
-            && Mathf.Abs(l2.pending.x - before.pendingX) < 0.01f && Mathf.Abs(l2.pending.z - before.pendingZ) < 0.01f
-            && Mathf.Abs(l2.pending.yaw - before.pendingYaw) < 0.01f
-            && l2.pending.needed == before.pendingNeeded && l2.pending.done == before.pendingDone,
-            l2.pending != null ? l2.pending.planId + " at " + l2.pending.x.ToString("F1") + "," + l2.pending.z.ToString("F1")
+            l2.Pending != null && l2.Pending.planId == BuildPlans.Hut.id
+            && Mathf.Abs(l2.Pending.x - before.pendingX) < 0.01f && Mathf.Abs(l2.Pending.z - before.pendingZ) < 0.01f
+            && Mathf.Abs(l2.Pending.yaw - before.pendingYaw) < 0.01f
+            && l2.Pending.needed == before.pendingNeeded && l2.Pending.done == before.pendingDone,
+            l2.Pending != null ? l2.Pending.planId + " at " + l2.Pending.x.ToString("F1") + "," + l2.Pending.z.ToString("F1")
                 : "no pending row");
         var ghost = camp.GetComponentInChildren<BuildSite>();
         Gate("and-the-drawing-with-it", ghost != null && ghost.PlanId == BuildPlans.Hut.id,
@@ -561,10 +561,10 @@ public class SaveProbe : MonoBehaviour
         s.timberPile = l != null ? l.CountOf(Res.Timber) : 0;
         s.shipAt = motor.transform.position;
         s.campAt = camp.CampCentre;
-        if (l != null && l.pending != null)
+        if (l != null && l.Pending != null)
         {
-            s.pendingX = l.pending.x; s.pendingZ = l.pending.z; s.pendingYaw = l.pending.yaw;
-            s.pendingNeeded = l.pending.needed; s.pendingDone = l.pending.done;
+            s.pendingX = l.Pending.x; s.pendingZ = l.Pending.z; s.pendingYaw = l.Pending.yaw;
+            s.pendingNeeded = l.Pending.needed; s.pendingDone = l.Pending.done;
         }
         if (l != null)
         {

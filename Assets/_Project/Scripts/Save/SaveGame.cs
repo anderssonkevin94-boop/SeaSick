@@ -227,7 +227,7 @@ namespace SeaSick.Save
                 var l = o.Ledger;
                 bool worth = o.IsHome || o.HasCampCentre
                     || l.hands.Count > 0 || l.built.Count > 0
-                    || (l.raised != null && l.raised.Count > 0) || l.pending != null;
+                    || (l.raised != null && l.raised.Count > 0) || l.SiteCount > 0;
                 if (!worth) continue;
                 Vector3 c = o.CampCentre;
                 var isle = o.Island;

@@ -1083,9 +1083,14 @@ namespace SeaSick.World
         /// the stack that resource belongs on.
         Vector3 Dropoff(OutpostHand r, string resource)
         {
-            if (r.order == OutpostOrder.Build && camp.Ledger?.pending != null)
+            // **The oldest site that still wants materials** -- `Focus` is
+            // the queue's one answer (2026-09-22), the same row
+            // `BuilderWants` names the material out of, so the man walks to
+            // the drawing whose need he is carrying.
+            var site = r.order == OutpostOrder.Build ? camp.Ledger?.Focus : null;
+            if (site != null)
             {
-                Vector3 p = camp.Ledger.pending.At;
+                Vector3 p = site.At;
                 p.y = camp.GroundAt(p);
                 return p;
             }

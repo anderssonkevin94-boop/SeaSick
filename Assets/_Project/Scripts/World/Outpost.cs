@@ -161,8 +161,8 @@ namespace SeaSick.World
             // scene to put something in. It happens here instead, which is
             // called on arrival, and whose whole job is "make the world agree
             // with the ledger".
-            if (ledger.ReadyToRaise) FinishPending();
-            else if (ledger.Building) EnsureBlueprint();
+            if (ledger.ReadyToRaise) FinishReady();
+            EnsureBlueprints();
             SyncFelling();
             GatherSync.Sync(this);   // stone, ore and spice props go as the seam is worked
             SyncHarvest();
@@ -302,9 +302,42 @@ namespace SeaSick.World
         /// itself somewhere nobody lives.
         public bool HasCampCentre => hasCampCentre;
 
-        /// The blueprint standing here, if one is drawn. Rebuilt from the
-        /// ledger whenever the island is loaded -- never the only copy.
-        BuildSite blueprint;
+        /// **The drawings standing here, one per queued site.** Rebuilt
+        /// from the ledger whenever the island is loaded -- never the only
+        /// copy. Since 2026-09-22 a camp can have several (Kevin: *"I want
+        /// to be able to place more blueprints at once"*), so this is a list
+        /// keyed to `OutpostLedger.sites` by the row each `BuildSite` holds.
+        readonly List<BuildSite> blueprints = new List<BuildSite>();
+
+        /// The drawing for this row, or null.
+        BuildSite BlueprintFor(PendingBuild row)
+        {
+            if (row == null) return null;
+            for (int i = 0; i < blueprints.Count; i++)
+                if (blueprints[i] != null && blueprints[i].Row == row) return blueprints[i];
+            return null;
+        }
+
+        /// Take one drawing down and forget it.
+        void RetireBlueprint(PendingBuild row)
+        {
+            for (int i = blueprints.Count - 1; i >= 0; i--)
+            {
+                var b = blueprints[i];
+                if (b == null) { blueprints.RemoveAt(i); continue; }
+                if (row != null && b.Row != row) continue;
+                b.Retire();
+                blueprints.RemoveAt(i);
+            }
+        }
+
+        /// Every drawing down (a save arriving, the island leaving).
+        void RetireAllBlueprints()
+        {
+            for (int i = 0; i < blueprints.Count; i++)
+                if (blueprints[i] != null) blueprints[i].Retire();
+            blueprints.Clear();
+        }
 
         /// Is something sited here and waiting on wood?
         public bool Building => ledger != null && ledger.Building;
@@ -343,43 +376,61 @@ namespace SeaSick.World
         /// ride along, and a refusal at the new spot leaves the old row and
         /// its drawing exactly where they were.
         public int Site(BuildPlan plan, Vector3 at, float yaw, bool keepProgress, out string why)
+            => Site(plan, at, yaw, keepProgress && ledger != null ? ledger.Pending : null, out why);
+
+        /// **Site it, or MOVE the row `moving` names.**
+        ///
+        /// With a queue the mover has to say WHICH drawing it is carrying --
+        /// "the pending one" stopped being an answer on 2026-09-22. The row
+        /// is lifted OUT of the queue for the tests below (so the ground it
+        /// is standing on does not refuse it to itself), and goes back at
+        /// the same place in the order if the new spot says no: a refused
+        /// move must leave the camp exactly as it was, position in the queue
+        /// included.
+        public int Site(BuildPlan plan, Vector3 at, float yaw, PendingBuild moving, out string why)
         {
             if (ledger == null) { why = "this ground was never surveyed"; return -1; }
+            ledger.MigratePending();
             PendingBuild carried = null;
-            if (keepProgress && ledger.pending != null && ledger.pending.planId == plan.id)
+            int carriedAt = -1;
+            if (moving != null && moving.planId == plan.id)
             {
-                carried = ledger.pending;
-                // Out of the way for the tests below, which refuse outright
-                // when something is pending -- and put back, untouched, if
-                // the new ground says no.
-                ledger.pending = null;
-                if (blueprint != null) { blueprint.Retire(); blueprint = null; }
+                carriedAt = ledger.sites.IndexOf(moving);
+                if (carriedAt >= 0)
+                {
+                    carried = moving;
+                    ledger.sites.RemoveAt(carriedAt);
+                    RetireBlueprint(carried);
+                }
             }
             int placed = SiteFresh(plan, at, yaw, out why);
             if (carried != null)
             {
-                if (placed < 0)
+                var landed = ledger.sites.Count > 0 ? ledger.sites[ledger.sites.Count - 1] : null;
+                if (placed < 0 || landed == null)
                 {
-                    ledger.pending = carried;
-                    EnsureBlueprint();
+                    ledger.sites.Insert(Mathf.Clamp(carriedAt, 0, ledger.sites.Count), carried);
+                    EnsureBlueprints();
+                    return placed;
                 }
-                else if (ledger.pending != null)
-                {
-                    ledger.pending.done = Mathf.Min(carried.done, ledger.pending.needed);
-                    ledger.pending.donePart = carried.donePart;
-                    ledger.pending.stoneDone = Mathf.Min(carried.stoneDone, ledger.pending.stoneNeeded);
-                    ledger.pending.stoneDonePart = carried.stoneDonePart;
-                    // The third part travels with the other two. Nothing
-                    // charges brick yet, so today this always moves 0 -- see
-                    // `BuildPlan.baseBrickCost`.
-                    ledger.pending.brickDone = Mathf.Min(carried.brickDone, ledger.pending.brickNeeded);
-                    ledger.pending.brickDonePart = carried.brickDonePart;
-                    if (blueprint != null) blueprint.Refresh(ledger.pending);
-                    // Paid in full already? Then moving it finishes it.
-                    if (ledger.ReadyToRaise) FinishPending();
-                    return ledger.pending != null
-                        ? ledger.pending.needed - ledger.pending.done : 0;
-                }
+                // The new row was appended; put it back where the old one
+                // stood in the queue, then pour the old row's progress in.
+                ledger.sites.RemoveAt(ledger.sites.Count - 1);
+                ledger.sites.Insert(Mathf.Clamp(carriedAt, 0, ledger.sites.Count), landed);
+                landed.done = Mathf.Min(carried.done, landed.needed);
+                landed.donePart = carried.donePart;
+                landed.stoneDone = Mathf.Min(carried.stoneDone, landed.stoneNeeded);
+                landed.stoneDonePart = carried.stoneDonePart;
+                // The third part travels with the other two. Nothing charges
+                // brick yet, so today this always moves 0 -- see
+                // `BuildPlan.baseBrickCost`.
+                landed.brickDone = Mathf.Min(carried.brickDone, landed.brickNeeded);
+                landed.brickDonePart = carried.brickDonePart;
+                var drawn = BlueprintFor(landed);
+                if (drawn != null) drawn.Refresh(landed);
+                // Paid in full already? Then moving it finishes it.
+                if (ledger.ReadyToRaise) FinishReady();
+                return Mathf.Max(0, landed.needed - landed.done);
             }
             return placed;
         }
@@ -387,8 +438,14 @@ namespace SeaSick.World
         int SiteFresh(BuildPlan plan, Vector3 at, float yaw, out string why)
         {
             if (ledger == null) { why = "this ground was never surveyed"; return -1; }
-            if (ledger.pending != null) { why = "something is already being built here"; return -1; }
+            ledger.MigratePending();
+            // **The queue replaced the refusal, 2026-09-22.** "Something is
+            // already being built here" is gone: a camp can hold as many
+            // drawings as there is ground for them. What survives is the
+            // one-of-each rule, which now has to cover the drawings too --
+            // otherwise the way to get two sawmills is to site one twice.
             if (CountOf(plan.id) > 0) { why = $"there is already a {plan.label} here"; return -1; }
+            if (ledger.Queued(plan.id)) { why = $"a {plan.label} is already going up here"; return -1; }
             if (!CanPlace(plan, at, yaw, out why, out float lo, out float hi)) return -1;
 
             // **Only the FIRE says where the camp is.** Until 2026-09-20 every
@@ -412,7 +469,7 @@ namespace SeaSick.World
                 // camp that will not be found again after a save.
                 ledger.SetKey(campCentre);
             }
-            ledger.pending = new PendingBuild
+            var row = new PendingBuild
             {
                 planId = plan.id,
                 x = spot.x,
@@ -432,6 +489,8 @@ namespace SeaSick.World
                 // `BuildPlan.baseBrickCost`.
                 brickNeeded = Mathf.Max(0, plan.brickCost),
             };
+            // Newest goes last: the queue is served oldest first.
+            ledger.sites.Add(row);
 
             // Making camp is everybody's job: there is no fire yet to idle
             // by. A LATER building orders NOBODY (Kevin, 2026-09-21: "when
@@ -440,13 +499,13 @@ namespace SeaSick.World
             // waits for the Hand to drop a man on it (`OrderBuild`), and the
             // rest of the camp goes on with what it was doing, idle included.
             if (plan.kind == BuildKind.Fire) ledger.OrderAll(OutpostOrder.Build);
-            EnsureBlueprint();
+            EnsureBlueprints();
             // A plan that costs nothing is finished the moment it is sited.
             // Nothing does today; the dev path (`MakeCamp`) reaches the same
             // door by paying the cost outright.
-            if (ledger.ReadyToRaise) FinishPending();
+            if (ledger.ReadyToRaise) FinishReady();
             why = "";
-            return ledger.pending != null ? ledger.pending.needed - ledger.pending.done : 0;
+            return Mathf.Max(0, row.needed - row.done);
         }
 
         /// Logs that came out of the ground the last thing built here stands
@@ -458,51 +517,104 @@ namespace SeaSick.World
         /// Draw the blueprint if the ledger says there is one and nothing is
         /// drawing it. Called on arrival, so a camp you sited and sailed away
         /// from is standing there half built when you get back.
-        void EnsureBlueprint()
+        void EnsureBlueprints()
         {
-            if (ledger == null || !ledger.Building || !Sited) return;
-            if (blueprint != null && blueprint.PlanId == ledger.pending.planId) return;
-            if (blueprint != null) blueprint.Retire();
+            if (ledger == null || !Sited) return;
+            ledger.MigratePending();
 
-            var plan = PlanFor(ledger.pending.planId, ledger.pending.length);
-            Vector3 at = ledger.pending.At;
-            at.y = height(at.x, at.z);
-            if (!CanPlace(plan, at, ledger.pending.yaw, out _, out float lo, out float hi))
+            // Drawings whose row has left the queue (raised, cancelled,
+            // moved) come down first, so the loop below never sees two
+            // objects claiming one spot.
+            for (int i = blueprints.Count - 1; i >= 0; i--)
             {
-                // The ground moved under a saved blueprint (a terrain
-                // parameter changed between sessions). Draw it anyway at the
-                // height the field gives now: refusing to draw it would leave
-                // a row nobody can see, act on or cancel.
-                lo = hi = at.y;
+                var b = blueprints[i];
+                if (b == null) { blueprints.RemoveAt(i); continue; }
+                if (b.Row != null && ledger.sites.Contains(b.Row)) continue;
+                b.Retire();
+                blueprints.RemoveAt(i);
             }
-            at.y = hi;
-            blueprint = BuildSite.Place(this, plan, at,
-                Quaternion.Euler(0f, ledger.pending.yaw, 0f), hi - lo);
-            blueprint.Refresh(ledger.pending);
+
+            foreach (var row in ledger.sites)
+            {
+                if (row == null || string.IsNullOrEmpty(row.planId)) continue;
+                if (row.Complete) continue;             // it is waiting to be raised
+                if (BlueprintFor(row) != null) continue;
+
+                var plan = PlanFor(row.planId, row.length);
+                Vector3 at = row.At;
+                at.y = height(at.x, at.z);
+                // It is in the queue, so `Clear` would refuse it to itself.
+                var wasIgnoring = IgnoreSite;
+                IgnoreSite = row;
+                bool ok = CanPlace(plan, at, row.yaw, out _, out float lo, out float hi);
+                IgnoreSite = wasIgnoring;
+                if (!ok)
+                {
+                    // The ground moved under a saved blueprint (a terrain
+                    // parameter changed between sessions), or the site next
+                    // to it in the queue is what the test tripped on. Draw it
+                    // anyway at the height the field gives now: refusing to
+                    // draw it would leave a row nobody can see, act on or
+                    // cancel.
+                    lo = hi = at.y;
+                }
+                at.y = hi;
+                var site = BuildSite.Place(this, plan, at,
+                    Quaternion.Euler(0f, row.yaw, 0f), hi - lo);
+                site.Bind(row);
+                site.Refresh(row);
+                blueprints.Add(site);
+            }
         }
 
         /// The wood is in: take the drawing down and stand the thing up.
-        void FinishPending()
+        /// **Stand up everything in the queue that is paid for.** Oldest
+        /// first, and as many as are ready: a camp that was away for a week
+        /// can come back to two finished buildings.
+        void FinishReady()
         {
-            if (ledger == null || ledger.pending == null) return;
-            var plan = PlanFor(ledger.pending.planId, ledger.pending.length);
-            Vector3 at = ledger.pending.At;
+            if (ledger == null) return;
+            ledger.MigratePending();
+            for (int guard = 0; guard < 32; guard++)
+            {
+                var row = ledger.FirstStocked;
+                if (row == null) return;
+                if (!RaiseRow(row)) return;
+            }
+        }
+
+        /// The wood is in: take the drawing down and stand the thing up.
+        /// False when the ground refused it -- the row stays in the queue
+        /// and the player can move it.
+        bool RaiseRow(PendingBuild row)
+        {
+            if (ledger == null || row == null) return false;
+            var plan = PlanFor(row.planId, row.length);
+            Vector3 at = row.At;
             if (height != null) at.y = height(at.x, at.z);
 
             // The blueprint goes first. `Raise` reserves the ground it stands
             // on, and the drawing is not a reservation -- but leaving it up
             // for a frame beside the real thing is two buildings in one place,
             // which is exactly what a player reports as a duplicate.
-            if (blueprint != null) { blueprint.Retire(); blueprint = null; }
+            RetireBlueprint(row);
 
-            var b = Raise(plan, at, ledger.pending.yaw);
+            // **And the ROW comes out of the queue before the raise.** Since
+            // 2026-09-22 `Clear` treats every queued site as occupied ground
+            // (so two drawings cannot overlap), and a site still in the list
+            // would refuse the building it IS. Put back on a refusal.
+            int wasAt = ledger.sites.IndexOf(row);
+            if (wasAt >= 0) ledger.sites.RemoveAt(wasAt);
+
+            var b = Raise(plan, at, row.yaw);
             if (b == null)
             {
                 // Refused on ground it was green on when it was sited. Rather
                 // than silently eating the wood, keep the row: the blueprint
                 // comes back next frame and the player can move it.
-                EnsureBlueprint();
-                return;
+                ledger.sites.Insert(Mathf.Clamp(wasAt < 0 ? 0 : wasAt, 0, ledger.sites.Count), row);
+                EnsureBlueprints();
+                return false;
             }
 
             // The fire is the camp; anything else is a building AT the camp.
@@ -515,7 +627,6 @@ namespace SeaSick.World
                 ledger.SetKey(campCentre);
             }
             ledger.built.Add(plan.id);
-            ledger.pending = null;
             ledger.ceilingPer = KeepsOfEach;
 
             // **The ground is cleared now, not when it was sited.** At home
@@ -542,13 +653,14 @@ namespace SeaSick.World
             // Everybody goes back to cutting. With the fire lit there is
             // finally somewhere to cut INTO.
             //
-            // The BUILDERS go idle, by the fire. They used to be sent to cut
-            // timber, which after the fire is the whole camp swinging axes
-            // nobody ordered (Kevin, 2026-09-21: idle hands hang out by the
-            // fire; a job is what the Hand gives one man).
-            foreach (var h in ledger.hands)
-                if (h != null && h.order == OutpostOrder.Build)
-                { h.order = OutpostOrder.Idle; h.target = ""; }
+            // The BUILDERS go idle, by the fire -- **unless there is another
+            // drawing waiting**, which since the queue arrived is the usual
+            // case: a crew that downed tools because the FIRST of three
+            // buildings went up would be a queue nobody could use.
+            if (!ledger.Building)
+                foreach (var h in ledger.hands)
+                    if (h != null && h.order == OutpostOrder.Build)
+                    { h.order = OutpostOrder.Idle; h.target = ""; }
             // And they stand round it, which is the moment the camp stops
             // being a clearing and starts being somewhere people are.
             ArrangeHands();
@@ -557,6 +669,7 @@ namespace SeaSick.World
             // *"build buildings, have them tweaked, and see the changes next
             // time I play."*
             Save.SaveGame.Autosave("a " + plan.label + " was raised");
+            return true;
         }
 
         /// A ledger row's plan at the length the row recorded. Only a pier
@@ -597,10 +710,17 @@ namespace SeaSick.World
 
         /// Give up on what is sited here. The wood already in it is gone --
         /// it was cut and carried, and there is nowhere to put it back.
-        public bool CancelPending()
+        public bool CancelPending() => CancelPending(ledger != null ? ledger.Pending : null);
+
+        /// **Give up on ONE drawing**, named. With a queue "the pending one"
+        /// is not an answer: cancelling the storehouse must not touch the
+        /// shelter in front of it. Everything else -- the refund, the idling,
+        /// the autosave -- is what it always was.
+        public bool CancelPending(PendingBuild p)
         {
-            if (ledger == null || ledger.pending == null) return false;
-            var p = ledger.pending;
+            if (ledger == null || p == null) return false;
+            ledger.MigratePending();
+            if (!ledger.sites.Remove(p)) return false;
             var plan = PlanFor(p.planId, p.length);
             // **What was carried here comes back on to the pile.** Kevin,
             // 2026-09-21: giving a build up is a decision, not a punishment.
@@ -610,12 +730,16 @@ namespace SeaSick.World
             // has been watching all along.
             ledger.Add(Res.Timber, p.done);
             if (p.stoneDone > 0) ledger.Add(Res.Stone, p.stoneDone);
-            ledger.pending = null;
-            // Whoever was building goes idle by the fire; nobody else is moved.
-            foreach (var h in ledger.hands)
-                if (h != null && h.order == OutpostOrder.Build)
-                { h.order = OutpostOrder.Idle; h.target = ""; }
-            if (blueprint != null) { blueprint.Retire(); blueprint = null; }
+            if (p.brickDone > 0) ledger.Add(Res.Brick, p.brickDone);
+            // Whoever was building goes idle by the fire -- **only when the
+            // queue is empty**. With another drawing still standing the crew
+            // has somewhere to go, and downing tools would punish the player
+            // for cancelling the second of two.
+            if (!ledger.Building)
+                foreach (var h in ledger.hands)
+                    if (h != null && h.order == OutpostOrder.Build)
+                    { h.order = OutpostOrder.Idle; h.target = ""; }
+            RetireBlueprint(p);
             Save.SaveGame.Autosave("the " + plan.label + " was given up");
             return true;
         }
@@ -652,15 +776,16 @@ namespace SeaSick.World
 
             if (Site(BuildPlans.Campfire, at, out why) < 0) return -1;
 
-            if (ledger != null && ledger.pending != null)
+            var row = ledger != null ? ledger.Pending : null;
+            if (row != null)
             {
-                ledger.pending.done = ledger.pending.needed;
-                ledger.pending.donePart = 0f;
-                ledger.pending.stoneDone = ledger.pending.stoneNeeded;
-                ledger.pending.stoneDonePart = 0f;
-                ledger.pending.brickDone = ledger.pending.brickNeeded;
-                ledger.pending.brickDonePart = 0f;
-                FinishPending();
+                row.done = row.needed;
+                row.donePart = 0f;
+                row.stoneDone = row.stoneNeeded;
+                row.stoneDonePart = 0f;
+                row.brickDone = row.brickNeeded;
+                row.brickDonePart = 0f;
+                FinishReady();
             }
             if (!HasCamp) { why = "the fire would not stand there"; return -1; }
 
@@ -2748,7 +2873,7 @@ namespace SeaSick.World
             // or nothing -- comes down first. A save replaces; it does not
             // add, and two storehouses on one plot is what "load" would
             // otherwise mean at home.
-            if (blueprint != null) { blueprint.Retire(); blueprint = null; }
+            RetireAllBlueprints();
             foreach (var old in built) if (old != null) Destroy(old.gameObject);
             built.Clear();
             reserved.RemoveAll(buildingReservations.Contains);
@@ -2758,8 +2883,17 @@ namespace SeaSick.World
             // JsonUtility cannot say "null": a ledger with no blueprint comes
             // back with an EMPTY one, and an empty one has `needed == 0`, which
             // reads as complete, which would raise a campfire nobody sited.
-            if (ledger.pending != null && string.IsNullOrEmpty(ledger.pending.planId))
-                ledger.pending = null;
+            // **And a save written before the build QUEUE (2026-09-22)
+            // carries its one drawing in the old single `pending` slot.**
+            // `MigratePending` lifts it into `sites` as a one-element queue
+            // and nulls the slot; a save written since has an empty one and
+            // it does nothing. Deliberately NOT a version bump, for the same
+            // reason the chart was not: `JsonUtility` leaves a field its JSON
+            // does not mention at its constructed value, so an old save reads
+            // back correctly instead of being refused.
+            ledger.MigratePending();
+            if (ledger.sites == null) ledger.sites = new List<PendingBuild>();
+            ledger.sites.RemoveAll(r => r == null || string.IsNullOrEmpty(r.planId));
             if (ledger.raised == null) ledger.raised = new List<BuiltBuilding>();
             if (ledger.built == null) ledger.built = new List<string>();
             if (ledger.hands == null) ledger.hands = new List<OutpostHand>();
@@ -3050,6 +3184,16 @@ namespace SeaSick.World
         }
 
         /// Nothing already claimed within reach of this footprint.
+        /// **The one queued site `Clear` does not count as occupied.**
+        ///
+        /// Two callers need it and both are asking about a drawing that is
+        /// already in the queue: the ghost while the player MOVES one (it
+        /// must not be refused by the spot it is standing on), and
+        /// `EnsureBlueprints` measuring the footing for a row it is about to
+        /// draw. Set it, ask, clear it -- it is never left set across a
+        /// frame, because a stale one is a hole in the overlap rule.
+        public PendingBuild IgnoreSite { get; set; }
+
         bool Clear(Vector3 p, float halfDiag)
         {
             foreach (var r in reserved)
@@ -3058,6 +3202,27 @@ namespace SeaSick.World
                 float need = halfDiag + r.w;
                 if (dx * dx + dz * dz < need * need) return false;
             }
+
+            // **And every drawing already queued, 2026-09-22.** A blueprint
+            // is not in `reserved` -- it is a promise, and a promise that
+            // reserved ground would go on reserving it after the player
+            // cancelled -- so the queue is tested here instead. Without this
+            // the second blueprint of a camp can be sited inside the first,
+            // and the raise that came later would be refused on ground the
+            // ghost went green on. `Outpost.RaiseRow` takes a row OUT of the
+            // queue before raising it, so nothing refuses itself.
+            if (ledger != null && ledger.sites != null)
+                foreach (var row in ledger.sites)
+                {
+                    if (row == null || string.IsNullOrEmpty(row.planId)) continue;
+                    if (row == IgnoreSite) continue;
+                    var plan = PlanFor(row.planId, row.length);
+                    float rl = plan.footprint.x, rw = plan.footprint.y;
+                    float rHalf = 0.5f * Mathf.Sqrt(rl * rl + rw * rw) + spacing * 0.5f;
+                    float dx = p.x - row.x, dz = p.z - row.z;
+                    float need = halfDiag + rHalf;
+                    if (dx * dx + dz * dz < need * need) return false;
+                }
             return true;
         }
 

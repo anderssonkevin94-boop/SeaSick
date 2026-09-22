@@ -101,14 +101,15 @@ namespace SeaSick.UI.Sheets
             float band = SheetHost.BandHeight;
             int storeTiles = ShownCount(l);
             int handCount = l.hands.Count;
-            int planCount = outpost.Building ? 1 : CountBuildable();
+            int planCount = CountBuildable();
+            int siteCount = Mathf.Min(l.SiteCount, SitesShown);
             int cargo = alongside ? ship.CargoCount : 0;
             int crew = alongside ? ship.CrewRows : 0;
 
             long key = Mathf.RoundToInt(band) * 1000003L
                        + storeTiles * 7919L + handCount * 131L + planCount * 31L
                        + cargo * 17L + crew * 7L + (alongside ? 1L : 0L)
-                       + (outpost.Building ? 3L : 0L);
+                       + siteCount * 3L;
             if (key == planKey) return;
             planKey = key;
 
@@ -116,7 +117,11 @@ namespace SeaSick.UI.Sheets
             // `SheetKit`'s constants are the USS heights rounded up, so this
             // is arithmetic on the stylesheet rather than a guess at it.
             float storeRows = storeTiles <= 4 ? 1f : 2f;
-            float campPx = storeRows * SheetKit.StorePx + SheetKit.NotePx;
+            // The "what is going up" block is one `ListRow` per queued site
+            // now, and an empty queue is still one note's worth of "Nothing
+            // going up" -- so the band arithmetic counts rows, not a note.
+            float campPx = storeRows * SheetKit.StorePx
+                           + (siteCount == 0 ? SheetKit.NotePx : siteCount * SheetKit.RowPx);
             float ordersPx = SheetKit.EyebrowPx + SheetKit.SegPx + SheetKit.TextPx
                              + SheetKit.SegPx + SheetKit.QuietPx + SheetKit.TextPx
                              + SheetKit.BarPx;
@@ -390,11 +395,11 @@ namespace SeaSick.UI.Sheets
             var l = L;
             buildListHolder.Clear();
             if (l == null) return;
-            if (outpost.Building)
-            {
-                buildListHolder.Add(SheetKit.Note("Something is already going up"));
-                return;
-            }
+            // **No "Something is already going up" any more (2026-09-22).**
+            // Kevin: *"I want to be able to place more blueprints at once."*
+            // The list is the list; what is already queued is on the camp
+            // page, and `Outpost.SiteFresh` is what still refuses a SECOND
+            // copy of the same plan.
             Slice(CountBuildable(), buildPart, buildPerPage, out int bFrom, out int bTo);
             int n = 0, seen = 0;
             foreach (var plan in outpost.Buildable())
@@ -457,7 +462,7 @@ namespace SeaSick.UI.Sheets
                 case PgBuild:
                     // Keyed on what the list SAYS: the stores it prices
                     // against, and whether a drawing is already up.
-                    long bkey = l.Total * 31L + (outpost.Building ? 1 : 0) * 7919L
+                    long bkey = l.Total * 31L + l.SiteCount * 7919L
                                 + l.built.Count * 131L;
                     bkey = bkey * 31L + buildPart;
                     if (bkey != buildKey) { buildKey = bkey; FillBuildList(); }
@@ -619,23 +624,29 @@ namespace SeaSick.UI.Sheets
         /// number in them is the ledger's.
         void Note(OutpostLedger l)
         {
-            var p = l.pending;
-            long key = p == null ? 0L
-                : ((p.planId != null ? p.planId.GetHashCode() : 0) * 31L + p.done) * 31L
-                  + p.stoneDone + l.HandsOn(OutpostOrder.Build) * 7919L;
+            // Keyed on the whole QUEUE, not on one row: a second drawing
+            // sited while the sheet is open has to show up.
+            long key = l.HandsOn(OutpostOrder.Build) * 7919L;
+            foreach (var q in l.sites)
+            {
+                if (q == null) continue;
+                key = key * 31L + (q.planId != null ? q.planId.GetHashCode() : 0);
+                key = key * 31L + q.done * 31L + q.stoneDone * 7L + q.brickDone;
+            }
             if (key == noteKey) return;
             noteKey = key;
 
-            if (p == null)
+            if (l.SiteCount == 0)
             {
                 SheetBits.Swap(noteHolder, SheetKit.Note("Nothing going up"));
                 return;
             }
 
-            var plan = BuildPlans.Named(p.planId).WithLength(p.length);
-            string label = string.IsNullOrEmpty(plan.label) ? "something" : plan.label;
-
-            // Who is on it: the first builder by name, and how many after him.
+            // Who is on it: the first builder by name, and how many after
+            // him. The crew is the CAMP's, not the site's -- builders serve
+            // the queue in order (`OutpostLedger.Focus`), so the same names
+            // are on whichever drawing is next -- and the line says so by
+            // naming them only against the one being worked.
             string who = null;
             int builders = 0;
             foreach (var h in l.hands)
@@ -644,28 +655,56 @@ namespace SeaSick.UI.Sheets
                     builders++;
                     if (who == null) who = h.name;
                 }
-
-            int timberLeft = Mathf.Max(0, p.needed - p.done);
-            int stoneLeft = Mathf.Max(0, p.stoneNeeded - p.stoneDone);
-
             string crew = builders == 0 ? "nobody on it"
                 : builders == 1 ? who + " on it"
                 : $"{who} and {builders - 1} more on it";
 
-            string stock;
-            if (timberLeft == 0 && stoneLeft == 0) stock = "Stocked";
-            else if (stoneLeft == 0) stock = $"Needs {timberLeft} timber";
-            else if (timberLeft == 0) stock = $"Needs {stoneLeft} stone";
-            else stock = $"Needs {timberLeft} timber, {stoneLeft} stone";
+            // **One `ListRow` per queued site**, so the pager can count them
+            // the way it counts the roster -- see `Plan`, which asks the
+            // band how many of these fit before it decides whether the
+            // orders block shares this page.
+            var col = new VisualElement();
+            var focus = l.Focus;
+            int shown = 0;
+            foreach (var q in l.sites)
+            {
+                if (q == null || string.IsNullOrEmpty(q.planId)) continue;
+                if (shown >= SitesShown) break;
+                shown++;
+                var plan = BuildPlans.Named(q.planId).WithLength(q.length);
+                string label = string.IsNullOrEmpty(plan.label) ? "something" : plan.label;
 
-            // The clock is dropped when it would only repeat the crew phrase:
-            // "nobody on it. Needs 5 timber, nobody is building it." was the
-            // same fact three times in one sentence.
-            string left = SiteSheet.DaysLeftLine(l, p, builders);
-            SheetBits.Swap(noteHolder, SheetKit.Note(left == SiteSheet.Nobody
-                ? $"{Cap(label)} going up, {crew}. {stock}."
-                : $"{Cap(label)} going up, {crew}. {stock}, {left}."));
+                // "2/2 stone, 3/6 logs" -- what is IN it, per material it
+                // wants. A part it never wanted is not printed.
+                var parts = new List<string>(3);
+                if (q.needed > 0) parts.Add($"{Mathf.Min(q.done, q.needed)}/{q.needed} logs");
+                if (q.stoneNeeded > 0) parts.Add($"{Mathf.Min(q.stoneDone, q.stoneNeeded)}/{q.stoneNeeded} stone");
+                if (q.brickNeeded > 0) parts.Add($"{Mathf.Min(q.brickDone, q.brickNeeded)}/{q.brickNeeded} brick");
+                string stock = parts.Count == 0 ? "no cost" : string.Join(", ", parts);
+
+                // Only the site being SERVED gets the crew on it; the ones
+                // behind it in the queue are waiting their turn and say so,
+                // and a stocked one is waiting for the ground, not for wood.
+                string tail = q.Complete ? "going up"
+                    : q == focus ? crew
+                    : "waiting its turn";
+
+                col.Add(SheetKit.ListRow(
+                    SheetKit.Text(label, true),
+                    SheetKit.Text(stock, false, true, 12f),
+                    SheetKit.Text(tail, false, true, 12f)));
+            }
+            if (l.SiteCount > shown)
+                col.Add(SheetKit.Note($"and {l.SiteCount - shown} more queued"));
+            SheetBits.Swap(noteHolder, col);
         }
+
+        /// **How many queued sites the camp page prints before it summarises
+        /// the rest.** The page is a third of a phone screen and the roster
+        /// is under it; past this the queue says "and 3 more queued" rather
+        /// than pushing the sheet off the bottom, which is the failure the
+        /// pager exists to prevent.
+        const int SitesShown = 4;
 
         static string Cap(string s) =>
             string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);

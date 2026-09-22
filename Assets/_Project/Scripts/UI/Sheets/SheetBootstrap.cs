@@ -52,7 +52,9 @@ namespace SeaSick.UI.Sheets
             {
                 if (s == null) return null;
                 var camp = SheetBits.OutpostOf(s);
-                if (camp == null || camp.Ledger == null || camp.Ledger.pending == null) return null;
+                // The drawing carries its own queue row since 2026-09-22;
+                // a `BuildSite` with none is one frame from being retired.
+                if (camp == null || camp.Ledger == null || s.Row == null) return null;
                 return new SiteSheet(camp, s);
             });
 

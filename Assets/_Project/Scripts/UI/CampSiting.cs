@@ -128,6 +128,12 @@ namespace SeaSick.UI
         /// mode is identical.
         bool moving;
 
+        /// **WHICH drawing is being carried (2026-09-22).** With a build
+        /// queue "the pending one" stopped being an answer: the move begins
+        /// from a `SiteSheet` that knows its own row, and `Outpost.Site`
+        /// wants that row so it lifts the right one out of the queue.
+        PendingBuild movingRow;
+
         /// Is the current placement a MOVE of the standing blueprint? The
         /// sheet says "never mind" differently for it: escaping a move
         /// leaves the drawing where it was.
@@ -139,6 +145,13 @@ namespace SeaSick.UI
 
         public static void Begin(Outpost target, BuildPlan what, Transform shipTransform,
             bool movePending)
+            => Begin(target, what, shipTransform,
+                movePending && target != null && target.Ledger != null
+                    ? target.Ledger.Pending : null);
+
+        /// Start placing, moving `move` if it is a row already in the queue.
+        public static void Begin(Outpost target, BuildPlan what, Transform shipTransform,
+            PendingBuild move)
         {
             if (Instance == null || target == null) return;
             Instance.Cancel();
@@ -153,10 +166,14 @@ namespace SeaSick.UI
             // the cursor moved was unwanted).
             Instance.heldYaw = Instance.outpost != null
                 ? Instance.outpost.AutoYaw(Instance.outpost.CampCentre + Vector3.forward * 10f) : 0f;
-            Instance.moving = movePending;
+            Instance.movingRow = move;
+            Instance.moving = move != null;
+            // The ghost must not be refused by the drawing it IS -- see
+            // `Outpost.IgnoreSite`. Cleared in `Cancel`, which every exit
+            // from this mode goes through.
+            if (Instance.outpost != null) Instance.outpost.IgnoreSite = move;
             // A drawing being moved keeps the facing it had.
-            if (movePending && target.Ledger != null && target.Ledger.pending != null)
-                Instance.heldYaw = target.Ledger.pending.yaw;
+            if (move != null) Instance.heldYaw = move.yaw;
             // **The press that started this mode must not also finish it.**
             // See `IslandInput.TapDownFrame`: an IMGUI button is clicked in
             // `OnGUI`, after every `Update` of that frame, and the Input
@@ -178,9 +195,8 @@ namespace SeaSick.UI
         /// a live ✓ rather than a red refusal.
         Vector3 StartPoint()
         {
-            if (moving && outpost != null && outpost.Ledger != null
-                && outpost.Ledger.pending != null)
-                return OnGround(outpost.Ledger.pending.x, outpost.Ledger.pending.z);
+            if (moving && movingRow != null)
+                return OnGround(movingRow.x, movingRow.z);
 
             Vector3 c = Centre();
             var cam = Camera.main;
@@ -207,6 +223,8 @@ namespace SeaSick.UI
         {
             plan = default;
             moving = false;
+            movingRow = null;
+            if (outpost != null) outpost.IgnoreSite = null;
             outpost = null;
             Refusal = "";
             valid = false;
@@ -317,7 +335,7 @@ namespace SeaSick.UI
         void Commit()
         {
             if (!valid) return;
-            int wanted = outpost.Site(sited, at, Yaw, moving, out string siteWhy);
+            int wanted = outpost.Site(sited, at, Yaw, movingRow, out string siteWhy);
             if (wanted < 0)
             {
                 // Refused at the last moment by a test the preview does not

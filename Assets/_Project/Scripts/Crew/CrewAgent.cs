@@ -306,9 +306,9 @@ namespace SeaSick.Crew
                 // ore past a half-built shed is not paying for it, and before
                 // resources were per-kind this branch happily let him.
                 if (l.Building
-                    && carriedResource == World.BuildPlans.Named(l.pending.planId).resource)
+                    && carriedResource == World.BuildPlans.Named(l.Pending.planId).resource)
                 {
-                    l.pending.done++;
+                    l.Pending.done++;
                     carriedResource = null;
                     // The last log finishes it, and the fire should be alight
                     // before the man has walked away from it.

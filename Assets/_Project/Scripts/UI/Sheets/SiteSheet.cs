@@ -53,14 +53,20 @@ namespace SeaSick.UI.Sheets
         readonly string planId;
         readonly string label;
 
+        /// **The row this sheet is about (2026-09-22).** A camp can queue
+        /// several drawings now, so "the pending one" would open the wrong
+        /// sheet the moment there were two: the sheet holds the row the
+        /// tapped `BuildSite` carries, and every verb on it acts on THAT
+        /// row.
+        readonly PendingBuild row;
+
         public SiteSheet(Outpost o, BuildSite s)
         {
             outpost = o;
             site = s;
             planId = s != null ? s.PlanId : null;
-            var l = o != null ? o.Ledger : null;
-            var p = l != null ? l.pending : null;
-            label = BuildPlans.Named(p != null ? p.planId : planId).label;
+            row = s != null ? s.Row : null;
+            label = BuildPlans.Named(row != null ? row.planId : planId).label;
         }
 
         public string Title => string.IsNullOrEmpty(label) ? "blueprint" : label;
@@ -74,20 +80,13 @@ namespace SeaSick.UI.Sheets
         {
             get
             {
-                if (outpost == null || site == null) return false;
+                if (outpost == null || site == null || row == null) return false;
                 var l = outpost.Ledger;
-                return l != null && l.pending != null && l.pending.planId == planId;
+                return l != null && l.sites != null && l.sites.Contains(row);
             }
         }
 
-        PendingBuild Pending
-        {
-            get
-            {
-                var l = outpost != null ? outpost.Ledger : null;
-                return l != null ? l.pending : null;
-            }
-        }
+        PendingBuild Pending => row;
 
         // --- the pieces kept between refreshes ---------------------------------
 
@@ -277,7 +276,7 @@ namespace SeaSick.UI.Sheets
         void CancelBuild()
         {
             if (outpost == null) return;
-            outpost.CancelPending();
+            outpost.CancelPending(row);
             Sheets.Close();
         }
 
@@ -289,7 +288,7 @@ namespace SeaSick.UI.Sheets
             var p = Pending;
             if (outpost == null || p == null) return;
             var plan = BuildPlans.Named(p.planId).WithLength(p.length);
-            CampSiting.Begin(outpost, plan, SheetBits.ShipTransform, movePending: true);
+            CampSiting.Begin(outpost, plan, SheetBits.ShipTransform, p);
             Sheets.Close();
         }
     }

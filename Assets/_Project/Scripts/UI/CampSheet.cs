@@ -203,7 +203,7 @@ namespace SeaSick.UI
             if (showBlueprint)
             {
                 var camp = isle != null ? Outpost.Of(isle) : null;
-                if (camp == null || camp.Ledger == null || camp.Ledger.pending == null)
+                if (camp == null || camp.Ledger == null || camp.Ledger.Pending == null)
                     showBlueprint = false;
             }
             if (!Expanded) return;
@@ -417,7 +417,7 @@ namespace SeaSick.UI
             // place of the store rows: they answer different questions and a
             // sheet that tries to answer both at once is the menu-of-
             // everything this pair of panels exists to avoid.
-            if (showBlueprint && l != null && l.pending != null)
+            if (showBlueprint && l != null && l.Pending != null)
             {
                 rows = 0;
                 y = BlueprintPanel(outpost, l, inner, y, lineH, btnH);
@@ -558,7 +558,7 @@ namespace SeaSick.UI
         float BlueprintPanel(Outpost outpost, OutpostLedger l, Rect inner,
             float y, float lineH, float btnH)
         {
-            var p = l.pending;
+            var p = l.Pending;
             var plan = BuildPlans.Named(p.planId).WithLength(p.length);
 
             if (blueprintTitle.Changed(p.planId != null ? p.planId.GetHashCode() : 0))
@@ -811,7 +811,7 @@ namespace SeaSick.UI
             // on its own would be a progress bar with no verb attached.
             if (outpost != null && outpost.Building)
             {
-                var p = l.pending;
+                var p = l.Pending;
                 int building = l.HandsOn(OutpostOrder.Build);
                 if (p.stoneNeeded > 0)
                 {
@@ -955,10 +955,10 @@ namespace SeaSick.UI
             k = k * 31 + l.raiders * 13 + Mathf.RoundToInt(l.DaysUntilRaid * 10f) + (l.HasWatchtower ? 5 : 0) + Mathf.RoundToInt(l.Guard * 100f) * 3;
             k = k * 31 + (outpost.HasCamp ? 1 : 0);
             k = k * 31 + (outpost.Building ? 1 : 0);
-            if (l.pending != null)
-                k = k * 31 + l.pending.done * 397 + l.pending.needed
-                           + l.pending.stoneDone * 1063 + l.pending.stoneNeeded * 7
-                           + l.pending.brickDone * 2081 + l.pending.brickNeeded * 11;
+            if (l.Pending != null)
+                k = k * 31 + l.Pending.done * 397 + l.Pending.needed
+                           + l.Pending.stoneDone * 1063 + l.Pending.stoneNeeded * 7
+                           + l.Pending.brickDone * 2081 + l.Pending.brickNeeded * 11;
             // Whole units and the ceiling — what the line prints. The sub-unit
             // accrual moves every tick and changes nothing anybody can read.
             k = k * 31 + CampLoading.CountsKey(l);

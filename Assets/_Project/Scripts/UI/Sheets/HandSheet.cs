@@ -163,7 +163,7 @@ namespace SeaSick.UI.Sheets
             if (l == null || h == null) return;
 
             long key = (l.built.Count * 31L + l.stocks.Count) * 31L
-                       + (l.pending != null ? 1 : 0) * 7919L
+                       + (l.Pending != null ? 1 : 0) * 7919L
                        + (int)h.order * 131L
                        + (h.target != null ? h.target.GetHashCode() : 0)
                        + Mathf.RoundToInt(SheetHost.BandHeight) * 1000003L;
@@ -299,7 +299,7 @@ namespace SeaSick.UI.Sheets
                 orders.Add(SheetKit.QuietPx, () =>
                 {
                     var led = outpost.Ledger;
-                    var p = led != null ? led.pending : null;
+                    var p = led != null ? led.Pending : null;
                     if (p == null) return null;
                     var hand = Hand;
                     var plan = BuildPlans.Named(p.planId);

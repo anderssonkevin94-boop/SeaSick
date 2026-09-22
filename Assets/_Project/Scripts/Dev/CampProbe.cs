@@ -288,7 +288,7 @@ public class CampProbe : MonoBehaviour
         if (wanted < 0) sb.AppendLine($"  Site refused: {whyNot}");
         yield return null;
 
-        var pending = outpost.Ledger != null ? outpost.Ledger.pending : null;
+        var pending = outpost.Ledger != null ? outpost.Ledger.Pending : null;
         int standingAtSiting = wood != null ? wood.TreeCount - wood.FelledInMesh() : -1;
 
         sb.AppendLine();
@@ -356,8 +356,8 @@ public class CampProbe : MonoBehaviour
         sb.AppendLine($"  one hand, two game days later: "
             + (outpost.HasCamp ? "the fire is lit" : "still a blueprint"));
         Gate(sb, ref fails, "the-crew-build-what-was-sited", outpost.HasCamp,
-            outpost.Ledger.pending != null
-                ? $"{outpost.Ledger.pending.done}/{outpost.Ledger.pending.needed} logs"
+            outpost.Ledger.Pending != null
+                ? $"{outpost.Ledger.Pending.done}/{outpost.Ledger.Pending.needed} logs"
                 : "no pending row and no fire");
         Gate(sb, ref fails, "the-fire-stands-where-it-was-sited", fireOff < 1.5f,
             $"{fireOff:F2} m from the spot");

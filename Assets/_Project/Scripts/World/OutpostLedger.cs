@@ -691,21 +691,117 @@ namespace SeaSick.World
             return n;
         }
 
-        /// What is sited here and not yet finished, or null.
+        /// **The build QUEUE, oldest first (2026-09-22).**
         ///
-        /// One at a time, deliberately. A camp with three half-built sheds in
-        /// it is a camp that has told the player nothing about what it is
-        /// doing.
+        /// Kevin, on the phone: *"I want to be able to place more blueprints
+        /// at once."* It used to be one row and a refusal ("something is
+        /// already going up"), which made the camp a one-decision-at-a-time
+        /// place and put the player on a boat waiting for a shed.
+        ///
+        /// Order is the whole design: hands serve `sites[0]` until it is
+        /// stocked, then `sites[1]`. A site leaves this list the moment it is
+        /// RAISED (`Outpost.FinishReady`) or cancelled, never before -- the
+        /// reservations and `CanPlace` read it to keep two drawings off the
+        /// same ground.
+        public List<PendingBuild> sites = new List<PendingBuild>();
+
+        /// **The single-row save slot this queue replaced. Migration only.**
+        ///
+        /// `JsonUtility` cannot rename a key, so a save written before the
+        /// queue carries its one blueprint here. `MigratePending` lifts it
+        /// into `sites` and nulls this, and `Outpost.Adopt` calls that before
+        /// anything reads the ledger. NOTHING ELSE MAY READ OR WRITE IT --
+        /// the live answer is `Pending` / `Focus` / `sites`. It is still
+        /// written by every save (as an empty object, exactly as it always
+        /// was: `JsonUtility` cannot write null either), which is why an old
+        /// build can still read a new save's camps.
         public PendingBuild pending;
 
+        /// **Old save into new list.** Idempotent, and cheap enough to call
+        /// from anywhere that is about to look at the queue.
+        public void MigratePending()
+        {
+            if (sites == null) sites = new List<PendingBuild>();
+            if (pending == null) return;
+            // An empty row is what `JsonUtility` writes for "there was
+            // nothing sited" -- see `Outpost.Adopt`, which has always had to
+            // re-null it.
+            if (!string.IsNullOrEmpty(pending.planId)) sites.Insert(0, pending);
+            pending = null;
+        }
+
+        /// **The site the camp is working on**: the oldest one that is not
+        /// yet stocked. Null when every queued site has all its materials in
+        /// (they are then only waiting to be stood up). This is what
+        /// `BuilderWants`, the haul target and the starvation lines are all
+        /// about -- one answer, so the arithmetic and the bodies agree.
+        public PendingBuild Focus
+        {
+            get
+            {
+                if (sites == null) return null;
+                for (int i = 0; i < sites.Count; i++)
+                    if (sites[i] != null && !sites[i].Complete) return sites[i];
+                return null;
+            }
+        }
+
+        /// The row a sheet means when it says "the blueprint" without naming
+        /// one: the one being worked, else the oldest queued.
+        public PendingBuild Pending
+        {
+            get
+            {
+                var f = Focus;
+                if (f != null) return f;
+                return sites != null && sites.Count > 0 ? sites[0] : null;
+            }
+        }
+
+        /// How many drawings stand here.
+        public int SiteCount => sites != null ? sites.Count : 0;
+
         /// Is there a blueprint here waiting on wood?
-        public bool Building => pending != null && !pending.Complete;
+        public bool Building => Focus != null;
 
         /// Sited, paid for, and waiting for somebody to stand it up. The
         /// arithmetic can finish a building while its island is unloaded, so
         /// the raise happens when the scene next has somewhere to put it —
         /// see `Outpost.CatchUp`.
-        public bool ReadyToRaise => pending != null && pending.Complete;
+        public bool ReadyToRaise
+        {
+            get
+            {
+                if (sites == null) return false;
+                for (int i = 0; i < sites.Count; i++)
+                    if (sites[i] != null && sites[i].Complete) return true;
+                return false;
+            }
+        }
+
+        /// The oldest site with everything in it, or null. `Outpost` raises
+        /// these one per call until there are none left.
+        public PendingBuild FirstStocked
+        {
+            get
+            {
+                if (sites == null) return null;
+                for (int i = 0; i < sites.Count; i++)
+                    if (sites[i] != null && sites[i].Complete) return sites[i];
+                return null;
+            }
+        }
+
+        /// Is this plan already queued here? A camp keeps one of each, and
+        /// that rule has to cover the drawings as well as the buildings or
+        /// the queue is how you get two sawmills.
+        public bool Queued(string planId)
+        {
+            if (sites == null || string.IsNullOrEmpty(planId)) return false;
+            for (int i = 0; i < sites.Count; i++)
+                if (sites[i] != null && sites[i].planId == planId) return true;
+            return false;
+        }
 
         // --- raiders, 2026-09-22 -----------------------------------------------
         //
@@ -1072,9 +1168,15 @@ namespace SeaSick.World
         public bool BuildStarved => TimberStarved || StoneStarved;
 
         /// The blueprint still wants logs and there are none to be had.
-        public bool TimberStarved =>
-            pending != null && !pending.Complete && !pending.TimberPaid
-            && CountOf(Res.Timber) <= 0 && Wood.standing < 1f;
+        public bool TimberStarved
+        {
+            get
+            {
+                var f = Focus;
+                return f != null && !f.TimberPaid
+                    && CountOf(Res.Timber) <= 0 && Wood.standing < 1f;
+            }
+        }
 
         /// **The same, for the stone part.** An island whose seam is worked
         /// out and whose pile is empty cannot finish a building however much
@@ -1084,7 +1186,8 @@ namespace SeaSick.World
         {
             get
             {
-                if (pending == null || pending.Complete || pending.StonePaid) return false;
+                var f = Focus;
+                if (f == null || f.StonePaid) return false;
                 if (CountOf(Res.Stone) > 0) return false;
                 var seam = Stock(Res.Stone);
                 return seam == null || seam.standing < 1f;
@@ -1213,7 +1316,47 @@ namespace SeaSick.World
         /// match the timber block above line for line, because two parts of
         /// one price that are paid by different-looking arithmetic are two
         /// things that will drift.
-        void PayStone(ref float labour)
+        /// **Pay the timber part of a site out of `labour` hand-days** --
+        /// the pile first, then what is standing.
+        ///
+        /// Lifted out of `Step` whole when the queue arrived (2026-09-22):
+        /// the block used to read `pending` directly, and a queue needs the
+        /// same arithmetic pointed at whichever row is being served. Not one
+        /// number changed in the move.
+        void PayTimber(PendingBuild pending, ref float labour)
+        {
+            if (pending == null || labour <= 0f) return;
+            float roomB = (pending.needed - pending.done) - pending.donePart;
+            if (roomB <= 0f) return;
+
+            // **The pile first.** Kevin, 2026-09-20: *"they gathered logs for
+            // it but it never built."* They had: ten logs sat beside the fire
+            // while the builders walked past them to cut fresh ones, and on a
+            // small island the fresh ones ran out at 6 of 24 and the sawmill
+            // stood as a drawing for ever. Timber already cut is carried five
+            // metres, which is also why it goes in faster than timber still
+            // growing.
+            var pile = Store(Res.Timber);
+            Haul(pile, ref pending.done, ref pending.donePart, ref roomB, ref labour);
+
+            // Then whatever is left of the day goes on cutting.
+            var wood = Wood;
+            float wantB = Mathf.Max(0f, labour) * TimberPerHandPerDay;
+            float gotB = Mathf.Min(wantB, Mathf.Min(wood.standing, roomB));
+            if (gotB <= 0f) return;
+            wood.standing -= gotB;
+            timberTaken += gotB;
+            pending.donePart += gotB;
+            int wholeB = Mathf.FloorToInt(pending.donePart);
+            if (wholeB > 0)
+            {
+                pending.done += wholeB;
+                pending.donePart -= wholeB;
+            }
+            labour -= gotB / TimberPerHandPerDay;
+        }
+
+        void PayStone(PendingBuild pending, ref float labour)
         {
             if (pending == null) return;
             float roomS = (pending.stoneNeeded - pending.stoneDone) - pending.stoneDonePart;
@@ -1250,7 +1393,7 @@ namespace SeaSick.World
         /// Runs last, out of whatever the timber and stone parts left, so a
         /// plan with `brickNeeded == 0` is bit-identical to the old path --
         /// `room <= 0` and it returns having touched nothing.
-        void PayBrick(ref float labour)
+        void PayBrick(PendingBuild pending, ref float labour)
         {
             if (pending == null) return;
             float room = (pending.brickNeeded - pending.brickDone) - pending.brickDonePart;
@@ -1330,10 +1473,13 @@ namespace SeaSick.World
         {
             get
             {
-                if (pending == null || pending.Complete) return null;
-                if (!pending.TimberPaid) return Res.Timber;
-                if (!pending.StonePaid) return Res.Stone;
-                return pending.BrickPaid ? null : Res.Brick;
+                // **The OLDEST unstocked site, and only that one.** The
+                // queue's whole rule, in the one place every body reads.
+                var p = Focus;
+                if (p == null) return null;
+                if (!p.TimberPaid) return Res.Timber;
+                if (!p.StonePaid) return Res.Stone;
+                return p.BrickPaid ? null : Res.Brick;
             }
         }
 
@@ -1374,46 +1520,23 @@ namespace SeaSick.World
             // Captured before the building block touches `pending`, so the
             // completion check below can tell "finished just now" from
             // "was already sitting there ready to raise".
-            bool wasComplete = pending != null && pending.Complete;
-            if (pending != null && !pending.Complete)
+            // **One pass down the QUEUE, oldest first (2026-09-22).** The
+            // hand-days are spent on `sites[0]` until it is stocked and only
+            // then on `sites[1]`, in the same tick if there is a day left
+            // over -- which is exactly "the haulers move on to the next one".
+            // With one site queued this is the old block to the bit.
+            float builders = 0f;
+            foreach (var h in hands)
+                if (h != null && h.order == OutpostOrder.Build) builders += WorkFactor(h);
+            if (builders > 0f && sites != null && sites.Count > 0)
             {
-                float builders = 0f;
-                foreach (var h in hands)
-                    if (h != null && h.order == OutpostOrder.Build) builders += WorkFactor(h);
-                if (builders > 0f)
+                float labour = builders * days;          // hand-days to spend
+                for (int si = 0; si < sites.Count && labour > 0f; si++)
                 {
-                    float labour = builders * days;          // hand-days to spend
-                    float roomB = (pending.needed - pending.done) - pending.donePart;
+                    var site = sites[si];
+                    if (site == null || site.Complete) continue;
 
-                    // **The pile first.** Kevin, 2026-09-20: *"they gathered
-                    // logs for it but it never built."* They had: ten logs sat
-                    // beside the fire while the builders walked past them to
-                    // cut fresh ones, and on a small island the fresh ones ran
-                    // out at 6 of 24 and the sawmill stood as a drawing for
-                    // ever. Timber already cut is carried five metres, which
-                    // is also why it goes in faster than timber still growing.
-                    var pile = Store(Res.Timber);
-                    Haul(pile, ref pending.done, ref pending.donePart,
-                        ref roomB, ref labour);
-
-                    // Then whatever is left of the day goes on cutting.
-                    var wood = Wood;
-                    float wantB = Mathf.Max(0f, labour) * TimberPerHandPerDay;
-                    float gotB = Mathf.Min(wantB, Mathf.Min(wood.standing, roomB));
-                    if (gotB > 0f)
-                    {
-                        wood.standing -= gotB;
-                        timberTaken += gotB;
-                        pending.donePart += gotB;
-                        int wholeB = Mathf.FloorToInt(pending.donePart);
-                        if (wholeB > 0)
-                        {
-                            pending.done += wholeB;
-                            pending.donePart -= wholeB;
-                        }
-                        labour -= gotB / TimberPerHandPerDay;
-                    }
-
+                    PayTimber(site, ref labour);
                     // --- and then the stone, 2026-09-21 ----------------------
                     //
                     // **The second part of the price, in the same two steps
@@ -1424,27 +1547,22 @@ namespace SeaSick.World
                     // It runs AFTER the timber out of whatever hand-days the
                     // timber part left over, which is what makes a plan with
                     // `stoneNeeded == 0` bit-identical to the old path: the
-                    // block below sees `roomS <= 0` and returns having
-                    // touched nothing. A builder therefore finishes the logs
-                    // first and starts on the rock in the same tick -- the
-                    // body walking out to a boulder follows, because
-                    // `CampWorker` asks the ledger the same question
-                    // (`BuilderWants`) the arithmetic just answered.
-                    //
-                    // Note `Stock(Res.Stone)` is read WITHOUT creating: an
-                    // empty stock conjured here would be a seam of zero on
-                    // an island with rocks on it, and `GatherSync` reads
-                    // `standing < 1` as "worked out" and would hide every
-                    // boulder on the island.
-                    PayStone(ref labour);
-                    PayBrick(ref labour);
+                    // block sees `roomS <= 0` and returns having touched
+                    // nothing. A builder therefore finishes the logs first
+                    // and starts on the rock in the same tick -- the body
+                    // walking out to a boulder follows, because `CampWorker`
+                    // asks the ledger the same question (`BuilderWants`) the
+                    // arithmetic just answered.
+                    PayStone(site, ref labour);
+                    PayBrick(site, ref labour);
+
+                    // The record of who's away doesn't care whether the raise
+                    // was seen -- `Outpost.FinishReady` handles standing the
+                    // mesh up separately, on the next `CatchUp`. This just
+                    // notes that it happened during the absence.
+                    if (site.Complete) away.raised.Add(site.planId);
                 }
             }
-            // The record of who's away doesn't care whether the raise was
-            // seen -- `Outpost.FinishPending` handles standing the mesh up
-            // separately, on the next `CatchUp`. This just notes that it
-            // happened during the absence.
-            if (pending != null && !wasComplete && pending.Complete) away.raised.Add(pending.planId);
 
             // --- gathering ---------------------------------------------------
             //
@@ -1721,7 +1839,9 @@ namespace SeaSick.World
         public bool Stalled(OutpostHand h)
         {
             if (h == null) return true;
-            if (h.order == OutpostOrder.Build) return pending == null || pending.Complete;
+            // Nothing unstocked left in the QUEUE, not "nothing sited": a
+            // builder whose site is stocked has the next drawing to serve.
+            if (h.order == OutpostOrder.Build) return Focus == null;
             if (h.order == OutpostOrder.Gather)
             {
                 var stock = Stock(h.target);

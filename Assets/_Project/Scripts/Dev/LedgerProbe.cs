@@ -216,24 +216,24 @@ public class LedgerProbe : MonoBehaviour
         sb.AppendLine();
         sb.AppendLine($"BLUEPRINT ({BuildPlans.Campfire.cost} logs, 1 hand building) "
             + "over 3 game days:");
-        sb.AppendLine($"  one call      done {b1.pending.done}  part {b1.pending.donePart:F4}  standing {b1.Wood.standing:F2}");
-        sb.AppendLine($"  240 calls     done {b2.pending.done}  part {b2.pending.donePart:F4}  standing {b2.Wood.standing:F2}");
-        sb.AppendLine($"  4 ragged      done {b3.pending.done}  part {b3.pending.donePart:F4}  standing {b3.Wood.standing:F2}");
+        sb.AppendLine($"  one call      done {b1.Pending.done}  part {b1.Pending.donePart:F4}  standing {b1.Wood.standing:F2}");
+        sb.AppendLine($"  240 calls     done {b2.Pending.done}  part {b2.Pending.donePart:F4}  standing {b2.Wood.standing:F2}");
+        sb.AppendLine($"  4 ragged      done {b3.Pending.done}  part {b3.Pending.donePart:F4}  standing {b3.Wood.standing:F2}");
 
         Gate(sb, ref fails, "build-is-path-independent",
             SameBuild(b1, b2) && SameBuild(b1, b3),
-            $"{b1.pending.done}/{b1.Wood.standing:F3} vs {b2.pending.done}/{b2.Wood.standing:F3} "
-            + $"vs {b3.pending.done}/{b3.Wood.standing:F3}");
+            $"{b1.Pending.done}/{b1.Wood.standing:F3} vs {b2.Pending.done}/{b2.Wood.standing:F3} "
+            + $"vs {b3.Pending.done}/{b3.Wood.standing:F3}");
 
         Gate(sb, ref fails, "a-finished-build-stops-eating-wood",
-            b1.pending.Complete && b1.pending.done == BuildPlans.Campfire.cost,
-            $"{b1.pending.done} of {BuildPlans.Campfire.cost} logs, no overshoot");
+            b1.Pending.Complete && b1.Pending.done == BuildPlans.Campfire.cost,
+            $"{b1.Pending.done} of {BuildPlans.Campfire.cost} logs, no overshoot");
 
         // How long one hand takes, which is the number the cost was chosen
         // to express: four logs at four logs a day is one day's work.
         var timed = Building(t0);
         int steps = 0;
-        while (!timed.pending.Complete && steps < 400)
+        while (!timed.Pending.Complete && steps < 400)
         {
             steps++;
             timed.Tick(t0 + steps * OutpostLedger.QuantumDays * day);
@@ -265,8 +265,8 @@ public class LedgerProbe : MonoBehaviour
         bare.Wood.standingMax = 0f;
         bare.Tick(t0 + 10.0 * day);
         Gate(sb, ref fails, "a-build-draws-on-standing-timber",
-            bare.pending.done == 0 && !bare.pending.Complete,
-            $"{bare.pending.done} logs delivered on ground with nothing standing");
+            bare.Pending.done == 0 && !bare.Pending.Complete,
+            $"{bare.Pending.done} logs delivered on ground with nothing standing");
 
         // And the other half of the same fact: on ground that was stripped but
         // is growing back, a day's building delivers what GREW, not what a
@@ -277,8 +277,8 @@ public class LedgerProbe : MonoBehaviour
         thin.Tick(t0 + 1.0 * day);
         float grew = OutpostLedger.StandingPerHectare * OutpostLedger.RegrowthPerDay;
         Gate(sb, ref fails, "a-stripped-camp-builds-at-the-rate-it-regrows",
-            thin.pending.done + thin.pending.donePart <= grew + 0.05f,
-            $"{thin.pending.done + thin.pending.donePart:F2} logs in a day "
+            thin.Pending.done + thin.Pending.donePart <= grew + 0.05f,
+            $"{thin.Pending.done + thin.Pending.donePart:F2} logs in a day "
             + $"against {grew:F2} regrown, not the {OutpostLedger.TimberPerHandPerDay:F0} a hand can cut");
 
         // And it survives a save half built, which is the whole reason the
@@ -287,12 +287,12 @@ public class LedgerProbe : MonoBehaviour
         half.Tick(t0 + 0.5 * day);
         var reloaded = JsonUtility.FromJson<OutpostLedger>(JsonUtility.ToJson(half));
         Gate(sb, ref fails, "a-half-built-blueprint-round-trips",
-            reloaded != null && reloaded.pending != null
-            && reloaded.pending.planId == half.pending.planId
-            && reloaded.pending.done == half.pending.done
-            && Mathf.Abs(reloaded.pending.x - half.pending.x) < 1e-3f,
-            $"{half.pending.done}/{half.pending.needed} logs at "
-            + $"({half.pending.x:F1}, {half.pending.z:F1}) restored intact");
+            reloaded != null && reloaded.Pending != null
+            && reloaded.Pending.planId == half.Pending.planId
+            && reloaded.Pending.done == half.Pending.done
+            && Mathf.Abs(reloaded.Pending.x - half.Pending.x) < 1e-3f,
+            $"{half.Pending.done}/{half.Pending.needed} logs at "
+            + $"({half.Pending.x:F1}, {half.Pending.z:F1}) restored intact");
 
         // --- 10. many resources, and a ceiling for each ----------------------
         //
@@ -423,19 +423,22 @@ public class LedgerProbe : MonoBehaviour
         l.lastTicked = at;
         l.ceilingPer = 0;                     // no fire yet, so nothing keeps anything
         l.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Build });
-        l.pending = new PendingBuild
+        // One drawing in the queue -- `sites` replaced the single
+        // `pending` row on 2026-09-22 and this probe's "one build" is the
+        // one-element case of it.
+        l.sites.Add(new PendingBuild
         {
             planId = BuildPlans.Campfire.id,
             x = 40f,
             z = -12.5f,
             needed = BuildPlans.Campfire.cost,
-        };
+        });
         return l;
     }
 
     static bool SameBuild(OutpostLedger a, OutpostLedger b)
-        => a.pending.done == b.pending.done
-        && Mathf.Abs(a.pending.donePart - b.pending.donePart) < 1e-4f
+        => a.Pending.done == b.Pending.done
+        && Mathf.Abs(a.Pending.donePart - b.Pending.donePart) < 1e-4f
         && Mathf.Abs(a.Wood.standing - b.Wood.standing) < 1e-3f;
 
     /// A camp with a bit of everything in it: two cutting, a sawyer and a

@@ -179,17 +179,21 @@ namespace SeaSick.World
             // Before the finished buildings, because a blueprint can overlap
             // the ground beside one and the thing you are pointing at is
             // whichever one the player can still do something about.
-            if (ledger != null && ledger.pending != null)
-            {
-                var plan = BuildPlans.Named(ledger.pending.planId);
-                Vector3 at = ledger.pending.At;
-                at.y = outpost.GroundAt(at);
-                if (InFootprint(p, at, ledger.pending.yaw, plan.footprint, slack))
+            // Every drawing in the queue, oldest first (2026-09-22): a camp
+            // can hold several now, and the one under the thumb is the one
+            // the player means.
+            if (ledger != null && ledger.sites != null)
+                foreach (var row in ledger.sites)
                 {
+                    if (row == null || string.IsNullOrEmpty(row.planId)) continue;
+                    var plan = BuildPlans.Named(row.planId);
+                    Vector3 at = row.At;
+                    at.y = outpost.GroundAt(at);
+                    if (!InFootprint(p, at, row.yaw, plan.footprint, slack)) continue;
                     t.kind = HandTarget.Kind.Blueprint;
-                    t.planId = ledger.pending.planId;
+                    t.planId = row.planId;
                     t.centre = at;
-                    t.yaw = ledger.pending.yaw;
+                    t.yaw = row.yaw;
                     t.boxed = true;
                     t.footprint = plan.footprint;
                     t.extent = HalfDiagonal(plan.footprint);
@@ -197,7 +201,6 @@ namespace SeaSick.World
                     t.refusal = cannotLand;
                     return t;
                 }
-            }
 
             // --- what is standing --------------------------------------------
             var built = outpost.Built;

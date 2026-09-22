@@ -17,9 +17,18 @@ namespace SeaSick.World
     /// player must not be able to tell.
     public class BuildSite : MonoBehaviour
     {
-        /// The plan this is a drawing of. Matched against
-        /// `OutpostLedger.pending.planId`.
+        /// The plan this is a drawing of.
         public string PlanId { get; private set; }
+
+        /// **The queue row this object draws (2026-09-22).** A camp can hold
+        /// several drawings now, so "the pending one" is not an answer: the
+        /// object carries a reference to its own row, and `Outpost` is what
+        /// binds them (`EnsureBlueprints`). The row is still the truth and
+        /// this is still only its rendering -- destroy this and the row goes
+        /// on being built while the island is unloaded.
+        public PendingBuild Row { get; private set; }
+
+        public void Bind(PendingBuild row) { Row = row; }
 
         Outpost outpost;
         GameObject ghost;
@@ -98,8 +107,7 @@ namespace SeaSick.World
 
         void Update()
         {
-            var p = outpost != null && outpost.Ledger != null
-                ? outpost.Ledger.pending : null;
+            var p = Row;
             if (p == null || p.planId != PlanId) return;
             Refresh(p);
         }

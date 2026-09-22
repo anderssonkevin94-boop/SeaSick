@@ -219,10 +219,11 @@ namespace SeaSick.UI
             y = Verb1(ref verb, Verb.Build, "build  ▸", x + indent, y, w - indent, subH);
             if (verb == Verb.Build)
             {
-                if (camp.Building)
-                    y = Note("something is already going up", x + indent * 2f, y, w - indent * 2f, subH);
-                else
-                    foreach (var plan in camp.Buildable())
+                // **The queue took the refusal away (2026-09-22).** A camp
+                // can hold several drawings, so the list is always the list;
+                // `Outpost.SiteFresh` still refuses a second copy of a plan
+                // that is built or already queued.
+                foreach (var plan in camp.Buildable())
                     {
                         var pr = new Rect(x + indent * 2f, y, w - indent * 2f, subH);
                         // Claimed one by one as well as by the panel: a row
@@ -277,7 +278,7 @@ namespace SeaSick.UI
         {
             Verb.Assign => Mathf.Max(1, camp.Positions().Count),
             Verb.Gather => Mathf.Max(1, camp.Gatherable().Count),
-            Verb.Build => camp.Building ? 1 : Mathf.Max(1, camp.Buildable().Count),
+            Verb.Build => Mathf.Max(1, camp.Buildable().Count),
             _ => 0,
         };
 

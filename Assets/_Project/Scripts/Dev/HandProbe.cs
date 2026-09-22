@@ -370,7 +370,7 @@ public class HandProbe : MonoBehaviour
         // --- the blueprint ------------------------------------------------------
         if (camp.Building)
         {
-            Vector3 at = camp.Ledger.pending.At;
+            Vector3 at = camp.Ledger.Pending.At;
             at.y = camp.GroundAt(at);
             Vector2 s = ToScreen(lens, at, out _);
             yield return Do(hand, resident, s);
@@ -873,7 +873,7 @@ public class HandProbe : MonoBehaviour
         // =====================================================================
         if (camp.Building)
         {
-            var p = camp.Ledger.pending;
+            var p = camp.Ledger.Pending;
             string planId = p.planId;
             var plan = BuildPlans.Named(planId);
             int stoodBefore = camp.CountOf(planId);
@@ -891,9 +891,9 @@ public class HandProbe : MonoBehaviour
             int stoodAfter = camp.CountOf(planId);
             sb.AppendLine();
             sb.AppendLine($"BUILDING THE {plan.label.ToUpperInvariant()} ({p.needed} logs, one hand, {days:F1} days):");
-            if (camp.Ledger.pending != null)
+            if (camp.Ledger.Pending != null)
             {
-                var q = camp.Ledger.pending;
+                var q = camp.Ledger.Pending;
                 Vector3 at = q.At; at.y = camp.GroundAt(at);
                 bool could = camp.CanPlace(plan, at, q.yaw, out string whyNot);
                 sb.AppendLine($"  STILL A DRAWING: {q.done} / {q.needed} logs in it, "
@@ -904,8 +904,8 @@ public class HandProbe : MonoBehaviour
             else sb.AppendLine($"  it stands: {stoodBefore} -> {stoodAfter}, "
                 + $"camp still at {camp.CampCentre.x:F0},{camp.CampCentre.z:F0}");
             Gate("a-blueprint-somebody-was-dropped-on-gets-built",
-                camp.Ledger.pending == null && stoodAfter == stoodBefore + 1,
-                camp.Ledger.pending != null ? "still a drawing" : $"{stoodBefore} -> {stoodAfter}");
+                camp.Ledger.Pending == null && stoodAfter == stoodBefore + 1,
+                camp.Ledger.Pending != null ? "still a drawing" : $"{stoodBefore} -> {stoodAfter}");
         }
 
         TimeOfDay.Paused = wasPaused;
@@ -1083,7 +1083,7 @@ public class HandProbe : MonoBehaviour
             if (HandTargets.InFootprint(p, b.transform.position,
                 b.transform.eulerAngles.y, plan.footprint, slack)) return true;
         }
-        var pend = camp.Ledger != null ? camp.Ledger.pending : null;
+        var pend = camp.Ledger != null ? camp.Ledger.Pending : null;
         if (pend != null)
         {
             var plan = BuildPlans.Named(pend.planId);
