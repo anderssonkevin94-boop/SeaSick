@@ -33,21 +33,34 @@ namespace SeaSick.UI.Sheets
             var p = go.AddComponent<Pickable>();
             var col = go.AddComponent<SphereCollider>();
             col.isTrigger = true;
-            col.radius = Mathf.Max(minRadius, RadiusOf(go));
-            // The mesh's own middle, not the transform's: a fire's quad is
+            // The model's own middle, not the transform's: a fire's quad is
             // usually offset up from the pivot on the ground.
-            var rend = go.GetComponentInChildren<Renderer>();
-            if (rend != null)
-                col.center = go.transform.InverseTransformPoint(rend.bounds.center);
+            if (BoundsOf(go, out var bounds))
+            {
+                col.radius = Mathf.Max(minRadius, Mathf.Max(bounds.extents.x, bounds.extents.z));
+                col.center = go.transform.InverseTransformPoint(bounds.center);
+            }
+            else col.radius = minRadius;
             p.added = col;
         }
 
-        static float RadiusOf(GameObject go)
+        /// **The whole model, not its first mesh, 2026-09-23.** This read
+        /// `GetComponentInChildren<Renderer>()`, which on an authored
+        /// building is whichever part the FBX happened to list first -- a
+        /// sign, a beam -- so the forge's tap target was a 1.5 m ball
+        /// hanging off one corner. Kevin, on the phone: *"tapping the
+        /// building as a whole does nothing."*
+        static bool BoundsOf(GameObject go, out Bounds b)
         {
-            var rend = go.GetComponentInChildren<Renderer>();
-            if (rend == null) return 0f;
-            var e = rend.bounds.extents;
-            return Mathf.Max(e.x, e.z);
+            b = default;
+            bool any = false;
+            foreach (var r in go.GetComponentsInChildren<Renderer>())
+            {
+                if (r is ParticleSystemRenderer) continue;
+                if (!any) { b = r.bounds; any = true; }
+                else b.Encapsulate(r.bounds);
+            }
+            return any;
         }
 
         /// Sweep the four kinds of thing that are tappable and can be bare.
@@ -57,7 +70,18 @@ namespace SeaSick.UI.Sheets
         {
             foreach (var f in Object.FindObjectsByType<World.Campfire>(
                          FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                // **Only the camp's fire, 2026-09-23.** Every building's
+                // window lamp is a `Campfire` too (`BuildingFactory.Lamp`
+                // borrows its flicker), and giving each one a tap sphere did
+                // two wrong things at once: the lamp became a little button
+                // that opened the CAMP sheet, and its collider made
+                // `Ensure` below believe the building already had one, so
+                // the building itself was never tappable.
+                var owner = f.GetComponentInParent<World.Building>();
+                if (owner != null && owner.Kind != World.BuildKind.Fire) continue;
                 Ensure(f, 1.6f);
+            }
             foreach (var b in Object.FindObjectsByType<World.BuildSite>(
                          FindObjectsInactive.Exclude, FindObjectsSortMode.None))
                 Ensure(b, 2.0f);
