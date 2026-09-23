@@ -1358,3 +1358,40 @@ whatever the LAST frame before the render happened to write to it, which is
 why the frame count and settle time above matter (`VillagerActing.cs`'s own
 doc comment: "any bone left exactly as we wrote it is restored before the
 next bend").
+
+## Working alongside Astra (2026-09-24)
+
+Two sessions build this game at once: Astra (art, and from 2026-09-24 the
+UI) and the systems session. The editor is ONE shared resource; git is
+not. The rules that keep them from tripping each other:
+
+- **Files.** Astra owns `Assets/_Project/Scripts/UI/**`, her art under
+  `Assets/_Project/Art/AstraPlaytest/**` and `Art/Ship/SternPaddleAstra*`,
+  the `Resources/Settlement/*_astra.prefab` / `Resources/Palisade` /
+  `Resources/Pier` wrappers, and `art-staging/` + `tools/blender/`. The
+  systems session owns `World/`, `Ship/`, `Steamer/`, `Ocean/`, `Dev/`,
+  `Save/`, `Combat/`, `Terrain/`. Neither edits the other's files; a
+  value the UI needs from the economy is read through the ledger's public
+  getters (`OutpostLedger.Stations.cs` doc block) and a missing getter is
+  ASKED for, not added from the UI side.
+- **The editor.** Only one session drives Unity (compile, play, capture,
+  build) at a time. The other writes code in its own `git worktree` and
+  does not compile until the editor is handed over. Phone builds
+  (`BuildPipeline.BuildPlayer` from the open editor, see "the game on an
+  iPhone") are the systems session's; a recompile mid-build breaks it.
+- **Git.** Small commits on `ships-into-unity`, each after a clean compile
+  (`unity cmd console_status --json`); pull before starting, commit before
+  handing the editor back.
+- **Sheet facts the UI side needs.** Every building sheet is one template
+  (`UI/Sheets/StationSheet.cs`): worker slot → what's coming in → what
+  it's making + the ORDER (recipe rows, ∞/5/10/20/50/100 chips, STOP) →
+  what's going out → why it's stopped → upgrade, poured into band-high
+  pages (`SheetHost.BandHeight`); `FarmSheet.cs` is the same frame without
+  chips. Buttons are built once and re-texted on the 0.25 s refresh (a
+  rebuilt element loses the tap it was in the middle of). The HUD's "44"
+  is PANEL UNITS: ~2.05 game-view px per unit at 1080x2340, so a 44-unit
+  button is ~90 px ≈ 30 pt on a 3x iPhone; a true 44 pt is ~65–70 units
+  and roughly halves what fits on a page. Kevin has said the buttons will
+  change. `WorldPicker` tries every raycast hit nearest-first (scenery
+  trees carry ~15 m trigger boxes); a building's tap sphere comes from
+  `Pickable.EnsureAll`.
