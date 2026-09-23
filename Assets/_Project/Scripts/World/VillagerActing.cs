@@ -37,7 +37,10 @@ namespace SeaSick.World
     /// no-op rather than a crash at a camp.
     public class VillagerActing : MonoBehaviour
     {
-        public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land }
+        /// `Bend` (2026-09-24): stooping over a stack -- picking a load up
+        /// off a store pile or a station's bay/rack, or setting one down.
+        /// Appended last so nothing that stored a mode by number moves.
+        public enum Mode { None, Chop, Saw, Hammer, Hoe, Stir, Carry, Dangle, Land, Bend }
 
         public Mode Current { get; private set; }
 
@@ -85,6 +88,10 @@ namespace SeaSick.World
         const float Hammer_Period = 0.85f;
         const float Hoe_Period = 1.5f;
         const float Stir_Period = 1.6f;
+        /// Down and up once. Timed from the moment the pose is shown
+        /// (`modeClock`), so a set-down that lasts half a period is a single
+        /// stoop down onto the stack, never a random slice of a cycle.
+        const float Bend_Period = 1.2f;
 
         /// Shoulder to fingertip, metres. The tool props hang from here.
         const float HandDrop = 0.60f;
@@ -100,6 +107,7 @@ namespace SeaSick.World
         float weight;                // 0..1 blend of `shown`
         float clock;                 // free-running, for the sine cycles
         float landTimer;
+        float modeClock;             // seconds since `shown` last changed
 
         Transform hips, chest, head, armL, armR, legL, legR;
         Vector3 hipsRest;
@@ -108,7 +116,8 @@ namespace SeaSick.World
 
         /// One prop per mode, built on first use and thereafter toggled. Kept
         /// by mode index so there is no dictionary and no per-frame lookup.
-        readonly GameObject[] tools = new GameObject[9];
+        /// One slot per `Mode`.
+        readonly GameObject[] tools = new GameObject[10];
         GameObject carryProp;
         string carryPropFor;
 
@@ -125,6 +134,7 @@ namespace SeaSick.World
 
             float dt = Time.deltaTime;
             clock += dt;
+            modeClock += dt;
             TrackVelocity(dt);
 
             if (shown != Current)
@@ -140,6 +150,7 @@ namespace SeaSick.World
                     shownLoad = load;
                     shownLoadCount = loadCount;
                     landTimer = 0f;
+                    modeClock = 0f;
                     RefreshProps();
                 }
             }
@@ -346,6 +357,23 @@ namespace SeaSick.World
                     chestRoll = -5f * side;
                     chestPitch = 6f;
                     headPitch = 4f;
+                    break;
+                }
+
+                case Mode.Bend:
+                {
+                    // A stoop over a stack: both hands down and forward,
+                    // folded at the chest and hips (a knee-less rig has
+                    // nothing else to fold at). Held long, it loops -- a man
+                    // sorting a load off a rack; held for a set-down, it is
+                    // one stoop. No hip drop: with no knees that would sink
+                    // the feet into the ground.
+                    float k = 0.5f - 0.5f * Mathf.Cos(TAU * modeClock / Bend_Period);
+                    armLPitch = armRPitch = Mathf.Lerp(-24f, -66f, k);
+                    armLIn = armRIn = 12f;
+                    chestPitch = Mathf.Lerp(10f, 38f, k);
+                    hipsPitch = Mathf.Lerp(4f, 18f, k);
+                    headPitch = Mathf.Lerp(6f, 16f, k);
                     break;
                 }
 
