@@ -106,11 +106,12 @@ namespace SeaSick.UI.Sheets
             int siteCount = Mathf.Min(l.SiteCount, SitesShown);
             int cargo = alongside ? ship.CargoCount : 0;
             int crew = alongside ? ship.CrewRows : 0;
+            bool warn = CampWarning(l) != null;
 
             long key = Mathf.RoundToInt(band) * 1000003L
                        + storeTiles * 7919L + handCount * 131L + planCount * 31L
                        + cargo * 17L + crew * 7L + (alongside ? 1L : 0L)
-                       + siteCount * 3L;
+                       + siteCount * 3L + (warn ? 1L : 0L) * 2L;
             if (key == planKey) return;
             planKey = key;
 
@@ -124,8 +125,11 @@ namespace SeaSick.UI.Sheets
             // The fire's own block, 2026-09-23: an eyebrow, the big roman
             // numeral, and either a note (top level) or a cost line plus a
             // rule -- counted here so a phone-height band still fits the
-            // roster underneath it.
-            float firePx = SheetKit.EyebrowPx + SheetKit.BigPx + SheetKit.NotePx + SheetKit.RulePx;
+            // roster underneath it. The warning row (also 2026-09-23) is
+            // its own `NotePx`, but only when `CampWarning` has something to
+            // say -- an absent row costs the band nothing.
+            float firePx = SheetKit.EyebrowPx + SheetKit.BigPx + SheetKit.NotePx + SheetKit.RulePx
+                           + (warn ? SheetKit.NotePx : 0f);
             float campPx = firePx + storeRows * SheetKit.StorePx
                            + (siteCount == 0 ? SheetKit.NotePx : siteCount * SheetKit.RowPx);
             float ordersPx = SheetKit.EyebrowPx + SheetKit.SegPx + SheetKit.TextPx
@@ -276,6 +280,7 @@ namespace SeaSick.UI.Sheets
         // --- the pieces kept between refreshes ---------------------------------
 
         VisualElement fireHolder;
+        VisualElement warnHolder;
         VisualElement storesHolder;
         VisualElement noteHolder;
         VisualElement rationsHolder;
@@ -293,6 +298,7 @@ namespace SeaSick.UI.Sheets
         // for it was text meshes, ours is that a rebuilt element loses the
         // press that is happening on it.
         long fireKey = long.MinValue;
+        long warnKey = long.MinValue;
         long storesKey = long.MinValue;
         long noteKey = long.MinValue;
         int rationsKey = -99;
@@ -344,10 +350,11 @@ namespace SeaSick.UI.Sheets
         void Forget()
         {
             fireHolder = null;
+            warnHolder = null;
             storesHolder = noteHolder = rationsHolder = priorityHolder = null;
             lookoutHolder = recruitBar = handsHolder = buildListHolder = null;
             rationsLine = recruitLine = bedsEyebrow = null;
-            fireKey = storesKey = noteKey = lookoutKey = recruitKey = handsKey = long.MinValue;
+            fireKey = warnKey = storesKey = noteKey = lookoutKey = recruitKey = handsKey = long.MinValue;
             rationsKey = priorityKey = -99;
             buildKey = long.MinValue;
         }
@@ -361,6 +368,13 @@ namespace SeaSick.UI.Sheets
         {
             fireHolder = SheetBits.Holder();
             root.Add(fireHolder);
+
+            // Camp warnings, 2026-09-23: one line, directly under the fire
+            // block, that says what is wrong before the piles do -- absent
+            // entirely (zero height) when nothing applies.
+            warnHolder = SheetBits.Holder();
+            root.Add(warnHolder);
+
             root.Add(SheetKit.Rule());
 
             storesHolder = SheetBits.Holder();
@@ -413,6 +427,34 @@ namespace SeaSick.UI.Sheets
                     col.Add(SheetKit.Note(why));
             }
             SheetBits.Swap(fireHolder, col);
+        }
+
+        /// **What is wrong with the camp, comma-joined, 2026-09-23.** Read
+        /// once here and once in `Plan` (for the row's height), never
+        /// computed twice in a way the two could disagree on: null means
+        /// the row is absent, not empty.
+        static string CampWarning(OutpostLedger l)
+        {
+            if (l == null) return null;
+            var bits = new List<string>(5);
+            if (l.TimberStarved) bits.Add("builders short of timber");
+            if (l.StoneStarved) bits.Add("builders short of stone");
+            if (l.AngryCount > 0)
+                bits.Add($"{l.AngryCount} hand{(l.AngryCount == 1 ? "" : "s")} angry");
+            if (l.HasWatchtower && !l.LookoutPosted) bits.Add("nobody on watch");
+            int idle = 0;
+            foreach (var h in l.hands) if (h != null && h.order == OutpostOrder.Idle) idle++;
+            if (idle > 0) bits.Add($"{idle} hand{(idle == 1 ? "" : "s")} idle");
+            return bits.Count > 0 ? string.Join(", ", bits) : null;
+        }
+
+        void WarnRow(OutpostLedger l)
+        {
+            string text = CampWarning(l);
+            long key = text != null ? text.GetHashCode() : 0;
+            if (key == warnKey) return;
+            warnKey = key;
+            SheetBits.Swap(warnHolder, text != null ? SheetKit.Note(text) : null);
         }
 
         // --- page: orders --------------------------------------------------
@@ -469,6 +511,13 @@ namespace SeaSick.UI.Sheets
         /// the screen now.
         void BuildBuild(VisualElement root)
         {
+            // **Playtest prices, 2026-09-23.** `BuildPlans.PlaytestCostCap`
+            // caps every blueprint's cost; the list already prices in the
+            // capped number, so this just says the number is not the real
+            // one, above everything it applies to.
+            if (BuildPlans.PlaytestCostCap > 0)
+                root.Add(SheetKit.Text(
+                    $"playtest prices: capped at {BuildPlans.PlaytestCostCap}", false, true, 11f));
             root.Add(SheetKit.Eyebrow("raise a building"));
             buildListHolder = SheetBits.Holder();
             root.Add(buildListHolder);
@@ -607,6 +656,7 @@ namespace SeaSick.UI.Sheets
                     break;
                 default:
                     FireRow(l);
+                    WarnRow(l);
                     Stores(l);
                     Note(l);
                     // The camp page carries the orders too where the band is
@@ -996,6 +1046,11 @@ namespace SeaSick.UI.Sheets
         {
             long key = l.hands.Count * 1000003L + l.HousingCapacity
                        + handPart * 100003L + handsPerPage * 17L;
+            // `StallReason` folds in over a day's worth of ledger state (a
+            // pile, a tool, an ingredient) that nothing above already hashes
+            // -- so it is read into the key too, or "pile is full" would sit
+            // there stale until something else on the row changed.
+            var stallByHand = new Dictionary<string, string>();
             foreach (var h in l.hands)
             {
                 if (h == null) continue;
@@ -1003,6 +1058,9 @@ namespace SeaSick.UI.Sheets
                 key = key * 31 + (int)h.order;
                 key = key * 31 + (h.target != null ? h.target.GetHashCode() : 0);
                 key = key * 31 + Mathf.RoundToInt(h.mood * 20f);
+                string stall = l.StallReason(h);
+                stallByHand[h.name] = stall;
+                key = key * 31 + (stall != null ? stall.GetHashCode() : 0);
             }
             if (key == handsKey) return;
             handsKey = key;
@@ -1031,17 +1089,22 @@ namespace SeaSick.UI.Sheets
                 if (h == null) continue;
                 var who = h;      // the closure's own copy; rows outlive the loop
                 string mood = who.MoodWord;
+                stallByHand.TryGetValue(who.name, out string stall);
                 // **One line, beside the name, not under it.** A column of
                 // name-over-job wrapped "lookout · angry" onto two lines and
                 // pushed the row past the 40 px it is allowed, so each hand
                 // took two rows' worth of sheet and the roster ran off the
                 // bottom. Name, then what they are doing, then the verb.
+                // A stall reason (2026-09-23) wins the row over the mood
+                // word, same rule as `HandSheet` -- it already says why.
+                string sub = stall != null
+                    ? $"{who.Doing} · {stall}"
+                    : mood.Length > 0 ? $"{who.Doing} · {mood}" : who.Doing;
                 handsHolder.Add(SheetKit.ListRow(
                     SheetKit.Token(SheetBits.Initial(who.name), who.Angry,
                         SheetBits.JobGlyph(who), () => OpenHand(who.name)),
                     SheetKit.Text(who.name, true),
-                    SheetKit.Text(mood.Length > 0 ? $"{who.Doing} · {mood}" : who.Doing,
-                        false, true, 12f),
+                    SheetKit.Text(sub, false, true, 12f),
                     SheetKit.Btn("change", () => OpenHand(who.name), false, true)));
             }
         }

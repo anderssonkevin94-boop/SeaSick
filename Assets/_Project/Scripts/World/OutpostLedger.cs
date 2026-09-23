@@ -2619,12 +2619,36 @@ namespace SeaSick.World
 
         /// Nothing more for this hand to do: their pile is full, or their
         /// stock is gone, or the thing they work at has nothing to work on.
-        public bool Stalled(OutpostHand h)
+        /// Thin wrapper over `StallCause` so the two can never disagree.
+        public bool Stalled(OutpostHand h) => StallCause(h) != null;
+
+        /// Null while producing, else the reason -- lower-case sentence
+        /// fragment, for the sheets. **Not the same set as `Stalled`**:
+        /// walking up from the landing and working hungry both stop a hand
+        /// from earning anything, but neither is what `Stalled` means (a
+        /// full pile, an empty stock, nothing to work on), so `Stalled`
+        /// stays blind to them and only this reads them, ahead of
+        /// `StallCause`.
+        public string StallReason(OutpostHand h)
         {
-            if (h == null) return true;
+            if (h == null) return null;
+            if (h.walkingIn) return "still on the way up from the ship";
+            string cause = StallCause(h);
+            if (cause != null) return cause;
+            if (WorkFactor(h) <= StarvingWorkFloor + 0.0001f) return "too hungry to work well";
+            return null;
+        }
+
+        /// The reason `Stalled` says yes, named. Same boolean logic,
+        /// term for term -- a `null` here is exactly the `false` `Stalled`
+        /// used to return inline.
+        string StallCause(OutpostHand h)
+        {
+            if (h == null) return "gone";
             // Nothing unstocked left in the QUEUE, not "nothing sited": a
             // builder whose site is stocked has the next drawing to serve.
-            if (h.order == OutpostOrder.Build) return Focus == null;
+            if (h.order == OutpostOrder.Build)
+                return Focus == null ? "nothing sited to build" : null;
             if (h.order == OutpostOrder.Gather)
             {
                 var stock = Stock(h.target);
@@ -2632,32 +2656,62 @@ namespace SeaSick.World
                 // stops him -- and a herd below one animal is a herd he
                 // cannot take one out of.
                 if (h.target == Res.Game)
-                    return HunterBlocker() != null || RoomFor(Res.Food) <= 0 || stock == null || stock.standing < 1f;
-                return RoomFor(h.target) <= 0 || stock == null || stock.standing < 1f;
+                {
+                    string blocker = HunterBlocker();
+                    if (blocker != null) return blocker;
+                    if (RoomFor(Res.Food) <= 0) return "pile is full";
+                    if (stock == null || stock.standing < 1f) return "no game left here";
+                    return null;
+                }
+                if (RoomFor(h.target) <= 0) return "pile is full";
+                if (stock == null || stock.standing < 1f) return "nothing left to cut here";
+                return null;
             }
             if (h.order == OutpostOrder.Work)
             {
                 // A lookout makes nothing and that is the job -- never
                 // stalled for having nothing to show for standing watch.
-                if (h.target == WatchtowerId) return false;
+                if (h.target == WatchtowerId) return null;
                 if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,
                         out _, out float ratePerDay, out string tool, out _))
-                    return true;
-                if (string.IsNullOrEmpty(makes) || ratePerDay <= 0f) return true;
-                if (RoomFor(makes) <= 0) return true;
-                if (tool != null && HeldOf(tool) <= 0f) return true;
+                    return "not set to make anything";
+                if (string.IsNullOrEmpty(makes) || ratePerDay <= 0f) return "not set to make anything";
+                if (RoomFor(makes) <= 0) return "pile is full";
+                if (tool != null && HeldOf(tool) <= 0f) return $"needs a {Friendly(tool)} in the pile";
                 if (takes != null && takes.Length > 0)
                 {
-                    foreach (var line in takes) if (HeldOf(line.res) <= 0f) return true;
-                    return false;
+                    foreach (var line in takes)
+                        if (HeldOf(line.res) <= 0f) return $"waiting on {Friendly(line.res)}";
+                    return null;
                 }
                 // The field is the input: stripped bare is stalled, until it
                 // grows back.
                 var field = Stock(makes);
-                return field != null && field.standing <= 0f;
+                return field != null && field.standing <= 0f ? "field is bare" : null;
             }
-            return true;
+            return "waiting on orders";
         }
+
+        /// A resource id in the words the sheets show, lower-case. Not
+        /// general localisation, just the vocabulary `Res` actually has.
+        static string Friendly(string res) => res switch
+        {
+            Res.Boards => "boards",
+            Res.FineBoards => "fine boards",
+            Res.SawBlade => "saw blade",
+            Res.Tools => "tools",
+            Res.Iron => "iron",
+            Res.Stone => "stone",
+            Res.Timber => "timber",
+            Res.Ore => "ore",
+            Res.Spice => "spice",
+            Res.Brick => "brick",
+            Res.Arrows => "arrows",
+            Res.Hide => "hide",
+            Res.Spear => "spear",
+            Res.IronSpear => "iron spear",
+            _ => string.IsNullOrEmpty(res) ? "supplies" : res.ToLowerInvariant(),
+        };
 
         /// **Net units per game-day this camp changes `resource` by, at its
         /// CURRENT orders, sign included.** Mirrors `Step` and `Stalled` term

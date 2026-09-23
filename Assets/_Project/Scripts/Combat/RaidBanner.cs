@@ -12,7 +12,7 @@ namespace SeaSick.UI
     {
         static readonly HudLabel label = new HudLabel();
 
-        /// Called every OnGUI event from `CampSheet.OnGUI`. Costs nothing
+        /// Called every OnGUI event from `CampToasts.OnGUI`. Costs nothing
         /// when there's nothing to say.
         public static void Draw(World.Outpost outpost)
         {

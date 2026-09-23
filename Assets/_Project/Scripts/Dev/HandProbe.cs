@@ -230,7 +230,7 @@ public class HandProbe : MonoBehaviour
         // 2. Lifting writes nothing
         // =====================================================================
         //
-        // In ONE frame, with no yield in it. `CampSheet.OnGUI` calls
+        // In ONE frame, with no yield in it. The camp sheets call
         // `Outpost.CatchUp` on every GUI event while she lies at an island, so
         // a leg that spanned frames would be comparing a ledger the sheet had
         // ticked underneath it.

@@ -10,9 +10,9 @@ namespace SeaSick.UI.Sheets
     ///
     /// Kevin, 2026-09-21: *"the blueprint should be pressable where it states
     /// how many resources it still needs and the option to cancel the build /
-    /// move it."* That is `CampSheet.BlueprintPanel` (CampSheet.cs:546-608);
-    /// this is the same three facts and the same two calls, unfolded beside
-    /// the stakes instead of along the bottom of the screen, plus the one
+    /// move it."* The old camp bar answered that in a panel; this is the
+    /// same three facts and the same two calls, unfolded beside the stakes
+    /// instead of along the bottom of the screen, plus the one
     /// thing the old panel could not do -- put somebody on it.
     ///
     /// **It closes itself the frame the building goes up.** `BuildSite.Retire`
@@ -325,7 +325,7 @@ namespace SeaSick.UI.Sheets
         }
 
         /// `Outpost.CancelPending` -- the wood and stone already carried here
-        /// go back on the pile (CampSheet.cs:594).
+        /// go back on the pile.
         void CancelBuild()
         {
             if (outpost == null) return;
@@ -335,7 +335,7 @@ namespace SeaSick.UI.Sheets
 
         /// `CampSiting.Begin(..., movePending: true)` -- the drawing stays
         /// where it is until the new spot is tapped, so escaping the move
-        /// leaves the camp exactly as it was (CampSheet.cs:602).
+        /// leaves the camp exactly as it was.
         void MoveBuild()
         {
             var p = Pending;

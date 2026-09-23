@@ -259,9 +259,9 @@ namespace SeaSick.UI.Sheets
         }
 
         /// "+4/day", "−1.5/day", or **the empty string** when it is too small
-        /// to print -- exactly `CampSheet.RefreshRates`' rule, so the two
-        /// never disagree. Empty rather than "steady": the caller folds this
-        /// into a line that reads perfectly well without it, and a pile that
+        /// to print -- one rule, so every line that prints a rate agrees.
+        /// Empty rather than "steady": the caller folds this into a line
+        /// that reads perfectly well without it, and a pile that
         /// is not moving does not need a word to say so.
         public static string RateLine(OutpostLedger l, string res)
         {

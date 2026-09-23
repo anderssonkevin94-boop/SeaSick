@@ -490,8 +490,8 @@ public class CampLifeProbe : MonoBehaviour
                 preDown[i] = wasDown[i] = wood.TreeAt(i).felled;
 
             // Two snapshots of what each body is doing, because a tree can
-            // also come down in somebody else's `CatchUp` — `CampSheet.OnGUI`
-            // calls it every GUI event — which lands AFTER this loop's step
+            // also come down in somebody else's `CatchUp` — the camp sheets
+            // call it every GUI event — which lands AFTER this loop's step
             // and before the next one, by which time the man who was swinging
             // at it has shouldered his log and started walking. The snapshot
             // taken immediately before each `CatchUp` is the honest answer to

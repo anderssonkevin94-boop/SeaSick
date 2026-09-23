@@ -173,9 +173,11 @@ namespace SeaSick.UI.Sheets
         // --- is the sheet HUD the HUD right now? ---
 
         /// True while she is lying at an island that has a camp — the one
-        /// situation the sheet HUD is built for. The legacy IMGUI panels read
-        /// it and stand down, so the two never draw over each other, and
-        /// neither one has to know the other exists beyond this line.
+        /// situation the sheet HUD is built for. The IMGUI panels that would
+        /// say the same things (`StatusHUD`'s cargo lines, `HomeTab`, the
+        /// anchor prompt's secondary rows) read it and stand down, so the two
+        /// never draw over each other, and neither one has to know the other
+        /// exists beyond this line.
         ///
         /// Evaluated four times a second rather than per call: `OnGUI` runs
         /// once per IMGUI EVENT and several panels ask, so a `FindFirstObject`
@@ -223,7 +225,7 @@ namespace SeaSick.UI.Sheets
             // quiet failure: the ship is not up on the frame the HUD first
             // asks, so `anchor` is null, and every call for the next quarter
             // second then returns before the line that would have found her.
-            // `SuppressLegacy` is asked several times a frame by the legacy
+            // `SuppressLegacy` is asked several times a frame by the IMGUI
             // panels, so the throttle is nearly always closed and the cache
             // never fills -- the place label sat there with its island name
             // blank while the sub-line underneath it read correctly, because
@@ -244,19 +246,20 @@ namespace SeaSick.UI.Sheets
 
             // **A surveyed island is not a camp.** This read `Outpost.Of(isle)
             // != null`, which is true the moment the SURVEY finishes -- the
-            // survey adds the `Outpost` component itself (Outpost.cs:2600),
-            // and it runs as the anchor goes down, before anything is built.
-            // So the legacy bar stood down the instant she stopped, and with
-            // it went the only "🔥 Make camp" button in the game
-            // (CampSheet.cs:310) -- while the sheet HUD had nothing to put in
-            // its place, because `SheetBootstrap.FireFor` refuses a camp with
-            // no fire and no blueprint, and there is no campfire in the world
-            // to tap. Kevin, on the phone, 2026-09-22: "I see no option at all
-            // to build the campfire."
+            // survey adds the `Outpost` component itself, and it runs as the
+            // anchor goes down, before anything is built. That stood the
+            // IMGUI prompts down the instant she stopped, and with them the
+            // only "🔥 Make camp" in the game -- while the sheet HUD had
+            // nothing to put in its place, because `SheetBootstrap.FireFor`
+            // refuses a camp with no fire and no blueprint, and there is no
+            // campfire in the world to tap. Kevin, on the phone, 2026-09-22:
+            // "I see no option at all to build the campfire."
             //
             // The test is the same one `FireFor` uses, so the handover is
-            // exact: the legacy bar owns the island until the fire is sited,
-            // the sheets own it from the frame the drawing goes down.
+            // exact: the anchor prompt's "Make camp" row
+            // (`AnchorController.DrawMakeCamp`) owns the island until the
+            // fire is sited, the sheets own it from the frame the drawing
+            // goes down.
             var isle = anchor.CurrentIsland;
             var camp = isle != null ? Outpost.Of(isle) : null;
             suppress = camp != null && (camp.HasCamp || camp.Building);

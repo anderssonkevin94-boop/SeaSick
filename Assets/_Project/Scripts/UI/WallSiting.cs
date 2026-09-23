@@ -479,9 +479,9 @@ namespace SeaSick.UI
             if (Mode == State.NoPost)
             {
                 SitingButtons.Hint(PlantHint);
-                // Even with nothing planted the player must be able to back
-                // out, and the sheet's "never mind" is the door that is
-                // always on screen — `CampSheet` draws it. Nothing to do here.
+                // With nothing planted there is no segment to hang the ✕
+                // under: Escape backs out on a desk, and a phone has no
+                // on-screen door out of this state yet.
                 return;
             }
 

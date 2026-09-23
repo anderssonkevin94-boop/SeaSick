@@ -40,7 +40,7 @@ namespace SeaSick.World
     /// mid-way.
     ///
     /// The MonoBehaviour half is only somewhere to hang a coroutine. It is
-    /// added on demand beside the ship's `AnchorController`/`CampSheet` and is
+    /// added on demand beside the ship's `AnchorController` and is
     /// deliberately NOT wired into `Sea.unity`: it carries no serialised state,
     /// and the scene is carrying other people's uncommitted work.
     public class CampLoading : MonoBehaviour

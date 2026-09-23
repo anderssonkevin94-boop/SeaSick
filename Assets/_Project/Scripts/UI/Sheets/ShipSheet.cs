@@ -12,7 +12,7 @@ namespace SeaSick.UI.Sheets
     /// is sailing.**
     ///
     /// The fourth step of the loop (GDD §6) had one button until 2026-09-20
-    /// and three by 2026-09-22, spread across `CampSheet`'s bar, its store
+    /// and three by 2026-09-22, spread across the old camp bar, its store
     /// rows and the anchor prompt's deck-cargo toggle. They are all about the
     /// same decision -- how much you dare take -- so they are one sheet,
     /// unfolded beside the hull.
@@ -362,7 +362,7 @@ namespace SeaSick.UI.Sheets
             return null;
         }
 
-        /// The lot, best first -- `CampLoading.Begin` (CampSheet.cs:335). The
+        /// The lot, best first -- `CampLoading.Begin`. The
         /// stop-at caps below are what keep it from emptying the island.
         void LoadPressed()
         {
@@ -527,8 +527,7 @@ namespace SeaSick.UI.Sheets
             if (key == crewKey) return;
             crewKey = key;
 
-            // Aboard: the arrow leaves them here (`Outpost.Station`,
-            // CampSheet.cs:493).
+            // Aboard: the arrow leaves them here (`Outpost.Station`).
             if (aboardCol == null || ashoreCol == null) return;
             aboardCol.Clear();
             int aboard = 0;
@@ -556,8 +555,8 @@ namespace SeaSick.UI.Sheets
             if (aboardCol.childCount == 0)
                 aboardCol.Add(SheetKit.Text(aboard == 0 ? "nobody aboard" : "—", false, true, 12f));
 
-            // Ashore: the arrow takes them back (`Outpost.Recall`,
-            // CampSheet.cs:519). **By name, never by enumerator** -- `Recall`
+            // Ashore: the arrow takes them back (`Outpost.Recall`).
+            // **By name, never by enumerator** -- `Recall`
             // takes the row out of `l.hands`, and the list this loop walks is
             // that list.
             ashoreCol.Clear();

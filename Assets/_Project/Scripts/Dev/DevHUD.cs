@@ -40,9 +40,15 @@ namespace SeaSick.Dev
 
         void Update()
         {
+            // **Editor and dev builds only, 2026-09-23.** The tuning list
+            // inside the panel was already compiled out of a shipping build,
+            // but this hotkey was not, so a keyboard on a release build could
+            // still summon the diagnostic wall.
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb != null && kb.f1Key.wasPressedThisFrame)
                 SeaSick.UI.SettingsPanel.Toggle(this);
+#endif
         }
 
         public void DrawTool(Rect body)

@@ -189,8 +189,16 @@ namespace SeaSick.UI.Sheets
             if (l == null || h == null) return;
             outpost.CatchUp();
 
-            if (doing != null) doing.text = Cap(h.Doing);
-            if (cause != null) cause.text = Mood(l, h);
+            // **Why nothing is coming home, 2026-09-23.** `StallReason`
+            // names the same thing `Stalled` already gates on -- so it goes
+            // on the doing line, next to the word it explains, one line:
+            // "gathering timber · pile is full". A stall already says why,
+            // so the mood line drops its own extra clause rather than
+            // repeat it (the reason wins the row over the mood word).
+            string stall = l.StallReason(h);
+            if (doing != null)
+                doing.text = Cap(h.Doing) + (stall != null ? " · " + stall : "");
+            if (cause != null) cause.text = Mood(l, h, stall != null);
             if (stand != null) stand.SetEnabled(h.order != OutpostOrder.Idle);
             if (back != null)
                 back.SetEnabled(SheetBits.Anchor != null && outpost.BodyNamed(who) != null);
@@ -216,16 +224,21 @@ namespace SeaSick.UI.Sheets
         /// 2026-09-23.** He is still ORDERED to hunt -- the gather verb
         /// above only refuses a NEW order -- so his status line is the one
         /// place left that tells you why nothing is coming home.
-        static string Mood(OutpostLedger l, OutpostHand h)
+        ///
+        /// `reasonShown` is true once the doing line already carries a
+        /// `StallReason` -- the hunt blocker included, since that is now
+        /// one of its causes too -- so this does not spend the row saying
+        /// it twice.
+        static string Mood(OutpostLedger l, OutpostHand h, bool reasonShown)
         {
             string word = h.MoodWord;
+            if (word.Length == 0) word = "content";
+            if (reasonShown) return word;
             if (h.order == OutpostOrder.Gather && h.target == Res.Game)
             {
                 string blocker = l.HunterBlocker();
-                if (blocker != null)
-                    return (word.Length == 0 ? "content" : word) + " · " + blocker;
+                if (blocker != null) return word + " · " + blocker;
             }
-            if (word.Length == 0) return "content";
             if (l.Hungry) return word + " · the food pile is empty";
             if (l.hungerDays > 0.05f)
                 return word + $" · {l.hungerDays:0.#} days gone short";

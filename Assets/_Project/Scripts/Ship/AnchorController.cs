@@ -99,11 +99,14 @@ namespace SeaSick.Ship
             crew = GetComponentsInChildren<CrewAgent>(true);
 
             // Build on demand rather than trusting the scene: Unity does not
-            // guarantee script order, and a sheet that only exists if somebody
-            // remembered to add it in the editor is a feature that works on
-            // one machine.
-            if (GetComponentInChildren<SeaSick.UI.CampSheet>(true) == null)
-                gameObject.AddComponent<SeaSick.UI.CampSheet>();
+            // guarantee script order, and a component that only exists if
+            // somebody remembered to add it in the editor is a feature that
+            // works on one machine. Siting mode (the ghost and its ✓ ✕ ↻),
+            // the loader's coroutine host and the camp toasts all ride on the
+            // ship and carry no serialised state.
+            if (CampSiting.Instance == null) gameObject.AddComponent<CampSiting>();
+            if (GetComponent<CampLoading>() == null) gameObject.AddComponent<CampLoading>();
+            if (GetComponent<CampToasts>() == null) gameObject.AddComponent<CampToasts>();
             islandCam = GetComponent<SeaSick.CameraRig.IslandCam>();
             if (islandCam == null) islandCam = gameObject.AddComponent<SeaSick.CameraRig.IslandCam>();
             voyage = FindFirstObjectByType<VoyageManager>();
@@ -947,6 +950,43 @@ namespace SeaSick.Ship
         /// with a height of 1.8u, and the button below it started at
         /// `secondary.y + 3.2u` — so the toggle covered the top 0.9u of "cast
         /// off", on a screen where the next thing you do is cast off.
+        /// **Make camp**, the one verb an island has before it has a fire.
+        ///
+        /// A row on the anchor's own stack, the row above leaving, because
+        /// until the fire is sited nothing else can offer it: the sheet HUD
+        /// only takes an island that has a fire or the drawing of one
+        /// (`SheetBootstrap.FireFor`), and there is no campfire in the world
+        /// to tap. A second `Prompts` bidder would lose the slot to this one
+        /// anyway, so it lives in the stack that already owns it. The tap
+        /// starts siting exactly as the old camp bar's button did; the ghost
+        /// then carries its own ✓ ✕ ↻ (`CampSiting.OnGUI`).
+        ///
+        /// Before the survey has decided, or where it found no ground, a line
+        /// says so instead of a button that could not work.
+        void DrawMakeCamp(ref Prompts.Stack stack, int u, float bh,
+            GUIStyle buttonStyle, GUIStyle infoStyle)
+        {
+            if (CurrentIsland == null || CampSiting.Placing) return;
+            var camp = Outpost.Of(CurrentIsland);
+            if (camp == null)
+            {
+                GUI.Label(stack.Next(u * 1.8f), Outpost.Surveying(CurrentIsland)
+                    ? "looking over the ground…"
+                    : "no ground here will take a camp", infoStyle);
+                return;
+            }
+            if (camp.HasCamp || camp.Building) return;
+            var r = stack.Next(bh);
+            UIBlocker.Block(r);
+            if (GUI.Button(r, MakeCampLabel, buttonStyle))
+                CampSiting.Begin(camp, BuildPlans.Campfire,
+                    motor != null ? motor.transform : null);
+        }
+
+        /// Built once: every part of it is a constant.
+        static readonly string MakeCampLabel =
+            $"🔥  Make camp — {BuildPlans.Campfire.cost} logs";
+
         void DrawDeckCargoToggle(ref Prompts.Stack stack, int u,
             GUIStyle buttonStyle, GUIStyle infoStyle)
         {
@@ -1085,6 +1125,8 @@ namespace SeaSick.Ship
                     UIBlocker.Block(primary);
                     if (GUI.Button(primary, "⚓  Cast off   (space)", buttonStyle)) WeighAnchor();
 
+                    if (!sheetHud) DrawMakeCamp(ref stack, u, bh, buttonStyle, infoStyle);
+
                     // While the sheet HUD is up, the ship's own sheet carries
                     // the shore party, the deck cargo and the repairs. Only
                     // "cast off" stays here, because leaving is the one
@@ -1098,10 +1140,8 @@ namespace SeaSick.Ship
                         if (GUI.Button(secondary, "send crew ashore", buttonStyle)) SendAshore();
                     }
 
-                    // The camp's own controls live in `CampSheet`, which owns
-                    // the lower third while she is lying at an island. Two
-                    // places offering to make the same camp is the duplication
-                    // the prompt slot exists to prevent.
+                    // Deck cargo is the ship's sheet's once there is a camp;
+                    // before that it is a row here.
                     if (!sheetHud) DrawDeckCargoToggle(ref stack, u, buttonStyle, infoStyle);
                     break;
                 }
@@ -1115,6 +1155,8 @@ namespace SeaSick.Ship
                     var primary = stack.Next(bh);
                     UIBlocker.Block(primary);
                     if (GUI.Button(primary, "recall crew aboard   (space)", buttonStyle)) RecallCrew();
+
+                    if (!sheetHud) DrawMakeCamp(ref stack, u, bh, buttonStyle, infoStyle);
 
                     bool canRepair = !sheetHud && hull != null && hull.NeedsRepair && voyage != null
                         && voyage.AmountOf("Timber") > 0;

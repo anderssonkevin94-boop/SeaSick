@@ -27,9 +27,8 @@ using SeaSick.World;
 /// 3. **A camp never ships home by itself.** Three game days with nobody
 ///    pressing anything and the hold does not move; and with her under way,
 ///    loading is refused outright.
-/// 4. **What the sheet says is what the ledger holds** — and saying it costs
-///    nothing while nothing has moved, because `OnGUI` runs several times a
-///    frame.
+/// 4. **The pile by the fire is what the ledger holds**, unit for unit up
+///    to the drawn cap.
 ///
 /// Plain C#, no editor references. Play mode, `Sea.unity`. Writes
 /// `Logs/CampLoadProbe.txt`. It restores the hold on the way out: everything
@@ -376,7 +375,7 @@ public class CampLoadProbe : MonoBehaviour
             $"hold moved {voyage.TotalHeld - holdBefore}");
 
         // =====================================================================
-        // 6. WHAT THE SHEET SAYS IS WHAT THE LEDGER HOLDS
+        // 6. THE PILE BY THE FIRE IS WHAT THE LEDGER HOLDS
         // =====================================================================
 
         var piles = CampPiles.EnsureOn(camp);
@@ -391,43 +390,13 @@ public class CampLoadProbe : MonoBehaviour
         int drawn = stack != null ? stack.childCount : -1;
         int haveTimber = l.CountOf(Res.Timber);
 
-        var sheet = anchor.GetComponent<CampSheet>();
-        string head = sheet != null ? sheet.HeadlineFor(target, camp) : "";
-        string wantLine = CampLoading.Lower(Res.Timber) + " " + haveTimber + " / " + l.ceilingPer;
-
         sb.AppendLine();
         sb.AppendLine("THE PICTURE AND THE NUMBER:");
         sb.AppendLine($"  ledger holds {haveTimber} timber; the pile draws {drawn} "
             + $"(caps at {PileDrawnCap})");
-        sb.AppendLine($"  headline: {head}");
-        sb.AppendLine($"  rows: {(sheet != null ? sheet.StoreRowCount : -1)}");
         Gate("the-pile-by-the-fire-agrees-with-the-ledger",
             drawn == Mathf.Min(haveTimber, PileDrawnCap),
             $"{drawn} drawn of {haveTimber} held");
-        Gate("the-headline-agrees-with-the-ledger",
-            haveTimber > 0 ? head.Contains(wantLine) : head.Contains("nothing gathered yet"),
-            $"looked for \"{wantLine}\"");
-        Gate("the-headline-lists-every-kind-held",
-            sheet != null && sheet.StoreRowCount == LiveKinds(l),
-            $"{(sheet != null ? sheet.StoreRowCount : -1)} rows for {LiveKinds(l)} kinds held");
-
-        // Steady state: the bar is drawn several times a frame and must not
-        // pay for it. Measured inside ONE frame, so nothing else in the game
-        // is charged to the sheet — and warmed first, so the one honest
-        // rebuild is not counted as the steady state.
-        if (sheet == null) sb.AppendLine("  (no CampSheet on the ship — the cost gate did not run)");
-        else
-        {
-            for (int i = 0; i < 200; i++) sheet.HeadlineFor(target, camp);
-            System.GC.Collect();
-            long b0 = System.GC.GetTotalMemory(false);
-            for (int i = 0; i < 200; i++) sheet.HeadlineFor(target, camp);
-            long b1 = System.GC.GetTotalMemory(false);
-            long bytes = b1 - b0;
-            sb.AppendLine($"  200 headline calls with nothing changed: {bytes} bytes");
-            Gate("a-steady-headline-allocates-nothing", bytes >= 0 && bytes < 2048,
-                $"{bytes} bytes over 200 calls");
-        }
 
         // =====================================================================
         // 7. UNDER WAY, NOTHING LOADS
@@ -467,15 +436,6 @@ public class CampLoadProbe : MonoBehaviour
             + $"(found it at {heldAtStart})");
 
         Finish(null);
-    }
-
-    /// How many kinds the camp is actually holding — what the sheet offers a
-    /// row for.
-    static int LiveKinds(OutpostLedger l)
-    {
-        int n = 0;
-        foreach (var s in l.stores) if (s != null && s.whole > 0) n++;
-        return n;
     }
 
     /// **The probe writing the ledger, which is the one thing allowed to.**

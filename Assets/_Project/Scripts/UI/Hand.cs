@@ -165,7 +165,7 @@ namespace SeaSick.UI
 
         Crew.CrewRoster Roster()
         {
-            // The SAME instance `CampSheet` refreshes: the roster caches its
+            // The SAME instance the ship's sheet refreshes: the roster caches its
             // crew array and the guns are assigned from it, so a second one
             // would be a second answer to "who is aboard".
             if (roster == null) roster = Object.FindFirstObjectByType<Crew.CrewRoster>();

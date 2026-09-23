@@ -10,11 +10,10 @@ namespace SeaSick.UI
     /// resolves a tap the same way the Hand's own cursor does (`HandTargets.
     /// Resolve`, via `Hand.Preview`) and, when the tap landed on a standing
     /// building rather than a villager, calls `Open` here instead of moving
-    /// the follow camera. `CampSheet` is the one place that actually shows a
-    /// menu, and it owns no input of its own -- it polls `Consume` at the top
-    /// of its own `OnGUI`/`Update` and, on a hit for the outpost it is
-    /// already showing, expands itself and switches to the building's row
-    /// (the build list, for the fire).
+    /// the follow camera. **Nothing reads it any more**: the camp bar that
+    /// polled `Consume` was retired on 2026-09-23, and the sheet HUD opens a
+    /// building's sheet through its own per-component registration
+    /// (`SheetBootstrap`, `Sheets.Register`), not through this mailbox.
     ///
     /// A static mailbox rather than an event so that a request raised before
     /// the sheet exists (scene still loading a frame late) is not silently
