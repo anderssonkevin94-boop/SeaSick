@@ -617,8 +617,18 @@ namespace SeaSick.World
         /// Nothing here has a collider (see `Dress`): the ship's grounding
         /// reads the height field, and the dock the pier registers is what
         /// stops her, not the planks.
+        ///
+        /// **Astra's pier kit v4 first, these boxes as the fallback
+        /// (2026-09-23)**, the way `Dress` puts a building's kit on before
+        /// the extrusion: `PierVisual` lays her modules, caps, shafts, ramp
+        /// and lantern under a `PierKit` child and leaves the root, its
+        /// length and its `Pier` exactly as they were. If any of her prefabs
+        /// is missing from `Resources/Pier/` or fails its contract check it
+        /// places nothing, and the boxes below go up instead.
         static void PierDeck(Transform root, BuildPlan plan)
         {
+            if (PierVisual.Build(root, plan, Island.TerrainHeight)) return;
+
             float len = plan.footprint.x, wid = plan.footprint.y;
             var plank = Mat("plank", new Color(0.50f, 0.38f, 0.24f));
             var post = Mat("post", new Color(0.22f, 0.16f, 0.11f));
