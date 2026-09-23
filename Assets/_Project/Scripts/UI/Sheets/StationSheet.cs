@@ -247,10 +247,14 @@ namespace SeaSick.UI.Sheets
         void BuildMake(VisualElement root)
         {
             root.Add(SheetKit.Eyebrow("make"));
-            makeHolder = SheetBits.Holder();
-            root.Add(makeHolder);
+            // **The running order and its STOP come first, 2026-09-23.** A
+            // page that does not fit the band is cut at the bottom, and
+            // below two recipe rows on a phone is already past it: STOP was
+            // laid out 13 units under the page's edge, visible to nobody.
             orderHolder = SheetBits.Holder();
             root.Add(orderHolder);
+            makeHolder = SheetBits.Holder();
+            root.Add(makeHolder);
             stockHolder = SheetBits.Holder();
             root.Add(stockHolder);
             rateNote = SheetBits.Holder();
@@ -404,7 +408,10 @@ namespace SeaSick.UI.Sheets
             // without needing to be rebuilt to lose the handler.
             row.RegisterCallback<ClickEvent>(_ =>
             {
-                if (!refs.available) return;
+                // A picked row can always be un-picked, even if it has since
+                // locked -- it is the only row left on the page (see
+                // `UpdateRecipeRow`), and a page with no way back is a trap.
+                if (!refs.available && pickedRecipe != r.id) return;
                 pickedRecipe = pickedRecipe == r.id ? null : r.id;
                 Refresh();
             });
@@ -474,6 +481,15 @@ namespace SeaSick.UI.Sheets
                     refs.makingChip.style.display = DisplayStyle.Flex;
                 }
             }
+
+            // **The picked recipe has the page to itself, 2026-09-23.** Its
+            // amount chips add a whole row, and on a phone-height band the
+            // chips, the order line and STOP only fit if the other recipes
+            // step aside; they come back the moment the pick is undone (the
+            // row again, or a chip). No scrolling -- Kevin's rule for the
+            // sheet -- so the page shrinks what it asks, not how it shows it.
+            bool focusing = pickedRecipe != null && station != null;
+            refs.row.style.display = !focusing || isPicked ? DisplayStyle.Flex : DisplayStyle.None;
 
             refs.row.style.opacity = available ? 1f : 0.5f;
             refs.row.EnableInClassList("sheet-clickable", available);

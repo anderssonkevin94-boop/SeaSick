@@ -115,15 +115,41 @@ namespace SeaSick.UI.Sheets
 
             // Triggers included on purpose: `Pickable` hangs a trigger sphere
             // on anything tappable that has no collider of its own.
-            if (Physics.Raycast(cam.ScreenPointToRay(screen), out var hit, 6000f,
-                                ~0, QueryTriggerInteraction.Collide))
+            //
+            // **Every hit, nearest first -- not just the first, 2026-09-23.**
+            // Kevin, on the phone: *"nothing happens when I press on the
+            // forge."* Every scenery tree carries a ~15 m trigger box
+            // (`Broad*`/`Spruce` under Scenery), and a single `Raycast` that
+            // includes triggers returned the tree standing in front of the
+            // forge -- no sheet for a tree, so the tap was read as ground.
+            // Measured at a camp in the woods: 4 of 36 island-cam rays at
+            // the forge reached it. A trigger with no sheet is an invisible
+            // volume, so the ray goes on through it; a SOLID collider with no
+            // sheet (the ground, a rock) is something the eye sees in front,
+            // and the tap stops there.
+            var ray = cam.ScreenPointToRay(screen);
+            int n = Physics.RaycastNonAlloc(ray, Hits, 6000f, ~0, QueryTriggerInteraction.Collide);
+            System.Array.Sort(Hits, 0, n, NearestFirst.Instance);
+            for (int i = 0; i < n; i++)
             {
-                var sheet = Sheets.TryCreateFor(hit.collider);
+                var col = Hits[i].collider;
+                if (col == null) continue;
+                var sheet = Sheets.TryCreateFor(col);
                 if (sheet != null) { Sheets.Open(sheet); return; }
+                if (!col.isTrigger) break;
             }
 
             // Ground, water, or nothing at all: whatever was open is done.
             if (Sheets.IsOpen) Sheets.Close();
+        }
+
+        /// Room for a ray through a wood: every tree's trigger box is a hit.
+        static readonly RaycastHit[] Hits = new RaycastHit[64];
+
+        sealed class NearestFirst : System.Collections.Generic.IComparer<RaycastHit>
+        {
+            public static readonly NearestFirst Instance = new NearestFirst();
+            public int Compare(RaycastHit a, RaycastHit b) => a.distance.CompareTo(b.distance);
         }
     }
 }

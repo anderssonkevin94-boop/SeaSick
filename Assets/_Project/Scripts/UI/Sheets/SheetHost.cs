@@ -336,7 +336,16 @@ namespace SeaSick.UI.Sheets
             page.style.overflow = Overflow.Hidden;
             body.Add(page);
             var content = s.Build();
-            if (content != null) page.Add(content);
+            // **Never squeezed, 2026-09-23.** UI Toolkit's default
+            // `flex-shrink` is 1, so a page taller than the band did not clip
+            // -- it squashed every block below its own height and each one
+            // spilled onto the next: the camp's fire block drawn over the
+            // store gauges, and a recipe's amount chips drawn UNDER the next
+            // recipe row, which then took the tap (Kevin: *"I can't press to
+            // create planks"*). At its natural height a page that is too tall
+            // is cut at the bottom instead, and what is drawn is what the
+            // finger lands on.
+            if (content != null) { content.style.flexShrink = 0f; page.Add(content); }
 
             var row = framed.BuildActions();
             if (row != null)
