@@ -437,6 +437,12 @@ namespace SeaSick.World
             // ground is what things stand on here.
             foreach (var c in model.GetComponentsInChildren<Collider>(true))
                 Object.Destroy(c);
+            // **Storage visibility (Kevin, 2026-09-23): a production
+            // building always shows the true amount it holds.** Finds its
+            // own station and toggles the kit's slot children; self-disables
+            // on a model with none (the blacksmith/kitchen kit, anything
+            // extruded).
+            root.gameObject.AddComponent<StationStockView>();
             return true;
         }
 
@@ -473,7 +479,10 @@ namespace SeaSick.World
             for (int i = 0; i < slots.Count; i++) slots[i].name = BedSlotPrefix + i.ToString("00");
         }
 
-        static string Stem(string name)
+        /// Visible to `StationStockView` too: the FBX import can add
+        /// `.001` suffixes, so anything matching a kit slot name has to
+        /// match on the stem the same way the bed naming below does.
+        internal static string Stem(string name)
         {
             int dot = name.LastIndexOf('.');
             return dot > 0 ? name.Substring(0, dot) : name;

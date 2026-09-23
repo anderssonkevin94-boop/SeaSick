@@ -738,7 +738,18 @@ namespace SeaSick.UI.Sheets
             for (int i = 0; i < shown.Count; i++)
             {
                 string res = shown[i];
-                int kept = l.CountOf(res);
+                // **The gauge below is the STORE's, 2026-09-23 stations.**
+                // `Fill01`/`ceilingPer` measure the store alone -- a
+                // station's own bay, bench and rack do not count against
+                // it -- so the big number tied to that bar has to agree, or
+                // a full store plus a loaded sawmill prints "25/20". The
+                // camp total (`CountOf`) still shows: as the food line's own
+                // "kept" (it was never gauged against the ceiling), and as
+                // an "at stations" addendum on everything else, so the
+                // number is honest without pretending the station stock
+                // does not exist.
+                int storeKept = l.StoreCountOf(res);
+                int campKept = l.CountOf(res);
                 string rate = SheetBits.RateLine(l, res);
                 string big, small;
 
@@ -751,19 +762,21 @@ namespace SeaSick.UI.Sheets
                     float days = SheetBits.FoodDays(l);
                     if (l.hands.Count == 0 || days < 0f)
                     {
-                        big = kept.ToString();
+                        big = campKept.ToString();
                         small = l.hands.Count == 0 ? "kept · nobody eats" : "kept · they eat nothing";
                     }
                     else
                     {
                         big = days.ToString("0.#");
-                        small = $"days · {kept} kept";
+                        small = $"days · {campKept} kept";
                     }
                 }
                 else
                 {
-                    big = kept.ToString();
+                    big = storeKept.ToString();
                     small = $"of {l.ceilingPer}";
+                    int atStations = campKept - storeKept;
+                    if (atStations > 0) small += $" · {atStations} at stations";
                 }
                 if (rate.Length > 0) small += " · " + rate;
 

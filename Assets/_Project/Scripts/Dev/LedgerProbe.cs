@@ -358,6 +358,11 @@ public class LedgerProbe : MonoBehaviour
         mill.built.Add(BuildPlans.Sawmill.id);
         mill.hands.Add(new OutpostHand { name = "Bo",   order = OutpostOrder.Gather, target = Res.Timber });
         mill.hands.Add(new OutpostHand { name = "Sten", order = OutpostOrder.Work,   target = BuildPlans.Sawmill.id });
+        // A station makes nothing without a player order (2026-09-23,
+        // storage-hub rules) -- `stationsMigrated = true` so this exercises
+        // that explicit path rather than the old-save free-order migration.
+        mill.stationsMigrated = true;
+        mill.PlaceOrder(BuildPlans.Sawmill.id, "boards", OutpostLedger.RepeatOrder);
         mill.Tick(t0 + 6.0 * day);
 
         sb.AppendLine();
@@ -376,10 +381,14 @@ public class LedgerProbe : MonoBehaviour
         var forge = new OutpostLedger { lastTicked = t0 };
         forge.built.Add(BuildPlans.Blacksmith.id);
         forge.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Work, target = BuildPlans.Blacksmith.id });
+        // A player order and nothing to work with -- the station waits
+        // rather than making anything (2026-09-23, storage-hub rules).
+        forge.stationsMigrated = true;
+        forge.PlaceOrder(BuildPlans.Blacksmith.id, "spear", OutpostLedger.RepeatOrder);
         forge.Tick(t0 + 20.0 * day);
         Gate(sb, ref fails, "a-forge-with-no-ore-makes-nothing",
-            forge.CountOf(Res.Tools) == 0,
-            $"{forge.CountOf(Res.Tools)} tools out of no ore at all");
+            forge.CountOf(Res.Tools) == 0 && forge.CountOf(Res.Spear) == 0,
+            $"{forge.CountOf(Res.Tools)} tools, {forge.CountOf(Res.Spear)} spears out of no boards or stone at all");
 
         // A farm's input is the ground, so it needs nothing but a farmhand.
         var farm = new OutpostLedger { lastTicked = t0 };
@@ -454,6 +463,11 @@ public class LedgerProbe : MonoBehaviour
         l.hands.Add(new OutpostHand { name = "Sten", order = OutpostOrder.Gather, target = Res.Timber });
         l.hands.Add(new OutpostHand { name = "Ola",  order = OutpostOrder.Work,   target = BuildPlans.Sawmill.id });
         l.hands.Add(new OutpostHand { name = "Nils", order = OutpostOrder.Work,   target = BuildPlans.Farm.id });
+        // The sawmill is a station and makes nothing without a player order
+        // (2026-09-23, storage-hub rules); the farm is not a station (its
+        // field is its input) and needs none.
+        l.stationsMigrated = true;
+        l.PlaceOrder(BuildPlans.Sawmill.id, "boards", OutpostLedger.RepeatOrder);
         return l;
     }
 

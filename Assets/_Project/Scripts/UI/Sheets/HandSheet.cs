@@ -311,9 +311,14 @@ namespace SeaSick.UI.Sheets
                     {
                         var stock = led != null ? led.Stock(r) : null;
                         float standing = stock != null ? stock.standing : 0f;
+                        // **Store-only, against the store's own ceiling**
+                        // (2026-09-23 stations): `ceilingPer` is never a
+                        // limit on a station's bay/bench/rack, so pairing it
+                        // with the camp TOTAL (`CountOf`) could print "25/20"
+                        // the moment a sawmill is holding stock of its own.
                         tail = standing < 1f
                             ? " — worked out"
-                            : $" — {(led != null ? led.CountOf(r) : 0)}/{(led != null ? led.ceilingPer : 0)} kept";
+                            : $" — {(led != null ? led.StoreCountOf(r) : 0)}/{(led != null ? led.ceilingPer : 0)} kept";
                     }
                     bool already = hand != null && hand.order == OutpostOrder.Gather
                                    && hand.target == r;

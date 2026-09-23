@@ -171,9 +171,11 @@ public class CampLifeProbe : MonoBehaviour
         float millToFire = Island.FlatDistance(mill.transform.position, camp.CampCentre);
         Vector3 door = CampWorker.WorkSpot(camp, mill);
 
-        // Give the mill something to saw, or he is stalled before he starts.
+        // Give the mill something to saw, and an order to work to -- a
+        // station makes nothing without one (2026-09-23, storage-hub rules).
         camp.Ledger.Add(Res.Timber, 8);
         bool assigned = camp.Assign(sawyerRow, BuildPlans.Sawmill.id);
+        camp.Ledger.PlaceOrder(BuildPlans.Sawmill.id, "boards", OutpostLedger.RepeatOrder);
         sawyerWorker.PreferWorkplace(mill);
 
         // --- 1. he WALKS to it, and he stays at his trade ---------------------

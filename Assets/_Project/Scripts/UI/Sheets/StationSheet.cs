@@ -38,6 +38,20 @@ namespace SeaSick.UI.Sheets
 
         int tab = -1;
 
+        /// **This built instance's index into `ledger.raised`** (and, in the
+        /// same breath, into `Outpost.Built` -- `Outpost.Raise` appends to
+        /// both lists together and `Demolish` removes the matching pair, so
+        /// the two stay parallel). `OutpostLedger.StationForRaised` turns it
+        /// into the one `StationStock` this sheet is about; without it every
+        /// tap here would land on "the first station of this plan" rather
+        /// than the one the player actually opened.
+        readonly int raisedIndex = -1;
+
+        /// The recipe a tap has picked but not yet ordered -- local to the
+        /// card, cleared on close/rebuild. Reveals the amount chips under
+        /// that one row.
+        string pickedRecipe;
+
         public StationSheet(Outpost o, Building b)
         {
             outpost = o;
@@ -46,7 +60,19 @@ namespace SeaSick.UI.Sheets
             plan = BuildPlans.Named(planId);
             hasMake = Recipes.StationHasRecipes(planId);
             hasUpgrade = Techs.MaxLevel(planId) > 1;
+
+            if (o != null && b != null)
+            {
+                var built = o.Built;
+                for (int i = 0; i < built.Count; i++)
+                    if (built[i] == b) { raisedIndex = i; break; }
+            }
         }
+
+        /// The one `StationStock` this card is about, or null for a plan
+        /// with no station stock at all (build-only levels, a farm).
+        StationStock Station(OutpostLedger l) =>
+            l != null && raisedIndex >= 0 ? l.StationForRaised(raisedIndex) : null;
 
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
 
@@ -107,6 +133,8 @@ namespace SeaSick.UI.Sheets
         // --- the pieces kept between refreshes --------------------------------
 
         VisualElement makeHolder;
+        VisualElement orderHolder;
+        VisualElement stockHolder;
         VisualElement rateNote;
         long makeKey = long.MinValue;
 
@@ -116,8 +144,10 @@ namespace SeaSick.UI.Sheets
 
         public VisualElement Build()
         {
-            makeHolder = null; rateNote = null; upgradeHolder = null; upgradeLevel = null;
+            makeHolder = null; orderHolder = null; stockHolder = null; rateNote = null;
+            upgradeHolder = null; upgradeLevel = null;
             makeKey = long.MinValue; upgradeKey = long.MinValue;
+            pickedRecipe = null;
 
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
@@ -139,6 +169,13 @@ namespace SeaSick.UI.Sheets
             {
                 long k = MakeKey(l);
                 if (k != makeKey) { makeKey = k; FillMake(l); }
+                // The order and the bay/bench/rack line move every tick a
+                // hand is on this station -- a hauler filling the bay, the
+                // bench climbing through `benchProgress` -- so unlike the
+                // recipe list (gated on `MakeKey`) these two redraw on every
+                // refresh. Both are a handful of labels; cheap.
+                FillOrder(l);
+                FillStock(l);
             }
             else
             {
@@ -156,6 +193,10 @@ namespace SeaSick.UI.Sheets
             root.Add(SheetKit.Eyebrow("make"));
             makeHolder = SheetBits.Holder();
             root.Add(makeHolder);
+            orderHolder = SheetBits.Holder();
+            root.Add(orderHolder);
+            stockHolder = SheetBits.Holder();
+            root.Add(stockHolder);
             rateNote = SheetBits.Holder();
             root.Add(rateNote);
         }
@@ -186,8 +227,9 @@ namespace SeaSick.UI.Sheets
         {
             if (makeHolder == null) return;
             makeHolder.Clear();
+            var station = Station(l);
             foreach (var r in Recipes.At(planId))
-                makeHolder.Add(RecipeRow(r, l));
+                makeHolder.Add(RecipeRow(r, l, station));
 
             var chosen = l.RecipeAt(planId);
             if (chosen == null)
@@ -207,13 +249,20 @@ namespace SeaSick.UI.Sheets
         /// One recipe: its label, the ingredient line coloured have/need, the
         /// tool line when it wants one, and a state chip or a lock line on
         /// the right. Locked rows (fire level, station level, tool) are
-        /// greyed and do nothing but say why; an unlocked row chooses the
-        /// recipe when tapped.
-        VisualElement RecipeRow(Recipe r, OutpostLedger l)
+        /// greyed and do nothing but say why; an unlocked row PICKS the
+        /// recipe when tapped (2026-09-23, orders) -- picking is local to
+        /// the card and only reveals the amount chips below it. Nothing is
+        /// ordered until one of those is tapped; a second tap on the same
+        /// row un-picks it. `ChooseRecipe` is no longer called from here --
+        /// it is kept for whatever else still calls it, but placing an
+        /// order is `PlaceOrder`, direct, so the count the player picked is
+        /// the count that lands.
+        VisualElement RecipeRow(Recipe r, OutpostLedger l, StationStock station)
         {
             bool available = l.RecipeAvailable(r, out string lockWhy);
-            var chosen = l.RecipeAt(planId);
-            bool isChosen = chosen != null && chosen.id == r.id;
+            var order = station != null ? l.OrderAt(planId, station.ordinal) : default;
+            bool isActive = order.Active && order.recipe != null && order.recipe.id == r.id;
+            bool isPicked = pickedRecipe == r.id;
 
             var left = new VisualElement();
             left.style.flexDirection = FlexDirection.Column;
@@ -239,12 +288,15 @@ namespace SeaSick.UI.Sheets
                 left.Add(toolLine);
             }
 
+            if (available && isPicked && station != null)
+                left.Add(AmountChips(l, station, r.id));
+
             VisualElement right = null;
             if (!available)
             {
                 right = SheetKit.Text(lockWhy, false, true, 11f);
             }
-            else if (isChosen)
+            else if (isActive)
             {
                 var missing = Cost.Missing(r.takes, res => l.CountOf(res));
                 right = missing.Count > 0
@@ -262,13 +314,164 @@ namespace SeaSick.UI.Sheets
             else
             {
                 row.AddToClassList("sheet-clickable");
+                if (isPicked)
+                    row.style.backgroundColor = new Color(
+                        SheetTheme.Brass.r, SheetTheme.Brass.g, SheetTheme.Brass.b, 0.14f);
                 row.RegisterCallback<ClickEvent>(_ =>
                 {
-                    l.ChooseRecipe(planId, r.id);
+                    pickedRecipe = isPicked ? null : r.id;
                     Dirty();
                 });
             }
             return row;
+        }
+
+        static readonly (string label, int count)[] AmountOptions =
+        {
+            ("∞", OutpostLedger.RepeatOrder),
+            ("5", 5), ("10", 10), ("20", 20), ("50", 50), ("100", 100),
+        };
+
+        /// **"make an order and keep making that order until you tell it to
+        /// stop, and/or set amounts like 5, 10, 20, 50, 100"** -- Kevin,
+        /// verbatim. One tap places the order outright; the STOP button
+        /// under the active-order block below is the only confirm this
+        /// needs, because it is also the undo.
+        VisualElement AmountChips(OutpostLedger l, StationStock station, string recipeId)
+        {
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.flexWrap = Wrap.Wrap;
+            row.style.marginTop = 6f;
+            foreach (var (label, count) in AmountOptions)
+            {
+                var b = SheetKit.Btn(label, () =>
+                {
+                    l.PlaceOrder(planId, recipeId, count, station.ordinal);
+                    pickedRecipe = null;
+                    Dirty();
+                });
+                // **44 pt floor.** `SheetKit.Btn` ships at 38 px, tuned for a
+                // button sitting among other rows on a card; an amount chip
+                // IS the decision Kevin's rule is about, so it gets the one
+                // number this project treats as a floor on anything a thumb
+                // aims at (`SheetKit.Tabs`' own rule, applied here).
+                b.style.minHeight = 44f;
+                b.style.minWidth = 44f;
+                b.style.flexGrow = 1f;
+                b.style.marginRight = 6f;
+                b.style.marginBottom = 6f;
+                row.Add(b);
+            }
+            // Stop the row's own click (picking/un-picking the recipe) from
+            // firing when a chip inside it is tapped.
+            row.RegisterCallback<ClickEvent>(e => e.StopPropagation());
+            return row;
+        }
+
+        /// **The active order, and the STOP button** -- Kevin's rule again:
+        /// a station keeps making what it was told until the player says
+        /// otherwise, so the one thing this block has to do is make "what"
+        /// and "stop" impossible to miss.
+        void FillOrder(OutpostLedger l)
+        {
+            if (orderHolder == null) return;
+            var station = Station(l);
+            var order = station != null ? l.OrderAt(planId, station.ordinal) : default;
+            if (station == null || !order.Active)
+            {
+                SheetBits.Swap(orderHolder, null);
+                return;
+            }
+
+            var row = new VisualElement();
+            row.style.flexDirection = FlexDirection.Row;
+            row.style.alignItems = Align.Center;
+            row.style.marginTop = 4f;
+
+            var left = new VisualElement();
+            left.style.flexDirection = FlexDirection.Column;
+            left.style.flexGrow = 1f;
+            left.Add(SheetKit.Text(order.recipe.label, true, false, 14f));
+            left.Add(SheetKit.Text(order.repeat ? "∞ until stopped" : $"{order.remaining} left",
+                false, true, 12f));
+            row.Add(left);
+
+            var stopBtn = SheetKit.Btn("STOP", () =>
+            {
+                l.StopOrder(planId, station.ordinal);
+                Dirty();
+            }, true);
+            stopBtn.style.minHeight = 44f;
+            stopBtn.style.minWidth = 96f;
+            stopBtn.style.flexGrow = 0f;
+            stopBtn.style.backgroundColor = SheetTheme.Ember;
+            stopBtn.style.borderTopColor = stopBtn.style.borderBottomColor =
+                stopBtn.style.borderLeftColor = stopBtn.style.borderRightColor = SheetTheme.Ember;
+            row.Add(stopBtn);
+
+            SheetBits.Swap(orderHolder, row);
+        }
+
+        static string BenchWord(BenchState s) => s switch
+        {
+            BenchState.Empty => "empty",
+            BenchState.Loaded => "loaded",
+            BenchState.Working => "working",
+            BenchState.Finished => "finished",
+            _ => "",
+        };
+
+        /// The Work hand the ledger has dealt to THIS built instance, if
+        /// any -- `StationOfHand` is the same round-robin the ledger itself
+        /// works from (`OutpostLedger.Stations.cs`), read backwards to find
+        /// the hand for a station rather than the station for a hand.
+        static OutpostHand HandOn(OutpostLedger l, StationStock station)
+        {
+            if (l == null || station == null || l.hands == null) return null;
+            foreach (var h in l.hands)
+            {
+                if (h == null || h.order != OutpostOrder.Work || h.target != station.planId) continue;
+                if (l.StationOfHand(h) == station) return h;
+            }
+            return null;
+        }
+
+        /// **The stock line**: bay per ingredient, the bench's own state,
+        /// the rack -- what the player would otherwise have to walk over
+        /// and look at. The stall reason rides under it when the hand
+        /// working here has one (`OutpostLedger.StallReason`, the same
+        /// sentence the hand's own token would show).
+        void FillStock(OutpostLedger l)
+        {
+            if (stockHolder == null) return;
+            var station = Station(l);
+            if (station == null) { SheetBits.Swap(stockHolder, null); return; }
+
+            var parts = new List<string>(4);
+            var recipe = station.OrderRecipe ?? l.RecipeAt(planId);
+            if (recipe != null)
+                foreach (var t in recipe.takes)
+                    parts.Add($"bay {ResDefs.Label(t.res)} {station.BayCount(t.res)}/{station.InputCap}");
+            parts.Add($"bench {BenchWord(station.benchState)}");
+            parts.Add($"rack {station.RackTotal}/{station.OutputCap}");
+
+            var col = new VisualElement();
+            col.style.flexDirection = FlexDirection.Column;
+            col.style.marginTop = 4f;
+            col.Add(SheetKit.Text(string.Join(" · ", parts), false, true, 11f));
+
+            var hand = HandOn(l, station);
+            string stall = hand != null ? l.StallReason(hand) : null;
+            if (!string.IsNullOrEmpty(stall))
+            {
+                var stallLine = SheetKit.Text(stall, false, false, 11f);
+                stallLine.style.color = SheetTheme.Ember;
+                stallLine.style.marginTop = 2f;
+                col.Add(stallLine);
+            }
+
+            SheetBits.Swap(stockHolder, col);
         }
 
         void Dirty()

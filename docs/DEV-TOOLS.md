@@ -63,6 +63,7 @@ shader property defaults. Re-run these after changing any default.
 | Probe | Measures | Output |
 | --- | --- | --- |
 | `RecipeGraph.Validate()` | **The guarantee**: walks every resource, recipe, fire level, building upgrade and ship rung and refuses them all if anything cannot be reached from a fresh camp with only the ground to gather from. Run via `unity cmd eval --json --code 'return SeaSick.World.Economy.RecipeGraph.Validate().ToString();'` from the shell; also logs on load in dev/editor builds. Call `RecipeGraph.WriteMarkdown("docs/PRODUCTION-CHAINS.md")` to regenerate the chain documentation (also called automatically on the same load). Errors are **hard**: a cycle, an item used as an input, a raw thing with a recipe, a fire level or upgrade that asks for something unreachable before it, or an id that does not exist. Warnings are **soft**: a fire level that unlocks nothing new. | console; `docs/PRODUCTION-CHAINS.md` (generated) |
+| `StationStockSelfTest.Run()` | **Station-stock gate** (`SeaSick.World`, plain C#, edit mode, no play needed): storage-hub arithmetic across `OutpostLedger.Stations.cs` and `StationStock.cs` — 11 gates (D2 for hauling, conservation, bay/rack capacities, full-rack-blocks-bench, count/repeat/stop orders); see "station stock: bays, benches, racks, orders, armful hauling" below. Run via `unity cmd eval --json --code 'return SeaSick.World.StationStockSelfTest.Run();'`. | console |
 | `FFTUnit.cs` | The Stockham IFFT core against analytic sinusoids (known modes in, sinusoid out to 1e-5). Edit mode, no play needed. | `/tmp/seasick-fftunit.txt` |
 | `SpectrumProbe2.cs` | The GPU sea against **oceanography**: Hs from field variance and Tp from a temporal PSD vs analytic JONSWAP integrals, for the three canonical (wind, fetch) triples. Edit mode. Slow (~2 min). | `/tmp/seasick-spectrum2.txt` |
 | `CascadeFadeProbe.cs` (`Scripts/Dev/`) | **How the sea thins with distance.** Reads per-cascade RMS straight off the displacement textures, then walks outward a metre at a time asking the SHIPPED rule what a vertex there is weighted, and reports surface RMS against distance plus **the biggest single-metre fall in it** — a step function has one, a ramp has none. Backed by a photograph: one sea-level frame with the phase pinned, scored for high-frequency contrast row by row, every row a known ground distance. Never restates the rule: it calls `OceanClipmap.WeightsAt` if that exists and otherwise reads each ring's `_Ocean_CascadeWeights` off the live MaterialPropertyBlock, so one file measures the old scheme and the new one. `Execute` = PC tier, `ExecuteMobile` = phone; **run them one at a time**, two instances at once fight over the clipmap. Play mode, OceanLab. | `/tmp/seasick-cascadefade-<tier>.txt`, `-<tier>.png` |
@@ -1242,3 +1243,45 @@ udid from `xcrun devicectl list devices`.
 - **Throttle on a phone is the telegraph arrows,** not a swipe. `HelmInput`
   reads touch only for the tiller (bottom 45% of the screen, x = rudder); W/S
   are keyboard. Kevin's first instinct was to swipe.
+
+
+## 2026-09-23 — station stock: bays, benches, racks, orders, armful hauling
+
+### `StationStockSelfTest.Run()` (`SeaSick.World`, plain C#, edit mode, no scene)
+Gate for the storage-hub rules in `OutpostLedger.Stations.cs`'s doc block and
+`StationStock.cs`: the store (fire-square or storage building) is the hub,
+every gathered unit goes to it, a production station owns real bay/bench/rack
+stock, and nothing on a bench works without a player order. Builds bare
+`OutpostLedger`s with a quarry (`Res.Stone` -> `brick`) and ticks them through
+`Tick`, the same door the game uses. Run via
+`unity cmd eval --json --code 'return SeaSick.World.StationStockSelfTest.Run();'`
+(namespace confirmed against the live source — `SeaSick.World`, not a bare
+`SeaSick` guess). Returns true / logs `ALL PASS` when every gate holds; logs
+an error report naming each failed gate otherwise. 11 gates, run as four
+groups:
+1. **order-placed** — `PlaceOrder(Quarry, "brick", 10)` is accepted on three
+   separately-built ledgers.
+2. **d2-same-bricks** — D2 holds for hauling, not just build labour: ten 1-day
+   ticks, one 10-day tick, and nine uneven ticks (some smaller than one
+   quantum) all land within 1 brick of each other.
+3. **count-10-made-10** — a count-10 order makes exactly 10 bricks, no more.
+4. **count-order-clears** — `HasOrder` goes false once the count is made; no
+   11th job starts.
+5. **conserved-a** — stone anywhere (store + bay + committed bench + arms) +
+   bricks anywhere always sums to the 40 stone the ledger started with.
+6. **bay-rack-within-capacity** — over 300 ticks of a repeat order against a
+   store ceiling of 10 (so bricks back up store -> rack -> bench), no bay row
+   ever exceeds `InputCap` and no rack ever exceeds `OutputCap`.
+7. **nothing-created-or-destroyed** — the same 300-tick run holds stone+brick
+   at exactly the 60 the ledger started with, tick by tick.
+8. **full-rack-blocks-bench** — with the rack at capacity, the bench sits at
+   `BenchState.Finished` (job done, output stuck on the bench) rather than
+   discarding the output or starting a new job; the idle hauler's stall reads
+   the rack/store-full reason.
+9. **repeat-runs-past-a-count** — a Repeat order keeps making bricks past 10
+   (run for 20 days, still `HasOrder`).
+10. **stop-stops** — `StopOrder` on a repeating station lets at most the job
+    already on the bench finish (at most +1 brick after the stop), clears
+    `HasOrder`, and leaves the bench `Empty` ten days later.
+11. **conserved-d** — stone+brick stays at the 200 the fourth ledger started
+    with, through the repeat-then-stop run.
