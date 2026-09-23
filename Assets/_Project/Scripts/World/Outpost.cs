@@ -904,24 +904,58 @@ namespace SeaSick.World
             Vector3 at = ClearingCentre;
             if (height != null) at.y = height(at.x, at.z);
 
-            if (Site(BuildPlans.Campfire, at, out why) < 0) return -1;
+            // A fire the player already sited is the one paid for; otherwise
+            // site one at the clearing.
+            PendingBuild row = CampfireRow();
+            if (row == null)
+            {
+                if (Site(BuildPlans.Campfire, at, out why) < 0) return -1;
+                row = CampfireRow();
+            }
 
-            var row = ledger != null ? ledger.Pending : null;
             if (row != null)
             {
+                // **Every phase a row goes through, not just the first.**
+                // Until 2026-09-23 this paid the MATERIALS only -- which was
+                // the whole of "finished" before the build became stock-then-
+                // build (7820c7e: `built >= LabourNeeded`) and plots had to be
+                // cleared first (ac51ae1: `Cleared`). Paid but never built or
+                // cleared, `Complete` stayed false, `FinishReady` found
+                // nothing to raise, and this said "the fire would not stand
+                // there" about a fire that was never asked to. The fire fells
+                // its own ring at the raise (`RaiseRow`), so the plot's trees
+                // come down there, the same as the slow way.
                 row.done = row.needed;
                 row.donePart = 0f;
                 row.stoneDone = row.stoneNeeded;
                 row.stoneDonePart = 0f;
                 row.brickDone = row.brickNeeded;
                 row.brickDonePart = 0f;
+                row.clearDone = row.ClearTotal;
+                row.built = row.LabourNeeded;
                 FinishReady();
             }
-            if (!HasCamp) { why = "the fire would not stand there"; return -1; }
+            if (!HasCamp)
+            {
+                why = row == null ? "the fire was sited but its row is gone"
+                    : !row.Complete ? "the fire is paid for but not complete"
+                    : "the fire would not stand there";
+                return -1;
+            }
 
             if (ledger != null) ledger.lastTicked = TimeOfDay.Seconds;
             why = "";
             return LastClearingFelled;
+        }
+
+        /// The campfire's row in the queue, or null.
+        PendingBuild CampfireRow()
+        {
+            if (ledger == null) return null;
+            ledger.MigratePending();
+            foreach (var r in ledger.sites)
+                if (r != null && r.planId == BuildPlans.Campfire.id) return r;
+            return null;
         }
 
         // --- the crew who stay ------------------------------------------------

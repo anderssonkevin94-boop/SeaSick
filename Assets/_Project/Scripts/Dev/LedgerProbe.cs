@@ -241,8 +241,16 @@ public class LedgerProbe : MonoBehaviour
         float daysTaken = steps * OutpostLedger.QuantumDays;
         sb.AppendLine($"  one hand finishes it in {daysTaken:F1} game days "
             + $"({daysTaken * day:F0} s at the current day length)");
-        Gate(sb, ref fails, "one-hand-one-day", Mathf.Abs(daysTaken - 1f) < 0.15f,
-            $"{daysTaken:F2} days against the 1.0 the cost was set to mean");
+        // **Stock, THEN build (7820c7e, 2026-09-23).** The four logs are
+        // still one hand's day to cut and carry; standing the fire up is a
+        // second phase of `LabourFor` hand-days on top. The gate was written
+        // when delivery WAS completion and had been failing (1.40 vs 1.0)
+        // since that commit -- the cost still means one day of wood, which
+        // is what this measures now: one day plus the plan's labour.
+        float labourDays = OutpostLedger.LabourFor(timed.Pending);
+        float expectDays = 1f + labourDays;
+        Gate(sb, ref fails, "one-hand-one-day", Mathf.Abs(daysTaken - expectDays) < 0.15f,
+            $"{daysTaken:F2} days against 1.0 of wood + {labourDays:F2} of building = {expectDays:F2}");
 
         // Builders do not stockpile. Until the fire is lit there is nothing to
         // stockpile INTO — in the game the ceiling is zero before the first

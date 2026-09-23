@@ -44,6 +44,8 @@ namespace SeaSick.World
         OutpostLedger ledger;
         bool resolved;
         int resolveAttempts;
+        int retryWait;
+        const int RetryFrames = 30;
         const int MaxResolveAttempts = 40;   // field is planted async of Dress; give it longer than a station
 
         /// How far a bed anchor may be from a live crop bed to count as its
@@ -65,10 +67,17 @@ namespace SeaSick.World
         {
             if (!resolved)
             {
+                // **Never give up, just slow down (2026-09-23).** After
+                // `MaxResolveAttempts` fast frames the view retries every
+                // `RetryFrames` frames forever, rather than disabling itself
+                // for good on a camp whose ledger arrived late (a load, a
+                // raise mid-frame): one GetComponentInParent per ~half second.
+                if (resolveAttempts >= MaxResolveAttempts && ++retryWait < RetryFrames) return;
+                retryWait = 0;
                 TryResolve();
                 if (!resolved)
                 {
-                    if (++resolveAttempts >= MaxResolveAttempts) enabled = false;
+                    if (resolveAttempts < MaxResolveAttempts) resolveAttempts++;
                     return;
                 }
             }

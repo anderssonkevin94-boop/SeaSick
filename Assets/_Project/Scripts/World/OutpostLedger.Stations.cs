@@ -498,9 +498,16 @@ namespace SeaSick.World
         /// gatherer never fills room a hauler is already carrying into.
         float StoreRoomF(string res)
         {
+            // **Whole units first, then the fraction** -- the exact order the
+            // gather loop used before this helper existed. `whole + part`
+            // summed first rounds 9 + 0.99999 up to 10.0 in float, the room
+            // reads 0, and the last unit never tips over into `whole`: the
+            // pile sticks at 9 of 10 forever (LedgerProbe
+            // `each-resource-has-its-own-ceiling`, 2026-09-23).
             var st = Store(res);
-            float have = st != null ? st.whole + st.part : 0f;
-            return ceilingPer - have - InFlightTo(HaulPlace.Store, -1, res);
+            int whole = st != null ? st.whole : 0;
+            float part = st != null ? st.part : 0f;
+            return (ceilingPer - whole - InFlightTo(HaulPlace.Store, -1, res)) - part;
         }
 
         void StartTrip(OutpostHand h, string res, int n, HaulPlace from, int fromStation,

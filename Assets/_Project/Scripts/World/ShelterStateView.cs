@@ -28,6 +28,8 @@ namespace SeaSick.World
         OutpostLedger ledger;
         bool resolved;
         int resolveAttempts;
+        int retryWait;
+        const int RetryFrames = 30;
         const int MaxResolveAttempts = 20;
 
         int shownBeds = -1;
@@ -44,11 +46,17 @@ namespace SeaSick.World
         {
             if (!resolved)
             {
+                // **Never give up, just slow down (2026-09-23).** After
+                // `MaxResolveAttempts` fast frames the view retries every
+                // `RetryFrames` frames forever, rather than disabling itself
+                // for good on a camp whose ledger arrived late (a load, a
+                // raise mid-frame): one GetComponentInParent per ~half second.
+                if (resolveAttempts >= MaxResolveAttempts && ++retryWait < RetryFrames) return;
+                retryWait = 0;
                 var outpost = GetComponentInParent<Outpost>();
                 ledger = outpost != null ? outpost.Ledger : null;
                 if (ledger != null) resolved = true;
-                else if (++resolveAttempts >= MaxResolveAttempts) { enabled = false; return; }
-                else return;
+                else { if (resolveAttempts < MaxResolveAttempts) resolveAttempts++; return; }
             }
             Apply();
         }

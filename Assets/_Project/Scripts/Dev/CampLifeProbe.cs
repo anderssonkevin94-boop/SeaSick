@@ -659,6 +659,7 @@ public class CampLifeProbe : MonoBehaviour
             // standing there, and comparing mid-lag would be gating the
             // feature against itself.
             string watchedJson = JsonUtility.ToJson(camp.Ledger);
+            string watchedBooks = Books(camp.Ledger);
             JsonUtility.FromJsonOverwrite(startLedger, camp.Ledger);
             TimeOfDay.Scrub(startClock);
             camp.CatchUp();
@@ -672,17 +673,22 @@ public class CampLifeProbe : MonoBehaviour
             TimeOfDay.Scrub(clock);
             camp.CatchUp();
             string unwatchedJson = JsonUtility.ToJson(camp.Ledger);
+            string unwatchedBooks = Books(camp.Ledger);
             JsonUtility.FromJsonOverwrite(watchedJson, camp.Ledger);
 
             sb.AppendLine($"  the same span ticked with nobody looking: "
-                + $"{(watchedJson == unwatchedJson ? "identical" : "DIFFERENT")}");
-            if (watchedJson != unwatchedJson)
+                + $"{(watchedBooks == unwatchedBooks ? "identical" : "DIFFERENT")}");
+            if (watchedBooks != unwatchedBooks)
             {
                 sb.AppendLine("    watched:   " + Clip(watchedJson));
                 sb.AppendLine("    unwatched: " + Clip(unwatchedJson));
+                // The whole of both, for a diff -- `Clip` keeps 300 chars and
+                // the difference is rarely in the first 300.
+                System.IO.File.WriteAllText("Logs/CampLifeProbe-watched.json", watchedJson);
+                System.IO.File.WriteAllText("Logs/CampLifeProbe-unwatched.json", unwatchedJson);
             }
             Gate("choreographing-the-felling-changed-no-number",
-                watchedJson == unwatchedJson,
+                watchedBooks == unwatchedBooks,
                 "the watched camp and the unwatched one came out with different books");
 
             // Put the bodies back and let them settle, because the section
@@ -797,6 +803,22 @@ public class CampLifeProbe : MonoBehaviour
             $"{perQuery * 1000f:F1} us a query");
 
         Finish();
+    }
+
+    /// **The books, without the absence report.** `away` is the "while you
+    /// were away" summary: it accumulates on every tick and is reset by a
+    /// WATCHED frame (`Outpost` ending the absence), so the replay -- ticked
+    /// and read with no frame between -- always carries one the watched camp
+    /// had already cleared. Measured 2026-09-23: that report (timber/boards
+    /// got, hungryDays) was the whole of the difference; every stock, stage,
+    /// haul and station field matched. It is not a number the camp runs on.
+    static string Books(OutpostLedger l)
+    {
+        var keep = l.away;
+        l.away = new OutpostLedger.Absence();
+        string j = JsonUtility.ToJson(l);
+        l.away = keep;
+        return j;
     }
 
     static string Clip(string s) => s.Length <= 300 ? s : s.Substring(0, 300) + "…";
