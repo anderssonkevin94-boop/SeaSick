@@ -239,7 +239,7 @@ namespace SeaSick.World
             Vector3 r = Vector3.Cross(Vector3.up, f).normalized;
             float half = Mathf.Abs(f.x) > 0.5f ? plan.footprint.x * 0.5f : plan.footprint.y * 0.5f;
             Vector3 c = f * (half + 0.7f);
-            const float Len = 0.9f, Wide = 1.1f, Below = 0.3f, Above = 0.5f;
+            const float Len = 1.2f, Wide = 1.0f, Below = 0.9f, Above = 0.15f;
             Vector3 tip = c + f * (Len * 0.5f), bl = c - f * (Len * 0.5f) - r * (Wide * 0.5f), br = c - f * (Len * 0.5f) + r * (Wide * 0.5f);
 
             var verts = new List<Vector3>(); var tris = new List<int>();
