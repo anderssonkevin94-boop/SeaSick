@@ -261,6 +261,7 @@ namespace SeaSick.UI.Sheets
                 var next = l != null ? l.NextCampfire : null;
                 if (next == null) return null;
                 fireBtn = SheetKit.Btn($"Raise the fire to {RecipeGraph.Roman(next.level)}", RaiseFire, true);
+                fireBtn.style.height = StationSheet.TouchPx;
                 fireBtn.SetEnabled(l.CanRaiseCampfire(out _));
                 return SheetKit.Actions(fireBtn);
             }
