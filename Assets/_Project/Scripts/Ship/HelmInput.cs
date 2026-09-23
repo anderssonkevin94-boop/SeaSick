@@ -70,6 +70,46 @@ namespace SeaSick.Ship
         bool hasTarget;
         float throttleOrder;
         bool astern;
+
+        // --- tap-to-sail (the seam for Astra's cinematic tap, 2026-09-24) ---
+        Vector3? sailTo;
+        bool sailToStop;
+
+        /// **Sail to a point on the water.** The heading autopilot steers
+        /// for it every frame; the throttle keeps whatever was ordered, or
+        /// takes `cruise01` if she was stopped so a tap actually moves her.
+        /// Arriving (within 1.5 hull lengths, at least 12 m) rings down to
+        /// stop when `stopThere`, else just lets the course go. Any thumb on
+        /// the stick or a held steering key takes over and cancels it, so
+        /// the player always wins over the tap.
+        public void SailTo(Vector3 worldPoint, bool stopThere = true, float cruise01 = 0.6f)
+        {
+            helm.CancelDrag();
+            sailTo = worldPoint;
+            sailToStop = stopThere;
+            astern = false;
+            if (throttleOrder <= 0.05f) throttleOrder = Mathf.Clamp01(cruise01);
+            SteerForSailTo();
+        }
+
+        public void CancelSailTo() { sailTo = null; }
+        public bool Sailing => sailTo.HasValue;
+        public Vector3? SailTarget => sailTo;
+
+        void SteerForSailTo()
+        {
+            if (!sailTo.HasValue || motor == null) return;
+            Vector3 d = sailTo.Value - transform.position; d.y = 0f;
+            float arrive = Mathf.Max(12f, 1.5f * motor.HullLength);
+            if (d.magnitude <= arrive)
+            {
+                if (sailToStop) { throttleOrder = 0f; astern = false; }
+                sailTo = null;             // course held, as after a released drag
+                return;
+            }
+            targetHeadingDeg = Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg;
+            hasTarget = true;
+        }
         float rudder;
         float prevHeadingDeg;
         bool prevHeadingValid;
@@ -132,6 +172,15 @@ namespace SeaSick.Ship
             }
 
             if (!Mathf.Approximately(testRudder, 0f)) { manualRudder = testRudder; manualSteer = true; }
+
+            // A tapped destination steers until the player takes the helm
+            // back: a thumb on the stick, a tap (which rang her down), or a
+            // held key all cancel it.
+            if (sailTo.HasValue)
+            {
+                if (manualSteer || helm.Dragging || helm.Tapped) sailTo = null;
+                else SteerForSailTo();
+            }
 
             float rudderTarget;
             if (manualSteer)

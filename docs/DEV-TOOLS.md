@@ -1395,3 +1395,21 @@ not. The rules that keep them from tripping each other:
   change. `WorldPicker` tries every raycast hit nearest-first (scenery
   trees carry ~15 m trigger boxes); a building's tap sphere comes from
   `Pickable.EnsureAll`.
+
+### Tap-to-sail seam (2026-09-24)
+
+Astra is building tap-to-sail with a cinematic camera pan. The ship side
+is one call on the player's `HelmInput` (`Ship/HelmInput.cs`):
+`SailTo(Vector3 worldPoint, bool stopThere = true, float cruise01 = 0.6f)`
+-- the existing heading autopilot steers for the point; the throttle
+keeps its order (or takes `cruise01` if she was stopped); within 1.5 hull
+lengths (≥ 12 m) she rings down when `stopThere`. `CancelSailTo()`,
+`Sailing`, `SailTarget` for the camera/HUD. A thumb on the stick, a tap
+on the helm zone or a held A/D key cancels it -- the player always wins.
+The tap itself must be a WATER tap outside the helm zone (bottom half)
+and must not steal building/villager taps: run it after `WorldPicker`
+finds no sheet (see its Tap: the sheetless-solid case is where "the
+ground/water" ends today). For this feature Astra may add her own
+component under `CameraRig/` (a cinematic pan) and the water-tap hook
+in `UI/`; `HelmInput`, `ShipMotor`, `ChaseCamera`/`IslandCam` stay
+systems-owned -- ask for a getter rather than editing them.
