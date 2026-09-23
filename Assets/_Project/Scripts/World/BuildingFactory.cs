@@ -221,7 +221,69 @@ namespace SeaSick.World
                 Object.Destroy(l.gameObject);
 
             Tint(root, alpha);
+            FrontMarker(root.transform, plan);
             return root;
+        }
+
+        /// **The blueprint's triangle (Kevin, 2026-09-24):** *"for the
+        /// blueprints, can you add a triangle showing which side is the
+        /// entrance ... or like the face of the building?"* A flat ember
+        /// wedge on the ground just outside the footprint on the plan's
+        /// `front` side, pointing away from the building -- the way you
+        /// would walk in. It is a short prism rather than a quad so it
+        /// still shows through a slope, and it is added AFTER `Tint`, so it
+        /// keeps its own colour instead of the chalk.
+        static void FrontMarker(Transform root, BuildPlan plan)
+        {
+            Vector3 f = plan.Front;
+            Vector3 r = Vector3.Cross(Vector3.up, f).normalized;
+            float half = Mathf.Abs(f.x) > 0.5f ? plan.footprint.x * 0.5f : plan.footprint.y * 0.5f;
+            Vector3 c = f * (half + 0.7f);
+            const float Len = 0.9f, Wide = 1.1f, Below = 0.3f, Above = 0.5f;
+            Vector3 tip = c + f * (Len * 0.5f), bl = c - f * (Len * 0.5f) - r * (Wide * 0.5f), br = c - f * (Len * 0.5f) + r * (Wide * 0.5f);
+
+            var verts = new List<Vector3>(); var tris = new List<int>();
+            void Quad(Vector3 a, Vector3 b, Vector3 cc, Vector3 d)
+            {
+                int i = verts.Count; verts.Add(a); verts.Add(b); verts.Add(cc); verts.Add(d);
+                tris.Add(i); tris.Add(i + 1); tris.Add(i + 2); tris.Add(i); tris.Add(i + 2); tris.Add(i + 3);
+            }
+            void Tri(Vector3 a, Vector3 b, Vector3 cc)
+            {
+                int i = verts.Count; verts.Add(a); verts.Add(b); verts.Add(cc);
+                tris.Add(i); tris.Add(i + 1); tris.Add(i + 2);
+            }
+            Vector3 up = Vector3.up * Above, dn = Vector3.down * Below;
+            // Top and bottom faces, then the three sides; wound to face outward.
+            Tri(tip + up, br + up, bl + up);
+            Tri(tip + dn, bl + dn, br + dn);
+            Quad(bl + dn, bl + up, br + up, br + dn);   // base (toward the building)
+            Quad(br + dn, br + up, tip + up, tip + dn); // right flank
+            Quad(tip + dn, tip + up, bl + up, bl + dn); // left flank
+
+            var mesh = new Mesh { name = "FrontMarker" };
+            mesh.SetVertices(verts); mesh.SetTriangles(tris, 0); mesh.RecalculateNormals(); mesh.RecalculateBounds();
+
+            var go = new GameObject("FrontMarker");
+            go.transform.SetParent(root, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = FrontMarkerMat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        static Material frontMarkerMat;
+        static Material FrontMarkerMat
+        {
+            get
+            {
+                if (frontMarkerMat == null)
+                {
+                    frontMarkerMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+                    frontMarkerMat.color = new Color(0.95f, 0.45f, 0.18f);
+                }
+                return frontMarkerMat;
+            }
         }
 
         // --- the wall (Phase 1, 2026-09-23) ----------------------------------

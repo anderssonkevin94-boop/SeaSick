@@ -189,6 +189,16 @@ namespace SeaSick.World
         /// asset costs a plainer building and never a broken camp.
         public string prefab;
 
+        /// **Which way the building faces, in its own local space.** The
+        /// extruded and kit buildings keep their door in the -X gable end
+        /// (the convention `Outpost.Raise` has always turned toward the
+        /// camp); Astra's authored models have their open working front on
+        /// +Z (input bay +X, output rack -X). Auto-siting turns THIS toward
+        /// the clearing, and a blueprint marks it with a triangle (Kevin,
+        /// 2026-09-24: "a triangle showing ... the face of the building").
+        public Vector3 front;   // zero = the -X door gable (a struct cannot default it)
+        public Vector3 Front => front.sqrMagnitude > 0.001f ? front.normalized : Vector3.left;
+
         /// **This plan, at a different length along the ridge.** A pier is
         /// as long as the beach makes it (14 m, or up to 24 m out to water
         /// that will float a hull), and everything downstream -- the ghost,
@@ -303,6 +313,7 @@ namespace SeaSick.World
             // 2026-09-23); its validated bounds (6.03 x 4.34 x 3.57 m) sit
             // inside this footprint/ridge, so neither needed correcting.
             prefab = "Settlement/storage_astra",
+            front = Vector3.forward,
         };
 
         public static readonly BuildPlan Hut = new BuildPlan
@@ -321,6 +332,7 @@ namespace SeaSick.World
             // 2026-09-23); its validated bounds (4.33 x 4.07 x 2.91 m) sit
             // inside this footprint/ridge.
             prefab = "Settlement/hut_astra",
+            front = Vector3.forward,
         };
 
         public static readonly BuildPlan Sawmill = new BuildPlan
@@ -341,6 +353,7 @@ namespace SeaSick.World
             makes = Res.Boards,
             rate = 3f,
             prefab = "Settlement/sawmill",
+            front = Vector3.forward,
         };
 
         /// **The farm, 2026-09-21.** GDD 6: *"food is local ... wheat feeds
@@ -388,6 +401,7 @@ namespace SeaSick.World
             bedRegrowPerDay = FarmRegrowPerDay,
             bedSpacing = FarmBedSpacing,
             prefab = "Settlement/farm_astra",
+            front = Vector3.forward,
         };
 
         /// Beds a farm plants. Six: the kit's `farm_02` count, and a field
@@ -426,6 +440,7 @@ namespace SeaSick.World
             // 2026-09-23); its validated bounds (5.90 x 3.31 x 4.46 m) sit
             // inside this footprint/ridge, so neither needed correcting.
             prefab = "Settlement/blacksmith_astra",
+            front = Vector3.forward,
         };
 
         public static readonly BuildPlan Kitchen = new BuildPlan
@@ -449,6 +464,7 @@ namespace SeaSick.World
             makes = Res.Meals,
             rate = 3f,
             prefab = "Settlement/kitchen_astra",
+            front = Vector3.forward,
         };
 
         /// **The fourth building that earns its place by preventing rather
@@ -492,6 +508,7 @@ namespace SeaSick.World
             // `BuildKind.Hut` (the extruded shed) stays as the fallback if it
             // fails to load.
             prefab = "Settlement/watchtower_astra",
+            front = Vector3.forward,
         };
 
         /// **The quarry, 2026-09-22.** Kevin: *"we need a stone quarry
@@ -535,6 +552,7 @@ namespace SeaSick.World
             // Astra's level-one stonecutting yard (art-staging/quarry-astra-lvl1-v2);
             // `BuildKind.Quarry` (the extruded shed) stays as the fallback if it fails to load.
             prefab = "Settlement/quarry",
+            front = Vector3.forward,
         };
 
         /// **The fletcher's, 2026-09-22.** Kevin: *"build a fletcher's
@@ -585,6 +603,7 @@ namespace SeaSick.World
             // before any `plan.kind` branch -- so naming a prefab here is
             // enough for the authored kit to win with no factory change.
             prefab = "Settlement/fletcher_astra",
+            front = Vector3.forward,
         };
 
         /// **A pier, 2026-09-21.** Kevin: *"I'd like a pier asset to be

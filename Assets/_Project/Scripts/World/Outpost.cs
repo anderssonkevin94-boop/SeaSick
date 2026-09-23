@@ -3152,6 +3152,65 @@ namespace SeaSick.World
             }
         }
 
+        /// **One farm's own beds, ripe or cut, for its sheet** (read-only,
+        /// 2026-09-23). The beds `FarmFields` planted for THIS farm are the
+        /// `BuildPlans.Farm.beds` crop beds nearest the point it planted them
+        /// at (the kit's middle bed slot, else off the front) -- the same
+        /// beds `FarmBedView` dresses. `ripe` gets one entry per bed found,
+        /// nearest first, true while it stands. Changes nothing.
+        public int FarmBeds(Building farm, List<bool> ripe)
+        {
+            ripe?.Clear();
+            if (farm == null || ripe == null) return 0;
+            var crops = CropsHere();
+            if (crops == null) crops = Terrain.SceneryCrops.On(Island.Nearest(farm.transform.position));
+            if (crops == null || crops.BedCount == 0) return 0;
+            var plan = BuildPlans.Farm;
+            var slots = BuildingFactory.BedSlotsOf(farm.transform);
+            Vector3 at = slots.Count > 0
+                ? slots[slots.Count / 2].position
+                : farm.transform.position + farm.transform.forward * (plan.footprint.y * 0.5f + 3f);
+            const float reach = 6f;
+            int want = Mathf.Max(0, plan.beds);
+            var taken = new List<int>(want);
+            for (int k = 0; k < want; k++)
+            {
+                int best = -1;
+                float bestSq = reach * reach;
+                for (int i = 0; i < crops.BedCount; i++)
+                {
+                    if (taken.Contains(i)) continue;
+                    Vector3 d = crops.BedAt(i).at - at;
+                    d.y = 0f;
+                    if (d.sqrMagnitude < bestSq) { bestSq = d.sqrMagnitude; best = i; }
+                }
+                if (best < 0) break;
+                taken.Add(best);
+                ripe.Add(!crops.BedAt(best).harvested);
+            }
+            return ripe.Count;
+        }
+
+        /// **Days until the next cut bed stands again** on regrowth alone
+        /// (read-only, 2026-09-23): the rate `OutpostLedger.Step` regrows
+        /// the Food field at (`standingMax * regrowPerDay` a day) against
+        /// the floor `BedsOwed` counts from. Infinity when nothing is owed
+        /// or nothing regrows. A hand harvesting meanwhile can push it out.
+        public float NextBedDays
+        {
+            get
+            {
+                var stock = ledger != null ? ledger.Stock(Res.Food) : null;
+                if (stock == null) return float.PositiveInfinity;
+                int owed = BedsOwed;
+                if (owed <= 0) return float.PositiveInfinity;
+                float perDay = stock.standingMax * stock.regrowPerDay;
+                if (perDay <= 1e-5f) return float.PositiveInfinity;
+                float gap = (stock.standingMax - stock.standing) - owed + 1e-3f;
+                return Mathf.Max(0f, gap) / perDay;
+            }
+        }
+
         /// **Make the field agree with the books**: harvested beds are a
         /// prefix of the nearest-the-camp order, exactly `BedsOwed` long.
         /// Pure in the ledger, like `SyncFelling`; a bed comes down the
@@ -3698,12 +3757,14 @@ namespace SeaSick.World
 
                 Vector3 toCentre = CampCentre - p;
                 toCentre.y = 0f;
-                // Door toward the middle of the clearing. A building whose
+                // Front toward the middle of the clearing. A building whose
                 // back is to the village is the tell that nobody chose where
-                // it went. The plan's ridge runs along local X and the door is
-                // in a gable end, so local -X is what has to face in.
+                // it went. Which side IS the front is the plan's business
+                // (`BuildPlan.front`: the kit's -X door gable, Astra's +Z
+                // working front); this turns that vector onto `toCentre`.
                 Quaternion facing = toCentre.sqrMagnitude > 0.01f
-                    ? Quaternion.LookRotation(toCentre.normalized, Vector3.up) * Quaternion.Euler(0f, 90f, 0f)
+                    ? Quaternion.LookRotation(toCentre.normalized, Vector3.up)
+                      * Quaternion.Inverse(Quaternion.LookRotation(plan.Front, Vector3.up))
                     : Quaternion.identity;
 
                 if (!Corners(p, facing, len, wid, out float lo, out float hi)) continue;
