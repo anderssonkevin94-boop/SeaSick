@@ -260,7 +260,10 @@ namespace SeaSick.World
             storeCapacity = OutpostLedger.CampfireCeiling,
             footprint = new Vector2(3.13f, 1.78f),
             ridge = 0.84f,
-            prefab = "Settlement/campfire_02",
+            // Astra's level-one campfire (art-staging/campfire-astra-lvl1-v2,
+            // 2026-09-23); `campfire_02` (the earlier kit fallback) is no
+            // longer worn but stays in Resources if this needs reverting.
+            prefab = "Settlement/campfire_astra",
         };
 
         // --- the camp buildings, 2026-09-19 ----------------------------------
@@ -296,7 +299,10 @@ namespace SeaSick.World
             storeCapacity = 20,
             footprint = new Vector2(6.46f, 5.14f),
             ridge = 3.84f,
-            prefab = "Settlement/storage",
+            // Astra's level-one storage hut (art-staging/storage-astra-lvl1-v1,
+            // 2026-09-23); its validated bounds (6.03 x 4.34 x 3.57 m) sit
+            // inside this footprint/ridge, so neither needed correcting.
+            prefab = "Settlement/storage_astra",
         };
 
         public static readonly BuildPlan Hut = new BuildPlan
@@ -311,7 +317,10 @@ namespace SeaSick.World
             ridge = 3.81f,
             supports = 4,
             houses = 2,
-            prefab = "Settlement/hut_01",
+            // Astra's level-one crew shelter (art-staging/shelter-astra-lvl1-v1,
+            // 2026-09-23); its validated bounds (4.33 x 4.07 x 2.91 m) sit
+            // inside this footprint/ridge.
+            prefab = "Settlement/hut_astra",
         };
 
         public static readonly BuildPlan Sawmill = new BuildPlan
@@ -361,7 +370,16 @@ namespace SeaSick.World
             resource = Res.Timber,
             baseCost = 16,
             footprint = new Vector2(4.66f, 4.69f),
-            ridge = 1.01f,
+            // **2026-09-23: 2.03 m, not the old 1.01 m.** Astra's kit
+            // (art-staging/farm-astra-lvl1-v1) flagged its own tool canopy
+            // as taller than the old ridge metadata
+            // (`requires_height_metadata_review` in its validation.json,
+            // measured bounds 0 to 2.026 m) and said explicitly not to
+            // compress the art to fit the stale number. This is a metadata
+            // correction to the asset's real height, not a scale -- the
+            // footprint (4.29 x 4.47 m measured) already sat inside the
+            // plot unchanged.
+            ridge = 2.03f,
             position = "farmhand",
             makes = Res.Food,
             rate = OutpostLedger.FoodPerHandPerDay,
@@ -369,7 +387,7 @@ namespace SeaSick.World
             unitsPerBed = FarmUnitsPerBed,
             bedRegrowPerDay = FarmRegrowPerDay,
             bedSpacing = FarmBedSpacing,
-            prefab = "Settlement/farm_01",
+            prefab = "Settlement/farm_astra",
         };
 
         /// Beds a farm plants. Six: the kit's `farm_02` count, and a field
@@ -415,13 +433,16 @@ namespace SeaSick.World
             footprint = new Vector2(6.26f, 6.12f),
             ridge = 4.18f,
             position = "cook",
-            // Bay/rack capacity in units. **A guess** (the sawmill's numbers), never played.
-            inputSlots = 6,
-            outputSlots = 12,
+            // Bay/rack capacity in units, 2026-09-23: Astra's kitchen kit
+            // (art-staging/kitchen-astra-lvl1-v1) has 4 Input_Food and 6
+            // Output_Meal display slots -- real capacities now, not the
+            // sawmill's borrowed guess.
+            inputSlots = 4,
+            outputSlots = 6,
             takes = Res.Food,
             makes = Res.Meals,
             rate = 3f,
-            prefab = "Settlement/kitchen",
+            prefab = "Settlement/kitchen_astra",
         };
 
         /// **The fourth building that earns its place by preventing rather

@@ -443,6 +443,16 @@ namespace SeaSick.World
             // on a model with none (the blacksmith/kitchen kit, anything
             // extruded).
             root.gameObject.AddComponent<StationStockView>();
+            // Astra's non-station buildings (2026-09-23): each of these
+            // looks for its own kit's slot names and self-disables (never
+            // even ticks `Update`, see each view's `Start`) on a model with
+            // none of them, exactly like `StationStockView` above -- so
+            // every kit building carries all four and only the one whose
+            // names match ever does anything.
+            root.gameObject.AddComponent<StoreStockView>();
+            root.gameObject.AddComponent<FarmBedView>();
+            root.gameObject.AddComponent<CampfireStateView>();
+            root.gameObject.AddComponent<ShelterStateView>();
             return true;
         }
 
