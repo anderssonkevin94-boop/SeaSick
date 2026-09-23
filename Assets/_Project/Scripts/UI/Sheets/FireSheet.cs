@@ -42,6 +42,7 @@ namespace SeaSick.UI.Sheets
         const int PgShip = 4;      // the manifest's three sections, embedded
         const int PgCargo = 5;
         const int PgCrew = 6;
+        const int PgFire = 7;      // the fire's own level, when it does not fit the camp page
 
         readonly Outpost outpost;
         readonly string focus;
@@ -73,7 +74,7 @@ namespace SeaSick.UI.Sheets
         /// section. `part` on `PgCamp` doubles as "the orders block is on
         /// this page too", which is what happens on a desk where the band is
         /// tall enough to carry both.
-        struct Pg { public int kind; public int part; }
+        struct Pg { public int kind; public int part; public bool fire; }
 
         readonly List<Pg> pages = new List<Pg>();
         string[] labels = { "camp" };
@@ -107,11 +108,13 @@ namespace SeaSick.UI.Sheets
             int cargo = alongside ? ship.CargoCount : 0;
             int crew = alongside ? ship.CrewRows : 0;
             bool warn = CampWarning(l) != null;
+            var nextFire = l.NextCampfire;
 
             long key = Mathf.RoundToInt(band) * 1000003L
                        + storeTiles * 7919L + handCount * 131L + planCount * 31L
                        + cargo * 17L + crew * 7L + (alongside ? 1L : 0L)
-                       + siteCount * 3L + (warn ? 1L : 0L) * 2L;
+                       + siteCount * 3L + (warn ? 1L : 0L) * 2L
+                       + l.CampfireLevel * 100019L;
             if (key == planKey) return;
             planKey = key;
 
@@ -128,10 +131,23 @@ namespace SeaSick.UI.Sheets
             // roster underneath it. The warning row (also 2026-09-23) is
             // its own `NotePx`, but only when `CampWarning` has something to
             // say -- an absent row costs the band nothing.
-            float firePx = SheetKit.EyebrowPx + SheetKit.BigPx + SheetKit.NotePx + SheetKit.RulePx
+            // **Sized honestly, 2026-09-23** (open item A from 1cf73f9): the
+            // old sum missed the blurb, the cost line and the "needs ..."
+            // note, and on a phone the fire block ran over the store gauges.
+            // Every line `FireRow` can draw is counted -- the why-note always,
+            // because whether it shows moves with the piles on the timer and
+            // the plan must not re-page under a finger.
+            float firePx = SheetKit.EyebrowPx + SheetKit.BigPx + SheetKit.TextPx   // fuel line
+                           + (nextFire == null ? SheetKit.NotePx
+                              : (string.IsNullOrEmpty(nextFire.blurb) ? 0f : SheetKit.TextPx)
+                                + SheetKit.TextPx + SheetKit.NotePx)
                            + (warn ? SheetKit.NotePx : 0f);
-            float campPx = firePx + storeRows * SheetKit.StorePx
-                           + (siteCount == 0 ? SheetKit.NotePx : siteCount * SheetKit.RowPx);
+            float storesPx = SheetKit.RulePx + storeRows * SheetKit.StorePx
+                             + (siteCount == 0 ? SheetKit.NotePx : siteCount * SheetKit.RowPx);
+            // The fire keeps the camp page when both fit; otherwise it is a
+            // page of its own in front of it, and the gauges keep theirs.
+            bool campCarriesFire = firePx + storesPx <= band;
+            float campPx = (campCarriesFire ? firePx : 0f) + storesPx;
             float ordersPx = SheetKit.EyebrowPx + SheetKit.SegPx + SheetKit.TextPx
                              + SheetKit.SegPx + SheetKit.QuietPx + SheetKit.TextPx
                              + SheetKit.BarPx;
@@ -143,7 +159,8 @@ namespace SeaSick.UI.Sheets
             int buildPages = SheetKit.PageCount(Mathf.Max(1, planCount), buildPerPage);
 
             pages.Clear();
-            pages.Add(new Pg { kind = PgCamp, part = campCarriesOrders ? 1 : 0 });
+            if (!campCarriesFire) pages.Add(new Pg { kind = PgFire, part = 0 });
+            pages.Add(new Pg { kind = PgCamp, part = campCarriesOrders ? 1 : 0, fire = campCarriesFire });
             if (!campCarriesOrders) pages.Add(new Pg { kind = PgOrders, part = 0 });
             for (int i = 0; i < handPages; i++) pages.Add(new Pg { kind = PgHands, part = i });
             for (int i = 0; i < buildPages; i++) pages.Add(new Pg { kind = PgBuild, part = i });
@@ -163,6 +180,7 @@ namespace SeaSick.UI.Sheets
                 switch (pages[i].kind)
                 {
                     case PgCamp: labels[i] = "camp"; break;
+                    case PgFire: labels[i] = "fire"; break;
                     case PgOrders: labels[i] = "orders"; break;
                     case PgHands:
                         labels[i] = handPages > 1
@@ -211,7 +229,7 @@ namespace SeaSick.UI.Sheets
             get
             {
                 Plan();
-                if (pages.Count == 0) return new Pg { kind = PgCamp, part = 1 };
+                if (pages.Count == 0) return new Pg { kind = PgCamp, part = 1, fire = true };
                 return pages[Mathf.Clamp(tab, 0, pages.Count - 1)];
             }
         }
@@ -237,7 +255,7 @@ namespace SeaSick.UI.Sheets
         {
             int k = Live.kind;
             if (k == PgShip || k == PgCargo || k == PgCrew) return ship.BuildActions();
-            if (k == PgCamp)
+            if (k == PgFire || (k == PgCamp && Live.fire))
             {
                 var l = L;
                 var next = l != null ? l.NextCampfire : null;
@@ -332,8 +350,9 @@ namespace SeaSick.UI.Sheets
                 case PgShip: BuildShip(root, ShipSheet.SecHold, 0); break;
                 case PgCargo: BuildShip(root, ShipSheet.SecCargo, page.part); break;
                 case PgCrew: BuildShip(root, ShipSheet.SecCrew, page.part); break;
+                case PgFire: BuildFire(root); break;
                 default:
-                    BuildCamp(root);
+                    BuildCamp(root, page.fire);
                     // On a desk the band carries the piles AND the orders, so
                     // the camp is one page rather than two half-empty ones.
                     if (page.part == 1) { root.Add(SheetKit.Rule()); BuildOrders(root); }
@@ -364,7 +383,24 @@ namespace SeaSick.UI.Sheets
         /// What the fire is holding, what it is doing with it, and the four
         /// standing orders. Everything on this tab was on the old sheet above
         /// the roster.
-        void BuildCamp(VisualElement root)
+        void BuildCamp(VisualElement root, bool withFire)
+        {
+            if (withFire)
+            {
+                BuildFire(root);
+                root.Add(SheetKit.Rule());
+            }
+
+            storesHolder = SheetBits.Holder();
+            root.Add(storesHolder);
+
+            noteHolder = SheetBits.Holder();
+            root.Add(noteHolder);
+        }
+
+        /// The fire block and the warning line under it -- the top of the
+        /// camp page, or a page of their own where the band is short.
+        void BuildFire(VisualElement root)
         {
             fireHolder = SheetBits.Holder();
             root.Add(fireHolder);
@@ -374,14 +410,6 @@ namespace SeaSick.UI.Sheets
             // entirely (zero height) when nothing applies.
             warnHolder = SheetBits.Holder();
             root.Add(warnHolder);
-
-            root.Add(SheetKit.Rule());
-
-            storesHolder = SheetBits.Holder();
-            root.Add(storesHolder);
-
-            noteHolder = SheetBits.Holder();
-            root.Add(noteHolder);
         }
 
         /// **The fire's own level, at the top of the camp page, 2026-09-23.**
@@ -393,7 +421,8 @@ namespace SeaSick.UI.Sheets
         {
             var cur = Techs.CampfireAt(l.CampfireLevel);
             var next = l.NextCampfire;
-            long key = l.CampfireLevel * 1000003L;
+            int logs = l.StoreCountOf(Res.Timber);
+            long key = l.CampfireLevel * 1000003L + logs * 7919L;
             if (next != null)
                 foreach (var line in next.cost) key = key * 31 + l.CountOf(line.res);
             if (key == fireKey) return;
@@ -405,6 +434,10 @@ namespace SeaSick.UI.Sheets
             string big = cur != null ? $"{RecipeGraph.Roman(cur.level)} {cur.name}"
                 : RecipeGraph.Roman(l.CampfireLevel);
             col.Add(SheetKit.Text(big, true, false, 20f));
+            // What it burns: the timber in the store, the logs
+            // `CampfireStateView` stacks beside it.
+            col.Add(SheetKit.Text(logs > 0 ? $"fuel · {logs} logs in the store" : "fuel · no logs in the store",
+                false, true, 12f));
 
             if (next == null)
             {
@@ -647,6 +680,10 @@ namespace SeaSick.UI.Sheets
                 case PgCargo:
                 case PgCrew:
                     if (CampLoading.Alongside(outpost)) ship.Refresh();
+                    break;
+                case PgFire:
+                    FireRow(l);
+                    WarnRow(l);
                     break;
                 case PgOrders:
                     RationsBlock(l);

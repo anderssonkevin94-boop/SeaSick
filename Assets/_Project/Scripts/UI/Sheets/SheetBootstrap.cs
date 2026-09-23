@@ -69,6 +69,9 @@ namespace SeaSick.UI.Sheets
                 if (b.Kind == BuildKind.Fire) return FireFor(camp);
                 if (b.Id == OutpostLedger.WatchtowerId) return FireFor(camp, FireSheet.FocusLookout);
                 if (camp == null || camp.Ledger == null) return null;
+                // The farm has its own sheet since 2026-09-23 (the building
+                // template, farm rows); it went to the camp sheet before.
+                if (b.Id == BuildPlans.Farm.id) return new FarmSheet(camp, b);
                 bool hasRecipes = Recipes.StationHasRecipes(b.Id);
                 bool hasUpgrade = Techs.MaxLevel(b.Id) > 1;
                 if (!hasRecipes && !hasUpgrade) return FireFor(camp);   // a pier: the fire, as before
