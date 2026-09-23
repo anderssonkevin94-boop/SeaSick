@@ -14,6 +14,12 @@ namespace SeaSick.Ship
         {
             var prefab = Resources.Load<FleetVisual>($"Ships/FleetV3/Ship{node + 1:00}");
             if (!prefab) return null;
+            // Opt-in art playtest affects the player's ship, not the enemy fleet.
+            if (parent.GetComponent<Shipyard>() != null)
+            {
+                var replacement = AstraSteamerVisual.Build(parent, node, prefab);
+                if (replacement != null) return replacement;
+            }
             var visual = Instantiate(prefab, parent, false);
             visual.name = "HullVisual";
             foreach (var gun in visual.gunTemplates) gun.gameObject.SetActive(false);
@@ -21,6 +27,8 @@ namespace SeaSick.Ship
         }
         public float DeckHeight(float z)
         {
+            var steamer = GetComponent<AstraSteamerVisual>();
+            if (steamer != null) return steamer.DeckHeight(z);
             if (stage <= 3) return freeboard * .5f + .12f;
             if (stage >= 7 && z < -length * .25f) return helm.y;
             float t = Mathf.Clamp01((z - length * .22f) / (length * .28f));

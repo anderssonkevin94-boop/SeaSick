@@ -149,11 +149,28 @@ namespace SeaSick.Steamer
 
             // --- 2. the hull she is wearing ------------------------------------
             ClearVisuals(root);
-            var hull = Spawn(HullResource, root, "HullVisual", Vector3.zero, PlaytestScale);
+            var approved = Resources.Load<GameObject>("AstraPlaytest/Steamer");
+            GameObject hull;
+            GameObject wheel;
+            if (approved != null)
+            {
+                hull = Object.Instantiate(approved, root, false);
+                hull.name = "HullVisual";
+                var art = hull.GetComponent<AstraSteamerVisual>();
+                art.enabled = false; // PaddleDrive remains the sole wheel animator.
+                art.geometry.localScale = new Vector3(data.beam / 9.36f,
+                    (data.depth - data.draft) / 1.76f, data.lwl / 23.95f);
+                wheel = art.paddle.gameObject;
+                AstraSteamerVisual.ReplaceCaptain(root);
+            }
+            else
+            {
+                hull = Spawn(HullResource, root, "HullVisual", Vector3.zero, PlaytestScale);
+                wheel = Spawn(WheelResource, root, "PaddleWheel", data.wheelAxle, PlaytestScale);
+            }
             // ONE wheel, on the centreline, inside her stern. The mesh is
             // modelled about its own axle so this is the only place its
             // position is stated.
-            var wheel = Spawn(WheelResource, root, "PaddleWheel", data.wheelAxle, PlaytestScale);
 
             Material paint = null;
             var shader = Shader.Find(PaintShader);
