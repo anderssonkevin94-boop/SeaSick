@@ -142,6 +142,10 @@ namespace SeaSick.World
         public void CatchUp()
         {
             if (ledger == null) return;
+            // Nobody watching, nobody walking: an unwatched camp is all
+            // arithmetic (`OutpostHand.walkingIn`).
+            if (!Watched)
+                foreach (var h in ledger.hands) if (h != null) h.walkingIn = false;
             // **One definition of the ceiling, and it is what stands on the
             // ground.** The ledger could have carried its own and drifted from
             // the buildings the moment a storehouse went up; instead the
@@ -306,6 +310,51 @@ namespace SeaSick.World
         Vector3 campCentre;
         bool hasCampCentre;
 
+        /// **How far from the town centre anything else may be sited, metres.**
+        ///
+        /// Kevin, 2026-09-23: *"i want you to be able to choose where you
+        /// want on the island to build your town center"* -- and once it
+        /// stands, the rest of the town goes NEAR it. The town centre itself
+        /// (the campfire, the first thing sited) has no reach rule at all:
+        /// anywhere `CanPlace` takes is fine. A guess; the dial.
+        public const float TownRadius = 40f;
+
+        /// **The one reach rule**, asked by `SiteFresh` (so the raise and the
+        /// queue agree) and by `CampSiting` (so the ghost and the ring agree).
+        /// False, with nothing to say, while there is no town centre yet or
+        /// when the thing being sited IS the town centre.
+        public bool TooFarFromTown(BuildPlan plan, Vector3 at, out string why)
+        {
+            why = "";
+            if (!hasCampCentre || plan.kind == BuildKind.Fire) return false;
+            // A pier goes where the deep water is, which for a town sited
+            // inland (2026-09-23, "anywhere on the island") can be well
+            // past the reach -- and the harbour is the plan's Phase 3.
+            if (plan.kind == BuildKind.Pier) return false;
+            float d = Island.FlatDistance(at, campCentre);
+            if (d <= TownRadius) return false;
+            why = $"too far from the town centre ({d:F0} m, {TownRadius:F0} m is the limit)";
+            return true;
+        }
+
+        /// **Move the camp's centre, and everything keyed to it.** The
+        /// ledger key follows (see `SiteFresh`), and a path grid baked round
+        /// the old centre is thrown away: since 2026-09-23 the town centre
+        /// can be anywhere on the island, so the grid built on arrival
+        /// (centred on the survey's clearing) may not even cover it.
+        void SetCampCentre(Vector3 at)
+        {
+            bool moved = !hasCampCentre || Island.FlatDistance(at, campCentre) > 8f;
+            campCentre = at;
+            hasCampCentre = true;
+            if (ledger != null) ledger.SetKey(campCentre);
+            if (moved)
+            {
+                var grid = GetComponent<CampPath>();
+                if (grid != null) grid.Invalidate();
+            }
+        }
+
         /// Has the player put a fire (or its blueprint) down here, or is
         /// `CampCentre` still the survey's guess? A save carries the answer:
         /// a loaded camp whose centre fell back to the clearing would key
@@ -408,6 +457,8 @@ namespace SeaSick.World
                 carriedAt = ledger.sites.IndexOf(moving);
                 if (carriedAt >= 0)
                 {
+                    // Its plot, as it stands, before it leaves the queue.
+                    SnapshotDown(moving, snapTrees, snapRocks);
                     carried = moving;
                     ledger.sites.RemoveAt(carriedAt);
                     RetireBlueprint(carried);
@@ -441,6 +492,12 @@ namespace SeaSick.World
                 // away does not un-build it.
                 landed.phased = true;
                 landed.built = Mathf.Min(carried.built, landed.LabourNeeded);
+                // **The clearing does NOT travel** (2026-09-23): it was work
+                // on the old ground. The new plot was counted fresh by
+                // `SiteFresh`; the old plot's stumps go back to the camp.
+                ReturnToCamp(snapTrees, snapRocks);
+                SyncFelling();
+                GatherSync.Sync(this);
                 var drawn = BlueprintFor(landed);
                 if (drawn != null) drawn.Refresh(landed);
                 // Paid in full already? Then moving it finishes it.
@@ -461,7 +518,13 @@ namespace SeaSick.World
             // otherwise the way to get two sawmills is to site one twice.
             if (CountOf(plan.id) > 0) { why = $"there is already a {plan.label} here"; return -1; }
             if (ledger.Queued(plan.id)) { why = $"a {plan.label} is already going up here"; return -1; }
+            // **The belt, 2026-09-23** -- the sheet already hides a locked
+            // plan; this refuses it too, so nothing can queue a station the
+            // fire has not opened yet by some other path in.
+            if (!ledger.PlanUnlocked(plan.id)) { why = ledger.PlanLockReason(plan.id); return -1; }
             if (!CanPlace(plan, at, yaw, out why, out float lo, out float hi)) return -1;
+            // Near the town centre, once there is one (2026-09-23).
+            if (TooFarFromTown(plan, at, out why)) return -1;
 
             // **Only the FIRE says where the camp is.** Until 2026-09-20 every
             // siting moved the camp centre -- harmless while the campfire was
@@ -475,14 +538,11 @@ namespace SeaSick.World
             bool isTheCamp = plan.kind == BuildKind.Fire || !hasCampCentre;
             if (isTheCamp)
             {
-                campCentre = spot;
-                hasCampCentre = true;
-
                 // The key moves to where the player put it, and it moves NOW --
                 // before any wood is counted. A ledger keyed to the survey's
                 // clearing and then filled by a camp forty metres away is a
                 // camp that will not be found again after a save.
-                ledger.SetKey(campCentre);
+                SetCampCentre(spot);
             }
             var row = new PendingBuild
             {
@@ -507,16 +567,23 @@ namespace SeaSick.World
                 // to do on rows that came out of an older save.
                 phased = true,
             };
+            // **Count the plot, 2026-09-23**, before the row joins the
+            // queue (so the registry and the camp's order are still the ones
+            // without it). Trees and rocks never refuse a siting.
+            TakeFootprint(row);
             // Newest goes last: the queue is served oldest first.
             ledger.sites.Add(row);
+            SyncFelling();
+            GatherSync.Sync(this);
 
             // Making camp is everybody's job: there is no fire yet to idle
-            // by. A LATER building orders NOBODY (Kevin, 2026-09-21: "when
-            // assigning someone a task everyone assumes that task -- if
-            // they're idle they just hang out by the fire"). The drawing
-            // waits for the Hand to drop a man on it (`OrderBuild`), and the
-            // rest of the camp goes on with what it was doing, idle included.
+            // by. A LATER building still orders nobody who HAS an order
+            // (Kevin, 2026-09-21: "when assigning someone a task everyone
+            // assumes that task") -- but since 2026-09-23 the IDLE ones take
+            // it up on their own (Kevin: "i want villagers to take
+            // initiative"), see `OutpostLedger.EnlistFree`.
             if (plan.kind == BuildKind.Fire) ledger.OrderAll(OutpostOrder.Build);
+            else if (ledger.EnlistFree() > 0 && Watched) PuppetsToWork();
             EnsureBlueprints();
             // A plan that costs nothing is finished the moment it is sited.
             // Nothing does today; the dev path (`MakeCamp`) reaches the same
@@ -672,11 +739,7 @@ namespace SeaSick.World
             // See `Site`.
             Vector3 stoodAt = b.transform.position;
             if (plan.kind == BuildKind.Fire || !hasCampCentre)
-            {
-                campCentre = stoodAt;
-                hasCampCentre = true;
-                ledger.SetKey(campCentre);
-            }
+                SetCampCentre(stoodAt);
             ledger.built.Add(plan.id);
             ledger.ceilingPer = KeepsOfEach;
 
@@ -686,10 +749,20 @@ namespace SeaSick.World
             // they come down through the same path the crew fell them by --
             // and what comes down is a camp appearing in the wood rather than
             // a gap appearing where a camp might one day go.
+            //
+            // **Only the FIRE fells a ring now, 2026-09-23.** Every other
+            // building's plot was cleared by the hands before it could be
+            // raised (`PendingBuild.Cleared` gates `Complete`), and its
+            // footprint is in the clearing registry from here on -- a 7.5 m
+            // ring felled at the raise was the old instant clearing, and it
+            // was not reproducible on a reload either. The fire keeps it:
+            // making camp is the one raise with nobody yet to clear for it.
             LastClearingFelled = 0;
             var wood = GetComponentInChildren<Terrain.SceneryWood>();
-            if (wood != null)
-                LastClearingFelled = wood.FellWithin(stoodAt, CampClearingRadius);
+            EnsureClearing(false);   // the registry as of this raise
+            if (wood != null && plan.kind == BuildKind.Fire)
+                LastClearingFelled = wood.FellWithin(stoodAt, CampClearingRadius,
+                    i => i < siteTree.Length && siteTree[i]);
             if (LastClearingFelled > 0)
                 ledger.Add(Res.Timber, LastClearingFelled);
 
@@ -771,7 +844,13 @@ namespace SeaSick.World
         {
             if (ledger == null || p == null) return false;
             ledger.MigratePending();
+            // What this plot had cleared goes back to the camp's books once
+            // the row is gone (see `ReturnToCamp`).
+            SnapshotDown(p, snapTrees, snapRocks);
             if (!ledger.sites.Remove(p)) return false;
+            ReturnToCamp(snapTrees, snapRocks);
+            SyncFelling();
+            GatherSync.Sync(this);
             var plan = PlanFor(p.planId, p.length);
             // **What was carried here comes back on to the pile.** Kevin,
             // 2026-09-21: giving a build up is a decision, not a punishment.
@@ -868,6 +947,11 @@ namespace SeaSick.World
             string who = hand.DisplayName;
             if (HandNamed(who) != null) return false;
 
+            // **Where they step ashore** (2026-09-23), read BEFORE anything
+            // moves them. Kevin: *"the crew you drop off will have to walk
+            // from where you've docked."*
+            Vector3 landing = LandingFor(hand);
+
             // They may be mid-errand ashore with a tree claimed. Drop it
             // first, or the node stays claimed by a body nobody can see and
             // no other hand will ever work it.
@@ -883,14 +967,63 @@ namespace SeaSick.World
                 target = Building ? "" : Res.Timber,
             });
 
+            // **Rations from the ship** (Kevin, 2026-09-23): every hand left
+            // ashore brings `ProvisionDays` of food, so the first buildings
+            // go up before the camp has to feed itself. Known hole: dropping
+            // and recalling the same man repeatedly books it again.
+            ledger?.Add(Res.Food, Mathf.RoundToInt(OutpostLedger.ProvisionDays
+                * OutpostLedger.EatPerHandPerDay));
+
             hand.transform.SetParent(transform, true);
             // Off only when nobody is here to see them. Leaving somebody
             // ashore in front of you and watching them wink out is the bug
             // this line is the whole of.
             hand.gameObject.SetActive(Watched);
-            ArrangeHands();
-            if (Watched) PuppetsToWork();
+            if (Watched)
+            {
+                // **They walk up from the landing** (2026-09-23) instead of
+                // appearing in the fire ring. Stood on the beach first, then
+                // given a worker (whose `home` seeds from where the body is),
+                // THEN arranged -- a live worker is TOLD its ring spot by
+                // `ArrangeHands` and walks there on `CampPath`, where a body
+                // without one would be put there outright. A Build order
+                // sends them to the blueprint the same way.
+                hand.transform.position = landing;
+                // No work in the books until the body gets there
+                // (`OutpostHand.walkingIn`).
+                var fresh = HandNamed(who);
+                if (fresh != null) fresh.walkingIn = true;
+                PuppetsToWork();
+                ArrangeHands();
+            }
+            else ArrangeHands();
             return true;
+        }
+
+        /// **Where a hand leaving the ship first stands on this island.**
+        /// Already ashore: where they are. Aboard: the foot of the gangway if
+        /// it is run out (the point `AnchorController.SendAshore` lands a
+        /// shore party on), else the island's shore point toward the ship.
+        /// Spread a pace per hand already living here so a boatload does not
+        /// arrive as one body. On the ground, never under it.
+        Vector3 LandingFor(Crew.CrewAgent hand)
+        {
+            Vector3 p = hand.transform.position;
+            bool onLand = hand.IsAshore && height != null && height(p.x, p.z) > 0.1f;
+            if (!onLand)
+            {
+                var ship = hand.transform.parent != null ? hand.transform.root : null;
+                var plank = ship != null ? ship.GetComponentInChildren<SeaSick.Ship.Gangway>() : null;
+                if (plank != null && plank.Ready) p = plank.LandingPoint;
+                else if (Island != null) p = Island.ShorePoint(0, 1, ship != null ? ship.position : p);
+                else p = CampCentre;
+
+                int n = ledger != null ? ledger.hands.Count : 0;
+                float a = n * 2.39996323f;                  // golden angle
+                p += new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (0.9f + 0.35f * (n % 4));
+            }
+            if (height != null) p.y = Mathf.Max(height(p.x, p.z), 0f);
+            return p;
         }
 
         /// Take this hand back aboard. The ledger stops counting them here.
@@ -1312,6 +1445,9 @@ namespace SeaSick.World
         {
             if (ledger == null) return;
 
+            // The plots first: they decide which trees the camp's order may
+            // hold at all.
+            SyncClearing();
             var wood = WoodHere();
             if (wood == null || wood.TreeCount == 0) return;
             BuildFellOrder(wood);
@@ -1465,22 +1601,37 @@ namespace SeaSick.World
         /// round somewhere nobody lives.
         void BuildFellOrder(Terrain.SceneryWood wood)
         {
+            // **Plots own their trees, 2026-09-23.** Every tree inside a
+            // raised or counted footprint is the plot's, not the camp's, and
+            // is left out of the order entirely -- see "the CLEAR phase"
+            // below. The order rebuilds whenever that set changes.
+            EnsureClearing(false);
             Vector3 c = CampCentre;
-            if (fellOrder != null && fellOrder.Length == wood.TreeCount
+            if (fellOrder != null && fellOrderVersion == clearVersion
                 && ReferenceEquals(fellOrderWood, wood)
                 && (fellOrderFrom - c).sqrMagnitude < 0.25f) return;
 
-            var idx = new int[wood.TreeCount];
-            var d2 = new float[wood.TreeCount];
-            for (int i = 0; i < idx.Length; i++)
+            int count = 0;
+            for (int i = 0; i < wood.TreeCount; i++)
+                if (i >= siteTree.Length || !siteTree[i]) count++;
+            var idx = new int[count];
+            var d2 = new float[count];
+            for (int i = 0, n = 0; i < wood.TreeCount; i++)
             {
-                idx[i] = i;
+                if (i < siteTree.Length && siteTree[i]) continue;
+                idx[n] = i;
                 Vector3 p = wood.TreeAt(i).baseAt - c;
                 p.y = 0f;
-                d2[i] = p.sqrMagnitude;
+                d2[n] = p.sqrMagnitude;
+                n++;
             }
             System.Array.Sort(d2, idx);
             fellOrder = idx;
+            fellOrderVersion = clearVersion;
+            if (posInOrder == null || posInOrder.Length != wood.TreeCount)
+                posInOrder = new int[wood.TreeCount];
+            for (int i = 0; i < posInOrder.Length; i++) posInOrder[i] = -1;
+            for (int k = 0; k < idx.Length; k++) posInOrder[idx[k]] = k;
             // From the front: trees already down are skipped, so starting over
             // costs one pass and cannot double-fell anything.
             fellCursor = 0;
@@ -1503,6 +1654,9 @@ namespace SeaSick.World
         }
 
         int[] fellOrder;
+        /// Tree index -> its place in `fellOrder`, -1 for a plot's tree.
+        int[] posInOrder;
+        int fellOrderVersion = -1;
         int fellCursor;
         Vector3 fellOrderFrom;
         Terrain.SceneryWood fellOrderWood;
@@ -1549,6 +1703,592 @@ namespace SeaSick.World
             return faunaCache;
         }
         FaunaLod faunaCache;
+
+        // --- the CLEAR phase: what stands on a plot, 2026-09-23 ---------------
+        //
+        // Kevin: *"any blueprint can be placed over any trees or small rocks
+        // etc and the area will be cleared by the villagers before buildings
+        // begin construction."*
+        //
+        // ## How it persists without breaking the wood's one invariant
+        //
+        // The camp's felled set is a PREFIX of `fellOrder` and nothing about
+        // it is saved but counts. A plot's trees cannot be part of that
+        // prefix -- they come down in the plot's order, not the camp's -- so
+        // they are taken OUT of `fellOrder` altogether:
+        //
+        // - The **clearing registry** below is every footprint that owns
+        //   ground: every raised building (`ledger.raised`), every raised
+        //   wall segment (`ledger.builtWalls`), and every queued row that was
+        //   counted at siting (`PendingBuild.clearSited`). Each owns the trees
+        //   and stone/ore rocks whose base is inside its footprint, first
+        //   owner wins, in that canonical order (raised, walls, queue order).
+        //   It is derived from saved rows plus geometry, so it is the same on
+        //   every load.
+        // - Owned trees are EXCLUDED from `fellOrder` (so `DrawWood` never
+        //   restands them and `ClaimTree` never sends a cutter to them), and
+        //   owned rocks are held out of `GatherSync`'s order
+        //   (`ResourceNode.HeldBySite`).
+        // - Within one footprint the trees and rocks are ordered NEAREST THE
+        //   CAMP FIRST. For a raised footprint all of them are down; for a
+        //   queued row the first `len - TreesLeft` trees and `len - RocksLeft`
+        //   rocks are. Nearest-the-camp matters: the footprint trees the
+        //   camp's own felling had already taken when the row was sited are
+        //   exactly the camp-nearest ones, so "the first N are down" draws
+        //   the same trees that were down, not a reshuffle.
+        // - At siting, those camp-felled trees move from the camp's books to
+        //   the plot's (`TakeFootprint`: `treesFelled` and `timberTaken` both
+        //   drop by that many, so the owed count is unchanged and the camp's
+        //   visible prefix is the same trees minus the plot's). Rocks the
+        //   seam had already hidden move the same way (`standing` rises by a
+        //   prop's worth each). Cancel/move hands them back (`ReturnToCamp`).
+        //
+        // Site trees are felled through `FellForLedger` rather than a
+        // non-ledger path: excluded from the order, `DrawWood` never touches
+        // them anyway, and if the row is later cancelled they rejoin the
+        // camp's wood as the books' trees, which the camp can then account
+        // for (a non-ledger stump could never come back).
+        //
+        // ## Known gaps
+        // - Boulders baked into the scenery mesh (`SceneryGround`) have no
+        //   index and no node; they are neither counted nor cleared. Siting
+        //   has never refused them, and still does not.
+        // - Piers are skipped entirely: half over water, and the land half is
+        //   a strip of beach where no tree stands.
+        // - Cancelling or moving a part-cleared row returns its stumps to the
+        //   camp's wood as counts; the camp's prefix may then show a
+        //   different tree down in their place. Logs already booked stay
+        //   booked.
+        // - An OLD save's raised buildings now own their footprints: those
+        //   trees were already felled (by the raise's `FellWithin`) and still
+        //   sit in `treesFelled`, so the camp's prefix may take a few more
+        //   trees at its edge on the first load. One-off.
+
+        /// Metres of margin round a building's footprint that must be clear.
+        public const float ClearMargin = 1.0f;
+        /// Half-width of the band along a wall's post line that must be clear.
+        public const float WallClearBand = 1.5f;
+
+        /// One footprint shape: a rotated rectangle, or a band round a line.
+        struct ClearShape
+        {
+            public bool line;
+            public Vector3 c;           // rect centre
+            public Quaternion inv;      // world -> rect local
+            public float hx, hz;        // half extents incl. margin
+            public Vector3 a, b;        // line posts
+            public float band;
+            public float reach;         // bounding radius round `c`, cull
+
+            public static ClearShape Rect(Vector3 at, float yaw, Vector2 footprint)
+            {
+                var s = new ClearShape
+                {
+                    c = new Vector3(at.x, 0f, at.z),
+                    inv = Quaternion.Inverse(Quaternion.Euler(0f, yaw, 0f)),
+                    hx = 0.5f * footprint.x + ClearMargin,
+                    hz = 0.5f * footprint.y + ClearMargin,
+                };
+                s.reach = Mathf.Sqrt(s.hx * s.hx + s.hz * s.hz);
+                return s;
+            }
+
+            public static ClearShape Line(Vector3 a, Vector3 b)
+            {
+                a.y = 0f; b.y = 0f;
+                return new ClearShape
+                {
+                    line = true, a = a, b = b, band = WallClearBand,
+                    c = 0.5f * (a + b),
+                    reach = 0.5f * (b - a).magnitude + WallClearBand,
+                };
+            }
+
+            public bool Contains(Vector3 p)
+            {
+                p.y = 0f;
+                Vector3 d = p - c;
+                if (d.sqrMagnitude > reach * reach) return false;
+                if (line)
+                {
+                    Vector3 ab = b - a;
+                    float l2 = ab.sqrMagnitude;
+                    float t = l2 > 1e-6f ? Mathf.Clamp01(Vector3.Dot(p - a, ab) / l2) : 0f;
+                    return (p - (a + ab * t)).sqrMagnitude <= band * band;
+                }
+                Vector3 local = inv * d;
+                return Mathf.Abs(local.x) <= hx && Mathf.Abs(local.z) <= hz;
+            }
+        }
+
+        class ClearEntry
+        {
+            public PendingBuild row;    // null for a raised footprint
+            public ClearShape shape;
+            public int[] trees = System.Array.Empty<int>();
+            public ResourceNode[] rocks = System.Array.Empty<ResourceNode>();
+            public int drawnTrees = -1, drawnRocks = -1;
+            public int TreesDown => row == null ? trees.Length
+                : Mathf.Clamp(trees.Length - row.TreesLeft, 0, trees.Length);
+            public int RocksDown => row == null ? rocks.Length
+                : Mathf.Clamp(rocks.Length - row.RocksLeft, 0, rocks.Length);
+        }
+
+        readonly List<ClearEntry> clearEntries = new List<ClearEntry>();
+        readonly Dictionary<PendingBuild, ClearEntry> clearByRow = new Dictionary<PendingBuild, ClearEntry>();
+        /// Tree index -> owned by some footprint. Excluded from `fellOrder`.
+        bool[] siteTree = System.Array.Empty<bool>();
+        readonly HashSet<ResourceNode> siteRocks = new HashSet<ResourceNode>();
+        int clearKey = int.MinValue, clearRockKey = int.MinValue;
+        Terrain.SceneryWood clearWood;
+        /// Bumped whenever the set of owned TREES may have changed; the fell
+        /// order rebuilds on it.
+        int clearVersion;
+        static readonly List<ResourceNode> rockScratch = new List<ResourceNode>();
+
+        int ClearTreeKey()
+        {
+            unchecked
+            {
+                int h = 17;
+                if (ledger != null)
+                {
+                    if (ledger.sites != null)
+                        foreach (var r in ledger.sites)
+                            if (r != null && r.clearSited)
+                                h = h * 31 + System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(r);
+                    h = h * 31 + (ledger.raised != null ? ledger.raised.Count : 0);
+                    h = h * 31 + (ledger.builtWalls != null ? ledger.builtWalls.Count : 0);
+                }
+                Vector3 c = CampCentre;
+                h = h * 31 + Mathf.RoundToInt(c.x * 2f);
+                h = h * 31 + Mathf.RoundToInt(c.z * 2f);
+                return h;
+            }
+        }
+
+        /// **Bring the registry up to date.** Cheap when nothing moved (one
+        /// hash over the queue). `rocksToo` also re-reads the island's rock
+        /// props, which only the reconciling paths need.
+        void EnsureClearing(bool rocksToo)
+        {
+            if (ledger == null) return;
+            var wood = WoodHere();
+            int key = ClearTreeKey();
+            bool treesStale = key != clearKey || !ReferenceEquals(clearWood, wood)
+                || (wood != null && siteTree.Length != wood.TreeCount);
+            int rockKey = key * 31 + ResourceNode.All.Count;
+            bool rocksStale = rocksToo && (treesStale || rockKey != clearRockKey);
+            if (!treesStale && !rocksStale) return;
+
+            if (treesStale)
+            {
+                clearEntries.Clear();
+                clearByRow.Clear();
+                int n = wood != null ? wood.TreeCount : 0;
+                if (siteTree.Length != n) siteTree = new bool[n];
+                else System.Array.Clear(siteTree, 0, n);
+
+                if (ledger.raised != null)
+                    foreach (var b in ledger.raised)
+                    {
+                        if (b == null) continue;
+                        var plan = PlanFor(b.planId, b.length);
+                        if (plan.kind == BuildKind.Pier) continue;
+                        AddEntry(null, ClearShape.Rect(new Vector3(b.x, 0f, b.z), b.yaw, plan.footprint), wood);
+                    }
+                if (ledger.builtWalls != null)
+                    foreach (var w in ledger.builtWalls)
+                        if (w != null) AddEntry(null, ClearShape.Line(w.A, w.B), wood);
+                if (ledger.sites != null)
+                    foreach (var r in ledger.sites)
+                    {
+                        if (r == null || !r.clearSited) continue;
+                        var shape = ShapeOf(r, out bool skip);
+                        if (skip) continue;
+                        var e = AddEntry(r, shape, wood);
+                        clearByRow[r] = e;
+                    }
+                clearKey = key;
+                clearWood = wood;
+                clearVersion++;
+                rocksStale = true;
+            }
+
+            if (rocksStale)
+            {
+                // Rocks: re-read the props (they stream with the island).
+                foreach (var old in siteRocks) if (old != null) old.HeldBySite = false;
+                siteRocks.Clear();
+                GatherRocks(rockScratch);
+                foreach (var e in clearEntries)
+                {
+                    e.rocks = OwnRocks(e.shape, rockScratch, true);
+                    e.drawnRocks = -1;
+                }
+                clearRockKey = rockKey;
+            }
+        }
+
+        ClearShape ShapeOf(PendingBuild r, out bool skip)
+        {
+            skip = false;
+            if (r.isWall) return ClearShape.Line(r.postA, r.postB);
+            var plan = PlanFor(r.planId, r.length);
+            if (plan.kind == BuildKind.Pier) { skip = true; return default; }
+            return ClearShape.Rect(r.At, r.yaw, plan.footprint);
+        }
+
+        ClearEntry AddEntry(PendingBuild row, ClearShape shape, Terrain.SceneryWood wood)
+        {
+            var e = new ClearEntry { row = row, shape = shape };
+            e.trees = OwnTrees(shape, wood, true);
+            clearEntries.Add(e);
+            return e;
+        }
+
+        /// Trees inside `shape` not owned by an earlier footprint, nearest the
+        /// camp first. `claim` marks them owned.
+        int[] OwnTrees(ClearShape shape, Terrain.SceneryWood wood, bool claim)
+        {
+            if (wood == null || wood.TreeCount == 0) return System.Array.Empty<int>();
+            Vector3 camp = CampCentre;
+            var list = new List<int>();
+            var d2 = new List<float>();
+            for (int i = 0; i < wood.TreeCount; i++)
+            {
+                if (i < siteTree.Length && siteTree[i]) continue;
+                Vector3 p = wood.TreeAt(i).baseAt;
+                if (!shape.Contains(p)) continue;
+                list.Add(i);
+                Vector3 d = p - camp; d.y = 0f;
+                d2.Add(d.sqrMagnitude + i * 1e-6f);   // stable tie-break
+            }
+            var idx = list.ToArray();
+            System.Array.Sort(d2.ToArray(), idx);
+            if (claim) foreach (int i in idx) if (i < siteTree.Length) siteTree[i] = true;
+            return idx;
+        }
+
+        /// This island's stone and ore props, whatever their state.
+        void GatherRocks(List<ResourceNode> into)
+        {
+            into.Clear();
+            var isl = Island;
+            foreach (var n in ResourceNode.All)
+            {
+                if (n == null || n.Home != isl) continue;
+                if (n.Resource != Res.Stone && n.Resource != Res.Ore) continue;
+                into.Add(n);
+            }
+        }
+
+        /// Rocks inside `shape` not owned already: stone ones first, then ore
+        /// (the ledger books `clearOre` last), each nearest the camp first.
+        ResourceNode[] OwnRocks(ClearShape shape, List<ResourceNode> pool, bool claim)
+        {
+            Vector3 camp = CampCentre;
+            var picked = new List<ResourceNode>();
+            foreach (var n in pool)
+                if (n != null && !siteRocks.Contains(n) && shape.Contains(n.transform.position))
+                    picked.Add(n);
+            picked.Sort((x, y) =>
+            {
+                int ox = x.Resource == Res.Ore ? 1 : 0, oy = y.Resource == Res.Ore ? 1 : 0;
+                if (ox != oy) return ox.CompareTo(oy);
+                Vector3 dx = x.transform.position - camp, dy = y.transform.position - camp;
+                dx.y = 0f; dy.y = 0f;
+                int c = dx.sqrMagnitude.CompareTo(dy.sqrMagnitude);
+                if (c != 0) return c;
+                return x.transform.position.x.CompareTo(y.transform.position.x);
+            });
+            if (claim)
+                foreach (var n in picked) { siteRocks.Add(n); n.HeldBySite = true; }
+            return picked.ToArray();
+        }
+
+        /// **Make every plot show what its row says.** Fell the first
+        /// `TreesDown` of each footprint, stand the rest back up (only a tree
+        /// the books felled can be, see `SceneryWood.Restand`), and hide the
+        /// first `RocksDown` rocks. Only redraws an entry whose count moved,
+        /// so it is cheap on the every-quarter-second `CatchUp` path.
+        void SyncClearing()
+        {
+            if (ledger == null) return;
+            EnsureClearing(true);
+            var wood = WoodHere();
+            foreach (var e in clearEntries)
+            {
+                int td = e.TreesDown;
+                if (wood != null && td != e.drawnTrees)
+                {
+                    for (int k = 0; k < e.trees.Length; k++)
+                    {
+                        int i = e.trees[k];
+                        if (i < 0 || i >= wood.TreeCount) continue;
+                        if (k < td) { if (!wood.TreeAt(i).felled) wood.FellForLedger(i); }
+                        else wood.Restand(i);
+                    }
+                    e.drawnTrees = td;
+                }
+                int rd = e.RocksDown;
+                if (rd != e.drawnRocks)
+                {
+                    for (int k = 0; k < e.rocks.Length; k++)
+                        if (e.rocks[k] != null) e.rocks[k].SetGathered(k < rd);
+                    e.drawnRocks = rd;
+                }
+            }
+        }
+
+        /// **How many obstructions a site HERE would have to clear.** For the
+        /// siting ghost ("clears 4 trees, 1 rock"). Counts what is STANDING
+        /// and not already owned by another footprint. Cached on the last
+        /// question, so a ghost held still costs nothing.
+        public void CountObstructions(BuildPlan plan, Vector3 at, float yaw, out int trees, out int rocks)
+        {
+            trees = rocks = 0;
+            if (ledger == null || plan.kind == BuildKind.Pier) return;
+            CountShape(ClearShape.Rect(at, yaw, plan.footprint), out trees, out rocks, out _);
+        }
+
+        public void CountObstructionsWall(Vector3 a, Vector3 b, out int trees, out int rocks)
+        {
+            trees = rocks = 0;
+            if (ledger == null) return;
+            CountShape(ClearShape.Line(a, b), out trees, out rocks, out _);
+        }
+
+        ClearShape lastCountShape;
+        int lastCountTrees = -1, lastCountRocks, lastCountOre, lastCountVersion, lastCountFrame = -1;
+
+        void CountShape(ClearShape shape, out int trees, out int rocks, out int ore)
+        {
+            EnsureClearing(true);
+            if (lastCountTrees >= 0 && lastCountVersion == clearVersion
+                // Held still, a ghost re-asks every frame; a quarter of a
+                // second of staleness is invisible and saves the per-frame
+                // walk over every tree on the island.
+                && Time.frameCount - lastCountFrame < 15
+                && SameShape(shape, lastCountShape))
+            {
+                trees = lastCountTrees; rocks = lastCountRocks; ore = lastCountOre;
+                return;
+            }
+            trees = rocks = ore = 0;
+            var wood = WoodHere();
+            foreach (int i in OwnTrees(shape, wood, false))
+                if (!wood.TreeAt(i).felled) trees++;
+            GatherRocks(rockScratch);
+            foreach (var n in OwnRocks(shape, rockScratch, false))
+                if (!n.Gathered) { rocks++; if (n.Resource == Res.Ore) ore++; }
+            lastCountShape = shape; lastCountTrees = trees; lastCountRocks = rocks;
+            lastCountOre = ore; lastCountVersion = clearVersion; lastCountFrame = Time.frameCount;
+        }
+
+        static bool SameShape(ClearShape x, ClearShape y)
+            => x.line == y.line && (x.c - y.c).sqrMagnitude < 1e-4f
+               && (x.a - y.a).sqrMagnitude < 1e-4f && (x.b - y.b).sqrMagnitude < 1e-4f
+               && Quaternion.Dot(x.inv, y.inv) > 0.99999f
+               && Mathf.Abs(x.hx - y.hx) < 1e-3f && Mathf.Abs(x.hz - y.hz) < 1e-3f;
+
+        /// **Count a fresh row's plot and move its already-felled ground off
+        /// the camp's books.** Called while `row` is NOT yet in the queue, so
+        /// the registry and the fell order are the ones without it. Sets
+        /// `clearTrees/clearRocks/clearOre`, zeroes `clearDone`, and marks the
+        /// row `clearSited` so the registry claims its ground from now on.
+        void TakeFootprint(PendingBuild row)
+        {
+            if (row == null || ledger == null) return;
+            var shape = ShapeOf(row, out bool skip);
+            if (skip) return;
+            var wood = WoodHere();
+            if (wood != null && wood.TreeCount > 0) BuildFellOrder(wood);
+            EnsureClearing(true);
+
+            int standing = 0, campDown = 0;
+            if (wood != null && wood.TreeCount > 0)
+            {
+                int down = DownWanted(wood);
+                foreach (int i in OwnTrees(shape, wood, false))
+                {
+                    if (!wood.TreeAt(i).felled) standing++;
+                    else if (posInOrder != null && i < posInOrder.Length
+                             && posInOrder[i] >= 0 && posInOrder[i] < down) campDown++;
+                }
+            }
+            int rocks = 0, ore = 0;
+            GatherRocks(rockScratch);
+            foreach (var n in OwnRocks(shape, rockScratch, false))
+            {
+                if (!n.Gathered) { rocks++; if (n.Resource == Res.Ore) ore++; }
+                else
+                {
+                    // Hidden by the seam's own prefix: the seam gives it up.
+                    var st = ledger.Stock(n.Resource);
+                    if (st != null) st.standing = Mathf.Min(st.standingMax, st.standing + n.UnitsPerProp);
+                }
+            }
+
+            row.clearTrees = standing;
+            row.clearRocks = rocks;
+            row.clearOre = ore;
+            row.clearDone = 0f;
+            row.clearSited = true;
+
+            if (campDown > 0)
+            {
+                ledger.treesFelled = Mathf.Max(0, ledger.treesFelled - campDown);
+                ledger.timberTaken = Mathf.Max(0f, ledger.timberTaken - campDown);
+                if (ledger.treesRegrown > ledger.treesFelled) ledger.treesRegrown = ledger.treesFelled;
+            }
+        }
+
+        /// What of `row`'s plot is down right now, by identity -- taken
+        /// BEFORE the row leaves the queue, handed to `ReturnToCamp` after.
+        void SnapshotDown(PendingBuild row, List<int> trees, List<ResourceNode> rocks)
+        {
+            trees.Clear(); rocks.Clear();
+            if (row == null) return;
+            EnsureClearing(true);
+            if (!clearByRow.TryGetValue(row, out var e)) return;
+            for (int k = 0; k < e.TreesDown; k++) trees.Add(e.trees[k]);
+            for (int k = 0; k < e.RocksDown; k++) if (e.rocks[k] != null) rocks.Add(e.rocks[k]);
+        }
+
+        /// **A row left the queue without being raised** (cancelled, or moved
+        /// to other ground): the stumps and broken rocks it leaves behind go
+        /// back on the camp's books, so the counts still describe what is
+        /// down. Only the ones no other footprint picked up.
+        void ReturnToCamp(List<int> trees, List<ResourceNode> rocks)
+        {
+            if (ledger == null) return;
+            EnsureClearing(true);
+            int back = 0;
+            foreach (int i in trees) if (i >= 0 && (i >= siteTree.Length || !siteTree[i])) back++;
+            if (back > 0)
+            {
+                ledger.treesFelled += back;
+                ledger.timberTaken += back;
+            }
+            foreach (var n in rocks)
+            {
+                if (n == null || siteRocks.Contains(n)) continue;
+                var st = ledger.Stock(n.Resource);
+                if (st != null) st.standing = Mathf.Max(0f, st.standing - n.UnitsPerProp);
+            }
+        }
+
+        readonly List<int> snapTrees = new List<int>();
+        readonly List<ResourceNode> snapRocks = new List<ResourceNode>();
+
+        // --- who is clearing which obstruction --------------------------------
+
+        readonly List<CampWorker> clearHands = new List<CampWorker>();
+        readonly List<PendingBuild> clearRowsOf = new List<PendingBuild>();
+        /// The claim: a tree index, or `-1 - k` for rock k of the row's entry.
+        readonly List<int> clearTargets = new List<int>();
+
+        /// **Send a builder to the next thing on this plot.** The candidates
+        /// are the row's standing obstructions IN THE ORDER THE LEDGER TAKES
+        /// THEM DOWN (trees nearest the camp first, then stone rocks, then
+        /// ore), so the one a man walks to is the one that is about to fall.
+        /// Each hand gets the first one nobody else holds; when there are
+        /// more hands than obstructions the extras double up on the front
+        /// one rather than standing idle.
+        public bool ClaimClearing(PendingBuild row, CampWorker w, out Vector3 at, out bool isRock)
+        {
+            at = Vector3.zero;
+            isRock = false;
+            if (w == null) return false;
+            if (row == null || row.Cleared || ledger == null || !ledger.sites.Contains(row))
+            { ReleaseClearing(w); return false; }
+            EnsureClearing(true);
+            if (!clearByRow.TryGetValue(row, out var e)) { ReleaseClearing(w); return false; }
+            var wood = WoodHere();
+            PruneClearing();
+
+            int fallback = int.MinValue;
+            for (int k = e.TreesDown; k < e.trees.Length; k++)
+            {
+                int i = e.trees[k];
+                if (wood == null || i < 0 || i >= wood.TreeCount || wood.TreeAt(i).felled) continue;
+                if (fallback == int.MinValue) fallback = i;
+                if (ClearClaimedByAnother(i, w)) continue;
+                return HoldClearing(w, row, i, e, out at, out isRock);
+            }
+            for (int k = e.RocksDown; k < e.rocks.Length; k++)
+            {
+                var n = e.rocks[k];
+                if (n == null || n.Gathered) continue;
+                int t = -1 - k;
+                if (fallback == int.MinValue) fallback = t;
+                if (ClearClaimedByAnother(t, w)) continue;
+                return HoldClearing(w, row, t, e, out at, out isRock);
+            }
+            if (fallback != int.MinValue) return HoldClearing(w, row, fallback, e, out at, out isRock);
+            ReleaseClearing(w);
+            return false;
+        }
+
+        bool HoldClearing(CampWorker w, PendingBuild row, int target, ClearEntry e,
+            out Vector3 at, out bool isRock)
+        {
+            isRock = target < 0;
+            at = isRock ? e.rocks[-1 - target].transform.position
+                        : WoodHere().TreeAt(target).baseAt;
+            for (int k = 0; k < clearHands.Count; k++)
+                if (ReferenceEquals(clearHands[k], w))
+                { clearRowsOf[k] = row; clearTargets[k] = target; return true; }
+            clearHands.Add(w); clearRowsOf.Add(row); clearTargets.Add(target);
+            return true;
+        }
+
+        /// **Has the thing this hand is standing at gone down?** True when it
+        /// has (the ledger crossed a whole obstruction and `SyncClearing`
+        /// showed it), when the row is cleared, raised or cancelled, or when
+        /// the hand holds no claim at all -- in every case, ask again.
+        public bool ClearingTargetGone(CampWorker w)
+        {
+            for (int k = 0; k < clearHands.Count; k++)
+            {
+                if (!ReferenceEquals(clearHands[k], w)) continue;
+                var row = clearRowsOf[k];
+                if (row == null || row.Cleared || ledger == null || !ledger.sites.Contains(row)) return true;
+                int t = clearTargets[k];
+                if (t >= 0)
+                {
+                    var wood = WoodHere();
+                    return wood == null || t >= wood.TreeCount || wood.TreeAt(t).felled;
+                }
+                EnsureClearing(true);
+                if (!clearByRow.TryGetValue(row, out var e)) return true;
+                int rk = -1 - t;
+                return rk >= e.rocks.Length || e.rocks[rk] == null || e.rocks[rk].Gathered;
+            }
+            return true;
+        }
+
+        public void ReleaseClearing(CampWorker w)
+        {
+            for (int k = clearHands.Count - 1; k >= 0; k--)
+                if (clearHands[k] == null || ReferenceEquals(clearHands[k], w))
+                { clearHands.RemoveAt(k); clearRowsOf.RemoveAt(k); clearTargets.RemoveAt(k); }
+        }
+
+        bool ClearClaimedByAnother(int target, CampWorker w)
+        {
+            for (int k = 0; k < clearHands.Count; k++)
+                if (clearTargets[k] == target && !ReferenceEquals(clearHands[k], w)) return true;
+            return false;
+        }
+
+        void PruneClearing()
+        {
+            for (int k = clearHands.Count - 1; k >= 0; k--)
+                if (clearHands[k] == null)
+                { clearHands.RemoveAt(k); clearRowsOf.RemoveAt(k); clearTargets.RemoveAt(k); }
+        }
 
         // --- who is on which tree ---------------------------------------------
 
@@ -1988,7 +2728,9 @@ namespace SeaSick.World
             get
             {
                 int n = openCapacity;
-                foreach (var b in built) if (b != null) n += b.StoreCapacity;
+                foreach (var b in built)
+                    if (b != null)
+                        n += b.StoreCapacity + (ledger != null ? Economy.Techs.StoreBonus(b.Id, ledger.LevelOf(b.Id)) : 0);
                 return n;
             }
         }
@@ -2817,6 +3559,13 @@ namespace SeaSick.World
         /// True where the scenery must not put a tree. Flat distance only --
         /// the clearing is a disc on the map, and the trees it excludes stand
         /// on whatever height the ground has there.
+        ///
+        /// **Nothing bakes with this any more (2026-09-23).** Kevin: *"do
+        /// away with the area of the camp fire"* -- the starting island grows
+        /// its wood through the survey's clearing like every other island,
+        /// and a town's ground is cleared plot by plot by the hands (the
+        /// CLEAR phase). Kept as the question "is this inside the survey's
+        /// disc" for the probes that still ask it.
         public bool KeepOut(float x, float z)
         {
             float dx = x - ClearingCentre.x, dz = z - ClearingCentre.z;
@@ -2848,11 +3597,16 @@ namespace SeaSick.World
                 float t = (i + 0.5f) / Tries;
                 float r = room * Mathf.Sqrt(t);
                 float a = i * Golden;
-                Vector3 p = ClearingCentre + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r);
+                // Round the CAMP, not the survey's clearing (2026-09-23): the
+                // town centre is wherever the player put it, and this spiral
+                // is the fallback for a building whose saved spot the ground
+                // no longer takes -- it must land in the town, not in a disc
+                // that may be a hundred metres off.
+                Vector3 p = CampCentre + new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r);
 
                 if (!Clear(p, halfDiag)) continue;
 
-                Vector3 toCentre = ClearingCentre - p;
+                Vector3 toCentre = CampCentre - p;
                 toCentre.y = 0f;
                 // Door toward the middle of the clearing. A building whose
                 // back is to the village is the tell that nobody chose where
@@ -2988,6 +3742,11 @@ namespace SeaSick.World
                 campCentre = savedCampCentre;
                 if (height != null) campCentre.y = height(campCentre.x, campCentre.z);
             }
+            // A path grid baked on arrival round the survey's clearing is
+            // centred on the wrong place now (2026-09-23: the camp need not
+            // be anywhere near the clearing). Rebuilt on the next ask.
+            var grid = GetComponent<CampPath>();
+            if (grid != null) grid.Invalidate();
             // The order the wood comes down in is measured from the centre,
             // and the centre just moved.
             fellOrder = null;
@@ -3547,9 +4306,33 @@ namespace SeaSick.World
             // reservations**: the rest of `Clear` tests the walls and the
             // queue as discs, and it has already been done properly, by
             // line, above.
-            if (!ClearOfReserved(0.5f * (a + b), len * 0.5f + 0.2f, out string blocked))
+            //
+            // **By LINE, not a disc round the midpoint (2026-09-23).** The
+            // old call handed `ClearOfReserved` a disc of radius len/2 on
+            // the segment's middle, so a 12 m length refused every hut and
+            // the fire within ~9 m of its MIDDLE even when the line itself
+            // passed well clear -- which is exactly where a camp wall goes.
+            // A tool artefact, not terrain: the line is now measured.
+            if (!LineClearOfReserved(a, b, out string blocked))
             { why = blocked; return false; }
 
+            return true;
+        }
+
+        /// `ClearOfReserved`'s rule and words, asked of a LINE: does the
+        /// segment pass inside any reserved disc?
+        bool LineClearOfReserved(Vector3 a, Vector3 b, out string why)
+        {
+            why = "";
+            foreach (var r in reserved)
+            {
+                var c = new Vector3(r.x, r.y, r.z);
+                if (WallSegment.FlatDistance(a, b, c) >= r.w + 0.2f) continue;
+                why = buildingReservations.Contains(r)
+                    ? "something already stands there"
+                    : $"that is inside the harbour's keep-out ({r.w:F0} m)";
+                return false;
+            }
             return true;
         }
 
@@ -3558,19 +4341,44 @@ namespace SeaSick.World
         /// two walls in one place.
         static bool TooCloseLines(Vector3 a0, Vector3 a1, Vector3 b0, Vector3 b1)
         {
-            const float Same = 0.1f;
-            bool shares =
-                (a0 - b0).sqrMagnitude < Same || (a0 - b1).sqrMagnitude < Same ||
-                (a1 - b0).sqrMagnitude < Same || (a1 - b1).sqrMagnitude < Same;
-            float d = WallSegment.FlatDistance(a0, a1, b0, b1);
-            if (!shares) return d < WallPostStep * 0.5f;
-            // Sharing a post, so the distance is zero by construction. What
-            // is left to refuse is a segment doubled back ON another one,
-            // which shows up as both far ends also being close.
+            // **ROOT CAUSE of "the third post stems from the first one, and
+            // red lines" (Kevin, iPhone, 2026-09-23).** The old version
+            // chose each segment's "far end" by asking only whether a0 met
+            // b0. In a run the shared post is almost never that pair: the
+            // next segment B->C meets the queued A->B at a0 == b1, so the
+            // "far end" it measured was B itself, at distance 0, and EVERY
+            // segment after the first was refused as "there is already a
+            // wall going up there". The preview went red after each ✓, and
+            // a drag long enough to split had its second piece refused at
+            // `Confirm`, which left post A where it was -- the next line
+            // grew out of the first post. Closing the ring (a1 == b0) was
+            // refused the same way. Now the shared post is found on BOTH
+            // segments, whichever ends they are, and flat (posts are on the
+            // XZ lattice; the height is not part of "the same post").
+            bool a0s = SamePost(a0, b0) || SamePost(a0, b1);
+            bool a1s = SamePost(a1, b0) || SamePost(a1, b1);
+            bool b0s = SamePost(b0, a0) || SamePost(b0, a1);
+            if (!a0s && !a1s)
+                return WallSegment.FlatDistance(a0, a1, b0, b1) < WallPostStep * 0.5f;
+            // Both ends shared: the same segment drawn again (either way).
+            if (a0s && a1s) return true;
+            // Sharing one post, so the distance is zero by construction.
+            // What is left to refuse is a segment doubled back ON the other
+            // one, which shows up as a far end close to the other line.
+            Vector3 aFar = a0s ? a1 : a0;
+            Vector3 bFar = b0s ? b1 : b0;
             float far = Mathf.Min(
-                WallSegment.FlatDistance(b0, b1, (a0 - b0).sqrMagnitude < Same ? a1 : a0),
-                WallSegment.FlatDistance(a0, a1, (b0 - a0).sqrMagnitude < Same ? b1 : b0));
+                WallSegment.FlatDistance(b0, b1, aFar),
+                WallSegment.FlatDistance(a0, a1, bFar));
             return far < WallPostStep * 0.5f;
+        }
+
+        /// Two posts on one lattice point. Flat: posts snap to the 2 m XZ
+        /// grid, so within a third of a metre is the same post.
+        static bool SamePost(Vector3 p, Vector3 q)
+        {
+            float dx = p.x - q.x, dz = p.z - q.z;
+            return dx * dx + dz * dz < 0.1f;
         }
 
         /// **Queue one segment.** Null with a reason if the ground refuses
@@ -3580,10 +4388,17 @@ namespace SeaSick.World
         {
             if (ledger == null) { why = "this ground was never surveyed"; return null; }
             ledger.MigratePending();
+            // The belt, same as a plan's own siting: the sheet already
+            // hides a locked wall.
+            if (!ledger.PlanUnlocked(BuildPlans.Palisade.id))
+            { why = ledger.PlanLockReason(BuildPlans.Palisade.id); return null; }
             a = SnapPost(a);
             b = SnapPost(b);
             if (!CanPlaceWall(a, b, out why)) return null;
-            var row = QueueWallRow(BuildPlans.Palisade, a, b);
+            // A FRESH line clears its band first (2026-09-23). Gates and
+            // repairs go through `QueueWallRow` without this: they stand on
+            // a line that is already raised and already owns its ground.
+            var row = QueueWallRow(BuildPlans.Palisade, a, b, true);
             why = "";
             return row;
         }
@@ -3591,7 +4406,7 @@ namespace SeaSick.World
         /// The row itself, shared by siting, the gate and the repair. It
         /// does NOT test the ground: a gate and a repair are both on a line
         /// that already proved itself.
-        PendingBuild QueueWallRow(BuildPlan plan, Vector3 a, Vector3 b)
+        PendingBuild QueueWallRow(BuildPlan plan, Vector3 a, Vector3 b, bool fresh = false)
         {
             Vector3 mid = 0.5f * (a + b);
             float len = Vector3.Distance(new Vector3(a.x, 0f, a.z), new Vector3(b.x, 0f, b.z));
@@ -3617,7 +4432,12 @@ namespace SeaSick.World
                 brickNeeded = Mathf.Max(0, plan.brickCost),
                 phased = true,
             };
+            if (fresh) TakeFootprint(row);
             ledger.sites.Add(row);
+            if (fresh) { SyncFelling(); GatherSync.Sync(this); }
+            // Idle hands take up a fresh segment on their own, 2026-09-23
+            // (`OutpostLedger.EnlistFree`).
+            if (ledger.EnlistFree() > 0 && Watched) PuppetsToWork();
             EnsureBlueprints();
             if (ledger.ReadyToRaise) FinishReady();
             return row;

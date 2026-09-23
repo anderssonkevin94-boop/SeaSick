@@ -90,6 +90,35 @@ namespace SeaSick.World
         public const string Food = "Food";
         public const string Meals = "Meals";
 
+        // --- the chains, 2026-09-23 -----------------------------------------
+        //
+        // Kevin: *"there should be steps to things ... to hunt you need a
+        // spear so the blacksmith needs a wood plank for the shaft and stone
+        // or metal for the tip."* Every key below is registered in
+        // `Economy/ResDefs` with a TIER (raw, treated, item) and made by a
+        // `Recipe`; `RecipeGraph.Validate` refuses a build in which any of
+        // them cannot be reached from a campfire and the ground. Add a key
+        // here, add its def there, or the probe names it.
+
+        /// **Dropped, not gathered.** One per animal a hunter brings home,
+        /// beside the meat. The first thing the fire wants when it is raised
+        /// to level II, so a camp that never hunts never grows.
+        public const string Hide = "Hide";
+        /// Ore smelted at the forge. Two ore to a bar.
+        public const string Iron = "Iron";
+        /// A board and a stone tip. **What a hunter needs in his hand**, and
+        /// what he wears out: a spear lasts about four animals.
+        public const string Spear = "Spear";
+        /// A board and an iron tip. Lasts three times as long as the stone
+        /// one; the hunter takes it first if the pile has both.
+        public const string IronSpear = "IronSpear";
+        /// Iron, ground to an edge at the forge. The tool the sawmill needs
+        /// before it can cut Fine Boards, and worn a little by every one.
+        public const string SawBlade = "SawBlade";
+        /// Boards cut true on a steel-edged saw. What a building's second
+        /// level is framed with.
+        public const string FineBoards = "FineBoards";
+
         /// What a hand can be told to go and GATHER — the things that are
         /// lying about on an island. The rest are made at a building by
         /// somebody assigned to it.
@@ -163,6 +192,12 @@ namespace SeaSick.World
             Food => new Color(0.55f, 0.62f, 0.28f),
             Game => new Color(0.42f, 0.20f, 0.16f),
             Meals => new Color(0.72f, 0.58f, 0.34f),
+            Hide => new Color(0.60f, 0.44f, 0.30f),
+            Iron => new Color(0.36f, 0.36f, 0.40f),
+            Spear => new Color(0.70f, 0.58f, 0.40f),
+            IronSpear => new Color(0.56f, 0.52f, 0.46f),
+            SawBlade => new Color(0.62f, 0.64f, 0.68f),
+            FineBoards => new Color(0.78f, 0.62f, 0.38f),
             _ => new Color(0.5f, 0.5f, 0.5f),
         };
     }

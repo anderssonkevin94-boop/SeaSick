@@ -61,6 +61,22 @@ namespace SeaSick.World
     {
         public string name;
         public OutpostOrder order = OutpostOrder.Idle;
+        /// **Still walking up from the ship, 2026-09-23** -- not saved.
+        /// Kevin: *"i placed the fire down and its halfway done before
+        /// anyone has cut down any wood or even reached it."* The ledger
+        /// pays work by the clock and the bodies act it out, which is right
+        /// for a camp nobody is watching; but a hand the player has just
+        /// watched step off the gangway has done nothing yet. Set by
+        /// `Outpost.Station` for a watched landing, cleared by the hand's
+        /// `CampWorker` the moment the body starts its first piece of work
+        /// (or after `CampWorker.WalkInLimit` seconds, so a body that cannot
+        /// path does not freeze the camp), and by `Outpost.CatchUp` whenever
+        /// nobody is watching. `WorkFactor` is zero while it is set.
+        [System.NonSerialized] public bool walkingIn;
+        /// Hunting because the camp went hungry and this hand took it on
+        /// itself (`OutpostLedger.FeedFirst`), not because the player said
+        /// so. Only these are sent back once the camp is fed again.
+        public bool autoFood;
 
         /// What they are gathering, or which building they are assigned to.
         /// Empty for Idle and for Build, which has only ever one thing to
@@ -204,6 +220,59 @@ namespace SeaSick.World
         /// it. See the note there.
         public bool phased;
 
+        // --- the CLEAR phase (2026-09-23) --------------------------------------
+        //
+        // Kevin: *"any blueprint can be placed over any trees or small rocks
+        // etc and the area will be cleared by the villagers before buildings
+        // begin construction."* So a site now has THREE clocks: clearing,
+        // stocking, building. Clearing and stocking can overlap (the haulers
+        // go on filling the stack while the plot is cut), building waits on
+        // both.
+        //
+        // **What is saved is COUNTS, never tree indices** -- the same trick
+        // the camp's wood plays with `treesFelled`. Which trees and rocks
+        // those counts describe is re-derived from the row's footprint and
+        // the island's geometry on every visit (`Outpost.SyncClearing`), in
+        // a fixed order (nearest the camp first), so the first
+        // `floor(clearDone)` of them are down on any load, however the
+        // terrain streamed in.
+        //
+        // A save written before this restores all of them as 0/false, which
+        // reads as "nothing to clear" -- `Cleared` is true and an old row
+        // builds exactly as it did yesterday.
+
+        /// Standing trees / stone-or-ore rocks inside the footprint when the
+        /// row was sited. Cleared in that order: every tree, then every rock
+        /// (stone rocks before ore rocks, see `clearOre`).
+        public int clearTrees, clearRocks;
+        /// How many of `clearRocks` are ORE rather than stone -- the last
+        /// ones cleared, so the ledger can book the right resource for a
+        /// rock without a scene to look at. Additive to the contract; 0 on
+        /// every old save.
+        public int clearOre;
+        /// Obstructions removed so far, fractional. The integer part is how
+        /// many are DOWN; the fraction is the one being worked.
+        public float clearDone;
+        /// **This row owns its footprint's trees and rocks.** Set only by a
+        /// fresh siting (`Outpost.SiteFresh`, `Outpost.SiteWall`) -- never
+        /// by a gate or a repair on a line that already stands, and never by
+        /// an old save -- so the clearing registry only claims ground for
+        /// rows that were counted. Without it an old save's queued row
+        /// would drop every tree in its footprint on first load.
+        public bool clearSited;
+
+        /// Obstructions this site had to clear, in all.
+        public int ClearTotal => clearTrees + clearRocks;
+        /// Obstructions still standing. Never negative.
+        public int ClearLeft => Mathf.Max(0, ClearTotal - Mathf.FloorToInt(clearDone));
+        /// Nothing left standing on the plot: building may begin.
+        public bool Cleared => ClearLeft == 0;
+        /// Trees still standing -- trees go first, so this is the whole of
+        /// `ClearLeft` until the last tree is down.
+        public int TreesLeft => Mathf.Max(0, clearTrees - Mathf.FloorToInt(clearDone));
+        /// Rocks still standing.
+        public int RocksLeft => Mathf.Max(0, ClearLeft - TreesLeft);
+
         // --- the wall half (Phase 1, 2026-09-23) -----------------------------
 
         /// **This row is a WALL SEGMENT, not a building on a plot.**
@@ -247,7 +316,11 @@ namespace SeaSick.World
         /// Stocked AND stood up: the row may leave the queue and become a
         /// building. Two phases, so this is no longer the same question as
         /// "has everything been delivered" -- that is `Stocked`.
-        public bool Complete => Stocked && built >= LabourNeeded;
+        ///
+        /// **And cleared, since 2026-09-23**: a building does not go up on
+        /// ground with trees still standing on it. `Cleared` is true on every
+        /// row from an old save, so this is the old answer for those.
+        public bool Complete => Stocked && Cleared && built >= LabourNeeded;
 
         /// **One bar over both piles.** The drawing fills on what has been
         /// delivered against what it wants, timber and stone summed -- so a
@@ -280,6 +353,19 @@ namespace SeaSick.World
         {
             get
             {
+                // The clear phase leads the line while it lasts: it is the
+                // thing the camp is visibly doing on the plot.
+                string clearing = "";
+                if (!Cleared)
+                {
+                    int t = TreesLeft, r = RocksLeft;
+                    var bits = new System.Collections.Generic.List<string>(2);
+                    if (t > 0) bits.Add(t == 1 ? "1 tree" : $"{t} trees");
+                    if (r > 0) bits.Add(r == 1 ? "1 rock" : $"{r} rocks");
+                    clearing = "clearing " + string.Join(", ", bits);
+                    if (Stocked) return clearing;
+                    clearing += "; ";
+                }
                 if (Stocked)
                     return built >= LabourNeeded
                         ? "going up"
@@ -288,7 +374,7 @@ namespace SeaSick.World
                 if (needed > 0) parts.Add($"{Mathf.Min(done, needed)}/{needed} logs");
                 if (stoneNeeded > 0) parts.Add($"{Mathf.Min(stoneDone, stoneNeeded)}/{stoneNeeded} stone");
                 if (brickNeeded > 0) parts.Add($"{Mathf.Min(brickDone, brickNeeded)}/{brickNeeded} brick");
-                return parts.Count == 0 ? "stocking" : "stocking " + string.Join(", ", parts);
+                return clearing + (parts.Count == 0 ? "stocking" : "stocking " + string.Join(", ", parts));
             }
         }
 
@@ -502,6 +588,14 @@ namespace SeaSick.World
         public int RoomFor(string resource) =>
             Mathf.Max(0, ceilingPer - CountOf(resource));
 
+        /// Whole and part together -- what a tool check or a recipe's "have"
+        /// arithmetic wants, since a saw blade at 0.95 is still a saw blade.
+        float HeldOf(string resource)
+        {
+            var s = Store(resource);
+            return s != null ? s.whole + s.part : 0f;
+        }
+
         /// Put whole units in, refusing what will not fit. Returns what was
         /// taken.
         public int Add(string resource, int n)
@@ -659,7 +753,20 @@ namespace SeaSick.World
         /// just gets slower, which is what makes the decline something the
         /// player can see coming and catch.
         public static float WorkFactor(OutpostHand h) =>
-            h == null ? 0f : Mathf.Clamp01(h.mood / 0.5f);
+            h == null || h.walkingIn ? 0f
+                : Mathf.Max(StarvingWorkFloor, Mathf.Clamp01(h.mood / 0.5f));
+
+        /// **Hunger slows a hand; it does not stop one, 2026-09-23.** Kevin
+        /// chose it after the stuck-buildings repro: at mood 0 the old
+        /// factor was exactly zero, so a hungry camp froze with everybody
+        /// "assigned". Mood still falls, the camp still suffers for it, and
+        /// the work still moves -- at about a third of the pace.
+        public const float StarvingWorkFloor = 0.35f;
+
+        /// Days of rations each hand brings ashore from the ship
+        /// (`Outpost.Station`), so a fresh camp gets its first buildings up
+        /// before it has to feed itself. Kevin, 2026-09-23.
+        public const float ProvisionDays = 3f;
 
         /// `WorkFactor`, except that **a hand bringing in food is never
         /// docked** -- foraging IS gathering food, so a starving camp told
@@ -667,7 +774,7 @@ namespace SeaSick.World
         /// Without this a camp that ran out once could never recover: the
         /// hungrier they got the less food they brought in.
         public static float WorkFactorOn(OutpostHand h, string produces) =>
-            produces == Res.Food ? (h == null ? 0f : 1f) : WorkFactor(h);
+            produces == Res.Food ? (h == null || h.walkingIn ? 0f : 1f) : WorkFactor(h);
 
         /// Is anybody here going hungry right now -- the pile has nothing
         /// in it and there is somebody to feed. What `Step`'s eating block
@@ -740,7 +847,8 @@ namespace SeaSick.World
             get
             {
                 int n = 0;
-                foreach (var id in built) n += BuildPlans.Named(id).houses;
+                foreach (var id in built)
+                    n += BuildPlans.Named(id).houses + Economy.Techs.HousesBonus(id, LevelOf(id));
                 return n;
             }
         }
@@ -767,6 +875,212 @@ namespace SeaSick.World
                 return $"{Housed} of {cap} beds · a new hand in {daysLeft:0.#} days";
             }
         }
+
+        // --- the fire: tech tree, building levels, recipes, 2026-09-23 -------
+        //
+        // Kevin: *"to hunt, you need a spear."* The tree hangs off the fire,
+        // not off any building raised or ship sailed, so it reads the same
+        // whether a camp is visited once or ten times a session. Backed by
+        // the data in `SeaSick.World.Economy` (`Techs`, `Recipes`, `Cost`);
+        // this is only the SAVED state and the arithmetic that spends it.
+
+        /// Saved level. 0 (a fresh ledger, or a save from before the fire had
+        /// levels) reads as 1 through `CampfireLevel`; nothing but
+        /// `RaiseCampfire` ever writes this field.
+        public int campfireLevel;
+
+        /// 1 for a camp that has never raised its fire.
+        public int CampfireLevel => Mathf.Max(1, campfireLevel);
+
+        /// One recipe remembered per station plan. `JsonUtility` cannot
+        /// serialise a Dictionary, so this is a `List<T>` of `[Serializable]`
+        /// rows, same shape as every other saved table here.
+        [System.Serializable]
+        public class RecipeChoice { public string planId; public string recipeId; }
+        public List<RecipeChoice> choices = new List<RecipeChoice>();
+
+        /// One level remembered per building plan -- every building raised
+        /// under one plan id shares its level.
+        [System.Serializable]
+        public class PlanLevel { public string planId; public int level; }
+        public List<PlanLevel> levels = new List<PlanLevel>();
+
+        /// "needs 3 more hide" -- the shortfall, `ShipPrices.CannotAfford`
+        /// style: lower-case, no full stop, names every line short.
+        static string DescribeShortfall(List<Economy.Ingredient> missing)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < missing.Count; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(missing[i].n).Append(" more ").Append(Economy.ResDefs.Label(missing[i].res));
+            }
+            return sb.ToString();
+        }
+
+        // --- the fire itself ---
+
+        public Economy.CampfireLevel NextCampfire => Economy.Techs.NextCampfire(CampfireLevel);
+
+        public bool CanRaiseCampfire(out string why)
+        {
+            var next = NextCampfire;
+            if (next == null) { why = "the fire is already at its top"; return false; }
+            var missing = Economy.Cost.Missing(next.cost, CountOf);
+            if (missing.Count > 0) { why = "needs " + DescribeShortfall(missing); return false; }
+            why = null;
+            return true;
+        }
+
+        public bool RaiseCampfire()
+        {
+            if (!CanRaiseCampfire(out _)) return false;
+            var next = NextCampfire;
+            foreach (var line in next.cost) Take(line.res, line.n);
+            campfireLevel = next.level;
+            return true;
+        }
+
+        public bool PlanUnlocked(string planId) => Economy.Techs.PlanLevel(planId) <= CampfireLevel;
+
+        public string PlanLockReason(string planId)
+        {
+            int need = Economy.Techs.PlanLevel(planId);
+            return need <= CampfireLevel ? null : $"needs the fire at {Economy.RecipeGraph.Roman(need)}";
+        }
+
+        // --- building levels ---
+
+        /// 1 when never upgraded, and for a plan id no save row mentions.
+        public int LevelOf(string planId)
+        {
+            if (levels != null)
+                foreach (var l in levels)
+                    if (l != null && l.planId == planId) return Mathf.Max(1, l.level);
+            return 1;
+        }
+
+        public Economy.UpgradeStep NextUpgrade(string planId) => Economy.Techs.Upgrade(planId, LevelOf(planId) + 1);
+
+        public bool CanUpgrade(string planId, out string why)
+        {
+            if (CountBuilt(planId) <= 0) { why = $"no {BuildPlans.Named(planId).label} stands here"; return false; }
+            var next = NextUpgrade(planId);
+            if (next == null) { why = "already at its top"; return false; }
+            if (CampfireLevel < next.campfireLevel)
+            { why = $"needs the fire at {Economy.RecipeGraph.Roman(next.campfireLevel)}"; return false; }
+            var missing = Economy.Cost.Missing(next.cost, CountOf);
+            if (missing.Count > 0) { why = "needs " + DescribeShortfall(missing); return false; }
+            why = null;
+            return true;
+        }
+
+        public bool Upgrade(string planId)
+        {
+            if (!CanUpgrade(planId, out _)) return false;
+            var next = NextUpgrade(planId);
+            foreach (var line in next.cost) Take(line.res, line.n);
+            if (levels == null) levels = new List<PlanLevel>();
+            bool found = false;
+            foreach (var l in levels)
+                if (l != null && l.planId == planId) { l.level = next.toLevel; found = true; break; }
+            if (!found) levels.Add(new PlanLevel { planId = planId, level = next.toLevel });
+            // The ceiling is pushed in from the buildings on the ground
+            // every `Outpost.CatchUp` (same as a fresh raise); nothing here
+            // owns a scene reference to force that early, so a level-up's
+            // extra store room shows on the very next tick, not this line.
+            return true;
+        }
+
+        // --- recipes ---
+
+        /// The chosen recipe, or the station's default; null for a station
+        /// with no recipe table at all (a farm, a watchtower).
+        public Economy.Recipe RecipeAt(string planId)
+        {
+            if (!Economy.Recipes.StationHasRecipes(planId)) return null;
+            string chosenId = null;
+            if (choices != null)
+                foreach (var c in choices)
+                    if (c != null && c.planId == planId) { chosenId = c.recipeId; break; }
+            var chosen = chosenId != null ? Economy.Recipes.Named(chosenId) : null;
+            if (chosen != null && chosen.station == planId && RecipeAvailable(chosen, out _)) return chosen;
+            return Economy.Recipes.Default(planId);
+        }
+
+        public bool ChooseRecipe(string planId, string recipeId)
+        {
+            var r = Economy.Recipes.Named(recipeId);
+            if (r == null || r.station != planId || !RecipeAvailable(r, out _)) return false;
+            if (choices == null) choices = new List<RecipeChoice>();
+            foreach (var c in choices)
+                if (c != null && c.planId == planId) { c.recipeId = recipeId; return true; }
+            choices.Add(new RecipeChoice { planId = planId, recipeId = recipeId });
+            return true;
+        }
+
+        /// Fire level, station level, tool -- NOT missing inputs, which a
+        /// chosen recipe simply waits on, same as the sawmill waits for
+        /// timber.
+        public bool RecipeAvailable(Economy.Recipe r, out string why)
+        {
+            if (r == null) { why = "no such recipe"; return false; }
+            if (CampfireLevel < r.campfireLevel)
+            { why = $"needs the fire at {Economy.RecipeGraph.Roman(r.campfireLevel)}"; return false; }
+            if (LevelOf(r.station) < r.stationLevel)
+            { why = $"needs the {BuildPlans.Named(r.station).label} at level {r.stationLevel}"; return false; }
+            if (r.tool != null && HeldOf(r.tool) <= 0f)
+            { why = $"needs a {Economy.ResDefs.Label(r.tool)} in the pile"; return false; }
+            why = null;
+            return true;
+        }
+
+        /// **One conversion, whatever the station.** A recipe station reads
+        /// its chosen (or default) `Recipe`; anything else synthesises the
+        /// old one-input plan fields into the same shape, so the Work loop,
+        /// `Stalled` and the forecast functions only ever read this. Legacy
+        /// `takes`/`Yield` stay bit-identical: one line, `{plan.takes, 1}`,
+        /// priced per `plan.Yield` outputs -- exactly what the old inline
+        /// arithmetic spent, to the bit.
+        bool Conversion(string planId, out string makes, out Economy.Ingredient[] takes,
+            out float yield, out float ratePerDay, out string tool, out float toolWear)
+        {
+            if (Economy.Recipes.StationHasRecipes(planId))
+            {
+                var r = RecipeAt(planId);
+                if (r == null) { makes = null; takes = Economy.Cost.None; yield = 1f; ratePerDay = 0f; tool = null; toolWear = 0f; return false; }
+                makes = r.makes;
+                takes = r.takes;
+                yield = Mathf.Max(1, r.yield);
+                ratePerDay = r.ratePerDay * Economy.Techs.RateMul(planId, LevelOf(planId));
+                tool = r.tool;
+                toolWear = r.toolWear;
+                return true;
+            }
+            var plan = BuildPlans.Named(planId);
+            makes = plan.makes;
+            takes = string.IsNullOrEmpty(plan.takes) ? Economy.Cost.None : new[] { new Economy.Ingredient(plan.takes, 1) };
+            yield = plan.Yield;
+            ratePerDay = plan.rate * Economy.Techs.RateMul(planId, LevelOf(planId));
+            tool = null;
+            toolWear = 0f;
+            return !string.IsNullOrEmpty(makes);
+        }
+
+        // --- hunting ---
+
+        /// What a hunter needs in hand, best spear first (`Techs.HuntingSpears`).
+        public string SpearInHand()
+        {
+            foreach (var spear in Economy.Techs.HuntingSpears)
+                if (HeldOf(spear) > 0f) return spear;
+            return null;
+        }
+
+        /// Null when a spear is in the pile; else the reason a hunter is not
+        /// out on the island. **Hard gate**, Kevin 2026-09-23: no spear, no
+        /// kills.
+        public string HunterBlocker() => SpearInHand() == null ? "needs a spear" : null;
 
         // --- what is built ---------------------------------------------------
 
@@ -1385,6 +1699,23 @@ namespace SeaSick.World
         /// a special case.
         public const float BuildDaysPerHand = 0.5f;
 
+        /// **Hand-days to take ONE tree off a building plot, 2026-09-23.**
+        /// One ordinary felling: a hand fells `TimberPerHandPerDay` (4) logs
+        /// a day, so a quarter of a day. The log is booked on the pile like
+        /// any other. **A guess, never played** -- the dial for "clearing
+        /// takes too long".
+        public const float ClearTreeHandDays = 1f / TimberPerHandPerDay;
+        /// **Hand-days to break ONE rock off a plot.** A boulder is a prop
+        /// that stands for `ResourceNode.DefaultUnitsPerProp` (4) stone in the
+        /// seam, and quarrying all of it would be 4/3 of a day -- far too
+        /// long for "get it out of the way". Half a day: broken and rolled
+        /// aside, with `ClearStonePerRock` worth keeping. A guess, never
+        /// played.
+        public const float ClearRockHandDays = 0.5f;
+        /// Units a cleared rock books on the pile (Stone, or Ore for the
+        /// `clearOre` tail). Half a prop's worth, matching the half-day.
+        public const int ClearStonePerRock = 2;
+
         /// Materials a plan of the reference size is made of. A hut is 6
         /// logs + 2 stone = 8, so a hut is a shade over the reference and
         /// costs about 0.67 hand-days to raise.
@@ -1610,6 +1941,50 @@ namespace SeaSick.World
         /// `labour` is hand-days, so three builders in one tick hand this
         /// three times as much and it finishes in a third of the time
         /// without knowing there are three of them.
+        /// **The CLEAR phase: spend hand-days taking the plot's trees and
+        /// rocks down, 2026-09-23.** Paid first, out of the same builder
+        /// labour `PayBuild` spends, so a camp nobody is watching clears its
+        /// plots at exactly the pace a watched one does. Every time
+        /// `clearDone` crosses a whole number one obstruction is down, and
+        /// what it was made of is booked the way gathering books it (a log,
+        /// or `ClearStonePerRock` stone/ore, up to the pile's ceiling). The
+        /// SCENE shows it by reading the same integer (`Outpost.SyncClearing`)
+        /// -- the ledger never needs to know which tree it was.
+        void PayClear(PendingBuild pending, ref float labour)
+        {
+            if (pending == null) return;
+            for (int guard = 0; guard < 256 && labour > 0f && !pending.Cleared; guard++)
+            {
+                int k = Mathf.FloorToInt(pending.clearDone);
+                bool tree = k < pending.clearTrees;
+                float cost = tree ? ClearTreeHandDays : ClearRockHandDays;
+                if (cost <= 0f) { pending.clearDone = k + 1; }
+                else
+                {
+                    float need = (k + 1 - pending.clearDone) * cost;
+                    if (labour < need)
+                    {
+                        pending.clearDone += labour / cost;
+                        labour = 0f;
+                        // Float drift must never book a tree twice or skip
+                        // one: the integer only moves in the branch below.
+                        if (pending.clearDone >= k + 1) pending.clearDone = k + 0.9999f;
+                        return;
+                    }
+                    labour -= need;
+                    pending.clearDone = k + 1;
+                }
+                if (tree) Add(Res.Timber, 1);
+                else
+                {
+                    // Rocks run stone first, ore last (`clearOre`).
+                    int rock = k - pending.clearTrees;
+                    bool ore = rock >= pending.clearRocks - pending.clearOre;
+                    Add(ore ? Res.Ore : Res.Stone, ClearStonePerRock);
+                }
+            }
+        }
+
         void PayBuild(PendingBuild pending, ref float labour)
         {
             if (pending == null || labour <= 0f) return;
@@ -1788,6 +2163,8 @@ namespace SeaSick.World
             // pile before a single count is read. See `ReconcileSites`.
             MigratePending();
             ReconcileSites();
+            FeedFirst();
+            EnlistFree();
 
             // Regrowth first, so a camp that stripped its ground last step has
             // something to cut this one rather than the order of operations
@@ -1846,6 +2223,13 @@ namespace SeaSick.World
                     // note: *"first the villagers should gather all the
                     // resources necessary to build the building, THEN they
                     // start actually building it."*
+                    // **Clear the plot first, 2026-09-23.** Out of the
+                    // same hand-days, before anything is hauled or stood
+                    // up; a plot with nothing on it (every old row) takes
+                    // nothing here and the rest is the old path to the bit.
+                    PayClear(site, ref labour);
+                    if (!site.Cleared) continue;   // the day went on the plot
+
                     if (site.Stocked)
                     {
                         PayBuild(site, ref labour);
@@ -1909,6 +2293,13 @@ namespace SeaSick.World
                 bool hunting = h.target == Res.Game;
                 string into = hunting ? Res.Food : h.target;
 
+                // **Hard gate, Kevin 2026-09-23: "to hunt, you need a
+                // spear."** No spear in the pile, no kills -- the hunter's
+                // day goes to nothing, same as a gatherer with nothing
+                // standing. `Stalled` reads the same `HunterBlocker`.
+                string spear = hunting ? SpearInHand() : null;
+                if (hunting && spear == null) continue;
+
                 var store = Store(into, true);
                 float room = (ceilingPer - store.whole) - store.part;
                 if (room <= 0f) continue;
@@ -1941,6 +2332,13 @@ namespace SeaSick.World
                     want = Mathf.Min(armed, plain + arrowsHeld);
                 }
 
+                // The spear wears with the kill, so the kill cannot outrun
+                // the spear any more than it can outrun the herd or the
+                // larder -- clamped here, the same shape as the arrows
+                // bonus above.
+                float spearWear = hunting ? Economy.Techs.SpearWear(spear) : 0f;
+                if (hunting && spearWear > 0f) want = Mathf.Min(want, HeldOf(spear) / spearWear);
+
                 float got = Mathf.Min(want, Mathf.Min(stock.standing, room));
                 if (got <= 0f) continue;
 
@@ -1962,6 +2360,31 @@ namespace SeaSick.World
                 int whole = Mathf.FloorToInt(store.part);
                 if (whole > 0) { store.whole += whole; store.part -= whole; }
                 away.Add(into, paid);
+
+                if (hunting)
+                {
+                    if (spearWear > 0f)
+                    {
+                        var spearStore = Store(spear, true);
+                        spearStore.part -= spearWear * got;
+                        while (spearStore.part < 0f && spearStore.whole > 0) { spearStore.whole--; spearStore.part += 1f; }
+                        if (spearStore.part < 0f) spearStore.part = 0f;
+                    }
+                    // Hide comes home beside the meat, one per animal --
+                    // a full hide pile does not stop the hunt, the hide is
+                    // simply lost.
+                    foreach (var drop in Economy.Techs.HuntDrops)
+                    {
+                        var dropStore = Store(drop.res, true);
+                        float dropRoom = Mathf.Max(0f, ceilingPer - dropStore.whole - dropStore.part);
+                        float dropGot = Mathf.Min(drop.n * got, dropRoom);
+                        if (dropGot <= 0f) continue;
+                        dropStore.part += dropGot;
+                        int dw = Mathf.FloorToInt(dropStore.part);
+                        if (dw > 0) { dropStore.whole += dw; dropStore.part -= dw; }
+                        away.Add(drop.res, dropGot);
+                    }
+                }
             }
 
             // --- working at a building ---------------------------------------
@@ -1980,40 +2403,45 @@ namespace SeaSick.World
                 // nothing rather than guessing.
                 if (!built.Contains(h.target)) continue;
 
-                var plan = BuildPlans.Named(h.target);
-                if (string.IsNullOrEmpty(plan.makes) || plan.rate <= 0f) continue;
+                // **One conversion, whatever the station.** `Conversion`
+                // reads the chosen (or default) recipe for a station with a
+                // recipe table, and otherwise synthesises the same one-input
+                // shape the old inline arithmetic spent -- see its doc
+                // comment. Every read of a plan's takes/makes/rate/Yield in
+                // this loop, `Stalled` and the two forecast functions goes
+                // through it, so a recipe station and a legacy one share one
+                // code path and cannot drift apart.
+                if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,
+                        out float yield, out float ratePerDay, out string tool, out float toolWear))
+                    continue;
+                if (string.IsNullOrEmpty(makes) || ratePerDay <= 0f) continue;
 
-                var made = Store(plan.makes, true);
+                // A tool sits in the pile and is worn, not spent one-for-one:
+                // no tool, no work at all -- the saw blade gates fine boards
+                // the way a spear gates a hunt.
+                if (tool != null && HeldOf(tool) <= 0f) continue;
+
+                var made = Store(makes, true);
                 float room = (ceilingPer - made.whole) - made.part;
                 if (room <= 0f) continue;
 
-                float want = Mathf.Min(plan.rate * days * WorkFactorOn(h, plan.makes)
-                    * PriorityMultiplier(plan.makes), room);
+                float want = Mathf.Min(ratePerDay * days * WorkFactorOn(h, makes)
+                    * PriorityMultiplier(makes), room);
                 if (want <= 0f) continue;
 
-                // An input is consumed one for one, and a hand with nothing to
-                // work on produces nothing. Deliberate, and the point of the
-                // chain: a sawmill on an island with no timber is a shed.
-                // **One input buys `plan.Yield` outputs, 2026-09-22.** It was
-                // flatly one for one until the fletcher, who turns one log
-                // into three arrows. `Yield` reads 1 for every plan that
-                // never mentions it, so the sawmill, the forge, the kitchen
-                // and the quarry come through this block spending exactly
-                // what they spent before, to the bit.
-                if (!string.IsNullOrEmpty(plan.takes))
+                // **`want` outputs cost `yield` batches**, and one batch
+                // spends every `takes` line at once -- clamp the OUTPUT by
+                // the tightest input, not by any one of them: one log left
+                // is three arrows, not one; two ore and one stone both have
+                // to hold for a recipe that wants both.
+                if (takes != null && takes.Length > 0)
                 {
-                    var from = Store(plan.takes);
-                    float have = from != null ? from.whole + from.part : 0f;
-                    float yield = plan.Yield;
-                    // Clamp the OUTPUT by what the input can buy, not by the
-                    // input itself -- one log left is three arrows, not one.
-                    want = Mathf.Min(want, have * yield);
+                    foreach (var line in takes)
+                    {
+                        if (line.n <= 0) continue;
+                        want = Mathf.Min(want, HeldOf(line.res) * yield / line.n);
+                    }
                     if (want <= 0f) continue;
-
-                    float spent = want / yield;
-                    from.part -= spent;
-                    while (from.part < 0f && from.whole > 0) { from.whole--; from.part += 1f; }
-                    if (from.part < 0f) from.part = 0f;
                 }
                 // **No input means the ground is the input**, and if the
                 // ground is tracked it is drawn down exactly as a gatherer
@@ -2024,19 +2452,52 @@ namespace SeaSick.World
                 // probe's bare farm -- is not bounded at all, as before.
                 else
                 {
-                    var field = Stock(plan.makes);
+                    var field = Stock(makes);
                     if (field != null)
                     {
                         want = Mathf.Min(want, field.standing);
                         if (want <= 0f) continue;
-                        field.standing -= want;
                     }
+                }
+
+                // The tool wears with what is actually made -- clamped the
+                // same way an input would be, so `want` cannot outrun it.
+                if (tool != null && toolWear > 0f)
+                {
+                    want = Mathf.Min(want, HeldOf(tool) / toolWear);
+                    if (want <= 0f) continue;
+                }
+
+                if (takes != null && takes.Length > 0)
+                {
+                    float batches = want / yield;
+                    foreach (var line in takes)
+                    {
+                        if (line.n <= 0) continue;
+                        var from = Store(line.res, true);
+                        from.part -= line.n * batches;
+                        while (from.part < 0f && from.whole > 0) { from.whole--; from.part += 1f; }
+                        if (from.part < 0f) from.part = 0f;
+                    }
+                }
+                else
+                {
+                    var field = Stock(makes);
+                    if (field != null) field.standing -= want;
+                }
+
+                if (tool != null && toolWear > 0f)
+                {
+                    var held = Store(tool, true);
+                    held.part -= toolWear * want;
+                    while (held.part < 0f && held.whole > 0) { held.whole--; held.part += 1f; }
+                    if (held.part < 0f) held.part = 0f;
                 }
 
                 made.part += want;
                 int whole = Mathf.FloorToInt(made.part);
                 if (whole > 0) { made.whole += whole; made.part -= whole; }
-                away.Add(plan.makes, want);
+                away.Add(makes, want);
             }
 
             // --- upkeep: eating -----------------------------------------------
@@ -2171,7 +2632,7 @@ namespace SeaSick.World
                 // stops him -- and a herd below one animal is a herd he
                 // cannot take one out of.
                 if (h.target == Res.Game)
-                    return RoomFor(Res.Food) <= 0 || stock == null || stock.standing < 1f;
+                    return HunterBlocker() != null || RoomFor(Res.Food) <= 0 || stock == null || stock.standing < 1f;
                 return RoomFor(h.target) <= 0 || stock == null || stock.standing < 1f;
             }
             if (h.order == OutpostOrder.Work)
@@ -2179,13 +2640,20 @@ namespace SeaSick.World
                 // A lookout makes nothing and that is the job -- never
                 // stalled for having nothing to show for standing watch.
                 if (h.target == WatchtowerId) return false;
-                var plan = BuildPlans.Named(h.target);
-                if (string.IsNullOrEmpty(plan.makes)) return true;
-                if (RoomFor(plan.makes) <= 0) return true;
-                if (!string.IsNullOrEmpty(plan.takes)) return CountOf(plan.takes) <= 0;
+                if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,
+                        out _, out float ratePerDay, out string tool, out _))
+                    return true;
+                if (string.IsNullOrEmpty(makes) || ratePerDay <= 0f) return true;
+                if (RoomFor(makes) <= 0) return true;
+                if (tool != null && HeldOf(tool) <= 0f) return true;
+                if (takes != null && takes.Length > 0)
+                {
+                    foreach (var line in takes) if (HeldOf(line.res) <= 0f) return true;
+                    return false;
+                }
                 // The field is the input: stripped bare is stalled, until it
                 // grows back.
-                var field = Stock(plan.makes);
+                var field = Stock(makes);
                 return field != null && field.standing <= 0f;
             }
             return true;
@@ -2228,6 +2696,8 @@ namespace SeaSick.World
                         if (armed) kills *= BowKillBonus;
                         if (resource == Res.Food) rate += kills * Res.MeatPerAnimal;
                         else if (resource == Res.Arrows && armed) rate -= kills;
+                        else foreach (var drop in Economy.Techs.HuntDrops)
+                            if (drop.res == resource) rate += kills * drop.n;
                         continue;
                     }
                     if (h.target != resource || Stalled(h)) continue;
@@ -2239,20 +2709,24 @@ namespace SeaSick.World
                 if (h.order == OutpostOrder.Work)
                 {
                     if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
-                    var plan = BuildPlans.Named(h.target);
-                    if (plan.rate <= 0f || Stalled(h)) continue;
-                    if (plan.makes == resource)
-                        rate += plan.rate * WorkFactorOn(h, resource) * PriorityMultiplier(resource);
+                    if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,
+                            out float yield, out float ratePerDay, out _, out _))
+                        continue;
+                    if (ratePerDay <= 0f || Stalled(h)) continue;
+                    if (makes == resource)
+                        rate += ratePerDay * WorkFactorOn(h, resource) * PriorityMultiplier(resource);
                     // Consumption scales with the same factor -- an angry
                     // worker draws down the input no faster than they make
-                    // the output.
-                    // Divided by the yield for the same reason `Step`
-                    // divides: a fletcher making three arrows a day is
+                    // the output. Divided by the yield for the same reason
+                    // `Step` divides: a fletcher making three arrows a day is
                     // drawing ONE log a day off the pile, and a readout that
                     // said three would have the player cutting twice what
                     // the bench can use.
-                    else if (plan.takes == resource)
-                        rate -= plan.rate * WorkFactorOn(h, plan.makes) / plan.Yield;
+                    else if (takes != null)
+                        foreach (var line in takes)
+                            if (line.res == resource)
+                                rate -= ratePerDay * WorkFactorOn(h, makes) * PriorityMultiplier(makes)
+                                    * line.n / yield;
                 }
                 // Build hauls from the pile into the blueprint -- a transfer,
                 // not production, so it never shows up here.
@@ -2290,15 +2764,17 @@ namespace SeaSick.World
                     // pile at all.
                     if (h.target == Res.Game)
                     {
-                        if (resource != Res.Food || Stalled(h)) continue;
+                        if ((resource != Res.Food && resource != Res.Hide) || Stalled(h)) continue;
                         // The bow, as `Step` and `RatePerDay` have it. This
                         // readout is the POSITIVE terms only, so the arrows
                         // it costs are deliberately not subtracted here --
-                        // only the meat they buy is.
+                        // only the meat (and the hide) they buy is.
                         float kills = Res.GatherRate(Res.Game)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
                         if (CountOf(Res.Arrows) > 0) kills *= BowKillBonus;
-                        rate += kills * Res.MeatPerAnimal;
+                        if (resource == Res.Food) rate += kills * Res.MeatPerAnimal;
+                        else foreach (var drop in Economy.Techs.HuntDrops)
+                            if (drop.res == Res.Hide) rate += kills * drop.n;
                         continue;
                     }
                     if (h.target != resource || Stalled(h)) continue;
@@ -2310,9 +2786,10 @@ namespace SeaSick.World
                 if (h.order == OutpostOrder.Work)
                 {
                     if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
-                    var plan = BuildPlans.Named(h.target);
-                    if (plan.rate <= 0f || plan.makes != resource || Stalled(h)) continue;
-                    rate += plan.rate * WorkFactorOn(h, resource) * PriorityMultiplier(resource);
+                    if (!Conversion(h.target, out string makes, out _, out _, out float ratePerDay, out _, out _))
+                        continue;
+                    if (ratePerDay <= 0f || makes != resource || Stalled(h)) continue;
+                    rate += ratePerDay * WorkFactorOn(h, resource) * PriorityMultiplier(resource);
                 }
             }
 
@@ -2322,6 +2799,130 @@ namespace SeaSick.World
         /// Put every hand here on the same order. Used when a blueprint goes
         /// down (everybody builds it) and when it is finished (everybody goes
         /// back to what an island is for).
+        /// **Why this site is not moving, in words, or "" when it is.**
+        /// Kevin, 2026-09-23: *"one wall segment was built, but nothing else
+        /// is even though it states that people are assigned to it. this has
+        /// happened before."* Two true things read as that bug, and the
+        /// sheet said neither:
+        /// - the builders are the CAMP's, not the site's, and they serve the
+        ///   queue oldest first (`Step`), so every later site shows "Bo is on
+        ///   it" while getting nothing until the ones ahead are done;
+        /// - a hand works at `WorkFactor` = mood / 0.5, so a starving crew is
+        ///   assigned and does exactly nothing.
+        public string StallReason(PendingBuild p)
+        {
+            if (p == null || p.Complete || hands == null) return "";
+            float strength = 0f;
+            int builders = 0, walking = 0;
+            foreach (var h in hands)
+                if (h != null && h.order == OutpostOrder.Build)
+                { builders++; strength += WorkFactor(h); if (h.walkingIn) walking++; }
+            if (builders == 0) return "";
+            if (walking == builders)
+                return "They are still on their way up from the ship.";
+            if (strength <= 0.001f)
+                return "They are too hungry to work. Feed the camp and they pick the tools back up.";
+            if (Hungry && strength <= builders * StarvingWorkFloor + 0.001f)
+                return "They are starving and working at a third of the pace. Feed the camp.";
+            int ahead = 0;
+            if (sites != null)
+                foreach (var s in sites)
+                {
+                    if (s == p) break;
+                    if (s != null && !s.Complete) ahead++;
+                }
+            if (ahead > 0)
+                return ahead == 1
+                    ? "Waiting its turn: the builders finish the site before it first."
+                    : $"Waiting its turn: {ahead} sites ahead of it in the queue.";
+            return "";
+        }
+
+        /// **A hungry camp feeds itself first, 2026-09-23.** Found by
+        /// reproducing Kevin's "one wall segment was built, but nothing else
+        /// is": a fresh camp has no food, mood falls 0.5 a day, `WorkFactor`
+        /// is mood / 0.5, so about two days (six minutes) in, every builder
+        /// is assigned and doing exactly nothing. Initiative has to include
+        /// "we are starving, somebody hunt": when the pile is under a day's
+        /// eating and nobody is on a food order, one free or building hand
+        /// in four (at least one) goes hunting on its own; they come back to
+        /// the queue once there are `FedDays` of food in. Hunting is exempt
+        /// from the hunger penalty (`WorkFactorOn`), so a starving camp can
+        /// always eat its way back -- if the island has game.
+        public void FeedFirst()
+        {
+            if (hands == null || hands.Count == 0) return;
+            var food = Store(Res.Food);
+            float have = food != null ? food.whole + food.part : 0f;
+            float day = hands.Count * EatPerHandPerDay;
+
+            if (have >= day * FedDays)
+            {
+                foreach (var h in hands)
+                    if (h != null && h.autoFood)
+                    {
+                        h.autoFood = false;
+                        // Re-ordered by the player since? Their order stands.
+                        if (h.order == OutpostOrder.Gather && h.target == Res.Game)
+                        { h.order = OutpostOrder.Idle; h.target = ""; }
+                    }
+                return;
+            }
+            if (have >= day) return;
+
+            int feeding = 0;
+            foreach (var h in hands)
+                if (h != null && h.order == OutpostOrder.Gather && h.target == Res.Game) feeding++;
+            int want = Mathf.Max(1, hands.Count / 4);
+            if (feeding >= want) return;
+            var game = Stock(Res.Game);
+            if (game == null || game.standing < 1f) return;   // nothing to hunt here
+
+            // Idle first, then builders -- never a hand the player put on
+            // other work.
+            for (int pass = 0; pass < 2 && feeding < want; pass++)
+                foreach (var h in hands)
+                {
+                    if (feeding >= want) break;
+                    if (h == null) continue;
+                    var from = pass == 0 ? OutpostOrder.Idle : OutpostOrder.Build;
+                    if (h.order != from) continue;
+                    h.order = OutpostOrder.Gather;
+                    h.target = Res.Game;
+                    h.autoFood = true;
+                    feeding++;
+                }
+        }
+
+        /// Days of food in the pile before hunters who went on their own
+        /// initiative come back to the build queue.
+        public const float FedDays = 3f;
+
+        /// **Free hands take the initiative, 2026-09-23.** Kevin: *"i want
+        /// villagers to take initiative. gather and build on my blueprints
+        /// without asking."* So a hand nobody has given anything to do
+        /// (`Idle`) goes to the queue on its own the moment there is a
+        /// drawing in it -- clearing, fetching the logs and stone, standing
+        /// it up, exactly what the Build order already does. An order the
+        /// player DID give (gather this, work that building) is left alone:
+        /// initiative is what a hand does with no orders, not a veto on the
+        /// ones it has. The way back is already written: when the queue
+        /// empties, `Outpost` sends every builder back to `Idle`.
+        ///
+        /// Run from `Step`, so it covers every way a hand comes to be idle
+        /// -- born, recalled, its building torn down, a save loaded -- off
+        /// screen as well as on. Returns how many it enlisted, so a caller
+        /// that just sited something can re-arrange the bodies at once.
+        public int EnlistFree()
+        {
+            if (!Building || hands == null) return 0;
+            int n = 0;
+            foreach (var h in hands)
+                if (h != null && h.order == OutpostOrder.Idle)
+                { h.order = OutpostOrder.Build; h.target = ""; n++; }
+            return n;
+        }
+
         public void OrderAll(OutpostOrder order, string target = "")
         {
             foreach (var h in hands)

@@ -175,6 +175,14 @@ namespace SeaSick.UI.Sheets
             // The building phase moves without any counter moving, so the
             // key has to carry it or the sheet freezes at "stocked".
             key = key * 31 + Mathf.RoundToInt(p.Build01 * 100f);
+            // **The CLEAR phase, 2026-09-23.** `ClearLeft` moves as hands
+            // fell trees and break rocks well before a single log is
+            // stocked -- without it in the key the sheet would freeze on
+            // "clearing: 4 trees, 1 rock left" for the whole phase.
+            key = key * 31 + p.ClearLeft;
+            // Why it is not moving (hungry / waiting its turn), 2026-09-23.
+            string stall = l.StallReason(p);
+            key = key * 31 + stall.GetHashCode();
             if (key != chipsKey && chips != null)
             {
                 chipsKey = key;
@@ -197,17 +205,23 @@ namespace SeaSick.UI.Sheets
                         row.Add(SheetKit.Text($"{p.brickDone} of {p.brickNeeded} bricks", false, false, 12f));
                     chips.Add(SheetKit.Row(row.ToArray()));
                 }
-                // **The phase, in the site's own words** -- "stocking 3/6
-                // logs, 2/2 stone" or "building 40%". One string, shared
-                // with the camp page (`FireSheet.Note`), so the two cannot
-                // say different things about the same drawing.
-                chips.Add(SheetKit.Text(Cap(p.PhaseLine), true, false, 13f));
+                // **The phase, in the site's own words** -- "clearing: 3
+                // trees, 1 rock left" comes first (2026-09-23: the CLEAR
+                // phase the villagers work through before a single log is
+                // laid, `OutpostLedger.PendingBuild.Cleared`), then
+                // "stocking 3/6 logs, 2/2 stone" or "building 40%". One
+                // string, shared with the camp page (`FireSheet.Note`), so
+                // the two cannot say different things about the same
+                // drawing.
+                chips.Add(SheetKit.Text(Cap(p.Cleared ? p.PhaseLine : ClearingLine(p)),
+                    true, false, 13f));
                 string need = !p.Stocked
                     ? NeedSentence(timberLeft, stoneLeft, brickLeft)
                     : p.Complete
                         ? "Everything is in and it is going up."
                         : "Everything it wants is here; now they raise it.";
                 chips.Add(SheetKit.Note(crew + ". " + need));
+                if (stall.Length > 0) chips.Add(SheetKit.Note(stall));
             }
 
             if (addHand != null)
@@ -262,6 +276,17 @@ namespace SeaSick.UI.Sheets
             if (days < 0.75f) return "about half a day left";
             if (days < 1.5f) return "about a day left";
             return $"about {days:0.#} days left";
+        }
+
+        /// **"clearing: 3 trees, 1 rock left"** -- the CLEAR phase's own
+        /// phase line, singular/plural correct, ahead of stocking/building
+        /// in `p.PhaseLine`. Only ever asked for while `!p.Cleared`.
+        static string ClearingLine(PendingBuild p)
+        {
+            var parts = new List<string>(2);
+            if (p.TreesLeft > 0) parts.Add(p.TreesLeft == 1 ? "1 tree" : $"{p.TreesLeft} trees");
+            if (p.RocksLeft > 0) parts.Add(p.RocksLeft == 1 ? "1 rock" : $"{p.RocksLeft} rocks");
+            return parts.Count == 0 ? "clearing" : "clearing: " + string.Join(", ", parts) + " left";
         }
 
         static string Cap(string s) =>

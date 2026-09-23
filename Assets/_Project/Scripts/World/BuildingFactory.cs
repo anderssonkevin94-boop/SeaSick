@@ -373,6 +373,22 @@ namespace SeaSick.World
         /// One material per rounded colour, cached: a ghost dragged about the
         /// island re-tints every frame it crosses a boundary, and a material
         /// per change would leak one per frame.
+        ///
+        /// **2026-09-23: `SeaSick/BlueprintGhost`, not URP Lit.** A ghost
+        /// standing behind a tree or in the grass used to vanish there --
+        /// URP Lit's ghost material had `_ZWrite 0` but no way to touch
+        /// `ZTest`, so it still lost the depth test to whatever foliage had
+        /// already written the depth buffer in front of it. Checked in
+        /// `Library/PackageCache/com.unity.render-pipelines.universal@.../
+        /// Shaders/Lit.shader` and `Unlit.shader` (package 17.4.0): neither
+        /// shader's forward pass carries a `[_ZTest]` token, so
+        /// `mat.SetInt("_ZTest", (int)CompareFunction.Always)` on either one
+        /// is a silent no-op -- there is no property for it to set. The only
+        /// way to draw over scenery is a shader that says `ZTest Always`
+        /// itself, so that one line is the whole of `BlueprintGhost.shader`
+        /// (`Assets/_Project/Art/Shaders/World/`): unlit, one colour
+        /// property, no lighting maths -- cheaper on the phone's GPU than
+        /// the Lit ghost ever was, not just equally cheap.
         static Material GhostMat(Color colour, float alpha)
         {
             int key = Mathf.RoundToInt(Mathf.Clamp01(alpha) * 20f)
@@ -381,21 +397,13 @@ namespace SeaSick.World
                 | (Mathf.RoundToInt(colour.b * 15f) << 16);
             if (ghostMats.TryGetValue(key, out var m) && m != null) return m;
 
-            m = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            m.SetFloat("_Surface", 1f);
-            m.SetOverrideTag("RenderType", "Transparent");
-            m.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            m.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            m.SetInt("_ZWrite", 0);
-            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            m.renderQueue = 3000;
+            m = new Material(Shader.Find("SeaSick/BlueprintGhost"));
             // Chalk, not the building's own colour. A blueprint that is
             // merely a pale version of the finished thing reads as a building
             // in fog; one that is plainly a drawing reads as a decision not
             // yet paid for.
             m.SetColor("_BaseColor", new Color(colour.r, colour.g, colour.b,
                 Mathf.Clamp01(alpha)));
-            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0f);
             ghostMats[key] = m;
             return m;
         }

@@ -3,6 +3,7 @@ using SeaSick.Crew;
 using SeaSick.Ship;
 using SeaSick.Voyage;
 using SeaSick.World;
+using SeaSick.World.Economy;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -47,11 +48,12 @@ namespace SeaSick.UI.Sheets
                 return new WallSheet(camp, w);
             });
 
-            // A finished building is a room in the same house: it opens the
-            // camp's own sheet rather than a sheet per shed. The watchtower is
-            // the one exception, and only because it has a decision on it --
-            // who is standing the watch -- so it opens the camp sheet already
-            // looking at the lookout row.
+            // A finished building opens its own crafting menu now, 2026-09-23
+            // (Kevin: *"a crafting menu in the appropriate buildings"*) --
+            // except the fire, which IS the camp, and the watchtower, whose
+            // only decision (who stands the watch) already lives on the camp
+            // sheet's lookout row. A building with nothing to make and
+            // nowhere to go (the pier) opens nothing at all.
             Sheets.Register<Building>(b =>
             {
                 if (b == null) return null;
@@ -64,8 +66,13 @@ namespace SeaSick.UI.Sheets
                     return wcamp != null ? new WallSheet(wcamp, seg) : null;
                 }
                 var camp = SheetBits.OutpostOf(b);
-                return FireFor(camp, b.Id == OutpostLedger.WatchtowerId
-                    ? FireSheet.FocusLookout : null);
+                if (b.Kind == BuildKind.Fire) return FireFor(camp);
+                if (b.Id == OutpostLedger.WatchtowerId) return FireFor(camp, FireSheet.FocusLookout);
+                if (camp == null || camp.Ledger == null) return null;
+                bool hasRecipes = Recipes.StationHasRecipes(b.Id);
+                bool hasUpgrade = Techs.MaxLevel(b.Id) > 1;
+                if (!hasRecipes && !hasUpgrade) return FireFor(camp);   // a pier: the fire, as before
+                return new StationSheet(camp, b);
             });
 
             // A drawing on the ground is its own thing: it is not the camp,

@@ -259,7 +259,11 @@ namespace SeaSick.Terrain
         /// The wood comes down at runtime instead, through the same path the
         /// crew fell it by. Which is the better story anyway: **making camp
         /// fells the wood it stands on, and you keep the logs.**
-        public int FellWithin(Vector3 at, float radius)
+        ///
+        /// `skip` (2026-09-23): trees the caller does not want touched --
+        /// `Outpost` passes the ones standing on another building's plot,
+        /// which only that plot's clearing may take down.
+        public int FellWithin(Vector3 at, float radius, System.Func<int, bool> skip = null)
         {
             if (trees == null) return 0;
             float r2 = radius * radius;
@@ -267,6 +271,7 @@ namespace SeaSick.Terrain
             for (int i = 0; i < trees.Length; i++)
             {
                 if (trees[i].felled) continue;
+                if (skip != null && skip(i)) continue;
                 Vector3 d = trees[i].baseAt - at;
                 d.y = 0f;                       // a disc on the map, not a sphere
                 if (d.sqrMagnitude > r2) continue;

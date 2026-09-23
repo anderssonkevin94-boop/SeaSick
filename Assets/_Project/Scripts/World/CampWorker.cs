@@ -75,6 +75,19 @@ namespace SeaSick.World
         /// the drawing, swings a hammer at it and carries nothing. See
         /// `PendingBuild.built` -- the ledger's second phase, mimed.
         bool raising;
+        /// **Clearing an obstruction off a build site, 2026-09-23.** Kevin's
+        /// rule: any blueprint may be dropped over standing trees or loose
+        /// rock, and the camp clears them before anybody raises a frame.
+        /// Same shape as `claimedTree`/`claimAt` above but the claim lives at
+        /// the SITE (`Outpost.ClaimClearing`) rather than on the open
+        /// island, and there is no index to hand back -- `clearing` is the
+        /// sentinel instead. `clearIsRock` picks the swing; there is no
+        /// separate pick/strike animation yet (`VillagerActing.Mode` has
+        /// none), so both trees and rock get the axe.
+        bool clearing;
+        Vector3 clearAt;
+        bool clearIsRock;
+        float clearFor;         // how long he has been swinging at it
         Animal quarry;         // the beast he has claimed, if he is hunting
 
         Vector3 flyVel;        // thrown: metres a second, integrated here
@@ -320,8 +333,9 @@ namespace SeaSick.World
         /// it.
         void ReleaseClaim()
         {
-            if (camp != null) { camp.ReleaseTree(this); camp.ReleaseBed(this); }
+            if (camp != null) { camp.ReleaseTree(this); camp.ReleaseBed(this); camp.ReleaseClearing(this); }
             claimedTree = -1;
+            clearing = false;
             Unclaim();
         }
 
@@ -409,6 +423,12 @@ namespace SeaSick.World
 
         // --- the loop ---------------------------------------------------------
 
+        /// Seconds a body may spend walking in from the ship before the
+        /// books count it anyway -- a man who cannot find a path must not
+        /// freeze the camp. Generous: a long walk inland is the point.
+        public const float WalkInLimit = 120f;
+        float walkInFor;
+
         OutpostOrder lastOrder;
         string lastTarget;
         bool seenOrder;
@@ -428,6 +448,17 @@ namespace SeaSick.World
             // to drag a man who is standing at his gun off the deck by his
             // world position. One reference compare closes it.
             if (transform.parent != camp.transform) { Drop(); Remove(agent); return; }
+
+            // **Arrived** (`OutpostHand.walkingIn`, 2026-09-23): the books
+            // start paying this hand the moment the body is at its first
+            // piece of work, not while it is still coming up from the ship.
+            var walker = Row;
+            if (walker != null && walker.walkingIn)
+            {
+                walkInFor += Time.deltaTime;
+                if (phase == Phase.Working || walkInFor > WalkInLimit)
+                    walker.walkingIn = false;
+            }
 
             float dt = Time.deltaTime;
 
@@ -480,7 +511,12 @@ namespace SeaSick.World
                 // change: dropping out of the camp's claim table even for one
                 // frame would read to `SyncFelling` as "nobody is cutting
                 // here" and empty the front of the wood behind him.
-                if (!Cutting(r)) ReleaseClaim();
+                // **Clearing outranks the same protection**, 2026-09-23: an
+                // order change straight from clearing a site into cutting
+                // free timber reads as `Cutting(r)` true on the NEW order,
+                // which would otherwise skip the release and leave the
+                // obstruction claim standing forever.
+                if (!Cutting(r) || clearing) ReleaseClaim();
                 phase = Phase.Resting;
                 wait = 0f;
             }
@@ -538,7 +574,37 @@ namespace SeaSick.World
                     // (`OutpostLedger.Step`), so the picture and the books
                     // agree about what the camp is doing.
                     var focus = camp != null && camp.Ledger != null ? camp.Ledger.Focus : null;
-                    raising = r.order == OutpostOrder.Build && focus != null && focus.Stocked;
+
+                    // **Clearing before raising, and before hauling,
+                    // 2026-09-23.** Kevin's rule: any blueprint may be
+                    // dropped over standing trees or loose rock, and the
+                    // camp clears the ground before anybody starts building
+                    // on it. `Outpost.ClaimClearing` hands out obstructions
+                    // the same way `ClaimTree` hands out trunks -- distinct
+                    // per hand where possible, false when there is nothing
+                    // left for THIS hand to claim (every obstruction is
+                    // already somebody else's, or the site is clear), in
+                    // which case he falls straight through to the ordinary
+                    // haul/raise decision below.
+                    clearing = r.order == OutpostOrder.Build && focus != null && !focus.Cleared
+                        && camp.ClaimClearing(focus, this, out clearAt, out clearIsRock);
+                    if (clearing)
+                    {
+                        target = Stand(clearAt);
+                        hauling = false;
+                        raising = false;
+                        clearFor = 0f;
+                        phase = Phase.Going;
+                        return;
+                    }
+
+                    // **Not Cleared yet is not Stocked either, as far as the
+                    // picture goes.** Construction labour does not accrue
+                    // until `Cleared` (`OutpostLedger`), so a man hammering
+                    // a frame that still has a tree standing through it
+                    // would be the animation lying about the numbers again.
+                    raising = r.order == OutpostOrder.Build && focus != null
+                        && focus.Cleared && focus.Stocked;
                     if (raising)
                     {
                         Vector3 sp = focus.At;
@@ -556,16 +622,50 @@ namespace SeaSick.World
 
                 case Phase.Going:
                     acting?.Set(VillagerActing.Mode.None);
+                    // Somebody else's claim took it, or the ledger cleared
+                    // it out from under him while he was still walking.
+                    // Turn round where he is rather than finish the walk to
+                    // nothing standing (same shape as `TickCutting`'s
+                    // mid-walk reclaim).
+                    if (clearing && camp.ClearingTargetGone(this))
+                    {
+                        if (!NextClearing()) { phase = Phase.Resting; wait = RestSeconds; return; }
+                        return;
+                    }
                     if (!Walk(target, dt)) return;
                     phase = Phase.Working;
                     // Hoisting a log off a stack is a moment, not a shift.
                     wait = hauling ? LoadSeconds : SwingSeconds * Random.Range(0.85f, 1.35f);
-                    acting?.Set(raising ? VillagerActing.Mode.Hammer
+                    clearFor = 0f;
+                    acting?.Set(clearing ? VillagerActing.Mode.Chop
+                        : raising ? VillagerActing.Mode.Hammer
                         : hauling ? VillagerActing.Mode.None : ModeFor(WhatFor(r)));
                     return;
 
                 case Phase.Working:
                     Face(target - transform.position, dt);
+                    // **Swing until the ledger says it is gone, not for a
+                    // fixed shift.** Same division as `TickCutting`'s
+                    // `TreeIsFelled`: he never fells the tree or breaks the
+                    // rock himself, and `Feel.chopPatience` is the same
+                    // "full pile, stop swinging" timeout it uses.
+                    if (clearing)
+                    {
+                        if (camp.ClearingTargetGone(this))
+                        {
+                            if (!NextClearing()) { Drop(); phase = Phase.Resting; wait = RestSeconds; return; }
+                            phase = Phase.Going;
+                            return;
+                        }
+                        clearFor += dt;
+                        if (clearFor < Feel.chopPatience) return;
+                        camp.ReleaseClearing(this);
+                        clearing = false;
+                        Drop();
+                        phase = Phase.Resting;
+                        wait = RestSeconds;
+                        return;
+                    }
                     wait -= dt;
                     if (wait > 0f) return;
                     // Raising it: he swings at the frame and walks nothing
@@ -647,12 +747,17 @@ namespace SeaSick.World
                     bool there = Walk(home, dt);
                     wait -= dt;
                     if (wait > 0f) { if (there) FaceRest(dt, 0f); return; }
-                    if (!ClaimQuarry())
+                    // **No spear, no hunt, 2026-09-23.** Kevin: "to hunt,
+                    // you need a spear." Checked before `ClaimQuarry` so an
+                    // unarmed hand never claims a beast it cannot take.
+                    bool unarmed = camp != null && camp.Ledger != null && camp.Ledger.HunterBlocker() != null;
+                    if (unarmed || !ClaimQuarry())
                     {
-                        // Nothing alive on the island, or every beast left
-                        // has a man on it. He potters near the fire and asks
-                        // again in a moment -- the same answer the cutter
-                        // gives an island with no wood left on it.
+                        // Nothing alive on the island, every beast left has
+                        // a man on it, or nobody has a spear. He potters near
+                        // the fire and asks again in a moment -- the same
+                        // answer the cutter gives an island with no wood
+                        // left on it.
                         Vector2 off = Random.insideUnitCircle.normalized * Random.Range(6f, 12f);
                         target = Stand(camp.CampCentre + new Vector3(off.x, 0f, off.y));
                         phase = Phase.Going;
@@ -678,10 +783,13 @@ namespace SeaSick.World
                     if (!Near(target, HuntReach)) { Walk(target, dt); return; }
                     phase = Phase.Working;
                     wait = HuntSeconds;
-                    // **A club, because there is no spear.** `VillagerActing`
-                    // has no hunting pose; Hammer is the overhand swing the
-                    // miners use and it is the nearest thing in the set. If a
-                    // spear ever goes in, this is the one line that changes.
+                    // **A spear exists in the ledger now (2026-09-23), but
+                    // not in the pose set.** `VillagerActing` has no hunting
+                    // pose; Hammer is the overhand swing the miners use and
+                    // it is the nearest thing there is. The gate that
+                    // requires the spear lives in `Phase.Resting` above --
+                    // this is only the mime, and it stays Hammer until a
+                    // hunting pose is animated.
                     acting?.Set(VillagerActing.Mode.Hammer);
                     return;
 
@@ -904,6 +1012,13 @@ namespace SeaSick.World
                 // builder in the BUILDING phase with an empty timber pile
                 // walked off to fell a tree instead of standing the hut up.
                 var f = camp != null && camp.Ledger != null ? camp.Ledger.Focus : null;
+                // **Clearing outranks it, 2026-09-23.** A site that is not
+                // `Cleared` gets a man's hand-time before he fetches
+                // anything for it -- see the clearing branch in
+                // `TickErrand`. Without this an unstocked, uncleared site
+                // sent a builder off to fell a tree on the far side of the
+                // island while the one standing IN the footprint waited.
+                if (f != null && !f.Cleared) return false;
                 if (f != null && f.Stocked) return false;
                 return WhatFor(r) == Res.Timber && !PileHas(Res.Timber);
             }
@@ -924,6 +1039,27 @@ namespace SeaSick.World
             Drop();
             phase = Phase.Resting;
             wait = RestSeconds;
+        }
+
+        /// One obstruction down (felled or broken by the ledger, same as
+        /// `Reclaim`'s tree) -- claim the next one off this site and aim the
+        /// walk at it. False means the site has nothing left for THIS hand
+        /// to claim (cleared, or every obstruction left is somebody else's):
+        /// callers drop the claim and go back to `Resting`, where the
+        /// ordinary errand decision (raise, now that it may be `Cleared`, or
+        /// haul) picks up again.
+        bool NextClearing()
+        {
+            var focus = camp != null && camp.Ledger != null ? camp.Ledger.Focus : null;
+            if (focus != null && camp.ClaimClearing(focus, this, out clearAt, out clearIsRock))
+            {
+                target = Stand(clearAt);
+                clearFor = 0f;
+                return true;
+            }
+            camp.ReleaseClearing(this);
+            clearing = false;
+            return false;
         }
 
         // --- thrown ------------------------------------------------------------

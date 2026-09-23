@@ -113,6 +113,10 @@ namespace SeaSick.World
             {
                 var n = all[i];
                 if (n == null || n.Home != island || n.Resource != resource) continue;
+                // A rock on a building plot is the plot's (2026-09-23): the
+                // clearing hides it, not the seam. Leaving it out here keeps
+                // the seam's prefix a prefix of the rocks it actually owns.
+                if (n.HeldBySite) continue;
                 scratch.Add(n);
             }
 

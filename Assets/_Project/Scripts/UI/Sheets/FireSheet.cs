@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using SeaSick.World;
+using SeaSick.World.Economy;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -120,7 +121,12 @@ namespace SeaSick.UI.Sheets
             // The "what is going up" block is one `ListRow` per queued site
             // now, and an empty queue is still one note's worth of "Nothing
             // going up" -- so the band arithmetic counts rows, not a note.
-            float campPx = storeRows * SheetKit.StorePx
+            // The fire's own block, 2026-09-23: an eyebrow, the big roman
+            // numeral, and either a note (top level) or a cost line plus a
+            // rule -- counted here so a phone-height band still fits the
+            // roster underneath it.
+            float firePx = SheetKit.EyebrowPx + SheetKit.BigPx + SheetKit.NotePx + SheetKit.RulePx;
+            float campPx = firePx + storeRows * SheetKit.StorePx
                            + (siteCount == 0 ? SheetKit.NotePx : siteCount * SheetKit.RowPx);
             float ordersPx = SheetKit.EyebrowPx + SheetKit.SegPx + SheetKit.TextPx
                              + SheetKit.SegPx + SheetKit.QuietPx + SheetKit.TextPx
@@ -216,14 +222,41 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildHeader() =>
             SheetKit.Header("the camp", Title, SheetTheme.Ember, "🔥", () => Sheets.Close());
 
-        /// **The action row is the ship tab's alone.** The camp, hands and
-        /// build tabs are made of rows that ARE their own actions -- a pill
-        /// group, a "change", a plan with its price on it -- and a pinned row
-        /// under them would be a second place to look for the same verbs.
+        /// **The action row is the ship tab's, and the camp tab's fire
+        /// button, 2026-09-23.** The hands and build tabs are made of rows
+        /// that ARE their own actions -- a pill group, a "change", a plan
+        /// with its price on it -- and a pinned row under them would be a
+        /// second place to look for the same verbs. Raising the fire is the
+        /// one standing decision the camp tab has, so it gets the row the
+        /// ship tab already had.
         public VisualElement BuildActions()
         {
             int k = Live.kind;
-            return k == PgShip || k == PgCargo || k == PgCrew ? ship.BuildActions() : null;
+            if (k == PgShip || k == PgCargo || k == PgCrew) return ship.BuildActions();
+            if (k == PgCamp)
+            {
+                var l = L;
+                var next = l != null ? l.NextCampfire : null;
+                if (next == null) return null;
+                fireBtn = SheetKit.Btn($"Raise the fire to {RecipeGraph.Roman(next.level)}", RaiseFire, true);
+                fireBtn.SetEnabled(l.CanRaiseCampfire(out _));
+                return SheetKit.Actions(fireBtn);
+            }
+            return null;
+        }
+
+        Button fireBtn;
+
+        void RaiseFire()
+        {
+            var l = L;
+            if (l == null) return;
+            if (l.RaiseCampfire())
+            {
+                fireKey = long.MinValue;
+                buildKey = long.MinValue;
+                Refresh();
+            }
         }
 
         public string Title => islandName;
@@ -242,6 +275,7 @@ namespace SeaSick.UI.Sheets
 
         // --- the pieces kept between refreshes ---------------------------------
 
+        VisualElement fireHolder;
         VisualElement storesHolder;
         VisualElement noteHolder;
         VisualElement rationsHolder;
@@ -258,6 +292,7 @@ namespace SeaSick.UI.Sheets
         // once a frame. The same idea as `CampSheet.HeadKey` -- IMGUI's reason
         // for it was text meshes, ours is that a rebuilt element loses the
         // press that is happening on it.
+        long fireKey = long.MinValue;
         long storesKey = long.MinValue;
         long noteKey = long.MinValue;
         int rationsKey = -99;
@@ -308,10 +343,11 @@ namespace SeaSick.UI.Sheets
         /// key cannot suppress the first fill of a freshly built block.
         void Forget()
         {
+            fireHolder = null;
             storesHolder = noteHolder = rationsHolder = priorityHolder = null;
             lookoutHolder = recruitBar = handsHolder = buildListHolder = null;
             rationsLine = recruitLine = bedsEyebrow = null;
-            storesKey = noteKey = lookoutKey = recruitKey = handsKey = long.MinValue;
+            fireKey = storesKey = noteKey = lookoutKey = recruitKey = handsKey = long.MinValue;
             rationsKey = priorityKey = -99;
             buildKey = long.MinValue;
         }
@@ -323,11 +359,60 @@ namespace SeaSick.UI.Sheets
         /// the roster.
         void BuildCamp(VisualElement root)
         {
+            fireHolder = SheetBits.Holder();
+            root.Add(fireHolder);
+            root.Add(SheetKit.Rule());
+
             storesHolder = SheetBits.Holder();
             root.Add(storesHolder);
 
             noteHolder = SheetBits.Holder();
             root.Add(noteHolder);
+        }
+
+        /// **The fire's own level, at the top of the camp page, 2026-09-23.**
+        /// "I camp" / "II hamlet" -- `RecipeGraph.Roman` and the level's own
+        /// name -- then what the next level costs and why it will not light
+        /// yet, in the same have/need colours `StationSheet` prices a
+        /// recipe in. At the top level the fire says so and stops.
+        void FireRow(OutpostLedger l)
+        {
+            var cur = Techs.CampfireAt(l.CampfireLevel);
+            var next = l.NextCampfire;
+            long key = l.CampfireLevel * 1000003L;
+            if (next != null)
+                foreach (var line in next.cost) key = key * 31 + l.CountOf(line.res);
+            if (key == fireKey) return;
+            fireKey = key;
+
+            var col = new VisualElement();
+            col.style.flexDirection = FlexDirection.Column;
+            col.Add(SheetKit.Eyebrow("fire"));
+            string big = cur != null ? $"{RecipeGraph.Roman(cur.level)} {cur.name}"
+                : RecipeGraph.Roman(l.CampfireLevel);
+            col.Add(SheetKit.Text(big, true, false, 20f));
+
+            if (next == null)
+            {
+                col.Add(SheetKit.Note("the fire is as high as it goes"));
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(next.blurb))
+                    col.Add(SheetKit.Text(next.blurb, false, true, 12f));
+                var costRow = new VisualElement();
+                costRow.style.flexDirection = FlexDirection.Row;
+                costRow.style.flexWrap = Wrap.Wrap;
+                for (int i = 0; i < next.cost.Length; i++)
+                {
+                    if (i > 0) costRow.Add(SheetKit.Text(", ", false, true, 12f));
+                    costRow.Add(StationSheet.IngredientLine(l, next.cost[i].res, next.cost[i].n));
+                }
+                col.Add(costRow);
+                if (!l.CanRaiseCampfire(out string why))
+                    col.Add(SheetKit.Note(why));
+            }
+            SheetBits.Swap(fireHolder, col);
         }
 
         // --- page: orders --------------------------------------------------
@@ -408,17 +493,31 @@ namespace SeaSick.UI.Sheets
                 n++;
                 int at = seen++;
                 if (at < bFrom || at >= bTo) continue;
-                string price = p.stoneCost > 0
-                    ? $"{p.label} — {p.cost} timber {p.stoneCost} stone"
-                    : $"{p.label} — {p.cost} timber";
-                buildListHolder.Add(SheetKit.Btn(price, () =>
+                // **A plan the fire has not opened yet is still listed,
+                // 2026-09-23.** Greyed, priced in the reason rather than the
+                // cost, and not tappable -- so the build tab is where a
+                // player finds out the quarry wants the fire at II, not a
+                // building that quietly disappeared.
+                bool unlocked = l.PlanUnlocked(p.id);
+                string price = !unlocked
+                    ? $"{p.label} — {l.PlanLockReason(p.id)}"
+                    : p.stoneCost > 0
+                        ? $"{p.label} — {p.cost} timber {p.stoneCost} stone"
+                        : $"{p.label} — {p.cost} timber";
+                var planBtn = SheetKit.Btn(price, () =>
                 {
                     CampSiting.Begin(outpost, p, SheetBits.ShipTransform);
                     // Siting takes the whole screen's attention; a sheet lying
                     // over the ground you are about to tap is the bug the old
                     // bottom bar had.
                     Sheets.Close();
-                }, false, true));
+                }, false, true);
+                if (!unlocked)
+                {
+                    planBtn.SetEnabled(false);
+                    planBtn.style.opacity = 0.5f;
+                }
+                buildListHolder.Add(planBtn);
             }
             if (n == 0)
                 buildListHolder.Add(SheetKit.Note("Nothing the camp can afford yet"));
@@ -490,6 +589,9 @@ namespace SeaSick.UI.Sheets
                     long bkey = l.Total * 31L + l.SiteCount * 7919L
                                 + l.built.Count * 131L;
                     bkey = bkey * 31L + buildPart;
+                    // Locked plans grey and un-grey with the fire, so the
+                    // list has to be redrawn when it moves.
+                    bkey = bkey * 31L + l.CampfireLevel;
                     if (bkey != buildKey) { buildKey = bkey; FillBuildList(); }
                     break;
                 case PgShip:
@@ -504,6 +606,7 @@ namespace SeaSick.UI.Sheets
                     Recruit(l);
                     break;
                 default:
+                    FireRow(l);
                     Stores(l);
                     Note(l);
                     // The camp page carries the orders too where the band is

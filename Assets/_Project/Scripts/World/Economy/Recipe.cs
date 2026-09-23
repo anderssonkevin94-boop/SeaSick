@@ -1,0 +1,140 @@
+using System.Collections.Generic;
+
+namespace SeaSick.World.Economy
+{
+    /// One thing a station can make, and what it takes to make it.
+    ///
+    /// A station (a `BuildPlan` with a `position`) holds several of these
+    /// and the player picks one on the station's sheet; the ledger's Work
+    /// loop then spends `takes` and produces `makes` at `ratePerDay` per
+    /// hand, exactly as the old one-input `plan.takes/makes` did. A station
+    /// with no recipe in this table keeps its old plan fields, so the farm
+    /// and the watchtower are untouched.
+    ///
+    /// **Rates are per OUTPUT unit.** `takes` is priced per `yield` outputs,
+    /// so "2 ore makes 1 iron" is `takes = {2 ore}, yield = 1`, and "1 timber
+    /// makes 3 arrows" is `takes = {1 timber}, yield = 3`.
+    public class Recipe
+    {
+        public string id;
+        /// `BuildPlan.id` of the station this is made at.
+        public string station;
+        public string makes;
+        /// Outputs per batch; `takes` is the price of one batch.
+        public int yield = 1;
+        public Ingredient[] takes = Cost.None;
+        /// Output units one hand makes in a day. **Every one is a guess.**
+        public float ratePerDay;
+        /// Fire level needed before the recipe is offered.
+        public int campfireLevel = 1;
+        /// Station level needed (1 = as raised).
+        public int stationLevel = 1;
+        /// An item that must be in the pile for the work to go on, and is
+        /// worn by it: `toolWear` of one is used up per output unit. Null
+        /// for no tool. The sawmill needs a saw blade for fine boards; the
+        /// quarry wears tools cutting brick.
+        public string tool;
+        public float toolWear;
+
+        public string label => ResDefs.Label(makes);
+
+        /// "2 ore → 1 iron" for the sheet.
+        public string Describe() => $"{Cost.Describe(takes)} → {yield} {label}";
+    }
+
+    /// **Every recipe in the game.** Ordered by station, then by the level
+    /// they unlock at, which is the order a station sheet lists them in.
+    public static class Recipes
+    {
+        public static readonly Recipe[] All =
+        {
+            // --- sawmill ---
+            new Recipe { id = "boards", station = "Sawmill", makes = Res.Boards, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Timber, 1)), ratePerDay = 3f },
+            new Recipe { id = "fine-boards", station = "Sawmill", makes = Res.FineBoards, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Boards, 2)), ratePerDay = 2f,
+                campfireLevel = 2, tool = Res.SawBlade, toolWear = 0.05f },
+
+            // --- kitchen ---
+            new Recipe { id = "meals", station = "Kitchen", makes = Res.Meals, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Food, 1)), ratePerDay = 3f },
+
+            // --- fletcher ---
+            new Recipe { id = "arrows", station = "Fletcher", makes = Res.Arrows, yield = 3,
+                takes = Cost.Of(Cost.I(Res.Timber, 1)), ratePerDay = 3f },
+
+            // --- forge ---
+            // The first thing a forge makes needs no ore at all: Kevin's
+            // spear is "a wood plank for the shaft and stone or metal for
+            // the tip", and the stone one is what gets the first hunter out.
+            new Recipe { id = "spear", station = "Blacksmith", makes = Res.Spear, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Boards, 1), Cost.I(Res.Stone, 1)), ratePerDay = 1.5f },
+            new Recipe { id = "iron", station = "Blacksmith", makes = Res.Iron, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Ore, 2)), ratePerDay = 1.5f, campfireLevel = 2 },
+            new Recipe { id = "saw-blade", station = "Blacksmith", makes = Res.SawBlade, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Iron, 2)), ratePerDay = 0.5f, campfireLevel = 2 },
+            new Recipe { id = "tools", station = "Blacksmith", makes = Res.Tools, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Iron, 1), Cost.I(Res.Boards, 1)), ratePerDay = 1f, campfireLevel = 2 },
+            new Recipe { id = "iron-spear", station = "Blacksmith", makes = Res.IronSpear, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Boards, 1), Cost.I(Res.Iron, 1)), ratePerDay = 1f,
+                campfireLevel = 2, stationLevel = 2 },
+
+            // --- quarry ---
+            new Recipe { id = "brick", station = "Quarry", makes = Res.Brick, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Stone, 1)), ratePerDay = 2f,
+                campfireLevel = 2, tool = Res.Tools, toolWear = 0.1f },
+        };
+
+        static Dictionary<string, Recipe> byId;
+        static Dictionary<string, List<Recipe>> byStation;
+
+        static void Index()
+        {
+            if (byId != null) return;
+            byId = new Dictionary<string, Recipe>();
+            byStation = new Dictionary<string, List<Recipe>>();
+            foreach (var r in All)
+            {
+                byId[r.id] = r;
+                if (!byStation.TryGetValue(r.station, out var list))
+                    byStation[r.station] = list = new List<Recipe>();
+                list.Add(r);
+            }
+        }
+
+        public static Recipe Named(string id)
+        {
+            Index();
+            return id != null && byId.TryGetValue(id, out var r) ? r : null;
+        }
+
+        /// Everything a station can ever make, locked ones included -- the
+        /// sheet shows those greyed with the reason, so the player can see
+        /// the step after the one they are on.
+        public static IReadOnlyList<Recipe> At(string stationId)
+        {
+            Index();
+            return stationId != null && byStation.TryGetValue(stationId, out var list)
+                ? list : (IReadOnlyList<Recipe>)System.Array.Empty<Recipe>();
+        }
+
+        public static bool StationHasRecipes(string stationId) => At(stationId).Count > 0;
+
+        /// The recipe a station works when the player has not chosen: its
+        /// first, which is the old one-input conversion for every station
+        /// that had one.
+        public static Recipe Default(string stationId)
+        {
+            var list = At(stationId);
+            return list.Count > 0 ? list[0] : null;
+        }
+
+        /// Every recipe that makes `res`, any station.
+        public static List<Recipe> Making(string res)
+        {
+            var list = new List<Recipe>();
+            foreach (var r in All) if (r.makes == res) list.Add(r);
+            return list;
+        }
+    }
+}

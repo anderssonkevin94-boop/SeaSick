@@ -27,8 +27,20 @@ namespace SeaSick.World
         /// Gone, as far as anyone looking for something to work is concerned:
         /// either a crew member took it (`Harvest`) or the ledger's arithmetic
         /// has already used it up (`SetGathered`).
-        public bool Harvested => harvested || Gathered;
+        ///
+        /// **Or it stands on a building plot (`HeldBySite`, 2026-09-23)**:
+        /// that rock is the plot's, taken down by the builders' clearing and
+        /// not by anybody gathering, so every finder that skips a spent node
+        /// skips it too.
+        public bool Harvested => harvested || Gathered || HeldBySite;
         bool harvested;
+
+        /// **Owned by a building plot's CLEAR phase.** Set and cleared only by
+        /// `Outpost`'s clearing registry, which also decides whether it is
+        /// shown (`SetGathered`). `GatherSync` leaves a held rock out of the
+        /// seam's order, so the seam's prefix and the plot's never fight over
+        /// the same prop. Not saved: re-derived from the rows on every load.
+        public bool HeldBySite { get; set; }
 
         /// **Hidden by `GatherSync` to match the ledger**, renderers off, the
         /// object still active. It stays in `All` on purpose: the ledger's

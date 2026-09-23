@@ -48,6 +48,23 @@ raiders, a dozen hands and the animals on screen.
 ### Phase 1 — Walls and gates  — BUILT 2026-09-23 01:20, commit e6a82c1, UNPLAYED
 Known gaps: scenery boulders are not obstacles (only resource rocks are; no index of baked scenery rocks — `CampPath.RockProbe` hook waits for one); palisade cost passes through `PlaytestCostCap` (5); `RaidParty.PartySize` is 3 so a full party breaches in ~8 s; segment hp 40/m, gates ×1.5 (`WallSegment` consts). Kevin's first play decides: post grab radius 1.5 m, 2 m snap, 12 m max segment, breach time, whether raiders should prefer gates.
 
+**2026-09-23, the CLEAR phase:** Kevin's rule, verbatim — *"any blueprint
+can be placed over any trees or small rocks etc and the area will be
+cleared by the villagers before buildings begin construction. obviously
+you cant place it on terrain thats unclearable."* So siting never refused
+trees or resource rocks to begin with (confirmed unchanged); what changed
+is that any blueprint — building or wall segment, this phase's palisade
+included — now carries a CLEAR phase ahead of stocking: villagers fell the
+standing trees and break the resource rocks inside the footprint (or
+within 1.5 m of a wall run) before construction labour accrues, paid out of
+the same labour economy as building. Unclearable terrain (beach, steep,
+water, past-shore) is still refused exactly as before — clearing removes an
+obstacle from the ground, it does not open ground that was never legal.
+The siting ghost and the site sheet both say what a spot will cost in
+trees/rocks before you commit. Gap carried over from the line above:
+baked scenery boulders (as opposed to gatherable `ResourceNode` rocks)
+are still not obstacles anywhere in this system, clearing included.
+
 (first; "raiders hitting a wall is the moment the vision becomes real")
 - **Siting:** a LINE tool in `CampSiting`: press on the ground, drag, release
   → a run of wall segments from A to B, snapped to a 2 m step, each segment a
@@ -90,6 +107,8 @@ Known gaps: scenery boulders are not obstacles (only resource rocks are; no inde
   sink") applied to buildings; palisade → stone wall; watchtower → bastion;
   pier → dock → quay. Higher tiers unlock as the camp's population/ledger
   crosses lines the sheet states plainly.
+- **Camp tiers are the fire levels** in `Techs.Campfire`: fire level I (camp) and level II (hamlet, unlocks quarry and all building level 2s); future levels III and IV are reserved for later phases. Each fire level's cost and unlocked plans are authored there.
+- **Stone walls, towers, and harbour fortifications** will be priced in `Cost` lines in `Techs` (new entries for level II→III transition and beyond) when each phase ships, paralleling how fire level costs work.
 
 ## Decisions — SETTLED by Kevin, 2026-09-23 00:50
 - **D1 yes** — wall cost per metre: 1 log / 2 m of palisade, hauled like any site; stone wall is a later tier.

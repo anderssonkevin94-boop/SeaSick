@@ -373,9 +373,9 @@ namespace SeaSick.Terrain
             Dress(island.transform, island.transform.position, island.Radius, island,
                   Mathf.Max(0, index), village);
 
-            // The village's own KeepOut circle already steers new scenery
-            // wide of the whole clearing (see `Dress` above), but a re-dress
-            // rebuilds the welded cells from scratch, which drops every
+            // No keep-out disc any more (2026-09-23, see `Dress`): trees on a
+            // raised plot are held down by the camp's clearing registry, and
+            // a re-dress rebuilds the welded cells from scratch, which drops every
             // per-building collapse `SceneryGround.ClearFootprintNear` had
             // already made. Kevin, 2026-09-22: re-apply one per building
             // already standing so a flora re-tune cannot regrow a fern
@@ -393,9 +393,16 @@ namespace SeaSick.Terrain
         void Dress(Transform parent, Vector3 centre, float meanR, Island island, int index,
             Outpost village = null)
         {
+            // **No village keep-out any more (2026-09-23).** Kevin: *"i also
+            // want to do away with the area of the camp fire"* -- the town
+            // centre goes wherever the player sites it, and its ground is
+            // cleared plot by plot by the hands (`PendingBuild.Cleared`), so
+            // a disc punched through the wood at bake time is a clearing in
+            // a place nobody may ever build. `village` is still taken: the
+            // re-dress below uses it to re-collapse grass under standing huts.
             IslandScenery.Build(parent, centre, meanR, Height, terrain,
                 ang => island.RadiusAt(ang), terrain.seed * 7919 + index, prm, island,
-                village != null ? (System.Func<float, float, bool>)village.KeepOut : null);
+                null);
 
             // **The animals, after the trees.** Kevin, 2026-09-22: wild animals
             // on the islands. Which herds an island carries is read off the

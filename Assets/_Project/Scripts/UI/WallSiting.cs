@@ -103,6 +103,15 @@ namespace SeaSick.UI
         /// one answer.
         public static string Refusal { get; private set; } = "";
 
+        /// **"clears 4 trees, 1 rock" for the whole run being drawn
+        /// (2026-09-23).** A drag can already be several pieces
+        /// (`Split`/`MaxWallSegment`), so this sums
+        /// `Outpost.CountObstructionsWall` over every piece rather than
+        /// asking only about A→B -- the number under the buttons should be
+        /// what confirming THIS drag actually costs. Set only while `valid`,
+        /// same rule as `CampSiting.ClearLine`.
+        static string clearLine = "";
+
         /// Is ✓ live?
         public static bool CanConfirm => Mode == State.Stretching && valid;
 
@@ -138,6 +147,8 @@ namespace SeaSick.UI
         /// The frame post A was planted on. The tap that planted it must not
         /// also move B — same trap as `CampSiting.beganFrame`.
         static int plantedFrame = -1;
+        /// The frame ✓ last went through — see `Confirm`.
+        static int confirmedFrame = -1;
 
         /// The split of A→B into pieces no longer than
         /// `Outpost.MaxWallSegment`: `posts[0]` is A, `posts[n]` is B, and
@@ -180,6 +191,7 @@ namespace SeaSick.UI
             confirmed = 0;
             hasFirst = false;
             Refusal = "";
+            clearLine = "";
             posts.Clear();
             ClearGhost();
         }
@@ -321,6 +333,7 @@ namespace SeaSick.UI
             Split();
             valid = posts.Count >= 2;
             Refusal = "";
+            clearLine = "";
             if (!valid) { Refusal = "the posts are on the same spot"; Redraw(); return; }
 
             for (int i = 0; i + 1 < posts.Count; i++)
@@ -329,6 +342,21 @@ namespace SeaSick.UI
                 valid = false;
                 Refusal = why;
                 break;
+            }
+
+            // **The CLEAR-phase line, summed over the split.** Only worth
+            // asking once every piece has already passed `CanPlaceWall` --
+            // see `CampSiting.Evaluate`'s reasoning, same rule here.
+            if (valid && outpost != null)
+            {
+                int trees = 0, rocks = 0;
+                for (int i = 0; i + 1 < posts.Count; i++)
+                {
+                    outpost.CountObstructionsWall(posts[i], posts[i + 1], out int t, out int r);
+                    trees += t;
+                    rocks += r;
+                }
+                clearLine = CampSiting.FormatClearLine(trees, rocks);
             }
             Redraw();
         }
@@ -370,6 +398,11 @@ namespace SeaSick.UI
         public static void Confirm()
         {
             if (Mode != State.Stretching || !valid) return;
+            // One press, one confirm: IMGUI and Enter can both land on a
+            // frame, and a second ✓ in the same frame would site the fresh
+            // 2 m stub nobody aimed.
+            if (confirmedFrame == Time.frameCount) return;
+            confirmedFrame = Time.frameCount;
 
             for (int i = 0; i + 1 < posts.Count; i++)
             {
@@ -378,6 +411,20 @@ namespace SeaSick.UI
                 // run. Say it and stay in the run rather than dropping the
                 // player out with no explanation — the pieces already sited
                 // stand, which is exactly what ✕ would have left them as.
+                //
+                // **And the run carries on from the last piece that DID
+                // stand.** Leaving `a` on the first post after sited pieces
+                // is how the next line came to grow out of the start of the
+                // run (Kevin, 2026-09-23).
+                if (i > 0)
+                {
+                    confirmed++;
+                    Vector3 dd = new Vector3(posts[i].x - a.x, 0f, posts[i].z - a.z);
+                    if (dd.sqrMagnitude > 0.0001f) heading = dd.normalized;
+                    a = posts[i];
+                    plantedFrame = Time.frameCount;
+                    Evaluate();
+                }
                 Refusal = why;
                 valid = false;
                 Redraw();
@@ -438,13 +485,15 @@ namespace SeaSick.UI
                 return;
             }
 
+            bool withMiddle = CanCloseRing;
             switch (SitingButtons.Draw(ButtonsAt, valid, Refusal,
-                        CanCloseRing, "⭯"))
+                        withMiddle, "⭯"))
             {
                 case SitingButtons.Press.Cancel: Stop(); break;
                 case SitingButtons.Press.Rotate: CloseRing(); break;
                 case SitingButtons.Press.Confirm: Confirm(); break;
             }
+            if (valid) CampSiting.DrawClearLine(ButtonsAt, withMiddle ? 3 : 2, clearLine);
         }
 
         // =================================================================

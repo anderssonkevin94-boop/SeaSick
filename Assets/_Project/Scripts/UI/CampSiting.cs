@@ -9,9 +9,11 @@ namespace SeaSick.UI
     ///
     /// Kevin's flow, 2026-09-19: anchored at an island, you choose to make
     /// camp, and instead of a camp appearing you get a blueprint on the end of
-    /// your thumb. You put it somewhere within reach of the ship, it stays
-    /// there as a drawing, and the hands you leave behind build it. Kevin,
-    /// 2026-09-22: the reach is measured from the campfire once it stands.
+    /// your thumb. You put it where you like, it stays there as a drawing,
+    /// and the hands you leave behind walk up from the landing and build it.
+    /// Kevin, 2026-09-23: the town centre (the fire) goes ANYWHERE the
+    /// ground takes it -- no ring round the ship, no pre-made clearing --
+    /// and everything after it goes within `Outpost.TownRadius` of it.
     ///
     /// This is the interface half of that. It owns exactly three things — the
     /// preview ghost, the ring on the ground, and the tap — and it owns no
@@ -26,15 +28,15 @@ namespace SeaSick.UI
     /// put a camp is mostly looking at the island.
     public class CampSiting : MonoBehaviour
     {
-        /// **How far from the camp centre you may site something, metres.**
+        /// **How much ground the ARRIVAL shot frames round the ship, metres.**
         ///
-        /// Kevin's rule: only within a certain radius of the camp. When a camp
-        /// has been sited (HasCamp is true), the circle is drawn around the
-        /// campfire (CampCentre); otherwise it is drawn around the ship. The
-        /// number is a guess and wants a dial — the median island is 78 m in
-        /// radius and the default island shot holds 165 m of ground, so 80 m
-        /// from a campfire reaches a good part of a typical island without
-        /// letting you develop the far side of a big one.
+        /// Until 2026-09-23 this was also a siting rule (the first campfire
+        /// had to go inside it). Kevin: *"i want you to be able to choose
+        /// where you want on the island to build your town center"* -- so it
+        /// refuses nothing now. `AnchorController` still frames
+        /// `RingCentre`/`RingRadius` on arrival, which with no camp is this
+        /// much ground round the landing. The siting rule is
+        /// `Outpost.TownRadius`, round the town centre, once there is one.
         public static float SiteRadius = 80f;
 
         public static CampSiting Instance { get; private set; }
@@ -68,6 +70,42 @@ namespace SeaSick.UI
         /// The sheet prints this; the ghost's colour says the same thing
         /// faster.
         public static string Refusal { get; private set; } = "";
+
+        /// **"clears 4 trees, 1 rock" -- what a VALID spot costs in
+        /// clearing (2026-09-23, the CLEAR-phase contract).** Printed where
+        /// `Refusal` would otherwise be: the two never show at once, since
+        /// this is only computed once the spot has already passed
+        /// `Outpost.CanPlace`. Empty when the footprint stands clean.
+        public static string ClearLine { get; private set; } = "";
+
+        /// **"clears N trees, M rocks", singular/plural correct, or "" when
+        /// nothing stands in the way.** Shared with `WallSiting`, which sums
+        /// `Outpost.CountObstructionsWall` across a whole run before calling
+        /// this once.
+        public static string FormatClearLine(int trees, int rocks)
+        {
+            if (trees <= 0 && rocks <= 0) return "";
+            var parts = new System.Collections.Generic.List<string>(2);
+            if (trees > 0) parts.Add(trees == 1 ? "1 tree" : $"{trees} trees");
+            if (rocks > 0) parts.Add(rocks == 1 ? "1 rock" : $"{rocks} rocks");
+            return "clears " + string.Join(", ", parts);
+        }
+
+        /// **Draw the clear line in the same slot `SitingButtons.Draw` would
+        /// have put the refusal text in**, for a caller that does not own
+        /// that private layout. Only called while the spot is valid, so it
+        /// never collides with a refusal.
+        public static void DrawClearLine(Vector3 world, int buttonCount, string line)
+        {
+            if (string.IsNullOrEmpty(line)) return;
+            var row = SitingButtons.Cluster(world, buttonCount);
+            if (row.width <= 0f) return;
+            var r = new Rect(row.center.x - HudLayout.Unit * 9f,
+                row.yMax + SitingButtons.Gap * 0.5f,
+                HudLayout.Unit * 18f, HudLayout.Unit * 1.4f);
+            UITheme.Rect(r, UITheme.Panel);
+            GUI.Label(r, line, UITheme.Small2Centered);
+        }
 
         BuildPlan plan;
         Outpost outpost;
@@ -259,9 +297,12 @@ namespace SeaSick.UI
             if (cam != null && GroundPick.FromScreen(cam,
                     new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out Vector3 mid))
             {
+                // No town centre yet (or this IS it): anywhere goes, so the
+                // middle of the screen is the answer as it stands.
+                if (!HasRing) return mid;
                 var d = new Vector2(mid.x - c.x, mid.z - c.z);
-                if (d.magnitude <= SiteRadius * 0.95f) return mid;
-                d = d.normalized * (SiteRadius * 0.6f);
+                if (d.magnitude <= Outpost.TownRadius * 0.95f) return mid;
+                d = d.normalized * (Outpost.TownRadius * 0.6f);
                 return OnGround(c.x + d.x, c.z + d.y);
             }
             return c;
@@ -366,6 +407,7 @@ namespace SeaSick.UI
             if (outpost != null) outpost.IgnoreSite = null;
             outpost = null;
             Refusal = "";
+            ClearLine = "";
             valid = false;
             if (ghost != null) { Destroy(ghost); ghost = null; }
             if (ring != null) { Destroy(ring.gameObject); ring = null; }
@@ -455,7 +497,7 @@ namespace SeaSick.UI
                 // picked; then the snap, which replaces `at` with the pier's
                 // centre and decides yaw and length.
                 valid = false;
-                if (!TooFar(want, out why))
+                if (!outpost.TooFarFromTown(plan, want, out why))
                 {
                     bool snapped = outpost.SnapPier(want, out Vector3 centre,
                         out snappedYaw, out sited, out why);
@@ -471,6 +513,18 @@ namespace SeaSick.UI
             // about the same rectangle on the same ground.
 
             Refusal = why;
+
+            // **The CLEAR-phase line (2026-09-23).** Only worth asking once
+            // the spot has already passed `CanPlace` -- a refused ghost is
+            // already saying why in `Refusal`, and a count of trees on
+            // ground the player cannot build on would just be noise under
+            // the same red ✕.
+            ClearLine = "";
+            if (valid && outpost != null)
+            {
+                outpost.CountObstructions(sited, at, Yaw, out int trees, out int rocks);
+                ClearLine = FormatClearLine(trees, rocks);
+            }
 
             Place(at);
             ShowGhost(true);
@@ -524,6 +578,7 @@ namespace SeaSick.UI
                 case SitingButtons.Press.Rotate: Turn(false); Evaluate(); break;
                 case SitingButtons.Press.Confirm: Commit(); break;
             }
+            if (valid) DrawClearLine(at, 3, ClearLine);
         }
 
         /// **Drop the view on to what was just sited**: Kevin's call, 35 m
@@ -549,12 +604,21 @@ namespace SeaSick.UI
         {
             // The ring first: it is the rule the player can SEE, so it should
             // be the reason they are given when both are broken.
-            if (TooFar(p, out why)) return false;
+            if (outpost.TooFarFromTown(plan, p, out why)) return false;
             return outpost.CanPlace(plan, p, Yaw, out why);
         }
 
-        /// The centre of the siting circle: the campfire if a camp stands, else the ship.
-        Vector3 Centre() => RingCentre(outpost, ship);
+        /// The town centre once one is sited (fire or its blueprint), else
+        /// the ship -- which with no ring only seeds where the ghost starts.
+        Vector3 Centre()
+            => outpost != null && outpost.HasCampCentre ? outpost.CampCentre
+             : ship != null ? ship.position : Vector3.zero;
+
+        /// **Is there a reach to draw?** Only once the town centre is down,
+        /// and never while siting (or moving) the town centre itself -- the
+        /// same two conditions `Outpost.TooFarFromTown` refuses on.
+        bool HasRing => outpost != null && outpost.HasCampCentre
+                        && plan.kind != BuildKind.Fire && plan.kind != BuildKind.Pier;
 
         /// **The siting ring, for anything that has to AGREE with it.**
         ///
@@ -574,23 +638,9 @@ namespace SeaSick.UI
             return outpost != null ? outpost.CampCentre : Vector3.zero;
         }
 
-        /// ...and how wide it is. Same number `TooFar` refuses on.
+        /// ...and how wide the arrival shot frames round it. Since 2026-09-23
+        /// this refuses nothing: see `SiteRadius` and `Outpost.TownRadius`.
         public static float RingRadius => SiteRadius;
-
-        bool TooFar(Vector3 p, out string why)
-        {
-            Vector3 c = Centre();
-            float d = Vector3.Distance(
-                new Vector3(p.x, 0f, p.z), new Vector3(c.x, 0f, c.z));
-            if (d > SiteRadius)
-            {
-                string from = outpost != null && outpost.HasCamp ? "camp" : "ship";
-                why = $"too far from the {from} ({d:F0} m of {SiteRadius:F0})";
-                return true;
-            }
-            why = "";
-            return false;
-        }
 
         void Place(Vector3 p)
         {
@@ -621,8 +671,11 @@ namespace SeaSick.UI
             if (ghost != null && ghost.activeSelf != on) ghost.SetActive(on);
         }
 
-        /// The ring on the ground round the camp centre: the reach, drawn where the
-        /// decision is being made rather than written in the sheet.
+        /// The ring on the ground round the town centre: the reach, drawn where the
+        /// decision is being made rather than written in the sheet. Faint on
+        /// purpose (2026-09-23) -- it is a hint about the rule, and the ghost's
+        /// red and the refusal line are what say no. None before the town
+        /// centre is sited: there is no reach to show.
         ///
         /// Sampled against the height field so it climbs the beach instead of
         /// slicing through it, and built ONCE — she is anchored, so it does
@@ -630,16 +683,17 @@ namespace SeaSick.UI
         /// not a thing to spend on a circle.
         void BuildRing()
         {
+            if (!HasRing) return;
             var go = new GameObject("SiteRing");
             go.transform.SetParent(transform, false);
             ring = go.AddComponent<LineRenderer>();
             ring.useWorldSpace = true;
             ring.loop = true;
-            ring.widthMultiplier = 1.1f;
+            ring.widthMultiplier = 0.6f;
             ring.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             ring.receiveShadows = false;
             ring.material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-            ring.material.SetColor("_BaseColor", new Color(0.62f, 0.78f, 0.92f, 0.6f));
+            ring.material.SetColor("_BaseColor", new Color(0.74f, 0.83f, 0.90f, 1f));
 
             const int Segments = 96;
             ring.positionCount = Segments;
@@ -648,8 +702,8 @@ namespace SeaSick.UI
             for (int i = 0; i < Segments; i++)
             {
                 float a = i * Mathf.PI * 2f / Segments;
-                float x = c.x + Mathf.Cos(a) * SiteRadius;
-                float z = c.z + Mathf.Sin(a) * SiteRadius;
+                float x = c.x + Mathf.Cos(a) * Outpost.TownRadius;
+                float z = c.z + Mathf.Sin(a) * Outpost.TownRadius;
                 // Over water the field returns sea bed, so the ring would
                 // disappear under the sea for most of its length. Clamp it to
                 // just above sea level, which is where the player is looking

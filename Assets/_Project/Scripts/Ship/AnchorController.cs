@@ -485,6 +485,11 @@ namespace SeaSick.Ship
         /// backing off so far that the shore stops reading.
         const float ringMargin = 1.15f;
 
+        /// Metres round the ship a campless landing frames (2026-09-23).
+        /// Close enough to see the crew come down the gangway; the player
+        /// pans inland from there to choose the town centre.
+        const float LandingFrameRadius = 30f;
+
         /// While the crew are ashore, pull the camera back to frame them —
         /// otherwise they wander out of shot and the player misses the work.
         void UpdateCameraFocus()
@@ -606,9 +611,20 @@ namespace SeaSick.Ship
                 Vector3 ringAt = SeaSick.UI.CampSiting.RingCentre(outpost, transform);
                 float ringR = SeaSick.UI.CampSiting.RingRadius;
 
+                // **2026-09-23, Kevin on the phone: "when debarking it zooms
+                // out to reveal essentially the entire island. this is too far
+                // zoomed back."** The ring above is gone as a RULE (the town
+                // centre can go anywhere since today), so framing all 80 m of
+                // it -- ~400 m of ground on a portrait screen -- framed a
+                // constraint that no longer exists. A campless landing now
+                // looks at the ship and a little ground round her, and the
+                // player pans inland to choose; a camp is framed on the TOWN
+                // (`CampCentre`, not the survey's `ClearingCentre`, which the
+                // town no longer has to be anywhere near) at its build reach.
+                ringR = LandingFrameRadius;
                 Vector3 aim = camp
-                    ? (outpost != null && outpost.Sited
-                        ? outpost.ClearingCentre
+                    ? (outpost != null && outpost.HasCampCentre
+                        ? outpost.CampCentre
                         : CurrentIsland.transform.position)
                     : ringAt;
 
@@ -627,8 +643,10 @@ namespace SeaSick.Ship
                 var settle = CurrentIsland.GetComponent<Settlement>();
                 float reach = !camp
                     ? ringR
-                    : (settle != null ? settle.ViewRadius
-                                      : Mathf.Max(70f, CurrentIsland.Radius));
+                    : outpost != null && outpost.HasCampCentre
+                        ? Outpost.TownRadius
+                        : (settle != null ? settle.ViewRadius
+                                          : Mathf.Max(70f, CurrentIsland.Radius));
 
                 // The zoom that holds the whole ring, on the NARROW axis of
                 // whatever shape the window is. On a phone that is the width,

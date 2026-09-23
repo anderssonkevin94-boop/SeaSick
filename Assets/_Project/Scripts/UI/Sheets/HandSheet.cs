@@ -211,9 +211,20 @@ namespace SeaSick.UI.Sheets
         /// The mood word and, where the ledger knows one, what caused it.
         /// Nothing here decides a mood: `OutpostHand.MoodWord`, `hungerDays`
         /// and `raids` are the ledger's own, and this only reads them out.
+        ///
+        /// **A hunter stood down by his own empty hands says so here,
+        /// 2026-09-23.** He is still ORDERED to hunt -- the gather verb
+        /// above only refuses a NEW order -- so his status line is the one
+        /// place left that tells you why nothing is coming home.
         static string Mood(OutpostLedger l, OutpostHand h)
         {
             string word = h.MoodWord;
+            if (h.order == OutpostOrder.Gather && h.target == Res.Game)
+            {
+                string blocker = l.HunterBlocker();
+                if (blocker != null)
+                    return (word.Length == 0 ? "content" : word) + " · " + blocker;
+            }
             if (word.Length == 0) return "content";
             if (l.Hungry) return word + " · the food pile is empty";
             if (l.hungerDays > 0.05f)
@@ -263,6 +274,12 @@ namespace SeaSick.UI.Sheets
             // `Outpost.OrderGather` (CampCrewList.cs:198). A worked-out stock
             // is still listed: an empty seam is information, and hiding it
             // would look like the menu was broken.
+            //
+            // **The hunt is a hard gate, 2026-09-23.** Kevin: "no spear, no
+            // kills." `Res.Game` is gathering like any other seam except a
+            // hunter needs one in the pile first (`OutpostLedger.HunterBlocker`),
+            // so its row says so and refuses the order rather than sending
+            // somebody out to throw their hands at a boar.
             orders.Add(SheetKit.EyebrowPx, () => SheetKit.Eyebrow("send out for"));
             foreach (var res in outpost.Gatherable())
             {
@@ -271,11 +288,20 @@ namespace SeaSick.UI.Sheets
                 {
                     var led = outpost.Ledger;
                     var hand = Hand;
-                    var stock = led != null ? led.Stock(r) : null;
-                    float standing = stock != null ? stock.standing : 0f;
-                    string tail = standing < 1f
-                        ? " — worked out"
-                        : $" — {(led != null ? led.CountOf(r) : 0)}/{(led != null ? led.ceilingPer : 0)} kept";
+                    string blocker = r == Res.Game && led != null ? led.HunterBlocker() : null;
+                    string tail;
+                    if (blocker != null)
+                    {
+                        tail = $" — {blocker} — the forge makes one from a board and a stone";
+                    }
+                    else
+                    {
+                        var stock = led != null ? led.Stock(r) : null;
+                        float standing = stock != null ? stock.standing : 0f;
+                        tail = standing < 1f
+                            ? " — worked out"
+                            : $" — {(led != null ? led.CountOf(r) : 0)}/{(led != null ? led.ceilingPer : 0)} kept";
+                    }
                     bool already = hand != null && hand.order == OutpostOrder.Gather
                                    && hand.target == r;
                     var b = SheetKit.Btn(CampLoading.Lower(r) + tail, () =>
@@ -283,7 +309,7 @@ namespace SeaSick.UI.Sheets
                         outpost.OrderGather(Hand, r);
                         Dirty();
                     }, false, true);
-                    b.SetEnabled(!already);
+                    b.SetEnabled(!already && blocker == null);
                     b.style.marginBottom = 4f;
                     return b;
                 });

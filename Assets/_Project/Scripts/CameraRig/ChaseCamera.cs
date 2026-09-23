@@ -383,7 +383,7 @@ namespace SeaSick.CameraRig
         [Tooltip("Metres of ground across the frame's HEIGHT. This is the zoom, expressed so it stays the same picture whatever the lens and the screen are: 165 m puts a crew member at about 1% of screen height. Chosen by hand with DockCamTuner.")]
         [SerializeField] float overviewGroundMetres = 165f;
         [Tooltip("Seconds-ish to rise into the overview and to come back down.")]
-        [SerializeField] float overviewResponse = 0.7f;
+        [SerializeField] float overviewResponse = 2f;
 
         [Tooltip("Back the overview off far enough that the ship is always in the frame, at the aspect the game is actually running. The authored zoom is kept whenever it already holds her, so this changes nothing until it has to.")]
         [SerializeField] bool overviewHoldsShip = true;
