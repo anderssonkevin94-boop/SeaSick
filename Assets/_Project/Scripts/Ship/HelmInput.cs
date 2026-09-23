@@ -7,44 +7,72 @@ namespace SeaSick.Ship
 {
     /// The helm. WASD at a desk, ONE THUMB on a phone.
     ///
-    /// Touch is a single gesture zone — the wheel at bottom centre (see
-    /// `TouchHelm`). Swipe across it to steer and it rubber-bands back to
-    /// midships when you let go; swipe up and down to ring the telegraph
-    /// through its notches, full astern to burn. Kevin, 2026-09-22:
-    /// *"swipe up to speed up, swipe down to slow down. bottom of the slow
-    /// down tier is reverse and top of the swipe up tier is burn for extra
-    /// speed. swiping left and right is steering where it snaps / rubber
-    /// bands back to center when you let go."*
+    /// Touch is a floating stick (see `TouchHelm`): put a thumb down anywhere
+    /// in the lower half of the screen and drag. The DIRECTION is the world
+    /// heading she's ordered to steer for; the DISTANCE is the throttle,
+    /// continuous from stop out to full ahead and, past the rim, into the
+    /// burn tier. Let go and she KEEPS doing it — hands-free cruising — until
+    /// the next touch changes the order. A tap (short, barely moved) rings
+    /// the telegraph to stop without letting go of the heading. Dragging
+    /// behind her while nearly stopped orders astern instead of a heading
+    /// change; behind her while still making way just asks her to come
+    /// about.
     ///
-    /// That replaced a wheel that HELD its angle and a latching lever beside
-    /// it: holding is right for a ship and wrong for a phone — every turn had
-    /// to be unwound by hand, and picking a speed took the second thumb at
-    /// exactly the moment the first one was busy.
+    /// Replaces the axis-locked swipe wheel (2026-09-22), which rubber-banded
+    /// the rudder back to midships on release and stepped the telegraph
+    /// through notches on a flick. Kevin, same day, on THAT control: "slow,
+    /// uneventful, not responsive." Holding a course is what a real helm
+    /// does; a phone thumb can't hold anything and steer at the same time, so
+    /// this control holds the course FOR you and gives the thumb back.
     ///
-    /// W and S drive: hold for ahead or astern, release and the notch takes
-    /// back over. A and D steer, and while either is held the wheel is drawn
-    /// over to show it; release and the same rubber band brings her back.
+    /// W/S still drive directly (held, not an order that survives release)
+    /// and A/D still steer directly, both straight through to the rudder —
+    /// the desktop override, not a second version of the touch policy. A/D
+    /// also clear the heading target, so letting go of the key doesn't snap
+    /// her back toward a stale course.
     ///
-    /// This class owns the POLICY: the gesture gives an ORDER, and the rudder
-    /// is eased toward it at `engageSpeed` while a finger (or a key) is on it
-    /// and walked home at `recenterSpeed` when nothing is. She keeps whatever
-    /// heading she has when it centres — there is no auto-heading here.
+    /// ## This class owns the POLICY
+    ///
+    /// `TouchHelm` turns one finger into a world heading, a distance and a
+    /// tap; this class decides what they mean (the throttle curve, the
+    /// astern/come-about split) and runs the heading autopilot: a Kp/Kd
+    /// controller on heading error and yaw rate, eased into the rudder so it
+    /// settles instead of hunting.
     [RequireComponent(typeof(ShipMotor))]
     public class HelmInput : MonoBehaviour
     {
-        [Tooltip("Rudder units/s toward the order. 2.0 = about half a second from midships to hard over, which is a steering GEAR rather than a switch: the boat's head starts to come round after the wheel is over, not with it. Was 3.5 (0.29 s) until the phone read as whiplash (Kevin, 2026-09-22).")]
-        [SerializeField] float engageSpeed = 2.0f;   // rudder units/s toward the order
-        [Tooltip("Rudder units/s back to midships once nothing is steering. Slower than the engage rate on purpose: the band should be felt letting go, not snapping.")]
-        [SerializeField] float recenterSpeed = 1.5f;
+        [Header("Heading autopilot")]
+        [Tooltip("Rudder order per degree of heading error. Default (1/25) puts full rudder at the same ~25 degrees the old hard-over lived at. UNTESTED ON DEVICE — first thing to hand-tune against the real hull.")]
+        [SerializeField] float steerKp = 0.04f;
+        [Tooltip("Rudder order per degree/second of yaw rate, SUBTRACTED from the Kp term so the turn brakes itself into the target heading instead of swinging past it and hunting back. UNTESTED — raise it if she oscillates around a course, lower it if she is sluggish to settle.")]
+        [SerializeField] float steerKd = 0.02f;
+        [Tooltip("Rudder units/s the autopilot's OUTPUT is eased at, same job engageSpeed did for the old wheel: turns the Kp/Kd command into a gear change rather than a switch.")]
+        [SerializeField] float rudderEaseSpeed = 3.5f;
         [SerializeField, Range(-1f, 1f)] float testRudder = 0f; // editor/testing override
+
+        [Header("Floating stick")]
+        [Tooltip("Distance past the ring's rim, as a fraction of its radius, at which the order reaches full burn. 1.0 = the rim itself; between 1.0 and this the order ramps from full ahead into burn.")]
+        [SerializeField] float burnEngageFrac = 1.10f;
+        [Tooltip("Below this speed (m/s) a drag pointed behind her orders astern. At or above it the same drag just asks her to come about — she has to be nearly stopped to back down.")]
+        [SerializeField] float asternSpeedThreshold = 1.5f;
+        [Tooltip("Degrees off her CURRENT heading a drag has to point before it counts as behind her rather than a wide turn.")]
+        [SerializeField] float asternAngleThreshold = 135f;
 
         ShipMotor motor;
         Breakers breakers;
-        float rudder;
 
-        /// The wheel. A plain object, not a component: it has no
-        /// lifetime of its own and nothing else should be able to find it.
+        /// The stick. A plain object, not a component: it has no lifetime of
+        /// its own and nothing else should be able to find it.
         readonly TouchHelm helm = new TouchHelm();
+
+        // --- policy state, held across frames so letting go keeps ordering it ---
+        float targetHeadingDeg;
+        bool hasTarget;
+        float throttleOrder;
+        bool astern;
+        float rudder;
+        float prevHeadingDeg;
+        bool prevHeadingValid;
 
         // IMGUI runs OnGUI once per EVENT, so a string built here is built
         // several times a frame — Layout, Repaint, and one more for every
@@ -72,7 +100,7 @@ namespace SeaSick.Ship
         void Update()
         {
             // **Not while the island view is up.** She is anchored whenever
-            // that view is engaged, so nothing moves -- but the wheel would
+            // that view is engaged, so nothing moves -- but the stick would
             // still take a drag meant for the ground (siting a building,
             // pressing on a crewman) and HOLD it, and she would sail off it
             // the moment the view closed. The same reason the arrows and WASD
@@ -81,22 +109,21 @@ namespace SeaSick.Ship
             bool ashore = SeaSick.CameraRig.IslandCam.Engaged;
             helm.Sample(!ashore);
 
-            float target = helm.Rudder;
-            // Is anything actively ASKING for helm? That, not the value, picks
-            // the rate: an order of zero with a thumb still on the wheel is
-            // "midships now", an order of zero with nothing on it is the band
-            // pulling her back.
-            bool held = helm.Steering;
-            float? drive = null;
+            if (!ashore) ReadStick();
 
             var kb = Keyboard.current;
+            bool manualSteer = false;
+            float manualRudder = 0f;
+            float? drive = null;
+
             if (kb != null && !ashore)
             {
                 // A held key OVERRIDES the gesture and hands it straight back
-                // on release -- and release means the same rubber band, so
-                // letting go of D is letting go of the wheel.
-                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) { target = -1f; held = true; }
-                else if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) { target = 1f; held = true; }
+                // on release. Unlike the old rubber band there is nothing to
+                // hand back TO here except a stale course, so releasing the
+                // key hands back whatever heading she is on at that instant.
+                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) { manualRudder = -1f; manualSteer = true; }
+                else if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) { manualRudder = 1f; manualSteer = true; }
 
                 if (kb.wKey.isPressed || kb.upArrowKey.isPressed) drive = 1f;
                 else if (kb.sKey.isPressed || kb.downArrowKey.isPressed) drive = -1f;
@@ -104,22 +131,123 @@ namespace SeaSick.Ship
                 if (kb.rKey.wasPressedThisFrame) motor.Rowing = !motor.Rowing;
             }
 
-            if (!Mathf.Approximately(testRudder, 0f)) { target = testRudder; held = true; }
+            if (!Mathf.Approximately(testRudder, 0f)) { manualRudder = testRudder; manualSteer = true; }
 
-            rudder = Mathf.MoveTowards(rudder, target,
-                (held ? engageSpeed : recenterSpeed) * Time.deltaTime);
+            float rudderTarget;
+            if (manualSteer)
+            {
+                rudderTarget = manualRudder;
+                targetHeadingDeg = motor.Heading;
+                hasTarget = true;
+            }
+            else if (!hasTarget)
+            {
+                rudderTarget = 0f;
+            }
+            else
+            {
+                // Kp on the heading error, Kd on the yaw rate (negated: it
+                // BRAKES the turn rather than chasing the error), full rudder
+                // saturating past the error a real helm would already be hard
+                // over at. `DeltaAngle` keeps the error signed and wrapped, so
+                // a target 179 degrees away doesn't fight itself over which
+                // way is shorter.
+                float err = Mathf.DeltaAngle(motor.Heading, targetHeadingDeg);
+                float yawRate = 0f;
+                float dt = Time.deltaTime;
+                if (prevHeadingValid && dt > 1e-5f)
+                    yawRate = Mathf.DeltaAngle(prevHeadingDeg, motor.Heading) / dt;
+
+                float steer = steerKp * err + steerKd * -yawRate;
+                steer = Mathf.Clamp(steer, -1f, 1f);
+                // Going astern, the same rudder swings the stern the other
+                // way relative to the bow's heading error, so the correction
+                // has to flip with it.
+                if (astern) steer = -steer;
+                rudderTarget = steer;
+            }
+
+            prevHeadingDeg = motor.Heading;
+            prevHeadingValid = true;
+
+            rudder = Mathf.MoveTowards(rudder, rudderTarget, rudderEaseSpeed * Time.deltaTime);
             motor.Rudder = rudder;
-            // The wheel is drawn at the REAL rudder, so the band unwinding is
-            // visible and a held key reads honestly.
-            helm.ShownRudder = rudder;
 
-            // How far past "full ahead" the burn notch reaches belongs to the
-            // hull, not to the control.
-            helm.BurnOrder = motor.Overdrive;
             // The engine's ramp in ShipMotor does the smoothing, and the
             // crew's condition sets how fast it ramps -- an order is still
             // only as good as whoever is below to answer it.
-            motor.ThrottleOrder = drive ?? helm.Throttle;
+            motor.ThrottleOrder = drive ?? throttleOrder;
+        }
+
+        /// Reads the floating stick and turns it into the policy this frame:
+        /// a held world heading, a continuous throttle order, and whether
+        /// she's being asked to back down rather than steer.
+        ///
+        /// Nothing here runs while a finger isn't on the stick — the whole
+        /// point of "hands-free cruising" is that `targetHeadingDeg` and
+        /// `throttleOrder` simply keep their last value until the next touch.
+        void ReadStick()
+        {
+            if (helm.Tapped)
+            {
+                // Ring down to stop without letting go of the course.
+                throttleOrder = 0f;
+                astern = false;
+                return;
+            }
+
+            if (!helm.Dragging) return;
+
+            if (helm.DragDistance01 < TouchHelm.DeadZoneFrac)
+            {
+                throttleOrder = 0f;
+                astern = false;
+                return;
+            }
+
+            float mag01 = Mathf.Clamp01(
+                (helm.DragDistance01 - TouchHelm.DeadZoneFrac) / (1f - TouchHelm.DeadZoneFrac));
+
+            bool pointsAstern = helm.HasDragDirection
+                && Mathf.Abs(Mathf.DeltaAngle(motor.Heading, helm.DragHeadingDeg)) > asternAngleThreshold
+                && motor.CurrentSpeed < asternSpeedThreshold;
+
+            if (pointsAstern)
+            {
+                astern = true;
+                throttleOrder = -mag01; // ShipMotor clamps the order to -1 anyway
+                // "Don't spin her": while backing, the held heading just
+                // tracks whatever she's doing right now, so the autopilot's
+                // error stays near zero and only the astern-flipped Kd term
+                // is left doing any correcting.
+                targetHeadingDeg = motor.Heading;
+                hasTarget = true;
+            }
+            else
+            {
+                astern = false;
+                if (helm.HasDragDirection)
+                {
+                    targetHeadingDeg = helm.DragHeadingDeg;
+                    hasTarget = true;
+                }
+                throttleOrder = ThrottleFromDistance(helm.DragDistance01);
+            }
+        }
+
+        /// 0 at the dead zone's edge to 1 at the rim, then a ramp from 1 up
+        /// to `motor.Overdrive` between the rim and `burnEngageFrac` — past
+        /// that the order clamps at full burn, which is what "the knob
+        /// clamps at the rim, with a visible burn state" means in practice:
+        /// the drawn knob stops moving but the order it stands for keeps
+        /// climbing until burn is fully engaged.
+        float ThrottleFromDistance(float distFrac)
+        {
+            const float Dz = TouchHelm.DeadZoneFrac;
+            if (distFrac < Dz) return 0f;
+            if (distFrac <= 1f) return Mathf.Clamp01((distFrac - Dz) / (1f - Dz));
+            float burnT = Mathf.InverseLerp(1f, burnEngageFrac, distFrac);
+            return Mathf.Lerp(1f, motor.Overdrive, Mathf.Clamp01(burnT));
         }
 
         /// What she is being asked to do RIGHT NOW, which is the held key if
@@ -159,13 +287,18 @@ namespace SeaSick.Ship
             return orderText;
         }
 
-        /// Ring down STOP from outside, and put the wheel amidships.
-        ///
-        /// The notch is re-asserted into `motor.ThrottleOrder` every Update,
-        /// so anything that wants her stopped has to move the CONTROL, not the
-        /// value the control produces — writing the value lasts exactly one
-        /// frame and then the helm quietly puts it back.
-        public void AllStop() { helm.Centre(); rudder = 0f; }
+        /// Ring down STOP from outside, and drop whatever gesture is in
+        /// progress. The notch is re-asserted into `motor.ThrottleOrder`
+        /// every Update, so anything that wants her stopped has to move the
+        /// CONTROL, not the value the control produces — writing the value
+        /// lasts exactly one frame and then the helm quietly puts it back.
+        public void AllStop()
+        {
+            helm.CancelDrag();
+            throttleOrder = 0f;
+            astern = false;
+            rudder = 0f;
+        }
 
         /// **Hook, not a mechanic.** How hard the burn notch is eating wood
         /// right now, 0 when she is not burning. Nothing consumes it yet.
@@ -176,17 +309,18 @@ namespace SeaSick.Ship
         void OnGUI()
         {
             // The helm is not on screen while she lies at a camp: the island
-            // sheet docks to the bottom of a portrait phone and the wheel
+            // sheet docks to the bottom of a portrait phone and the stick
             // would be drawn under it, on a ship that is anchored anyway.
             if (SeaSick.CameraRig.IslandCam.Engaged) return;
 
             int u = HudLayout.Unit;
 
-            // The wheel and the lever, bottom centre where a thumb is. They
-            // place themselves (`HudLayout.Slot.Wheel`) and claim their own
-            // rects with `UIBlocker`, so a tap on the helm never reaches the
-            // water underneath it.
-            helm.Draw(OrderText(), motor.Burning);
+            // The stick and its readout, bottom of the screen where a thumb
+            // is. They place themselves (`HudLayout.Slot.Wheel`) and claim
+            // their own rects with `UIBlocker`, so a tap on the helm never
+            // reaches the water underneath it.
+            helm.Draw(targetHeadingDeg, hasTarget, throttleOrder, astern, motor.Burning,
+                motor.Heading, OrderText());
 
             // --- Point of sail: the readout that teaches the whole system ---
             float panelW = u * 10f;
@@ -238,7 +372,7 @@ namespace SeaSick.Ship
 
             // Astern fills the same bar backwards from a centre mark, so
             // which way she is being driven reads without being read. It is
-            // the ACHIEVED throttle; the order is on the notch ladder.
+            // the ACHIEVED throttle; the order is on the stick's own readout.
             var barRect = new Rect(px + u * 0.6f, py + u * 2.65f, panelW - u * 1.2f, u * 0.22f);
             float t = Mathf.Clamp(motor.Throttle, -1f, 1f);
             float mid = barRect.x + barRect.width * 0.32f;

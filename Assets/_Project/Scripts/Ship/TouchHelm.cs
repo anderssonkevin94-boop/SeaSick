@@ -5,162 +5,121 @@ using ET = UnityEngine.InputSystem.EnhancedTouch;
 
 namespace SeaSick.Ship
 {
-    /// **One wheel, one thumb: swipe across to steer, swipe up and down to
-    /// change speed.**
+    /// **Floating stick, point her where you want to go.**
     ///
-    /// Kevin, 2026-09-22, after playing the wheel-and-lever version on the
-    /// phone: *"swipe up to speed up, swipe down to slow down. bottom of the
-    /// slow down tier is reverse and top of the swipe up tier is burn for
-    /// extra speed. swiping left and right is steering where it snaps /
-    /// rubber bands back to center when you let go."* Ideal: playable with
-    /// one hand.
+    /// Replaces the axis-locked swipe wheel (2026-09-22): Kevin played that
+    /// version and called it "slow, uneventful, not responsive" — a rubber-
+    /// banding rudder that snapped back the moment you let go, and a
+    /// telegraph that only moved in discrete steps on a flick. This control
+    /// is the opposite of both: put a thumb down anywhere in the lower half
+    /// of the screen and a stick appears under it; the DIRECTION you drag is
+    /// the heading you want her pointed, the DISTANCE is how hard, and she
+    /// keeps doing it after you let go. One thumb sets a course and a speed
+    /// in one gesture and then is free.
     ///
-    /// What that replaced, and why: the wheel you turned by dragging round
-    /// the hub HELD its angle, so every turn had to be unwound by hand, and
-    /// the telegraph lever beside it meant choosing a speed with a second
-    /// thumb while the first one was busy keeping her off a rock. Holding is
-    /// right for a ship and wrong for a phone.
+    /// ## This class owns the gesture, not the policy
     ///
-    /// ## One gesture zone, axis-locked
+    /// `TouchHelm` turns one finger into three numbers — `DragHeadingDeg` (a
+    /// WORLD heading, camera-independent), `DragDistance01` (how far out of
+    /// the dead zone, unclamped so past-the-rim is visible), and `Tapped` (a
+    /// stop order) — and draws the stick. `HelmInput` decides what those mean
+    /// (astern vs. come-about, the throttle curve, the Kp/Kd heading
+    /// autopilot) and is the thing with `Update()`.
     ///
-    /// A touch that lands on the wheel is undecided until it has moved
-    /// `AxisLockPx`; the axis it moved further along then owns it until the
-    /// finger lifts. No diagonal ever does two things at once, and a tap that
-    /// never moves does nothing at all.
+    /// ## Camera-relative, frozen at touch-down
     ///
-    /// * **Across = rudder.** The order is the finger's x offset from where it
-    ///   went DOWN — not from the hub — so grabbing anywhere on the wheel
-    ///   works, and full helm is about one wheel-radius of travel. On release
-    ///   the order goes to zero and `HelmInput` eases the real rudder back:
-    ///   the rubber band. She keeps whatever heading she has when it centres;
-    ///   there is no auto-heading anywhere in here.
-    /// * **Up/down = telegraph notches.** Travel accumulates and steps one
-    ///   notch every `NotchTravelPx`, rebasing each time, so a flick steps one
-    ///   and a long drag steps several without ever being a continuous slider.
+    /// "Screen up" has to mean something in the WORLD, and the chase camera
+    /// rotates with the ship (`ChaseCamera`), so screen-up can't be read once
+    /// and reused — holding the stick "up" while she comes round would have
+    /// the camera's up rotate with her and the ship chase her own tail
+    /// forever. The camera's flattened forward/right are captured the
+    /// instant the thumb goes down and used for the whole drag; the heading
+    /// that comes out is a plain world-space number from then on, so once the
+    /// thumb lifts nothing about it depends on the camera any more.
     ///
-    /// ## It owns the gesture, not the policy
+    /// ## Multitouch, keyed by touch id — and released without trusting the
+    /// phase
     ///
-    /// This class turns one finger into two numbers — `Rudder` in [-1,1] and
-    /// `Throttle` (a notch order, up to `BurnOrder` above 1) — and draws them.
-    /// `HelmInput` decides what they mean, eases the rudder, and lets a held
-    /// key override either.
-    ///
-    /// ## Multitouch, keyed by touch id
-    ///
-    /// The wheel remembers the TOUCH ID that grabbed it and ignores every
-    /// other contact until that id lifts, so a second finger anywhere else on
-    /// the glass cannot disturb a turn in progress. A touch that vanishes
-    /// without an Ended phase (app switch, palm rejection) is released by the
-    /// not-seen-this-frame sweep rather than by trusting the phase.
-    ///
-    /// `Pointer.current` stays as the editor mouse fallback, and is only
-    /// consulted when there are no touches at all.
+    /// Same discipline as the old wheel: the stick remembers the touch id
+    /// that grabbed it and ignores every other contact, and a touch that
+    /// vanishes without an `Ended` phase (app switch, palm rejection) is
+    /// still released by the not-seen-this-frame sweep. `Pointer.current` is
+    /// the editor/desktop mouse fallback, consulted only when the glass is
+    /// empty.
     public sealed class TouchHelm
     {
-        // --- geometry, in HudLayout units -----------------------------------
-        /// The one size tunable. Diameter: big enough to find with a thumb.
-        const float WheelD = 10f;
-        const float LadderW = 1.2f;  // the notch ladder beside the wheel
-        const float LadderH = 6.0f;
-        const float ColGap = 0.8f;
-        const float LabelH = 1.3f;   // the order readout, above the wheel
+        // --- gesture geometry, all in SCREEN PIXELS -------------------------
 
-        // --- gesture constants, in SCREEN PIXELS ----------------------------
-        // Kept in the same space as the wheel's own radius (u * WheelD / 2,
-        // which is 100 px at the unit size every phone and desktop window this
-        // game runs at resolves to), so a gesture distance and a drawn
-        // distance mean the same thing.
-
-        /// How far a finger must travel before the gesture commits to an axis.
-        const float AxisLockPx = 12f;
-        /// Travel along the locked vertical axis that rings the telegraph on
-        /// one notch. A flick is one; 200 px is three.
-        const float NotchTravelPx = 55f;
-        /// Full rudder at this fraction of the wheel's radius of sideways
-        /// travel, measured from the touch-down point.
-        ///
-        /// Kevin, 2026-09-22, on the phone: *"the turning radius is way too
-        /// sharp on this ship … I want freedom to move without getting
-        /// whiplash."* Hard over used to arrive in 0.9 radius ≈ 90 px, which
-        /// is less than a thumb's idle wobble, so every correction was a full
-        /// helm order. 1.3 radius ≈ 130 px is a deliberate swipe.
-        const float RudderTravelFrac = 1.3f;
-        /// Shaping exponent on the travel→order curve. 1 is linear; above 1
-        /// the first quarter of the swipe is gentle and the last quarter is
-        /// where the hard-over lives, so small course corrections have room
-        /// to be small. |x|^1.6 gives a quarter of the travel ~1/8 of the
-        /// helm. The PHYSICS is fixed separately (rudder area, yaw added
-        /// inertia, yaw damping in the steamer's hull) — this only decides
-        /// how much of it one thumb asks for.
-        const float RudderCurve = 1.6f;
-        /// How far past the rim still counts as a grab — a thumb pad is wide
-        /// and the rim is where the grip is.
-        const float GrabFrac = 1.18f;
-        /// The gesture zone is the whole lower part of the screen, not just
-        /// the wheel (Kevin, 2026-09-22, phone: "the steering needs to be
-        /// applicable on the whole bottom half of the screen, it's way too
-        /// small of an area right now"). The wheel is the picture of the
-        /// helm; a thumb anywhere below this fraction of the screen height
-        /// that is not on another control is on the helm.
+        /// The gesture zone is the whole lower half of the screen (Kevin,
+        /// 2026-09-22: "the steering needs to be applicable on the whole
+        /// bottom half of the screen"), minus whatever another control has
+        /// already claimed with `UIBlocker`.
         const float ZoneFrac = 0.5f;
-        /// Degrees the DRAWN wheel turns at full rudder. Purely visual.
-        const float MaxWheelDeg = 120f;
-
-        // --- the telegraph ---------------------------------------------------
-        /// Bottom to top: full astern, stop, slow ahead, full ahead, burn.
-        /// Burn is index `BurnNotch` and takes its value from `BurnOrder`,
-        /// because how far past "full" the overdrive reaches belongs to the
-        /// hull, not to the control.
-        static readonly float[] NotchOrders = { -1f, 0f, 0.35f, 1f, 1f };
-        public const int NotchCount = 5;
-        public const int StopNotch = 1;
-        public const int BurnNotch = 4;
-
-        // --- state ----------------------------------------------------------
-        /// Which notch the telegraph is at. Stop on a cold start.
-        public int Notch { get; private set; } = StopNotch;
-        public bool Burning => Notch == BurnNotch;
-
-        /// The overdrive order, set from `ShipMotor.Overdrive` each frame.
-        public float BurnOrder { get; set; } = 1.35f;
-
-        /// The engine order the notch stands for.
-        public float Throttle => Notch == BurnNotch ? BurnOrder : NotchOrders[Notch];
-
-        /// The rudder ORDER. Zero unless a finger is actively steering — the
-        /// release is what makes it rubber-band, and `HelmInput` owns the ease.
-        public float Rudder { get; private set; }
-        /// True while a finger is locked to the across axis. `HelmInput` uses
-        /// it to pick the engage rate over the recentre rate.
-        public bool Steering => wheelId != NoTouch && axis == Axis.Across;
-        /// True while any finger owns the wheel.
-        public bool Dragging => wheelId != NoTouch;
-
-        /// What the wheel is DRAWN at, in rudder units: the eased, real rudder,
-        /// written by `HelmInput` every frame. The wheel therefore shows the
-        /// rubber band unwinding and a held A/D, and never lies about which way
-        /// she is going over.
-        public float ShownRudder { get; set; }
+        /// Ring radius as a fraction of the shorter screen dimension — big
+        /// enough to find and move inside of with a thumb, DPI-sane on both
+        /// the phone and the desk.
+        const float RingRadiusFrac = 0.14f;
+        /// Dead zone, as a fraction of the ring radius: inside this the stick
+        /// reads centred — no heading, no throttle — so a thumb that isn't
+        /// quite still doesn't order a course change.
+        public const float DeadZoneFrac = 0.10f;
+        /// How far past the rim the drawn knob still tracks the thumb before
+        /// visually clamping there. The ORDER (in `HelmInput`) keeps climbing
+        /// into the burn tier past 100%; the drawing stops a little further
+        /// out so a thumb pushed to the edge of its reach still has somewhere
+        /// to go without the knob leaving the ring.
+        const float KnobClampFrac = 1.25f;
+        /// Touch shorter than this, moved less than the dead zone: a tap, not
+        /// a drag. `HelmInput` reads it as "ring the telegraph to stop."
+        const float TapMaxSeconds = 0.2f;
+        /// How long the ring takes to fade out after release.
+        const float FadeSeconds = 0.30f;
 
         const int NoTouch = int.MinValue;
         const int MouseId = NoTouch + 1;
 
-        enum Axis { Undecided, Across, Along }
+        // --- state read by HelmInput ----------------------------------------
+
+        /// True while a finger owns the stick.
+        public bool Dragging => wheelId != NoTouch;
+        /// One-`Sample()`-call pulse: the finger just lifted having barely
+        /// moved and barely stayed — ring the telegraph to stop.
+        public bool Tapped { get; private set; }
+        /// One-`Sample()`-call pulse on ANY release, drag or tap.
+        public bool JustReleased { get; private set; }
+        /// The WORLD heading (degrees, `Mathf.Atan2` convention matching
+        /// `ShipMotor.Heading`) the current drag direction implies. Only
+        /// meaningful while `HasDragDirection` is true.
+        public float DragHeadingDeg { get; private set; }
+        /// False inside the dead zone, or the instant a drag begins before it
+        /// has moved anywhere — a direction cannot be read from no movement.
+        public bool HasDragDirection { get; private set; }
+        /// Drag distance / ring radius. NOT clamped to 1 — past the rim is
+        /// exactly how the burn tier is reached, and how "how hard" reads
+        /// past "all the way."
+        public float DragDistance01 { get; private set; }
 
         int wheelId = NoTouch;
-        Axis axis = Axis.Undecided;
-        Vector2 grabPoint;      // where the finger went down, GUI space
-        float notchAnchorY;     // rebased every time a notch steps
+        Vector2 anchorPoint;   // GUI space, where the thumb went down
+        Vector2 knobPoint;     // GUI space, current/last drawn knob position
+        Vector3 camRightFlat, camForwardFlat; // frozen at touch-down
+        float touchDownTime;
+        float ringRadiusPx;
+        float fade;            // 0..1, ring opacity once nothing is dragging
         bool seenWheel;
 
-        // Rects are resolved in Draw (OnGUI owns the layout) and read by
-        // Sample (Update). One frame of lag, which is what every slot in
-        // HudLayout already carries and is invisible at 60 Hz.
-        Rect wheelRect, ladderRect;
-        bool laidOut;
-
-        /// Midships and stop, from outside. `HelmInput.AllStop` calls this.
-        public void Centre() { Notch = StopNotch; Rudder = 0f; }
+        /// Drop the gesture immediately, no tap/release policy fires. Used
+        /// when something OUTSIDE the control needs the wheel to let go right
+        /// now — `HelmInput.AllStop()` calls this when the anchor goes down,
+        /// so a drag in progress can't keep ordering a course for a ship that
+        /// is no longer free to take one.
+        public void CancelDrag()
+        {
+            wheelId = NoTouch;
+            HasDragDirection = false;
+            DragDistance01 = 0f;
+            fade = 0f;
+        }
 
         // =====================================================================
         // Gesture
@@ -168,22 +127,26 @@ namespace SeaSick.Ship
 
         /// Call once per Update, BEFORE the orders are read.
         ///
-        /// `active` is false while the island view is up: the wheel is not
-        /// drawn then, so it must not be grabbable either — the sheet covers
-        /// the bottom of a portrait screen and a drag meant for the ground
-        /// would otherwise ring the engine up.
+        /// `active` is false while the island view is up: the stick must not
+        /// be grabbable then, or a drag meant for the ground (siting a
+        /// building, pressing on a crewman) would ring the engine up instead.
         public void Sample(bool active)
         {
-            if (!active || !laidOut)
+            Tapped = false;
+            JustReleased = false;
+
+            if (!active)
             {
                 wheelId = NoTouch;
-                axis = Axis.Undecided;
-                Rudder = 0f;
+                HasDragDirection = false;
+                DragDistance01 = 0f;
+                fade = Mathf.Max(0f, fade - Time.deltaTime / FadeSeconds);
                 return;
             }
 
             seenWheel = false;
             bool anyTouch = false;
+            ringRadiusPx = RingRadiusFrac * Mathf.Min(Screen.width, Screen.height);
 
             if (ET.EnhancedTouchSupport.enabled && Touchscreen.current != null)
             {
@@ -200,9 +163,9 @@ namespace SeaSick.Ship
                 }
             }
 
-            // Editor mouse. Deliberately only when the glass is empty, so a
-            // simulated pointer riding alongside real touches cannot fight a
-            // real thumb on a phone.
+            // Editor/desktop mouse. Only consulted when the glass is empty,
+            // so a simulated pointer riding alongside real touches cannot
+            // fight a real thumb on a phone.
             if (!anyTouch)
             {
                 var p = Pointer.current;
@@ -210,206 +173,195 @@ namespace SeaSick.Ship
                     Feed(MouseId, p.position.ReadValue(), p.press.wasPressedThisFrame);
             }
 
-            // Not seen this frame means it has lifted, whatever its phase said.
-            // Letting go is what starts the rubber band, so the order drops to
-            // midships here and `HelmInput` walks the rudder home.
-            if (!seenWheel)
-            {
-                wheelId = NoTouch;
-                axis = Axis.Undecided;
-                Rudder = 0f;
-            }
+            // Not seen this frame means it has lifted, whatever its phase
+            // said — the only way a palm rejection or an app switch is ever
+            // caught.
+            if (!seenWheel && wheelId != NoTouch) Release();
+
+            fade = Dragging ? 1f : Mathf.Max(0f, fade - Time.deltaTime / FadeSeconds);
         }
 
         void Feed(int id, Vector2 screenPos, bool began)
         {
-            // Input System screen space is origin bottom-left; every rect here
-            // is GUI space, origin top-left.
+            // Input System screen space is origin bottom-left; every rect
+            // here is GUI space, origin top-left.
             var g = new Vector2(screenPos.x, Screen.height - screenPos.y);
 
-            // The owning finger is served first and WITHOUT a rect test: a
-            // drag that wanders off the wheel keeps steering until it lifts,
-            // which is the only way a one-radius throw can reach the edge of
-            // the wheel and stay there.
             if (id == wheelId) { Drag(g); seenWheel = true; return; }
             if (!began || wheelId != NoTouch) return;
 
-            // On the wheel itself, or anywhere in the bottom half that no
-            // other HUD control has claimed (the ladder, the helm panel, the
-            // sheets and the rail all register with UIBlocker; the wheel does
-            // too, which is why it is tested first).
-            float r = wheelRect.width * 0.5f;
-            bool onWheel = Vector2.Distance(g, wheelRect.center) <= r * GrabFrac;
+            // Anywhere in the bottom half that no other HUD control has
+            // already claimed this frame (buttons, sheets, the rail all
+            // register with UIBlocker).
             bool inZone = g.y >= Screen.height * (1f - ZoneFrac) && !UIBlocker.Blocked(g);
-            if (!onWheel && !inZone) return;
+            if (!inZone) return;
 
             wheelId = id;
-            axis = Axis.Undecided;
-            grabPoint = g;
-            notchAnchorY = g.y;
+            anchorPoint = g;
+            knobPoint = g;
+            touchDownTime = Time.time;
+            HasDragDirection = false;
+            DragDistance01 = 0f;
+
+            // Freeze the camera's flattened basis for the whole drag — see
+            // the class doc: the camera rotates with the ship, the drag must
+            // not.
+            var cam = Camera.main;
+            Vector3 fwd = cam != null ? cam.transform.forward : Vector3.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
+            fwd.Normalize();
+            camForwardFlat = fwd;
+            camRightFlat = Vector3.Cross(Vector3.up, fwd);
+
             seenWheel = true;
         }
 
         void Drag(Vector2 g)
         {
-            Vector2 d = g - grabPoint;
+            Vector2 d = g - anchorPoint;
+            float distPx = d.magnitude;
+            DragDistance01 = ringRadiusPx > 0.01f ? distPx / ringRadiusPx : 0f;
 
-            if (axis == Axis.Undecided)
+            if (DragDistance01 >= DeadZoneFrac)
             {
-                // A press that never moves is not a gesture: it changes
-                // nothing and it is not an accidental hard-over either.
-                if (d.magnitude < AxisLockPx) return;
-                axis = Mathf.Abs(d.x) >= Mathf.Abs(d.y) ? Axis.Across : Axis.Along;
-                // The notch ladder counts from where the axis committed, so
-                // the 12 px it took to decide is not also a twelfth of a notch.
-                if (axis == Axis.Along) notchAnchorY = g.y;
-            }
-
-            if (axis == Axis.Across)
-            {
-                float r = wheelRect.width * 0.5f;
-                float travel = Mathf.Clamp(d.x / Mathf.Max(1f, r * RudderTravelFrac), -1f, 1f);
-                // Signed power curve: the sign is the side she goes, the
-                // magnitude is shaped. Mathf.Pow of a negative base is NaN,
-                // so the magnitude is raised and the sign put back by hand.
-                Rudder = Mathf.Sign(travel) * Mathf.Pow(Mathf.Abs(travel), RudderCurve);
-                return;
+                // GUI y grows down, so up-the-screen is a falling y.
+                Vector3 worldDir = camRightFlat * d.x + camForwardFlat * (-d.y);
+                if (worldDir.sqrMagnitude > 1e-6f)
+                {
+                    DragHeadingDeg = Mathf.Atan2(worldDir.x, worldDir.z) * Mathf.Rad2Deg;
+                    HasDragDirection = true;
+                }
             }
 
-            // GUI y grows DOWN, so up-the-screen is a falling y.
-            float up = notchAnchorY - g.y;
-            // Rebase per step rather than mapping position to a notch: a long
-            // drag steps several, and reversing direction costs one full notch
-            // of travel instead of flickering on the boundary. Travel is eaten
-            // even when the notch is already at an end, so coming back down off
-            // burn takes exactly one notch of travel, not all of it back.
-            while (up >= NotchTravelPx)
-            {
-                Step(1);
-                notchAnchorY -= NotchTravelPx;
-                up -= NotchTravelPx;
-            }
-            while (up <= -NotchTravelPx)
-            {
-                Step(-1);
-                notchAnchorY += NotchTravelPx;
-                up += NotchTravelPx;
-            }
+            // The drawn knob clamps a little past the rim so a thumb pushed
+            // to the edge of its reach still has somewhere to go.
+            float clampPx = ringRadiusPx * KnobClampFrac;
+            knobPoint = distPx <= clampPx || clampPx < 1f ? g : anchorPoint + d.normalized * clampPx;
         }
 
-        void Step(int by) => Notch = Mathf.Clamp(Notch + by, 0, NotchCount - 1);
-
-        static Rect Grow(Rect r, float by)
-            => new Rect(r.x - by, r.y - by, r.width + by * 2f, r.height + by * 2f);
+        void Release()
+        {
+            float duration = Time.time - touchDownTime;
+            Tapped = duration < TapMaxSeconds && DragDistance01 < DeadZoneFrac;
+            JustReleased = true;
+            wheelId = NoTouch;
+            HasDragDirection = false;
+            // knobPoint/anchorPoint/DragDistance01 are left as they were, so
+            // the ring can fade out from where it was let go of.
+        }
 
         // =====================================================================
         // Drawing
         // =====================================================================
 
-        /// Reserve the slot and claim the rect on EVERY event; draw only on
-        /// Repaint. The layout must not depend on frame rate (see HudLayout's
-        /// note on slots going stale), and it is the text meshes that cost, not
-        /// two float compares.
+        /// Reserves a small persistent readout slot (order word, a compass
+        /// needle for the held heading, a throttle bar) and, while a thumb is
+        /// on the stick or the release fade hasn't finished, draws the
+        /// floating ring at the thumb's own anchor point rather than at any
+        /// fixed screen position.
         ///
-        /// `orderWord` is built and cached by `HelmInput` — nothing here
-        /// allocates a string.
-        public void Draw(GUIContent orderWord, bool burning)
+        /// `targetHeadingDeg`/`hasTarget`/`throttleOrder`/`astern`/`burning`
+        /// are `HelmInput`'s policy state, handed in so nothing here needs to
+        /// know about `ShipMotor`. `currentHeadingDeg` is `motor.Heading`,
+        /// for the compass needle's relative bearing.
+        public void Draw(float targetHeadingDeg, bool hasTarget, float throttleOrder,
+            bool astern, bool burning, float currentHeadingDeg, GUIContent orderWord)
         {
             int u = HudLayout.Unit;
-            float w = u * (WheelD + ColGap + LadderW);
-            float h = u * (LabelH + WheelD);
-
+            float w = u * 9.2f;
+            float h = u * 3.4f;
             var cluster = HudLayout.Place(HudLayout.Slot.Wheel, w, h);
-
-            wheelRect = new Rect(cluster.x, cluster.y + u * LabelH, u * WheelD, u * WheelD);
-            ladderRect = new Rect(wheelRect.xMax + u * ColGap,
-                                  wheelRect.center.y - u * LadderH * 0.5f,
-                                  u * LadderW, u * LadderH);
-            laidOut = true;
-
-            // The gesture zone is the wheel plus its grab margin, so a swipe
-            // that starts on the rim never also reaches the water underneath.
-            UIBlocker.Block(wheelRect);
+            var readoutRect = new Rect(cluster.x, cluster.y, w, h);
+            UIBlocker.Block(readoutRect);
 
             if (Event.current.type != EventType.Repaint) return;
 
-            DrawWheel(u);
-            DrawLadder(u);
+            DrawReadout(readoutRect, u, targetHeadingDeg, hasTarget, throttleOrder,
+                astern, burning, currentHeadingDeg, orderWord);
 
-            var prev = GUI.contentColor;
-            if (burning) GUI.contentColor = UITheme.Warn;
-            GUI.Label(new Rect(cluster.x, cluster.y, u * WheelD, u * LabelH),
-                      orderWord, UITheme.Small2Centered);
-            GUI.contentColor = prev;
+            if (Dragging || fade > 0.001f)
+                DrawStick(u, astern, burning);
         }
 
-        void DrawWheel(int u)
+        void DrawReadout(Rect r, int u, float targetDeg, bool hasTarget, float throttle,
+            bool astern, bool burning, float currentDeg, GUIContent orderWord)
         {
-            float deg = Mathf.Clamp(ShownRudder, -1f, 1f) * MaxWheelDeg;
-            Vector2 hub = wheelRect.center;
-            float r = wheelRect.width * 0.5f;
+            UITheme.Rect(r, UITheme.Panel);
 
-            // The amidships mark, OUTSIDE the rim and fixed to the screen: the
-            // wheel turns against it, which is the whole reason a helm is
-            // readable at a glance.
-            UITheme.Rect(new Rect(hub.x - 1.5f, wheelRect.y - u * 0.28f, 3f, u * 0.62f),
-                         UITheme.Warn);
+            GUI.Label(new Rect(r.x, r.y + u * 0.1f, r.width, u * 1.2f),
+                orderWord, UITheme.Small2Centered);
 
-            Ring(hub, r - u * 0.35f, u * 0.5f, UITheme.Panel, 30);
-            Ring(hub, r - u * 0.35f, u * 0.22f, UITheme.TextDim, 30);
-
-            var prev = GUI.matrix;
-            const int Spokes = 8;
-            float inner = u * 0.7f;
-            float outer = r - u * 0.3f;
-            for (int i = 0; i < Spokes; i++)
+            // The compass: a needle at the relative bearing between where
+            // she's pointed now and the course she's been given. Amidships
+            // (straight up) is dead ahead of her own bow, not of the camera.
+            float dialR = u * 1.05f;
+            var hub = new Vector2(r.x + dialR + u * 0.6f, r.yMax - dialR - u * 0.3f);
+            Ring(hub, dialR, u * 0.24f, UITheme.TextDim, 24);
+            UITheme.Rect(new Rect(hub.x - 1.5f, hub.y - dialR - u * 0.22f, 3f, u * 0.4f),
+                UITheme.TextDim);
+            if (hasTarget)
             {
-                // The king spoke is the one you read the angle off, so it is
-                // brighter, thicker and wears a knob at the rim.
-                bool king = i == 0;
+                float rel = Mathf.DeltaAngle(currentDeg, targetDeg);
+                var prev = GUI.matrix;
+                GUIUtility.RotateAroundPivot(rel, hub);
+                var needleCol = astern ? UITheme.Warn : UITheme.Sea;
+                UITheme.Rect(new Rect(hub.x - u * 0.16f, hub.y - dialR + u * 0.1f,
+                    u * 0.32f, dialR - u * 0.1f), needleCol);
                 GUI.matrix = prev;
-                GUIUtility.RotateAroundPivot(deg + i * (360f / Spokes), hub);
-                float sw = king ? u * 0.42f : u * 0.22f;
-                UITheme.Rect(new Rect(hub.x - sw * 0.5f, hub.y - outer, sw, outer - inner),
-                             king ? UITheme.Text : UITheme.TextDim);
-                if (king)
-                    UITheme.Rect(new Rect(hub.x - u * 0.45f, hub.y - r - u * 0.1f,
-                                          u * 0.9f, u * 0.55f), UITheme.Sea);
             }
-            GUI.matrix = prev;
 
-            // The hub goes amber while she is over: the one thing on the wheel
-            // that says "this is unwinding by itself" as the band pulls it back.
-            bool off = Mathf.Abs(ShownRudder) > 0.02f;
-            Ring(hub, u * 0.75f, u * 0.5f, off ? UITheme.Warn : UITheme.TextDim, 14);
+            // Throttle: one bar, mid-anchored at stop, astern below the mark
+            // and ahead/burn above it — same reading as the achieved-throttle
+            // bar on the helm panel, so the two never disagree in shape.
+            float barX = hub.x + dialR + u * 0.6f;
+            var barRect = new Rect(barX, r.y + u * 1.5f, r.xMax - u * 0.5f - barX, u * 0.55f);
+            if (barRect.width > u)
+            {
+                UITheme.Bar(barRect, 1f, UITheme.Track);
+                const float Ceiling = 1.4f; // headroom for the burn tier
+                float mid = barRect.x + barRect.width / (1f + Ceiling);
+                float t = Mathf.Clamp(throttle, -1f, Ceiling);
+                var col = burning ? UITheme.Warn : astern ? UITheme.Warn : UITheme.Sea;
+                if (t >= 0f)
+                    UITheme.Bar(new Rect(mid, barRect.y, (barRect.xMax - mid) * (t / Ceiling),
+                        barRect.height), 1f, col);
+                else
+                    UITheme.Bar(new Rect(mid + (mid - barRect.x) * t, barRect.y,
+                        (mid - barRect.x) * -t, barRect.height), 1f, col);
+            }
         }
 
-        /// The telegraph, as five rungs rather than words: which notch she is
-        /// on has to be readable without reading, because the thumb setting it
-        /// is also the thumb steering and the eyes are on the water.
-        void DrawLadder(int u)
+        void DrawStick(int u, bool astern, bool burning)
         {
-            UITheme.Rect(Grow(ladderRect, u * 0.2f), UITheme.Panel);
+            float a = fade;
+            var deadCol = UITheme.TextDim; deadCol.a *= a;
+            var rimCol = UITheme.Track; rimCol.a *= a * 1.4f;
+            var knobCol = burning ? UITheme.Warn : astern ? UITheme.Bad : UITheme.Sea;
+            knobCol.a *= a;
 
-            float step = ladderRect.height / NotchCount;
-            for (int i = 0; i < NotchCount; i++)
+            Ring(anchorPoint, ringRadiusPx * DeadZoneFrac, 3f, deadCol, 18);
+            Ring(anchorPoint, ringRadiusPx, 4f, rimCol, 30);
+
+            if (ringRadiusPx <= 1f) return;
+
+            Vector2 knob = knobPoint;
+            float knobSize = u * 0.9f;
+            UITheme.Rect(new Rect(knob.x - knobSize * 0.5f, knob.y - knobSize * 0.5f,
+                knobSize, knobSize), knobCol);
+
+            // A pull line from the anchor to the knob, so the direction and
+            // the amount both read at a glance.
+            float len = Vector2.Distance(anchorPoint, knob);
+            if (len > 1f)
             {
-                // Index 0 is full astern and belongs at the BOTTOM.
-                var rung = new Rect(ladderRect.x,
-                                    ladderRect.yMax - step * (i + 1) + step * 0.2f,
-                                    ladderRect.width, step * 0.6f);
-                if (i == Notch)
-                    UITheme.Rect(rung, i == BurnNotch ? UITheme.Warn
-                                     : i == 0 ? UITheme.Warn : UITheme.Sea);
-                else
-                    UITheme.Rect(rung, UITheme.Track);
+                Vector2 mid = (anchorPoint + knob) * 0.5f;
+                float ang = Mathf.Atan2(knob.x - anchorPoint.x, -(knob.y - anchorPoint.y)) * Mathf.Rad2Deg;
+                var prev = GUI.matrix;
+                GUIUtility.RotateAroundPivot(ang, mid);
+                UITheme.Rect(new Rect(mid.x - 1.5f, mid.y - len * 0.5f, 3f, len), knobCol);
+                GUI.matrix = prev;
             }
-
-            // Stop is the landmark you count from, so it wears a tick that is
-            // there whether or not she is sitting on it.
-            float stopY = ladderRect.yMax - step * (StopNotch + 0.5f);
-            UITheme.Rect(new Rect(ladderRect.x - u * 0.25f, stopY - 1f,
-                                  ladderRect.width + u * 0.5f, 2f), UITheme.Text);
         }
 
         /// A circle, out of the only primitive IMGUI has. Each segment resets
