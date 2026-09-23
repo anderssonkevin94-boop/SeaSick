@@ -120,6 +120,10 @@ namespace SeaSick.World
 
         public bool Hauling => haulCount > 0 && !string.IsNullOrEmpty(haulRes);
 
+        /// Bumped by every trip start, never saved: lets the body
+        /// (`CampWorker`) mime each ledger trip exactly once.
+        [System.NonSerialized] public int haulSerial;
+
         /// What to call what they are doing, for the list on the right.
         public string Doing
         {
@@ -331,9 +335,13 @@ namespace SeaSick.World
         /// Hand-days of labour this plan's size asks for once it is stocked.
         public float LabourNeeded => OutpostLedger.LabourFor(this);
 
-        /// How far through the BUILDING phase, 0..1.
-        public float Build01 => LabourNeeded <= 0f
-            ? 1f : Mathf.Clamp01(built / LabourNeeded);
+        /// How far through the BUILDING phase, 0..1. **Zero until every
+        /// material is in and the plot is clear** (Kevin, phone playtest
+        /// 2026-09-23: *"get the resources (5/5 wood, 3/3 stone) then they
+        /// start hammering"*) -- `built` only accrues then anyway, but an
+        /// old save's row can carry a `built` that must not show early.
+        public float Build01 => !(Stocked && Cleared) ? 0f
+            : LabourNeeded <= 0f ? 1f : Mathf.Clamp01(built / LabourNeeded);
 
         /// Stocked AND stood up: the row may leave the queue and become a
         /// building. Two phases, so this is no longer the same question as
@@ -344,30 +352,29 @@ namespace SeaSick.World
         /// row from an old save, so this is the old answer for those.
         public bool Complete => Stocked && Cleared && built >= LabourNeeded;
 
-        /// **One bar over both piles.** The drawing fills on what has been
-        /// delivered against what it wants, timber and stone summed -- so a
-        /// hut at 5/5 logs and 0/2 stone reads five sevenths built, which is
-        /// the truth. When the stone price is zero this is the old
-        /// `(done + donePart) / needed` to the bit.
+        /// **What has been delivered against what it wants, 0..1, WHOLE
+        /// units only** -- timber, stone and brick summed. A picture of the
+        /// stack (the log pile, the ghost's tint), never a percentage: the
+        /// percentage is `Progress01`, which is the labour alone.
+        /// (2026-09-23 phone playtest: the fractional `*DonePart` fields used
+        /// to count here, so the bar crept up with nothing delivered.)
         public float Fill01
         {
             get
             {
                 float want = needed + stoneNeeded + brickNeeded;
                 if (want <= 0f) return 1f;
-                return Mathf.Clamp01(
-                    (done + donePart + stoneDone + stoneDonePart
-                     + brickDone + brickDonePart) / want);
+                return Mathf.Clamp01((Mathf.Min(done, needed) + Mathf.Min(stoneDone, stoneNeeded)
+                     + Mathf.Min(brickDone, brickNeeded)) / want);
             }
         }
 
-        /// **Both phases as one bar, 0..1.** The first half is the stocking,
-        /// the second half is the labour -- so a site at "everything
-        /// delivered, nobody has lifted a hammer" reads 50 %, which is the
-        /// truth and is also the moment Kevin wants to be able to see.
-        public float Progress01 => Stocked
-            ? 0.5f + 0.5f * Build01
-            : 0.5f * Fill01;
+        /// **The site's percentage, 0..1: the BUILDING phase alone.** 0 %
+        /// while it is being cleared and stocked -- the stocking is shown as
+        /// counts ("3/5 timber"), not as a creeping percentage -- then 0 to
+        /// 100 over the hammering. Kevin, 2026-09-23: *"the percentages also
+        /// start going up before resource quota is met."*
+        public float Progress01 => Build01;
 
         /// **What the site is doing, in the words the sheets print.**
         /// "stocking 3/6 logs, 2/2 stone" then "building 40%".
@@ -1955,49 +1962,160 @@ namespace SeaSick.World
             lastTicked += steps * quantum;
         }
 
-        /// **Pay the stone part of the blueprint out of `labour` hand-days**,
-        /// pile first and then the seam, spending what it uses. Shaped to
-        /// match the timber block above line for line, because two parts of
-        /// one price that are paid by different-looking arithmetic are two
-        /// things that will drift.
-        /// **Pay the timber part of a site out of `labour` hand-days** --
-        /// the pile first, then what is standing.
-        ///
-        /// Lifted out of `Step` whole when the queue arrived (2026-09-22):
-        /// the block used to read `pending` directly, and a queue needs the
-        /// same arithmetic pointed at whichever row is being served. Not one
-        /// number changed in the move.
-        void PayTimber(PendingBuild pending, ref float labour)
+        // --- stocking a site: whole armfuls, never more than it needs ----------
+        //
+        // **Phone playtest, 2026-09-23.** Kevin: *"they carry way too much
+        // resources to it, and the required x/z resources don't show accurate
+        // account for how many they've received ... it should be: get the
+        // resources (5/5 wood, 3/3 stone) then they start hammering."*
+        //
+        // Until today the stocking was a fractional pour (`PayTimber` /
+        // `PayStone` / `PayBrick` / `Haul`): hand-days became fractions of a
+        // log in `donePart`, the bar read those fractions, and the bodies
+        // mimed trips on their own clock with no relation to what landed. Now
+        // a builder does what a station hauler does: one TRIP at a time
+        // (`OutpostHand.haul*`, `HaulPlace.Site`), carrying a whole armful
+        // (`Res.Armful`) capped at what the site is still short of NET of
+        // loads already walking to it -- so two haulers never both bring the
+        // last three. The load leaves its source at pickup and lands in the
+        // site's whole counters on arrival (`DepositHaul`); nothing fractional
+        // is ever booked into a site.
+
+        [System.NonSerialized] readonly List<OutpostHand> builderScratch = new List<OutpostHand>();
+
+        /// Game-days for one builder's trip carrying `n` of `res` from `from`.
+        /// The OLD per-hand rates, so a plan's cost still means the same time:
+        /// out of a pile at `HaulPerHandPerDay`, cut at `TimberPerHandPerDay`,
+        /// quarried at `StonePerHandPerDay` (the walk is inside those rates,
+        /// as it always was).
+        static float SiteTripDays(string res, int n, HaulPlace from)
         {
-            if (pending == null || labour <= 0f) return;
-            float roomB = (pending.needed - pending.done) - pending.donePart;
-            if (roomB <= 0f) return;
+            float rate = from != HaulPlace.Field ? HaulPerHandPerDay
+                : res == Res.Timber ? TimberPerHandPerDay : StonePerHandPerDay;
+            return n / Mathf.Max(0.01f, rate);
+        }
 
-            // **The pile first.** Kevin, 2026-09-20: *"they gathered logs for
-            // it but it never built."* They had: ten logs sat beside the fire
-            // while the builders walked past them to cut fresh ones, and on a
-            // small island the fresh ones ran out at 6 of 24 and the sawmill
-            // stood as a drawing for ever. Timber already cut is carried five
-            // metres, which is also why it goes in faster than timber still
-            // growing.
-            var pile = Store(Res.Timber);
-            Haul(pile, ref pending.done, ref pending.donePart, ref roomB, ref labour);
-
-            // Then whatever is left of the day goes on cutting.
-            var wood = Wood;
-            float wantB = Mathf.Max(0f, labour) * TimberPerHandPerDay;
-            float gotB = Mathf.Min(wantB, Mathf.Min(wood.standing, roomB));
-            if (gotB <= 0f) return;
-            wood.standing -= gotB;
-            timberTaken += gotB;
-            pending.donePart += gotB;
-            int wholeB = Mathf.FloorToInt(pending.donePart);
-            if (wholeB > 0)
+        /// **Whole units of `res` this site is still short of once every load
+        /// already walking to a site has landed.** Loads in arms fill the
+        /// queue oldest-first -- the order `DeliverToSite` puts them in -- so
+        /// the answer is exactly what will still be missing.
+        public int NetShort(PendingBuild site, string res)
+        {
+            if (site == null || sites == null) return 0;
+            int transit = InFlightTo(HaulPlace.Site, -1, res);
+            for (int i = 0; i < sites.Count; i++)
             {
-                pending.done += wholeB;
-                pending.donePart -= wholeB;
+                var s = sites[i];
+                int r = RemainingOf(s, res);
+                if (s == site) return Mathf.Max(0, r - transit);
+                transit = Mathf.Max(0, transit - r);
             }
-            labour -= gotB / TimberPerHandPerDay;
+            return 0;
+        }
+
+        /// Start one builder's fetch for `site`: the first material it is
+        /// short of (timber, stone, brick -- `BuilderWants`' order) that has
+        /// a source -- the store, then a station rack, then (timber and stone
+        /// only) the island itself. False when nothing it wants can be got
+        /// or every unit it wants is already in somebody's arms.
+        bool StartSiteTrip(OutpostHand h, PendingBuild site)
+        {
+            for (int k = 0; k < 3; k++)
+            {
+                string res = k == 0 ? Res.Timber : k == 1 ? Res.Stone : Res.Brick;
+                int need = NetShort(site, res);
+                if (need <= 0) continue;
+                int cap = Mathf.Min(Res.Armful(res), need);
+
+                // The pile first (Kevin, 2026-09-20: *"they gathered logs for
+                // it but it never built"*): timber already cut is carried.
+                var pile = Store(res);
+                if (pile != null && pile.whole > 0)
+                {
+                    int n = Mathf.Min(cap, pile.whole);
+                    pile.whole -= n;
+                    StartTrip(h, res, n, HaulPlace.Store, -1, HaulPlace.Site, -1,
+                        SiteTripDays(res, n, HaulPlace.Store));
+                    return true;
+                }
+                // Then a station's output rack (a240cdf): as good as the store.
+                if (stations != null)
+                    for (int i = 0; i < stations.Count; i++)
+                    {
+                        var row = stations[i]?.Rack(res);
+                        if (row == null || row.whole <= 0) continue;
+                        int n = Mathf.Min(cap, row.whole);
+                        row.whole -= n;
+                        StartTrip(h, res, n, HaulPlace.Station, i, HaulPlace.Site, -1,
+                            SiteTripDays(res, n, HaulPlace.Station));
+                        return true;
+                    }
+                // Then cut or quarry it. Brick has no seam: nobody quarries a
+                // brick out of a hillside.
+                if (res == Res.Brick) continue;
+                var stock = Stock(res);
+                int standing = stock != null ? Mathf.FloorToInt(stock.standing + 1e-4f) : 0;
+                if (standing <= 0) continue;
+                {
+                    int n = Mathf.Min(cap, standing);
+                    stock.standing = Mathf.Max(0f, stock.standing - n);
+                    // `timberTaken` (which trees the scene shows felled) is
+                    // booked when the armful LANDS (`DepositHaul`), so the
+                    // body chopping through the trip sees its tree go over
+                    // at the end of it, not two trees drop at the start.
+                    StartTrip(h, res, n, HaulPlace.Field, -1, HaulPlace.Site, -1,
+                        SiteTripDays(res, n, HaulPlace.Field));
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// **One builder's share of a quantum**, spent down the queue oldest
+        /// first: clear the plot, fetch its materials trip by trip, and --
+        /// only once every one is IN -- stand it up. A hand whose site has
+        /// every missing unit already in somebody's arms moves on to the next
+        /// site, exactly as "the haulers move on to the next one".
+        void BuilderDay(OutpostHand h, ref float budget)
+        {
+            for (int guard = 0; guard < 64 && budget > Eps; guard++)
+            {
+                if (h.Hauling)
+                {
+                    if (h.haulTo != HaulPlace.Site)
+                    {
+                        // A station load from a job he just left: put it down.
+                        DepositHaul(h);
+                        if (h.Hauling) return;
+                        continue;
+                    }
+                    float d = Mathf.Min(budget, h.haulLeft);
+                    h.haulLeft -= d;
+                    budget -= d;
+                    if (h.haulLeft <= Eps) DepositHaul(h);
+                    continue;
+                }
+
+                bool started = false;
+                for (int si = 0; si < sites.Count && budget > Eps; si++)
+                {
+                    var site = sites[si];
+                    if (site == null || site.Complete) continue;
+                    PayClear(site, ref budget);
+                    if (!site.Cleared) continue;   // the day went on the plot
+                    if (site.Stocked)
+                    {
+                        PayBuild(site, ref budget);
+                        // The record of who's away doesn't care whether the
+                        // raise was seen -- `Outpost.FinishReady` stands the
+                        // mesh up on the next `CatchUp`.
+                        if (site.Complete) away.raised.Add(site.planId);
+                        continue;
+                    }
+                    if (StartSiteTrip(h, site)) { started = true; break; }
+                }
+                if (!started) return;
+            }
         }
 
         /// **The second phase: spend hand-days standing it up.**
@@ -2080,8 +2198,25 @@ namespace SeaSick.World
                 Spill(ref s.done, s.needed, Res.Timber);
                 Spill(ref s.stoneDone, s.stoneNeeded, Res.Stone);
                 Spill(ref s.brickDone, s.brickNeeded, Res.Brick);
+                // **A fraction of a unit is not delivered** (2026-09-23): the
+                // old fractional pour left `*DonePart` in saved rows. Nothing
+                // accrues there any more, so an old save's fractions go back
+                // to the pile they came from -- not lost, not counted.
+                SpillPart(ref s.donePart, Res.Timber);
+                SpillPart(ref s.stoneDonePart, Res.Stone);
+                SpillPart(ref s.brickDonePart, Res.Brick);
                 if (s.built > s.LabourNeeded) s.built = s.LabourNeeded;
             }
+        }
+
+        void SpillPart(ref float part, string resource)
+        {
+            if (part <= 0f) { part = 0f; return; }
+            var st = Store(resource, true);
+            st.part += part;
+            part = 0f;
+            int whole = Mathf.FloorToInt(st.part + 1e-5f);
+            if (whole > 0) { st.whole += whole; st.part = Mathf.Max(0f, st.part - whole); }
         }
 
         void Spill(ref int done, int need, string resource)
@@ -2090,127 +2225,6 @@ namespace SeaSick.World
             int extra = done - need;
             done = need;
             Store(resource, true).whole += extra;
-        }
-
-        void PayStone(PendingBuild pending, ref float labour)
-        {
-            if (pending == null) return;
-            float roomS = (pending.stoneNeeded - pending.stoneDone) - pending.stoneDonePart;
-            if (roomS <= 0f || labour <= 0f) return;
-
-            Haul(Store(Res.Stone), ref pending.stoneDone, ref pending.stoneDonePart,
-                ref roomS, ref labour);
-
-            var seam = Stock(Res.Stone);
-            if (seam == null || roomS <= 0f || labour <= 0f) return;
-            float want = labour * StonePerHandPerDay;
-            float got = Mathf.Min(want, Mathf.Min(seam.standing, roomS));
-            if (got <= 0f) return;
-            seam.standing -= got;
-            pending.stoneDonePart += got;
-            int whole = Mathf.FloorToInt(pending.stoneDonePart);
-            if (whole > 0)
-            {
-                pending.stoneDone += whole;
-                pending.stoneDonePart -= whole;
-            }
-            labour -= got / StonePerHandPerDay;
-        }
-
-        /// **Pay the brick part out of `labour` hand-days -- from the pile
-        /// and from nowhere else.**
-        ///
-        /// The haul half of `PayStone` with the seam half deleted rather than
-        /// left empty, because there is no seam: nobody quarries a brick out
-        /// of a hillside. A site short of brick therefore stalls until
-        /// somebody makes some, which is the whole point of putting a good
-        /// on the far side of a building.
-        ///
-        /// Runs last, out of whatever the timber and stone parts left, so a
-        /// plan with `brickNeeded == 0` is bit-identical to the old path --
-        /// `room <= 0` and it returns having touched nothing.
-        void PayBrick(PendingBuild pending, ref float labour)
-        {
-            if (pending == null) return;
-            float room = (pending.brickNeeded - pending.brickDone) - pending.brickDonePart;
-            if (room <= 0f || labour <= 0f) return;
-
-            Haul(Store(Res.Brick), ref pending.brickDone, ref pending.brickDonePart,
-                ref room, ref labour);
-
-            // **Then the station racks, if the store is short** (Kevin,
-            // 2026-09-23): a quarry's rack of brick is as good as the store's
-            // and taking it empties the rack -- nothing is counted twice.
-            if (stations != null)
-                foreach (var st in stations)
-                {
-                    if (room <= 0f || labour <= 0f) break;
-                    if (st == null) continue;
-                    Haul(st.Rack(Res.Brick), ref pending.brickDone, ref pending.brickDonePart,
-                        ref room, ref labour);
-                }
-        }
-
-        /// **Carry from a pile into the blueprint, fractions and all.**
-        ///
-        /// Kevin, 2026-09-22: *"villagers carry 10 stone to a shelter that
-        /// only has 0/2 continuously."* This block used to floor the carry to
-        /// a whole unit and throw the remainder away:
-        /// `FloorToInt(min(labour * HaulPerHandPerDay, ...))`. One quantum is
-        /// `QuantumDays` (0.1) of a day and the haul rate is 12 a day, so one
-        /// hand at FULL strength carries 1.2 units a quantum -- a hair over
-        /// the one unit the floor needs. Dock that hand at all (`WorkFactor`
-        /// scales with mood, and a hand goes "hungry" under 0.95) and the
-        /// figure drops under 1.0, floors to **zero, every quantum, for
-        /// ever**: the pile stays full, the counter never moves, and the
-        /// bodies go on walking the load over because `BuilderWants` still
-        /// says the site is short.
-        ///
-        /// Timber hid it, which is why it showed up on stone. A builder who
-        /// hauls nothing falls through to CUTTING, and the cut accrues into
-        /// `donePart` fractionally -- so the timber part always inched
-        /// forward. Stone's seam is a third as rich (`ScatteredStoneShare`)
-        /// and is usually worked out by the time a second building is sited,
-        /// leaving the pile as the only source; brick has no seam at all.
-        ///
-        /// So the carry accrues into the same `*DonePart` field the cut uses,
-        /// and the pile is debited in the same fractions through its own
-        /// `part`. At full strength this is the old behaviour plus the
-        /// remainder that used to be dropped; below it, it is the difference
-        /// between slow
-        /// and stopped. `room` and `labour` are spent by what was carried, so
-        /// a site that wants 2 takes 2 out of a pile of 10 and the builder's
-        /// remaining hand-days go on to the next part of the price.
-        static void Haul(OutpostStore pile, ref int done, ref float part,
-            ref float room, ref float labour)
-        {
-            if (pile == null || pile.whole <= 0 || room <= 0f || labour <= 0f) return;
-            // Bounded by what is lying there, what the site still wants, and
-            // how much of the day is left -- so carrying to a site that wants
-            // 2 out of a pile of 10 delivers 2 and leaves 8 on the pile.
-            float have = pile.whole + pile.part;
-            float got = Mathf.Min(labour * HaulPerHandPerDay, Mathf.Min(have, room));
-            if (got <= 0f) return;
-
-            // **Off the pile in the same fractions it goes into the site**,
-            // through `OutpostStore.part`, which exists for exactly this --
-            // the sub-unit accrual gathering already uses. Units leaving the
-            // ground therefore equal units entering the blueprint to the
-            // fraction, which a floored debit against a fractional credit
-            // would not.
-            have -= got;
-            pile.whole = Mathf.Max(0, Mathf.FloorToInt(have));
-            pile.part = Mathf.Max(0f, have - pile.whole);
-
-            part += got;
-            int whole = Mathf.FloorToInt(part);
-            if (whole > 0)
-            {
-                done += whole;
-                part -= whole;
-            }
-            room -= got;
-            labour -= got / HaulPerHandPerDay;
         }
 
         /// **What a builder here should be fetching right now**: logs until
@@ -2291,71 +2305,29 @@ namespace SeaSick.World
             // then on `sites[1]`, in the same tick if there is a day left
             // over -- which is exactly "the haulers move on to the next one".
             // With one site queued this is the old block to the bit.
-            float builders = 0f;
+            // **Per hand since 2026-09-23** (phone playtest): each builder
+            // spends his own share of the quantum in `BuilderDay` -- clear,
+            // fetch in whole armfuls, then build. Clearing and building are
+            // linear in hand-days, so this is the old pooled arithmetic for
+            // those two phases; the stocking is now trips. The builder list
+            // is taken once, before anyone touches a store, so a gatherer
+            // who starts helping cannot be counted in or out mid-pass.
+            var builderHands = builderScratch;
+            builderHands.Clear();
             foreach (var h in hands)
-                if (h != null && (h.order == OutpostOrder.Build
-                                  || (gatherersBuild && GatherBlocked(h)))) builders += WorkFactor(h);
-            if (builders > 0f && sites != null && sites.Count > 0)
             {
-                float labour = builders * days;          // hand-days to spend
-                for (int si = 0; si < sites.Count && labour > 0f; si++)
-                {
-                    var site = sites[si];
-                    if (site == null || site.Complete) continue;
-
-                    // **Two phases, 2026-09-23.** Stock it first -- every
-                    // log, every stone -- and only then does anybody start
-                    // building. No labour accrues into a site that is still
-                    // short of something, which is the whole of Kevin's
-                    // note: *"first the villagers should gather all the
-                    // resources necessary to build the building, THEN they
-                    // start actually building it."*
-                    // **Clear the plot first, 2026-09-23.** Out of the
-                    // same hand-days, before anything is hauled or stood
-                    // up; a plot with nothing on it (every old row) takes
-                    // nothing here and the rest is the old path to the bit.
-                    PayClear(site, ref labour);
-                    if (!site.Cleared) continue;   // the day went on the plot
-
-                    if (site.Stocked)
-                    {
-                        PayBuild(site, ref labour);
-                        if (site.Complete) away.raised.Add(site.planId);
-                        continue;
-                    }
-
-                    PayTimber(site, ref labour);
-                    // --- and then the stone, 2026-09-21 ----------------------
-                    //
-                    // **The second part of the price, in the same two steps
-                    // and the same order**: what is already quarried and
-                    // lying by the fire goes in at the haul rate, and only
-                    // then does anybody take a pick to standing rock.
-                    //
-                    // It runs AFTER the timber out of whatever hand-days the
-                    // timber part left over, which is what makes a plan with
-                    // `stoneNeeded == 0` bit-identical to the old path: the
-                    // block sees `roomS <= 0` and returns having touched
-                    // nothing. A builder therefore finishes the logs first
-                    // and starts on the rock in the same tick -- the body
-                    // walking out to a boulder follows, because `CampWorker`
-                    // asks the ledger the same question (`BuilderWants`) the
-                    // arithmetic just answered.
-                    PayStone(site, ref labour);
-                    PayBrick(site, ref labour);
-
-                    // Stocked by this very tick, with the day not spent?
-                    // Then they start building it now rather than standing
-                    // about until the next quantum.
-                    if (site.Stocked) PayBuild(site, ref labour);
-
-                    // The record of who's away doesn't care whether the raise
-                    // was seen -- `Outpost.FinishReady` handles standing the
-                    // mesh up separately, on the next `CatchUp`. This just
-                    // notes that it happened during the absence.
-                    if (site.Complete) away.raised.Add(site.planId);
-                }
+                if (h == null) continue;
+                if (h.order == OutpostOrder.Build || (gatherersBuild && GatherBlocked(h)))
+                    builderHands.Add(h);
+                else if (h.Hauling && h.haulTo == HaulPlace.Site)
+                    DepositHaul(h, true);   // re-ordered mid-trip: it lands now
             }
+            if (sites != null)
+                foreach (var h in builderHands)
+                {
+                    float budget = days * WorkFactor(h);
+                    BuilderDay(h, ref budget);
+                }
 
             // --- gathering ---------------------------------------------------
             //

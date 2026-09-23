@@ -173,9 +173,12 @@ namespace SeaSick.World
         /// last one.
         public void Refresh(PendingBuild p)
         {
-            // `Progress01` is the stocking in its first half and the
-            // raising in its second, so one number drives the whole ramp.
-            float fill = p.Progress01;
+            // The ghost's tint: the stocking (whole units delivered,
+            // `Fill01`) in its first half and the raising (`Build01`, zero
+            // until every material is in and the plot is clear) in its
+            // second. A picture, not a percentage -- the sheets' percentage
+            // is `Progress01`, the labour alone.
+            float fill = p.Stocked && p.Cleared ? 0.5f + 0.5f * p.Build01 : 0.5f * p.Fill01;
             if (ghost != null && Mathf.Abs(fill - drawnFill) > 0.02f)
             {
                 float a = fill <= 0.5f

@@ -24,6 +24,11 @@ namespace SeaSick.World
     ///     `SpendableOf` agrees, `CountOf` still shows the bay.
     /// (h) The store's ceiling holds while a gatherer and a hauler both
     ///     fill it, and every unit is accounted.
+    /// (i) A build site (5 timber + 3 stone, 2 builders, store or ground):
+    ///     delivered + in arms never above the cost, shown counts are the
+    ///     whole delivered units, 0 % until stocked and cleared, every unit
+    ///     conserved, at most 4 trips, D2 across tick sizes, and an old
+    ///     save's over-delivery goes back to the store.
     public static class StationStockSelfTest
     {
         public static bool Run()
@@ -180,9 +185,148 @@ namespace SeaSick.World
                 ceilOk ? $"store stone {h.StoreCountOf(Res.Stone)}/{h.ceilingPer}, bay {h.StationOf(BuildPlans.Quarry.id).BayCount(Res.Stone)}, hauled {hauled}" : ceilWhy);
             Gate(sb, ref fails, "store-ceiling-conserves", consH, consH ? "213 stone accounted every tick" : consHWhy);
 
+            // --- (i) a build site: stock exactly the cost, THEN build ----------
+            // Kevin's phone playtest, 2026-09-23. A site wanting 5 timber +
+            // 3 stone, two builders, the store stocked / the store empty
+            // (they cut and quarry it themselves), stepped fine and coarse.
+            foreach (bool fromStore in new[] { true, false })
+                foreach (double stepDays in new[] { 0.02, 0.1, 0.5 })
+                    SiteRun(sb, ref fails, fromStore, stepDays);
+
+            // D2: the same site, ten 0.1-day ticks vs one 1-day tick vs
+            // ragged ticks, compared mid-stocking and at the end.
+            foreach (double span in new[] { 0.3, 1.0, 4.0 })
+            {
+                var s1 = Site(false); var s2 = Site(false); var s3 = Site(false);
+                double n1 = s1.lastTicked, n2 = s2.lastTicked, n3 = s3.lastTicked;
+                int k = Mathf.RoundToInt((float)(span / 0.1));
+                for (int i = 0; i < k; i++) Advance(s1, ref n1, 0.1);
+                Advance(s2, ref n2, span);
+                double left = span;
+                double[] rag = { 0.03, 0.17, 0.01, 0.42 };
+                for (int i = 0; left > 1e-9; i++) { double st = System.Math.Min(left, rag[i % rag.Length]); Advance(s3, ref n3, st); left -= st; }
+                Gate(sb, ref fails, $"site-d2-{span:0.0}d", SameSite(s1, s2) && SameSite(s1, s3),
+                    $"{SiteState(s1)} | {SiteState(s2)} | {SiteState(s3)}");
+            }
+
+            // An old save's over-delivered row (8 of 5 logs, 0.6 of a log in
+            // `donePart`, 4 of 3 stone): the surplus goes back to the store,
+            // nothing lost or made.
+            {
+                var o = Site(true);
+                var row = o.sites[0];
+                o.Store(Res.Timber).whole = 0; o.Store(Res.Stone).whole = 0;
+                row.done = 8; row.donePart = 0.6f; row.stoneDone = 4;
+                float t0 = TimberAll(o), st0 = StoneAll(o);
+                double no = o.lastTicked;
+                Advance(o, ref no, 0.1);
+                Gate(sb, ref fails, "old-surplus-back-to-store",
+                    row.done == 5 && row.stoneDone == 3 && row.donePart == 0f
+                    && Mathf.Abs(TimberAll(o) - t0) < 1e-3f && Mathf.Abs(StoneAll(o) - st0) < 1e-3f,
+                    $"site {row.done}/5 timber {row.stoneDone}/3 stone part {row.donePart}, "
+                    + $"timber {t0:0.##}->{TimberAll(o):0.##}, stone {st0:0.##}->{StoneAll(o):0.##}");
+            }
+
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());
             return fails == 0;
+        }
+
+        /// A site wanting 5 timber + 3 stone and two builders. `fromStore`:
+        /// 10 of each in the store and nothing standing; else an empty store
+        /// and ground to cut and quarry (no regrowth, so it conserves).
+        static OutpostLedger Site(bool fromStore)
+        {
+            var l = new OutpostLedger { ceilingPer = 20, stationsMigrated = true };
+            l.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Build });
+            l.hands.Add(new OutpostHand { name = "Sten", order = OutpostOrder.Build });
+            l.Store(Res.Food, true).whole = 1000;
+            l.Store(Res.Timber, true).whole = fromStore ? 10 : 0;
+            l.Store(Res.Stone, true).whole = fromStore ? 10 : 0;
+            l.AddStanding(Res.Timber, fromStore ? 0f : 40f).regrowPerDay = 0f;
+            l.AddStanding(Res.Stone, fromStore ? 0f : 40f).regrowPerDay = 0f;
+            l.sites.Add(new PendingBuild
+            {
+                planId = BuildPlans.Hut.id, x = 5f, z = 5f,
+                needed = 5, stoneNeeded = 3, phased = true,
+            });
+            l.lastTicked = 0.0;
+            return l;
+        }
+
+        static float TimberAll(OutpostLedger l)
+        {
+            var st = l.Store(Res.Timber);
+            return (st != null ? st.whole + st.part : 0f) + l.CarriedOf(Res.Timber)
+                + l.Stock(Res.Timber).standing + l.sites[0].done + l.sites[0].donePart;
+        }
+
+        static float StoneAll(OutpostLedger l)
+        {
+            var st = l.Store(Res.Stone);
+            return (st != null ? st.whole + st.part : 0f) + l.CarriedOf(Res.Stone)
+                + l.Stock(Res.Stone).standing + l.sites[0].stoneDone + l.sites[0].stoneDonePart;
+        }
+
+        static int Trips(OutpostLedger l)
+        {
+            int n = 0;
+            foreach (var h in l.hands) n += h.haulSerial;
+            return n;
+        }
+
+        static void SiteRun(StringBuilder sb, ref int fails, bool fromStore, double stepDays)
+        {
+            var l = Site(fromStore);
+            var p = l.sites[0];
+            float t0 = TimberAll(l), s0 = StoneAll(l);
+            double now = l.lastTicked;
+            string tag = $"{(fromStore ? "store" : "cut")}-{stepDays:0.00}d";
+            string over = null, shown = null, early = null, cons = null;
+            bool sawBuild = false;
+            int ticks = Mathf.CeilToInt((float)(8.0 / stepDays));
+            for (int i = 0; i < ticks && !p.Complete; i++)
+            {
+                Advance(l, ref now, stepDays);
+                int tIn = p.done + l.CarriedOf(Res.Timber), sIn = p.stoneDone + l.CarriedOf(Res.Stone);
+                if (over == null && (p.done > p.needed || p.stoneDone > p.stoneNeeded || tIn > p.needed || sIn > p.stoneNeeded))
+                    over = $"tick {i}: timber {p.done}+{l.CarriedOf(Res.Timber)} carried of {p.needed}, stone {p.stoneDone}+{l.CarriedOf(Res.Stone)} of {p.stoneNeeded}";
+                string line = p.PhaseLine;
+                bool countsOk = p.donePart == 0f && p.stoneDonePart == 0f
+                    && Mathf.Abs(p.Fill01 - (p.done + p.stoneDone) / 8f) < 1e-5f
+                    && (p.Stocked || (line.Contains($"{p.done}/{p.needed} logs") && line.Contains($"{p.stoneDone}/{p.stoneNeeded} stone")));
+                if (shown == null && !countsOk)
+                    shown = $"tick {i}: '{line}' done {p.done}+{p.donePart} stone {p.stoneDone}+{p.stoneDonePart} fill {p.Fill01:0.###}";
+                if (early == null && !(p.Stocked && p.Cleared) && (p.built > 0f || p.Build01 > 0f || p.Progress01 > 0f))
+                    early = $"tick {i}: built {p.built:0.###} build01 {p.Build01:0.##} progress {p.Progress01:0.##} at {p.done}/5 {p.stoneDone}/3";
+                if (p.Stocked && p.built > 0f) sawBuild = true;
+                if (cons == null && (Mathf.Abs(TimberAll(l) - t0) > 1e-3f || Mathf.Abs(StoneAll(l) - s0) > 1e-3f))
+                    cons = $"tick {i}: timber {TimberAll(l):0.###} of {t0}, stone {StoneAll(l):0.###} of {s0}";
+            }
+            Gate(sb, ref fails, $"site-never-over-{tag}", over == null, over ?? "delivered + in arms never above the cost");
+            Gate(sb, ref fails, $"site-counts-true-{tag}", shown == null, shown ?? $"'{p.PhaseLine}', whole units, no fractions");
+            Gate(sb, ref fails, $"site-build-waits-{tag}", early == null, early ?? "0 % until 5/5 + 3/3");
+            Gate(sb, ref fails, $"site-conserves-{tag}", cons == null, cons ?? $"timber {t0}, stone {s0} accounted every tick");
+            Gate(sb, ref fails, $"site-completes-{tag}", p.Complete && sawBuild && p.done == 5 && p.stoneDone == 3
+                                                      && Mathf.Approximately(p.Progress01, 1f) && l.CarriedOf(Res.Timber) == 0,
+                $"complete {p.Complete} at {now / TimeOfDay.DayLength:0.0} d, {p.done}/5 {p.stoneDone}/3, {p.Progress01:P0}");
+            Gate(sb, ref fails, $"site-trips-{tag}", Trips(l) <= 4,
+                $"{Trips(l)} trips for 5 timber (armful 2) + 3 stone (armful 3); 4 is the least");
+        }
+
+        static bool SameSite(OutpostLedger a, OutpostLedger b)
+        {
+            var p = a.sites[0]; var q = b.sites[0];
+            return p.done == q.done && p.stoneDone == q.stoneDone && Mathf.Abs(p.built - q.built) < 1e-3f
+                && a.CarriedOf(Res.Timber) == b.CarriedOf(Res.Timber) && a.CarriedOf(Res.Stone) == b.CarriedOf(Res.Stone)
+                && Mathf.Abs(a.Stock(Res.Timber).standing - b.Stock(Res.Timber).standing) < 1e-3f
+                && Mathf.Abs(a.Stock(Res.Stone).standing - b.Stock(Res.Stone).standing) < 1e-3f;
+        }
+
+        static string SiteState(OutpostLedger l)
+        {
+            var p = l.sites[0];
+            return $"{p.done}/5 {p.stoneDone}/3 arms {l.CarriedOf(Res.Timber)}t{l.CarriedOf(Res.Stone)}s built {p.built:0.###}";
         }
 
         static OutpostLedger Quarry(int stone, int ceiling, int idleHaulers)

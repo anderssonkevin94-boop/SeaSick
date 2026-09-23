@@ -133,10 +133,11 @@ namespace SeaSick.UI.Sheets
             if (l == null || p == null) return;
             outpost.CatchUp();
 
-            // **Both phases in one bar, 2026-09-23.** `Progress01` is the
-            // stocking in its first half and the raising in its second, so
-            // "everything delivered, nobody has started" reads 50 % -- the
-            // number the site's own phase line says in words underneath.
+            // **The percentage is the BUILDING alone** (Kevin's phone
+            // playtest, 2026-09-23: *"the percentages also start going up
+            // before resource quota is met"*). `Progress01` reads 0 % while
+            // the plot is cleared and stocked -- the chips below count the
+            // deliveries in whole units -- then 0 to 100 over the hammering.
             int pct = Mathf.RoundToInt(p.Progress01 * 100f);
             if (pct != ringKey)
             {
@@ -245,10 +246,9 @@ namespace SeaSick.UI.Sheets
             if (p == null) return "not started";
             int timberLeft = Mathf.Max(0, p.needed - p.done);
             int stoneLeft = Mathf.Max(0, p.stoneNeeded - p.stoneDone);
-            // Brick has no per-hand pace below -- `OutpostLedger.PayBrick`
-            // pays it straight out of the pile, never off a hand's back
-            // (BuildPlan.cs:86) -- so it only holds this clock at "ready to
-            // raise" until the stores cover it; it never slows the estimate.
+            // Brick has no per-hand pace below -- it is only ever carried
+            // out of a pile or a rack (`OutpostLedger.StartSiteTrip`), never
+            // made on site -- so it never slows the estimate.
             int brickLeft = Mathf.Max(0, p.brickNeeded - p.brickDone);
             // **The building phase has its own clock, 2026-09-23.** A
             // stocked site is not "ready to raise" any more -- it is being

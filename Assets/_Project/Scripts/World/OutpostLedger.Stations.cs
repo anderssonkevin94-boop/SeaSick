@@ -513,6 +513,7 @@ namespace SeaSick.World
         void StartTrip(OutpostHand h, string res, int n, HaulPlace from, int fromStation,
             HaulPlace to, int toStation, float tripDays, bool fromBay = false)
         {
+            h.haulSerial++;
             h.haulFromBay = fromBay;
             h.haulRes = res;
             h.haulCount = n;
@@ -535,6 +536,17 @@ namespace SeaSick.World
         void DepositHaul(OutpostHand h, bool force = false)
         {
             if (h == null || !h.Hauling) { if (h != null) ClearHaul(h); return; }
+            // **A builder's armful into a blueprint** (2026-09-23): through
+            // `DeliverToSite`, so it fills the oldest site short of it up to
+            // its need and any surplus (a visitor beat him to it, the site
+            // was cancelled) goes on the pile -- never past a need, never lost.
+            if (h.haulTo == HaulPlace.Site)
+            {
+                if (h.haulFrom == HaulPlace.Field && h.haulRes == Res.Timber) timberTaken += h.haulCount;
+                DeliverToSite(h.haulRes, h.haulCount);
+                ClearHaul(h);
+                return;
+            }
             StationStock dest = null;
             if (h.haulTo == HaulPlace.Station && stations != null
                 && h.haulToStation >= 0 && h.haulToStation < stations.Count)
@@ -903,8 +915,9 @@ namespace SeaSick.World
                 {
                     HaulerDay(h, ref budget);
                 }
-                else if (h.Hauling)
+                else if (h.Hauling && h.haulTo != HaulPlace.Site)
                 {
+                    // (A builder's site load is the builder pass's own.)
                     DepositHaul(h);
                 }
             }

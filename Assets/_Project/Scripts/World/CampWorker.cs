@@ -395,6 +395,8 @@ namespace SeaSick.World
         // --- the row ---------------------------------------------------------
 
         OutpostHand row;
+        /// The ledger trip (`OutpostHand.haulSerial`) this body last mimed.
+        int mimedTrip = -1;
         float rowChecked;
 
         /// The row this body is drawing.
@@ -614,8 +616,28 @@ namespace SeaSick.World
                         phase = Phase.Going;
                         return;
                     }
+                    // **One walk per LEDGER trip, 2026-09-23** (phone
+                    // playtest: *"they carry way too much resources to
+                    // it"*). The body used to fetch on its own clock --
+                    // a load every few seconds while the books moved one
+                    // unit a quarter-day -- so the site took far more trips
+                    // than it had units. Now a builder fetches only while
+                    // his row is carrying an armful to a site
+                    // (`OutpostHand.haulTo == Site`), and mimes each of
+                    // those trips once; between trips he rests by the fire.
+                    if (r.order == OutpostOrder.Build)
+                    {
+                        if (!(r.Hauling && r.haulTo == HaulPlace.Site) || r.haulSerial == mimedTrip)
+                        {
+                            wait = RestSeconds;
+                            return;
+                        }
+                        mimedTrip = r.haulSerial;
+                    }
                     string wantB = WhatFor(r);
-                    hauling = r.order == OutpostOrder.Build && PileHas(wantB);
+                    hauling = r.order == OutpostOrder.Build
+                        ? r.haulFrom != HaulPlace.Field
+                        : false;
                     target = hauling ? PileSpot(wantB) : FindSomethingToWorkAt(r);
                     phase = Phase.Going;
                     return;
@@ -1020,14 +1042,13 @@ namespace SeaSick.World
                 // island while the one standing IN the footprint waited.
                 if (f != null && !f.Cleared) return false;
                 if (f != null && f.Stocked) return false;
-                return WhatFor(r) == Res.Timber && !PileHas(Res.Timber);
+                // Cutting exactly while the books have him cutting: a
+                // site-bound armful of timber taken off the standing wood.
+                return r.Hauling && r.haulTo == HaulPlace.Site
+                    && r.haulFrom == HaulPlace.Field && r.haulRes == Res.Timber;
             }
             return r.order == OutpostOrder.Gather && r.target == Res.Timber;
         }
-
-        bool PileHas(string resource) =>
-            !string.IsNullOrEmpty(resource) && camp != null && camp.Ledger != null
-            && camp.Ledger.CountOf(resource) > 0;
 
         bool Claim() => camp.ClaimTree(this, out claimedTree, out claimAt);
 
@@ -1225,6 +1246,8 @@ namespace SeaSick.World
         {
             if (r == null) return null;
             if (r.order != OutpostOrder.Build) return r.target;
+            // What the books say is in his arms, when there is something.
+            if (r.Hauling && r.haulTo == HaulPlace.Site) return r.haulRes;
             string want = camp != null && camp.Ledger != null ? camp.Ledger.BuilderWants : null;
             return string.IsNullOrEmpty(want) ? Res.Timber : want;
         }

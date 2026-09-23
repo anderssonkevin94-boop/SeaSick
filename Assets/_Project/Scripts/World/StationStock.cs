@@ -32,6 +32,10 @@ namespace SeaSick.World
         Station,
         /// The island itself: a stationed worker gathering his own raw.
         Field,
+        /// A queued blueprint (`OutpostLedger.sites`), 2026-09-23: a
+        /// builder's armful. Not tied to one row -- it lands in the oldest
+        /// site short of it (`OutpostLedger.DeliverToSite`).
+        Site,
     }
 
     /// **A production station's own stock, one per BUILT instance
