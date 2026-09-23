@@ -58,6 +58,15 @@ namespace SeaSick.World
         /// be broken and mended several times in one raid.
         Transform whole, broken;
 
+        /// The camp's chain of posts (`WallChain`), which redraws this when
+        /// a neighbour changes how its ends fit -- and the fit it was last
+        /// drawn with, so it only does when something did change. Null for
+        /// the extruded fallback and for a segment with no camp object.
+        WallChain chain;
+        int fitKey = -1;
+
+        internal int FitKey => fitKey;
+
         /// Metres from the line within which a point counts as "on" this
         /// segment. Half the post step, so two parallel runs a step apart
         /// are still two runs.
@@ -94,7 +103,31 @@ namespace SeaSick.World
             hp = Mathf.Clamp(hitPoints, 0f, maxHp);
             whole = wholeVisual;
             broken = brokenVisual;
+            chain = WallChain.Of(transform.parent);
+            if (chain != null)
+            {
+                // The factory drew it a moment ago from this same question.
+                fitKey = chain.FitFor(a, b, isGate, this).Key;
+                chain.Add(this);
+            }
             ShowState();
+        }
+
+        /// A new drawing from the chain: the old one goes, the state it
+        /// shows carries over.
+        internal void Redraw(Transform newWhole, Transform newBroken, int key)
+        {
+            if (whole != null && whole != newWhole) WallVisual.Kill(whole.gameObject);
+            if (broken != null && broken != newBroken) WallVisual.Kill(broken.gameObject);
+            whole = newWhole;
+            broken = newBroken;
+            fitKey = key;
+            ShowState();
+        }
+
+        void OnDestroy()
+        {
+            if (chain != null) chain.Remove(this);
         }
 
         /// The midpoint at ground height -- where a hauler walks to, where
@@ -188,15 +221,15 @@ namespace SeaSick.World
             var map = Camp != null ? CampPath.For(Camp) : null;
             if (map != null) map.MarkWall(this, false);   // off the map as a WALL
 
-            if (whole != null) Destroy(whole.gameObject);
-            if (broken != null) Destroy(broken.gameObject);
-            whole = gateWhole;
-            broken = gateBroken;
             isGate = true;
             maxHp = HpFor(Length, true);
             hp = maxHp;
             if (Row != null) { Row.isGate = true; Row.hp = hp; Row.maxHp = maxHp; }
-            ShowState();
+            Redraw(gateWhole, gateBroken,
+                chain != null ? chain.FitFor(a, b, true, this).Key : -1);
+            // The gate's own posts stand on its nodes now (when it fits
+            // them), so the chain's posts there come down.
+            if (chain != null) chain.MarkDirty();
 
             if (map != null) map.MarkWall(this, true);    // back on, as a GATE
         }
