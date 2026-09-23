@@ -67,7 +67,17 @@ namespace SeaSick.World
             if (Dress(root.transform, plan))
             {
                 if (plan.beds > 0) NameBeds(root.transform);
-                Footing(root.transform, plan, footing);
+                // **No slab under an authored model (Kevin, 2026-09-24):**
+                // *"all the buildings on these concrete looking slabs in game
+                // really breaks the immersion. ensure the buildings are
+                // standing flat on the ground, some clipping is okay."* The
+                // caller hands us the HIGHEST corner; the model is let down
+                // most of the way to the lowest, so the downhill edge floats
+                // by at most a fifth of the drop (a few centimetres on the
+                // plots we allow) and the uphill side clips into the slope,
+                // which he accepted. The extruded fallbacks below still pour
+                // their own footing; they are what a missing model gets.
+                root.transform.position -= new Vector3(0f, Mathf.Max(0f, footing) * SinkIntoSlope, 0f);
                 // The kit's fire is a ring of stones and nothing else. The
                 // LIGHT is the whole reason a camp reads from the water at
                 // night, so it is added whatever the geometry came from.
@@ -541,6 +551,11 @@ namespace SeaSick.World
         /// ones have one: the ground is never flattened, so a building sits at
         /// its highest corner and something has to bridge the drop to its
         /// lowest. Buried is invisible; floating is not.
+        /// How much of the plot's high-to-low drop an authored model is let
+        /// down by (1 = sit on the lowest corner, 0 = the old highest-corner
+        /// perch). Kit and extruded buildings are unaffected.
+        const float SinkIntoSlope = 0.8f;
+
         static void Footing(Transform root, BuildPlan plan, float footing)
         {
             if (footing <= 0.05f && plan.kind == BuildKind.Fire) return;
