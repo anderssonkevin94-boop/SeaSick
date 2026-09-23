@@ -413,13 +413,19 @@ namespace SeaSick.World
             footprint = new Vector2(6.53f, 5.85f),
             ridge = 4.29f,
             position = "smith",
-            // Bay/rack capacity in units. **A guess** (the sawmill's numbers), never played.
-            inputSlots = 6,
-            outputSlots = 12,
+            // Bay/rack capacity in units, 2026-09-23: Astra's forge kit
+            // (art-staging/forge-astra-lvl1-v1) has 5 Input_Ore and 4
+            // Output_Tool display slots -- real capacities now, not the
+            // sawmill's borrowed guess.
+            inputSlots = 5,
+            outputSlots = 4,
             takes = Res.Ore,
             makes = Res.Tools,
             rate = 1.5f,
-            prefab = "Settlement/blacksmith",
+            // Astra's level-one blacksmith (art-staging/forge-astra-lvl1-v1,
+            // 2026-09-23); its validated bounds (5.90 x 3.31 x 4.46 m) sit
+            // inside this footprint/ridge, so neither needed correcting.
+            prefab = "Settlement/blacksmith_astra",
         };
 
         public static readonly BuildPlan Kitchen = new BuildPlan
@@ -473,8 +479,19 @@ namespace SeaSick.World
             resource = Res.Timber,
             baseCost = 12,
             footprint = new Vector2(2.6f, 2.6f),
-            ridge = 7.5f,
+            // **2026-09-23: 4.65 m, not the old 7.5 m.** Astra's V2 bare-
+            // platform tower (art-staging/watchtower-astra-lvl1-v2 -- no
+            // roof, no rail, no bracing, Kevin approved) measures 4.65 m
+            // overall (validated bounds 2.275 x 4.651 x 2.404 m, footprint
+            // fits the 2.6 x 2.6 plot). The old 7.5 m was the V1 study's
+            // allowance, not this asset's real height -- do not stretch the
+            // model to fill it.
+            ridge = 4.65f,
             position = "lookout",
+            // Astra's level-one watchtower (art-staging/watchtower-astra-lvl1-v2);
+            // `BuildKind.Hut` (the extruded shed) stays as the fallback if it
+            // fails to load.
+            prefab = "Settlement/watchtower_astra",
         };
 
         /// **The quarry, 2026-09-22.** Kevin: *"we need a stone quarry
@@ -549,13 +566,25 @@ namespace SeaSick.World
             footprint = new Vector2(4.84f, 4.93f),
             ridge = 3.2f,
             position = "fletcher",
-            // Bay/rack capacity in units. **A guess** (the sawmill's numbers), never played.
-            inputSlots = 6,
-            outputSlots = 12,
+            // Bay/rack capacity in units, 2026-09-23: Astra's fletcher kit
+            // (art-staging/fletcher-astra-lvl1-v1) has 5 Input_Timber and 4
+            // Output_Arrows display slots -- real capacities now, not the
+            // sawmill's borrowed guess.
+            inputSlots = 5,
+            outputSlots = 4,
             takes = Res.Timber,
             makes = Res.Arrows,
             rate = 3f,
             yieldPerInput = 3f,
+            // Astra's level-one fletcher (art-staging/fletcher-astra-lvl1-v1,
+            // 2026-09-23); its validated bounds (4.13 x 2.97 x 4.02 m) sit
+            // inside this footprint/ridge, so neither needed correcting.
+            // `BuildKind.Fletcher` (the extruded bench+butt) already runs
+            // as `Raise`'s fallback only when `Dress` fails to load a
+            // prefab -- see `BuildingFactory.Raise`, which tries `Dress`
+            // before any `plan.kind` branch -- so naming a prefab here is
+            // enough for the authored kit to win with no factory change.
+            prefab = "Settlement/fletcher_astra",
         };
 
         /// **A pier, 2026-09-21.** Kevin: *"I'd like a pier asset to be

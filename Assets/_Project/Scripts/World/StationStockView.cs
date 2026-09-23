@@ -177,19 +177,22 @@ namespace SeaSick.World
 
         // --- discovery -------------------------------------------------------------
 
-        /// **Alias names, 2026-09-23 (Astra's kitchen).** The kit convention
-        /// wraps slots in `Input_Container`/`Output_Container`/`Bench_Anchor`
-        /// groups, but Astra's kitchen kit has no such wrapper -- its
-        /// `Input_Food_NN`, `Output_Meal_NN` and work-state meshes sit flat
-        /// at the model root, and the work states are named for what they
-        /// SHOW (`Work_Preparing`/`Work_Cooking`/`Work_Finished`) rather than
-        /// for the bench mechanic (`Bench_Loaded`/`Bench_Cutting`/
+        /// **Alias names, 2026-09-23 (Astra's kitchen, forge and fletcher).**
+        /// The kit convention wraps slots in
+        /// `Input_Container`/`Output_Container`/`Bench_Anchor` groups, but
+        /// several of Astra's kits have no such wrapper -- their numbered
+        /// slots and work-state meshes sit flat at the model root, and each
+        /// kit names its work states for what they SHOW
+        /// (kitchen: `Work_Preparing`/`Work_Cooking`/`Work_Finished`; forge:
+        /// `Work_Heating`/`Work_Forging`/`Work_Finished`; fletcher:
+        /// `Work_Shaping`/`Work_Fletching`/`Work_Finished`) rather than for
+        /// the bench mechanic (`Bench_Loaded`/`Bench_Cutting`/
         /// `Bench_Finished`). Extending discovery with a small alias list
         /// (and a root-level fallback when a container is absent) keeps this
-        /// one generic reader working on both kits, per Kevin's rule of
+        /// one generic reader working on every kit, per Kevin's rule of
         /// extending the reader rather than special-casing a building.
-        static readonly string[] BenchLoadedNames = { "Bench_Loaded", "Work_Preparing" };
-        static readonly string[] BenchCuttingNames = { "Bench_Cutting", "Work_Cooking" };
+        static readonly string[] BenchLoadedNames = { "Bench_Loaded", "Work_Preparing", "Work_Heating", "Work_Shaping" };
+        static readonly string[] BenchCuttingNames = { "Bench_Cutting", "Work_Cooking", "Work_Forging", "Work_Fletching" };
         static readonly string[] BenchFinishedNames = { "Bench_Finished", "Work_Finished" };
 
         void DiscoverSlots()

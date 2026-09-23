@@ -3312,10 +3312,16 @@ namespace SeaSick.World
         /// through `Terrain.SceneryCrops.Plant`.
         public static System.Action<Building> PlantFarmBeds;
 
+        /// **Campfire hook, 2026-09-23.** Same shape as `PlantFarmBeds`:
+        /// called with the building the moment a campfire is actually
+        /// raised. `CampPug` uses it to stand her companion by the fire.
+        public static System.Action<Building> SpawnCampPug;
+
         void AfterRaised(BuildPlan plan, Building b)
         {
             if (b == null) return;
             if (plan.id == BuildPlans.Farm.id) PlantFarmBeds?.Invoke(b);
+            if (plan.id == BuildPlans.Campfire.id) SpawnCampPug?.Invoke(b);
         }
 
         /// Share of an island's disc that is worth working. The rest is
