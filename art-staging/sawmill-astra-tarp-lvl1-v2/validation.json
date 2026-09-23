@@ -1,0 +1,168 @@
+{
+  "modules": {
+    "Frame": {
+      "triangles": 924,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canopy": {
+      "triangles": 2048,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Lashings": {
+      "triangles": 2736,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign": {
+      "triangles": 168,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Rack": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Log_01": {
+      "triangles": 116,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Log_02": {
+      "triangles": 116,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Log_03": {
+      "triangles": 116,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Log_04": {
+      "triangles": 116,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Log_05": {
+      "triangles": 116,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Log_06": {
+      "triangles": 116,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Rack": {
+      "triangles": 352,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_01": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_02": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_03": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_04": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_05": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_06": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_07": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_08": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_09": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_10": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_11": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Plank_12": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Workbench": {
+      "triangles": 924,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Loaded": {
+      "triangles": 116,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Cutting": {
+      "triangles": 64,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Finished": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Saw_Tool": {
+      "triangles": 220,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "all_variant_triangles": 9348,
+  "bounds": [
+    [
+      -3.4100000858306885,
+      -2.305000066757202,
+      0.0
+    ],
+    [
+      3.4800000190734863,
+      2.4674625396728516,
+      3.380000114440918
+    ]
+  ],
+  "canopy_occlusion_hits": {
+    "(-9, -12, 9)": 0,
+    "(0, -15, 10)": 0,
+    "(9, -12, 9)": 0
+  },
+  "empty_triangles": 7680
+}

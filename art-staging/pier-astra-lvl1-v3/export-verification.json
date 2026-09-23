@@ -1,0 +1,22 @@
+{
+  "Pier_Deck_2m": {
+    "result": "PASS",
+    "triangles": 904
+  },
+  "Pier_Infill_2m": {
+    "result": "PASS",
+    "triangles": 508
+  },
+  "Pier_Sea_End_2m": {
+    "result": "PASS",
+    "triangles": 1384
+  },
+  "Pier_Piling_1m": {
+    "result": "PASS",
+    "triangles": 28
+  },
+  "Pier_Shore_Ramp": {
+    "result": "PASS",
+    "triangles": 352
+  }
+}

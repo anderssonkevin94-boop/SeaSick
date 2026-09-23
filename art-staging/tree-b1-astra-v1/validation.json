@@ -1,0 +1,24 @@
+{
+  "Tree_B1_Wood": {
+    "triangles": 1834,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Tree_B1_Canopy": {
+    "triangles": 9574,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "bounds_blender": [
+    [
+      -2.5079336166381836,
+      -2.136336088180542,
+      -0.1020718663930893
+    ],
+    [
+      2.4162447452545166,
+      1.907477855682373,
+      6.943777084350586
+    ]
+  ]
+}

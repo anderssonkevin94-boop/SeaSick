@@ -1,0 +1,369 @@
+{
+  "parts": {
+    "Pier_Deck_1m": {
+      "file": "Pier_Deck_1m.fbx",
+      "sockets_blender": {
+        "Snap_Land": [
+          0,
+          0,
+          0
+        ],
+        "Snap_Sea": [
+          1,
+          0,
+          0
+        ],
+        "Deck_Land": [
+          0,
+          0,
+          1.2
+        ],
+        "Deck_Sea": [
+          1,
+          0,
+          1.2
+        ],
+        "Pile_Left": [
+          0.4,
+          1.24,
+          0.45999999999999996
+        ],
+        "Pile_Right": [
+          0.4,
+          -1.24,
+          0.45999999999999996
+        ]
+      },
+      "marker_names": {
+        "Snap_Land": "Pier_Deck_1m__Snap_Land",
+        "Snap_Sea": "Pier_Deck_1m__Snap_Sea",
+        "Deck_Land": "Pier_Deck_1m__Deck_Land",
+        "Deck_Sea": "Pier_Deck_1m__Deck_Sea",
+        "Pile_Left": "Pier_Deck_1m__Pile_Left",
+        "Pile_Right": "Pier_Deck_1m__Pile_Right"
+      }
+    },
+    "Pier_Infill_1m": {
+      "file": "Pier_Infill_1m.fbx",
+      "sockets_blender": {
+        "Snap_Land": [
+          0,
+          0,
+          0
+        ],
+        "Snap_Sea": [
+          1,
+          0,
+          0
+        ],
+        "Deck_Land": [
+          0,
+          0,
+          1.2
+        ],
+        "Deck_Sea": [
+          1,
+          0,
+          1.2
+        ]
+      },
+      "marker_names": {
+        "Snap_Land": "Pier_Infill_1m__Snap_Land",
+        "Snap_Sea": "Pier_Infill_1m__Snap_Sea",
+        "Deck_Land": "Pier_Infill_1m__Deck_Land",
+        "Deck_Sea": "Pier_Infill_1m__Deck_Sea"
+      }
+    },
+    "Pier_Sea_End_1m": {
+      "file": "Pier_Sea_End_1m.fbx",
+      "sockets_blender": {
+        "Snap_Land": [
+          0,
+          0,
+          0
+        ],
+        "Snap_Sea": [
+          1,
+          0,
+          0
+        ],
+        "Deck_Land": [
+          0,
+          0,
+          1.2
+        ],
+        "Deck_Sea": [
+          1,
+          0,
+          1.2
+        ],
+        "Pile_Left": [
+          0.4,
+          1.24,
+          0.45999999999999996
+        ],
+        "Pile_Right": [
+          0.4,
+          -1.24,
+          0.45999999999999996
+        ],
+        "Mooring_Tie": [
+          0.77,
+          -1.12,
+          1.38
+        ],
+        "Light_Source": [
+          0.4,
+          0.58,
+          2.5
+        ]
+      },
+      "marker_names": {
+        "Snap_Land": "Pier_Sea_End_1m__Snap_Land",
+        "Snap_Sea": "Pier_Sea_End_1m__Snap_Sea",
+        "Deck_Land": "Pier_Sea_End_1m__Deck_Land",
+        "Deck_Sea": "Pier_Sea_End_1m__Deck_Sea",
+        "Pile_Left": "Pier_Sea_End_1m__Pile_Left",
+        "Pile_Right": "Pier_Sea_End_1m__Pile_Right",
+        "Mooring_Tie": "Pier_Sea_End_1m__Mooring_Tie",
+        "Light_Source": "Pier_Sea_End_1m__Light_Source"
+      }
+    },
+    "Pier_Deck_2m": {
+      "file": "Pier_Deck_2m.fbx",
+      "sockets_blender": {
+        "Snap_Land": [
+          0,
+          0,
+          0
+        ],
+        "Snap_Sea": [
+          2,
+          0,
+          0
+        ],
+        "Deck_Land": [
+          0,
+          0,
+          1.2
+        ],
+        "Deck_Sea": [
+          2,
+          0,
+          1.2
+        ],
+        "Pile_Left": [
+          0.4,
+          1.24,
+          0.45999999999999996
+        ],
+        "Pile_Right": [
+          0.4,
+          -1.24,
+          0.45999999999999996
+        ]
+      },
+      "marker_names": {
+        "Snap_Land": "Pier_Deck_2m__Snap_Land",
+        "Snap_Sea": "Pier_Deck_2m__Snap_Sea",
+        "Deck_Land": "Pier_Deck_2m__Deck_Land",
+        "Deck_Sea": "Pier_Deck_2m__Deck_Sea",
+        "Pile_Left": "Pier_Deck_2m__Pile_Left",
+        "Pile_Right": "Pier_Deck_2m__Pile_Right"
+      }
+    },
+    "Pier_Infill_2m": {
+      "file": "Pier_Infill_2m.fbx",
+      "sockets_blender": {
+        "Snap_Land": [
+          0,
+          0,
+          0
+        ],
+        "Snap_Sea": [
+          2,
+          0,
+          0
+        ],
+        "Deck_Land": [
+          0,
+          0,
+          1.2
+        ],
+        "Deck_Sea": [
+          2,
+          0,
+          1.2
+        ]
+      },
+      "marker_names": {
+        "Snap_Land": "Pier_Infill_2m__Snap_Land",
+        "Snap_Sea": "Pier_Infill_2m__Snap_Sea",
+        "Deck_Land": "Pier_Infill_2m__Deck_Land",
+        "Deck_Sea": "Pier_Infill_2m__Deck_Sea"
+      }
+    },
+    "Pier_Sea_End_2m": {
+      "file": "Pier_Sea_End_2m.fbx",
+      "sockets_blender": {
+        "Snap_Land": [
+          0,
+          0,
+          0
+        ],
+        "Snap_Sea": [
+          2,
+          0,
+          0
+        ],
+        "Deck_Land": [
+          0,
+          0,
+          1.2
+        ],
+        "Deck_Sea": [
+          2,
+          0,
+          1.2
+        ],
+        "Pile_Left": [
+          0.4,
+          1.24,
+          0.45999999999999996
+        ],
+        "Pile_Right": [
+          0.4,
+          -1.24,
+          0.45999999999999996
+        ],
+        "Mooring_Tie": [
+          1.77,
+          -1.12,
+          1.38
+        ],
+        "Light_Source": [
+          0.4,
+          0.58,
+          2.5
+        ]
+      },
+      "marker_names": {
+        "Snap_Land": "Pier_Sea_End_2m__Snap_Land",
+        "Snap_Sea": "Pier_Sea_End_2m__Snap_Sea",
+        "Deck_Land": "Pier_Sea_End_2m__Deck_Land",
+        "Deck_Sea": "Pier_Sea_End_2m__Deck_Sea",
+        "Pile_Left": "Pier_Sea_End_2m__Pile_Left",
+        "Pile_Right": "Pier_Sea_End_2m__Pile_Right",
+        "Mooring_Tie": "Pier_Sea_End_2m__Mooring_Tie",
+        "Light_Source": "Pier_Sea_End_2m__Light_Source"
+      }
+    },
+    "Pier_Piling_1m": {
+      "file": "Pier_Piling_1m.fbx",
+      "sockets_blender": {
+        "Top": [
+          0,
+          0,
+          0
+        ],
+        "Bottom": [
+          0,
+          0,
+          -1
+        ]
+      },
+      "marker_names": {
+        "Top": "Pier_Piling_1m__Top",
+        "Bottom": "Pier_Piling_1m__Bottom"
+      }
+    },
+    "Pier_Pile_Cap": {
+      "file": "Pier_Pile_Cap.fbx",
+      "sockets_blender": {
+        "Shaft_Top": [
+          0,
+          0,
+          0
+        ],
+        "Cap_Top": [
+          0,
+          0,
+          1.289
+        ]
+      },
+      "marker_names": {
+        "Shaft_Top": "Pier_Pile_Cap__Shaft_Top",
+        "Cap_Top": "Pier_Pile_Cap__Cap_Top"
+      }
+    },
+    "Pier_Shore_Ramp": {
+      "file": "Pier_Shore_Ramp.fbx",
+      "sockets_blender": {
+        "Hinge": [
+          0,
+          0,
+          1.2
+        ],
+        "Toe": [
+          -2.4,
+          0,
+          1.2
+        ]
+      },
+      "marker_names": {
+        "Hinge": "Pier_Shore_Ramp__Hinge",
+        "Toe": "Pier_Shore_Ramp__Toe"
+      }
+    },
+    "Pier_Ramp_Foot_Pad": {
+      "file": "Pier_Ramp_Foot_Pad.fbx",
+      "sockets_blender": {
+        "Toe_Contact": [
+          0,
+          0,
+          0
+        ],
+        "Shore_Edge": [
+          -0.64,
+          0,
+          0
+        ]
+      },
+      "marker_names": {
+        "Toe_Contact": "Pier_Ramp_Foot_Pad__Toe_Contact",
+        "Shore_Edge": "Pier_Ramp_Foot_Pad__Shore_Edge"
+      }
+    }
+  },
+  "deck_top_local_z": 1.2,
+  "module_root": "land end at mean water",
+  "deck_width": 3,
+  "axis": "Blender +X sea, +Y width, +Z up",
+  "deck_lengths": [
+    1,
+    2
+  ],
+  "pile_attach_z": 0.46,
+  "pile_length": 1,
+  "cap_height": 1.289,
+  "ramp_run": 2.4,
+  "ramp_drop_range": [
+    0.3,
+    2.5
+  ],
+  "ramp_equations": {
+    "hinge_local": [
+      0,
+      0,
+      1.2
+    ],
+    "angle_Y": "-atan2(drop,2.4)",
+    "span_scale_X": "sqrt(2.4*2.4+drop*drop)/2.4",
+    "foot_pad_position": [
+      -2.4,
+      0,
+      "1.2-drop"
+    ],
+    "foot_pad_rotation": "identity"
+  }
+}

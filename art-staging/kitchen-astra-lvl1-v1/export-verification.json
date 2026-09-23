@@ -1,0 +1,20 @@
+{
+  "result": "PASS",
+  "exports": {
+    "kitchen-state-kit.fbx": {
+      "triangles": 8284,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "kitchen-empty.fbx": {
+      "triangles": 5604,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "kitchen-review.fbx": {
+      "triangles": 7224,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  }
+}

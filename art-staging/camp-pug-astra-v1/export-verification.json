@@ -1,0 +1,15 @@
+{
+  "result": "PASS",
+  "exports": {
+    "camp-pug.fbx": {
+      "triangles": 7444,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "camp-pug-no-neckerchief.fbx": {
+      "triangles": 7176,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  }
+}

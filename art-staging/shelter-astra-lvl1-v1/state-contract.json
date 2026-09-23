@@ -1,0 +1,10 @@
+{
+  "default_state": "open",
+  "mutually_exclusive": [
+    "Entrance_Open",
+    "Entrance_Closed"
+  ],
+  "beds": "Two fixed bedrolls, not a resident count display. No occupants are included.",
+  "lantern": "Opaque unlit prop, no light or flame effect.",
+  "integration": "Art only. No housing, sleep, navigation, or occupancy code supplied."
+}

@@ -1,0 +1,158 @@
+{
+  "Barrel": {
+    "triangles": 732,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Trunnion": {
+    "triangles": 92,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Carriage_Cheek_-1": {
+    "triangles": 196,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Bearing_Cap_-1": {
+    "triangles": 68,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Cheek_Bolt": {
+    "triangles": 20,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Cheek_Bolt.001": {
+    "triangles": 20,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Truck_Wheel": {
+    "triangles": 140,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Wheel_Pin": {
+    "triangles": 28,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Truck_Wheel.001": {
+    "triangles": 140,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Wheel_Pin.001": {
+    "triangles": 28,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Carriage_Cheek_1": {
+    "triangles": 196,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Bearing_Cap_1": {
+    "triangles": 68,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Cheek_Bolt.002": {
+    "triangles": 20,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Cheek_Bolt.003": {
+    "triangles": 20,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Truck_Wheel.002": {
+    "triangles": 140,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Wheel_Pin.002": {
+    "triangles": 28,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Truck_Wheel.003": {
+    "triangles": 140,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Wheel_Pin.003": {
+    "triangles": 28,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Axle": {
+    "triangles": 28,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Cross_Timber": {
+    "triangles": 44,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Axle.001": {
+    "triangles": 28,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Cross_Timber.001": {
+    "triangles": 44,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Carriage_Bed": {
+    "triangles": 44,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Elevation_Quoin": {
+    "triangles": 44,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Quoin_Handle": {
+    "triangles": 44,
+    "boundary_edges": 0,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "dimensions_xyz": [
+    1.2200000286102295,
+    2.1815762519836426,
+    1.2756377458572388
+  ],
+  "total_triangles": 2380
+}

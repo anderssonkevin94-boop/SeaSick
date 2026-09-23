@@ -1,0 +1,80 @@
+{
+  "Hull_Shell": {
+    "vertices": 3906,
+    "triangles": 7808,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Rails_Teal": {
+    "vertices": 4292,
+    "triangles": 8404,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Hull_Ironwork": {
+    "vertices": 3196,
+    "triangles": 6164,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Plank_Seams": {
+    "vertices": 1764,
+    "triangles": 3292,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Chimney": {
+    "vertices": 240,
+    "triangles": 476,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Helm": {
+    "vertices": 552,
+    "triangles": 1016,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Housing_Lid": {
+    "vertices": 145,
+    "triangles": 286,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Housing_Ironwork": {
+    "vertices": 736,
+    "triangles": 1416,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Housing_AccessPanel": {
+    "vertices": 696,
+    "triangles": 1376,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Paddle_Rotor": {
+    "vertices": 2768,
+    "triangles": 5408,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Paddle_Frame": {
+    "vertices": 312,
+    "triangles": 588,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "total_triangles": 36234
+}

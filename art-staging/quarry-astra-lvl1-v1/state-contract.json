@@ -1,0 +1,17 @@
+{
+  "input_display_slots": 5,
+  "output_display_slots": 12,
+  "slots_are_not_gameplay_capacity": true,
+  "default_state": "empty",
+  "bench_variants": [
+    "Bench_Loaded",
+    "Bench_Cutting",
+    "Bench_Finished"
+  ],
+  "production_rules": [
+    "Require rough stone before starting; move it out of the input bay when loaded.",
+    "Finish an existing job even with empty input storage.",
+    "If output is full, retain finished work on the bench and block the next job."
+  ],
+  "integration": "Art staging only. No Unity assets, production code, or game scenes modified."
+}

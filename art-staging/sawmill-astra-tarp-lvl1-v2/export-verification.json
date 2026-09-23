@@ -1,0 +1,23 @@
+{
+  "sawmill-tarp-state-kit.fbx": {
+    "triangles": 9348,
+    "meshes": 29,
+    "flat_shading": true,
+    "vertex_colors": true,
+    "state_hierarchy": true
+  },
+  "sawmill-tarp-empty.fbx": {
+    "triangles": 7680,
+    "meshes": 7,
+    "flat_shading": true,
+    "vertex_colors": true,
+    "state_hierarchy": true
+  },
+  "sawmill-tarp-review.fbx": {
+    "triangles": 8692,
+    "meshes": 19,
+    "flat_shading": true,
+    "vertex_colors": true,
+    "state_hierarchy": true
+  }
+}

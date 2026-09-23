@@ -1,0 +1,12 @@
+{
+  "mesh_count": 29,
+  "triangles": 6916,
+  "nonmanifold_edges": 0,
+  "degenerate_faces": 0,
+  "roof_occlusion_hits_at_review_angles": {
+    "(8, -12, 8)": 0,
+    "(-8, -12, 8)": 0,
+    "(0, -14, 7)": 0
+  },
+  "result": "PASS"
+}

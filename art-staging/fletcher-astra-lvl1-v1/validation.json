@@ -1,0 +1,132 @@
+{
+  "modules": {
+    "Frame": {
+      "triangles": 572,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canopy": {
+      "triangles": 1452,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shaving_Horse": {
+      "triangles": 568,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Workbench": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Hand_Tools": {
+      "triangles": 284,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Feather_Supplies": {
+      "triangles": 236,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bow_Rack": {
+      "triangles": 264,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Display_Bows": {
+      "triangles": 648,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Timber_Cradle": {
+      "triangles": 352,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Timber_01": {
+      "triangles": 92,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Timber_02": {
+      "triangles": 92,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Timber_03": {
+      "triangles": 92,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Timber_04": {
+      "triangles": 92,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Timber_05": {
+      "triangles": 92,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Arrow_Stand": {
+      "triangles": 748,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Arrows_01": {
+      "triangles": 324,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Arrows_02": {
+      "triangles": 324,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Arrows_03": {
+      "triangles": 324,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Arrows_04": {
+      "triangles": 324,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Shaping": {
+      "triangles": 28,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Fletching": {
+      "triangles": 128,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Finished": {
+      "triangles": 216,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign": {
+      "triangles": 264,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "all_variant_triangles": 8044,
+  "bounds": [
+    [
+      -2.1050000190734863,
+      -1.8969999551773071,
+      0.0
+    ],
+    [
+      2.0250000953674316,
+      2.125,
+      2.965179681777954
+    ]
+  ]
+}

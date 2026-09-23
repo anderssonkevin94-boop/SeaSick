@@ -1,0 +1,172 @@
+{
+  "Pier_Deck_1m": {
+    "triangles": 480,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        0.0,
+        -1.5,
+        0.46000003814697266
+      ],
+      [
+        1.0,
+        1.5,
+        1.2000000476837158
+      ]
+    ]
+  },
+  "Pier_Infill_1m": {
+    "triangles": 340,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        0.0,
+        -1.5,
+        0.7000000476837158
+      ],
+      [
+        1.0,
+        1.5,
+        1.2000000476837158
+      ]
+    ]
+  },
+  "Pier_Sea_End_1m": {
+    "triangles": 1136,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        0.0,
+        -1.5,
+        0.46000003814697266
+      ],
+      [
+        1.0,
+        1.5,
+        3.125
+      ]
+    ]
+  },
+  "Pier_Deck_2m": {
+    "triangles": 648,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        0.0,
+        -1.5,
+        0.46000003814697266
+      ],
+      [
+        2.0,
+        1.5,
+        1.2000000476837158
+      ]
+    ]
+  },
+  "Pier_Infill_2m": {
+    "triangles": 508,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        0.0,
+        -1.5,
+        0.7000000476837158
+      ],
+      [
+        2.0,
+        1.5,
+        1.2000000476837158
+      ]
+    ]
+  },
+  "Pier_Sea_End_2m": {
+    "triangles": 1304,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        0.0,
+        -1.5,
+        0.46000003814697266
+      ],
+      [
+        2.0,
+        1.5,
+        3.125
+      ]
+    ]
+  },
+  "Pier_Piling_1m": {
+    "triangles": 28,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        -0.23000000417232513,
+        -0.23000000417232513,
+        -1.0
+      ],
+      [
+        0.23000000417232513,
+        0.23000000417232513,
+        0.0
+      ]
+    ]
+  },
+  "Pier_Pile_Cap": {
+    "triangles": 128,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        -0.23399999737739563,
+        -0.23399999737739563,
+        0.0
+      ],
+      [
+        0.23399999737739563,
+        0.23399999737739563,
+        1.2890000343322754
+      ]
+    ]
+  },
+  "Pier_Shore_Ramp": {
+    "triangles": 352,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        -2.4000000953674316,
+        -1.2000000476837158,
+        0.8200000524520874
+      ],
+      [
+        0.0,
+        1.2000000476837158,
+        1.2000000476837158
+      ]
+    ]
+  },
+  "Pier_Ramp_Foot_Pad": {
+    "triangles": 176,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        -0.6399999856948853,
+        -1.25,
+        -0.28999999165534973
+      ],
+      [
+        0.0,
+        1.25,
+        0.0
+      ]
+    ]
+  }
+}

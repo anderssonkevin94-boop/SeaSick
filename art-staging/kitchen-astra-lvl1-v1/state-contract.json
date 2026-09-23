@@ -1,0 +1,20 @@
+{
+  "input_slots": 4,
+  "output_slots": 6,
+  "slots_are_not_gameplay_capacity": true,
+  "default_state": "empty",
+  "work_variants": [
+    "Work_Preparing",
+    "Work_Cooking",
+    "Work_Finished"
+  ],
+  "rules": [
+    "Require Food before starting and remove it from input when claimed.",
+    "Show only one work variant or none.",
+    "No input left does not cancel a job already cooking.",
+    "On full output retain Work_Finished and block the next job.",
+    "Transfer finished meal into output without duplicating stock."
+  ],
+  "vfx": "No flames, smoke, steam, dynamic light or fire animation provided. Fire_Anchor and Steam_Anchor are VFX attachment references.",
+  "integration": "Art only, no game import or production code."
+}

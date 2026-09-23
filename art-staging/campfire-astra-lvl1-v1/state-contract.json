@@ -1,0 +1,19 @@
+{
+  "states": {
+    "cold": [
+      "hide Flames",
+      "hide Embers"
+    ],
+    "embers": [
+      "hide Flames"
+    ],
+    "lit": [
+      "show Flames",
+      "show Embers"
+    ]
+  },
+  "fuel_slots": 3,
+  "fuel_slots_are_not_gameplay_capacity": true,
+  "fire": "Static stylized preview geometry; no animation or particle system implemented. Fire_Anchor reserved for future VFX.",
+  "integration": "Art only, not imported into Unity."
+}

@@ -1,0 +1,42 @@
+{
+  "Pier_Deck_1m": {
+    "result": "PASS",
+    "triangles": 480
+  },
+  "Pier_Infill_1m": {
+    "result": "PASS",
+    "triangles": 340
+  },
+  "Pier_Sea_End_1m": {
+    "result": "PASS",
+    "triangles": 1136
+  },
+  "Pier_Deck_2m": {
+    "result": "PASS",
+    "triangles": 648
+  },
+  "Pier_Infill_2m": {
+    "result": "PASS",
+    "triangles": 508
+  },
+  "Pier_Sea_End_2m": {
+    "result": "PASS",
+    "triangles": 1304
+  },
+  "Pier_Piling_1m": {
+    "result": "PASS",
+    "triangles": 28
+  },
+  "Pier_Pile_Cap": {
+    "result": "PASS",
+    "triangles": 128
+  },
+  "Pier_Shore_Ramp": {
+    "result": "PASS",
+    "triangles": 352
+  },
+  "Pier_Ramp_Foot_Pad": {
+    "result": "PASS",
+    "triangles": 176
+  }
+}

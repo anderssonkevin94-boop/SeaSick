@@ -1,0 +1,20 @@
+{
+  "result": "PASS",
+  "exports": {
+    "forge-state-kit.fbx": {
+      "triangles": 8062,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "forge-empty.fbx": {
+      "triangles": 7398,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "forge-review.fbx": {
+      "triangles": 7854,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  }
+}

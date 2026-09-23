@@ -1,0 +1,46 @@
+{
+  "input_display_slots": 6,
+  "output_display_slots": 12,
+  "slots_are_not_gameplay_capacity": true,
+  "default_state": "empty",
+  "bench_variants": [
+    "Bench_Loaded",
+    "Bench_Cutting",
+    "Bench_Finished"
+  ],
+  "states_for_review": {
+    "empty": {
+      "input": 0,
+      "output": 0,
+      "bench": "Empty"
+    },
+    "ready": {
+      "input": 6,
+      "output": 0,
+      "bench": "Empty"
+    },
+    "working": {
+      "input": 5,
+      "output": 0,
+      "bench": "Cutting"
+    },
+    "output-ready": {
+      "input": 5,
+      "output": 1,
+      "bench": "Empty"
+    },
+    "output-blocked": {
+      "input": 0,
+      "output": 12,
+      "bench": "Finished"
+    }
+  },
+  "production_rules": [
+    "Start only if an input log exists; remove it from storage when loading the bench.",
+    "Finish the current job even if input storage is now empty.",
+    "When output cannot accept production, keep finished work on the bench and block the next job.",
+    "Inventory counts and job state must drive visibility; do not randomize or loop stock changes."
+  ],
+  "overflow": "Agree gameplay capacity or add a count indicator before integrating inventories larger than the display slots.",
+  "integration": "Model only. Runtime inventory, navigation, yields and animation code are not modified."
+}

@@ -1,0 +1,9 @@
+Crew: latest hatless mesh, 1.7 m, skin-only tint, new skeleton-bound idle/walk clips.
+Sawmill: latest tarp only; hidden stock/work variants preserved for future per-building inventory integration.
+Ship: V8 geometry, independent paddle module; opt-in player visual adapter preserves ladder handling and existing guns.
+Verified walk binding; knee displacement 0.120 m.
+crew Unity bounds (1.098, 1.700, 0.391)
+sawmill Unity bounds (6.891, 3.380, 4.766)
+Ship runtime adapter: gun count preserved, deck at center 2.65 m.
+ship Unity bounds (8.754, 13.250, 27.150)
+SUCCESS: prefab and runtime imports complete; no scene file was saved or replaced.

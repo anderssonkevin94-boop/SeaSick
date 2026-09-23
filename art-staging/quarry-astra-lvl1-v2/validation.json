@@ -1,0 +1,162 @@
+{
+  "modules": {
+    "Masonry": {
+      "triangles": 1188,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Roof": {
+      "triangles": 1628,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Tool_Wall": {
+      "triangles": 596,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Cutting_Bench": {
+      "triangles": 264,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Lifting_Frame": {
+      "triangles": 1348,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Bay": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Pallet": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign": {
+      "triangles": 200,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Stone_01": {
+      "triangles": 38,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Stone_02": {
+      "triangles": 38,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Stone_03": {
+      "triangles": 38,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Stone_04": {
+      "triangles": 38,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Stone_05": {
+      "triangles": 38,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_01": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_02": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_03": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_04": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_05": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_06": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_07": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_08": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_09": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_10": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_11": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Brick_12": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Loaded": {
+      "triangles": 38,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Cutting": {
+      "triangles": 308,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Finished": {
+      "triangles": 132,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Mallet_Tool": {
+      "triangles": 88,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "bounds": [
+    [
+      -3.384999990463257,
+      -2.1700000762939453,
+      0.0
+    ],
+    [
+      3.380000114440918,
+      2.3858482837677,
+      2.8685646057128906
+    ]
+  ],
+  "all_variant_triangles": 7564
+}

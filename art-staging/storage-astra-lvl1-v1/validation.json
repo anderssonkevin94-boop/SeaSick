@@ -1,0 +1,142 @@
+{
+  "modules": {
+    "Platform": {
+      "triangles": 1276,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Frame": {
+      "triangles": 1320,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canopy": {
+      "triangles": 2004,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Ropes": {
+      "triangles": 256,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Front_Racks": {
+      "triangles": 1144,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shelving": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign": {
+      "triangles": 352,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Timber_01": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Timber_02": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Timber_03": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Timber_04": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Timber_05": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Boards_01": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Boards_02": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Boards_03": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Boards_04": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Boards_05": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Boards_06": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Boards_07": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Boards_08": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Food_01": {
+      "triangles": 136,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Food_02": {
+      "triangles": 136,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Food_03": {
+      "triangles": 136,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Cargo_01": {
+      "triangles": 264,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stock_Cargo_02": {
+      "triangles": 264,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "all_stock_triangles": 8528,
+  "bounds": [
+    [
+      -3.015188694000244,
+      -2.0399999618530273,
+      0.0
+    ],
+    [
+      3.015188694000244,
+      2.297499895095825,
+      3.571152448654175
+    ]
+  ]
+}

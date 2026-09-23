@@ -1,0 +1,72 @@
+{
+  "modules": {
+    "Hearth": {
+      "triangles": 576,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Burn_Logs": {
+      "triangles": 496,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Embers": {
+      "triangles": 416,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Flames": {
+      "triangles": 156,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Cooking_Frame": {
+      "triangles": 152,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Cooking_Pot": {
+      "triangles": 480,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Seat": {
+      "triangles": 256,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Fuel_Cradle": {
+      "triangles": 168,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Fuel_Log_01": {
+      "triangles": 124,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Fuel_Log_02": {
+      "triangles": 124,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Fuel_Log_03": {
+      "triangles": 124,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "triangles": 3072,
+  "bounds": [
+    [
+      -1.4649999141693115,
+      -0.6958109140396118,
+      0.0
+    ],
+    [
+      1.274999976158142,
+      0.6994056105613708,
+      0.8110390305519104
+    ]
+  ]
+}

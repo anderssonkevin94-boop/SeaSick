@@ -1,0 +1,15 @@
+{
+  "beds": 6,
+  "bed_states": [
+    "Bare",
+    "Sprout",
+    "Growing",
+    "Ripe"
+  ],
+  "default_state": "Bare",
+  "rule": "Keep Soil visible; enable at most one crop stage per bed. Bare means all crop stage meshes hidden.",
+  "output_slots": 4,
+  "slots_are_not_gameplay_capacity": true,
+  "warning": "Bind to real standing crop, harvest and stored Food; do not invent an independent growth timer. Seed_Box and Water_Butt are decorative props, not new resource requirements.",
+  "integration": "Art staging only; no Unity import or production code."
+}

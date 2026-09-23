@@ -1,0 +1,34 @@
+{
+  "default_state": "empty",
+  "display_slots": {
+    "Timber": [
+      "Stock_Timber_01",
+      "Stock_Timber_02",
+      "Stock_Timber_03",
+      "Stock_Timber_04",
+      "Stock_Timber_05"
+    ],
+    "Boards": [
+      "Stock_Boards_01",
+      "Stock_Boards_02",
+      "Stock_Boards_03",
+      "Stock_Boards_04",
+      "Stock_Boards_05",
+      "Stock_Boards_06",
+      "Stock_Boards_07",
+      "Stock_Boards_08"
+    ],
+    "Food": [
+      "Stock_Food_01",
+      "Stock_Food_02",
+      "Stock_Food_03"
+    ],
+    "Cargo": [
+      "Stock_Cargo_01",
+      "Stock_Cargo_02"
+    ]
+  },
+  "slots_are_not_gameplay_capacity": true,
+  "generic_cargo_mapping": "Unassigned; do not count crates as a specific resource without gameplay mapping.",
+  "integration": "No inventory code or game import. Storage does not process resources. Read README.md."
+}

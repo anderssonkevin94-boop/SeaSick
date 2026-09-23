@@ -1,0 +1,193 @@
+{
+  "modules": {
+    "Bed_01_Soil": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_02_Soil": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_03_Soil": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_04_Soil": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_05_Soil": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_06_Soil": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_01_Sprout": {
+      "triangles": 288,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_01_Growing": {
+      "triangles": 480,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_01_Ripe": {
+      "triangles": 1416,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_02_Sprout": {
+      "triangles": 288,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_02_Growing": {
+      "triangles": 480,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_02_Ripe": {
+      "triangles": 1416,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_03_Sprout": {
+      "triangles": 288,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_03_Growing": {
+      "triangles": 480,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_03_Ripe": {
+      "triangles": 1416,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_04_Sprout": {
+      "triangles": 288,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_04_Growing": {
+      "triangles": 480,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_04_Ripe": {
+      "triangles": 1416,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_05_Sprout": {
+      "triangles": 288,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_05_Growing": {
+      "triangles": 480,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_05_Ripe": {
+      "triangles": 1416,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_06_Sprout": {
+      "triangles": 288,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_06_Growing": {
+      "triangles": 480,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_06_Ripe": {
+      "triangles": 1416,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Tool_Frame": {
+      "triangles": 616,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canopy": {
+      "triangles": 976,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Tools": {
+      "triangles": 304,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Water_Butt": {
+      "triangles": 516,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Seed_Box": {
+      "triangles": 132,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Harvest_Basket": {
+      "triangles": 476,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Harvest_Sheaf_01": {
+      "triangles": 230,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Harvest_Sheaf_02": {
+      "triangles": 230,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Harvest_Sheaf_03": {
+      "triangles": 230,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Harvest_Sheaf_04": {
+      "triangles": 230,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign": {
+      "triangles": 200,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "all_variant_triangles": 20412,
+  "bounds": [
+    [
+      -2.2300000190734863,
+      -2.259999990463257,
+      0.0
+    ],
+    [
+      2.055000066757202,
+      2.2139999866485596,
+      2.025954484939575
+    ]
+  ],
+  "requires_height_metadata_review": true
+}

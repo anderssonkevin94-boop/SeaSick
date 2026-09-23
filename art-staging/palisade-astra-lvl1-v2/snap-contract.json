@@ -1,0 +1,162 @@
+{
+  "axes": "Blender +X run, +Y rear, +Z up",
+  "root": "start end at ground",
+  "pitch": 0.25,
+  "parts": {
+    "Palisade_Run_1m_A": {
+      "length": 1,
+      "sockets": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          1,
+          0,
+          0
+        ]
+      },
+      "markers": [
+        "Palisade_Run_1m_A__Snap_Start",
+        "Palisade_Run_1m_A__Snap_End"
+      ]
+    },
+    "Palisade_Run_1m_B": {
+      "length": 1,
+      "sockets": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          1,
+          0,
+          0
+        ]
+      },
+      "markers": [
+        "Palisade_Run_1m_B__Snap_Start",
+        "Palisade_Run_1m_B__Snap_End"
+      ]
+    },
+    "Palisade_Run_1m_C": {
+      "length": 1,
+      "sockets": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          1,
+          0,
+          0
+        ]
+      },
+      "markers": [
+        "Palisade_Run_1m_C__Snap_Start",
+        "Palisade_Run_1m_C__Snap_End"
+      ]
+    },
+    "Palisade_Filler_050m": {
+      "length": 0.5,
+      "sockets": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          0.5,
+          0,
+          0
+        ]
+      },
+      "markers": [
+        "Palisade_Filler_050m__Snap_Start",
+        "Palisade_Filler_050m__Snap_End"
+      ]
+    },
+    "Palisade_Filler_025m": {
+      "length": 0.25,
+      "sockets": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          0.25,
+          0,
+          0
+        ]
+      },
+      "markers": [
+        "Palisade_Filler_025m__Snap_Start",
+        "Palisade_Filler_025m__Snap_End"
+      ]
+    },
+    "Palisade_Breached_1m": {
+      "length": 1,
+      "sockets": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          1,
+          0,
+          0
+        ]
+      },
+      "markers": [
+        "Palisade_Breached_1m__Snap_Start",
+        "Palisade_Breached_1m__Snap_End"
+      ]
+    },
+    "Palisade_Post": {
+      "length": 0.4,
+      "sockets": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          0.4,
+          0,
+          0
+        ],
+        "Post_Center": [
+          0.2,
+          0,
+          0
+        ]
+      },
+      "markers": [
+        "Palisade_Post__Snap_Start",
+        "Palisade_Post__Snap_End",
+        "Palisade_Post__Post_Center"
+      ]
+    }
+  },
+  "run_y_envelope": [
+    -0.14,
+    0.183
+  ],
+  "post_body_half_width": 0.19,
+  "post_center": [
+    0.2,
+    0,
+    0
+  ],
+  "rules": [
+    "Quarter-metre modules do not exactly fit arbitrary real lengths. Clip the final module and cap cut faces in the runtime adapter.",
+    "Trim run endpoints to each square post footprint for arbitrary-angle bends; do not butt modules to the post center.",
+    "Sub-quarter residuals and middle-third breach boundaries need runtime trimming, not changed gameplay lengths.",
+    "No fixed-angle corner assets are needed."
+  ]
+}

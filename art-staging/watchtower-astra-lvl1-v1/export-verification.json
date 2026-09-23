@@ -1,0 +1,20 @@
+{
+  "result": "PASS",
+  "exports": {
+    "watchtower-state-kit.fbx": {
+      "triangles": 8272,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "watchtower-idle.fbx": {
+      "triangles": 8256,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "watchtower-alert.fbx": {
+      "triangles": 8184,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  }
+}

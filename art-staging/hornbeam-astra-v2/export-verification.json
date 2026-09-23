@@ -1,0 +1,10 @@
+{
+  "Hornbeam": {
+    "result": "PASS",
+    "triangles": 224
+  },
+  "Hornbeam_Stump": {
+    "result": "PASS",
+    "triangles": 32
+  }
+}

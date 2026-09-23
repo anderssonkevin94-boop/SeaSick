@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "meshes": [
+    "Footings",
+    "Ladder",
+    "Platform",
+    "Posts"
+  ],
+  "triangles": 1504
+}

@@ -1,0 +1,151 @@
+{
+  "topology": {
+    "Shirt_Connected": {
+      "vertices": 202,
+      "triangles": 372,
+      "components": 1,
+      "boundary_loops": 4,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Trousers_Connected": {
+      "vertices": 138,
+      "triangles": 272,
+      "components": 1,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Arm_Hand.L": {
+      "vertices": 64,
+      "triangles": 124,
+      "components": 1,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Arm_Hand.R": {
+      "vertices": 64,
+      "triangles": 124,
+      "components": 1,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Boot.L": {
+      "vertices": 72,
+      "triangles": 140,
+      "components": 1,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Boot.R": {
+      "vertices": 72,
+      "triangles": 140,
+      "components": 1,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Belt": {
+      "vertices": 20,
+      "triangles": 36,
+      "components": 1,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Head_Neck": {
+      "vertices": 70,
+      "triangles": 136,
+      "components": 1,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Hair": {
+      "vertices": 30,
+      "triangles": 56,
+      "components": 1,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Cap": {
+      "vertices": 78,
+      "triangles": 148,
+      "components": 2,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Face_details": {
+      "vertices": 64,
+      "triangles": 112,
+      "components": 4,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Nose": {
+      "vertices": 6,
+      "triangles": 8,
+      "components": 1,
+      "boundary_loops": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "triangles": 1668,
+  "poses": {
+    "neutral": {
+      "degenerate_triangles": 0,
+      "garment_intersections": {
+        "Shirt_Connected / Arm_Hand.L": 0,
+        "Shirt_Connected / Arm_Hand.R": 0,
+        "Trousers_Connected / Boot.L": 0,
+        "Trousers_Connected / Boot.R": 0
+      }
+    },
+    "working": {
+      "degenerate_triangles": 0,
+      "garment_intersections": {
+        "Shirt_Connected / Arm_Hand.L": 0,
+        "Shirt_Connected / Arm_Hand.R": 0,
+        "Trousers_Connected / Boot.L": 0,
+        "Trousers_Connected / Boot.R": 0
+      }
+    },
+    "reach": {
+      "degenerate_triangles": 0,
+      "garment_intersections": {
+        "Shirt_Connected / Arm_Hand.L": 0,
+        "Shirt_Connected / Arm_Hand.R": 0,
+        "Trousers_Connected / Boot.L": 0,
+        "Trousers_Connected / Boot.R": 0
+      }
+    },
+    "crouch": {
+      "degenerate_triangles": 0,
+      "garment_intersections": {
+        "Shirt_Connected / Arm_Hand.L": 0,
+        "Shirt_Connected / Arm_Hand.R": 0,
+        "Trousers_Connected / Boot.L": 0,
+        "Trousers_Connected / Boot.R": 0
+      }
+    },
+    "stride": {
+      "degenerate_triangles": 0,
+      "garment_intersections": {
+        "Shirt_Connected / Arm_Hand.L": 0,
+        "Shirt_Connected / Arm_Hand.R": 0,
+        "Trousers_Connected / Boot.L": 0,
+        "Trousers_Connected / Boot.R": 0
+      }
+    }
+  },
+  "skin_base_color_srgb": "#D99259",
+  "rig_bones": 16,
+  "notes": "Five keyed deformation tests, not polished gameplay animations. No Unity integration."
+}

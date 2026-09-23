@@ -1,0 +1,21 @@
+{
+  "input_slots": 5,
+  "output_slots": 4,
+  "arrows_per_visual_bundle": 3,
+  "slots_are_not_gameplay_capacity": true,
+  "default_state": "empty",
+  "work_variants": [
+    "Work_Shaping",
+    "Work_Fletching",
+    "Work_Finished"
+  ],
+  "rules": [
+    "Claim Timber once before starting.",
+    "Show only one work variant or none while idle.",
+    "Empty input does not cancel an already claimed job.",
+    "Retain Work_Finished when output is full; block a new job.",
+    "Transfer without duplicating the job in work and output displays.",
+    "Use existing Timber-to-Arrows recipe and yield, not mesh counts."
+  ],
+  "integration": "Art only. No rig, animations, navigation, colliders or gameplay. Bows and feather supplies are decorative, not additional resources."
+}

@@ -1,0 +1,133 @@
+{
+  "modules": {
+    "Frame": {
+      "triangles": 792,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canopy": {
+      "triangles": 1588,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Prep_Bench": {
+      "triangles": 528,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Utensils": {
+      "triangles": 512,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Hearth": {
+      "triangles": 668,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Burn_Logs": {
+      "triangles": 56,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Cooking_Pot": {
+      "triangles": 460,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Crate": {
+      "triangles": 396,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Serving_Shelf": {
+      "triangles": 440,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Food_01": {
+      "triangles": 132,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Food_02": {
+      "triangles": 132,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Food_03": {
+      "triangles": 204,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Food_04": {
+      "triangles": 204,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Meal_01": {
+      "triangles": 240,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Meal_02": {
+      "triangles": 240,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Meal_03": {
+      "triangles": 240,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Meal_04": {
+      "triangles": 240,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Meal_05": {
+      "triangles": 240,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Meal_06": {
+      "triangles": 240,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Preparing": {
+      "triangles": 136,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Cooking": {
+      "triangles": 192,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Finished": {
+      "triangles": 240,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign": {
+      "triangles": 164,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "all_variant_triangles": 8284,
+  "pot_canopy_horizontal_gap": 0.7950000166893005,
+  "bounds": [
+    [
+      -2.805000066757202,
+      -1.7899999618530273,
+      0.0
+    ],
+    [
+      2.7799999713897705,
+      2.3980000019073486,
+      3.246532440185547
+    ]
+  ]
+}

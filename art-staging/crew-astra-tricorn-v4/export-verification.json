@@ -1,0 +1,9 @@
+{
+  "meshes": 2,
+  "bones": 16,
+  "triangles": 2092,
+  "vertex_colors": true,
+  "normalized_weights": true,
+  "neutral_skin_shade": true,
+  "imported_rig_deformation_max_displacement": 0.1676269910719551
+}

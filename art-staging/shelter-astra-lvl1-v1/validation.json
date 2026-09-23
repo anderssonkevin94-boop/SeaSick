@@ -1,0 +1,87 @@
+{
+  "modules": {
+    "Foundation": {
+      "triangles": 924,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Frame": {
+      "triangles": 792,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Lower_Walls": {
+      "triangles": 264,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canopy": {
+      "triangles": 2444,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canvas_Walls": {
+      "triangles": 792,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Ropes": {
+      "triangles": 256,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Entrance_Open": {
+      "triangles": 544,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Entrance_Closed": {
+      "triangles": 608,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_Left": {
+      "triangles": 220,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Chest_Left": {
+      "triangles": 220,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bed_Right": {
+      "triangles": 220,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Chest_Right": {
+      "triangles": 220,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Porch_Details": {
+      "triangles": 176,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Lantern": {
+      "triangles": 372,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "all_variant_triangles": 8052,
+  "bounds": [
+    [
+      -2.1539244651794434,
+      -2.115000009536743,
+      0.0
+    ],
+    [
+      2.173924446105957,
+      1.9549999237060547,
+      2.9083504676818848
+    ]
+  ]
+}

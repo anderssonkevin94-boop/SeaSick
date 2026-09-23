@@ -1,0 +1,20 @@
+{
+  "triangles": 6936,
+  "mesh_modules": 6,
+  "bounds": [
+    [
+      -3.5450000762939453,
+      -2.43500018119812,
+      -2.5252703039768676e-07
+    ],
+    [
+      3.549999952316284,
+      1.980000615119934,
+      3.8050005435943604
+    ]
+  ],
+  "flat_shading": true,
+  "vertex_colors": true,
+  "worker_markers": true,
+  "moving_pivots": true
+}

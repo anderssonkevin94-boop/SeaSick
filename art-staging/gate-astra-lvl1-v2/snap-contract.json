@@ -1,0 +1,30 @@
+{
+  "span": 3,
+  "height": 3.57,
+  "clear_post_width": 2.22,
+  "snap_start": [
+    0,
+    0,
+    0
+  ],
+  "snap_end": [
+    3,
+    0,
+    0
+  ],
+  "hinge_blender": [
+    0.48,
+    -0.11,
+    0
+  ],
+  "open_degrees": -100,
+  "interior": "+Y",
+  "minimum_swing_clearance": 1.15,
+  "right_hinge_blender": [
+    2.52,
+    -0.11,
+    0
+  ],
+  "right_open_degrees": 100,
+  "axes": "Blender X wall run, Z up; use imported markers for Unity mapping"
+}

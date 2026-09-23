@@ -1,0 +1,121 @@
+{
+  "Palisade_Run_1m_A": {
+    "triangles": 368,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds_blender": [
+      [
+        0.0,
+        -0.12351055443286896,
+        -0.07999999821186066
+      ],
+      [
+        1.0,
+        0.18299999833106995,
+        2.5899999141693115
+      ]
+    ]
+  },
+  "Palisade_Run_1m_B": {
+    "triangles": 368,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds_blender": [
+      [
+        0.0,
+        -0.12357941269874573,
+        -0.07999999821186066
+      ],
+      [
+        1.0,
+        0.18299999833106995,
+        2.549999952316284
+      ]
+    ]
+  },
+  "Palisade_Run_1m_C": {
+    "triangles": 368,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds_blender": [
+      [
+        0.0,
+        -0.12351055443286896,
+        -0.07999999821186066
+      ],
+      [
+        1.0,
+        0.18299999833106995,
+        2.5299999713897705
+      ]
+    ]
+  },
+  "Palisade_Filler_050m": {
+    "triangles": 196,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds_blender": [
+      [
+        0.0,
+        -0.12357941269874573,
+        -0.07999999821186066
+      ],
+      [
+        0.5,
+        0.18299999833106995,
+        2.549999952316284
+      ]
+    ]
+  },
+  "Palisade_Filler_025m": {
+    "triangles": 110,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds_blender": [
+      [
+        0.0,
+        -0.10532226413488388,
+        -0.07999999821186066
+      ],
+      [
+        0.25,
+        0.18299999833106995,
+        2.5299999713897705
+      ]
+    ]
+  },
+  "Palisade_Breached_1m": {
+    "triangles": 328,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds_blender": [
+      [
+        0.0,
+        -0.1779497116804123,
+        -0.07999999821186066
+      ],
+      [
+        1.0,
+        0.22794970870018005,
+        0.6650000214576721
+      ]
+    ]
+  },
+  "Palisade_Post": {
+    "triangles": 132,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds_blender": [
+      [
+        0.0,
+        -0.20000000298023224,
+        -0.07999999821186066
+      ],
+      [
+        0.4000000059604645,
+        0.20000000298023224,
+        2.9100000858306885
+      ]
+    ]
+  }
+}

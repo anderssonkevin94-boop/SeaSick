@@ -1,0 +1,1122 @@
+{
+  "meshes": {
+    "Footing": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Footing.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Footing.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Footing.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floor_Joist": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floor_Joist.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floor_Joist.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.004": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.005": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.006": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.007": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.008": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.009": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.010": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.011": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.012": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Floorboard.013": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Threshold": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Entry_Step": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Post": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Post_Shoe": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Knee_Brace": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Side_Brace": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Joinery_Peg": {
+      "triangles": 28,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Post.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Post_Shoe.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Knee_Brace.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Side_Brace.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Joinery_Peg.001": {
+      "triangles": 28,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Wall_Plate": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Post.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Post_Shoe.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Knee_Brace.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Side_Brace.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Joinery_Peg.002": {
+      "triangles": 28,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Post.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Post_Shoe.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Knee_Brace.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Side_Brace.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Joinery_Peg.003": {
+      "triangles": 28,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Wall_Plate.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Tie_Beam": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "King_Post": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rafter": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rafter.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Tie_Beam.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "King_Post.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rafter.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rafter.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.004": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.005": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.006": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.007": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.008": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.009": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.010": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.011": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Plank.012": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Brace": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rear_Sill": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Roof_Deck": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.001": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.002": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.003": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.004": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.005": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.006": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.007": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.008": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.009": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.010": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.011": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.012": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.013": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.014": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.015": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.016": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.017": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.018": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.019": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.020": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.021": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.022": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.023": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.024": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.025": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.026": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.027": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.028": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.029": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.030": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.031": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.032": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.033": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.034": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.035": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.036": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.037": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.038": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.039": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.040": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.041": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bargeboard": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bargeboard.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Eave_Fascia": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Roof_Deck.001": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.042": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.043": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.044": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.045": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.046": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.047": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.048": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.049": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.050": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.051": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.052": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.053": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.054": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.055": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.056": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.057": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.058": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.059": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.060": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.061": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.062": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.063": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.064": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.065": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.066": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.067": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.068": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.069": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.070": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.071": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.072": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.073": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.074": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.075": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.076": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.077": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.078": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.079": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.080": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.081": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.082": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Shingle.083": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bargeboard.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bargeboard.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Eave_Fascia.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Ridge_Cap": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign_Hanger": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign_Hanger.001": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Trade_Sign": {
+      "triangles": 68,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign_Saw": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign_Handle": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Leg": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Leg.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Rail": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Leg.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Leg.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Rail.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Saw_Table": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Saw_Table.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Crosspiece": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bench_Crosspiece.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Fence": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Saw_Blade": {
+      "triangles": 284,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Saw_Axle": {
+      "triangles": 36,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Axle_Bearing": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Axle_Bearing.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Flywheel_Rim": {
+      "triangles": 128,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Flywheel_Spoke": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Flywheel_Spoke.001": {
+      "triangles": 12,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Crank_Grip": {
+      "triangles": 28,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Infeed_Log": {
+      "triangles": 36,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Finished_Board": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Log_Rack_Base": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Log_Rack_Stake": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Log_Rack_Stake.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Log_Rack_Base.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Log_Rack_Stake.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Log_Rack_Stake.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stored_Log": {
+      "triangles": 36,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "End_Heart": {
+      "triangles": 36,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "End_Core": {
+      "triangles": 28,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stored_Log.001": {
+      "triangles": 36,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "End_Heart.001": {
+      "triangles": 36,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "End_Core.001": {
+      "triangles": 28,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stored_Log.002": {
+      "triangles": 36,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "End_Heart.002": {
+      "triangles": 36,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "End_Core.002": {
+      "triangles": 28,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Board_Stack_Bearer": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Board_Stack_Bearer.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.002": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.003": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.004": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.005": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.006": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.007": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.008": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.009": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.010": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.011": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.012": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.013": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stacked_Plank.014": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stack_Batten": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stack_Batten.001": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "triangles": 6936,
+  "bounds": [
+    [
+      -3.5450000762939453,
+      -2.434999942779541,
+      0.0
+    ],
+    [
+      3.549999952316284,
+      1.9800000190734863,
+      3.8050003051757812
+    ]
+  ]
+}

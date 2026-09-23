@@ -1,0 +1,59 @@
+{
+  "Hull_Shell": {
+    "vertices": 3390,
+    "triangles": 6776,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Rails_Teal": {
+    "vertices": 4148,
+    "triangles": 8116,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Hull_Ironwork": {
+    "vertices": 3100,
+    "triangles": 5972,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Plank_Seams": {
+    "vertices": 2528,
+    "triangles": 4820,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Chimney": {
+    "vertices": 240,
+    "triangles": 476,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Helm": {
+    "vertices": 552,
+    "triangles": 1016,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Paddle_Rotor": {
+    "vertices": 2768,
+    "triangles": 5408,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Paddle_Frame": {
+    "vertices": 312,
+    "triangles": 588,
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "total_triangles": 33172
+}

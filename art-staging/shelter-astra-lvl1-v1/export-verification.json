@@ -1,0 +1,20 @@
+{
+  "result": "PASS",
+  "exports": {
+    "shelter-state-kit.fbx": {
+      "triangles": 8052,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "shelter-open.fbx": {
+      "triangles": 7444,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "shelter-closed.fbx": {
+      "triangles": 7508,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  }
+}

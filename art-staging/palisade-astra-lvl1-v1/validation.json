@@ -1,0 +1,37 @@
+{
+  "Palisade_Straight_2m_A": {
+    "triangles": 1224,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Palisade_Straight_2m_B": {
+    "triangles": 1224,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Palisade_Straight_1m": {
+    "triangles": 1040,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Palisade_Corner_Left": {
+    "triangles": 178,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Palisade_Corner_Right": {
+    "triangles": 178,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Palisade_Terminal": {
+    "triangles": 518,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Palisade_Filler_025m": {
+    "triangles": 134,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "input_slots": 5,
+  "output_slots": 4,
+  "slots_are_not_gameplay_capacity": true,
+  "default_state": "empty",
+  "work_variants": [
+    "Work_Heating",
+    "Work_Forging",
+    "Work_Finished"
+  ],
+  "rules": [
+    "Claim Ore before starting; visual slots are normalized inventory indicators, not recipe quantities.",
+    "Use only one work variant, or none when idle.",
+    "A running job may continue after input storage empties.",
+    "Retain Work_Finished if output is full; do not duplicate finished stock.",
+    "Use existing Ore-to-Tools economy; no additional coal or ingot resource implied."
+  ],
+  "vfx": "Fire, smoke and sparks are external. Work hot colors are vertex colors, not an emissive shader.",
+  "integration": "Art only; no gameplay, rig, animations, colliders or navigation supplied."
+}

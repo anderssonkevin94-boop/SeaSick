@@ -1,0 +1,32 @@
+{
+  "Gate_Posts": {
+    "triangles": 256,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Gate_Lintel": {
+    "triangles": 100,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Gate_Leaf": {
+    "triangles": 940,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Gate_Frame_Hardware": {
+    "triangles": 232,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Gate_Leaf_Right": {
+    "triangles": 940,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  },
+  "Gate_Frame_Hardware_Right": {
+    "triangles": 232,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0
+  }
+}

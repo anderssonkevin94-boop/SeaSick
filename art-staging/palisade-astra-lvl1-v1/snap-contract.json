@@ -1,0 +1,166 @@
+{
+  "parts": {
+    "Palisade_Straight_2m_A": {
+      "file": "Palisade_Straight_2m_A.fbx",
+      "sockets_blender": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          2,
+          0,
+          0
+        ]
+      },
+      "marker_names": {
+        "Snap_Start": "Palisade_Straight_2m_A__Snap_Start",
+        "Snap_End": "Palisade_Straight_2m_A__Snap_End"
+      },
+      "turn_degrees": 0,
+      "rail_side": "+Y",
+      "nominal_pitch": 0.25
+    },
+    "Palisade_Straight_2m_B": {
+      "file": "Palisade_Straight_2m_B.fbx",
+      "sockets_blender": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          2,
+          0,
+          0
+        ]
+      },
+      "marker_names": {
+        "Snap_Start": "Palisade_Straight_2m_B__Snap_Start",
+        "Snap_End": "Palisade_Straight_2m_B__Snap_End"
+      },
+      "turn_degrees": 0,
+      "rail_side": "+Y",
+      "nominal_pitch": 0.25
+    },
+    "Palisade_Straight_1m": {
+      "file": "Palisade_Straight_1m.fbx",
+      "sockets_blender": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          1,
+          0,
+          0
+        ]
+      },
+      "marker_names": {
+        "Snap_Start": "Palisade_Straight_1m__Snap_Start",
+        "Snap_End": "Palisade_Straight_1m__Snap_End"
+      },
+      "turn_degrees": 0,
+      "rail_side": "+Y",
+      "nominal_pitch": 0.25
+    },
+    "Palisade_Corner_Left": {
+      "file": "Palisade_Corner_Left.fbx",
+      "sockets_blender": {
+        "Snap_Start": [
+          -0.375,
+          0,
+          0
+        ],
+        "Snap_End": [
+          0,
+          0.375,
+          0
+        ]
+      },
+      "marker_names": {
+        "Snap_Start": "Palisade_Corner_Left__Snap_Start",
+        "Snap_End": "Palisade_Corner_Left__Snap_End"
+      },
+      "turn_degrees": 90,
+      "rail_side": "+Y",
+      "nominal_pitch": 0.25
+    },
+    "Palisade_Corner_Right": {
+      "file": "Palisade_Corner_Right.fbx",
+      "sockets_blender": {
+        "Snap_Start": [
+          -0.375,
+          0,
+          0
+        ],
+        "Snap_End": [
+          0,
+          -0.375,
+          0
+        ]
+      },
+      "marker_names": {
+        "Snap_Start": "Palisade_Corner_Right__Snap_Start",
+        "Snap_End": "Palisade_Corner_Right__Snap_End"
+      },
+      "turn_degrees": -90,
+      "rail_side": "-Y",
+      "nominal_pitch": 0.25
+    },
+    "Palisade_Terminal": {
+      "file": "Palisade_Terminal.fbx",
+      "sockets_blender": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          0.25,
+          0,
+          0
+        ]
+      },
+      "marker_names": {
+        "Snap_Start": "Palisade_Terminal__Snap_Start",
+        "Snap_End": "Palisade_Terminal__Snap_End"
+      },
+      "turn_degrees": 0,
+      "rail_side": "+Y",
+      "nominal_pitch": 0.25
+    },
+    "Palisade_Filler_025m": {
+      "file": "Palisade_Filler_025m.fbx",
+      "sockets_blender": {
+        "Snap_Start": [
+          0,
+          0,
+          0
+        ],
+        "Snap_End": [
+          0.25,
+          0,
+          0
+        ]
+      },
+      "marker_names": {
+        "Snap_Start": "Palisade_Filler_025m__Snap_Start",
+        "Snap_End": "Palisade_Filler_025m__Snap_End"
+      },
+      "turn_degrees": 0,
+      "rail_side": "+Y",
+      "nominal_pitch": 0.25
+    }
+  },
+  "rules": [
+    "Match boundary sockets, not mesh bounds.",
+    "Straight pieces include no duplicate end stakes.",
+    "Corners occupy 0.375 m on each centerline leg.",
+    "Terminal adds 0.25 m, not a zero-length overlay.",
+    "No geometry stretching to fit arbitrary length. Quantize/rebuild the stake row in the adapter.",
+    "Visual stake count never sets timber cost."
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "deckhand-working-pose": {
+    "meshes": 2,
+    "triangles": 2714,
+    "vertex_colors": true,
+    "neutral_skin_shade": true
+  },
+  "deckhand-neutral": {
+    "meshes": 2,
+    "triangles": 2714,
+    "vertex_colors": true,
+    "neutral_skin_shade": true
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "Pier_Deck_2m": {
+    "triangles": 1268,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        0.0,
+        -1.5,
+        -0.5
+      ],
+      [
+        2.0,
+        1.5,
+        0.4970000088214874
+      ]
+    ]
+  },
+  "Pier_Deck_2m_Repaired": {
+    "triangles": 1356,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        0.0,
+        -1.5,
+        -0.5
+      ],
+      [
+        2.0,
+        1.5,
+        0.4970000088214874
+      ]
+    ]
+  },
+  "Pier_Sea_End_2m": {
+    "triangles": 4928,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        0.0,
+        -1.6933637857437134,
+        -1.3705613613128662
+      ],
+      [
+        2.0,
+        1.6799999475479126,
+        0.4970000088214874
+      ]
+    ]
+  },
+  "Pier_Piling_1m": {
+    "triangles": 28,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        -0.14000000059604645,
+        -0.14000000059604645,
+        -1.0
+      ],
+      [
+        0.14000000059604645,
+        0.14000000059604645,
+        0.0
+      ]
+    ]
+  },
+  "Pier_Shore_Ramp": {
+    "triangles": 704,
+    "nonmanifold_edges": 0,
+    "degenerate_faces": 0,
+    "bounds": [
+      [
+        -2.4000000953674316,
+        -1.2000000476837158,
+        -0.3199999928474426
+      ],
+      [
+        0.0,
+        1.2000000476837158,
+        0.027499999850988388
+      ]
+    ]
+  }
+}

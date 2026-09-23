@@ -1,0 +1,90 @@
+{
+  "modules": {
+    "Footings": {
+      "triangles": 352,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Tower_Frame": {
+      "triangles": 1760,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Joinery": {
+      "triangles": 504,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Platform": {
+      "triangles": 660,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Guardrails": {
+      "triangles": 1100,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Ladder": {
+      "triangles": 800,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Roof_Frame": {
+      "triangles": 660,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canopy": {
+      "triangles": 1796,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bell_Bracket": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Signal_Bell": {
+      "triangles": 312,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bell_Rope": {
+      "triangles": 64,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Flag_Pole": {
+      "triangles": 116,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Flag_Stowed": {
+      "triangles": 88,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Flag_Alert": {
+      "triangles": 16,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "triangles_all_variants": 8272,
+  "bounds": [
+    [
+      -1.2652270793914795,
+      -1.2608647346496582,
+      0.0
+    ],
+    [
+      1.2680000066757202,
+      1.2498995065689087,
+      7.199999809265137
+    ]
+  ],
+  "floor_height": 4.61,
+  "entry_clear_width": 0.785,
+  "ladder_inner_width": 0.575
+}

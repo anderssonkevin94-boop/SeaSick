@@ -1,0 +1,20 @@
+{
+  "result": "PASS",
+  "exports": {
+    "fletcher-state-kit.fbx": {
+      "triangles": 8044,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "fletcher-empty.fbx": {
+      "triangles": 5916,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "fletcher-review.fbx": {
+      "triangles": 7284,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  }
+}

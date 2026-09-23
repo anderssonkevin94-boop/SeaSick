@@ -1,0 +1,8 @@
+{
+  "triangles": 2380,
+  "meshes": 25,
+  "flat_shaded": true,
+  "vertex_colors": true,
+  "wheel_origins_centered": true,
+  "elevation_and_muzzle_hierarchy": true
+}

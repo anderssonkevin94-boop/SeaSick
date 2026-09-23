@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "default_state": "cold",
+  "states": {
+    "cold": {
+      "Embers": false,
+      "external_fire_effect": false
+    },
+    "embers": {
+      "Embers": true,
+      "external_fire_effect": false
+    },
+    "lit": {
+      "Embers": true,
+      "external_fire_effect": true
+    }
+  },
+  "fuel_slots": [
+    "Fuel_Log_01",
+    "Fuel_Log_02",
+    "Fuel_Log_03"
+  ],
+  "fuel_slots_are_not_gameplay_capacity": true,
+  "fuel_visibility": "Show the first N slots for a display count from 0 to 3. Inventory capacity and count mapping must be decided by gameplay. Do not loop or randomize stock changes.",
+  "fire": "No flame geometry, smoke, light, particles or fire animation included. Attach future effects to Fire_Anchor. Embers are optional colored geometry, not emissive VFX.",
+  "burn_logs": "Burn_Logs is a separate static hearth-log module, not part of the storage count.",
+  "integration": "Art only, not imported into Unity. See README.md."
+}

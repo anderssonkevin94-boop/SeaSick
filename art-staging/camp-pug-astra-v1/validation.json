@@ -1,0 +1,60 @@
+{
+  "modules": {
+    "Body": {
+      "triangles": 4984,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0,
+      "connected_components": 1
+    },
+    "Curled_Tail": {
+      "triangles": 396,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Folded_Ears": {
+      "triangles": 16,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Muzzle": {
+      "triangles": 586,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Left_Eye": {
+      "triangles": 880,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Right_Healed_Eyelid": {
+      "triangles": 224,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Brow_Folds": {
+      "triangles": 90,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Neckerchief": {
+      "triangles": 268,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "triangles": 7444,
+  "bounds": [
+    [
+      -0.19220000505447388,
+      -0.4192372262477875,
+      0.0
+    ],
+    [
+      0.19220000505447388,
+      0.2862681448459625,
+      0.6095138192176819
+    ]
+  ],
+  "right_eye": "Absent; healed closed eyelid on anatomical right (-X).",
+  "rigged": false
+}

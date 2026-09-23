@@ -1,0 +1,50 @@
+{
+  "Forest_Hornbeam": {
+    "result": "PASS",
+    "triangles": 224
+  },
+  "Forest_Hornbeam_Stump": {
+    "result": "PASS",
+    "triangles": 32
+  },
+  "Forest_Broadleaf": {
+    "result": "PASS",
+    "triangles": 224
+  },
+  "Forest_Broadleaf_Stump": {
+    "result": "PASS",
+    "triangles": 32
+  },
+  "Forest_Slender": {
+    "result": "PASS",
+    "triangles": 176
+  },
+  "Forest_Slender_Stump": {
+    "result": "PASS",
+    "triangles": 32
+  },
+  "Forest_Leaning": {
+    "result": "PASS",
+    "triangles": 190
+  },
+  "Forest_Leaning_Stump": {
+    "result": "PASS",
+    "triangles": 32
+  },
+  "Forest_Uneven": {
+    "result": "PASS",
+    "triangles": 224
+  },
+  "Forest_Uneven_Stump": {
+    "result": "PASS",
+    "triangles": 32
+  },
+  "Forest_Young": {
+    "result": "PASS",
+    "triangles": 160
+  },
+  "Forest_Young_Stump": {
+    "result": "PASS",
+    "triangles": 32
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "result": "PASS",
+  "exports": {
+    "farm-state-kit.fbx": {
+      "triangles": 20412,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "farm-bare.fbx": {
+      "triangles": 6388,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "farm-ripe.fbx": {
+      "triangles": 15804,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  }
+}

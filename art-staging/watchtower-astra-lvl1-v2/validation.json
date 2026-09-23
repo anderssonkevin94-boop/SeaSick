@@ -1,0 +1,38 @@
+{
+  "modules": {
+    "Footings": {
+      "triangles": 176,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Posts": {
+      "triangles": 176,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Platform": {
+      "triangles": 616,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Ladder": {
+      "triangles": 536,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "triangles": 1504,
+  "bounds": [
+    [
+      -1.1369999647140503,
+      -1.2611809968948364,
+      0.0
+    ],
+    [
+      1.1380000114440918,
+      1.1399999856948853,
+      4.65054988861084
+    ]
+  ],
+  "floor_height": 4.61
+}

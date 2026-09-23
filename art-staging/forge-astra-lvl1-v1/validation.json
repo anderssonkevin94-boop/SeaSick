@@ -1,0 +1,143 @@
+{
+  "modules": {
+    "Frame": {
+      "triangles": 748,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canopy": {
+      "triangles": 1588,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Forge_Hearth": {
+      "triangles": 1936,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Coal": {
+      "triangles": 234,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Bellows": {
+      "triangles": 356,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Anvil": {
+      "triangles": 424,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Workbench": {
+      "triangles": 440,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Smith_Tools": {
+      "triangles": 516,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Apron": {
+      "triangles": 60,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Quench_Tub": {
+      "triangles": 272,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Ore_Bin": {
+      "triangles": 396,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Ore_01": {
+      "triangles": 52,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Ore_02": {
+      "triangles": 52,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Ore_03": {
+      "triangles": 52,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Ore_04": {
+      "triangles": 52,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Input_Ore_05": {
+      "triangles": 52,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Tool_Rack": {
+      "triangles": 264,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Tool_01": {
+      "triangles": 68,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Tool_02": {
+      "triangles": 68,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Tool_03": {
+      "triangles": 68,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Tool_04": {
+      "triangles": 68,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Heating": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Forging": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Finished": {
+      "triangles": 44,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign": {
+      "triangles": 164,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "all_variant_triangles": 8062,
+  "forge_canopy_horizontal_gap": 0.5999999940395355,
+  "bounds": [
+    [
+      -2.9625000953674316,
+      -2.0350000858306885,
+      0.0
+    ],
+    [
+      2.940000057220459,
+      2.42900013923645,
+      3.307358503341675
+    ]
+  ]
+}

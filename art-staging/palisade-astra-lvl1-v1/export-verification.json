@@ -1,0 +1,30 @@
+{
+  "Palisade_Straight_2m_A": {
+    "triangles": 1224,
+    "result": "PASS"
+  },
+  "Palisade_Straight_2m_B": {
+    "triangles": 1224,
+    "result": "PASS"
+  },
+  "Palisade_Straight_1m": {
+    "triangles": 1040,
+    "result": "PASS"
+  },
+  "Palisade_Corner_Left": {
+    "triangles": 178,
+    "result": "PASS"
+  },
+  "Palisade_Corner_Right": {
+    "triangles": 178,
+    "result": "PASS"
+  },
+  "Palisade_Terminal": {
+    "triangles": 518,
+    "result": "PASS"
+  },
+  "Palisade_Filler_025m": {
+    "triangles": 134,
+    "result": "PASS"
+  }
+}
