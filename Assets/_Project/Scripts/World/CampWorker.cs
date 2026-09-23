@@ -32,12 +32,25 @@ namespace SeaSick.World
     /// goats while somebody is watching it is the arithmetic showing through.
     /// The ledger kills; he only mimes. See `TickHunting`.
     ///
-    /// It READS the ledger in three places and writes it in none: the row's
-    /// order and target (what to mime), `Ledger.pending` (where a blueprint
-    /// is), and `Ledger.Stalled(row)` (whether to mime anything at all). A
-    /// stalled mill has to READ as stalled — a sawyer sawing at a mill with no
-    /// timber in it is the animation lying about the numbers, which is worse
-    /// than a sawyer standing still.
+    /// **And for hauling, 2026-09-23.** `OutpostLedger.HaulOf(row)` books a
+    /// whole trip's route and timing the moment it starts -- station input
+    /// and output, a builder's site stocking, a stationed worker fetching his
+    /// own raw. This used to layer a second, local schedule on top of that
+    /// (`haulSerial`/"mime it once" bookkeeping, a builder's own pile-fetch
+    /// simulation) which could only ever approximate what the books had
+    /// already decided. It reads `HaulOf` fresh every frame instead and
+    /// walks exactly the trip the ledger is running, at whatever stage its
+    /// `progress01` says -- so a hand who becomes watched mid-trip picks up
+    /// precisely where the unwatched clock left him rather than starting a
+    /// trip of his own. See `TickHaul`.
+    ///
+    /// It READS the ledger and writes it in none: the row's order and target
+    /// (what to mime), `Ledger.pending` (where a blueprint is),
+    /// `Ledger.Stalled(row)` (whether to mime anything at all), and
+    /// `Ledger.HaulOf(row)` (the trip in progress, above). A stalled mill has
+    /// to READ as stalled — a sawyer sawing at a mill with no timber in it is
+    /// the animation lying about the numbers, which is worse than a sawyer
+    /// standing still.
     ///
     /// Only exists while the ship is here: `Outpost.ShowHands` adds and
     /// removes it. A camp three kilometres astern costs nothing.
@@ -69,7 +82,6 @@ namespace SeaSick.World
         int claimedTree = -1;  // the trunk the camp gave him, by index
         Vector3 claimAt;       // and where it stands
         float chopFor;         // how long he has been swinging at it
-        bool hauling;          // carrying from the pile rather than cutting
         /// **Standing the thing up rather than fetching for it, 2026-09-23.**
         /// True for a builder whose site has every material in: he walks to
         /// the drawing, swings a hammer at it and carries nothing. See
@@ -138,8 +150,6 @@ namespace SeaSick.World
         /// Arm's length. He closes to this and no further -- walking to the
         /// animal's own position would put him inside it.
         const float HuntReach = 1.2f;
-        /// Long enough to read as picking a log up off a stack.
-        const float LoadSeconds = 0.9f;
         /// How far they will wander for a PROP to work at -- stone, ore,
         /// spice. Trees are not bounded by this any more: a cutter is handed
         /// the ledger's next tree wherever on the island it stands
@@ -336,6 +346,7 @@ namespace SeaSick.World
             if (camp != null) { camp.ReleaseTree(this); camp.ReleaseBed(this); camp.ReleaseClearing(this); }
             claimedTree = -1;
             clearing = false;
+            fieldNode = null;
             Unclaim();
         }
 
@@ -395,8 +406,26 @@ namespace SeaSick.World
         // --- the row ---------------------------------------------------------
 
         OutpostHand row;
-        /// The ledger trip (`OutpostHand.haulSerial`) this body last mimed.
+        /// The ledger trip (`OutpostHand.haulSerial`) this body is currently
+        /// miming. Checked every frame in `TickHaul`: when it does not match
+        /// the row's own serial any more -- a new trip started, or this row
+        /// got handed a stale claim from whatever it was doing before it
+        /// started hauling -- whatever this body had claimed (a tree, a
+        /// prop) is let go before the new trip's pickup is worked out.
         int mimedTrip = -1;
+        /// Was `HaulOf(row).active` last frame. The one-frame edge this
+        /// catches: the trip just finished (or was cut short by a
+        /// re-order) and nobody told this body to put the load down and go
+        /// idle, because the row's own order/target never changed.
+        bool wasHauling;
+        /// The prop a Field pickup is walking to when it is not timber --
+        /// stone, ore, spice. Re-picked (see `HaulPickupSpot`) once it is
+        /// harvested out from under him or a new trip starts.
+        ResourceNode fieldNode;
+        /// Cooldown on a failed tree claim / prop search, so a hand with
+        /// nothing left to fetch on the island does not re-scan the camp's
+        /// trees or `ResourceNode.All` every single frame.
+        float fieldRetryAt;
         float rowChecked;
 
         /// The row this body is drawing.
@@ -523,6 +552,34 @@ namespace SeaSick.World
                 wait = 0f;
             }
 
+            // **A haul outranks the order it is running under, 2026-09-23.**
+            // `OutpostLedger.HaulOf` is the one source of truth for a
+            // hauling hand -- station input/output, a builder's site
+            // stocking, a stationed worker fetching his own raw -- and it
+            // can be running under Idle, Gather, Work or Build alike (a
+            // spare hand or a store-blocked gatherer doing station hauling,
+            // a sawyer walking his own boards in, a builder's armful). See
+            // `TickHaul`.
+            if (camp.Ledger != null && r.Hauling)
+            {
+                TickHaul(r, dt);
+                wasHauling = true;
+                return;
+            }
+            if (wasHauling)
+            {
+                // The trip just ended, or was cut short by a re-order that
+                // did not touch `order`/`target` -- nobody else is going to
+                // tell this body to put the load down. Straight back to
+                // Resting, which is where every order's own loop decides
+                // what happens next.
+                wasHauling = false;
+                Drop();
+                ReleaseClaim();
+                phase = Phase.Resting;
+                wait = RestSeconds;
+            }
+
             switch (r.order)
             {
                 case OutpostOrder.Idle: TickIdle(dt); return;
@@ -593,7 +650,6 @@ namespace SeaSick.World
                     if (clearing)
                     {
                         target = Stand(clearAt);
-                        hauling = false;
                         raising = false;
                         clearFor = 0f;
                         phase = Phase.Going;
@@ -612,33 +668,19 @@ namespace SeaSick.World
                         Vector3 sp = focus.At;
                         sp.y = camp.GroundAt(sp);
                         target = sp;
-                        hauling = false;
                         phase = Phase.Going;
                         return;
                     }
-                    // **One walk per LEDGER trip, 2026-09-23** (phone
-                    // playtest: *"they carry way too much resources to
-                    // it"*). The body used to fetch on its own clock --
-                    // a load every few seconds while the books moved one
-                    // unit a quarter-day -- so the site took far more trips
-                    // than it had units. Now a builder fetches only while
-                    // his row is carrying an armful to a site
-                    // (`OutpostHand.haulTo == Site`), and mimes each of
-                    // those trips once; between trips he rests by the fire.
-                    if (r.order == OutpostOrder.Build)
-                    {
-                        if (!(r.Hauling && r.haulTo == HaulPlace.Site) || r.haulSerial == mimedTrip)
-                        {
-                            wait = RestSeconds;
-                            return;
-                        }
-                        mimedTrip = r.haulSerial;
-                    }
-                    string wantB = WhatFor(r);
-                    hauling = r.order == OutpostOrder.Build
-                        ? r.haulFrom != HaulPlace.Field
-                        : false;
-                    target = hauling ? PileSpot(wantB) : FindSomethingToWorkAt(r);
+                    // **A builder with nothing to clear, raise or fetch right
+                    // now waits by the fire, 2026-09-23.** Every trip he
+                    // might be sent on -- store or rack or his own cut off
+                    // the island, to the site -- is a ledger haul, and
+                    // `Update` already sent it to `TickHaul` this frame if
+                    // one was running. Reaching here with a Build order means
+                    // there simply isn't one THIS tick; try again next.
+                    if (r.order == OutpostOrder.Build) { wait = RestSeconds; return; }
+
+                    target = FindSomethingToWorkAt(r);
                     phase = Phase.Going;
                     return;
 
@@ -656,12 +698,10 @@ namespace SeaSick.World
                     }
                     if (!Walk(target, dt)) return;
                     phase = Phase.Working;
-                    // Hoisting a log off a stack is a moment, not a shift.
-                    wait = hauling ? LoadSeconds : SwingSeconds * Random.Range(0.85f, 1.35f);
+                    wait = SwingSeconds * Random.Range(0.85f, 1.35f);
                     clearFor = 0f;
                     acting?.Set(clearing ? VillagerActing.Mode.Chop
-                        : raising ? VillagerActing.Mode.Hammer
-                        : hauling ? VillagerActing.Mode.None : ModeFor(WhatFor(r)));
+                        : raising ? VillagerActing.Mode.Hammer : ModeFor(WhatFor(r)));
                     return;
 
                 case Phase.Working:
@@ -1019,41 +1059,13 @@ namespace SeaSick.World
             }
         }
 
-        /// Is this row cutting standing timber? Gatherers of timber always
-        /// are; a builder is whenever the pile has nothing left to carry, and
-        /// that is the same order the ledger's own step takes (haul, then cut).
-        bool Cutting(OutpostHand r)
-        {
-            if (r == null) return false;
-            // **A builder only cuts while it is LOGS he is short of.** Once
-            // the timber part of the blueprint is paid the ledger's answer
-            // changes to stone (`OutpostLedger.BuilderWants`), and a man at
-            // a tree would then be swinging for something the arithmetic is
-            // no longer buying -- so he leaves the wood and goes to the
-            // rocks through the ordinary errand loop instead.
-            if (r.order == OutpostOrder.Build)
-            {
-                // **A builder raising a stocked site is not cutting,
-                // 2026-09-23.** `WhatFor` falls back to Timber when the
-                // ledger has nothing left to fetch, so without this a
-                // builder in the BUILDING phase with an empty timber pile
-                // walked off to fell a tree instead of standing the hut up.
-                var f = camp != null && camp.Ledger != null ? camp.Ledger.Focus : null;
-                // **Clearing outranks it, 2026-09-23.** A site that is not
-                // `Cleared` gets a man's hand-time before he fetches
-                // anything for it -- see the clearing branch in
-                // `TickErrand`. Without this an unstocked, uncleared site
-                // sent a builder off to fell a tree on the far side of the
-                // island while the one standing IN the footprint waited.
-                if (f != null && !f.Cleared) return false;
-                if (f != null && f.Stocked) return false;
-                // Cutting exactly while the books have him cutting: a
-                // site-bound armful of timber taken off the standing wood.
-                return r.Hauling && r.haulTo == HaulPlace.Site
-                    && r.haulFrom == HaulPlace.Field && r.haulRes == Res.Timber;
-            }
-            return r.order == OutpostOrder.Gather && r.target == Res.Timber;
-        }
+        /// Is this row cutting standing timber ON ITS OWN CLOCK -- the direct
+        /// rate-based gather loop, never a booked ledger trip? Only a plain
+        /// Gather-Timber order now: a builder's own cut off the island is a
+        /// Field haul (`OutpostLedger.StartTimedTrip`), and `Update` sends
+        /// any active haul to `TickHaul` before this is ever asked, so the
+        /// Build case that used to live here can no longer fire.
+        bool Cutting(OutpostHand r) => r != null && r.order == OutpostOrder.Gather && r.target == Res.Timber;
 
         bool Claim() => camp.ClaimTree(this, out claimedTree, out claimAt);
 
@@ -1234,28 +1246,130 @@ namespace SeaSick.World
             }
         }
 
+        // --- hauling (2026-09-23) ----------------------------------------------
+
+        /// **Mime the ledger's own trip.** `OutpostLedger.HaulOf(row)` is the
+        /// one account of where a hauling hand is and what is on his
+        /// shoulder -- station input and output, a builder's site stocking, a
+        /// stationed worker fetching his own raw, all the same shape (see the
+        /// "trip timing" doc block on `OutpostLedger.Stations`). This reads
+        /// it fresh every frame and paints the picture; it keeps no walk
+        /// schedule of its own that could drift from the books.
+        ///
+        /// **Teleport-free catch-up.** The stage below comes straight off
+        /// `progress01` against the two thresholds the ledger booked at the
+        /// trip's start -- never off a phase this component remembers -- so
+        /// a hand who goes from unwatched to watched mid-trip (the books
+        /// have been paying him in the dark the whole time) picks the target
+        /// for whatever stage the ledger is already in and walks there from
+        /// wherever he happens to be standing; nobody teleports. A body that
+        /// reaches a stage's spot before the ledger's clock catches up just
+        /// holds its pose there -- the cut/pick mime doubles as the wait.
+        /// One that is still walking when the ledger moves on to the next
+        /// stage re-aims at the new target instead of finishing a walk to
+        /// somewhere it no longer matters.
+        void TickHaul(OutpostHand r, float dt)
+        {
+            var view = camp.Ledger.HaulOf(r);
+            if (!view.active) return;
+
+            // A different trip than the one this body was last picturing --
+            // a fresh haul, or a row that was doing something else (its own
+            // claimed tree, a bed, a clearing) right up until it picked this
+            // one up. Whatever the old trip or the old errand had claimed is
+            // not this trip's to keep.
+            if (r.haulSerial != mimedTrip) { ReleaseClaim(); mimedTrip = r.haulSerial; }
+
+            if (view.progress01 >= view.workEnd01)
+            {
+                // Loaded, walking the armful home.
+                acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
+                Walk(Grounded(view.toAt), dt);
+                return;
+            }
+
+            // Empty-handed: either still walking out to the pickup, or
+            // standing at it working the load loose.
+            Vector3 pick = HaulPickupSpot(view);
+            bool arrived = Walk(pick, dt);
+            if (!arrived && view.progress01 < view.walkOutEnd01)
+            {
+                acting?.Set(VillagerActing.Mode.None);
+                return;
+            }
+
+            Face(pick - transform.position, dt);
+            acting?.Set(ModeFor(view.resource));
+        }
+
+        Vector3 Grounded(Vector3 p) { p.y = camp.GroundAt(p); return p; }
+
+        /// **Where a hauling hand actually stands to pick the load up.**
+        /// Store, station and site pickups are exactly where the ledger says
+        /// (`HaulView.fromAt`). A Field pickup is the camp centre in the
+        /// books -- there is no tree or boulder in the ledger's accounts,
+        /// only a metres-from-camp number (`OutpostLedger.SourceMetres`) --
+        /// so the body picks its own: the front of the felling order
+        /// (`Outpost.ClaimTree`, the same claim table `TickCutting` uses, so
+        /// a hauler and a plain gatherer never swing at the same trunk) for
+        /// timber, or the nearest unharvested prop of the kind for anything
+        /// else, same rule `FindSomethingToWorkAt` uses for a builder.
+        Vector3 HaulPickupSpot(HaulView view)
+        {
+            if (view.from != HaulPlace.Field) return Grounded(view.fromAt);
+
+            if (view.resource == Res.Timber)
+            {
+                if ((claimedTree < 0 || camp.TreeIsFelled(claimedTree)) && Time.time >= fieldRetryAt)
+                {
+                    if (!Claim()) fieldRetryAt = Time.time + 1f;
+                }
+                return claimedTree >= 0 ? Stand(claimAt) : Stand(camp.CampCentre);
+            }
+
+            if ((fieldNode == null || fieldNode.Harvested) && Time.time >= fieldRetryAt)
+            {
+                fieldNode = NearestNode(view.resource);
+                if (fieldNode == null) fieldRetryAt = Time.time + 1f;
+            }
+            return fieldNode != null ? Stand(fieldNode.transform.position) : Stand(camp.CampCentre);
+        }
+
+        /// Nearest unharvested prop of this resource to the CAMP CENTRE, no
+        /// `Reach` bound -- an armful the ledger is already paying for gets
+        /// fetched from wherever it stands, same as a builder's own gather in
+        /// `FindSomethingToWorkAt`.
+        ResourceNode NearestNode(string resource)
+        {
+            ResourceNode near = null;
+            float best = float.MaxValue;
+            Vector3 from = camp.CampCentre;
+            foreach (var n in ResourceNode.All)
+            {
+                if (n == null || n.Harvested || n.Resource != resource) continue;
+                Vector3 d = n.transform.position - from;
+                d.y = 0f;
+                float m = d.sqrMagnitude;
+                if (m < best) { best = m; near = n; }
+            }
+            return near;
+        }
+
         // --- what to mime -----------------------------------------------------
 
-        /// **What this row is after.** A gatherer is after what they were
-        /// told to get; a builder is after whatever half of the blueprint's
-        /// price is still unpaid -- logs first, then stone
-        /// (`OutpostLedger.BuilderWants`), which is the same order and the
-        /// same answer the ledger's own `Step` uses. Asking the ledger
-        /// rather than deciding here is the whole of why the body and the
-        /// books cannot disagree about which material a builder is carrying.
+        /// **What this row is after.** What they were told to get -- Timber,
+        /// Stone, Game, whatever `target` says.
         ///
-        /// Falls back to timber when there is no blueprint left to read, so
-        /// a builder in the frame between finishing and being re-ordered
-        /// mimes an axe rather than nothing.
-        string WhatFor(OutpostHand r)
-        {
-            if (r == null) return null;
-            if (r.order != OutpostOrder.Build) return r.target;
-            // What the books say is in his arms, when there is something.
-            if (r.Hauling && r.haulTo == HaulPlace.Site) return r.haulRes;
-            string want = camp != null && camp.Ledger != null ? camp.Ledger.BuilderWants : null;
-            return string.IsNullOrEmpty(want) ? Res.Timber : want;
-        }
+        /// **Only ever asked of a Gather row now, 2026-09-23.** A builder's
+        /// own answer used to live here too (logs first, then stone,
+        /// `OutpostLedger.BuilderWants`), for the direct-carry loop below;
+        /// that loop is a ledger haul now (`TickHaul` reads `HaulOf(r)`,
+        /// which already knows exactly what is on the books and skips this
+        /// entirely), so a Build row never reaches this any more -- but see
+        /// `Carries`, called from the hunting and station-work mimes too,
+        /// which is why this still takes the general row rather than just a
+        /// resource name.
+        string WhatFor(OutpostHand r) => r?.target;
 
         /// **What ends up on his shoulder**, which is not always what he was
         /// sent after. One row splits the two: a hunter is sent after Game
@@ -1305,27 +1419,13 @@ namespace SeaSick.World
             }
         }
 
-        /// Where the load goes: the blueprint if one is going up, otherwise
-        /// the stack that resource belongs on.
-        Vector3 Dropoff(OutpostHand r, string resource)
-        {
-            // **The oldest site that still wants THIS material** --
-            // `OutpostLedger.SiteWanting`, 2026-09-23. It used to be
-            // `Focus`, which is "the site the camp is on" and says nothing
-            // about whether that site is still short of the thing in this
-            // man's arms: it is the answer that walked a fourth log to a
-            // site that wanted one. Null (nobody wants it) falls through to
-            // the pile, which is where a surplus belongs.
-            var site = r != null && r.order == OutpostOrder.Build && camp.Ledger != null
-                ? camp.Ledger.SiteWanting(resource) : null;
-            if (site != null)
-            {
-                Vector3 p = site.At;
-                p.y = camp.GroundAt(p);
-                return p;
-            }
-            return PileSpot(resource);
-        }
+        /// Where a load from the direct-rate gather loop goes: the stack
+        /// that resource belongs on. A builder's carry to a SITE is a ledger
+        /// haul now (`TickHaul` walks straight to `HaulOf(r).toAt`, which the
+        /// books already aimed at "the oldest site that still wants this" --
+        /// `OutpostLedger.SiteWanting` -- when the trip was booked), so this
+        /// is only ever asked for a Gather row's own pile.
+        Vector3 Dropoff(OutpostHand r, string resource) => PileSpot(resource);
 
         /// **The stack this resource is kept on.** See `PileRadius`: the angle
         /// comes from the resource name, exactly as `CampPiles` lays it out,

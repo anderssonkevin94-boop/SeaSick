@@ -1775,21 +1775,18 @@ namespace SeaSick.World
         /// a special case.
         public const float BuildDaysPerHand = 0.5f;
 
-        /// **Hand-days to take ONE tree off a building plot, 2026-09-23.**
-        /// One ordinary felling: a hand fells `TimberPerHandPerDay` (4) logs
-        /// a day, so a quarter of a day. The log is booked on the pile like
-        /// any other. **A guess, never played** -- the dial for "clearing
-        /// takes too long".
-        public const float ClearTreeHandDays = 1f / TimberPerHandPerDay;
-        /// **Hand-days to break ONE rock off a plot.** A boulder is a prop
-        /// that stands for `ResourceNode.DefaultUnitsPerProp` (4) stone in the
-        /// seam, and quarrying all of it would be 4/3 of a day -- far too
-        /// long for "get it out of the way". Half a day: broken and rolled
-        /// aside, with `ClearStonePerRock` worth keeping. A guess, never
-        /// played.
-        public const float ClearRockHandDays = 0.5f;
+        /// **Hand-days to take ONE tree off a building plot.** Kevin,
+        /// 2026-09-23: 5 SECONDS of builder time a tree
+        /// (`Playtest.ClearSecondsPerTree`), turned into days at the current
+        /// `TimeOfDay.DayLength`. The log is booked on the pile like any
+        /// other. The dial for "clearing takes too long".
+        public static float ClearTreeHandDays => SecondsToDays(Playtest.ClearSecondsPerTree);
+        /// **Hand-days to break ONE rock off a plot**: `Playtest.ClearSecondsPerRock`
+        /// (8 s, the stone cut ratio -- a guess, Kevin set only the tree),
+        /// broken and rolled aside with `ClearStonePerRock` worth keeping.
+        public static float ClearRockHandDays => SecondsToDays(Playtest.ClearSecondsPerRock);
         /// Units a cleared rock books on the pile (Stone, or Ore for the
-        /// `clearOre` tail). Half a prop's worth, matching the half-day.
+        /// `clearOre` tail). Half a prop's worth.
         public const int ClearStonePerRock = 2;
 
         /// Materials a plan of the reference size is made of. A hut is 6
@@ -2306,9 +2303,12 @@ namespace SeaSick.World
             foreach (var h in hands)
             {
                 if (h == null) continue;
-                if (h.order == OutpostOrder.Build || (gatherersBuild && GatherBlocked(h)))
+                // (A trip gatherer's help is `GatherDay`'s -- his arms too --
+                // so only a blocked HUNTER joins the builders here.)
+                if (h.order == OutpostOrder.Build
+                    || (gatherersBuild && !TripGatherer(h) && GatherBlocked(h)))
                     builderHands.Add(h);
-                else if (h.Hauling && h.haulTo == HaulPlace.Site)
+                else if (h.Hauling && h.haulTo == HaulPlace.Site && !TripGatherer(h))
                     DepositHaul(h, true);   // re-ordered mid-trip: it lands now
             }
             if (sites != null)
@@ -2323,10 +2323,17 @@ namespace SeaSick.World
             // One pass per HAND rather than per resource, so two hands on the
             // same thing share one stock and one ceiling without this loop
             // having to know that they are two.
+            //
+            // **Everything but the hunt is TRIPS since 2026-09-23** (Kevin,
+            // decision A): store -> source -> cut an armful -> store, each
+            // trip's time its walked distance plus the cutting (`GatherDay`,
+            // OutpostLedger.Stations.cs). No per-day `Res.GatherRate`
+            // accrual any more. Only the hunter below keeps a rate.
             foreach (var h in hands)
             {
                 if (h == null || h.order != OutpostOrder.Gather) continue;
                 if (string.IsNullOrEmpty(h.target)) continue;
+                if (TripGatherer(h)) { GatherDay(h, days, gatherersBuild); continue; }
 
                 var stock = Stock(h.target);
                 if (stock == null || stock.standing <= 0f) continue;
@@ -2708,6 +2715,8 @@ namespace SeaSick.World
                     return null;
                 }
                 if (GatherBlocked(h)) return GatherFullReason(h);
+                // Walking home with the last armful is still working.
+                if (h.Hauling) return null;
                 if (stock == null || stock.standing < 1f) return "nothing left to cut here";
                 return null;
             }
@@ -2802,7 +2811,8 @@ namespace SeaSick.World
                         continue;
                     }
                     if (h.target != resource || Stalled(h)) continue;
-                    rate += Res.GatherRate(resource) * WorkFactorOn(h, resource)
+                    // Trips since 2026-09-23: an armful per walked trip.
+                    rate += GatherTripPerDay(resource) * WorkFactorOn(h, resource)
                         * PriorityMultiplier(resource);
                     continue;
                 }
@@ -2879,7 +2889,8 @@ namespace SeaSick.World
                         continue;
                     }
                     if (h.target != resource || Stalled(h)) continue;
-                    rate += Res.GatherRate(resource) * WorkFactorOn(h, resource)
+                    // Trips since 2026-09-23: an armful per walked trip.
+                    rate += GatherTripPerDay(resource) * WorkFactorOn(h, resource)
                         * PriorityMultiplier(resource);
                     continue;
                 }

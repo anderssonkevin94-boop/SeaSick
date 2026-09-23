@@ -29,7 +29,10 @@ public class LedgerProbe : MonoBehaviour
         float day = Mathf.Max(0.0001f, SeaSick.World.TimeOfDay.DayLength);
         sb.AppendLine($"day = {day:F0} s, quantum = {OutpostLedger.QuantumDays:F2} day "
             + $"({OutpostLedger.QuantumDays * day:F1} s)");
-        sb.AppendLine($"rates: {OutpostLedger.TimberPerHandPerDay:F1} logs/hand/day, "
+        // Gathering is TRIPS since 2026-09-23 (walk out, 5 s a log, walk
+        // back): the rate is an armful per trip, from the default 25 m.
+        sb.AppendLine($"rates: {new OutpostLedger().GatherTripPerDay(Res.Timber):F1} logs/hand/day by trips "
+            + $"({OutpostLedger.DefaultSourceMetres:F0} m out, {Playtest.CutSecondsPerLog:F0} s a log), "
             + $"ceiling {OutpostLedger.CampfireCeiling}, "
             + $"{OutpostLedger.StandingPerHectare:F0} logs/ha standing, "
             + $"regrowth {OutpostLedger.RegrowthPerDay * 100f:F0}%/day");
@@ -114,24 +117,35 @@ public class LedgerProbe : MonoBehaviour
         // Kevin chose a stock that depletes. If the numbers make it
         // unreachable then "depletes and regrows" is a claim, not a mechanic.
 
+        // **Measured per quantum since 2026-09-23.** Gathering is trips now
+        // (Kevin: walk out, 5 s a log, walk back), so two hands take the
+        // 20 logs of half a hectare in under a day, not the old "3+ days at
+        // 4 logs a hand a day" -- a whole-day loop can no longer tell
+        // "instantly" from "as fast as the trips allow". The bite is still
+        // tested (the wood runs out); "not instantly" is now "no faster than
+        // the trips": each hand takes an armful a trip, so the last armful
+        // cannot leave the ground before (rounds - 1) whole trips have run.
         var strip = Working(t0, hectares: 0.5f);
         float startStanding = strip.Wood.standing;
-        int daysToStrip = 0;
-        for (int d = 1; d <= 400; d++)
+        float daysToStrip = 0f;
+        for (int q = 1; q <= 4000; q++)
         {
             strip.ceilingPer = 100000;         // take the ceiling out of the question
-            strip.Tick(t0 + d * (double)day);
-            if (strip.Wood.standing < 1f) { daysToStrip = d; break; }
+            strip.Tick(t0 + q * (double)OutpostLedger.QuantumDays * day);
+            if (strip.Wood.standing < 1f) { daysToStrip = q * OutpostLedger.QuantumDays; break; }
         }
+        int armful = Res.Armful(Res.Timber);
+        int rounds = Mathf.CeilToInt(startStanding / (strip.hands.Count * armful));
+        float fastest = (rounds - 1) * strip.TripDays(Res.Timber, armful, HaulPlace.Field, -1, HaulPlace.Store, -1);
         sb.AppendLine();
         sb.AppendLine($"DEPLETION on half a hectare ({startStanding:F0} logs standing), "
-            + $"ceiling lifted: stripped in {daysToStrip} game days "
+            + $"ceiling lifted: stripped in {daysToStrip:F1} game days "
             + $"({daysToStrip * day / 60f:F1} real minutes at the current day length)");
-        Gate(sb, ref fails, "the-wood-can-run-out", daysToStrip > 0,
-            daysToStrip > 0 ? $"stripped on day {daysToStrip}"
-                            : $"still {strip.Wood.standing:F1} standing after 400 days");
-        Gate(sb, ref fails, "but-not-instantly", daysToStrip == 0 || daysToStrip >= 3,
-            $"stripped in {daysToStrip} days");
+        Gate(sb, ref fails, "the-wood-can-run-out", daysToStrip > 0f,
+            daysToStrip > 0f ? $"stripped on day {daysToStrip:F1}"
+                             : $"still {strip.Wood.standing:F1} standing after 400 days");
+        Gate(sb, ref fails, "but-not-instantly", daysToStrip == 0f || daysToStrip >= fastest - 1e-3f,
+            $"stripped in {daysToStrip:F2} days; {rounds} rounds of 2-log trips can do it no faster than {fastest:F2}");
 
         // --- 6. and it has to come back --------------------------------------
 
@@ -296,7 +310,7 @@ public class LedgerProbe : MonoBehaviour
         Gate(sb, ref fails, "a-stripped-camp-builds-at-the-rate-it-regrows",
             thin.Pending.done + thin.Pending.donePart <= grew + 0.05f,
             $"{thin.Pending.done + thin.Pending.donePart:F2} logs in a day "
-            + $"against {grew:F2} regrown, not the {OutpostLedger.TimberPerHandPerDay:F0} a hand can cut");
+            + $"against {grew:F2} regrown, not the {thin.GatherTripPerDay(Res.Timber):F0} a hand can cut by trips");
 
         // And it survives a save half built, which is the whole reason the
         // blueprint is a row and not a GameObject.
@@ -388,10 +402,17 @@ public class LedgerProbe : MonoBehaviour
         sb.AppendLine($"  timber {mill.CountOf(Res.Timber)}   boards {mill.CountOf(Res.Boards)}");
         Gate(sb, ref fails, "a-sawyer-makes-boards", mill.CountOf(Res.Boards) > 0,
             $"{mill.CountOf(Res.Boards)} boards after 6 days");
+        // **Measured against what was CUT, not a rate (2026-09-23).** The
+        // old bound was "less than two hands at 4 logs a day"; gathering is
+        // trips now (~10 logs a hand a day), which made that bound loose
+        // enough to pass with nothing sawn. `timberTaken` is every log that
+        // left the ground, so timber still held anywhere (store, bays, arms)
+        // below it is timber the saw ate.
+        int timberHeld = mill.CountOf(Res.Timber) + mill.CarriedOf(Res.Timber);
         Gate(sb, ref fails, "and-eats-the-timber-to-do-it",
-            mill.CountOf(Res.Boards) + mill.CountOf(Res.Timber) < 6f * 2f * OutpostLedger.TimberPerHandPerDay,
-            $"{mill.CountOf(Res.Timber)} timber + {mill.CountOf(Res.Boards)} boards is less than "
-            + "what two hands would have cut if nothing was consumed");
+            mill.CountOf(Res.Boards) > 0 && timberHeld < mill.timberTaken - 0.5f,
+            $"{mill.timberTaken:F0} logs cut, {timberHeld} still held, {mill.CountOf(Res.Boards)} boards: "
+            + $"{mill.timberTaken - timberHeld:F0} went into the saw");
 
         // A position with nothing to work on produces nothing, which is the
         // whole point of the chain: a forge on an island with no ore is a shed.

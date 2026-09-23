@@ -229,53 +229,96 @@ namespace SeaSick.UI.Sheets
                 addHand.SetEnabled(SheetBits.FirstIdle(l) != null);
         }
 
-        /// **"about 2 days left", out of the ledger's own day rates.**
+        /// **"about 2 days left", out of the ledger's own trip-timing
+        /// model (2026-09-23 rewrite).**
         ///
         /// A guess by construction -- the hands have to walk, the stock can
         /// run out, and a starving camp works at `WorkFactor` -- so it says
-        /// "about". `TimberPerHandPerDay` / `StonePerHandPerDay` are the same
-        /// constants `OutpostLedger.Step` builds with, so the estimate and the
-        /// thing it estimates cannot drift apart.
+        /// "about". Since stocking became whole-armful trips timed by real
+        /// walking distance (`OutpostLedger.Stations`, "trip timing"), the
+        /// old per-day haul rates (`TimberPerHandPerDay` etc) no longer
+        /// describe anything the ledger does, so the estimate is rebuilt out
+        /// of the same arithmetic a trip is booked with: remaining units ->
+        /// `ceil(remaining / Res.Armful(res))` trips, each trip's time from
+        /// `OutpostLedger.TripDays` (the exact function `StartTimedTrip`
+        /// pays with), summed and divided among the hands actually on the
+        /// build order. `HaulDaysFor` below is the per-resource half of
+        /// that; the two phases (haul the pile, then hammer it up) are
+        /// added because the same hands do them one after the other.
         /// The one answer callers have to be able to recognise: it is the
         /// only one that is about the CREW rather than about the clock, and
         /// both sheets say that part in their own words instead.
         public const string Nobody = "nobody is building it";
 
+        /// One game-hour, in days -- the "under an hour" floor below.
+        /// `TimeOfDay.DayLength` cancels out of the ratio regardless of its
+        /// value, so this needs no reference to it.
+        const float HourInDays = 1f / 24f;
+
         public static string DaysLeftLine(OutpostLedger l, PendingBuild p, int builders)
         {
             if (p == null) return "not started";
-            int timberLeft = Mathf.Max(0, p.needed - p.done);
-            int stoneLeft = Mathf.Max(0, p.stoneNeeded - p.stoneDone);
-            // Brick has no per-hand pace below -- it is only ever carried
-            // out of a pile or a rack (`OutpostLedger.StartSiteTrip`), never
-            // made on site -- so it never slows the estimate.
-            int brickLeft = Mathf.Max(0, p.brickNeeded - p.brickDone);
-            // **The building phase has its own clock, 2026-09-23.** A
-            // stocked site is not "ready to raise" any more -- it is being
-            // raised, and how long that takes is hand-days over hands.
-            if (p.Stocked)
-            {
-                if (p.Complete) return "ready to raise";
-                if (builders <= 0) return Nobody;
-                float left = (p.LabourNeeded - p.built) / builders;
-                if (left < 0.4f) return "nearly up";
-                if (left < 0.75f) return "about half a day of building left";
-                return $"about {left:0.#} days of building left";
-            }
+            if (p.Complete) return "ready to raise";
             if (builders <= 0) return Nobody;
 
-            float days = 0f;
-            if (timberLeft > 0 && OutpostLedger.TimberPerHandPerDay > 0f)
-                days += timberLeft / (builders * OutpostLedger.TimberPerHandPerDay);
-            if (stoneLeft > 0 && OutpostLedger.StonePerHandPerDay > 0f)
-                days += stoneLeft / (builders * OutpostLedger.StonePerHandPerDay);
-            // ...and then they build it. Part of the wait, so the number
-            // does not jump when the last log lands.
-            days += (p.LabourNeeded - p.built) / builders;
+            // **The haul half, 0 once `Stocked`** -- `HaulDaysFor` returns 0
+            // for a resource with nothing left, so this needs no separate
+            // Stocked branch to skip it.
+            float haulDays = HaulDaysFor(l, p, Res.Timber, Mathf.Max(0, p.needed - p.done))
+                + HaulDaysFor(l, p, Res.Stone, Mathf.Max(0, p.stoneNeeded - p.stoneDone))
+                + HaulDaysFor(l, p, Res.Brick, Mathf.Max(0, p.brickNeeded - p.brickDone));
 
+            // **The building half.** `LabourNeeded` is hand-days; `built`
+            // only accrues once stocked, so this is the whole clock on a
+            // site still being stocked and just the remainder once it is.
+            float buildDays = Mathf.Max(0f, p.LabourNeeded - p.built);
+
+            // Both halves are person-days of work the crew can split, so
+            // both divide by the same headcount -- the haul trips are not
+            // run by one hand alone any more than the hammering is.
+            float days = (haulDays + buildDays) / builders;
+
+            if (p.Stocked)
+            {
+                if (days < HourInDays) return "under an hour of building left";
+                if (days < 0.4f) return "nearly up";
+                if (days < 0.75f) return "about half a day of building left";
+                return $"about {days:0.#} days of building left";
+            }
+
+            if (days < HourInDays) return "under an hour left";
             if (days < 0.75f) return "about half a day left";
             if (days < 1.5f) return "about a day left";
             return $"about {days:0.#} days left";
+        }
+
+        /// **Person-days to haul the last `remaining` units of `res` to the
+        /// site**, out of the same trips `OutpostLedger.StartSiteTrip` would
+        /// actually start: the pile first, the island (cut/quarry) after.
+        ///
+        /// `StartSiteTrip` also tries a station's output rack between those
+        /// two, but `OutpostLedger` has no public accessor for rack stock,
+        /// so a rack-fed haul reads here as a slower Field (cut) trip --
+        /// this estimate can run a little LONG on a camp with a stocked
+        /// sawmill or quarry rack, never short. Brick has no Field step at
+        /// all (`StartSiteTrip` never quarries a brick), so a brick short of
+        /// the store's whole pile reads as a Store trip too rather than
+        /// pretend it can be gathered -- a guess, but "empty" would be worse.
+        static float HaulDaysFor(OutpostLedger l, PendingBuild p, string res, int remaining)
+        {
+            if (l == null || remaining <= 0) return 0f;
+            int armful = Mathf.Max(1, Res.Armful(res));
+            int fromStore = res == Res.Brick ? remaining
+                : Mathf.Min(remaining, Mathf.Max(0, l.StoreCountOf(res)));
+            int fromField = remaining - fromStore;
+            int storeTrips = Mathf.CeilToInt(fromStore / (float)armful);
+            int fieldTrips = Mathf.CeilToInt(fromField / (float)armful);
+            float days = 0f;
+            if (storeTrips > 0)
+                days += storeTrips * l.TripDays(res, armful, HaulPlace.Store, -1, HaulPlace.Site, -1, p);
+            if (fieldTrips > 0)
+                days += fieldTrips * l.TripDays(res, armful, HaulPlace.Field, -1, HaulPlace.Site, -1, p);
+            return days;
         }
 
         /// **"clearing: 3 trees, 1 rock left"** -- the CLEAR phase's own

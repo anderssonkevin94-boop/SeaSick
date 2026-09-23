@@ -10,6 +10,18 @@ namespace SeaSick.World
         /// Seconds of game time to cut ONE log at the tree. Kevin: *"cutting
         /// logs should take 5 seconds for the purpose of playtesting."*
         public const float CutSecondsPerLog = 5f;
+
+        /// Seconds of builder time to take ONE tree off a building plot.
+        /// Kevin, 2026-09-23: 5 s a tree. Read through
+        /// `OutpostLedger.ClearTreeHandDays`.
+        public const float ClearSecondsPerTree = 5f;
+
+        /// Seconds of builder time to break ONE rock off a plot. **A guess,
+        /// not Kevin's number**: the tree's 5 s scaled by the stone/timber
+        /// cut ratio (`Res.GatherRate`: 4 / 2.5), i.e. what a unit of stone
+        /// takes to quarry (`GatherSecondsPerUnit(Stone)` = 8 s). Ore rocks
+        /// use it too.
+        public const float ClearSecondsPerRock = 8f;
     }
 
     /// <summary>
@@ -33,7 +45,7 @@ namespace SeaSick.World
     /// should be based on the time it takes to walk to the storage (or wood
     /// source) and back, not some arbitrary timer. cutting logs should take
     /// 5 seconds"*).** Every trip -- station haul, site stocking, a stationed
-    /// worker fetching his own raw -- starts at its DROP-OFF, walks to its
+    /// worker fetching his own raw, a gatherer's armful (below) -- starts at its DROP-OFF, walks to its
     /// PICKUP, cuts/quarries there if the pickup is the island (`Field`),
     /// and walks back:
     /// `seconds = 2 * leg / WalkMetresPerSecond + HandleSeconds
@@ -52,6 +64,19 @@ namespace SeaSick.World
     /// with an unknown end = `DefaultLegMetres`. The route is saved on the
     /// hand at the start (`haulFromX/Z`, `haulToX/Z`, `haulWalkDays`,
     /// `haulWorkDays`) so the mime walks the leg the books paid for.
+    ///
+    /// **Gathering is trips too (Kevin, 2026-09-23, decision A).** A hand on
+    /// a plain `Gather` order (anything but `Res.Game` -- hunting and the farm
+    /// stay per-day rates) walks from the store to the source, cuts/picks an
+    /// armful (`Res.Armful` x `GatherSecondsPerUnit`), walks back and puts
+    /// it in the STORE: `HaulPlace.Field -> Store` through the same
+    /// `StartTimedTrip`/`HaulOf` as every other trip (`GatherDay`). The
+    /// field (`OutpostStock.standing`) loses the armful at pickup; the
+    /// armful is capped by `RoomFor` (net of every load walking to the
+    /// store), so the ceiling holds. No room: the rest of his day hauls for
+    /// the stations or helps build (Kevin's full-store rule), and he
+    /// resumes when room comes back. `Res.GatherRate` is no longer a per-day
+    /// accrual for these -- only the cut-time ratio (`GatherSecondsPerUnit`).
     ///
     /// READ API (visuals, part B / villager mime, part D):
     /// <list type="bullet">
@@ -259,6 +284,18 @@ namespace SeaSick.World
             float walk = LegMetres(res, from, fromStation, to, toStation, site) / WalkMetresPerSecond;
             float work = HandleSeconds + (from == HaulPlace.Field ? n * GatherSecondsPerUnit(res) : 0f);
             return SecondsToDays(2f * walk + work);
+        }
+
+        /// **Units a day one full-strength gatherer brings in** of `res`:
+        /// an armful per gather trip (`Field -> Store`). What the readouts
+        /// (`RatePerDay`, `MakeRatePerDay`) show in place of the old flat
+        /// `Res.GatherRate`; it ignores the store filling up and the field
+        /// running short, which `Stalled` covers.
+        public float GatherTripPerDay(string res)
+        {
+            int n = Mathf.Max(1, Res.Armful(res));
+            float d = TripDays(res, n, HaulPlace.Field, -1, HaulPlace.Store, -1);
+            return d > 0f ? n / d : 0f;
         }
 
         const float Eps = 1e-5f;
@@ -767,6 +804,16 @@ namespace SeaSick.World
             int put = force ? h.haulCount : Mathf.Clamp(ceilingPer - st.whole, 0, h.haulCount);
             st.whole += put;
             h.haulCount -= put;
+            if (put > 0 && h.haulFrom == HaulPlace.Field && h.haulTo == HaulPlace.Store)
+            {
+                // **A gatherer's armful lands** (2026-09-23): its trees go
+                // over now, as a builder's do (the body cut through the
+                // trip), and it is what the camp gathered while away. Booked
+                // per unit put down, so a load that waits at a full store is
+                // booked once, as it goes in.
+                if (h.haulRes == Res.Timber) timberTaken += put;
+                away.Add(h.haulRes, put);
+            }
             if (h.haulCount > 0 && h.haulFrom == HaulPlace.Station && stations != null
                 && h.haulFromStation >= 0 && h.haulFromStation < stations.Count)
             {
@@ -1098,16 +1145,70 @@ namespace SeaSick.World
             return false;
         }
 
-        /// A gatherer who cannot put another unit in the store.
+        /// A gatherer who cannot put another unit in the store. A trip
+        /// gatherer walking home with his own armful is not blocked -- that
+        /// armful already holds its room (`RoomFor` counts it) -- unless it
+        /// is standing at a store something else filled.
         bool GatherBlocked(OutpostHand h)
         {
             if (h == null || h.order != OutpostOrder.Gather || string.IsNullOrEmpty(h.target)) return false;
-            string into = h.target == Res.Game ? Res.Food : h.target;
-            return StoreRoomF(into) <= 0f;
+            if (h.target == Res.Game) return StoreRoomF(Res.Food) <= 0f;
+            if (h.Hauling && h.haulFrom == HaulPlace.Field && h.haulTo == HaulPlace.Store
+                && !WaitingAtStore(h)) return false;
+            return RoomFor(h.target) <= 0;
+        }
+
+        /// **A gatherer who works by trips** (everything but the hunter):
+        /// `GatherDay` spends his whole quantum, whatever is in his arms, so
+        /// the builder and station passes leave him alone.
+        static bool TripGatherer(OutpostHand h) =>
+            h != null && h.order == OutpostOrder.Gather && !string.IsNullOrEmpty(h.target)
+            && h.target != Res.Game;
+
+        /// One gather trip: from the store out to the source, an armful cut
+        /// there, back into the store. The armful is the least of
+        /// `Res.Armful`, the store's room net of every load walking to it,
+        /// and what stands in the field -- which gives it up now, at pickup.
+        /// False when the store is full or the field is bare.
+        bool StartGatherTrip(OutpostHand h)
+        {
+            string res = h.target;
+            var stock = Stock(res);
+            int standing = stock != null ? Mathf.FloorToInt(stock.standing + 1e-4f) : 0;
+            int n = Mathf.Min(Res.Armful(res), Mathf.Min(RoomFor(res), standing));
+            if (n <= 0) return false;
+            stock.standing = Mathf.Max(0f, stock.standing - n);
+            StartTimedTrip(h, res, n, HaulPlace.Field, -1, HaulPlace.Store, -1);
+            return true;
+        }
+
+        /// **A gatherer's quantum, by trips (Kevin, 2026-09-23).** Finish
+        /// whatever is in his arms (his own armful, or a haul/site load from
+        /// helping), then trip after trip while the store has room and the
+        /// field has stock. With the store full, the rest of the quantum
+        /// helps: builds when `helpBuild` (no station hauling wanted and a
+        /// site in the queue -- `Step` decides once per quantum), else hauls
+        /// for the stations. A bare field just stops him ("nothing left to
+        /// cut here"). The work clock is scaled as the old rate was
+        /// (`WorkFactorOn` + `PriorityMultiplier` of what he gathers); the
+        /// help is paid at plain `WorkFactor`, like any builder or hauler.
+        void GatherDay(OutpostHand h, float days, bool helpBuild)
+        {
+            float scale = WorkFactorOn(h, h.target) * PriorityMultiplier(h.target);
+            float budget = days * scale;
+            for (int guard = 0; guard < 64 && budget > Eps; guard++)
+            {
+                if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) return; continue; }
+                if (!StartGatherTrip(h)) break;
+            }
+            if (budget <= Eps || h.Hauling || RoomFor(h.target) > 0 || scale <= 0f) return;
+            float help = budget / scale * WorkFactor(h);
+            if (helpBuild) { if (sites != null) BuilderDay(h, ref help); }
+            else HaulerDay(h, ref help);
         }
 
         /// The station pass of `Step`: every stationed worker's day, every
-        /// idle hand's (and store-blocked gatherer's) hauling, and any load
+        /// idle hand's (and store-blocked hunter's) hauling, and any load
         /// in the arms of a hand whose job changed put down at once.
         void StepStations(float days, bool gatherersHaul)
         {
@@ -1121,6 +1222,10 @@ namespace SeaSick.World
                     var s = StationOfHand(h);
                     if (s == null) { if (h.Hauling) DepositHaul(h); continue; }
                     WorkerDay(h, s, stations.IndexOf(s), ref budget);
+                }
+                else if (TripGatherer(h))
+                {
+                    // `GatherDay` already spent his quantum, arms and all.
                 }
                 else if (h.order == OutpostOrder.Idle
                          || (gatherersHaul && GatherBlocked(h)))

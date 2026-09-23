@@ -33,6 +33,14 @@ namespace SeaSick.World
     ///     an explicit centre (the store), quarry and site position, so each
     ///     trip's time is known; a trip books exactly `TripDays`, and a site
     ///     twice as far from the store takes ~twice as long to stock.
+    /// (k) Gathering is trips (Kevin, 2026-09-23): a timber gatherer 20 m
+    ///     out books 2 logs a trip in 2 x 20 x 1.15 / 2.6 + 3 + 2 x 5 s; the
+    ///     same camp ticked 0.1 d at a time, 1 d at once and raggedly lands
+    ///     on the same books; two gatherers never push the store past its
+    ///     ceiling and every log is accounted; with the store full a gatherer
+    ///     says so and helps build / hauls for the stations, then resumes.
+    /// (l) Clearing a plot is seconds of builder time: 2 trees = 10 s,
+    ///     a rock = 8 s (the rest of an 18 s quantum goes on building).
     public static class StationStockSelfTest
     {
         public static bool Run()
@@ -270,6 +278,133 @@ namespace SeaSick.World
                     + "(observed on the 0.1-day quantum)");
             }
 
+            // --- (k) gathering is trips (Kevin, 2026-09-23) -----------------
+            {
+                // (1) one gatherer, trees 20 m from the store.
+                var gt = Gatherers(1, 20);
+                var gh = gt.hands[0];
+                double ng = gt.lastTicked;
+                Advance(gt, ref ng, 0.1);
+                float wantSec = 2f * 20f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
+                                + OutpostLedger.HandleSeconds + 2f * Playtest.CutSecondsPerLog;
+                bool firstTrip = gh.Hauling && gh.haulFrom == HaulPlace.Field && gh.haulTo == HaulPlace.Store
+                                 && gh.haulRes == Res.Timber && gh.haulCount == 2
+                                 && Mathf.Abs(gh.haulDays * TimeOfDay.DayLength - wantSec) < 0.01f;
+                float tripSec = gh.haulDays * TimeOfDay.DayLength;
+                Advance(gt, ref ng, 0.1);                    // 36 s: the first armful (30.7 s) is in
+                Gate(sb, ref fails, "gather-trip-2-logs-timed",
+                    firstTrip && gt.StoreCountOf(Res.Timber) == 2 && gt.CarriedOf(Res.Timber) == 2
+                    && Mathf.Abs(gt.Stock(Res.Timber).standing - 36f) < 1e-3f,
+                    $"trip {gh.haulCount} logs {tripSec:0.00} s (want {wantSec:0.00} s = 2 x 20 x {OutpostLedger.PathFactor} / "
+                    + $"{OutpostLedger.WalkMetresPerSecond} + {OutpostLedger.HandleSeconds} + 2 x {Playtest.CutSecondsPerLog}); "
+                    + $"at 36 s store {gt.StoreCountOf(Res.Timber)}, arms {gt.CarriedOf(Res.Timber)}, standing {gt.Stock(Res.Timber).standing:0.#}");
+
+                // A gatherer leaving mid-trip (`RemoveHand`) puts his armful
+                // in the store: nothing lost, the trees booked as felled.
+                var lv = Gatherers(1, 20);
+                double nl = lv.lastTicked;
+                Advance(lv, ref nl, 0.1);
+                var lh = lv.hands[0];
+                bool midTrip = lh.Hauling && lh.haulFrom == HaulPlace.Field;
+                lv.RemoveHand(lh);
+                Gate(sb, ref fails, "gather-leaving-hand-drops-nothing",
+                    midTrip && !lh.Hauling && lv.StoreCountOf(Res.Timber) == 2 && Mathf.Abs(GatherAll(lv) - 40f) < 1e-3f
+                    && Mathf.Abs(lv.timberTaken - 2f) < 1e-3f,
+                    $"mid-trip {midTrip}, store {lv.StoreCountOf(Res.Timber)}, {GatherAll(lv):0.##} of 40 accounted, felled {lv.timberTaken:0.#}");
+
+                // (2) D2: ten 0.1-day ticks vs one 1-day tick vs ragged.
+                foreach (double span in new[] { 1.0, 1.7 })
+                {
+                    var d1 = Gatherers(1, 20); var d2 = Gatherers(1, 20); var d3 = Gatherers(1, 20);
+                    double m1 = d1.lastTicked, m2 = d2.lastTicked, m3 = d3.lastTicked;
+                    int k = Mathf.RoundToInt((float)(span / 0.1));
+                    for (int i = 0; i < k; i++) Advance(d1, ref m1, 0.1);
+                    Advance(d2, ref m2, span);
+                    double left = span;
+                    double[] rag = { 0.03, 0.17, 0.01, 0.42 };
+                    for (int i = 0; left > 1e-9; i++) { double st = System.Math.Min(left, rag[i % rag.Length]); Advance(d3, ref m3, st); left -= st; }
+                    Gate(sb, ref fails, $"gather-d2-{span:0.0}d", SameGather(d1, d2) && SameGather(d1, d3),
+                        $"{GatherState(d1)} | {GatherState(d2)} | {GatherState(d3)}");
+                }
+
+                // (3) two gatherers, ceiling 10: never over, every log accounted.
+                var two = Gatherers(2, 10);
+                double nt = two.lastTicked;
+                bool ceilG = true, consG = true;
+                string ceilGWhy = "", consGWhy = "";
+                for (int i = 0; i < 60; i++)
+                {
+                    Advance(two, ref nt, 0.05);
+                    if (two.StoreCountOf(Res.Timber) > two.ceilingPer && ceilG)
+                    { ceilG = false; ceilGWhy = $"tick {i}: store {two.StoreCountOf(Res.Timber)} > {two.ceilingPer}"; }
+                    float all = GatherAll(two);
+                    if (Mathf.Abs(all - 40f) > 1e-3f && consG) { consG = false; consGWhy = $"tick {i}: {all:0.###} of 40"; }
+                }
+                string full0 = two.StallReason(two.hands[0]) ?? "";
+                Gate(sb, ref fails, "gather-ceiling-two-gatherers",
+                    ceilG && consG && two.StoreCountOf(Res.Timber) == 10 && two.CarriedOf(Res.Timber) == 0
+                    && full0.Contains("store is full of timber"),
+                    ceilG && consG ? $"store {two.StoreCountOf(Res.Timber)}/10, arms {two.CarriedOf(Res.Timber)}, "
+                                     + $"40 logs accounted every tick, stall '{full0}'"
+                                   : ceilGWhy + consGWhy);
+
+                // (4a) store full + a site queued: says so, helps build, resumes.
+                var bs = Gatherers(1, 10);
+                bs.Store(Res.Timber).whole = 10;
+                bs.sites.Add(new PendingBuild { planId = BuildPlans.Hut.id, x = 5f, z = 5f, needed = 4, phased = true });
+                var bh = bs.hands[0];
+                string whyB = bs.StallReason(bh) ?? "";
+                double nb = bs.lastTicked;
+                Advance(bs, ref nb, 0.1);
+                bool helpedB = bh.haulSerial > 0 && (bs.sites[0].done > 0 || bs.HaulOf(bh).to == HaulPlace.Site)
+                               && bs.Stock(Res.Timber).standing >= 40f - 1e-3f;
+                for (int i = 0; i < 40 && !(bs.sites[0].Complete && bs.StoreCountOf(Res.Timber) == 10); i++) Advance(bs, ref nb, 0.1);
+                Gate(sb, ref fails, "gather-full-store-helps-build",
+                    whyB.Contains("store is full of timber, helping build") && helpedB
+                    && bs.sites[0].Complete && bs.StoreCountOf(Res.Timber) == 10,
+                    $"stall '{whyB}', first quantum a site trip {helpedB}, site complete {bs.sites[0].Complete}, "
+                    + $"store back to {bs.StoreCountOf(Res.Timber)}/10 at {nb / TimeOfDay.DayLength:0.0} d");
+
+                // (4b) store full + a manned station wanting it: hauls for it, resumes.
+                var q = Quarry(10, 10, 0);
+                q.SetSourceMetres(Res.Stone, 20f);
+                q.AddStanding(Res.Stone, 40f).regrowPerDay = 0f;
+                q.hands.Add(new OutpostHand { name = "Gatherer", order = OutpostOrder.Gather, target = Res.Stone });
+                q.PlaceOrder(BuildPlans.Quarry.id, "brick", OutpostLedger.RepeatOrder);
+                var qh = q.hands[1];
+                string whyQ = q.StallReason(qh) ?? "";
+                double nq = q.lastTicked;
+                Advance(q, ref nq, 0.1);
+                var qv = q.HaulOf(qh);
+                bool haulQ = qh.haulSerial > 0 && q.Stock(Res.Stone).standing >= 40f - 1e-3f
+                             && (!qv.active || (qv.from == HaulPlace.Store && qv.to == HaulPlace.Station));
+                Advance(q, ref nq, 2.0);
+                Gate(sb, ref fails, "gather-full-store-hauls",
+                    whyQ.Contains("store is full of stone, hauling for the stations") && haulQ
+                    && q.Stock(Res.Stone).standing < 40f - 1e-3f,
+                    $"stall '{whyQ}', first quantum a station haul {haulQ}, "
+                    + $"field {q.Stock(Res.Stone).standing:0.#}/40 after 2 d (resumed)");
+            }
+
+            // --- (l) clearing a plot is seconds of builder time --------------
+            foreach (bool rock in new[] { false, true })
+            {
+                var c2 = Site(true);
+                var p = c2.sites[0];
+                p.done = 5; p.stoneDone = 3;                   // stocked: only clear + build left
+                if (rock) p.clearRocks = 1; else p.clearTrees = 2;
+                p.clearSited = true;
+                c2.hands.RemoveAt(1);                         // one builder
+                double nc2 = c2.lastTicked;
+                Advance(c2, ref nc2, 0.1);                    // one 18 s quantum
+                float clearSec = rock ? Playtest.ClearSecondsPerRock : 2f * Playtest.ClearSecondsPerTree;
+                float wantBuilt = (OutpostLedger.QuantumDays * TimeOfDay.DayLength - clearSec) / TimeOfDay.DayLength;
+                Gate(sb, ref fails, rock ? "clear-rock-8s" : "clear-2-trees-10s",
+                    p.Cleared && Mathf.Abs(p.built - wantBuilt) < 1e-4f,
+                    $"{(rock ? "1 rock" : "2 trees")} cleared {p.Cleared}; of an 18 s quantum "
+                    + $"{p.built * TimeOfDay.DayLength:0.00} s went on building (want {18f - clearSec:0.00} s, i.e. {clearSec:0} s clearing)");
+            }
+
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());
             return fails == 0;
@@ -382,6 +517,40 @@ namespace SeaSick.World
             var p = l.sites[0];
             return $"{p.done}/5 {p.stoneDone}/3 arms {l.CarriedOf(Res.Timber)}t{l.CarriedOf(Res.Stone)}s built {p.built:0.###}";
         }
+
+        /// `n` timber gatherers, the store at the fire square (0,0), trees
+        /// 20 m out, 40 logs standing and no regrowth (so it conserves).
+        static OutpostLedger Gatherers(int n, int ceiling)
+        {
+            var l = new OutpostLedger { ceilingPer = ceiling, stationsMigrated = true };
+            l.SetCentre(Vector3.zero);
+            l.SetSourceMetres(Res.Timber, 20f);
+            for (int i = 0; i < n; i++)
+                l.hands.Add(new OutpostHand { name = "Gatherer" + i, order = OutpostOrder.Gather, target = Res.Timber });
+            l.Store(Res.Food, true).whole = 1000;
+            l.Store(Res.Timber, true).whole = 0;
+            l.AddStanding(Res.Timber, 40f).regrowPerDay = 0f;
+            l.lastTicked = 0.0;
+            return l;
+        }
+
+        /// Timber in the store (whole and part), in arms and still standing.
+        static float GatherAll(OutpostLedger l)
+        {
+            var st = l.Store(Res.Timber);
+            return (st != null ? st.whole + st.part : 0f) + l.CarriedOf(Res.Timber) + l.Stock(Res.Timber).standing;
+        }
+
+        static bool SameGather(OutpostLedger a, OutpostLedger b)
+            => a.StoreCountOf(Res.Timber) == b.StoreCountOf(Res.Timber)
+            && a.CarriedOf(Res.Timber) == b.CarriedOf(Res.Timber)
+            && Mathf.Abs(a.Stock(Res.Timber).standing - b.Stock(Res.Timber).standing) < 1e-3f
+            && Mathf.Abs(a.hands[0].haulLeft - b.hands[0].haulLeft) < 1e-4f
+            && Mathf.Abs(a.timberTaken - b.timberTaken) < 1e-3f;
+
+        static string GatherState(OutpostLedger l)
+            => $"store {l.StoreCountOf(Res.Timber)} arms {l.CarriedOf(Res.Timber)} standing {l.Stock(Res.Timber).standing:0.#} "
+             + $"taken {l.timberTaken:0.#} left {l.hands[0].haulLeft * TimeOfDay.DayLength:0.0}s";
 
         static OutpostLedger Quarry(int stone, int ceiling, int idleHaulers)
         {
