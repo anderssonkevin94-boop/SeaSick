@@ -98,6 +98,25 @@ namespace SeaSick.World
         /// the ship) does not suddenly read as newborn.
         public bool born = false;
 
+        // --- the haul in their arms (2026-09-23) ---------------------------
+        //
+        // One trip at a time: goods leave the source at pickup, ride here, and
+        // land at the destination when `haulLeft` (game-days of the hand's
+        // effective work) runs out. Saved, so a trip split across quanta,
+        // ticks or a save lands exactly where one long tick would (D2). Read
+        // through `OutpostLedger.HaulOf`. All default to "carrying nothing",
+        // which is what an old save reads as.
+        public string haulRes = "";
+        public int haulCount;
+        public HaulPlace haulFrom = HaulPlace.None;
+        public HaulPlace haulTo = HaulPlace.None;
+        public int haulFromStation = -1;
+        public int haulToStation = -1;
+        public float haulLeft;
+        public float haulDays;
+
+        public bool Hauling => haulCount > 0 && !string.IsNullOrEmpty(haulRes);
+
         /// What to call what they are doing, for the list on the right.
         public string Doing
         {
@@ -495,7 +514,7 @@ namespace SeaSick.World
     /// expensive version of this job; since 2026-09-21 `Save/SaveGame`
     /// writes it into the save file exactly as it is.
     [System.Serializable]
-    public class OutpostLedger
+    public partial class OutpostLedger
     {
         // --- identity --------------------------------------------------------
 
@@ -578,22 +597,29 @@ namespace SeaSick.World
             return made;
         }
 
+        /// **Everything the camp holds of this, 2026-09-23**: the store PLUS
+        /// every station's bay, finished bench and output rack. What costs,
+        /// the HUD and tool checks read; `Take` draws from the same places,
+        /// so nothing is counted that cannot be spent. Loads in hands' arms
+        /// are not in it (`CarriedOf`). The store alone is `StoreCountOf`.
         public int CountOf(string resource)
         {
             var s = Store(resource);
-            return s != null ? s.whole : 0;
+            return (s != null ? s.whole : 0) + StationCountOf(resource);
         }
 
-        /// Room left for this resource, in whole units.
+        /// Room left in the STORE for this resource, in whole units. The
+        /// ceiling is the store's; station stock does not use it up.
         public int RoomFor(string resource) =>
-            Mathf.Max(0, ceilingPer - CountOf(resource));
+            Mathf.Max(0, ceilingPer - StoreCountOf(resource));
 
         /// Whole and part together -- what a tool check or a recipe's "have"
         /// arithmetic wants, since a saw blade at 0.95 is still a saw blade.
+        /// Store and stations both, like `CountOf`.
         float HeldOf(string resource)
         {
             var s = Store(resource);
-            return s != null ? s.whole + s.part : 0f;
+            return (s != null ? s.whole + s.part : 0f) + StationHeldOf(resource);
         }
 
         /// Put whole units in, refusing what will not fit. Returns what was
@@ -607,13 +633,16 @@ namespace SeaSick.World
             return took;
         }
 
-        /// Take whole units out. Returns what was actually there.
+        /// Take whole units out: the store first, then station racks,
+        /// finished benches and bays (the same places `CountOf` counts).
+        /// Returns what was actually there.
         public int Take(string resource, int n)
         {
+            if (n <= 0) return 0;
             var s = Store(resource);
-            if (s == null || n <= 0) return 0;
-            int got = Mathf.Min(s.whole, n);
-            s.whole -= got;
+            int got = s != null ? Mathf.Min(s.whole, n) : 0;
+            if (s != null) s.whole -= got;
+            if (got < n) got += TakeFromStations(resource, n - got);
             return got;
         }
 
@@ -625,7 +654,7 @@ namespace SeaSick.World
             {
                 int n = 0;
                 foreach (var s in stores) if (s != null) n += s.whole;
-                return n;
+                return n + StationTotal();
             }
         }
 
@@ -996,7 +1025,19 @@ namespace SeaSick.World
 
         /// The chosen recipe, or the station's default; null for a station
         /// with no recipe table at all (a farm, a watchtower).
+        ///
+        /// **Since the orders (2026-09-23)** a station's ACTIVE order wins:
+        /// what it is being told to make is what it makes. Without one, the
+        /// remembered choice or the default -- what the sheet highlights.
         public Economy.Recipe RecipeAt(string planId)
+        {
+            var ordered = OrderedRecipe(planId);
+            if (ordered != null) return ordered;
+            return LegacyRecipeAt(planId);
+        }
+
+        /// The pre-order answer: remembered choice, else the default.
+        Economy.Recipe LegacyRecipeAt(string planId)
         {
             if (!Economy.Recipes.StationHasRecipes(planId)) return null;
             string chosenId = null;
@@ -1013,9 +1054,18 @@ namespace SeaSick.World
             var r = Economy.Recipes.Named(recipeId);
             if (r == null || r.station != planId || !RecipeAvailable(r, out _)) return false;
             if (choices == null) choices = new List<RecipeChoice>();
+            bool found = false;
             foreach (var c in choices)
-                if (c != null && c.planId == planId) { c.recipeId = recipeId; return true; }
-            choices.Add(new RecipeChoice { planId = planId, recipeId = recipeId });
+                if (c != null && c.planId == planId) { c.recipeId = recipeId; found = true; break; }
+            if (!found) choices.Add(new RecipeChoice { planId = planId, recipeId = recipeId });
+            // **Choosing IS ordering, 2026-09-23**: nothing is worked without
+            // an order, and the station sheet's one tap is a player order --
+            // so a chosen recipe is a REPEAT order on every station of this
+            // plan. `PlaceOrder` is the full API (counts, per instance).
+            EnsureStations();
+            for (int i = 0; i < stations.Count; i++)
+                if (stations[i] != null && stations[i].planId == planId)
+                    PlaceOrder(i, recipeId, RepeatOrder);
             return true;
         }
 
@@ -1400,11 +1450,10 @@ namespace SeaSick.World
         public int LookoutVolley(int maxArrows = VolleyArrows)
         {
             if (!LookoutPosted) return 0;
-            var quiver = Store(Res.Arrows);
-            if (quiver == null || quiver.whole <= 0) return 0;
-            int loosed = Mathf.Min(maxArrows, quiver.whole);
-            quiver.whole -= loosed;
-            return loosed;
+            // Store and the fletcher's rack alike (`Take` draws both).
+            int held = CountOf(Res.Arrows);
+            if (held <= 0 || maxArrows <= 0) return 0;
+            return Take(Res.Arrows, Mathf.Min(maxArrows, held));
         }
 
         /// Matches the id `BuildPlans.Watchtower` is being wired up with
@@ -2071,6 +2120,18 @@ namespace SeaSick.World
 
             Haul(Store(Res.Brick), ref pending.brickDone, ref pending.brickDonePart,
                 ref room, ref labour);
+
+            // **Then the station racks, if the store is short** (Kevin,
+            // 2026-09-23): a quarry's rack of brick is as good as the store's
+            // and taking it empties the rack -- nothing is counted twice.
+            if (stations != null)
+                foreach (var st in stations)
+                {
+                    if (room <= 0f || labour <= 0f) break;
+                    if (st == null) continue;
+                    Haul(st.Rack(Res.Brick), ref pending.brickDone, ref pending.brickDonePart,
+                        ref room, ref labour);
+                }
         }
 
         /// **Carry from a pile into the blueprint, fractions and all.**
@@ -2165,6 +2226,14 @@ namespace SeaSick.World
             ReconcileSites();
             FeedFirst();
             EnlistFree();
+            EnsureStations();
+
+            // **A gatherer whose store is full does something else** (Kevin,
+            // 2026-09-23): hauls for the stations if there is hauling to do,
+            // else lends a hand to the build. Decided once per quantum so the
+            // two cannot both take his day.
+            bool haulChores = HasHaulChore();
+            bool gatherersBuild = !haulChores && Focus != null;
 
             // Regrowth first, so a camp that stripped its ground last step has
             // something to cut this one rather than the order of operations
@@ -2207,7 +2276,8 @@ namespace SeaSick.World
             // With one site queued this is the old block to the bit.
             float builders = 0f;
             foreach (var h in hands)
-                if (h != null && h.order == OutpostOrder.Build) builders += WorkFactor(h);
+                if (h != null && (h.order == OutpostOrder.Build
+                                  || (gatherersBuild && GatherBlocked(h)))) builders += WorkFactor(h);
             if (builders > 0f && sites != null && sites.Count > 0)
             {
                 float labour = builders * days;          // hand-days to spend
@@ -2321,8 +2391,9 @@ namespace SeaSick.World
                 // hunter with two arrows left and four animals' worth of day
                 // in him shoots two and walks the rest down, which is what
                 // makes running dry read as a slope rather than a cliff.
-                var quiver = hunting ? Store(Res.Arrows) : null;
-                float arrowsHeld = quiver != null ? quiver.whole + quiver.part : 0f;
+                // Store and station racks alike (`HeldOf`), spent through
+                // `DrawHeld` from the same places.
+                float arrowsHeld = hunting ? HeldOf(Res.Arrows) : 0f;
                 if (hunting && arrowsHeld > 0f)
                 {
                     float plain = want;
@@ -2345,13 +2416,8 @@ namespace SeaSick.World
                 // Spend the quiver against what was actually killed, after
                 // the herd and the larder have had their say -- a hunter
                 // stopped by a full Food pile has not loosed an arrow.
-                if (hunting && quiver != null && arrowsHeld > 0f)
-                {
-                    float spend = Mathf.Min(got, arrowsHeld);
-                    quiver.part -= spend;
-                    while (quiver.part < 0f && quiver.whole > 0) { quiver.whole--; quiver.part += 1f; }
-                    if (quiver.part < 0f) quiver.part = 0f;
-                }
+                if (hunting && arrowsHeld > 0f)
+                    DrawHeld(Res.Arrows, Mathf.Min(got, arrowsHeld));
 
                 stock.standing -= got;
                 if (h.target == Res.Timber) timberTaken += got;
@@ -2363,13 +2429,7 @@ namespace SeaSick.World
 
                 if (hunting)
                 {
-                    if (spearWear > 0f)
-                    {
-                        var spearStore = Store(spear, true);
-                        spearStore.part -= spearWear * got;
-                        while (spearStore.part < 0f && spearStore.whole > 0) { spearStore.whole--; spearStore.part += 1f; }
-                        if (spearStore.part < 0f) spearStore.part = 0f;
-                    }
+                    if (spearWear > 0f) DrawHeld(spear, spearWear * got);
                     // Hide comes home beside the meat, one per animal --
                     // a full hide pile does not stop the hunt, the hide is
                     // simply lost.
@@ -2402,6 +2462,10 @@ namespace SeaSick.World
                 // to a saved hand whose building was never restored; produce
                 // nothing rather than guessing.
                 if (!built.Contains(h.target)) continue;
+                // **Stations work their own stock, by order** -- see
+                // `StepStations` below. This loop is left with the buildings
+                // whose input is the ground (the farm).
+                if (IsStation(h.target)) continue;
 
                 // **One conversion, whatever the station.** `Conversion`
                 // reads the chosen (or default) recipe for a station with a
@@ -2486,19 +2550,20 @@ namespace SeaSick.World
                     if (field != null) field.standing -= want;
                 }
 
-                if (tool != null && toolWear > 0f)
-                {
-                    var held = Store(tool, true);
-                    held.part -= toolWear * want;
-                    while (held.part < 0f && held.whole > 0) { held.whole--; held.part += 1f; }
-                    if (held.part < 0f) held.part = 0f;
-                }
+                if (tool != null && toolWear > 0f) DrawHeld(tool, toolWear * want);
 
                 made.part += want;
                 int whole = Mathf.FloorToInt(made.part);
                 if (whole > 0) { made.whole += whole; made.part -= whole; }
                 away.Add(makes, want);
             }
+
+            // --- stations and hauling, 2026-09-23 ----------------------------
+            //
+            // Stationed workers work their bench by ORDER and fetch/haul when
+            // it cannot go on; idle hands (and gatherers the store has no room
+            // for, unless they went to the build above) haul for them.
+            StepStations(days, !gatherersBuild);
 
             // --- upkeep: eating -----------------------------------------------
             //
@@ -2615,7 +2680,7 @@ namespace SeaSick.World
 
         /// How full this resource's pile is, for anything drawing a gauge.
         public float Fill01(string resource) => ceilingPer > 0
-            ? Mathf.Clamp01(CountOf(resource) / (float)ceilingPer) : 0f;
+            ? Mathf.Clamp01(StoreCountOf(resource) / (float)ceilingPer) : 0f;
 
         /// Nothing more for this hand to do: their pile is full, or their
         /// stock is gone, or the thing they work at has nothing to work on.
@@ -2659,11 +2724,11 @@ namespace SeaSick.World
                 {
                     string blocker = HunterBlocker();
                     if (blocker != null) return blocker;
-                    if (RoomFor(Res.Food) <= 0) return "pile is full";
+                    if (GatherBlocked(h)) return GatherFullReason(h);
                     if (stock == null || stock.standing < 1f) return "no game left here";
                     return null;
                 }
-                if (RoomFor(h.target) <= 0) return "pile is full";
+                if (GatherBlocked(h)) return GatherFullReason(h);
                 if (stock == null || stock.standing < 1f) return "nothing left to cut here";
                 return null;
             }
@@ -2672,6 +2737,7 @@ namespace SeaSick.World
                 // A lookout makes nothing and that is the job -- never
                 // stalled for having nothing to show for standing watch.
                 if (h.target == WatchtowerId) return null;
+                if (IsStation(h.target)) return StationStallCause(h);
                 if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,
                         out _, out float ratePerDay, out string tool, out _))
                     return "not set to make anything";
@@ -2689,6 +2755,8 @@ namespace SeaSick.World
                 var field = Stock(makes);
                 return field != null && field.standing <= 0f ? "field is bare" : null;
             }
+            // An idle hand carrying for the stations is not stalled.
+            if (h.order == OutpostOrder.Idle && h.Hauling) return null;
             return "waiting on orders";
         }
 

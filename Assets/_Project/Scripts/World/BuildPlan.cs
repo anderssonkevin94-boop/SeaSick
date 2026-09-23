@@ -177,6 +177,13 @@ namespace SeaSick.World
         /// What the whole field holds when it is raised, in units of Food.
         public float FieldStanding => beds * unitsPerBed;
 
+        /// **A station's input bay, in UNITS per resource (2026-09-23).**
+        /// Zero on a non-station plan; `StationStock.InputCap` reads 0 as
+        /// its default. A two-input recipe gets this much of EACH.
+        public int inputSlots;
+        /// **A station's output rack, in units, all resources together.**
+        public int outputSlots;
+
         /// Path under `Resources/` of the authored model, or null to extrude
         /// one. Loaded at raise time and quietly fallen back on, so a missing
         /// asset costs a plainer building and never a broken camp.
@@ -318,6 +325,9 @@ namespace SeaSick.World
             footprint = new Vector2(7.56f, 5.85f),
             ridge = 3.84f,
             position = "sawyer",
+            // Bay/rack capacity in units. Kevin confirmed 2026-09-23.
+            inputSlots = 6,
+            outputSlots = 12,
             takes = Res.Timber,
             makes = Res.Boards,
             rate = 3f,
@@ -385,6 +395,9 @@ namespace SeaSick.World
             footprint = new Vector2(6.53f, 5.85f),
             ridge = 4.29f,
             position = "smith",
+            // Bay/rack capacity in units. **A guess** (the sawmill's numbers), never played.
+            inputSlots = 6,
+            outputSlots = 12,
             takes = Res.Ore,
             makes = Res.Tools,
             rate = 1.5f,
@@ -402,6 +415,9 @@ namespace SeaSick.World
             footprint = new Vector2(6.26f, 6.12f),
             ridge = 4.18f,
             position = "cook",
+            // Bay/rack capacity in units. **A guess** (the sawmill's numbers), never played.
+            inputSlots = 6,
+            outputSlots = 12,
             takes = Res.Food,
             makes = Res.Meals,
             rate = 3f,
@@ -472,9 +488,15 @@ namespace SeaSick.World
             footprint = new Vector2(7.4f, 5.8f),
             ridge = 2.9f,
             position = "quarryman",
+            // Bay/rack capacity in units. Kevin confirmed 2026-09-23.
+            inputSlots = 5,
+            outputSlots = 12,
             takes = Res.Stone,
             makes = Res.Brick,
             rate = 2f,
+            // Astra's level-one stonecutting yard (art-staging/quarry-astra-lvl1-v2);
+            // `BuildKind.Quarry` (the extruded shed) stays as the fallback if it fails to load.
+            prefab = "Settlement/quarry",
         };
 
         /// **The fletcher's, 2026-09-22.** Kevin: *"build a fletcher's
@@ -506,6 +528,9 @@ namespace SeaSick.World
             footprint = new Vector2(4.84f, 4.93f),
             ridge = 3.2f,
             position = "fletcher",
+            // Bay/rack capacity in units. **A guess** (the sawmill's numbers), never played.
+            inputSlots = 6,
+            outputSlots = 12,
             takes = Res.Timber,
             makes = Res.Arrows,
             rate = 3f,

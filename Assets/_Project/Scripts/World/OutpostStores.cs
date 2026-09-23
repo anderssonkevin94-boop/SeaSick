@@ -172,6 +172,32 @@ namespace SeaSick.World
             _ => 0f,             // rock does not
         };
 
+        /// **Units one hand carries in one haul trip (2026-09-23).** Logs are
+        /// heavy and long, so fewer of them than bricks; small made things go
+        /// by the bundle. **Every one is a guess, none played.** The trip
+        /// itself takes `OutpostLedger.StationTripDays`, so trips a day per
+        /// hand = 1 / that, and units a day = armful / that.
+        public static int Armful(string r) => r switch
+        {
+            Timber => 2,
+            Stone => 3,
+            Ore => 3,
+            Spice => 5,
+            Food => 5,
+            Hide => 3,
+            Boards => 4,
+            FineBoards => 4,
+            Brick => 4,
+            Iron => 3,
+            Tools => 2,
+            SawBlade => 1,
+            Spear => 2,
+            IronSpear => 2,
+            Arrows => 12,
+            Meals => 4,
+            _ => 3,
+        };
+
         /// Colour of a pile of it, for the stacks by the fire.
         public static Color Colour(string r) => r switch
         {
