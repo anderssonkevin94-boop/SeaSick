@@ -111,6 +111,7 @@ namespace SeaSick.World
         void LateUpdate()
         {
             Bind();
+            UndoUnkeyedBends();
 
             float dt = Time.deltaTime;
             clock += dt;
@@ -185,10 +186,10 @@ namespace SeaSick.World
             hips = Bone(all, "hips", "hip", "pelvis");
             chest = Bone(all, "chest", "chest", "spine");
             head = Bone(all, "head", "head");
-            armL = Bone(all, "arm_L", "arm_l");
-            armR = Bone(all, "arm_R", "arm_r");
-            legL = Bone(all, "leg_L", "leg_l");
-            legR = Bone(all, "leg_R", "leg_r");
+            armL = Bone(all, "arm_L", "upper_arm.L", "arm_l");
+            armR = Bone(all, "arm_R", "upper_arm.R", "arm_r");
+            legL = Bone(all, "leg_L", "thigh.L", "leg_l");
+            legR = Bone(all, "leg_R", "thigh.R", "leg_r");
 
             if (hips != null) hipsRest = hips.localPosition;
 
@@ -394,8 +395,17 @@ namespace SeaSick.World
                 // silently integrate to infinity the day a clip stops doing
                 // that. Lerping from the live pose keeps the blend smooth
                 // without ever accumulating.
-                Vector3 want = hipsRest + new Vector3(0f, hipsDrop, 0f);
+                // The drop is metres along the BODY's up; converted into the
+                // hips' parent space, because a rig can carry its unit scale
+                // on the bones (Astra's deckhand: ~92x) and a raw local
+                // offset then sank a crouching villager 24 m.
+                Vector3 drop = hips.parent != null
+                    ? hips.parent.InverseTransformVector(transform.up * hipsDrop)
+                    : new Vector3(0f, hipsDrop, 0f);
+                Vector3 want = hipsRest + drop;
+                Vector3 hipsBefore = hips.localPosition;
                 hips.localPosition = Vector3.Lerp(hips.localPosition, want, w);
+                hipsWritten = true; hipsBeforePos = hipsBefore; hipsAfterPos = hips.localPosition;
             }
         }
 
@@ -418,8 +428,35 @@ namespace SeaSick.World
             if (pitch == 0f && yaw == 0f && roll == 0f) return;
             Quaternion body = transform.rotation;
             Quaternion a = body * Quaternion.Euler(pitch, yaw, roll) * Quaternion.Inverse(body);
+            Quaternion before = b.localRotation;
             b.rotation = Quaternion.Slerp(b.rotation, a * b.rotation, w);
+            written[b] = new Written { before = before, after = b.localRotation };
         }
+
+        /// **A bone the Animator does not key keeps last frame's bend.** The
+        /// old kit's clips keyed every bone every frame, so bending "over
+        /// what the Animator just wrote" was safe; Astra's deckhand clips key
+        /// only the limbs, and a bend on top of last frame's bend folded the
+        /// spine and hips over within a second. So: any bone still exactly as
+        /// we left it was not rewritten -- put it back the way we found it
+        /// before this frame bends it again. Bones the Animator does write are
+        /// untouched by this.
+        struct Written { public Quaternion before, after; }
+        readonly Dictionary<Transform, Written> written = new Dictionary<Transform, Written>();
+
+        void UndoUnkeyedBends()
+        {
+            foreach (var kv in written)
+                if (kv.Key != null && kv.Key.localRotation == kv.Value.after)
+                    kv.Key.localRotation = kv.Value.before;
+            written.Clear();
+            if (hipsWritten && hips != null && hips.localPosition == hipsAfterPos)
+                hips.localPosition = hipsBeforePos;
+            hipsWritten = false;
+        }
+
+        bool hipsWritten;
+        Vector3 hipsBeforePos, hipsAfterPos;
 
         // --- props ----------------------------------------------------------
 
@@ -513,6 +550,11 @@ namespace SeaSick.World
             root.transform.localPosition =
                 armL.InverseTransformPoint(armL.position - transform.up * HandDrop);
             root.transform.localRotation = Quaternion.Inverse(armL.rotation) * transform.rotation;
+            // Sized to the BODY, not the bone: an FBX rig can carry its unit
+            // conversion on the bones (Astra's deckhand arm reads ~92x), and
+            // a prop inheriting that swung axes the size of trees.
+            Vector3 bone = armL.lossyScale, body = transform.lossyScale;
+            root.transform.localScale = new Vector3(body.x / bone.x, body.y / bone.y, body.z / bone.z);
 
             var wood = Mat("tool_haft", new Color(0.44f, 0.31f, 0.19f));
             var iron = Mat("tool_iron", new Color(0.42f, 0.44f, 0.48f));
