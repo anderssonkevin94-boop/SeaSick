@@ -112,6 +112,9 @@ namespace SeaSick.World
         public HaulPlace haulTo = HaulPlace.None;
         public int haulFromStation = -1;
         public int haulToStation = -1;
+        /// The load came out of a station's input BAY (not its rack): where
+        /// it goes back to if the store turns out to be full on arrival.
+        public bool haulFromBay;
         public float haulLeft;
         public float haulDays;
 
@@ -597,25 +600,37 @@ namespace SeaSick.World
             return made;
         }
 
-        /// **Everything the camp holds of this, 2026-09-23**: the store PLUS
-        /// every station's bay, finished bench and output rack. What costs,
-        /// the HUD and tool checks read; `Take` draws from the same places,
-        /// so nothing is counted that cannot be spent. Loads in hands' arms
-        /// are not in it (`CarriedOf`). The store alone is `StoreCountOf`.
+        /// **Everything the camp holds of this, 2026-09-23** -- the DISPLAYED
+        /// camp total: the store PLUS every station's bay, finished bench and
+        /// output rack. Loads in hands' arms are not in it (`CarriedOf`). The
+        /// store alone is `StoreCountOf`. Not what a cost may spend -- a bay
+        /// is a station's queued input -- that is `SpendableOf`.
         public int CountOf(string resource)
         {
             var s = Store(resource);
             return (s != null ? s.whole : 0) + StationCountOf(resource);
         }
 
-        /// Room left in the STORE for this resource, in whole units. The
-        /// ceiling is the store's; station stock does not use it up.
+        /// **What a cost may spend** (2026-09-23): the store, station racks
+        /// and finished benches -- exactly where `Take` draws, never bays.
+        /// Every affordability gate reads this (fire raise, upgrades,
+        /// recruiting, the lookout's volley).
+        public int SpendableOf(string resource)
+        {
+            var s = Store(resource);
+            return (s != null ? s.whole : 0) + StationSpendableOf(resource);
+        }
+
+        /// Room left in the STORE for this resource, in whole units, net of
+        /// loads already walking there (a haul reserves its room at pickup).
+        /// The ceiling is the store's; station stock does not use it up.
         public int RoomFor(string resource) =>
-            Mathf.Max(0, ceilingPer - StoreCountOf(resource));
+            Mathf.Max(0, ceilingPer - StoreCountOf(resource) - InFlightTo(HaulPlace.Store, -1, resource));
 
         /// Whole and part together -- what a tool check or a recipe's "have"
         /// arithmetic wants, since a saw blade at 0.95 is still a saw blade.
-        /// Store and stations both, like `CountOf`.
+        /// Store and station RACKS (never bays), the places `DrawHeld`
+        /// wears from, so a check never passes on stock the wear cannot take.
         float HeldOf(string resource)
         {
             var s = Store(resource);
@@ -633,9 +648,10 @@ namespace SeaSick.World
             return took;
         }
 
-        /// Take whole units out: the store first, then station racks,
-        /// finished benches and bays (the same places `CountOf` counts).
-        /// Returns what was actually there.
+        /// Take whole units out: the store first, then station racks and
+        /// finished benches (`SpendableOf`). **Never a bay** -- a station's
+        /// queued input is not the camp's to spend. Returns what was
+        /// actually there.
         public int Take(string resource, int n)
         {
             if (n <= 0) return 0;
@@ -899,7 +915,7 @@ namespace SeaSick.World
                 int cap = HousingCapacity;
                 if (cap <= 0) return "no beds";
                 if (Housed >= cap) return $"{Housed} of {cap} beds";
-                if (CountOf(Res.Food) < RecruitFoodCost) return "no food to feed a newcomer";
+                if (SpendableOf(Res.Food) < RecruitFoodCost) return "no food to feed a newcomer";
                 float daysLeft = Mathf.Max(0f, DaysPerRecruit - recruitProgress);
                 return $"{Housed} of {cap} beds · a new hand in {daysLeft:0.#} days";
             }
@@ -955,7 +971,7 @@ namespace SeaSick.World
         {
             var next = NextCampfire;
             if (next == null) { why = "the fire is already at its top"; return false; }
-            var missing = Economy.Cost.Missing(next.cost, CountOf);
+            var missing = Economy.Cost.Missing(next.cost, SpendableOf);
             if (missing.Count > 0) { why = "needs " + DescribeShortfall(missing); return false; }
             why = null;
             return true;
@@ -998,7 +1014,7 @@ namespace SeaSick.World
             if (next == null) { why = "already at its top"; return false; }
             if (CampfireLevel < next.campfireLevel)
             { why = $"needs the fire at {Economy.RecipeGraph.Roman(next.campfireLevel)}"; return false; }
-            var missing = Economy.Cost.Missing(next.cost, CountOf);
+            var missing = Economy.Cost.Missing(next.cost, SpendableOf);
             if (missing.Count > 0) { why = "needs " + DescribeShortfall(missing); return false; }
             why = null;
             return true;
@@ -1451,7 +1467,7 @@ namespace SeaSick.World
         {
             if (!LookoutPosted) return 0;
             // Store and the fletcher's rack alike (`Take` draws both).
-            int held = CountOf(Res.Arrows);
+            int held = SpendableOf(Res.Arrows);
             if (held <= 0 || maxArrows <= 0) return 0;
             return Take(Res.Arrows, Mathf.Min(maxArrows, held));
         }
@@ -1801,7 +1817,7 @@ namespace SeaSick.World
             {
                 var f = StockingFocus;
                 return f != null && !f.TimberPaid
-                    && CountOf(Res.Timber) <= 0 && Wood.standing < 1f;
+                    && StoreCountOf(Res.Timber) <= 0 && Wood.standing < 1f;
             }
         }
 
@@ -1815,7 +1831,8 @@ namespace SeaSick.World
             {
                 var f = StockingFocus;
                 if (f == null || f.StonePaid) return false;
-                if (CountOf(Res.Stone) > 0) return false;
+                // The store: builders pay stone from it (and the seam) only.
+                if (StoreCountOf(Res.Stone) > 0) return false;
                 var seam = Stock(Res.Stone);
                 return seam == null || seam.standing < 1f;
             }
@@ -2371,7 +2388,8 @@ namespace SeaSick.World
                 if (hunting && spear == null) continue;
 
                 var store = Store(into, true);
-                float room = (ceilingPer - store.whole) - store.part;
+                // Net of loads walking to the store: the ceiling holds.
+                float room = StoreRoomF(into);
                 if (room <= 0f) continue;
                 if (hunting) room /= Res.MeatPerAnimal;
 
@@ -2436,7 +2454,7 @@ namespace SeaSick.World
                     foreach (var drop in Economy.Techs.HuntDrops)
                     {
                         var dropStore = Store(drop.res, true);
-                        float dropRoom = Mathf.Max(0f, ceilingPer - dropStore.whole - dropStore.part);
+                        float dropRoom = Mathf.Max(0f, StoreRoomF(drop.res));
                         float dropGot = Mathf.Min(drop.n * got, dropRoom);
                         if (dropGot <= 0f) continue;
                         dropStore.part += dropGot;
@@ -2486,7 +2504,7 @@ namespace SeaSick.World
                 if (tool != null && HeldOf(tool) <= 0f) continue;
 
                 var made = Store(makes, true);
-                float room = (ceilingPer - made.whole) - made.part;
+                float room = StoreRoomF(makes);
                 if (room <= 0f) continue;
 
                 float want = Mathf.Min(ratePerDay * days * WorkFactorOn(h, makes)
@@ -2638,7 +2656,7 @@ namespace SeaSick.World
             // regardless. Checked against the pile AFTER eating, so a camp
             // that just fed its last hand on its last three Food does not
             // also recruit off the same three.
-            if (Housed < HousingCapacity && CountOf(Res.Food) >= RecruitFoodCost)
+            if (Housed < HousingCapacity && SpendableOf(Res.Food) >= RecruitFoodCost)
             {
                 recruitProgress += days;
                 if (recruitProgress >= DaysPerRecruit)
@@ -2812,7 +2830,7 @@ namespace SeaSick.World
                         // Arrows reads as a drain. Mirrors `Step` term for
                         // term, which is the only way a readout stays honest
                         // about a good that is consumed rather than kept.
-                        bool armed = CountOf(Res.Arrows) > 0;
+                        bool armed = HeldOf(Res.Arrows) > 0f;
                         float kills = Res.GatherRate(Res.Game)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
                         if (armed) kills *= BowKillBonus;
@@ -2893,7 +2911,7 @@ namespace SeaSick.World
                         // only the meat (and the hide) they buy is.
                         float kills = Res.GatherRate(Res.Game)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
-                        if (CountOf(Res.Arrows) > 0) kills *= BowKillBonus;
+                        if (HeldOf(Res.Arrows) > 0f) kills *= BowKillBonus;
                         if (resource == Res.Food) rate += kills * Res.MeatPerAnimal;
                         else foreach (var drop in Economy.Techs.HuntDrops)
                             if (drop.res == Res.Hide) rate += kills * drop.n;

@@ -16,6 +16,14 @@ namespace SeaSick.World
     ///     arms) + bricks anywhere, at every tick.
     /// (d) A Repeat order runs past any count until stopped; after the stop
     ///     at most the job already on the bench finishes.
+    /// (e) A hand removed mid-haul (`RemoveHand`) puts its armful down.
+    /// (f) Demolishing the first of two quarries spills IT, the survivor
+    ///     keeps its own stock and becomes ordinal 0; the dead row is emptied
+    ///     and `IsLive` says so.
+    /// (g) `Take` draws store, racks, finished benches -- never a bay;
+    ///     `SpendableOf` agrees, `CountOf` still shows the bay.
+    /// (h) The store's ceiling holds while a gatherer and a hauler both
+    ///     fill it, and every unit is accounted.
     public static class StationStockSelfTest
     {
         public static bool Run()
@@ -92,6 +100,85 @@ namespace SeaSick.World
                                               && ds.benchState == BenchState.Empty,
                 $"{atStop} at stop, {after} ten days later, bench {ds.benchState}");
             Gate(sb, ref fails, "conserved-d", StoneIn(d) == 200, $"stone+brick = {StoneIn(d)} of 200");
+
+            // --- (e) a hand leaving mid-haul puts the armful down -------------
+            var e = Quarry(20, 1000, 1);
+            e.PlaceOrder(BuildPlans.Quarry.id, "brick", OutpostLedger.RepeatOrder);
+            double nowE = e.lastTicked;
+            var hauler = e.hands[1];
+            for (int i = 0; i < 40 && !hauler.Hauling; i++) Advance(e, ref nowE, 0.02);
+            bool wasHauling = hauler.Hauling;
+            int beforeLeave = StoneIn(e);
+            e.RemoveHand(hauler);
+            int afterLeave = StoneIn(e);
+            Gate(sb, ref fails, "leaving-hand-drops-nothing",
+                wasHauling && !hauler.Hauling && afterLeave == beforeLeave && afterLeave == 20,
+                $"hauling {wasHauling}, stone+brick {beforeLeave} -> {afterLeave} of 20");
+
+            // --- (f) demolishing one of two same-plan stations -----------------
+            var f = Quarry(0, 1000, 0);
+            f.built.Add(BuildPlans.Quarry.id);
+            f.raised.Add(new BuiltBuilding { planId = BuildPlans.Quarry.id, x = 0f });
+            f.raised.Add(new BuiltBuilding { planId = BuildPlans.Quarry.id, x = 10f });
+            f.EnsureStations();
+            var f0 = f.StationOf(BuildPlans.Quarry.id, 0);
+            var f1 = f.StationOf(BuildPlans.Quarry.id, 1);
+            f0.Rack(Res.Brick, true).whole = 3;
+            f1.Rack(Res.Brick, true).whole = 7;
+            f1.Bay(Res.Stone, true).whole = 2;
+            f.DemolishBuilt(BuildPlans.Quarry.id, 0);      // the FIRST one comes down
+            var fs = f.StationForRaised(0);
+            Gate(sb, ref fails, "demolish-keeps-survivor-stock",
+                f.Stations.Count == 1 && fs == f1 && f1.ordinal == 0 && f1.RackCount(Res.Brick) == 7
+                && f1.BayCount(Res.Stone) == 2 && f.StoreCountOf(Res.Brick) == 3
+                && !f.IsLive(f0) && f0.removed && f0.RackTotal == 0 && f.IsLive(f1),
+                $"stations {f.Stations.Count}, survivor rack {f1.RackCount(Res.Brick)} bay {f1.BayCount(Res.Stone)}, "
+                + $"store brick {f.StoreCountOf(Res.Brick)}, dead row live {f.IsLive(f0)}");
+
+            // --- (g) Take and cost gates never spend a bay ---------------------
+            var g = Quarry(2, 1000, 0);
+            var gs = g.StationOf(BuildPlans.Quarry.id);
+            gs.Bay(Res.Stone, true).whole = 5;
+            gs.Rack(Res.Brick, true).whole = 1;
+            int spendable = g.SpendableOf(Res.Stone), shown = g.CountOf(Res.Stone);
+            int took = g.Take(Res.Stone, 10);
+            int tookBrick = g.Take(Res.Brick, 5);
+            Gate(sb, ref fails, "take-skips-bays",
+                took == 2 && gs.BayCount(Res.Stone) == 5 && spendable == 2 && shown == 7 && tookBrick == 1,
+                $"took {took} of 10 (bay kept {gs.BayCount(Res.Stone)}), spendable {spendable}, shown {shown}, brick {tookBrick}");
+
+            // --- (h) the store ceiling holds with loads walking in -------------
+            // An unmanned quarry's bay goes home while a gatherer fills the
+            // same pile: nothing over the ceiling, nothing lost.
+            var h = new OutpostLedger { ceilingPer = 10, stationsMigrated = true, campfireLevel = 2 };
+            h.built.Add(BuildPlans.Quarry.id);
+            h.hands.Add(new OutpostHand { name = "Hauler", order = OutpostOrder.Idle });
+            for (int i = 0; i < 3; i++)
+                h.hands.Add(new OutpostHand { name = "Gatherer" + i, order = OutpostOrder.Gather, target = Res.Stone });
+            h.Store(Res.Food, true).whole = 1000;
+            h.Store(Res.Stone, true).whole = 7;
+            var seam = h.AddStanding(Res.Stone, 200f);
+            seam.regrowPerDay = 0f;
+            h.lastTicked = 0.0;
+            h.EnsureStations();
+            h.StationOf(BuildPlans.Quarry.id).Bay(Res.Stone, true).whole = 6;
+            double nowH = h.lastTicked;
+            bool ceilOk = true, consH = true, hauled = false;
+            string ceilWhy = "", consHWhy = "";
+            for (int i = 0; i < 200; i++)
+            {
+                Advance(h, ref nowH, 0.05);
+                if (h.CarriedOf(Res.Stone) > 0) hauled = true;
+                if (h.StoreCountOf(Res.Stone) > h.ceilingPer && ceilOk)
+                { ceilOk = false; ceilWhy = $"tick {i}: store {h.StoreCountOf(Res.Stone)} > {h.ceilingPer}"; }
+                var st = h.Store(Res.Stone);
+                float all = (st != null ? st.whole + st.part : 0f) + h.CountOf(Res.Stone) - h.StoreCountOf(Res.Stone)
+                            + h.CarriedOf(Res.Stone) + h.Stock(Res.Stone).standing;
+                if (Mathf.Abs(all - 213f) > 0.01f && consH) { consH = false; consHWhy = $"tick {i}: {all:0.###} of 213"; }
+            }
+            Gate(sb, ref fails, "store-ceiling-holds", ceilOk && hauled,
+                ceilOk ? $"store stone {h.StoreCountOf(Res.Stone)}/{h.ceilingPer}, bay {h.StationOf(BuildPlans.Quarry.id).BayCount(Res.Stone)}, hauled {hauled}" : ceilWhy);
+            Gate(sb, ref fails, "store-ceiling-conserves", consH, consH ? "213 stone accounted every tick" : consHWhy);
 
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());

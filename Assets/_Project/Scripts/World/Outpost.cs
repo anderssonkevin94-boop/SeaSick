@@ -1032,7 +1032,8 @@ namespace SeaSick.World
             if (hand == null || ship == null) return false;
             var row = HandNamed(hand.DisplayName);
             if (row == null) return false;
-            ledger.hands.Remove(row);
+            // Puts down any armful first -- a haul never leaves with the hand.
+            ledger.RemoveHand(row);
             hand.transform.SetParent(ship, true);
             hand.gameObject.SetActive(true);
             // The body was MOVED, not walked -- the state machine has to agree
@@ -1167,7 +1168,7 @@ namespace SeaSick.World
             // already counted among the hands it is meant to stand clear of.
             Vector3 station = Crew.BornVillager.FreeStation(ship);
 
-            ledger.hands.Remove(row);
+            ledger.RemoveHand(row);        // armful put down first
             row.born = false;
             CampWorker.Remove(hand);
             hand.transform.SetParent(ship, true);
@@ -2544,7 +2545,6 @@ namespace SeaSick.World
             built.Remove(b);
             if (ledger != null)
             {
-                ledger.built.Remove(id);
                 int bestI = -1; float bestD = float.MaxValue;
                 for (int i = 0; i < ledger.raised.Count; i++)
                 {
@@ -2553,7 +2553,10 @@ namespace SeaSick.World
                     float d = (r.At - new Vector3(b.transform.position.x, 0f, b.transform.position.z)).sqrMagnitude;
                     if (d < bestD) { bestD = d; bestI = i; }
                 }
-                if (bestI >= 0) ledger.raised.RemoveAt(bestI);
+                // The ledger takes the `built` id and that `raised` row out,
+                // and the station row THIS building was (not the plan's last)
+                // -- so a surviving twin keeps its own stock.
+                ledger.DemolishBuilt(id, bestI);
                 if (!ledger.built.Contains(id))
                     foreach (var h in ledger.hands)
                         if (h != null && h.order == OutpostOrder.Work && h.target == id)

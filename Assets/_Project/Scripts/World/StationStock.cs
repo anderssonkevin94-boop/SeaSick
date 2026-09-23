@@ -53,6 +53,11 @@ namespace SeaSick.World
         public string planId = "";
         /// Which of this plan's built instances (0 for the first).
         public int ordinal;
+        /// Set (and the row emptied) when the ledger drops this station --
+        /// its building came down. A cached view reads it, or asks
+        /// `OutpostLedger.IsLive`. A saved row never has it: removed rows
+        /// leave the list.
+        public bool removed;
 
         /// Input bay: one row per resource. Capacity is `InputCap` PER
         /// resource, so a two-input recipe can hold `InputCap` of each.
@@ -123,6 +128,23 @@ namespace SeaSick.World
             int n = BayCount(res) + RackCount(res);
             if (benchState == BenchState.Finished && benchOut > 0 && BenchMakes == res) n += benchOut;
             return n;
+        }
+
+        /// Whole units the camp may SPEND from here: the rack and a finished
+        /// bench. Never the bay -- that is this station's queued input.
+        public int SpendableOf(string res)
+        {
+            int n = RackCount(res);
+            if (benchState == BenchState.Finished && benchOut > 0 && BenchMakes == res) n += benchOut;
+            return n;
+        }
+
+        /// Whole and part on the rack: what wear (`OutpostLedger.DrawHeld`)
+        /// can draw from this station.
+        public float SpendableHeldOf(string res)
+        {
+            var r = Rack(res);
+            return r != null ? r.whole + r.part : 0f;
         }
 
         public float HeldOf(string res)

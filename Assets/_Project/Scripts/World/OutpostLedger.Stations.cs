@@ -121,6 +121,74 @@ namespace SeaSick.World
             return n;
         }
 
+        /// **Is this row still a station of this camp?** False for null, for
+        /// a row removed by `DemolishBuilt` / `EnsureStations` (its `removed`
+        /// flag is set and it is emptied), and for a row this ledger's list
+        /// no longer holds. A view that cached a `StationStock` asks this
+        /// before drawing it.
+        public bool IsLive(StationStock s) =>
+            s != null && !s.removed && stations != null && stations.Contains(s);
+
+        /// A station has a worker at it: Work hands on a plan are dealt round
+        /// its instances in hand-list order (`StationOfHand`), so the nth
+        /// instance is manned when more than n hands work that plan.
+        public bool Manned(StationStock s) =>
+            s != null && !s.removed && HandsOn(OutpostOrder.Work, s.planId) > s.ordinal;
+
+        /// **A building came down (Outpost.Demolish).** Takes the plan's one
+        /// `built` id and, when `raisedIndex` is a row of it, that `raised`
+        /// row out -- and with it the station row THAT building was (its
+        /// ordinal is its place among the plan's `raised` rows), spilled into
+        /// the store and marked dead. Higher ordinals of the plan shift down
+        /// one, so every surviving station keeps its own stock. A
+        /// `raisedIndex` of -1 takes the plan's last instance.
+        public void DemolishBuilt(string planId, int raisedIndex)
+        {
+            if (string.IsNullOrEmpty(planId)) return;
+            if (built == null) built = new List<string>();
+            if (raised == null || raisedIndex < 0 || raisedIndex >= raised.Count
+                || raised[raisedIndex] == null || raised[raisedIndex].planId != planId)
+                raisedIndex = -1;
+            if (IsStation(planId) && built.Contains(planId))
+            {
+                EnsureStations();
+                int n = CountBuilt(planId);
+                int ordinal = n - 1;
+                if (raisedIndex >= 0)
+                {
+                    ordinal = 0;
+                    for (int i = 0; i < raisedIndex; i++)
+                        if (raised[i] != null && raised[i].planId == planId) ordinal++;
+                    if (ordinal >= n) ordinal = n - 1;
+                }
+                int idx = StationIndex(planId, ordinal);
+                if (idx >= 0)
+                {
+                    FlushAllHauls();         // station indices are about to shift
+                    var gone = stations[idx];
+                    SpillStation(gone);
+                    KillStation(gone);
+                    stations.RemoveAt(idx);
+                    foreach (var o in stations)
+                        if (o != null && o.planId == planId && o.ordinal > ordinal) o.ordinal--;
+                }
+            }
+            built.Remove(planId);
+            if (raisedIndex >= 0) raised.RemoveAt(raisedIndex);
+        }
+
+        /// Empty a removed row and flag it, so a view holding it sees a dead
+        /// station, never stock that has already gone back to the store.
+        static void KillStation(StationStock s)
+        {
+            if (s == null) return;
+            s.removed = true;
+            if (s.bay != null) s.bay.Clear();
+            if (s.rack != null) s.rack.Clear();
+            EmptyBench(s);
+            s.ClearOrder();
+        }
+
         /// The station instance a Work hand stands at: Work hands on one plan
         /// are dealt round the plan's instances in hand-list order.
         public StationStock StationOfHand(OutpostHand h)
@@ -155,6 +223,7 @@ namespace SeaSick.World
                 {
                     if (!StationGone(i)) continue;
                     SpillStation(stations[i]);
+                    KillStation(stations[i]);
                     stations.RemoveAt(i);
                 }
             }
@@ -173,7 +242,10 @@ namespace SeaSick.World
                 stationsMigrated = true;
                 foreach (var s in stations)
                 {
-                    if (s == null || s.HasOrder || HandsOn(OutpostOrder.Work, s.planId) <= 0) continue;
+                    // Only a MANNED instance: with more sawmills than sawyers
+                    // the spare ones stay order-less instead of pulling stock
+                    // into bays nobody works.
+                    if (s == null || s.HasOrder || !Manned(s)) continue;
                     var r = LegacyRecipeAt(s.planId);
                     if (r == null) continue;
                     s.orderRecipe = r.id;
@@ -291,6 +363,15 @@ namespace SeaSick.World
             return s != null ? s.whole : 0;
         }
 
+        /// Whole units the camp may SPEND out of its stations: racks and
+        /// finished benches (what `TakeFromStations` draws), never bays.
+        int StationSpendableOf(string res)
+        {
+            int n = 0;
+            if (stations != null) foreach (var s in stations) if (s != null) n += s.SpendableOf(res);
+            return n;
+        }
+
         int StationCountOf(string res)
         {
             int n = 0;
@@ -298,10 +379,12 @@ namespace SeaSick.World
             return n;
         }
 
+        /// Whole and part of `res` in racks and finished benches -- the
+        /// station half of `HeldOf`, which (like `DrawHeld`) leaves bays alone.
         float StationHeldOf(string res)
         {
             float n = 0f;
-            if (stations != null) foreach (var s in stations) if (s != null) n += s.HeldOf(res);
+            if (stations != null) foreach (var s in stations) if (s != null) n += s.SpendableHeldOf(res);
             return n;
         }
 
@@ -313,7 +396,8 @@ namespace SeaSick.World
         }
 
         /// Whole units out of the stations after the store ran short:
-        /// racks, then finished benches, then bays.
+        /// racks, then finished benches. **Never bays** -- a bay is a
+        /// station's queued input, not the camp's to spend.
         int TakeFromStations(string res, int n)
         {
             if (stations == null || n <= 0) return 0;
@@ -334,17 +418,11 @@ namespace SeaSick.World
                     if (s.benchOut <= 0) EmptyBench(s);
                 }
             }
-            foreach (var s in stations)
-            {
-                if (s == null || got >= n) continue;
-                var b = s.Bay(res);
-                if (b != null) { int t = Mathf.Min(b.whole, n - got); b.whole -= t; got += t; }
-            }
             return got;
         }
 
-        /// **Take a FRACTION of `res` from wherever the camp holds it** --
-        /// store, racks, bays -- for wear (a spear per kill, a tool per
+        /// **Take a FRACTION of `res` from wherever the camp may spend it** --
+        /// store, then racks (never bays, same as `Take`) -- for wear (a spear per kill, a tool per
         /// brick) and for arrows loosed. Returns what was drawn.
         float DrawHeld(string res, float amount)
         {
@@ -353,7 +431,6 @@ namespace SeaSick.World
             if (stations != null)
             {
                 foreach (var s in stations) if (s != null && left > 0f) left = DrawFrom(s.Rack(res), left);
-                foreach (var s in stations) if (s != null && left > 0f) left = DrawFrom(s.Bay(res), left);
             }
             return amount - left;
         }
@@ -412,13 +489,24 @@ namespace SeaSick.World
             return n;
         }
 
-        /// Store room for `res`, net of loads already walking there.
-        int StoreRoomNet(string res) =>
-            Mathf.Max(0, RoomFor(res) - InFlightTo(HaulPlace.Store, -1, res));
+        /// Store room for `res`, net of loads already walking there
+        /// (`RoomFor` reserves them).
+        int StoreRoomNet(string res) => RoomFor(res);
+
+        /// Fractional store room for gathering: the ceiling less the pile
+        /// (whole and part) less every load walking to the store, so a
+        /// gatherer never fills room a hauler is already carrying into.
+        float StoreRoomF(string res)
+        {
+            var st = Store(res);
+            float have = st != null ? st.whole + st.part : 0f;
+            return ceilingPer - have - InFlightTo(HaulPlace.Store, -1, res);
+        }
 
         void StartTrip(OutpostHand h, string res, int n, HaulPlace from, int fromStation,
-            HaulPlace to, int toStation, float tripDays)
+            HaulPlace to, int toStation, float tripDays, bool fromBay = false)
         {
+            h.haulFromBay = fromBay;
             h.haulRes = res;
             h.haulCount = n;
             h.haulFrom = from;
@@ -430,17 +518,58 @@ namespace SeaSick.World
         }
 
         /// Put the load down where it was going (the store if that station
-        /// is gone). Never drops anything.
-        void DepositHaul(OutpostHand h)
+        /// is gone). Never drops anything. **The store's ceiling holds**: a
+        /// store-bound load that no longer fits (something else filled the
+        /// room) puts down what fits, goes back to the bay or rack it came
+        /// from as far as that has room, and the rest stays in the hand's
+        /// arms (`haulLeft` 0, retried every step). `force` (the hand is
+        /// leaving the camp, or the station is being torn down) puts it all
+        /// in the store, over the ceiling if need be -- it exists.
+        void DepositHaul(OutpostHand h, bool force = false)
         {
             if (h == null || !h.Hauling) { if (h != null) ClearHaul(h); return; }
             StationStock dest = null;
             if (h.haulTo == HaulPlace.Station && stations != null
                 && h.haulToStation >= 0 && h.haulToStation < stations.Count)
                 dest = stations[h.haulToStation];
-            if (dest != null) dest.Bay(h.haulRes, true).whole += h.haulCount;
-            else Store(h.haulRes, true).whole += h.haulCount;
-            ClearHaul(h);
+            if (dest != null) { dest.Bay(h.haulRes, true).whole += h.haulCount; ClearHaul(h); return; }
+
+            var st = Store(h.haulRes, true);
+            int put = force ? h.haulCount : Mathf.Clamp(ceilingPer - st.whole, 0, h.haulCount);
+            st.whole += put;
+            h.haulCount -= put;
+            if (h.haulCount > 0 && h.haulFrom == HaulPlace.Station && stations != null
+                && h.haulFromStation >= 0 && h.haulFromStation < stations.Count)
+            {
+                var src = stations[h.haulFromStation];
+                int back = h.haulFromBay
+                    ? src.InputCap - src.BayCount(h.haulRes) - InFlightTo(HaulPlace.Station, h.haulFromStation, h.haulRes)
+                    : src.RackRoom;
+                back = Mathf.Clamp(back, 0, h.haulCount);
+                if (back > 0)
+                {
+                    var row = h.haulFromBay ? src.Bay(h.haulRes, true) : src.Rack(h.haulRes, true);
+                    row.whole += back;
+                    h.haulCount -= back;
+                }
+            }
+            if (h.haulCount <= 0) { ClearHaul(h); return; }
+            h.haulLeft = 0f;                 // at the store, waiting for room
+        }
+
+        /// A hand standing at a full store with a load it cannot put down.
+        static bool WaitingAtStore(OutpostHand h) => h.Hauling && h.haulLeft <= Eps;
+
+        /// **A hand leaves the camp's books** (recalled aboard, carried to a
+        /// berth): whatever is in their arms is put down first -- at its
+        /// destination, or the store over the ceiling if need be -- so the
+        /// armful never leaves with them. Returns whether the hand was on
+        /// the list.
+        public bool RemoveHand(OutpostHand h)
+        {
+            if (h == null || hands == null) return false;
+            if (h.Hauling) DepositHaul(h, true);
+            return hands.Remove(h);
         }
 
         static void ClearHaul(OutpostHand h)
@@ -453,20 +582,24 @@ namespace SeaSick.World
             h.haulToStation = -1;
             h.haulLeft = 0f;
             h.haulDays = 0f;
+            h.haulFromBay = false;
         }
 
+        /// Every load put down now, before station indices shift.
         void FlushAllHauls()
         {
             if (hands == null) return;
-            foreach (var h in hands) if (h != null && h.Hauling) DepositHaul(h);
+            foreach (var h in hands) if (h != null && h.Hauling) DepositHaul(h, true);
         }
 
-        void AdvanceHaul(OutpostHand h, ref float budget)
+        /// False when the hand is stuck at a full store: its day stops there.
+        bool AdvanceHaul(OutpostHand h, ref float budget)
         {
             float d = Mathf.Min(budget, h.haulLeft);
             h.haulLeft -= d;
             budget -= d;
             if (h.haulLeft <= Eps) DepositHaul(h);
+            return !WaitingAtStore(h);
         }
 
         /// A job an idle hand (or a gatherer whose store is full) could do.
@@ -477,6 +610,7 @@ namespace SeaSick.World
             public OutpostStore source;
             public HaulPlace from, to;
             public int fromStation, toStation;
+            public bool fromBay;
         }
 
         /// **Idle hauling, in priority order**: fill the bays of stations
@@ -490,7 +624,9 @@ namespace SeaSick.World
             {
                 var s = stations[i];
                 var r = s?.OrderRecipe;
-                if (r == null) continue;
+                // Only a station somebody works: an unmanned bay would lock
+                // the stock away from the builders and the costs.
+                if (r == null || !Manned(s)) continue;
                 foreach (var line in r.takes)
                 {
                     if (line.n <= 0) continue;
@@ -512,7 +648,8 @@ namespace SeaSick.World
             {
                 var s = stations[i];
                 if (s == null || s.bay == null) continue;
-                var r = s.OrderRecipe;
+                // An unmanned station's order wants nothing: its bay goes home.
+                var r = Manned(s) ? s.OrderRecipe : null;
                 foreach (var row in s.bay)
                 {
                     if (row == null || row.whole <= 0 || Wants(r, row.resource)) continue;
@@ -522,7 +659,7 @@ namespace SeaSick.World
                     {
                         res = row.resource, n = Mathf.Min(Res.Armful(row.resource), Mathf.Min(row.whole, room)),
                         source = row, from = HaulPlace.Station, fromStation = i,
-                        to = HaulPlace.Store, toStation = -1,
+                        to = HaulPlace.Store, toStation = -1, fromBay = true,
                     };
                     return true;
                 }
@@ -562,7 +699,7 @@ namespace SeaSick.World
         void BeginChore(OutpostHand h, Chore c)
         {
             c.source.whole -= c.n;
-            StartTrip(h, c.res, c.n, c.from, c.fromStation, c.to, c.toStation, StationTripDays);
+            StartTrip(h, c.res, c.n, c.from, c.fromStation, c.to, c.toStation, StationTripDays, c.fromBay);
         }
 
         /// Is there station hauling a spare hand could do right now?
@@ -572,7 +709,7 @@ namespace SeaSick.World
         {
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
-                if (h.Hauling) { AdvanceHaul(h, ref budget); continue; }
+                if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) break; continue; }
                 if (!FindHaulerChore(out var c)) break;
                 BeginChore(h, c);
             }
@@ -645,7 +782,7 @@ namespace SeaSick.World
         {
             for (int guard = 0; guard < 128 && budget > Eps; guard++)
             {
-                if (h.Hauling) { AdvanceHaul(h, ref budget); continue; }
+                if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) break; continue; }
 
                 if (s.benchState == BenchState.Finished) UnloadBench(s);
 
@@ -735,9 +872,7 @@ namespace SeaSick.World
         {
             if (h == null || h.order != OutpostOrder.Gather || string.IsNullOrEmpty(h.target)) return false;
             string into = h.target == Res.Game ? Res.Food : h.target;
-            var st = Store(into);
-            float room = ceilingPer - (st != null ? st.whole + st.part : 0f);
-            return room <= 0f;
+            return StoreRoomF(into) <= 0f;
         }
 
         /// The station pass of `Step`: every stationed worker's day, every

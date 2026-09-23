@@ -193,7 +193,13 @@ namespace SeaSick.Ship
             // Anywhere in the bottom half that no other HUD control has
             // already claimed this frame (buttons, sheets, the rail all
             // register with UIBlocker).
-            bool inZone = g.y >= Screen.height * (1f - ZoneFrac) && !UIBlocker.Blocked(g);
+            // UIBlocker.Blocked wants SCREEN space (origin bottom-left, what
+            // it was handed as `screenPos`) — it flips to GUI space itself.
+            // Handing it `g` (already GUI space) used to flip a second time
+            // and mirror the test vertically, so a tap on the bottom HUD
+            // read as inside the helm zone and stopped her instead of
+            // pressing the button.
+            bool inZone = g.y >= Screen.height * (1f - ZoneFrac) && !UIBlocker.Blocked(screenPos);
             if (!inZone) return;
 
             wheelId = id;

@@ -145,7 +145,24 @@ namespace SeaSick.Steamer
         public float RudderForceN { get; private set; }
         public float TopSpeed => topSpeed;
         /// The assist master dial (0 = pure physics). Settable live.
-        public float Responsiveness { get => responsiveness; set => responsiveness = Mathf.Clamp(value, 0f, 1.5f); }
+        ///
+        /// `Derive()` blends `spinUpSeconds`/`quickSpinUpSeconds` by this
+        /// value into `shaftJ`, so a live change that only wrote the field
+        /// left the shaft inertia stale until the next `FixedUpdate` called
+        /// `Derive()` anyway (every step, so in practice one frame late) —
+        /// re-run it here instead of waiting, it is cheap (a handful of
+        /// float ops, no allocation).
+        public float Responsiveness
+        {
+            get => responsiveness;
+            set
+            {
+                float v = Mathf.Clamp(value, 0f, 1.5f);
+                if (Mathf.Approximately(v, responsiveness)) return;
+                responsiveness = v;
+                if (Configured) Derive();
+            }
+        }
         /// Assist surge force this step, newtons, and assist yaw torque, N m.
         public float SurgeAssistN => surgeAssistN;
         public float YawAssistNm => yawAssistNm;
@@ -303,10 +320,14 @@ namespace SeaSick.Steamer
 
             float way = Vector3.Dot(rb.linearVelocity - body.AmbientFlow, fwd);
             float helm = Helm();
-            // Any value the helm hands over -- telegraph notches or a
-            // continuous lever -- is just a number in -1..1 here (burn above 1
-            // is clamped: the wheel has no overdrive of its own).
-            float order = anchored ? 0f : Mathf.Clamp(motor.Throttle, -1f, 1f);
+            // The order carries the same overdrive ceiling every other hull
+            // answers to (`ShipMotor.Overdrive`, 1.35 by default) rather than
+            // being clamped flat at 1 -- burn is meant to push her past her
+            // ordinary top speed, not do nothing. Astern has no overdrive of
+            // its own (there is no burn notch behind the stop mark), so only
+            // the ahead side gets the ceiling.
+            float overdriveCeiling = Mathf.Max(1f, motor.Overdrive);
+            float order = anchored ? 0f : Mathf.Clamp(motor.Throttle, -1f, overdriveCeiling);
             if (order < 0f) order *= asternFraction;
 
             float upY = Mathf.Max(transform.up.y, 0.5f);
@@ -318,7 +339,11 @@ namespace SeaSick.Steamer
                                 + (handles[1].sample.height - probeWorld[1].y)) / upY;
             dip = level - wheelBottom;
 
-            float cmd = Mathf.Clamp(order * omegaMax, -omegaMax, omegaMax);
+            // Ahead, the ceiling on the order (above) is the ceiling here too
+            // -- burn commands revs past omegaMax on purpose. Astern order is
+            // already <= 0 and pre-scaled by asternFraction, so it never asks
+            // for more than omegaMax the other way.
+            float cmd = Mathf.Clamp(order * omegaMax, -omegaMax, omegaMax * overdriveCeiling);
 
             // Thrust acts where the floats are: at the effective radius BELOW
             // the axle, which is why hard ahead lifts her head.
@@ -340,7 +365,12 @@ namespace SeaSick.Steamer
             float maxLoadStep = Mathf.Abs(du) / reff;
             float loadStep = Mathf.Clamp(T * reff / shaftJ * dt, -maxLoadStep, maxLoadStep);
             omega += engine / shaftJ * dt - loadStep;
-            omega = Mathf.Clamp(omega, -1.15f * omegaMax, 1.15f * omegaMax);
+            // Headroom above the commanded ceiling so the governor has room
+            // to close on `cmd` without clipping it outright; 1.15x was
+            // enough when `cmd` never asked for more than omegaMax, burn
+            // needs the same margin on top of its own higher ceiling.
+            float omegaCeiling = Mathf.Max(1.15f, overdriveCeiling * 1.05f);
+            omega = Mathf.Clamp(omega, -omegaCeiling * omegaMax, omegaCeiling * omegaMax);
 
             if (!anchored && f > 0f)
             {
@@ -420,7 +450,7 @@ namespace SeaSick.Steamer
             {
                 bool gaining = Mathf.Abs(vCmd) > 0.05f && Mathf.Sign(e) == Mathf.Sign(vCmd)
                                && way * Mathf.Sign(vCmd) < Mathf.Abs(vCmd);
-                float w;
+                float w = 0f;
                 if (gaining)
                 {
                     float frac = way * Mathf.Sign(vCmd) / Mathf.Abs(vCmd);
@@ -429,8 +459,16 @@ namespace SeaSick.Steamer
                 }
                 else
                 {
-                    w = brakeAssistAccel * Mathf.SmoothStep(0f, 1f,
-                        Mathf.Clamp01(Mathf.Abs(e) / (0.25f * Mathf.Max(1f, topSpeed))));
+                    // Let waves give speed: a wave-surfed hull running a bit
+                    // hotter than ordered is the reward (see HelmInput's way
+                    // gauge), not something to fight. Only brake once she is
+                    // more than ~10% of the ORDERED speed over it; an order
+                    // of stop (vCmd == 0) has no tolerance to give, so any
+                    // way at all still gets braked down.
+                    float tol = 0.10f * Mathf.Abs(vCmd);
+                    if (Mathf.Abs(e) > tol)
+                        w = brakeAssistAccel * Mathf.SmoothStep(0f, 1f,
+                            Mathf.Clamp01(Mathf.Abs(e) / (0.25f * Mathf.Max(1f, topSpeed))));
                 }
                 wantF = Mathf.Sign(e) * w * r01 * rb.mass * wheelF * sub;
             }

@@ -68,8 +68,22 @@ namespace SeaSick.World
                 else return;
             }
             if (station == null) return;
+            // A demolish elsewhere in the camp removes a station row and
+            // shifts the plan's ordinals down, so the cached row can go dead
+            // or stop being ours: re-find it when it is flagged removed, and
+            // once a second regardless, which is cheap next to being wrong.
+            if (station.removed || ++sinceResolve >= ReresolveFrames)
+            {
+                sinceResolve = 0;
+                var fresh = ResolveStation();
+                if (fresh == null) { if (station.removed) { resolved = false; resolveAttempts = 0; } return; }
+                if (fresh != station) { station = fresh; shownInput = shownOutput = -1; shownBench = (BenchState)(-1); }
+            }
             Apply();
         }
+
+        int sinceResolve;
+        const int ReresolveFrames = 60;
 
         // --- resolving the station ---------------------------------------------
 
@@ -155,6 +169,21 @@ namespace SeaSick.World
 
         // --- discovery -------------------------------------------------------------
 
+        /// **Alias names, 2026-09-23 (Astra's kitchen).** The kit convention
+        /// wraps slots in `Input_Container`/`Output_Container`/`Bench_Anchor`
+        /// groups, but Astra's kitchen kit has no such wrapper -- its
+        /// `Input_Food_NN`, `Output_Meal_NN` and work-state meshes sit flat
+        /// at the model root, and the work states are named for what they
+        /// SHOW (`Work_Preparing`/`Work_Cooking`/`Work_Finished`) rather than
+        /// for the bench mechanic (`Bench_Loaded`/`Bench_Cutting`/
+        /// `Bench_Finished`). Extending discovery with a small alias list
+        /// (and a root-level fallback when a container is absent) keeps this
+        /// one generic reader working on both kits, per Kevin's rule of
+        /// extending the reader rather than special-casing a building.
+        static readonly string[] BenchLoadedNames = { "Bench_Loaded", "Work_Preparing" };
+        static readonly string[] BenchCuttingNames = { "Bench_Cutting", "Work_Cooking" };
+        static readonly string[] BenchFinishedNames = { "Bench_Finished", "Work_Finished" };
+
         void DiscoverSlots()
         {
             if (discovered) return;
@@ -164,15 +193,16 @@ namespace SeaSick.World
             var outputContainer = FindByStem(transform, "Output_Container");
             var benchAnchor = FindByStem(transform, "Bench_Anchor");
 
-            if (inputContainer != null) CollectSlots(inputContainer, "Input_", inputSlots);
-            if (outputContainer != null) CollectSlots(outputContainer, "Output_", outputSlots);
+            // Container present: scoped collection, unchanged. Absent (Astra's
+            // kitchen): fall back to the whole model, numbered-slot filter in
+            // `CollectSlots` keeps `Input_Anchor`/`Input_Crate` out of it.
+            CollectSlots(inputContainer != null ? inputContainer : transform, "Input_", inputSlots);
+            CollectSlots(outputContainer != null ? outputContainer : transform, "Output_", outputSlots);
 
-            if (benchAnchor != null)
-            {
-                benchLoaded = FindByStem(benchAnchor, "Bench_Loaded")?.gameObject;
-                benchCutting = FindByStem(benchAnchor, "Bench_Cutting")?.gameObject;
-                benchFinished = FindByStem(benchAnchor, "Bench_Finished")?.gameObject;
-            }
+            var benchRoot = benchAnchor != null ? benchAnchor : transform;
+            benchLoaded = FindFirstByStem(benchRoot, BenchLoadedNames)?.gameObject;
+            benchCutting = FindFirstByStem(benchRoot, BenchCuttingNames)?.gameObject;
+            benchFinished = FindFirstByStem(benchRoot, BenchFinishedNames)?.gameObject;
             tool = FindToolChild(transform)?.gameObject;
 
             // All hidden until the first real Apply -- an idle bench should
@@ -201,10 +231,29 @@ namespace SeaSick.World
                 if (t == container) continue;
                 string stem = BuildingFactory.Stem(t.name);
                 if (!stem.StartsWith(prefix, System.StringComparison.Ordinal)) continue;
-                found.Add((TrailingNumber(stem), t));
+                int n = TrailingNumber(stem);
+                // A numbered slot only. Scoped to a real `_Container`, every
+                // child already qualifies; scanning a whole model root (no
+                // container -- Astra's kitchen) also catches unnumbered
+                // siblings like `Input_Anchor`/`Input_Crate`, which are not
+                // slots and must not count as one.
+                if (n == int.MaxValue) continue;
+                found.Add((n, t));
             }
             found.Sort((a, b) => a.n != b.n ? a.n.CompareTo(b.n) : string.CompareOrdinal(a.t.name, b.t.name));
             foreach (var f in found) into.Add(f.t.gameObject);
+        }
+
+        /// First child (searched depth-first through `root`) whose stem
+        /// exactly matches one of `names`, tried in order.
+        static Transform FindFirstByStem(Transform root, string[] names)
+        {
+            foreach (var name in names)
+            {
+                var t = FindByStem(root, name);
+                if (t != null) return t;
+            }
+            return null;
         }
 
         static Transform FindToolChild(Transform root)

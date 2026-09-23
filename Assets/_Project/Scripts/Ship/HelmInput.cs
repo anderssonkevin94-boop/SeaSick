@@ -162,8 +162,16 @@ namespace SeaSick.Ship
                 steer = Mathf.Clamp(steer, -1f, 1f);
                 // Going astern, the same rudder swings the stern the other
                 // way relative to the bow's heading error, so the correction
-                // has to flip with it.
-                if (astern) steer = -steer;
+                // has to flip with it. This has to key off which way she is
+                // actually moving through the water (sign of her forward
+                // velocity), not the stick's `astern` order flag — the order
+                // and her way disagree right at the astern/ahead transition
+                // (ringing ahead while she still carries sternway, or vice
+                // versa), and flipping on the wrong signal steers her the
+                // wrong way at exactly the moment the autopilot is fighting
+                // to bring her round.
+                float fwdSpeed = Vector3.Dot(motor.Velocity, transform.forward);
+                if (fwdSpeed < -0.05f) steer = -steer;
                 rudderTarget = steer;
             }
 
@@ -200,17 +208,27 @@ namespace SeaSick.Ship
 
             if (helm.DragDistance01 < TouchHelm.DeadZoneFrac)
             {
-                throttleOrder = 0f;
-                astern = false;
+                // Thumb is down but still inside the dead zone: not a change
+                // of order. A genuine TAP (short, barely moved) already fired
+                // `helm.Tapped` above on release; a held-still touch here
+                // must not stop her — keep whatever heading/throttle she
+                // already had.
                 return;
             }
 
             float mag01 = Mathf.Clamp01(
                 (helm.DragDistance01 - TouchHelm.DeadZoneFrac) / (1f - TouchHelm.DeadZoneFrac));
 
-            bool pointsAstern = helm.HasDragDirection
-                && Mathf.Abs(Mathf.DeltaAngle(motor.Heading, helm.DragHeadingDeg)) > asternAngleThreshold
-                && motor.CurrentSpeed < asternSpeedThreshold;
+            bool behindHer = helm.HasDragDirection
+                && Mathf.Abs(Mathf.DeltaAngle(motor.Heading, helm.DragHeadingDeg)) > asternAngleThreshold;
+            // Latched: once astern, a drag that still points behind her keeps
+            // her backing down no matter how fast the sternway builds — the
+            // speed gate only decides whether astern can be ENTERED, so
+            // holding the drag doesn't flip her to full ahead + a 180-degree
+            // target the instant she passes the threshold going backwards.
+            bool pointsAstern = astern
+                ? behindHer
+                : behindHer && motor.CurrentSpeed < asternSpeedThreshold;
 
             if (pointsAstern)
             {
