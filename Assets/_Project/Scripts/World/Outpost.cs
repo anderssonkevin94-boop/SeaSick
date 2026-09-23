@@ -163,6 +163,7 @@ namespace SeaSick.World
             ReconcileWood();
             ReconcileCrops();
             ReconcileGame();
+            SaveTripGeometry();
             // The raiders are ships, and the ships are the authority: the
             // ledger is told how many are offshore and never guesses. Sink
             // them and the clock stops.
@@ -189,6 +190,52 @@ namespace SeaSick.World
             // arithmetic recruits, but only a scene can put a body in.
             EnsureBornBodies();
         }
+
+        /// **What the ledger needs to time a trip, 2026-09-23.** The books
+        /// know where every building and site stands but not where a tree or
+        /// a rock is, so while the camp is WATCHED this saves, per gathered
+        /// resource, the straight-line metres from the camp centre to the
+        /// nearest usable source (the front of the fell order for timber --
+        /// the tree the ledger takes next; the nearest live prop for stone,
+        /// ore, spice) and the centre itself. An unwatched camp times its
+        /// trips on the last numbers saved (`OutpostLedger.SourceMetres`).
+        /// Throttled: the wood only moves outward a tree at a time.
+        void SaveTripGeometry()
+        {
+            if (ledger == null) return;
+            if (hasCampCentre) ledger.SetCentre(campCentre);
+            if (!Watched || Time.unscaledTime < nextGeometryAt) return;
+            nextGeometryAt = Time.unscaledTime + 2f;
+            Vector3 c = CampCentre;
+
+            var wood = WoodHere();
+            if (wood != null && wood.TreeCount > 0)
+            {
+                BuildFellOrder(wood);
+                for (int k = 0; k < fellOrder.Length; k++)
+                {
+                    var t = wood.TreeAt(fellOrder[k]);
+                    if (t.felled) continue;
+                    Vector3 d = t.baseAt - c; d.y = 0f;
+                    ledger.SetSourceMetres(Res.Timber, d.magnitude);
+                    break;
+                }
+            }
+
+            foreach (var res in Res.Gatherable)
+            {
+                if (res == Res.Timber || res == Res.Food || res == Res.Game) continue;
+                float best = float.MaxValue;
+                foreach (var n in ResourceNode.All)
+                {
+                    if (n == null || n.Home != Island || n.Harvested || n.Resource != res) continue;
+                    Vector3 d = n.transform.position - c; d.y = 0f;
+                    best = Mathf.Min(best, d.sqrMagnitude);
+                }
+                if (best < float.MaxValue) ledger.SetSourceMetres(res, Mathf.Sqrt(best));
+            }
+        }
+        float nextGeometryAt;
 
         /// **The campfire is the provisions gauge** (settled 2026-09-13, wired
         /// 2026-09-22). Three days of food for everyone here is a bright fire;

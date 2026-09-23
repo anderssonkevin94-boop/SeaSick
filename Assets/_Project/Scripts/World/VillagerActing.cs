@@ -50,17 +50,25 @@ namespace SeaSick.World
         }
 
         /// Change what the body is doing. `carrying` names the resource on
-        /// the shoulder for `Carry` (a log for timber and boards, else a sack).
+        /// the shoulder for `Carry` (a log for timber, a flat bundle for
+        /// boards, a stack for stone or brick, else a sack), and `count` is
+        /// how many units are in his arms — Kevin, 2026-09-23: *"if they
+        /// carry 3 logs, you see three logs."* Kept at 1 for every other
+        /// mode's tool, which never varies.
         ///
         /// Takes effect immediately as far as `Current` is concerned — the
         /// probes and the camp read it as the answer to "what is he doing" —
         /// but the POSE cross-fades, so a mode change is a movement rather
         /// than a snap.
-        public void Set(Mode mode, string carrying = null)
+        public void Set(Mode mode, string carrying = null) => Set(mode, carrying, 1);
+
+        public void Set(Mode mode, string carrying, int count)
         {
-            if (Current == mode && load == carrying) return;
+            count = Mathf.Max(1, count);
+            if (Current == mode && load == carrying && loadCount == count) return;
             Current = mode;
             load = carrying;
+            loadCount = count;
         }
 
         // --- tunables (runtime-added component: these consts ARE the dials) --
@@ -85,8 +93,10 @@ namespace SeaSick.World
         // --- state ----------------------------------------------------------
 
         string load;                 // what Set() was last told to carry
+        int loadCount = 1;           // how many units Set() was last told
         Mode shown = Mode.None;      // what the POSE is doing, which lags Current
         string shownLoad;
+        int shownLoadCount = 1;
         float weight;                // 0..1 blend of `shown`
         float clock;                 // free-running, for the sine cycles
         float landTimer;
@@ -128,13 +138,19 @@ namespace SeaSick.World
                     weight = 0f;
                     shown = Current;
                     shownLoad = load;
+                    shownLoadCount = loadCount;
                     landTimer = 0f;
                     RefreshProps();
                 }
             }
             else
             {
-                if (shownLoad != load) { shownLoad = load; RefreshProps(); }
+                if (shownLoad != load || shownLoadCount != loadCount)
+                {
+                    shownLoad = load;
+                    shownLoadCount = loadCount;
+                    RefreshProps();
+                }
                 weight = Mathf.MoveTowards(weight, shown == Mode.None ? 0f : 1f,
                     dt / Mathf.Max(0.01f, FadeSeconds));
             }
@@ -317,15 +333,18 @@ namespace SeaSick.World
 
                 case Mode.Carry:
                 {
-                    // One arm up steadying a shoulder load, the body leaning
-                    // off it. The LEGS are deliberately untouched: this is the
-                    // one acting mode that plays while they are walking, and
-                    // the walk cycle is the thing that sells the weight.
-                    armLPitch = -156f;
+                    // Both arms up and in, reading as holding a stack rather
+                    // than steadying a single shoulder load — 2026-09-23,
+                    // now that `Carry` shows a whole armful. The LEGS are
+                    // deliberately untouched: this is the one acting mode
+                    // that plays while they are walking, and the walk cycle
+                    // is the thing that sells the weight.
+                    armLPitch = -150f;
                     armLIn = 18f;
-                    armRPitch = 8f;
-                    chestRoll = -7f * side;
-                    chestPitch = 5f;
+                    armRPitch = -46f;
+                    armRIn = 20f;
+                    chestRoll = -5f * side;
+                    chestPitch = 6f;
                     headPitch = 4f;
                     break;
                 }
@@ -503,36 +522,126 @@ namespace SeaSick.World
             m == Mode.Chop || m == Mode.Saw || m == Mode.Hammer
             || m == Mode.Hoe || m == Mode.Stir;
 
+        /// Highest visible count in a bundle. **Kevin, 2026-09-23:** *"if
+        /// they carry 3 logs, you see three logs"* — but a haul can be a
+        /// dozen units, and a dozen cubes on one body is polygons and draw
+        /// calls nobody asked for. The real number stays the ledger's; this
+        /// is only ever the picture of "several."
+        const int MaxVisibleCarry = 6;
+
         void EnsureCarry()
         {
-            if (carryProp != null && carryPropFor == shownLoad) return;
+            int n = Mathf.Clamp(shownLoadCount, 1, MaxVisibleCarry);
+            string key = shownLoad + "x" + n;
+            if (carryProp != null && carryPropFor == key) return;
             if (carryProp != null) Destroy(carryProp);
-            carryPropFor = shownLoad;
+            carryPropFor = key;
 
             // **The look the CampWorker's old `carried` object had**, moved in
-            // here so there is one owner of anything hanging off a villager.
-            // A log for the things that come in lengths, a sack for the rest.
+            // here so there is one owner of anything hanging off a villager,
+            // now built as a STACK of `n` distinct props rather than one.
+            // Timber is round logs, Boards/FineBoards a flat milled bundle,
+            // Stone and Brick their own stacks, everything else a sack —
+            // and a sack per unit above one, same as the rest.
             string what = string.IsNullOrEmpty(shownLoad) ? Res.Timber : shownLoad;
-            bool logs = what == Res.Timber || what == Res.Boards;
-            var root = new GameObject("Carry_" + what);
+            var root = new GameObject("Carry_" + what + "_" + n);
             root.transform.SetParent(transform, false);
-            root.transform.localPosition = new Vector3(0.20f * side, 1.45f, 0.06f);
-            root.transform.localRotation = Quaternion.Euler(0f, 8f * side, 0f);
+            root.transform.localPosition = new Vector3(0.16f * side, 1.42f, 0.10f);
+            root.transform.localRotation = Quaternion.Euler(0f, 6f * side, 0f);
 
-            if (logs)
-            {
-                var log = Prim(PrimitiveType.Cylinder, root.transform,
-                    new Vector3(0.20f, 0.62f, 0.20f), Mat("log", Res.Colour(Res.Timber)));
-                log.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            }
+            if (what == Res.Timber)
+                BuildLogs(root.transform, n);
+            else if (what == Res.Boards || what == Res.FineBoards)
+                BuildPlanks(root.transform, n, what == Res.FineBoards);
+            else if (what == Res.Stone)
+                BuildStones(root.transform, n);
+            else if (what == Res.Brick)
+                BuildBricks(root.transform, n);
             else
-            {
-                var sack = Prim(PrimitiveType.Cube, root.transform,
-                    new Vector3(0.34f, 0.30f, 0.30f), Mat("sack_" + what, Res.Colour(what)));
-                sack.transform.localPosition = new Vector3(0f, 0.10f, 0f);
-                sack.transform.localRotation = Quaternion.Euler(0f, 18f, 9f);
-            }
+                BuildSacks(root.transform, n, what);
+
             carryProp = root;
+        }
+
+        /// Round logs, shouldered side by side with just enough stagger
+        /// that three of them read as three and not as one thick trunk.
+        static void BuildLogs(Transform root, int n)
+        {
+            var mat = Mat("log", Res.Colour(Res.Timber));
+            const float spacing = 0.15f;
+            for (int i = 0; i < n; i++)
+            {
+                var log = Prim(PrimitiveType.Cylinder, root,
+                    new Vector3(0.16f, 0.58f, 0.16f), mat);
+                float x = (i - (n - 1) * 0.5f) * spacing;
+                float y = (i % 2 == 0) ? 0f : 0.05f;
+                float z = ((i % 3) - 1) * 0.02f;
+                log.transform.localPosition = new Vector3(x, y, z);
+                log.transform.localRotation =
+                    Quaternion.Euler(90f, 0f, (i % 2 == 0 ? 1f : -1f) * (3f + i));
+            }
+        }
+
+        /// A flat bundle of milled planks, stacked one on the next rather
+        /// than side by side — the far side of a sawyer, not a tree.
+        static void BuildPlanks(Transform root, int n, bool fine)
+        {
+            var mat = Mat(fine ? "planks_fine" : "planks", Res.Colour(Res.Boards));
+            for (int i = 0; i < n; i++)
+            {
+                var plank = Prim(PrimitiveType.Cube, root,
+                    new Vector3(0.46f, 0.035f, 0.13f), mat);
+                plank.transform.localPosition =
+                    new Vector3(0.015f * (i % 2 == 0 ? 1 : -1), 0.045f * i, 0f);
+                plank.transform.localRotation =
+                    Quaternion.Euler(0f, (i % 2 == 0 ? 2f : -2f), 0f);
+            }
+        }
+
+        /// Rough stone, piled in the arms rather than on the shoulder — a
+        /// quarryman carries it in front of his chest, not slung.
+        static void BuildStones(Transform root, int n)
+        {
+            var mat = Mat("stones", Res.Colour(Res.Stone));
+            for (int i = 0; i < n; i++)
+            {
+                var stone = Prim(PrimitiveType.Cube, root, Vector3.one * 0.19f, mat);
+                int row = i / 2, col = i % 2;
+                stone.transform.localPosition = new Vector3(
+                    (col - 0.5f) * 0.17f, row * 0.16f, -0.02f * row);
+                stone.transform.localRotation = Quaternion.Euler(
+                    (i % 2 == 0 ? 8f : -6f), 10f * (i % 3 - 1), (i % 2 == 0 ? -5f : 7f));
+            }
+        }
+
+        /// Squared bricks, small and stacked true — the far side of a
+        /// quarryman, not the rough stone that went in.
+        static void BuildBricks(Transform root, int n)
+        {
+            var mat = Mat("bricks", Res.Colour(Res.Brick));
+            for (int i = 0; i < n; i++)
+            {
+                var brick = Prim(PrimitiveType.Cube, root,
+                    new Vector3(0.17f, 0.085f, 0.10f), mat);
+                brick.transform.localPosition = new Vector3(0f, 0.09f * i, 0.01f * i);
+                brick.transform.localRotation = Quaternion.Euler(0f, (i % 2) * 4f, 0f);
+            }
+        }
+
+        /// Everything else: a sack per unit, the way one sack always looked.
+        static void BuildSacks(Transform root, int n, string what)
+        {
+            var mat = Mat("sack_" + what, Res.Colour(what));
+            float scale = n <= 1 ? 1f : 0.82f;
+            for (int i = 0; i < n; i++)
+            {
+                var sack = Prim(PrimitiveType.Cube, root,
+                    new Vector3(0.34f, 0.30f, 0.30f) * scale, mat);
+                int row = i / 2, col = i % 2;
+                sack.transform.localPosition = new Vector3(
+                    (col - 0.5f) * 0.22f * scale, 0.10f + row * 0.20f * scale, 0f);
+                sack.transform.localRotation = Quaternion.Euler(0f, 18f + i * 6f, 9f - i * 3f);
+            }
         }
 
         /// A tool in the hand. Primitive on purpose: at the zoom a camp is

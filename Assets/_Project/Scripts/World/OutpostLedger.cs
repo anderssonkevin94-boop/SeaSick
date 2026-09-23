@@ -117,6 +117,14 @@ namespace SeaSick.World
         public bool haulFromBay;
         public float haulLeft;
         public float haulDays;
+        /// **The trip's route, booked at its start (2026-09-23).** Where the
+        /// load is picked up and put down (world x,z), whether both were
+        /// known, and the game-days of one walked leg and of the work at the
+        /// pickup (cut + handle). Read through `HaulOf`; an old save's trip
+        /// reads as unplaced.
+        public bool haulPlaced;
+        public float haulFromX, haulFromZ, haulToX, haulToZ;
+        public float haulWalkDays, haulWorkDays;
 
         public bool Hauling => haulCount > 0 && !string.IsNullOrEmpty(haulRes);
 
@@ -1747,10 +1755,6 @@ namespace SeaSick.World
         /// unit everything else is priced against — see `Res.GatherRate`,
         /// which sets the other resources relative to it.
         public const float TimberPerHandPerDay = 4f;
-        /// Logs a day one builder carries from the pile into a blueprint.
-        /// Three times the felling rate: the wood is already down and it is
-        /// lying five metres away. A guess like the rest.
-        public const float HaulPerHandPerDay = 12f;
         /// **Stone a day one builder quarries out of standing rock**, when
         /// there is none piled to carry. Under the felling rate (4) because
         /// a boulder is four strikes where a tree is three -- the same
@@ -1983,18 +1987,6 @@ namespace SeaSick.World
 
         [System.NonSerialized] readonly List<OutpostHand> builderScratch = new List<OutpostHand>();
 
-        /// Game-days for one builder's trip carrying `n` of `res` from `from`.
-        /// The OLD per-hand rates, so a plan's cost still means the same time:
-        /// out of a pile at `HaulPerHandPerDay`, cut at `TimberPerHandPerDay`,
-        /// quarried at `StonePerHandPerDay` (the walk is inside those rates,
-        /// as it always was).
-        static float SiteTripDays(string res, int n, HaulPlace from)
-        {
-            float rate = from != HaulPlace.Field ? HaulPerHandPerDay
-                : res == Res.Timber ? TimberPerHandPerDay : StonePerHandPerDay;
-            return n / Mathf.Max(0.01f, rate);
-        }
-
         /// **Whole units of `res` this site is still short of once every load
         /// already walking to a site has landed.** Loads in arms fill the
         /// queue oldest-first -- the order `DeliverToSite` puts them in -- so
@@ -2034,8 +2026,7 @@ namespace SeaSick.World
                 {
                     int n = Mathf.Min(cap, pile.whole);
                     pile.whole -= n;
-                    StartTrip(h, res, n, HaulPlace.Store, -1, HaulPlace.Site, -1,
-                        SiteTripDays(res, n, HaulPlace.Store));
+                    StartTimedTrip(h, res, n, HaulPlace.Store, -1, HaulPlace.Site, -1, site);
                     return true;
                 }
                 // Then a station's output rack (a240cdf): as good as the store.
@@ -2046,8 +2037,7 @@ namespace SeaSick.World
                         if (row == null || row.whole <= 0) continue;
                         int n = Mathf.Min(cap, row.whole);
                         row.whole -= n;
-                        StartTrip(h, res, n, HaulPlace.Station, i, HaulPlace.Site, -1,
-                            SiteTripDays(res, n, HaulPlace.Station));
+                        StartTimedTrip(h, res, n, HaulPlace.Station, i, HaulPlace.Site, -1, site);
                         return true;
                     }
                 // Then cut or quarry it. Brick has no seam: nobody quarries a
@@ -2063,8 +2053,7 @@ namespace SeaSick.World
                     // booked when the armful LANDS (`DepositHaul`), so the
                     // body chopping through the trip sees its tree go over
                     // at the end of it, not two trees drop at the start.
-                    StartTrip(h, res, n, HaulPlace.Field, -1, HaulPlace.Site, -1,
-                        SiteTripDays(res, n, HaulPlace.Field));
+                    StartTimedTrip(h, res, n, HaulPlace.Field, -1, HaulPlace.Site, -1, site);
                     return true;
                 }
             }

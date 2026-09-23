@@ -706,7 +706,7 @@ namespace SeaSick.World
                     carrying = Carries(r);
                     dropAt = Dropoff(r, carrying);
                     phase = Phase.Coming;
-                    acting?.Set(VillagerActing.Mode.Carry, carrying);
+                    acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
                     return;
 
                 case Phase.Coming:
@@ -721,6 +721,11 @@ namespace SeaSick.World
                     // mid-walk and take it to the pile (or to the next
                     // drawing that is short of it) instead.
                     dropAt = Dropoff(r, carrying);
+                    // The armful can shrink mid-walk (the store filled while
+                    // he was on his way and `DepositHaul` put down what fit),
+                    // so the stack he shoulders is re-read every step too —
+                    // `Set` is a no-op unless it actually changed.
+                    acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
                     if (!Walk(dropAt, dt)) return;
                     Drop();
                     phase = Phase.Resting;
@@ -831,7 +836,7 @@ namespace SeaSick.World
                     carrying = Carries(r);
                     dropAt = Dropoff(r, carrying);
                     phase = Phase.Coming;
-                    acting?.Set(VillagerActing.Mode.Carry, carrying);
+                    acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
                     return;
 
                 case Phase.Coming:
@@ -995,7 +1000,7 @@ namespace SeaSick.World
                         carrying = Res.Timber;
                         dropAt = Dropoff(r, carrying);
                         phase = Phase.Coming;
-                        acting?.Set(VillagerActing.Mode.Carry, carrying);
+                        acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
                         return;
                     }
                     chopFor += dt;
@@ -1217,7 +1222,7 @@ namespace SeaSick.World
                     }
                     dropAt = PileSpot(carrying);
                     phase = Phase.Coming;
-                    acting?.Set(VillagerActing.Mode.Carry, carrying);
+                    acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
                     return;
 
                 case Phase.Coming:
@@ -1261,6 +1266,15 @@ namespace SeaSick.World
         ///
         /// Everything else carries what `WhatFor` says, unchanged.
         string Carries(OutpostHand r) => Hunting(r) ? Res.Food : WhatFor(r);
+
+        /// **How many units are in his arms**, for `VillagerActing.Set`'s
+        /// visible stack (Kevin, 2026-09-23: *"if they carry 3 logs, you see
+        /// three logs"*). A real ledger haul (`OutpostHand.Hauling` —
+        /// builder site trips fetched from a pile or a station) says the
+        /// true armful; a single swing at a tree, a rock or a beast — which
+        /// never went through the haul system — is one unit, same as it
+        /// always looked.
+        static int CarryCount(OutpostHand r) => r != null && r.Hauling ? Mathf.Max(1, r.haulCount) : 1;
 
         /// The swing that suits the material. An axe for wood, a pick-like
         /// hammer for the things that come out of rock, a hoe for what is

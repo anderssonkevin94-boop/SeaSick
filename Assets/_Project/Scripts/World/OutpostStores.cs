@@ -175,8 +175,8 @@ namespace SeaSick.World
         /// **Units one hand carries in one haul trip (2026-09-23).** Logs are
         /// heavy and long, so fewer of them than bricks; small made things go
         /// by the bundle. **Every one is a guess, none played.** The trip
-        /// itself takes `OutpostLedger.StationTripDays`, so trips a day per
-        /// hand = 1 / that, and units a day = armful / that.
+        /// itself takes its walked distance there and back plus the handling
+        /// (`OutpostLedger.TripDays`), so units a day = armful / that.
         public static int Armful(string r) => r switch
         {
             Timber => 2,

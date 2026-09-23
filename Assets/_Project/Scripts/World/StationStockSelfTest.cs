@@ -29,6 +29,10 @@ namespace SeaSick.World
     ///     whole delivered units, 0 % until stocked and cleared, every unit
     ///     conserved, at most 4 trips, D2 across tick sizes, and an old
     ///     save's over-delivery goes back to the store.
+    /// (j) Trip time is walked distance (2026-09-23): every ledger here has
+    ///     an explicit centre (the store), quarry and site position, so each
+    ///     trip's time is known; a trip books exactly `TripDays`, and a site
+    ///     twice as far from the store takes ~twice as long to stock.
     public static class StationStockSelfTest
     {
         public static bool Run()
@@ -122,6 +126,7 @@ namespace SeaSick.World
 
             // --- (f) demolishing one of two same-plan stations -----------------
             var f = Quarry(0, 1000, 0);
+            f.raised.Clear();
             f.built.Add(BuildPlans.Quarry.id);
             f.raised.Add(new BuiltBuilding { planId = BuildPlans.Quarry.id, x = 0f });
             f.raised.Add(new BuiltBuilding { planId = BuildPlans.Quarry.id, x = 10f });
@@ -156,7 +161,10 @@ namespace SeaSick.World
             // An unmanned quarry's bay goes home while a gatherer fills the
             // same pile: nothing over the ceiling, nothing lost.
             var h = new OutpostLedger { ceilingPer = 10, stationsMigrated = true, campfireLevel = 2 };
+            h.SetCentre(Vector3.zero);
+            h.SetSourceMetres(Res.Stone, 20f);
             h.built.Add(BuildPlans.Quarry.id);
+            h.raised.Add(new BuiltBuilding { planId = BuildPlans.Quarry.id, x = 15f });
             h.hands.Add(new OutpostHand { name = "Hauler", order = OutpostOrder.Idle });
             for (int i = 0; i < 3; i++)
                 h.hands.Add(new OutpostHand { name = "Gatherer" + i, order = OutpostOrder.Gather, target = Res.Stone });
@@ -173,7 +181,10 @@ namespace SeaSick.World
             for (int i = 0; i < 200; i++)
             {
                 Advance(h, ref nowH, 0.05);
-                if (h.CarriedOf(Res.Stone) > 0) hauled = true;
+                // A 15 m trip (~14 s) starts and lands inside one 18 s
+                // quantum, so "seen in arms" is not enough: a trip counter
+                // or the bay going down says it happened.
+                if (h.CarriedOf(Res.Stone) > 0 || h.hands[0].haulSerial > 0) hauled = true;
                 if (h.StoreCountOf(Res.Stone) > h.ceilingPer && ceilOk)
                 { ceilOk = false; ceilWhy = $"tick {i}: store {h.StoreCountOf(Res.Stone)} > {h.ceilingPer}"; }
                 var st = h.Store(Res.Stone);
@@ -227,6 +238,38 @@ namespace SeaSick.World
                     + $"timber {t0:0.##}->{TimberAll(o):0.##}, stone {st0:0.##}->{StoneAll(o):0.##}");
             }
 
+            // --- (j) trip time is distance ----------------------------------
+            {
+                var near = Site(true, 100f);
+                var far = Site(true, 200f);
+                double nn = near.lastTicked, nf = far.lastTicked;
+                Advance(near, ref nn, 0.1);
+                Advance(far, ref nf, 0.1);
+                float dn = near.hands[0].haulDays, df = far.hands[0].haulDays;
+                float want = (2f * 100f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
+                              + OutpostLedger.HandleSeconds) / TimeOfDay.DayLength;
+                Gate(sb, ref fails, "trip-days-is-distance",
+                    near.hands[0].Hauling && Mathf.Abs(dn - want) < 1e-4f,
+                    $"100 m store->site trip {dn * TimeOfDay.DayLength:0.0} s, expected {want * TimeOfDay.DayLength:0.0} s "
+                    + $"(2 x 100 m x {OutpostLedger.PathFactor} / {OutpostLedger.WalkMetresPerSecond} m/s + {OutpostLedger.HandleSeconds} s)");
+                // A cut trip: walk out, 5 s a log, walk back.
+                var cut = Site(false, 7.07f);
+                double nc = cut.lastTicked;
+                Advance(cut, ref nc, 0.1);
+                var ch = cut.hands[0];
+                float wantCut = (2f * 20f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
+                                 + OutpostLedger.HandleSeconds + ch.haulCount * Playtest.CutSecondsPerLog) / TimeOfDay.DayLength;
+                Gate(sb, ref fails, "cut-trip-5s-a-log",
+                    ch.Hauling && ch.haulFrom == HaulPlace.Field && ch.haulRes == Res.Timber
+                    && Mathf.Abs(ch.haulDays - wantCut) < 1e-4f,
+                    $"{ch.haulCount} logs cut 20 m out: {ch.haulDays * TimeOfDay.DayLength:0.0} s, expected {wantCut * TimeOfDay.DayLength:0.0} s");
+                double tn = StockedAt(near, nn), tf = StockedAt(far, nf);
+                double ratio = tf / System.Math.Max(1e-6, tn);
+                Gate(sb, ref fails, "twice-as-far-twice-as-long", df > dn * 1.9f && ratio > 1.7 && ratio < 2.1,
+                    $"trip {dn * TimeOfDay.DayLength:0.0} s vs {df * TimeOfDay.DayLength:0.0} s; stocked at {tn:0.00} d (100 m) vs {tf:0.00} d (200 m), x{ratio:0.00} "
+                    + "(observed on the 0.1-day quantum)");
+            }
+
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());
             return fails == 0;
@@ -235,9 +278,12 @@ namespace SeaSick.World
         /// A site wanting 5 timber + 3 stone and two builders. `fromStore`:
         /// 10 of each in the store and nothing standing; else an empty store
         /// and ground to cut and quarry (no regrowth, so it conserves).
-        static OutpostLedger Site(bool fromStore)
+        static OutpostLedger Site(bool fromStore, float siteMetres = 7.07f)
         {
             var l = new OutpostLedger { ceilingPer = 20, stationsMigrated = true };
+            l.SetCentre(Vector3.zero);                 // the store is the fire square at 0,0
+            l.SetSourceMetres(Res.Timber, 20f);        // trees and rock 20 m out
+            l.SetSourceMetres(Res.Stone, 20f);
             l.hands.Add(new OutpostHand { name = "Bo", order = OutpostOrder.Build });
             l.hands.Add(new OutpostHand { name = "Sten", order = OutpostOrder.Build });
             l.Store(Res.Food, true).whole = 1000;
@@ -247,7 +293,7 @@ namespace SeaSick.World
             l.AddStanding(Res.Stone, fromStore ? 0f : 40f).regrowPerDay = 0f;
             l.sites.Add(new PendingBuild
             {
-                planId = BuildPlans.Hut.id, x = 5f, z = 5f,
+                planId = BuildPlans.Hut.id, x = siteMetres * 0.7071f, z = siteMetres * 0.7071f,
                 needed = 5, stoneNeeded = 3, phased = true,
             });
             l.lastTicked = 0.0;
@@ -314,6 +360,14 @@ namespace SeaSick.World
                 $"{Trips(l)} trips for 5 timber (armful 2) + 3 stone (armful 3); 4 is the least");
         }
 
+        /// Days (from 0) at which the site first reads Stocked, stepping 0.02 d.
+        static double StockedAt(OutpostLedger l, double now)
+        {
+            var p = l.sites[0];
+            for (int i = 0; i < 1000 && !p.Stocked; i++) Advance(l, ref now, 0.02);
+            return now / TimeOfDay.DayLength;
+        }
+
         static bool SameSite(OutpostLedger a, OutpostLedger b)
         {
             var p = a.sites[0]; var q = b.sites[0];
@@ -332,6 +386,8 @@ namespace SeaSick.World
         static OutpostLedger Quarry(int stone, int ceiling, int idleHaulers)
         {
             var l = new OutpostLedger();
+            l.SetCentre(Vector3.zero);                  // store at the fire square
+            l.raised.Add(new BuiltBuilding { planId = BuildPlans.Quarry.id, x = 15f });  // quarry 15 m off
             l.ceilingPer = ceiling;
             l.campfireLevel = 2;            // brick is a fire-II recipe
             l.stationsMigrated = true;      // no free order: the test places them

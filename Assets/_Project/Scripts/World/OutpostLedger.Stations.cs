@@ -3,6 +3,15 @@ using UnityEngine;
 
 namespace SeaSick.World
 {
+    /// **Playtest dials, 2026-09-23.** Numbers Kevin set for testing on the
+    /// phone, not balance. Grep for `Playtest.` before a release.
+    public static class Playtest
+    {
+        /// Seconds of game time to cut ONE log at the tree. Kevin: *"cutting
+        /// logs should take 5 seconds for the purpose of playtesting."*
+        public const float CutSecondsPerLog = 5f;
+    }
+
     /// <summary>
     /// **Stations, orders and hauling (2026-09-23, Kevin's storage-hub rules).**
     ///
@@ -15,8 +24,34 @@ namespace SeaSick.World
     /// Watchtower) each keep their own `StationStock` per built instance:
     /// input bay, one-job bench, output rack, and the player's order.
     /// Nothing is worked without an order. All hauling is ledger arithmetic
-    /// (armful per trip, `StationTripDays` per trip), never driven by bodies
-    /// -- D2 holds because each trip's remaining time is saved on the hand.
+    /// (armful per trip, each trip's time from its real distance -- see
+    /// "trip timing" below), never driven by bodies -- D2 holds because each
+    /// trip's time is fixed when it starts and its remainder is saved on the
+    /// hand.
+    ///
+    /// **Trip timing (Kevin, 2026-09-23 phone playtest: *"storage trips
+    /// should be based on the time it takes to walk to the storage (or wood
+    /// source) and back, not some arbitrary timer. cutting logs should take
+    /// 5 seconds"*).** Every trip -- station haul, site stocking, a stationed
+    /// worker fetching his own raw -- starts at its DROP-OFF, walks to its
+    /// PICKUP, cuts/quarries there if the pickup is the island (`Field`),
+    /// and walks back:
+    /// `seconds = 2 * leg / WalkMetresPerSecond + HandleSeconds
+    ///            + (Field ? n * GatherSecondsPerUnit(res) : 0)`,
+    /// `days = seconds / TimeOfDay.DayLength`. A leg is the straight line
+    /// between the two ledger positions times `PathFactor` (1.15: the ledger
+    /// has no A*, the bodies walk round things). Positions the ledger knows:
+    /// the STORE (first Storage/Storehouse `raised` row, else the campfire's
+    /// `raised` row, else the campfire's site, else the centre `Outpost`
+    /// saved), a STATION (its `raised` row, by ordinal), a SITE (its x,z).
+    /// The island's sources have no position in the books: `Outpost` saves
+    /// the metres from the camp centre to the nearest standing tree / rock
+    /// per resource (`sourceDistance`) whenever the camp is watched, and a
+    /// Field leg uses that number from anywhere in camp (the town is within
+    /// `Outpost.TownRadius`); never watched = `DefaultSourceMetres`. A leg
+    /// with an unknown end = `DefaultLegMetres`. The route is saved on the
+    /// hand at the start (`haulFromX/Z`, `haulToX/Z`, `haulWalkDays`,
+    /// `haulWorkDays`) so the mime walks the leg the books paid for.
     ///
     /// READ API (visuals, part B / villager mime, part D):
     /// <list type="bullet">
@@ -30,7 +65,12 @@ namespace SeaSick.World
     ///   `orderRecipe`/`orderLeft`/`orderRepeat`.</item>
     /// <item>`OrderAt(stationIndex)` -> `StationOrder {recipe, remaining, repeat, Active}`.</item>
     /// <item>`HaulOf(hand)` -> `HaulView {active, resource, count, from, fromStation,
-    ///   to, toStation, progress01}`; from/to are Store, Station (index) or Field.</item>
+    ///   to, toStation, progress01, placed, fromAt, toAt, walkOutEnd01, workEnd01,
+    ///   totalSeconds}`; from/to are Store, Station (index), Site or Field. The
+    ///   trip is: progress 0..walkOutEnd01 walk empty from `toAt` to `fromAt`,
+    ///   ..workEnd01 cut/pick up at `fromAt`, ..1 carry back to `toAt`.
+    ///   `fromAt` of a Field trip is the camp centre (the ledger has no tree):
+    ///   the body picks its own tree and the leg length is `SourceMetres`.</item>
     /// <item>`CarriedOf(res)` -- units in hands' arms right now (not in `CountOf`).</item>
     /// </list>
     /// WRITE API: `PlaceOrder(stationIndex | planId, recipeId, count /* -1 = repeat */)`,
@@ -51,11 +91,175 @@ namespace SeaSick.World
         /// Order count meaning "until told to stop".
         public const int RepeatOrder = -1;
 
-        /// **Game-days one haul trip takes** (walk there, pick up, walk
-        /// back), in the hand's effective working days. A flagged guess:
-        /// 0.15 day = 27 s of a 180 s day. With a 2-log armful that is ~13
-        /// logs a day, in line with the builders' `HaulPerHandPerDay` (12).
-        public const float StationTripDays = 0.15f;
+        // --- trip timing (2026-09-23; see the class doc) ---------------------
+
+        /// Metres a second a villager walks. **The same number as
+        /// `CampWorker.Speed` (2.6)** -- the body and the books must agree on
+        /// how long a leg takes; change both together.
+        public const float WalkMetresPerSecond = 2.6f;
+        /// Straight line to walked path. The ledger has no A*; bodies route
+        /// round huts and rocks (`CampPath`). A guess.
+        public const float PathFactor = 1.15f;
+        /// Seconds per trip for picking the load up and putting it down.
+        public const float HandleSeconds = 3f;
+        /// Metres from the camp centre to the nearest source of a resource
+        /// for a camp nobody has ever watched (no `sourceDistance` row).
+        public const float DefaultSourceMetres = 25f;
+        /// A leg whose end the ledger cannot place (no centre saved, a
+        /// station with no `raised` row -- a probe's hand-written ledger).
+        public const float DefaultLegMetres = 12f;
+
+        /// One row per gathered resource: straight-line metres from the camp
+        /// centre to the nearest usable source, as `Outpost` last saw it.
+        [System.Serializable]
+        public class SourceDistance
+        {
+            public string resource;
+            public float metres;
+        }
+
+        /// Saved. Written by `Outpost.CatchUp` while the camp is watched;
+        /// an unwatched camp (and an old save: empty) uses what is here or
+        /// `DefaultSourceMetres`.
+        public List<SourceDistance> sourceDistance = new List<SourceDistance>();
+
+        /// The camp centre as `Outpost` last saw it (`Outpost.CampCentre`).
+        /// Saved; the store's position when neither a storage building nor
+        /// the campfire has a row. False in an old save.
+        public bool hasCentre;
+        public float centreX, centreZ;
+
+        public void SetCentre(Vector3 at) { hasCentre = true; centreX = at.x; centreZ = at.z; }
+
+        /// Straight-line metres from the centre to the nearest `res` source.
+        public float SourceMetres(string res)
+        {
+            if (sourceDistance != null)
+                foreach (var d in sourceDistance)
+                    if (d != null && d.resource == res) return Mathf.Max(0f, d.metres);
+            return DefaultSourceMetres;
+        }
+
+        public void SetSourceMetres(string res, float metres)
+        {
+            if (string.IsNullOrEmpty(res)) return;
+            if (sourceDistance == null) sourceDistance = new List<SourceDistance>();
+            foreach (var d in sourceDistance)
+                if (d != null && d.resource == res) { d.metres = Mathf.Max(0f, metres); return; }
+            sourceDistance.Add(new SourceDistance { resource = res, metres = Mathf.Max(0f, metres) });
+        }
+
+        /// **Seconds to cut / quarry ONE unit at the source.** Timber is
+        /// Kevin's playtest number (`Playtest.CutSecondsPerLog`); the rest
+        /// keep `Res.GatherRate`'s relation to timber (stone 8 s, ore 10 s,
+        /// spice 6.7 s), so the playtest speed-up is the same for all.
+        public static float GatherSecondsPerUnit(string res)
+        {
+            if (res == Res.Timber) return Playtest.CutSecondsPerLog;
+            float rate = Mathf.Max(0.01f, Res.GatherRate(res));
+            return Playtest.CutSecondsPerLog * Res.GatherRate(Res.Timber) / rate;
+        }
+
+        /// The camp centre: the campfire's `raised` row, its site, or the
+        /// saved centre.
+        public bool CentreAt(out Vector3 at)
+        {
+            at = default;
+            string fire = BuildPlans.Campfire.id;
+            if (raised != null)
+                foreach (var r in raised)
+                    if (r != null && r.planId == fire) { at = r.At; return true; }
+            if (sites != null)
+                foreach (var p in sites)
+                    if (p != null && p.planId == fire) { at = new Vector3(p.x, 0f, p.z); return true; }
+            if (hasCentre) { at = new Vector3(centreX, 0f, centreZ); return true; }
+            return false;
+        }
+
+        /// Where the store is: inside the first Storage/Storehouse standing,
+        /// else the square by the fire (the centre).
+        public bool StoreAt(out Vector3 at)
+        {
+            if (raised != null)
+                foreach (var r in raised)
+                    if (r != null && (r.planId == BuildPlans.Storage.id || r.planId == BuildPlans.Storehouse.id))
+                    { at = r.At; return true; }
+            return CentreAt(out at);
+        }
+
+        /// Where station `index` stands: its plan's `raised` row of the same
+        /// ordinal.
+        public bool StationPlace(int index, out Vector3 at)
+        {
+            at = default;
+            if (stations == null || index < 0 || index >= stations.Count || raised == null) return false;
+            var s = stations[index];
+            if (s == null) return false;
+            int k = 0;
+            foreach (var r in raised)
+            {
+                if (r == null || r.planId != s.planId) continue;
+                if (k++ == s.ordinal) { at = r.At; return true; }
+            }
+            return false;
+        }
+
+        bool PlaceOf(HaulPlace place, int station, PendingBuild site, out Vector3 at)
+        {
+            at = default;
+            switch (place)
+            {
+                case HaulPlace.Store: return StoreAt(out at);
+                case HaulPlace.Station: return StationPlace(station, out at);
+                case HaulPlace.Site:
+                    if (site == null) return false;
+                    at = new Vector3(site.x, 0f, site.z);
+                    return true;
+                case HaulPlace.Field: return CentreAt(out at);
+            }
+            return false;
+        }
+
+        /// Walked metres of one leg between pickup and drop-off.
+        float LegMetres(string res, HaulPlace from, int fromStation, HaulPlace to, int toStation, PendingBuild site)
+        {
+            if (from == HaulPlace.Field) return SourceMetres(res) * PathFactor;
+            if (PlaceOf(from, fromStation, site, out var a) && PlaceOf(to, toStation, site, out var b))
+            {
+                Vector3 d = b - a; d.y = 0f;
+                return d.magnitude * PathFactor;
+            }
+            return DefaultLegMetres * PathFactor;
+        }
+
+        static float SecondsToDays(float seconds) => seconds / Mathf.Max(0.0001f, TimeOfDay.DayLength);
+
+        /// **Start a trip whose time is its distance.** Walk from the
+        /// drop-off to the pickup, cut `n` there if it is the island, pick
+        /// up, walk back. The route and phases go on the hand (saved).
+        void StartTimedTrip(OutpostHand h, string res, int n, HaulPlace from, int fromStation,
+            HaulPlace to, int toStation, PendingBuild site = null, bool fromBay = false)
+        {
+            float leg = LegMetres(res, from, fromStation, to, toStation, site);
+            float walk = leg / WalkMetresPerSecond;
+            float work = HandleSeconds + (from == HaulPlace.Field ? n * GatherSecondsPerUnit(res) : 0f);
+            StartTrip(h, res, n, from, fromStation, to, toStation, SecondsToDays(2f * walk + work), fromBay);
+            h.haulWalkDays = SecondsToDays(walk);
+            h.haulWorkDays = SecondsToDays(work);
+            h.haulPlaced = PlaceOf(from, fromStation, site, out var fa) & PlaceOf(to, toStation, site, out var ta);
+            h.haulFromX = fa.x; h.haulFromZ = fa.z;
+            h.haulToX = ta.x; h.haulToZ = ta.z;
+        }
+
+        /// **Game-days of one trip** (for sheets and probes): the same
+        /// arithmetic `StartTimedTrip` books.
+        public float TripDays(string res, int n, HaulPlace from, int fromStation,
+            HaulPlace to, int toStation, PendingBuild site = null)
+        {
+            float walk = LegMetres(res, from, fromStation, to, toStation, site) / WalkMetresPerSecond;
+            float work = HandleSeconds + (from == HaulPlace.Field ? n * GatherSecondsPerUnit(res) : 0f);
+            return SecondsToDays(2f * walk + work);
+        }
 
         const float Eps = 1e-5f;
 
@@ -463,6 +667,12 @@ namespace SeaSick.World
                 to = h.haulTo,
                 toStation = h.haulTo == HaulPlace.Station ? h.haulToStation : -1,
                 progress01 = Mathf.Clamp01(1f - h.haulLeft / total),
+                placed = h.haulPlaced,
+                fromAt = new Vector3(h.haulFromX, 0f, h.haulFromZ),
+                toAt = new Vector3(h.haulToX, 0f, h.haulToZ),
+                walkOutEnd01 = Mathf.Clamp01(h.haulWalkDays / total),
+                workEnd01 = Mathf.Clamp01((h.haulWalkDays + h.haulWorkDays) / total),
+                totalSeconds = h.haulDays * TimeOfDay.DayLength,
             };
         }
 
@@ -602,6 +812,9 @@ namespace SeaSick.World
             h.haulLeft = 0f;
             h.haulDays = 0f;
             h.haulFromBay = false;
+            h.haulPlaced = false;
+            h.haulWalkDays = h.haulWorkDays = 0f;
+            h.haulFromX = h.haulFromZ = h.haulToX = h.haulToZ = 0f;
         }
 
         /// Every load put down now, before station indices shift.
@@ -718,7 +931,7 @@ namespace SeaSick.World
         void BeginChore(OutpostHand h, Chore c)
         {
             c.source.whole -= c.n;
-            StartTrip(h, c.res, c.n, c.from, c.fromStation, c.to, c.toStation, StationTripDays, c.fromBay);
+            StartTimedTrip(h, c.res, c.n, c.from, c.fromStation, c.to, c.toStation, null, c.fromBay);
         }
 
         /// Is there station hauling a spare hand could do right now?
@@ -857,7 +1070,7 @@ namespace SeaSick.World
                     {
                         int n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, inStore));
                         Store(line.res).whole -= n;
-                        StartTrip(h, line.res, n, HaulPlace.Store, -1, HaulPlace.Station, si, StationTripDays);
+                        StartTimedTrip(h, line.res, n, HaulPlace.Store, -1, HaulPlace.Station, si);
                         return true;
                     }
                     // **The store has none: he gathers it himself** (Kevin's
@@ -871,8 +1084,7 @@ namespace SeaSick.World
                             int n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, standing));
                             stock.standing -= n;
                             if (line.res == Res.Timber) timberTaken += n;
-                            float days = StationTripDays + n / Mathf.Max(0.01f, Res.GatherRate(line.res));
-                            StartTrip(h, line.res, n, HaulPlace.Field, -1, HaulPlace.Station, si, days);
+                            StartTimedTrip(h, line.res, n, HaulPlace.Field, -1, HaulPlace.Station, si);
                             return true;
                         }
                     }

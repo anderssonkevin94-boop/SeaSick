@@ -241,16 +241,25 @@ public class LedgerProbe : MonoBehaviour
         float daysTaken = steps * OutpostLedger.QuantumDays;
         sb.AppendLine($"  one hand finishes it in {daysTaken:F1} game days "
             + $"({daysTaken * day:F0} s at the current day length)");
-        // **Stock, THEN build (7820c7e, 2026-09-23).** The four logs are
-        // still one hand's day to cut and carry; standing the fire up is a
-        // second phase of `LabourFor` hand-days on top. The gate was written
-        // when delivery WAS completion and had been failing (1.40 vs 1.0)
-        // since that commit -- the cost still means one day of wood, which
-        // is what this measures now: one day plus the plan's labour.
+        // **Stock, THEN build (7820c7e, 2026-09-23).** Standing the fire up
+        // is a second phase of `LabourFor` hand-days on top of the wood.
+        // **Trip-timed wood (2026-09-23, Kevin: trips are the walk there and
+        // back, a log is 5 s to cut):** the wood phase is no longer "4 logs
+        // at 4 a day = 1 day" but the trips it takes -- one hand, armfuls of
+        // `Res.Armful(Timber)`, each `TripDays` (walk to the nearest standing
+        // tree and back + cutting + handling). This ledger was never
+        // watched, so the tree is `DefaultSourceMetres` out.
+        float woodDays = 0f;
+        for (int left = BuildPlans.Campfire.cost; left > 0; )
+        {
+            int n = Mathf.Min(Res.Armful(Res.Timber), left);
+            woodDays += timed.TripDays(Res.Timber, n, HaulPlace.Field, -1, HaulPlace.Site, -1);
+            left -= n;
+        }
         float labourDays = OutpostLedger.LabourFor(timed.Pending);
-        float expectDays = 1f + labourDays;
+        float expectDays = woodDays + labourDays;
         Gate(sb, ref fails, "one-hand-one-day", Mathf.Abs(daysTaken - expectDays) < 0.15f,
-            $"{daysTaken:F2} days against 1.0 of wood + {labourDays:F2} of building = {expectDays:F2}");
+            $"{daysTaken:F2} days against {woodDays:F2} of wood trips + {labourDays:F2} of building = {expectDays:F2}");
 
         // Builders do not stockpile. Until the fire is lit there is nothing to
         // stockpile INTO — in the game the ceiling is zero before the first

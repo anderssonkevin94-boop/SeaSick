@@ -1,3 +1,4 @@
+using UnityEngine;
 using System.Collections.Generic;
 
 namespace SeaSick.World
@@ -212,7 +213,24 @@ namespace SeaSick.World
         public HaulPlace to;
         /// Station index when `to == Station`, else -1.
         public int toStation;
-        /// 0 at pickup, 1 at drop-off.
+        /// 0 when the trip starts (at the drop-off, empty-handed), 1 when
+        /// the load is put down there.
         public float progress01;
+        /// The route below was booked (false for a trip from an old save).
+        public bool placed;
+        /// Pickup point (store / rack / bay; the camp centre for a Field
+        /// trip -- the body picks its own tree, the leg is
+        /// `OutpostLedger.SourceMetres`), world x,z with y 0.
+        public Vector3 fromAt;
+        /// Drop-off point, where the trip starts and ends. y 0.
+        public Vector3 toAt;
+        /// progress01 at which the hand reaches the pickup (walking empty
+        /// from `toAt` to `fromAt` until here).
+        public float walkOutEnd01;
+        /// progress01 at which cutting/picking up ends and the carry back
+        /// to `toAt` starts.
+        public float workEnd01;
+        /// Seconds of game time the whole trip takes at full work factor.
+        public float totalSeconds;
     }
 }
