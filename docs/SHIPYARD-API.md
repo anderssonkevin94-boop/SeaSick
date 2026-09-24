@@ -390,10 +390,19 @@ implicit) is migrated to the same explicit equipment on load. Each gun's own
 `ShipLoad`'s lightest calibre) are read from its module, summed as
 `gunsCrewNeeded`/`gunsWeightKg`; a draft whose guns need more hands than it
 has berths is refused `GUNS_NEED_CREW` (gate `guns-need-berths-for-their-crew`),
-never silently capped. The plan's `data.gunSockets` is the fitted STARBOARD
-guns' own positions (ship frame), so `CannonBattery.Fit` (unchanged, it
-mirrors them to port) draws and works the battery from the slots, not the
-hull form.
+never silently capped. `data.gunSockets` stays the fitted STARBOARD guns'
+own positions (ship frame) as a courtesy copy for `Reshaped`/`Scaled` and
+the self-test's hull-form comparisons; the LIVE battery is no longer fit
+from it. `SteamerBootstrap.Man` is instead handed the plan's `fittedGuns`
+directly (`BuildOptions.fittedGuns`, threaded from `ShipyardService.Options`)
+and calls the new `CannonBattery.Fit(IList<CannonBattery.GunStation>)`,
+which stands each gun exactly where its own slot put it with its own side —
+no mirroring — so a side missing a gun (one sent to the dry dock, §15) gets
+a correctly-counted, correctly-positioned battery instead of a phantom or
+mis-positioned twin (2026-09-25, fixes the deviation noted at the end of
+§15). The untouched V8 steamer (no refit yet) still calls the old
+`CannonBattery.Fit(IList<Vector3>)` (starboard list mirrored to port)
+exactly as before — that path, and her battery, are unchanged.
 
 The **weight allowance stays the shared limit**: displacement at the load
 line − lightship − crew × 90 kg − guns carried × 500 kg (`ShipLoad` weights;
@@ -530,6 +539,14 @@ crew (4a), so both land on the right deck.
    hidden with it on a refitted ship.
 
 ## 14. Changed files
+
+Since the guns-as-equipment commits above (unpaired-gun fix, 2026-09-25):
+* `Assets/_Project/Scripts/Ship/CannonBattery.cs` — `GunStation` (position + side, no pairing assumed); new `Fit(IList<GunStation>)`; `PortCount`/`StarboardCount`/`TotalGuns`. The old `Fit(IList<Vector3>)` (starboard mirrored to port) is UNCHANGED, still what the untouched V8 steamer calls.
+* `Assets/_Project/Scripts/Steamer/SteamerBootstrap.cs` — `BuildOptions.fittedGuns` (null = today's mirrored-socket path); `Man` fits the battery from it directly when set, no mirroring.
+* `Assets/_Project/Scripts/Ship/Modular/Runtime/ShipyardService.cs` — `Options(plan)` passes `plan.fittedGuns` through.
+* `Assets/_Project/Scripts/Ship/Modular/Shipyard.cs` — comment fix only (`data.gunSockets` is now a courtesy copy, not what the live battery reads).
+* `Assets/_Project/Scripts/Ship/Modular/ShipyardSelfTest.cs` — `long-guns-3-port-3-starboard`, `short-guns-2-port-2-starboard`, `port-gun-removed-keeps-starboard-unmoved-at-3`.
+* `Assets/_Project/Scripts/Dev/ShipyardRefitProbe.cs` — (b1) live check: remove the middle port gun only, battery reads 5 guns / 2 port / 3 starboard, then restore.
 
 Since d6d66ad (guns as equipment + dry dock, 2026-09-25) — see §15:
 * `Assets/_Project/Resources/ShipModules/Modules/equipment.cannon.astra.v1.json` — new: the real cannon module (mass/crew provisional).
@@ -687,12 +704,15 @@ if (string.IsNullOrEmpty(yard.Validate(draft)) && yard.TryApply(expected, draft,
 ```
 
 **Deviations from the brief that built this** (2026-09-25, noted so Kevin
-can revisit): `CannonBattery.Fit` still mirrors a single STARBOARD list to
-port (unchanged, to keep this scoped) — a lone unpaired gun (legal in the
-data: "a port gun without its starboard twin") draws correctly
-(`ModularShipView`) but does not get a correctly-paired live `CannonBattery`
-gun; only symmetric pairs (everything `Long`/`Short`/`WithMiddles`/migration
-ever produce) are exercised. `equipment.cannon.astra.v1`'s `boundsMinU`/
+can revisit): ~~`CannonBattery.Fit` still mirrors a single STARBOARD list to
+port... a lone unpaired gun does not get a correctly-paired live
+`CannonBattery` gun~~ — FIXED (2026-09-25): the battery is now fit from the
+plan's `fittedGuns` directly, one gun per side, no mirroring (see above); a
+lone unpaired gun draws correctly (`ModularShipView`, unchanged) AND fires
+correctly (gates `long-guns-3-port-3-starboard`, `short-guns-2-port-2-starboard`,
+`port-gun-removed-keeps-starboard-unmoved-at-3` in `ShipyardSelfTest`; live
+check `battery: 5 guns, 2 port, 3 starboard (no mirrored phantom)` in
+`ShipyardRefitProbe`). `equipment.cannon.astra.v1`'s `boundsMinU`/
 `boundsMaxU` (the placeholder-box fallback) are estimated from
 `export-verification.json`'s overall dimensions, not re-measured from the
 imported FBX — fine for now since the mesh usually resolves, worth
