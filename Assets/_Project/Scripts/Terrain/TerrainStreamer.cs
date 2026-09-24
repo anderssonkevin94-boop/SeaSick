@@ -25,6 +25,7 @@ namespace SeaSick.Terrain
         {
             public int2 coord;
             public int lod;            // lodStep currently on the mesh (0 = nothing yet)
+            public int revision;
             public int targetLod;
             public bool building;
             public bool wantCollider;
@@ -97,6 +98,7 @@ namespace SeaSick.Terrain
         public bool IsLoaded(int2 c) => loaded.TryGetValue(c, out var ch) && ch.lod != 0 && !ch.building;
         public Mesh MeshAt(int2 c) => IsLoaded(c) ? loaded[c].mesh : null;
         public int LodAt(int2 c) => loaded.TryGetValue(c, out var ch) ? ch.lod : 0;
+        public int MeshRevisionAt(int2 c) => loaded.TryGetValue(c, out var ch) ? ch.revision : -1;
         public bool HasCollider(int2 c) => loaded.TryGetValue(c, out var ch) && ch.collider.enabled && ch.collider.sharedMesh != null;
         public IEnumerable<int2> LoadedCoords => loaded.Keys;
 
@@ -311,6 +313,7 @@ namespace SeaSick.Terrain
                 f.chunk.building = false;
                 f.chunk.renderer.enabled = true;
                 TotalBuilt++;
+                f.chunk.revision=TotalBuilt;
                 inFlight.RemoveAt(i);
 
                 // The collider is only valid once the bake for this exact mesh lands.

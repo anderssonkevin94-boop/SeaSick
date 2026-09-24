@@ -1,0 +1,4 @@
+PASS: 46 templates have outward face winding.
+PASS: 253 tree positions and index order unchanged. Felling and regrowth mesh checks pass.
+New scenery: 27 cells, 112276 LOD0 triangles, 35404 LOD1 triangles.
+No terrain heights, resource yields or save files modified. No on-device frame-time claim.

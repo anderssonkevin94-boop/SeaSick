@@ -1178,6 +1178,53 @@ MonoBehaviour:
   cellHeadingDeg: 195
   seed: 20260828
   contrast: 1.7
+--- !u!1 &1026905573
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1026905575}
+  - component: {fileID: 1026905574}
+  m_Layer: 0
+  m_Name: Island 2 Nature
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1026905574
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1026905573}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 87e434b3bdaf74edb900df3f91a5f98a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.IslandNatureProfile
+  islandCentre: {x: 660, y: 81}
+  meshLibrary: {fileID: 4900000, guid: 2f1d89bd66b214e4bbd75f13a6d608a2, type: 3}
+  natureMaterial: {fileID: 2100000, guid: 927bdde2ac2c64e1f97e6b697e65b620, type: 2}
+--- !u!4 &1026905575
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1026905573}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1001 &1185681785
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2002,6 +2049,18 @@ MonoBehaviour:
   cruiseDelay: 6
   cruiseInRate: 0.35
   cruiseOutRate: 1.4
+  portraitDistance: 24
+  portraitHeight: 12
+  portraitLookAhead: 6
+  portraitFov: 68
+  portraitBlendRate: 2
+  portraitZoomOut: 0.3
+  portraitStoppedPull: 0.85
+  portraitPullInRate: 0.33
+  userZoomMin: 0.6
+  userZoomMax: 1.6
+  userZoomDecay: 20
+  wheelZoomStep: 0.08
   heaveFollow: 1.5
   heaveShare: 1
   stormDrop: 4.8
@@ -2400,10 +2459,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 082596c3d27b5486aba50f7fb8f0ce16, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.HelmInput
-  steerZoneHeight: 0.45
-  engageSpeed: 3.5
-  recenterSpeed: 1.2
+  steerKp: 0.04
+  steerKd: 0.02
+  rudderEaseSpeed: 3.5
   testRudder: 0
+  burnEngageFrac: 1.1
+  asternSpeedThreshold: 1.5
+  asternAngleThreshold: 135
+  stopDetent: 0.15
 --- !u!114 &2143489879
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2443,6 +2506,7 @@ MonoBehaviour:
   rollLimit: 20
   limitSpring: 6
   turnHeel: 8
+  overdrive: 1.35
   rowSpeed: 2.5455842
   headSeaPenalty: 0.45
   sailTrimRate: 0.55
@@ -2501,6 +2565,10 @@ MonoBehaviour:
   sprayFullRate: 55
   wakeFullRate: 30
   shoulderRate: 75
+  bowSpeedShare: 0.3
+  bowTurnShare: 0.1
+  outsideShoulderShare: 0.55
+  shoulderTurnGate: 0.25
   beamImpactThreshold: 1.5
   beamImpactCooldown: 0.45
   seaThresholdScale: 3.5
@@ -2952,3 +3020,4 @@ SceneRoots:
   - {fileID: 1251020371}
   - {fileID: 1230492702}
   - {fileID: 645928703}
+  - {fileID: 1026905575}

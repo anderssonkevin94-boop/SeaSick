@@ -1,0 +1,6 @@
+RUNNING
+PASS: terrain step 2: 7561 actual mesh contacts, largest gap -0.0430 m; 18 independent collider rays, max height error 0.000000 m.
+PASS: terrain step 4: 7561 actual mesh contacts, largest gap -0.0431 m; 18 independent collider rays, max height error 0.000000 m.
+PASS: terrain step 1: 7561 actual mesh contacts, largest gap -0.0431 m; 18 independent collider rays, max height error 0.000000 m.
+PASS: felling/regrowth across terrain LOD changes.
+PASS: all checks completed.

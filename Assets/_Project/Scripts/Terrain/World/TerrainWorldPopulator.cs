@@ -455,6 +455,7 @@ namespace SeaSick.Terrain
                 prop.transform.position = p;
                 prop.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
                 prop.transform.localScale *= Random.Range(0.85f, 1.3f);
+                IslandNatureProfile.For(island.transform.position)?.DressResource(prop,kind,i);
                 var node = prop.AddComponent<ResourceNode>();
                 node.Configure(kind, island, kind == "Stone" || kind == "Ore" ? 4 : 3);
                 list.Add(prop);

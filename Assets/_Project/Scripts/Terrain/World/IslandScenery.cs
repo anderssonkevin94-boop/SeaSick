@@ -142,6 +142,7 @@ namespace SeaSick.Terrain
             public Vector3 min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
             public Vector3 max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
             public int index;
+            public List<NatureGrounding.Anchor> grounding;
 
             public void Grow(Vector3 p, float r, float h)
             {
@@ -173,6 +174,8 @@ namespace SeaSick.Terrain
             var rng = new System.Random(seed);
             bool kit = SceneryKit.Available;
             bool individualTrees = terrain != null && terrain.individualTrees;
+            var nature = IslandNatureProfile.For(centre);
+            SceneryKit.Template Template(string id) => nature != null ? nature.Resolve(id) : SceneryKit.Get(id);
             var index = new List<SceneryWood.Tree>();
             // Every wheat mat, for `SceneryCrops`: a bed is one unit of Food.
             var cropIndex = new List<SceneryCrops.Bed>();
@@ -192,6 +195,7 @@ namespace SeaSick.Terrain
                 if (!cellMap.TryGetValue(key, out var cb))
                 {
                     cb = new CellBuild { index = cellList.Count };
+                    if(nature!=null)cb.grounding=new List<NatureGrounding.Anchor>();
                     cellMap[key] = cb;
                     cellList.Add(cb);
                 }
@@ -498,11 +502,11 @@ namespace SeaSick.Terrain
             // little under the truth.
             float keep = Mathf.Clamp01(MaxTrees * 0.95f / Mathf.Max(1f, cells * accept));
 
-            var spruce0 = SceneryKit.Get("Spruce"); var spruce1 = SceneryKit.Get("Spruce_LOD1");
-            var broad0 = SceneryKit.Get("Broad"); var broad1 = SceneryKit.Get("Broad_LOD1");
-            var palm0 = SceneryKit.Get("Palm"); var palm1 = SceneryKit.Get("Palm_LOD1");
-            var boulders = new[] { SceneryKit.Get("Boulder_0"), SceneryKit.Get("Boulder_1"), SceneryKit.Get("Boulder_2"), SceneryKit.Get("Boulder_3") };
-            var cliffTp = new[] { SceneryKit.Get("Cliff_0"), SceneryKit.Get("Cliff_1"), SceneryKit.Get("Cliff_2") };
+            var spruce0 = Template("Spruce"); var spruce1 = Template("Spruce_LOD1");
+            var broad0 = Template("Broad"); var broad1 = Template("Broad_LOD1");
+            var palm0 = Template("Palm"); var palm1 = Template("Palm_LOD1");
+            var boulders = new[] { Template("Boulder_0"), Template("Boulder_1"), Template("Boulder_2"), Template("Boulder_3") };
+            var cliffTp = new[] { Template("Cliff_0"), Template("Cliff_1"), Template("Cliff_2") };
             if (kit && (spruce0 == null || broad0 == null || palm0 == null || boulders[0] == null || cliffTp[0] == null))
             {
                 Debug.LogWarning("IslandScenery: kit is incomplete -- falling back to cones");
@@ -513,8 +517,8 @@ namespace SeaSick.Terrain
             // rather than to a null reference in the middle of a bake.
             var crop0 = new[] { SceneryKit.Get("Crop_0"), SceneryKit.Get("Crop_1"), SceneryKit.Get("Crop_2") };
             var crop1 = new[] { SceneryKit.Get("Crop_0_LOD1"), SceneryKit.Get("Crop_1_LOD1"), SceneryKit.Get("Crop_2_LOD1") };
-            var scrub0 = new[] { SceneryKit.Get("Scrub_0"), SceneryKit.Get("Scrub_1"), SceneryKit.Get("Scrub_2") };
-            var scrub1 = new[] { SceneryKit.Get("Scrub_0_LOD1"), SceneryKit.Get("Scrub_1_LOD1"), SceneryKit.Get("Scrub_2_LOD1") };
+            var scrub0 = new[] { Template("Scrub_0"), Template("Scrub_1"), Template("Scrub_2") };
+            var scrub1 = new[] { Template("Scrub_0_LOD1"), Template("Scrub_1_LOD1"), Template("Scrub_2_LOD1") };
             bool hasCrop = kit, hasScrub = kit;
             for (int i = 0; i < 3; i++)
             {
@@ -670,7 +674,13 @@ namespace SeaSick.Terrain
                             float factor = 1f;
                             if (species == 2) { tp0 = palm0; tp1 = palm1; factor = 0.72f; }
                             else if (species == 1) { tp0 = broad0; tp1 = broad1; factor = 0.82f; }
-                            if (individualTrees && species != 2)
+                            if (nature != null)
+                            {
+                                tp0=nature.Tree(at,rVariant,sp.cover,slope);
+                                tp1=nature.Tree(at,rVariant,sp.cover,slope,true);
+                                factor=tp0.name.Contains("Young") ? .50f : Mathf.Lerp(.72f,1.03f,sp.cover);
+                            }
+                            else if (individualTrees && species != 2)
                             {
                                 bool broad = Mathf.PerlinNoise(wx * .025f + 12f, wz * .025f) > .38f;
                                 string id = broad ? (rVariant < .18f ? "Broad_Young" : rVariant < .48f ? "Broad" : rVariant < .72f ? "Broad_B" : "Broad_C") : (rVariant < .2f ? "Spruce_Young" : rVariant < .65f ? "Spruce" : "Spruce_B");
@@ -688,9 +698,9 @@ namespace SeaSick.Terrain
                             float target = Mathf.Lerp(TreeMinH, TreeMaxH, Mathf.Pow(rHeight, HeightBias)) * factor;
                             float s = target / Mathf.Max(1f, tp0.height);
                             float yaw = individualTrees ? rYaw * Mathf.PI * 2f : Wind + (rYaw - 0.5f) * 0.7f;
-                            float width = individualTrees ? Mathf.Lerp(.78f, 1.18f, rRockC) : 1f;
+                            float width = nature!=null ? Mathf.Lerp(.82f,1.26f,sp.cover) : individualTrees ? Mathf.Lerp(.78f, 1.18f, rRockC) : 1f;
                             var sc = new Vector3(s * width, s, s * width);
-                            if (individualTrees)
+                            if (individualTrees && nature == null)
                                 individuals.Add((tp0.name, at, yaw, sc));
                             else StampBoth(cb, tp0, tp1, at, yaw, sc, sc);
                             cb.Grow(at, tp0.radius * s, target);
@@ -708,7 +718,7 @@ namespace SeaSick.Terrain
                     }
                     // Counted whether or not it was placed, so the budget and
                     // the loop's exit are the same with a clearing as without.
-                    if (individualTrees && place)
+                    if (individualTrees && place && nature==null)
                     {
                         // Groundcover clusters share a habitat but never a fixed offset.
                         // Kevin, 2026-09-22: was 2-6 (avg ~4), too thick around
@@ -724,12 +734,13 @@ namespace SeaSick.Terrain
                             if (uy < sandTop || Mathf.Abs(uy - h) > .8f || (keepOut != null && keepOut(ux, uz))) continue;
                             string id = u == 0 ? (rRockB < .16f ? "Sticks" : "Scrub_" + Mathf.Min(2,(int)(rRockB*3f)))
                                 : rScrubA < .35f ? (u % 2 == 0 ? "Fern" : "Fern_B") : (u % 2 == 0 ? "Grass" : "Grass_B");
-                            var under = SceneryKit.Get(id);
+                            var under = Template(id);
                             if (under == null) continue;
                             var cb = CellFor(ux, uz);
                             int gv0 = cb.v0.Count, gv1 = cb.v1.Count;
-                            var low = SceneryKit.Get(id + "_LOD1") ?? under;
+                            var low = nature != null ? null : Template(id + "_LOD1") ?? under;
                             var scale = Vector3.one * Mathf.Lerp(WorldScale.GroundcoverScaleMin, WorldScale.GroundcoverScaleMax, rScrubA);
+                            if (nature != null) scale = Vector3.one * Mathf.Lerp(.9f,1.4f,rScrubA);
                             var pos = new Vector3(ux,uy-.035f,uz);
                             StampBoth(cb,under,low,pos,angle,scale,scale);
                             cb.Grow(pos,3f,3f);bushes++;
@@ -745,7 +756,7 @@ namespace SeaSick.Terrain
                 }
             }
 
-            if (individualTrees)
+            if (individualTrees && nature==null)
             {
                 // Kevin, 2026-09-22: step was 4.5 m; sample count scales as
                 // 1/step^2, so *sqrt(2) (WorldScale.ShoreGroundcoverStep)
@@ -761,11 +772,12 @@ namespace SeaSick.Terrain
                     if (Mathf.Abs(height(x+1,z)-y) > .45f || Mathf.Abs(height(x,z+1)-y) > .45f) continue;
                     string id = y < 3.5f ? "Driftwood" : y < 4.3f ? "Grass_Dry" : patch > .7f ? "Scrub_1" : "Grass";
                     if (id == "Driftwood" && patch < .7f) continue;
-                    var under=SceneryKit.Get(id);if(under==null)continue;
+                    var under=Template(id);if(under==null)continue;
                     var cb=CellFor(x,z);var pos=new Vector3(x,y-.03f,z);
                     int pv0 = cb.v0.Count, pv1 = cb.v1.Count;
                     var scale=Vector3.one*Mathf.Lerp(WorldScale.ShoreGroundcoverScaleMin, WorldScale.ShoreGroundcoverScaleMax, patch);
-                    StampBoth(cb,under,SceneryKit.Get(id+"_LOD1")??under,pos,x+z,scale,scale);cb.Grow(pos,3f,3f);bushes++;
+                    if(nature!=null)scale=Vector3.one*Mathf.Lerp(.85f,1.35f,patch);
+                    StampBoth(cb,under,nature!=null ? null : Template(id+"_LOD1")??under,pos,x+z,scale,scale);cb.Grow(pos,3f,3f);bushes++;
                     groundIndex.Add(new SceneryGround.Patch
                     {
                         baseAt = pos, cell = cb.index,
@@ -999,6 +1011,21 @@ namespace SeaSick.Terrain
                 }
             }
 
+            if (nature != null)
+            {
+                foreach (var accent in nature.Accents(centre,maxR,height,radiusAt,index))
+                {
+                    var pos=accent.position;
+                    if(keepOut!=null && keepOut(pos.x,pos.z)) continue;
+                    var tp=nature.Get(accent.name); if(tp==null) continue;
+                    var cb=CellFor(pos.x,pos.z); int start=cb.v0.Count;
+                    StampBoth(cb,tp,null,pos,accent.yaw,Vector3.one*accent.scale,Vector3.one);
+                    cb.Grow(pos,tp.radius*accent.scale,tp.height*accent.scale);
+                    groundIndex.Add(new SceneryGround.Patch {baseAt=pos,cell=cb.index,vertStart=start,vertCount=cb.v0.Count-start});
+                }
+                nature.PaintGround(isle,index,height);
+            }
+
             int tri0 = 0, tri1 = 0;
             foreach (var cb in cellList) { tri0 += cb.t0.Count / 3; tri1 += cb.t1.Count / 3; }
             float ha = Mathf.Max(0.01f, Mathf.PI * meanR * meanR / 10000f);
@@ -1040,10 +1067,12 @@ namespace SeaSick.Terrain
                     cgo.transform.SetParent(go.transform, false);
                     cell.lod0 = MakeMesh(cb.v0, cb.n0, cb.c0, cb.t0, "SceneryLOD0");
                     cell.r0 = Attach(cgo.transform, "LOD0", cell.lod0);
+                    if(nature!=null) cell.r0.sharedMaterial=nature.Material;
                     if (cb.v1.Count > 0)
                     {
                         cell.lod1 = MakeMesh(cb.v1, cb.n1, cb.c1, cb.t1, "SceneryLOD1");
                         cell.r1 = Attach(cgo.transform, "LOD1", cell.lod1);
+                        if(nature!=null) cell.r1.sharedMaterial=nature.Material;
                         cell.r1.enabled = false;
                     }
                     cell.centre = (cb.min + cb.max) * 0.5f;
@@ -1076,6 +1105,12 @@ namespace SeaSick.Terrain
             if (groundIndex.Count > 0)
                 go.AddComponent<SceneryGround>().Configure(wcells, groundIndex);
             go.AddComponent<SceneryLod>().Configure(wcells, terrain);
+            if(nature!=null)
+            {
+                var contacts=new List<NatureGrounding.Anchor>();
+                foreach(var cb in cellList)if(cb.grounding!=null)contacts.AddRange(cb.grounding);
+                go.AddComponent<NatureGrounding>().Configure(wcells,contacts);
+            }
             return go;
         }
 
@@ -1160,15 +1195,26 @@ namespace SeaSick.Terrain
         static void StampBoth(CellBuild cb, SceneryKit.Template tp0, SceneryKit.Template tp1,
             Vector3 at, float yaw, Vector3 s0, Vector3 s1)
         {
+            int start0=cb.v0.Count,start1=cb.v1.Count;
             SceneryKit.Stamp(tp0, cb.v0, cb.n0, cb.c0, cb.t0, at, yaw, s0);
             if (tp1 != null) SceneryKit.Stamp(tp1, cb.v1, cb.n1, cb.c1, cb.t1, at, yaw, s1);
+            RecordFeet(cb,start0,start1);
         }
 
         static void StampBoth(CellBuild cb, SceneryKit.Template tp0, SceneryKit.Template tp1,
             Vector3 at, Quaternion rot, Vector3 s)
         {
+            int start0=cb.v0.Count,start1=cb.v1.Count;
             SceneryKit.Stamp(tp0, cb.v0, cb.n0, cb.c0, cb.t0, at, rot, s);
             if (tp1 != null) SceneryKit.Stamp(tp1, cb.v1, cb.n1, cb.c1, cb.t1, at, rot, s);
+            RecordFeet(cb,start0,start1);
+        }
+
+        static void RecordFeet(CellBuild cb,int start0,int start1)
+        {
+            if(cb.grounding==null || cb.v0.Count==start0)return;
+            cb.grounding.Add(new NatureGrounding.Anchor {cell=cb.index,start0=start0,count0=cb.v0.Count-start0,
+                start1=start1,count1=cb.v1.Count-start1,feet=NatureGrounding.Feet(cb.v0,start0,cb.v0.Count-start0),referenceY=cb.v0[start0].y});
         }
 
         static Mesh MakeMesh(List<Vector3> v, List<Vector3> n, List<Color32> c, List<int> t, string name)

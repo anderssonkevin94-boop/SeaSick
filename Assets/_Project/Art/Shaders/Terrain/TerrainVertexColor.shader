@@ -34,6 +34,7 @@ Shader "SeaSick/Terrain Vertex Color"
         _GraphicLight ("Graphic — soft sculpted lighting", Range(0,1)) = 0
         _ShadowTint ("Graphic — shadow colour", Color) = (0.56,0.67,0.88,1)
         _AuthoredFormLighting ("Authored form lighting", Range(0,1)) = 0
+        _ShadowReceiverOffset ("Nature shadow receiver offset (m)", Range(0,.3)) = 0
     }
     SubShader
     {
@@ -66,7 +67,13 @@ Shader "SeaSick/Terrain Vertex Color"
                 float _GraphicLight;
                 float4 _ShadowTint;
                 float _AuthoredFormLighting;
+                float _ShadowReceiverOffset;
             CBUFFER_END
+
+            TEXTURE2D(_IslandNatureGround);
+            SAMPLER(sampler_IslandNatureGround);
+            float4 _IslandNatureBounds;
+            float _IslandNatureEnabled;
 
             // --- procedural value noise -------------------------------------
             float hash13(float3 p)
@@ -205,6 +212,22 @@ Shader "SeaSick/Terrain Vertex Color"
                     albedo = lerp(albedo,painted,study);
                 }
 
+                // Optional island-local ground palette. No geometry, roads or building masks.
+                if (_IslandNatureEnabled > .5 && _CrispTerrain > .5)
+                {
+                    float2 uv = (i.positionWS.xz-_IslandNatureBounds.xy)*_IslandNatureBounds.w+.5;
+                    float inside = step(0,uv.x)*step(0,uv.y)*step(uv.x,1)*step(uv.y,1);
+                    float4 nature = SAMPLE_TEXTURE2D(_IslandNatureGround,sampler_IslandNatureGround,uv);
+                    float land = smoothstep(_SandLine-.2,_SandLine+1.1,i.positionWS.y);
+                    float rock = smoothstep(.35,.65,i.color.a);
+                    float exposed = smoothstep(.35,.65,vnoise(float3(i.positionWS.x,0,i.positionWS.z)*.09));
+                    float soilOnShelf = smoothstep(.65,.92,n.y)*(1-exposed)*.88;
+                    rock *= 1-soilOnShelf;
+                    float weight = inside*nature.a;
+                    albedo = lerp(albedo,nature.rgb,weight*land*(1-rock));
+                    albedo = lerp(albedo,float3(.255,.262,.245),weight*rock*.65);
+                }
+
                 // Fade the whole detail layer out with distance. Without this
                 // it turns into per-pixel noise on the horizon -- shimmer that
                 // reads as a rendering fault and eats the silhouette.
@@ -242,7 +265,7 @@ Shader "SeaSick/Terrain Vertex Color"
                     albedo *= 1.0 + (c - 0.5) * 2.0 * _DetailStrength * fade * rocky;
                 }
 
-                float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
+                float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS+n*_ShadowReceiverOffset);
                 Light light = GetMainLight(shadowCoord);
                 float ndl = saturate(dot(n, light.direction));
                 float3 diffuse = light.color * light.shadowAttenuation * ndl;
