@@ -44,6 +44,11 @@ namespace SeaSick.Ship.Modular
         /// Per hull section of the draft: occupancy, `canRemove`, `reason`
         /// (bind the UI's `removalBlocker` here).
         public readonly List<SectionOccupancy> sections = new List<SectionOccupancy>();
+        /// Per module id the dry dock holds or would hold after this draft
+        /// were applied from the live ship (2026-09-25). Filled by
+        /// `ShipyardService.Report`, which has the dock; empty from `From`
+        /// alone. Same numbers as `ShipyardService.DryDockPreview(draft)`.
+        public readonly List<DryDockRow> dryDock = new List<DryDockRow>();
 
         public SectionOccupancy Section(string key)
         {
@@ -130,7 +135,7 @@ namespace SeaSick.Ship.Modular
                 "Authored gun slots with clearance, clear of the crew passages (provisional). Guns cannot be fitted by hand in the prototype; the hull's own guns stand in them.");
             Add("deckSlots", "Deck slots (reserved)", "", p => p.capacity.equipmentSlots, true);
             Add("guns", "Guns carried", "", p => p.capacity.guns, true,
-                "The hull's gun pairs that have a slot pair in their section and berths for their crew (1 hand per gun). More slots do not add guns.");
+                "Every equipment.deck-gun fitted on a deck-gun slot (2026-09-25: explicit equipment, not the hull form). Fitting/removing them goes through FitEquipment/RemoveEquipment and the dry dock.");
             if (proposed != null && current != null && proposed.capacity.holdCells < current.capacity.holdCells)
                 r.warnings.Add(new ShipyardNote { code = "HOLD_SMALLER", message = $"The hold shrinks from {current.capacity.holdCells} to {proposed.capacity.holdCells}." });
             if (proposed != null && current != null && proposed.capacity.crewStations < current.capacity.crewStations)

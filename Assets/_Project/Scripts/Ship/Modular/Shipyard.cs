@@ -41,6 +41,16 @@ namespace SeaSick.Ship.Modular
         /// lightship sum + load) would float outside its keel..deck range.
         /// Never clamped.
         public const string SimOutOfRange = "SIM_OUT_OF_RANGE";
+        /// Fitted guns need more hands at the guns than the draft has berths
+        /// for (2026-09-25: guns are explicit equipment; nothing strikes them
+        /// automatically any more -- see EquipmentWouldBeLost).
+        public const string GunsNeedCrew = "GUNS_NEED_CREW";
+        /// ApplyRefit would need to take a module from the dry dock that is
+        /// not there (fewer in stock than the draft asks for).
+        public const string NotInDryDock = "NOT_IN_DRY_DOCK";
+        /// ApplyRefit would add to or take from the dry dock, but she is not
+        /// at her home berth (AnchorController.AtHomeDock).
+        public const string DryDockNotHere = "DRY_DOCK_NOT_HERE";
     }
 
     /// What the prototype shipyard offers (D5): W1-r2 V3 stern and bow,
@@ -55,10 +65,12 @@ namespace SeaSick.Ship.Modular
         static readonly string[] Rotors = { ShipConfiguration.TimberRotor, ShipConfiguration.ReinforcedRotor };
         static readonly string[] Carriers = { ShipConfiguration.M1Carrier };
         static readonly string[] Fittings = { ShipConfiguration.V3Chimney };
+        static readonly string[] Equipment = { ShipConfiguration.EquipmentCannon };
         static readonly string[] None = new string[0];
 
         /// The module ids the UI may offer for one kind (ModuleKind.*).
-        /// UpperDeck and Equipment are empty in the prototype.
+        /// UpperDeck is still empty in the prototype; Equipment offers the
+        /// one deck cannon (2026-09-25).
         public static IReadOnlyList<string> AllowedModuleIds(string kind)
         {
             switch (kind)
@@ -69,6 +81,7 @@ namespace SeaSick.Ship.Modular
                 case ModuleKind.Rotor: return Rotors;
                 case ModuleKind.Carrier: return Carriers;
                 case ModuleKind.Fitting: return Fittings;
+                case ModuleKind.Equipment: return Equipment;
                 default: return None;
             }
         }
@@ -98,8 +111,11 @@ namespace SeaSick.Ship.Modular
                 if (Array.IndexOf(Fittings, f.moduleId) < 0 || f.socketId != ShipConfiguration.ChimneySocket)
                     r.Add(Reject(f.socketId, $"Only the chimney, on the stern's chimney socket, can be fitted in the prototype shipyard ('{f.moduleId}' on '{f.socketId}')."));
             }
+            // Equipment (2026-09-25): the one deck cannon is offered; the
+            // module rules (slot class, clearance, passages, overlap) and the
+            // retention/crew checks below do the rest.
             foreach (var e in cfg.equipment ?? new List<EquipmentChoice>())
-                if (e != null) r.Add(Reject(e.slotId, "Deck equipment cannot be fitted in the prototype shipyard yet."));
+                Only(r, lib, e?.slotId ?? "", e?.moduleId, Equipment);
             return r;
         }
 
@@ -230,6 +246,25 @@ namespace SeaSick.Ship.Modular
         public Vector3 position;
     }
 
+    /// One gun standing on the assembled hull (2026-09-25). Derived from the
+    /// assembly's placed Equipment modules -- never from the hull form any
+    /// more; the slot is where she stands. Ship frame (the plan's viewOffset
+    /// already folded into positionM.z).
+    [Serializable]
+    public class FittedGun
+    {
+        /// Qualified equipment slot, e.g. "middle[0]/DeckSlot_1_1".
+        public string slotId;
+        public string moduleId;
+        public Vector3 positionM;
+        /// "port" or "starboard" (game +X = starboard).
+        public string side;
+        /// This one gun's provisional weight and crew (EquipmentSpec.massKg
+        /// / .crew, falling back to WeightModel defaults when unauthored).
+        public float massKg;
+        public int crew;
+    }
+
     /// What things weigh (A2). The service fills it from the game's existing
     /// mass accounting (`ShipLoad.CargoUnitKg`, `ShipLoad.CrewKg`); the gun
     /// weight is the lightest calibre in `ShipLoad` (a swivel) because the
@@ -286,10 +321,15 @@ namespace SeaSick.Ship.Modular
         /// Hull sections without a capacity block / without lightship data
         /// (null = none missing). Blocking (NO_CAPACITY / NO_MASS_DATA).
         public string capacityMissing, massMissing;
-        /// Which of the REFERENCE hull form's gun sockets she carries, aligned
-        /// with `data.gunSockets` (null = all, in order). A socket she does
-        /// not carry has no usable slot pair in its section (or no berths).
-        public int[] gunIdx;
+        /// Every gun standing on this hull (2026-09-25: explicit equipment,
+        /// not hull-form sockets). `data.gunSockets` is set from the
+        /// starboard-side entries here, in ship frame, so CannonBattery.Fit
+        /// (which mirrors starboard to port) draws and works them unchanged.
+        public List<FittedGun> fittedGuns = new List<FittedGun>();
+        /// Sum of the fitted guns' own provisional weight/crew (the weight
+        /// model's per-item numbers, not a flat count x constant any more).
+        public float gunsWeightKg;
+        public int gunsCrewNeeded;
         public DeckLoadPlan deckLoad;
         /// Upright hydrostatics of the ASSEMBLED hull, from Astra's per-module
         /// station tables (H2). The report's displacement and draft come from
@@ -306,9 +346,10 @@ namespace SeaSick.Ship.Modular
         public float loadLineMarginU, loadDisplacementKg;
 
         /// Cargo weight she can take with `crew` aboard, kg (A2): displacement
-        /// at the load line - lightship - crew - guns.
+        /// at the load line - lightship - crew - the fitted guns' own weight
+        /// (their module mass, summed; replaces the old flat guns x gunKg).
         public float WeightAllowanceKg(int crew, WeightModel w) =>
-            loadDisplacementKg - lightshipKg - crew * w.crewKg - capacity.guns * w.gunKg;
+            loadDisplacementKg - lightshipKg - crew * w.crewKg - gunsWeightKg;
     }
 
     /// One hull section of a draft: what is in it and whether it can go.
@@ -359,10 +400,6 @@ namespace SeaSick.Ship.Modular
         /// The same masses floated on the SAILING MODEL's hull form (static
         /// strip-sum solve; see ShipyardPlanner.SimStaticDraft).
         public float simDraftCurrentM = float.NaN, simDraftDraftM = float.NaN;
-        /// Gun pairs the live ship carries that the draft has no slot (or no
-        /// berths) for. NOT blocking: guns come with the hull's slots (like
-        /// the hold with its cells); refitting back brings them back.
-        public List<PositionedItem> gunsStruck = new List<PositionedItem>();
         /// Per hull section of the DRAFT: what occupies it and whether that
         /// section may be taken out (A-UI `removalBlocker`).
         public List<SectionOccupancy> sections = new List<SectionOccupancy>();
@@ -466,7 +503,15 @@ namespace SeaSick.Ship.Modular
             var draftPlan = PlanFor(draft, lib, reference, refPlan, w, out var asm);
             v.assembly = asm;
             v.issues.AddRange(ShipyardPolicy.Check(draft, lib));
-            if (asm != null) v.issues.AddRange(asm.rejections);
+            // A hull change whose draft still lists a gun on a slot that no
+            // longer exists fails assembly with the generic
+            // EQUIPMENT_SLOT_UNKNOWN; translate that one case to the
+            // friendlier, dry-dock-flavoured EQUIPMENT_WOULD_BE_LOST (D5/D6
+            // "never discard, readable refusal") so the player is told to
+            // take the gun off first rather than shown a raw slot-id error.
+            if (asm != null)
+                foreach (var rj in asm.rejections)
+                    v.issues.Add(TranslateVanishedGunSlot(rj, draft, lib) ?? rj);
             if (asm != null && asm.ok)
             {
                 v.overallLengthM = asm.overallLengthM;
@@ -508,18 +553,20 @@ namespace SeaSick.Ship.Modular
             if (draftPlan != null && live != null)
             {
                 CheckRetention(v.issues, live, curPlan, draftPlan);
-                v.gunsStruck = GunsStruck(curPlan, draftPlan);
-                // **Refused, not struck** (Kevin + Astra, 2026-09-24: "Reject
+                // **Refused, not struck** (Kevin + Astra, 2026-09-24, kept
+                // 2026-09-25 now that guns are explicit equipment: "Reject
                 // changes that cannot safely retain existing equipment";
-                // "never silently discard anything"). A gun pair with no slot
-                // on the draft blocks the refit. Guns cannot be removed by
-                // hand in the prototype yet, so a hull with fewer slot pairs
-                // than she carries (Short: 2 of 3 pairs) stays refused until
-                // that exists or the rule changes.
-                foreach (var g in v.gunsStruck)
-                    v.issues.Add(new Rejection { code = ShipyardCodes.EquipmentWouldBeLost, partId = g.id,
-                        message = $"{g.label} would have no gun slot on this ship; the refit is refused rather than remove it." });
-                float total = live.totalHeld * w.cargoUnitKg + live.crewAboard * w.crewKg + draftPlan.capacity.guns * w.gunKg;
+                // "never silently discard anything"). A hull change whose
+                // draft still references a gun on a slot that no longer
+                // exists is EQUIPMENT_WOULD_BE_LOST (translated from the
+                // assembler's EQUIPMENT_SLOT_UNKNOWN, above); a gun the draft
+                // keeps but cannot crew is GUNS_NEED_CREW, below. Nothing
+                // strikes a gun silently any more -- see the dry dock (D5).
+                if (draftPlan.gunsCrewNeeded > draftPlan.capacity.crewStations)
+                    v.issues.Add(new Rejection { code = ShipyardCodes.GunsNeedCrew, partId = "guns",
+                        message = $"{draftPlan.capacity.guns} guns need {draftPlan.gunsCrewNeeded} hands at the guns and this ship has berths for {draftPlan.capacity.crewStations}. " +
+                                  $"Take {draftPlan.gunsCrewNeeded - draftPlan.capacity.crewStations} guns off to the dry dock first." });
+                float total = live.totalHeld * w.cargoUnitKg + live.crewAboard * w.crewKg + draftPlan.gunsWeightKg;
                 v.totalMassDraftKg = draftPlan.lightshipKg + total;
                 if (!draftPlan.hydro.Ok)
                     v.issues.Add(new Rejection { code = ShipyardCodes.NoHydrostatics, partId = "",
@@ -534,7 +581,7 @@ namespace SeaSick.Ship.Modular
                         message = $"At {v.totalMassDraftKg / 1000f:0.0} t her sailing model would float outside its keel-to-deck range. Lighten her first." });
                 if (curPlan != null && curPlan.hydro.Ok)
                 {
-                    v.totalMassCurrentKg = curPlan.lightshipKg + live.totalHeld * w.cargoUnitKg + live.crewAboard * w.crewKg + curPlan.capacity.guns * w.gunKg;
+                    v.totalMassCurrentKg = curPlan.lightshipKg + live.totalHeld * w.cargoUnitKg + live.crewAboard * w.crewKg + curPlan.gunsWeightKg;
                     TableDraft(curPlan, v.totalMassCurrentKg, out v.tableDraftCurrentM);
                     SimStaticDraft(curPlan.data, v.totalMassCurrentKg, out v.simDraftCurrentM);
                 }
@@ -546,6 +593,25 @@ namespace SeaSick.Ship.Modular
             v.draftPlan = draftPlan;
             v.currentPlan = curPlan;
             return v;
+        }
+
+        /// `rejection` is EQUIPMENT_SLOT_UNKNOWN and its partId names an
+        /// equipment slot the draft's OWN config still lists a deck-gun on ->
+        /// a friendlier EQUIPMENT_WOULD_BE_LOST (null = pass the rejection
+        /// through unchanged).
+        static Rejection TranslateVanishedGunSlot(Rejection rejection, ShipConfiguration draft, ModuleLibrary lib)
+        {
+            if (rejection == null || rejection.code != "EQUIPMENT_SLOT_UNKNOWN" || draft?.equipment == null) return null;
+            foreach (var e in draft.equipment)
+            {
+                if (e == null || e.slotId != rejection.partId) continue;
+                string name = e.moduleId;
+                if (lib != null && lib.TryGet(e.moduleId, out var d) && d.equipment?.equipmentClass == "equipment.deck-gun")
+                    name = ModuleLibrary.Name(d);
+                return new Rejection { code = ShipyardCodes.EquipmentWouldBeLost, partId = e.slotId,
+                    message = $"{name} at {e.slotId} would have no place on this ship (its slot is gone); take it off to the dry dock first." };
+            }
+            return null;
         }
 
         /// The plan for one configuration. `refPlan` null = this IS the
@@ -593,12 +659,27 @@ namespace SeaSick.Ship.Modular
             p.sections = SectionCapacities(asm, lib, p.viewOffset.z, out p.capacityMissing);
             int hold = 0, berths = 0, gunSlots = 0;
             foreach (var sc in p.sections) { hold += sc.holdCells; berths += sc.berths; gunSlots += sc.gunSlotIds.Count; }
-            p.gunIdx = FitGuns(p.data, p.sections, berths, out var kept);
-            if (kept != null) p.data.gunSockets = kept;   // the battery Man() fits (null = all, unchanged)
+
+            // Guns (2026-09-25): explicit equipment, not hull-form sockets.
+            // Every fitted equipment.deck-gun in the assembly is a gun,
+            // standing exactly where its slot put it; the assembler already
+            // refused anything that does not fit or overlaps a passage or
+            // another item, so nothing here re-validates placement.
+            p.fittedGuns = FittedGunsOf(asm, lib, p.viewOffset.z, w);
+            foreach (var g in p.fittedGuns) { p.gunsWeightKg += g.massKg; p.gunsCrewNeeded += g.crew; }
+            var star = new List<Vector3>();
+            foreach (var g in p.fittedGuns) if (g.side == "starboard") star.Add(g.positionM);
+            // CannonBattery.Fit takes the STARBOARD list and mirrors it to
+            // port unchanged -- the same call the untouched V8 ship makes
+            // (SteamerBootstrap.Man), now fed from the fitted slots instead
+            // of the hull form. A lone unmatched gun still draws (the
+            // ModularShipView art), but only pairs get a working battery gun
+            // this way; see docs/SHIPYARD-API.md for the open question.
+            p.data.gunSockets = star.ToArray();
             p.capacity = new ShipCapacity
             {
                 holdCells = hold, crewStations = berths, equipmentSlots = slots, gunSlots = gunSlots,
-                guns = 2 * (p.data.gunSockets?.Length ?? 0),
+                guns = p.fittedGuns.Count,
             };
 
             // Weight (A2/H2/H5), from the module station tables.
@@ -616,7 +697,7 @@ namespace SeaSick.Ship.Modular
             {
                 if (refPlan == null)
                 {
-                    float fullLoad = p.lightshipKg + ReferenceHoldCells * w.cargoUnitKg + ReferenceCrewStations * w.crewKg + p.capacity.guns * w.gunKg;
+                    float fullLoad = p.lightshipKg + ReferenceHoldCells * w.cargoUnitKg + ReferenceCrewStations * w.crewKg + p.gunsWeightKg;
                     p.loadLineMarginU = p.hydro.SolveWaterline(fullLoad, rho, out float zLoad, out _) ? p.hydro.DeckZU - zLoad : 0f;
                 }
                 else p.loadLineMarginU = refPlan.loadLineMarginU;
@@ -640,6 +721,33 @@ namespace SeaSick.Ship.Modular
                 else if (ModuleKind.IsHull(d.kind)) missing = missing == null ? ModuleLibrary.Name(d) : missing + ", " + ModuleLibrary.Name(d);
             }
             return kg;
+        }
+
+        /// Every fitted equipment.deck-gun in the assembly, ship frame
+        /// (`viewZ` = the plan's viewOffset.z). The assembler has already
+        /// validated placement (slot class, clearance, passage, overlap);
+        /// this just reads the result and each gun's own provisional
+        /// weight/crew, falling back to the weight model's defaults for a
+        /// module that does not author them.
+        public static List<FittedGun> FittedGunsOf(AssemblyResult asm, ModuleLibrary lib, float viewZ, WeightModel w)
+        {
+            var list = new List<FittedGun>();
+            if (asm == null) return list;
+            foreach (var pm in asm.placed)
+            {
+                if (pm.kind != ModuleKind.Equipment || !lib.TryGet(pm.moduleId, out var d) || d.equipment == null) continue;
+                if (d.equipment.equipmentClass != "equipment.deck-gun") continue;
+                list.Add(new FittedGun
+                {
+                    slotId = pm.instanceKey.StartsWith("equipment:") ? pm.instanceKey.Substring("equipment:".Length) : pm.instanceKey,
+                    moduleId = pm.moduleId,
+                    positionM = new Vector3(pm.positionM.x, pm.positionM.y, viewZ + pm.positionM.z),
+                    side = pm.positionM.x > 0f ? "starboard" : "port",
+                    massKg = d.equipment.massKg != null ? d.equipment.massKg.value : w.gunKg,
+                    crew = d.equipment.crew != null ? d.equipment.crew.value : WeightModel.CrewPerGun,
+                });
+            }
+            return list;
         }
 
         /// The installed hull sections, aft to fore, with their authored
@@ -724,47 +832,6 @@ namespace SeaSick.Ship.Modular
             return list;
         }
 
-        /// Which of the hull form's gun pairs she carries. Each pair belongs to
-        /// the section whose z span contains its (reshaped) socket; a section
-        /// takes as many pairs as it has usable slot pairs, nearest first;
-        /// then pairs beyond berths / (2 x CrewPerGun) are struck, aft-most
-        /// first. The guns stand where the hull form puts them (the slot is
-        /// the licence, not the position). Returns the kept indices, and
-        /// `kept` = the filtered socket array (null when all are kept, so the
-        /// reference stays field-for-field identical).
-        static int[] FitGuns(HullFormData data, List<SectionCapacity> sections, int berths, out Vector3[] kept)
-        {
-            kept = null;
-            var g = data.gunSockets;
-            int n = g?.Length ?? 0;
-            if (n == 0 || sections.Count == 0) return null;
-            var keep = new bool[n];
-            foreach (var sc in sections)
-            {
-                var cand = new List<(float d, int gun, int slot)>();
-                for (int i = 0; i < n; i++)
-                    if (g[i].z >= sc.aftZ && g[i].z < sc.fwdZ)
-                        for (int j = 0; j < sc.gunPairZs.Count; j++) cand.Add((Mathf.Abs(g[i].z - sc.gunPairZs[j]), i, j));
-                cand.Sort((a, b) => a.d.CompareTo(b.d));
-                var slotUsed = new bool[sc.gunPairZs.Count];
-                foreach (var (_, gun, slot) in cand)
-                    if (!keep[gun] && !slotUsed[slot]) { keep[gun] = true; slotUsed[slot] = true; }
-            }
-            int maxPairs = berths / (2 * WeightModel.CrewPerGun);
-            int count = 0;
-            for (int i = 0; i < n; i++) if (keep[i]) count++;
-            for (int i = n - 1; i >= 0 && count > maxPairs; i--) if (keep[i]) { keep[i] = false; count--; }
-            var idx = new List<int>();
-            for (int i = 0; i < n; i++) if (keep[i]) idx.Add(i);
-            if (idx.Count == n) return null;
-            kept = new Vector3[idx.Count];
-            for (int i = 0; i < idx.Count; i++) kept[i] = g[idx[i]];
-            return idx.ToArray();
-        }
-
-        /// Hull-form gun index of the k-th gun she carries.
-        public static int GunIndex(ShipyardPlan p, int k) => p.gunIdx != null && k < p.gunIdx.Length ? p.gunIdx[k] : k;
-
         /// The table waterline for a total mass: draft above the keel in m,
         /// false = above the deck limit (OVERLOADED) or no tables.
         public static bool TableDraft(ShipyardPlan p, float totalKg, out float draftM) =>
@@ -841,13 +908,12 @@ namespace SeaSick.Ship.Modular
             Share(list, cellShare, live.totalHeld, (o, n) => o.cargoCells = n);
             SectionOccupancy At(float z) { foreach (var o in list) if (z >= o.aftZ && z < o.fwdZ) return o; return list[list.Count - 1]; }
             foreach (var z in CrewStationZs(p.data, live.crewAboard)) At(z).crew++;
-            if (p.data.gunSockets != null)
-                for (int i = 0; i < p.data.gunSockets.Length; i++)
-                {
-                    var o = At(p.data.gunSockets[i].z);
-                    o.guns += 2;
-                    o.equipment.Add($"gun pair {GunIndex(p, i) + 1}");
-                }
+            foreach (var g in p.fittedGuns)
+            {
+                var o = At(g.positionM.z);
+                o.guns += 1;
+                o.equipment.Add($"gun, {g.side}");
+            }
             if (p.assembly.Find("fitting:" + ShipConfiguration.ChimneySocket) != null)
                 At(0.5f * (p.funnelAftZ + p.funnelFwdZ)).equipment.Add("funnel");
             for (int i = 0; i < live.kindsOnDeck; i++) At(p.deckLoad.Slot(i).z).equipment.Add($"deck load pile {i + 1}");
@@ -903,8 +969,12 @@ namespace SeaSick.Ship.Modular
         }
 
         /// Everything positioned on the CURRENT hull that has a valid place
-        /// there but would have none on the draft (D6). Guns (gun sockets),
-        /// the deck-load piles actually carried, and the funnel.
+        /// there but would have none on the draft (D6): the deck-load piles
+        /// actually carried, and the funnel. Guns are no longer diffed here
+        /// (2026-09-25): a gun the draft cannot keep a place for already
+        /// fails assembly (EQUIPMENT_SLOT_UNKNOWN, translated to
+        /// EQUIPMENT_WOULD_BE_LOST in Validate) or is refused GUNS_NEED_CREW;
+        /// nothing strikes a gun silently any more.
         public static List<PositionedItem> EquipmentLost(LiveShipSnapshot live, ShipyardPlan cur, ShipyardPlan draft)
         {
             var lost = new List<PositionedItem>();
@@ -913,19 +983,6 @@ namespace SeaSick.Ship.Modular
             if (live.hasChimney && !draftChimney)
                 lost.Add(new PositionedItem { id = "chimney", label = "The funnel" });
             if (cur == null) return lost;
-            // A gun pair the draft CARRIES must stand on her deck; one the
-            // draft does not carry (no slot pair / no berths) is struck, not
-            // lost -- see GunsStruck.
-            var cg = cur.data.gunSockets; var dg = draft.data.gunSockets;
-            int nGuns = cg?.Length ?? 0;
-            for (int i = 0; i < nGuns; i++)
-            {
-                if (!OnDeck(cur.data, cg[i], 0f)) continue;
-                int gi = GunIndex(cur, i), k = DraftSlotOf(draft, gi);
-                if (k < 0) continue;
-                if (!OnDeck(draft.data, dg[k], 0f))
-                    lost.Add(new PositionedItem { id = $"gun{gi}", label = $"Gun pair {gi + 1}", position = dg[k] });
-            }
             for (int s = 0; s < live.kindsOnDeck; s++)
             {
                 var a = cur.deckLoad.Slot(s);
@@ -935,29 +992,6 @@ namespace SeaSick.Ship.Modular
                     lost.Add(new PositionedItem { id = $"deckload{s}", label = $"Deck load pile {s + 1}", position = b });
             }
             return lost;
-        }
-
-        static int DraftSlotOf(ShipyardPlan draft, int gunIndex)
-        {
-            int n = draft.data.gunSockets?.Length ?? 0;
-            for (int k = 0; k < n; k++) if (GunIndex(draft, k) == gunIndex) return k;
-            return -1;
-        }
-
-        /// Gun pairs the current ship carries and the draft does not (its
-        /// section has no free usable slot pair, or berths run out). Each is
-        /// a REFUSAL (EQUIPMENT_WOULD_BE_LOST) -- see Validate.
-        public static List<PositionedItem> GunsStruck(ShipyardPlan cur, ShipyardPlan draft)
-        {
-            var struck = new List<PositionedItem>();
-            if (cur?.data?.gunSockets == null || draft == null) return struck;
-            for (int i = 0; i < cur.data.gunSockets.Length; i++)
-            {
-                int gi = GunIndex(cur, i);
-                if (DraftSlotOf(draft, gi) < 0)
-                    struck.Add(new PositionedItem { id = $"gun{gi}", label = $"Gun pair {gi + 1}", position = cur.data.gunSockets[i] });
-            }
-            return struck;
         }
 
         /// A point (ship frame) stands on the deck: inside the hull's length,
@@ -1008,6 +1042,10 @@ namespace SeaSick.Ship.Modular
                 warning = "the saved ship configuration could not be read; she comes back as the standard long steamer.";
                 return ShipConfiguration.Long();
             }
+            // A v1 document never carried equipment (guns were implicit); give
+            // it explicit guns before checking it against today's rules, so
+            // an existing refitted save loads with the same guns.
+            if (cfg.schemaVersion < ShipConfiguration.SupportedSchemaVersion) cfg = cfg.MigratedToV2();
             var why = new List<Rejection>(ShipyardPolicy.Check(cfg, lib));
             why.AddRange(ShipAssembler.Assemble(cfg, lib).rejections);
             if (why.Count > 0)
