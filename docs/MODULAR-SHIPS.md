@@ -119,7 +119,7 @@ Unknown fields are ignored (so data can gain fields ahead of code).
 | `lengthU` | Length along +X from the aft interface (hull sections). |
 | `boundsMinU`, `boundsMaxU`, `boundsNote` | Module-local AABB (placeholder boxes, extents). Measured from the FBX where meshes exist. |
 | `sockets[]` | `id`, `role`, `standard`, `posU` (module-local), `yawDeg`, `radiusLimit`, `placementRule`, `provisional`, `notes`. |
-| `visuals[]` | `id`, `resourcePath` (Resources path, no extension), `placeholder`, `notes`. **Purely visual.** |
+| `visuals[]` | `id`, `resourcePath` (Resources path, no extension), `placeholder`, `localPositionU`, `notes`. **Purely visual.** `localPositionU` (added 2026-09-25 for the W1x expanded-beam kit) is a module-local authoring offset this ONE part is instantiated at, on top of the module's own origin — zero (the default) for every single-piece visual authored so far; a MULTI-PART kit whose individual FBX pieces carry their own `manifest.json` `local_position` (e.g. the width-inserts family's split Port/Starboard/Insert/Core pieces) sets it per part instead. |
 | `rotor` | Rotors: `mount`, `nominalRadius`, `sweptRadius`, `paddleWidth`. |
 | `carrier` | Carriers: `mount`. |
 | `fitting` | Fittings / upper decks: `socketClass` (which socket standard it plugs into), `originNote`. |
@@ -383,7 +383,7 @@ integration with `ShipMotor`, `PaddleDrive`, `Shipyard`, `ShipLadder` or saves.
 
 ## 12. Running the checks
 
-* Headless (no Unity): `tools/modular-selftest.sh` → `ModularShipSelfTest: 104 PASS, 0 FAIL` (45 milestone-1 + 59 shipyard; 2026-09-25 guns-as-equipment gates).
+* Headless (no Unity): `tools/modular-selftest.sh` → `ModularShipSelfTest: 134 PASS, 0 FAIL` (2026-09-25: +30 `ExpandedHullValidation` gates for the W1x expanded-beam family, docs/EXPANDED-HULL-VALIDATION.md).
 * In an editor on this branch's project: `unity cmd eval --json --code 'return SeaSick.Ship.Modular.ModularShipSelfTest.Run();'`
   (also checks every `resourcePath` resolves through `Resources.Load` after import).
 * Batch preview (the branch's own project only, never the main open editor):
@@ -396,3 +396,40 @@ integration with `ShipMotor`, `PaddleDrive`, `Shipyard`, `ShipLadder` or saves.
 * Test scene: menu **SeaSick/Modular/Create Test Scene** (or `-executeMethod
   SeaSick.Ship.Modular.ModularShipTestSceneSetup.CreateTestScene`), open
   `Assets/_Project/Scenes/Tests/ModularShipTest.unity`, press Play. Not in build settings.
+
+## 13. Hull width families (2026-09-25)
+
+Two hull families are validated and offered: **W1-r2** (the original,
+deck beam 9.28) and **W1x** (`hull.*.w1x.v1`, deck beam 12.08, length and
+depth unchanged — the "expanded" / "W1-center-expansion-r1" family, full
+validation in docs/EXPANDED-HULL-VALIDATION.md). A ship may be built from
+either family's stern/middle/bow, never a mix — `ShipAssembler`'s existing
+per-socket join-profile check already refuses a direct W1-r2 ↔ W1x join
+(`JOIN_PROFILE_MISMATCH`, readable), with no new assembler or policy
+mechanism needed. W1x **supersedes** the earlier W2-r1 direction (branch
+`wide-hull`, deck beam 11.6, deeper keel −2.75, independently modelled
+cross-sections) as the width upgrade Kevin and Astra are taking forward;
+W2-r1 stays validated-but-unexposed (its `hull.transition.w1r2-w2r1.v1`
+placeholder and `W2`/`W2-placeholder` join profiles are dormant, not
+deleted, in case that branch is revisited).
+
+W1x's kit (`art-staging/modular-width-inserts-v1`) is **multi-part**: unlike
+W1-r2's one-FBX-per-visual kits, several of its parts are split
+Core/Port/Starboard/Insert pieces with their own `manifest.json`
+`local_position`, carried in the new `VisualPart.localPositionU` field
+(§3) and applied by `ModularShipView.Build` on top of the module's own
+placement. The wheel/carrier/chimney are **unchanged** and reused as-is
+(the kit's own words, verified independently — see the validation doc);
+only the hull shell/rails/ironwork/plank-seams meshes are new per family.
+
+**Raised decks — future contract (Astra, 2026-09-25).** Still
+`NOT_IN_PROTOTYPE` (open question 1 above) on every hull family, W1x
+included; `modular-width-raised-v1` and `modular-raised-middle-v1` were
+**not** imported by the W1x validation work (out of scope). For whenever
+raised decks are taken up, the rule Astra gave is: **reject raised ends
+placed directly adjacent with no middle bay between them**; **never
+combine the continuous raised-middle style with the older stair/drop-edge
+end variants** on the same ship; **raised ends separated by a LOW middle
+are a valid partial-deck option**, pending a traversal (stair/ramp) check
+between the levels. This is a design contract for the next raised-deck
+integration to implement against, not code that exists yet.

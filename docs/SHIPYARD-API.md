@@ -64,7 +64,7 @@ the adapter does goes through it.
 | `bool CanRefitNow(out string reason)` | Pure. See §5. |
 | `ShipyardApplyResult ApplyRefit(ShipConfiguration expected, ShipConfiguration draft)` | Atomic. See §4. |
 | `event Action<ShipConfiguration> Refitted` | After a successful apply, and after a save's configuration is applied on load (copy of the new one). |
-| `IReadOnlyList<string> AllowedModuleIds(string kind)` | For your pickers (`ModuleKind.*`). Stern/Middle/Bow: the V3 W1-r2 part; Rotor: timber, reinforced; Carrier: M1; Fitting: chimney; Equipment: the one deck cannon (2026-09-25, §15); UpperDeck: empty. |
+| `IReadOnlyList<string> AllowedModuleIds(string kind)` | For your pickers (`ModuleKind.*`). Stern/Middle/Bow: the V3 W1-r2 part **and** the W1x expanded-beam part (2026-09-25, §9) — pick one family per ship, never mix; Rotor: timber, reinforced; Carrier: M1; Fitting: chimney; Equipment: the one deck cannon (2026-09-25, §15); UpperDeck: empty. |
 | `ShipyardService.PersistPathOverride` | Probes only (redirects the persist step to a scratch file). |
 
 Pure C# (no scene): `ShipyardPlanner.Validate(draft, library, referenceHull, snapshot)`,
@@ -222,14 +222,23 @@ ShipyardSession.SetWorldInputBlocked(false);
 
 ## 9. Prototype scope
 
-Allowed: `hull.stern.w1r2.v3`, 0–3 × `hull.middle.w1r2.v3`, `hull.bow.w1r2.v3`,
-`wheel.rotor.m1.timber` / `wheel.rotor.m1.reinforced` on `wheel.carrier.m1`,
-`fitting.chimney.v3` on `stern/Chimney`, `equipment.cannon.astra.v1` on any
-deck-gun slot (2026-09-25). Excluded: raised decks, wider hulls (their
-definitions need validation), the oversized wheel, any other equipment,
-costs. Timber ↔ reinforced changes **only the rotor's drawing**: same radius,
-same physics, no bonus. **Meshes are never stretched** to make width/depth
-variants; only the PHYSICS data is reshaped, and only from authored module data (A9).
+Allowed: `hull.stern.w1r2.v3` **or** `hull.stern.w1x.v1`, 0–3 × the matching
+`hull.middle.w1r2.v3` / `hull.middle.w1x.v1`, `hull.bow.w1r2.v3` **or**
+`hull.bow.w1x.v1`, `wheel.rotor.m1.timber` / `wheel.rotor.m1.reinforced` on
+`wheel.carrier.m1`, `fitting.chimney.v3` on `stern/Chimney`,
+`equipment.cannon.astra.v1` on any deck-gun slot (2026-09-25). W1-r2 and W1x
+(the expanded-beam family, 2026-09-25, validated in
+docs/EXPANDED-HULL-VALIDATION.md — deck beam 12.08 vs 9.28, length/depth
+unchanged) may each build a complete ship, but **never mix**: their join
+profiles differ (`W1-r2` vs `W1x`), so `ShipAssembler`'s existing per-socket
+standard check refuses a direct join between them, readably
+(`JOIN_PROFILE_MISMATCH`) — no new policy code was needed for the one-width
+rule beyond the family allow-list itself. Excluded: raised decks, the
+still-unvalidated/superseded W2-r1 wide-and-deep family, the oversized
+wheel, any other equipment, costs. Timber ↔ reinforced changes **only the
+rotor's drawing**: same radius, same physics, no bonus. **Meshes are never
+stretched** to make width/depth variants; only the PHYSICS data is
+reshaped, and only from authored module data (A9).
 
 ## 10. How it works (and what is approximate)
 
