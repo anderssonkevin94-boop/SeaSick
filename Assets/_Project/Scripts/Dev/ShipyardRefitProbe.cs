@@ -25,6 +25,11 @@ using SeaSick.World;
 /// (b) refused refits (oversized, W2, raised deck, 4 bays, stale draft,
 ///     cargo that would not fit, crew that would not fit, under way) leave
 ///     her bit-identical in the same frame;
+/// (b2) equipment + dry dock (2026-09-25): live, at the home berth, remove
+///      the 2 middle guns (RemoveEquipment), shrink to Short (now valid --
+///      guns are explicit equipment, never struck), check the dock holds 2,
+///      grow back to Long-shaped without them, fit the 2 back from the dock
+///      (FitEquipment), check the battery carries 6 guns again;
 /// (c) save/load through a temp file: save, refit to Short, load -> the
 ///     saved configuration and hold; an old-format save (field removed) ->
 ///     the standard steamer;
@@ -36,9 +41,11 @@ using SeaSick.World;
 /// SeaSick.Steamer = 1). Play mode, Sea.unity, ~2.5 min. Never touches the
 /// player's save: refits persist to a temp file (PersistPathOverride) and
 /// the round trip uses temp files. Writes Logs/ShipyardRefitProbe.txt.
-// NOTE 2026-09-24: Short is refused (a gun pair without a slot), so the
-// shorter-than-today length cannot be sailed here; lengths trialled are
-// Long, 2 bays and 3 bays.
+// NOTE 2026-09-24, superseded 2026-09-25: Short used to be refused outright
+// (a gun pair without a slot, struck guns not yet supported); guns are now
+// explicit equipment with a dry dock to hold what does not fit, so Short
+// builds once her middle guns are taken off first (b2, below). Lengths
+// trialled at sea are still Long, 2 bays and 3 bays (unchanged scope).
 public class ShipyardRefitProbe : MonoBehaviour
 {
     public static void Execute()
@@ -126,15 +133,44 @@ public class ShipyardRefitProbe : MonoBehaviour
         Refuse("cargo-would-not-fit", ShipConfiguration.Short(), ShipyardCodes.CargoWouldNotFit);
         voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
 
-        // Short is refused outright while her 3 gun pairs cannot all have a
-        // slot (2 of 3; guns cannot be removed by hand yet) -- the agreed
-        // "never discard equipment" rule. Checked with 4 hands landed so the
-        // gun rule is what refuses her, not the berths.
-        var crew = Crew();
-        for (int i = crew.Count - 1; i >= 4; i--) { landed.Add(crew[i]); crew[i].gameObject.SetActive(false); }
-        Refuse("short-gun-pair-without-slot", ShipConfiguration.Short(), ShipyardCodes.EquipmentWouldBeLost);
-        foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
-        landed.Clear();
+        // (b2) Equipment + dry dock: take the 2 middle guns off, shrink to
+        // Short (now valid), check the dock, grow back without them, fit
+        // them back from the dock, check the battery.
+        var midStar = "middle[0]/DeckSlot_1_-1"; var midPort = "middle[0]/DeckSlot_1_1";
+        var eRemove1 = yard.RemoveEquipment(yard.Current, midStar);
+        Gate("equipment: remove middle starboard gun", eRemove1.ok, eRemove1.ok ? "removed" : eRemove1.message);
+        var eRemove2 = yard.RemoveEquipment(eRemove1.draft, midPort);
+        Gate("equipment: remove middle port gun", eRemove2.ok, eRemove2.ok ? "removed" : eRemove2.message);
+        var rNoMidGuns = yard.ApplyRefit(yard.Current, eRemove2.draft);
+        Gate("equipment: apply with the 2 middle guns off", rNoMidGuns.ok && yard.Current.equipment.Count == 4,
+            rNoMidGuns.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+
+        var rToShort = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
+        Gate("hull: shrink to Short now her guns are off", rToShort.ok && yard.Current.ValueEquals(ShipConfiguration.Short()),
+            rToShort.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+        Gate("dry dock: the 2 middle guns are stored", yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 2, yard.Dock.ToJson());
+
+        var toLongNoMid = ShipConfiguration.Long();
+        toLongNoMid.equipment.RemoveAll(x => x != null && x.slotId != null && x.slotId.StartsWith("middle["));
+        var rGrowBack = yard.ApplyRefit(yard.Current, toLongNoMid);
+        Gate("hull: grow back to Long, guns still in dock", rGrowBack.ok && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 2,
+            rGrowBack.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+
+        var eFit1 = yard.FitEquipment(yard.Current, midStar, ShipConfiguration.EquipmentCannon);
+        Gate("equipment: fit middle starboard gun back", eFit1.ok, eFit1.ok ? "fitted" : eFit1.message);
+        var eFit2 = yard.FitEquipment(eFit1.draft, midPort, ShipConfiguration.EquipmentCannon);
+        Gate("equipment: fit middle port gun back", eFit2.ok, eFit2.ok ? "fitted" : eFit2.message);
+        var rAllGunsBack = yard.ApplyRefit(yard.Current, eFit2.draft);
+        Gate("equipment: apply with all 6 guns back", rAllGunsBack.ok && yard.Current.ValueEquals(ShipConfiguration.Long())
+            && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 0, rAllGunsBack.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+        var batteryAfterDock = yard.GetComponent<CannonBattery>();
+        int gunsAfterDock = batteryAfterDock != null ? 2 * batteryAfterDock.GunsPerSide : 0;
+        Gate("battery: 6 guns positioned at their slots", gunsAfterDock == 6,
+            $"GunsPerSide {(batteryAfterDock != null ? batteryAfterDock.GunsPerSide : 0)} -> {gunsAfterDock} guns");
 
         string tmp = Application.temporaryCachePath;
         ShipyardService.PersistPathOverride = System.IO.Path.Combine(tmp, "ShipyardRefitProbe-persist.json");
