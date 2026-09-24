@@ -41,6 +41,11 @@ namespace SeaSick.UI.Sheets
             var g = new Label(string.IsNullOrEmpty(glyph) ? "" : glyph);
             g.AddToClassList("sheet-badge-glyph");
             disc.Add(g);
+            if (MidnightLandHud.Active)
+            {
+                disc.Clear(); disc.style.backgroundColor = Color.clear;
+                disc.Add(new LandIcon(title == "sawmill" ? "saw" : "build"));
+            }
             head.Add(disc);
 
             var words = new VisualElement();
@@ -55,6 +60,12 @@ namespace SeaSick.UI.Sheets
 
             var x = new Button(() => close?.Invoke()) { text = "✕" };
             x.AddToClassList(SheetTheme.Close);
+            if (MidnightLandHud.Active)
+            {
+                x.text = ""; x.tooltip = "Close";
+                x.style.alignItems = Align.Center; x.style.justifyContent = Justify.Center;
+                x.Add(new LandIcon("close"));
+            }
             head.Add(x);
             return head;
         }
@@ -150,6 +161,14 @@ namespace SeaSick.UI.Sheets
             nums.Add(b);
             var s = new Label(small ?? "");
             s.AddToClassList("sheet-store-small");
+            if (MidnightLandHud.Active)
+            {
+                nums.style.flexDirection = FlexDirection.Column;
+                nums.style.alignItems = Align.FlexStart;
+                s.style.whiteSpace = WhiteSpace.Normal;
+                s.style.marginLeft = 0;
+                s.style.fontSize = 10f;
+            }
             nums.Add(s);
             box.Add(nums);
 

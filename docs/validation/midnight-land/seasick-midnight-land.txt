@@ -1,0 +1,12 @@
+Panel (x:0.00, y:0.00, width:430.08, height:931.83); scale 0.1567336. Bounds are panel coordinates.
+button  (x:366.36, y:459.55, width:43.80, height:44.20)
+button overview (x:19.91, y:526.05, width:97.56, height:43.80)
+button work (x:117.47, y:526.05, width:97.56, height:43.80)
+button make (x:215.04, y:526.05, width:97.56, height:43.80)
+button upgrade (x:312.60, y:526.05, width:97.56, height:43.80)
+button post a sawyer (x:294.68, y:671.00, width:115.48, height:44.20)
+button  (x:23.10, y:864.93, width:90.00, height:53.76)
+button  (x:121.06, y:864.93, width:90.00, height:53.76)
+button  (x:219.02, y:864.93, width:90.00, height:53.76)
+button  (x:316.98, y:864.93, width:90.00, height:53.76)
+PASS visible button bounds and card/navigation separation

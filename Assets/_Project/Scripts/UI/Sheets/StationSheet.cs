@@ -74,6 +74,7 @@ namespace SeaSick.UI.Sheets
             hasWorker = BuildPlans.HasPosition(planId) && hasMake;
             isStore = planId == BuildPlans.Storage.id;
             ResolveRaisedIndex();
+            if (MidnightOverview) tab = 0;
         }
 
         void ResolveRaisedIndex()
@@ -90,6 +91,7 @@ namespace SeaSick.UI.Sheets
             l != null && raisedIndex >= 0 ? l.StationForRaised(raisedIndex) : null;
 
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
+        bool MidnightOverview => MidnightLandHud.Active && planId == BuildPlans.Sawmill.id;
 
         // --- the frame -------------------------------------------------------
 
@@ -140,7 +142,7 @@ namespace SeaSick.UI.Sheets
         internal const float TouchPx = 44f;
 
         const int KWorker = 0, KIn = 1, KMaking = 2, KRecipe = 3, KOut = 4, KStall = 5,
-                  KUpgrade = 6, KStore = 7;
+                  KUpgrade = 6, KStore = 7, KFlow = 8;
 
         struct Blk { public int kind; public int arg; public float px; }
 
@@ -193,7 +195,7 @@ namespace SeaSick.UI.Sheets
             var recipes = hasMake ? Recipes.At(planId) : null;
             int rc = recipes != null ? recipes.Count : 0;
             long key = Mathf.RoundToInt(band) * 1000003L + rc * 131L + MaxInputs * 7L
-                       + (hasUpgrade ? 1 : 0) + (hasWorker ? 2 : 0);
+                       + (hasUpgrade ? 1 : 0) + (hasWorker ? 2 : 0) + (MidnightOverview ? 1000000007L : 0L);
             if (key == planKey && pages.Count > 0) return;
             planKey = key;
 
@@ -239,6 +241,13 @@ namespace SeaSick.UI.Sheets
             }
             if (page.Count > 0) pages.Add(page);
             if (pages.Count == 0) pages.Add(new List<Blk>());
+            // Overview has no pinned action row, so it can use that reserved space.
+            if (MidnightOverview && band + SheetHost.ActionsPx >= 86f + WorkerPx + StallPx)
+                pages.Insert(0, new List<Blk> {
+                    new Blk { kind = KFlow, px = 86f },
+                    new Blk { kind = KWorker, px = WorkerPx },
+                    new Blk { kind = KStall, px = StallPx }
+                });
 
             // Named by what a page opens with; "make 1/2" where there are two.
             var names = new string[pages.Count];
@@ -259,6 +268,7 @@ namespace SeaSick.UI.Sheets
             if (page.Count == 0) return "make";
             switch (page[0].kind)
             {
+                case KFlow: return "overview";
                 case KWorker:
                 case KIn:
                 case KMaking:
@@ -299,6 +309,8 @@ namespace SeaSick.UI.Sheets
         Label stallLine;
         Label[] storeLines;
         Label upgradeLevel;
+        Label flowInput, flowOutput, flowState, flowInputName, flowOutputName;
+        VisualElement flowProgress;
         VisualElement upgradeHolder;
         long upgradeKey = long.MinValue;
 
@@ -321,6 +333,7 @@ namespace SeaSick.UI.Sheets
         void Fill()
         {
             worker = null; inLines = null; benchLine = null;
+            flowInput = flowOutput = flowState = flowInputName = flowOutputName = null; flowProgress = null;
             orderRow = null; orderTitle = null; orderSub = null; orderStop = null; orderStopStation = null;
             outLine = null; stallLine = null; storeLines = null;
             upgradeLevel = null; upgradeHolder = null; upgradeKey = long.MinValue;
@@ -333,6 +346,7 @@ namespace SeaSick.UI.Sheets
             {
                 switch (b.kind)
                 {
+                    case KFlow: BuildFlow(); break;
                     case KWorker:
                         worker = new WorkerSlot(outpost, planId, () => Refresh());
                         root.Add(worker.Root);
@@ -374,6 +388,7 @@ namespace SeaSick.UI.Sheets
             if (builtKey != planKey) Fill();
 
             var station = Station(l);
+            RefreshFlow(l, station);
             var hand = HandOn(l, station);
             worker?.Update(l, hand);
             FillIn(l, station);
@@ -388,6 +403,45 @@ namespace SeaSick.UI.Sheets
         }
 
         // --- 2. coming in --------------------------------------------------------
+
+        void BuildFlow()
+        {
+            var row = new VisualElement(); row.AddToClassList("land-flow"); root.Add(row);
+            VisualElement Cell(string icon)
+            {
+                var cell = new VisualElement(); cell.AddToClassList("land-flow-cell");
+                cell.Add(new LandIcon(icon)); row.Add(cell); return cell;
+            }
+            void Arrow() { var arrow = new LandIcon("arrow"); arrow.AddToClassList("land-flow-arrow"); row.Add(arrow); }
+            var input = Cell("logs");
+            flowInputName = SheetKit.Text("Logs", false, false, 13); input.Add(flowInputName);
+            flowInput = SheetKit.Text("", true, false, 20); input.Add(flowInput);
+            Arrow();
+            var bench = Cell("saw");
+            flowState = SheetKit.Text("Idle", false, false, 13); bench.Add(flowState);
+            var track = new VisualElement(); track.AddToClassList("land-flow-progress"); bench.Add(track);
+            flowProgress = new VisualElement(); flowProgress.AddToClassList("land-flow-progress-fill"); track.Add(flowProgress);
+            Arrow();
+            var output = Cell("planks");
+            flowOutputName = SheetKit.Text("Planks", false, false, 13); output.Add(flowOutputName);
+            flowOutput = SheetKit.Text("", true, false, 20); output.Add(flowOutput);
+        }
+
+        void RefreshFlow(OutpostLedger ledger, StationStock station)
+        {
+            if (flowInput == null) return;
+            var recipe = Feeding(ledger, station);
+            string input = recipe != null && recipe.takes.Length > 0 ? recipe.takes[0].res : Res.Timber;
+            string output = station?.BenchMakes ?? recipe?.makes ?? Res.Boards;
+            flowInputName.text = input == Res.Timber ? "Logs" : ResDefs.Label(input);
+            flowOutputName.text = output == Res.Boards ? "Planks" : ResDefs.Label(output);
+            flowInput.text = station == null ? "--" : $"{station.BayCount(input)}/{station.InputCap}";
+            flowOutput.text = station == null ? "--" : $"{station.RackTotal}/{station.OutputCap}";
+            flowState.text = station == null ? "Unavailable" : station.benchState == BenchState.Working ? "Cutting"
+                : station.benchState == BenchState.Finished ? "Ready" : station.benchState == BenchState.Loaded ? "Loaded" : "Idle";
+            float progress = station == null ? 0f : station.benchState == BenchState.Finished ? 1f : Mathf.Clamp01(station.benchProgress);
+            flowProgress.style.width = Length.Percent(progress * 100f);
+        }
 
         /// A lead label and its line -- "IN  timber 3 of 6 in the bay".
         /// The lead is the row's name; lines after the first leave it blank
@@ -984,6 +1038,15 @@ namespace SeaSick.UI.Sheets
             btn.style.fontSize = 13f;
             btn.style.flexShrink = 0f;
             Root.Add(btn);
+            if (MidnightLandHud.Active)
+            {
+                lead.style.width = 52f;
+                btn.style.minWidth = 108f;
+                who.style.minWidth = 0f;
+                who.style.whiteSpace = WhiteSpace.NoWrap;
+                who.style.overflow = Overflow.Hidden;
+                who.style.textOverflow = TextOverflow.Ellipsis;
+            }
         }
 
         public void Update(OutpostLedger l, OutpostHand hand, int others = 0)

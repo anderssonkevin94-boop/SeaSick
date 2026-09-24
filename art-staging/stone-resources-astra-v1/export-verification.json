@@ -1,0 +1,50 @@
+{
+  "Stone_Field": {
+    "result": "PASS",
+    "triangles": 44
+  },
+  "Stone_Field_Depleted": {
+    "result": "PASS",
+    "triangles": 44
+  },
+  "Stone_Broad": {
+    "result": "PASS",
+    "triangles": 42
+  },
+  "Stone_Broad_Depleted": {
+    "result": "PASS",
+    "triangles": 40
+  },
+  "Stone_Split": {
+    "result": "PASS",
+    "triangles": 88
+  },
+  "Stone_Split_Depleted": {
+    "result": "PASS",
+    "triangles": 88
+  },
+  "Stone_Upright": {
+    "result": "PASS",
+    "triangles": 88
+  },
+  "Stone_Upright_Depleted": {
+    "result": "PASS",
+    "triangles": 86
+  },
+  "Stone_LowRidge": {
+    "result": "PASS",
+    "triangles": 130
+  },
+  "Stone_LowRidge_Depleted": {
+    "result": "PASS",
+    "triangles": 130
+  },
+  "Stone_Outcrop": {
+    "result": "PASS",
+    "triangles": 132
+  },
+  "Stone_Outcrop_Depleted": {
+    "result": "PASS",
+    "triangles": 132
+  }
+}

@@ -1018,6 +1018,7 @@ namespace SeaSick.Ship
         /// handed.
         void OnGUI()
         {
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
             // Two panels offering to cast off in the same corner of the
             // screen is a choice nobody wants to make -- the same rule the
             // dock prompt already applies against the beach one.

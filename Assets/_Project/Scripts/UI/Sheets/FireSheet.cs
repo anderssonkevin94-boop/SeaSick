@@ -43,6 +43,9 @@ namespace SeaSick.UI.Sheets
         const int PgCargo = 5;
         const int PgCrew = 6;
         const int PgFire = 7;      // the fire's own level, when it does not fit the camp page
+        const int PgFortify = 8;
+        const int PgStores = 9;
+        int storePart;
 
         readonly Outpost outpost;
         readonly string focus;
@@ -86,6 +89,19 @@ namespace SeaSick.UI.Sheets
 
         public string[] TabLabels { get { Plan(); return labels; } }
 
+        internal string CurrentSection
+        {
+            get { Plan(); return labels[Mathf.Clamp(tab, 0, labels.Length - 1)].Split(' ')[0]; }
+        }
+
+        internal void FocusSection(string section)
+        {
+            Plan();
+            for (int i = 0; i < labels.Length; i++)
+                if (labels[i] == section || labels[i].StartsWith(section + " ")) { tab = i; return; }
+            tab = 0;
+        }
+
         /// **The page plan, out of the band the frame actually has.**
         ///
         /// Every count here is read, never assumed: how many store tiles the
@@ -121,7 +137,7 @@ namespace SeaSick.UI.Sheets
             // What the two halves of the camp page cost, in panel units.
             // `SheetKit`'s constants are the USS heights rounded up, so this
             // is arithmetic on the stylesheet rather than a guess at it.
-            float storeRows = storeTiles <= 4 ? 1f : 2f;
+            float storeRows = MidnightLandHud.Active ? Mathf.Ceil(Mathf.Min(storeTiles,4) / 2f) : storeTiles <= 4 ? 1f : 2f;
             // The "what is going up" block is one `ListRow` per queued site
             // now, and an empty queue is still one note's worth of "Nothing
             // going up" -- so the band arithmetic counts rows, not a note.
@@ -155,15 +171,21 @@ namespace SeaSick.UI.Sheets
 
             handsPerPage = SheetHost.RowsThatFit(SheetKit.RowPx, SheetKit.EyebrowPx);
             buildPerPage = SheetHost.RowsThatFit(SheetKit.QuietPx + 4f, SheetKit.EyebrowPx);
+            if (MidnightLandHud.Active)
+                buildPerPage = SheetHost.RowsThatFit(48f, SheetKit.EyebrowPx + SheetKit.TextPx);
             int handPages = SheetKit.PageCount(Mathf.Max(1, handCount), handsPerPage);
             int buildPages = SheetKit.PageCount(Mathf.Max(1, planCount), buildPerPage);
 
             pages.Clear();
             if (!campCarriesFire) pages.Add(new Pg { kind = PgFire, part = 0 });
             pages.Add(new Pg { kind = PgCamp, part = campCarriesOrders ? 1 : 0, fire = campCarriesFire });
+            if (MidnightLandHud.Active)
+                for (int i = 1; i < SheetKit.PageCount(storeTiles,4); i++)
+                    pages.Add(new Pg { kind = PgStores, part = i });
             if (!campCarriesOrders) pages.Add(new Pg { kind = PgOrders, part = 0 });
             for (int i = 0; i < handPages; i++) pages.Add(new Pg { kind = PgHands, part = i });
             for (int i = 0; i < buildPages; i++) pages.Add(new Pg { kind = PgBuild, part = i });
+            if (MidnightLandHud.Active) pages.Add(new Pg { kind = PgFortify, part = 0 });
             pages.Add(new Pg { kind = PgShip, part = 0 });
             if (alongside)
             {
@@ -180,6 +202,7 @@ namespace SeaSick.UI.Sheets
                 switch (pages[i].kind)
                 {
                     case PgCamp: labels[i] = "camp"; break;
+                    case PgStores: labels[i] = SheetKit.PageLabel("camp", pages[i].part, SheetKit.PageCount(storeTiles,4)); break;
                     case PgFire: labels[i] = "fire"; break;
                     case PgOrders: labels[i] = "orders"; break;
                     case PgHands:
@@ -191,6 +214,7 @@ namespace SeaSick.UI.Sheets
                     case PgBuild:
                         labels[i] = SheetKit.PageLabel("build", bp, buildPages); bp++; break;
                     case PgShip: labels[i] = "ship"; break;
+                    case PgFortify: labels[i] = "fortify"; break;
                     case PgCargo:
                         labels[i] = SheetKit.PageLabel("cargo", cp, ship.CargoPages); cp++; break;
                     default:
@@ -339,6 +363,7 @@ namespace SeaSick.UI.Sheets
             var page = Live;
             handPart = page.kind == PgHands ? page.part : 0;
             buildPart = page.kind == PgBuild ? page.part : 0;
+            storePart = page.kind == PgStores ? page.part : 0;
 
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
@@ -348,6 +373,11 @@ namespace SeaSick.UI.Sheets
                 case PgOrders: BuildOrders(root); break;
                 case PgHands: BuildHands(root); break;
                 case PgBuild: BuildBuild(root); break;
+                case PgFortify: BuildFortifications(root); break;
+                case PgStores:
+                    storesHolder = SheetBits.Holder();
+                    root.Add(storesHolder);
+                    break;
                 case PgShip: BuildShip(root, ShipSheet.SecHold, 0); break;
                 case PgCargo: BuildShip(root, ShipSheet.SecCargo, page.part); break;
                 case PgCrew: BuildShip(root, ShipSheet.SecCrew, page.part); break;
@@ -595,6 +625,7 @@ namespace SeaSick.UI.Sheets
                     // bottom bar had.
                     Sheets.Close();
                 }, false, true);
+                if (MidnightLandHud.Active) planBtn.style.height = 44f;
                 if (!unlocked)
                 {
                     planBtn.SetEnabled(false);
@@ -605,6 +636,12 @@ namespace SeaSick.UI.Sheets
             if (n == 0)
                 buildListHolder.Add(SheetKit.Note("Nothing the camp can afford yet"));
 
+            if (!MidnightLandHud.Active) BuildFortifications(buildListHolder);
+        }
+
+        void BuildFortifications(VisualElement target)
+        {
+
             // **The wall and its gate, 2026-09-23.** They sit under the
             // buildings and outside the paging, because they are not sited
             // the way a building is: a palisade is drawn as a RUN of
@@ -613,7 +650,7 @@ namespace SeaSick.UI.Sheets
             // Listing them here anyway is the point: the build page is
             // where a player looks for "what can this camp make", and a
             // fortification missing from it is a feature nobody finds.
-            buildListHolder.Add(SheetKit.Eyebrow("fortify"));
+            target.Add(SheetKit.Eyebrow("fortify"));
             var wallRow = SheetKit.Btn(
                 $"palisade — 1 timber per {BuildPlans.MetresPerPalisadeLog:0.#} m",
                 () =>
@@ -622,13 +659,15 @@ namespace SeaSick.UI.Sheets
                     Sheets.Close();
                 }, false, true);
             wallRow.SetEnabled(Outpost.BeginWallSiting != null);
-            buildListHolder.Add(wallRow);
+            if (MidnightLandHud.Active) wallRow.style.height = 44f;
+            target.Add(wallRow);
 
             var gateRow = SheetKit.Btn($"gate — {BuildPlans.Gate.cost} timber",
                 () => { }, false, true);
             gateRow.SetEnabled(false);
-            buildListHolder.Add(gateRow);
-            buildListHolder.Add(SheetKit.Note("Tap a length of wall to put a gate in it."));
+            if (MidnightLandHud.Active) gateRow.style.height = 44f;
+            target.Add(gateRow);
+            target.Add(SheetKit.Note("Tap a length of wall to put a gate in it."));
         }
 
         // --- tab: ship ------------------------------------------------------------
@@ -666,6 +705,8 @@ namespace SeaSick.UI.Sheets
                 case PgHands:
                     Hands(l);
                     break;
+                case PgFortify: break;
+                case PgStores: Stores(l); break;
                 case PgBuild:
                     // Keyed on what the list SAYS: the stores it prices
                     // against, and whether a drawing is already up.
@@ -751,6 +792,12 @@ namespace SeaSick.UI.Sheets
             foreach (var r in Always) shown.Add(r);
             foreach (var r in Sometimes)
                 if (l.CountOf(r) > 0 || AnyWorkerMakes(l, r)) shown.Add(r);
+            if (MidnightLandHud.Active)
+            {
+                int first = Mathf.Min(storePart * 4, shown.Count);
+                shown.RemoveRange(0,first);
+                if (shown.Count > 4) shown.RemoveRange(4,shown.Count-4);
+            }
 
             // More than four stores wraps to a second row -- the tile row was
             // never meant to hold more than the four gatherables it shipped
@@ -830,7 +877,14 @@ namespace SeaSick.UI.Sheets
             // Four to a row, same as the row always shipped with; a fifth
             // kind (a quarry running alongside a sawmill, say) starts a
             // second row rather than squeezing a fifth tile into the first.
-            if (cols.Length <= 4)
+            if (MidnightLandHud.Active)
+            {
+                var rows = SheetKit.Col();
+                for (int i = 0; i < cols.Length; i += 2)
+                    rows.Add(i + 1 < cols.Length ? SheetKit.Row(cols[i], cols[i+1]) : SheetKit.Row(cols[i]));
+                SheetBits.Swap(storesHolder, rows);
+            }
+            else if (cols.Length <= 4)
             {
                 SheetBits.Swap(storesHolder, SheetKit.Row(cols));
             }

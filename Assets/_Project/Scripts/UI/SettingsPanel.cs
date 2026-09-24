@@ -35,6 +35,7 @@ namespace SeaSick.UI
         /// There is one drawer; if there are two, the last one enabled wins
         /// and the other still works from its own tab.
         public static SettingsPanel Instance { get; private set; }
+        static readonly string[] RowLandTheme = { "Island UI: Classic", "Island UI: Midnight" };
 
         void OnEnable() => Instance = this;
 
@@ -144,6 +145,8 @@ namespace SeaSick.UI
 
             y = Toggle(body, y, rowH, RowMinimap, HudVisibility.Minimap,
                        v => HudVisibility.Minimap = v);
+            y = Toggle(body, y, rowH, RowLandTheme, Sheets.MidnightLandHud.Enabled,
+                       v => Sheets.MidnightLandHud.Enabled = v);
             y = Toggle(body, y, rowH, RowCompass, HudVisibility.Compass,
                        v => HudVisibility.Compass = v);
             y = Toggle(body, y, rowH, RowCrew, HudVisibility.Crew,

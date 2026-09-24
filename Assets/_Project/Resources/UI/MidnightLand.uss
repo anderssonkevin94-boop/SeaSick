@@ -1,0 +1,54 @@
+.midnight-land .sheet-card, .land-resources, .land-nav {
+    background-color: rgb(22, 42, 56);
+    border-color: rgb(164, 210, 232);
+    border-width: 1px;
+    border-radius: 6px;
+}
+.midnight-land .sheet-inner { border-color: rgba(164, 210, 232, 0.35); }
+.midnight-land .sheet-title, .midnight-land .sheet-text,
+.midnight-land .sheet-note-text,
+.midnight-land .sheet-store-big, .midnight-land .sheet-chip-value,
+.midnight-land .sheet-tab-now, .midnight-land .sheet-tab-arrow { color: rgb(232, 242, 246); }
+.midnight-land .sheet-eyebrow, .midnight-land .sheet-muted,
+.midnight-land .sheet-store-small, .midnight-land .sheet-tab { color: rgb(166, 186, 198); letter-spacing: 0; }
+.midnight-land .sheet-tab--on { color: rgb(164, 210, 232); background-color: rgba(164, 210, 232, 0.08); }
+.midnight-land .sheet-btn, .midnight-land .sheet-close {
+    color: rgb(232, 242, 246); border-color: rgba(164, 210, 232, 0.65);
+    background-color: rgb(32, 57, 72);
+}
+.midnight-land .sheet-close { width: 44px; height: 44px; border-width: 0; border-radius: 0; }
+.midnight-land .sheet-btn--primary { background-color: rgb(164, 210, 232); color: rgb(22, 42, 56); }
+.midnight-land .sheet-btn:hover { background-color: rgb(58, 89, 107); }
+.midnight-land .sheet-btn--primary:hover { background-color: rgb(194, 228, 242); }
+.midnight-land .sheet-btn:disabled { opacity: 0.45; }
+.midnight-land .sheet-rule { background-color: rgba(164, 210, 232, 0.4); }
+.midnight-land .sheet-tabs, .midnight-land .sheet-actions { border-color: rgba(164, 210, 232, 0.4); }
+.midnight-land .sheet-note, .midnight-land .sheet-chip { background-color: rgba(164, 210, 232, 0.06); border-color: rgba(164, 210, 232, 0.3); }
+.midnight-land .sheet-bar { background-color: rgb(74, 96, 108); }
+.land-nav, .land-resources { position: absolute; flex-direction: row; align-items: center; padding: 4px 10px; }
+.land-nav { height: 64px; }
+.land-resources { height: 46px; }
+.land-icon { width: 28px; height: 28px; flex-shrink: 0; }
+.land-resource { flex-direction: row; align-items: center; flex-grow: 1; }
+.land-resource > Label, .land-day, .land-nav-button > Label {
+    color: rgb(232, 242, 246); font-size: 14px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    white-space: nowrap; margin-left: 5px;
+}
+.land-day { font-size: 12px; margin-left: 4px; }
+.land-nav-button {
+    height: 54px; flex-grow: 1; flex-basis: 0; flex-shrink: 1; align-items: center;
+    justify-content: center; background-color: rgba(0,0,0,0); border-width: 0;
+    border-bottom-width: 3px; border-bottom-color: rgba(0,0,0,0); border-radius: 0; margin: 0 4px; padding: 0;
+}
+.land-nav-button > Label { margin: 0; font-size: 13px; }
+.land-nav-button:hover { background-color: rgba(164,210,232,0.08); }
+.land-nav-selected { border-bottom-color: rgb(164,210,232); background-color: rgba(164,210,232,0.08); }
+.land-nav-selected > Label { color: rgb(164,210,232); }
+.land-flow { flex-direction: row; height: 86px; flex-shrink: 0; align-items: center; }
+.land-flow-cell { flex-grow: 1; flex-basis: 0; align-items: center; }
+.land-flow-cell .land-icon { width: 32px; height: 32px; margin-bottom: 3px; }
+.land-flow-cell > Label { -unity-text-align: middle-center; margin: 0; }
+.land-flow-arrow { width: 22px; height: 22px; }
+.land-flow-progress { height: 7px; width: 90%; margin-top: 5px; background-color: rgb(74,96,108); border-radius: 3px; }
+.land-flow-progress-fill { height: 7px; background-color: rgb(127,200,173); border-radius: 3px; }

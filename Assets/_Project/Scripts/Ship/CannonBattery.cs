@@ -407,6 +407,7 @@ namespace SeaSick.Ship
 
         void OnGUI()
         {
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
             // A hull with no gun-port stations is not carrying guns, and two
             // buttons reading "no crew" are two buttons in a thumb's way.
             if (allGuns.Count == 0) return;

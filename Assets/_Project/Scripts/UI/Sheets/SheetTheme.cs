@@ -22,17 +22,20 @@ namespace SeaSick.UI.Sheets
 
         // --- the paper and the ink ---
         public static readonly Color Paper = Hex("F4E8CF");
-        public static readonly Color Ink = Hex("1F2D38");
+        static readonly Color LegacyInk = Hex("1F2D38");
+        public static Color Ink => MidnightLandHud.Active ? MidnightLandHud.Pearl : LegacyInk;
         /// Ink at 62 % — the second line on a row, a unit, a "of 30".
-        public static readonly Color InkDim = new Color(31f / 255f, 45f / 255f, 56f / 255f, 0.62f);
+        public static Color InkDim => MidnightLandHud.Active ? MidnightLandHud.Muted : new Color(31f / 255f, 45f / 255f, 56f / 255f, 0.62f);
 
         // --- the accents ---
         public static readonly Color Brass = Hex("C99339");
         public static readonly Color BrassBorder = Hex("8A6120");
-        public static readonly Color Ember = Hex("E4623A");
-        public static readonly Color Moss = Hex("5E9A48");
+        static readonly Color LegacyEmber = Hex("E4623A"), LegacyMoss = Hex("5E9A48");
+        public static Color Ember => MidnightLandHud.Active ? new Color32(246, 146, 128, 255) : LegacyEmber;
+        public static Color Moss => MidnightLandHud.Active ? new Color32(127, 200, 173, 255) : LegacyMoss;
         public static readonly Color Sea = Hex("2E7EA3");
-        public static readonly Color Timber = Hex("A8672F");
+        static readonly Color LegacyTimber = Hex("A8672F");
+        public static Color Timber => MidnightLandHud.Active ? MidnightLandHud.Ice : LegacyTimber;
         public static readonly Color Stone = Hex("7C8894");
 
         // --- USS class names ---

@@ -45,6 +45,7 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
             // IMGUI calls OnGUI once per EVENT, not once per frame: Layout,
             // Repaint, and one more for every MouseMove the editor or the
             // player generates. This panel only draws, so everything it does

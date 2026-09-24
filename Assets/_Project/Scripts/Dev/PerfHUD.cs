@@ -210,6 +210,12 @@ namespace SeaSick.Dev
             // StatusHUD, which was one hand-copy better than a magic number
             // and still meant two files had to agree.
             var panel = HudLayout.Place(HudLayout.Slot.Perf, w, h);
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active)
+            {
+                var resources = SeaSick.UI.Sheets.MidnightLandHud.ResourcesRect;
+                panel.x = resources.x;
+                panel.y = Mathf.Max(panel.y, resources.yMax + u);
+            }
 
             // Reserved above, drawn below: the rows are what cost, not the rect.
             if (Event.current.type != EventType.Repaint) return;

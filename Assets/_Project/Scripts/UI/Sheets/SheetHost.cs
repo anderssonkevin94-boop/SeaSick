@@ -32,6 +32,8 @@ namespace SeaSick.UI.Sheets
         public static SheetHost Instance { get; private set; }
 
         UIDocument doc;
+        PanelSettings runtimePanel;
+        Vector2Int originalResolution;
         VisualElement root;
 
         // The sheet layer and its parts.
@@ -50,6 +52,8 @@ namespace SeaSick.UI.Sheets
         AshoreRail rail;
         ChartInstrument chart;
         SelectionRing ring;
+        MidnightLandHud land;
+        bool midnight;
 
         ISheet built;
         float nextRefresh;
@@ -107,7 +111,9 @@ namespace SeaSick.UI.Sheets
 
             doc = GetComponent<UIDocument>();
             if (doc == null) doc = gameObject.AddComponent<UIDocument>();
-            doc.panelSettings = settings;
+            runtimePanel = Instantiate(settings);
+            originalResolution = runtimePanel.referenceResolution;
+            doc.panelSettings = runtimePanel;
             // The document is created empty and filled here rather than from a
             // UXML tree: every element in it is data-driven, and a UXML file
             // would be a second place a class name could drift from
@@ -121,6 +127,8 @@ namespace SeaSick.UI.Sheets
             else Debug.LogWarning("[Sheets] Resources/UI/Sheets.uss is missing — the sheet HUD will be unstyled.");
 
             BuildChrome();
+            var landStyle = Resources.Load<StyleSheet>("UI/MidnightLand");
+            if (landStyle != null) root.styleSheets.Add(landStyle);
 
             place = new PlaceLabel(root);
             rail = new AshoreRail(root);
@@ -129,6 +137,7 @@ namespace SeaSick.UI.Sheets
             // replace the minimap and the compass tape rather than sit beside
             // them.
             chart = new ChartInstrument(root);
+            land = new MidnightLandHud(root);
             if (ring == null) ring = gameObject.AddComponent<SelectionRing>();
             chromeBuilt = true;
         }
@@ -136,7 +145,11 @@ namespace SeaSick.UI.Sheets
         void OnEnable() { Sheets.Changed += OnSheetChanged; }
         void OnDisable() { Sheets.Changed -= OnSheetChanged; }
 
-        void OnDestroy() { if (Instance == this) Instance = null; }
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+            if (runtimePanel != null) Destroy(runtimePanel);
+        }
 
         /// The panel a tap has to be tested against before it is allowed to
         /// reach the world. `WorldPicker` asks for this rather than keeping
@@ -564,8 +577,9 @@ namespace SeaSick.UI.Sheets
             if (safe.width < 1f || safe.height < 1f)
                 safe = new Rect(0f, 0f, Screen.width, Screen.height);
             return HudLayout.Wide
-                ? new Vector2(safe.width * Third - Margin * 2f, safe.height - Margin * 2f)
-                : new Vector2(safe.width - Margin * 2f, safe.height * Third - Margin * 2f);
+                ? new Vector2(safe.width * Third - Margin * 2f, safe.height - Margin * 2f
+                    - (MidnightLandHud.Active ? (MidnightLandHud.NavHeight + MidnightLandHud.TopHeight + 24f) / PanelScale : 0f))
+                : new Vector2(safe.width - Margin * 2f, safe.height * (MidnightLandHud.Active ? .46f : Third) - Margin * 2f);
         }
 
         /// **How tall a page may be, in panel units.**
@@ -579,7 +593,7 @@ namespace SeaSick.UI.Sheets
             get
             {
                 float h = FrameSizeScreen().y * PanelScale
-                          - (BorderPx + HeadPx + StripPx + ActionsPx + BodyPadPx);
+                          - (BorderPx + HeadPx + StripPx + ActionsPx + BodyPadPx + (MidnightLandHud.Active ? 10f : 0f));
                 return Mathf.Max(80f, h);
             }
         }
@@ -595,6 +609,7 @@ namespace SeaSick.UI.Sheets
         public static bool Fits(float px, float reservePx = 0f) =>
             px + reservePx <= BandHeight;
 
+        Vector2 lastPanelSize;
         void LateUpdate()
         {
             if (Instance == null) Instance = this;
@@ -607,8 +622,18 @@ namespace SeaSick.UI.Sheets
             if (animating && Time.unscaledTime > animDeadline) animating = false;
 
             bool on = Sheets.SuppressLegacy;
-            place.Tick(on, root);
-            rail.Tick(on, root);
+            runtimePanel.referenceResolution = MidnightLandHud.Active && !HudLayout.Wide
+                ? new Vector2Int(430, 932) : originalResolution;
+            land.Tick(root);
+            var panelSize = new Vector2(root.resolvedStyle.width, root.resolvedStyle.height);
+            if (midnight != MidnightLandHud.Active || (panelSize - lastPanelSize).sqrMagnitude > 1f)
+            {
+                lastPanelSize = panelSize;
+                midnight = MidnightLandHud.Active;
+                OnSheetChanged();
+            }
+            place.Tick(on && !midnight, root);
+            rail.Tick(on && !midnight, root);
             chart.Tick(root);
             // Claimed here rather than inside the instrument, so the flag is
             // true for exactly as long as something is actually drawing.
@@ -702,6 +727,12 @@ namespace SeaSick.UI.Sheets
             }
 
             // GUI space (origin top-left), for `HudLayout`.
+            if (MidnightLandHud.Active)
+            {
+                var size = FrameSizeScreen();
+                w = size.x; h = size.y;
+                yBottom += (MidnightLandHud.NavHeight + 10f) / PanelScale;
+            }
             FrameRect = new Rect(x, Screen.height - (yBottom + h), w, h);
             FrameOpen = true;
             // Told once a frame, to the IMGUI HUD's own space. It used to be
@@ -709,7 +740,9 @@ namespace SeaSick.UI.Sheets
             // out of the prompt stack's way — and that made the sheet's size
             // depend on the HUD's, which is the loop a fixed frame exists to
             // cut. The sheet is the fixed thing now; the HUD moves.
-            HudLayout.ClaimSheet(FrameRect);
+            var claimed = FrameRect;
+            if (MidnightLandHud.Active) claimed.yMax = MidnightLandHud.NavigationRect.yMax;
+            HudLayout.ClaimSheet(claimed);
 
             // Panel space. The panel is scaled by its match rule, so every
             // screen pixel above becomes `scale` panel units — the y flip is

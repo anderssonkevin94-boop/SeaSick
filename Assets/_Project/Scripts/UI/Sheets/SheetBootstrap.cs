@@ -114,7 +114,7 @@ namespace SeaSick.UI.Sheets
             return new FireSheet(camp, focus);
         }
 
-        static ISheet ShipFor()
+        internal static ISheet ShipFor()
         {
             var anchor = SheetBits.Anchor;
             if (anchor == null) return null;
