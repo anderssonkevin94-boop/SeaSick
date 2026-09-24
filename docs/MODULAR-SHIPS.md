@@ -45,6 +45,17 @@ height datum** (Z = 0; deck is Z 1.76, keel Z −1.92). Every FBX part of one mo
 shares that origin. Rotor and carrier FBXs are **axle-local** (origin = axle centre).
 The chimney's origin is its base centre.
 
+**Verified on import (2026-09-24, batch Unity on this branch's own project).**
+Unity imports Astra's FBXs with an identity root rotation and the convention
+above already baked: each hull section runs **+Z from its aft face** (stern
+0 → 9.30, middle 0 → 6.00, bow 0 → 10.98 including the prow), beam along X
+(shell ±4.64, rails ±4.84), up along Y (keel −1.92). Rotors are axle-local
+(M1 radius 1.62, M1-L 2.15, paddle width ±2.30 across X). So
+`ModularShipView.visualAxisFix` stays identity. Assembled at 0.5 m/u: short
+10.14 m, long 13.14 m, three bays 19.14 m; beam 4.85 m over rails; the wheel
+overhangs 0.45 m aft of the stern interface. Any new delivery must import
+the same way — the preview tool below prints these numbers for every mesh.
+
 ### Why 0.5 m per unit (decided)
 
 Today's in-game steamer draws the same V8 mesh with a *per-axis* stretch
@@ -370,8 +381,15 @@ integration with `ShipMotor`, `PaddleDrive`, `Shipyard`, `ShipLadder` or saves.
 ## 12. Running the checks
 
 * Headless (no Unity): `tools/modular-selftest.sh` → `ModularShipSelfTest: 45 PASS, 0 FAIL`.
-* In the editor: `unity cmd eval --json --code 'return SeaSick.Ship.Modular.ModularShipSelfTest.Run();'`
+* In an editor on this branch's project: `unity cmd eval --json --code 'return SeaSick.Ship.Modular.ModularShipSelfTest.Run();'`
   (also checks every `resourcePath` resolves through `Resources.Load` after import).
+* Batch preview (the branch's own project only, never the main open editor):
+  `Unity -batchmode -projectPath <worktree> -executeMethod
+  SeaSick.Ship.Modular.EditorTools.ModularShipPreview.Run` — imports, prints every
+  mesh's imported bounds/orientation, runs the self-test in Unity, creates the test
+  scene and renders short/long/three-bay ships plus timber/reinforced stern close-ups
+  to `Logs/modular-previews/`, then logs the oversized-wheel rejection
+  (`Logs/modular-preview.txt`). ~20 s once imported.
 * Test scene: menu **SeaSick/Modular/Create Test Scene** (or `-executeMethod
   SeaSick.Ship.Modular.ModularShipTestSceneSetup.CreateTestScene`), open
   `Assets/_Project/Scenes/Tests/ModularShipTest.unity`, press Play. Not in build settings.
