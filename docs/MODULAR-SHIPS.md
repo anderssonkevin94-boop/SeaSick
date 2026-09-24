@@ -19,7 +19,7 @@ all of that stands on:
 | Assembler: config + library → placements or reasons (pure C#) | `Scripts/Ship/Modular/ShipAssembler.cs` |
 | View: draws an assembly, rotor on its own pivot | `Scripts/Ship/Modular/View/ModularShipView.cs`, `RotorSpin.cs` |
 | Isolated test bench + scene builder | `Scripts/Dev/ModularShipBench.cs`, `Scripts/Ship/Modular/Editor/ModularShipTestSceneSetup.cs` |
-| Self-test (45 milestone-1 gates + 52 shipyard gates, see docs/SHIPYARD-API.md; editor or headless) | `Scripts/Ship/Modular/ModularShipSelfTest.cs`, `tools/modular-selftest.sh` |
+| Self-test (45 milestone-1 gates + 59 shipyard gates, see docs/SHIPYARD-API.md; editor or headless) | `Scripts/Ship/Modular/ModularShipSelfTest.cs`, `tools/modular-selftest.sh` |
 
 It is **isolated from the sailing game**: nothing in `Ship/`, `Steamer/`, `Save/`
 or any scene was changed. The existing steamer, fleet ships and saves are untouched.
@@ -363,11 +363,14 @@ integration with `ShipMotor`, `PaddleDrive`, `Shipyard`, `ShipLadder` or saves.
    Raise the deck, narrow the passage there, or accept?
 2. **M1-L needs a stern module.** The oversized wheel cannot fit any W1-r2 stern.
    Is an M1-L stern (pocket, housing, rail crown, carrier) wanted?
-3. **Crew-passage width.** Provisional: the full band between the port and starboard
-   slot clearances, |y| ≤ 2.675 u (2.68 m wide), 1.7 m tall, per section; stern from
-   the housing edge X 3.16, bow to X 4.4. Kevin: how wide should it really be?
-   Note the **helm** (X 4.22–4.58, |y| ≤ 0.8) and the **chimney** stand on the
-   centreline inside it (fittings are not checked against passages yet).
+3. **Crew-passage width.** Provisional, retuned 2026-09-25 to fit Astra's real
+   cannon kit (footprint 2.18 u across, wider than the milestone-1 placeholder):
+   |y| ≤ 2.30 u (2.30 m wide, down from 2.675 u), 1.7 m tall, per section; stern
+   from the housing edge X 3.16, bow to X 4.4; the deck-gun slot clearances
+   widened to match (1.8 x 2.3 x 1.65 u, docs/SHIPYARD-API.md §15). Still just a
+   number chosen to touch, not overlap, the wider slots -- Kevin: how wide should
+   it really be? Note the **helm** (X 4.22–4.58, |y| ≤ 0.8) and the **chimney**
+   stand on the centreline inside it (fittings are not checked against passages yet).
 4. **Chimney on long ships.** The rule is "assembled midpoint" (V3 README). On a
    3-bay ship that puts it mid-bay; is that right, or should it sit on a fixed bay?
 5. **Second bow.** Should the W1-r2 V2 bow (8.65, no prow) become a second bow option?
@@ -380,7 +383,7 @@ integration with `ShipMotor`, `PaddleDrive`, `Shipyard`, `ShipLadder` or saves.
 
 ## 12. Running the checks
 
-* Headless (no Unity): `tools/modular-selftest.sh` → `ModularShipSelfTest: 97 PASS, 0 FAIL` (45 milestone-1 + 52 shipyard).
+* Headless (no Unity): `tools/modular-selftest.sh` → `ModularShipSelfTest: 104 PASS, 0 FAIL` (45 milestone-1 + 59 shipyard; 2026-09-25 guns-as-equipment gates).
 * In an editor on this branch's project: `unity cmd eval --json --code 'return SeaSick.Ship.Modular.ModularShipSelfTest.Run();'`
   (also checks every `resourcePath` resolves through `Resources.Load` after import).
 * Batch preview (the branch's own project only, never the main open editor):

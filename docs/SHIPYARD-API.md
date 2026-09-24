@@ -1,7 +1,8 @@
 # Shipyard API (prototype) — for Astra's UI
 
-Branch `modular-ships`, 2026-09-24. Backend for the first playable shipyard:
-low-deck W1-r2 ships, 0–3 middle bays, timber or reinforced M1 wheel. The
+Branch `modular-ships`, 2026-09-24, equipment + dry dock added 2026-09-25.
+Backend for the first playable shipyard: low-deck W1-r2 ships, 0–3 middle
+bays, timber or reinforced M1 wheel, deck cannons as real equipment. The
 backend computes everything (dimensions, displacement, capacity,
 compatibility); the UI only displays it. Namespace `SeaSick.Ship.Modular`.
 
@@ -63,7 +64,7 @@ the adapter does goes through it.
 | `bool CanRefitNow(out string reason)` | Pure. See §5. |
 | `ShipyardApplyResult ApplyRefit(ShipConfiguration expected, ShipConfiguration draft)` | Atomic. See §4. |
 | `event Action<ShipConfiguration> Refitted` | After a successful apply, and after a save's configuration is applied on load (copy of the new one). |
-| `IReadOnlyList<string> AllowedModuleIds(string kind)` | For your pickers (`ModuleKind.*`). Stern/Middle/Bow: the V3 W1-r2 part; Rotor: timber, reinforced; Carrier: M1; Fitting: chimney; UpperDeck/Equipment: empty. |
+| `IReadOnlyList<string> AllowedModuleIds(string kind)` | For your pickers (`ModuleKind.*`). Stern/Middle/Bow: the V3 W1-r2 part; Rotor: timber, reinforced; Carrier: M1; Fitting: chimney; Equipment: the one deck cannon (2026-09-25, §15); UpperDeck: empty. |
 | `ShipyardService.PersistPathOverride` | Probes only (redirects the persist step to a scratch file). |
 
 Pure C# (no scene): `ShipyardPlanner.Validate(draft, library, referenceHull, snapshot)`,
@@ -91,8 +92,8 @@ public class SectionOccupancy {
     public float aftZ, fwdZ;                 // ship frame, m (ends open-ended)
     public int holdCells, cargoCells;        // AUTHORED hold cells of this module / cargo attributed pro rata
     public int berths, crew;                 // AUTHORED berths of this module / hands standing on it
-    public int gunSlots, guns;               // usable authored gun slots / guns standing in it
-    public List<string> equipment;           // "gun pair 2", "funnel", "deck load pile 1"
+    public int gunSlots, guns;               // usable authored gun slots / fitted guns standing in it
+    public List<string> equipment;           // "gun, starboard", "funnel", "deck load pile 1"
     public bool canRemove; public string reason;   // bind removalBlocker here; stern/bow never
 }
 ```
@@ -118,7 +119,7 @@ first blocking message. Figures:
 | `crewBerths` | Σ sections' authored `berths` | yes |
 | `gunSlots` | Σ usable authored gun slots (validated: clearance, clear of crew passages) | yes |
 | `deckSlots` | deck slots the hull reserves (reserved, not usable yet) | yes |
-| `guns` | guns she carries: the hull's gun pairs with a slot pair in their section and berths for their crew | yes |
+| `guns` | guns she carries: every `equipment.deck-gun` fitted (2026-09-25, §15) — explicit, not derived | yes |
 
 Warnings today: `HOLD_SMALLER`, `FEWER_BERTHS`, `PROVISIONAL_TUNING`. A gun
 pair the draft has no slot for is a BLOCKING `EQUIPMENT_WOULD_BE_LOST`, not a
@@ -160,12 +161,15 @@ Milestone-1 codes (docs/MODULAR-SHIPS.md §6) all still apply. Added:
 
 | Code | When | Example message |
 | --- | --- | --- |
-| `NOT_IN_PROTOTYPE` | raised deck, wider hull (W2), oversized wheel, any equipment, placeholder / incompatible-reference part, a fitting other than the chimney on `stern/Chimney` | "Raised decks are not part of the prototype shipyard yet." / "Oversized wheel (M1-L) is not part of the prototype shipyard: only the M1 timber and reinforced wheels are offered." |
+| `NOT_IN_PROTOTYPE` | raised deck, wider hull (W2), oversized wheel, an equipment module other than the one deck cannon, placeholder / incompatible-reference part, a fitting other than the chimney on `stern/Chimney` | "Raised decks are not part of the prototype shipyard yet." / "Oversized wheel (M1-L) is not part of the prototype shipyard: only the M1 timber and reinforced wheels are offered." |
 | `WHEEL_REQUIRED` | no rotor | "A paddle steamer needs her wheel; choose a timber or reinforced M1 wheel." |
 | `CARGO_WOULD_NOT_FIT` (partId `hold`) | cargo units > new hold cells | "She is carrying 16 loads and this ship's hold takes 11. Unload 5 first; nothing is thrown overboard." |
 | `CARGO_WOULD_NOT_FIT` (partId `weight`) | cargo weight > new weight room | "Her cargo weighs 5.5 t and this ship can carry 5.4 t with 4 hands and her guns aboard. …" |
 | `CREW_WOULD_NOT_FIT` | hands aboard > new berths | "8 hands are aboard and this ship has stations for 4. Land 4 first." |
-| `EQUIPMENT_WOULD_BE_LOST` | something positioned on her (the funnel, a deck-load pile, a gun pair the draft CARRIES but whose position is off her deck) has a place now and none on the draft. A gun pair the draft has no slot for is **struck**, not refused (warning `GUNS_STRUCK`, §10) | "Deck load pile 3 would have no place on this ship; the refit is refused rather than leave it behind." |
+| `EQUIPMENT_WOULD_BE_LOST` | something positioned on her (the funnel, a deck-load pile) has a place now and none on the draft; OR (2026-09-25) the draft's own `equipment` list still names a slot that no longer exists on the hull it describes (the assembler's `EQUIPMENT_SLOT_UNKNOWN`, translated to this friendlier code+message) | "Deck load pile 3 would have no place on this ship; the refit is refused rather than leave it behind." / "Deck cannon (Astra v1) at middle[0]/DeckSlot_1_1 would have no place on this ship (its slot is gone); take it off to the dry dock first." |
+| `GUNS_NEED_CREW` (2026-09-25) | the draft's fitted guns × their own crew > its berths | "6 guns need 6 hands at the guns and this ship has berths for 4. Take 2 guns off to the dry dock first." |
+| `NOT_IN_DRY_DOCK` (2026-09-25, `ApplyRefit` only) | the draft would take more of a module from the dock than is in stock | "There is no Deck cannon (Astra v1) in the dry dock to fit." |
+| `DRY_DOCK_NOT_HERE` (2026-09-25, `ApplyRefit` only) | the draft would add to or take from the dock, and she is not at her home berth | "She must be at her home dry dock to move equipment to or from storage; a plain refit between slots does not." |
 | `STALE_DRAFT` | live config ≠ `expected` | "The ship changed since this plan was drawn up. Look again and confirm." |
 | `OVERLOADED` | the loaded mass would float her above the deck line (downflooding) — never clamped | "At 85.6 t she would float above her deck line and flood. Lighten her first." |
 | `NO_HYDROSTATICS` | a hull section has no (valid, hash-matching) station table | |
@@ -175,6 +179,13 @@ Milestone-1 codes (docs/MODULAR-SHIPS.md §6) all still apply. Added:
 | `CANNOT_REFIT_NOW` | §6 | the reason sentence |
 | `APPLY_FAILED`, `SAVE_FAILED` | the rebuild / the save failed; she was put back | |
 | `NO_REFERENCE_HULL` | the steamer's hull form is missing | |
+
+Milestone-1 equipment codes (`EQUIPMENT_SLOT_UNKNOWN`, `EQUIPMENT_WRONG_KIND`,
+`EQUIPMENT_CLASS_NOT_ALLOWED`, `EQUIPMENT_SLOT_TAKEN` — what the brief that
+built this calls "SLOT_OCCUPIED", the same code — `EQUIPMENT_EXCEEDS_CLEARANCE`,
+`EQUIPMENT_BLOCKS_PASSAGE`, `EQUIPMENT_OVERLAP`, docs/MODULAR-SHIPS.md §6)
+still apply, unchanged, to `FitEquipment`/`RemoveEquipment`/`MoveEquipment`
+and to a draft that carries equipment straight into `Validate`.
 
 ## 6. `CanRefitNow` reasons
 
@@ -213,8 +224,9 @@ ShipyardSession.SetWorldInputBlocked(false);
 
 Allowed: `hull.stern.w1r2.v3`, 0–3 × `hull.middle.w1r2.v3`, `hull.bow.w1r2.v3`,
 `wheel.rotor.m1.timber` / `wheel.rotor.m1.reinforced` on `wheel.carrier.m1`,
-`fitting.chimney.v3` on `stern/Chimney`. Excluded: raised decks, wider hulls
-(their definitions need validation), the oversized wheel, deck equipment,
+`fitting.chimney.v3` on `stern/Chimney`, `equipment.cannon.astra.v1` on any
+deck-gun slot (2026-09-25). Excluded: raised decks, wider hulls (their
+definitions need validation), the oversized wheel, any other equipment,
 costs. Timber ↔ reinforced changes **only the rotor's drawing**: same radius,
 same physics, no bonus. **Meshes are never stretched** to make width/depth
 variants; only the PHYSICS data is reshaped, and only from authored module data (A9).
@@ -366,18 +378,22 @@ same test the assembler applies to equipment). Gate:
 clearance 1.8 × 1.55 × 1.65 u at |y| 3.45, i.e. |y| 2.675..4.225, which
 touches but does not overlap the passages' |y| ≤ 2.675.
 
-**Extra space does not grant everything at once.** Slots do not buy guns.
-She carries the hull form's own gun pairs (3). Each pair counts only if its
-section has a free usable port+starboard slot pair (nearest first), and only
-while berths ≥ guns × `WeightModel.CrewPerGun`. CrewPerGun is **1**, from
-the code: `CannonBattery` works each gun with one named hand
-(`CrewRoster.GunCrew(index)`). Beyond that the aft-most pairs are struck.
-So 3 bays have 10 gun slots but still 6 guns (gate
-`extra-slots-grant-no-guns`), and a middle with 0 berths strikes Long's
-pair 3 (gate `guns-need-berths-for-their-crew`). The guns stand where the
-hull form puts them; the slot is the licence, not the position. The plan's
-`data.gunSockets` holds only the carried pairs, so the battery `Man()` fits
-is exactly `capacity.guns`.
+**Guns are real equipment now (2026-09-25), not hull-form sockets.** See §15
+for the full picture (module, presets, migration, dry dock, API). In short:
+`capacity.guns` is the COUNT of fitted `equipment.deck-gun` items in the
+assembly — no cap, no "nearest pair", nothing struck. `Long()`/`Short()`/
+`WithMiddles(n)` fit the hull's 3 pairs on their AUTHORED slots explicitly
+(bow and stern always, the middle pair on the first bay only — extra bays
+buy slots, not guns, gate `extra-slots-grant-no-guns`); a v1 save (guns still
+implicit) is migrated to the same explicit equipment on load. Each gun's own
+`crew` (1, from `CannonBattery`/`CrewRoster.GunCrew`) and `massKg` (500,
+`ShipLoad`'s lightest calibre) are read from its module, summed as
+`gunsCrewNeeded`/`gunsWeightKg`; a draft whose guns need more hands than it
+has berths is refused `GUNS_NEED_CREW` (gate `guns-need-berths-for-their-crew`),
+never silently capped. The plan's `data.gunSockets` is the fitted STARBOARD
+guns' own positions (ship frame), so `CannonBattery.Fit` (unchanged, it
+mirrors them to port) draws and works the battery from the slots, not the
+hull form.
 
 The **weight allowance stays the shared limit**: displacement at the load
 line − lightship − crew × 90 kg − guns carried × 500 kg (`ShipLoad` weights;
@@ -388,14 +404,18 @@ reaches it (0.738 m below the deck line). Every hull gets the same margin.
 **Cargo weight is checked, not felt** (only the ladder ships' `ShipLoad`
 puts it on the rigidbody).
 
-**Guns without a slot are refused, not struck (decided 2026-09-24).** Short
-has slots for pairs 1 and 3 only (stern + bow); pair 2 stands in her bow next
-to pair 1 and loses the nearest-slot contest. A refit to Short is therefore
-refused `EQUIPMENT_WOULD_BE_LOST` ("Gun pair 2 would have no gun slot on this
-ship; the refit is refused rather than remove it."), per the agreed rule:
-reject changes that cannot safely retain existing equipment, never discard.
-Guns cannot be removed by hand in the prototype, so Short stays unbuildable
-until gun removal/stores exist or Kevin and Astra change the rule.
+**Guns without a slot are refused, not struck (decided 2026-09-24; the dry
+dock, 2026-09-25, is how the "or change the rule" below happened).** Short
+has slots for the stern and bow pairs only, not the middle's — so a draft
+built by cloning the live config and just clearing `middleIds` still lists
+the middle pair on a slot (`middle[0]/DeckSlot_1_-1`/`_1`) that no longer
+exists, and is refused `EQUIPMENT_WOULD_BE_LOST` ("… would have no place on
+this ship (its slot is gone); take it off to the dry dock first."), per the
+agreed rule: reject changes that cannot safely retain existing equipment,
+never discard. Guns CAN now be removed by hand (`RemoveEquipment`, into the
+dry dock) — do that first (or start from the `Short()` preset, which never
+references the middle pair) and the same hull shrink is valid; the 2 guns
+sit in the dock, unlost, until fitted again. See §15.
 
 The old derived capacity (volume and crew-strip ratios) is kept only as the
 printed cross-check gate `derived-capacity-cross-check`. Authored − derived
@@ -511,6 +531,22 @@ crew (4a), so both land on the right deck.
 
 ## 14. Changed files
 
+Since d6d66ad (guns as equipment + dry dock, 2026-09-25) — see §15:
+* `Assets/_Project/Resources/ShipModules/Modules/equipment.cannon.astra.v1.json` — new: the real cannon module (mass/crew provisional).
+* `Assets/_Project/Resources/ShipModules/Modules/hull.{stern,middle,bow}.w1r2.v3.json` — deck-gun `equipmentSlots` widened 1.55→2.3 u across (fits the real footprint); `CrewPassage_Main` narrowed 2.675→2.30 u to match; port-side (`_1`) deck-gun socket `yawDeg` 0→180 (muzzle to port).
+* `Assets/_Project/Resources/ShipModules/Meshes/Equipment/Cannon_Astra_v1/Cannon.fbx` — new: copied from `art-staging/cannon-astra-v1/cannon.fbx` (no `.meta` yet).
+* `Assets/_Project/Scripts/Ship/Modular/ModuleSchema.cs` — `ProvisionalFloat`; `EquipmentSpec.massKg`/`.crew`.
+* `Assets/_Project/Scripts/Ship/Modular/ShipConfiguration.cs` — `SupportedSchemaVersion` 1→2; `EquipmentCannon`; `Short`/`Long`/`WithMiddles` fit the hull's 3 gun pairs explicitly; `MigratedToV2` (v1 save → explicit guns).
+* `Assets/_Project/Scripts/Ship/Modular/Shipyard.cs` — guns: `FittedGun`, `ShipyardPlan.fittedGuns`/`gunsWeightKg`/`gunsCrewNeeded` replace `gunIdx`/`FitGuns`/`GunIndex`; `GunsStruck` and the old `EquipmentLost` gun-diff removed; `GUNS_NEED_CREW`, `NOT_IN_DRY_DOCK`, `DRY_DOCK_NOT_HERE` codes; `TranslateVanishedGunSlot` (EQUIPMENT_SLOT_UNKNOWN → friendlier EQUIPMENT_WOULD_BE_LOST for a gun); `ShipyardPolicy` allows the cannon; `ModularSave.Decode` calls `MigratedToV2`.
+* `Assets/_Project/Scripts/Ship/Modular/DryDock.cs` — new: the pure dry-dock store + apply-time diff.
+* `Assets/_Project/Scripts/Ship/Modular/ShipyardEquipment.cs` — new: pure `Fit`/`Remove`/`Move`/`Slots`/`DockPreview`, `EquipmentSlotView`, `DryDockRow`, `ShipyardEdit`.
+* `Assets/_Project/Scripts/Ship/Modular/ShipyardReport.cs` — `dryDock` rows; `guns` figure note.
+* `Assets/_Project/Scripts/Ship/Modular/Runtime/ShipyardService.cs` — `Dock`; `DryDockField`/`ApplyDryDockFromSave`; `ApplyRefit` gates + commits the dock diff; `FitEquipment`/`RemoveEquipment`/`MoveEquipment`/`EquipmentSlots`/`DryDockPreview`.
+* `Assets/_Project/Scripts/Save/SaveData.cs`, `Save/SaveGame.cs` — `ShipSave.dryDock` (additive field, same pattern as `.modular`).
+* `Assets/_Project/Scripts/Ship/Modular/ModularShipSelfTest.cs`, `ShipyardSelfTest.cs` — module count 12→13; gun/dry-dock gates rewritten for explicit equipment (`hull-shrink-with-dangling-guns-refused`, `hull-shrink-after-removing-guns-ok`, `dock-*`, `guns-need-berths-for-their-crew`); obsolete `gunIdx`/`GunsStruck`-era gates removed.
+* `Assets/_Project/Scripts/Dev/ShipyardRefitProbe.cs` — the old outright "Short is refused" check replaced with the live remove-guns → shrink → dock → grow → refit-back → battery sequence (b2).
+* `docs/MODULAR-SHIPS.md`, this file — updated for the above.
+
 Since 79b734d (authored capacity + one mass source, 2026-09-24):
 * `Assets/_Project/Resources/ShipModules/Modules/hull.{stern,middle,bow}.w1r2.v3.json` — provisional `capacity` blocks (seeded, §10).
 * `Assets/_Project/Scripts/Ship/Modular/ModuleSchema.cs` — `CapacitySpec`, `ProvisionalInt`, `ProvisionalSlots`; `ModuleDef.capacity`.
@@ -553,3 +589,115 @@ Delivered by Astra (copied into the worktree by the coordinator, not authored he
 * `Assets/_Project/Scripts/Dev/Editor/RunProbe.cs` — `RunProbe.ShipyardRefit()`.
 * `tools/modular-selftest.sh`, `tools/modular-selftest/Main.cs` — compile `HullFormData.cs`, pass `hullform.json` and a disk reader for the hydrostatic tables.
 * `docs/MODULAR-SHIPS.md` — self-test count and a pointer here.
+
+## 15. Equipment editing + dry dock (2026-09-25) — for Astra's UI
+
+**The module.** `equipment.cannon.astra.v1` (kind `Equipment`, class
+`equipment.deck-gun`), Astra's real kit
+(`art-staging/cannon-astra-v1`, footprint 1.22 × 2.1816 × 1.2756 u, muzzle
+toward authoring -Y at yaw 0 — a starboard slot's socket stays yaw 0, a
+port slot's is yaw 180 so the drawn muzzle points the other way). Mesh at
+`Resources/ShipModules/Meshes/Equipment/Cannon_Astra_v1/Cannon.fbx` (no
+`.meta` yet — Unity writes one on first import; `ModularShipView` falls back
+to a grey placeholder box until then, same as any other module). Mass (500
+kg) and crew (1) are on `ModuleDef.equipment.massKg`/`.crew`
+(`ProvisionalFloat`/`ProvisionalInt`, same shape as `capacity`'s fields) —
+provisional, same numbers the implicit hull-form guns used. The real
+footprint does not fit the milestone-1 deck-slot clearance
+(1.8 × 1.55 × 1.65 u): every `equipment.deck-gun` slot on the three hull
+modules was widened to 1.8 × **2.3** × 1.65 u, and each module's
+`CrewPassage_Main` narrowed from |y| ≤ 2.675 to |y| ≤ **2.30** u to match
+(still touches, does not overlap — the same relationship as before, just at
+the new numbers). Both remain PROVISIONAL; retune freely.
+
+**Guns are explicit `equipment` entries**, not hull-form sockets (§10).
+`ShipConfiguration.SupportedSchemaVersion` is now **2**; a v1 document
+(no `equipment`) is migrated on load (`ShipConfiguration.MigratedToV2`,
+called from `ModularSave.Decode`) by fitting the SAME cannon on the bow's
+and stern's authored pair, and on the first middle bay's if she had one —
+exactly what `WithMiddles(n)` still builds fresh, since a v1 config could
+only ever have been one of those. An old save with no `modular` field at
+all is still untouched (`Long()`, as before).
+
+**API** (on `ShipyardService`; pure — no ship/dock/save touched — unless
+noted):
+
+```csharp
+ShipyardEdit FitEquipment(ShipConfiguration draft, string slotId, string moduleId);
+ShipyardEdit RemoveEquipment(ShipConfiguration draft, string slotId);
+ShipyardEdit MoveEquipment(ShipConfiguration draft, string fromSlotId, string toSlotId);
+class ShipyardEdit { bool ok; string code, message; ShipConfiguration draft; }
+    // draft = the edited copy on success, an unchanged copy of the INPUT on
+    // failure (never your own reference either way). Fails with the same
+    // codes ShipAssembler/ShipyardPolicy would refuse the result with
+    // (EQUIPMENT_SLOT_UNKNOWN, EQUIPMENT_CLASS_NOT_ALLOWED,
+    // EQUIPMENT_SLOT_TAKEN [= "SLOT_OCCUPIED"], EQUIPMENT_EXCEEDS_CLEARANCE,
+    // EQUIPMENT_BLOCKS_PASSAGE, EQUIPMENT_OVERLAP, NOT_IN_PROTOTYPE) or
+    // NOTHING_THERE (Remove/Move a slot with nothing fitted).
+
+IReadOnlyList<EquipmentSlotView> EquipmentSlots(ShipConfiguration draft);
+class EquipmentSlotView { string slotId, sectionKey, side /* "port"/"starboard" */, label /* "Middle bay 1, starboard gun" */;
+                          string[] accepts; string occupantModuleId /* "" = empty */;
+                          bool usable; string blockedReason /* "" = usable */; Vector3 positionM /* ship frame */; }
+    // Every FIXED deck-gun slot of the draft (the free-placement deck AREA
+    // is not enumerated here). `usable` is false only when the slot's
+    // clearance overlaps a crew passage of THIS draft's assembly --
+    // occupied is a separate question (occupantModuleId).
+
+IReadOnlyList<DryDockRow> DryDockPreview(ShipConfiguration draft);
+class DryDockRow { string moduleId, name; int inDockNow, inDockAfterApply; }
+    // Per module id the dock holds now, or would after applying `draft`
+    // from the LIVE ship's current configuration -- the same diff
+    // ApplyRefit uses. Bind a picker's "in stock" / greyed-out state to this
+    // (Fit does not itself check stock -- only ApplyRefit does, at the end).
+```
+
+`AllowedModuleIds(ModuleKind.Equipment)` → `["equipment.cannon.astra.v1"]`.
+`ShipyardReport.dryDock` (filled by `ShipyardService.Report`, empty from the
+pure `ShipyardReport.From`) carries the same rows as `DryDockPreview` for the
+report screen. `Report`'s `guns` figure and every `SectionOccupancy.guns` /
+`.equipment` ("gun, starboard" / "gun, port", one per fitted gun — no longer
+"gun pair N") now read straight off the fitted equipment.
+
+**The dry dock** (`DryDock`, pure, JSON, `ShipyardService.Dock` a copy of
+the live one). Counted by module id, generic — not gun-specific. `ShipSave`
+gets an ADDITIVE `dryDock` field next to `modular` (same pattern: empty
+string while the dock is empty, `SaveData.CurrentVersion` unchanged, an
+old/missing field is an empty dock). `ApplyRefit(expected, draft)`, after
+`Validate` passes: diffs `expected.equipment` against `draft.equipment` **by
+module id** (`DryDock.Diff` — a pure move to a different slot, same module,
+same count, is not a delta and costs nothing); anything missing from the
+draft goes INTO the dock, anything new comes FROM it. If the diff is
+non-empty it additionally requires `AnchorController.AtHomeDock`
+(`DRY_DOCK_NOT_HERE` otherwise) and enough stock for every "from the dock"
+delta (`NOT_IN_DRY_DOCK` otherwise) — checked BEFORE the hull is rebuilt, so
+either refusal leaves the ship untouched; a plain move needs only the usual
+`CanRefitNow`. The hull rebuild and the dock update commit together right
+before `Persist`; if the save fails, both roll back with the ship.
+
+**Minimal usage** (fit a gun from the dock, on top of §8's pattern):
+
+```csharp
+var draft = yard.ReadCurrent();
+var slots = svc.EquipmentSlots(draft);              // pick an empty, usable one
+var edit = svc.FitEquipment(draft, slots[0].slotId, "equipment.cannon.astra.v1");
+if (edit.ok) draft = edit.draft;                     // else show edit.message
+var preview = svc.DryDockPreview(draft);             // grey out a module with 0 in stock
+if (string.IsNullOrEmpty(yard.Validate(draft)) && yard.TryApply(expected, draft, out string why)) { /* done */ }
+```
+
+**Deviations from the brief that built this** (2026-09-25, noted so Kevin
+can revisit): `CannonBattery.Fit` still mirrors a single STARBOARD list to
+port (unchanged, to keep this scoped) — a lone unpaired gun (legal in the
+data: "a port gun without its starboard twin") draws correctly
+(`ModularShipView`) but does not get a correctly-paired live `CannonBattery`
+gun; only symmetric pairs (everything `Long`/`Short`/`WithMiddles`/migration
+ever produce) are exercised. `equipment.cannon.astra.v1`'s `boundsMinU`/
+`boundsMaxU` (the placeholder-box fallback) are estimated from
+`export-verification.json`'s overall dimensions, not re-measured from the
+imported FBX — fine for now since the mesh usually resolves, worth
+confirming after import. A v1→v2 save migration always seats the middle
+pair on the FIRST bay (matching what `WithMiddles` itself builds), not the
+geometrically-nearest bay the old implicit rule would have chosen for a
+2- or 3-bay ship refitted before this change shipped — no real save has ever
+had that shape yet, so this was chosen for simplicity over exactness.
