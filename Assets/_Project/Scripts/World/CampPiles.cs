@@ -24,8 +24,10 @@ namespace SeaSick.World
 
         /// Most units drawn in one stack. The ceiling starts at ten and a
         /// store hut takes it to thirty; past a dozen the stack stops being
-        /// countable anyway, so it grows in height and then stops.
-        const int MaxDrawn = 12;
+        /// countable anyway, so it grows in height and then stops. Public
+        /// because the deck load aboard (`Ship.ShipHold`) is drawn with the
+        /// same piles and stops at the same dozen.
+        public const int MaxDrawn = 12;
 
         readonly Dictionary<string, Transform> stacks = new Dictionary<string, Transform>();
         readonly Dictionary<string, int> drawn = new Dictionary<string, int>();
@@ -311,10 +313,36 @@ namespace SeaSick.World
 
             stack.position = at;
             stack.rotation = facing;
+            DrawPile(stack, resource, count, false);
+        }
 
-            for (int i = stack.childCount - 1; i >= 0; i--)
-                Destroy(stack.GetChild(i).gameObject);
-            if (count <= 0) return;
+        // --- the one drawing of a unit of cargo (2026-09-24) -----------------
+        //
+        // Kevin, phone playtest: *"the cargo gets HUGE on the ship. much
+        // larger than it is on land."* The deck had its own brig-era meshes
+        // (`CargoVisual`, a 1.5 m x 0.42 m log, a 1.1 m block of stone) at two
+        // to three times the size of the pile by the fire. There is one
+        // drawing now, and it is this one: `DrawPile` is what the ring by the
+        // fire, the hut-side stacks and the deck load aboard all call, and
+        // `BuildUnit` is one unit of it on its own (what `CargoVisual.Build`
+        // hands out, for a crewman's shoulder or the home beach).
+
+        /// **Draw `count` units of `resource` into `pile`**, clearing what was
+        /// there -- the same shapes, sizes, materials and layout as the stacks
+        /// by the fire, capped at `MaxDrawn`. The pile is drawn about its own
+        /// origin, base on y = 0, three columns along its local x.
+        ///
+        /// `tidy` is for cargo lashed on a deck: the same units, stowed
+        /// square. Every log lies along the pile's local z (fore and aft when
+        /// the pile is unrotated in a ship's frame), and stone and rubble keep
+        /// their shapes but lose their tumble -- yaw within +/-2 deg, no tilt.
+        /// Ashore passes false and is drawn exactly as before.
+        public static void DrawPile(Transform pile, string resource, int count, bool tidy)
+        {
+            if (pile == null) return;
+            for (int i = pile.childCount - 1; i >= 0; i--)
+                Destroy(pile.GetChild(i).gameObject);
+            if (count <= 0 || string.IsNullOrEmpty(resource)) return;
 
             var mat = MatFor(resource, false);
             int n = Mathf.Min(count, MaxDrawn);
@@ -322,36 +350,77 @@ namespace SeaSick.World
             int seed = Mathf.Abs(resource.GetHashCode());
 
             for (int i = 0; i < n; i++)
-            {
-                int row = i / 3, col = i % 3;
-
-                switch (shape)
-                {
-                    case PileShape.Logs:
-                        BuildLog(stack, mat, row, col);
-                        break;
-                    case PileShape.Cairn:
-                        BuildCairnBlock(stack, mat, i, row, col, seed);
-                        break;
-                    case PileShape.Courses:
-                        BuildBrickCourse(stack, mat, row, col);
-                        break;
-                    case PileShape.Bundle:
-                        BuildShaft(stack, mat, i, n);
-                        break;
-                    case PileShape.Sacks:
-                        BuildSack(stack, resource, i, row, col);
-                        break;
-                    default:
-                        BuildHeapCube(stack, mat, i, row, col);
-                        break;
-                }
-            }
+                DrawUnit(pile, resource, shape, mat, i, n, seed, tidy);
 
             // A pile of six or more sacks earns one open crate beside it —
             // enough goods that some of it travelled boxed, not carried.
             if (shape == PileShape.Sacks && n >= 6)
-                BuildCrate(stack, resource, n);
+                BuildCrate(pile, resource, n);
+        }
+
+        /// **One unit of `resource`**, the size it is in the pile by the fire,
+        /// under a new root named `Cargo_<resource>` parented to `parent`,
+        /// centred on the root's vertical axis with its base at about y = 0.
+        /// Drawn tidy (a log lies along the root's z). An arrow unit is a
+        /// small bundle: one shaft alone is a stick.
+        public static GameObject BuildUnit(string resource, Transform parent)
+        {
+            if (string.IsNullOrEmpty(resource)) resource = Res.Timber;
+            var root = new GameObject($"Cargo_{resource}");
+            root.transform.SetParent(parent, false);
+            var body = new GameObject("Unit").transform;
+            body.SetParent(root.transform, false);
+
+            var mat = MatFor(resource, false);
+            var shape = ShapeFor(resource);
+            int seed = Mathf.Abs(resource.GetHashCode());
+            if (shape == PileShape.Bundle)
+                for (int i = 0; i < UnitBundle; i++)
+                    DrawUnit(body, resource, shape, mat, i, UnitBundle, seed, true);
+            else
+                // Index 1 is the middle column of the bottom course, the unit
+                // the pile layout already puts nearest its own centre.
+                DrawUnit(body, resource, shape, mat, 1, 1, seed, true);
+
+            // Whatever the layout's row/column offset left, take it off: the
+            // caller places the root, and the unit should be ON it.
+            if (shape != PileShape.Bundle && body.childCount > 0)
+            {
+                Vector3 p = body.GetChild(0).localPosition;
+                body.localPosition = new Vector3(-p.x, 0f, -p.z);
+            }
+            return root;
+        }
+
+        /// Shafts in one arrow "unit" drawn on its own.
+        const int UnitBundle = 4;
+
+        /// The i-th unit of an n-unit pile.
+        static void DrawUnit(Transform stack, string resource, PileShape shape, Material mat,
+            int i, int n, int seed, bool tidy)
+        {
+            int row = i / 3, col = i % 3;
+            switch (shape)
+            {
+                case PileShape.Logs:
+                    BuildLog(stack, mat, row, col, tidy);
+                    break;
+                case PileShape.Cairn:
+                    BuildCairnBlock(stack, mat, i, row, col, seed, tidy);
+                    break;
+                case PileShape.Courses:
+                    BuildBrickCourse(stack, mat, row, col);
+                    break;
+                case PileShape.Bundle:
+                    BuildShaft(stack, mat, i, n);
+                    break;
+                case PileShape.Sacks:
+                    BuildSack(stack, resource, i, row, col);
+                    break;
+                default:
+                    BuildHeapCube(stack, mat, i, row, col, tidy);
+                    break;
+            }
         }
 
         static GameObject NewPrimitive(Transform parent, PrimitiveType type, Material mat)
@@ -364,11 +433,13 @@ namespace SeaSick.World
             return go;
         }
 
-        static void BuildLog(Transform stack, Material mat, int row, int col)
+        static void BuildLog(Transform stack, Material mat, int row, int col, bool tidy)
         {
-            // Cross-piled, the way timber is actually stacked.
+            // Cross-piled, the way timber is actually stacked. Tidy (a deck
+            // load): every course the same way, along z, so a lashed stack of
+            // timber runs fore and aft and nothing stands up out of it.
             var go = NewPrimitive(stack, PrimitiveType.Cylinder, mat);
-            bool across = row % 2 == 1;
+            bool across = tidy || row % 2 == 1;
             go.transform.localScale = new Vector3(0.24f, 0.8f, 0.24f);
             go.transform.localRotation = Quaternion.Euler(
                 across ? 90f : 0f, across ? 0f : 90f, 0f);
@@ -378,12 +449,13 @@ namespace SeaSick.World
                 across ? 0f : (col - 1) * 0.32f);
         }
 
-        static void BuildHeapCube(Transform stack, Material mat, int i, int row, int col)
+        static void BuildHeapCube(Transform stack, Material mat, int i, int row, int col, bool tidy)
         {
-            // Rubble with no shape of its own: a plain heap.
+            // Rubble with no shape of its own: a plain heap. Tidy: squared
+            // up, within +/-2 deg.
             var go = NewPrimitive(stack, PrimitiveType.Cube, mat);
             go.transform.localScale = new Vector3(0.44f, 0.34f, 0.44f);
-            go.transform.localRotation = Quaternion.Euler(0f, (i * 37) % 360, 0f);
+            go.transform.localRotation = Quaternion.Euler(0f, tidy ? (i * 37) % 5 - 2 : (i * 37) % 360, 0f);
             go.transform.localPosition = new Vector3(
                 (col - 1) * 0.42f, 0.17f + row * 0.3f,
                 ((i % 5) - 2) * 0.09f);
@@ -392,7 +464,8 @@ namespace SeaSick.World
         /// Stone/ore: irregular flattened blocks stacked lower and wider
         /// than the generic heap, the way a cairn of quarried rock actually
         /// sits — not masonry, not a grid of identical cubes.
-        static void BuildCairnBlock(Transform stack, Material mat, int i, int row, int col, int seed)
+        static void BuildCairnBlock(Transform stack, Material mat, int i, int row, int col, int seed,
+            bool tidy)
         {
             var go = NewPrimitive(stack, PrimitiveType.Cube, mat);
 
@@ -401,9 +474,11 @@ namespace SeaSick.World
             float sy = Mathf.Lerp(0.18f, 0.30f, Hash01(seed + i * 3 + 2));
             go.transform.localScale = new Vector3(sx, sy, sz);
 
-            float yaw = Hash01(seed + i * 7) * 360f;
-            float tiltX = (Hash01(seed + i * 11) - 0.5f) * 16f;
-            float tiltZ = (Hash01(seed + i * 13) - 0.5f) * 16f;
+            // Tidy (lashed on a deck): the same blocks, squared up -- yaw
+            // within +/-2 deg and flat, so the load does not read as tipped.
+            float yaw = tidy ? (Hash01(seed + i * 7) - 0.5f) * 4f : Hash01(seed + i * 7) * 360f;
+            float tiltX = tidy ? 0f : (Hash01(seed + i * 11) - 0.5f) * 16f;
+            float tiltZ = tidy ? 0f : (Hash01(seed + i * 13) - 0.5f) * 16f;
             go.transform.localRotation = Quaternion.Euler(tiltX, yaw, tiltZ);
 
             // Wider spread and a shallower rise than the heap: a cairn

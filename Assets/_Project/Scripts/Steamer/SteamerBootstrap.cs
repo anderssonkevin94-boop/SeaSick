@@ -247,6 +247,7 @@ namespace SeaSick.Steamer
             if (captain != null) captain.localPosition = data.helm;
             var voyage = Object.FindFirstObjectByType<SeaSick.Voyage.VoyageManager>();
             if (voyage != null) voyage.SetHoldCapacity(HoldCells);
+            FitDeckLoad(ship, data, hull);
             Man(ship, data);
 
             // --- 7. the drive, and only then hand it the ship ------------------
@@ -349,6 +350,100 @@ namespace SeaSick.Steamer
                     sockets.Add(new Vector3(g.x, DeckYAt(data, g.z), g.z));
                 }
             battery.Fit(sockets);
+        }
+
+        /// **Her cargo is a deck load, lashed low and wide just aft of
+        /// amidships** (2026-09-24). Kevin, on the phone: *"the cargo gets
+        /// HUGE on the ship ... it piles it in a very distracting and
+        /// unreasonable way."* The serialized layout was the brig's (a 2 x 2
+        /// tower at the stern); this lays it out from her own numbers.
+        ///
+        /// - Row 0 fills the open deck between the funnel and the helmsman,
+        ///   centred in it; row 1 starts just forward of the funnel. The
+        ///   funnel is MEASURED off the mesh she is wearing (the Astra
+        ///   `Chimney` renderer), not typed; without one it is taken as a
+        ///   0.8 m casing on the centreline amidships.
+        /// - Two kinds abreast (fewer on a narrow deck): as many piles at
+        ///   `Across` centres as fit inside the crew's stations, which stand
+        ///   0.7 m in from the bulwark (`DeckStation`).
+        /// - Feet on the deck at each row's own station.
+        static void FitDeckLoad(GameObject ship, HullFormData data, GameObject hull)
+        {
+            var hold = ship.GetComponent<ShipHold>();
+            if (hold == null) return;
+
+            // A pile by the fire is at most ~1.6 m long (a dozen logs laid
+            // fore and aft) and ~1.55 m wide (a cairn of stone), about a
+            // metre high: `CampPiles.DrawPile`.
+            const float PileLength = 1.7f, Across = 1.5f, Clear = 0.15f;
+
+            float funnelAft = -0.4f, funnelFwd = 0.4f;
+            var chimney = FindDeep(hull != null ? hull.transform : null, "Chimney");
+            var r = chimney != null ? chimney.GetComponent<Renderer>() : null;
+            if (r != null)
+            {
+                Bounds b = r.bounds;
+                float lo = float.MaxValue, hi = float.MinValue;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 corner = new Vector3(
+                        (i & 1) == 0 ? b.min.x : b.max.x,
+                        (i & 2) == 0 ? b.min.y : b.max.y,
+                        (i & 4) == 0 ? b.min.z : b.max.z);
+                    float z = ship.transform.InverseTransformPoint(corner).z;
+                    lo = Mathf.Min(lo, z);
+                    hi = Mathf.Max(hi, z);
+                }
+                funnelAft = lo; funnelFwd = hi;
+            }
+
+            // The helmsman stands at `data.helm`; leave him a body's room.
+            float aftLimit = data.helm.z + 0.45f;
+            float room = (funnelAft - Clear) - aftLimit;
+            float z0 = room >= PileLength
+                ? (funnelAft - Clear + aftLimit) * 0.5f
+                : funnelAft - Clear - PileLength * 0.5f;
+            float z1 = funnelFwd + Clear + PileLength * 0.5f;
+
+            // Across: inside the crew's stations at row 0's station.
+            int si = NearestStation(data, z0);
+            float half = data.HalfBreadthAt(si, data.stations[si].deckY);
+            int abreast = Mathf.Clamp(Mathf.FloorToInt(2f * (half - 0.7f) / Across), 1, 3);
+
+            var rows = new[]
+            {
+                new Vector3(0f, DeckYAt(data, z0) + 0.01f, z0),
+                new Vector3(0f, DeckYAt(data, z1) + 0.01f, z1),
+                new Vector3(0f, DeckYAt(data, z1 + PileLength + 0.1f) + 0.01f, z1 + PileLength + 0.1f),
+            };
+            hold.Fit(rows, abreast, Across, HoldCells);
+            Debug.Log($"[Steamer] deck load: {abreast} abreast at {Across:F2} m, rows z "
+                + $"{rows[0].z:F2} / {rows[1].z:F2} / {rows[2].z:F2}, deck y {rows[0].y:F2} "
+                + $"(funnel z {funnelAft:F2}..{funnelFwd:F2}{(r != null ? "" : ", assumed")}, "
+                + $"helm z {data.helm.z:F2})");
+        }
+
+        static int NearestStation(HullFormData data, float z)
+        {
+            int si = 0; float best = float.MaxValue;
+            for (int i = 0; i < data.StationCount; i++)
+            {
+                float d = Mathf.Abs(data.stations[i].z - z);
+                if (d < best) { best = d; si = i; }
+            }
+            return si;
+        }
+
+        static Transform FindDeep(Transform t, string name)
+        {
+            if (t == null) return null;
+            if (t.name == name) return t;
+            for (int i = 0; i < t.childCount; i++)
+            {
+                var f = FindDeep(t.GetChild(i), name);
+                if (f != null) return f;
+            }
+            return null;
         }
 
         /// `ConfigureForHull` authors top speed as 15 * sqrt(L / TunedLoa) and
