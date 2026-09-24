@@ -28,7 +28,8 @@ namespace SeaSick.Ship
         /// Paddle/engine pitch rises by this fraction at top speed.  0..1
         public static float soundPitchRange = 0.4f;
         /// Telegraph notch / burn haptics on iOS and Android.
-        public static bool hapticsOn = true;
+        public static bool  hapticsOn         = false;  // OFF 2026-09-24: Handheld.Vibrate at launch deadlocked iOS 26's audio daemon (audiomxd XPC timeout, phone froze); a Taptic plugin later
+        public static bool  soundOn           = false;  // OFF 2026-09-24 for the launch bisect: PaddleSound is not attached while false; flip on to test the chug alone
 
         // ---------------------------------------------------------- signals
         //

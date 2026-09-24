@@ -152,7 +152,10 @@ namespace SeaSick.Ship
             // The engine note rides with the same rig: SpeedJuice is only
             // ever on the player's ShipMotor (raiders are EnemyShip, not
             // ShipMotor), so this is the one place that means "her".
-            if (!GetComponent<PaddleSound>()) gameObject.AddComponent<PaddleSound>();
+            // Attached only when JuiceTuning.soundOn (launch bisect, 2026-09-24):
+            // the 14:51 build froze the phone at launch with the audio daemon
+            // deadlocked; sound and haptics come back one at a time.
+            if (JuiceTuning.soundOn && !GetComponent<PaddleSound>()) gameObject.AddComponent<PaddleSound>();
 
             // Every emitter hangs off this rather than off the hull directly,
             // so the whole rig can be held at the waterline as she settles.
