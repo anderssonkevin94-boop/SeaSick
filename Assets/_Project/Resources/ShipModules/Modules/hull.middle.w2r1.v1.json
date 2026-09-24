@@ -1,0 +1,177 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.middle.w2r1.v1",
+    "version": 1,
+    "kind": "Middle",
+    "family": "W2-r1",
+    "status": "prototype",
+    "displayName": "Midship_W2 (V1)",
+    "description": "Repeatable 6.00 u wide/deep middle bay. 25% wider deck than W1-r2; keel lowered to -2.75.",
+    "source": "art-staging/modular-hull-wide-v1/manifest.json",
+    "lengthU": 6.0,
+    "boundsMinU": {"x": 0, "y": -6.01, "z": -2.75},
+    "boundsMaxU": {"x": 6.0, "y": 6.01, "z": 2.47},
+    "boundsNote": "Measured 2026-09-25 (WideHullValidation): union of the module's FBX vertex bounds, converted to authoring axes by the measured Blender-reimport rotation (authoring.x=-measured.y, authoring.y=measured.x, authoring.z=measured.z). Max Z 2.47 matches Midship_W1's exactly (rail top unchanged per kit README).",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.aft",
+            "standard": "W2",
+            "posU": {"x": 0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.fwd",
+            "standard": "W2",
+            "posU": {"x": 6.0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "DeckSlot_0_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 1.5, "y": -4.35, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "manifest.json sockets.Midship_W2__DeckSlot_0_-1."
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 1.5, "y": 4.35, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "manifest.json sockets.Midship_W2__DeckSlot_0_1."
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 3.5, "y": -4.35, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "manifest.json sockets.Midship_W2__DeckSlot_1_-1."
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 3.5, "y": 4.35, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "manifest.json sockets.Midship_W2__DeckSlot_1_1."
+        },
+        {
+            "id": "DeckAreaSocket",
+            "role": "deck.area",
+            "standard": "",
+            "posU": {"x": 3.0, "y": 0, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Centre of the free-placement deck area of this bay (not an authored kit empty; carried over from the W1-r2 pattern for parity)."
+        }
+    ],
+    "visuals": [
+        {"id": "Hull_Shell", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Midship_W2/Hull_Shell", "placeholder": false, "notes": ""},
+        {"id": "Rails_Teal", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Midship_W2/Rails_Teal", "placeholder": false, "notes": ""},
+        {"id": "Hull_Ironwork", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Midship_W2/Hull_Ironwork", "placeholder": false, "notes": ""},
+        {"id": "Plank_Seams", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Midship_W2/Plank_Seams", "placeholder": false, "notes": ""}
+    ],
+    "equipmentSlots": [
+        {
+            "id": "DeckSlot_0_-1",
+            "socketId": "DeckSlot_0_-1",
+            "clearanceSizeU": {"x": 2.18, "y": 1.22, "z": 1.28},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance = the REAL cannon footprint (art-staging/cannon-astra-v1: 1.22 wide x 2.18 long x 1.28 high), verified by WideHullValidation against this section's bounds and its crew passage (touches, does not overlap). CAVEAT: DeckSlot_0 and DeckSlot_1 on the SAME side overlap each other by 0.18 u in X if both carried a real cannon at once (pitch 2.0 u < the cannon's 2.18 u length); only one gun per side per bay is offered (capacity.gunSlots below)."
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "socketId": "DeckSlot_0_1",
+            "clearanceSizeU": {"x": 2.18, "y": 1.22, "z": 1.28},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance = the REAL cannon footprint. See DeckSlot_0_-1 for the same-side adjacent-slot caveat."
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "socketId": "DeckSlot_1_-1",
+            "clearanceSizeU": {"x": 2.18, "y": 1.22, "z": 1.28},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance = the REAL cannon footprint. See DeckSlot_0_-1 for the same-side adjacent-slot caveat."
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "socketId": "DeckSlot_1_1",
+            "clearanceSizeU": {"x": 2.18, "y": 1.22, "z": 1.28},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance = the REAL cannon footprint. See DeckSlot_0_-1 for the same-side adjacent-slot caveat."
+        },
+        {
+            "id": "DeckArea",
+            "socketId": "DeckAreaSocket",
+            "clearanceSizeU": {"x": 6.0, "y": 11.6, "z": 2.66},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "PROVISIONAL free-placement area: the whole bay deck (length 6.00 x deck beam 11.60), height 2.66 unchanged from W1-r2 (headroom under a future raised deck). Equipment here reserves its own footprint; it must still keep out of the crew passage."
+        }
+    ],
+    "passages": [
+        {
+            "id": "CrewPassage_Main",
+            "centreU": {"x": 3.0, "y": 0, "z": 3.46},
+            "sizeU": {"x": 6.0, "y": 7.48, "z": 3.4},
+            "provisional": true,
+            "notes": "W2 has no authored crew passages (kit README); derived from W1-r2's passage rule scaled to the W2 deck (docs/WIDE-HULL-VALIDATION.md): |y| <= the deck-slot Y (4.35) minus half the real cannon's width (1.22/2=0.61) = 3.74, so sizeU.y = 7.48. X span (the whole bay, 0..6.00) and height 3.4 u (1.7 m crew) unchanged from W1-r2."
+        }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW2r1_v1/Midship_W2",
+        "sourceGeometrySha256": "b52a278fb1112ccce9b1632fb3f2d2ea4ea7eb032511be55d5487e4466668f74",
+        "validWaterlineZU": [-2.75, 1.76],
+        "offsetZU": 0,
+        "notes": "Astra 2026-09-24 (art-staging/modular-hull-wide-v1/hydrostatics/Midship_W2.json): Hull_Shell only, upright level flotation. Cross-checked by WideHullValidation against the trapezoid area of the interfaces.json Hull_Shell profile x 6.00: 294.82 vs table's 294.84 U^3 (0.005%)."
+    },
+    "lightship": {
+        "massKg": 15379.7,
+        "provisional": true,
+        "rule": "Seeded 2026-09-25 (WideHullValidation): today's W1-r2 Long lightship (31906.6 kg) x the W2/W1 Long hydrostatic-table volume-to-deck ratio (940.54 / 611.67 U^3 = 1.5377), split by this section's own table volume to the deck (294.84 / 940.54 U^3). See hull.stern.w2r1.v1's lightship.rule for why the volume ratio was chosen over the surface-area ratio."
+    },
+    "capacity": {
+        "holdCells": {"value": 8, "provisional": true, "source": "round(this section's table volume-to-deck (294.84 U^3) / W1-r2's volume-per-hold-cell (611.67/16=38.229 U^3))"},
+        "berths": {"value": 5, "provisional": true, "source": "floor(W1-r2 middle's 4 berths x the W2/W1 deck-area ratio 11.60/9.28=1.25)"},
+        "gunSlots": {"ids": ["DeckSlot_1_-1", "DeckSlot_1_1"], "provisional": true, "source": "Both slots pass the real-cannon clearance/passage check (WideHullValidation); this is the same DeckSlot index W1-r2's middle designates, kept for consistency (no existing W2 ship to match a gun position to). DeckSlot_0 is left off to avoid the same-side adjacent-slot overlap noted on those slots."},
+        "rule": "Seeded 2026-09-25 (WideHullValidation), mirroring the W1-r2 A4 seeding: PROVISIONAL, tune freely; the shipyard sums whatever is here."
+    },
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    }
+}

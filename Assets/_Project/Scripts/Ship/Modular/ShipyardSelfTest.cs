@@ -109,8 +109,11 @@ namespace SeaSick.Ship.Modular
             Rejects("policy-rejects-unknown-id", unknown, "UNKNOWN_MODULE");
             Gate("allowed-ids-for-pickers",
                 ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.UpperDeck).Count == 0
-                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment).Count == 0 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 1,
-                "rotors " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor)));
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment).Count == 0
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Stern).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 2
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Bow).Count == 2,
+                "rotors " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor))
+                + " middles " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle)));
 
             // ---- reshape ---------------------------------------------------
             string refJson = ModularJson.To(reference);

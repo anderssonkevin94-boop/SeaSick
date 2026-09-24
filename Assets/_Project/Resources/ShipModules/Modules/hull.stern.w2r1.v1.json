@@ -1,0 +1,146 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.stern.w2r1.v1",
+    "version": 1,
+    "kind": "Stern",
+    "family": "W2-r1",
+    "status": "prototype",
+    "displayName": "Stern_W2 (V1)",
+    "description": "Wide/deep stern section with the M1 wheel pocket and housing, helm on deck. 25% wider deck than W1-r2; keel lowered to -2.75.",
+    "source": "art-staging/modular-hull-wide-v1/manifest.json",
+    "lengthU": 9.3,
+    "boundsMinU": {"x": -0.23, "y": -6.01, "z": -2.75},
+    "boundsMaxU": {"x": 9.3, "y": 6.01, "z": 3.652},
+    "boundsNote": "Measured 2026-09-25 (WideHullValidation): union of the module's FBX vertex bounds, converted to authoring axes by the measured Blender-reimport rotation (authoring.x=-measured.y, authoring.y=measured.x, authoring.z=measured.z; verified against manifest AftSocket/ForwardSocket and against W1-r2's identical fitting heights, e.g. this stern's max Z 3.652 matches Stern_W1's exactly).",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.origin",
+            "standard": "",
+            "posU": {"x": 0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": "Aft end of the ship; the module origin."
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.fwd",
+            "standard": "W2",
+            "posU": {"x": 9.3, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "WheelModuleSocket",
+            "role": "wheel",
+            "standard": "M1",
+            "posU": {"x": 0.72, "y": 0, "z": 0.35},
+            "yawDeg": 0,
+            "radiusLimit": 1.64,
+            "placementRule": "",
+            "provisional": false,
+            "notes": "Axle centre. Standard M1 wheel socket unchanged from W1-r2 (kit README). Rotor and carrier are placed here; rotate the rotor only, about game X."
+        },
+        {
+            "id": "Chimney",
+            "role": "fitting.chimney",
+            "standard": "fitting.chimney",
+            "posU": {"x": 0, "y": 0, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "assembled-midpoint",
+            "provisional": false,
+            "notes": "Kit README: chimney base centre at the assembled ship midpoint, Z = 1.76 (deck), same rule and fitting geometry as W1-r2."
+        },
+        {
+            "id": "DeckSlot_2_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 5.5, "y": -4.35, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "manifest.json sockets.Stern_W2__DeckSlot_2_-1."
+        },
+        {
+            "id": "DeckSlot_2_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 5.5, "y": 4.35, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "manifest.json sockets.Stern_W2__DeckSlot_2_1."
+        }
+    ],
+    "visuals": [
+        {"id": "Hull_Shell", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Stern_W2/Hull_Shell", "placeholder": false, "notes": ""},
+        {"id": "Rails_Teal", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Stern_W2/Rails_Teal", "placeholder": false, "notes": ""},
+        {"id": "Hull_Ironwork", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Stern_W2/Hull_Ironwork", "placeholder": false, "notes": ""},
+        {"id": "Plank_Seams", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Stern_W2/Plank_Seams", "placeholder": false, "notes": ""},
+        {"id": "Housing_Lid", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Stern_W2/Housing_Lid", "placeholder": false, "notes": ""},
+        {"id": "Housing_Ironwork", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Stern_W2/Housing_Ironwork", "placeholder": false, "notes": ""},
+        {"id": "Housing_AccessPanel", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Stern_W2/Housing_AccessPanel", "placeholder": false, "notes": ""},
+        {"id": "Helm", "resourcePath": "ShipModules/Meshes/HullW2r1_v1/Stern_W2/Helm", "placeholder": false, "notes": ""}
+    ],
+    "equipmentSlots": [
+        {
+            "id": "DeckSlot_2_-1",
+            "socketId": "DeckSlot_2_-1",
+            "clearanceSizeU": {"x": 2.18, "y": 1.22, "z": 1.28},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance = the REAL cannon footprint (art-staging/cannon-astra-v1: 1.22 wide x 2.18 long x 1.28 high), verified by WideHullValidation against this section's bounds and its crew passage (touches, does not overlap). Main-deck slots stay PROVISIONAL: the kit's deck-slot empties do not certify cannon clearance (kit README)."
+        },
+        {
+            "id": "DeckSlot_2_1",
+            "socketId": "DeckSlot_2_1",
+            "clearanceSizeU": {"x": 2.18, "y": 1.22, "z": 1.28},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance = the REAL cannon footprint (art-staging/cannon-astra-v1: 1.22 wide x 2.18 long x 1.28 high), verified by WideHullValidation against this section's bounds and its crew passage (touches, does not overlap). Main-deck slots stay PROVISIONAL: the kit's deck-slot empties do not certify cannon clearance (kit README)."
+        }
+    ],
+    "passages": [
+        {
+            "id": "CrewPassage_Main",
+            "centreU": {"x": 6.23, "y": 0, "z": 3.46},
+            "sizeU": {"x": 6.14, "y": 7.48, "z": 3.4},
+            "provisional": true,
+            "notes": "W2 has no authored crew passages (kit README); derived from W1-r2's passage rule scaled to the W2 deck (docs/WIDE-HULL-VALIDATION.md): |y| <= the deck-slot Y (4.35) minus half the real cannon's width (1.22/2=0.61) = 3.74, so sizeU.y = 7.48. X span unchanged from W1-r2 (3.16, the forward edge of the wheel housing ironwork, to 9.30): the kit keeps housing/ironwork sizes unchanged. Height 3.4 u = 1.7 m crew (WorldScale.Person) at 0.5 m/u, unaffected by beam/keel."
+        }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW2r1_v1/Stern_W2",
+        "sourceGeometrySha256": "bb1c603de880f15e066a3bc2f44bd39b3f100bf090934ab3d769a083874eaaac",
+        "validWaterlineZU": [-2.75, 1.76],
+        "offsetZU": 0,
+        "notes": "Astra 2026-09-24 (art-staging/modular-hull-wide-v1/hydrostatics/Stern_W2.json): Hull_Shell only, upright level flotation."
+    },
+    "lightship": {
+        "massKg": 19889.6,
+        "provisional": true,
+        "rule": "Seeded 2026-09-25 (WideHullValidation): today's W1-r2 Long lightship (31906.6 kg) x the W2/W1 Long hydrostatic-table volume-to-deck ratio (940.54 / 611.67 U^3 = 1.5377), split by this section's own table volume to the deck (381.30 / 940.54 U^3). Volume ratio chosen over hull-shell surface-area ratio (1.2532): at the resulting mass the ship floats at 46.2% of keel-to-deck depth at lightship, matching W1-r2 Long's 45.9% almost exactly, so the loaded FRACTION of the (now much deeper) hull is preserved; the surface-area ratio gives 38.9%, a visibly different loading fraction. See docs/WIDE-HULL-VALIDATION.md."
+    },
+    "capacity": {
+        "holdCells": {"value": 10, "provisional": true, "source": "round(this section's table volume-to-deck (381.30 U^3) / W1-r2's volume-per-hold-cell (611.67/16=38.229 U^3))"},
+        "berths": {"value": 2, "provisional": true, "source": "floor(W1-r2 stern's 2 berths x the W2/W1 deck-area ratio 11.60/9.28=1.25)"},
+        "gunSlots": {"ids": ["DeckSlot_2_-1", "DeckSlot_2_1"], "provisional": true, "source": "Both slots pass the real-cannon clearance/passage check (WideHullValidation); this is the same DeckSlot index W1-r2's stern designates, kept for consistency (no existing W2 ship to match a gun position to)."},
+        "rule": "Seeded 2026-09-25 (WideHullValidation), mirroring the W1-r2 A4 seeding: PROVISIONAL, tune freely; the shipyard sums whatever is here."
+    },
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    }
+}

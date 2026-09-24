@@ -37,6 +37,17 @@
             "keelZU": 0,
             "description": "Reserved for a future broader hull family. Not authored; exists so a placeholder module can name it and be rejected against W1-r2.",
             "sourceNote": "none (placeholder)"
+        },
+        {
+            "id": "W2",
+            "version": 1,
+            "status": "prototype",
+            "profilePoints": 22,
+            "halfBeamU": 5.8,
+            "deckZU": 1.76,
+            "keelZU": -2.75,
+            "description": "Hull cross-section interface of the W2-r1 wide/deep modular hull family (deck beam 11.60, 25% wider than W1-r2; keel lowered to -2.75). Independently generated cross-sections, not a scale of W1-r2; never joins W1-r2 directly.",
+            "sourceNote": "art-staging/modular-hull-wide-v1/manifest.json + interfaces.json (Hull_Shell loop Stern_W2_forward == Midship_W2_aft == Midship_W2_forward == Bow_W2_aft, point-for-point identical, 22 points, half-beam 5.8; verified by WideHullValidation)"
         }
     ],
     "mountStandards": [
