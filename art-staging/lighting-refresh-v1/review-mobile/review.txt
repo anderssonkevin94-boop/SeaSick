@@ -1,0 +1,3 @@
+PASS SeaSick/Terrain Vertex Color peak=1 max boundary step=0.01568627
+PASS SeaSick/Environment Toon peak=1 max boundary step=0.01568627
+PASS mobile six-lamp adjacent chunks max seam step=0.003921568

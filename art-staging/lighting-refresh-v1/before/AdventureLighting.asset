@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.AdventureLighting
   applyToGame: 1
   sunHeightScale: 0.72
-  sunlight: {r: 1, g: 0.98, b: 0.94, a: 1}
-  sunIntensity: 1.16
+  sunlight: {r: 1, g: 0.89, b: 0.73, a: 1}
+  sunIntensity: 1.12
   ambientEquator: {r: 0.36, g: 0.43, b: 0.6, a: 1}
   ambientGround: {r: 0.19, g: 0.24, b: 0.33, a: 1}
   skyFill: 0.68

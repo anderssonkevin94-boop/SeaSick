@@ -6,8 +6,8 @@ namespace SeaSick.World
     {
         public bool applyToGame=true;
         [Range(.4f,1f)] public float sunHeightScale=.72f;
-        public Color sunlight=new Color(1f,.98f,.94f);
-        public float sunIntensity=1.16f;
+        public Color sunlight=new Color(1f,.89f,.73f);
+        public float sunIntensity=1.12f;
         public Color ambientEquator=new Color(.36f,.43f,.60f);
         public Color ambientGround=new Color(.19f,.24f,.33f);
         [Range(0,1)] public float skyFill=.68f;
