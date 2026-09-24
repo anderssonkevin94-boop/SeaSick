@@ -86,15 +86,15 @@ namespace SeaSick.Dev
             {"HandlingTuning.turnSpeedBleed",       (0f, 0.6f)},
             {"HandlingTuning.turnHeelDegrees",      (0f, 20f)},
             {"HandlingTuning.accelScale",           (0.3f, 3f)},
-            {"HandlingTuning.topSpeedScale",        (0.5f, 1.5f)},
+            {"HandlingTuning.topSpeedScale",        (0.5f, 2f)},   // 2 = PaddleDrive.TopSpeedNow clamp; Kevin pinned 1.5
             {"HandlingTuning.coastDownScale",       (0.3f, 3f)},
             {"HandlingTuning.paddleResponsiveness", (0f, 1.5f)},
 
             {"JuiceTuning.camFovBoostDeg",    (0f, 25f)},
             {"JuiceTuning.camDropMeters",     (0f, 5f)},
             {"JuiceTuning.camLeanPerYawDeg",  (0f, 0.5f)},
-            {"JuiceTuning.camLagSeconds",     (0f, 1f)},
-            {"JuiceTuning.sprayScale",        (0f, 3f)},
+            {"JuiceTuning.camLagSeconds",     (0f, 2f)},   // Kevin pinned 1.0
+            {"JuiceTuning.sprayScale",        (0f, 5f)},   // Kevin pinned 3; particle caps bound it
             {"JuiceTuning.wakeScale",         (0f, 3f)},
             {"JuiceTuning.soundPitchRange",   (0f, 1f)},
         };

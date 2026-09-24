@@ -11,25 +11,28 @@ namespace SeaSick.Ship
     ///
     /// None of this changes how the ship moves. It is the feedback half: what
     /// the screen, the speaker and the hand are told about what she is doing.
+    /// **Defaults = Kevin's FeelLab tuning, 2026-09-24** (phone, SAVE+LOG JSON pasted in chat after
+    /// "sailing feels a lot better"): values he changed are baked here; the
+    /// FeelLab still loads his saved PlayerPrefs over them on his phone.
     public static class JuiceTuning
     {
         /// Extra vertical FOV at top speed, degrees.                 0..25
-        public static float camFovBoostDeg = 10f;
+        public static float camFovBoostDeg = 9.8f;
         /// The chase camera sinks this far toward the water at top speed. 0..5
-        public static float camDropMeters = 1.5f;
+        public static float camDropMeters = 1.07f;
         /// Camera roll (deg) per deg/s of yaw rate, INTO the turn.     0..0.5
-        public static float camLeanPerYawDeg = 0.15f;
+        public static float camLeanPerYawDeg = 0.028f;
         /// Smoothing time on the three camera effects above, seconds. 0 = instant. 0..1
-        public static float camLagSeconds = 0.25f;
+        public static float camLagSeconds = 1.0f;
         /// Bow and turn spray intensity multiplier.                  0..3
-        public static float sprayScale = 1f;
+        public static float sprayScale = 3.0f;
         /// Surface wake intensity multiplier.                        0..3
-        public static float wakeScale = 1f;
+        public static float wakeScale = 0.65f;
         /// Paddle/engine pitch rises by this fraction at top speed.  0..1
-        public static float soundPitchRange = 0.4f;
+        public static float soundPitchRange = 0.45f;
         /// Telegraph notch / burn haptics on iOS and Android.
         public static bool  hapticsOn         = false;  // OFF 2026-09-24: Handheld.Vibrate at launch deadlocked iOS 26's audio daemon (audiomxd XPC timeout, phone froze); a Taptic plugin later
-        public static bool  soundOn           = false;  // OFF 2026-09-24 for the launch bisect: PaddleSound is not attached while false; flip on to test the chug alone
+        public static bool  soundOn           = true;   // ON by Kevin's FeelLab JSON 2026-09-24 (haptics stay off: the launch freeze was Handheld.Vibrate); read once when SpeedJuice sets up, so a live toggle needs a relaunch
 
         // ---------------------------------------------------------- signals
         //

@@ -13,6 +13,9 @@ namespace SeaSick.Ship
     ///
     /// The two helpers below are the shared maths, so both drives mean the
     /// same thing by "turn rate at this speed" and "which lag applies".
+    /// **Defaults = Kevin's FeelLab tuning, 2026-09-24** (phone, SAVE+LOG JSON pasted in chat after
+    /// "sailing feels a lot better"): values he changed are baked here; the
+    /// FeelLab still loads his saved PlayerPrefs over them on his phone.
     public static class HandlingTuning
     {
         /// s, first-order lag for the yaw rate to BUILD toward what the helm
@@ -36,9 +39,9 @@ namespace SeaSick.Ship
         ///                                                          range 0..20
         public static float turnHeelDegrees = 6f;
         /// Multiplies acceleration (propulsive side only).          range 0.3..3
-        public static float accelScale = 1f;
+        public static float accelScale = 2.15f;
         /// Multiplies top speed.                                  range 0.5..1.5
-        public static float topSpeedScale = 1f;
+        public static float topSpeedScale = 1.5f;
         /// Multiplies what slows her while the telegraph is at stop
         /// (> 1 stops sooner).                                      range 0.3..3
         public static float coastDownScale = 1f;
