@@ -349,6 +349,46 @@ namespace SeaSick.Ship.Modular
                 Gate("extra-slots-grant-no-guns", threeP.capacity.gunSlots > longPlan.capacity.gunSlots && threeP.capacity.guns == longPlan.capacity.guns,
                     $"3 bays: {threeP.capacity.gunSlots} gun slots but {threeP.capacity.guns} guns (the hull's 3 pairs); weight room is the shared limit");
 
+                // ---- guns: per-side counts, and an unpaired gun (2026-09-25 fix) --
+                // `p.fittedGuns` is what CannonBattery is now fit from directly
+                // (SteamerBootstrap.Man), one entry per real gun with its own
+                // side -- so these counts are the actual live battery, not a
+                // starboard-mirrored guess.
+                {
+                    int longPort = 0, longStar = 0;
+                    foreach (var g in longPlan.fittedGuns) if (g.side == "starboard") longStar++; else longPort++;
+                    Gate("long-guns-3-port-3-starboard", longPort == 3 && longStar == 3,
+                        $"port {longPort} starboard {longStar}: {string.Join(", ", longPlan.fittedGuns.ConvertAll(g => g.side + " " + g.slotId))}");
+
+                    int shortPort = 0, shortStar = 0;
+                    foreach (var g in shortPlan.fittedGuns) if (g.side == "starboard") shortStar++; else shortPort++;
+                    Gate("short-guns-2-port-2-starboard", shortPort == 2 && shortStar == 2,
+                        $"port {shortPort} starboard {shortStar}");
+
+                    // Send the middle PORT gun to the dry dock -- exactly the
+                    // "port gun removed, starboard kept" case that used to
+                    // mirror a phantom back. Starboard must keep all 3 of its
+                    // own guns, port must drop to 2, and every surviving gun
+                    // (by slotId) must stand at EXACTLY the position Long's
+                    // own plan put it at -- not shifted by whatever the
+                    // removed gun's mirror used to contribute.
+                    var portRemoved = ShipyardEquipment.Remove(ShipConfiguration.Long(), "middle[0]/DeckSlot_1_1", lib);
+                    var prPlan = portRemoved.ok ? ShipyardPlanner.PlanFor(portRemoved.draft, lib, reference, longPlan, out _) : null;
+                    int prPort = 0, prStar = 0;
+                    if (prPlan != null) foreach (var g in prPlan.fittedGuns) if (g.side == "starboard") prStar++; else prPort++;
+                    bool positionsMatch = prPlan != null;
+                    if (prPlan != null)
+                        foreach (var g in prPlan.fittedGuns)
+                        {
+                            var wasAt = longPlan.fittedGuns.Find(x => x.slotId == g.slotId);
+                            positionsMatch &= wasAt != null && wasAt.side == g.side && (wasAt.positionM - g.positionM).sqrMagnitude < 1e-8f;
+                        }
+                    Gate("port-gun-removed-keeps-starboard-unmoved-at-3", portRemoved.ok && prPlan != null && prPort == 2 && prStar == 3 && positionsMatch,
+                        prPlan != null
+                            ? $"port {prPort} starboard {prStar}: {string.Join(", ", prPlan.fittedGuns.ConvertAll(g => g.side + " " + g.slotId))}"
+                            : "remove or plan failed: " + portRemoved.message);
+                }
+
                 // Synthetic data: a slot in the passage, a free-area slot, an
                 // unknown id -- none counts; and berths cap guns.
                 string midJson = null; int midAt = -1;
