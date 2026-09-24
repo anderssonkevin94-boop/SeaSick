@@ -31,11 +31,13 @@ here, and standard W1-r2 is untouched.
 | 3 | Hydrostatic tables | **PASS** | Schema matches the W1-r2 loader exactly; `sourceGeometrySha256` in each module JSON == the table file's own field (all three, byte-for-byte); valid range −1.92..1.76 on all three — **identical to W1-r2's**, confirming depth is unchanged. Monotonic (enforced by `HydroTable.Valid()`). Independent cross-check: Midship's deck-level area (constant to 1e-13 across all 99 stations — a genuinely prismatic bay) × 6.00 u = 254.2867 u³ vs the table's own 254.2866 u³ — **0.00003%**, far inside 2%. |
 | 4 | Gun slots + passages, real cannon | **PASS** | All 10 kit deck-slot empties (stern 2, middle 4, bow 4) pass the assembler's own clearance/passage test against the real cannon (`art-staging/cannon-astra-v1`, 1.22 × 2.1816 × 1.2756), at the DERIVED expanded positions (§4 below). Passage exclusion proven live (`w1x-real-cannon-in-passage-rejected`). |
 | 5 | Capacity + mass, assembly, reshape, wheel dip | **PASS** | See below. |
+| 6 | Width-transition module (Task C) | **PASS** | Ported from branch `wide-hull` (commit 2521ec0) and retargeted from its superseded W1-r2 ↔ W2-r1 scaffold to this branch's W1-r2 ↔ W1x families; no W2-r1 data brought over. No schema/assembler change needed (re-verified against this branch's `ShipAssembler.cs`). See §6 below. |
 
-`tools/modular-selftest.sh`: **`ModularShipSelfTest: 134 PASS, 0 FAIL`**
-(104 pre-existing milestone-1 + shipyard gates, unchanged in substance — 4 of
-their count/allow-list assertions updated for the new module count and W1x
-allow-list entries — plus 30 new `ExpandedHullValidation` gates).
+`tools/modular-selftest.sh`: **`ModularShipSelfTest: 140 PASS, 0 FAIL`**
+(104 pre-existing milestone-1 + shipyard gates, unchanged in substance — their
+count/allow-list assertions updated for the new module count (16 → 17, the
+committed transition placeholder) — plus 30 `ExpandedHullValidation` Task-A
+gates + 6 new Task-C width-transition gates).
 
 ## 1. Interface profile
 
@@ -301,6 +303,112 @@ trusting any expanded-hull number.)
 **Lightship vs today's Long.** 42 548.7 kg vs 31 906.6 kg — **+33.4%**,
 matching the chosen volume ratio (1.3335) exactly by construction.
 
+## 6. Transition module contract (Task C)
+
+Ported from branch `wide-hull` (commit 2521ec0, "Wide hull: headless
+validator (Task A) + width-transition scaffold (Task C)") and **retargeted**
+from its superseded `W1-r2 ↔ W2-r1` scaffold to this branch's families,
+`W1-r2 ↔ W1x` (§0 above: W1x supersedes W2-r1 as the width upgrade). No
+W2-r1 data, meshes, tables, presets or validator code was brought over —
+`WidePresets.cs` and `WideHullValidation.cs`'s Task-A gates stay on
+`wide-hull`; only the Task-C transition mechanism and its gates, rewritten
+against `ExpandedPresets.cs` and this branch's W1x module ids, came across.
+
+**No schema or assembler change was needed**, verified fresh against this
+branch's own `ShipAssembler.cs` before writing anything: `SocketDef.standard`
+is already per-socket, and the chain-build loop only ever compares the two
+TOUCHING sockets at a join (`fwd.standard != aft.standard` →
+`JOIN_PROFILE_MISMATCH`), never a whole-ship "one standard" invariant. A
+single hull module whose aft socket names one join profile and whose forward
+socket names another is therefore already assemblable, and non-transition
+modules (whose aft and forward sockets always name the SAME profile)
+transitively keep every run of consecutive non-transition sections on one
+standard. The asked-for policy ("all hull sections share one interface
+standard unless joined by a transition module") already falls out of the
+existing per-join check with zero code changes.
+
+Proven with a SYNTHETIC in-memory module (`test.transition.synthetic.*`, not
+committed, built and torn down inside `ExpandedHullValidation.Body`):
+
+* `w1x-transition-synthetics-load`: the synthetic full/bare/reversed modules
+  load into a `ModuleLibrary` alongside the real committed data.
+* `w1x-transition-w1r2-stern-w1x-middle-w1x-bow-assembles`: W1-r2 stern +
+  [synthetic transition, aft=W1-r2/fwd=W1x] + W1x middle + W1x bow
+  assembles.
+* `w1x-transition-reversed-w1x-stern-w1r2-middle-w1r2-bow-assembles`: the
+  mirror (W1x stern + [synthetic transition, aft=W1x/fwd=W1-r2] + W1-r2
+  middle + W1-r2 bow) also assembles — orientation is a property of the
+  module, not hard-coded.
+* `w1x-transition-wrong-orientation-rejected`: using the W1-r2-aft/W1x-fwd
+  transition the WRONG way round (behind a W1x stern) is refused
+  `JOIN_PROFILE_MISMATCH`, same rule as any mismatched pair.
+* `w1x-transition-without-data-flags-missing-capacity-and-mass`: a BARE
+  synthetic transition (no `capacity`/`hydrostatics`/`lightship`, same shape
+  as the real placeholder below) assembles at the milestone-1 level but is
+  flagged by `ShipyardPlanner.ModuleLightshipKg`/`SectionCapacities`
+  (`NO_MASS_DATA`/`NO_CAPACITY` territory) and by `AssemblyHydrostatics.For`
+  (`missing` set, `Ok` false) — the SAME generic, kind-agnostic code path
+  every other hull section goes through. No special-casing was added or
+  needed.
+* `w1x-real-transition-placeholder-refused-not-in-prototype`: the REAL
+  committed placeholder module (`hull.transition.w1r2-w1x.v1`, below) is
+  refused by `ShipyardPolicy.Check` with `NOT_IN_PROTOTYPE`, mentioning its
+  placeholder status — it is not offered to players and never will be until
+  it is added to an allow-list (which this work deliberately did not do).
+
+**The committed placeholder**
+(`Assets/_Project/Resources/ShipModules/Modules/hull.transition.w1r2-w1x.v1.json`):
+`kind: "Middle"`, `family: "Transition"`, `status: "placeholder"`, no
+`visuals`/`equipmentSlots`/`passages`/`hydrostatics`/`lightship`/`capacity`.
+Its aft socket names `"W1-r2"`, its forward socket `"W1x"`, `lengthU` 6.0 (a
+placeholder guess, a middle-bay's worth — NOT a measurement), bounds the
+union of the W1-r2 and W1x middle bounds. Not on any `ShipyardPolicy`
+allow-list, so it cannot be built by a player; it exists only so the schema
+names it and the gates above can exercise the mechanism.
+
+### What Astra's real delivery must carry
+
+For `hull.transition.w1r2-w1x.v1` (or a reverse `hull.transition.w1x-w1r2.v1`)
+to become buildable (added to a `ShipyardPolicy` allow-list — not done by
+this work), it needs, per the existing module contract (`docs/MODULAR-SHIPS.md`
+§3, §7):
+
+1. **Two join profiles, one per end**, matching the two sections it bridges
+   point-for-point within 1e-4 u — `hull.aft` names `"W1-r2"` (the profile
+   behind it), `hull.fwd` names `"W1x"` (the profile ahead), or the reverse
+   for the mirror module. The same equality check §1 above already runs.
+2. **A length** (`lengthU`) **and module-local AABB bounds**, measured from
+   the real FBX the same way §2 above was.
+3. **Correct multi-part placement** if the transition is modelled in more
+   than one piece (Core + Port/Starboard, insert strips, etc., the same
+   `VisualPart.localPositionU` convention §2 above verifies) — the two ends
+   must land exactly on the W1-r2 and W1x half-beams they join to, not
+   somewhere in between by mistake.
+4. **A hydrostatic station table** in the SAME schema the loader already
+   reads (`ShipHydrostatics.cs`'s `HydroTable`) — `sourceGeometrySha256`
+   matching the module's own declared hash, monotonic volume, a valid
+   keel..deck range for ITS OWN (transitional, so probably asymmetric)
+   cross-section, per §3 above.
+5. **A `capacity` block** (`holdCells`, `berths`, `gunSlots` — every field
+   `provisional: true` with a `source` line, same as every other hull
+   section) and a **`lightship` mass**, seeded the same defensible-ratio way
+   §5 above was.
+6. **Its own deck-gun slots (if any) revalidated against the real cannon**
+   footprint the same way §4 above proved all 10 of W1x's — a transitional
+   cross-section changes clearance geometry along its length, so a slot
+   cannot just be assumed safe because it was safe on a parallel section.
+7. **Passages never narrowed below the existing half-width** (2.30 u,
+   unchanged since W1-r2) at any point along the transition's length — the
+   assembler's clearance/passage check (§4 above) is local to each fixed
+   slot, not a continuous sweep, so this is a modelling constraint on Astra's
+   geometry, not something a gate can prove from the outside without a
+   station-by-station passage table.
+
+No other code path treats a transition module specially, and none should
+need to — `ShipAssembler`, `AssemblyHydrostatics` and
+`ShipyardPlanner.SectionCapacities`/`ModuleLightshipKg` already handle any
+hull-kind module generically, transition or not, as proven above.
+
 ## What I still need to do in Unity (not done here — no Unity was launched)
 
 1. Open the project, let it import the 50 new W1x FBXs (no `.meta` files
@@ -335,6 +443,10 @@ matching the chosen volume ratio (1.3335) exactly by construction.
 * `ExpandedHullValidation.cs` (Task A gates), wired into `ModularShipSelfTest`;
   gate-count updates; this document; `docs/SHIPYARD-API.md` §9 +
   `AllowedModuleIds` row; `docs/MODULAR-SHIPS.md` §3/§13.
+* Task C (ported from `wide-hull` 2521ec0, retargeted to W1-r2 ↔ W1x): the
+  committed placeholder `hull.transition.w1r2-w1x.v1.json`,
+  `ExpandedHullValidation.cs`'s 6 new transition gates, module-count
+  assertion updates (16 → 17), and this document's §6.
 
 (Exact hashes: see `git log --oneline` on this branch — commits are ordered
 so each one keeps the selftest green, per the task's rules.)
