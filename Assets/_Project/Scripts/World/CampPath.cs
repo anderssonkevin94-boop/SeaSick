@@ -52,6 +52,14 @@ namespace SeaSick.World
     /// nearest walkable cell; a search that fails or runs past its expansion
     /// cap returns false, and the caller falls back to the old straight line.
     /// Standing still forever is not a state this can produce.
+    ///
+    /// **Except through a wall (2026-09-24).** Kevin, on the phone: *"villagers
+    /// and animals walk through the walls that I've built."* The straight-line
+    /// fallback is only taken where the straight line does not cross a wall
+    /// (`Crosses`); where it would, the walker waits and asks again, and
+    /// every step any walker takes is checked against the walls as lines
+    /// (`Blocks`, `BlocksAnimal`) -- so no fallback, short hop or cut corner
+    /// can carry a body through a palisade.
     [DisallowMultipleComponent]
     public class CampPath : MonoBehaviour
     {
@@ -156,6 +164,14 @@ namespace SeaSick.World
         /// ever recomputed by a rebuild, while these are put up and knocked
         /// down all through a raid.
         byte[] block;
+        /// **Walls and gates, on a layer of their own (2026-09-24).** They
+        /// used to share `block` with the rocks, so a segment could only
+        /// be OR'd on and AND'd off -- and two segments share the cell
+        /// their common post stands in, so tearing down, breaching or
+        /// gating one segment cleared its NEIGHBOUR's post cell too. This
+        /// layer is instead re-laid whole from `camp.Walls` on every change
+        /// (`RelayWalls`): a few hundred cell writes, and it cannot drift.
+        byte[] wall;
         float[] pen;            // 1 + SlopePenalty * (slope/limit)^2
 
         // A* scratch, allocated once and reused. `stamp` is what lets a query
@@ -180,7 +196,7 @@ namespace SeaSick.World
 
         /// Can this walker stand in this cell? Ground first, then whatever
         /// has been put on top of it.
-        bool Walk(int i) => open[i] && (block[i] & mask) == 0;
+        bool Walk(int i) => open[i] && ((block[i] | wall[i]) & mask) == 0;
 
         /// The pathing map for this camp, added to the island on first ask.
         public static CampPath For(Outpost camp)
@@ -253,6 +269,7 @@ namespace SeaSick.World
             hs = new float[count];
             open = new bool[count];
             block = new byte[count];
+            wall = new byte[count];
             pen = new float[count];
 
             // One height sample per cell. This is the whole cost of the map.
@@ -320,7 +337,7 @@ namespace SeaSick.World
             // standing -- a grid rebuilt mid-raid must come back knowing
             // about the palisade it was built under.
             MarkRocks();
-            ReMarkWalls();
+            RelayWalls(null);
 
             watch.Stop();
             LastBuildMs = (float)watch.Elapsed.TotalMilliseconds;
@@ -367,7 +384,7 @@ namespace SeaSick.World
             if (hs == null) return false;
 
             mask = MaskFor(who);
-            int a = Nearest(from), b = Nearest(to);
+            int a = Nearest(from, who), b = Nearest(to, who);
             if (a < 0 || b < 0) return false;
             if (a == b) { corners.Add(to); return true; }
 
@@ -508,15 +525,29 @@ namespace SeaSick.World
         /// cells of it. This is the "target is off the mesh" fallback: a man
         /// sent to a spot on a cliff walks to the foot of the cliff rather
         /// than refusing to move.
-        int Nearest(Vector3 at)
+        ///
+        /// **On the point's own side of any wall (2026-09-24).** A point in
+        /// a blocked cell is usually a point beside a wall -- a hand
+        /// standing where the palisade just went up, a site a pace off the
+        /// line -- and the old ring scan took the first walkable cell in
+        /// scan order, the far side of the wall as often as the near one.
+        /// The route then started (or ended) across the palisade and its
+        /// first (or last) straight leg walked through it. Now a candidate
+        /// must be reachable from the point without crossing a wall, and
+        /// the closest such one in the ring wins. A point INSIDE a wall's
+        /// thickness is exempt (`WallEmbedded`), so nobody is trapped.
+        int Nearest(Vector3 at, Walker who = Walker.Hand)
         {
             int i = Index(at);
             if (i < 0) return -1;
             if (Walk(i)) return i;
 
+            bool gatesOpen = who == Walker.Hand;
             int cx = i % n, cy = i / n;
             for (int r = 1; r <= 6; r++)
             {
+                int best = -1;
+                float bestD = float.MaxValue;
                 for (int dy = -r; dy <= r; dy++)
                 {
                     int y = cy + dy;
@@ -527,36 +558,80 @@ namespace SeaSick.World
                         int x = cx + dx;
                         if (x < 0 || x >= n) continue;
                         int j = y * n + x;
-                        if (Walk(j)) return j;
+                        if (!Walk(j)) continue;
+                        float ddx = origin.x + x * cell - at.x, ddz = origin.y + y * cell - at.z;
+                        float d = ddx * ddx + ddz * ddz;
+                        if (d >= bestD) continue;
+                        if (camp != null && WallsBlock(camp.Walls, at, Centre(j), gatesOpen, 0f, out _))
+                            continue;
+                        best = j;
+                        bestD = d;
                     }
                 }
+                if (best >= 0) return best;
             }
             return -1;
         }
 
-        /// Is the straight line between two cells walkable the whole way? A
-        /// supercover walk, so it cannot slip diagonally between two blocked
-        /// cells the way a naive Bresenham does.
+        /// Is the straight line between two cells walkable the whole way?
+        ///
+        /// **A TRUE supercover now (2026-09-24)**, the same walk `Raster`
+        /// lays a wall with: every cell the line between the two centres
+        /// passes through, and at an exact corner both cells it grazes. The
+        /// old one-step-at-a-time Bresenham was 4-connected but not a
+        /// supercover: on a shallow diagonal it skipped cells the line
+        /// really passes through, so a wall laid with it had gaps under its
+        /// own drawing and a leg tested with it could clip a blocked corner.
         bool Clear(int a, int b)
         {
-            int x0 = a % n, y0 = a / n, x1 = b % n, y1 = b / n;
-            int dx = Mathf.Abs(x1 - x0), dy = Mathf.Abs(y1 - y0);
-            int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-            int err = dx - dy;
-            int guard = dx + dy + 2;
-
-            while (guard-- > 0)
+            int x = a % n, y = a / n, x1 = b % n, y1 = b / n;
+            int ddx = x1 - x, ddy = y1 - y;
+            int nx = Mathf.Abs(ddx), ny = Mathf.Abs(ddy);
+            int sx = ddx > 0 ? 1 : -1, sy = ddy > 0 ? 1 : -1;
+            if (!Walk(y * n + x)) return false;
+            for (int ix = 0, iy = 0; ix < nx || iy < ny;)
             {
-                if (!Walk(y0 * n + x0)) return false;
-                if (x0 == x1 && y0 == y1) return true;
-                int e2 = 2 * err;
-                if (e2 > -dy) { err -= dy; x0 += sx; }
-                else if (e2 < dx) { err += dx; y0 += sy; }
-                // Both branches in one step would cut a corner, so they are
-                // taken one at a time — that is the "supercover" part.
+                int decision = (1 + 2 * ix) * ny - (1 + 2 * iy) * nx;
+                if (decision == 0)
+                {
+                    // Through a corner exactly: both cells it touches count.
+                    if (!Walk(y * n + x + sx) || !Walk((y + sy) * n + x)) return false;
+                    x += sx; y += sy; ix++; iy++;
+                }
+                else if (decision < 0) { x += sx; ix++; }
+                else { y += sy; iy++; }
+                if (!Walk(y * n + x)) return false;
             }
-            return false;
+            return true;
         }
+
+        /// The supercover of the line between two cells, into `into`. The
+        /// same walk as `Clear`, so a wall's cells and a route's line test
+        /// agree cell for cell.
+        void Raster(int a, int b, List<int> into)
+        {
+            into.Clear();
+            int x = a % n, y = a / n, x1 = b % n, y1 = b / n;
+            int ddx = x1 - x, ddy = y1 - y;
+            int nx = Mathf.Abs(ddx), ny = Mathf.Abs(ddy);
+            int sx = ddx > 0 ? 1 : -1, sy = ddy > 0 ? 1 : -1;
+            into.Add(y * n + x);
+            for (int ix = 0, iy = 0; ix < nx || iy < ny;)
+            {
+                int decision = (1 + 2 * ix) * ny - (1 + 2 * iy) * nx;
+                if (decision == 0)
+                {
+                    into.Add(y * n + x + sx);
+                    into.Add((y + sy) * n + x);
+                    x += sx; y += sy; ix++; iy++;
+                }
+                else if (decision < 0) { x += sx; ix++; }
+                else { y += sy; iy++; }
+                into.Add(y * n + x);
+            }
+        }
+
+        readonly List<int> rasterCells = new List<int>();
 
         // --- walls, gates and rocks ------------------------------------------
 
@@ -573,7 +648,7 @@ namespace SeaSick.World
             if (!built) Build();
             if (hs == null) return false;
             mask = MaskFor(who);
-            int a = Nearest(from), b = Nearest(to);
+            int a = Nearest(from, who), b = Nearest(to, who);
             if (a < 0 || b < 0) return false;
             if (a == b) return true;
             return Search(a, b);
@@ -583,20 +658,35 @@ namespace SeaSick.World
         ///
         /// Rasterised as a supercover line between the two posts, one cell
         /// wide -- the same walk `Clear` does, so a segment can never be
-        /// slipped through diagonally. A gate blocks the raider only; a
-        /// palisade blocks everybody. Called on raise, on breach, on
+        /// slipped through diagonally. A gate's 3 m module blocks the raider
+        /// only; a palisade -- including the palisade either side of a
+        /// gate's module -- blocks everybody. Called on raise, on breach, on
         /// repair and on the swap from wall to gate; nothing else rebuilds
         /// the grid, which is the point (`docs/PLAN-fortress-harbour.md`
         /// Phase 1: "rebuild the affected cells on raise/cancel, not the
         /// whole grid").
+        ///
+        /// **It re-lays the whole wall layer rather than toggling one line
+        /// (2026-09-24).** Toggling cleared the shared post cell of the
+        /// neighbouring segment on every tear-down, breach or gate swap; and
+        /// a gate marked as one raider-only line opened the WHOLE segment to
+        /// the hands -- a 12 m "gate" is a 3 m gate module with 4.5 m of
+        /// palisade either side (`WallVisual.Build`), and the hands walked
+        /// straight through that palisade. `RelayWalls` has neither fault.
+        /// `blocked == false` means "this one is coming off": it is left out
+        /// of the re-lay although it is still in `camp.Walls` (every caller
+        /// clears a segment before forgetting or changing it).
         public void MarkWall(WallSegment seg, bool blocked)
         {
             if (seg == null) return;
-            MarkLine(seg.A, seg.B, seg.IsGate ? BlockRaider : BlockBoth, blocked);
+            if (!built) Build();
+            if (hs == null) return;
+            RelayWalls(blocked ? null : seg);
         }
 
         /// The same for a line the caller describes itself -- what a wall
-        /// SITE uses to keep the ground it is drawn on to itself.
+        /// SITE uses to keep the ground it is drawn on to itself. Goes on
+        /// the rock layer, so a wall re-lay never wipes it.
         public void MarkLine(Vector3 a, Vector3 b, byte flags, bool blocked)
         {
             if (!built) Build();
@@ -604,36 +694,214 @@ namespace SeaSick.World
 
             int ia = Index(a), ib = Index(b);
             if (ia < 0 || ib < 0) return;
-            int x0 = ia % n, y0 = ia / n, x1 = ib % n, y1 = ib / n;
-            int dx = Mathf.Abs(x1 - x0), dy = Mathf.Abs(y1 - y0);
-            int sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
-            int err = dx - dy;
-            int guard = dx + dy + 2;
-            while (guard-- > 0)
+            Raster(ia, ib, rasterCells);
+            for (int k = 0; k < rasterCells.Count; k++)
             {
-                int i = y0 * n + x0;
+                int i = rasterCells[k];
                 if (blocked) block[i] |= flags; else block[i] = (byte)(block[i] & ~flags);
-                if (x0 == x1 && y0 == y1) break;
-                int e2 = 2 * err;
-                if (e2 > -dy) { err -= dy; x0 += sx; }
-                else if (e2 < dx) { err += dx; y0 += sy; }
             }
         }
 
-        /// Re-lay every standing segment. Called at the end of a build, so
-        /// a grid thrown away and remade (a camp centre that moved, a dev
-        /// reset) comes back knowing about the wall.
-        void ReMarkWalls()
+        /// Half the opening a gate segment gives the hands, metres from its
+        /// midpoint: the gate module (`WallVisual.GateSpan`) plus a hair, so
+        /// a 2 m or 2.83 m gate -- whose module overhangs both its posts --
+        /// opens the post cells it stands over.
+        static float GateOpenHalf => WallVisual.GateSpan * 0.5f + 0.1f;
+
+        /// **Lay every standing segment, from scratch.** Palisade: both
+        /// flags on every cell of its supercover. Gate: the raider flag on
+        /// every cell and the hand flag on the cells outside the gate module
+        /// (the palisade either side of it); then, in a second pass so the
+        /// order of the list cannot matter, the hand flag comes OFF the
+        /// module's cells, including a post cell a neighbouring palisade put
+        /// it on. A grid rebuilt from nothing and a grid marked one change
+        /// at a time now come out identical.
+        void RelayWalls(WallSegment except)
         {
+            if (wall == null) return;
+            System.Array.Clear(wall, 0, wall.Length);
             if (camp == null) return;
             var walls = camp.Walls;
             if (walls == null) return;
-            for (int i = 0; i < walls.Count; i++)
+            float open2 = GateOpenHalf * GateOpenHalf;
+
+            for (int pass = 0; pass < 2; pass++)
             {
-                var w = walls[i];
-                if (w == null || w.Breached) continue;
-                MarkLine(w.A, w.B, w.IsGate ? BlockRaider : BlockBoth, true);
+                for (int k = 0; k < walls.Count; k++)
+                {
+                    var w = walls[k];
+                    if (w == null || w == except || w.Breached) continue;
+                    if (pass == 1 && !w.IsGate) continue;
+                    int ia = Index(w.A), ib = Index(w.B);
+                    if (ia < 0 || ib < 0) continue;
+                    Raster(ia, ib, rasterCells);
+
+                    float mx = 0.5f * (w.A.x + w.B.x), mz = 0.5f * (w.A.z + w.B.z);
+                    for (int c = 0; c < rasterCells.Count; c++)
+                    {
+                        int i = rasterCells[c];
+                        if (!w.IsGate) { wall[i] |= BlockBoth; continue; }
+                        float dx = origin.x + (i % n) * cell - mx;
+                        float dz = origin.y + (i / n) * cell - mz;
+                        bool inModule = dx * dx + dz * dz <= open2;
+                        if (pass == 0)
+                        {
+                            wall[i] |= BlockRaider;
+                            if (!inModule) wall[i] |= BlockHand;
+                        }
+                        else if (inModule) wall[i] = (byte)(wall[i] & ~BlockHand);
+                    }
+                }
             }
+        }
+
+        // --- walls as LINES: the continuous test ------------------------------
+
+        /// **Metres a walker keeps off a wall.** The grid says which way to
+        /// go; this is what stops a body actually entering the palisade on
+        /// a corner cut, a short straight hop, or a plan that failed
+        /// (`CampWorker.Walk`, `Animal.Step`). About the half-depth of the
+        /// kit's stakes plus a shoulder.
+        public static float WallClearance = 0.35f;
+
+        /// Closer than this to a wall line, a walker is IN the wall -- only
+        /// possible by being put there (the Hand, a segment raised over a
+        /// man, a builder's stand spot on a line that runs toward the fire).
+        /// Such a walker ignores that segment so he can always walk out.
+        public const float WallEmbedded = 0.15f;
+
+        /// Does a step from `from` to `to` pass through a wall of this camp,
+        /// or come within `clearance` of one while closing on it? `along`
+        /// is the blocking wall's direction, for sliding. Gates are open to
+        /// a `Hand` (their 3 m module only) and shut to anybody else. No
+        /// allocation: a `for` over the camp's own list.
+        public static bool Blocks(Outpost camp, Vector3 from, Vector3 to, Walker who,
+            float clearance, out Vector3 along)
+        {
+            along = default;
+            if (camp == null) return false;
+            return WallsBlock(camp.Walls, from, to, who == Walker.Hand, clearance, out along);
+        }
+
+        /// Does the straight line cross a wall of this camp? `Blocks` with
+        /// no clearance: "can I just walk straight there".
+        public static bool Crosses(Outpost camp, Vector3 from, Vector3 to, Walker who)
+            => Blocks(camp, from, to, who, 0f, out _);
+
+        /// **The same for an animal, against every camp's walls.** A beast
+        /// is not the camp's: gates are shut to it, as to a raider. Called
+        /// per animal per frame, so it is a loop over a handful of camps and
+        /// their segments with a box reject before any real arithmetic, and
+        /// a camp with no wall costs one `Count` read.
+        public static bool BlocksAnimal(Vector3 from, Vector3 to, float clearance)
+        {
+            var all = Outpost.All;
+            for (int i = 0; i < all.Count; i++)
+            {
+                var o = all[i];
+                if (o == null) continue;
+                var walls = o.Walls;
+                if (walls == null || walls.Count == 0) continue;
+                if (WallsBlock(walls, from, to, false, clearance, out _)) return true;
+            }
+            return false;
+        }
+
+        static bool WallsBlock(IReadOnlyList<WallSegment> walls, Vector3 p, Vector3 q,
+            bool gatesOpen, float r, out Vector3 along)
+        {
+            along = default;
+            if (walls == null) return false;
+            // The list gates are looked up in, for a walker they open to.
+            var gates = gatesOpen ? walls : null;
+            float h = WallVisual.GateSpan * 0.5f;
+            for (int k = 0; k < walls.Count; k++)
+            {
+                var w = walls[k];
+                if (w == null || w.Breached) continue;
+                Vector3 a = w.A, b = w.B;
+                float dx = b.x - a.x, dz = b.z - a.z;
+                float len = Mathf.Sqrt(dx * dx + dz * dz);
+                if (len < 1e-4f) continue;
+                float ux = dx / len, uz = dz / len;
+
+                if (w.IsGate && gatesOpen)
+                {
+                    // Only the palisade either side of the module stands.
+                    if (len <= 2f * h) continue;
+                    float mx = 0.5f * (a.x + b.x), mz = 0.5f * (a.z + b.z);
+                    if (PieceBlocks(p, q, a.x, a.z, mx - ux * h, mz - uz * h, r, gates)
+                        || PieceBlocks(p, q, mx + ux * h, mz + uz * h, b.x, b.z, r, gates))
+                    { along = new Vector3(ux, 0f, uz); return true; }
+                    continue;
+                }
+
+                if (PieceBlocks(p, q, a.x, a.z, b.x, b.z, r, gates))
+                { along = new Vector3(ux, 0f, uz); return true; }
+            }
+            return false;
+        }
+
+        /// **Is this point in a gate's opening?** A gate's 3 m module is
+        /// wider than a 2 m segment and overhangs its posts, so the way
+        /// through a short gate runs over the very post cells the palisade
+        /// either side ends on (`RelayWalls` opens them for the same
+        /// reason). A crossing -- or a close pass -- inside the opening is
+        /// the gate, not the palisade. Only reached when a step is already
+        /// against a wall, so the second loop is rare.
+        static bool InGate(IReadOnlyList<WallSegment> walls, float x, float z)
+        {
+            float o2 = GateOpenHalf * GateOpenHalf;
+            for (int k = 0; k < walls.Count; k++)
+            {
+                var w = walls[k];
+                if (w == null || !w.IsGate || w.Breached) continue;
+                float dx = 0.5f * (w.A.x + w.B.x) - x, dz = 0.5f * (w.A.z + w.B.z) - z;
+                if (dx * dx + dz * dz <= o2) return true;
+            }
+            return false;
+        }
+
+        /// One straight piece of wall against one step, flat. `gates`, when
+        /// not null, is the list whose gate openings let this walker by.
+        static bool PieceBlocks(Vector3 p, Vector3 q, float sx, float sz, float ex, float ez,
+            float r, IReadOnlyList<WallSegment> gates)
+        {
+            // Box reject first: almost every piece is nowhere near the step.
+            float lox = (sx < ex ? sx : ex) - r, hix = (sx > ex ? sx : ex) + r;
+            float loz = (sz < ez ? sz : ez) - r, hiz = (sz > ez ? sz : ez) + r;
+            if ((p.x > q.x ? p.x : q.x) < lox || (p.x < q.x ? p.x : q.x) > hix) return false;
+            if ((p.z > q.z ? p.z : q.z) < loz || (p.z < q.z ? p.z : q.z) > hiz) return false;
+
+            float d0 = PointSegDist(p.x, p.z, sx, sz, ex, ez);
+            if (d0 < WallEmbedded) return false;       // in it already: let him out
+
+            // Crossing the line outright.
+            float c1 = Cross2(sx, sz, ex, ez, p.x, p.z), c2 = Cross2(sx, sz, ex, ez, q.x, q.z);
+            float c3 = Cross2(p.x, p.z, q.x, q.z, sx, sz), c4 = Cross2(p.x, p.z, q.x, q.z, ex, ez);
+            if ((c1 > 0f) != (c2 > 0f) && (c3 > 0f) != (c4 > 0f))
+            {
+                if (gates == null) return true;
+                float t = c1 / (c1 - c2);                // where p->q meets the line
+                return !InGate(gates, p.x + (q.x - p.x) * t, p.z + (q.z - p.z) * t);
+            }
+
+            if (r <= 0f) return false;
+            float d1 = PointSegDist(q.x, q.z, sx, sz, ex, ez);
+            if (!(d1 < r && d1 < d0)) return false;
+            return gates == null || !InGate(gates, q.x, q.z);
+        }
+
+        static float Cross2(float ox, float oz, float px, float pz, float qx, float qz)
+            => (px - ox) * (qz - oz) - (pz - oz) * (qx - ox);
+
+        static float PointSegDist(float x, float z, float sx, float sz, float ex, float ez)
+        {
+            float dx = ex - sx, dz = ez - sz;
+            float l2 = dx * dx + dz * dz;
+            float t = l2 < 1e-8f ? 0f : Mathf.Clamp01(((x - sx) * dx + (z - sz) * dz) / l2);
+            float ox = sx + t * dx - x, oz = sz + t * dz - z;
+            return Mathf.Sqrt(ox * ox + oz * oz);
         }
 
         /// **Rocks are obstacles now (D4, 2026-09-23).** Kevin's decision

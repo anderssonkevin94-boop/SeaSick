@@ -115,7 +115,12 @@ namespace SeaSick.World
                     if (until <= 0f)
                     {
                         if (Night()) { Rest(); break; }
-                        if (FaunaField.TryPoint(field, anchor, WanderLeash, MaxSlope, rng, out var p))
+                        // A wander that would take it through a palisade is
+                        // not taken (2026-09-24): it grazes on and picks
+                        // again, so a herd inside a pen stays in and one
+                        // outside a camp stays out.
+                        if (FaunaField.TryPoint(field, anchor, WanderLeash, MaxSlope, rng, out var p)
+                            && !CampPath.BlocksAnimal(transform.position, p, 0f))
                         { target = p; state = State.Wander; }
                         else Graze();
                     }
@@ -267,15 +272,21 @@ namespace SeaSick.World
 
             // Aim at a point rather than a direction, so the run has an end and
             // the shared Step() can keep it off the beach.
-            Vector3 want = transform.position + away * 25f;
-            if (!FaunaField.PointOk(field, want, MaxSlope))
+            // A run that would go through a wall counts as cornered too
+            // (2026-09-24), so a spooked goat turns along the palisade
+            // rather than into it. If no bearing is clear it runs at the
+            // first one anyway and `Step` stops it at the wall.
+            Vector3 me0 = transform.position;
+            Vector3 want = me0 + away * 25f;
+            if (!FaunaField.PointOk(field, want, MaxSlope) || CampPath.BlocksAnimal(me0, want, 0f))
             {
                 // Cornered: try a few bearings before giving up and just
                 // standing -- better than running into the sea.
                 for (int i = 1; i <= 6; i++)
                 {
-                    Vector3 alt = transform.position + (Quaternion.Euler(0f, i * 40f, 0f) * away) * 20f;
-                    if (FaunaField.PointOk(field, alt, MaxSlope)) { want = alt; break; }
+                    Vector3 alt = me0 + (Quaternion.Euler(0f, i * 40f, 0f) * away) * 20f;
+                    if (FaunaField.PointOk(field, alt, MaxSlope) && !CampPath.BlocksAnimal(me0, alt, 0f))
+                    { want = alt; break; }
                 }
             }
             target = want;
@@ -300,9 +311,20 @@ namespace SeaSick.World
             // Never step below the beach, whatever the target said: the one
             // place an animal must never end up is in the water.
             if (field.Height(next.x, next.z) < field.SandTop) return true;
+            // Nor through a wall (2026-09-24, Kevin: "animals walk through
+            // the walls that I've built"). Treated like the beach: the walk
+            // is over where it stands, a wander goes back to grazing and a
+            // flight stands at the palisade until its timer runs out. One
+            // call per frame: a box reject per segment of each walled camp,
+            // no allocation (`CampPath.BlocksAnimal`).
+            if (CampPath.BlocksAnimal(transform.position, next, AnimalClearance)) return true;
             transform.position = next;
             return false;
         }
+
+        /// Metres of body kept off a palisade: a goat or a boar is wider
+        /// than a man, so a little more than `CampPath.WallClearance`.
+        const float AnimalClearance = 0.5f;
 
         /// Feet on the ground. One sample a frame, and no smoothing -- these
         /// walk at 1 m/s over ground that is smooth at that scale.

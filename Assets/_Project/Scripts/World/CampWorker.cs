@@ -2459,6 +2459,40 @@ namespace SeaSick.World
 
             Vector3 step = leg / legLen * Mathf.Min(Speed * dt, legLen);
             Vector3 next = here + step;
+
+            // **The wall guard (2026-09-24).** Kevin: *"villagers ... walk
+            // through the walls that I've built."* The route keeps a hand
+            // on the right side of a wall, but a route is cell centres and
+            // a body is not: a corner retired 1.4 m early, a straight hop
+            // under `NextCorner`'s 6 m, the frames before a plan comes back
+            // -- each of those walked a straight line, and a straight line
+            // does not know a palisade is there. So every step is checked
+            // against the walls themselves, as lines. Blocked, he slides
+            // along the wall (which is where the gate or the end of it is);
+            // pinned with no slide, he stands and the route is re-asked.
+            if (CampPath.Blocks(camp, here, next, CampPath.Walker.Hand,
+                    CampPath.WallClearance, out Vector3 along))
+            {
+                Vector3 slide = along * Vector3.Dot(step, along);
+                Vector3 alt = here + slide;
+                if (slide.sqrMagnitude < 1e-8f
+                    || CampPath.Blocks(camp, here, alt, CampPath.Walker.Hand,
+                           CampPath.WallClearance, out _))
+                {
+                    // Re-ask in half a second rather than every frame: a
+                    // pinned man asking every frame is a search a frame.
+                    routeAge = Mathf.Max(routeAge, RePlanSeconds - 0.5f);
+                    // A target just the near side of the wall -- a pile or a
+                    // stand spot laid against the palisade -- is as reached
+                    // as it is going to get; one across it is not.
+                    if (dist < 1.2f && !CampPath.Crosses(camp, here, to, CampPath.Walker.Hand))
+                    { ClearRoute(); return true; }
+                    Face(leg, dt);
+                    return false;
+                }
+                next = alt;
+            }
+
             next.y = camp.GroundAt(next);
             transform.position = next;
             Face(leg, dt);
@@ -2491,26 +2525,40 @@ namespace SeaSick.World
         /// pivoting exactly over one looks like a man checking a map.
         const float CornerReach = 1.4f;
 
+        /// Extra seconds before re-asking after "no route, and straight is
+        /// through a wall". On top of `RePlanSeconds`, so about four seconds
+        /// between asks: a gate the player puts in is found that quickly.
+        const float NoRouteBackoff = 3f;
+
         void ClearRoute()
         {
             route.Clear();
             routeAt = 0;
             hasRoute = false;
+            routeAge = 0f;
         }
 
         Vector3 NextCorner(Vector3 here, Vector3 to, float dist, float dt)
         {
             // Close in, or a hop not worth a search: go straight. Most steps
-            // a camp ever takes are this one.
-            if (dist < 6f) { ClearRoute(); return to; }
+            // a camp ever takes are this one -- UNLESS a wall is in the way
+            // (2026-09-24): a tree four metres the far side of the palisade
+            // was a straight walk through it. Then it is planned like any
+            // other walk, and goes round by the gate.
+            bool straightCrosses = CampPath.Crosses(camp, here, to, CampPath.Walker.Hand);
+            if (dist < 6f && !straightCrosses) { ClearRoute(); return to; }
 
             routeAge += dt;
 
-            bool stale = !hasRoute
-                || routeAt >= route.Count
-                || routeAge >= RePlanSeconds
-                || Vector3.SqrMagnitude(new Vector3(to.x - routeFor.x, 0f, to.z - routeFor.z))
+            // A walker told "no route" waits out `NoRouteBackoff` (a
+            // negative age) before asking again -- unless the errand itself
+            // changed, which is a new question.
+            bool moved = Vector3.SqrMagnitude(new Vector3(to.x - routeFor.x, 0f, to.z - routeFor.z))
                        > RePlanMoved * RePlanMoved;
+            bool stale = moved
+                || (!hasRoute
+                    ? routeAge >= 0f
+                    : routeAt >= route.Count || routeAge >= RePlanSeconds);
 
             if (stale && CampPath.Budget())
             {
@@ -2528,18 +2576,38 @@ namespace SeaSick.World
                 hasRoute = map != null
                     && map.Route(here, to, CampPath.Walker.Hand, route)
                     && route.Count > 0;
-                if (!hasRoute) route.Clear();
+                if (!hasRoute)
+                {
+                    route.Clear();
+                    // **No way round, and straight is through a wall**: a
+                    // ring with no gate, or the far side of one. He waits
+                    // where he is -- and asks less often, because a failed
+                    // search in a closed ring has just flooded the whole
+                    // ring (up to `MaxExpansions`), and a camp of hands
+                    // doing that every 1.2 s is a phone's frame budget.
+                    if (straightCrosses) routeAge = -NoRouteBackoff;
+                }
             }
 
-            if (!hasRoute || routeAt >= route.Count) return to;
+            // No route (yet, or at all): the old straight line -- but never
+            // through a wall. Standing still for the frames a plan takes, or
+            // until a gate goes in, is the honest answer there.
+            if (!hasRoute || routeAt >= route.Count) return straightCrosses ? here : to;
 
             // Retire corners we are already on top of, and never let the last
-            // one stand in for the target.
+            // one stand in for the target. **Not round a wall's end early**
+            // (2026-09-24): a corner is retired at 1.4 m only if the line
+            // from here to the one after it is clear of the walls; otherwise
+            // he walks on to the corner itself (within 0.3 m it goes anyway,
+            // and the step guard in `Walk` has the last word).
             while (routeAt < route.Count - 1)
             {
                 Vector3 c = route[routeAt];
                 float dx = c.x - here.x, dz = c.z - here.z;
-                if (dx * dx + dz * dz > CornerReach * CornerReach) break;
+                float d2 = dx * dx + dz * dz;
+                if (d2 > CornerReach * CornerReach) break;
+                Vector3 after = routeAt + 1 >= route.Count - 1 ? to : route[routeAt + 1];
+                if (d2 > 0.09f && CampPath.Crosses(camp, here, after, CampPath.Walker.Hand)) break;
                 routeAt++;
             }
 
