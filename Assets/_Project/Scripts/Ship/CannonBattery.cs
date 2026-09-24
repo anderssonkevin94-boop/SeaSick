@@ -82,6 +82,11 @@ namespace SeaSick.Ship
         public int PortReady => CountReady(port);
         public int StarboardReady => CountReady(starboard);
         public int GunsPerSide => Mathf.Max(port.Count, starboard.Count);
+        /// A side's REAL count, unlike `GunsPerSide` (the symmetric max) --
+        /// the two differ once a ship can carry an unpaired gun.
+        public int PortCount => port.Count;
+        public int StarboardCount => starboard.Count;
+        public int TotalGuns => allGuns.Count;
 
         /// Flat-water reach of these guns, for the gunnery readout.
         public float GunRange => starboard.Count > 0 && starboard[0] != null
@@ -110,7 +115,7 @@ namespace SeaSick.Ship
             // `Fit` instead, from the bays the player assigned to a battery,
             // and this default never runs.
             if (built) return;
-            Fit(null);
+            Fit((IList<Vector3>)null);
         }
 
         bool built;
@@ -186,6 +191,63 @@ namespace SeaSick.Ship
                     foreach (var g in starboardLocal) zSum += g.z;
                     fittedMidZ = zSum / starboardLocal.Count;
                     hasFittedMid = true;
+                }
+            }
+
+            built = true;
+            PostGunCrews();
+        }
+
+        /// One physical gun to stand, ship-local space, for `Fit(IList&lt;GunStation&gt;)`.
+        /// Unlike the starboard-only list `Fit(IList&lt;Vector3&gt;)` mirrors, each
+        /// entry carries its OWN side, so a ship can be missing a gun on one
+        /// side and keep the other exactly where she stood.
+        public struct GunStation
+        {
+            public Vector3 position;
+            public bool starboard;
+            public GunStation(Vector3 position, bool starboard)
+            {
+                this.position = position;
+                this.starboard = starboard;
+            }
+        }
+
+        /// Fit the battery to an EXPLICIT set of guns, each already carrying
+        /// its own side and position -- no mirroring. This is what a ship
+        /// with guns as equipment (2026-09-25) uses: her port and starboard
+        /// counts and positions come straight from what is actually fitted,
+        /// so removing one gun from one side leaves the other side untouched
+        /// and does not draw a phantom twin. Guns are added in list order,
+        /// which is also the crew-assignment order (`CrewRoster.GunCrew`).
+        /// An empty or null list is a real "no guns" battery.
+        public void Fit(IList<GunStation> guns)
+        {
+            authoredBattery = false;
+            foreach (var c in allGuns)
+                if (c != null) Destroy(c.gameObject);
+            port.Clear(); starboard.Clear(); allGuns.Clear();
+
+            var wood = MakeWood();
+            var iron = MakeIron();
+
+            hasFittedMid = false;
+            if (guns != null && guns.Count > 0)
+            {
+                float zSum = 0f;
+                foreach (var g in guns) zSum += g.position.z;
+                fittedMidZ = zSum / guns.Count;
+                hasFittedMid = true;
+            }
+
+            if (guns != null)
+            {
+                int si = 0, pi = 0;
+                foreach (var g in guns)
+                {
+                    var side = g.starboard ? starboard : port;
+                    string name = g.starboard ? $"CannonStar{si++}" : $"CannonPort{pi++}";
+                    MakeAt(name, g.position, g.starboard ? 1f : -1f, side, wood, iron);
                 }
             }
 
