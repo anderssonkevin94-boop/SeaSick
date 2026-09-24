@@ -229,10 +229,18 @@ namespace SeaSick.Steamer
             public SeaSick.Ship.Modular.DeckLoadPlan deckLoad;
             /// For the log line only.
             public bool refit;
+            /// Her guns, explicit equipment (2026-09-25), each with its own
+            /// side and position -- null = the untouched steamer, which still
+            /// takes her battery from `data.gunSockets` (starboard, mirrored
+            /// to port) exactly as she always has. A modular refit passes the
+            /// plan's `fittedGuns` here instead, so a side missing a gun (one
+            /// sent to the dry dock) does not get a mirrored phantom back.
+            public System.Collections.Generic.List<SeaSick.Ship.Modular.FittedGun> fittedGuns;
 
             public static BuildOptions Standard => new BuildOptions
             {
                 holdCells = HoldCells, hands = Hands, cloneHands = true, deckLoad = null, refit = false,
+                fittedGuns = null,
             };
         }
 
@@ -408,6 +416,27 @@ namespace SeaSick.Steamer
 
             var battery = ship.GetComponent<CannonBattery>();
             if (battery == null) return;
+
+            if (o.fittedGuns != null)
+            {
+                // Guns as explicit equipment (2026-09-25): each one already
+                // knows its own side and position (the slot it stands on),
+                // so it is handed to the battery as-is -- no mirroring, so a
+                // side missing a gun (one sent to the dry dock) stays short
+                // instead of growing a phantom twin from the other side.
+                var stations = new System.Collections.Generic.List<CannonBattery.GunStation>(o.fittedGuns.Count);
+                foreach (var g in o.fittedGuns)
+                {
+                    // Same correction as the socket path below: stand the
+                    // gunner on the deck at that station, not at the
+                    // carriage's own height.
+                    var pos = new Vector3(g.positionM.x, DeckYAt(data, g.positionM.z), g.positionM.z);
+                    stations.Add(new CannonBattery.GunStation(pos, g.side == "starboard"));
+                }
+                battery.Fit(stations);
+                return;
+            }
+
             // An EMPTY list is a real answer -- no guns -- and null means "the
             // authored pair", so a hull whose generator wrote no sockets must
             // pass the empty list, not null.

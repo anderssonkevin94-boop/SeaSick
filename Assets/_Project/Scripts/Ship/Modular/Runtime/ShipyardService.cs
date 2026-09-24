@@ -526,6 +526,7 @@ namespace SeaSick.Ship.Modular
             cloneHands = false,
             deckLoad = plan.deckLoad,
             refit = true,
+            fittedGuns = plan.fittedGuns,
         };
 
         // ---- the live snapshot ----------------------------------------------

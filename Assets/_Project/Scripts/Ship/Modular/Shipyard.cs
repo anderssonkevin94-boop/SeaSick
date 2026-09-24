@@ -667,14 +667,16 @@ namespace SeaSick.Ship.Modular
             // another item, so nothing here re-validates placement.
             p.fittedGuns = FittedGunsOf(asm, lib, p.viewOffset.z, w);
             foreach (var g in p.fittedGuns) { p.gunsWeightKg += g.massKg; p.gunsCrewNeeded += g.crew; }
+            // `data.gunSockets` (starboard only) stays a courtesy copy for the
+            // self-test's hull-form comparisons and `Reshaped`/`Scaled` -- the
+            // live battery no longer reads it. SteamerBootstrap.Man is handed
+            // `p.fittedGuns` itself (each gun with its own side and position)
+            // and fits `CannonBattery` directly from that, unmirrored, so a
+            // lone unpaired gun (a port gun sent to the dry dock, starboard
+            // kept) still gets a correctly-counted, correctly-positioned
+            // battery instead of a mirrored phantom.
             var star = new List<Vector3>();
             foreach (var g in p.fittedGuns) if (g.side == "starboard") star.Add(g.positionM);
-            // CannonBattery.Fit takes the STARBOARD list and mirrors it to
-            // port unchanged -- the same call the untouched V8 ship makes
-            // (SteamerBootstrap.Man), now fed from the fitted slots instead
-            // of the hull form. A lone unmatched gun still draws (the
-            // ModularShipView art), but only pairs get a working battery gun
-            // this way; see docs/SHIPYARD-API.md for the open question.
             p.data.gunSockets = star.ToArray();
             p.capacity = new ShipCapacity
             {
