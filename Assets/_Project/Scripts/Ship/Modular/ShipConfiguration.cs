@@ -16,8 +16,11 @@ namespace SeaSick.Ship.Modular
     [Serializable]
     public class ShipConfiguration
     {
-        /// Highest configuration schema this build reads.
-        public const int SupportedSchemaVersion = 1;
+        /// Highest configuration schema this build reads. Bumped to 2
+        /// 2026-09-25: guns are explicit `equipment` entries now, not
+        /// implicit hull-form sockets (docs/SHIPYARD-API.md). A v1 document
+        /// still reads (MigratedToV2 below), never refused.
+        public const int SupportedSchemaVersion = 2;
 
         public int schemaVersion = SupportedSchemaVersion;
         public string sternId;
@@ -39,13 +42,24 @@ namespace SeaSick.Ship.Modular
         public const string M1Carrier = "wheel.carrier.m1";
         public const string V3Chimney = "fitting.chimney.v3";
         public const string ChimneySocket = "stern/Chimney";
+        public const string EquipmentCannon = "equipment.cannon.astra.v1";
+        /// The stern's and bow's own authored gun-slot pair (local ids; both
+        /// modules happen to name them the same way).
+        const string GunSlotStar = "DeckSlot_1_-1", GunSlotPort = "DeckSlot_1_1";
+        const string SternGunSlotStar = "DeckSlot_2_-1", SternGunSlotPort = "DeckSlot_2_1";
 
-        /// Stern + bow, reinforced M1 wheel, chimney (V3 short assembly).
+        /// Stern + bow, reinforced M1 wheel, chimney, 4 guns (V3 short assembly).
         public static ShipConfiguration Short() => WithMiddles(0);
 
-        /// Stern + one middle + bow (V3 long assembly).
+        /// Stern + one middle + bow, 6 guns (V3 long assembly; today's ship).
         public static ShipConfiguration Long() => WithMiddles(1);
 
+        /// **Guns are explicit equipment (2026-09-25).** The hull's 3 pairs
+        /// stand where they always have: bow and stern always carry theirs;
+        /// the middle pair stands on the FIRST bay only -- a second or third
+        /// bay adds gun SLOTS, not guns (docs/SHIPYARD-API.md §10), so
+        /// `WithMiddles(2)` and `WithMiddles(3)` carry the same 6 guns as
+        /// `Long()`, just with unused slots further forward.
         public static ShipConfiguration WithMiddles(int n)
         {
             var c = new ShipConfiguration
@@ -57,7 +71,52 @@ namespace SeaSick.Ship.Modular
             };
             for (int i = 0; i < n; i++) c.middleIds.Add(V3Middle);
             c.fittings.Add(new FittingChoice { socketId = ChimneySocket, moduleId = V3Chimney });
+            c.equipment.Add(new EquipmentChoice { slotId = "bow/" + GunSlotStar, moduleId = EquipmentCannon });
+            c.equipment.Add(new EquipmentChoice { slotId = "bow/" + GunSlotPort, moduleId = EquipmentCannon });
+            c.equipment.Add(new EquipmentChoice { slotId = "stern/" + SternGunSlotStar, moduleId = EquipmentCannon });
+            c.equipment.Add(new EquipmentChoice { slotId = "stern/" + SternGunSlotPort, moduleId = EquipmentCannon });
+            if (n > 0)
+            {
+                c.equipment.Add(new EquipmentChoice { slotId = "middle[0]/" + GunSlotStar, moduleId = EquipmentCannon });
+                c.equipment.Add(new EquipmentChoice { slotId = "middle[0]/" + GunSlotPort, moduleId = EquipmentCannon });
+            }
             return c;
+        }
+
+        /// A v1 document (saved before 2026-09-25) never carried equipment --
+        /// the prototype refused all of it, and guns were implicit hull-form
+        /// sockets. This reproduces what she carried as explicit equipment so
+        /// an old save's guns come back the same, SIMPLIFIED for what a v1
+        /// config could ever actually be: the prototype policy at v1 allowed
+        /// no hull shape other than `WithMiddles(n)` (0-3 W1-r2 middles, any
+        /// rotor/fittings choice never affected capacity), so bow and stern
+        /// always carried their pair and the middle pair always stood on the
+        /// first bay -- exactly what `WithMiddles` still does. A config this
+        /// build cannot build after migrating falls back to Long() with a
+        /// warning regardless (ModularSave.Decode), so an unanticipated v1
+        /// document is never silently wrong, only replaced.
+        public ShipConfiguration MigratedToV2()
+        {
+            var m = Clone();
+            if (m.schemaVersion >= SupportedSchemaVersion) return m;
+            m.schemaVersion = SupportedSchemaVersion;
+            if (m.equipment.Count > 0) return m; // already explicit; nothing to invent
+            if (!string.IsNullOrEmpty(m.bowId))
+            {
+                m.equipment.Add(new EquipmentChoice { slotId = "bow/" + GunSlotStar, moduleId = EquipmentCannon });
+                m.equipment.Add(new EquipmentChoice { slotId = "bow/" + GunSlotPort, moduleId = EquipmentCannon });
+            }
+            if (!string.IsNullOrEmpty(m.sternId))
+            {
+                m.equipment.Add(new EquipmentChoice { slotId = "stern/" + SternGunSlotStar, moduleId = EquipmentCannon });
+                m.equipment.Add(new EquipmentChoice { slotId = "stern/" + SternGunSlotPort, moduleId = EquipmentCannon });
+            }
+            if ((m.middleIds?.Count ?? 0) > 0)
+            {
+                m.equipment.Add(new EquipmentChoice { slotId = "middle[0]/" + GunSlotStar, moduleId = EquipmentCannon });
+                m.equipment.Add(new EquipmentChoice { slotId = "middle[0]/" + GunSlotPort, moduleId = EquipmentCannon });
+            }
+            return m;
         }
 
         // ---- JSON ---------------------------------------------------------
