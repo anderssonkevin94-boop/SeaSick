@@ -54,6 +54,7 @@ namespace SeaSick.UI.Sheets
         SelectionRing ring;
         MidnightLandHud land;
         bool midnight;
+        readonly BuildingSheetFocus buildingFocus = new BuildingSheetFocus();
 
         ISheet built;
         float nextRefresh;
@@ -576,10 +577,16 @@ namespace SeaSick.UI.Sheets
             var safe = Screen.safeArea;
             if (safe.width < 1f || safe.height < 1f)
                 safe = new Rect(0f, 0f, Screen.width, Screen.height);
-            return HudLayout.Wide
+            var size = HudLayout.Wide
                 ? new Vector2(safe.width * Third - Margin * 2f, safe.height - Margin * 2f
                     - (MidnightLandHud.Active ? (MidnightLandHud.NavHeight + MidnightLandHud.TopHeight + 24f) / PanelScale : 0f))
                 : new Vector2(safe.width - Margin * 2f, safe.height * (MidnightLandHud.Active ? .46f : Third) - Margin * 2f);
+            if (!HudLayout.Wide && Sheets.Current is StationSheet station && station.ProductionLayout)
+            {
+                float ceiling = safe.height - (MidnightLandHud.TopHeight + MidnightLandHud.NavHeight + 160f) / PanelScale;
+                size.y = Mathf.Min(Mathf.Max(size.y, 480f / PanelScale), ceiling);
+            }
+            return size;
         }
 
         /// **How tall a page may be, in panel units.**
@@ -650,7 +657,7 @@ namespace SeaSick.UI.Sheets
             }
 
             var s = Sheets.Current;
-            if (s == null) { FrameOpen = false; return; }
+            if (s == null) { FrameOpen = false; buildingFocus.Tick(null); return; }
 
             if (!s.StillValid) { Sheets.Close(); FrameOpen = false; return; }
 
@@ -662,6 +669,7 @@ namespace SeaSick.UI.Sheets
             }
 
             Place(s);
+            buildingFocus.Tick(s);
         }
 
         // --- placement ---

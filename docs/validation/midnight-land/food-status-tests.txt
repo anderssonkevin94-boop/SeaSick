@@ -1,0 +1,1 @@
+PASS: food duration, no crew, rations off, reserved food exclusion, unassigned, idle, missing inputs, working, full output, compact counts.

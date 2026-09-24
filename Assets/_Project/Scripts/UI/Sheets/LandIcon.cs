@@ -35,6 +35,9 @@ namespace SeaSick.UI.Sheets
             p.strokeColor = pearl; p.lineWidth = 1.6f*s;
             switch (kind)
             {
+                case "food":
+                    Poly(pearl,new Vector2(3,16),new Vector2(29,16),new Vector2(25,26),new Vector2(7,26));
+                    Line(10,29,22,29); Line(10,6,10,12); Line(16,3,16,11); Line(22,6,22,12); break;
                 case "logs":
                     for (int i=0; i<3; i++)
                     {

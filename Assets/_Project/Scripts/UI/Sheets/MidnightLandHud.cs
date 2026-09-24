@@ -17,7 +17,8 @@ namespace SeaSick.UI.Sheets
         public static Color Ice => new Color32(164, 210, 232, 255);
         public static Color Muted => new Color32(166, 186, 198, 255);
         readonly VisualElement top, nav;
-        readonly Label logs, boards, crew, day;
+        readonly Label logs, boards, crew, food, day;
+        readonly BuildingStatusLabels buildingStatus;
         readonly Button[] buttons = new Button[4];
         float nextUpdate;
 
@@ -27,10 +28,12 @@ namespace SeaSick.UI.Sheets
         public MidnightLandHud(VisualElement root)
         {
             top = new VisualElement(); top.AddToClassList("land-resources"); root.Add(top);
-            logs = Resource(top, "logs", "Logs in store");
-            boards = Resource(top, "planks", "Planks in store");
+            logs = Resource(top, "logs", "Timber in store");
+            boards = Resource(top, "planks", "Boards in store");
             crew = Resource(top, "crew", "Crew ashore");
+            food = Resource(top, "food", "Stored food at current rations; excludes future gathering");
             day = new Label(); day.AddToClassList("land-day"); top.Add(day);
+            buildingStatus = new BuildingStatusLabels(root);
             nav = new VisualElement(); nav.AddToClassList("land-nav"); root.Add(nav);
             string[] names = { "Build", "Crew", "Stores", "Ship" };
             string[] icons = { "build", "crew", "stores", "ship" };
@@ -70,7 +73,7 @@ namespace SeaSick.UI.Sheets
             bool active = Active;
             root.EnableInClassList("midnight-land", active);
             top.style.display = nav.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
-            if (!active) { NavigationRect = ResourcesRect = Rect.zero; return; }
+            if (!active) { NavigationRect = ResourcesRect = Rect.zero; buildingStatus.Hide(); return; }
             float scale = SheetHost.PanelScale;
             var safe = Screen.safeArea;
             float left = safe.xMin * scale + 8f, right = (Screen.width - safe.xMax) * scale + 8f;
@@ -83,13 +86,20 @@ namespace SeaSick.UI.Sheets
             NavigationRect = new Rect(safe.xMin + 8f / scale, Screen.height - safe.yMin - (NavHeight + 8f) / scale,
                 safe.width - 16f / scale, NavHeight / scale);
             if (!SheetHost.FrameOpen) HudLayout.ClaimSheet(NavigationRect);
+            buildingStatus.Tick(Camp, scale);
             if (Time.unscaledTime < nextUpdate) return;
             nextUpdate = Time.unscaledTime + .25f;
             var ledger = Camp != null ? Camp.Ledger : null;
-            logs.text = ledger != null ? ledger.StoreCountOf(Res.Timber).ToString() : "0";
-            boards.text = ledger != null ? ledger.StoreCountOf(Res.Boards).ToString() : "0";
+            logs.text = CompactCount(ledger != null ? ledger.StoreCountOf(Res.Timber) : 0);
+            boards.text = CompactCount(ledger != null ? ledger.StoreCountOf(Res.Boards) : 0);
             crew.text = ledger != null ? ledger.hands.Count.ToString() : "0";
-            day.text = "Day " + TimeOfDay.Day + " / Ashore";
+            float days = SheetBits.FoodDays(ledger);
+            food.text = ledger == null || ledger.hands.Count == 0 ? "--"
+                : days < 0f ? "Off" : days < .1f ? "<0.1d" : days > 99f ? "99+d" : days.ToString("0.#") + "d";
+            food.style.color = ledger != null && ledger.hands.Count > 0 && (days < 1f)
+                ? SheetTheme.Ember : days < 3f && days >= 0f ? Ice : Pearl;
+            food.parent.tooltip = SheetBits.FoodDaysLine(ledger) + "; stored supply only, excludes future gathering";
+            day.text = "Day " + TimeOfDay.Day;
             for (int i = 0; i < buttons.Length; i++)
             {
                 bool selected = Sheets.Current is StationSheet && i == 0;
@@ -99,5 +109,8 @@ namespace SeaSick.UI.Sheets
                 buttons[i].EnableInClassList("land-nav-selected", selected);
             }
         }
+
+        internal static string CompactCount(int count) => count < 1000 ? count.ToString()
+            : count < 1000000 ? (count / 1000f).ToString("0.#") + "k" : (count / 1000000f).ToString("0.#") + "m";
     }
 }

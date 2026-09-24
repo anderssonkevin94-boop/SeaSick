@@ -1,0 +1,5 @@
+Tabs: Production, Upgrade
+Camera ready: True; focus: (-14.42, 31.12, 166.37); ground: 24.69906; subject: (-15.70, 31.12, 159.30)
+Terrain hit (-15.55, 31.38, 159.30); distance before anchor: 0.31m
+Building ground anchor: (646.00, 485.10, 37.30); outside UI: True; sheet: (x:1292.00, y:102.00, width:616.00, height:855.00)
+PASS

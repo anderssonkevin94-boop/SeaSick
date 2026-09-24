@@ -283,7 +283,8 @@ namespace SeaSick.UI.Sheets
             if (l == null || l.hands.Count == 0) return -1f;
             float perDay = l.hands.Count * OutpostLedger.EatPerHandPerDay * l.EatMultiplier;
             if (perDay <= 0.0001f) return -1f;
-            return (l.CountOf(Res.Food) + (l.Store(Res.Food)?.part ?? 0f)) / perDay;
+            // Upkeep eats from the store, not food reserved in a kitchen input bay.
+            return (l.StoreCountOf(Res.Food) + (l.Store(Res.Food)?.part ?? 0f)) / perDay;
         }
 
         public static string FoodDaysLine(OutpostLedger l)

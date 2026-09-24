@@ -2016,7 +2016,7 @@ MonoBehaviour:
   overviewMargin: 1.3
   overviewFov: 36
   overviewGroundMetres: 165
-  overviewResponse: 0.7
+  overviewResponse: 2
   overviewHoldsShip: 1
   overviewShipMargin: 22
   minPersonScreenFraction: 0.0055

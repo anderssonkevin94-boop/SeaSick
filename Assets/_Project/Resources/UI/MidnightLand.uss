@@ -36,6 +36,16 @@
     white-space: nowrap; margin-left: 5px;
 }
 .land-day { font-size: 12px; margin-left: 4px; }
+.land-resources .land-icon { width: 22px; height: 22px; }
+.land-resource { min-width: 0; flex-shrink: 1; }
+.land-resource > Label { font-size: 12px; margin-left: 3px; }
+.land-building-status {
+    position: absolute; width: 110px; height: 24px;
+    background-color: rgb(22,42,56); color: rgb(255,171,142);
+    border-color: rgb(164,210,232); border-width: 1px; border-radius: 4px;
+    -unity-text-align: middle-center; font-size: 11px; white-space: nowrap;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
 .land-nav-button {
     height: 54px; flex-grow: 1; flex-basis: 0; flex-shrink: 1; align-items: center;
     justify-content: center; background-color: rgba(0,0,0,0); border-width: 0;
@@ -52,3 +62,25 @@
 .land-flow-arrow { width: 22px; height: 22px; }
 .land-flow-progress { height: 7px; width: 90%; margin-top: 5px; background-color: rgb(74,96,108); border-radius: 3px; }
 .land-flow-progress-fill { height: 7px; background-color: rgb(127,200,173); border-radius: 3px; }
+.land-production { flex-shrink: 0; }
+.land-production-status { height: 40px; margin: 0; white-space: normal; overflow: hidden; }
+.land-production .land-flow { height: 86px; }
+.land-production .land-flow-cell .land-icon { width: 25px; height: 25px; }
+.land-product-choice, .land-amount-choice { height: 44px; min-height: 44px; margin: 0; flex-shrink: 0; }
+.land-product-choice { margin-top: 3px; }
+.land-product-choice .unity-base-field__input, .land-amount-choice .unity-base-field__input {
+    background-color: rgb(32,57,72); border-color: rgb(115,151,173); border-width: 1px; border-radius: 4px;
+    padding-left: 10px; padding-right: 10px; min-height: 42px;
+}
+.land-product-choice .unity-base-popup-field__text, .land-amount-choice .unity-base-popup-field__text {
+    color: rgb(232,242,246); font-size: 13px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.land-production-detail { height: 26px; margin: 2px 0 0 0; white-space: normal; }
+.land-production-actions { flex-wrap: nowrap; }
+.land-amount-choice { width: 112px; margin-right: 6px; }
+.land-production-start { height: 44px; min-width: 0; flex-grow: 1; flex-shrink: 1; font-size: 13px; }
+.land-production-stop { height: 44px; width: 58px; min-width: 58px; flex-shrink: 0; margin-left: 6px; font-size: 13px; }
+.midnight-land .unity-base-dropdown__item { min-height: 44px; }
+.midnight-land .unity-base-dropdown__container-inner { background-color: rgb(32,57,72); }
+.midnight-land .unity-base-dropdown__label { color: rgb(232,242,246); font-size: 14px; }

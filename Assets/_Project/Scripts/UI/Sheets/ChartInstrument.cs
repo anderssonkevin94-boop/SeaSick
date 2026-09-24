@@ -173,13 +173,14 @@ namespace SeaSick.UI.Sheets
             root.style.left = safe.xMin * scale + 14f;
             root.style.top = (Screen.height - safe.yMax) * scale + 14f;
             bool land = MidnightLandHud.Active;
-            root.style.scale = new Scale(new Vector3(land ? .62f : 1f, land ? .62f : 1f, 1f));
+            float chartScale = land ? (BuildingSheetFocus.IsBuilding(Sheets.Current) ? .40f : .62f) : 1f;
+            root.style.scale = new Scale(new Vector3(chartScale, chartScale, 1f));
             root.style.transformOrigin = new TransformOrigin(0f, 0f);
             if (land)
             {
-                root.style.left = safe.xMax * scale - Diameter * .62f - 14f;
+                root.style.left = safe.xMax * scale - Diameter * chartScale - 14f;
                 if (HudLayout.Wide)
-                    root.style.left = (safe.xMin + safe.width * (2f / 3f)) * scale - Diameter * .62f - 14f;
+                    root.style.left = (safe.xMin + safe.width * (2f / 3f)) * scale - Diameter * chartScale - 14f;
                 root.style.top = (Screen.height - safe.yMax) * scale + MidnightLandHud.TopHeight + 20f;
             }
             tab.style.display = land ? DisplayStyle.None : DisplayStyle.Flex;

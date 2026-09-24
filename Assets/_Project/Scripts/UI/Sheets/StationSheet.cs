@@ -37,7 +37,7 @@ namespace SeaSick.UI.Sheets
     /// click needs its press and release on the SAME element -- so nothing a
     /// finger can land on is rebuilt on that timer. Rows are made in `Build`
     /// (and when a TAP changes their shape) and only re-texted after.
-    public class StationSheet : ISheetFramed
+    public partial class StationSheet : ISheetFramed
     {
         readonly Outpost outpost;
         readonly Building building;
@@ -74,7 +74,7 @@ namespace SeaSick.UI.Sheets
             hasWorker = BuildPlans.HasPosition(planId) && hasMake;
             isStore = planId == BuildPlans.Storage.id;
             ResolveRaisedIndex();
-            if (MidnightOverview) tab = 0;
+            if (ProductionLayout) tab = 0;
         }
 
         void ResolveRaisedIndex()
@@ -91,12 +91,13 @@ namespace SeaSick.UI.Sheets
             l != null && raisedIndex >= 0 ? l.StationForRaised(raisedIndex) : null;
 
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
-        bool MidnightOverview => MidnightLandHud.Active && planId == BuildPlans.Sawmill.id;
+        internal bool ProductionLayout => MidnightLandHud.Active && hasMake;
 
         // --- the frame -------------------------------------------------------
 
         public Color Accent => SheetTheme.Timber;
-        public string Title => plan.label;
+        public string Title => ProductionLayout && !string.IsNullOrEmpty(plan.label)
+            ? char.ToUpperInvariant(plan.label[0]) + plan.label.Substring(1) : plan.label;
 
         public Vector3 AnchorWorld => building != null
             ? building.transform.position
@@ -127,6 +128,7 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildActions()
         {
             upgradeBtn = null;
+            if (ProductionLayout && tab == 0) return BuildProductionActions();
             var l = L;
             if (l == null || !PageHas(LivePage, KUpgrade) || l.NextUpgrade(planId) == null) return null;
             int next = l.LevelOf(planId) + 1;
@@ -195,9 +197,20 @@ namespace SeaSick.UI.Sheets
             var recipes = hasMake ? Recipes.At(planId) : null;
             int rc = recipes != null ? recipes.Count : 0;
             long key = Mathf.RoundToInt(band) * 1000003L + rc * 131L + MaxInputs * 7L
-                       + (hasUpgrade ? 1 : 0) + (hasWorker ? 2 : 0) + (MidnightOverview ? 1000000007L : 0L);
+                       + (hasUpgrade ? 1 : 0) + (hasWorker ? 2 : 0) + (ProductionLayout ? 1000000007L : 0L);
             if (key == planKey && pages.Count > 0) return;
             planKey = key;
+
+            // Tasks stay stable across phone sizes; only the classic layout pours blocks into pages.
+            if (ProductionLayout)
+            {
+                pages.Clear();
+                pages.Add(new List<Blk>());
+                if (hasUpgrade) pages.Add(new List<Blk> { new Blk { kind = KUpgrade, px = UpgradePx } });
+                labels = hasUpgrade ? new[] { "Production", "Upgrade" } : new[] { "Production" };
+                tab = Mathf.Clamp(tab, 0, pages.Count - 1);
+                return;
+            }
 
             var flow = new List<Blk>();
             if (hasWorker) flow.Add(new Blk { kind = KWorker, px = WorkerPx });
@@ -241,13 +254,6 @@ namespace SeaSick.UI.Sheets
             }
             if (page.Count > 0) pages.Add(page);
             if (pages.Count == 0) pages.Add(new List<Blk>());
-            // Overview has no pinned action row, so it can use that reserved space.
-            if (MidnightOverview && band + SheetHost.ActionsPx >= 86f + WorkerPx + StallPx)
-                pages.Insert(0, new List<Blk> {
-                    new Blk { kind = KFlow, px = 86f },
-                    new Blk { kind = KWorker, px = WorkerPx },
-                    new Blk { kind = KStall, px = StallPx }
-                });
 
             // Named by what a page opens with; "make 1/2" where there are two.
             var names = new string[pages.Count];
@@ -339,9 +345,11 @@ namespace SeaSick.UI.Sheets
             upgradeLevel = null; upgradeHolder = null; upgradeKey = long.MinValue;
             recipeRows.Clear();
             root.Clear();
+            ResetProductionElements();
             builtKey = planKey;
 
             var page = LivePage;
+            if (ProductionLayout && tab == 0) { BuildProduction(); return; }
             foreach (var b in page)
             {
                 switch (b.kind)
@@ -390,6 +398,7 @@ namespace SeaSick.UI.Sheets
             var station = Station(l);
             RefreshFlow(l, station);
             var hand = HandOn(l, station);
+            RefreshProduction(l, station, hand);
             worker?.Update(l, hand);
             FillIn(l, station);
             FillMaking(l, station);
@@ -413,8 +422,8 @@ namespace SeaSick.UI.Sheets
                 cell.Add(new LandIcon(icon)); row.Add(cell); return cell;
             }
             void Arrow() { var arrow = new LandIcon("arrow"); arrow.AddToClassList("land-flow-arrow"); row.Add(arrow); }
-            var input = Cell("logs");
-            flowInputName = SheetKit.Text("Logs", false, false, 13); input.Add(flowInputName);
+            var input = Cell(planId == BuildPlans.Sawmill.id ? "logs" : "stores");
+            flowInputName = SheetKit.Text("Timber", false, false, 13); input.Add(flowInputName);
             flowInput = SheetKit.Text("", true, false, 20); input.Add(flowInput);
             Arrow();
             var bench = Cell("saw");
@@ -422,8 +431,8 @@ namespace SeaSick.UI.Sheets
             var track = new VisualElement(); track.AddToClassList("land-flow-progress"); bench.Add(track);
             flowProgress = new VisualElement(); flowProgress.AddToClassList("land-flow-progress-fill"); track.Add(flowProgress);
             Arrow();
-            var output = Cell("planks");
-            flowOutputName = SheetKit.Text("Planks", false, false, 13); output.Add(flowOutputName);
+            var output = Cell(planId == BuildPlans.Sawmill.id ? "planks" : "stores");
+            flowOutputName = SheetKit.Text("Boards", false, false, 13); output.Add(flowOutputName);
             flowOutput = SheetKit.Text("", true, false, 20); output.Add(flowOutput);
         }
 
@@ -433,11 +442,18 @@ namespace SeaSick.UI.Sheets
             var recipe = Feeding(ledger, station);
             string input = recipe != null && recipe.takes.Length > 0 ? recipe.takes[0].res : Res.Timber;
             string output = station?.BenchMakes ?? recipe?.makes ?? Res.Boards;
-            flowInputName.text = input == Res.Timber ? "Logs" : ResDefs.Label(input);
-            flowOutputName.text = output == Res.Boards ? "Planks" : ResDefs.Label(output);
+            flowInputName.text = ResDefs.Label(input);
+            flowOutputName.text = ResDefs.Label(output);
             flowInput.text = station == null ? "--" : $"{station.BayCount(input)}/{station.InputCap}";
+            if (recipe != null && recipe.takes.Length > 1 && station != null)
+            {
+                int held = 0;
+                foreach (var ingredient in recipe.takes) held += station.BayCount(ingredient.res);
+                flowInputName.text = "Input bay";
+                flowInput.text = $"{held}/{station.InputCap * recipe.takes.Length}";
+            }
             flowOutput.text = station == null ? "--" : $"{station.RackTotal}/{station.OutputCap}";
-            flowState.text = station == null ? "Unavailable" : station.benchState == BenchState.Working ? "Cutting"
+            flowState.text = station == null ? "Unavailable" : station.benchState == BenchState.Working ? (planId == BuildPlans.Sawmill.id ? "Cutting" : "Working")
                 : station.benchState == BenchState.Finished ? "Ready" : station.benchState == BenchState.Loaded ? "Loaded" : "Idle";
             float progress = station == null ? 0f : station.benchState == BenchState.Finished ? 1f : Mathf.Clamp01(station.benchProgress);
             flowProgress.style.width = Length.Percent(progress * 100f);
@@ -999,12 +1015,14 @@ namespace SeaSick.UI.Sheets
         readonly Label who;
         readonly Label sub;
         readonly Button btn;
+        readonly bool compact;
         OutpostHand current;
 
         public readonly VisualElement Root;
 
-        public WorkerSlot(Outpost o, string planId, System.Action changed)
+        public WorkerSlot(Outpost o, string planId, System.Action changed, bool compact = false)
         {
+            this.compact = compact;
             outpost = o;
             this.planId = planId;
             this.changed = changed;
@@ -1047,6 +1065,12 @@ namespace SeaSick.UI.Sheets
                 who.style.overflow = Overflow.Hidden;
                 who.style.textOverflow = TextOverflow.Ellipsis;
             }
+            if (compact)
+            {
+                lead.text = "CREW";
+                sub.style.display = DisplayStyle.None;
+                btn.style.minWidth = 116f;
+            }
         }
 
         public void Update(OutpostLedger l, OutpostHand hand, int others = 0)
@@ -1056,15 +1080,15 @@ namespace SeaSick.UI.Sheets
             {
                 who.text = hand.name;
                 sub.text = others > 0 ? $"+{others} more" : "";
-                btn.text = "stand down";
+                btn.text = compact ? "Stand down" : "stand down";
                 btn.SetEnabled(true);
             }
             else
             {
-                who.text = "nobody";
+                who.text = compact ? "Unassigned" : "nobody";
                 sub.text = SheetBits.FirstIdle(l) == null ? "no idle hand" : "";
-                btn.text = $"post a {position}";
-                btn.SetEnabled(SheetBits.FirstIdle(l) != null);
+                btn.text = compact ? (SheetBits.FirstIdle(l) != null ? "Assign worker" : "Manage crew") : $"post a {position}";
+                btn.SetEnabled(compact || SheetBits.FirstIdle(l) != null);
             }
         }
 
@@ -1077,6 +1101,12 @@ namespace SeaSick.UI.Sheets
             {
                 var free = SheetBits.FirstIdle(l);
                 if (free != null) outpost.Assign(free, planId);
+                else if (compact)
+                {
+                    var crew = new FireSheet(outpost);
+                    crew.FocusSection("hands");
+                    Sheets.Open(crew);
+                }
             }
             changed?.Invoke();
         }

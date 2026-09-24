@@ -44,7 +44,7 @@ namespace SeaSick.UI.Sheets
             if (MidnightLandHud.Active)
             {
                 disc.Clear(); disc.style.backgroundColor = Color.clear;
-                disc.Add(new LandIcon(title == "sawmill" ? "saw" : "build"));
+                disc.Add(new LandIcon(string.Equals(title, "sawmill", StringComparison.OrdinalIgnoreCase) ? "saw" : "build"));
             }
             head.Add(disc);
 
