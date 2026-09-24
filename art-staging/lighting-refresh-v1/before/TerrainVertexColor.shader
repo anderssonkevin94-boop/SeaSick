@@ -280,7 +280,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 float sculpted = smoothstep(.34 - bandWidth, .34 + bandWidth, sun);
                 float3 fill = max(0, SampleSH(float3(0,1,0))) * .58 * _ShadowTint.rgb;
                 float3 graphic = albedo * (fill + light.color
-                    * lerp(_ShadowTint.rgb * 0.38, float3(1.02,1.01,1.0), sculpted));
+                    * lerp(_ShadowTint.rgb * 0.38, float3(1.02,0.97,0.85), sculpted));
                 col = lerp(col, graphic, _GraphicLight);
 
                 // The Blender plateau has deliberate broad face colours.  This
@@ -297,7 +297,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 float authoredHigh = smoothstep(.82-edge, .82+edge, authoredSun);
                 float3 authoredShadow = float3(0.30, 0.42, 0.85);
                 float3 authoredMidTint = float3(0.66, 0.70, 0.82);
-                float3 authoredSunTint = float3(1.04, 1.03, 1.0);
+                float3 authoredSunTint = float3(1.08, 1.03, 0.90);
                 float3 authoredTint = authoredShadow;
                 authoredTint = lerp(authoredTint, authoredMidTint, authoredLow);
                 authoredTint = lerp(authoredTint, authoredSunTint, authoredMid);
@@ -332,15 +332,10 @@ Shader "SeaSick/Terrain Vertex Color"
                         #else
                             float3 lp = _AdditionalLightsPosition[pidx].xyz;
                         #endif
-                        float3 toLamp = lp - i.positionWS;
-                        float distanceSqr = max(dot(toLamp, toLamp), HALF_MIN);
-                        // Cancel inverse-square dimming, retaining URP's real
-                        // range/spot fade so clustered culling cannot cut a lit glow.
-                        float rangeFade = saturate(pl.distanceAttenuation * distanceSqr);
-                        float fall = saturate(1.0 - sqrt(distanceSqr) * 0.045);
+                        float fall = saturate(1.0 - distance(lp, i.positionWS) * 0.045);
                         fall *= fall;
                         float wrap = saturate(dot(n, pl.direction) * 0.6 + 0.4);
-                        col += albedo * pl.color * fall * rangeFade * wrap;
+                        col += albedo * pl.color * fall * wrap;
                     LIGHT_LOOP_END
                 }
                 #endif

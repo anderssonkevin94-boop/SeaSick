@@ -101,15 +101,10 @@ Shader "SeaSick/Environment Toon"
                         #else
                             float3 lp = _AdditionalLightsPosition[pidx].xyz;
                         #endif
-                        float3 toLamp = lp - i.positionWS;
-                        float distanceSqr = max(dot(toLamp, toLamp), HALF_MIN);
-                        // Retain Unity's real range/spot fade while keeping the
-                        // stylised broad glow instead of inverse-square dimming.
-                        float rangeFade = saturate(pl.distanceAttenuation * distanceSqr);
-                        float fall = saturate(1.0 - sqrt(distanceSqr) * 0.045);
+                        float fall = saturate(1.0 - distance(lp, i.positionWS) * 0.045);
                         fall *= fall;
                         float wrap = saturate(dot(n, pl.direction) * 0.6 + 0.4);
-                        col += albedo * pl.color * fall * rangeFade * wrap;
+                        col += albedo * pl.color * fall * wrap;
                     LIGHT_LOOP_END
                 }
                 #endif

@@ -1,0 +1,2 @@
+PASS SeaSick/Terrain Vertex Color peak=1 max boundary step=0.01568628
+PASS SeaSick/Environment Toon peak=1 max boundary step=0.01568628
