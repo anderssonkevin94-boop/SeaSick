@@ -111,8 +111,10 @@ namespace SeaSick.Ship.Modular
                 ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.UpperDeck).Count == 0
                 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment).Count == 1
                 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment)[0] == ShipConfiguration.EquipmentCannon
-                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 1,
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Stern).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 2
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Bow).Count == 2,
                 "rotors " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor))
+                + " middles " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle))
                 + " equipment " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment)));
 
             // ---- reshape ---------------------------------------------------
