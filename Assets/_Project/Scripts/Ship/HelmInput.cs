@@ -199,7 +199,8 @@ namespace SeaSick.Ship
             // the moment the view closed. The same reason the arrows and WASD
             // are guarded: R would otherwise ring down rowing at the exact
             // moment it is also `CampSiting`'s rotate-the-ghost key.
-            bool ashore = SeaSick.CameraRig.IslandCam.Engaged;
+            bool ashore = SeaSick.CameraRig.IslandCam.Engaged
+                || SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked; // the shipyard modal owns input
             helm.Sample(!ashore);
 
             // Read live every frame: the lab flips it on the phone.

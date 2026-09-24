@@ -642,7 +642,8 @@ namespace SeaSick.CameraRig
             // Not under the tuner either: `SailCamTuner` reads the same wheel
             // to fly the seat, and two things zooming one camera off one
             // notch is a camera nobody is steering.
-            if (!IslandCam.Engaged && !SailOverride.HasValue)
+            if (!IslandCam.Engaged && !SailOverride.HasValue
+                && !SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked)
             {
                 var touches = ET.Touch.activeTouches;
                 if (touches.Count == 2)

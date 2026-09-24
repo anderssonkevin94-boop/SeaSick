@@ -196,6 +196,10 @@ namespace SeaSick.Crew
         /// Ashore covers the whole work loop, not just standing about.
         public bool IsAshore => state == State.ToNode || state == State.Chopping
             || state == State.ToShip || state == State.Idling || state == State.GoingAshore;
+        /// The ship this hand walks back to while ashore (set by `GoAshore`);
+        /// null for a hand who has never been ashore. Read by the shipyard's
+        /// refit guard, which will not rebuild a deck a hand is out of.
+        public Transform HomeShip => ship;
         public bool IsAboard => state == State.Station || state == State.Bailing
             || state == State.Returning;
 

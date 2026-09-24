@@ -19,7 +19,7 @@ all of that stands on:
 | Assembler: config + library → placements or reasons (pure C#) | `Scripts/Ship/Modular/ShipAssembler.cs` |
 | View: draws an assembly, rotor on its own pivot | `Scripts/Ship/Modular/View/ModularShipView.cs`, `RotorSpin.cs` |
 | Isolated test bench + scene builder | `Scripts/Dev/ModularShipBench.cs`, `Scripts/Ship/Modular/Editor/ModularShipTestSceneSetup.cs` |
-| Self-test (45 gates, editor or headless) | `Scripts/Ship/Modular/ModularShipSelfTest.cs`, `tools/modular-selftest.sh` |
+| Self-test (45 milestone-1 gates + 42 shipyard gates, see docs/SHIPYARD-API.md; editor or headless) | `Scripts/Ship/Modular/ModularShipSelfTest.cs`, `tools/modular-selftest.sh` |
 
 It is **isolated from the sailing game**: nothing in `Ship/`, `Steamer/`, `Save/`
 or any scene was changed. The existing steamer, fleet ships and saves are untouched.
@@ -380,7 +380,7 @@ integration with `ShipMotor`, `PaddleDrive`, `Shipyard`, `ShipLadder` or saves.
 
 ## 12. Running the checks
 
-* Headless (no Unity): `tools/modular-selftest.sh` → `ModularShipSelfTest: 45 PASS, 0 FAIL`.
+* Headless (no Unity): `tools/modular-selftest.sh` → `ModularShipSelfTest: 87 PASS, 0 FAIL` (45 milestone-1 + 42 shipyard).
 * In an editor on this branch's project: `unity cmd eval --json --code 'return SeaSick.Ship.Modular.ModularShipSelfTest.Run();'`
   (also checks every `resourcePath` resolves through `Resources.Load` after import).
 * Batch preview (the branch's own project only, never the main open editor):

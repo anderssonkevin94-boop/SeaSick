@@ -357,7 +357,7 @@ namespace SeaSick.Ship
             TrainSide(port, false, dt);
 
             var kb = UnityEngine.InputSystem.Keyboard.current;
-            if (kb == null) return;
+            if (kb == null || SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (kb.qKey.wasPressedThisFrame) FireBroadside(false);
             if (kb.eKey.wasPressedThisFrame) FireBroadside(true);
         }

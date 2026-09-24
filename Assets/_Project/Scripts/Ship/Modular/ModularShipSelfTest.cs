@@ -26,15 +26,17 @@ namespace SeaSick.Ship.Modular
             var mods = Resources.LoadAll<TextAsset>(ModuleLibrary.ModulesResourceFolder);
             var texts = new List<string>(); var names = new List<string>();
             foreach (var t in mods) { texts.Add(t.text); names.Add(t.name); }
+            var hull = Resources.Load<TextAsset>(SeaSick.Steamer.HullFormData.ResourcePath);
             bool ok = RunWith(std != null ? std.text : "", texts, names,
-                path => Resources.Load<GameObject>(path) != null);
+                path => Resources.Load<GameObject>(path) != null, hull != null ? hull.text : null,
+                path => { var t = Resources.Load<TextAsset>(path); return t != null ? t.text : null; });
             if (ok) Debug.Log(Report); else Debug.LogError(Report);
             return ok;
         }
 
         /// `resourceExists` (optional) checks each VisualPart.resourcePath.
         public static bool RunWith(string standardsJson, IList<string> moduleJsons, IList<string> names = null,
-            Func<string, bool> resourceExists = null)
+            Func<string, bool> resourceExists = null, string hullFormJson = null, Func<string, string> readResourceText = null)
         {
             var sb = new StringBuilder();
             int fails = 0, passes = 0;
@@ -46,6 +48,8 @@ namespace SeaSick.Ship.Modular
             sb.AppendLine("[ModularShipSelfTest]");
             try { Body(standardsJson, moduleJsons, names, resourceExists, Gate); }
             catch (Exception e) { fails++; sb.AppendLine("  FAIL exception -- " + e); }
+            try { ShipyardSelfTest.Body(standardsJson, moduleJsons, names, hullFormJson, readResourceText, (n, ok, d) => Gate(n, ok, d)); }
+            catch (Exception e) { fails++; sb.AppendLine("  FAIL shipyard exception -- " + e); }
             Passed = passes; Failed = fails;
             sb.AppendLine($"ModularShipSelfTest: {passes} PASS, {fails} FAIL");
             Report = sb.ToString();

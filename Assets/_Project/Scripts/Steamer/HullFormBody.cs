@@ -42,7 +42,7 @@ namespace SeaSick.Steamer
         // has no horizontal baseline left to be measured over.
         const float MinUprightForSlope = 0.2f;
 
-        [SerializeField] float waterDensity = 1025f;
+        [SerializeField] float waterDensity = HullFormData.SeaWaterDensity;
 
         [Header("Damping ratios (derived into coefficients at Configure)")]
         [Tooltip("Heave damping ratio. c_h = 2 zeta sqrt(rho g Aw m), shared out over the half-strips by waterplane and applied where each one samples -- so the same dampers also give some roll and pitch damping, which is accounted for below.")]

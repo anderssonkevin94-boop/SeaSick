@@ -1,7 +1,8 @@
 #!/bin/zsh
 # Headless self-test of the modular-ship core -- no Unity editor, no scene.
 #
-# Compiles Assets/_Project/Scripts/Ship/Modular/*.cs (NOT View/ or Editor/)
+# Compiles Assets/_Project/Scripts/Ship/Modular/*.cs (NOT View/, Runtime/ or
+# Editor/) plus Steamer/HullFormData.cs (the hull form the shipyard reshapes)
 # with Unity's own Roslyn against NetStandard 2.1 + UnityEngine.CoreModule,
 # adds tools/modular-selftest/{JsonShim,Main}.cs (a managed JsonUtility
 # stand-in, because the real one is a native module), and runs
@@ -22,7 +23,7 @@ trap 'rm -rf "$O"' EXIT
 
 "$DOTNET" "$CSC" -nologo -t:exe -nostdlib -noconfig -langversion:9.0 -nowarn:0162,0168,0219,0414,0649,0169,0436 \
   -r:$U/Resources/Scripting/NetStandard/ref/2.1.0/netstandard.dll -r:$CORE \
-  -out:$O/t.exe "$P"/Assets/_Project/Scripts/Ship/Modular/*.cs \
+  -out:$O/t.exe "$P"/Assets/_Project/Scripts/Ship/Modular/*.cs "$P"/Assets/_Project/Scripts/Steamer/HullFormData.cs \
   "$P"/tools/modular-selftest/JsonShim.cs "$P"/tools/modular-selftest/Main.cs > $O/build.log 2>&1
 if grep -q "error CS" $O/build.log; then grep "error CS" $O/build.log | sed "s|$P/||"; echo "BUILD FAILED"; exit 2; fi
 cp $CORE $O/

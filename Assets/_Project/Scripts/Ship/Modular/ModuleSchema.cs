@@ -62,6 +62,10 @@ namespace SeaSick.Ship.Modular
         public const string HullFwd = "hull.fwd";
         /// The bow's forward extreme, prow included (not a join; no standard).
         public const string HullTip = "hull.tip";
+        /// The bow's stem at the height datum (the waterline end of the hull
+        /// proper), decorative prow EXCLUDED. Not a join; no standard. Used to
+        /// measure the hull's length for physics (Shipyard: HullMeasure).
+        public const string HullStem = "hull.stem";
         public const string Wheel = "wheel";
         public const string FittingChimney = "fitting.chimney";
         public const string DeckUpper = "deck.upper";
@@ -179,6 +183,34 @@ namespace SeaSick.Ship.Modular
         public PassageDef[] passages;
         /// Future gameplay numbers. ALL unset in milestone 1.
         public PhysicalSpec physical;
+        /// Hull sections: Astra's hydrostatic station table (upright level
+        /// flotation of Hull_Shell only). Null/empty path = none.
+        public HydrostaticsRef hydrostatics;
+        /// Hull sections: provisional lightship mass for the shipyard report.
+        public LightshipSpec lightship;
+    }
+
+    [Serializable]
+    public class HydrostaticsRef
+    {
+        /// Resources path without extension to the table JSON.
+        public string resourcePath;
+        public string sourceGeometrySha256;
+        /// [keel, main deck] heights above the module datum, U. Never
+        /// extrapolated above.
+        public float[] validWaterlineZU;
+        /// Vertical offset of this module's datum in the ship frame, U
+        /// (0 for every W1-r2 section today).
+        public float offsetZU;
+        public string notes;
+    }
+
+    [Serializable]
+    public class LightshipSpec
+    {
+        public float massKg;
+        public bool provisional = true;
+        public string rule;
     }
 
     [Serializable]

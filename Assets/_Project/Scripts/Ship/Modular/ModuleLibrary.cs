@@ -22,6 +22,9 @@ namespace SeaSick.Ship.Modular
         public readonly List<string> errors = new List<string>();
         readonly Dictionary<string, ModuleDef> byId = new Dictionary<string, ModuleDef>();
         readonly List<ModuleDef> ordered = new List<ModuleDef>();
+        readonly Dictionary<string, HydroTable> hydro = new Dictionary<string, HydroTable>();
+        /// Why a module's hydrostatic table was not loaded (id -> reason).
+        public readonly Dictionary<string, string> hydrostaticsErrors = new Dictionary<string, string>();
 
         /// True when the standards loaded and no module was refused.
         public bool Ok => Standards != null && errors.Count == 0;
@@ -60,8 +63,37 @@ namespace SeaSick.Ship.Modular
                 lib.errors.Add($"LIB_STANDARDS_MISSING: Resources/{StandardsResource}.json was not found.");
                 return lib;
             }
-            return FromJson(std.text, texts, names);
+            var loaded = FromJson(std.text, texts, names);
+            loaded.LoadHydrostatics(path => { var t = Resources.Load<TextAsset>(path); return t != null ? t.text : null; });
+            return loaded;
         }
+
+        /// Reads every hull module's hydrostatic table through `readText`
+        /// (Resources path -> JSON text, null if absent). A table whose
+        /// geometry hash differs from the module's reference is refused.
+        public void LoadHydrostatics(Func<string, string> readText)
+        {
+            hydro.Clear(); hydrostaticsErrors.Clear();
+            foreach (var d in ordered)
+            {
+                var h = d.hydrostatics;
+                if (h == null || string.IsNullOrEmpty(h.resourcePath)) continue;
+                string text = null;
+                try { text = readText(h.resourcePath); } catch (Exception e) { hydrostaticsErrors[d.id] = e.Message; continue; }
+                if (string.IsNullOrEmpty(text)) { hydrostaticsErrors[d.id] = $"no table at {h.resourcePath}"; continue; }
+                HydroTable t;
+                try { t = ModularJson.From<HydroTable>(text); }
+                catch (Exception e) { hydrostaticsErrors[d.id] = "unreadable: " + e.Message; continue; }
+                string why = null;
+                if (t == null || !t.Valid(out why)) { hydrostaticsErrors[d.id] = "invalid: " + (t == null ? "empty" : why); continue; }
+                if (!string.IsNullOrEmpty(h.sourceGeometrySha256) && t.sourceGeometrySha256 != h.sourceGeometrySha256)
+                { hydrostaticsErrors[d.id] = "geometry hash differs from the module's reference"; continue; }
+                hydro[d.id] = t;
+            }
+        }
+
+        /// The module's hydrostatic table, or null.
+        public HydroTable Hydrostatics(string id) => id != null && hydro.TryGetValue(id, out var t) ? t : null;
 
         /// Headless and test entry: raw JSON strings. `sourceNames` (optional,
         /// same order) only improves error messages.

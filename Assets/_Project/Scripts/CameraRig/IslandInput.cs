@@ -201,6 +201,8 @@ namespace SeaSick.CameraRig
             // 1. A dev tool that is open owns the view, unless it is the
             // tuner attached to THIS camera.
             if (DevTools.Open != null && !IslandCam.TunerAttached) { CancelGesture(); return; }
+            // 1a. The shipyard modal owns the view while it is open.
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) { CancelGesture(); return; }
 
             // 2. Stay inert until the overview has actually settled — a grab
             // against a shot still flying up from the chase camera has

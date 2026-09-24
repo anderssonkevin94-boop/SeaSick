@@ -34,6 +34,9 @@ namespace SeaSick.Steamer
     public class HullFormData
     {
         public const string ResourcePath = "Steamer/hullform";
+        /// Sea water, kg/m^3. The one place it is written: HullFormBody's
+        /// default and the shipyard's hydrostatics both read it.
+        public const float SeaWaterDensity = 1025f;
 
         public float lwl, loa, beam, beamOverGuards, draft, depth, volume, massKg, waterplane, kb, bm, gm, kg, lcbZ;
         public float gyradiusRoll, gyradiusPitch, gyradiusYaw;
@@ -95,6 +98,124 @@ namespace SeaSick.Steamer
                 }
             }
             return d;
+        }
+
+        /// **The same hull reshaped per axis** (modular shipyard, 2026-09-24):
+        /// `sL` along her length (z), `sB` across her beam (x), `sD` in her
+        /// depth (y, keel to deck; the waterline stays at y = 0). Unlike
+        /// `Scaled` this is not a similarity, so each field follows its own
+        /// definition:
+        ///
+        ///   lwl, loa                          x sL        (lengths)
+        ///   beam, beamOverGuards              x sB
+        ///   draft, depth, kb, kg              x sD        (heights; kb/kg above the keel)
+        ///   volume, massKg                    x sL sB sD  (mass = rho V, so she floats on her marks)
+        ///   waterplane                        x sL sB
+        ///   bm = I_T / V                      x sB^2 / sD (I_T ~ L B^3, V ~ L B D)
+        ///   gm                                gm + dkb + dbm - dkg (its definition, kb + bm - kg)
+        ///   lcbZ                              x sL
+        ///   gyradiusRoll                      x sB        (roll gyradius ~ 0.4 B, ITTC rule of thumb)
+        ///   gyradiusPitch, gyradiusYaw        x sL        (~ 0.25 L; HullFormBody's own fallbacks)
+        ///   com, gunSockets, helm, rudder     (x sB, y sD, z sL)
+        ///   wheelAxle                         (x sB, y UNCHANGED, z sL): the axle height sets the
+        ///                                     wheel's dip, i.e. her thrust, which must not change
+        ///   wheelRadius/Width/Floats/FloatDepth/DesignDip, rudderArea
+        ///                                     UNCHANGED -- the wheel and the blade are fittings,
+        ///                                     not hull; no thrust or handling bonus from shape
+        ///   funnelTopY                        + (sD - 1)(depth - draft): the funnel stands on the
+        ///                                     deck and its own height does not change
+        ///   well.halfWidth                    UNCHANGED (set by the wheel); fwdZ/platformFwdZ x sL;
+        ///                                     floorY/platformRise x sD
+        ///   stations: z, dz x sL; keelY, deckY, y[] x sD; halfBreadth[] x sB;
+        ///             area[] x sB sD; momentY[] (area x height) x sB sD^2
+        ///
+        /// Longitudinal inertia of the waterplane goes as sL^3 sB and the
+        /// transverse as sL sB^3 automatically, because both are integrated
+        /// from the station tables (`Rederive`, `HullFormBody`), not stored.
+        /// `Reshaped(1, 1, 1)` is field-for-field identical to the source (every
+        /// rule is a multiplication by exactly 1 or an addition of exactly 0).
+        /// Fields the generator writes but this class does not declare (lcfZ,
+        /// inertiaT/L, cb, cwp, cm, volumeFwd/Aft, flareRatio,
+        /// forecastleBreakZ) are never read at runtime and are not carried.
+        /// A deep copy; the source is untouched.
+        public HullFormData Reshaped(float sL, float sB, float sD)
+        {
+            float vol = sL * sB * sD;
+            var d = (HullFormData)MemberwiseClone();
+            d.lwl *= sL; d.loa *= sL;
+            d.beam *= sB; d.beamOverGuards *= sB;
+            d.draft *= sD; d.depth *= sD;
+            d.kb *= sD; d.kg *= sD;
+            d.bm *= sB * sB / sD;
+            d.gm = gm + (d.kb - kb) + (d.bm - bm) - (d.kg - kg);
+            d.lcbZ *= sL;
+            d.volume *= vol; d.massKg *= vol;
+            d.waterplane *= sL * sB;
+            d.gyradiusRoll *= sB; d.gyradiusPitch *= sL; d.gyradiusYaw *= sL;
+            d.com = Axes(com, sB, sD, sL);
+            d.helm = Axes(helm, sB, sD, sL);
+            d.rudder = Axes(rudder, sB, sD, sL);
+            d.wheelAxle = new Vector3(wheelAxle.x * sB, wheelAxle.y, wheelAxle.z * sL);
+            d.funnelTopY = funnelTopY + (sD - 1f) * (depth - draft);
+            if (gunSockets != null)
+            {
+                d.gunSockets = new Vector3[gunSockets.Length];
+                for (int i = 0; i < gunSockets.Length; i++) d.gunSockets[i] = Axes(gunSockets[i], sB, sD, sL);
+            }
+            if (well != null)
+                d.well = new HullFormWell
+                {
+                    halfWidth = well.halfWidth, fwdZ = well.fwdZ * sL, floorY = well.floorY * sD,
+                    platformRise = well.platformRise * sD, platformFwdZ = well.platformFwdZ * sL,
+                };
+            if (stations != null)
+            {
+                d.stations = new HullFormStation[stations.Length];
+                for (int i = 0; i < stations.Length; i++)
+                {
+                    var s = stations[i];
+                    if (s == null) continue;
+                    d.stations[i] = new HullFormStation
+                    {
+                        z = s.z * sL, dz = s.dz * sL, keelY = s.keelY * sD, deckY = s.deckY * sD,
+                        y = Scale(s.y, sD), halfBreadth = Scale(s.halfBreadth, sB),
+                        area = Scale(s.area, sB * sD), momentY = Scale(s.momentY, sB * sD * sD),
+                    };
+                }
+            }
+            return d;
+        }
+
+        static Vector3 Axes(Vector3 v, float sx, float sy, float sz) => new Vector3(v.x * sx, v.y * sy, v.z * sz);
+
+        /// **The stern's own fittings ride with the stern.** The wheel, its
+        /// well, the rudder and the helm belong to the stern module, which
+        /// does not stretch: when a bay is added the whole stern moves aft by
+        /// half the bay. So after `Reshaped` stretched their z with the hull,
+        /// this puts each at `reference` z + `dz` (x and y stay as `Reshaped`
+        /// made them). On the reference ship `dz = 0` and every z is the
+        /// reference's own, exactly.
+        public void PinSternFittings(HullFormData reference, float dz)
+        {
+            wheelAxle.z = reference.wheelAxle.z + dz;
+            rudder.z = reference.rudder.z + dz;
+            helm.z = reference.helm.z + dz;
+            if (well != null && reference.well != null && !ReferenceEquals(well, reference.well))
+            {
+                well.fwdZ = reference.well.fwdZ + dz;
+                well.platformFwdZ = reference.well.platformFwdZ + dz;
+            }
+        }
+
+        /// Enclosed volume below the deck line of every station, m^3: the
+        /// space a hold can use (full-section area at deck level x strip).
+        public float VolumeBelowDeck()
+        {
+            float v = 0f;
+            if (stations == null) return v;
+            for (int i = 0; i < stations.Length; i++)
+                if (stations[i] != null) v += AreaAt(i, stations[i].deckY) * stations[i].dz;
+            return v;
         }
 
         static float[] Scale(float[] a, float f)

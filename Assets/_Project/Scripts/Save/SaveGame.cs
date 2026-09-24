@@ -177,6 +177,8 @@ namespace SeaSick.Save
             Vector3 p = motor.transform.position;
             s.x = p.x; s.y = p.y; s.z = p.z;
             s.yaw = motor.transform.eulerAngles.y;
+            var shipyard = motor.GetComponent<SeaSick.Ship.Modular.ShipyardService>();
+            s.modular = shipyard != null ? shipyard.SaveField() : "";
             s.anchor = 0;
             if (anchor != null)
             {
@@ -282,6 +284,7 @@ namespace SeaSick.Save
                 // refusal. Bumping would have thrown away Kevin's saves to
                 // add a drawing.
                 if (d.seen == null) d.seen = new List<SeenSave>();
+                if (d.ship.modular == null) d.ship.modular = "";
                 if (d.trackX == null) d.trackX = new List<float>();
                 if (d.trackZ == null) d.trackZ = new List<float>();
                 if (d.trackAt == null) d.trackAt = new List<double>();
@@ -363,6 +366,14 @@ namespace SeaSick.Save
                     if (c != null) yard.SetUseQuiet(c.bay, c.tier, (BayUse)c.use);
                 yard.Refurnish();
             }
+
+            // 2a. Her modular configuration, if the save has one: the hull,
+            // deck, hold size and stations are rebuilt HERE, before the hold
+            // and the hands come back, so they land on the right deck. An
+            // old save (no field) is the standard steamer; an unbuildable
+            // field falls back to it with a warning, never a refusal.
+            var shipyard = motor.GetComponent<SeaSick.Ship.Modular.ShipyardService>();
+            if (shipyard != null) shipyard.ApplyFromSave(data.ship.modular);
 
             // 3. The hold and the stores, after the yard told the voyage
             // how big the hold is.

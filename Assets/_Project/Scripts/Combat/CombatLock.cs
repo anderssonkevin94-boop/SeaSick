@@ -60,7 +60,8 @@ namespace SeaSick.Combat
             }
 
             var kb = UnityEngine.InputSystem.Keyboard.current;
-            if (kb != null && kb.spaceKey.wasPressedThisFrame)
+            if (kb != null && kb.spaceKey.wasPressedThisFrame
+                && !SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked)
             {
                 if (Locked != null) Release();
                 else

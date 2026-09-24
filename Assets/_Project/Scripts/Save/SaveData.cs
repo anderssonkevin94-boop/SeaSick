@@ -111,6 +111,14 @@ namespace SeaSick.Save
         /// there is nothing else about him to keep. Empty in an old save,
         /// which is exactly right -- an old save has none.
         public List<string> crewNames = new List<string>();
+
+        /// **Her modular configuration** (`SeaSick.Ship.Modular.ShipConfiguration`
+        /// as its own versioned JSON), written only once she has been refitted
+        /// or loaded from a save that had one. Empty in an old save -- and in
+        /// a new one whose ship was never refitted -- which loads as the
+        /// standard long steamer, exactly as before. Added after version 1
+        /// shipped and deliberately NOT a version bump (see `SaveGame.Read`).
+        public string modular = "";
     }
 
     [System.Serializable]

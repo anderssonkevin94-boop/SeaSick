@@ -101,14 +101,25 @@ namespace SeaSick.Steamer
             // way would leave a PlayerShip with no hull at all; without her
             // numbers there is no steamer, and the honest fallback is the
             // ship the scene was authored with.
-            var data = HullFormData.Load();
-            if (data == null || data.stations == null || data.stations.Length == 0)
+            var data = ReferenceData();
+            if (data == null)
             {
                 Debug.LogError("[Steamer] no usable hull form at Resources/Steamer/hullform.json"
                     + " -- sailing the ladder ship instead.");
                 Shipyard.SuppressApplyOnStart = false;
                 return;
             }
+            Convert(yard.gameObject, yard, data);
+        }
+
+        /// **Her hull form as she is built today**: the generator's tables at
+        /// `PlaytestScale`, with the rudder cut to a real blade (below). The
+        /// modular shipyard reshapes THIS for a refitted ship; the standard
+        /// long steamer is this, unchanged. Null when there is no usable form.
+        public static HullFormData ReferenceData()
+        {
+            var data = HullFormData.Load();
+            if (data == null || data.stations == null || data.stations.Length == 0) return null;
 
             if (PlaytestScale > 0f && Mathf.Abs(PlaytestScale - 1f) > 0.001f)
                 data = data.Scaled(PlaytestScale);
@@ -126,7 +137,7 @@ namespace SeaSick.Steamer
             // the mesh are untouched, because nothing but the rudder force
             // reads this field.
             data.rudderArea = RudderAreaFraction * data.lwl * data.draft;
-            Convert(yard.gameObject, yard, data);
+            return data;
         }
 
         static void Convert(GameObject ship, Shipyard yard, HullFormData data)
@@ -192,6 +203,51 @@ namespace SeaSick.Steamer
                 Paint(wheel, paint);
             }
 
+            Assemble(ship, data, hull, wheel != null ? wheel.transform : null, paint, BuildOptions.Standard);
+
+            // The modular shipyard's handle on her (docs/SHIPYARD-API.md). It
+            // does nothing until a refit is confirmed or a save carries one:
+            // until then she is exactly the ship built above.
+            var shipyard = ship.GetComponent<SeaSick.Ship.Modular.ShipyardService>();
+            if (shipyard == null) shipyard = ship.AddComponent<SeaSick.Ship.Modular.ShipyardService>();
+            shipyard.Bind(data, hull, wheel != null ? wheel.transform : null);
+        }
+
+        /// What differs between building her at start and rebuilding her in
+        /// the modular shipyard. `Standard` is today's steamer, unchanged.
+        public struct BuildOptions
+        {
+            /// Hold cells handed to the VoyageManager.
+            public int holdCells;
+            /// Hands to post (and, when `cloneHands`, to make up to).
+            public int hands;
+            /// Start: clone hands up to `hands` and stand down the rest.
+            /// Refit: never -- post the hands already aboard, nobody made,
+            /// nobody sent away.
+            public bool cloneHands;
+            /// Where the deck load goes; null = measure the funnel off `hull`.
+            public SeaSick.Ship.Modular.DeckLoadPlan deckLoad;
+            /// For the log line only.
+            public bool refit;
+
+            public static BuildOptions Standard => new BuildOptions
+            {
+                holdCells = HoldCells, hands = Hands, cloneHands = true, deckLoad = null, refit = false,
+            };
+        }
+
+        /// **Everything that follows from her hull form**, in the one order
+        /// that works: collider, body, motor, clip and foam, people and hold,
+        /// drive, target, marker. Run once at start (`Convert`) and again, on
+        /// the SAME GameObject and Rigidbody, by `ShipyardService` for a
+        /// refit -- so a refitted ship is built by the very path she was.
+        /// `hull` is what she is drawn with (for the funnel), `wheel` the
+        /// transform the drive spins.
+        public static void Assemble(GameObject ship, HullFormData data, GameObject hull, Transform wheel,
+                                    Material paint, BuildOptions o)
+        {
+            Transform root = ship.transform;
+
             // --- 3. collider, THEN mass and inertia ----------------------------
             //
             // Same box the yard fits, from her own numbers: keel at -draft,
@@ -246,9 +302,9 @@ namespace SeaSick.Steamer
             var captain = root.Find("Helmsman");
             if (captain != null) captain.localPosition = data.helm;
             var voyage = Object.FindFirstObjectByType<SeaSick.Voyage.VoyageManager>();
-            if (voyage != null) voyage.SetHoldCapacity(HoldCells);
-            FitDeckLoad(ship, data, hull);
-            Man(ship, data);
+            if (voyage != null) voyage.SetHoldCapacity(o.holdCells);
+            FitDeckLoad(ship, data, hull, o);
+            Man(ship, data, o);
 
             // --- 7. the drive, and only then hand it the ship ------------------
             var paddle = ship.GetComponent<PaddleDrive>();
@@ -256,7 +312,7 @@ namespace SeaSick.Steamer
             // Froude scaling: a hull at k of the drawing tops out at √k of
             // the drawing's speed (15.5 → ~10 m/s at 0.42).
             paddle.SetTopSpeed(PaddleDrive.DefaultTopSpeed * Mathf.Sqrt(Mathf.Max(0.05f, PlaytestScale)));
-            paddle.Configure(data, body, wheel != null ? wheel.transform : null);
+            paddle.Configure(data, body, wheel);
             // The capsule the raiders' balls have to cross, from this hull.
             var target = ship.GetComponent<SeaSick.Combat.PlayerHull>();
             if (target != null) target.Configure(data.beam * 0.5f + 0.4f, data.lwl * 0.46f);
@@ -272,11 +328,12 @@ namespace SeaSick.Steamer
 
             var marker = ship.GetComponent<SteamerShip>();
             if (marker == null) marker = ship.AddComponent<SteamerShip>();
-            marker.Bind(data, body, paddle, paint);
+            // A refit keeps the paint the conversion made (and still owns).
+            marker.Bind(data, body, paddle, paint != null ? paint : marker.PaintMaterial);
 
             var rb = ship.GetComponent<Rigidbody>();
             float tonnes = (rb != null ? rb.mass : data.massKg) / 1000f;
-            Debug.Log($"[Steamer] converted PlayerShip: L {data.lwl:F1} B {data.beam:F1} m {tonnes:F0} t");
+            Debug.Log($"[Steamer] {(o.refit ? "refitted" : "converted")} PlayerShip: L {data.lwl:F1} B {data.beam:F1} m {tonnes:F0} t");
         }
 
         /// Crew and guns, from the ship rather than from constants.
@@ -288,10 +345,26 @@ namespace SeaSick.Steamer
         /// generator solved them against her own planking; `CannonBattery`
         /// mirrors the starboard side and then posts a hand to each gun
         /// itself.
-        static void Man(GameObject ship, HullFormData data)
+        static void Man(GameObject ship, HullFormData data, BuildOptions o)
         {
+            int Hands = o.hands;
             var hands = ship.GetComponentsInChildren<SeaSick.Crew.CrewAgent>(true);
-            if (hands.Length > 0)
+            if (!o.cloneHands)
+            {
+                // A refit: the same people, re-posted on the new deck. Nobody
+                // is made and nobody is stood down (the shipyard refuses a
+                // refit with more hands aboard than stations).
+                var aboard = new System.Collections.Generic.List<SeaSick.Crew.CrewAgent>();
+                foreach (var h in hands) if (h != null && h.gameObject.activeSelf) aboard.Add(h);
+                for (int i = 0; i < aboard.Count; i++)
+                {
+                    DeckStation(data, i, Mathf.Max(Hands, aboard.Count), out Vector3 at, out Vector3 rail);
+                    aboard[i].AssignStation(at, rail);
+                }
+                var crewList = ship.GetComponent<SeaSick.Crew.CrewRoster>();
+                if (crewList != null) crewList.Refresh();
+            }
+            else if (hands.Length > 0)
             {
                 var live = new System.Collections.Generic.List<SeaSick.Crew.CrewAgent>(hands);
                 // A clone is a different person: `Instantiate` copies the
@@ -325,7 +398,7 @@ namespace SeaSick.Steamer
                 for (int i = 0; i < live.Count && posted < Hands; i++)
                 {
                     if (live[i] == null || !live[i].gameObject.activeSelf) continue;
-                    DeckStation(data, posted, out Vector3 at, out Vector3 rail);
+                    DeckStation(data, posted, Hands, out Vector3 at, out Vector3 rail);
                     live[i].AssignStation(at, rail);
                     posted++;
                 }
@@ -367,10 +440,18 @@ namespace SeaSick.Steamer
         ///   `Across` centres as fit inside the crew's stations, which stand
         ///   0.7 m in from the bulwark (`DeckStation`).
         /// - Feet on the deck at each row's own station.
-        static void FitDeckLoad(GameObject ship, HullFormData data, GameObject hull)
+        static void FitDeckLoad(GameObject ship, HullFormData data, GameObject hull, BuildOptions o)
         {
             var hold = ship.GetComponent<ShipHold>();
             if (hold == null) return;
+            if (o.deckLoad != null)
+            {
+                // A refit: the shipyard laid the rows out already (the SAME
+                // `DeckLoadPlan.Lay`, from the assembly's own funnel), and
+                // checked every pile still has a place.
+                hold.Fit(o.deckLoad.rows, o.deckLoad.abreast, SeaSick.Ship.Modular.DeckLoadPlan.Across, o.holdCells);
+                return;
+            }
 
             // A pile by the fire is at most ~1.6 m long (a dozen logs laid
             // fore and aft) and ~1.55 m wide (a cairn of stone), about a
@@ -398,6 +479,8 @@ namespace SeaSick.Steamer
             }
 
             // The helmsman stands at `data.helm`; leave him a body's room.
+            // (Same layout as `SeaSick.Ship.Modular.DeckLoadPlan.Lay`, which
+            // the shipyard uses for a refit -- keep the two in step.)
             float aftLimit = data.helm.z + 0.45f;
             float room = (funnelAft - Clear) - aftLimit;
             float z0 = room >= PileLength
@@ -467,10 +550,10 @@ namespace SeaSick.Steamer
         /// third of the way forward to just ahead of the helm, x inside the
         /// bulwark by `Inboard` at that station's deck level. Nothing here
         /// is a typed coordinate, so it holds at any scale.
-        static void DeckStation(HullFormData data, int n, out Vector3 at, out Vector3 rail)
+        static void DeckStation(HullFormData data, int n, int hands, out Vector3 at, out Vector3 rail)
         {
             const float Inboard = 0.7f;
-            int pairs = Mathf.Max(1, (Hands + 1) / 2);
+            int pairs = Mathf.Max(1, (hands + 1) / 2);
             int pair = n / 2;
             float side = n % 2 == 0 ? 1f : -1f;
             // From +0.30 L to the helm, and never into the wheel well.

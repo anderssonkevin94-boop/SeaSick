@@ -1,0 +1,428 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Text;
+using UnityEngine;
+using SeaSick.Crew;
+using SeaSick.Ocean;
+using SeaSick.Save;
+using SeaSick.Ship;
+using SeaSick.Ship.Modular;
+using SeaSick.Steamer;
+using SeaSick.Voyage;
+using SeaSick.World;
+
+/// **Does a refit keep her, and does she still sail?** (modular shipyard,
+/// 2026-09-24, docs/SHIPYARD-API.md)
+///
+/// (a) repeated refits at the home berth: Long -> Short -> 3 bays -> timber
+///     -> reinforced -> Long; after each: the same GameObject and Rigidbody,
+///     exactly one player ship / shipyard / listener, damage, hold per kind
+///     and the crew roster unchanged, hands on the new deck, the drawn axle
+///     on the physics axle, motor/drive/body lengths and mass from the new
+///     hull form, the hold capacity and berths from the plan;
+/// (b) refused refits (oversized, W2, raised deck, 4 bays, stale draft,
+///     cargo that would not fit, crew that would not fit, under way) leave
+///     her bit-identical in the same frame;
+/// (c) save/load through a temp file: save, refit to Short, load -> the
+///     saved configuration and hold; an old-format save (field removed) ->
+///     the standard steamer;
+/// (d) sea trial for Long, Short and 3 bays in searched-for open water:
+///     20 s full ahead, 10 s full helm. Sanity gates only (no NaN, afloat,
+///     moving, |roll| < 25 deg) -- the numbers are printed, not judged.
+///
+/// Needs the STEAMER (menu SeaSick/Dev/Sail the Steamer, PlayerPrefs
+/// SeaSick.Steamer = 1). Play mode, Sea.unity, ~2.5 min. Never touches the
+/// player's save: refits persist to a temp file (PersistPathOverride) and
+/// the round trip uses temp files. Writes Logs/ShipyardRefitProbe.txt.
+public class ShipyardRefitProbe : MonoBehaviour
+{
+    public static void Execute()
+    {
+        if (!Application.isPlaying) { Debug.LogError("ShipyardRefitProbe: not in play mode"); return; }
+        var old = FindAnyObjectByType<ShipyardRefitProbe>();
+        if (old != null) Destroy(old.gameObject);
+        var runner = new GameObject("ShipyardRefitProbeRunner").AddComponent<ShipyardRefitProbe>();
+        runner.StartCoroutine(runner.Run());
+    }
+
+    readonly StringBuilder sb = new StringBuilder();
+    int fails, passes;
+
+    ShipyardService yard;
+    ShipMotor motor;
+    Rigidbody rb;
+    AnchorController anchor;
+    VoyageManager voyage;
+    HullIntegrity hull;
+    HelmInput helm;
+    int shipId, bodyId, listeners;
+    readonly List<CrewAgent> landed = new List<CrewAgent>();
+    readonly List<string> draftRows = new List<string>();
+
+    IEnumerator Run()
+    {
+        yield return new WaitForEndOfFrame();
+        GameBoot.Skip();
+        float t0 = Time.realtimeSinceStartup;
+        SeaSick.Terrain.TerrainWorldPopulator pop = null;
+        while (Time.realtimeSinceStartup - t0 < 90f)
+        {
+            pop = FindFirstObjectByType<SeaSick.Terrain.TerrainWorldPopulator>();
+            if (pop != null && pop.Done && ShipyardService.Player != null) break;
+            yield return null;
+        }
+        yard = ShipyardService.Player;
+        if (yard == null) { Finish("no ShipyardService: the steamer is not selected (SeaSick/Dev/Sail the Steamer) or she failed to convert"); yield break; }
+        if (pop == null || !pop.Done) { Finish("the world never built"); yield break; }
+        motor = yard.GetComponent<ShipMotor>();
+        rb = yard.GetComponent<Rigidbody>();
+        anchor = yard.GetComponent<AnchorController>();
+        hull = yard.GetComponent<HullIntegrity>();
+        voyage = FindFirstObjectByType<VoyageManager>();
+        helm = yard.GetComponent<HelmInput>();
+        if (motor == null || rb == null || anchor == null || voyage == null) { Finish("ship parts missing"); yield break; }
+        t0 = Time.realtimeSinceStartup;
+        while (!anchor.StartedDocked && Time.realtimeSinceStartup - t0 < 10f) yield return null;
+        yield return new WaitForSeconds(1f);
+
+        shipId = yard.gameObject.GetInstanceID();
+        bodyId = rb.GetInstanceID();
+        listeners = FindObjectsByType<AudioListener>(FindObjectsSortMode.None).Length;
+        var refData = SteamerBootstrap.ReferenceData();
+        Gate("reference-matches-bootstrap-scale", ShipyardSelfTest.PlaytestScale == SteamerBootstrap.PlaytestScale,
+            $"self-test mirror {ShipyardSelfTest.PlaytestScale} vs bootstrap {SteamerBootstrap.PlaytestScale}");
+        var steamer = yard.GetComponent<SteamerShip>();
+        Gate("untouched-ship-is-reference", !yard.ModularActive && steamer != null && Mathf.Approximately(steamer.Data.lwl, refData.lwl)
+            && Mathf.Approximately(rb.mass, refData.massKg) && Mathf.Approximately(motor.HullLength, refData.lwl),
+            $"lwl {steamer?.Data.lwl:F3} mass {rb.mass:F0} kg HullLength {motor.HullLength:F3}");
+
+        // A known state: some damage, two kinds in the hold, the berth.
+        string why0;
+        if (!anchor.AtHomeDock && !anchor.BerthAtHome(out why0)) sb.AppendLine("could not berth at the start: " + why0);
+        yield return new WaitForSeconds(0.5f);
+        if (hull != null) hull.Batter(yard.transform.position, 0.15f);
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
+        yield return null;
+        sb.AppendLine($"start: {Crew().Count} hands, hold {voyage.TotalHeld}/{voyage.HoldCapacity}, integrity {Integrity():F3}, "
+            + $"can refit: {yard.CanRefitNow(out string r0)} {r0}");
+        yield return MeasureDraft("standard (untouched V8)", yard.Validate(ShipConfiguration.Long()).draftPlan);
+
+        // ---- (b) refused refits, then (a) repeated refits ----------------
+        var lng = ShipConfiguration.Long();
+        Refuse("oversized", Mod(lng, c => c.rotorId = ShipConfiguration.OversizedRotor), ShipyardCodes.NotInPrototype);
+        Refuse("w2", Mod(lng, c => c.middleIds[0] = "hull.middle.w2broad.placeholder"), ShipyardCodes.NotInPrototype);
+        Refuse("raised-deck", Mod(lng, c => c.fittings.Add(new FittingChoice { socketId = "stern/UpperDeckMount", moduleId = "deck.upper.partial.placeholder" })), ShipyardCodes.NotInPrototype);
+        Refuse("four-bays", ShipConfiguration.WithMiddles(4), "TOO_MANY_MIDDLES");
+        Refuse("stale-draft", ShipConfiguration.Short(), ShipyardCodes.StaleDraft, ShipConfiguration.Short());
+        Refuse("crew-would-not-fit", ShipConfiguration.Short(), ShipyardCodes.CrewWouldNotFit);
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 14), Pair(Res.Stone, 2) }, Banked());
+        Refuse("cargo-would-not-fit", ShipConfiguration.Short(), ShipyardCodes.CargoWouldNotFit);
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
+
+        // Short has berths for 4: the probe lands four hands for the run
+        // (deactivates them; they come back before the last refit to Long).
+        var crew = Crew();
+        for (int i = crew.Count - 1; i >= 4; i--) { landed.Add(crew[i]); crew[i].gameObject.SetActive(false); }
+
+        string tmp = Application.temporaryCachePath;
+        ShipyardService.PersistPathOverride = System.IO.Path.Combine(tmp, "ShipyardRefitProbe-persist.json");
+        yield return RefitAndCheck("short", ShipConfiguration.Short());
+        Gate("apply-persisted-through-save-routine", System.IO.File.Exists(ShipyardService.PersistPathOverride)
+            && System.IO.File.ReadAllText(ShipyardService.PersistPathOverride).Contains("hull.bow.w1r2.v3"),
+            ShipyardService.PersistPathOverride);
+        yield return RefitAndCheck("two-bays", ShipConfiguration.WithMiddles(2));
+        yield return RefitAndCheck("three-bays", ShipConfiguration.WithMiddles(3));
+        yield return RefitAndCheck("three-bays-timber", Mod(ShipConfiguration.WithMiddles(3), c => c.rotorId = ShipConfiguration.TimberRotor));
+        yield return RefitAndCheck("three-bays-reinforced", ShipConfiguration.WithMiddles(3));
+        foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
+        landed.Clear();
+        yield return RefitAndCheck("long", ShipConfiguration.Long());
+
+        // Under way: refused.
+        anchor.CastOff();
+        yield return null;
+        motor.Anchored = false;
+        if (helm != null) helm.enabled = false;
+        motor.ThrottleOrder = 1f;
+        yield return new WaitForSeconds(4f);
+        Refuse("under-way", ShipConfiguration.Short(), ShipyardCodes.CannotRefitNow);
+        motor.ThrottleOrder = 0f;
+        if (!anchor.BerthAtHome(out string bw)) sb.AppendLine("could not re-berth: " + bw);
+        yield return new WaitForSeconds(1f);
+
+        // ---- (c) save / load ------------------------------------------------
+        var saveA = System.IO.Path.Combine(tmp, "ShipyardRefitProbe-a.json");
+        var saveOld = System.IO.Path.Combine(tmp, "ShipyardRefitProbe-old.json");
+        for (int i = Crew().Count - 1; i >= 4; i--) { var h = Crew()[i]; landed.Add(h); h.gameObject.SetActive(false); }
+        yield return RefitAndCheck("three-bays-for-save", ShipConfiguration.WithMiddles(3));
+        var savedCfg = yard.Current;
+        var savedHold = HoldPerKind();
+        bool wrote = SaveGame.SaveTo(saveA, "ShipyardRefitProbe");
+        yield return RefitAndCheck("short-before-load", ShipConfiguration.Short());
+        var data = SaveGame.Read(saveA);
+        Gate("save-has-modular-field", wrote && data != null && !string.IsNullOrEmpty(data.ship.modular), data != null ? data.ship.modular : "unreadable");
+        if (data != null)
+        {
+            yield return SaveGame.Restore(data, this);
+            yield return new WaitForSeconds(0.5f);
+            Gate("load-brings-back-saved-configuration", SaveGame.LastRestoreOk && yard.ModularActive && yard.Current.ValueEquals(savedCfg)
+                && SameHold(savedHold, HoldPerKind()) && Mathf.Approximately(motor.HullLength, yard.ActiveData.lwl),
+                $"{SaveGame.LastRestoreNote}; middles {yard.Current.middleIds.Count}; hold {Fmt(HoldPerKind())} vs {Fmt(savedHold)}");
+            string json = System.IO.File.ReadAllText(saveA);
+            string oldJson = System.Text.RegularExpressions.Regex.Replace(json, ",\\s*\"modular\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*\"", "");
+            System.IO.File.WriteAllText(saveOld, oldJson);
+            var od = SaveGame.Read(saveOld);
+            Gate("old-format-save-has-no-field", od != null && od.ship.modular == "" && !oldJson.Contains("\"modular\""), od != null ? "read" : "unreadable");
+            if (od != null)
+            {
+                yield return SaveGame.Restore(od, this);
+                yield return new WaitForSeconds(0.5f);
+                var sd = yard.GetComponent<SteamerShip>().Data;
+                Gate("old-format-save-loads-as-standard-steamer", !yard.ModularActive && yard.Current.ValueEquals(ShipConfiguration.Long())
+                    && Mathf.Approximately(rb.mass, refData.massKg) && Mathf.Approximately(sd.lwl, refData.lwl) && voyage.HoldCapacity == 16,
+                    $"modular {yard.ModularActive} mass {rb.mass:F0} lwl {sd.lwl:F3} hold cap {voyage.HoldCapacity}");
+            }
+        }
+        foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
+        landed.Clear();
+
+        // ---- (d) sea trials ------------------------------------------------------
+        Vector3 spot = default; bool found = false;
+        var th = Island.TerrainHeight;
+        if (th != null)
+            for (float dist = 800f; dist <= 8000f && !found; dist += 400f)
+                for (int b = 0; b < 12 && !found; b++)
+                {
+                    float a = b / 12f * Mathf.PI * 2f;
+                    var c = yard.transform.position + new Vector3(Mathf.Sin(a) * dist, 0f, Mathf.Cos(a) * dist);
+                    bool deep = true;
+                    for (float x = -300f; x <= 300f && deep; x += 50f)
+                        for (float z = -300f; z <= 300f && deep; z += 50f)
+                            if (th(c.x + x, c.z + z) > -8f) deep = false;
+                    if (deep) { spot = c; found = true; }
+                }
+        if (!found) { Gate("open-water-found", false, "no 600 m disc deeper than 8 m within 8 km"); Finish(null); yield break; }
+        sb.AppendLine($"sea trials at {spot:F0}");
+        var trials = new List<string>();
+        foreach (var (name, cfg, hands) in new[] {
+            ("long", ShipConfiguration.Long(), 8), ("short", ShipConfiguration.Short(), 4), ("three-bays", ShipConfiguration.WithMiddles(3), 8) })
+        {
+            if (!anchor.AtHomeDock && !anchor.BerthAtHome(out string bwhy)) sb.AppendLine("berth: " + bwhy);
+            yield return new WaitForSeconds(0.5f);
+            var cr = Crew();
+            for (int i = cr.Count - 1; i >= hands; i--) { landed.Add(cr[i]); cr[i].gameObject.SetActive(false); }
+            if (!yard.Current.ValueEquals(cfg)) yield return RefitAndCheck(name + "-for-trial", cfg);
+            yield return SeaTrial(name, spot, trials);
+            foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
+            landed.Clear();
+        }
+        sb.AppendLine("PROVISIONAL two hydrostatic models, at her own mass, moored at rest (not gated):");
+        foreach (var r in draftRows) sb.AppendLine("  " + r);
+        sb.AppendLine("sea trials:");
+        foreach (var t in trials) sb.AppendLine("  " + t);
+        if (!anchor.BerthAtHome(out string endWhy)) sb.AppendLine("end berth: " + endWhy);
+        Finish(null);
+    }
+
+    // ---- a refit and everything it must keep ---------------------------------
+
+    IEnumerator RefitAndCheck(string name, ShipConfiguration target)
+    {
+        if (!yard.CanRefitNow(out string why))
+        {
+            if (!anchor.AtHomeDock) anchor.BerthAtHome(out _);
+            yield return new WaitForSeconds(1f);
+        }
+        float integ = Integrity();
+        var holdBefore = HoldPerKind();
+        var namesBefore = Names();
+        var result = yard.ApplyRefit(yard.Current, target);
+        // Same frame: identity, damage, hold, crew.
+        bool same = yard.gameObject.GetInstanceID() == shipId && rb.GetInstanceID() == bodyId;
+        int ships = FindObjectsByType<ShipMotor>(FindObjectsSortMode.None).Length;
+        int yards = FindObjectsByType<ShipyardService>(FindObjectsSortMode.None).Length;
+        int ears = FindObjectsByType<AudioListener>(FindObjectsSortMode.None).Length;
+        Gate(name + ": applied", result.ok && yard.Current.ValueEquals(target), result.ToString().Replace("\n", " | "));
+        Gate(name + ": one ship, same object", same && ships == 1 && yards == 1 && ears == listeners,
+            $"ship {same}, ShipMotors {ships}, shipyards {yards}, listeners {ears}/{listeners}");
+        Gate(name + ": damage/hold/crew kept", Integrity() == integ && SameHold(holdBefore, HoldPerKind()) && Names() == namesBefore,
+            $"integrity {integ:F4}->{Integrity():F4}; hold {Fmt(HoldPerKind())}; crew [{Names()}]");
+        yield return new WaitForSeconds(0.6f);
+        var d = yard.ActiveData;
+        var plan = yard.Validate(yard.Current);
+        var pivot = yard.RotorPivot;
+        Vector3 axle = pivot != null ? yard.transform.InverseTransformPoint(pivot.position) : new Vector3(float.NaN, 0, 0);
+        var paddle = yard.GetComponent<PaddleDrive>();
+        var steamer = yard.GetComponent<SteamerShip>();
+        bool lengths = Mathf.Approximately(motor.HullLength, d.lwl) && steamer != null && steamer.Data == d
+            && Mathf.Approximately(rb.mass, d.massKg) && paddle != null && paddle.Configured;
+        Gate(name + ": hull form everywhere", lengths && voyage.HoldCapacity == plan.capacityDraft.holdCells,
+            $"lwl {d.lwl:F3} HullLength {motor.HullLength:F3} mass {rb.mass:F0}/{d.massKg:F0} hold cap {voyage.HoldCapacity} (plan {plan.capacityDraft})");
+        Gate(name + ": drawn axle on physics axle", pivot != null && Mathf.Abs(axle.z - d.wheelAxle.z) < 0.01f && Mathf.Abs(axle.x) < 0.01f,
+            $"drawn {axle.x:F3},{axle.y:F3},{axle.z:F3} physics {d.wheelAxle.x:F3},{d.wheelAxle.y:F3},{d.wheelAxle.z:F3} (y differs by design: {axle.y - d.wheelAxle.y:F3} m)");
+        int onDeck = 0, standing = 0; string worst = "";
+        foreach (var c in Crew())
+        {
+            if (!c.Available) continue;
+            standing++;
+            var p = c.transform.localPosition;
+            int si = ShipyardPlanner.NearestStation(d, p.z);
+            float deckY = d.stations[si].deckY, half = d.HalfBreadthAt(si, deckY);
+            bool ok = Mathf.Abs(p.y - deckY) < 0.1f && Mathf.Abs(p.x) <= half && ShipyardPlanner.OnDeck(d, new Vector3(0f, 0f, p.z), 0f);
+            if (ok) onDeck++; else worst = $"{c.DisplayName} at {p.x:F2},{p.y:F2},{p.z:F2} (deck {deckY:F2}, half {half:F2})";
+        }
+        Gate(name + ": hands on the new deck", onDeck == standing, $"{onDeck}/{standing} at station on deck {worst}");
+        sb.AppendLine($"  {name}: {plan.capacityDraft}; lwl {d.lwl:F2} m, {d.massKg / 1000f:F1} t, axle z {d.wheelAxle.z:F3}, helm z {d.helm.z:F3}");
+        yield return MeasureDraft(name, plan.draftPlan);
+    }
+
+    /// PROVISIONAL, printed not gated: at rest and moored, the keel's depth
+    /// below the local sea surface (the ocean sampler the hull uses), next to
+    /// the two static predictions for the mass she actually has.
+    IEnumerator MeasureDraft(string name, ShipyardPlan plan)
+    {
+        var d = yard.ActiveData;
+        motor.ThrottleOrder = 0f;
+        float keelY = float.MaxValue;
+        foreach (var st in d.stations) keelY = Mathf.Min(keelY, st.keelY);
+        float sum = 0f; int n = 0;
+        for (float t = 0f; t < 2.5f; t += Time.fixedDeltaTime)
+        {
+            yield return new WaitForFixedUpdate();
+            if (t < 1f || !OceanSampler.Ready) continue;
+            Vector3 keel = yard.transform.TransformPoint(new Vector3(0f, keelY, 0f));
+            sum += OceanSampler.SampleImmediate(keel).height - keel.y; n++;
+        }
+        float dyn = n > 0 ? sum / n : float.NaN;
+        string table = plan != null && ShipyardPlanner.TableDraft(plan, rb.mass, out float td) ? td.ToString("F3") : "--";
+        string stat = ShipyardPlanner.SimStaticDraft(d, rb.mass, out float sd) ? sd.ToString("F3") : "--";
+        draftRows.Add($"{name,-24} | {rb.mass / 1000f:F2} t | table {table} | sim static {stat} | sim dynamic {dyn:F3} m");
+    }
+
+    void Refuse(string name, ShipConfiguration draft, string code, ShipConfiguration expected = null)
+    {
+        string cfg = yard.Current.ToJson();
+        var hold = HoldPerKind();
+        float integ = Integrity();
+        Vector3 p = yard.transform.position; Quaternion q = yard.transform.rotation;
+        float mass = rb.mass; var data = yard.GetComponent<SteamerShip>().Data; int cap = voyage.HoldCapacity;
+        var res = yard.ApplyRefit(expected ?? yard.Current, draft);
+        bool unchanged = yard.Current.ToJson() == cfg && SameHold(hold, HoldPerKind()) && Integrity() == integ
+            && yard.transform.position == p && yard.transform.rotation == q && rb.mass == mass
+            && yard.GetComponent<SteamerShip>().Data == data && voyage.HoldCapacity == cap;
+        bool coded = !res.ok && res.issues.Exists(i => i.code == code);
+        Gate("refused " + name, coded && unchanged, (unchanged ? "unchanged; " : "CHANGED; ") + res.ToString().Replace("\n", " | "));
+    }
+
+    // ---- sea trial ---------------------------------------------------------------
+
+    IEnumerator SeaTrial(string name, Vector3 spot, List<string> rows)
+    {
+        anchor.CastOff();
+        yield return null;
+        motor.Anchored = false;
+        motor.MooringHeading = null;
+        motor.AutopilotTarget = null;
+        if (helm != null) helm.enabled = false;
+        motor.Rudder = 0f; motor.ThrottleOrder = 0f;
+        float h = OceanSampler.Ready ? OceanSampler.SampleImmediate(spot).height : 0f;
+        SaveGame.Warp(motor, new Vector3(spot.x, h, spot.z), 0f);
+        yield return new WaitForSeconds(1.5f);
+        var d = yard.ActiveData;
+        float vmax = 0f, rollMax = 0f, pitchMax = 0f, draftMin = float.MaxValue, draftMax = float.MinValue, yawSum = 0f;
+        int yawN = 0; bool nan = false;
+        motor.ThrottleOrder = 1f;
+        for (float t = 0f; t < 30f; t += Time.fixedDeltaTime)
+        {
+            if (t >= 20f) motor.Rudder = 1f;
+            yield return new WaitForFixedUpdate();
+            var pos = rb.position; var v = rb.linearVelocity;
+            if (float.IsNaN(pos.x + pos.y + pos.z + v.x + v.y + v.z)) { nan = true; break; }
+            float sp = new Vector3(v.x, 0f, v.z).magnitude;
+            if (t < 20f) vmax = Mathf.Max(vmax, sp);
+            var e = yard.transform.eulerAngles;
+            rollMax = Mathf.Max(rollMax, Mathf.Abs(Mathf.DeltaAngle(0f, e.z)));
+            pitchMax = Mathf.Max(pitchMax, Mathf.Abs(Mathf.DeltaAngle(0f, e.x)));
+            float sea = OceanSampler.Ready ? OceanSampler.SampleImmediate(pos).height : 0f;
+            float draft = sea - pos.y + d.draft; // design draft + sinkage of the origin
+            draftMin = Mathf.Min(draftMin, draft); draftMax = Mathf.Max(draftMax, draft);
+            if (t >= 22f) { yawSum += Mathf.Abs(rb.angularVelocity.y) * Mathf.Rad2Deg; yawN++; }
+        }
+        motor.ThrottleOrder = 0f; motor.Rudder = 0f;
+        float yaw = yawN > 0 ? yawSum / yawN : 0f;
+        bool afloat = draftMax < d.depth && draftMin > -0.5f;
+        Gate($"trial {name}: sane", !nan && afloat && vmax > 1f && rollMax < 25f,
+            $"top {vmax:F2} m/s, |roll| {rollMax:F1} deg, |pitch| {pitchMax:F1} deg, draft {draftMin:F2}..{draftMax:F2} m (design {d.draft:F2}, depth {d.depth:F2}), yaw rate {yaw:F1} deg/s");
+        rows.Add($"{name,-10} L {d.lwl:F2} m  {d.massKg / 1000f:F1} t  top {vmax:F2} m/s  roll {rollMax:F1}  pitch {pitchMax:F1}  yaw {yaw:F1} deg/s  MaxSpeed {motor.MaxSpeed:F2}");
+        if (helm != null) helm.enabled = true;
+    }
+
+    // ---- helpers ---------------------------------------------------------------
+
+    static ShipConfiguration Mod(ShipConfiguration c, System.Action<ShipConfiguration> f) { var x = c.Clone(); f(x); return x; }
+    static KeyValuePair<string, int> Pair(string r, int n) => new KeyValuePair<string, int>(r, n);
+    IEnumerable<KeyValuePair<string, int>> Banked()
+    {
+        var l = new List<KeyValuePair<string, int>>();
+        foreach (var kv in voyage.BankedStores) l.Add(kv);
+        return l;
+    }
+    float Integrity() => hull != null ? hull.Integrity01 : 1f;
+
+    List<CrewAgent> Crew()
+    {
+        var l = new List<CrewAgent>();
+        foreach (var c in yard.GetComponentsInChildren<CrewAgent>(false)) l.Add(c);
+        return l;
+    }
+
+    string Names()
+    {
+        var n = new List<string>();
+        foreach (var c in Crew()) n.Add(c.DisplayName);
+        n.Sort();
+        return string.Join(",", n);
+    }
+
+    Dictionary<string, int> HoldPerKind()
+    {
+        var d = new Dictionary<string, int>();
+        foreach (var kv in voyage.HeldStores) if (kv.Value > 0) d[kv.Key] = kv.Value;
+        return d;
+    }
+
+    static bool SameHold(Dictionary<string, int> a, Dictionary<string, int> b)
+    {
+        if (a.Count != b.Count) return false;
+        foreach (var kv in a) if (!b.TryGetValue(kv.Key, out int n) || n != kv.Value) return false;
+        return true;
+    }
+
+    static string Fmt(Dictionary<string, int> d)
+    {
+        var s = new List<string>();
+        foreach (var kv in d) s.Add(kv.Key + " " + kv.Value);
+        return string.Join(", ", s);
+    }
+
+    void Gate(string name, bool ok, string detail)
+    {
+        if (ok) passes++; else fails++;
+        sb.Append(ok ? "  PASS " : "  FAIL ").Append(name).Append(" -- ").AppendLine(detail);
+    }
+
+    void Finish(string stopped)
+    {
+        foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
+        landed.Clear();
+        ShipyardService.PersistPathOverride = null;
+        if (helm != null) helm.enabled = true;
+        if (stopped != null) { fails++; sb.AppendLine("  STOPPED -- " + stopped); }
+        sb.AppendLine($"ShipyardRefitProbe: {passes} PASS, {fails} FAIL");
+        string text = "[ShipyardRefitProbe]\n" + sb;
+        if (fails == 0) Debug.Log(text); else Debug.LogError(text);
+        var path = System.IO.Path.Combine(Application.dataPath, "../Logs/ShipyardRefitProbe.txt");
+        try { System.IO.File.WriteAllText(path, text); } catch { }
+        Destroy(gameObject);
+    }
+}

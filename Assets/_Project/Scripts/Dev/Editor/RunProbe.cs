@@ -124,6 +124,12 @@ public static class RunProbe
     /// a temp file and comes back where it stood. Play mode, Sea.unity.
     /// Logs/SaveProbe.txt.
     public static void Save() => Call("SaveProbe");
+    // --- modular shipyard (2026-09-24) ------------------------------------------
+    /// Refits at the berth keep her identity, damage, hold and crew; refused
+    /// refits change nothing; save/load carries the configuration (and an old
+    /// save is the standard steamer); Long/Short/3-bay sea trials. Needs the
+    /// steamer. Play mode, Sea.unity, ~2.5 min. Logs/ShipyardRefitProbe.txt.
+    public static void ShipyardRefit() => Call("ShipyardRefitProbe");
     /// A rung costs goods that were sailed home: refused at sea, refused short,
     /// banked per resource, paid exactly, and `Apply` stays free for the rig.
     public static void Sink() => Call("SinkProbe");

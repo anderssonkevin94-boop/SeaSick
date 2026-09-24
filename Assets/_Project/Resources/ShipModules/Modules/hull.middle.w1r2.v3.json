@@ -168,6 +168,18 @@
             "notes": "PROVISIONAL centreline crew passage: |y| <= 2.675 = the clear band between the port and starboard deck-slot clearances (3.45 - 1.55/2); height 3.4 u = 1.7 m crew (WorldScale.Person) at 0.5 m/u."
         }
     ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW1r2_v3/Midship_W1",
+        "sourceGeometrySha256": "9cb49be5b4941aacaa8a3751ea71e0f08dc214f6b70ee49342b736a9688eea3f",
+        "validWaterlineZU": [-1.9199999570846558, 1.76],
+        "offsetZU": 0,
+        "notes": "Astra 2026-09-24: Hull_Shell only, upright level flotation; see docs/modular-reference/MODULAR-HYDROSTATICS-HANDOFF.md."
+    },
+    "lightship": {
+        "massKg": 10039.4,
+        "provisional": true,
+        "rule": "Seeded 2026-09-24 so stern + 1 middle + bow = today's steamer mass (hullform.json massKg x 0.42^3 = 31906.6 kg), split by each section's table volume to the deck. Wheel, carrier and chimney carry 0: today's mass is one lump."
+    },
     "physical": {
         "massKg": {"authored": false, "value": 0, "source": ""},
         "displacementM3": {"authored": false, "value": 0, "source": ""},
