@@ -928,6 +928,8 @@ namespace SeaSick.World
                     return;
 
                 case Phase.Coming:
+                    // Re-aimed every step: a hut raised mid-carry takes it.
+                    dropAt = Dropoff(r, carrying);
                     if (!Walk(dropAt, dt)) return;
                     Drop();
                     phase = Phase.Resting;
@@ -1099,6 +1101,8 @@ namespace SeaSick.World
                     return;
 
                 case Phase.Coming:
+                    // Re-aimed every step: a hut raised mid-carry takes it.
+                    dropAt = Dropoff(r, carrying);
                     if (!Walk(dropAt, dt)) return;
                     Drop();
                     phase = Phase.Resting;
@@ -1331,9 +1335,10 @@ namespace SeaSick.World
         /// keeps no `StationStock` (the farm, whose field is its input and
         /// whose yield is a per-day rate into the store; the watchtower).
         /// Walk to the door, work the shift, carry what the building makes to
-        /// its stack by the fire, come back -- unchanged from before
-        /// 2026-09-24, because for these the pile by the fire IS where the
-        /// books put it.
+        /// the store, come back -- unchanged from before 2026-09-24, because
+        /// for these the store IS where the books put it. The store is its
+        /// stack by the fire until a storage building stands, then the hut
+        /// (`StoreSpot`; it used to be the fire ring for good).
         void TickWorkAt(OutpostHand r, float dt)
         {
             Building post = preferred != null && preferred.Id == r.target
@@ -1381,12 +1386,15 @@ namespace SeaSick.World
                         wait = RestSeconds;
                         return;
                     }
-                    dropAt = PileSpot(carrying);
+                    dropAt = StoreSpot(carrying, out _);
                     phase = Phase.Coming;
                     acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
                     return;
 
                 case Phase.Coming:
+                    // Re-aimed every step, like the gather loop: a hut
+                    // raised while he is walking takes the load.
+                    dropAt = StoreSpot(carrying, out _);
                     if (!Walk(dropAt, dt)) return;
                     Drop();
                     phase = Phase.Resting;
@@ -1660,7 +1668,11 @@ namespace SeaSick.World
                     return inputSide ? InputSpot(b, out face) : OutputSpot(b, out face);
                 }
                 case HaulPlace.Store:
-                    return StoreSpot(res, at, out face);
+                    // The books' `at` is NOT used to find the building: a
+                    // trip booked before the hut stood carries the fire as
+                    // its store point, and matching the hut against that
+                    // found nothing and sent the load to the fire ring.
+                    return StoreSpot(res, out face);
             }
             // A site (the drawing itself), or a station whose building the
             // body cannot find (a probe's hand-written ledger): the books'
@@ -1668,17 +1680,25 @@ namespace SeaSick.World
             return Grounded(at);
         }
 
-        /// The store's end of a trip. Before a Storage/Storehouse stands the
-        /// store IS the stacks by the fire (`CampPiles`), so the load goes to
-        /// its own stack (`PileSpot`), not into the fire. After, the storage
-        /// building's `Input_Pickup` if Astra gave it one, else the side of
-        /// it that faces the fire.
-        Vector3 StoreSpot(string res, Vector3 at, out Vector3 face)
+        /// **The store's end of ANY carry** -- a ledger haul, a gatherer's
+        /// armful, a hunter's meat, a farmhand's yield. Before a
+        /// Storage/Storehouse stands the store IS the stacks by the fire
+        /// (`CampPiles`), so the load goes to its own stack (`PileSpot`), not
+        /// into the fire. After, the storage building's `Input_Pickup` if
+        /// Astra gave it one, else the side of it that faces the fire.
+        ///
+        /// Kevin, phone playtest 2026-09-24: *"there are still villagers
+        /// dropping food, rocks and other things by the campfire despite
+        /// there being a storage hut."* Only ledger hauls came through here;
+        /// the gather/cut/hunt loops (`Dropoff`) and the farm/watchtower
+        /// shift (`TickWorkAt`) went straight to `PileSpot`. Every store
+        /// drop-off and pickup is this one function now.
+        Vector3 StoreSpot(string res, out Vector3 face)
         {
             var ledger = camp.Ledger;
             if (ledger != null && ledger.HasStorageBuilding)
             {
-                var b = BuildingAt(BuildPlans.Storage.id, at) ?? BuildingAt(BuildPlans.Storehouse.id, at);
+                var b = CampPiles.StoreBuildingOf(camp);
                 if (b != null)
                 {
                     face = b.transform.position;
@@ -2300,7 +2320,12 @@ namespace SeaSick.World
         /// books already aimed at "the oldest site that still wants this" --
         /// `OutpostLedger.SiteWanting` -- when the trip was booked), so this
         /// is only ever asked for a Gather row's own pile.
-        Vector3 Dropoff(OutpostHand r, string resource) => PileSpot(resource);
+        ///
+        /// **The store, not the fire, once a storage building stands**
+        /// (2026-09-24): `StoreSpot` decides, so the hut takes every armful.
+        /// Asked every step of the carry home, so a hut raised while he is
+        /// walking takes the load he is already carrying.
+        Vector3 Dropoff(OutpostHand r, string resource) => StoreSpot(resource, out _);
 
         /// **The stack this resource is kept on.** See `PileRadius`: the angle
         /// comes from the resource name, exactly as `CampPiles` lays it out,

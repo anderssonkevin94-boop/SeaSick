@@ -29,6 +29,7 @@ namespace SeaSick.World
         bool discovered;
 
         OutpostLedger ledger;
+        CampPiles piles;
         bool resolved;
         int resolveAttempts;
         int retryWait;
@@ -57,6 +58,7 @@ namespace SeaSick.World
                 retryWait = 0;
                 var outpost = GetComponentInParent<Outpost>();
                 ledger = outpost != null ? outpost.Ledger : null;
+                piles = outpost != null ? outpost.GetComponentInChildren<CampPiles>(true) : null;
                 if (ledger != null) resolved = true;
                 else { if (resolveAttempts < MaxResolveAttempts) resolveAttempts++; return; }
             }
@@ -65,18 +67,41 @@ namespace SeaSick.World
 
         void Apply()
         {
-            int t = Capped(ledger.StoreCountOf(Res.Timber), timberSlots.Count);
+            int t = Capped(Held(Res.Timber), timberSlots.Count);
             if (t != shownTimber) { SetShown(timberSlots, t); shownTimber = t; }
 
-            int b = Capped(ledger.StoreCountOf(Res.Boards), boardsSlots.Count);
+            int b = Capped(Held(Res.Boards), boardsSlots.Count);
             if (b != shownBoards) { SetShown(boardsSlots, b); shownBoards = b; }
 
-            int f = Capped(ledger.StoreCountOf(Res.Food), foodSlots.Count);
+            int f = Capped(Held(Res.Food), foodSlots.Count);
             if (f != shownFood) { SetShown(foodSlots, f); shownFood = f; }
 
             // Cargo stays hidden: the kit's own README says its resource
             // binding is unassigned, so showing any count on it would be
             // inventing a stock that is not there.
+        }
+
+        /// What this hut is showing of `res`: the store's count, less what
+        /// `CampPiles` still draws by the fire while the store moves in
+        /// from the ring (the few seconds after the hut is raised) -- so the
+        /// racks fill as the ring empties and no unit is drawn twice.
+        int Held(string res)
+        {
+            int n = ledger.StoreCountOf(res);
+            return piles != null ? Mathf.Max(0, n - piles.StillByFire(res)) : n;
+        }
+
+        /// **Does this hut have a rack for `res`?** `CampPiles` draws
+        /// everything else as a stack beside the hut once it stands, so the
+        /// goods this kit cannot show (stone, ore, brick, arrows, a hut
+        /// with no kit at all) are still somewhere to be seen.
+        public bool Shows(string res)
+        {
+            DiscoverSlots();
+            if (res == Res.Timber) return timberSlots.Count > 0;
+            if (res == Res.Boards) return boardsSlots.Count > 0;
+            if (res == Res.Food) return foodSlots.Count > 0;
+            return false;
         }
 
         static int Capped(int count, int slots) => Mathf.Clamp(count, 0, slots);

@@ -31,6 +31,92 @@ namespace SeaSick.World
         readonly Dictionary<string, int> drawn = new Dictionary<string, int>();
         static readonly Dictionary<string, Material> mats = new Dictionary<string, Material>();
 
+        // --- the store hut (2026-09-24) -------------------------------------
+        //
+        // Kevin, phone playtest: *"the initial storage is by the campfire.
+        // but as soon as a storage hut is built all resources are to be
+        // moved from around the fireplace into the storage hut."* Once a
+        // Storage/Storehouse stands (`OutpostLedger.HasStorageBuilding`) the
+        // ring by the fire is not drawn any more. The hut draws what its
+        // kit has racks for (`StoreStockView`: timber, boards, food); what it
+        // has no rack for (stone, ore, brick, arrows, ...) is stacked on the
+        // ground beside the hut, on its fire-facing side, either side of the
+        // door the hands walk to -- so nothing the camp owns goes unseen.
+        //
+        // **The move.** On the raise itself (not on a load that finds the
+        // hut already standing) the ring does not blink out: each stack
+        // drains over `MoveSeconds` while the same units appear at the hut
+        // (`StillByFire` is subtracted from what the hut and its stacks
+        // show). The ledger is untouched throughout: there is one store, and
+        // this is only where it is drawn.
+
+        /// The hut the store is drawn at; null = the ring by the fire.
+        Building hut;
+        /// The ring has been drawn at least once with no hut standing, so a
+        /// hut appearing is a raise worth watching the goods move for.
+        bool drewRing;
+        /// Units of each resource still drawn by the fire mid-move.
+        readonly Dictionary<string, int> byFire = new Dictionary<string, int>();
+        readonly List<string> moveKeys = new List<string>();
+        float moveClock;
+        /// Roughly how long the whole move takes, whatever the stack sizes.
+        const float MoveSeconds = 5f;
+        /// One tick of the move: every stack by the fire gives up a share.
+        const float MoveTick = 0.25f;
+
+        readonly Dictionary<string, Transform> hutStacks = new Dictionary<string, Transform>();
+        readonly Dictionary<string, int> hutDrawn = new Dictionary<string, int>();
+        /// First-seen order of the goods stacked beside the hut: the slot a
+        /// resource gets, stable for the session.
+        readonly List<string> hutOrder = new List<string>();
+        StoreStockView hutView;
+
+        /// Metres between the hut-side stacks, and their distance out from
+        /// the wall. The middle slot is left empty: that is the door the
+        /// hands walk to (`CampWorker.StoreSpot`, `EdgeBeyond` + 0.6 m).
+        const float HutSlotSpacing = 1.4f, HutStandOff = 1.1f;
+
+        /// **The storage building the store is kept in**, or null while
+        /// the store is the ring by the fire. The standing Storage or
+        /// Storehouse nearest the ledger's own store point
+        /// (`OutpostLedger.StoreAt`, the first raised row of either), so
+        /// the hands, these stacks and the books agree on which one. Found
+        /// by plan id among `Outpost.Built` rather than by an exact
+        /// position match, so a trip booked before the hut stood, or a
+        /// hut re-sited on load, still finds it.
+        public static Building StoreBuildingOf(Outpost o)
+        {
+            if (o == null) return null;
+            var l = o.Ledger;
+            if (l == null || !l.HasStorageBuilding) return null;
+            var built = o.Built;
+            if (built == null) return null;
+            bool anchored = l.StoreAt(out Vector3 want);
+            string a = BuildPlans.Storage.id, b = BuildPlans.Storehouse.id;
+            Building best = null;
+            float bestSq = float.MaxValue;
+            for (int i = 0; i < built.Count; i++)
+            {
+                var x = built[i];
+                if (x == null || (x.Id != a && x.Id != b)) continue;
+                if (!anchored) return x;
+                Vector3 d = x.transform.position - want;
+                d.y = 0f;
+                float sq = d.sqrMagnitude;
+                if (sq < bestSq) { bestSq = sq; best = x; }
+            }
+            return best;
+        }
+
+        /// Units of `resource` still drawn by the fire while the store moves
+        /// into a newly raised hut; 0 otherwise. What the hut's own display
+        /// subtracts so the same unit is never drawn in both places.
+        public int StillByFire(string resource)
+        {
+            if (hut == null || string.IsNullOrEmpty(resource)) return 0;
+            return byFire.TryGetValue(resource, out int n) ? n : 0;
+        }
+
         public static CampPiles EnsureOn(Outpost owner)
         {
             if (owner == null) return null;
@@ -60,6 +146,15 @@ namespace SeaSick.World
             var l = outpost.Ledger;
             Vector3 fire = outpost.CampCentre;
 
+            var standing = StoreBuildingOf(outpost);
+            // The second test catches a hut pulled down: Unity's `==` calls a
+            // destroyed hut equal to null, so `standing != hut` alone never
+            // notices and its side stacks would be left standing.
+            if (standing != hut || (hut == null && hutStacks.Count > 0)) Rehome(standing);
+
+            if (hut != null) { StepMove(Time.deltaTime); DrawAtHut(l, fire); return; }
+
+            drewRing = true;
             // A stable order, so a stack does not hop round the fire when a
             // new resource appears. `stores` is append-only in practice, but
             // "in practice" is how a camp ends up rearranging itself on
@@ -67,10 +162,113 @@ namespace SeaSick.World
             foreach (var s in l.stores)
             {
                 if (s == null || string.IsNullOrEmpty(s.resource)) continue;
-                if (drawn.TryGetValue(s.resource, out int was) && was == s.whole) continue;
-                drawn[s.resource] = s.whole;
-                Rebuild(s.resource, s.whole, fire);
+                SetRing(s.resource, s.whole, fire);
             }
+        }
+
+        /// The store changed buildings: a hut raised (start the move), a
+        /// hut pulled down (straight back to the ring), or a different hut
+        /// taking over (just redraw there).
+        void Rehome(Building standing)
+        {
+            bool raised = hut == null && standing != null;
+            hut = standing;
+            hutView = hut != null ? hut.GetComponent<StoreStockView>() : null;
+            moveClock = 0f;
+            byFire.Clear();
+            if (raised && drewRing)
+                foreach (var kv in drawn)
+                    if (kv.Value > 0) byFire[kv.Key] = kv.Value;
+            // Every hut-side stack is redrawn at the new spot (or cleared).
+            foreach (var t in hutStacks.Values)
+                if (t != null) Destroy(t.gameObject);
+            hutStacks.Clear();
+            hutDrawn.Clear();
+        }
+
+        /// One step of the move: each stack still by the fire gives up a
+        /// share, sized so the whole ring is empty in about `MoveSeconds`.
+        void StepMove(float dt)
+        {
+            if (byFire.Count == 0) return;
+            moveClock += dt;
+            if (moveClock < MoveTick) return;
+            moveClock = 0f;
+            moveKeys.Clear();
+            moveKeys.AddRange(byFire.Keys);
+            foreach (var k in moveKeys)
+            {
+                int n = byFire[k];
+                // A drawn stack tops out at `MaxDrawn`, so 40 logs by the
+                // fire read as 12 and leave as 12: the undrawn surplus goes
+                // on the first tick.
+                if (n > MaxDrawn) n = MaxDrawn;
+                int step = Mathf.Max(1, Mathf.CeilToInt(MaxDrawn * MoveTick / MoveSeconds));
+                n -= step;
+                if (n <= 0) byFire.Remove(k); else byFire[k] = n;
+            }
+        }
+
+        void DrawAtHut(OutpostLedger l, Vector3 fire)
+        {
+            foreach (var s in l.stores)
+            {
+                if (s == null || string.IsNullOrEmpty(s.resource)) continue;
+                int atFire = Mathf.Min(StillByFire(s.resource), Mathf.Max(0, s.whole));
+                SetRing(s.resource, atFire, fire);
+                int atHut = Mathf.Max(0, s.whole - atFire);
+                if (hutView != null && hutView.Shows(s.resource)) atHut = 0;
+                SetHutSide(s.resource, atHut, fire);
+            }
+        }
+
+        void SetRing(string resource, int count, Vector3 fire)
+        {
+            if (drawn.TryGetValue(resource, out int was) && was == count) return;
+            drawn[resource] = count;
+            // Angle from the name: the same resource lands in the same place
+            // at every camp, which is what lets a player read a camp from the
+            // air without looking anything up.
+            float a = Mathf.Abs(resource.GetHashCode() % 360) * Mathf.Deg2Rad;
+            Vector3 at = fire + new Vector3(Mathf.Cos(a) * Radius, 0f, Mathf.Sin(a) * Radius);
+            at.y = outpost.GroundAt(at);
+            Rebuild(stacks, "Pile_", resource, count, at, Quaternion.Euler(0f, a * Mathf.Rad2Deg, 0f));
+        }
+
+        void SetHutSide(string resource, int count, Vector3 fire)
+        {
+            if (hutDrawn.TryGetValue(resource, out int was) && was == count) return;
+            hutDrawn[resource] = count;
+            if (count <= 0 && !hutStacks.ContainsKey(resource)) return;
+            if (!hutOrder.Contains(resource)) hutOrder.Add(resource);
+            Vector3 at = HutSlot(hutOrder.IndexOf(resource), fire, out Quaternion facing);
+            Rebuild(hutStacks, "HutPile_", resource, count, at, facing);
+        }
+
+        /// Slot `i` beside the hut: just outside its footprint on the side
+        /// facing the fire (the side the hands come to), alternating right
+        /// and left of the door, the door itself left clear.
+        Vector3 HutSlot(int i, Vector3 fire, out Quaternion facing)
+        {
+            Vector3 c = hut.transform.position;
+            Vector3 d = fire - c;
+            d.y = 0f;
+            if (d.sqrMagnitude < 1e-4f) { d = hut.transform.forward; d.y = 0f; }
+            d = d.sqrMagnitude > 1e-6f ? d.normalized : Vector3.forward;
+            Vector2 fp = hut.Footprint;
+            if (fp.x <= 0f || fp.y <= 0f) fp = BuildPlans.Named(hut.Id).footprint;
+            float hx = Mathf.Max(0.5f, fp.x * 0.5f), hz = Mathf.Max(0.5f, fp.y * 0.5f);
+            Vector3 local = Quaternion.Euler(0f, -hut.transform.eulerAngles.y, 0f) * d;
+            float ax = Mathf.Abs(local.x), az = Mathf.Abs(local.z);
+            float reach = Mathf.Min(ax > 1e-4f ? hx / ax : float.MaxValue,
+                                    az > 1e-4f ? hz / az : float.MaxValue);
+            Vector3 side = new Vector3(-d.z, 0f, d.x);
+            int k = i / 2 + 1;
+            float lateral = (i % 2 == 0 ? 1f : -1f) * k * HutSlotSpacing;
+            Vector3 at = c + d * (reach + HutStandOff) + side * lateral;
+            at.y = outpost.GroundAt(at);
+            facing = Quaternion.LookRotation(side, Vector3.up);
+            return at;
         }
 
         /// What a resource's pile looks like. Logs are cross-stacked
@@ -100,24 +298,19 @@ namespace SeaSick.World
             return PileShape.Heap;
         }
 
-        void Rebuild(string resource, int count, Vector3 fire)
+        void Rebuild(Dictionary<string, Transform> into, string prefix, string resource, int count,
+            Vector3 at, Quaternion facing)
         {
-            if (!stacks.TryGetValue(resource, out var stack) || stack == null)
+            if (!into.TryGetValue(resource, out var stack) || stack == null)
             {
-                var go = new GameObject("Pile_" + resource);
+                var go = new GameObject(prefix + resource);
                 go.transform.SetParent(transform, false);
                 stack = go.transform;
-                stacks[resource] = stack;
+                into[resource] = stack;
             }
 
-            // Angle from the name: the same resource lands in the same place
-            // at every camp, which is what lets a player read a camp from the
-            // air without looking anything up.
-            float a = Mathf.Abs(resource.GetHashCode() % 360) * Mathf.Deg2Rad;
-            Vector3 at = fire + new Vector3(Mathf.Cos(a) * Radius, 0f, Mathf.Sin(a) * Radius);
-            at.y = outpost.GroundAt(at);
             stack.position = at;
-            stack.rotation = Quaternion.Euler(0f, a * Mathf.Rad2Deg, 0f);
+            stack.rotation = facing;
 
             for (int i = stack.childCount - 1; i >= 0; i--)
                 Destroy(stack.GetChild(i).gameObject);
