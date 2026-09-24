@@ -11,7 +11,7 @@ namespace SeaSick.World
     ///
     /// (a) D2: ten 1-day ticks and one 10-day tick make the same bricks (±1).
     /// (b) No bay row ever holds more than `InputCap`, no rack more than
-    ///     `OutputCap`, checked after every 0.1-day tick.
+    ///     `OutputCap`, checked after every 0.1-day tick (five quanta).
     /// (c) Conservation: stone put in = stone anywhere (store, bay, bench,
     ///     arms) + bricks anywhere, at every tick.
     /// (d) A Repeat order runs past any count until stopped; after the stop
@@ -34,13 +34,23 @@ namespace SeaSick.World
     ///     trip's time is known; a trip books exactly `TripDays`, and a site
     ///     twice as far from the store takes ~twice as long to stock.
     /// (k) Gathering is trips (Kevin, 2026-09-23): a timber gatherer 20 m
-    ///     out books 2 logs a trip in 2 x 20 x 1.15 / 2.6 + 3 + 2 x 5 s; the
+    ///     out books 2 logs a trip in 2 x 20 x 1.15 / 2.6 + 1 + 2 x 5 s; the
     ///     same camp ticked 0.1 d at a time, 1 d at once and raggedly lands
     ///     on the same books; two gatherers never push the store past its
     ///     ceiling and every log is accounted; with the store full a gatherer
     ///     says so and helps build / hauls for the stations, then resumes.
     /// (l) Clearing a plot is seconds of builder time: 2 trees = 10 s,
-    ///     a rock = 8 s (the rest of an 18 s quantum goes on building).
+    ///     a rock = 8 s (the rest of an 18 s tick goes on building).
+    /// (m) Tempo, Kevin's phone playtest 2026-09-24: one log -> 3 boards in
+    ///     45 s (15 s a plank), all 3 onto the rack together; a rack short of
+    ///     room takes what fits and the rest wait on the bench, blocking it;
+    ///     a sawyer's store fetch lands within one 3.6 s quantum of its
+    ///     walked time (1 s to pick up); a hungry hand's line says he is
+    ///     working slowly and at what pace; a busy camp ticked for 30 days in
+    ///     0.02-, 0.1- and 1-day calls keeps the same books (and is timed).
+    ///     DIAGNOSTIC, never a failure: the same camp STEPPED (not ticked) in
+    ///     0.02-, 0.1- and 1-day steps -- how far the books drift with the
+    ///     step size, which is why there is no coarse catch-up path.
     public static class StationStockSelfTest
     {
         public static bool Run()
@@ -189,8 +199,8 @@ namespace SeaSick.World
             for (int i = 0; i < 200; i++)
             {
                 Advance(h, ref nowH, 0.05);
-                // A 15 m trip (~14 s) starts and lands inside one 18 s
-                // quantum, so "seen in arms" is not enough: a trip counter
+                // A 15 m trip (~14 s) starts and lands inside one 0.05-day
+                // check, so "seen in arms" is not enough: a trip counter
                 // or the bay going down says it happened.
                 if (h.CarriedOf(Res.Stone) > 0 || h.hands[0].haulSerial > 0) hauled = true;
                 if (h.StoreCountOf(Res.Stone) > h.ceilingPer && ceilOk)
@@ -275,7 +285,7 @@ namespace SeaSick.World
                 double ratio = tf / System.Math.Max(1e-6, tn);
                 Gate(sb, ref fails, "twice-as-far-twice-as-long", df > dn * 1.9f && ratio > 1.7 && ratio < 2.1,
                     $"trip {dn * TimeOfDay.DayLength:0.0} s vs {df * TimeOfDay.DayLength:0.0} s; stocked at {tn:0.00} d (100 m) vs {tf:0.00} d (200 m), x{ratio:0.00} "
-                    + "(observed on the 0.1-day quantum)");
+                    + $"(observed on the {OutpostLedger.QuantumDays:0.00}-day quantum)");
             }
 
             // --- (k) gathering is trips (Kevin, 2026-09-23) -----------------
@@ -355,7 +365,7 @@ namespace SeaSick.World
                 var bh = bs.hands[0];
                 string whyB = bs.StallReason(bh) ?? "";
                 double nb = bs.lastTicked;
-                Advance(bs, ref nb, 0.1);
+                Advance(bs, ref nb, OutpostLedger.QuantumDays);   // ONE quantum: after it room is back and he resumes
                 bool helpedB = bh.haulSerial > 0 && (bs.sites[0].done > 0 || bs.HaulOf(bh).to == HaulPlace.Site)
                                && bs.Stock(Res.Timber).standing >= 40f - 1e-3f;
                 for (int i = 0; i < 40 && !(bs.sites[0].Complete && bs.StoreCountOf(Res.Timber) == 10); i++) Advance(bs, ref nb, 0.1);
@@ -374,7 +384,7 @@ namespace SeaSick.World
                 var qh = q.hands[1];
                 string whyQ = q.StallReason(qh) ?? "";
                 double nq = q.lastTicked;
-                Advance(q, ref nq, 0.1);
+                Advance(q, ref nq, OutpostLedger.QuantumDays);     // ONE quantum (was 0.1 d = the old quantum)
                 var qv = q.HaulOf(qh);
                 bool haulQ = qh.haulSerial > 0 && q.Stock(Res.Stone).standing >= 40f - 1e-3f
                              && (!qv.active || (qv.from == HaulPlace.Store && qv.to == HaulPlace.Station));
@@ -396,14 +406,17 @@ namespace SeaSick.World
                 p.clearSited = true;
                 c2.hands.RemoveAt(1);                         // one builder
                 double nc2 = c2.lastTicked;
-                Advance(c2, ref nc2, 0.1);                    // one 18 s quantum
+                Advance(c2, ref nc2, 0.1);                    // 18 s: five 3.6 s quanta
                 float clearSec = rock ? Playtest.ClearSecondsPerRock : 2f * Playtest.ClearSecondsPerTree;
-                float wantBuilt = (OutpostLedger.QuantumDays * TimeOfDay.DayLength - clearSec) / TimeOfDay.DayLength;
+                float tickSec = QuantaIn(0.1) * OutpostLedger.QuantumDays * TimeOfDay.DayLength;
+                float wantBuilt = (tickSec - clearSec) / TimeOfDay.DayLength;
                 Gate(sb, ref fails, rock ? "clear-rock-8s" : "clear-2-trees-10s",
                     p.Cleared && Mathf.Abs(p.built - wantBuilt) < 1e-4f,
-                    $"{(rock ? "1 rock" : "2 trees")} cleared {p.Cleared}; of an 18 s quantum "
-                    + $"{p.built * TimeOfDay.DayLength:0.00} s went on building (want {18f - clearSec:0.00} s, i.e. {clearSec:0} s clearing)");
+                    $"{(rock ? "1 rock" : "2 trees")} cleared {p.Cleared}; of an {tickSec:0.#} s tick "
+                    + $"{p.built * TimeOfDay.DayLength:0.00} s went on building (want {tickSec - clearSec:0.00} s, i.e. {clearSec:0} s clearing)");
             }
+
+            Tempo(sb, ref fails);
 
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());
@@ -551,6 +564,198 @@ namespace SeaSick.World
         static string GatherState(OutpostLedger l)
             => $"store {l.StoreCountOf(Res.Timber)} arms {l.CarriedOf(Res.Timber)} standing {l.Stock(Res.Timber).standing:0.#} "
              + $"taken {l.timberTaken:0.#} left {l.hands[0].haulLeft * TimeOfDay.DayLength:0.0}s";
+
+        /// Whole quanta a tick of `days` advances (what `Tick` books).
+        static int QuantaIn(double days)
+            => (int)((days * TimeOfDay.DayLength + 1e-3) / (OutpostLedger.QuantumDays * (double)TimeOfDay.DayLength));
+
+        // --- (m) tempo, Kevin's phone playtest 2026-09-24 -------------------
+        static void Tempo(StringBuilder sb, ref int fails)
+        {
+            float day = TimeOfDay.DayLength;
+            double q = OutpostLedger.QuantumDays * (double)day;          // seconds a quantum
+            var boards = Economy.Recipes.Named("boards");
+            float jobSec = day * Mathf.Max(1, boards.yield) / boards.ratePerDay;
+
+            // (1) One log on the bench: nothing at the last quantum before
+            // 45 s, 3 boards (together, on the rack) at the first after.
+            {
+                var l = Sawmill(20, 0);
+                var s = l.StationOf(BuildPlans.Sawmill.id);
+                s.Bay(Res.Timber, true).whole = 1;
+                l.PlaceOrder(BuildPlans.Sawmill.id, "boards", 3);
+                int before = Mathf.FloorToInt((float)(jobSec / q - 1e-4));
+                l.Tick(before * q + 1e-3);
+                int atBefore = l.CountOf(Res.Boards);
+                float prog = s.benchProgress;
+                l.Tick((before + 1) * q + 1e-3);
+                // The count-3 order is done, so in the same quantum the
+                // sawyer picks the rack up to carry it home: count the 3 on
+                // the rack OR in his arms.
+                int made = l.CountOf(Res.Boards) + l.CarriedOf(Res.Boards);
+                Gate(sb, ref fails, "boards-3-a-log-15s",
+                    boards.yield == 3 && Mathf.Abs(jobSec / boards.yield - 15f) < 1e-3f
+                    && atBefore == 0 && made == 3 && s.benchState == BenchState.Empty && !s.HasOrder,
+                    $"1 timber -> {boards.yield} boards, {jobSec / boards.yield:0.#} s a plank ({jobSec:0} s a job); "
+                    + $"at {before * q:0.0} s {atBefore} boards (bench {prog:P0}), at {(before + 1) * q:0.0} s "
+                    + $"{made} (rack {s.RackCount(Res.Boards)}, arms {l.CarriedOf(Res.Boards)}), bench {s.benchState}, "
+                    + $"count-3 order done {!s.HasOrder}");
+            }
+
+            // (2) Rack 11/12 and the store full of boards: 1 goes on, 2 wait
+            // on the bench (Finished), which blocks -- nothing lost.
+            {
+                var l = Sawmill(5, 0);
+                l.Store(Res.Boards, true).whole = 5;
+                var s = l.StationOf(BuildPlans.Sawmill.id);
+                s.Rack(Res.Boards, true).whole = 11;
+                s.Bay(Res.Timber, true).whole = 1;
+                l.PlaceOrder(BuildPlans.Sawmill.id, "boards", OutpostLedger.RepeatOrder);
+                double now = 0.0;
+                Advance(l, ref now, 2.0 * jobSec / day);
+                string why = l.StallReason(l.hands[0]) ?? "";
+                Gate(sb, ref fails, "boards-short-rack-holds-rest",
+                    s.RackTotal == 12 && s.benchState == BenchState.Finished && s.benchOut == 2
+                    && l.CountOf(Res.Boards) == 5 + 11 + 3 && why.Contains("rack and store are full of boards"),
+                    $"rack {s.RackTotal}/12, bench {s.benchState} holding {s.benchOut}, boards counted {l.CountOf(Res.Boards)} of 19, stall '{why}'");
+            }
+
+            // (3) A sawyer fetching from the store 15 m off: the load lands in
+            // the first quantum that reaches the walked time
+            // (2 x 15 x 1.15 / 2.6 + HandleSeconds), not up to 18 s later.
+            {
+                var l = Sawmill(20, 5);
+                var s = l.StationOf(BuildPlans.Sawmill.id);
+                l.PlaceOrder(BuildPlans.Sawmill.id, "boards", OutpostLedger.RepeatOrder);
+                var h = l.hands[0];
+                float tripSec = l.TripDays(Res.Timber, 2, HaulPlace.Store, -1, HaulPlace.Station, 0) * day;
+                double landedAt = -1;
+                bool fetched = false;
+                for (int i = 1; i <= 40 && landedAt < 0; i++)
+                {
+                    l.Tick(i * q + 1e-3);
+                    if (h.Hauling && h.haulTo == HaulPlace.Station) fetched = true;
+                    if (fetched && !h.Hauling && s.benchState != BenchState.Empty) landedAt = i * q;
+                }
+                float wantTrip = 2f * 15f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
+                                 + OutpostLedger.HandleSeconds;
+                Gate(sb, ref fails, "sawyer-fetch-lands-within-a-quantum",
+                    fetched && Mathf.Abs(tripSec - wantTrip) < 0.01f && OutpostLedger.HandleSeconds <= 1f
+                    && landedAt >= tripSec - 1e-3 && landedAt <= tripSec + q + 1e-3,
+                    $"store->sawmill 15 m, 2 logs: trip {tripSec:0.00} s (1 s to pick up), log on the bench at "
+                    + $"{landedAt:0.0} s (quantum {q:0.0} s)");
+            }
+
+            // (4) Hunger shows: a sawyer at mood 0.175 (pace 0.35) says so;
+            // a content one says nothing.
+            {
+                var l = Sawmill(20, 0);
+                var s = l.StationOf(BuildPlans.Sawmill.id);
+                s.Bay(Res.Timber, true).whole = 1;
+                l.PlaceOrder(BuildPlans.Sawmill.id, "boards", OutpostLedger.RepeatOrder);
+                var h = l.hands[0];
+                string content = l.StallReason(h);
+                h.mood = 0.175f;
+                l.Store(Res.Food).whole = 0;
+                string starving = l.StallReason(h) ?? "";
+                float pace = l.WorkFactorOf(h);
+                l.Store(Res.Food).whole = 1000;           // fed again, mood still low
+                h.mood = 0.4f;
+                string recovering = l.StallReason(h) ?? "";
+                Gate(sb, ref fails, "slow-work-says-why",
+                    content == null && Mathf.Abs(pace - OutpostLedger.StarvingWorkFloor) < 1e-4f
+                    && starving == "working slowly — hungry (35% pace)"
+                    && recovering == "working slowly — low spirits (80% pace)",
+                    $"content '{content ?? "(nothing)"}', mood 0.175 unfed '{starving}', mood 0.4 fed '{recovering}'");
+            }
+
+            // (5) D2 on a busy camp over 30 days: two gatherers, a sawyer, a
+            // hauler, a builder with a hut, food running short -- ticked in
+            // 0.02-, 0.1- and 1-day calls and one 30-day call. Same books.
+            {
+                var a = Busy(); var b = Busy(); var c = Busy();
+                double na = 0, nb = 0, nc = 0;
+                for (int i = 0; i < 1500; i++) Advance(a, ref na, 0.02);
+                for (int i = 0; i < 300; i++) Advance(b, ref nb, 0.1);
+                for (int i = 0; i < 30; i++) Advance(c, ref nc, 1.0);
+                var once = Busy(); double no = 0;
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                Advance(once, ref no, 30.0);
+                watch.Stop();
+                Gate(sb, ref fails, "d2-30-days-busy-camp",
+                    SameBusy(a, b) && SameBusy(a, c) && SameBusy(a, once),
+                    $"{BusyState(a)} | {BusyState(b)} | {BusyState(c)} | one call {BusyState(once)}; "
+                    + $"the one 30-day call ran {QuantaIn(30.0)} steps in {watch.Elapsed.TotalMilliseconds:0.0} ms");
+            }
+
+            // (6) DIAGNOSTIC, not a gate: the same busy camp STEPPED (not
+            // ticked) 30 days in 0.02-, 0.1- and 1-day steps. `Tick` only ever
+            // steps `QuantumDays`, so this is what a coarse catch-up path for
+            // unwatched camps WOULD do. It is reported, never counted: the
+            // step size is not neutral (hands take turns inside a step, mood
+            // is read at the step start and eating settles at its end, the
+            // haul-or-build choice is per step), which is why no coarse path
+            // exists.
+            {
+                var f = Busy(); var m = Busy(); var g = Busy();
+                for (int i = 0; i < 1500; i++) f.StepForTest(0.02f);
+                for (int i = 0; i < 300; i++) m.StepForTest(0.1f);
+                for (int i = 0; i < 30; i++) g.StepForTest(1f);
+                bool same = SameBusy(f, m) && SameBusy(f, g);
+                sb.Append("  DIAG mixed-step-30d (not counted) -- ")
+                  .Append(same ? "step size made no difference: " : "books DRIFT with step size: ")
+                  .AppendLine($"0.02 d {BusyState(f)} | 0.1 d {BusyState(m)} | 1 d {BusyState(g)}");
+            }
+        }
+
+        /// A sawmill 15 m from the store (the fire square at 0,0), one
+        /// sawyer, fed, no timber standing -- the test sets the rest.
+        static OutpostLedger Sawmill(int ceiling, int storeTimber)
+        {
+            var l = new OutpostLedger { ceilingPer = ceiling, stationsMigrated = true };
+            l.SetCentre(Vector3.zero);
+            l.raised.Add(new BuiltBuilding { planId = BuildPlans.Sawmill.id, x = 15f });
+            l.built.Add(BuildPlans.Sawmill.id);
+            l.hands.Add(new OutpostHand { name = "Sawyer", order = OutpostOrder.Work, target = BuildPlans.Sawmill.id });
+            l.Store(Res.Food, true).whole = 1000;
+            l.Store(Res.Timber, true).whole = storeTimber;
+            l.lastTicked = 0.0;
+            l.EnsureStations();
+            return l;
+        }
+
+        static OutpostLedger Busy()
+        {
+            var l = Sawmill(20, 4);
+            l.SetSourceMetres(Res.Timber, 20f);
+            l.SetSourceMetres(Res.Stone, 20f);
+            l.AddStanding(Res.Timber, 60f, 0.02f);
+            l.AddStanding(Res.Stone, 30f).regrowPerDay = 0f;
+            l.Store(Res.Food).whole = 120;          // runs short: hunger in the mix
+            for (int i = 0; i < 2; i++)
+                l.hands.Add(new OutpostHand { name = "Cutter" + i, order = OutpostOrder.Gather, target = Res.Timber });
+            l.hands.Add(new OutpostHand { name = "Hauler", order = OutpostOrder.Idle });
+            l.hands.Add(new OutpostHand { name = "Builder", order = OutpostOrder.Build });
+            l.sites.Add(new PendingBuild
+            {
+                planId = BuildPlans.Hut.id, x = 8f, z = -6f, needed = 6, stoneNeeded = 2, phased = true,
+            });
+            l.PlaceOrder(BuildPlans.Sawmill.id, "boards", OutpostLedger.RepeatOrder);
+            return l;
+        }
+
+        static bool SameBusy(OutpostLedger a, OutpostLedger b)
+        {
+            foreach (var r in new[] { Res.Timber, Res.Boards, Res.Stone, Res.Food })
+                if (Mathf.Abs(a.CountOf(r) + a.CarriedOf(r) - b.CountOf(r) - b.CarriedOf(r)) > 1) return false;
+            return a.sites.Count == b.sites.Count && Mathf.Abs(a.Wood.standing - b.Wood.standing) < 1f
+                && Mathf.Abs(a.hands[1].mood - b.hands[1].mood) < 1e-3f;
+        }
+
+        static string BusyState(OutpostLedger l)
+            => $"timber {l.CountOf(Res.Timber) + l.CarriedOf(Res.Timber)} boards {l.CountOf(Res.Boards) + l.CarriedOf(Res.Boards)} "
+             + $"stone {l.CountOf(Res.Stone) + l.CarriedOf(Res.Stone)} food {l.CountOf(Res.Food)} sites {l.sites.Count} "
+             + $"standing {l.Wood.standing:0.#} mood {l.hands[1].mood:0.00}";
 
         static OutpostLedger Quarry(int stone, int ceiling, int idleHaulers)
         {

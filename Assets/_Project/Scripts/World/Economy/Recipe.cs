@@ -49,8 +49,14 @@ namespace SeaSick.World.Economy
         public static readonly Recipe[] All =
         {
             // --- sawmill ---
-            new Recipe { id = "boards", station = "Sawmill", makes = Res.Boards, yield = 1,
-                takes = Cost.Of(Cost.I(Res.Timber, 1)), ratePerDay = 3f },
+            // **1 log -> 3 planks, 15 s a plank** (Kevin, phone playtest
+            // 2026-09-24: plank making "far too slow"). 180 s day / 15 s =
+            // 12 boards a hand-day, so one log's job is 45 s on the bench.
+            // The three come off together; a rack with less room takes what
+            // fits and the rest wait on the bench, blocking it
+            // (`OutpostLedger.UnloadBench`). A playtest number, not balance.
+            new Recipe { id = "boards", station = "Sawmill", makes = Res.Boards, yield = 3,
+                takes = Cost.Of(Cost.I(Res.Timber, 1)), ratePerDay = 12f },
             new Recipe { id = "fine-boards", station = "Sawmill", makes = Res.FineBoards, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Boards, 2)), ratePerDay = 2f,
                 campfireLevel = 2, tool = Res.SawBlade, toolWear = 0.05f },

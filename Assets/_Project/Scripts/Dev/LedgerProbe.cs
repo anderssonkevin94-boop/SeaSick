@@ -398,7 +398,7 @@ public class LedgerProbe : MonoBehaviour
 
         sb.AppendLine();
         sb.AppendLine($"A SAWYER, 6 days, one hand cutting and one at the mill "
-            + $"({BuildPlans.Sawmill.rate:F0} boards/day):");
+            + $"({SeaSick.World.Economy.Recipes.Named("boards").ratePerDay:F0} boards/day):");
         sb.AppendLine($"  timber {mill.CountOf(Res.Timber)}   boards {mill.CountOf(Res.Boards)}");
         Gate(sb, ref fails, "a-sawyer-makes-boards", mill.CountOf(Res.Boards) > 0,
             $"{mill.CountOf(Res.Boards)} boards after 6 days");

@@ -836,6 +836,29 @@ namespace SeaSick.World
         public static float WorkFactorOn(OutpostHand h, string produces) =>
             produces == Res.Food ? (h == null || h.walkingIn ? 0f : 1f) : WorkFactor(h);
 
+        /// **The pace this hand's CURRENT job is paid at, 0..1** -- the
+        /// factor `Step` actually scales his day by, dispatched the way
+        /// `Step` dispatches it: a gatherer (trips or hunt) and a farmhand
+        /// at `WorkFactorOn` of what they bring in (food is never docked);
+        /// a builder, a hauler and every stationed worker (the kitchen
+        /// included -- `StepStations` pays the bench at plain `WorkFactor`)
+        /// at `WorkFactor`. Hunger/mood only; the camp's `priority` is a
+        /// choice, not a slowdown, and is left out. 2026-09-24, so the
+        /// sheets can say why a villager is slow (`StallReason`).
+        public float WorkFactorOf(OutpostHand h)
+        {
+            if (h == null || h.walkingIn) return 0f;
+            if (h.order == OutpostOrder.Gather && !string.IsNullOrEmpty(h.target))
+                return WorkFactorOn(h, h.target == Res.Game ? Res.Food : h.target);
+            if (h.order == OutpostOrder.Work && !string.IsNullOrEmpty(h.target) && !IsStation(h.target)
+                && Conversion(h.target, out string makes, out _, out _, out _, out _, out _))
+                return WorkFactorOn(h, makes);
+            return WorkFactor(h);
+        }
+
+        /// Below this pace the hand's line says he is working slowly, and why.
+        public const float SlowWorkShown = 0.9f;
+
         /// Is anybody here going hungry right now -- the pile has nothing
         /// in it and there is somebody to feed. What `Step`'s eating block
         /// is about to find, a step early, for anything that wants to warn
@@ -1740,16 +1763,33 @@ namespace SeaSick.World
 
         // --- the numbers, none of which have been played ---------------------
 
-        /// Seconds of game time in one step. A day is `TimeOfDay.DayLength`
-        /// (180 s while testing), so a quantum is eighteen seconds of real time
-        /// at the current setting.
+        /// Game-days in one step. A day is `TimeOfDay.DayLength` (180 s while
+        /// testing), so a quantum is 3.6 seconds of real time at the current
+        /// setting.
         ///
         /// Everything advances in whole quanta and the remainder is carried, so
         /// **one call covering ten days and ten calls covering one day each
         /// produce bit-identical state.** That property is what lets the game
         /// tick a camp whenever it feels like — on arrival, on a map query, on
         /// save — without the answer depending on how often it asked.
-        public const float QuantumDays = 0.1f;
+        ///
+        /// **0.1 -> 0.02, 2026-09-24** (Kevin, phone playtest: fetching a log
+        /// at the store "seems like a minute"). Every decision the books take
+        /// -- start the next trip, load the bench, carry the rack home -- is
+        /// taken inside a step, but the body mimes the books on the step
+        /// grid (`CampWorker.SecondsUntilSpent`), so an 18 s grid read as up
+        /// to 18 s of standing about per hand-off. 3.6 s reads as real time.
+        ///
+        /// **The quantum is FIXED, watched or not**, which keeps D2 bit-exact
+        /// (`StationStockSelfTest` `d2-30-days-busy-camp`). The step SIZE is
+        /// not neutral (the same self-test's `mixed-step-30d` diagnostic):
+        /// hands take turns inside a step, mood/`WorkFactor` is read once at
+        /// the step's start and eating settles once at its end, and the
+        /// "haul or help build" choice is taken per step. So there is no
+        /// coarse catch-up path for unwatched camps; a 30-day absence is
+        /// 1500 steps (timed in `d2-30-days-busy-camp`), and a coarse path
+        /// would also put `CampWorker.SecondsUntilSpent` off the grid.
+        public const float QuantumDays = 0.02f;
 
         /// Logs a hand fells in a day. **A guess, never played.** Still the
         /// unit everything else is priced against — see `Res.GatherRate`,
@@ -1949,10 +1989,11 @@ namespace SeaSick.World
             if (steps <= 0) return;
 
             // A camp left for a very long time still has to answer in one
-            // frame. Ten thousand quanta is a thousand game days, far past any
+            // frame. Fifty thousand quanta is a thousand game days at the
+            // 0.02-day quantum (2026-09-24; was 10000 at 0.1), far past any
             // session; beyond it the arithmetic has converged on the ceiling
             // anyway, so the clamp cannot change an outcome anyone will see.
-            const long MaxSteps = 10000;
+            const long MaxSteps = 50000;
             long run = steps > MaxSteps ? MaxSteps : steps;
 
             for (long i = 0; i < run; i++) Step(QuantumDays);
@@ -2233,6 +2274,12 @@ namespace SeaSick.World
                 return p.BrickPaid ? null : Res.Brick;
             }
         }
+
+        /// **Test seam, not a game path**: one `Step` of any size, bypassing
+        /// `Tick`'s fixed quantum, so `StationStockSelfTest` can measure how
+        /// far the books drift when the step size changes. The game only
+        /// ever steps `QuantumDays`.
+        internal void StepForTest(float days) => Step(days);
 
         /// One quantum of work. The only place the outpost's state changes.
         void Step(float days)
@@ -2686,7 +2733,20 @@ namespace SeaSick.World
             if (h.walkingIn) return "still on the way up from the ship";
             string cause = StallCause(h);
             if (cause != null) return cause;
-            if (WorkFactor(h) <= StarvingWorkFloor + 0.0001f) return "too hungry to work well";
+            // **Slow, and why, 2026-09-24** (Kevin: plank making "far too
+            // slow" -- the hand should SAY when he is dragging). Below
+            // `SlowWorkShown` the line names the pace his current job is paid
+            // at (`WorkFactorOf`), rounded to 5 % so a sheet keyed on this
+            // text rebuilds on a real change, not every step. Hungry = the
+            // pile is empty or the camp is on short rations right now; low
+            // spirits = fed again but mood still climbing back (or a raid).
+            float pace = WorkFactorOf(h);
+            if (pace < SlowWorkShown)
+            {
+                int pct = Mathf.Clamp(Mathf.RoundToInt(pace * 20f) * 5, 0, 100);
+                string why = Hungry || rations != Rations.Full ? "hungry" : "low spirits";
+                return $"working slowly — {why} ({pct}% pace)";
+            }
             return null;
         }
 

@@ -127,11 +127,13 @@ Modular parts on the ship prefab (hull, sails, rudder, comfort fittings, cargo h
 
 Future levels (III, IV) stay unused and unpaid until they are designed.
 
+**Tempo (2026-09-24, Kevin's phone numbers).** *"Plank making works"* but was far too slow. Picking a log up at the store takes ~1 s (was 3 s plus a wait for the next 18 s ledger step); 1 log → 3 planks; 15 s a plank (12 boards a hand-day, 45 s a log). The ledger now steps in 0.02-day quanta (3.6 s at a 180 s day) so a watched camp reads as real time; a hand under 90 % pace says why (*"working slowly — hungry (35% pace)"*). The other recipes' rates are unchanged and untested against this tempo: fine boards 90 s, meals 60 s, arrows 60 s each (3 min a job), spear 120 s, iron 120 s, saw blade 6 min, tools 3 min, iron spear 3 min, brick 90 s.
+
 **Recipes at each fire level.** A station (sawmill, kitchen, fletcher, blacksmith, quarry) holds recipes that unlock by fire level and station level:
 
 | Station | Takes | Makes | Yield | Rate/day | Tools | Fire | Level |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Sawmill | 1 timber | boards | 1 | 3 | — | I | 1 |
+| Sawmill | 1 timber | boards | 3 | 12 | — | I | 1 |
 | Sawmill | 2 boards | fine boards | 1 | 2 | saw blade (0.05 wear/out) | II | 2 |
 | Kitchen | 1 food | meals | 1 | 3 | — | I | 1 |
 | Fletcher | 1 timber | arrows | 3 | 3 | — | I | 1 |

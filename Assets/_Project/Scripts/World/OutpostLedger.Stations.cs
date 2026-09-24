@@ -125,8 +125,14 @@ namespace SeaSick.World
         /// Straight line to walked path. The ledger has no A*; bodies route
         /// round huts and rocks (`CampPath`). A guess.
         public const float PathFactor = 1.15f;
-        /// Seconds per trip for picking the load up and putting it down.
-        public const float HandleSeconds = 3f;
+        /// Seconds per trip for picking the load up (off a store pile, a
+        /// rack, a bay -- or the cut armful off the ground) and putting it
+        /// down. **3 -> 1, 2026-09-24** (Kevin, phone playtest: picking a
+        /// log up at the store should take about a second): the walk is the
+        /// cost, the handling is a second. Cutting at the source is a
+        /// separate number (`GatherSecondsPerUnit` / `Playtest.CutSecondsPerLog`)
+        /// and is untouched.
+        public const float HandleSeconds = 1f;
         /// Metres from the camp centre to the nearest source of a resource
         /// for a camp nobody has ever watched (no `sourceDistance` row).
         public const float DefaultSourceMetres = 25f;
