@@ -152,11 +152,6 @@ namespace SeaSick.CameraRig
         [SerializeField] float portraitFov = 68f;
         [Tooltip("How fast the rig crosses between the two presets. ~2 is half a second, which reads as a move and not a cut when the device turns.")]
         [SerializeField] float portraitBlendRate = 2f;
-        [Header("Tap sailing framing")]
-        [SerializeField] float pilotDistance = 24f;
-        [SerializeField] float pilotHeight = 32f;
-        [SerializeField] float pilotLookAhead = 7f;
-        float pilotViewBlend;
 
         // Speed reads as a DOLLY upright, not as a lens.
         //
@@ -618,8 +613,7 @@ namespace SeaSick.CameraRig
             // Not under the tuner either: `SailCamTuner` reads the same wheel
             // to fly the seat, and two things zooming one camera off one
             // notch is a camera nobody is steering.
-            if (!IslandCam.Engaged && !SailOverride.HasValue
-                && !SeaSick.Ship.SailingPilot.BlocksZoom)
+            if (!IslandCam.Engaged && !SailOverride.HasValue)
             {
                 var touches = ET.Touch.activeTouches;
                 if (touches.Count == 2)
@@ -822,17 +816,12 @@ namespace SeaSick.CameraRig
                     bDist = Mathf.Lerp(bDist, portraitDistance, portrait01);
                     bHeight = Mathf.Lerp(bHeight, portraitHeight, portrait01);
                     bAhead = Mathf.Lerp(bAhead, portraitLookAhead, portrait01);
-                    pilotViewBlend = Mathf.MoveTowards(pilotViewBlend,
-                        Ship.SailingPilot.OwnsWorldInput ? 1f : 0f, dt * 2f);
-                    bDist = Mathf.Lerp(bDist, pilotDistance, pilotViewBlend);
-                    bHeight = Mathf.Lerp(bHeight, pilotHeight, pilotViewBlend);
-                    bAhead = Mathf.Lerp(bAhead, pilotLookAhead, pilotViewBlend);
                 }
 
                 // Cruise is a LANDSCAPE move. Upright the preset is already
                 // backed off and lifted, and easing further out from there
                 // puts her at the bottom of a tall frame with nothing in it.
-                float cruise = cruiseLevel * (1f - portrait01) * (1f - pilotViewBlend);
+                float cruise = cruiseLevel * (1f - portrait01);
                 // The dolly and the player's pinch scale the SEAT only —
                 // distance and height together, so the tilt barely moves and
                 // the horizon stays where it was put.
@@ -872,7 +861,7 @@ namespace SeaSick.CameraRig
                     float fit = Mathf.Min(sep * lockPullPerMetre,
                                           lockMaxPull * frameK) * lockLevel;
                     back += fit;
-                    up += fit * Mathf.Lerp(0.42f, 1f, pilotViewBlend);
+                    up += fit * 0.42f;
                     anchor = shipFlat + dirToTarget * (sep * lockBias * lockLevel);
                 }
 
@@ -1054,12 +1043,6 @@ namespace SeaSick.CameraRig
                 cam.fieldOfView = Mathf.Lerp(sailFov > 0f ? sailFov : fovBase,
                     overviewFov, overviewLevel);
 
-            if (!IslandCam.Engaged && !shot.HasValue && !SailOverride.HasValue)
-            {
-                Vector3 pan = SeaSick.Ship.SailingPilot.ViewOffset;
-                desired += pan;
-                lookPoint += pan;
-            }
             if (!rigSeeded) { rigPos = transform.position; rigSeeded = true; }
             // `direct` is k = 1: the seat, verbatim. Written into `rigPos`
             // rather than round it, so letting go of the land resumes the

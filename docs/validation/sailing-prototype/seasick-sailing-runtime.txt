@@ -1,1 +1,0 @@
-PASS: runtime attachment, classic/prototype switch and stop. Anchored=True, ExternalDrive=True

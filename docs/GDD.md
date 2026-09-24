@@ -24,13 +24,7 @@ The meter only ever goes up at sea. Past ~80% they start leaving their post to h
 
 ## 4. Platform, player & controls
 
-**2026-09-24 experimental override:** a switchable tap-to-sail prototype now
-ships alongside the classic floating-stick controls. Water taps set a validated
-straight-water destination, drags pan, pinch zooms, and a dedicated helm area
-provides manual steering. Arrival cuts propulsion without anchoring. This is a
-playtest, not a final replacement decision; see [SAILING-PROTOTYPE.md](SAILING-PROTOTYPE.md)
-for ownership, limits and tests. The historical control descriptions below do
-not fully describe the current floating-stick implementation or this experiment.
+**2026-09-24:** tap-to-sail (tap water to set a destination, tap an enemy to lock, drag/pinch camera) was tried on the phone and removed at Kevin's verdict — *"the point and sail did not work, so we can remove that from the game."* The one-wheel thumb stick below stays as the only helm control.
 
 - **Platform:** mobile, portrait, one-handed. Sessions = one voyage (target 3–8 min).
 - **Player role:** the captain — commands, never walks the deck. Crew executes.
