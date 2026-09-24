@@ -62,8 +62,10 @@ namespace SeaSick.Ship.Modular
                         var inst = Instantiate(prefab, host, false);
                         inst.name = string.IsNullOrEmpty(part.id) ? prefab.name : part.id;
                         // Keep whatever root rotation/scale the importer baked;
-                        // only the authoring->metre factor is added.
-                        inst.transform.localPosition = Vector3.zero;
+                        // only the authoring->metre factor is added, plus this
+                        // part's own offset (multi-part visuals only; zero for
+                        // every single-piece visual, unchanged from before).
+                        inst.transform.localPosition = ModularScale.AuthoringToGame(part.localPositionU, k);
                         inst.transform.localRotation = visualAxisFix * prefab.transform.localRotation;
                         inst.transform.localScale = prefab.transform.localScale * k;
                         foreach (var r in inst.GetComponentsInChildren<Renderer>(true))

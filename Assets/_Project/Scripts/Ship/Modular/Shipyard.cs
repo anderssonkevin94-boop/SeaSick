@@ -59,9 +59,9 @@ namespace SeaSick.Ship.Modular
     /// refused with NOT_IN_PROTOTYPE, IN ADDITION to every milestone-1 rule.
     public static class ShipyardPolicy
     {
-        static readonly string[] Sterns = { ShipConfiguration.V3Stern };
-        static readonly string[] Middles = { ShipConfiguration.V3Middle };
-        static readonly string[] Bows = { ShipConfiguration.V3Bow };
+        static readonly string[] Sterns = { ShipConfiguration.V3Stern, ExpandedPresets.ExpandedStern };
+        static readonly string[] Middles = { ShipConfiguration.V3Middle, ExpandedPresets.ExpandedMiddle };
+        static readonly string[] Bows = { ShipConfiguration.V3Bow, ExpandedPresets.ExpandedBow };
         static readonly string[] Rotors = { ShipConfiguration.TimberRotor, ShipConfiguration.ReinforcedRotor };
         static readonly string[] Carriers = { ShipConfiguration.M1Carrier };
         static readonly string[] Fittings = { ShipConfiguration.V3Chimney };
@@ -128,8 +128,8 @@ namespace SeaSick.Ship.Modular
             if (d == null) return; // UNKNOWN_MODULE comes from the assembler
             if (d.kind == ModuleKind.Rotor && d.rotor != null && d.rotor.mount != "M1")
                 why = $"{ModuleLibrary.Name(d)} is not part of the prototype shipyard: only the M1 timber and reinforced wheels are offered.";
-            else if (ModuleKind.IsHull(d.kind) && d.family != "W1-r2")
-                why = $"{ModuleLibrary.Name(d)} is not part of the prototype shipyard: only the W1-r2 low-deck hull is offered (no wider hulls yet).";
+            else if (ModuleKind.IsHull(d.kind) && d.family != "W1-r2" && d.family != "W1x")
+                why = $"{ModuleLibrary.Name(d)} is not part of the prototype shipyard: only the W1-r2 low-deck and W1x expanded-beam hulls are offered.";
             else if (d.status == ModuleStatus.Placeholder || d.status == ModuleStatus.IncompatibleReference)
                 why = $"{ModuleLibrary.Name(d)} is a {d.status} part and cannot be built.";
             else

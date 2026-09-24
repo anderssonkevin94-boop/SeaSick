@@ -1,0 +1,481 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.stern.w1x.v1",
+    "version": 1,
+    "kind": "Stern",
+    "family": "W1x",
+    "status": "prototype",
+    "displayName": "Stern_W1 (expanded, W1x)",
+    "description": "Stern section, centre-expansion width family (W1-center-expansion-r1): deck beam 12.08 (was 9.28), length and depth UNCHANGED. Wheel pocket, housing, helm and wheel mount are the SAME unchanged geometry as hull.stern.w1r2.v3 (README: 'not scaled to make the ship wider'); this module reuses the existing wheel.rotor.*/wheel.carrier.m1/fitting.chimney.v3 modules as-is.",
+    "source": "art-staging/modular-width-inserts-v1/manifest.json",
+    "lengthU": 9.3,
+    "boundsMinU": {
+        "x": -0.23,
+        "y": -6.25,
+        "z": -1.92
+    },
+    "boundsMaxU": {
+        "x": 9.3,
+        "y": 6.25,
+        "z": 3.652
+    },
+    "boundsNote": "X/Z UNCHANGED from hull.stern.w1r2.v3 (length/depth not touched by this kit; confirmed independently by ExpandedHullValidation's chimney-midpoint cross-check, docs/EXPANDED-HULL-VALIDATION.md). Y DERIVED, not Blender-measured: half-beam 6.04 (12.08/2) + the same 0.21 u rail overhang W1-r2's stern already has (4.85-4.64) = 6.25. A per-part Blender re-import found the individual 'Port'/'Starboard' shoulder pieces disagreeing with each other on X by exactly 2.8 u (an axis-metadata artifact in those two FBX files, not a real geometry difference -- see the validation doc), so the AABB's X/Z came from the unaffected parts and the analytic length/depth facts instead of a full per-part union.",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.origin",
+            "standard": "",
+            "posU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": "Aft end of the ship; the module origin."
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.fwd",
+            "standard": "W1x",
+            "posU": {
+                "x": 9.3,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "WheelModuleSocket",
+            "role": "wheel",
+            "standard": "M1",
+            "posU": {
+                "x": 0.72,
+                "y": 0,
+                "z": 0.35
+            },
+            "yawDeg": 0,
+            "radiusLimit": 1.64,
+            "placementRule": "",
+            "provisional": false,
+            "notes": "UNCHANGED from hull.stern.w1r2.v3 (manifest fittings.wheel_mount: 'M1 unchanged'). Axle centre. Rotor and carrier are placed here; rotate the rotor only, about game X."
+        },
+        {
+            "id": "Chimney",
+            "role": "fitting.chimney",
+            "standard": "fitting.chimney",
+            "posU": {
+                "x": 0,
+                "y": 0,
+                "z": 1.76
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "assembled-midpoint",
+            "provisional": false,
+            "notes": "UNCHANGED rule/Z. Cross-checked against the kit's own fittings.chimney_position (13.14, 0, 1.76 for a one-middle-bay assembly): the assembled-midpoint formula on this stern + hull.middle.w1x.v1 + hull.bow.w1x.v1 reproduces X 13.14 exactly (see docs/EXPANDED-HULL-VALIDATION.md), which is also bit-for-bit today's W1-r2 Long chimney X -- independent proof the expanded hull's assembled LENGTH is unchanged."
+        },
+        {
+            "id": "DeckSlot_2_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 5.5,
+                "y": -4.85,
+                "z": 1.76
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard from W1-r2's 3.45 by +1.4 (the per-side beam growth) -- see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md."
+        },
+        {
+            "id": "DeckSlot_2_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 5.5,
+                "y": 4.85,
+                "z": 1.76
+            },
+            "yawDeg": 180,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard from W1-r2's 3.45 by +1.4; see DeckSlot_2_-1."
+        }
+    ],
+    "visuals": [
+        {
+            "id": "Core__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Core__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Core__Hull_Ironwork\"], 122 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Core__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Core__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Core__Hull_Shell\"], 532 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Core__Plank_Seams",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Core__Plank_Seams",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Core__Plank_Seams\"], 306 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Core__Rails_Teal",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Core__Rails_Teal",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Core__Rails_Teal\"], 128 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Helm",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Helm",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Helm\"], 280 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Housing_AccessPanel",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Housing_AccessPanel",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Housing_AccessPanel\"], 648 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Housing_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Housing_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Housing_Ironwork\"], 472 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Housing_Lid",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Housing_Lid",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Housing_Lid\"], 142 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Insert_Plank_Joints",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Insert_Plank_Joints",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Insert_Plank_Joints\"], 24 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Insert_Port__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Insert_Port__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Insert_Port__Hull_Ironwork\"], 10 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Insert_Port__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Insert_Port__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Insert_Port__Hull_Shell\"], 70 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Insert_Port__Rails_Teal",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Insert_Port__Rails_Teal",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Insert_Port__Rails_Teal\"], 16 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Insert_Starboard__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Insert_Starboard__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Insert_Starboard__Hull_Ironwork\"], 10 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Insert_Starboard__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Insert_Starboard__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Insert_Starboard__Hull_Shell\"], 66 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Insert_Starboard__Rails_Teal",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Insert_Starboard__Rails_Teal",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Insert_Starboard__Rails_Teal\"], 16 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Port__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Port__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Port__Hull_Ironwork\"], 411 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Port__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Port__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Port__Hull_Shell\"], 237 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Port__Plank_Seams",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Port__Plank_Seams",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Port__Plank_Seams\"], 208 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Port__Rails_Teal",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Port__Rails_Teal",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Port__Rails_Teal\"], 224 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Starboard__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Starboard__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": -1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Starboard__Hull_Ironwork\"], 411 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Starboard__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Starboard__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": -1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Starboard__Hull_Shell\"], 233 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Starboard__Plank_Seams",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Starboard__Plank_Seams",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": -1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Starboard__Plank_Seams\"], 208 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Starboard__Rails_Teal",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Stern_W1/Stern_W1__Starboard__Rails_Teal",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": -1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Stern_W1.parts[\"Stern_W1__Starboard__Rails_Teal\"], 224 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        }
+    ],
+    "equipmentSlots": [
+        {
+            "id": "DeckSlot_2_-1",
+            "socketId": "DeckSlot_2_-1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        },
+        {
+            "id": "DeckSlot_2_1",
+            "socketId": "DeckSlot_2_1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        }
+    ],
+    "passages": [
+        {
+            "id": "CrewPassage_Main",
+            "centreU": {
+                "x": 6.23,
+                "y": 0,
+                "z": 3.46
+            },
+            "sizeU": {
+                "x": 6.14,
+                "y": 4.6,
+                "z": 3.4
+            },
+            "provisional": true,
+            "notes": "PROVISIONAL, UNCHANGED from W1-r2's own passage (|y| <= 2.30): the expanded beam adds width OUTBOARD of the deck-slot line only (the insert sits between the original hull halves and the unmoved centreline), so the centreline crew corridor is untouched. Derivation and the chosen alternative (widening the passage instead) are documented in docs/EXPANDED-HULL-VALIDATION.md."
+        }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW1x_v1/Stern_W1",
+        "sourceGeometrySha256": "28dbe864ddea34db101e56eb9c41709d71d1fd59a09518099216c2e2d23f1ce2",
+        "validWaterlineZU": [
+            -1.9199999570846558,
+            1.76
+        ],
+        "offsetZU": 0,
+        "notes": "Astra 2026-09-24 (art-staging/modular-width-inserts-v1/hydrostatics/Stern_W1.json): Hull_Shell only, upright level flotation, UNCHANGED keel/deck range from W1-r2. Hash cross-checked against the manifest's own declared hash by ExpandedHullValidation (bit-for-bit match)."
+    },
+    "lightship": {
+        "massKg": 17404.8,
+        "provisional": true,
+        "rule": "Seeded 2026-09-25 (ExpandedHullValidation): today's W1-r2 Long lightship (31906.6 kg) x the expanded/W1-r2 Long hydrostatic-table volume-to-deck ratio (815.687 / 611.671 U^3 = 1.333538), split by this section's own table volume to the deck (333.66 / 815.687). See docs/EXPANDED-HULL-VALIDATION.md 'Capacity + mass' for why the volume ratio (not the geometric beam ratio 1.302) was used."
+    },
+    "capacity": {
+        "holdCells": {
+            "value": 9,
+            "provisional": true,
+            "source": "round(this section's table volume-to-deck (333.66 U^3) / W1-r2's volume-per-hold-cell (611.67/16=38.229 U^3))"
+        },
+        "berths": {
+            "value": 2,
+            "provisional": true,
+            "source": "floor(W1-r2 stern's 2 berths x the beam ratio 12.08/9.28=1.302) = floor(2.60) = 2 (unchanged)"
+        },
+        "gunSlots": {
+            "ids": [
+                "DeckSlot_2_-1",
+                "DeckSlot_2_1"
+            ],
+            "provisional": true,
+            "source": "Same designated pair W1-r2's stern uses (DeckSlot_2), moved outboard with the deck edge; both pass the assembler's clearance/passage check against the real cannon (ExpandedHullValidation)."
+        },
+        "rule": "Seeded 2026-09-25 (ExpandedHullValidation), mirroring the W1-r2 A4 seeding: PROVISIONAL, tune freely; the shipyard sums whatever is here."
+    },
+    "physical": {
+        "massKg": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "displacementM3": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "cargoCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "crewCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "thrustCoefficient": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    }
+}

@@ -292,6 +292,16 @@ namespace SeaSick.Ship.Modular
         /// "ShipModules/Meshes/HullW1r2_v3/Stern_W1/Hull_Shell".
         public string resourcePath;
         public bool placeholder;
+        /// Module-local authoring offset this ONE part is instantiated at,
+        /// on top of the module's own origin (additive to
+        /// ModularShipView.Build's per-module placement). Zero for every
+        /// single-piece visual authored so far (W1-r2's kits export one
+        /// whole mesh per named part, already in module-local space) --
+        /// added 2026-09-25 for a MULTI-PART kit (the width-inserts family)
+        /// whose Port/Starboard/Insert pieces are split out and carry their
+        /// own manifest `local_position`. Unset = Vector3.zero, so every
+        /// existing module JSON reads unchanged.
+        public Vector3 localPositionU;
         public string notes;
     }
 

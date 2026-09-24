@@ -1,0 +1,406 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.middle.w1x.v1",
+    "version": 1,
+    "kind": "Middle",
+    "family": "W1x",
+    "status": "prototype",
+    "displayName": "Midship_W1 (expanded, W1x)",
+    "description": "Repeatable 6.00 u expanded middle bay. Deck beam 12.08 (was 9.28), length and depth unchanged.",
+    "source": "art-staging/modular-width-inserts-v1/manifest.json",
+    "lengthU": 6.0,
+    "boundsMinU": {
+        "x": 0,
+        "y": -6.25,
+        "z": -1.92
+    },
+    "boundsMaxU": {
+        "x": 6.0,
+        "y": 6.25,
+        "z": 2.47
+    },
+    "boundsNote": "X/Z UNCHANGED from hull.middle.w1r2.v3 (length/depth not touched by this kit). Y DERIVED (not Blender-measured, see hull.stern.w1x.v1's boundsNote): half-beam 6.04 + 0.21 u rail overhang = 6.25.",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.aft",
+            "standard": "W1x",
+            "posU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.fwd",
+            "standard": "W1x",
+            "posU": {
+                "x": 6.0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "DeckSlot_0_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 1.5,
+                "y": -4.85,
+                "z": 1.76
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard from W1-r2's 3.45 by +1.4; see docs/EXPANDED-HULL-VALIDATION.md 'Gun slots'."
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 1.5,
+                "y": 4.85,
+                "z": 1.76
+            },
+            "yawDeg": 180,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard by +1.4; see DeckSlot_0_-1."
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 3.5,
+                "y": -4.85,
+                "z": 1.76
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard by +1.4; see DeckSlot_0_-1."
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 3.5,
+                "y": 4.85,
+                "z": 1.76
+            },
+            "yawDeg": 180,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard by +1.4; see DeckSlot_0_-1."
+        },
+        {
+            "id": "DeckAreaSocket",
+            "role": "deck.area",
+            "standard": "",
+            "posU": {
+                "x": 3.0,
+                "y": 0,
+                "z": 1.76
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Centre of the free-placement deck area of this bay."
+        }
+    ],
+    "visuals": [
+        {
+            "id": "Insert_Plank_Joints",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Insert_Plank_Joints",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Insert_Plank_Joints\"], 36 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Insert_Port__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Insert_Port__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Insert_Port__Hull_Shell\"], 8 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Insert_Starboard__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Insert_Starboard__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Insert_Starboard__Hull_Shell\"], 8 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Port__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Port__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Port__Hull_Ironwork\"], 180 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Port__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Port__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Port__Hull_Shell\"], 60 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Port__Plank_Seams",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Port__Plank_Seams",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Port__Plank_Seams\"], 144 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Port__Rails_Teal",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Port__Rails_Teal",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Port__Rails_Teal\"], 104 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Starboard__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Starboard__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": -1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Starboard__Hull_Ironwork\"], 180 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Starboard__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Starboard__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": -1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Starboard__Hull_Shell\"], 60 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Starboard__Plank_Seams",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Starboard__Plank_Seams",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": -1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Starboard__Plank_Seams\"], 144 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        },
+        {
+            "id": "Starboard__Rails_Teal",
+            "resourcePath": "ShipModules/Meshes/HullW1x_v1/Midship_W1/Midship_W1__Starboard__Rails_Teal",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": -1.399999976158142,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Midship_W1.parts[\"Midship_W1__Starboard__Rails_Teal\"], 104 triangles; measured 2026-09-25 (ExpandedHullValidation, Blender --background re-import) triangle count and existence both match the manifest exactly."
+        }
+    ],
+    "equipmentSlots": [
+        {
+            "id": "DeckSlot_0_-1",
+            "socketId": "DeckSlot_0_-1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "socketId": "DeckSlot_0_1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "socketId": "DeckSlot_1_-1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "socketId": "DeckSlot_1_1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        },
+        {
+            "id": "DeckArea",
+            "socketId": "DeckAreaSocket",
+            "clearanceSizeU": {
+                "x": 6.0,
+                "y": 12.08,
+                "z": 2.66
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "PROVISIONAL free-placement area: the whole bay deck (length 6.00 x the NEW deck beam 12.08), height 2.66 unchanged. Equipment here reserves its own footprint; it must still keep out of the crew passage."
+        }
+    ],
+    "passages": [
+        {
+            "id": "CrewPassage_Main",
+            "centreU": {
+                "x": 3.0,
+                "y": 0,
+                "z": 3.46
+            },
+            "sizeU": {
+                "x": 6.0,
+                "y": 4.6,
+                "z": 3.4
+            },
+            "provisional": true,
+            "notes": "PROVISIONAL, UNCHANGED from W1-r2's own passage (|y| <= 2.30): the expanded beam adds width OUTBOARD of the deck-slot line only (the insert sits between the original hull halves and the unmoved centreline), so the centreline crew corridor is untouched. Derivation and the chosen alternative (widening the passage instead) are documented in docs/EXPANDED-HULL-VALIDATION.md."
+        }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW1x_v1/Midship_W1",
+        "sourceGeometrySha256": "9688f920c0b0f2ea6b52bebe111a8a7a833884f59a803e96c1e8c5585bd1fe5d",
+        "validWaterlineZU": [
+            -1.9199999570846558,
+            1.76
+        ],
+        "offsetZU": 0,
+        "notes": "Astra 2026-09-24 (art-staging/modular-width-inserts-v1/hydrostatics/Midship_W1.json): Hull_Shell only, upright level flotation, UNCHANGED keel/deck range. Cross-checked by ExpandedHullValidation: this bay is exactly prismatic (deck-level sectional area is bit-for-bit constant across all 99 stations, spread 5e-14%), so the deck-level area at one station x 6.00 u reproduces the table's integrated deck volume to 0.000%."
+    },
+    "lightship": {
+        "massKg": 13264.4,
+        "provisional": true,
+        "rule": "Seeded 2026-09-25 (ExpandedHullValidation): same method as hull.stern.w1x.v1 (see its lightship.rule) -- 42548.7 kg split by this section's table volume share (254.29 / 815.687)."
+    },
+    "capacity": {
+        "holdCells": {
+            "value": 7,
+            "provisional": true,
+            "source": "round(254.29 U^3 / 38.229) -- see hull.stern.w1x.v1.capacity.holdCells.source"
+        },
+        "berths": {
+            "value": 5,
+            "provisional": true,
+            "source": "floor(W1-r2 middle's 4 berths x the beam ratio 1.302) = floor(5.21) = 5"
+        },
+        "gunSlots": {
+            "ids": [
+                "DeckSlot_1_-1",
+                "DeckSlot_1_1"
+            ],
+            "provisional": true,
+            "source": "Same designated pair W1-r2's middle uses (DeckSlot_1), moved outboard with the deck edge; both pass the assembler's clearance/passage check against the real cannon (ExpandedHullValidation)."
+        },
+        "rule": "Seeded 2026-09-25 (ExpandedHullValidation), mirroring the W1-r2 A4 seeding: PROVISIONAL, tune freely; the shipyard sums whatever is here."
+    },
+    "physical": {
+        "massKg": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "displacementM3": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "cargoCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "crewCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "thrustCoefficient": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    }
+}
