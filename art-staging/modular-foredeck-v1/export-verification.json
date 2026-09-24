@@ -1,0 +1,62 @@
+{
+  "narrow": {
+    "identical_on_short_and_long": true,
+    "exports": {
+      "Deck": {
+        "bounds_error": 7.152557373046875e-07,
+        "triangles": 28,
+        "vertex_colors": "Col"
+      },
+      "Frame": {
+        "bounds_error": 7.152557373046875e-07,
+        "triangles": 352,
+        "vertex_colors": "Col"
+      },
+      "Rails": {
+        "bounds_error": 7.152557373046875e-07,
+        "triangles": 268,
+        "vertex_colors": "Col"
+      },
+      "Seams": {
+        "bounds_error": 7.152557373046875e-07,
+        "triangles": 108,
+        "vertex_colors": "Col"
+      },
+      "Stairs": {
+        "bounds_error": 5.960464477539062e-07,
+        "triangles": 96,
+        "vertex_colors": "Col"
+      }
+    }
+  },
+  "wide": {
+    "identical_on_short_and_long": true,
+    "exports": {
+      "Deck": {
+        "bounds_error": 4.76837158203125e-07,
+        "triangles": 28,
+        "vertex_colors": "Col"
+      },
+      "Frame": {
+        "bounds_error": 4.76837158203125e-07,
+        "triangles": 352,
+        "vertex_colors": "Col"
+      },
+      "Rails": {
+        "bounds_error": 4.76837158203125e-07,
+        "triangles": 268,
+        "vertex_colors": "Col"
+      },
+      "Seams": {
+        "bounds_error": 7.152557373046875e-07,
+        "triangles": 132,
+        "vertex_colors": "Col"
+      },
+      "Stairs": {
+        "bounds_error": 5.960464477539062e-07,
+        "triangles": 96,
+        "vertex_colors": "Col"
+      }
+    }
+  }
+}

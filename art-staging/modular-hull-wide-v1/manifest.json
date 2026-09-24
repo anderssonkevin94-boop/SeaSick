@@ -1,0 +1,315 @@
+{
+  "standard": "W2-r1",
+  "coordinates": "Blender +X bow, +Y port, +Z up; unchanged V8 authoring units",
+  "cross_section": {
+    "deck_beam": 11.6,
+    "deck_height": 1.76,
+    "keel_height": -2.75
+  },
+  "modules": {
+    "Stern_W2": {
+      "length": 9.3,
+      "origin": "aft connection plane, ship height datum",
+      "aft_socket": [
+        0,
+        0,
+        0
+      ],
+      "forward_socket": [
+        9.3,
+        0,
+        0
+      ],
+      "files": [
+        "models/Stern_W2/Hull_Shell.fbx",
+        "models/Stern_W2/Rails_Teal.fbx",
+        "models/Stern_W2/Hull_Ironwork.fbx",
+        "models/Stern_W2/Plank_Seams.fbx",
+        "models/Stern_W2/Housing_Lid.fbx",
+        "models/Stern_W2/Housing_Ironwork.fbx",
+        "models/Stern_W2/Housing_AccessPanel.fbx",
+        "models/Stern_W2/Helm.fbx"
+      ],
+      "triangles": 4594,
+      "hydrostatics": {
+        "schemaVersion": 1,
+        "file": "hydrostatics/Stern_W2.json",
+        "sourceGeometrySha256": "bb1c603de880f15e066a3bc2f44bd39b3f100bf090934ab3d769a083874eaaac",
+        "validWaterlineZU": [
+          -2.75,
+          1.76
+        ],
+        "uprightOnly": true,
+        "stationCount": 199,
+        "waterlineCount": 66
+      }
+    },
+    "Midship_W2": {
+      "length": 6.0,
+      "origin": "aft connection plane, ship height datum",
+      "aft_socket": [
+        0,
+        0,
+        0
+      ],
+      "forward_socket": [
+        6.0,
+        0,
+        0
+      ],
+      "files": [
+        "models/Midship_W2/Hull_Shell.fbx",
+        "models/Midship_W2/Rails_Teal.fbx",
+        "models/Midship_W2/Hull_Ironwork.fbx",
+        "models/Midship_W2/Plank_Seams.fbx"
+      ],
+      "triangles": 1018,
+      "hydrostatics": {
+        "schemaVersion": 1,
+        "file": "hydrostatics/Midship_W2.json",
+        "sourceGeometrySha256": "b52a278fb1112ccce9b1632fb3f2d2ea4ea7eb032511be55d5487e4466668f74",
+        "validWaterlineZU": [
+          -2.75,
+          1.76
+        ],
+        "uprightOnly": true,
+        "stationCount": 99,
+        "waterlineCount": 66
+      }
+    },
+    "Bow_W2": {
+      "length": 10.979999542236328,
+      "origin": "aft connection plane, ship height datum",
+      "aft_socket": [
+        0,
+        0,
+        0
+      ],
+      "forward_socket": [
+        10.979999542236328,
+        0,
+        0
+      ],
+      "files": [
+        "models/Bow_W2/Hull_Shell.fbx",
+        "models/Bow_W2/Rails_Teal.fbx",
+        "models/Bow_W2/Hull_Ironwork.fbx",
+        "models/Bow_W2/Plank_Seams.fbx",
+        "models/Bow_W2/Prow.fbx"
+      ],
+      "triangles": 2346,
+      "hydrostatics": {
+        "schemaVersion": 1,
+        "file": "hydrostatics/Bow_W2.json",
+        "sourceGeometrySha256": "a14fa488b14c0dad1181b882d45256408dc855b62deb946b783f6695b847c694",
+        "validWaterlineZU": [
+          -2.75,
+          1.76
+        ],
+        "uprightOnly": true,
+        "stationCount": 287,
+        "waterlineCount": 66
+      }
+    }
+  },
+  "assemblies": {
+    "short": {
+      "midship_count": 0,
+      "stern_position": [
+        0,
+        0,
+        0
+      ],
+      "midship_first_position": [
+        9.3,
+        0,
+        0
+      ],
+      "bow_position": [
+        9.3,
+        0,
+        0
+      ],
+      "length": 20.27999954223633
+    },
+    "long": {
+      "midship_count": 1,
+      "stern_position": [
+        0,
+        0,
+        0
+      ],
+      "midship_first_position": [
+        9.3,
+        0,
+        0
+      ],
+      "bow_position": [
+        15.3,
+        0,
+        0
+      ],
+      "length": 26.27999954223633
+    }
+  },
+  "wheel": {
+    "mount": "M1",
+    "socket_stern_local": [
+      0.7200002670288086,
+      0.0,
+      0.3499999940395355
+    ],
+    "rotor_file": "models/Fittings/Rotor.fbx",
+    "carrier_file": "models/Fittings/Carrier.fbx",
+    "spin_axis_blender": "Y",
+    "spin_axis_game": "X"
+  },
+  "chimney": {
+    "file": "models/Fittings/Chimney.fbx",
+    "origin": "base centre",
+    "placement": "(assembled length / 2, 0, 1.76) in Blender"
+  },
+  "export_axes": "Existing V8 FBX convention: Blender (x,y,z) location maps to game (-y,z,x).",
+  "sockets": {
+    "Stern_W2__AftSocket": {
+      "parent": "Stern_W2",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Stern_W2__ForwardSocket": {
+      "parent": "Stern_W2",
+      "position": [
+        9.300000190734863,
+        0.0,
+        0.0
+      ]
+    },
+    "Stern_W2__DeckSlot_2_-1": {
+      "parent": "Stern_W2",
+      "position": [
+        5.5,
+        -4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "Stern_W2__DeckSlot_2_1": {
+      "parent": "Stern_W2",
+      "position": [
+        5.5,
+        4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "Midship_W2__AftSocket": {
+      "parent": "Midship_W2",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Midship_W2__ForwardSocket": {
+      "parent": "Midship_W2",
+      "position": [
+        6.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Midship_W2__DeckSlot_0_-1": {
+      "parent": "Midship_W2",
+      "position": [
+        1.5,
+        -4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "Midship_W2__DeckSlot_0_1": {
+      "parent": "Midship_W2",
+      "position": [
+        1.5,
+        4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "Midship_W2__DeckSlot_1_-1": {
+      "parent": "Midship_W2",
+      "position": [
+        3.5,
+        -4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "Midship_W2__DeckSlot_1_1": {
+      "parent": "Midship_W2",
+      "position": [
+        3.5,
+        4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "Bow_W2__AftSocket": {
+      "parent": "Bow_W2",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Bow_W2__ForwardSocket": {
+      "parent": "Bow_W2",
+      "position": [
+        10.979999542236328,
+        0.0,
+        0.0
+      ]
+    },
+    "Bow_W2__DeckSlot_0_-1": {
+      "parent": "Bow_W2",
+      "position": [
+        1.5,
+        -4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "Bow_W2__DeckSlot_0_1": {
+      "parent": "Bow_W2",
+      "position": [
+        1.5,
+        4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "Bow_W2__DeckSlot_1_-1": {
+      "parent": "Bow_W2",
+      "position": [
+        3.5,
+        -4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "Bow_W2__DeckSlot_1_1": {
+      "parent": "Bow_W2",
+      "position": [
+        3.5,
+        4.349999904632568,
+        1.7599999904632568
+      ]
+    },
+    "WheelModuleSocket": {
+      "parent": "Stern_W2",
+      "position": [
+        0.7200002670288086,
+        0.0,
+        0.3499999940395355
+      ]
+    }
+  },
+  "status": "Offline prototype; no colliders, LODs, navigation, balance or Unity import.",
+  "compatibility": "W2-r1 sections join only W2-r1. M1 rotor/carrier remain shared with W1-r2. No W1/W2 adapter supplied.",
+  "shape": "25 percent wider deck beam; deeper body; unchanged flat working deck, M1 wheel, fitting sizes and V3 pointed prow.",
+  "bow_length_note": "Includes decorative prow, not a joinable forward extension."
+}

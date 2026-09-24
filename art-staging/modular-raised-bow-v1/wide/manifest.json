@@ -1,0 +1,146 @@
+{
+  "id": "RaisedBow_wide_v1",
+  "interface": "W2-r1",
+  "replaces": "Bow_W2",
+  "placement": "replace entire matching bow module at identical transform; do not overlay",
+  "units": "V8 authoring units, not calibrated game metres",
+  "coordinates": "Blender +X bow +Y port +Z up; game (-y,z,x)",
+  "files": {
+    "Rails": "models/Rails.fbx",
+    "Frame": "models/Frame.fbx",
+    "Stairs": "models/Stairs.fbx",
+    "Seams": "models/Seams.fbx",
+    "StructuralTrim": "models/StructuralTrim.fbx",
+    "HullCourses": "models/HullCourses.fbx",
+    "StemExtension": "models/StemExtension.fbx",
+    "Hull_Ironwork": "models/Hull_Ironwork.fbx",
+    "Hull_Shell": "models/Hull_Shell.fbx",
+    "Plank_Seams": "models/Plank_Seams.fbx",
+    "Prow": "models/Prow.fbx",
+    "Rails_Teal": "models/Rails_Teal.fbx"
+  },
+  "deck_height": 4.2,
+  "sockets": {
+    "Bow_W2__AftSocket": {
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Bow_W2__DeckSlot_0_-1": {
+      "position": [
+        1.5,
+        -4.349999904632568,
+        1.7599999904632568
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Bow_W2__DeckSlot_0_1": {
+      "position": [
+        1.5,
+        4.349999904632568,
+        1.7599999904632568
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Bow_W2__DeckSlot_1_-1": {
+      "position": [
+        3.5,
+        -4.349999904632568,
+        1.7599999904632568
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Bow_W2__DeckSlot_1_1": {
+      "position": [
+        3.5,
+        4.349999904632568,
+        1.7599999904632568
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Bow_W2__ForwardSocket": {
+      "position": [
+        10.979999542236328,
+        0.0,
+        0.0
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Foredeck_Cannon_Port": {
+      "position": [
+        5.858109474182129,
+        3.2324225902557373,
+        4.199999809265137
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        3.1415927410125732
+      ]
+    },
+    "Foredeck_Cannon_Starboard": {
+      "position": [
+        5.858109474182129,
+        -3.2324225902557373,
+        4.199999809265137
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Foredeck_StairBottom": {
+      "position": [
+        2.0181095600128174,
+        0.0,
+        1.7977999448776245
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Foredeck_StairTop": {
+      "position": [
+        4.898109436035156,
+        0.0,
+        4.199999809265137
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "status": "offline shape prototype; preview cannons excluded from mesh exports"
+}

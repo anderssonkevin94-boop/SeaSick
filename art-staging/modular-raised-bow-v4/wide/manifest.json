@@ -1,0 +1,79 @@
+{
+  "id": "RaisedBowFull_wide_v4",
+  "interface": "W2-r1",
+  "replacement": "Bow_W2",
+  "placement": "same bow-local transform; replaces entire low bow; not an overlay",
+  "length": 12.008499145507812,
+  "units": "V8 authoring units, not calibrated game metres",
+  "coordinates": "Blender +X bow +Y port +Z up; game (-y,z,x)",
+  "upper_deck_height": 4.2,
+  "lower_door_height": 1.76,
+  "moving_parts": {
+    "Door": {
+      "pivot": [
+        -0.015,
+        -2.87,
+        1.76
+      ],
+      "axis": "Z",
+      "review_angle_degrees": 65,
+      "closed_angle_degrees": 0
+    },
+    "Hatch": {
+      "pivot": [
+        2.55,
+        0.0,
+        4.36
+      ],
+      "axis": "Y",
+      "review_angle_degrees": 80,
+      "closed_angle_degrees": 0
+    }
+  },
+  "chimney_rule": "Independent fitting: X=min(original midpoint X, bow origin X - 1.65); Z unchanged. Keeps chimney aft of raised shell.",
+  "files": {
+    "UpperRails": "models/UpperRails.fbx",
+    "UpperPosts": "models/UpperPosts.fbx",
+    "RearGuard": "models/RearGuard.fbx",
+    "PlankDetails": "models/PlankDetails.fbx",
+    "PortalFrames": "models/PortalFrames.fbx",
+    "InternalLadder": "models/InternalLadder.fbx",
+    "Door": "models/Door.fbx",
+    "Hatch": "models/Hatch.fbx",
+    "StemExtension": "models/StemExtension.fbx",
+    "Hull_Ironwork": "models/Hull_Ironwork.fbx",
+    "Hull_Shell": "models/Hull_Shell.fbx",
+    "Plank_Seams": "models/Plank_Seams.fbx",
+    "Prow": "models/Prow.fbx",
+    "UpperBraceBolts": "models/UpperBraceBolts.fbx"
+  },
+  "access": "Starboard DoorEntry at Y=-2.15 connects through the lined internal passage to centreline HatchExit at Y=0. Traversal is not yet implemented.",
+  "adjacent_raised_section": "RearGuard is separate and should be removed when a matching raised module joins. Matching upper interface and bulkhead treatment still need integration.",
+  "sockets": {
+    "Bow_W2__AftSocket": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "Bow_W2__ForwardSocket": [
+      12.008499145507812,
+      0.0,
+      0.0
+    ],
+    "DoorEntry": [
+      -0.4000000059604645,
+      -2.1500000953674316,
+      1.7599999904632568
+    ],
+    "HatchExit": [
+      1.75,
+      0.0,
+      4.199999809265137
+    ],
+    "UpperDeckJoin": [
+      0.0,
+      0.0,
+      4.199999809265137
+    ]
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "id": "Foredeck_narrow_v1",
+  "interface": "W1-r2",
+  "units": "unchanged V8 authoring units, not calibrated game metres",
+  "coordinates": "Blender +X bow, +Y port, +Z up; game position maps to (-y,z,x)",
+  "parent": "matching bow module; identity local transform",
+  "deck_height": 4.2,
+  "deck_outline": [
+    [
+      4.898109536124576,
+      -3.296655715147608
+    ],
+    [
+      6.694694313940003,
+      -2.246440184542685
+    ],
+    [
+      8.368546741275523,
+      -1.0252309230060237
+    ],
+    [
+      9.2914809604462,
+      -0.20015234031135565
+    ],
+    [
+      9.2914809604462,
+      0.20015234031135565
+    ],
+    [
+      8.368546741275523,
+      1.0252309230060237
+    ],
+    [
+      6.694694313940003,
+      2.246440184542685
+    ],
+    [
+      4.898109536124576,
+      3.296655715147608
+    ]
+  ],
+  "stairs": {
+    "clear_tread_width": 1.32,
+    "run": 2.88,
+    "treads": 8,
+    "bottom_x": 2.0181095361245758,
+    "top_x": 4.898109536124576
+  },
+  "files": {
+    "Deck": "models/Deck.fbx",
+    "Rails": "models/Rails.fbx",
+    "Frame": "models/Frame.fbx",
+    "Stairs": "models/Stairs.fbx",
+    "Seams": "models/Seams.fbx"
+  },
+  "sockets": {
+    "Foredeck_Cannon_Port": {
+      "location": [
+        5.858109474182129,
+        2.0754759311676025,
+        4.199999809265137
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        3.1415927410125732
+      ]
+    },
+    "Foredeck_Cannon_Starboard": {
+      "location": [
+        5.858109474182129,
+        -2.0754759311676025,
+        4.199999809265137
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Foredeck_StairBottom": {
+      "location": [
+        2.0181095600128174,
+        0.0,
+        1.7977999448776245
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Foredeck_StairTop": {
+      "location": [
+        4.898109436035156,
+        0.0,
+        4.199999809265137
+      ],
+      "rotation_euler": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "preview_cannons": "existing asset, unscaled; preview only, excluded from foredeck FBXs",
+  "limitations": "static fit prototype; no recoil, crew clearance certification, colliders, navigation, balance, Unity import or iOS testing"
+}

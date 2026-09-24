@@ -1,0 +1,75 @@
+{
+  "family": "wide",
+  "assemblies": {
+    "short": {
+      "stair_chimney_intersections": 0,
+      "stair_endpoints_world": [
+        [
+          11.318109512329102,
+          0.0,
+          1.7727999687194824
+        ],
+        [
+          14.19810962677002,
+          0.0,
+          4.199999809265137
+        ]
+      ],
+      "cannon_surface_intersections": []
+    },
+    "long": {
+      "stair_chimney_intersections": 0,
+      "stair_endpoints_world": [
+        [
+          17.3181095123291,
+          0.0,
+          1.7727999687194824
+        ],
+        [
+          20.198108673095703,
+          0.0,
+          4.199999809265137
+        ]
+      ],
+      "cannon_surface_intersections": []
+    }
+  },
+  "parts": {
+    "Deck": {
+      "vertices": 16,
+      "triangles": 28,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rails": {
+      "vertices": 144,
+      "triangles": 268,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Frame": {
+      "vertices": 236,
+      "triangles": 352,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stairs": {
+      "vertices": 64,
+      "triangles": 96,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Seams": {
+      "vertices": 88,
+      "triangles": 132,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "addon_triangles": 876
+}
