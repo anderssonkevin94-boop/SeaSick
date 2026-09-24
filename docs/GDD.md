@@ -23,6 +23,15 @@ Failure is soft, and it is a loss of *capability* rather than an event: a crew t
 The meter only ever goes up at sea. Past ~80% they start leaving their post to heave over the rail; the episodes get longer and closer together until the rail is all they do. Nothing is announced and nothing is seized — sail changes get slower, the oars weaken, guns fall silent one at a time as their gunner walks away. **The captain always keeps the tiller, and the sail stays wherever it was last set**, so a fully broken crew leaves a ship that still steers and still makes way. You lose your options, not your ship.
 
 ## 4. Platform, player & controls
+
+**2026-09-24 experimental override:** a switchable tap-to-sail prototype now
+ships alongside the classic floating-stick controls. Water taps set a validated
+straight-water destination, drags pan, pinch zooms, and a dedicated helm area
+provides manual steering. Arrival cuts propulsion without anchoring. This is a
+playtest, not a final replacement decision; see [SAILING-PROTOTYPE.md](SAILING-PROTOTYPE.md)
+for ownership, limits and tests. The historical control descriptions below do
+not fully describe the current floating-stick implementation or this experiment.
+
 - **Platform:** mobile, portrait, one-handed. Sessions = one voyage (target 3–8 min).
 - **Player role:** the captain — commands, never walks the deck. Crew executes.
 - **Camera:** third-person chase, ~10–15 m behind/above the ship; close enough to read whole-body acting. Automatic brief push-ins on notable events (imminent puke, mutiny stage change). No manual camera.

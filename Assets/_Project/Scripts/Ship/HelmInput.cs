@@ -60,6 +60,7 @@ namespace SeaSick.Ship
 
         ShipMotor motor;
         Breakers breakers;
+        SailingPilot pilot;
 
         /// The stick. A plain object, not a component: it has no lifetime of
         /// its own and nothing else should be able to find it.
@@ -129,6 +130,8 @@ namespace SeaSick.Ship
         {
             motor = GetComponent<ShipMotor>();
             breakers = GetComponent<Breakers>();
+            pilot = GetComponent<SailingPilot>();
+            if (pilot == null) pilot = gameObject.AddComponent<SailingPilot>();
         }
 
         // `Touch.activeTouches` is empty until this is on, and it is
@@ -139,6 +142,11 @@ namespace SeaSick.Ship
 
         void Update()
         {
+            if (pilot != null && pilot.Experimental)
+            {
+                pilot.Tick();
+                return;
+            }
             // **Not while the island view is up.** She is anchored whenever
             // that view is engaged, so nothing moves -- but the stick would
             // still take a drag meant for the ground (siting a building,
@@ -361,10 +369,13 @@ namespace SeaSick.Ship
         /// lasts exactly one frame and then the helm quietly puts it back.
         public void AllStop()
         {
+            if (pilot != null) pilot.Stop();
             helm.CancelDrag();
             throttleOrder = 0f;
             astern = false;
             rudder = 0f;
+            hasTarget = false;
+            prevHeadingValid = false;
         }
 
         /// **Hook, not a mechanic.** How hard the burn notch is eating wood
@@ -375,6 +386,7 @@ namespace SeaSick.Ship
 
         void OnGUI()
         {
+            if (pilot != null && pilot.Experimental) return;
             // The helm is not on screen while she lies at a camp: the island
             // sheet docks to the bottom of a portrait phone and the stick
             // would be drawn under it, on a ship that is anchored anyway.

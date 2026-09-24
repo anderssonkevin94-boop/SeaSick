@@ -30,6 +30,46 @@ namespace SeaSick.Combat
 
         public IHittable Locked { get; private set; }
 
+        public enum TapResult { Miss, Engaged, Released, OutOfRange }
+
+        // Ships need not have colliders. Pick their projected hull capsules,
+        // with a small finger allowance, rather than a distant water point.
+        public TapResult TryTap(Camera camera, Vector2 screen)
+        {
+            if (camera == null) return TapResult.Miss;
+            IHittable best = null;
+            float bestScore = float.PositiveInfinity;
+            foreach (var target in HitTargets.All)
+            {
+                if (target == null || !target.Alive || target is PlayerHull || target is IFriendly) continue;
+                Vector3 centre = camera.WorldToScreenPoint(target.HitCentre);
+                Vector3 a = camera.WorldToScreenPoint(target.HitCentre - target.HitAxis);
+                Vector3 b = camera.WorldToScreenPoint(target.HitCentre + target.HitAxis);
+                if (centre.z <= camera.nearClipPlane || a.z <= camera.nearClipPlane || b.z <= camera.nearClipPlane) continue;
+                Vector3 edge = camera.WorldToScreenPoint(target.HitCentre + camera.transform.right * target.HitRadius);
+                float radius = Mathf.Max(Mathf.Abs(edge.x - centre.x), Mathf.Min(Screen.width, Screen.height) * .024f);
+                float score = ScreenHullDistance(screen, a, b) / radius;
+                if (score > 1f || score >= bestScore) continue;
+                Ray sight = new Ray(camera.transform.position, target.HitCentre - camera.transform.position);
+                if (GroundPick.Along(sight, out var ground) && ground.y > 0f
+                    && Vector3.Distance(sight.origin, ground) < Vector3.Distance(sight.origin, target.HitCentre) - target.HitRadius) continue;
+                best = target;
+                bestScore = score;
+            }
+            if (best == null) return TapResult.Miss;
+            if (ReferenceEquals(best, Locked)) { Release(); return TapResult.Released; }
+            if (Distance(best) > lockRange) return TapResult.OutOfRange;
+            Take(best);
+            return TapResult.Engaged;
+        }
+
+        public static float ScreenHullDistance(Vector2 point, Vector2 a, Vector2 b)
+        {
+            Vector2 axis = b - a;
+            float t = axis.sqrMagnitude > .001f ? Mathf.Clamp01(Vector2.Dot(point - a, axis) / axis.sqrMagnitude) : 0f;
+            return Vector2.Distance(point, a + axis * t);
+        }
+
         /// True when space belongs to the lock rather than to the anchor.
         /// Computed rather than stored, so it never depends on which component
         /// ran first this frame.
@@ -162,9 +202,11 @@ namespace SeaSick.Combat
                 float d = Distance(Locked);
                 msg = d > breakRange
                     ? $"lock slipping —  {d:F0} m"
-                    : $"space  ·  release lock   ({d:F0} m)";
+                    : SeaSick.Ship.SailingPilot.OwnsWorldInput
+                        ? $"Target locked   ({d:F0} m)"
+                        : $"space  ·  release lock   ({d:F0} m)";
             }
-            else msg = Candidate() != null ? "space  ·  lock on" : null;
+            else msg = !SeaSick.Ship.SailingPilot.OwnsWorldInput && Candidate() != null ? "space  ·  lock on" : null;
             if (msg == null) return;
 
             // The shared prompt slot, at a rank below the anchor's. This line

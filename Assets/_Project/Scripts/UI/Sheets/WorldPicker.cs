@@ -38,6 +38,11 @@ namespace SeaSick.UI.Sheets
 
         void Update()
         {
+            if (SeaSick.Ship.SailingPilot.OwnsWorldInput)
+            {
+                armed = false;
+                return;
+            }
             var pointer = Pointer.current;
             if (pointer == null) return;
 
@@ -58,7 +63,7 @@ namespace SeaSick.UI.Sheets
             // is dropped by this same release, and that drop is not a tap.
             if (Busy() || OverUI(at)) return;
 
-            Tap(at);
+            if (!TrySelect(at) && Sheets.IsOpen) Sheets.Close();
         }
 
         static bool Busy()
@@ -82,10 +87,10 @@ namespace SeaSick.UI.Sheets
             return panel.Pick(p) != null;
         }
 
-        void Tap(Vector2 screen)
+        public static bool TrySelect(Vector2 screen)
         {
             var cam = Camera.main;
-            if (cam == null) return;
+            if (cam == null) return false;
 
             // **The crew are asked FIRST, and they are asked in screen space.**
             //
@@ -110,7 +115,7 @@ namespace SeaSick.UI.Sheets
             if (who != null)
             {
                 var hers = Sheets.TryCreateFor(who);
-                if (hers != null) { Sheets.Open(hers); return; }
+                if (hers != null) { Sheets.Open(hers); return true; }
             }
 
             // Triggers included on purpose: `Pickable` hangs a trigger sphere
@@ -135,12 +140,12 @@ namespace SeaSick.UI.Sheets
                 var col = Hits[i].collider;
                 if (col == null) continue;
                 var sheet = Sheets.TryCreateFor(col);
-                if (sheet != null) { Sheets.Open(sheet); return; }
+                if (sheet != null) { Sheets.Open(sheet); return true; }
                 if (!col.isTrigger) break;
             }
 
             // Ground, water, or nothing at all: whatever was open is done.
-            if (Sheets.IsOpen) Sheets.Close();
+            return false;
         }
 
         /// Room for a ray through a wood: every tree's trigger box is a hit.
