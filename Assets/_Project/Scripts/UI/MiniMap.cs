@@ -42,6 +42,11 @@ namespace SeaSick.UI
             arrowTex = BuildArrow(32);
         }
 
+        void OnEnable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += Rebind;
+        void OnDisable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= Rebind;
+        void Rebind(GameObject oldShip, GameObject newShip) =>
+            motor = newShip != null ? newShip.GetComponent<ShipMotor>() : null;
+
         static Texture2D BuildDisc(int size)
         {
             var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -169,6 +174,7 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (SheetsHud.ChartActive) return;   // the chart instrument replaced this
 
             if (motor == null) return;

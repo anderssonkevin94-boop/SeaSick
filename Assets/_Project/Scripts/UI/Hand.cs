@@ -233,6 +233,7 @@ namespace SeaSick.UI
         /// else.
         public Crew.CrewAgent PickAt(Vector2 screen, bool forPickup)
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return null;
             var cam = Lens();
             if (cam == null) return null;
             var camp = Camp;

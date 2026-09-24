@@ -119,6 +119,7 @@ namespace SeaSick.Ship
         /// not there, or is disabled, the key does nothing.
         void SpacebarCommand()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null || !kb.spaceKey.wasPressedThisFrame) return;
             // The home panel owns both the screen and the spacebar while it
@@ -1018,6 +1019,7 @@ namespace SeaSick.Ship
         /// handed.
         void OnGUI()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
             // Two panels offering to cast off in the same corner of the
             // screen is a choice nobody wants to make -- the same rule the

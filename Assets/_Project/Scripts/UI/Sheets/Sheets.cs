@@ -35,6 +35,7 @@ namespace SeaSick.UI.Sheets
 
         public static void Open(ISheet sheet)
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (sheet == null) { Close(); return; }
             if (ReferenceEquals(sheet, current)) return;
             current = sheet;
@@ -190,6 +191,18 @@ namespace SeaSick.UI.Sheets
         static bool suppress;
         static float nextEval;
         static AnchorController anchor;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void BindShipEvents()
+        {
+            SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= RebindShip;
+            SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += RebindShip;
+        }
+        static void RebindShip(GameObject oldShip, GameObject newShip)
+        {
+            anchor = newShip != null ? newShip.GetComponent<AnchorController>() : null;
+            nextEval = 0;
+        }
 
         /// **Statics outlive play mode here — the clock does not.**
         ///

@@ -127,6 +127,21 @@ namespace SeaSick.UI.Sheets
     /// from rebuilding a whole tree.
     internal static class SheetBits
     {
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void BindShipEvents()
+        {
+            Rebind(null, null);
+            SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= Rebind;
+            SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += Rebind;
+        }
+
+        static void Rebind(GameObject oldShip, GameObject newShip)
+        {
+            anchor = newShip != null ? newShip.GetComponent<AnchorController>() : null;
+            hold = newShip != null ? newShip.GetComponent<ShipHold>() : null;
+            roster = newShip != null ? newShip.GetComponent<CrewRoster>() : null;
+            motor = newShip != null ? newShip.GetComponent<ShipMotor>() : null;
+        }
         // --- the scene's singletons, found once -------------------------------
         //
         // The `!= null` tests are real: a cached reference from a previous

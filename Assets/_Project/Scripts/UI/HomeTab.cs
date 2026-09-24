@@ -44,6 +44,14 @@ namespace SeaSick.UI
 
         void Start() => anchor = FindFirstObjectByType<AnchorController>();
 
+        void OnEnable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += Rebind;
+        void OnDisable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= Rebind;
+        void Rebind(GameObject oldShip, GameObject newShip)
+        {
+            anchor = newShip != null ? newShip.GetComponent<AnchorController>() : null;
+            armedUntil = -99f; nextLookup = 0;
+        }
+
         /// Script order is not guaranteed and the ship is not always the first
         /// thing up, so the lookup has to be able to run again — but once a
         /// second from here, not once per IMGUI EVENT from OnGUI, which is
@@ -57,6 +65,7 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (anchor == null) return;
             if (SheetsHud.SuppressLegacy) return;   // the ship's own sheet carries this while she lies at a camp
             // Nothing to do at her own pier.

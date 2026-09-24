@@ -63,6 +63,7 @@ namespace SeaSick.UI.Sheets
 
         static bool Busy()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return true;
             if (CampSiting.Placing) return true;
             var hand = Hand.Instance;
             return hand != null && hand.Holding;

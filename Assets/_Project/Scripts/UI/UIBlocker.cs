@@ -115,6 +115,7 @@ namespace SeaSick.UI
         /// GUI space (origin top-left), which is what `FrameRect` already is.
         public static bool SheetBlocked(Vector2 guiPoint)
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return true;
             if (Sheets.MidnightLandHud.Active && (Sheets.MidnightLandHud.NavigationRect.Contains(guiPoint)
                 || Sheets.MidnightLandHud.ResourcesRect.Contains(guiPoint))) return true;
             return Sheets.SheetHost.FrameOpen

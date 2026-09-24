@@ -41,6 +41,14 @@ namespace SeaSick.UI.Sheets
         AnchorController.State was = AnchorController.State.Underway;
         float nextScan;
 
+        void OnEnable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += Rebind;
+        void OnDisable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= Rebind;
+        void Rebind(GameObject oldShip, GameObject newShip)
+        {
+            anchor = newShip != null ? newShip.GetComponent<AnchorController>() : null;
+            nextScan = 0;
+        }
+
         void Update()
         {
             ChartData.TickTrack();

@@ -27,6 +27,11 @@ namespace SeaSick.UI
             voyage = FindFirstObjectByType<VoyageManager>();
         }
 
+        void OnEnable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += Rebind;
+        void OnDisable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= Rebind;
+        void Rebind(GameObject oldShip, GameObject newShip) =>
+            motor = newShip != null ? newShip.GetComponent<ShipMotor>() : null;
+
         static float BearingTo(Vector3 from, Vector3 to)
         {
             Vector3 d = to - from;
@@ -35,6 +40,7 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             // Draw-only panel: skip the non-Repaint events. See StatusHUD for
             // the measurement — IMGUI runs OnGUI once per event, and the
             // discarded passes were the game's biggest source of GC garbage.

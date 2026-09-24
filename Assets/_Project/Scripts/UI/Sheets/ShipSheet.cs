@@ -131,6 +131,14 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildActions()
         {
             everyoneAshore = SheetKit.Btn("Everyone ashore", EveryoneAshore);
+            if (SeaSick.Ship.Modular.ShipyardService.Player != null)
+            {
+                everyoneAshore.text = "All ashore";
+                return SheetKit.Actions(
+                    everyoneAshore,
+                    SheetKit.Btn("Shipyard", SeaSick.UI.ModularYard.ShipyardLiveBridge.Open),
+                    SheetKit.Btn("Cast off", CastOff, true));
+            }
             return SheetKit.Actions(
                 everyoneAshore,
                 SheetKit.Btn("Cast off", CastOff, true));

@@ -208,6 +208,7 @@ namespace SeaSick.UI
         /// the whole mode down with it.
         public static bool Tick(int beganFrame)
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return Active;
             if (Mode == State.Off) return false;
             if (outpost == null) { End(); return false; }
 
@@ -293,6 +294,7 @@ namespace SeaSick.UI
 
         public static void BeginDrag(Vector2 screen)
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (Mode != State.Stretching) return;
             dragging = true;
             grabOffset = Vector2.zero;
@@ -305,6 +307,7 @@ namespace SeaSick.UI
         /// position THIS frame, not the one it left.
         public static void DragTo(Vector2 screen)
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (!dragging || Mode != State.Stretching) return;
             if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return;
             b = Snap(new Vector3(g.x + grabOffset.x, g.y, g.z + grabOffset.y));
@@ -397,6 +400,7 @@ namespace SeaSick.UI
         /// change. Kevin: *"press confirm and then continue."*
         public static void Confirm()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (Mode != State.Stretching || !valid) return;
             // One press, one confirm: IMGUI and Enter can both land on a
             // frame, and a second ✓ in the same frame would site the fresh

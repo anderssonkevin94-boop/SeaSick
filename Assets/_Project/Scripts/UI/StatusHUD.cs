@@ -43,8 +43,20 @@ namespace SeaSick.UI
             voyage = FindFirstObjectByType<VoyageManager>();
         }
 
+        void OnEnable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += Rebind;
+        void OnDisable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= Rebind;
+        void Rebind(GameObject oldShip, GameObject newShip)
+        {
+            motor = newShip != null ? newShip.GetComponent<ShipMotor>() : null;
+            hull = newShip != null ? newShip.GetComponent<HullIntegrity>() : null;
+            bilge = newShip != null ? newShip.GetComponent<Bilge>() : null;
+            crew = newShip != null ? newShip.GetComponentsInChildren<CrewAgent>(true) : new CrewAgent[0];
+            nextNavRefresh = 0;
+        }
+
         void OnGUI()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
             // IMGUI calls OnGUI once per EVENT, not once per frame: Layout,
             // Repaint, and one more for every MouseMove the editor or the

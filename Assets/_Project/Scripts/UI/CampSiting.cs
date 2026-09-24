@@ -415,6 +415,7 @@ namespace SeaSick.UI
 
         void Update()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (plan.id == null) return;
             if (outpost == null || ship == null) { Cancel(); return; }
 
@@ -533,6 +534,7 @@ namespace SeaSick.UI
         /// **The only way a building gets placed.** The ✓ button, or Enter.
         public static void Confirm()
         {
+            if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (Instance == null) return;
             if (Instance.wallMode) WallSiting.Confirm();
             else Instance.Commit();
