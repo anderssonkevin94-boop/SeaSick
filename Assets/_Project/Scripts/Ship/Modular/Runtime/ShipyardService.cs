@@ -69,9 +69,13 @@ namespace SeaSick.Ship.Modular
         ShipyardPlan currentPlan;
         ModularShipView view;
         bool modularActive;
+        DryDock dock = DryDock.Empty();
 
         /// A copy of what she is built from. Mutating it changes nothing.
         public ShipConfiguration Current => current.Clone();
+        /// A copy of what is in her dry dock (equipment a refit has taken
+        /// off her, waiting to be fitted again). Mutating it changes nothing.
+        public DryDock Dock => dock.Clone();
         /// True once she is drawn from modules (a refit, or a save that
         /// carried a configuration). False = the untouched standard steamer.
         public bool ModularActive => modularActive;
@@ -101,6 +105,7 @@ namespace SeaSick.Ship.Modular
             current = ShipConfiguration.Long();
             currentPlan = null;
             modularActive = false;
+            dock = DryDock.Empty();
             Player = this;
         }
 
@@ -175,6 +180,7 @@ namespace SeaSick.Ship.Modular
             var v = Validate(draft);
             var r = ShipyardReport.From(v, v.currentPlan, v.draftPlan, Library.MetresPerUnit);
             if (!CanRefitNow(out string why)) r.refitNowBlockedBecause = why;
+            r.dryDock.AddRange(DryDockPreview(draft));
             return r;
         }
 
@@ -197,6 +203,30 @@ namespace SeaSick.Ship.Modular
         }
 
         public GameObject BuildPreview(ShipConfiguration draft, Transform parent) => BuildPreview(draft, parent, out _);
+
+        // ---- equipment editing (2026-09-25) ----------------------------------
+        //
+        // Pure: return a NEW draft, never touch the ship, the dock or the
+        // save. `Fit` takes from the dock only at ApplyRefit time -- bind
+        // your picker's "in stock" state to DryDockPreview so it can grey out
+        // a module that is not there, but a Fit call itself never checks.
+
+        public ShipyardEdit FitEquipment(ShipConfiguration draft, string slotId, string moduleId) =>
+            ShipyardEquipment.Fit(draft, slotId, moduleId, Library);
+        public ShipyardEdit RemoveEquipment(ShipConfiguration draft, string slotId) =>
+            ShipyardEquipment.Remove(draft, slotId, Library);
+        public ShipyardEdit MoveEquipment(ShipConfiguration draft, string fromSlotId, string toSlotId) =>
+            ShipyardEquipment.Move(draft, fromSlotId, toSlotId, Library);
+        /// Every deck-gun slot of `draft`: where it is, whether it is usable,
+        /// and what (if anything) already occupies it.
+        public IReadOnlyList<EquipmentSlotView> EquipmentSlots(ShipConfiguration draft) =>
+            ShipyardEquipment.Slots(draft, Library, reference);
+        /// What is in the dry dock now, and what would be after applying
+        /// `draft` from the LIVE ship's current configuration (the same diff
+        /// ApplyRefit uses) -- bind a picker's "in stock" / greyed-out state
+        /// to this.
+        public IReadOnlyList<DryDockRow> DryDockPreview(ShipConfiguration draft) =>
+            ShipyardEquipment.DockPreview(current, draft, dock, Library);
 
         /// Whether a refit may be applied right now, and if not, why (a
         /// sentence for the player).
@@ -277,19 +307,51 @@ namespace SeaSick.Ship.Modular
                 res.configuration = Current;
                 return res;
             }
+
+            // The dry dock (D5): equipment `expected` carries that `draft`
+            // does not goes IN; equipment `draft` carries that `expected` did
+            // not comes FROM it (a move between slots is neither -- same
+            // module id, same count). Checked BEFORE anything is rebuilt, so
+            // a refusal here leaves the ship untouched.
+            var dockDiff = DryDock.Diff(expected, draft);
+            bool dockChanges = dockDiff.Count > 0;
+            if (dockChanges)
+            {
+                var homeAnchor = GetComponent<AnchorController>();
+                if (homeAnchor == null || !homeAnchor.AtHomeDock)
+                {
+                    res.issues.Add(new Rejection { code = ShipyardCodes.DryDockNotHere, partId = "",
+                        message = "She must be at her home dry dock to move equipment to or from storage; a plain refit between slots does not." });
+                    res.configuration = Current;
+                    return res;
+                }
+                if (!dock.CanApply(dockDiff, out string missingId))
+                {
+                    string missingName = missingId;
+                    if (Library != null && Library.TryGet(missingId, out var missingDef)) missingName = ModuleLibrary.Name(missingDef);
+                    res.issues.Add(new Rejection { code = ShipyardCodes.NotInDryDock, partId = missingId ?? "",
+                        message = $"There is no {missingName} in the dry dock to fit." });
+                    res.configuration = Current;
+                    return res;
+                }
+            }
+
             var prevPlan = currentPlan;
             bool prevModular = modularActive;
+            var prevDock = dock.Clone();
             if (!Rebuild(v.plan, out string fail))
             {
                 res.issues.Add(new Rejection { code = ShipyardCodes.ApplyFailed, partId = "", message = fail });
                 res.configuration = Current;
                 return res;
             }
+            if (dockChanges) dock.Apply(dockDiff);
             if (!Persist(out string saveWhy))
             {
                 // Swap back: the previous build, through the same path.
                 string back = null;
                 bool restored = prevModular && prevPlan != null ? Rebuild(prevPlan, out back) : RevertToReference(out back, false);
+                dock = prevDock;
                 res.issues.Add(new Rejection { code = ShipyardCodes.SaveFailed, partId = "",
                     message = "The refit could not be saved (" + saveWhy + "), so it was undone." +
                               (restored ? "" : " Undoing it ALSO failed: " + back) });
@@ -327,6 +389,14 @@ namespace SeaSick.Ship.Modular
         /// The save's `ship.modular` field, or "" while she is the untouched
         /// standard steamer (so an old-format save is written as before).
         public string SaveField() => modularActive ? ModularSave.Encode(current) : "";
+
+        /// The save's `ship.dryDock` field, or "" while the dock is empty (so
+        /// a game that never used it writes exactly what it always wrote).
+        public string DryDockField() => dock.entries.Count > 0 ? dock.ToJson() : "";
+
+        /// Load path (SaveGame.Restore, alongside ApplyFromSave). A
+        /// missing/unreadable field is an empty dock, never a refusal.
+        public void ApplyDryDockFromSave(string field) => dock = DryDock.FromJson(field);
 
         /// Load path (SaveGame.Restore, before the hold and crew come back).
         /// Skips the refit guards and the cargo/crew checks -- the save was
