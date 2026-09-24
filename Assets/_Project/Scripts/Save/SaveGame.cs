@@ -179,6 +179,7 @@ namespace SeaSick.Save
             s.yaw = motor.transform.eulerAngles.y;
             var shipyard = motor.GetComponent<SeaSick.Ship.Modular.ShipyardService>();
             s.modular = shipyard != null ? shipyard.SaveField() : "";
+            s.dryDock = shipyard != null ? shipyard.DryDockField() : "";
             s.anchor = 0;
             if (anchor != null)
             {
@@ -285,6 +286,7 @@ namespace SeaSick.Save
                 // add a drawing.
                 if (d.seen == null) d.seen = new List<SeenSave>();
                 if (d.ship.modular == null) d.ship.modular = "";
+                if (d.ship.dryDock == null) d.ship.dryDock = "";
                 if (d.trackX == null) d.trackX = new List<float>();
                 if (d.trackZ == null) d.trackZ = new List<float>();
                 if (d.trackAt == null) d.trackAt = new List<double>();
@@ -373,7 +375,11 @@ namespace SeaSick.Save
             // old save (no field) is the standard steamer; an unbuildable
             // field falls back to it with a warning, never a refusal.
             var shipyard = motor.GetComponent<SeaSick.Ship.Modular.ShipyardService>();
-            if (shipyard != null) shipyard.ApplyFromSave(data.ship.modular);
+            if (shipyard != null)
+            {
+                shipyard.ApplyFromSave(data.ship.modular);
+                shipyard.ApplyDryDockFromSave(data.ship.dryDock);
+            }
 
             // 3. The hold and the stores, after the yard told the voyage
             // how big the hold is.

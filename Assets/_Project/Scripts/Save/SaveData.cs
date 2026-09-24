@@ -119,6 +119,13 @@ namespace SeaSick.Save
         /// standard long steamer, exactly as before. Added after version 1
         /// shipped and deliberately NOT a version bump (see `SaveGame.Read`).
         public string modular = "";
+
+        /// **Her dry dock** (`SeaSick.Ship.Modular.DryDock` as its own
+        /// versioned JSON): equipment a refit has taken off her, waiting to
+        /// be fitted again. Empty while the dock is empty (the common case).
+        /// Added after version 1 shipped, next to `modular` and the same way
+        /// -- NOT a version bump (see `SaveGame.Read`).
+        public string dryDock = "";
     }
 
     [System.Serializable]
