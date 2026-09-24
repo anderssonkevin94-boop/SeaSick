@@ -25,6 +25,10 @@ using SeaSick.World;
 /// (b) refused refits (oversized, W2, raised deck, 4 bays, stale draft,
 ///     cargo that would not fit, crew that would not fit, under way) leave
 ///     her bit-identical in the same frame;
+/// (b1) an UNPAIRED gun (2026-09-25 fix): remove only the middle PORT gun
+///      (starboard kept), apply, check the live battery is honestly
+///      asymmetric (5 guns, 2 port, 3 starboard) rather than mirroring a
+///      phantom port gun back off the untouched starboard list; restore her;
 /// (b2) equipment + dry dock (2026-09-25): live, at the home berth, remove
 ///      the 2 middle guns (RemoveEquipment), shrink to Short (now valid --
 ///      guns are explicit equipment, never struck), check the dock holds 2,
@@ -133,10 +137,33 @@ public class ShipyardRefitProbe : MonoBehaviour
         Refuse("cargo-would-not-fit", ShipConfiguration.Short(), ShipyardCodes.CargoWouldNotFit);
         voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
 
+        // (b1) An unpaired gun: take only the middle PORT gun off and keep
+        // starboard fitted. `CannonBattery.Fit` used to mirror a single
+        // STARBOARD list to port unconditionally, so this case used to draw
+        // a wrong live battery (a phantom port gun, or a mis-positioned
+        // one); it must now come out honestly asymmetric.
+        var midStar = "middle[0]/DeckSlot_1_-1"; var midPort = "middle[0]/DeckSlot_1_1";
+        var eRemovePortOnly = yard.RemoveEquipment(yard.Current, midPort);
+        Gate("equipment: remove middle port gun only", eRemovePortOnly.ok, eRemovePortOnly.ok ? "removed" : eRemovePortOnly.message);
+        var rPortOnly = yard.ApplyRefit(yard.Current, eRemovePortOnly.draft);
+        Gate("hull: apply with only the middle port gun off", rPortOnly.ok && yard.Current.equipment.Count == 5,
+            rPortOnly.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+        var batteryPortOnly = yard.GetComponent<CannonBattery>();
+        Gate("battery: 5 guns, 2 port, 3 starboard (no mirrored phantom)",
+            batteryPortOnly != null && batteryPortOnly.TotalGuns == 5 && batteryPortOnly.PortCount == 2 && batteryPortOnly.StarboardCount == 3,
+            batteryPortOnly != null
+                ? $"total {batteryPortOnly.TotalGuns}, port {batteryPortOnly.PortCount}, starboard {batteryPortOnly.StarboardCount}"
+                : "no CannonBattery");
+
+        var rPortRestored = yard.ApplyRefit(yard.Current, ShipConfiguration.Long());
+        Gate("hull: restore the middle port gun from the dock", rPortRestored.ok && yard.Current.ValueEquals(ShipConfiguration.Long())
+            && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 0, rPortRestored.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+
         // (b2) Equipment + dry dock: take the 2 middle guns off, shrink to
         // Short (now valid), check the dock, grow back without them, fit
         // them back from the dock, check the battery.
-        var midStar = "middle[0]/DeckSlot_1_-1"; var midPort = "middle[0]/DeckSlot_1_1";
         var eRemove1 = yard.RemoveEquipment(yard.Current, midStar);
         Gate("equipment: remove middle starboard gun", eRemove1.ok, eRemove1.ok ? "removed" : eRemove1.message);
         var eRemove2 = yard.RemoveEquipment(eRemove1.draft, midPort);
