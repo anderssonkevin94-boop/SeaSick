@@ -423,6 +423,35 @@ namespace SeaSick.CameraRig
         float baseFarClip = -1f;
         float sailFov = -1f;
 
+        // --- speed and turn juice (JuiceTuning, 2026-09-24) -------------------
+        //
+        // Kevin on the helm: "slow, uneventful, not responsive". Three effects
+        // on the AT-SEA chase shot only, each read live from
+        // `SeaSick.Ship.JuiceTuning` every frame and eased by its
+        // `camLagSeconds` (0 = instant):
+        //   * the lens opens by camFovBoostDeg at top speed -- in BOTH shapes.
+        //     This deliberately overrides the "portrait lens is fixed" rule
+        //     below; the slider goes to 0 if it proves sickening on the phone;
+        //   * the seat sinks camDropMeters toward the water at top speed;
+        //   * the frame rolls INTO a turn, camLeanPerYawDeg per deg/s of yaw,
+        //     capped at JuiceRollCap.
+        // All three are display-time offsets: none of them feeds `rigPos` or
+        // `sailFov`, so the framing filters underneath are untouched, and all
+        // three fade out with the island overview, a shore party and the
+        // sail-cam tuner, so the B&W2 view and the tuner's readout never see
+        // them.
+        const float JuiceRollCap = 8f;
+        float juiceFov, juiceDrop, juiceRoll;
+        /// The roll written onto the rotation last frame, stripped off again
+        /// before the rotation filter runs so it never accumulates.
+        float appliedRoll;
+        Rigidbody targetBody;
+
+        /// What the juice is adding right now, for the lab's readout.
+        public float JuiceFov => juiceFov;
+        public float JuiceDrop => juiceDrop;
+        public float JuiceRoll => juiceRoll;
+
         /// Diagnostic only: the distance the overview last asked for.
         public float LastOverviewSpan { get; private set; }
         public Vector3 LastOverviewSeat { get; private set; }
@@ -661,6 +690,28 @@ namespace SeaSick.CameraRig
             motorFor = target;
             motor = target != null
                 ? target.GetComponent<SeaSick.Ship.ShipMotor>() : null;
+            targetBody = target != null ? target.GetComponent<Rigidbody>() : null;
+        }
+
+        /// The three juice terms, eased toward what speed and yaw ask for.
+        /// `gate` is 0 whenever the shot is not the plain sailing chase.
+        void UpdateJuice(float dt, float gate)
+        {
+            // Read every frame: the lab moves these live.
+            float lag = Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camLagSeconds);
+            float s01 = motor != null ? SeaSick.Ship.JuiceTuning.Speed01(motor) : 0f;
+            float yaw = SeaSick.Ship.JuiceTuning.YawRateDeg(targetBody);
+
+            float wantFov = Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camFovBoostDeg) * s01 * gate;
+            float wantDrop = Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camDropMeters) * s01 * gate;
+            // +yaw is to starboard. Leaning the frame to starboard is a
+            // NEGATIVE roll about the camera's forward axis in Unity.
+            float wantRoll = Mathf.Clamp(-SeaSick.Ship.JuiceTuning.camLeanPerYawDeg * yaw,
+                                         -JuiceRollCap, JuiceRollCap) * gate;
+
+            juiceFov = SeaSick.Ship.JuiceTuning.Ease(juiceFov, wantFov, lag, dt);
+            juiceDrop = SeaSick.Ship.JuiceTuning.Ease(juiceDrop, wantDrop, lag, dt);
+            juiceRoll = SeaSick.Ship.JuiceTuning.Ease(juiceRoll, wantRoll, lag, dt);
         }
 
         void LateUpdate()
@@ -731,6 +782,9 @@ namespace SeaSick.CameraRig
             // a foot from your face a moving projection is the single
             // sickest thing a chase camera can do — and the dolly above is
             // already saying everything they were saying about speed.
+            // (2026-09-24: `JuiceTuning.camFovBoostDeg` now opens it anyway,
+            // in both shapes, on top of this -- see the juice note by the
+            // fields. Its slider at 0 restores the fixed upright lens.)
             float baseLens = Mathf.Lerp(fovBase, portraitFov, portrait01);
             if (motor != null)
             {
@@ -748,6 +802,15 @@ namespace SeaSick.CameraRig
             // The tuner's lens, if it is holding one. Applied after the speed
             // and surf terms so those keep working underneath it.
             if (sailFovOverride > 1f) sailFov = sailFovOverride;
+
+            // The speed and turn juice. Only on the plain chase: a shore
+            // party's framing and the tuner's flown numbers stay exact, and
+            // the island overview fades it out below with `overviewLevel`.
+            UpdateJuice(dt, PointOfInterest.HasValue || SailOverride.HasValue ? 0f : 1f);
+            // The lens actually drawn at sea. `sailFov` itself stays the
+            // filter's own state, so the juice rides on top of it rather than
+            // being low-passed a second time by `fovResponse`.
+            float sailLens = (sailFov > 0f ? sailFov : fovBase) + juiceFov;
 
             Vector3 shipFlat = new Vector3(target.position.x, 0f, target.position.z);
             Vector3 anchor, desired, lookPoint;
@@ -910,7 +973,7 @@ namespace SeaSick.CameraRig
             if (overviewLevel > 0.001f && shot.HasValue)
             {
                 var ov = shot.Value;
-                float vfov = Mathf.Lerp(sailFov > 0f ? sailFov : fovBase, overviewFov, overviewLevel);
+                float vfov = Mathf.Lerp(sailLens, overviewFov, overviewLevel);
                 float tanHalf = Mathf.Tan(vfov * 0.5f * Mathf.Deg2Rad);
 
                 // The zoom is authored as METRES OF GROUND up the frame, not
@@ -1040,8 +1103,7 @@ namespace SeaSick.CameraRig
                 cam.farClipPlane = baseFarClip;
 
             if (cam != null)
-                cam.fieldOfView = Mathf.Lerp(sailFov > 0f ? sailFov : fovBase,
-                    overviewFov, overviewLevel);
+                cam.fieldOfView = Mathf.Lerp(sailLens, overviewFov, overviewLevel);
 
             if (!rigSeeded) { rigPos = transform.position; rigSeeded = true; }
             // `direct` is k = 1: the seat, verbatim. Written into `rigPos`
@@ -1078,7 +1140,13 @@ namespace SeaSick.CameraRig
             // The clamps below are display-time corrections and deliberately do
             // NOT feed back into rigPos, so being shoved up by a crest never
             // drags the framing with it.
-            transform.position = rigPos + Vector3.up * seaY;
+            // The juice drop, faded out by the overview. Limited so the seat
+            // never asks to go under twice the water floor; the floor clamp
+            // just below is still the hard guarantee against the real sea.
+            float atSea = 1f - overviewLevel;
+            float drop = Mathf.Min(juiceDrop * atSea,
+                Mathf.Max(0f, rigPos.y - 2f * minHeightAboveWater));
+            transform.position = rigPos + Vector3.up * (seaY - drop);
 
             // A low camera sells speed, but it must never end up underwater.
             if (SeaSick.Ocean.OceanSampler.Ready)
@@ -1128,16 +1196,22 @@ namespace SeaSick.CameraRig
                 }
             }
             Quaternion desiredRot = Quaternion.LookRotation(lookPoint - transform.position, Vector3.up);
+            // Last frame's juice roll comes off first, so the rotation filter
+            // runs on the un-rolled pose and the roll never accumulates.
+            Quaternion unrolled = transform.rotation * Quaternion.Euler(0f, 0f, -appliedRoll);
             // The rotation's leftover is carried the same way as the position's.
+            Quaternion framed;
             if (direct)
             {
-                if (!wasDirect) directTurn = Quaternion.Inverse(desiredRot) * transform.rotation;
+                if (!wasDirect) directTurn = Quaternion.Inverse(desiredRot) * unrolled;
                 directTurn = Quaternion.Slerp(directTurn, Quaternion.identity,
                     1f - Mathf.Exp(-directSettle * dt));
-                transform.rotation = desiredRot * directTurn;
+                framed = desiredRot * directTurn;
             }
-            else transform.rotation = Quaternion.Slerp(transform.rotation, desiredRot,
+            else framed = Quaternion.Slerp(unrolled, desiredRot,
                     1f - Mathf.Exp(-rotationResponse * dt));
+            appliedRoll = juiceRoll * atSea;
+            transform.rotation = framed * Quaternion.Euler(0f, 0f, appliedRoll);
 
             OverviewDirect = direct && directOffset == Vector3.zero
                              && Quaternion.Angle(directTurn, Quaternion.identity) < 0.01f;

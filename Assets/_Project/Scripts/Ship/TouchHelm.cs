@@ -24,7 +24,9 @@ namespace SeaSick.Ship
     /// the dead zone, unclamped so past-the-rim is visible), and `Tapped` (a
     /// stop order) — and draws the stick. `HelmInput` decides what those mean
     /// (astern vs. come-about, the throttle curve, the Kp/Kd heading
-    /// autopilot) and is the thing with `Update()`.
+    /// autopilot) and is the thing with `Update()`. `StickOffset` is the raw
+    /// screen-relative offset the direct-rudder mode reads instead
+    /// (`HelmTuning.directRudder`: X = rudder, Y = latched throttle lever).
     ///
     /// ## Camera-relative, frozen at touch-down
     ///
@@ -98,6 +100,12 @@ namespace SeaSick.Ship
         /// exactly how the burn tier is reached, and how "how hard" reads
         /// past "all the way."
         public float DragDistance01 { get; private set; }
+        /// The thumb's offset from the touch-down point in SCREEN terms, in
+        /// ring radii: +x right, +y UP the screen. Not clamped. Direct-rudder
+        /// mode (`HelmTuning.directRudder`) reads X as the rudder and Y as
+        /// the throttle lever; the autopilot mode ignores it. Zero at
+        /// touch-down, left as it was on release (like `DragDistance01`).
+        public Vector2 StickOffset { get; private set; }
 
         int wheelId = NoTouch;
         Vector2 anchorPoint;   // GUI space, where the thumb went down
@@ -118,6 +126,7 @@ namespace SeaSick.Ship
             wheelId = NoTouch;
             HasDragDirection = false;
             DragDistance01 = 0f;
+            StickOffset = Vector2.zero;
             fade = 0f;
         }
 
@@ -140,6 +149,7 @@ namespace SeaSick.Ship
                 wheelId = NoTouch;
                 HasDragDirection = false;
                 DragDistance01 = 0f;
+                StickOffset = Vector2.zero;
                 fade = Mathf.Max(0f, fade - Time.deltaTime / FadeSeconds);
                 return;
             }
@@ -208,6 +218,7 @@ namespace SeaSick.Ship
             touchDownTime = Time.time;
             HasDragDirection = false;
             DragDistance01 = 0f;
+            StickOffset = Vector2.zero;
 
             // Freeze the camera's flattened basis for the whole drag — see
             // the class doc: the camera rotates with the ship, the drag must
@@ -228,6 +239,9 @@ namespace SeaSick.Ship
             Vector2 d = g - anchorPoint;
             float distPx = d.magnitude;
             DragDistance01 = ringRadiusPx > 0.01f ? distPx / ringRadiusPx : 0f;
+            // GUI y grows down; StickOffset is +y UP the screen.
+            StickOffset = ringRadiusPx > 0.01f
+                ? new Vector2(d.x, -d.y) / ringRadiusPx : Vector2.zero;
 
             if (DragDistance01 >= DeadZoneFrac)
             {
@@ -271,8 +285,18 @@ namespace SeaSick.Ship
         /// are `HelmInput`'s policy state, handed in so nothing here needs to
         /// know about `ShipMotor`. `currentHeadingDeg` is `motor.Heading`,
         /// for the compass needle's relative bearing.
+        ///
+        /// `direct` switches the drawing to direct-rudder mode: the compass
+        /// needle becomes a rudder indicator (`rudder`, -1 port .. 1
+        /// starboard), and the floating stick draws the rudder as the knob's
+        /// sideways offset on a horizontal track (`rudderStickX`, in ring
+        /// radii: where the thumb would have to be for the blade's CURRENT
+        /// angle, so the knob lags the thumb while the rudder catches up and
+        /// slides home when it springs back) and the latched throttle as a
+        /// vertical gauge beside the ring.
         public void Draw(float targetHeadingDeg, bool hasTarget, float throttleOrder,
-            bool astern, bool burning, float currentHeadingDeg, GUIContent orderWord)
+            bool astern, bool burning, float currentHeadingDeg, GUIContent orderWord,
+            bool direct = false, float rudder = 0f, float rudderStickX = 0f)
         {
             int u = HudLayout.Unit;
             float w = u * 9.2f;
@@ -284,14 +308,18 @@ namespace SeaSick.Ship
             if (Event.current.type != EventType.Repaint) return;
 
             DrawReadout(readoutRect, u, targetHeadingDeg, hasTarget, throttleOrder,
-                astern, burning, currentHeadingDeg, orderWord);
+                astern, burning, currentHeadingDeg, orderWord, direct, rudder);
 
             if (Dragging || fade > 0.001f)
-                DrawStick(u, astern, burning);
+            {
+                if (direct) DrawStickDirect(u, rudderStickX, throttleOrder, astern, burning);
+                else DrawStick(u, astern, burning);
+            }
         }
 
         void DrawReadout(Rect r, int u, float targetDeg, bool hasTarget, float throttle,
-            bool astern, bool burning, float currentDeg, GUIContent orderWord)
+            bool astern, bool burning, float currentDeg, GUIContent orderWord,
+            bool direct, float rudder)
         {
             UITheme.Rect(r, UITheme.Panel);
 
@@ -306,9 +334,14 @@ namespace SeaSick.Ship
             Ring(hub, dialR, u * 0.24f, UITheme.TextDim, 24);
             UITheme.Rect(new Rect(hub.x - 1.5f, hub.y - dialR - u * 0.22f, 3f, u * 0.4f),
                 UITheme.TextDim);
-            if (hasTarget)
+            // Direct-rudder mode: the same needle is the RUDDER angle
+            // indicator, hard over at `RudderDialDeg` either side of the
+            // lubber mark, so the one persistent readout says what the thumb
+            // is doing to the blade and shows it spring home after release.
+            if (direct || hasTarget)
             {
-                float rel = Mathf.DeltaAngle(currentDeg, targetDeg);
+                float rel = direct ? Mathf.Clamp(rudder, -1f, 1f) * RudderDialDeg
+                    : Mathf.DeltaAngle(currentDeg, targetDeg);
                 var prev = GUI.matrix;
                 GUIUtility.RotateAroundPivot(rel, hub);
                 var needleCol = astern ? UITheme.Warn : UITheme.Sea;
@@ -368,6 +401,68 @@ namespace SeaSick.Ship
                 UITheme.Rect(new Rect(mid.x - 1.5f, mid.y - len * 0.5f, 3f, len), knobCol);
                 GUI.matrix = prev;
             }
+        }
+
+        /// Needle swing, degrees, at full rudder on the readout dial.
+        const float RudderDialDeg = 35f;
+        /// Burn headroom on the stick's throttle gauge, as a multiple of full
+        /// ahead — the same ceiling the readout bar uses.
+        const float GaugeCeiling = 1.4f;
+
+        /// Direct-rudder stick: a horizontal rudder track through the anchor
+        /// with the knob sitting at the blade's CURRENT angle, and a vertical
+        /// throttle gauge beside the ring whose fill is the LATCHED order —
+        /// it does not follow the thumb back when it lifts, because the order
+        /// doesn't either.
+        void DrawStickDirect(int u, float rudderStickX, float throttle, bool astern, bool burning)
+        {
+            float a = fade;
+            float R = ringRadiusPx;
+            if (R <= 1f) return;
+            var deadCol = UITheme.TextDim; deadCol.a *= a;
+            var rimCol = UITheme.Track; rimCol.a *= a * 1.4f;
+            var dimCol = UITheme.TextDim; dimCol.a *= a * 0.8f;
+            var rudCol = Mathf.Abs(rudderStickX) > 0.98f ? UITheme.Warn : UITheme.Sea;
+            rudCol.a *= a;
+            var thrCol = burning || astern ? UITheme.Warn : UITheme.Sea;
+            thrCol.a *= a;
+            var notchCol = UITheme.Text; notchCol.a *= a;
+
+            Ring(anchorPoint, R * DeadZoneFrac, 3f, deadCol, 18);
+            Ring(anchorPoint, R, 4f, rimCol, 30);
+
+            // Rudder: a dim track rim to rim, a midships tick, a filled bar
+            // from midships out to the knob, and the knob itself.
+            float trackH = Mathf.Max(3f, u * 0.12f);
+            UITheme.Rect(new Rect(anchorPoint.x - R, anchorPoint.y - trackH * 0.5f,
+                2f * R, trackH), dimCol);
+            UITheme.Rect(new Rect(anchorPoint.x - 1.5f, anchorPoint.y - u * 0.35f,
+                3f, u * 0.7f), dimCol);
+            float kx = anchorPoint.x + Mathf.Clamp(rudderStickX, -1f, 1f) * R;
+            float barH = u * 0.3f;
+            UITheme.Rect(new Rect(Mathf.Min(anchorPoint.x, kx), anchorPoint.y - barH * 0.5f,
+                Mathf.Abs(kx - anchorPoint.x), barH), rudCol);
+            float knobSize = u * 0.9f;
+            UITheme.Rect(new Rect(kx - knobSize * 0.5f, anchorPoint.y - knobSize * 0.5f,
+                knobSize, knobSize), rudCol);
+
+            // Throttle gauge: 2R tall, centred on the anchor, on whichever
+            // side of the ring has room (a thumb that lands near the right
+            // edge of a portrait phone gets it on the left).
+            float gw = u * 0.45f;
+            float gx = anchorPoint.x + R + u * 0.6f;
+            if (gx + gw > Screen.width - u * 0.2f) gx = anchorPoint.x - R - u * 0.6f - gw;
+            float top = anchorPoint.y - R, bottom = anchorPoint.y + R;
+            float span = 1f + GaugeCeiling;                 // -1 (full astern) .. +ceiling (burn)
+            float YOf(float v) => bottom - (Mathf.Clamp(v, -1f, GaugeCeiling) + 1f) / span * (bottom - top);
+
+            UITheme.Rect(new Rect(gx, top, gw, bottom - top), rimCol);
+            float y0 = YOf(0f), yT = YOf(throttle);
+            UITheme.Rect(new Rect(gx, Mathf.Min(y0, yT), gw, Mathf.Abs(yT - y0)), thrCol);
+            // Notches: stop (wide) and full ahead, so "latched at full" and
+            // "latched at stop" read without reading a number.
+            UITheme.Rect(new Rect(gx - u * 0.2f, y0 - 1.5f, gw + u * 0.4f, 3f), notchCol);
+            UITheme.Rect(new Rect(gx, YOf(1f) - 1f, gw, 2f), notchCol);
         }
 
         /// A circle, out of the only primitive IMGUI has. Each segment resets

@@ -155,6 +155,13 @@ namespace SeaSick.Steamer
         /// a1 and a2 of the surge resistance; PaddleDrive solves against them.
         public float SurgeLinear { get => surgeLinear; set => surgeLinear = Mathf.Max(0f, value); }
         public float SurgeQuadratic { get => surgeQuadratic; set => surgeQuadratic = Mathf.Max(0f, value); }
+        /// Runtime multiplier on the surge resistance APPLIED to her, 1 = the
+        /// curve above. `PaddleDrive` writes `HandlingTuning.coastDownScale`
+        /// here while the telegraph is at stop, 1 otherwise. Deliberately not
+        /// folded into SurgeLinear/SurgeQuadratic: PaddleDrive solves its
+        /// thrust constant against those, and a coast knob must not move her
+        /// top speed.
+        public float SurgeDragScale { get; set; } = 1f;
         /// Immersed volume / design volume, clamped 0..1.
         public float Submersion { get; private set; }
         /// The same ratio unclamped -- > 1 is how deep she is pressed.
@@ -695,7 +702,8 @@ namespace SeaSick.Steamer
             // and rides in the mean of what is under her, not in whatever the
             // water is doing at one point.
             float uHull = Vector3.Dot(rb.linearVelocity - (AmbientFlow + meanOrbital), fwdFlat);
-            float surge = -mass * (surgeLinear * uHull + surgeQuadratic * uHull * Mathf.Abs(uHull)) * Submersion;
+            float surge = -mass * (surgeLinear * uHull + surgeQuadratic * uHull * Mathf.Abs(uHull)) * Submersion
+                * Mathf.Max(0f, SurgeDragScale);
             rb.AddForce(fwdFlat * surge);
 
             // ---- hull-frame damping torques ----
