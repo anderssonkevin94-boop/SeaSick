@@ -89,7 +89,10 @@ namespace SeaSick.World
 
         void Update()
         {
-            if (field == null) return;
+            // **Bind first** (2026-09-24): a one-off NullReferenceException in
+            // FaunaField.TryPoint came from an animal updating before `Bind`
+            // ran (no field, no seed). Nothing to do until it is bound.
+            if (field == null || rng == null) return;
             // Dead: the flop owns the transform until it is done with it, and
             // `Ground()` at the bottom of this would lift the carcass back out
             // of the turf every frame.

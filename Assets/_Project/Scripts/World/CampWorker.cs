@@ -49,7 +49,7 @@ namespace SeaSick.World
     /// report: a hauler stood in the middle of the building for ~40 s
     /// before putting the logs down; the fletcher "made arrows" before the
     /// logs were there; finished arrows went to the campfire). The ledger
-    /// only moves on 0.1-day steps (18 s at the playtest day length) and
+    /// only moves on `QuantumDays` steps (0.02 day = 3.6 s at the playtest day length; 0.1 day = 18 s until 2026-09-24) and
     /// times a trip on its own abstract legs at the hand's work factor, so
     /// "walk while `progress01` says walk" had the body at the drop-off long
     /// before the books put the load down. The body now works out WHEN the
@@ -1420,8 +1420,8 @@ namespace SeaSick.World
         /// held at the drop-off until it read 1. Three things put daylight
         /// between that and the books:
         ///
-        /// 1. The ledger only moves in 0.1-day steps (`QuantumDays`, 18 s
-        ///    at the playtest day length), so `progress01` is a staircase:
+        /// 1. The ledger only moves in `QuantumDays` steps (0.02 day = 3.6 s at
+        ///    the playtest day length; 18 s before 2026-09-24), so `progress01` is a staircase:
         ///    the "carry" stage was seen up to a step late and the deposit
         ///    lands up to a step after the continuous clock reaches 1.
         /// 2. The trip is paid at the hand's work factor (hunger floors it

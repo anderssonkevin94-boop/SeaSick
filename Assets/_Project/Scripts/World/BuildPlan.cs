@@ -351,7 +351,9 @@ namespace SeaSick.World
             outputSlots = 12,
             takes = Res.Timber,
             makes = Res.Boards,
-            rate = 3f,
+            // Informational only -- `Recipes.All` ("boards": 1 timber -> 3, 12 a
+            // hand-day since 2026-09-24) is what the ledger runs. Kept in step.
+            rate = 12f,
             prefab = "Settlement/sawmill",
             front = Vector3.forward,
         };

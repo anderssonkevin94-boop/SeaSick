@@ -2671,7 +2671,7 @@ namespace SeaSick.World
             if (!Watched) return;
             // Four times a second, not sixty: `CatchUp` reconciles the
             // props and the bodies as well as running the tick, and the
-            // tick itself only advances on a 0.1-day quantum anyway. A hut
+            // tick itself only advances on a `QuantumDays` quantum (3.6 s) anyway. A hut
             // that finishes a quarter of a second before it stands up is a
             // hut that stood up when it was finished; sixty passes of prop
             // reconciliation a second on a phone is not.

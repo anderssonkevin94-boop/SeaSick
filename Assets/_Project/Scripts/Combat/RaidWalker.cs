@@ -197,6 +197,20 @@ namespace SeaSick.Combat
         /// same stack a hand would, because it's the same pile.
         Vector3 PileSpot(string resource)
         {
+            // **The hut, once one stands** (2026-09-24): the goods moved off
+            // the fire ring into the Storage/Storehouse (`CampPiles`), so the
+            // raider goes where the goods are -- a stride outside the hut on
+            // his own side of it.
+            var hut = World.CampPiles.StoreBuildingOf(camp);
+            if (hut != null)
+            {
+                Vector3 face = hut.transform.position;
+                Vector3 dir = transform.position - face; dir.y = 0f;
+                if (dir.sqrMagnitude < 0.01f) dir = Vector3.forward;
+                Vector3 h = face + dir.normalized * 2.4f;
+                h.y = camp.GroundAt(h);
+                return h;
+            }
             float a = Mathf.Abs(resource.GetHashCode() % 360) * Mathf.Deg2Rad;
             var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
             Vector3 at = camp.CampCentre + outward * (PileRadius - PileStandOff);
