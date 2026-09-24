@@ -2543,6 +2543,7 @@ namespace SeaSick.World
             routeAt = 0;
             hasRoute = false;
             routeAge = 0f;
+            if (row != null) row.bodyBlocked = null;
         }
 
         Vector3 NextCorner(Vector3 here, Vector3 to, float dist, float dt)
@@ -2598,7 +2599,13 @@ namespace SeaSick.World
 
             // No route (yet, or at all): the old straight line -- but never
             // through a wall. Standing still for the frames a plan takes, or
-            // until a gate goes in, is the honest answer there.
+            // until a gate goes in, is the honest answer there. **And say
+            // so** (2026-09-24): the sheet reads `bodyBlocked`, because the
+            // books think he is working while his feet are at the fire.
+            if (row != null)
+                row.bodyBlocked = !hasRoute && straightCrosses && routeAge < 0f
+                    ? "walled off — no way round, needs a gate"
+                    : null;
             if (!hasRoute || routeAt >= route.Count) return straightCrosses ? here : to;
 
             // Retire corners we are already on top of, and never let the last

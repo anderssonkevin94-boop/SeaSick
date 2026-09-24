@@ -73,6 +73,11 @@ namespace SeaSick.World
         /// path does not freeze the camp), and by `Outpost.CatchUp` whenever
         /// nobody is watching. `WorkFactor` is zero while it is set.
         [System.NonSerialized] public bool walkingIn;
+        /// **What the BODY cannot do**, written by `CampWorker` and read by
+        /// `StallReason` only (never by the books): today just "walled off",
+        /// when the walk to his errand has no route and the straight line is
+        /// through a palisade. Null while he can move. 2026-09-24.
+        [System.NonSerialized] public string bodyBlocked;
         /// Hunting because the camp went hungry and this hand took it on
         /// itself (`OutpostLedger.FeedFirst`), not because the player said
         /// so. Only these are sent back once the camp is fed again.
@@ -2720,6 +2725,59 @@ namespace SeaSick.World
         /// Thin wrapper over `StallCause` so the two can never disagree.
         public bool Stalled(OutpostHand h) => StallCause(h) != null;
 
+        /// **Why no builder can lift a finger**: null while any queued site
+        /// still has clearing to do, is stocked and waiting to be raised, or
+        /// is short of something that exists somewhere to fetch. Otherwise
+        /// the oldest unstocked site's shortfall, e.g. "needs 6 stone for
+        /// the Hut — none in the store, no rock to quarry here". The same
+        /// tests `StartSiteTrip` makes, read without moving anything.
+        public string SiteShortfall()
+        {
+            if (sites == null) return null;
+            PendingBuild stuck = null;
+            for (int i = 0; i < sites.Count; i++)
+            {
+                var s = sites[i];
+                if (s == null || s.Complete) continue;
+                if (!s.Cleared || s.Stocked) return null;
+                if (stuck == null) stuck = s;
+            }
+            if (stuck == null) return null;
+            string list = null, hint = null;
+            for (int k = 0; k < 3; k++)
+            {
+                string res = k == 0 ? Res.Timber : k == 1 ? Res.Stone : Res.Brick;
+                int need = NetShort(stuck, res);
+                if (need <= 0 || SiteSourceExists(res)) continue;
+                string item = $"{need} {Friendly(res)}";
+                list = list == null ? item : list + ", " + item;
+                if (hint == null)
+                    hint = res == Res.Brick ? "the quarry makes brick"
+                         : res == Res.Stone ? "no rock to quarry here"
+                         : "no trees left to cut";
+            }
+            if (list == null) return null;   // a trip is about to start
+            return $"needs {list} for the {BuildPlans.Named(stuck.planId).label} — none in the store, {hint}";
+        }
+
+        /// Is there any of this to fetch for a site: the store, a station's
+        /// output rack, or (timber and stone) the ground. Mirrors the order
+        /// `StartSiteTrip` looks in.
+        bool SiteSourceExists(string res)
+        {
+            var pile = Store(res);
+            if (pile != null && pile.whole > 0) return true;
+            if (stations != null)
+                for (int i = 0; i < stations.Count; i++)
+                {
+                    var row = stations[i]?.Rack(res);
+                    if (row != null && row.whole > 0) return true;
+                }
+            if (res == Res.Brick) return false;
+            var stock = Stock(res);
+            return stock != null && stock.standing >= 1f - 1e-4f;
+        }
+
         /// Null while producing, else the reason -- lower-case sentence
         /// fragment, for the sheets. **Not the same set as `Stalled`**:
         /// walking up from the landing and working hungry both stop a hand
@@ -2731,6 +2789,9 @@ namespace SeaSick.World
         {
             if (h == null) return null;
             if (h.walkingIn) return "still on the way up from the ship";
+            // The body's own reason first (walled off): the books say he is
+            // working, the feet say he cannot get there. Display only.
+            if (!string.IsNullOrEmpty(h.bodyBlocked)) return h.bodyBlocked;
             string cause = StallCause(h);
             if (cause != null) return cause;
             // **Slow, and why, 2026-09-24** (Kevin: plank making "far too
@@ -2759,7 +2820,17 @@ namespace SeaSick.World
             // Nothing unstocked left in the QUEUE, not "nothing sited": a
             // builder whose site is stocked has the next drawing to serve.
             if (h.order == OutpostOrder.Build)
-                return Focus == null ? "nothing sited to build" : null;
+            {
+                if (Focus == null) return "nothing sited to build";
+                // **Standing at the fire with a site queued, 2026-09-24**
+                // (Kevin: three builders "just go and stand by the camp fire
+                // ... it's not clear why they won't work"): every site was
+                // cleared but not stocked, and the material it is short of is
+                // nowhere -- not in the store, not on a rack, not standing in
+                // the ground -- so `BuilderDay` could start no trip. Named
+                // here so the sheet says so. A hauler mid-trip is working.
+                return h.Hauling ? null : SiteShortfall();
+            }
             if (h.order == OutpostOrder.Gather)
             {
                 var stock = Stock(h.target);
@@ -3007,6 +3078,11 @@ namespace SeaSick.World
                 return ahead == 1
                     ? "Waiting its turn: the builders finish the site before it first."
                     : $"Waiting its turn: {ahead} sites ahead of it in the queue.";
+            // First in the queue and nobody moving (2026-09-24): the material
+            // is nowhere to be had. Say which, and where it could come from.
+            string shortfall = SiteShortfall();
+            if (shortfall != null)
+                return "Waiting on materials: " + shortfall + ". Send a hand for it, or order it made.";
             return "";
         }
 
