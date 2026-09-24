@@ -1,0 +1,114 @@
+{
+    "schemaVersion": 1,
+    "id": "deck.upper.partial.placeholder",
+    "version": 1,
+    "kind": "UpperDeck",
+    "family": "study-C-oversized-deck",
+    "status": "placeholder",
+    "displayName": "Partial raised deck (placeholder)",
+    "description": "Raised working deck, walking plane Z 4.42 over the main deck 1.76 (2.66 u = 1.33 m headroom at 0.5 m/u, LESS than a 1.7 m crew). No mesh in this milestone.",
+    "source": "docs/modular-reference/study-C-oversized-deck-manifest.json",
+    "lengthU": 0,
+    "boundsMinU": {"x": 5.7, "y": -3.695, "z": 1.76},
+    "boundsMaxU": {"x": 9.65, "y": 3.695, "z": 4.42},
+    "boundsNote": "PLACEHOLDER: box spanning the four cannon clearances down to the main deck; the real deck outline is not delivered.",
+    "sockets": [
+        {
+            "id": "CannonSocket_Starboard_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 6.6, "y": -2.92, "z": 4.42},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Study C-oversized-deck, converted to stern-local X by +11.55 (study wheel socket -10.83 -> stern 0.72). Layout placeholder; not gameplay validated."
+        },
+        {
+            "id": "CannonSocket_Starboard_2",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 8.75, "y": -2.92, "z": 4.42},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Study C-oversized-deck, converted to stern-local X by +11.55 (study wheel socket -10.83 -> stern 0.72). Layout placeholder; not gameplay validated."
+        },
+        {
+            "id": "CannonSocket_Port_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 6.6, "y": 2.92, "z": 4.42},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Study C-oversized-deck, converted to stern-local X by +11.55 (study wheel socket -10.83 -> stern 0.72). Layout placeholder; not gameplay validated."
+        },
+        {
+            "id": "CannonSocket_Port_2",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 8.75, "y": 2.92, "z": 4.42},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Study C-oversized-deck, converted to stern-local X by +11.55 (study wheel socket -10.83 -> stern 0.72). Layout placeholder; not gameplay validated."
+        }
+    ],
+    "visuals": [],
+    "equipmentSlots": [
+        {
+            "id": "CannonSocket_Starboard_1",
+            "socketId": "CannonSocket_Starboard_1",
+            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "clearance_box_local (1.8,1.55,1.65) from the study manifest. Study C-oversized-deck, converted to stern-local X by +11.55 (study wheel socket -10.83 -> stern 0.72). Layout placeholder; not gameplay validated."
+        },
+        {
+            "id": "CannonSocket_Starboard_2",
+            "socketId": "CannonSocket_Starboard_2",
+            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "clearance_box_local (1.8,1.55,1.65) from the study manifest. Study C-oversized-deck, converted to stern-local X by +11.55 (study wheel socket -10.83 -> stern 0.72). Layout placeholder; not gameplay validated."
+        },
+        {
+            "id": "CannonSocket_Port_1",
+            "socketId": "CannonSocket_Port_1",
+            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "clearance_box_local (1.8,1.55,1.65) from the study manifest. Study C-oversized-deck, converted to stern-local X by +11.55 (study wheel socket -10.83 -> stern 0.72). Layout placeholder; not gameplay validated."
+        },
+        {
+            "id": "CannonSocket_Port_2",
+            "socketId": "CannonSocket_Port_2",
+            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "clearance_box_local (1.8,1.55,1.65) from the study manifest. Study C-oversized-deck, converted to stern-local X by +11.55 (study wheel socket -10.83 -> stern 0.72). Layout placeholder; not gameplay validated."
+        }
+    ],
+    "passages": [
+        {
+            "id": "CrewPassage_Upper",
+            "centreU": {"x": 7.675, "y": 0, "z": 6.12},
+            "sizeU": {"x": 3.95, "y": 4.29, "z": 3.4},
+            "provisional": true,
+            "notes": "PROVISIONAL: spans the cannon row (X 5.70-9.65) between the port and starboard cannon clearances (|y| <= 2.92 - 0.775). Astra's CrewPassage_Upper empty (stern-local X 7.95) lies inside it."
+        }
+    ],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "fitting": {"socketClass": "deck.upper.placeholder", "originNote": "stern origin"}
+}

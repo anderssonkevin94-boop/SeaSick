@@ -1,0 +1,50 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.middle.w2broad.placeholder",
+    "version": 1,
+    "kind": "Middle",
+    "family": "W2-placeholder",
+    "status": "placeholder",
+    "displayName": "Broad middle (W2, placeholder)",
+    "description": "Stand-in for a future broader hull family. No geometry, no numbers of its own.",
+    "source": "none",
+    "lengthU": 6.0,
+    "boundsMinU": {"x": 0, "y": -4.85, "z": -1.92},
+    "boundsMaxU": {"x": 6.0, "y": 4.85, "z": 2.47},
+    "boundsNote": "PLACEHOLDER: box copied from the W1-r2 midship so it can be drawn; not a W2 measurement.",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.aft",
+            "standard": "W2-placeholder",
+            "posU": {"x": 0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.fwd",
+            "standard": "W2-placeholder",
+            "posU": {"x": 6.0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": "Length copied from W1-r2 for drawing only."
+        }
+    ],
+    "visuals": [],
+    "equipmentSlots": [],
+    "passages": [],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    }
+}

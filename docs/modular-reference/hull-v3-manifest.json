@@ -1,0 +1,279 @@
+{
+  "standard": "W1-r2",
+  "coordinates": "Blender +X bow, +Y port, +Z up; unchanged V8 authoring units",
+  "cross_section": {
+    "deck_beam": 9.28,
+    "deck_height": 1.76,
+    "keel_height": -1.92
+  },
+  "modules": {
+    "Stern_W1": {
+      "length": 9.3,
+      "origin": "aft connection plane, ship height datum",
+      "aft_socket": [
+        0,
+        0,
+        0
+      ],
+      "forward_socket": [
+        9.3,
+        0,
+        0
+      ],
+      "files": [
+        "models/Stern_W1/Hull_Shell.fbx",
+        "models/Stern_W1/Rails_Teal.fbx",
+        "models/Stern_W1/Hull_Ironwork.fbx",
+        "models/Stern_W1/Plank_Seams.fbx",
+        "models/Stern_W1/Housing_Lid.fbx",
+        "models/Stern_W1/Housing_Ironwork.fbx",
+        "models/Stern_W1/Housing_AccessPanel.fbx",
+        "models/Stern_W1/Helm.fbx"
+      ],
+      "triangles": 4502
+    },
+    "Midship_W1": {
+      "length": 6.0,
+      "origin": "aft connection plane, ship height datum",
+      "aft_socket": [
+        0,
+        0,
+        0
+      ],
+      "forward_socket": [
+        6.0,
+        0,
+        0
+      ],
+      "files": [
+        "models/Midship_W1/Hull_Shell.fbx",
+        "models/Midship_W1/Rails_Teal.fbx",
+        "models/Midship_W1/Hull_Ironwork.fbx",
+        "models/Midship_W1/Plank_Seams.fbx"
+      ],
+      "triangles": 962
+    },
+    "Bow_W1": {
+      "length": 10.979999542236328,
+      "origin": "aft connection plane, ship height datum",
+      "aft_socket": [
+        0,
+        0,
+        0
+      ],
+      "forward_socket": [
+        10.979999542236328,
+        0,
+        0
+      ],
+      "files": [
+        "models/Bow_W1/Hull_Shell.fbx",
+        "models/Bow_W1/Rails_Teal.fbx",
+        "models/Bow_W1/Hull_Ironwork.fbx",
+        "models/Bow_W1/Plank_Seams.fbx",
+        "models/Bow_W1/Prow.fbx"
+      ],
+      "triangles": 2198
+    }
+  },
+  "assemblies": {
+    "short": {
+      "midship_count": 0,
+      "stern_position": [
+        0,
+        0,
+        0
+      ],
+      "midship_first_position": [
+        9.3,
+        0,
+        0
+      ],
+      "bow_position": [
+        9.3,
+        0,
+        0
+      ],
+      "length": 20.27999954223633
+    },
+    "long": {
+      "midship_count": 1,
+      "stern_position": [
+        0,
+        0,
+        0
+      ],
+      "midship_first_position": [
+        9.3,
+        0,
+        0
+      ],
+      "bow_position": [
+        15.3,
+        0,
+        0
+      ],
+      "length": 26.27999954223633
+    }
+  },
+  "wheel": {
+    "mount": "M1",
+    "socket_stern_local": [
+      0.7200002670288086,
+      0.0,
+      0.3499999940395355
+    ],
+    "rotor_file": "models/Fittings/Rotor.fbx",
+    "carrier_file": "models/Fittings/Carrier.fbx",
+    "spin_axis_blender": "Y",
+    "spin_axis_game": "X"
+  },
+  "chimney": {
+    "file": "models/Fittings/Chimney.fbx",
+    "origin": "base centre",
+    "placement": "(assembled length / 2, 0, 1.76) in Blender"
+  },
+  "export_axes": "Existing V8 FBX convention: Blender (x,y,z) location maps to game (-y,z,x).",
+  "sockets": {
+    "Stern_W1__AftSocket": {
+      "parent": "Stern_W1",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Stern_W1__ForwardSocket": {
+      "parent": "Stern_W1",
+      "position": [
+        9.300000190734863,
+        0.0,
+        0.0
+      ]
+    },
+    "Stern_W1__DeckSlot_2_-1": {
+      "parent": "Stern_W1",
+      "position": [
+        5.5,
+        -3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "Stern_W1__DeckSlot_2_1": {
+      "parent": "Stern_W1",
+      "position": [
+        5.5,
+        3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "Midship_W1__AftSocket": {
+      "parent": "Midship_W1",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Midship_W1__ForwardSocket": {
+      "parent": "Midship_W1",
+      "position": [
+        6.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Midship_W1__DeckSlot_0_-1": {
+      "parent": "Midship_W1",
+      "position": [
+        1.5,
+        -3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "Midship_W1__DeckSlot_0_1": {
+      "parent": "Midship_W1",
+      "position": [
+        1.5,
+        3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "Midship_W1__DeckSlot_1_-1": {
+      "parent": "Midship_W1",
+      "position": [
+        3.5,
+        -3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "Midship_W1__DeckSlot_1_1": {
+      "parent": "Midship_W1",
+      "position": [
+        3.5,
+        3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "Bow_W1__AftSocket": {
+      "parent": "Bow_W1",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "Bow_W1__ForwardSocket": {
+      "parent": "Bow_W1",
+      "position": [
+        10.979999542236328,
+        0.0,
+        0.0
+      ]
+    },
+    "Bow_W1__DeckSlot_0_-1": {
+      "parent": "Bow_W1",
+      "position": [
+        1.5,
+        -3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "Bow_W1__DeckSlot_0_1": {
+      "parent": "Bow_W1",
+      "position": [
+        1.5,
+        3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "Bow_W1__DeckSlot_1_-1": {
+      "parent": "Bow_W1",
+      "position": [
+        3.5,
+        -3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "Bow_W1__DeckSlot_1_1": {
+      "parent": "Bow_W1",
+      "position": [
+        3.5,
+        3.450000047683716,
+        1.7599999904632568
+      ]
+    },
+    "WheelModuleSocket": {
+      "parent": "Stern_W1",
+      "position": [
+        0.7200002670288086,
+        0.0,
+        0.3499999940395355
+      ]
+    }
+  },
+  "status": "Offline prototype; no colliders, LODs, navigation, balance or Unity import.",
+  "bow_revision": "V3: raked bow, carved timber head, iron shoe and flush brass diamond",
+  "compatibility": "W1-r2 interface unchanged; V2 stern/middle and M1 wheel remain compatible.",
+  "bow_length_note": "Bow length includes the decorative prow; stern and middle lengths are unchanged."
+}

@@ -1,0 +1,299 @@
+using System;
+using UnityEngine;
+
+namespace SeaSick.Ship.Modular
+{
+    // ---------------------------------------------------------------------
+    // The modular-ship DATA CONTRACT (milestone 1). Plain [Serializable]
+    // classes with public fields, so JsonUtility reads and writes them and
+    // a missing field keeps the value written here. Every top-level
+    // document carries its own schemaVersion; every module carries its own
+    // content `version`. See docs/MODULAR-SHIPS.md for the field-by-field
+    // description and the rules Astra's deliveries follow.
+    //
+    // All positions and sizes in these classes are in AUTHORING units
+    // ("V8 units") on Blender's axes: +X bow, +Y port, +Z up. Nothing here
+    // is in game metres; ModularScale is the one place that converts.
+    // ---------------------------------------------------------------------
+
+    /// String constants for `ModuleDef.kind`. Strings, not an enum, because
+    /// JsonUtility writes enums as integers and a reordered enum would
+    /// silently re-type every module file.
+    public static class ModuleKind
+    {
+        public const string Stern = "Stern";
+        public const string Middle = "Middle";
+        public const string Bow = "Bow";
+        public const string Rotor = "Rotor";
+        public const string Carrier = "Carrier";
+        public const string Fitting = "Fitting";
+        public const string UpperDeck = "UpperDeck";
+        public const string Equipment = "Equipment";
+
+        public static readonly string[] All = { Stern, Middle, Bow, Rotor, Carrier, Fitting, UpperDeck, Equipment };
+
+        public static bool IsKnown(string kind) => Array.IndexOf(All, kind) >= 0;
+        public static bool IsHull(string kind) => kind == Stern || kind == Middle || kind == Bow;
+    }
+
+    /// String constants for `ModuleDef.status`.
+    public static class ModuleStatus
+    {
+        /// Real authored geometry that is still a reference prototype.
+        public const string Prototype = "prototype";
+        /// No real geometry; the view draws a marked grey box. Assembles, but
+        /// is listed in AssemblyResult.placeholders so UI can flag it.
+        public const string Placeholder = "placeholder";
+        /// Kept only so the rules can be tested against it (e.g. the V1 W1
+        /// middle). Never offered to a player.
+        public const string IncompatibleReference = "incompatible-reference";
+        /// Signed off by Kevin and Astra (none yet).
+        public const string Approved = "approved";
+    }
+
+    /// String constants for `SocketDef.role`.
+    public static class SocketRole
+    {
+        /// The ship's aft end on a stern (not a join; no standard).
+        public const string HullOrigin = "hull.origin";
+        /// A join to the section aft of this one (standard = JoinProfile).
+        public const string HullAft = "hull.aft";
+        /// A join to the section forward of this one (standard = JoinProfile).
+        public const string HullFwd = "hull.fwd";
+        /// The bow's forward extreme, prow included (not a join; no standard).
+        public const string HullTip = "hull.tip";
+        public const string Wheel = "wheel";
+        public const string FittingChimney = "fitting.chimney";
+        public const string DeckUpper = "deck.upper";
+        public const string DeckSlot = "deck.slot";
+        public const string DeckArea = "deck.area";
+    }
+
+    /// String constants for `SocketDef.placementRule`.
+    public static class PlacementRule
+    {
+        /// Use posU as written (module-local).
+        public const string Fixed = "";
+        /// X is replaced by the midpoint between the stern's aft interface and
+        /// the bow's forward socket (the "assembled ship midpoint" of the V3
+        /// README); Y and Z are taken from posU.
+        public const string AssembledMidpoint = "assembled-midpoint";
+    }
+
+    // ---- standards.json --------------------------------------------------
+
+    [Serializable]
+    public class ModuleStandards
+    {
+        public int schemaVersion = 1;
+        /// The ONE authoring-unit -> metre conversion. Uniform on all axes.
+        public float metresPerUnit;
+        public string axisConvention;
+        /// Upper limit on repeated middle sections (Astra verified 0-3 bays).
+        public int maxMiddles;
+        public JoinProfile[] joinProfiles;
+        public MountStandard[] mountStandards;
+        public SlotClass[] slotClasses;
+        public string notes;
+    }
+
+    /// A hull cross-section interface. Two hull sections may join only if the
+    /// forward socket of one and the aft socket of the next name the SAME
+    /// profile id. Names of the modules are irrelevant.
+    [Serializable]
+    public class JoinProfile
+    {
+        public string id;
+        public int version;
+        public string status;
+        public int profilePoints;
+        public float halfBeamU;
+        public float deckZU;
+        public float keelZU;
+        public string description;
+        public string sourceNote;
+    }
+
+    /// A wheel mount interface (stern pocket + carrier + rotor).
+    [Serializable]
+    public class MountStandard
+    {
+        public string id;
+        public int version;
+        public string status;
+        /// Reference rotor for this mount (the rotor authored against it).
+        public float nominalRadius;
+        public float sweptRadius;
+        public float paddleWidth;
+        /// Largest swept radius the pocket accepts.
+        public float radiusLimit;
+        /// Absolute authoring Z of the pocket ceiling (study README).
+        public float pocketCeilingZU;
+        public string description;
+        public string sourceNote;
+    }
+
+    /// A vocabulary entry for fitting sockets and equipment slots.
+    [Serializable]
+    public class SlotClass
+    {
+        public string id;
+        public string description;
+    }
+
+    // ---- one module file -------------------------------------------------
+
+    [Serializable]
+    public class ModuleDef
+    {
+        public int schemaVersion = 1;
+        /// Stable, dotted, never reused ("hull.stern.w1r2.v3"). Saves and
+        /// configurations refer to modules by this id only.
+        public string id;
+        /// Content revision of this id. Bump for a compatible change (same
+        /// interfaces, same socket meanings); an incompatible change gets a
+        /// NEW id instead.
+        public int version = 1;
+        public string kind;
+        /// Interface family, e.g. "W1-r2". Informational; compatibility is
+        /// decided by socket standards, never by family or file names.
+        public string family;
+        public string status;
+        public string displayName;
+        public string description;
+        public string source;
+        /// Length along +X from the aft interface (hull sections).
+        public float lengthU;
+        /// Module-local authoring AABB (placeholder boxes, overall extents).
+        public Vector3 boundsMinU;
+        public Vector3 boundsMaxU;
+        public string boundsNote;
+        public SocketDef[] sockets;
+        /// Purely visual. Swapping these never changes placement or rules.
+        public VisualPart[] visuals;
+        public RotorSpec rotor;
+        public CarrierSpec carrier;
+        public FittingSpec fitting;
+        public EquipmentSpec equipment;
+        public EquipmentSlotDef[] equipmentSlots;
+        public PassageDef[] passages;
+        /// Future gameplay numbers. ALL unset in milestone 1.
+        public PhysicalSpec physical;
+    }
+
+    [Serializable]
+    public class SocketDef
+    {
+        public string id;
+        public string role;
+        /// A JoinProfile id (hull sockets), a MountStandard id (wheel
+        /// sockets) or a SlotClass id (fitting / slot sockets).
+        public string standard;
+        /// Module-local authoring position.
+        public Vector3 posU;
+        /// Rotation about authoring +Z (degrees, counter-clockwise seen from
+        /// above, i.e. bow towards port). Only equipment uses it today.
+        public float yawDeg;
+        /// Wheel sockets: largest rotor swept radius this pocket takes.
+        public float radiusLimit;
+        public string placementRule;
+        public bool provisional;
+        public string notes;
+    }
+
+    [Serializable]
+    public class VisualPart
+    {
+        public string id;
+        /// Resources path without extension, e.g.
+        /// "ShipModules/Meshes/HullW1r2_v3/Stern_W1/Hull_Shell".
+        public string resourcePath;
+        public bool placeholder;
+        public string notes;
+    }
+
+    [Serializable]
+    public class RotorSpec
+    {
+        public string mount;
+        public float nominalRadius;
+        public float sweptRadius;
+        public float paddleWidth;
+        public string notes;
+    }
+
+    [Serializable]
+    public class CarrierSpec
+    {
+        public string mount;
+        public string notes;
+    }
+
+    [Serializable]
+    public class FittingSpec
+    {
+        /// The SlotClass id of the socket this fitting plugs into.
+        public string socketClass;
+        public string originNote;
+    }
+
+    [Serializable]
+    public class EquipmentSpec
+    {
+        public string equipmentClass;
+        /// Footprint box: X along the socket's forward, Y across, Z up.
+        public Vector3 footprintU;
+        public bool placeholder;
+        public string notes;
+    }
+
+    /// A place equipment can stand. Its clearance box has its BASE CENTRE at
+    /// the socket: x in [s.x - size.x/2, s.x + size.x/2], same for y,
+    /// z in [s.z, s.z + size.z].
+    [Serializable]
+    public class EquipmentSlotDef
+    {
+        public string id;
+        public string socketId;
+        public Vector3 clearanceSizeU;
+        public string[] classes;
+        public bool provisional;
+        public string notes;
+    }
+
+    /// A crew-passage exclusion: no equipment may overlap this box.
+    /// Centre + full size, module-local.
+    [Serializable]
+    public class PassageDef
+    {
+        public string id;
+        public Vector3 centreU;
+        public Vector3 sizeU;
+        public bool provisional;
+        public string notes;
+    }
+
+    /// Future mass / buoyancy / capacity / propulsion inputs. Deliberately a
+    /// separate block from geometry: NONE of these may be derived from mesh
+    /// size, section length or wheel radius (a bigger wheel is not a faster
+    /// ship). Every field stays `authored = false` until Kevin sets numbers.
+    [Serializable]
+    public class PhysicalSpec
+    {
+        public AuthoredValue massKg;
+        public AuthoredValue displacementM3;
+        public AuthoredValue cargoCapacity;
+        public AuthoredValue crewCapacity;
+        public AuthoredValue thrustCoefficient;
+        public string notes;
+    }
+
+    /// Nullable-by-convention number (JsonUtility has no nullables).
+    [Serializable]
+    public class AuthoredValue
+    {
+        public bool authored;
+        public float value;
+        public string source;
+    }
+}

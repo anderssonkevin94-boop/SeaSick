@@ -1,0 +1,41 @@
+{
+    "schemaVersion": 1,
+    "id": "wheel.rotor.m1l.oversized",
+    "version": 1,
+    "kind": "Rotor",
+    "family": "M1-L",
+    "status": "prototype",
+    "displayName": "Oversized wheel (M1-L)",
+    "description": "Paddle-wheel rotor. A bigger wheel is NOT a faster ship: propulsion is not authored. Needs an M1-L stern pocket, housing and carrier, none of which exist for W1-r2 yet.",
+    "source": "art-staging/modular-ship-study-v1/C-oversized/manifest.json",
+    "lengthU": 0,
+    "boundsMinU": {"x": -2.15, "y": -2.3, "z": -2.15},
+    "boundsMaxU": {"x": 2.15, "y": 2.3, "z": 2.15},
+    "boundsNote": "Measured 2026-09-24: union of the module's FBX vertex bounds (Blender re-import), authoring axes.",
+    "sockets": [],
+    "visuals": [
+        {
+            "id": "Rotor",
+            "resourcePath": "ShipModules/Meshes/Wheels/M1L_Oversized/Rotor",
+            "placeholder": false,
+            "notes": "Axle-local (origin = axle centre). Rotate ONLY this, about game X."
+        }
+    ],
+    "equipmentSlots": [],
+    "passages": [],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "rotor": {
+        "mount": "M1-L",
+        "nominalRadius": 2.15,
+        "sweptRadius": 2.1516797,
+        "paddleWidth": 4.16,
+        "notes": "spin axis Blender Y / game X"
+    }
+}

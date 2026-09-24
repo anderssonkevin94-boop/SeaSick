@@ -1,0 +1,52 @@
+{
+  "variant": "A-timber",
+  "coordinates": "Blender +X bow, +Y port, +Z up; dimensions in unchanged V8 authoring units",
+  "rotor": {
+    "file": "models/Rotor.fbx",
+    "origin": "axle centre",
+    "installed_blender_position": [
+      -10.829999923706055,
+      0.0,
+      0.3499999940395355
+    ],
+    "game_position": [
+      0,
+      0.35,
+      -10.83
+    ],
+    "blender_spin_axis": "Y",
+    "game_spin_axis": "X",
+    "nominal_radius": 1.62,
+    "swept_radius": 1.6222284104285425,
+    "paddle_width": 4.16
+  },
+  "carrier": {
+    "file": "models/Carrier.fbx",
+    "origin": "axle centre",
+    "mount": "M1"
+  },
+  "fixed_meshes": "Hull-origin local, at zero. Rotor and Carrier alone must be translated to the socket.",
+  "sockets": {
+    "WheelModuleSocket": {
+      "position_blender": [
+        -10.829999923706055,
+        0.0,
+        0.3499999940395355
+      ],
+      "metadata": {
+        "mount_standard": "M1",
+        "rotor_width": 4.16,
+        "radius_limit": 1.64
+      }
+    },
+    "WheelServiceAccess": {
+      "position_blender": [
+        -7.300000190734863,
+        0.0,
+        1.7599999904632568
+      ],
+      "metadata": {}
+    }
+  },
+  "integration_status": "OFFLINE REVIEW ONLY. No Unity import, scale calibration, colliders, LODs, navigation or balance included."
+}

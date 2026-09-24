@@ -1,0 +1,33 @@
+{
+    "schemaVersion": 1,
+    "id": "equipment.cannon.placeholder",
+    "version": 1,
+    "kind": "Equipment",
+    "family": "equipment",
+    "status": "placeholder",
+    "displayName": "Cannon (placeholder)",
+    "description": "Layout stand-in for a deck gun. Footprint = the study's clearance box. NOT a balance or weapon definition.",
+    "source": "none",
+    "lengthU": 0,
+    "boundsMinU": {"x": -0.9, "y": -0.775, "z": 0},
+    "boundsMaxU": {"x": 0.9, "y": 0.775, "z": 1.65},
+    "boundsNote": "PLACEHOLDER: equals the footprint.",
+    "sockets": [],
+    "visuals": [],
+    "equipmentSlots": [],
+    "passages": [],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "equipment": {
+        "equipmentClass": "equipment.deck-gun",
+        "footprintU": {"x": 1.8, "y": 1.55, "z": 1.65},
+        "placeholder": true,
+        "notes": "Footprint copied from the study cannon clearance; not measured from a cannon mesh."
+    }
+}

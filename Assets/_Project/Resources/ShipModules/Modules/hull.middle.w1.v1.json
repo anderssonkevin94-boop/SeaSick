@@ -1,0 +1,50 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.middle.w1.v1",
+    "version": 1,
+    "kind": "Middle",
+    "family": "W1",
+    "status": "incompatible-reference",
+    "displayName": "Midship_W1 (V1)",
+    "description": "V1 middle bay on the OLD W1 profile. Kept only so the join rule can be tested; never offered to players.",
+    "source": "docs/modular-reference/hull-v1-manifest.json",
+    "lengthU": 6.0,
+    "boundsMinU": {"x": 0, "y": -4.75, "z": -1.92},
+    "boundsMaxU": {"x": 6.0, "y": 4.75, "z": 1.76},
+    "boundsNote": "Cross-section extents from V1 interfaces.json (half-beam 4.75); rails not measured.",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.aft",
+            "standard": "W1",
+            "posU": {"x": 0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.fwd",
+            "standard": "W1",
+            "posU": {"x": 6.0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        }
+    ],
+    "visuals": [],
+    "equipmentSlots": [],
+    "passages": [],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    }
+}

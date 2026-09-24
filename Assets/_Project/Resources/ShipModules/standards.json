@@ -1,0 +1,76 @@
+{
+    "schemaVersion": 1,
+    "metresPerUnit": 0.5,
+    "axisConvention": "authoring = Blender V8 units, +X bow, +Y port, +Z up; game = (-y, z, x) * metresPerUnit (game +Z bow, +X starboard, +Y up)",
+    "maxMiddles": 3,
+    "notes": "metresPerUnit 0.5 decided 2026-09-24 (uniform; see docs/MODULAR-SHIPS.md for the derivation). maxMiddles 3 = the bay counts Astra verified closed in Blender (0-3).",
+    "joinProfiles": [
+        {
+            "id": "W1-r2",
+            "version": 2,
+            "status": "prototype",
+            "profilePoints": 22,
+            "halfBeamU": 4.64,
+            "deckZU": 1.76,
+            "keelZU": -1.92,
+            "description": "Hull cross-section interface of the V2 and V3 modular hull families (deck beam 9.28).",
+            "sourceNote": "art-staging/modular-hull-family-v3/manifest.json + interfaces.json (Hull_Shell loop: 22 points, half-beam 4.64)"
+        },
+        {
+            "id": "W1",
+            "version": 1,
+            "status": "incompatible-reference",
+            "profilePoints": 28,
+            "halfBeamU": 4.75,
+            "deckZU": 1.76,
+            "keelZU": -1.92,
+            "description": "V1 hull cross-section. Same section names and lengths as W1-r2 but a DIFFERENT shape; never joins W1-r2.",
+            "sourceNote": "art-staging/modular-hull-family-v1/interfaces.json (Hull_Shell loop: 28 points, half-beam 4.75)"
+        },
+        {
+            "id": "W2-placeholder",
+            "version": 0,
+            "status": "placeholder",
+            "profilePoints": 0,
+            "halfBeamU": 0,
+            "deckZU": 0,
+            "keelZU": 0,
+            "description": "Reserved for a future broader hull family. Not authored; exists so a placeholder module can name it and be rejected against W1-r2.",
+            "sourceNote": "none (placeholder)"
+        }
+    ],
+    "mountStandards": [
+        {
+            "id": "M1",
+            "version": 1,
+            "status": "prototype",
+            "nominalRadius": 1.62,
+            "sweptRadius": 1.6222284,
+            "paddleWidth": 4.16,
+            "radiusLimit": 1.64,
+            "pocketCeilingZU": 2.17,
+            "description": "Standard stern wheel pocket, carrier and rotor interface. Timber and reinforced rotors both fit.",
+            "sourceNote": "art-staging/modular-ship-study-v1 README compatibility table + A-timber manifest WheelModuleSocket metadata"
+        },
+        {
+            "id": "M1-L",
+            "version": 1,
+            "status": "prototype",
+            "nominalRadius": 2.15,
+            "sweptRadius": 2.1516797,
+            "paddleWidth": 4.16,
+            "radiusLimit": 2.17,
+            "pocketCeilingZU": 2.72,
+            "description": "Enlarged stern pocket for the oversized rotor. Needs its own stern housing and carrier; NO W1-r2 stern offers it yet.",
+            "sourceNote": "art-staging/modular-ship-study-v1 README compatibility table + C-oversized manifest WheelModuleSocket metadata"
+        }
+    ],
+    "slotClasses": [
+        {"id": "fitting.chimney", "description": "Funnel/chimney fitting on the ship centreline."},
+        {
+            "id": "deck.upper.placeholder",
+            "description": "Mount for a partial raised deck. Placeholder interface: no stern authors it yet."
+        },
+        {"id": "equipment.deck-gun", "description": "Deck-mounted gun (cannon). Layout only; no balance."}
+    ]
+}

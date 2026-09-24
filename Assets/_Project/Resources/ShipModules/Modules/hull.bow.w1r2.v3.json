@@ -1,0 +1,166 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.bow.w1r2.v3",
+    "version": 1,
+    "kind": "Bow",
+    "family": "W1-r2",
+    "status": "prototype",
+    "displayName": "Bow_W1 (V3)",
+    "description": "Raked bow; length includes the decorative prow.",
+    "source": "art-staging/modular-hull-family-v3/manifest.json",
+    "lengthU": 10.98,
+    "boundsMinU": {"x": 0, "y": -4.84, "z": -1.92},
+    "boundsMaxU": {"x": 10.98, "y": 4.84, "z": 3.52},
+    "boundsNote": "Measured 2026-09-24: union of the module's FBX vertex bounds (Blender re-import), authoring axes.",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.aft",
+            "standard": "W1-r2",
+            "posU": {"x": 0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.tip",
+            "standard": "",
+            "posU": {"x": 10.98, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": "Tip of the decorative prow; not a join."
+        },
+        {
+            "id": "DeckSlot_0_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 1.5, "y": -3.45, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": ""
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 1.5, "y": 3.45, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": ""
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 3.5, "y": -3.45, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": ""
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {"x": 3.5, "y": 3.45, "z": 1.76},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": ""
+        }
+    ],
+    "visuals": [
+        {
+            "id": "Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1r2_v3/Bow_W1/Hull_Shell",
+            "placeholder": false,
+            "notes": ""
+        },
+        {
+            "id": "Rails_Teal",
+            "resourcePath": "ShipModules/Meshes/HullW1r2_v3/Bow_W1/Rails_Teal",
+            "placeholder": false,
+            "notes": ""
+        },
+        {
+            "id": "Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1r2_v3/Bow_W1/Hull_Ironwork",
+            "placeholder": false,
+            "notes": ""
+        },
+        {
+            "id": "Plank_Seams",
+            "resourcePath": "ShipModules/Meshes/HullW1r2_v3/Bow_W1/Plank_Seams",
+            "placeholder": false,
+            "notes": ""
+        },
+        {
+            "id": "Prow",
+            "resourcePath": "ShipModules/Meshes/HullW1r2_v3/Bow_W1/Prow",
+            "placeholder": false,
+            "notes": "Optional decorative prow; shares the bow origin."
+        }
+    ],
+    "equipmentSlots": [
+        {
+            "id": "DeckSlot_0_-1",
+            "socketId": "DeckSlot_0_-1",
+            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance borrowed from study C-oversized-deck CannonSocket clearance_box_local (1.8,1.55,1.65); main-deck slots are PROVISIONAL (V3 README: not verified cannon/crew placements)."
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "socketId": "DeckSlot_0_1",
+            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance borrowed from study C-oversized-deck CannonSocket clearance_box_local (1.8,1.55,1.65); main-deck slots are PROVISIONAL (V3 README: not verified cannon/crew placements)."
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "socketId": "DeckSlot_1_-1",
+            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance borrowed from study C-oversized-deck CannonSocket clearance_box_local (1.8,1.55,1.65); main-deck slots are PROVISIONAL (V3 README: not verified cannon/crew placements)."
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "socketId": "DeckSlot_1_1",
+            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "classes": ["equipment.deck-gun"],
+            "provisional": true,
+            "notes": "Clearance borrowed from study C-oversized-deck CannonSocket clearance_box_local (1.8,1.55,1.65); main-deck slots are PROVISIONAL (V3 README: not verified cannon/crew placements)."
+        }
+    ],
+    "passages": [
+        {
+            "id": "CrewPassage_Main",
+            "centreU": {"x": 2.2, "y": 0, "z": 3.46},
+            "sizeU": {"x": 4.4, "y": 5.35, "z": 3.4},
+            "provisional": true,
+            "notes": "PROVISIONAL centreline crew passage: |y| <= 2.675 = the clear band between the port and starboard deck-slot clearances (3.45 - 1.55/2); height 3.4 u = 1.7 m crew (WorldScale.Person) at 0.5 m/u. Runs to X 4.4, the forward edge of the last deck-slot clearance; the bow narrows beyond it."
+        }
+    ],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    }
+}

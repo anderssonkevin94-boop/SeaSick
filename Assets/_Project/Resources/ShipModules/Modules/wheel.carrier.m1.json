@@ -1,0 +1,35 @@
+{
+    "schemaVersion": 1,
+    "id": "wheel.carrier.m1",
+    "version": 1,
+    "kind": "Carrier",
+    "family": "M1",
+    "status": "prototype",
+    "displayName": "Wheel carrier (M1)",
+    "description": "Fixed bearings and frame. Never rotates.",
+    "source": "art-staging/modular-hull-family-v3 (Fittings/Carrier.fbx)",
+    "lengthU": 0,
+    "boundsMinU": {"x": -0.94, "y": -2.5, "z": -0.68},
+    "boundsMaxU": {"x": 0.43, "y": 2.5, "z": 1.98},
+    "boundsNote": "Measured 2026-09-24: union of the module's FBX vertex bounds (Blender re-import), authoring axes.",
+    "sockets": [],
+    "visuals": [
+        {
+            "id": "Carrier",
+            "resourcePath": "ShipModules/Meshes/Wheels/M1_Carrier/Carrier",
+            "placeholder": false,
+            "notes": "Axle-local; stays fixed."
+        }
+    ],
+    "equipmentSlots": [],
+    "passages": [],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "carrier": {"mount": "M1", "notes": ""}
+}

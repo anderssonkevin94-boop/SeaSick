@@ -1,0 +1,41 @@
+{
+    "schemaVersion": 1,
+    "id": "wheel.rotor.m1.timber",
+    "version": 1,
+    "kind": "Rotor",
+    "family": "M1",
+    "status": "prototype",
+    "displayName": "Timber wheel (M1)",
+    "description": "Paddle-wheel rotor. A bigger wheel is NOT a faster ship: propulsion is not authored.",
+    "source": "art-staging/modular-ship-study-v1/A-timber/manifest.json",
+    "lengthU": 0,
+    "boundsMinU": {"x": -1.62, "y": -2.3, "z": -1.62},
+    "boundsMaxU": {"x": 1.62, "y": 2.3, "z": 1.62},
+    "boundsNote": "Measured 2026-09-24: union of the module's FBX vertex bounds (Blender re-import), authoring axes.",
+    "sockets": [],
+    "visuals": [
+        {
+            "id": "Rotor",
+            "resourcePath": "ShipModules/Meshes/Wheels/M1_Timber/Rotor",
+            "placeholder": false,
+            "notes": "Axle-local (origin = axle centre). Rotate ONLY this, about game X."
+        }
+    ],
+    "equipmentSlots": [],
+    "passages": [],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "rotor": {
+        "mount": "M1",
+        "nominalRadius": 1.62,
+        "sweptRadius": 1.6222284,
+        "paddleWidth": 4.16,
+        "notes": "spin axis Blender Y / game X"
+    }
+}
