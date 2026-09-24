@@ -83,14 +83,31 @@ namespace SeaSick.Steamer
         [SerializeField, Range(0f, 1f)] float surgeAssistFadeEnd = 0.85f;
         [Tooltip("Extra braking, m/s^2 (x mass), when she is going faster than ordered (telegraph eased or stopped). Full once she is 25% of top speed over the order.")]
         [SerializeField] float brakeAssistAccel = 0.6f;
-        [Tooltip("Turning circle, in waterline lengths, that the yaw assist steers toward at full helm. The assist only pushes while her yaw rate is short of it and fades as the physics' own rate arrives, so it buys the bite, not the steady turn.")]
+        // SUPERSEDED at runtime (2026-09-24) by the yaw servo below and
+        // HandlingTuning (turnCircleLengths, yawTauBuild/Release,
+        // turnHeelDegrees). Kept so anything serialized against them loads.
+#pragma warning disable 0414
+        [Tooltip("SUPERSEDED by HandlingTuning.turnCircleLengths. Was: turning circle, in waterline lengths, the old fade-out yaw assist steered toward.")]
         [SerializeField] float assistTurnDiameterL = 3.5f;
-        [Tooltip("Yaw assist gain, 1/s: how hard the assist closes the gap between her yaw rate and the one the helm asks for.")]
+        [Tooltip("SUPERSEDED by yawTrackSeconds. Was: yaw assist gain, 1/s.")]
         [SerializeField] float yawAssistGain = 2.2f;
-        [Tooltip("Ceiling on the yaw assist, rad/s^2 of yaw acceleration.")]
+        [Tooltip("SUPERSEDED by yawServoMaxAccel. Was: ceiling on the yaw assist, rad/s^2.")]
         [SerializeField] float yawAssistMaxAccel = 0.5f;
-        [Tooltip("Heel INTO the turn at the assist's full-helm yaw rate, degrees, as a roll moment against her own roll stiffness. The hull's cross-flow still leans her ~4 deg OUT at full helm, so 8 nets ~4 deg in.")]
+        [Tooltip("SUPERSEDED by HandlingTuning.turnHeelDegrees (+ crossflowHeelPerAccel). Was: heel into the turn at the assist's full-helm rate, degrees.")]
         [SerializeField] float heelIntoTurnDeg = 8f;
+#pragma warning restore 0414
+
+        [Header("Yaw servo (HandlingTuning drives it; responsiveness 0 turns it off)")]
+        [Tooltip("Seconds: how tightly her actual yaw rate is held to the lagged reference. Small = the HandlingTuning lags are exactly what she does; the strip physics (rudder, cross-flow, yaw dampers, the sea) become disturbances it corrects. 0.12 s at 50 Hz is a loop gain of 0.17 per step, well inside stable.")]
+        [SerializeField, Range(0.05f, 1f)] float yawTrackSeconds = 0.12f;
+        [Tooltip("Seconds of low-pass on the estimate of what everything ELSE is doing to her yaw (hull damping, cross-flow, rudder, sea). The servo cancels that estimate, so the steady turn lands on the commanded rate instead of short of it by the hull's own damping (~1/s here, which would be ~15% short on tracking alone).")]
+        [SerializeField, Range(0.05f, 2f)] float yawDisturbanceSeconds = 0.25f;
+        [Tooltip("Ceiling on the servo's yaw acceleration, rad/s^2. Stops a collision or a glitch becoming a spin; at the fastest build lag (0.1 s) it is what limits turn-in.")]
+        [SerializeField] float yawServoMaxAccel = 2.5f;
+        [Tooltip("Rudder inflow, as a fraction of top speed, at which the at-rest turn share (HandlingTuning.turnRateAtRest01) is fully available. Below it the share fades to nothing: engine stopped and no way on, the stern wheel's rudder has no water and the helm does nothing -- her one honest limit. Ring any ahead and the race gives it back.")]
+        [SerializeField, Range(0.01f, 1f)] float steerageInflow01 = 0.2f;
+        [Tooltip("Degrees of OUTBOARD heel the hull's own cross-flow gives per m/s^2 of turn (way x yaw rate). Added back into the heel moment so HandlingTuning.turnHeelDegrees reads as the NET lean into the turn. ~1: the old tuning measured ~4 deg out at ~4 m/s^2. An estimate -- re-measure if the net lean looks off.")]
+        [SerializeField, Range(0f, 3f)] float crossflowHeelPerAccel = 1f;
         [Tooltip("Seconds: every assist force is eased through this first-order lag so a stepped order or helm never becomes a step in acceleration (jerk is what makes the player sick).")]
         [SerializeField] float assistEaseSeconds = 0.25f;
 
@@ -118,6 +135,11 @@ namespace SeaSick.Steamer
         float omega, dip, thrust, visualAngle;
         // Eased assist outputs: surge N, yaw N m, roll N m.
         float surgeAssistN, yawAssistNm, heelAssistNm;
+        // Yaw servo: the lagged reference rate, the estimate of everything
+        // else's yaw acceleration, and last step's rate and servo push (the
+        // pair the estimate is measured from). rad/s, rad/s^2.
+        float yawRef, yawDist, lastYawRate, lastServoAcc;
+        bool servoPrimed;
 
         readonly OceanProbeRegistry.Handle[] handles = new OceanProbeRegistry.Handle[2];
         readonly Vector3[] probeWorld = new Vector3[2];
@@ -144,6 +166,11 @@ namespace SeaSick.Steamer
         /// the stern being pushed to port (bow to starboard).
         public float RudderForceN { get; private set; }
         public float TopSpeed => topSpeed;
+        /// The top speed the drive is solved for THIS step: `TopSpeed` x
+        /// `HandlingTuning.topSpeedScale`. `TopSpeed` stays the authored
+        /// value because the bootstrap fits the motor's MaxSpeed to it, and
+        /// MaxSpeed applies the same scale itself.
+        public float TopSpeedNow => topSpeed * Mathf.Clamp(HandlingTuning.topSpeedScale, 0.3f, 2f);
         /// The assist master dial (0 = pure physics). Settable live.
         ///
         /// `Derive()` blends `spinUpSeconds`/`quickSpinUpSeconds` by this
@@ -189,6 +216,7 @@ namespace SeaSick.Steamer
 
             omega = 0f;
             surgeAssistN = yawAssistNm = heelAssistNm = 0f;
+            servoPrimed = false;
             probesWritten = false;
             if (!Configured) return;
 
@@ -244,10 +272,16 @@ namespace SeaSick.Steamer
         void Derive()
         {
             float m = rb.mass;
-            float v = Mathf.Max(0.5f, topSpeed);
+            float v = Mathf.Max(0.5f, TopSpeedNow);
             reff = Mathf.Max(0.2f, data.wheelRadius - 0.5f * data.wheelDesignDip);
             omegaMax = v / Mathf.Max(0.05f, 1f - slipAtTop) / reff;
-            tauMax = m * Mathf.Max(0.1f, bollardAccel) * reff;
+            // HandlingTuning.accelScale is the engine's torque limit, i.e. her
+            // pull from rest -- floored at 1.15x what holding the top speed
+            // needs, so the slider's low end makes her sluggish but never
+            // leaves her short of the speed the telegraph promises. At the
+            // default the floor (~1.3 m/s^2) is far under bollardAccel (2.6).
+            tauMax = m * reff * Mathf.Max(Mathf.Max(0.1f, bollardAccel * HandlingTuning.accelScale),
+                                          1.15f * SurgeDecel(v));
             // The governor's time constant is spinUp x band; keep it above a
             // step and a bit so the lighter shaft cannot ring at 50 Hz.
             float spin = Mathf.Lerp(Mathf.Max(0.05f, spinUpSeconds),
@@ -301,6 +335,16 @@ namespace SeaSick.Steamer
             RudderInflow = 0f;
             if (!Configured || motor == null) return;
 
+            // HandlingTuning, read every step. The setter early-outs on an
+            // unchanged value, so this is a compare when nobody touches it.
+            Responsiveness = HandlingTuning.paddleResponsiveness;
+            // Telegraph at stop: the coast knob scales everything that takes
+            // her way off -- the hull's surge drag (here), the stopped wheel
+            // dragging through the water and the brake assist (below).
+            bool coasting = Mathf.Abs(motor.ThrottleOrder) < HandlingTuning.CoastOrder;
+            float coastK = coasting ? Mathf.Max(0f, HandlingTuning.coastDownScale) : 1f;
+            body.SurgeDragScale = coastK;
+
             // She publishes even before the sea is ready, so the gauges read
             // a settled zero rather than whatever the servo last left there.
             motor.PublishExternal(Mathf.Max(0f, body.FkSurgeAccel), body.FkSwayAccel, 0f);
@@ -309,9 +353,11 @@ namespace SeaSick.Steamer
             // current, when there is one, moves her too.
             body.AmbientFlow = motor.Anchored ? Vector3.zero : motor.WaterVelocity;
 
-            if (!body.Ready || !probesWritten) return;
+            // Any skipped step breaks the yaw servo's step-to-step estimate;
+            // it re-primes from her actual rate on the next live one.
+            if (!body.Ready || !probesWritten) { servoPrimed = false; return; }
             for (int i = 0; i < handles.Length; i++)
-                if (handles[i] == null || handles[i].sampledFrame == 0) return;
+                if (handles[i] == null || handles[i].sampledFrame == 0) { servoPrimed = false; return; }
 
             Derive();
             float dt = Time.fixedDeltaTime;
@@ -320,6 +366,14 @@ namespace SeaSick.Steamer
 
             float way = Vector3.Dot(rb.linearVelocity - body.AmbientFlow, fwd);
             float helm = Helm();
+            float topNow = TopSpeedNow;
+            // Speed bleed in a turn (HandlingTuning.turnSpeedBleed at the peak
+            // yaw rate), taken off the governor's order: the wheel is seen and
+            // heard to labour as she digs in. On top of what the hull's own
+            // crabbing drag already costs her.
+            float yaw01 = Mathf.Clamp01(Mathf.Abs(Vector3.Dot(rb.angularVelocity, transform.up))
+                                        / PeakYawRate(topNow));
+            float bleed = 1f - Mathf.Clamp01(HandlingTuning.turnSpeedBleed) * yaw01 * yaw01;
             // The order carries the same overdrive ceiling every other hull
             // answers to (`ShipMotor.Overdrive`, 1.35 by default) rather than
             // being clamped flat at 1 -- burn is meant to push her past her
@@ -343,7 +397,7 @@ namespace SeaSick.Steamer
             // -- burn commands revs past omegaMax on purpose. Astern order is
             // already <= 0 and pre-scaled by asternFraction, so it never asks
             // for more than omegaMax the other way.
-            float cmd = Mathf.Clamp(order * omegaMax, -omegaMax, omegaMax * overdriveCeiling);
+            float cmd = Mathf.Clamp(order * omegaMax, -omegaMax, omegaMax * overdriveCeiling) * bleed;
 
             // Thrust acts where the floats are: at the effective radius BELOW
             // the axle, which is why hard ahead lifts her head.
@@ -374,6 +428,10 @@ namespace SeaSick.Steamer
 
             if (!anchored && f > 0f)
             {
+                // A stopped (or windmilling) wheel dragged through the water
+                // is most of what stops her; with the telegraph at stop that
+                // drag is the coast knob's. The shaft still feels the true T.
+                if (coasting && T * way < 0f) T *= coastK;
                 thrust = T;
                 rb.AddForceAtPosition(fwd * T, at, ForceMode.Force);
 
@@ -422,8 +480,14 @@ namespace SeaSick.Steamer
                 rb.AddForceAtPosition(-transform.right * force, at2, ForceMode.Force);
             }
 
-            ApplyAssists(dt, way, order, helm, anchored ? 0f : DipFactor(dip), at);
+            ApplyAssists(dt, way, order * bleed, helm, anchored ? 0f : DipFactor(dip), at, coastK, anchored);
         }
+
+        /// rad/s: the rate a HandlingTuning.turnCircleLengths radius gives at
+        /// top speed. The turn-rate curve's 1.0.
+        float PeakYawRate(float top) =>
+            Mathf.Max(1e-3f, Mathf.Max(0.1f, top)
+                / (Mathf.Max(0.3f, HandlingTuning.turnCircleLengths) * Mathf.Max(1f, data.lwl)));
 
         // --- response assists ------------------------------------------------
         //
@@ -434,17 +498,19 @@ namespace SeaSick.Steamer
         // the air gets no help, a hull thrown clear gets none), and FADES as
         // the physics arrives, so the speed she holds and the circle she
         // settles into are still the strip model's.
-        void ApplyAssists(float dt, float way, float order, float helm, float wheelF, Vector3 thrustAt)
+        void ApplyAssists(float dt, float way, float order, float helm, float wheelF, Vector3 thrustAt,
+                          float coastK, bool anchored)
         {
             float r01 = Mathf.Max(0f, responsiveness);
             float sub = Mathf.Clamp01(body.Submersion * 2f);
             float ease = 1f - Mathf.Exp(-dt / Mathf.Max(0.02f, assistEaseSeconds));
-            float lwl = Mathf.Max(1f, data.lwl);
+            float topNow = TopSpeedNow;
 
-            // Surge: toward the speed the order asks for. Astern orders are
-            // already scaled by asternFraction, which is about her astern top.
+            // Surge: toward the speed the order asks for (already bled for
+            // the turn by the caller). Astern orders are already scaled by
+            // asternFraction, which is about her astern top.
             float wantF = 0f;
-            float vCmd = order * topSpeed;
+            float vCmd = order * topNow;
             float e = vCmd - way;
             if (r01 > 0f && Mathf.Abs(e) > 0.01f)
             {
@@ -454,7 +520,9 @@ namespace SeaSick.Steamer
                 if (gaining)
                 {
                     float frac = way * Mathf.Sign(vCmd) / Mathf.Abs(vCmd);
-                    w = surgeAssistAccel * (1f - Mathf.SmoothStep(0f, 1f,
+                    // HandlingTuning.accelScale: the push, like the engine's torque limit.
+                    w = surgeAssistAccel * Mathf.Max(0f, HandlingTuning.accelScale)
+                        * (1f - Mathf.SmoothStep(0f, 1f,
                         Mathf.InverseLerp(surgeAssistFadeStart, Mathf.Max(surgeAssistFadeStart + 0.01f, surgeAssistFadeEnd), frac)));
                 }
                 else
@@ -464,44 +532,90 @@ namespace SeaSick.Steamer
                     // gauge), not something to fight. Only brake once she is
                     // more than ~10% of the ORDERED speed over it; an order
                     // of stop (vCmd == 0) has no tolerance to give, so any
-                    // way at all still gets braked down.
+                    // way at all still gets braked down. At stop the coast
+                    // knob scales it.
                     float tol = 0.10f * Mathf.Abs(vCmd);
                     if (Mathf.Abs(e) > tol)
-                        w = brakeAssistAccel * Mathf.SmoothStep(0f, 1f,
-                            Mathf.Clamp01(Mathf.Abs(e) / (0.25f * Mathf.Max(1f, topSpeed))));
+                        w = brakeAssistAccel * coastK * Mathf.SmoothStep(0f, 1f,
+                            Mathf.Clamp01(Mathf.Abs(e) / (0.25f * Mathf.Max(1f, topNow))));
                 }
                 wantF = Mathf.Sign(e) * w * r01 * rb.mass * wheelF * sub;
             }
             surgeAssistN = Mathf.Lerp(surgeAssistN, wantF, ease);
 
-            // Yaw: toward the rate a circle of assistTurnDiameterL lengths
-            // gives at the water the rudder is working in -- so no way and no
-            // wheel still means no steering, and astern the helm reverses.
-            float wantYaw = 0f, wantHeel = 0f;
-            float inflow = Mathf.Clamp(RudderInflow, -topSpeed, topSpeed);
-            float radius = 0.5f * Mathf.Max(0.5f, assistTurnDiameterL) * lwl;
-            float rRef = Mathf.Max(0.1f, topSpeed) / radius;
+            // --- yaw servo (HandlingTuning) -------------------------------
+            //
+            // The strip physics alone gives her whatever turn the rudder and
+            // the cross-flow balance out at, with no handle on how it FEELS.
+            // So the helm commands a yaw RATE, shaped like every other hull's:
+            // peak = top / (turnCircleLengths x L), TurnRate01 of it at this
+            // speed, and a first-order lag toward it -- yawTauBuild while the
+            // command pulls away from zero, yawTauRelease while it eases.
+            // The servo holds her actual rate to that reference (feed-forward
+            // on the reference's own slope, plus a yawTrackSeconds correction),
+            // and cancels a low-passed estimate of everything else's yaw
+            // acceleration, so the hull's ~1/s yaw damping does not leave the
+            // steady turn short. Astern (rudder inflow reversed) the helm
+            // reverses, as it does on the blade.
             float yawRate = Vector3.Dot(rb.angularVelocity, transform.up);
+            float wServo = Mathf.Clamp01(r01) * sub;
+            float servoAcc = 0f;
+            float peak = PeakYawRate(topNow);
+            if (wServo <= 0f || anchored)
+            {
+                // Off (pure physics, thrown clear, or moored -- the mooring
+                // spring owns her heading): follow her, so switching back on
+                // picks up from where she is, not from a stale reference.
+                yawRef = yawRate;
+                yawDist = 0f;
+            }
+            else
+            {
+                float inflow = Mathf.Clamp(RudderInflow, -topNow, topNow);
+                float dir = inflow < -0.05f ? -1f : (inflow > 0.05f ? 1f : (way < 0f ? -1f : 1f));
+                // The at-rest share needs water on the blade: none with the
+                // engine stopped and no way on, all of it once the race runs.
+                float steer = Mathf.Clamp01(Mathf.Abs(inflow) / (steerageInflow01 * Mathf.Max(0.5f, topNow)));
+                float avail = peak * HandlingTuning.TurnRate01(Mathf.Abs(way) / Mathf.Max(0.1f, topNow),
+                                                               HandlingTuning.turnRateAtRest01 * steer);
+                float rCmd = helm * dir * avail;
+
+                if (!servoPrimed) { yawRef = yawRate; yawDist = 0f; servoPrimed = true; }
+                else
+                {
+                    // What the rest of the world did to her yaw last step.
+                    float other = (yawRate - lastYawRate) / Mathf.Max(1e-4f, dt) - lastServoAcc;
+                    yawDist += (other - yawDist) * (1f - Mathf.Exp(-dt / Mathf.Max(0.02f, yawDisturbanceSeconds)));
+                }
+                float prevRef = yawRef;
+                float tau = HandlingTuning.YawTau(rCmd, yawRef);
+                yawRef += (rCmd - yawRef) * (1f - Mathf.Exp(-dt / tau));
+                float acc = (yawRef - prevRef) / Mathf.Max(1e-4f, dt)
+                          + (yawRef - yawRate) / Mathf.Max(0.02f, yawTrackSeconds)
+                          - yawDist;
+                servoAcc = Mathf.Clamp(acc, -yawServoMaxAccel, yawServoMaxAccel) * wServo;
+            }
+            lastYawRate = yawRate;
+            lastServoAcc = servoAcc;
+            // Not eased through assistEaseSeconds: it is inside a feedback
+            // loop, and its reference is already a smooth lag.
+            yawAssistNm = servoAcc * rb.inertiaTensor.y;
+
+            // Heel INTO the turn: HandlingTuning.turnHeelDegrees at the peak
+            // yaw rate x top speed, against her own roll stiffness, following
+            // her ACTUAL yaw rate (so the turn, not the thumb). Plus the
+            // estimated outboard lean her cross-flow gives at this lateral
+            // acceleration, so the knob is the net lean. +yaw is to
+            // starboard; starboard down is -Z roll.
+            float wantHeel = 0f;
             if (r01 > 0f)
             {
-                float rCmd = helm * inflow / radius;
-                if (Mathf.Abs(rCmd) > 1e-3f)
-                {
-                    // Only ever helps toward the order, and lets go as her own
-                    // rate reaches 90% of it: the bite, not the turn.
-                    float have = yawRate / rCmd;
-                    float w = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.3f, 0.9f, have));
-                    float acc = Mathf.Clamp(yawAssistGain * (rCmd - yawRate),
-                        -yawAssistMaxAccel, yawAssistMaxAccel);
-                    wantYaw = acc * w * r01 * rb.inertiaTensor.y * sub;
-                }
-                // Lean INTO the turn by her actual yaw rate (so it follows the
-                // turn, not the thumb). +yaw is to starboard; starboard down
-                // is -Z roll.
-                float lean = Mathf.Clamp(yawRate / rRef, -1f, 1f) * heelIntoTurnDeg * Mathf.Deg2Rad;
-                wantHeel = -lean * body.RollStiffness * r01 * sub;
+                float yaw01 = Mathf.Clamp(yawRate / peak, -1f, 1f);
+                float speed01 = Mathf.Clamp01(Mathf.Abs(way) / Mathf.Max(0.1f, topNow));
+                float leanDeg = HandlingTuning.turnHeelDegrees * yaw01 * speed01
+                              + crossflowHeelPerAccel * way * yawRate;
+                wantHeel = -leanDeg * Mathf.Deg2Rad * body.RollStiffness * Mathf.Clamp01(r01) * sub;
             }
-            yawAssistNm = Mathf.Lerp(yawAssistNm, wantYaw, ease);
             heelAssistNm = Mathf.Lerp(heelAssistNm, wantHeel, ease);
 
             if (surgeAssistN != 0f)

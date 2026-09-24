@@ -20,9 +20,11 @@ namespace SeaSick.Ship
         [SerializeField] float surfOvershoot = 1.25f;
         [SerializeField] float overspeedDragScale = 0.35f;
         [SerializeField] float waveDrift = 1f;
+        [Tooltip("Turn rate at rest, deg/s. SUPERSEDED at runtime (2026-09-24): the rate at rest is now HandlingTuning.turnRateAtRest01 x the peak. Kept so scenes still load.")]
         [SerializeField] float minTurnRate = 15f;
+        [Tooltip("Turn rate at top speed on a TurnCircleLengths (2.2 L) radius, deg/s. Still the base: at runtime it is re-based onto HandlingTuning.turnCircleLengths and shaped by HandlingTuning.TurnRate01.")]
         [SerializeField] float maxTurnRate = 34f;
-        [Tooltip("How fast she BUILDS a turn, rad/s per second. A big ship does not just turn slower, she takes longer to start.")]
+        [Tooltip("How fast she BUILDS a turn. Was a rad/s^2 rate limit; now a MULTIPLIER on the HandlingTuning yaw lags: tau x (4 / this). 4 is the knob as-is; the ladder sets 4 x sqrt(24.2/L), so a big ship still takes longer to start.")]
         [SerializeField] float yawResponse = 4f;
         [Tooltip("Top speed astern as a fraction of ahead. Every hull backs badly -- the rudder is at the wrong end of her and the hull is shaped for one direction.")]
         [SerializeField, Range(0.1f, 0.8f)] float asternFraction = 0.35f;
@@ -60,7 +62,12 @@ namespace SeaSick.Ship
         [SerializeField] float pitchLimit = 16f;
         [SerializeField] float rollLimit = 20f;
         [SerializeField] float limitSpring = 6f;   // torque per deg past the limit, x inertia
+        // SUPERSEDED at runtime (2026-09-24) by HandlingTuning.turnHeelDegrees,
+        // an ANGLE against her roll stiffness rather than a torque (this 5
+        // measured 24.6 deg steady on the brig). Kept so scenes still load.
+#pragma warning disable 0414
         [SerializeField] float turnHeel = 5f;
+#pragma warning restore 0414
 
         [Header("Load & freeboard")]
 
@@ -171,6 +178,10 @@ namespace SeaSick.Ship
 
         float baseMaxSpeed = 15f, hullScale = 1f;
         const float BaseAccel = 2.6f, BaseYawResponse = 4f;
+        /// (2 pi / 4.6 s)^2: roll stiffness per unit roll inertia for a hull
+        /// the yard never fitted (BuoyantBody.RollStiffness still 0). 4.6 s
+        /// is the brig's measured roll period.
+        const float FallbackRollOmega2 = 1.866f;
 
         /// Multipliers from the FITTINGS, applied on top of the hull.
         ///
@@ -252,7 +263,10 @@ namespace SeaSick.Ship
         public Vector2 WindDirection { get; private set; } = new Vector2(0.95f, 0.33f);
         public float WindStrength { get; private set; } = 1f;
         public float GustFactor01 { get; private set; }
-        public float MaxSpeed => maxSpeed;
+        /// Top speed as she will actually make it: the fitted `maxSpeed` x the
+        /// lab's `HandlingTuning.topSpeedScale`, so every gauge scaled to it
+        /// moves with the slider.
+        public float MaxSpeed => maxSpeed * HandlingTuning.topSpeedScale;
         /// The ceiling `ThrottleOrder` is clamped to. Above 1 is the burn tier.
         public float Overdrive => overdrive;
         /// True while the telegraph is past full ahead. The HUD reads this.
@@ -670,7 +684,9 @@ namespace SeaSick.Ship
             float laden = Mathf.Min(load, 1f);
             float heaviness = 1f / (1f + 0.55f * laden + 1.05f * over);
 
-            float effMaxSpeed = maxSpeed * (1f - 0.10f * laden - 0.14f * over);
+            // MaxSpeed carries HandlingTuning.topSpeedScale.
+            float topSpeed = Mathf.Max(0.1f, MaxSpeed);
+            float effMaxSpeed = topSpeed * (1f - 0.10f * laden - 0.14f * over);
             if (hull != null) effMaxSpeed *= hull.SpeedMultiplier;
 
             Vector3 forward = Flat(transform.forward);
@@ -678,7 +694,7 @@ namespace SeaSick.Ship
             Vector3 through = rb.linearVelocity - WaterVelocity;
             float forwardWay = Vector3.Dot(through, forward);
             float sideWay = Vector3.Dot(through, right);
-            float speedFactor = Mathf.Clamp01(CurrentSpeed / maxSpeed);
+            float speedFactor = Mathf.Clamp01(CurrentSpeed / topSpeed);
 
             // An externally driven hull (the steamer) makes her own thrust,
             // yaw, grip and surf out of real forces. Everything from here to
@@ -732,7 +748,18 @@ namespace SeaSick.Ship
             // captain never loses the tiller — but she answers late and small,
             // which is what makes the recovery a thing you can do WELL.
             float helm = 1f - broachRudderLoss * Broach01;
-            float turnRate = Mathf.Lerp(minTurnRate, maxTurnRate, speedFactor)
+            // --- how hard she CAN turn (HandlingTuning, read every step) ----
+            //
+            // `maxTurnRate` is the ladder's rate for a TurnCircleLengths
+            // (2.2 L) radius at top speed, fittings included; re-based onto
+            // the knob's radius it is the PEAK. The curve then gives
+            // turnRateAtRest01 of it at rest, all of it by half speed and
+            // 0.8 of it flat out (`minTurnRate` is no longer read).
+            float peakTurn = maxTurnRate * (TurnCircleLengths
+                / Mathf.Max(0.3f, HandlingTuning.turnCircleLengths));
+            float peakTurnRad = Mathf.Max(1e-4f, peakTurn * Mathf.Deg2Rad);
+            float turnRate = peakTurn
+                * HandlingTuning.TurnRate01(speedFactor, HandlingTuning.turnRateAtRest01)
                 * (1f - 0.15f * laden - 0.20f * over) * helm;
             // --- the broach: a DIVERGENT yaw the rudder has to hold off -----
             //
@@ -771,12 +798,32 @@ namespace SeaSick.Ship
 
             Vector3 av = rb.angularVelocity;
             float targetYawRate = effectiveRudder * turnRate * Mathf.Deg2Rad + broachBias;
-            av.y = Mathf.MoveTowards(av.y, targetYawRate, yawResponse * helm * dt);
+            // First-order lag toward the commanded rate (was a 4 rad/s^2
+            // rate limit: full rate in 0.08 s, dead in 0.04 s). tau is the
+            // BUILD lag while the command is pulling away from zero and the
+            // RELEASE lag while it is easing, centred or reversed -- so she
+            // bites, then carries a little when the helm comes off.
+            // `yawResponse` (4 x hull scale on the ladder) scales the lag, so
+            // the long hulls still start slower; the broach's rudder loss
+            // (`helm`) slows it further, as it slowed the old limiter.
+            float yawTau = HandlingTuning.YawTau(targetYawRate, av.y)
+                * (BaseYawResponse / Mathf.Max(0.1f, yawResponse))
+                / Mathf.Max(0.15f, helm);
+            av.y += (targetYawRate - av.y) * (1f - Mathf.Exp(-dt / yawTau));
             rb.angularVelocity = av;
+            float yaw01 = Mathf.Clamp(av.y / peakTurnRad, -1f, 1f);
 
-            // Turn heel: rudder + speed lays her over into the turn.
-            rb.AddTorque(forward * (-effectiveRudder * speedFactor * turnHeel
-                * 0.15f * RollInertia()), ForceMode.Force);
+            // Turn heel: an ANGLE into the turn, turnHeelDegrees at the peak
+            // yaw rate x top speed, against her roll stiffness -- so it
+            // follows the actual yaw (lagged, never a snap) and still passes
+            // through the soft roll limit below. The stiffness is the yard's
+            // m g GM; a hull the yard never fitted falls back to the brig's
+            // measured 4.6 s roll period.
+            float rollK = buoyant.RollStiffness > 0f
+                ? buoyant.RollStiffness : RollInertia() * FallbackRollOmega2;
+            float heelRad = HandlingTuning.turnHeelDegrees * Mathf.Deg2Rad
+                * yaw01 * speedFactor;
+            rb.AddTorque(forward * (-heelRad * rollK), ForceMode.Force);
 
             // --- propulsion toward the engine's target speed ---
             //
@@ -793,6 +840,9 @@ namespace SeaSick.Ship
             float demand = Mathf.Clamp(order, -1f, 1f);
             float power = demand >= 0f ? demand : demand * asternFraction;
             float targetSpeed = effMaxSpeed * power * SeaResistance01 * burnMul;
+            // A hard turn costs way: the rudder is a brake and the hull is
+            // crabbing. HandlingTuning.turnSpeedBleed at the peak yaw rate.
+            targetSpeed *= 1f - Mathf.Clamp01(HandlingTuning.turnSpeedBleed) * yaw01 * yaw01;
             // Pace her to the sea. A hull driven flat out into a head sea
             // does not go faster, she goes wetter -- she launches off a crest
             // and lands on her forefoot. Easing gives up way on purpose so
@@ -821,9 +871,15 @@ namespace SeaSick.Ship
             // could still feel two seconds later.
             float overspeedDrag = Mathf.Lerp(overspeedDragScale,
                 overspeedDragScale * surfDragRelief, SurfBoost01);
+            // HandlingTuning: accelScale on the PUSH only, coastDownScale on
+            // the hold-back while the telegraph is at stop (this is her whole
+            // coast-down: 124 m from full measured on 09-18), so the two
+            // sliders never touch each other's end of the curve.
+            bool coasting = Mathf.Abs(ThrottleOrder) < HandlingTuning.CoastOrder;
             float pull = forwardWay > targetSpeed
                 ? acceleration * overspeedDrag
-                : acceleration * burnMul;
+                    * (coasting ? Mathf.Max(0f, HandlingTuning.coastDownScale) : 1f)
+                : acceleration * burnMul * Mathf.Max(0f, HandlingTuning.accelScale);
             if (Anchored) pull = acceleration * 2.5f;
             float dv = Mathf.Clamp(targetSpeed - forwardWay,
                 -pull * heaviness * dt, pull * heaviness * dt);
