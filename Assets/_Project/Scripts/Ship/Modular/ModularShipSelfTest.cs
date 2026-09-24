@@ -66,7 +66,7 @@ namespace SeaSick.Ship.Modular
         static void Body(string stdJson, IList<string> mods, IList<string> names, Func<string, bool> exists, GateFn Gate)
         {
             var lib = ModuleLibrary.FromJson(stdJson, mods, names);
-            Gate("library-loads", lib.Ok && lib.All.Count == 12 && Near(lib.MetresPerUnit, 0.5f) && lib.MaxMiddles == 3,
+            Gate("library-loads", lib.Ok && lib.All.Count == 13 && Near(lib.MetresPerUnit, 0.5f) && lib.MaxMiddles == 3,
                 $"ok={lib.Ok} modules={lib.All.Count} k={lib.MetresPerUnit} maxMiddles={lib.MaxMiddles} errors=[{string.Join(" | ", lib.errors)}]");
             if (!lib.Usable) return;
 
@@ -189,8 +189,11 @@ namespace SeaSick.Ship.Modular
             var pass = ShipAssembler.Assemble(passCfg, lib);
             Gate("cannon-in-passage-rejected", !pass.ok && pass.HasCode("EQUIPMENT_BLOCKS_PASSAGE"), First(pass, "EQUIPMENT_BLOCKS_PASSAGE") ?? Codes(pass));
 
-            var sideCfg = ShipConfiguration.Long();
-            sideCfg.equipment.Add(new EquipmentChoice { slotId = "middle[0]/DeckArea", moduleId = Cannon, offsetU = new Vector3(0f, 3.45f, 0f) });
+            // middle[1] (Long only ever fits real guns on middle[0]'s own
+            // slots -- docs/SHIPYARD-API.md §10) so the free-placed
+            // cannon here has no real gun to collide with.
+            var sideCfg = ShipConfiguration.WithMiddles(2);
+            sideCfg.equipment.Add(new EquipmentChoice { slotId = "middle[1]/DeckArea", moduleId = Cannon, offsetU = new Vector3(0f, 3.45f, 0f) });
             var side = ShipAssembler.Assemble(sideCfg, lib);
             Gate("cannon-free-placed-beside-passage-ok", side.ok, side.ok ? "deck area, 3.45 u to port (touches, does not enter, the passage)" : side.Summary());
 
@@ -231,13 +234,13 @@ namespace SeaSick.Ship.Modular
             cfg.equipment.Add(new EquipmentChoice { slotId = "middle[1]/DeckArea", moduleId = Cannon, offsetU = new Vector3(0.25f, -3.4f, 0f) });
             string json = cfg.ToJson();
             var back = ShipConfiguration.FromJson(json);
-            Gate("config-round-trip", back != null && back.ValueEquals(cfg) && back.schemaVersion == 1 && back.middleIds.Count == 2, json);
+            Gate("config-round-trip", back != null && back.ValueEquals(cfg) && back.schemaVersion == ShipConfiguration.SupportedSchemaVersion && back.middleIds.Count == 2, json);
 
             string future = json.Substring(0, json.Length - 1) + ",\"futureField\":42,\"futureBlock\":{\"a\":[1,2,3],\"b\":\"x\"}}";
             var fut = ShipConfiguration.FromJson(future);
             Gate("config-unknown-field-ignored", fut != null && fut.ValueEquals(cfg), "extra fields futureField/futureBlock");
 
-            var newer = ShipConfiguration.FromJson(json.Replace("\"schemaVersion\":1", "\"schemaVersion\":99"));
+            var newer = ShipConfiguration.FromJson(json.Replace("\"schemaVersion\":" + ShipConfiguration.SupportedSchemaVersion, "\"schemaVersion\":99"));
             var nr = ShipAssembler.Assemble(newer, lib);
             Gate("config-schema-99-rejected", newer != null && newer.schemaVersion == 99 && !nr.ok && nr.HasCode("CONFIG_SCHEMA_TOO_NEW"),
                 First(nr, "CONFIG_SCHEMA_TOO_NEW") ?? Codes(nr));
@@ -251,7 +254,7 @@ namespace SeaSick.Ship.Modular
             var dupList = new List<string>(mods);
             dupList.Add(Mini("hull.middle.w1r2.v3", "Middle", ""));
             var dup = ModuleLibrary.FromJson(stdJson, dupList);
-            Gate("duplicate-id-rejected", !dup.Ok && dup.errors.Exists(e => e.StartsWith("LIB_DUPLICATE_ID")) && dup.All.Count == 12,
+            Gate("duplicate-id-rejected", !dup.Ok && dup.errors.Exists(e => e.StartsWith("LIB_DUPLICATE_ID")) && dup.All.Count == 13,
                 string.Join(" | ", dup.errors));
 
             var oddList = new List<string>(mods);
@@ -261,7 +264,7 @@ namespace SeaSick.Ship.Modular
             var odd = ModuleLibrary.FromJson(stdJson, oddList);
             Gate("library-refuses-bad-modules", odd.errors.Exists(e => e.StartsWith("LIB_UNKNOWN_KIND"))
                 && odd.errors.Exists(e => e.StartsWith("LIB_UNKNOWN_STANDARD"))
-                && odd.errors.Exists(e => e.StartsWith("LIB_SCHEMA_TOO_NEW")) && odd.All.Count == 12,
+                && odd.errors.Exists(e => e.StartsWith("LIB_SCHEMA_TOO_NEW")) && odd.All.Count == 13,
                 string.Join(" | ", odd.errors));
 
             // ---- data hygiene -------------------------------------------

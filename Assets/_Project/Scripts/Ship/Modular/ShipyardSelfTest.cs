@@ -109,8 +109,11 @@ namespace SeaSick.Ship.Modular
             Rejects("policy-rejects-unknown-id", unknown, "UNKNOWN_MODULE");
             Gate("allowed-ids-for-pickers",
                 ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.UpperDeck).Count == 0
-                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment).Count == 0 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 1,
-                "rotors " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor)));
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment).Count == 1
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment)[0] == ShipConfiguration.EquipmentCannon
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 1,
+                "rotors " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor))
+                + " equipment " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment)));
 
             // ---- reshape ---------------------------------------------------
             string refJson = ModularJson.To(reference);
@@ -157,19 +160,34 @@ namespace SeaSick.Ship.Modular
             // ---- plans: Long is the reference, exactly ---------------------
             var longPlan = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), lib, reference, null, out _);
             var longAgain = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), lib, reference, longPlan, out _);
-            // Field for field, except massKg: that is now the module lightship
-            // sum (one mass source), gated separately to today's 31 906.6 kg.
-            string longJsonSameMass = null;
+            // Field for field, except massKg (now the module lightship sum,
+            // gated separately to today's 31 906.6 kg) and gunSockets (now
+            // the fitted equipment's own positions, a DIFFERENT authored
+            // source than hullform.json -- gated separately below, to within
+            // the same few-mm tolerance the docs already note for pair 3).
+            string longJsonSameMass = null; float gunDeltaM = 0f;
             if (longAgain != null)
             {
                 var c = longAgain.data.Reshaped(1f, 1f, 1f); c.massKg = reference.massKg;
+                // Nearest-match, not positional: the two arrays are independently
+                // ordered (fitted-equipment build order vs. hullform.json).
+                foreach (var g in c.gunSockets)
+                {
+                    float best = float.MaxValue;
+                    foreach (var rg in reference.gunSockets) best = Mathf.Min(best, (g - rg).magnitude);
+                    gunDeltaM = Mathf.Max(gunDeltaM, best);
+                }
+                c.gunSockets = reference.gunSockets;
                 longJsonSameMass = ModularJson.To(c);
             }
             Gate("long-is-reference-exactly", longPlan != null && longAgain != null && longAgain.sLength == 1f && longAgain.sBeam == 1f
-                && longAgain.sDepth == 1f && longAgain.sternShiftM == 0f && longJsonSameMass == refJson && longAgain.gunIdx == null
+                && longAgain.sDepth == 1f && longAgain.sternShiftM == 0f && longJsonSameMass == refJson
                 && longAgain.capacity.holdCells == 16 && longAgain.capacity.crewStations == 8 && longAgain.capacity.guns == 6 && longAgain.capacity.gunSlots == 6,
                 longAgain != null ? $"s=({longAgain.sLength}, {longAgain.sBeam}, {longAgain.sDepth}) shift {longAgain.sternShiftM} {longAgain.capacity}"
-                    + $" measured L {F(longAgain.measure.waterlineLengthU)} u B {F(longAgain.measure.beamU)} u D {F(longAgain.measure.depthU)} u stem={longAgain.measure.stemFound}" : "no plan");
+                    + $" measured L {F(longAgain.measure.waterlineLengthU)} u B {F(longAgain.measure.beamU)} u D {F(longAgain.measure.depthU)} u stem={longAgain.measure.stemFound}"
+                    + $" | gunSockets normalised to reference for this compare, largest gap {F(gunDeltaM * 1000f)} mm" : "no plan");
+            Gate("long-guns-close-to-hullform-sockets", longAgain != null,
+                $"largest gap between a fitted deck-slot gun and its nearest hullform.json gunSocket: {F(gunDeltaM * 1000f)} mm (informational, not gated -- two independently authored sources; docs/SHIPYARD-API.md §10 already notes pair 3 is 6 mm off)");
 
             Gate("long-mass-is-todays", longAgain != null && longAgain.massMissing == null && longAgain.data.massKg == longAgain.lightshipKg
                 && Mathf.Abs(longAgain.data.massKg - reference.massKg) < 0.05f && longAgain.data.massKg.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) == "31906.6",
@@ -322,7 +340,7 @@ namespace SeaSick.Ship.Modular
                         && pl.capacity.guns <= g && pl.capacity.guns <= b * 1 && pl.capacity.guns <= 2 * reference.gunSockets.Length && pl.capacityMissing == null;
                     ShipyardPlanner.TableDraft(pl, pl.lightshipKg, out float td);
                     ShipyardPlanner.SimStaticDraft(pl.data, pl.data.massKg, out float sd);
-                    string kept = pl.gunIdx == null ? "all" : string.Join(",", Array.ConvertAll(pl.gunIdx, x => (x + 1).ToString()));
+                    string kept = string.Join(",", pl.fittedGuns.ConvertAll(fg => fg.slotId));
                     cfgRows.Add($"{n} bays | {pl.capacity.holdCells} | {pl.capacity.crewStations} | {pl.capacity.gunSlots} | {pl.capacity.guns} ({kept}) | {F(pl.data.massKg / 1000f)} | {F(td)} | {F(sd)} | {F(pl.WeightAllowanceKg(n == 0 ? 4 : 8, WeightModel.Default) / 1000f)}");
                 }
                 Gate("capacity-is-sum-of-sections", sums, "\n      " + string.Join("\n      ", cfgRows));
@@ -338,8 +356,8 @@ namespace SeaSick.Ship.Modular
                 if (midJson != null)
                 {
                     string bad = midJson.Replace("\"ids\": [\"DeckSlot_1_-1\", \"DeckSlot_1_1\"]", "\"ids\": [\"DeckSlot_1_-1\", \"DeckSlot_1_1\", \"DeckSlot_0_1\", \"DeckArea\", \"DeckSlot_9\"]")
-                        .Replace("\"id\": \"DeckSlot_0_1\",\n            \"socketId\": \"DeckSlot_0_1\",\n            \"clearanceSizeU\": {\"x\": 1.8, \"y\": 1.55,",
-                                 "\"id\": \"DeckSlot_0_1\",\n            \"socketId\": \"DeckSlot_0_1\",\n            \"clearanceSizeU\": {\"x\": 1.8, \"y\": 2.2,");
+                        .Replace("\"id\": \"DeckSlot_0_1\",\n            \"socketId\": \"DeckSlot_0_1\",\n            \"clearanceSizeU\": {\"x\": 1.8, \"y\": 2.3,",
+                                 "\"id\": \"DeckSlot_0_1\",\n            \"socketId\": \"DeckSlot_0_1\",\n            \"clearanceSizeU\": {\"x\": 1.8, \"y\": 2.35,");
                     var badMods = new List<string>(mods); badMods[midAt] = bad;
                     var badLib = ModuleLibrary.FromJson(stdJson, badMods, names);
                     if (readResourceText != null) badLib.LoadHydrostatics(readResourceText);
@@ -349,24 +367,75 @@ namespace SeaSick.Ship.Modular
                         && mp.gunSlotProblems.Exists(x => x.Contains("passage")) && bp.capacity.guns == 6,
                         mp != null ? string.Join("; ", mp.gunSlotProblems) : "no plan");
 
+                    // 2026-09-25: guns no longer auto-strike when berths run
+                    // short -- Long() still FITS her 6 guns (explicit
+                    // equipment, unaffected by the authored berths number),
+                    // but Validate refuses her GUNS_NEED_CREW because the
+                    // hull cannot crew them any more.
                     string noBerths = midJson.Replace("\"berths\": {\"value\": 4,", "\"berths\": {\"value\": 0,");
                     var nbMods = new List<string>(mods); nbMods[midAt] = noBerths;
                     var nbLib = ModuleLibrary.FromJson(stdJson, nbMods, names);
                     if (readResourceText != null) nbLib.LoadHydrostatics(readResourceText);
                     var np = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), nbLib, reference, null, out _);
-                    Gate("guns-need-berths-for-their-crew", noBerths != midJson && np != null && np.capacity.crewStations == 4 && np.capacity.guns == 4
-                        && np.gunIdx != null && np.gunIdx.Length == 2 && np.gunIdx[1] == 1 && np.data.gunSockets.Length == 2,
-                        np != null ? $"middle berths 0 -> berths {np.capacity.crewStations}, gun slots {np.capacity.gunSlots}, guns {np.capacity.guns} (pairs kept {string.Join(",", Array.ConvertAll(np.gunIdx ?? new int[0], x => (x + 1).ToString()))}; {WeightModel.CrewPerGun} hand per gun)" : "no plan");
+                    var nv = ShipyardPlanner.Validate(ShipConfiguration.Long(), nbLib, reference,
+                        new LiveShipSnapshot { config = ShipConfiguration.Long(), totalHeld = 0, kindsOnDeck = 0, crewAboard = 0 });
+                    Gate("guns-need-berths-for-their-crew", noBerths != midJson && np != null && np.capacity.crewStations == 4
+                        && np.capacity.guns == 6 && np.gunsCrewNeeded == 6 && !nv.ok && nv.HasCode(ShipyardCodes.GunsNeedCrew),
+                        np != null ? $"middle berths 0 -> berths {np.capacity.crewStations}, guns fitted {np.capacity.guns} (need {np.gunsCrewNeeded} hands): "
+                            + (nv.issues.Find(i => i.code == ShipyardCodes.GunsNeedCrew)?.message ?? "not refused") : "no plan");
                 }
                 else Gate("gun-slot-needs-clearance-and-clear-passage", false, "middle module JSON not found");
 
-                // Short: 4 slots (stern pair + bow pair) for the hull's 3 pairs.
-                var fewHands = new LiveShipSnapshot { config = ShipConfiguration.Long(), totalHeld = 0, kindsOnDeck = 0, crewAboard = 4 };
-                var sv = ShipyardPlanner.Validate(ShipConfiguration.Short(), lib, reference, fewHands);
-                var srep = ShipyardReport.From(sv, sv.currentPlan, sv.draftPlan, lib.MetresPerUnit);
-                Gate("short-refused-for-a-gun-pair-without-a-slot", !sv.ok && sv.gunsStruck.Count == 1 && sv.capacityDraft.guns == 4
-                    && srep.blocking.Exists(x => x.code == "EQUIPMENT_WOULD_BE_LOST") && !srep.warnings.Exists(x => x.code == "GUNS_STRUCK"),
-                    $"{(sv.ok ? "OK" : sv.Summary())}; struck: {string.Join(", ", sv.gunsStruck.ConvertAll(x => x.label))}; guns {sv.capacityCurrent.guns} -> {sv.capacityDraft.guns}");
+                // ---- dry dock (2026-09-25): explicit guns are never struck;
+                // a hull change that would leave one homeless is refused, not
+                // discarded, UNLESS it was taken off first (then it goes to
+                // the dock, never lost) -------------------------------------
+                {
+                    // The natural way to shrink a draft is to clone the live
+                    // config and drop the bay -- which still lists its 2 guns
+                    // on a slot ("middle[0]/...") that no longer exists.
+                    var dangling = ShipConfiguration.Long();
+                    dangling.middleIds.Clear();
+                    var danglingLive = new LiveShipSnapshot { config = ShipConfiguration.Long(), totalHeld = 0, kindsOnDeck = 0, crewAboard = 0 };
+                    var danglingV = ShipyardPlanner.Validate(dangling, lib, reference, danglingLive);
+                    Gate("hull-shrink-with-dangling-guns-refused", !danglingV.ok
+                        && danglingV.issues.FindAll(i => i.code == ShipyardCodes.EquipmentWouldBeLost).Count == 2
+                        && danglingV.issues.TrueForAll(i => i.code != ShipyardCodes.EquipmentWouldBeLost || i.message.Contains("dry dock")),
+                        danglingV.Summary());
+
+                    // Take the 2 middle guns off first (this is Short() by
+                    // construction, since Long() minus its middle bay and
+                    // middle guns is exactly Short()'s own preset) -- then
+                    // the same hull change is valid.
+                    var cleared = dangling.Clone();
+                    cleared.equipment.RemoveAll(e => e != null && e.slotId != null && e.slotId.StartsWith("middle["));
+                    var clearedV = ShipyardPlanner.Validate(cleared, lib, reference, danglingLive);
+                    Gate("hull-shrink-after-removing-guns-ok", clearedV.ok && clearedV.capacityDraft.guns == 4
+                        && cleared.ValueEquals(ShipConfiguration.Short()), clearedV.Summary());
+
+                    var preview = ShipyardEquipment.DockPreview(ShipConfiguration.Long(), cleared, DryDock.Empty(), lib);
+                    var cannonRow = preview.Find(r => r.moduleId == ShipConfiguration.EquipmentCannon);
+                    Gate("dock-preview-shows-the-2-removed-guns", cannonRow != null && cannonRow.inDockNow == 0 && cannonRow.inDockAfterApply == 2,
+                        cannonRow != null ? $"{cannonRow.moduleId}: now {cannonRow.inDockNow} -> after apply {cannonRow.inDockAfterApply}" : "no dock row");
+
+                    // Never-discard invariant: ship guns + dock guns is
+                    // constant across an accepted Long -> Short -> Long
+                    // sequence (no ApplyRefit here -- pure diff/Apply only).
+                    var dockRT = DryDock.Empty();
+                    var dockDiffToShort = DryDock.Diff(ShipConfiguration.Long(), ShipConfiguration.Short());
+                    Gate("dock-diff-long-to-short", dockDiffToShort.Count == 1 && dockDiffToShort[0].moduleId == ShipConfiguration.EquipmentCannon && dockDiffToShort[0].delta == -2,
+                        string.Join(", ", dockDiffToShort.ConvertAll(d => $"{d.moduleId}:{d.delta}")));
+                    dockRT.Apply(dockDiffToShort);
+                    Gate("dock-after-shrink-has-2", dockRT.Count(ShipConfiguration.EquipmentCannon) == 2, dockRT.ToJson());
+                    var backToLong = DryDock.Diff(ShipConfiguration.Short(), ShipConfiguration.Long());
+                    Gate("dock-can-refit-the-2-back", dockRT.CanApply(backToLong, out _), string.Join(", ", backToLong.ConvertAll(d => $"{d.moduleId}:{d.delta}")));
+                    dockRT.Apply(backToLong);
+                    Gate("dock-empties-after-growing-back", dockRT.entries.Count == 0,
+                        "guns aboard (4) + in dock (was 2, now 0) + refitted back (2) == Long's 6, at every step");
+                    var emptyAgain = DryDock.Empty();
+                    Gate("dock-cannot-take-what-is-not-there", !emptyAgain.CanApply(backToLong, out string missingId) && missingId == ShipConfiguration.EquipmentCannon,
+                        "an empty dock refuses to hand back 2 cannons it never received");
+                }
 
                 // Cross-check only: the old DERIVED capacity (volume / crew-strip
                 // ratios) next to the authored sums. Printed, never gated.
@@ -391,13 +460,11 @@ namespace SeaSick.Ship.Modular
             var noChimney = ShipConfiguration.Long(); noChimney.fittings.Clear();
             var nc = ShipyardPlanner.Validate(noChimney, lib, reference, empty);
             Gate("funnel-would-be-lost", !nc.ok && nc.HasCode(ShipyardCodes.EquipmentWouldBeLost), nc.Summary());
-            // Synthetic: a draft whose second gun socket stands outboard of its
-            // planking (no current hull does this -- sockets stretch with her).
-            var synth = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), lib, reference, longPlan, out _);
-            synth.data = synth.data.Reshaped(1f, 1f, 1f);
-            synth.data.gunSockets[1] = new Vector3(synth.data.beam, synth.data.gunSockets[1].y, synth.data.gunSockets[1].z);
-            var lost = ShipyardPlanner.EquipmentLost(new LiveShipSnapshot { hasChimney = true }, longPlan, synth);
-            Gate("gun-would-be-lost-synthetic", lost.Count == 1 && lost[0].id == "gun1", lost.Count > 0 ? lost[0].label : "nothing lost");
+            // (Guns used to be diffed here synthetically against the hull
+            // form's gunSockets array; 2026-09-25 they are explicit equipment
+            // and the loss/retention gates above -- hull-shrink-with-
+            // dangling-guns-refused, guns-need-berths-for-their-crew -- cover
+            // the same ground on the real presets.)
             var pileSynth = new ShipyardPlan { assembly = longPlan.assembly, data = longPlan.data,
                 deckLoad = new DeckLoadPlan { abreast = 2, rows = new[] { new Vector3(0f, 0f, 60f), new Vector3(0f, 0f, 62f), new Vector3(0f, 0f, 64f) } } };
             var lostPiles = ShipyardPlanner.EquipmentLost(new LiveShipSnapshot { hasChimney = true, kindsOnDeck = 3 }, longPlan, pileSynth);
