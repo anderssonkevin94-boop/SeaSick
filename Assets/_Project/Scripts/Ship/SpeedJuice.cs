@@ -11,6 +11,26 @@ namespace SeaSick.Ship
         [SerializeField] float wakeFullRate = 85f;
         [SerializeField] float shoulderRate = 75f;
 
+        // Speed and turn you can SEE (2026-09-24, "slow, uneventful, not
+        // responsive"). The bow spray used to top out at 12% of its rate at
+        // full speed -- sixteen puffs a second, which at the phone's framing
+        // is nothing -- so half ahead and full ahead looked the same. These
+        // are the shares of the full rates that speed and turning now reach;
+        // `JuiceTuning.sprayScale` multiplies all of it, live.
+        [Header("Speed and turn spray")]
+        [Tooltip("Share of sprayFullRate the bow throws at top speed (was 0.12).")]
+        [SerializeField] float bowSpeedShare = 0.30f;
+        [Tooltip("Extra share of sprayFullRate the bow throws in a full-rate turn.")]
+        [SerializeField] float bowTurnShare = 0.10f;
+        [Tooltip("Share of shoulderRate thrown off the OUTSIDE shoulder in a full-rate turn at top speed.")]
+        [SerializeField] float outsideShoulderShare = 0.55f;
+        [Tooltip("Turn fraction below which the shoulders stay silent, so a straight course keeps its clean water.")]
+        [Range(0f, 0.8f)] [SerializeField] float shoulderTurnGate = 0.25f;
+        // Hard caps for the phone. At sprayScale 3 in a hard turn these are
+        // what is alive at once, not what is asked for.
+        const int BowSprayCap = 260;
+        const int ShoulderCap = 180;
+
         SurfaceWake surfaceWake;
         ShipMotor motor;
         Rigidbody rb;
@@ -129,6 +149,10 @@ namespace SeaSick.Ship
             surfaceWake = GetComponent<SurfaceWake>();
             if (!surfaceWake) surfaceWake = gameObject.AddComponent<SurfaceWake>();
             surfaceWake.Configure(hullLength, hullBeam);
+            // The engine note rides with the same rig: SpeedJuice is only
+            // ever on the player's ShipMotor (raiders are EnemyShip, not
+            // ShipMotor), so this is the one place that means "her".
+            if (!GetComponent<PaddleSound>()) gameObject.AddComponent<PaddleSound>();
 
             // Every emitter hangs off this rather than off the hull directly,
             // so the whole rig can be held at the waterline as she settles.
@@ -218,7 +242,20 @@ namespace SeaSick.Ship
             WidenOverLife(wakeLinePort);
             WidenOverLife(wakeLineStar);
 
+            // Bursts keep their 1200 headroom elsewhere; the three emitters
+            // that now stream with speed and turn are capped for the phone.
+            SetCap(bowSpray, BowSprayCap);
+            SetCap(shoulderPort, ShoulderCap);
+            SetCap(shoulderStar, ShoulderCap);
+
             ApplyRig();
+        }
+
+        static void SetCap(ParticleSystem ps, int max)
+        {
+            if (ps == null) return;
+            var main = ps.main;
+            main.maxParticles = max;
         }
 
         /// Put every emitter where THIS hull's water is. Re-run whenever she
@@ -362,16 +399,30 @@ namespace SeaSick.Ship
         {
             HoldAtWaterline();
             AimBeamSpray();
-            float s01 = Mathf.Clamp01(motor.CurrentSpeed / motor.MaxSpeed);
+            // Read every frame: the lab moves these live.
+            float spray = Mathf.Max(0f, JuiceTuning.sprayScale);
+            float s01 = JuiceTuning.Speed01(motor);
+            float yaw = JuiceTuning.YawRateDeg(rb);
+            float turn01 = JuiceTuning.Turn01(motor, yaw);
             // Spray kicks in hard when the bow drops onto a wave face.
             float slam = Mathf.Clamp01(-motor.SurfAccel / 2.5f);
-            SetRate(bowSpray, sprayFullRate * (Mathf.Pow(s01, 1.4f) * 0.12f + slam * 0.35f));
+            // A turn only throws water if she is moving through it.
+            float turnSpray = turn01 * Mathf.Sqrt(s01);
+            SetRate(bowSpray, sprayFullRate * spray
+                * (Mathf.Pow(s01, 1.4f) * bowSpeedShare + turnSpray * bowTurnShare + slam * 0.35f));
             // Continuous foam is the water-following SurfaceWake mesh.
             // Keep these legacy emitters silent; impact spray remains airborne.
             SetRate(wake, 0);
-            SetRate(shoulderPort, 0);
-            SetRate(shoulderStar, 0);
             SetRate(sternWash, 0);
+
+            // ...except the OUTSIDE shoulder in a real turn. Turning to
+            // starboard she skids: the water comes at her from ahead and to
+            // port, and the port bow is the one that shoulders it aside.
+            // Gated so a straight course stays as clean as it was.
+            float bite = Mathf.InverseLerp(shoulderTurnGate, 1f, turn01) * Mathf.Pow(s01, 0.8f);
+            float shoulder = shoulderRate * outsideShoulderShare * spray * bite;
+            SetRate(shoulderPort, yaw > 0f ? shoulder : 0f);
+            SetRate(shoulderStar, yaw < 0f ? shoulder : 0f);
 
             // The wake arms need real way before there is a wake at all, and
             // they lengthen with speed — a fast hull throws a longer, denser V.
