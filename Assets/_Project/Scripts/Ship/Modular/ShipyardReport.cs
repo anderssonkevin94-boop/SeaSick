@@ -52,8 +52,10 @@ namespace SeaSick.Ship.Modular
         }
         public string currentRotorId, proposedRotorId;
         /// Proposed ship as loaded: draft above the keel from the module
-        /// station tables, and from the sailing model's hull form. Both
-        /// PROVISIONAL while the two models differ. NaN = above the deck line.
+        /// station tables, and from the sailing model's hull form -- both for
+        /// the SAME mass (module lightship sum + cargo + crew + guns; the sim
+        /// is weighed with the same lightship sum). PROVISIONAL while the two
+        /// GEOMETRIES differ. NaN = outside the model's keel..deck range.
         public float tableDraftM = float.NaN, simDraftM = float.NaN;
         public float tableDraftCurrentM = float.NaN, simDraftCurrentM = float.NaN;
         /// Why she cannot be refitted right now ("" = she can). Not a draft
@@ -100,7 +102,7 @@ namespace SeaSick.Ship.Modular
                 current = v.totalMassCurrentKg / 1000f, proposed = v.totalMassDraftKg / 1000f, available = current != null && proposed != null,
                 note = "Lightship + cargo + crew + guns; floated on the module station tables." });
             Add("lightship", "Lightship mass", "t", p => p.lightshipKg / 1000f, true,
-                "Sum of the sections' provisional lightship masses (module data).");
+                "Sum of the modules' provisional lightship masses (module data). The sailing model is weighed with this too.");
             r.figures.Add(new ShipyardFigure { id = "draft", label = "Draft (as loaded)", unit = "m", provisional = true,
                 current = v.tableDraftCurrentM, proposed = v.tableDraftDraftM,
                 available = current != null && proposed != null && !float.IsNaN(v.tableDraftCurrentM) && !float.IsNaN(v.tableDraftDraftM),
@@ -108,13 +110,13 @@ namespace SeaSick.Ship.Modular
             r.figures.Add(new ShipyardFigure { id = "simDraft", label = "Draft in the sailing model (as loaded)", unit = "m", provisional = true,
                 current = v.simDraftCurrentM, proposed = v.simDraftDraftM,
                 available = current != null && proposed != null && !float.IsNaN(v.simDraftCurrentM) && !float.IsNaN(v.simDraftDraftM),
-                note = "Same mass floated on the reshaped reference hull the physics sails on (approximation). Differs from the table draft while the two models differ." });
+                note = "The same mass floated on the reshaped reference hull the physics sails on (approximation). Differs from the table draft while the two geometries differ. Cargo is not yet felt by the physics." });
             r.tableDraftM = v.tableDraftDraftM; r.simDraftM = v.simDraftDraftM;
             r.tableDraftCurrentM = v.tableDraftCurrentM; r.simDraftCurrentM = v.simDraftCurrentM;
             Add("loadLine", "Displacement at load line", "t", p => p.loadDisplacementKg / 1000f, true,
                 "Load line = a freeboard margin below the deck, anchored on the standard ship's full load.");
             Add("holdCells", "Hold (volume)", "", p => p.capacity.holdCells, true,
-                "Enclosed volume below deck, anchored to 16 on the standard ship.");
+                "Sum of the sections' authored hold cells (provisional module data; 16 on the standard ship).");
             r.figures.Add(new ShipyardFigure { id = "weightAllowance", label = "Cargo weight allowance", unit = "t", provisional = true,
                 current = v.weightAllowanceCurrentKg / 1000f, proposed = v.weightAllowanceDraftKg / 1000f,
                 available = current != null && proposed != null,
@@ -123,11 +125,12 @@ namespace SeaSick.Ship.Modular
                 current = v.cargoKg / 1000f, proposed = v.cargoKg / 1000f });
             r.sections.AddRange(v.sections);
             Add("crewBerths", "Crew berths", "", p => p.capacity.crewStations, true,
-                "Deck stations along the crew strip, anchored to 8 on the standard ship.");
-            Add("gunSlots", "Usable gun/equipment slots", "", p => 0f, false,
-                "No deck equipment can be fitted in the prototype.");
+                "Sum of the sections' authored berths (provisional module data; 8 on the standard ship).");
+            Add("gunSlots", "Gun slots", "", p => p.capacity.gunSlots, true,
+                "Authored gun slots with clearance, clear of the crew passages (provisional). Guns cannot be fitted by hand in the prototype; the hull's own guns stand in them.");
             Add("deckSlots", "Deck slots (reserved)", "", p => p.capacity.equipmentSlots, true);
-            Add("guns", "Guns carried", "", p => p.capacity.guns);
+            Add("guns", "Guns carried", "", p => p.capacity.guns, true,
+                "The hull's gun pairs that have a slot pair in their section and berths for their crew (1 hand per gun). More slots do not add guns.");
             if (proposed != null && current != null && proposed.capacity.holdCells < current.capacity.holdCells)
                 r.warnings.Add(new ShipyardNote { code = "HOLD_SMALLER", message = $"The hold shrinks from {current.capacity.holdCells} to {proposed.capacity.holdCells}." });
             if (proposed != null && current != null && proposed.capacity.crewStations < current.capacity.crewStations)

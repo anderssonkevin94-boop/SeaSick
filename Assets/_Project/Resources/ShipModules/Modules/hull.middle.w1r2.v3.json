@@ -180,6 +180,12 @@
         "provisional": true,
         "rule": "Seeded 2026-09-24 so stern + 1 middle + bow = today's steamer mass (hullform.json massKg x 0.42^3 = 31906.6 kg), split by each section's table volume to the deck. Wheel, carrier and chimney carry 0: today's mass is one lump."
     },
+    "capacity": {
+        "holdCells": {"value": 5, "provisional": true, "source": "16 x this section's table volume to the deck / the Long ship's, largest remainder"},
+        "berths": {"value": 4, "provisional": true, "source": "today's deck stations standing in this section on the Long ship"},
+        "gunSlots": {"ids": ["DeckSlot_1_-1", "DeckSlot_1_1"], "provisional": true, "source": "today's gun pair 2 (z 1.09 m, 4.69 u into the bay)"},
+        "rule": "Seeded 2026-09-24 (A4) ONCE so stern + 1 middle + bow = today's steamer exactly (16 hold cells, 8 berths, 6 guns = 3 pairs): hold cells = 16 split by each section's hydrostatic-table volume to the deck (largest remainder); berths = today's 8 deck stations (SteamerBootstrap.DeckStation) counted in the section whose X range contains them; gun slots = the port/starboard deck slot nearest to today's gun socket (hullform.json gunSockets, x0.42) in the section that contains it. PROVISIONAL: tune freely; the shipyard sums whatever is here."
+    },
     "physical": {
         "massKg": {"authored": false, "value": 0, "source": ""},
         "displacementM3": {"authored": false, "value": 0, "source": ""},

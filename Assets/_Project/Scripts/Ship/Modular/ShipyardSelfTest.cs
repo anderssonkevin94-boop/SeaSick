@@ -72,8 +72,12 @@ namespace SeaSick.Ship.Modular
                 {
                     var c = ShipConfiguration.WithMiddles(n); c.rotorId = rotor;
                     var v = ShipyardPlanner.Validate(c, lib, reference, empty);
-                    allOk &= v.ok;
-                    accepted.Add($"{n}x{(rotor == ShipConfiguration.TimberRotor ? "T" : "R")}:{(v.ok ? "ok" : v.Summary())}");
+                    // The MODULE POLICY accepts every length; only equipment
+                    // retention may refuse (Short: a gun pair without a slot,
+                    // gated separately in short-refused-for-a-gun-pair-without-a-slot).
+                    bool policyOk = v.issues.TrueForAll(i => i.code == ShipyardCodes.EquipmentWouldBeLost);
+                    allOk &= policyOk;
+                    accepted.Add($"{n}x{(rotor == ShipConfiguration.TimberRotor ? "T" : "R")}:{(v.ok ? "ok" : policyOk ? "policy ok, equipment-refused" : v.Summary())}");
                 }
             Gate("policy-accepts-0-3-bays-timber-reinforced", allOk, string.Join(" ", accepted));
 
@@ -153,12 +157,23 @@ namespace SeaSick.Ship.Modular
             // ---- plans: Long is the reference, exactly ---------------------
             var longPlan = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), lib, reference, null, out _);
             var longAgain = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), lib, reference, longPlan, out _);
+            // Field for field, except massKg: that is now the module lightship
+            // sum (one mass source), gated separately to today's 31 906.6 kg.
+            string longJsonSameMass = null;
+            if (longAgain != null)
+            {
+                var c = longAgain.data.Reshaped(1f, 1f, 1f); c.massKg = reference.massKg;
+                longJsonSameMass = ModularJson.To(c);
+            }
             Gate("long-is-reference-exactly", longPlan != null && longAgain != null && longAgain.sLength == 1f && longAgain.sBeam == 1f
-                && longAgain.sDepth == 1f && longAgain.sternShiftM == 0f && ModularJson.To(longAgain.data) == refJson
-                && longAgain.capacity.holdCells == 16 && longAgain.capacity.crewStations == 8,
+                && longAgain.sDepth == 1f && longAgain.sternShiftM == 0f && longJsonSameMass == refJson && longAgain.gunIdx == null
+                && longAgain.capacity.holdCells == 16 && longAgain.capacity.crewStations == 8 && longAgain.capacity.guns == 6 && longAgain.capacity.gunSlots == 6,
                 longAgain != null ? $"s=({longAgain.sLength}, {longAgain.sBeam}, {longAgain.sDepth}) shift {longAgain.sternShiftM} {longAgain.capacity}"
                     + $" measured L {F(longAgain.measure.waterlineLengthU)} u B {F(longAgain.measure.beamU)} u D {F(longAgain.measure.depthU)} u stem={longAgain.measure.stemFound}" : "no plan");
 
+            Gate("long-mass-is-todays", longAgain != null && longAgain.massMissing == null && longAgain.data.massKg == longAgain.lightshipKg
+                && Mathf.Abs(longAgain.data.massKg - reference.massKg) < 0.05f && longAgain.data.massKg.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) == "31906.6",
+                longAgain != null ? $"sim mass = module lightship sum {longAgain.data.massKg:0.000} kg vs today's {reference.massKg:0.000} kg (delta {longAgain.data.massKg - reference.massKg:0.000} kg)" : "no plan");
             var shortPlan = ShipyardPlanner.PlanFor(ShipConfiguration.Short(), lib, reference, longPlan, out _);
             var threePlan = ShipyardPlanner.PlanFor(ShipConfiguration.WithMiddles(3), lib, reference, longPlan, out _);
             string Line(string n, ShipyardPlan p) => p == null ? n + " none" :
@@ -199,6 +214,18 @@ namespace SeaSick.Ship.Modular
                 var ov = ShipyardPlanner.Validate(ShipConfiguration.Long(), lib, reference,
                     new LiveShipSnapshot { config = ShipConfiguration.Long(), totalHeld = 100, kindsOnDeck = 1, crewAboard = 8 });
                 Gate("overload-is-blocking", over && ov.HasCode(ShipyardCodes.Overloaded), ov.issues.Find(i => i.code == ShipyardCodes.Overloaded)?.message ?? "no OVERLOADED");
+                // The sailing model outside its keel..deck range: a refusal, never a clamp.
+                float simDeckKg = 0f;
+                {
+                    float deck = float.MaxValue; foreach (var st2 in longPlan.data.stations) deck = Mathf.Min(deck, st2.deckY);
+                    simDeckKg = ShipyardPlanner.VolumeTo(longPlan.data, deck) * HullFormData.SeaWaterDensity;
+                }
+                bool simOver = !ShipyardPlanner.SimStaticDraft(longPlan.data, simDeckKg * 1.01f, out float simNaN) && float.IsNaN(simNaN);
+                int cargoToSimDeck = Mathf.CeilToInt((simDeckKg * 1.01f - longPlan.lightshipKg - 8 * 90f - 6 * 500f) / 500f);
+                var so = ShipyardPlanner.Validate(ShipConfiguration.Long(), lib, reference,
+                    new LiveShipSnapshot { config = ShipConfiguration.Long(), totalHeld = cargoToSimDeck, kindsOnDeck = 1, crewAboard = 8 });
+                Gate("sim-out-of-range-is-blocking", simOver && so.HasCode(ShipyardCodes.SimOutOfRange) && float.IsNaN(so.simDraftDraftM),
+                    $"sim deck limit {F(simDeckKg / 1000f)} t; {cargoToSimDeck} loads -> {string.Join(", ", so.issues.ConvertAll(x => x.code))}");
                 longPlan.hydro.SolveWaterline(0f, HullFormData.SeaWaterDensity, out _, out float d0);
                 Gate("below-keel-is-zero", hm.VolumeAt(-5f) == 0f && hm.VolumeAt(hm.KeelZU) == 0f && d0 == 0f && float.IsNaN(hm.VolumeAt(2.5f)),
                     "volume 0 at/below the keel, NaN (never clamped) above the deck line");
@@ -225,21 +252,133 @@ namespace SeaSick.Ship.Modular
                 }
                 Gate("drafts-at-equal-lightship-per-length", true, string.Join("; ", eq));
 
-                // PROVISIONAL: two hydrostatic models, every supported length.
-                // Timber and reinforced rotors carry no mass of their own, so
-                // one row per length covers both.
-                var rows = new List<string> { "config | lightship t | table draft m | sim static draft m | delta m | delta % | sim own mass t -> sim draft m" };
-                bool allFinite = true;
+                // PROVISIONAL: two hydrostatic models, every supported length,
+                // ONE mass: the module lightship sum, which is also what the
+                // sailing model is weighed with (data.massKg). Timber and
+                // reinforced rotors carry no mass of their own, so one row per
+                // length covers both. "sim design" = the reshaped form's own
+                // design draft, where rho*V of the stretched form would float.
+                var rows = new List<string> { "config | mass t | table draft m | sim static draft m | delta m | delta % | sim design draft m" };
+                bool allFinite = true, oneMass = true;
                 for (int n = 0; n <= 3; n++)
                 {
                     var pl = ShipyardPlanner.PlanFor(ShipConfiguration.WithMiddles(n), lib, reference, longPlan, out _);
+                    oneMass &= pl.data.massKg == pl.lightshipKg && pl.massMissing == null;
                     bool a = ShipyardPlanner.TableDraft(pl, pl.lightshipKg, out float td);
-                    bool b = ShipyardPlanner.SimStaticDraft(pl.data, pl.lightshipKg, out float sd);
-                    bool c = ShipyardPlanner.SimStaticDraft(pl.data, pl.data.massKg, out float own);
-                    allFinite &= a && b && c;
-                    rows.Add($"{n} bays | {F(pl.lightshipKg / 1000f)} | {F(td)} | {F(sd)} | {F(sd - td)} | {(sd - td) / td * 100f:+0.0;-0.0} | {F(pl.data.massKg / 1000f)} -> {F(own)}");
+                    bool b = ShipyardPlanner.SimStaticDraft(pl.data, pl.data.massKg, out float sd);
+                    allFinite &= a && b;
+                    rows.Add($"{n} bays | {F(pl.data.massKg / 1000f)} | {F(td)} | {F(sd)} | {F(sd - td)} | {(sd - td) / td * 100f:+0.0;-0.0} | {F(pl.data.draft)}");
                 }
-                Gate("two-hydrostatic-models-table", allFinite, "\n      " + string.Join("\n      ", rows));
+                Gate("two-hydrostatic-models-table", allFinite && oneMass, (oneMass ? "" : "SIM MASS != MODULE LIGHTSHIP; ") + "\n      " + string.Join("\n      ", rows));
+            }
+
+            // ---- authored capacity (A4) ------------------------------------------
+            {
+                var capRows = new List<string>();
+                bool authoredOk = true;
+                foreach (var id in new[] { ShipConfiguration.V3Stern, ShipConfiguration.V3Middle, ShipConfiguration.V3Bow })
+                {
+                    var d = lib.Get(id); var c = d?.capacity;
+                    bool ok = c != null && c.holdCells != null && c.berths != null && c.gunSlots?.ids != null
+                        && c.holdCells.provisional && c.berths.provisional && c.gunSlots.provisional;
+                    authoredOk &= ok;
+                    capRows.Add(ok ? $"{id}: hold {c.holdCells.value} berths {c.berths.value} gun slots [{string.Join(", ", c.gunSlots.ids)}]" : id + ": MISSING/not provisional");
+                }
+                var lsc = longPlan.sections;
+                var probs = new List<string>(); int sumHold = 0, sumBerths = 0, sumSlots = 0;
+                foreach (var sc in lsc) { probs.AddRange(sc.gunSlotProblems); sumHold += sc.holdCells; sumBerths += sc.berths; sumSlots += sc.gunSlotIds.Count; }
+                Gate("capacity-authored-per-module", authoredOk && lsc.Count == 3 && sumHold == 16 && sumBerths == 8 && sumSlots == 6 && probs.Count == 0
+                    && longPlan.capacity.holdCells == 16 && longPlan.capacity.crewStations == 8 && longPlan.capacity.guns == 6,
+                    string.Join(" | ", capRows) + $" || Long sum: hold {sumHold}, berths {sumBerths}, gun slots {sumSlots}, guns {longPlan.capacity.guns}" + (probs.Count > 0 ? " PROBLEMS " + string.Join("; ", probs) : ""));
+
+                // Where today's guns and berths stand on Long (the seeding rule).
+                var where = new List<string>();
+                for (int i = 0; i < reference.gunSockets.Length; i++)
+                {
+                    float z = reference.gunSockets[i].z;
+                    var sc = lsc.Find(x => z >= x.aftZ && z < x.fwdZ);
+                    where.Add($"gun pair {i + 1} z {F(z)} -> {sc?.sectionKey} (slot pairs at z {string.Join("/", sc?.gunPairZs.ConvertAll(F) ?? new List<string>())})");
+                }
+                var berthAt = new Dictionary<string, int>();
+                foreach (var z in ShipyardPlanner.CrewStationZs(longPlan.data, 8))
+                {
+                    var sc = lsc.Find(x => z >= x.aftZ && z < x.fwdZ);
+                    string k = sc?.sectionKey ?? "?"; berthAt[k] = (berthAt.TryGetValue(k, out int b) ? b : 0) + 1;
+                }
+                bool seedsMatch = true;
+                foreach (var sc in lsc) seedsMatch &= (berthAt.TryGetValue(sc.sectionKey, out int b) ? b : 0) == sc.berths;
+                Gate("capacity-seeds-match-todays-deck", seedsMatch,
+                    string.Join("; ", where) + " || today's 8 stations: " + string.Join(", ", new List<string>(berthAt.Keys).ConvertAll(k => k + " " + berthAt[k])));
+
+                // Every standard length: the sum over installed sections.
+                var cfgRows = new List<string> { "config | hold | berths | gun slots | guns (pairs kept) | mass t | table draft m | sim draft m | weight room t (8 hands; Short 4)" };
+                bool sums = true;
+                for (int n = 0; n <= 3; n++)
+                {
+                    var pl = ShipyardPlanner.PlanFor(ShipConfiguration.WithMiddles(n), lib, reference, longPlan, out _);
+                    int h = 0, b = 0, g = 0;
+                    foreach (var sc in pl.sections) { h += sc.holdCells; b += sc.berths; g += sc.gunSlotIds.Count; }
+                    sums &= pl.capacity.holdCells == h && pl.capacity.crewStations == b && pl.capacity.gunSlots == g
+                        && pl.capacity.guns <= g && pl.capacity.guns <= b * 1 && pl.capacity.guns <= 2 * reference.gunSockets.Length && pl.capacityMissing == null;
+                    ShipyardPlanner.TableDraft(pl, pl.lightshipKg, out float td);
+                    ShipyardPlanner.SimStaticDraft(pl.data, pl.data.massKg, out float sd);
+                    string kept = pl.gunIdx == null ? "all" : string.Join(",", Array.ConvertAll(pl.gunIdx, x => (x + 1).ToString()));
+                    cfgRows.Add($"{n} bays | {pl.capacity.holdCells} | {pl.capacity.crewStations} | {pl.capacity.gunSlots} | {pl.capacity.guns} ({kept}) | {F(pl.data.massKg / 1000f)} | {F(td)} | {F(sd)} | {F(pl.WeightAllowanceKg(n == 0 ? 4 : 8, WeightModel.Default) / 1000f)}");
+                }
+                Gate("capacity-is-sum-of-sections", sums, "\n      " + string.Join("\n      ", cfgRows));
+
+                var threeP = ShipyardPlanner.PlanFor(ShipConfiguration.WithMiddles(3), lib, reference, longPlan, out _);
+                Gate("extra-slots-grant-no-guns", threeP.capacity.gunSlots > longPlan.capacity.gunSlots && threeP.capacity.guns == longPlan.capacity.guns,
+                    $"3 bays: {threeP.capacity.gunSlots} gun slots but {threeP.capacity.guns} guns (the hull's 3 pairs); weight room is the shared limit");
+
+                // Synthetic data: a slot in the passage, a free-area slot, an
+                // unknown id -- none counts; and berths cap guns.
+                string midJson = null; int midAt = -1;
+                for (int i = 0; i < mods.Count; i++) if (mods[i].Contains("\"id\": \"hull.middle.w1r2.v3\"")) { midJson = mods[i]; midAt = i; }
+                if (midJson != null)
+                {
+                    string bad = midJson.Replace("\"ids\": [\"DeckSlot_1_-1\", \"DeckSlot_1_1\"]", "\"ids\": [\"DeckSlot_1_-1\", \"DeckSlot_1_1\", \"DeckSlot_0_1\", \"DeckArea\", \"DeckSlot_9\"]")
+                        .Replace("\"id\": \"DeckSlot_0_1\",\n            \"socketId\": \"DeckSlot_0_1\",\n            \"clearanceSizeU\": {\"x\": 1.8, \"y\": 1.55,",
+                                 "\"id\": \"DeckSlot_0_1\",\n            \"socketId\": \"DeckSlot_0_1\",\n            \"clearanceSizeU\": {\"x\": 1.8, \"y\": 2.2,");
+                    var badMods = new List<string>(mods); badMods[midAt] = bad;
+                    var badLib = ModuleLibrary.FromJson(stdJson, badMods, names);
+                    if (readResourceText != null) badLib.LoadHydrostatics(readResourceText);
+                    var bp = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), badLib, reference, null, out _);
+                    var mp = bp?.sections.Find(x => x.sectionKey == "middle[0]");
+                    Gate("gun-slot-needs-clearance-and-clear-passage", bad != midJson && mp != null && mp.gunSlotIds.Count == 2 && mp.gunSlotProblems.Count == 3
+                        && mp.gunSlotProblems.Exists(x => x.Contains("passage")) && bp.capacity.guns == 6,
+                        mp != null ? string.Join("; ", mp.gunSlotProblems) : "no plan");
+
+                    string noBerths = midJson.Replace("\"berths\": {\"value\": 4,", "\"berths\": {\"value\": 0,");
+                    var nbMods = new List<string>(mods); nbMods[midAt] = noBerths;
+                    var nbLib = ModuleLibrary.FromJson(stdJson, nbMods, names);
+                    if (readResourceText != null) nbLib.LoadHydrostatics(readResourceText);
+                    var np = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), nbLib, reference, null, out _);
+                    Gate("guns-need-berths-for-their-crew", noBerths != midJson && np != null && np.capacity.crewStations == 4 && np.capacity.guns == 4
+                        && np.gunIdx != null && np.gunIdx.Length == 2 && np.gunIdx[1] == 1 && np.data.gunSockets.Length == 2,
+                        np != null ? $"middle berths 0 -> berths {np.capacity.crewStations}, gun slots {np.capacity.gunSlots}, guns {np.capacity.guns} (pairs kept {string.Join(",", Array.ConvertAll(np.gunIdx ?? new int[0], x => (x + 1).ToString()))}; {WeightModel.CrewPerGun} hand per gun)" : "no plan");
+                }
+                else Gate("gun-slot-needs-clearance-and-clear-passage", false, "middle module JSON not found");
+
+                // Short: 4 slots (stern pair + bow pair) for the hull's 3 pairs.
+                var fewHands = new LiveShipSnapshot { config = ShipConfiguration.Long(), totalHeld = 0, kindsOnDeck = 0, crewAboard = 4 };
+                var sv = ShipyardPlanner.Validate(ShipConfiguration.Short(), lib, reference, fewHands);
+                var srep = ShipyardReport.From(sv, sv.currentPlan, sv.draftPlan, lib.MetresPerUnit);
+                Gate("short-refused-for-a-gun-pair-without-a-slot", !sv.ok && sv.gunsStruck.Count == 1 && sv.capacityDraft.guns == 4
+                    && srep.blocking.Exists(x => x.code == "EQUIPMENT_WOULD_BE_LOST") && !srep.warnings.Exists(x => x.code == "GUNS_STRUCK"),
+                    $"{(sv.ok ? "OK" : sv.Summary())}; struck: {string.Join(", ", sv.gunsStruck.ConvertAll(x => x.label))}; guns {sv.capacityCurrent.guns} -> {sv.capacityDraft.guns}");
+
+                // Cross-check only: the old DERIVED capacity (volume / crew-strip
+                // ratios) next to the authored sums. Printed, never gated.
+                var diff = new List<string>();
+                for (int n = 0; n <= 3; n++)
+                {
+                    var pl = ShipyardPlanner.PlanFor(ShipConfiguration.WithMiddles(n), lib, reference, longPlan, out _);
+                    int dh = Mathf.Max(4, Mathf.FloorToInt(16 * (pl.data.VolumeBelowDeck() / reference.VolumeBelowDeck()) + 1e-4f));
+                    int dc = 2 * Mathf.Max(1, Mathf.FloorToInt(4 * (ShipyardPlanner.CrewStrip(pl.data) / ShipyardPlanner.CrewStrip(reference)) + 1e-4f));
+                    diff.Add($"{n} bays: hold authored {pl.capacity.holdCells} vs derived {dh} ({pl.capacity.holdCells - dh:+0;-0;0}), berths {pl.capacity.crewStations} vs {dc} ({pl.capacity.crewStations - dc:+0;-0;0})");
+                }
+                Gate("derived-capacity-cross-check", true, string.Join("; ", diff));
             }
 
             // ---- retention -----------------------------------------------------
@@ -295,9 +434,12 @@ namespace SeaSick.Ship.Modular
             var light = new LiveShipSnapshot { config = ShipConfiguration.WithMiddles(3), totalHeld = 2, kindsOnDeck = 1, crewAboard = 4 };
             var occ3 = ShipyardPlanner.Validate(ShipConfiguration.WithMiddles(3), lib, reference, light).sections;
             var mid3 = occ3.Find(o => o.sectionKey == "middle[1]");
-            Gate("section-occupancy", occ.Count == 3 && cells == 16 && cargo == 16 && berths == 8 && crewN == 8 && mid != null && !mid.canRemove
+            int occGuns = 0, occSlots = 0; foreach (var o in occ) { occGuns += o.guns; occSlots += o.gunSlots; }
+            Gate("section-occupancy", occ.Count == 3 && cells == 16 && cargo == 16 && berths == 8 && crewN == 8 && occGuns == 6 && occSlots == 6
+                && occ.TrueForAll(o => o.holdCells == lib.Get(o.moduleId).capacity.holdCells.value && o.berths == lib.Get(o.moduleId).capacity.berths.value)
+                && mid != null && !mid.canRemove
                 && !string.IsNullOrEmpty(mid.reason) && !occ[0].canRemove && mid3 != null && mid3.canRemove,
-                string.Join(" | ", occ.ConvertAll(o => $"{o.sectionKey}: hold {o.holdCells} cargo {o.cargoCells} berths {o.berths} crew {o.crew} [{string.Join(", ", o.equipment)}] remove={o.canRemove} {o.reason}"))
+                string.Join(" | ", occ.ConvertAll(o => $"{o.sectionKey}: hold {o.holdCells} cargo {o.cargoCells} berths {o.berths} crew {o.crew} gun slots {o.gunSlots} guns {o.guns} [{string.Join(", ", o.equipment)}] remove={o.canRemove} {o.reason}"))
                 + $" || 3-bay light: middle[1] remove={mid3?.canRemove}");
 
             // ---- purity ------------------------------------------------------------

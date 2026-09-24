@@ -18,8 +18,10 @@ using SeaSick.World;
 ///     -> reinforced -> Long; after each: the same GameObject and Rigidbody,
 ///     exactly one player ship / shipyard / listener, damage, hold per kind
 ///     and the crew roster unchanged, hands on the new deck, the drawn axle
-///     on the physics axle, motor/drive/body lengths and mass from the new
-///     hull form, the hold capacity and berths from the plan;
+///     on the physics axle, motor/drive/body lengths from the new hull form,
+///     her rigidbody mass = the module lightship sum (one mass source), the
+///     hold capacity, berths and guns carried from the plan's authored
+///     per-module capacity;
 /// (b) refused refits (oversized, W2, raised deck, 4 bays, stale draft,
 ///     cargo that would not fit, crew that would not fit, under way) leave
 ///     her bit-identical in the same frame;
@@ -34,6 +36,9 @@ using SeaSick.World;
 /// SeaSick.Steamer = 1). Play mode, Sea.unity, ~2.5 min. Never touches the
 /// player's save: refits persist to a temp file (PersistPathOverride) and
 /// the round trip uses temp files. Writes Logs/ShipyardRefitProbe.txt.
+// NOTE 2026-09-24: Short is refused (a gun pair without a slot), so the
+// shorter-than-today length cannot be sailed here; lengths trialled are
+// Long, 2 bays and 3 bays.
 public class ShipyardRefitProbe : MonoBehaviour
 {
     public static void Execute()
@@ -119,18 +124,23 @@ public class ShipyardRefitProbe : MonoBehaviour
         Refuse("cargo-would-not-fit", ShipConfiguration.Short(), ShipyardCodes.CargoWouldNotFit);
         voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
 
-        // Short has berths for 4: the probe lands four hands for the run
-        // (deactivates them; they come back before the last refit to Long).
+        // Short is refused outright while her 3 gun pairs cannot all have a
+        // slot (2 of 3; guns cannot be removed by hand yet) -- the agreed
+        // "never discard equipment" rule. Checked with 4 hands landed so the
+        // gun rule is what refuses her, not the berths.
         var crew = Crew();
         for (int i = crew.Count - 1; i >= 4; i--) { landed.Add(crew[i]); crew[i].gameObject.SetActive(false); }
+        Refuse("short-gun-pair-without-slot", ShipConfiguration.Short(), ShipyardCodes.EquipmentWouldBeLost);
+        foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
+        landed.Clear();
 
         string tmp = Application.temporaryCachePath;
         ShipyardService.PersistPathOverride = System.IO.Path.Combine(tmp, "ShipyardRefitProbe-persist.json");
-        yield return RefitAndCheck("short", ShipConfiguration.Short());
+        yield return RefitAndCheck("two-bays-first", ShipConfiguration.WithMiddles(2));
         Gate("apply-persisted-through-save-routine", System.IO.File.Exists(ShipyardService.PersistPathOverride)
             && System.IO.File.ReadAllText(ShipyardService.PersistPathOverride).Contains("hull.bow.w1r2.v3"),
             ShipyardService.PersistPathOverride);
-        yield return RefitAndCheck("two-bays", ShipConfiguration.WithMiddles(2));
+        yield return RefitAndCheck("long-between", ShipConfiguration.Long());
         yield return RefitAndCheck("three-bays", ShipConfiguration.WithMiddles(3));
         yield return RefitAndCheck("three-bays-timber", Mod(ShipConfiguration.WithMiddles(3), c => c.rotorId = ShipConfiguration.TimberRotor));
         yield return RefitAndCheck("three-bays-reinforced", ShipConfiguration.WithMiddles(3));
@@ -158,7 +168,7 @@ public class ShipyardRefitProbe : MonoBehaviour
         var savedCfg = yard.Current;
         var savedHold = HoldPerKind();
         bool wrote = SaveGame.SaveTo(saveA, "ShipyardRefitProbe");
-        yield return RefitAndCheck("short-before-load", ShipConfiguration.Short());
+        yield return RefitAndCheck("long-before-load", ShipConfiguration.Long());
         var data = SaveGame.Read(saveA);
         Gate("save-has-modular-field", wrote && data != null && !string.IsNullOrEmpty(data.ship.modular), data != null ? data.ship.modular : "unreadable");
         if (data != null)
@@ -205,7 +215,7 @@ public class ShipyardRefitProbe : MonoBehaviour
         sb.AppendLine($"sea trials at {spot:F0}");
         var trials = new List<string>();
         foreach (var (name, cfg, hands) in new[] {
-            ("long", ShipConfiguration.Long(), 8), ("short", ShipConfiguration.Short(), 4), ("three-bays", ShipConfiguration.WithMiddles(3), 8) })
+            ("long", ShipConfiguration.Long(), 8), ("two-bays", ShipConfiguration.WithMiddles(2), 8), ("three-bays", ShipConfiguration.WithMiddles(3), 8) })
         {
             if (!anchor.AtHomeDock && !anchor.BerthAtHome(out string bwhy)) sb.AppendLine("berth: " + bwhy);
             yield return new WaitForSeconds(0.5f);
@@ -216,7 +226,8 @@ public class ShipyardRefitProbe : MonoBehaviour
             foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
             landed.Clear();
         }
-        sb.AppendLine("PROVISIONAL two hydrostatic models, at her own mass, moored at rest (not gated):");
+        sb.AppendLine("PROVISIONAL two hydrostatic models, ONE mass (rb.mass = module lightship sum), moored at rest (not gated):");
+        sb.AppendLine("  config                   | mass | table draft | sim static draft | delta (sim - table) | sim design draft | sim dynamic (keel below local sea)");
         foreach (var r in draftRows) sb.AppendLine("  " + r);
         sb.AppendLine("sea trials:");
         foreach (var t in trials) sb.AppendLine("  " + t);
@@ -256,8 +267,13 @@ public class ShipyardRefitProbe : MonoBehaviour
         var steamer = yard.GetComponent<SteamerShip>();
         bool lengths = Mathf.Approximately(motor.HullLength, d.lwl) && steamer != null && steamer.Data == d
             && Mathf.Approximately(rb.mass, d.massKg) && paddle != null && paddle.Configured;
-        Gate(name + ": hull form everywhere", lengths && voyage.HoldCapacity == plan.capacityDraft.holdCells,
-            $"lwl {d.lwl:F3} HullLength {motor.HullLength:F3} mass {rb.mass:F0}/{d.massKg:F0} hold cap {voyage.HoldCapacity} (plan {plan.capacityDraft})");
+        var battery = yard.GetComponent<CannonBattery>();
+        int gunsFitted = battery != null ? 2 * battery.GunsPerSide : 0;
+        float lightKg = plan.draftPlan != null ? plan.draftPlan.lightshipKg : float.NaN;
+        Gate(name + ": hull form everywhere", lengths && voyage.HoldCapacity == plan.capacityDraft.holdCells
+            && Mathf.Approximately(rb.mass, lightKg) && gunsFitted == plan.capacityDraft.guns,
+            $"lwl {d.lwl:F3} HullLength {motor.HullLength:F3} mass {rb.mass:F0}/{d.massKg:F0} (module lightship {lightKg:F0}) "
+            + $"guns fitted {gunsFitted} hold cap {voyage.HoldCapacity} (plan {plan.capacityDraft})");
         Gate(name + ": drawn axle on physics axle", pivot != null && Mathf.Abs(axle.z - d.wheelAxle.z) < 0.01f && Mathf.Abs(axle.x) < 0.01f,
             $"drawn {axle.x:F3},{axle.y:F3},{axle.z:F3} physics {d.wheelAxle.x:F3},{d.wheelAxle.y:F3},{d.wheelAxle.z:F3} (y differs by design: {axle.y - d.wheelAxle.y:F3} m)");
         int onDeck = 0, standing = 0; string worst = "";
@@ -278,7 +294,9 @@ public class ShipyardRefitProbe : MonoBehaviour
 
     /// PROVISIONAL, printed not gated: at rest and moored, the keel's depth
     /// below the local sea surface (the ocean sampler the hull uses), next to
-    /// the two static predictions for the mass she actually has.
+    /// the two static predictions for the mass she actually has -- ONE mass,
+    /// the rigidbody's, which is the module lightship sum on a refitted ship
+    /// (and today's hull-form mass on the untouched one).
     IEnumerator MeasureDraft(string name, ShipyardPlan plan)
     {
         var d = yard.ActiveData;
@@ -296,7 +314,10 @@ public class ShipyardRefitProbe : MonoBehaviour
         float dyn = n > 0 ? sum / n : float.NaN;
         string table = plan != null && ShipyardPlanner.TableDraft(plan, rb.mass, out float td) ? td.ToString("F3") : "--";
         string stat = ShipyardPlanner.SimStaticDraft(d, rb.mass, out float sd) ? sd.ToString("F3") : "--";
-        draftRows.Add($"{name,-24} | {rb.mass / 1000f:F2} t | table {table} | sim static {stat} | sim dynamic {dyn:F3} m");
+        float td2 = float.NaN, sd2 = float.NaN;
+        bool both = plan != null && ShipyardPlanner.TableDraft(plan, rb.mass, out td2) & ShipyardPlanner.SimStaticDraft(d, rb.mass, out sd2);
+        string delta = both ? $"{sd2 - td2:+0.000;-0.000} m ({(sd2 - td2) / td2 * 100f:+0.0;-0.0} %)" : "--";
+        draftRows.Add($"{name,-24} | {rb.mass / 1000f:F2} t | table {table} | sim static {stat} | delta {delta} | sim design {d.draft:F3} | sim dynamic {dyn:F3} m");
     }
 
     void Refuse(string name, ShipConfiguration draft, string code, ShipConfiguration expected = null)

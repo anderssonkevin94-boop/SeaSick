@@ -89,8 +89,9 @@ public class ShipyardFigure { public string id, label, unit, note; public float 
 public class SectionOccupancy {
     public string sectionKey, moduleId;
     public float aftZ, fwdZ;                 // ship frame, m (ends open-ended)
-    public int holdCells, cargoCells;        // share of the hold (by table volume to the deck) / cargo attributed pro rata
-    public int berths, crew;                 // deck stations in it / hands posted there
+    public int holdCells, cargoCells;        // AUTHORED hold cells of this module / cargo attributed pro rata
+    public int berths, crew;                 // AUTHORED berths of this module / hands standing on it
+    public int gunSlots, guns;               // usable authored gun slots / guns standing in it
     public List<string> equipment;           // "gun pair 2", "funnel", "deck load pile 1"
     public bool canRemove; public string reason;   // bind removalBlocker here; stern/bow never
 }
@@ -107,31 +108,35 @@ first blocking message. Figures:
 | `beam`, `depth` | shell beam, keel-to-deck (m) | |
 | `sections` | middle bays | |
 | `displacement` | as loaded now: lightship + cargo + crew + guns (t) | yes |
-| `lightship` | sum of the sections' lightship masses (module data) (t) | yes |
+| `lightship` | sum of the modules' lightship masses (module data) — **the** mass: the sailing model is weighed with it too (t) | yes |
 | `draft` | as loaded, above the keel, **from module station tables** (m); unavailable = above the deck line | yes |
-| `simDraft` | what the live physics floats her at — **reshaped reference hull (approximation)** (m) | yes |
+| `simDraft` | the SAME mass floated on the sailing model's geometry — **reshaped reference hull (approximation)** (m) | yes |
 | `loadLine` | displacement at the load line (t) | yes |
-| `holdCells` | hold **volume** capacity (today's HoldCells) | yes |
+| `holdCells` | hold **volume** capacity = Σ sections' authored `holdCells` | yes |
 | `weightAllowance` | cargo **weight** room with the hands now aboard (t) | yes |
 | `cargoWeight` | what the cargo aboard weighs (t) | yes |
-| `crewBerths` | crew stations | yes |
-| `gunSlots` | usable gun/equipment slots (0: nothing can be fitted yet) | |
+| `crewBerths` | Σ sections' authored `berths` | yes |
+| `gunSlots` | Σ usable authored gun slots (validated: clearance, clear of crew passages) | yes |
 | `deckSlots` | deck slots the hull reserves (reserved, not usable yet) | yes |
-| `guns` | guns she carries (from her hull form) | |
+| `guns` | guns she carries: the hull's gun pairs with a slot pair in their section and berths for their crew | yes |
 
-Warnings today: `HOLD_SMALLER`, `FEWER_BERTHS`, `PROVISIONAL_TUNING`.
-Numbers you get for the three standard ships (headless self-test):
+Warnings today: `HOLD_SMALLER`, `FEWER_BERTHS`, `PROVISIONAL_TUNING`. A gun
+pair the draft has no slot for is a BLOCKING `EQUIPMENT_WOULD_BE_LOST`, not a
+warning (see §10 Capacity).
+Numbers you get for the standard ships (headless self-test, gate
+`capacity-is-sum-of-sections`):
 
-| | Short | Long (today) | 3 bays |
-| --- | --- | --- | --- |
-| hull / overall | 8.88 / 10.14 m | 11.88 / 13.14 m | 17.88 / 19.14 m |
-| sailing model lwl, mass | 9.42 m, 23.8 t | 12.60 m, 31.9 t | 18.97 m, 48.0 t |
-| module lightship (tables) → draft | 21.9 t → 0.86 m | 31.9 t → 0.84 m | 52.0 t → 0.83 m |
-| hold cells / berths | 11 / 4 | 16 / 8 | 24 / 14 |
-| cargo weight room (hands) | 4.3 t (4) · 3.9 t (8) | 8.0 t (8) | 16.2 t (8) |
-| deck slots / guns | 6 / 6 | 10 / 6 | 18 / 6 |
+| | Short | Long (today) | 2 bays | 3 bays |
+| --- | --- | --- | --- | --- |
+| hull / overall | 8.88 / 10.14 m | 11.88 / 13.14 m | 14.88 / 16.14 m | 17.88 / 19.14 m |
+| mass (Σ module lightship = sim mass) | 21.87 t | 31.91 t | 41.95 t | 51.99 t |
+| draft at that mass: tables / sim | 0.859 / 0.801 m | 0.844 / 0.861 m | 0.837 / 0.896 m | 0.832 / 0.919 m |
+| hold cells / berths | 11 / 4 | 16 / 8 | 21 / 12 | 26 / 16 |
+| gun slots / guns carried | 4 / 4 (pairs 1, 3) | 6 / 6 | 8 / 6 | 10 / 6 |
+| cargo weight room (hands) | 5.27 t (4) · 4.91 t (8) | 8.0 t (8) | 12.09 t (8) | 16.18 t (8) |
+| deck slots (reserved) | 6 | 10 | 14 | 18 |
 
-Short's weight room (4.3 t ≈ 8 units) binds before its volume (11 cells).
+Short's weight room (5.27 t ≈ 10 units) still binds before its volume (11 cells).
 
 ## 4. Side-effect guarantees
 
@@ -160,10 +165,13 @@ Milestone-1 codes (docs/MODULAR-SHIPS.md §6) all still apply. Added:
 | `CARGO_WOULD_NOT_FIT` (partId `hold`) | cargo units > new hold cells | "She is carrying 16 loads and this ship's hold takes 11. Unload 5 first; nothing is thrown overboard." |
 | `CARGO_WOULD_NOT_FIT` (partId `weight`) | cargo weight > new weight room | "Her cargo weighs 5.5 t and this ship can carry 5.4 t with 4 hands and her guns aboard. …" |
 | `CREW_WOULD_NOT_FIT` | hands aboard > new berths | "8 hands are aboard and this ship has stations for 4. Land 4 first." |
-| `EQUIPMENT_WOULD_BE_LOST` | something positioned on her (the funnel, a gun pair, a deck-load pile) has a place now and none on the draft | "Gun pair 2 would have no place on this ship; the refit is refused rather than leave it behind." |
+| `EQUIPMENT_WOULD_BE_LOST` | something positioned on her (the funnel, a deck-load pile, a gun pair the draft CARRIES but whose position is off her deck) has a place now and none on the draft. A gun pair the draft has no slot for is **struck**, not refused (warning `GUNS_STRUCK`, §10) | "Deck load pile 3 would have no place on this ship; the refit is refused rather than leave it behind." |
 | `STALE_DRAFT` | live config ≠ `expected` | "The ship changed since this plan was drawn up. Look again and confirm." |
 | `OVERLOADED` | the loaded mass would float her above the deck line (downflooding) — never clamped | "At 85.6 t she would float above her deck line and flood. Lighten her first." |
 | `NO_HYDROSTATICS` | a hull section has no (valid, hash-matching) station table | |
+| `SIM_OUT_OF_RANGE` (partId `sim`) | the SAILING MODEL, weighed with the same mass, would float outside its keel..deck range — never clamped (on Long it binds before `OVERLOADED`: 72.0 t vs 78.4 t) | "At 73.1 t her sailing model would float outside its keel-to-deck range. Lighten her first." |
+| `NO_CAPACITY` | a hull section has no authored `capacity` block | |
+| `NO_MASS_DATA` | a hull section has no `lightship` mass | |
 | `CANNOT_REFIT_NOW` | §6 | the reason sentence |
 | `APPLY_FAILED`, `SAVE_FAILED` | the rebuild / the save failed; she was put back | |
 | `NO_REFERENCE_HULL` | the steamer's hull form is missing | |
@@ -226,7 +234,8 @@ waterline datum** (new bow socket role `hull.stem`, X 8.45 measured from
 count); beam = 2 × the join profile's shell half-breadth; depth = the
 profile's keel-to-deck. `HullFormData.Reshaped(sL, sB, sD)` reshapes the
 steamer's generated station tables by those factors, every field by its own
-definition (documented in the method; e.g. mass ∝ sL·sB·sD, BM ∝ sB²/sD, wheel
+definition (documented in the method; e.g. mass ∝ sL·sB·sD, which the plan then
+replaces with the module lightship sum (one mass source, below), BM ∝ sB²/sD, wheel
 radius/dip and rudder area unchanged). The stern's fittings (wheel axle,
 well, rudder, helm) are then pinned to the drawn stern, which moves by half
 the change in length. **This is an approximation**: the assembled hull's
@@ -256,40 +265,60 @@ running on the reshaped `HullFormData` (it needs half-breadth stations, the
 tables have areas). Measured agreement for today's ship: 31.9 t floats at
 **0.844 m** on the tables vs **0.861 m** in the sailing model (−1.9 %); the
 table volume at the model's draft is 31.86 m³ vs the model's 31.13 m³
-(+2.3 %); volume to the deck 76.46 m³. They agree for Long. They drift apart
-with length: Short lightship 21.9 t (modules) vs 23.8 t (sailing model), 3
-bays 52.0 t vs 48.0 t (±8 %), because the sailing model stretches the whole
-steamer while the tables add real bays. The drawn datum (Z 0) sits 0.116 m
+(+2.3 %); volume to the deck 76.46 m³. They agree for Long. Their GEOMETRIES
+drift apart with length (the sailing model stretches the whole steamer while
+the tables add real bays: ρ·V of the stretched form is 23.8 t for Short and
+48.0 t for 3 bays vs 21.9 / 52.0 t of module lightship), but since
+2026-09-24 there is **one mass** (below). The drawn datum (Z 0) sits 0.116 m
 above the table waterline; the view hangs it on the physics waterline.
 **Next step (proposed, not built):** generate `HullFormBody`'s station data
 (half-breadth / area / moment per level) from the module tables — the export
 would need half-breadth and moment per station as well as area — so the sim
 and the report share one geometry source.
 
+**One mass source (2026-09-24, Kevin).** Every plan, Long included, sets the
+reshaped `HullFormData.massKg` to Σ installed modules' `lightship.massKg`
+(`ShipyardPlanner.ModuleLightshipKg`: a hull section without one is refused
+`NO_MASS_DATA`; wheel, carrier and chimney carry none today, so 0, and that
+is kept). `HullFormBody.Configure` sets `rb.mass` from `massKg` and derives
+the inertia tensor, heave/roll/pitch damping and roll/pitch stiffness from
+that same number; `PaddleDrive` scales its engine torque from `rb.mass` as it
+always did. The form's GEOMETRY (`volume`, design `draft`, stations) stays
+the reshaped hull's, so she comes to rest wherever that mass floats her,
+which is her design draft only on Long. That is intended. (`Submersion` =
+immersed / design volume, so at rest it reads ≈ 0.92 on Short and ≈ 1.08 on
+3 bays; it scales surge resistance and the rudder's wetness clamp.) Long's
+sim mass is 31 906.60 kg vs today's 31 906.62 kg (gate `long-mass-is-todays`;
+the untouched V8 ship keeps the hull form's own mass). Cargo, crew and gun
+weights are still **checked, not felt** by the steamer's rigidbody.
+
 ### Provisional: two hydrostatic models
 
 The shipyard report floats a ship on the module station tables; the game
-sails her on the reshaped reference hull. Both drafts are in the report
+sails her on the reshaped reference hull. Both are now weighed with the SAME
+mass (above); what differs is geometry. Both drafts are in the report
 (`ShipyardReport.tableDraftM` / `simDraftM`, and `…CurrentM`; figures `draft`
-and `simDraft`), both PROVISIONAL while the models differ. Static values
-(headless self-test, gate `two-hydrostatic-models-table`; the sim column is
+and `simDraft`), both PROVISIONAL. Static values at the lightship mass
+(headless self-test, gate `two-hydrostatic-models-table`, which also checks
+sim mass == module lightship for every length; the sim column is
 HullFormBody's own strip sum, `AreaAt(level) × dz`, solved for the mass).
-Timber and reinforced rotors carry no mass of their own, so one row per
-length covers both:
+Timber and reinforced rotors carry no mass, so one row per length covers both:
 
-| config | lightship (modules) | table draft | sim static draft | Δ | Δ % | sim at its own mass |
+| config | mass (Σ module lightship = sim) | table draft | sim static draft | Δ (sim − table) | Δ % | sim design draft |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0 bays (Short) | 21.87 t | 0.859 m | 0.801 m | −0.059 m | −6.8 % | 23.85 t → 0.861 m |
-| 1 bay (Long, today) | 31.91 t | 0.844 m | 0.861 m | +0.017 m | +2.0 % | 31.91 t → 0.861 m |
-| 2 bays | 41.95 t | 0.837 m | 0.896 m | +0.059 m | +7.1 % | 39.97 t → 0.861 m |
-| 3 bays | 51.99 t | 0.832 m | 0.919 m | +0.087 m | +10.5 % | 48.03 t → 0.861 m |
+| 0 bays (Short) | 21.87 t | 0.859 m | 0.801 m | −0.059 m | −6.8 % | 0.861 m |
+| 1 bay (Long, today) | 31.91 t | 0.844 m | 0.861 m | +0.017 m | +2.0 % | 0.861 m |
+| 2 bays | 41.95 t | 0.837 m | 0.896 m | +0.059 m | +7.1 % | 0.861 m |
+| 3 bays | 51.99 t | 0.832 m | 0.919 m | +0.087 m | +10.5 % | 0.861 m |
 
-The sim floats every length at exactly its design draft at its own mass (its
-mass is ρ·V of the stretched form by construction); the tables say a longer
-W1-r2 ship at the modules' lightship sits slightly shallower. The DYNAMIC
-column — the keel's depth below the local sea surface, moored at rest after
-each refit, at her actual rigidbody mass — is printed by the play-mode probe
-(`Logs/ShipyardRefitProbe.txt`, "PROVISIONAL two hydrostatic models"); it has
+The sim column is now where the live physics actually comes to rest. Before
+this change she rested at 0.861 m at every length, on ρ·V of the stretched
+form. No length's lightship or full load leaves the sim's keel..deck range;
+if one did, the refit is refused `SIM_OUT_OF_RANGE` (gate
+`sim-out-of-range-is-blocking`). The DYNAMIC column (the keel's depth below
+the local sea surface, moored at rest after each refit, at her rigidbody
+mass) is printed by the play-mode probe (`Logs/ShipyardRefitProbe.txt`,
+"PROVISIONAL two hydrostatic models", same columns + dynamic). The probe has
 not been run yet. Nothing is gated on agreement.
 
 **Lightship per module (H5).** Each hull module's `lightship.massKg` is
@@ -298,19 +327,82 @@ massKg × 0.42³), split by each section's table volume to the deck: stern
 12 498.2, middle 10 039.4, bow 9 369.0 kg. Wheel, carrier and chimney carry 0
 (today's mass is one lump).
 
-**Capacity (D9) — derived today, NOT yet authored per module (A4 pending).**
-Hold cells = 16 × (volume below deck ÷ Long's), floor, min 4. Berths = 8 ×
-(usable deck strip ÷ Long's), whole pairs. Weight room (A2) = displacement at
-the load line − lightship − crew × 90 kg − guns × 500 kg, using `ShipLoad`'s
-weights (`CargoUnitKg` 500, `CrewKg` 90; the steamer's guns have no calibre,
-so the lightest, 500 kg — provisional), all floated on the module tables. The
-load line is a freeboard margin below the deck line, anchored so Long's full
-hold with 8 hands and 6 guns just reaches it (0.738 m below the deck line);
-the same margin applies to every hull. **Cargo
-weight is checked, not felt**: cargo mass does not reach the steamer's
-physics today (only the ladder ships' `ShipLoad` puts it on the rigidbody).
-Raised decks later: an UpperDeck module adds deck area (berths, slots) and a
-second `deckY` level; depth for physics stays the main hull's keel-to-deck.
+**Capacity (D9/A4): AUTHORED per module, provisional.** Each hull module
+carries a `capacity` block (`ModuleSchema.CapacitySpec`). Every field is
+marked `"provisional": true` in the data and has its own `source` line:
+
+```json
+"capacity": {
+    "holdCells": {"value": 5, "provisional": true, "source": "..."},
+    "berths":    {"value": 4, "provisional": true, "source": "..."},
+    "gunSlots":  {"ids": ["DeckSlot_1_-1", "DeckSlot_1_1"], "provisional": true, "source": "..."},
+    "rule": "how it was seeded"
+}
+```
+
+A ship's hold cells and berths are the SUM over her installed sections;
+nothing is derived from geometry any more. The weight model needs nothing
+more per module: it reads `lightship.massKg` and the shared `ShipLoad`
+weights. **Seeded once** (2026-09-24) so Long reproduces today exactly
+(16 cells, 8 berths, 6 guns): hold cells = 16 split by each section's table
+volume to the deck, largest remainder; berths = today's 8 deck stations
+(`SteamerBootstrap.DeckStation`) counted in the section whose z range contains
+them; gun slots = the port/starboard deck slot nearest today's gun socket
+(`hullform.json` `gunSockets` × 0.42) in the section that contains it
+(gate `capacity-seeds-match-todays-deck`):
+
+| module | hold cells | berths | gun slots | today's gun it stands for |
+| --- | --- | --- | --- | --- |
+| `hull.stern.w1r2.v3` | 6 | 2 | `DeckSlot_2_-1`, `DeckSlot_2_1` | gun pair 3 (z −1.26 m, **6 mm aft of the stern/middle join**; a retune may give it to the middle) |
+| `hull.middle.w1r2.v3` | 5 | 4 | `DeckSlot_1_-1`, `DeckSlot_1_1` | gun pair 2 (z 1.09 m) |
+| `hull.bow.w1r2.v3` | 5 | 2 | `DeckSlot_1_-1`, `DeckSlot_1_1` | gun pair 1 (z 3.44 m) |
+
+A listed gun slot counts only if it is one of the module's equipment slots
+on a `deck.slot` socket, takes `equipment.deck-gun`, and has a non-empty
+clearance box that lies inside the section (length; join profile
+half-beam) and overlaps no crew passage of the ASSEMBLED ship (strict, the
+same test the assembler applies to equipment). Gate:
+`gun-slot-needs-clearance-and-clear-passage`. The seeded slots have
+clearance 1.8 × 1.55 × 1.65 u at |y| 3.45, i.e. |y| 2.675..4.225, which
+touches but does not overlap the passages' |y| ≤ 2.675.
+
+**Extra space does not grant everything at once.** Slots do not buy guns.
+She carries the hull form's own gun pairs (3). Each pair counts only if its
+section has a free usable port+starboard slot pair (nearest first), and only
+while berths ≥ guns × `WeightModel.CrewPerGun`. CrewPerGun is **1**, from
+the code: `CannonBattery` works each gun with one named hand
+(`CrewRoster.GunCrew(index)`). Beyond that the aft-most pairs are struck.
+So 3 bays have 10 gun slots but still 6 guns (gate
+`extra-slots-grant-no-guns`), and a middle with 0 berths strikes Long's
+pair 3 (gate `guns-need-berths-for-their-crew`). The guns stand where the
+hull form puts them; the slot is the licence, not the position. The plan's
+`data.gunSockets` holds only the carried pairs, so the battery `Man()` fits
+is exactly `capacity.guns`.
+
+The **weight allowance stays the shared limit**: displacement at the load
+line − lightship − crew × 90 kg − guns carried × 500 kg (`ShipLoad` weights;
+the steamer's guns have no calibre, so the lightest, 500 kg, provisional),
+floated on the module tables. The load line is a freeboard margin below the
+deck line, anchored so that Long's full hold with 8 hands and 6 guns just
+reaches it (0.738 m below the deck line). Every hull gets the same margin.
+**Cargo weight is checked, not felt** (only the ladder ships' `ShipLoad`
+puts it on the rigidbody).
+
+**Guns without a slot are refused, not struck (decided 2026-09-24).** Short
+has slots for pairs 1 and 3 only (stern + bow); pair 2 stands in her bow next
+to pair 1 and loses the nearest-slot contest. A refit to Short is therefore
+refused `EQUIPMENT_WOULD_BE_LOST` ("Gun pair 2 would have no gun slot on this
+ship; the refit is refused rather than remove it."), per the agreed rule:
+reject changes that cannot safely retain existing equipment, never discard.
+Guns cannot be removed by hand in the prototype, so Short stays unbuildable
+until gun removal/stores exist or Kevin and Astra change the rule.
+
+The old derived capacity (volume and crew-strip ratios) is kept only as the
+printed cross-check gate `derived-capacity-cross-check`. Authored − derived
+is 0 / 0 on Short and Long; hold +1 / +2 and berths +2 / +2 on 2 / 3 bays.
+Raised decks later: an UpperDeck module can carry its own `capacity` block
+(berths, gun slots) and a second `deckY` level; depth for physics stays the
+main hull's keel-to-deck.
 
 **Placement (D3).** The `ModularShipView` hangs under the ship at authoring
 Z 0 = the waterline and is shifted along the ship so the drawn rotor axle
@@ -379,8 +471,12 @@ crew (4a), so both land on the right deck.
 
 ## 12. Tests
 
-* Headless: `tools/modular-selftest.sh` → `ModularShipSelfTest: 87 PASS, 0 FAIL`
-  (45 milestone-1 + 42 shipyard: the two-models draft table, hydrostatic tables (load, prow never
+* Headless: `tools/modular-selftest.sh` → `ModularShipSelfTest: 97 PASS, 0 FAIL`
+  (45 milestone-1 + 52 shipyard: authored capacity (per-module blocks, seeds
+  match today's deck, sums per length, slot validation, guns need berths,
+  extra slots grant no guns, Short strikes a gun pair, derived cross-check),
+  one mass (`long-mass-is-todays`, sim mass == lightship in the two-models
+  table, `sim-out-of-range-is-blocking`), the two-models draft table, hydrostatic tables (load, prow never
   counted, volume-to-deck = Σ tables, monotonic draft solve, OVERLOADED,
   0 below keel, sailing-model cross-check, lightship seeds), section
   occupancy, policy accept/reject with codes,
@@ -395,15 +491,16 @@ crew (4a), so both land on the right deck.
 
 1. Replace the ship object (Kevin's D4 revision) — needs the rebinds in §10
    first, three of them in UI files. Your call, Kevin/Astra.
-2. A4 authored per-module capacity blocks are not implemented. Proposed seed
-   (sums to today on Long): hold stern 6 / middle 5 / bow 5; berths 3 / 2 / 3;
-   gun slots stern `DeckSlot_2_±1`, middle `DeckSlot_1_±1`, bow `DeckSlot_0_±1`
-   (Long = 6 = today's guns). Consequence to decide: Short would then have 4
-   gun slots for her 6 hull-form guns and every Short refit would be refused
-   `EQUIPMENT_WOULD_BE_LOST` until guns move from the hull form to module slots.
-3. Short has 4 berths: with today's 8 hands aboard, Short is refused
-   (`CREW_WOULD_NOT_FIT`) until 4 are landed.
-4. Cargo weight is checked but has no physical effect on the steamer.
+2. A4 authored capacity is in (§10). A gun pair with no slot on the draft
+   REFUSES the refit (Short is unbuildable while guns can't be removed by
+   hand) — Kevin/Astra: add gun removal/stores, or change the rule? And:
+   should guns move to the slot positions (they stand at the hull form's
+   sockets today)?
+3. Short has 4 berths (stern 2 + bow 2): with today's 8 hands aboard, Short
+   is refused (`CREW_WOULD_NOT_FIT`) until 4 are landed; with ≤ 4 hands and
+   ≤ 10 loads she is accepted with 4 guns.
+4. Cargo weight is checked but has no physical effect on the steamer (the
+   lightship mass now is felt: one mass source, §10).
 5. Bow stem X 8.45 was measured by us from the FBX; Astra, please confirm or
    add it to the manifest. (Kevin's brief quoted 23.95 u for the Long hull:
    that is the V2 bow; the V3 raked bow at the waterline gives 23.75 u.)
@@ -412,7 +509,18 @@ crew (4a), so both land on the right deck.
 7. The V8 art's other parts (e.g. any smoke rig on `AstraSteamerVisual`) are
    hidden with it on a refitted ship.
 
-## 14. Changed files since ea67f99
+## 14. Changed files
+
+Since 79b734d (authored capacity + one mass source, 2026-09-24):
+* `Assets/_Project/Resources/ShipModules/Modules/hull.{stern,middle,bow}.w1r2.v3.json` — provisional `capacity` blocks (seeded, §10).
+* `Assets/_Project/Scripts/Ship/Modular/ModuleSchema.cs` — `CapacitySpec`, `ProvisionalInt`, `ProvisionalSlots`; `ModuleDef.capacity`.
+* `Assets/_Project/Scripts/Ship/Modular/Shipyard.cs` — capacity = Σ authored section blocks (`SectionCapacities`, gun-slot validation, `FitGuns`, `WeightModel.CrewPerGun`), derived path removed; plan `data.massKg` = Σ module lightship (`ModuleLightshipKg`); `SIM_OUT_OF_RANGE`, `NO_CAPACITY`, `NO_MASS_DATA`; `GunsStruck` (warning) vs `EquipmentLost` by hull-form gun index; occupancy reads the authored numbers.
+* `Assets/_Project/Scripts/Ship/Modular/ShipyardReport.cs` — `gunSlots`/`guns` figures from authored capacity, notes, one-mass wording.
+* `Assets/_Project/Scripts/Ship/Modular/ShipyardSelfTest.cs` — 10 new gates; two-models table with one mass; Long gated field-for-field except mass (mass gated to 31 906.6 kg).
+* `Assets/_Project/Scripts/Dev/ShipyardRefitProbe.cs` — gates rb.mass == module lightship and guns fitted == plan; mass/draft table with Δ and sim design draft in the dynamic section.
+* `docs/MODULAR-SHIPS.md` — self-test count.
+
+Since ea67f99 (the prototype backend):
 
 Added
 * `Assets/_Project/Scripts/Ship/Modular/Shipyard.cs` — pure core: codes, prototype policy, hull measurement, reshape plan, capacity, weight allowance, retention checks, deck-load layout, save-field codec.

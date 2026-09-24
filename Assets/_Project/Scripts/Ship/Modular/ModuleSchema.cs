@@ -186,8 +186,50 @@ namespace SeaSick.Ship.Modular
         /// Hull sections: Astra's hydrostatic station table (upright level
         /// flotation of Hull_Shell only). Null/empty path = none.
         public HydrostaticsRef hydrostatics;
-        /// Hull sections: provisional lightship mass for the shipyard report.
+        /// Hull sections: provisional lightship mass. The shipyard report
+        /// AND the sailing model weigh the ship with the sum of these (one
+        /// mass source; docs/SHIPYARD-API.md §10). Any module may carry one.
         public LightshipSpec lightship;
+        /// Hull sections: AUTHORED room aboard (A4), summed over the installed
+        /// sections. Every field is provisional data. Null = none (a hull
+        /// section without it cannot be planned: NO_CAPACITY).
+        public CapacitySpec capacity;
+    }
+
+    /// Authored per-module capacity (A4, 2026-09-24). Tunable numbers, not
+    /// derived from geometry. Seeded so stern + 1 middle + bow reproduces
+    /// today's steamer exactly (16 hold cells, 8 berths, 3 gun pairs).
+    [Serializable]
+    public class CapacitySpec
+    {
+        /// Hold cells (volume) this section contributes.
+        public ProvisionalInt holdCells;
+        /// Crew berths (deck stations) this section contributes.
+        public ProvisionalInt berths;
+        /// Equipment-slot ids ON THIS MODULE that may carry a gun. A listed
+        /// slot only counts if it exists, takes `equipment.deck-gun`, has a
+        /// clearance box inside the section and clear of every crew passage
+        /// of the assembled ship (checked by the shipyard, not trusted).
+        /// One id per gun; a gun PAIR needs a port and a starboard id.
+        public ProvisionalSlots gunSlots;
+        /// How the numbers were chosen (for the next person to retune them).
+        public string rule;
+    }
+
+    [Serializable]
+    public class ProvisionalInt
+    {
+        public int value;
+        public bool provisional = true;
+        public string source;
+    }
+
+    [Serializable]
+    public class ProvisionalSlots
+    {
+        public string[] ids;
+        public bool provisional = true;
+        public string source;
     }
 
     [Serializable]
