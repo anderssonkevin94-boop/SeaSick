@@ -66,7 +66,9 @@ public class ShipyardRefitProbe : MonoBehaviour
 
     IEnumerator Run()
     {
-        yield return new WaitForEndOfFrame();
+        // Not WaitForEndOfFrame: it never resumes in batch mode (no frame is
+        // rendered), which hung the first batch run for its full timeout.
+        yield return null;
         GameBoot.Skip();
         float t0 = Time.realtimeSinceStartup;
         SeaSick.Terrain.TerrainWorldPopulator pop = null;

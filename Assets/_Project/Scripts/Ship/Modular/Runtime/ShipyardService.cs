@@ -116,7 +116,49 @@ namespace SeaSick.Ship.Modular
             Player = null;
             PlayerShipReplaced = null;
             PersistPathOverride = null;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            TestFaultStage = null;
+#endif
         }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        // ---- TEST-ONLY fault injection (ShipyardUiProbe) ---------------------
+        //
+        // Compiled only in the editor and development builds; a release player
+        // has none of this. Null (the default, and after every play-mode start)
+        // = no fault, and the checks below are one string compare each.
+        //
+        // A probe sets TestFaultStage to one of the Fault* names and calls
+        // ApplyRefit with a valid draft; the refit then throws a
+        // ShipyardTestFaultException at that point, and the probe checks that
+        // she comes back exactly as she was. The probe MUST put it back to null
+        // (ShipyardUiProbe does so in a finally).
+        //
+        //   FaultAfterSnapshot -- in Rebuild, after the previous build was
+        //       captured and the new hull's GameObject was created, before
+        //       anything is drawn or assembled. Exercises Rebuild's catch.
+        //   FaultAfterAssemble -- in Rebuild, after the new drawing is built
+        //       AND SteamerBootstrap.Assemble has reshaped her physics to the
+        //       new form, before the drawings are swapped. The hardest
+        //       rollback: the old form must be re-assembled over the new one.
+        //   FaultBeforePersist -- at the start of Persist, after a successful
+        //       rebuild. SaveGame.SaveTo turns every exception into `false`, so
+        //       the fault is caught right here and reported the same way a
+        //       failed save is: ApplyRefit's SAVE_FAILED path (swap back).
+        //       It differs from an unwritable path in that the save target is
+        //       fine and nothing was written.
+
+        /// Test-only: the refit stage at which to throw, or null (normal play).
+        public static string TestFaultStage { get; set; }
+        public const string FaultAfterSnapshot = "after-snapshot";
+        public const string FaultAfterAssemble = "after-assemble";
+        public const string FaultBeforePersist = "before-persist";
+
+        static void TestFault(string stage)
+        {
+            if (TestFaultStage != null && TestFaultStage == stage) throw new ShipyardTestFaultException(stage);
+        }
+#endif
 
         // ---- reading --------------------------------------------------------
 
@@ -164,10 +206,19 @@ namespace SeaSick.Ship.Modular
             if (reference == null) { reason = "This ship has no hull form to refit."; return false; }
             if (!Library.Usable) { reason = "The ship module data could not be loaded."; return false; }
             if (SeaSick.Save.SaveGame.Restoring) { reason = "A save is still loading."; return false; }
-            var rb = GetComponent<Rigidbody>();
-            if (rb != null && rb.linearVelocity.magnitude > AtRestSpeed)
-            { reason = "She is under way. Bring her to rest first."; return false; }
+            // "At rest" is HORIZONTAL way, and tied up at the home dock is at
+            // rest by definition (2026-09-24, ShipyardRefitProbe): the full
+            // velocity includes the heave of a moored hull in a lively sea,
+            // which exceeds 0.3 m/s constantly and refused refits at random
+            // at the berth.
             var anchor = GetComponent<AnchorController>();
+            var rb = GetComponent<Rigidbody>();
+            bool tiedUp = anchor != null && anchor.AtHomeDock;
+            if (!tiedUp && rb != null)
+            {
+                var v = rb.linearVelocity; v.y = 0f;
+                if (v.magnitude > AtRestSpeed) { reason = "She is under way. Bring her to rest first."; return false; }
+            }
             if (anchor != null)
             {
                 var st = anchor.CurrentState;
@@ -254,6 +305,10 @@ namespace SeaSick.Ship.Modular
         bool Persist(out string why)
         {
             why = null;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            try { TestFault(FaultBeforePersist); }
+            catch (ShipyardTestFaultException e) { why = e.Message; return false; }
+#endif
             string path = PersistPathOverride;
             if (path == null)
             {
@@ -325,11 +380,17 @@ namespace SeaSick.Ship.Modular
                 fresh.transform.SetParent(transform, false);
                 fresh.transform.localPosition = plan.viewOffset;
                 fresh.transform.localRotation = Quaternion.identity;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                TestFault(FaultAfterSnapshot);
+#endif
                 var newView = fresh.AddComponent<ModularShipView>();
                 newView.Build(plan.assembly);
                 if (newView.RotorPivot == null) throw new InvalidOperationException("the assembly drew no wheel");
 
                 SteamerBootstrap.Assemble(gameObject, plan.data, fresh, newView.RotorPivot, null, Options(plan));
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                TestFault(FaultAfterAssemble);
+#endif
 
                 // Committed: swap the drawings.
                 if (prevView != null) { prevView.gameObject.SetActive(false); Destroy(prevView.gameObject); }
@@ -419,4 +480,14 @@ namespace SeaSick.Ship.Modular
             return s;
         }
     }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    /// Thrown only by ShipyardService's test fault hook (TestFaultStage).
+    public class ShipyardTestFaultException : Exception
+    {
+        public readonly string stage;
+        public ShipyardTestFaultException(string stage)
+            : base("TEST FAULT injected at refit stage '" + stage + "' (ShipyardService.TestFaultStage)") { this.stage = stage; }
+    }
+#endif
 }

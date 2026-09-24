@@ -130,6 +130,12 @@ public static class RunProbe
     /// save is the standard steamer); Long/Short/3-bay sea trials. Needs the
     /// steamer. Play mode, Sea.unity, ~2.5 min. Logs/ShipyardRefitProbe.txt.
     public static void ShipyardRefit() => Call("ShipyardRefitProbe");
+    /// The shipyard UI path on the live steamer: refits through Astra's
+    /// ShipyardDraft + ShipyardLiveBridge with cargo and crew aboard, stale
+    /// baseline, the modal's input blocking (virtual keyboard/mouse), rollback
+    /// on a failed save and on injected build faults, save/load. Needs the
+    /// steamer. Play mode, Sea.unity, ~1 min. Logs/ShipyardUiProbe.txt.
+    public static void ShipyardUi() => Call("ShipyardUiProbe");
     /// A rung costs goods that were sailed home: refused at sea, refused short,
     /// banked per resource, paid exactly, and `Apply` stays free for the rig.
     public static void Sink() => Call("SinkProbe");

@@ -422,7 +422,10 @@ namespace SeaSick.Voyage
                 foreach (var c in crew) if (c != null) c.Rest();
                 // Tap-anywhere had to go: the panel has buttons on it now,
                 // and every one of them would also have set sail.
-                if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
+                // Not while the shipyard is open (2026-09-24, ShipyardUiProbe:
+                // Space here cast her off from under an open refit screen).
+                if (!SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked
+                    && Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
                     BeginVoyage();
             }
         }
