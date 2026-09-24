@@ -114,6 +114,9 @@ namespace SeaSick.World
         /// none), so both trees and rock get the axe.
         bool clearing;
         Vector3 clearAt;
+        /// A rock on a plot is a kit deposit now (2-4 m across,
+        /// `StoneDeposit`): stand outside it, not in it.
+        const float ClearRockStandOff = 2f;
         bool clearIsRock;
         float clearFor;         // how long he has been swinging at it
         Animal quarry;         // the beast he has claimed, if he is hunting
@@ -704,7 +707,7 @@ namespace SeaSick.World
                         && camp.ClaimClearing(focus, this, out clearAt, out clearIsRock);
                     if (clearing)
                     {
-                        target = Stand(clearAt);
+                        target = Stand(clearAt, clearIsRock ? ClearRockStandOff : 1.1f);
                         raising = false;
                         clearFor = 0f;
                         phase = Phase.Going;
@@ -1150,7 +1153,7 @@ namespace SeaSick.World
             var focus = camp != null && camp.Ledger != null ? camp.Ledger.Focus : null;
             if (focus != null && camp.ClaimClearing(focus, this, out clearAt, out clearIsRock))
             {
-                target = Stand(clearAt);
+                target = Stand(clearAt, clearIsRock ? ClearRockStandOff : 1.1f);
                 clearFor = 0f;
                 return true;
             }
@@ -2242,21 +2245,29 @@ namespace SeaSick.World
                 fieldNode = NearestNode(view.resource);
                 if (fieldNode == null) fieldRetryAt = Time.time + 1f;
             }
-            return fieldNode != null ? Stand(fieldNode.transform.position) : Stand(camp.CampCentre);
+            return fieldNode != null ? Stand(fieldNode.transform.position, fieldNode.StandOff) : Stand(camp.CampCentre);
         }
 
         /// Nearest unharvested prop of this resource to the CAMP CENTRE, no
         /// `Reach` bound -- an armful the ledger is already paying for gets
         /// fetched from wherever it stands, same as a builder's own gather in
         /// `FindSomethingToWorkAt`.
+        ///
+        /// **This island's props only** (2026-09-24): `ResourceNode.All` is
+        /// every island's, and with no rock at home the nearest boulder was
+        /// across the water -- the body set off for it and mimed at the
+        /// shore. `Harvested` covers a worked-out deposit (its remnant), so
+        /// the target is always a rock with units left.
         ResourceNode NearestNode(string resource)
         {
             ResourceNode near = null;
             float best = float.MaxValue;
             Vector3 from = camp.CampCentre;
+            var isle = camp.Island;
             foreach (var n in ResourceNode.All)
             {
                 if (n == null || n.Harvested || n.Resource != resource) continue;
+                if (isle != null && n.Home != isle) continue;
                 Vector3 d = n.transform.position - from;
                 d.y = 0f;
                 float m = d.sqrMagnitude;
@@ -2407,12 +2418,13 @@ namespace SeaSick.World
                 foreach (var n in ResourceNode.All)
                 {
                     if (n == null || n.Harvested || n.Resource != what) continue;
+                    if (camp.Island != null && n.Home != camp.Island) continue;   // not across the water
                     Vector3 d = n.transform.position - from;
                     d.y = 0f;
                     float m = d.sqrMagnitude;
                     if (m < best) { best = m; near = n; }
                 }
-                if (near != null) return Stand(near.transform.position);
+                if (near != null) return Stand(near.transform.position, near.StandOff);
             }
 
             // Nothing in reach: potter about near the fire.
@@ -2423,7 +2435,12 @@ namespace SeaSick.World
         /// Beside the thing, not inside it — and on a bearing of this hand's
         /// own, so three cutters sent to the same trunk ring it instead of
         /// standing in one another.
-        Vector3 Stand(Vector3 at)
+        ///
+        /// `off` is how far from the thing's pivot: a pace for a trunk, just
+        /// outside the footprint for a stone deposit (`ResourceNode.StandOff`,
+        /// 2026-09-24) -- on the camp's side of it, which is where he came from
+        /// and where he carries the armful back to.
+        Vector3 Stand(Vector3 at, float off = 1.1f)
         {
             Vector3 away = at - camp.CampCentre;
             away.y = 0f;
@@ -2434,7 +2451,7 @@ namespace SeaSick.World
                 ? (Mathf.Abs(agent.DisplayName.GetHashCode() % 140) - 70f) : 0f;
             away = Quaternion.Euler(0f, spread, 0f) * away;
 
-            Vector3 p = at - away * 1.1f;
+            Vector3 p = at - away * off;
             p.y = camp.GroundAt(p);
             return p;
         }

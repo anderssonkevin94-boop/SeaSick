@@ -429,6 +429,7 @@ namespace SeaSick.World
 
             Tempo(sb, ref fails);
             Transfers(sb, ref fails);
+            Deposits(sb, ref fails);
 
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());
@@ -1061,6 +1062,81 @@ namespace SeaSick.World
                     $"to farm: {inArms} in arms -> aboard {ship.HeldOf(T)}; to build: still carrying {stillCarrying}, "
                     + $"then aboard {ship2.HeldOf(T)} ashore {Ashore(b, T)}");
             }
+        }
+
+        // --- (m) stone deposits, 2026-09-24 ------------------------------------
+        // The seam sized once to the kit rocks on the island
+        // (`SizeStoneToDeposits`), never lowered; a trip's uncut units still in
+        // the rock; a store's booked-out units still on the pile.
+        static void Deposits(StringBuilder sb, ref int fails)
+        {
+            // Kevin's Island_2 camp: 0.9 standing of a 10.4 seam, rocks worth 27.
+            var k = new OutpostLedger();
+            var ks = k.Stock(Res.Stone, true);
+            ks.standing = 0.9f; ks.standingMax = 10.4f;
+            bool changed = k.SizeStoneToDeposits(27f);
+            Gate(sb, ref fails, "deposits-size-near-empty-seam",
+                changed && ks.standing == 27f && ks.standingMax == 27f && k.stoneDepositsV == OutpostLedger.StoneDepositsVersion,
+                $"0.9/10.4 -> {ks.standing:0.#}/{ks.standingMax:0.#}, v{k.stoneDepositsV}");
+
+            bool again = k.SizeStoneToDeposits(40f);
+            Gate(sb, ref fails, "deposits-size-once", !again && ks.standing == 27f && ks.standingMax == 27f,
+                $"second call {(again ? "changed" : "left")} it at {ks.standing:0.#}/{ks.standingMax:0.#}");
+
+            var copy = JsonUtility.FromJson<OutpostLedger>(JsonUtility.ToJson(k));
+            float cs = copy.Stock(Res.Stone).standing;
+            bool afterLoad = copy.SizeStoneToDeposits(40f);
+            Gate(sb, ref fails, "deposits-size-once-across-a-save",
+                copy.stoneDepositsV == OutpostLedger.StoneDepositsVersion && !afterLoad && copy.Stock(Res.Stone).standing == cs,
+                $"loaded v{copy.stoneDepositsV}, re-size {(afterLoad ? "changed" : "left")} it at {copy.Stock(Res.Stone).standing:0.#}");
+
+            var rich = new OutpostLedger();
+            var rs = rich.Stock(Res.Stone, true);
+            rs.standing = 50f; rs.standingMax = 60f;
+            bool richChanged = rich.SizeStoneToDeposits(27f);
+            Gate(sb, ref fails, "deposits-never-lower-stone",
+                !richChanged && rs.standing == 50f && rs.standingMax == 60f && rich.stoneDepositsV == OutpostLedger.StoneDepositsVersion,
+                $"50/60 with rocks worth 27 -> {rs.standing:0.#}/{rs.standingMax:0.#}");
+
+            var early = new OutpostLedger();
+            var es = early.Stock(Res.Stone, true);
+            es.standing = es.standingMax = 10.4f;
+            bool none = early.SizeStoneToDeposits(0f);
+            bool later = early.SizeStoneToDeposits(33f);
+            Gate(sb, ref fails, "deposits-wait-for-rocks",
+                !none && later && es.standing == 33f && es.standingMax == 33f,
+                $"no rocks yet: {(none ? "sized" : "waited")}; then 10.4 -> {es.standing:0.#}/{es.standingMax:0.#}");
+
+            var bare = new OutpostLedger();
+            bool noStock = bare.SizeStoneToDeposits(20f);
+            Gate(sb, ref fails, "deposits-no-seam-no-stone", !noStock && bare.Stock(Res.Stone) == null && bare.stoneDepositsV == 0,
+                "a camp with no Stone stock gets none from rocks");
+
+            // A gatherer's trip out of the field: 3 stone, walk 0.3 d, cut 0.2 d.
+            var g = new OutpostLedger();
+            var man = new OutpostHand { name = "Gatherer", order = OutpostOrder.Gather, target = Res.Stone,
+                haulRes = Res.Stone, haulCount = 3, haulFrom = HaulPlace.Field, haulTo = HaulPlace.Store,
+                haulDays = 1f, haulLeft = 0.9f, haulWalkDays = 0.3f, haulWorkDays = 0.2f };
+            g.hands.Add(man);
+            int walking = g.UncutFromField(Res.Stone);
+            man.haulLeft = 0.4f;     // past the cut: carrying
+            int carrying = g.UncutFromField(Res.Stone);
+            int ore = g.UncutFromField(Res.Ore);
+            Gate(sb, ref fails, "deposits-uncut-still-in-the-rock", walking == 3 && carrying == 0 && ore == 0,
+                $"walking out {walking}, carrying {carrying}, other resource {ore}");
+
+            // A builder's armful booked out of a store of 2 (left 2 behind).
+            var b = new OutpostLedger();
+            b.Store(Res.Stone, true).whole = 2;
+            var builder = new OutpostHand { name = "Builder", order = OutpostOrder.Build,
+                haulRes = Res.Stone, haulCount = 4, haulFrom = HaulPlace.Store, haulTo = HaulPlace.Site,
+                haulDays = 1f, haulLeft = 0.95f, haulWalkDays = 0.2f, haulWorkDays = 0.05f };
+            b.hands.Add(builder);
+            int onPile = b.OnStorePile(Res.Stone);
+            builder.haulLeft = 0.5f; // lifted
+            int lifted = b.OnStorePile(Res.Stone);
+            Gate(sb, ref fails, "deposits-booked-stays-on-pile", onPile == 6 && lifted == 2 && b.StoreCountOf(Res.Stone) == 2,
+                $"booked, not lifted: {onPile} on the pile (store 2); lifted: {lifted}");
         }
 
         static void Gate(StringBuilder sb, ref int fails, string name, bool ok, string detail)

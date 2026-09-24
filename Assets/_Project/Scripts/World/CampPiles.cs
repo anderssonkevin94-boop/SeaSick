@@ -164,7 +164,10 @@ namespace SeaSick.World
             foreach (var s in l.stores)
             {
                 if (s == null || string.IsNullOrEmpty(s.resource)) continue;
-                SetRing(s.resource, s.whole, fire);
+                // What the pile physically holds: booked-out units stay on
+                // it until the man sent for them lifts them (2026-09-24,
+                // `OutpostLedger.OnStorePile`).
+                SetRing(s.resource, l.OnStorePile(s.resource), fire);
             }
         }
 
@@ -216,9 +219,10 @@ namespace SeaSick.World
             foreach (var s in l.stores)
             {
                 if (s == null || string.IsNullOrEmpty(s.resource)) continue;
-                int atFire = Mathf.Min(StillByFire(s.resource), Mathf.Max(0, s.whole));
+                int whole = l.OnStorePile(s.resource);
+                int atFire = Mathf.Min(StillByFire(s.resource), whole);
                 SetRing(s.resource, atFire, fire);
-                int atHut = Mathf.Max(0, s.whole - atFire);
+                int atHut = Mathf.Max(0, whole - atFire);
                 if (hutView != null && hutView.Shows(s.resource)) atHut = 0;
                 SetHutSide(s.resource, atHut, fire);
             }

@@ -40,7 +40,41 @@ namespace SeaSick.World
         /// shown (`SetGathered`). `GatherSync` leaves a held rock out of the
         /// seam's order, so the seam's prefix and the plot's never fight over
         /// the same prop. Not saved: re-derived from the rows on every load.
-        public bool HeldBySite { get; set; }
+        public bool HeldBySite
+        {
+            get => heldBySite;
+            set { heldBySite = value; ShowDeposit(); }
+        }
+        bool heldBySite;
+
+        // --- stone deposits (2026-09-24) ---------------------------------------
+
+        /// Astra's kit rock this Stone node wears (`StoneDeposit.Dress`), or
+        /// null. With one, being gathered SWAPS the rock to its `_Depleted`
+        /// remnant in place instead of hiding it, and a plot's clearing hides
+        /// it outright.
+        public StoneDeposit Deposit
+        {
+            get => deposit;
+            set { deposit = value; ShowDeposit(); }
+        }
+        StoneDeposit deposit;
+
+        /// Where this node stood when it was made -- before any camp moved
+        /// it into its ring -- so what is seeded off it (a deposit's shape
+        /// and units) is the same on every load.
+        public Vector3 SpawnPos { get; private set; }
+
+        /// How far from the pivot a worker stands to swing at it: outside the
+        /// deposit's footprint, or a pace off a plain prop.
+        public float StandOff => deposit != null ? deposit.StandOff : 1.1f;
+
+        void ShowDeposit()
+        {
+            if (deposit == null) return;
+            bool gone = heldBySite && Gathered;
+            deposit.Show(Gathered || harvested, gone);
+        }
 
         /// **Hidden by `GatherSync` to match the ledger**, renderers off, the
         /// object still active. It stays in `All` on purpose: the ledger's
@@ -66,7 +100,15 @@ namespace SeaSick.World
         void OnEnable() { if (!All.Contains(this)) All.Add(this); }
         void OnDisable() { All.Remove(this); }
 
-        void Awake() { baseScale = transform.localScale; }
+        void Awake() { baseScale = transform.localScale; SpawnPos = transform.position; }
+
+        /// Every Stone node wears a kit deposit, on every island, whoever
+        /// made it (`Configure` has set the kind by now). `StoneDeposits`
+        /// dresses a camp's own earlier, when it sizes the seam.
+        void Start()
+        {
+            if (wood == null && resource == Res.Stone && deposit == null) StoneDeposit.Dress(this);
+        }
 
         public void Configure(string res, Island island, int hits)
         {
@@ -123,10 +165,12 @@ namespace SeaSick.World
             if (Gathered == gathered) return;
             Gathered = gathered;
             if (gathered) Claim = default;
-            if (renderers == null) renderers = GetComponentsInChildren<Renderer>(true);
             if (colliders == null) colliders = GetComponentsInChildren<Collider>(true);
-            foreach (var r in renderers) if (r != null) r.enabled = !gathered;
             foreach (var c in colliders) if (c != null) c.enabled = !gathered;
+            // A deposit swaps to its remnant rather than vanishing.
+            if (deposit != null) { ShowDeposit(); return; }
+            if (renderers == null) renderers = GetComponentsInChildren<Renderer>(true);
+            foreach (var r in renderers) if (r != null) r.enabled = !gathered;
         }
 
         Renderer[] renderers;
@@ -136,6 +180,8 @@ namespace SeaSick.World
         {
             harvested = true;
             Claim = default;
+            // A quarried-out deposit stays where it was, as its remnant.
+            if (deposit != null) { ShowDeposit(); return; }
             // A scenery tree has to come down in the MESH -- there is nothing
             // to deactivate, because this object was never what was drawn.
             if (wood != null && treeIndex >= 0)

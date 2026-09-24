@@ -77,6 +77,7 @@ namespace SeaSick.World
 
                 var order = OrderFor(e, island, s.resource);
                 if (order.Length == 0) continue;
+                if (s.resource == Res.Stone && SyncDeposits(o.Ledger, s, order)) continue;
 
                 float taken = Mathf.Max(0f, s.standingMax - s.standing);
                 int per = order[0].UnitsPerProp;
@@ -90,6 +91,45 @@ namespace SeaSick.World
                     if (n != null) n.SetGathered(k < want);
                 }
             }
+        }
+
+        /// **Stone as kit deposits (2026-09-24).** Each rock in the order
+        /// (nearest the camp first) stands for its own `StoneDeposit.Units`,
+        /// scaled so the rocks between them are exactly the seam
+        /// (`standingMax`): the last rock goes with the last unit. A rock
+        /// whose share is all taken swaps to its `_Depleted` remnant
+        /// (`SetGathered` -> `StoneDeposit.Show`) and is no longer a target.
+        ///
+        /// **Still in the ground until it is cut** (the shelved
+        /// stone-visible patch): the books take an armful out of `standing`
+        /// when the trip is BOOKED and the body reaches the rock only after
+        /// the walk -- units a trip has not cut yet
+        /// (`OutpostLedger.UncutFromField`) count as still standing, so the
+        /// rock a man is walking to stays full until his swing is done.
+        ///
+        /// False (and nothing touched) when a node has no deposit, so the
+        /// old per-prop arithmetic still covers it.
+        static bool SyncDeposits(OutpostLedger l, OutpostStock s, ResourceNode[] order)
+        {
+            float total = 0f;
+            for (int k = 0; k < order.Length; k++)
+            {
+                var d = order[k] != null ? StoneDeposit.Dress(order[k]) : null;
+                if (d == null) return false;
+                total += d.Units;
+            }
+            if (total <= 0f || s.standingMax <= 0f) return false;
+
+            float left = Mathf.Min(s.standingMax, s.standing + l.UncutFromField(s.resource));
+            float taken = Mathf.Max(0f, s.standingMax - left);
+            float f = s.standingMax / total;
+            float cum = 0f;
+            for (int k = 0; k < order.Length; k++)
+            {
+                cum += order[k].Deposit.Units * f;
+                order[k].SetGathered(left < 1f || cum <= taken + 1e-3f);
+            }
+            return true;
         }
 
         /// Drop the cache for an outpost (or everything, with null): the next

@@ -163,6 +163,10 @@ namespace SeaSick.World
             // The fire may have been lit (or restored) since the survey, and
             // the boulders belong round it. No-op after the first call.
             PlaceCampStone();
+            // The rocks ARE the seam (2026-09-24): every Stone node wears a
+            // kit deposit, an island with none gets some laid, and the seam
+            // is sized to them once. See `StoneDeposits`.
+            StoneDeposits.EnsureOn(this);
             ReconcileWood();
             ReconcileCrops();
             ReconcileGame();
@@ -2568,6 +2572,11 @@ namespace SeaSick.World
         /// The height field is the authority everywhere in this codebase; this
         /// is just the polite way to ask an outpost for it.
         public float GroundAt(Vector3 at) => height != null ? height(at.x, at.z) : at.y;
+        /// True once the survey has handed this camp its ground (`GroundAt`
+        /// answers the terrain rather than echoing `at.y`).
+        public bool HasGround => height != null;
+        /// The lowest ground the survey counts as land (above the beach).
+        public float MinGroundHeight => minHeight;
 
         // --- the live raid, 2026-09-22 -----------------------------------------
 

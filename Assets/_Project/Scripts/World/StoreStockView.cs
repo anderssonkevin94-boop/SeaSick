@@ -87,7 +87,10 @@ namespace SeaSick.World
         /// racks fill as the ring empties and no unit is drawn twice.
         int Held(string res)
         {
-            int n = ledger.StoreCountOf(res);
+            // Booked-but-not-lifted units are still on the rack
+            // (`OutpostLedger.OnStorePile`, 2026-09-24): the stone stays
+            // until the builder sent for it takes it down.
+            int n = ledger.OnStorePile(res);
             return piles != null ? Mathf.Max(0, n - piles.StillByFire(res)) : n;
         }
 
