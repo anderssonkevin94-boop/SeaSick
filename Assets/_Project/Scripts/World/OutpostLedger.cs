@@ -2114,6 +2114,9 @@ namespace SeaSick.World
             {
                 if (h.Hauling)
                 {
+                    // A transfer armful (2026-09-24) is walked by the builder
+                    // pass's `TransferDay`, not put down here.
+                    if (IsTransferHaul(h)) return;
                     if (h.haulTo != HaulPlace.Site)
                     {
                         // A station load from a job he just left: put it down.
@@ -2296,6 +2299,8 @@ namespace SeaSick.World
             FeedFirst();
             EnlistFree();
             EnsureStations();
+            // She cast off: store -> ship armfuls go home; done orders go.
+            SettleTransfers();
 
             // **A gatherer whose store is full does something else** (Kevin,
             // 2026-09-23): hauls for the stations if there is hauling to do,
@@ -2363,12 +2368,15 @@ namespace SeaSick.World
                 else if (h.Hauling && h.haulTo == HaulPlace.Site && !TripGatherer(h))
                     DepositHaul(h, true);   // re-ordered mid-trip: it lands now
             }
-            if (sites != null)
-                foreach (var h in builderHands)
-                {
-                    float budget = days * WorkFactor(h);
-                    BuilderDay(h, ref budget);
-                }
+            foreach (var h in builderHands)
+            {
+                float budget = days * WorkFactor(h);
+                if (sites != null) BuilderDay(h, ref budget);
+                // **A builder standing about carries cargo** (2026-09-24):
+                // what the site work left of his day goes on the transfer
+                // orders, and an armful he is already walking is walked.
+                if (budget > Eps) TransferDay(h, ref budget);
+            }
 
             // --- gathering ---------------------------------------------------
             //

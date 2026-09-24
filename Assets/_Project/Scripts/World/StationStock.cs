@@ -37,6 +37,13 @@ namespace SeaSick.World
         /// builder's armful. Not tied to one row -- it lands in the oldest
         /// site short of it (`OutpostLedger.DeliverToSite`).
         Site,
+        /// **The ship at this camp's landing, 2026-09-24** (Kevin: unload
+        /// the ship to the island and back, *physically carried*). Its
+        /// world point is the foot of the gangway (`ICargoSide.GangwayAt`):
+        /// the pier ROOT when she lies at a camp pier -- `CampPath` has no
+        /// pier deck, so a hand cannot path out to the head -- or the
+        /// plank's landing on a beach. Appended LAST: saved as an int.
+        Ship,
     }
 
     /// **A production station's own stock, one per BUILT instance

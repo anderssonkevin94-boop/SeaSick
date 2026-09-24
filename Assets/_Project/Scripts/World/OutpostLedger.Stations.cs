@@ -247,6 +247,10 @@ namespace SeaSick.World
                     at = new Vector3(site.x, 0f, site.z);
                     return true;
                 case HaulPlace.Field: return CentreAt(out at);
+                // The foot of the gangway (2026-09-24 transfers): the ship
+                // end is the bound `ICargoSide`'s; none bound = unplaced, and
+                // the leg falls back to `DefaultLegMetres`.
+                case HaulPlace.Ship: return cargo != null && cargo.GangwayAt(out at);
             }
             return false;
         }
@@ -800,6 +804,10 @@ namespace SeaSick.World
                 ClearHaul(h);
                 return;
             }
+            // **A store -> ship armful** (2026-09-24): into the hold as far as
+            // she takes it, the rest back to the store -- see
+            // `OutpostLedger.Transfers`.
+            if (h.haulTo == HaulPlace.Ship) { DepositToShip(h, force); return; }
             StationStock dest = null;
             if (h.haulTo == HaulPlace.Station && stations != null
                 && h.haulToStation >= 0 && h.haulToStation < stations.Count)
@@ -819,6 +827,20 @@ namespace SeaSick.World
                 // booked once, as it goes in.
                 if (h.haulRes == Res.Timber) timberTaken += put;
                 away.Add(h.haulRes, put);
+            }
+            if (h.haulFrom == HaulPlace.Ship)
+            {
+                // **A ship -> store armful** (2026-09-24): what went in is
+                // landed; what did not goes back aboard while she is still
+                // here (and back on the order), else it waits in his arms
+                // at the store like any store-bound load.
+                transferredAshore += put;
+                if (h.haulCount > 0 && ShipHere)
+                {
+                    int back = Mathf.Clamp(cargo.Give(h.haulRes, h.haulCount), 0, h.haulCount);
+                    h.haulCount -= back;
+                    ReturnToOrder(h.haulRes, false, back);
+                }
             }
             if (h.haulCount > 0 && h.haulFrom == HaulPlace.Station && stations != null
                 && h.haulFromStation >= 0 && h.haulFromStation < stations.Count)
@@ -995,6 +1017,9 @@ namespace SeaSick.World
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
                 if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) break; continue; }
+                // The player's transfer orders first (2026-09-24): Kevin
+                // asked for them; the station hauling is background.
+                if (StartTransferTrip(h)) continue;
                 if (!FindHaulerChore(out var c)) break;
                 BeginChore(h, c);
             }
@@ -1209,7 +1234,11 @@ namespace SeaSick.World
             }
             if (budget <= Eps || h.Hauling || RoomFor(h.target) > 0 || scale <= 0f) return;
             float help = budget / scale * WorkFactor(h);
-            if (helpBuild) { if (sites != null) BuilderDay(h, ref help); }
+            if (helpBuild)
+            {
+                if (sites != null) BuilderDay(h, ref help);
+                if (help > Eps && !h.Hauling) TransferDay(h, ref help);
+            }
             else HaulerDay(h, ref help);
         }
 
@@ -1238,9 +1267,11 @@ namespace SeaSick.World
                 {
                     HaulerDay(h, ref budget);
                 }
-                else if (h.Hauling && h.haulTo != HaulPlace.Site)
+                else if (h.Hauling && h.haulTo != HaulPlace.Site
+                         && !(IsTransferHaul(h) && builderScratch.Contains(h)))
                 {
-                    // (A builder's site load is the builder pass's own.)
+                    // (A builder's site load is the builder pass's own, and
+                    // so is a transfer armful a builder is walking.)
                     DepositHaul(h);
                 }
             }

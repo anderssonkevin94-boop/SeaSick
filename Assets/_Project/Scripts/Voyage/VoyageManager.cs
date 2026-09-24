@@ -285,6 +285,30 @@ namespace SeaSick.Voyage
 
         public int AmountOf(string resource) => held.TryGetValue(resource, out int n) ? n : 0;
 
+        /// Units of `resource` in the hold. The name the camp sheets use
+        /// (`OutpostLedger.StoreCountOf` is its shore twin); same as `AmountOf`.
+        public int HeldOf(string resource) =>
+            !string.IsNullOrEmpty(resource) && held.TryGetValue(resource, out int n) ? n : 0;
+
+        /// **Out of the hold, onto a villager's shoulder** (2026-09-24, camp
+        /// transfer orders: `OutpostLedger.OrderTransfer`, bound through
+        /// `World.ShipCargoSide`). Takes up to `amount` of `resource` and
+        /// returns what it ACTUALLY removed -- the caller books exactly that,
+        /// so a request for more than is aboard can neither create nor lose
+        /// a unit. Unlike `TryConsume` it never refuses a partial take.
+        /// The visible stack is the caller's (`ShipHold.RemoveVisual`).
+        public int RemoveLoot(int amount, string resource)
+        {
+            if (amount <= 0 || string.IsNullOrEmpty(resource)) return 0;
+            if (!held.TryGetValue(resource, out int have) || have <= 0) return 0;
+            int take = Mathf.Min(have, amount);
+            held[resource] = have - take;
+            if (held[resource] <= 0) held.Remove(resource);
+            TotalHeld -= take;
+            if (ship != null) ship.CargoLoad = HoldFill;
+            return take;
+        }
+
         /// Over the side. The escape valve for a ship that is going under —
         /// costs you the payoff, buys back freeboard immediately. The player's
         /// decision, at the helm, in seconds.
@@ -559,6 +583,14 @@ namespace SeaSick.Voyage
             panelVersion++;   // the stores moved; see RefreshPanelText
         }
 
+        /// **The HOMECOMING's unload only** (2026-09-24). Home is not a camp
+        /// ledger: the voyage banks the hold into `banked` + `Stockpile` in
+        /// `CompleteVoyage`, and this only paces the visible pile. A hold
+        /// emptied at a CAMP never comes here -- that is carried, armful by
+        /// armful, by the camp's hands through transfer orders
+        /// (`OutpostLedger.OrderTransfer(res, n, toShip: false)`, the ship end
+        /// bound by `World.ShipCargoSide`). This instant version is kept for
+        /// the one place with no camp and no hands: the home dock.
         System.Collections.IEnumerator UnloadAshore(List<string> units)
         {
             var pile = World.Stockpile.Instance;

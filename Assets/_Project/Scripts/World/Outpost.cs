@@ -151,6 +151,9 @@ namespace SeaSick.World
             // the buildings the moment a storehouse went up; instead the
             // buildings ARE the ledger's ceiling, pushed in before every tick.
             ledger.ceilingPer = KeepsOfEach;
+            // The ship's end of the transfer orders (2026-09-24) -- bound
+            // before the tick, so a trip starts only while she is here.
+            ShipCargoSide.BindTo(this);
             // A camp restored from a save written before stone was a price
             // has no seam in its books. See `EnsureStoneStock`.
             EnsureStoneStock();

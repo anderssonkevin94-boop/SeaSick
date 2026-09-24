@@ -5,6 +5,12 @@ using SeaSick.UI;
 using SeaSick.Voyage;
 using SeaSick.World;
 
+/// **STALE since 2026-09-24 (carried cargo).** `CampLoading` no longer
+/// moves a unit every `Interval`: loads are transfer orders that villagers
+/// carry an armful at a time (`OutpostLedger.Transfers`). The waits below
+/// (40 / 60 s) and the "at most one more unit after cancel" gate were sized
+/// for the old coroutine and will misreport. The ledger side is gated by
+/// `StationStockSelfTest` section (n); rewrite this probe before trusting it.
 /// **Does a camp's pile end up in the hold, unit for unit, and never by
 /// itself?**
 ///

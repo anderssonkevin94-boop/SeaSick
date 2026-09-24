@@ -1680,6 +1680,14 @@ namespace SeaSick.World
                     // its store point, and matching the hut against that
                     // found nothing and sent the load to the fire ring.
                     return StoreSpot(res, out face);
+                case HaulPlace.Ship:
+                    // **The foot of the gangway** (2026-09-24 transfers): the
+                    // books' own point (`ICargoSide.GangwayAt` -- the plank's
+                    // landing, the pier ROOT at a pier: `CampPath` has no
+                    // pier deck to walk out on). He faces the ship to pick up
+                    // / set down.
+                    if (ShipCargoSide.ShipAt(out var hull)) face = hull;
+                    return Grounded(at);
             }
             // A site (the drawing itself), or a station whose building the
             // body cannot find (a probe's hand-written ledger): the books'

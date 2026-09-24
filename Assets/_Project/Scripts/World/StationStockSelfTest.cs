@@ -51,6 +51,17 @@ namespace SeaSick.World
     ///     DIAGNOSTIC, never a failure: the same camp STEPPED (not ticked) in
     ///     0.02-, 0.1- and 1-day steps -- how far the books drift with the
     ///     step size, which is why there is no coarse catch-up path.
+    /// (n) Ship <-> store transfers (Kevin, 2026-09-24: *"unload things from
+    ///     my ship to the island and vice versa ... physically carried"*),
+    ///     against a fake `ICargoSide` with its gangway 30 m from the store:
+    ///     no order while she is away; 7 timber store -> ship lands 7 aboard
+    ///     and 0 lost in 0.02-, 1-day and ragged ticks; a trip books the
+    ///     walked store <-> gangway distance; 5 stone ship -> store lands 5;
+    ///     a full store and a full hold each wait, say why, and resume; a
+    ///     cancel mid-trip lands only what was in arms; she casting off
+    ///     mid-trip sends a store -> ship armful back to the store (order
+    ///     paused, count restored) and lets a ship -> store armful finish;
+    ///     a re-ordered hand's armful lands, a builder walks it on.
     public static class StationStockSelfTest
     {
         public static bool Run()
@@ -417,6 +428,7 @@ namespace SeaSick.World
             }
 
             Tempo(sb, ref fails);
+            Transfers(sb, ref fails);
 
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());
@@ -800,6 +812,255 @@ namespace SeaSick.World
                 foreach (var line in r.takes) if (line.res == Res.Stone) n += line.n;
             }
             return n;
+        }
+
+        // --- (n) ship <-> store transfers ------------------------------------------
+
+        /// The ship's end for the self-test: a hold with a capacity, a
+        /// gangway 30 m east of the store, and a switch for "she is here".
+        sealed class FakeCargo : ICargoSide
+        {
+            public bool present = true;
+            public int capacity = 100;
+            public Vector3 gangway = new Vector3(30f, 0f, 0f);
+            public readonly System.Collections.Generic.Dictionary<string, int> held =
+                new System.Collections.Generic.Dictionary<string, int>();
+
+            public int Total { get { int n = 0; foreach (var kv in held) n += kv.Value; return n; } }
+            public bool Present => present;
+            public int Room => Mathf.Max(0, capacity - Total);
+            public int HeldOf(string res) => res != null && held.TryGetValue(res, out int n) ? n : 0;
+            public int Take(string res, int n)
+            {
+                int got = Mathf.Min(HeldOf(res), Mathf.Max(0, n));
+                if (got > 0) held[res] = HeldOf(res) - got;
+                return got;
+            }
+            public int Give(string res, int n)
+            {
+                n = Mathf.Min(Mathf.Max(0, n), Room);
+                if (n > 0) held[res] = HeldOf(res) + n;
+                return n;
+            }
+            public bool GangwayAt(out Vector3 at) { at = gangway; return true; }
+        }
+
+        /// A fed camp with its store at 0,0, `porters` idle hands, and the
+        /// fake ship alongside.
+        static OutpostLedger Porters(int ceiling, int porters, out FakeCargo ship)
+        {
+            var l = new OutpostLedger { ceilingPer = ceiling, stationsMigrated = true };
+            l.SetCentre(Vector3.zero);
+            for (int i = 0; i < porters; i++)
+                l.hands.Add(new OutpostHand { name = "Porter" + i, order = OutpostOrder.Idle });
+            l.Store(Res.Food, true).whole = 1000;
+            l.lastTicked = 0.0;
+            ship = new FakeCargo();
+            l.cargo = ship;
+            return l;
+        }
+
+        static int Ashore(OutpostLedger l, string res) => l.StoreCountOf(res);
+
+        static void Transfers(StringBuilder sb, ref int fails)
+        {
+            string T = Res.Timber, S = Res.Stone;
+
+            // Refused while she is away.
+            {
+                var l = Porters(20, 1, out var ship);
+                l.Store(T, true).whole = 10;
+                ship.present = false;
+                bool refused = !l.OrderTransfer(T, 5, true);
+                Gate(sb, ref fails, "transfer-refused-when-away", refused && !l.TransferPending(T, true),
+                    refused ? "no order without the ship" : "an order was placed with her away");
+            }
+
+            // 7 timber store -> ship, across tick sizes: 7 aboard, 0 lost.
+            {
+                double[] ragged = { 0.03, 0.31, 0.02, 0.4, 0.05, 1.19 };
+                string detail = "";
+                bool ok = true;
+                for (int run = 0; run < 3; run++)
+                {
+                    var l = Porters(20, 1, out var ship);
+                    l.Store(T, true).whole = 10;
+                    bool placed = l.OrderTransfer(T, 7, true);
+                    double now = l.lastTicked;
+                    if (run == 0) for (int i = 0; i < 100; i++) Advance(l, ref now, 0.02);
+                    else if (run == 1) for (int i = 0; i < 2; i++) Advance(l, ref now, 1.0);
+                    else foreach (var st in ragged) Advance(l, ref now, st);
+                    bool good = placed && ship.HeldOf(T) == 7 && Ashore(l, T) == 3
+                                && l.CarriedOf(T) == 0 && !l.TransferPending(T, true)
+                                && l.transferredAboard == 7;
+                    ok &= good;
+                    detail += $"[{(run == 0 ? "0.02d" : run == 1 ? "1d" : "ragged")}: aboard {ship.HeldOf(T)} "
+                              + $"ashore {Ashore(l, T)} arms {l.CarriedOf(T)} pending {l.TransferPending(T, true)}] ";
+                }
+                Gate(sb, ref fails, "transfer-7-timber-aboard-d2", ok, detail);
+            }
+
+            // A trip is the walked distance store <-> gangway.
+            {
+                var l = Porters(20, 1, out var ship);
+                l.Store(T, true).whole = 10;
+                l.OrderTransfer(T, 7, true);
+                double now = l.lastTicked;
+                Advance(l, ref now, 0.02);
+                var h = l.hands[0];
+                float want = l.TripDays(T, 2, HaulPlace.Store, -1, HaulPlace.Ship, -1);
+                float wantSec = 2f * 30f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
+                                + OutpostLedger.HandleSeconds;
+                bool ok = h.Hauling && h.haulTo == HaulPlace.Ship && h.haulCount == 2 && h.haulPlaced
+                          && Mathf.Abs(h.haulDays - want) < 1e-6f
+                          && Mathf.Abs(want * TimeOfDay.DayLength - wantSec) < 0.01f
+                          && Mathf.Abs(h.haulToX - 30f) < 1e-3f;
+                Gate(sb, ref fails, "transfer-trip-is-walked", ok,
+                    $"armful {h.haulCount} to {h.haulTo}, booked {h.haulDays * TimeOfDay.DayLength:0.00} s "
+                    + $"(want {wantSec:0.00} s = 2 x 30 m x {OutpostLedger.PathFactor} / {OutpostLedger.WalkMetresPerSecond} + {OutpostLedger.HandleSeconds}), "
+                    + $"drop at x {h.haulToX:0.#}");
+            }
+
+            // 5 stone ship -> store.
+            {
+                var l = Porters(20, 1, out var ship);
+                ship.held[S] = 5;
+                bool placed = l.OrderTransfer(S, 5, false);
+                double now = l.lastTicked;
+                Advance(l, ref now, 2.0);
+                Gate(sb, ref fails, "transfer-5-stone-ashore",
+                    placed && Ashore(l, S) == 5 && ship.HeldOf(S) == 0 && l.CarriedOf(S) == 0
+                    && l.transferredAshore == 5 && !l.TransferPending(S, false),
+                    $"ashore {Ashore(l, S)} aboard {ship.HeldOf(S)} arms {l.CarriedOf(S)} landed {l.transferredAshore}");
+            }
+
+            // A full store waits, says so, and resumes.
+            {
+                var l = Porters(4, 1, out var ship);
+                ship.held[S] = 10;
+                l.OrderTransfer(S, OutpostLedger.TransferAll, false);
+                double now = l.lastTicked;
+                Advance(l, ref now, 2.0);
+                string why = l.TransferStall(S, false);
+                string line = l.TransferSummary();
+                bool waited = Ashore(l, S) == 4 && ship.HeldOf(S) == 6 && l.CarriedOf(S) == 0
+                              && why == OutpostLedger.StallStoreFull && l.TransferPending(S, false)
+                              && line.Contains(OutpostLedger.StallStoreFull);
+                l.ceilingPer = 10;
+                Advance(l, ref now, 2.0);
+                bool resumed = Ashore(l, S) == 10 && ship.HeldOf(S) == 0 && l.CarriedOf(S) == 0
+                               && !l.TransferPending(S, false);
+                Gate(sb, ref fails, "transfer-store-full-waits", waited && resumed,
+                    $"waited {waited} (stall '{why}', line '{line}'), after room: ashore {Ashore(l, S)} aboard {ship.HeldOf(S)}");
+            }
+
+            // A full hold waits, says so, and resumes.
+            {
+                var l = Porters(20, 1, out var ship);
+                ship.capacity = 3;
+                l.Store(T, true).whole = 10;
+                l.OrderTransfer(T, OutpostLedger.TransferAll, true);
+                double now = l.lastTicked;
+                Advance(l, ref now, 2.0);
+                string why = l.TransferStall(T, true);
+                bool waited = ship.HeldOf(T) == 3 && Ashore(l, T) == 7 && l.CarriedOf(T) == 0
+                              && why == OutpostLedger.StallHoldFull && l.TransferPending(T, true);
+                ship.capacity = 10;
+                Advance(l, ref now, 2.0);
+                bool resumed = ship.HeldOf(T) == 10 && Ashore(l, T) == 0 && l.CarriedOf(T) == 0
+                               && !l.TransferPending(T, true);
+                Gate(sb, ref fails, "transfer-hold-full-waits", waited && resumed,
+                    $"waited {waited} (stall '{why}'), after room: aboard {ship.HeldOf(T)} ashore {Ashore(l, T)}");
+            }
+
+            // Cancel mid-trip: what is in arms lands, nothing more starts.
+            {
+                var l = Porters(20, 1, out var ship);
+                l.Store(T, true).whole = 10;
+                l.OrderTransfer(T, 10, true);
+                double now = l.lastTicked;
+                Advance(l, ref now, 0.2);   // 36 s: one armful down, the next in arms
+                int landed = ship.HeldOf(T), inArms = l.CarryingTransfer(T, true);
+                l.CancelTransfers();
+                Advance(l, ref now, 2.0);
+                bool ok = inArms > 0 && ship.HeldOf(T) == landed + inArms
+                          && ship.HeldOf(T) + Ashore(l, T) == 10 && l.CarriedOf(T) == 0
+                          && !l.TransferPending(T, true);
+                Gate(sb, ref fails, "transfer-cancel-mid-trip-conserves", ok,
+                    $"at cancel {landed} aboard + {inArms} in arms; after: aboard {ship.HeldOf(T)} ashore {Ashore(l, T)} arms {l.CarriedOf(T)}");
+            }
+
+            // She casts off mid-trip (store -> ship): the armful goes home,
+            // the order pauses with its count restored, and resumes.
+            {
+                var l = Porters(20, 1, out var ship);
+                l.Store(T, true).whole = 10;
+                l.OrderTransfer(T, 10, true);
+                double now = l.lastTicked;
+                Advance(l, ref now, 0.2);
+                int inArms = l.CarryingTransfer(T, true);
+                ship.present = false;
+                Advance(l, ref now, 1.0);
+                int aboard = ship.HeldOf(T);
+                int leftWhileAway = l.TransferLeft(T, true);
+                bool paused = inArms > 0 && aboard + Ashore(l, T) == 10 && l.CarriedOf(T) == 0
+                              && l.TransferPending(T, true) && leftWhileAway == 10 - aboard
+                              && l.TransferStall(T, true) == OutpostLedger.StallAway;
+                ship.present = true;
+                Advance(l, ref now, 2.0);
+                bool resumed = ship.HeldOf(T) == 10 && Ashore(l, T) == 0 && l.CarriedOf(T) == 0;
+                Gate(sb, ref fails, "transfer-ship-leaves-to-ship-conserves", paused && resumed,
+                    $"{inArms} in arms when she left; then aboard {aboard} + ashore {Ashore(l, T)}, left {leftWhileAway}; "
+                    + $"back alongside: aboard {ship.HeldOf(T)}");
+            }
+
+            // She casts off mid-trip (ship -> store): the armful is off her
+            // already and lands in the store.
+            {
+                var l = Porters(20, 1, out var ship);
+                ship.held[S] = 9;
+                l.OrderTransfer(S, 9, false);
+                double now = l.lastTicked;
+                Advance(l, ref now, 0.02);
+                int inArms = l.CarryingTransfer(S, false);
+                ship.present = false;
+                Advance(l, ref now, 2.0);
+                bool ok = inArms > 0 && Ashore(l, S) == inArms && ship.HeldOf(S) == 9 - inArms
+                          && l.CarriedOf(S) == 0 && l.TransferPending(S, false);
+                Gate(sb, ref fails, "transfer-ship-leaves-to-store-conserves", ok,
+                    $"{inArms} in arms when she left; ashore {Ashore(l, S)} aboard {ship.HeldOf(S)} arms {l.CarriedOf(S)}");
+            }
+
+            // Re-ordered mid-trip: to a farm (not a transfer carrier) the
+            // armful lands where it was going at once; to Build he walks it
+            // on and keeps carrying (a builder with nothing to build).
+            {
+                var l = Porters(20, 1, out var ship);
+                l.Store(T, true).whole = 10;
+                l.OrderTransfer(T, 4, true);
+                double now = l.lastTicked;
+                Advance(l, ref now, 0.02);
+                int inArms = l.CarryingTransfer(T, true);
+                l.hands[0].order = OutpostOrder.Work;
+                l.hands[0].target = BuildPlans.Farm.id;
+                Advance(l, ref now, 0.02);
+                bool landedNow = inArms > 0 && ship.HeldOf(T) == inArms && l.CarriedOf(T) == 0
+                                 && ship.HeldOf(T) + Ashore(l, T) == 10;
+
+                var b = Porters(20, 1, out var ship2);
+                b.Store(T, true).whole = 10;
+                b.OrderTransfer(T, 4, true);
+                double nb = b.lastTicked;
+                Advance(b, ref nb, 0.02);
+                b.hands[0].order = OutpostOrder.Build;
+                Advance(b, ref nb, 0.02);
+                bool stillCarrying = b.CarryingTransfer(T, true) > 0 && ship2.HeldOf(T) == 0;
+                Advance(b, ref nb, 2.0);
+                bool builderDone = ship2.HeldOf(T) == 4 && Ashore(b, T) == 6 && b.CarriedOf(T) == 0;
+                Gate(sb, ref fails, "transfer-reordered-mid-trip-conserves", landedNow && stillCarrying && builderDone,
+                    $"to farm: {inArms} in arms -> aboard {ship.HeldOf(T)}; to build: still carrying {stillCarrying}, "
+                    + $"then aboard {ship2.HeldOf(T)} ashore {Ashore(b, T)}");
+            }
         }
 
         static void Gate(StringBuilder sb, ref int fails, string name, bool ok, string detail)

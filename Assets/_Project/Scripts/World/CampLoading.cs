@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using SeaSick.Ship;
@@ -21,7 +20,8 @@ namespace SeaSick.World
     /// plan's defence against risk #2 -- "the sailing becomes transport" -- and
     /// it is why everything here hangs off a button and nothing off the tick.
     /// Nothing in this file runs unless somebody pressed something: there is no
-    /// Update, and the coroutine only exists while a load is in progress.
+    /// Update. Since 2026-09-24 a press places transfer ORDERS on the camp's
+    /// ledger and the camp's hands carry them (see "what a load is doing").
     ///
     /// **The hold is the bottleneck, and the line is the player's greed.**
     /// `VoyageManager.AddLoot` clamps only to the PHYSICAL limit (`MaxHold`),
@@ -39,15 +39,14 @@ namespace SeaSick.World
     /// `CampLoadProbe` gates it per resource across a run that fills the hold
     /// mid-way.
     ///
-    /// The MonoBehaviour half is only somewhere to hang a coroutine. It is
-    /// added on demand beside the ship's `AnchorController` and is
-    /// deliberately NOT wired into `Sea.unity`: it carries no serialised state,
-    /// and the scene is carrying other people's uncommitted work.
+    /// Still a MonoBehaviour for its callers' sake; since 2026-09-24 it has no
+    /// coroutine and is never added to anything -- everything is static.
     public class CampLoading : MonoBehaviour
     {
         // --- the cadence ------------------------------------------------------
 
-        /// Seconds between one unit and the next.
+        /// Seconds between one unit and the next -- of the RETIRED coroutine
+        /// (2026-09-24: hands carry armfuls now). Kept for `CampLoadProbe`.
         ///
         /// A shade quicker than the 0.18 s `VoyageManager.UnloadAshore` uses
         /// coming the other way, because a hold takes more than a beach keeps
@@ -125,51 +124,64 @@ namespace SeaSick.World
         static void ResetVisit() => loadedThisVisit.Clear();
 
         // --- what a load is doing right now -----------------------------------
+        //
+        // **Carried by hands since 2026-09-24.** Kevin: *"These things should
+        // be physically carried from where they are to where they have been
+        // designated."* `Begin` no longer runs a coroutine that teleported one
+        // unit per 0.15 s; it places store -> ship TRANSFER ORDERS on the
+        // camp's ledger (`OutpostLedger.OrderTransfer`), and the camp's free
+        // hands walk them down to the gangway an armful at a time as timed
+        // trips. Everything below reads those orders, so the ship sheet's
+        // surface (Busy / Moved / Loading / Cancel) is unchanged.
 
-        /// True while units are being carried. The sheet's ⬆ Load becomes
-        /// ✕ Stop on this.
-        public static bool Busy { get; private set; }
+        /// True while store -> ship orders stand (or armfuls are walking)
+        /// at the camp being loaded, and she is still alongside it. The
+        /// sheet's Load becomes Stop on this.
+        public static bool Busy
+        {
+            get
+            {
+                var l = Camp != null ? Camp.Ledger : null;
+                return l != null && l.AnyTransferPending(true) && Alongside(Camp);
+            }
+        }
 
-        /// Units this run has put aboard.
-        public static int Moved { get; private set; }
+        /// Units the hands have set down aboard since this load began.
+        public static int Moved
+        {
+            get
+            {
+                var l = Camp != null ? Camp.Ledger : null;
+                return l != null ? Mathf.Max(0, l.transferredAboard - movedBase) : 0;
+            }
+        }
 
-        /// What is being carried at this moment, or null.
-        public static string Loading { get; private set; }
+        static int movedBase;
 
-        /// The camp being emptied, or null.
+        /// What is being carried aboard at this moment (the first armful
+        /// walking to her, else the first standing order), or null.
+        public static string Loading
+        {
+            get
+            {
+                var l = Camp != null ? Camp.Ledger : null;
+                if (l == null) return null;
+                foreach (var h in l.hands)
+                    if (h != null && h.Hauling && h.haulTo == HaulPlace.Ship) return h.haulRes;
+                if (l.transfers != null)
+                    foreach (var o in l.transfers)
+                        if (o != null && o.toShip && o.left > 0) return o.resource;
+                return null;
+            }
+        }
+
+        /// The camp being loaded, or null.
         public static Outpost Camp { get; private set; }
 
         /// Is this the camp currently being loaded? The sheet asks, because a
         /// load is about ONE place and she can only be at one.
         public static bool LoadingFrom(Outpost camp) =>
             Busy && camp != null && Camp == camp;
-
-        // --- the runner -------------------------------------------------------
-
-        static CampLoading runner;
-        Coroutine run;
-
-        void Awake() { if (runner == null) runner = this; }
-
-        void OnDisable()
-        {
-            // Play mode ending, or the ship being torn down. A static `Busy`
-            // left true would make the sheet offer ✕ Stop for a load that has
-            // no coroutine behind it -- statics outlive play mode here, domain
-            // reload is off.
-            if (runner == this) { Halt(); runner = null; }
-        }
-
-        /// Somewhere to hang the coroutine: the ship, if she is in the scene.
-        static CampLoading EnsureRunner()
-        {
-            if (runner != null) return runner;
-            var anchor = Object.FindFirstObjectByType<AnchorController>();
-            var host = anchor != null ? anchor.gameObject : new GameObject("CampLoading");
-            runner = host.GetComponent<CampLoading>();
-            if (runner == null) runner = host.AddComponent<CampLoading>();
-            return runner;
-        }
 
         // --- is she actually here ----------------------------------------------
 
@@ -217,9 +229,9 @@ namespace SeaSick.World
         /// **Move up to `want` units of one kind from the ground to the hold,
         /// right now, and return how many actually went.**
         ///
-        /// The visible version below is this in a loop with a wait in it; this
-        /// one is what a probe, a dev tool or a future "load all" button can
-        /// call without watching. Both go through the same three steps in the
+        /// **The instant path, kept for probes and dev tools only**
+        /// (`CampLoadProbe`). The game's load is carried by hands since
+        /// 2026-09-24 (`Begin` -> transfer orders); this one teleports. Both go through the same three steps in the
         /// same order, so the instant path and the carried path cannot drift.
         ///
         /// The ledger is settled first (`CatchUp`), because the pile is the
@@ -274,38 +286,48 @@ namespace SeaSick.World
             return moved;
         }
 
-        // --- the visible version ------------------------------------------------
+        // --- the carried version ---------------------------------------------------
 
-        /// **Start carrying, so the pile by the fire goes down as the stack on
-        /// deck goes up.**
+        /// **Order the camp's hands to carry the store down to the boat**,
+        /// kind by kind in `plan` order (null: `BestFirst`), which is also
+        /// the order armfuls are taken in.
         ///
-        /// `plan` is the order the kinds are worked through; null means
-        /// `BestFirst`. Returns false when there is nothing to do -- she is not
-        /// here, the camp is empty, or the hold is at whatever limit the player
-        /// has chosen.
+        /// Each kind with anything in the STORE gets a store -> ship transfer
+        /// order: "all" when the kind has no stop-at, else everything above
+        /// the stop-at floor the ship sheet set (`SetStopAt` keeps that many
+        /// ashore). The hold's line is still the limit: a hand only takes an
+        /// armful the hold has room for (`RoomAboard`, net of armfuls already
+        /// walking), and the order waits, saying "hold full", when there is
+        /// none. Returns false when there is nothing to do -- she is not
+        /// here, the store is empty, or the hold is at the player's limit.
         public static bool Begin(Outpost camp, VoyageManager v, ShipHold hold,
             string[] plan = null)
         {
             if (camp == null || v == null) return false;
-            if (!Alongside(camp)) return false;
-
-            var r = EnsureRunner();
-            if (r == null) return false;
-            r.Halt();
+            if (!Alongside(camp)) { ResetVisit(); return false; }
 
             camp.CatchUp();
-            if (camp.Ledger == null || camp.Ledger.Total <= 0) return false;
+            var l = camp.Ledger;
+            if (l == null) return false;
+            ShipCargoSide.BindTo(camp);
             if (RoomAboard(v) <= 0) return false;
 
+            // A fresh load (not a second press while one runs) counts from 0.
+            if (Camp != camp || !l.AnyTransferPending(true)) movedBase = l.transferredAboard;
             Camp = camp;
-            Moved = 0;
-            var c = r.StartCoroutine(r.Carry(camp, v, hold, plan ?? BestFirst));
-            // `Carry` runs to its first yield inside StartCoroutine, so a load
-            // with nothing to carry is already finished by the time we get the
-            // handle back. Keeping that handle would leave a `run` nobody can
-            // stop.
-            r.run = Busy ? c : null;
-            return Busy;
+
+            bool any = false;
+            foreach (var res in plan ?? BestFirst)
+            {
+                if (string.IsNullOrEmpty(res)) continue;
+                int have = l.StoreCountOf(res);
+                if (have <= 0) continue;
+                int floor = StopAt(res);
+                int count = floor < 0 ? OutpostLedger.TransferAll : Mathf.Max(0, have - floor);
+                if (count <= 0) continue;
+                any |= l.OrderTransfer(res, count, true);
+            }
+            return any && Busy;
         }
 
         /// One kind only -- what the per-resource `load` button in the open
@@ -320,58 +342,15 @@ namespace SeaSick.World
             return Begin(camp, v, hold, oneKind);
         }
 
-        /// **Stop, now.** The coroutine is stopped outright rather than being
-        /// asked to notice a flag, so no further unit moves: a player who
-        /// presses ✕ Stop because the hull is going under wants the next box
-        /// left on the beach, not carried anyway because the wait had already
-        /// started.
+        /// **Stop.** Every transfer order at the camp being loaded is struck
+        /// (`OutpostLedger.CancelTransfers`), so no hand picks up another
+        /// armful. Armfuls already on a shoulder finish their walk and are set
+        /// down where they were going -- a unit is never dropped on the path.
         public static void Cancel()
         {
-            if (runner != null) runner.Halt();
-            else { Busy = false; Loading = null; }
+            var l = Camp != null ? Camp.Ledger : null;
+            if (l != null) l.CancelTransfers();
             ResetVisit();
-        }
-
-        void Halt()
-        {
-            if (run != null) { StopCoroutine(run); run = null; }
-            Busy = false;
-            Loading = null;
-        }
-
-        void Done()
-        {
-            run = null;
-            Busy = false;
-            Loading = null;
-        }
-
-        IEnumerator Carry(Outpost camp, VoyageManager v, ShipHold hold, string[] plan)
-        {
-            Busy = true;
-            var wait = new WaitForSeconds(Interval);
-
-            for (int i = 0; i < plan.Length; i++)
-            {
-                string res = plan[i];
-                if (string.IsNullOrEmpty(res)) continue;
-
-                while (true)
-                {
-                    // Asked every unit: she can weigh anchor, the player can
-                    // switch deck cargo off, and a camp can run dry mid-carry.
-                    // Weighing anchor also ends the visit for the per-kind
-                    // caps -- see `ResetVisit`.
-                    if (!Alongside(camp)) { ResetVisit(); Done(); yield break; }
-                    if (RoomAboard(v) <= 0) { Done(); yield break; }
-
-                    Loading = res;
-                    if (LoadNow(camp, v, hold, res, 1) != 1) break;   // this kind is out
-                    Moved++;
-                    yield return wait;
-                }
-            }
-            Done();
         }
 
         // --- what the camp is holding, as a line of text -------------------------
