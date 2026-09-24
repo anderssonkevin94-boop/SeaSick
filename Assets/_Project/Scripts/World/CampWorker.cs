@@ -426,7 +426,14 @@ namespace SeaSick.World
             return spot;
         }
 
-        void OnDisable() { Drop(); ReleaseClaim(); }
+        /// **Every live villager body**, for the things that want to know who
+        /// is near without a scene search: `GateLeaves` swings for a hand
+        /// within a few metres. Kept by OnEnable/OnDisable, so a component
+        /// `Remove` has handed to `Destroy` drops out the same frame.
+        public static readonly List<CampWorker> Bodies = new List<CampWorker>();
+
+        void OnEnable() { if (!Bodies.Contains(this)) Bodies.Add(this); }
+        void OnDisable() { Bodies.Remove(this); Drop(); ReleaseClaim(); }
 
         void Drop()
         {
