@@ -68,7 +68,7 @@ namespace SeaSick.Ship.Modular
         static void Body(string stdJson, IList<string> mods, IList<string> names, Func<string, bool> exists, GateFn Gate)
         {
             var lib = ModuleLibrary.FromJson(stdJson, mods, names);
-            Gate("library-loads", lib.Ok && lib.All.Count == 16 && Near(lib.MetresPerUnit, 0.5f) && lib.MaxMiddles == 3,
+            Gate("library-loads", lib.Ok && lib.All.Count == 17 && Near(lib.MetresPerUnit, 0.5f) && lib.MaxMiddles == 3,
                 $"ok={lib.Ok} modules={lib.All.Count} k={lib.MetresPerUnit} maxMiddles={lib.MaxMiddles} errors=[{string.Join(" | ", lib.errors)}]");
             if (!lib.Usable) return;
 
@@ -256,7 +256,7 @@ namespace SeaSick.Ship.Modular
             var dupList = new List<string>(mods);
             dupList.Add(Mini("hull.middle.w1r2.v3", "Middle", ""));
             var dup = ModuleLibrary.FromJson(stdJson, dupList);
-            Gate("duplicate-id-rejected", !dup.Ok && dup.errors.Exists(e => e.StartsWith("LIB_DUPLICATE_ID")) && dup.All.Count == 16,
+            Gate("duplicate-id-rejected", !dup.Ok && dup.errors.Exists(e => e.StartsWith("LIB_DUPLICATE_ID")) && dup.All.Count == 17,
                 string.Join(" | ", dup.errors));
 
             var oddList = new List<string>(mods);
@@ -266,7 +266,7 @@ namespace SeaSick.Ship.Modular
             var odd = ModuleLibrary.FromJson(stdJson, oddList);
             Gate("library-refuses-bad-modules", odd.errors.Exists(e => e.StartsWith("LIB_UNKNOWN_KIND"))
                 && odd.errors.Exists(e => e.StartsWith("LIB_UNKNOWN_STANDARD"))
-                && odd.errors.Exists(e => e.StartsWith("LIB_SCHEMA_TOO_NEW")) && odd.All.Count == 16,
+                && odd.errors.Exists(e => e.StartsWith("LIB_SCHEMA_TOO_NEW")) && odd.All.Count == 17,
                 string.Join(" | ", odd.errors));
 
             // ---- data hygiene -------------------------------------------

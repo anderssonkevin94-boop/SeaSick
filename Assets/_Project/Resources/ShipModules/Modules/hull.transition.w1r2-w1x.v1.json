@@ -1,0 +1,50 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.transition.w1r2-w1x.v1",
+    "version": 1,
+    "kind": "Middle",
+    "family": "Transition",
+    "status": "placeholder",
+    "displayName": "W1-r2 to W1x width transition (placeholder)",
+    "description": "Bridges the W1-r2 low-deck hull to the W1x expanded-beam hull: aft join profile W1-r2, forward join profile W1x. No geometry yet -- Kevin: 'Astra will provide those models, so build like you have it, and we will implement them later.' See docs/EXPANDED-HULL-VALIDATION.md, section 'Transition module contract', for exactly what her delivery must carry (join profiles each end, length, multi-part placement, hydrostatics table, capacity block, lightship mass, gun slots revalidated, passages never narrowed).",
+    "source": "none (schema/policy placeholder; no kit delivery yet)",
+    "lengthU": 6.0,
+    "boundsMinU": {"x": 0, "y": -6.25, "z": -1.92},
+    "boundsMaxU": {"x": 6.0, "y": 6.25, "z": 2.47},
+    "boundsNote": "PLACEHOLDER: box is the union of the W1-r2 and W1x middle bounds so it can be drawn as a grey box; not a measurement of any real transition geometry.",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.aft",
+            "standard": "W1-r2",
+            "posU": {"x": 0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Joins a W1-r2 stern or middle behind it."
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.fwd",
+            "standard": "W1x",
+            "posU": {"x": 6.0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Joins a W1x middle or bow ahead of it. PLACEHOLDER length (6.0 u, a middle-bay's worth); Astra's real transition may need a different length to blend the two cross-sections plausibly."
+        }
+    ],
+    "visuals": [],
+    "equipmentSlots": [],
+    "passages": [],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    }
+}
