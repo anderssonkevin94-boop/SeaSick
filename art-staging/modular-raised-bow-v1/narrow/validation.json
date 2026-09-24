@@ -1,0 +1,108 @@
+{
+  "mode": "narrow",
+  "assemblies": {
+    "short": {
+      "welded_hull": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0
+      },
+      "cannon_surface_intersections": [],
+      "triangles_without_preview_cannons": 9544
+    },
+    "long": {
+      "welded_hull": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0
+      },
+      "cannon_surface_intersections": [],
+      "triangles_without_preview_cannons": 10506
+    }
+  },
+  "parts": {
+    "Rails": {
+      "vertices": 144,
+      "triangles": 268,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Frame": {
+      "vertices": 144,
+      "triangles": 216,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Stairs": {
+      "vertices": 64,
+      "triangles": 96,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Seams": {
+      "vertices": 72,
+      "triangles": 108,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "StructuralTrim": {
+      "vertices": 128,
+      "triangles": 212,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "HullCourses": {
+      "vertices": 120,
+      "triangles": 204,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "StemExtension": {
+      "vertices": 8,
+      "triangles": 12,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Hull_Ironwork": {
+      "vertices": 248,
+      "triangles": 440,
+      "boundary_edges": 8,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Hull_Shell": {
+      "vertices": 260,
+      "triangles": 496,
+      "boundary_edges": 22,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Plank_Seams": {
+      "vertices": 392,
+      "triangles": 654,
+      "boundary_edges": 68,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Prow": {
+      "vertices": 38,
+      "triangles": 60,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rails_Teal": {
+      "vertices": 152,
+      "triangles": 244,
+      "boundary_edges": 16,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "replacement_bow_triangles": 3010
+}

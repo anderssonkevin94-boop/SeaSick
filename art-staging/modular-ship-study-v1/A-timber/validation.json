@@ -1,0 +1,101 @@
+{
+  "meshes": {
+    "Hull_Shell": {
+      "vertices": 3906,
+      "triangles": 7808,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rails_Teal": {
+      "vertices": 4292,
+      "triangles": 8404,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Hull_Ironwork": {
+      "vertices": 3196,
+      "triangles": 6164,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Plank_Seams": {
+      "vertices": 1764,
+      "triangles": 3292,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Chimney": {
+      "vertices": 240,
+      "triangles": 476,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Helm": {
+      "vertices": 552,
+      "triangles": 1016,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Housing_Lid": {
+      "vertices": 145,
+      "triangles": 286,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Housing_Ironwork": {
+      "vertices": 736,
+      "triangles": 1416,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Housing_AccessPanel": {
+      "vertices": 696,
+      "triangles": 1376,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Rotor": {
+      "vertices": 520,
+      "triangles": 912,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Carrier": {
+      "vertices": 152,
+      "triangles": 260,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "total_triangles": 31410,
+  "rotation_samples": 72,
+  "bearing_contact_excluded_radius": 0.55,
+  "surface_intersections": [],
+  "swept_radius": 1.6222284104285425,
+  "pocket_ceiling": 2.17,
+  "notes": "BVH surface tests sampled every 5 degrees; intentional axle/bearing contact excluded. Not a physics or watertightness simulation.",
+  "variant": "A-timber",
+  "blender_version": "5.1.1",
+  "socket_blender": [
+    -10.829999923706055,
+    0.0,
+    0.3499999940395355
+  ],
+  "socket_game_convention": [
+    0,
+    0.35,
+    -10.83
+  ],
+  "mount": "M1"
+}

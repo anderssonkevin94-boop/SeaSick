@@ -1,0 +1,208 @@
+{
+  "wheel_tests": {
+    "short": {
+      "samples": 72,
+      "surface_intersections": [],
+      "bearing_exclusion_radius": 0.55
+    },
+    "long": {
+      "samples": 72,
+      "surface_intersections": [],
+      "bearing_exclusion_radius": 0.55
+    }
+  },
+  "exports": {
+    "Bow_W1/Hull_Ironwork": {
+      "triangles": 488,
+      "bounds_error": 7.152557373046875e-07,
+      "vertex_colors": "Col"
+    },
+    "Bow_W1/Hull_Shell": {
+      "triangles": 428,
+      "bounds_error": 7.152557373046875e-07,
+      "vertex_colors": "Col"
+    },
+    "Bow_W1/Plank_Seams": {
+      "triangles": 826,
+      "bounds_error": 7.152557373046875e-07,
+      "vertex_colors": "Col"
+    },
+    "Bow_W1/Prow": {
+      "triangles": 60,
+      "bounds_error": 1.3113021850585938e-06,
+      "vertex_colors": "Col"
+    },
+    "Bow_W1/Rails_Teal": {
+      "triangles": 396,
+      "bounds_error": 7.557520120826666e-07,
+      "vertex_colors": "Col"
+    },
+    "Fittings/Carrier": {
+      "triangles": 260,
+      "bounds_error": 4.172325134277344e-07,
+      "vertex_colors": "Col"
+    },
+    "Fittings/Chimney": {
+      "triangles": 156,
+      "bounds_error": 5.888836085432558e-08,
+      "vertex_colors": "Col"
+    },
+    "Fittings/Rotor": {
+      "triangles": 1616,
+      "bounds_error": 2.384185791015625e-07,
+      "vertex_colors": "Col"
+    },
+    "Midship_W1/Hull_Ironwork": {
+      "triangles": 360,
+      "bounds_error": 5.580659490078688e-07,
+      "vertex_colors": "Col"
+    },
+    "Midship_W1/Hull_Shell": {
+      "triangles": 114,
+      "bounds_error": 9.5367431640625e-07,
+      "vertex_colors": "Col"
+    },
+    "Midship_W1/Plank_Seams": {
+      "triangles": 280,
+      "bounds_error": 9.5367431640625e-07,
+      "vertex_colors": "Col"
+    },
+    "Midship_W1/Rails_Teal": {
+      "triangles": 208,
+      "bounds_error": 9.5367431640625e-07,
+      "vertex_colors": "Col"
+    },
+    "Stern_W1/Helm": {
+      "triangles": 280,
+      "bounds_error": 5.364418029785156e-07,
+      "vertex_colors": "Col"
+    },
+    "Stern_W1/Housing_AccessPanel": {
+      "triangles": 648,
+      "bounds_error": 5.364418029785156e-07,
+      "vertex_colors": "Col"
+    },
+    "Stern_W1/Housing_Ironwork": {
+      "triangles": 472,
+      "bounds_error": 5.066394805908203e-07,
+      "vertex_colors": "Col"
+    },
+    "Stern_W1/Housing_Lid": {
+      "triangles": 142,
+      "bounds_error": 4.954636096954346e-07,
+      "vertex_colors": "Col"
+    },
+    "Stern_W1/Hull_Ironwork": {
+      "triangles": 924,
+      "bounds_error": 9.5367431640625e-07,
+      "vertex_colors": "Col"
+    },
+    "Stern_W1/Hull_Shell": {
+      "triangles": 866,
+      "bounds_error": 9.5367431640625e-07,
+      "vertex_colors": "Col"
+    },
+    "Stern_W1/Plank_Seams": {
+      "triangles": 626,
+      "bounds_error": 9.5367431640625e-07,
+      "vertex_colors": "Col"
+    },
+    "Stern_W1/Rails_Teal": {
+      "triangles": 544,
+      "bounds_error": 9.5367431640625e-07,
+      "vertex_colors": "Col"
+    }
+  },
+  "imported_assemblies": {
+    "0": {
+      "Hull_Shell": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Rails_Teal": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Hull_Ironwork": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Plank_Seams": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "1": {
+      "Hull_Shell": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Rails_Teal": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Hull_Ironwork": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Plank_Seams": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "2": {
+      "Hull_Shell": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Rails_Teal": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Hull_Ironwork": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Plank_Seams": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "3": {
+      "Hull_Shell": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Rails_Teal": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Hull_Ironwork": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Plank_Seams": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    }
+  },
+  "shared_geometry": "Short and long saved scenes contain identical module mesh coordinates.",
+  "notes": "Wheel intersections sampled every 5 degrees; excludes intentional axle/bearing contact. No Unity or iOS testing."
+}

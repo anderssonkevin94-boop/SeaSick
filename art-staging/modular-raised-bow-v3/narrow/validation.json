@@ -1,0 +1,231 @@
+{
+  "family": "narrow",
+  "assemblies": {
+    "short": {
+      "parts": {
+        "UpperRails": {
+          "vertices": 128,
+          "triangles": 240,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperPosts": {
+          "vertices": 160,
+          "triangles": 240,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "RearGuard": {
+          "vertices": 56,
+          "triangles": 88,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "PlankDetails": {
+          "vertices": 344,
+          "triangles": 576,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "PortalFrames": {
+          "vertices": 56,
+          "triangles": 84,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "InternalLadder": {
+          "vertices": 72,
+          "triangles": 108,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Door": {
+          "vertices": 60,
+          "triangles": 92,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hatch": {
+          "vertices": 24,
+          "triangles": 36,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "StemExtension": {
+          "vertices": 8,
+          "triangles": 12,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Ironwork": {
+          "vertices": 224,
+          "triangles": 408,
+          "boundary_edges": 8,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Shell": {
+          "vertices": 272,
+          "triangles": 524,
+          "boundary_edges": 22,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Plank_Seams": {
+          "vertices": 232,
+          "triangles": 362,
+          "boundary_edges": 68,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Prow": {
+          "vertices": 38,
+          "triangles": 60,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperBraceBolts": {
+          "vertices": 48,
+          "triangles": 80,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        }
+      },
+      "joined_hull": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0
+      },
+      "chimney_hull_intersections": 0,
+      "chimney_position": [
+        7.650000095367432,
+        0.0,
+        1.7599999904632568
+      ],
+      "triangles": 9444
+    },
+    "long": {
+      "parts": {
+        "UpperRails": {
+          "vertices": 128,
+          "triangles": 240,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperPosts": {
+          "vertices": 160,
+          "triangles": 240,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "RearGuard": {
+          "vertices": 56,
+          "triangles": 88,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "PlankDetails": {
+          "vertices": 344,
+          "triangles": 576,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "PortalFrames": {
+          "vertices": 56,
+          "triangles": 84,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "InternalLadder": {
+          "vertices": 72,
+          "triangles": 108,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Door": {
+          "vertices": 60,
+          "triangles": 92,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hatch": {
+          "vertices": 24,
+          "triangles": 36,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "StemExtension": {
+          "vertices": 8,
+          "triangles": 12,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Ironwork": {
+          "vertices": 224,
+          "triangles": 408,
+          "boundary_edges": 8,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Shell": {
+          "vertices": 272,
+          "triangles": 524,
+          "boundary_edges": 22,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Plank_Seams": {
+          "vertices": 232,
+          "triangles": 362,
+          "boundary_edges": 68,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Prow": {
+          "vertices": 38,
+          "triangles": 60,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperBraceBolts": {
+          "vertices": 48,
+          "triangles": 80,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        }
+      },
+      "joined_hull": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0
+      },
+      "chimney_hull_intersections": 0,
+      "chimney_position": [
+        13.139999389648438,
+        0.0,
+        1.7599999904632568
+      ],
+      "triangles": 10406
+    }
+  }
+}

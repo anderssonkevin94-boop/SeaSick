@@ -1,0 +1,364 @@
+{
+  "narrow": {
+    "shared_geometry": true,
+    "exports": {
+      "UpperRails": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 160,
+          "triangles": 300,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "UpperPosts": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 200,
+          "triangles": 300,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "ForwardGuard": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 88,
+          "triangles": 144,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "UpperPlanks": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 344,
+          "triangles": 552,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "UpperBraceBolts": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 96,
+          "triangles": 160,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "PortalFrames": {
+        "bounds_error": 1.1920928955078125e-06,
+        "topology": {
+          "vertices": 56,
+          "triangles": 84,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "InternalLadder": {
+        "bounds_error": 8.642673492431641e-07,
+        "topology": {
+          "vertices": 72,
+          "triangles": 108,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Hatch": {
+        "bounds_error": 1.7881393432617188e-07,
+        "topology": {
+          "vertices": 24,
+          "triangles": 36,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Door": {
+        "bounds_error": 1.447174611257651e-07,
+        "topology": {
+          "vertices": 60,
+          "triangles": 92,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Helm": {
+        "bounds_error": 5.364418029785156e-07,
+        "topology": {
+          "vertices": 184,
+          "triangles": 280,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Hull_Ironwork": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 448,
+          "triangles": 812,
+          "boundary_edges": 8,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Hull_Shell": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 352,
+          "triangles": 684,
+          "boundary_edges": 22,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Plank_Seams": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 208,
+          "triangles": 352,
+          "boundary_edges": 16,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "TwinStairs": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 132,
+          "triangles": 256,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "StairGuards": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 112,
+          "triangles": 184,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "StairNosings": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 128,
+          "triangles": 192,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      }
+    }
+  },
+  "wide": {
+    "shared_geometry": true,
+    "exports": {
+      "UpperRails": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 160,
+          "triangles": 300,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "UpperPosts": {
+        "bounds_error": 9.685754776000977e-07,
+        "topology": {
+          "vertices": 200,
+          "triangles": 300,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "ForwardGuard": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 88,
+          "triangles": 144,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "UpperPlanks": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 376,
+          "triangles": 600,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "UpperBraceBolts": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 96,
+          "triangles": 160,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "PortalFrames": {
+        "bounds_error": 1.1920928955078125e-06,
+        "topology": {
+          "vertices": 56,
+          "triangles": 84,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "InternalLadder": {
+        "bounds_error": 8.642673492431641e-07,
+        "topology": {
+          "vertices": 72,
+          "triangles": 108,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Hatch": {
+        "bounds_error": 1.7881393432617188e-07,
+        "topology": {
+          "vertices": 24,
+          "triangles": 36,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Door": {
+        "bounds_error": 1.447174611257651e-07,
+        "topology": {
+          "vertices": 60,
+          "triangles": 92,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Helm": {
+        "bounds_error": 5.364418029785156e-07,
+        "topology": {
+          "vertices": 184,
+          "triangles": 280,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Hull_Ironwork": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 448,
+          "triangles": 812,
+          "boundary_edges": 8,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Hull_Shell": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 352,
+          "triangles": 684,
+          "boundary_edges": 22,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "Plank_Seams": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 208,
+          "triangles": 352,
+          "boundary_edges": 16,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "TwinStairs": {
+        "bounds_error": 1.430511474609375e-06,
+        "topology": {
+          "vertices": 132,
+          "triangles": 256,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "StairGuards": {
+        "bounds_error": 9.5367431640625e-07,
+        "topology": {
+          "vertices": 112,
+          "triangles": 184,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      },
+      "StairNosings": {
+        "bounds_error": 1.430511474609375e-06,
+        "topology": {
+          "vertices": 128,
+          "triangles": 192,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "vertex_colors": "Col"
+      }
+    }
+  }
+}

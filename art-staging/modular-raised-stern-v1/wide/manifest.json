@@ -1,0 +1,82 @@
+{
+  "id": "RaisedStern_wide_v1",
+  "interface": "W2-r1",
+  "replacement": "Stern_W2",
+  "length": 9.3,
+  "deck_height": 4.2,
+  "wheel": "Existing M1 rotor and carrier retained at unchanged axle socket.",
+  "units": "V8 authoring units; not calibrated game metres",
+  "coordinates": "Blender +X bow, +Y port, +Z up; game (-y,z,x)",
+  "files": {
+    "UpperRails": "models/UpperRails.fbx",
+    "UpperPosts": "models/UpperPosts.fbx",
+    "ForwardGuard": "models/ForwardGuard.fbx",
+    "UpperPlanks": "models/UpperPlanks.fbx",
+    "UpperBraceBolts": "models/UpperBraceBolts.fbx",
+    "PortalFrames": "models/PortalFrames.fbx",
+    "InternalLadder": "models/InternalLadder.fbx",
+    "Hatch": "models/Hatch.fbx",
+    "Door": "models/Door.fbx",
+    "Helm": "models/Helm.fbx",
+    "Hull_Ironwork": "models/Hull_Ironwork.fbx",
+    "Hull_Shell": "models/Hull_Shell.fbx",
+    "Plank_Seams": "models/Plank_Seams.fbx"
+  },
+  "moving_parts": {
+    "Hatch": {
+      "pivot": [
+        6.75,
+        0.0,
+        4.360000133514404
+      ],
+      "axis": "Y",
+      "review_angle_degrees": -80,
+      "closed_angle_degrees": 0
+    },
+    "Door": {
+      "pivot": [
+        9.315000534057617,
+        -2.869999885559082,
+        1.7599999904632568
+      ],
+      "axis": "Z",
+      "review_angle_degrees": -65,
+      "closed_angle_degrees": 0
+    }
+  },
+  "placement": "Static meshes use the original stern module origin. Door and hatch use the recorded hinge pivots.",
+  "adjacency": "ForwardGuard is separate. Same-height adjacent modules still require tested upper joining geometry.",
+  "sockets": {
+    "Stern_W2__AftSocket": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "Stern_W2__ForwardSocket": [
+      9.300000190734863,
+      0.0,
+      0.0
+    ],
+    "SternDoorEntry": [
+      9.699999809265137,
+      -2.1500000953674316,
+      1.7599999904632568
+    ],
+    "SternHatchExit": [
+      7.550000190734863,
+      0.0,
+      4.199999809265137
+    ],
+    "SternUpperDeckJoin": [
+      9.300000190734863,
+      0.0,
+      4.199999809265137
+    ],
+    "WheelModuleSocket": [
+      0.7200002670288086,
+      0.0,
+      0.3499999940395355
+    ]
+  },
+  "status": "Offline shape prototype. Crew traversal, recoil, colliders, buoyancy and phone testing not implemented."
+}

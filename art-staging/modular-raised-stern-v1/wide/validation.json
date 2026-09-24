@@ -1,0 +1,207 @@
+{
+  "family": "wide",
+  "assemblies": {
+    "stern-only": {
+      "parts": {
+        "UpperRails": {
+          "vertices": 160,
+          "triangles": 300,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperPosts": {
+          "vertices": 200,
+          "triangles": 300,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "ForwardGuard": {
+          "vertices": 56,
+          "triangles": 88,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperPlanks": {
+          "vertices": 424,
+          "triangles": 708,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperBraceBolts": {
+          "vertices": 96,
+          "triangles": 160,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "PortalFrames": {
+          "vertices": 56,
+          "triangles": 84,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "InternalLadder": {
+          "vertices": 72,
+          "triangles": 108,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hatch": {
+          "vertices": 24,
+          "triangles": 36,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Door": {
+          "vertices": 60,
+          "triangles": 92,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Helm": {
+          "vertices": 184,
+          "triangles": 280,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Ironwork": {
+          "vertices": 448,
+          "triangles": 812,
+          "boundary_edges": 8,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Shell": {
+          "vertices": 325,
+          "triangles": 628,
+          "boundary_edges": 22,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Plank_Seams": {
+          "vertices": 208,
+          "triangles": 352,
+          "boundary_edges": 16,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        }
+      },
+      "joined_hull": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0
+      },
+      "wheel_samples": 72,
+      "wheel_hull_intersections": []
+    },
+    "both-raised": {
+      "parts": {
+        "UpperRails": {
+          "vertices": 160,
+          "triangles": 300,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperPosts": {
+          "vertices": 200,
+          "triangles": 300,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "ForwardGuard": {
+          "vertices": 56,
+          "triangles": 88,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperPlanks": {
+          "vertices": 424,
+          "triangles": 708,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "UpperBraceBolts": {
+          "vertices": 96,
+          "triangles": 160,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "PortalFrames": {
+          "vertices": 56,
+          "triangles": 84,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "InternalLadder": {
+          "vertices": 72,
+          "triangles": 108,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hatch": {
+          "vertices": 24,
+          "triangles": 36,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Door": {
+          "vertices": 60,
+          "triangles": 92,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Helm": {
+          "vertices": 184,
+          "triangles": 280,
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Ironwork": {
+          "vertices": 448,
+          "triangles": 812,
+          "boundary_edges": 8,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Shell": {
+          "vertices": 325,
+          "triangles": 628,
+          "boundary_edges": 22,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Plank_Seams": {
+          "vertices": 208,
+          "triangles": 352,
+          "boundary_edges": 16,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        }
+      },
+      "joined_hull": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0
+      },
+      "wheel_samples": 72,
+      "wheel_hull_intersections": []
+    }
+  }
+}

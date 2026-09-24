@@ -1,0 +1,10 @@
+VIEW (320, 568) root=(x:0.00, y:20.00, width:320.00, height:548.00)
+PASS touch bounds, single-line labels, confirmation availability, nonblank pixels (580) connected=True
+PASS simulated Button add/undo/wheel/cancel actions; preview camera and texture released
+VIEW (390, 844) root=(x:0.00, y:44.00, width:390.00, height:766.00)
+PASS touch bounds, single-line labels, confirmation availability, nonblank pixels (1141) connected=True
+VIEW (430, 932) root=(x:0.00, y:44.00, width:430.00, height:854.00)
+PASS touch bounds, single-line labels, confirmation availability, nonblank pixels (1216) connected=True
+VIEW (844, 390) root=(x:47.00, y:0.00, width:750.00, height:390.00)
+PASS touch bounds, single-line labels, confirmation availability, nonblank pixels (1139) connected=True
+Failures: 0

@@ -1,0 +1,267 @@
+{
+  "interfaces": {
+    "Hull_Shell": {
+      "point_counts": {
+        "Stern_W2_forward": 22,
+        "Midship_W2_aft": 22,
+        "Midship_W2_forward": 22,
+        "Bow_W2_aft": 22
+      },
+      "exact_match_5dp": true
+    },
+    "Rails_Teal": {
+      "point_counts": {
+        "Stern_W2_forward": 16,
+        "Midship_W2_aft": 16,
+        "Midship_W2_forward": 16,
+        "Bow_W2_aft": 16
+      },
+      "exact_match_5dp": true
+    },
+    "Hull_Ironwork": {
+      "point_counts": {
+        "Stern_W2_forward": 8,
+        "Midship_W2_aft": 8,
+        "Midship_W2_forward": 8,
+        "Bow_W2_aft": 8
+      },
+      "exact_match_5dp": true
+    },
+    "Plank_Seams": {
+      "point_counts": {
+        "Stern_W2_forward": 84,
+        "Midship_W2_aft": 84,
+        "Midship_W2_forward": 84,
+        "Bow_W2_aft": 84
+      },
+      "exact_match_5dp": true
+    }
+  },
+  "assemblies": {
+    "short": {
+      "length": 20.27999954223633,
+      "joined_geometry": {
+        "Hull_Shell": {
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Rails_Teal": {
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Ironwork": {
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Plank_Seams": {
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        }
+      },
+      "triangles": 8972
+    },
+    "long": {
+      "length": 26.27999954223633,
+      "joined_geometry": {
+        "Hull_Shell": {
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Rails_Teal": {
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Hull_Ironwork": {
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        },
+        "Plank_Seams": {
+          "boundary_edges": 0,
+          "overconnected_edges": 0,
+          "degenerate_faces": 0
+        }
+      },
+      "triangles": 9990
+    }
+  },
+  "modules": {
+    "Stern_W2": {
+      "Hull_Shell": {
+        "vertices": 447,
+        "triangles": 870,
+        "boundary_edges": 22,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Rails_Teal": {
+        "vertices": 312,
+        "triangles": 544,
+        "boundary_edges": 16,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Hull_Ironwork": {
+        "vertices": 528,
+        "triangles": 924,
+        "boundary_edges": 8,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Plank_Seams": {
+        "vertices": 472,
+        "triangles": 714,
+        "boundary_edges": 84,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Housing_Lid": {
+        "vertices": 73,
+        "triangles": 142,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Housing_Ironwork": {
+        "vertices": 264,
+        "triangles": 472,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Housing_AccessPanel": {
+        "vertices": 332,
+        "triangles": 648,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Helm": {
+        "vertices": 184,
+        "triangles": 280,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "Midship_W2": {
+      "Hull_Shell": {
+        "vertices": 79,
+        "triangles": 114,
+        "boundary_edges": 44,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Rails_Teal": {
+        "vertices": 144,
+        "triangles": 208,
+        "boundary_edges": 32,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Hull_Ironwork": {
+        "vertices": 208,
+        "triangles": 360,
+        "boundary_edges": 16,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Plank_Seams": {
+        "vertices": 280,
+        "triangles": 336,
+        "boundary_edges": 168,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "Bow_W2": {
+      "Hull_Shell": {
+        "vertices": 226,
+        "triangles": 428,
+        "boundary_edges": 22,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Rails_Teal": {
+        "vertices": 240,
+        "triangles": 396,
+        "boundary_edges": 16,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Hull_Ironwork": {
+        "vertices": 280,
+        "triangles": 488,
+        "boundary_edges": 8,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Plank_Seams": {
+        "vertices": 572,
+        "triangles": 974,
+        "boundary_edges": 84,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Prow": {
+        "vertices": 38,
+        "triangles": 60,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    }
+  },
+  "repeat_tests": {
+    "2": {
+      "Hull_Shell": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Rails_Teal": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Hull_Ironwork": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Plank_Seams": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "3": {
+      "Hull_Shell": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Rails_Teal": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Hull_Ironwork": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      },
+      "Plank_Seams": {
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    }
+  }
+}
