@@ -1,0 +1,66 @@
+{
+  "Boulder_Broad": {
+    "triangles": 52,
+    "vertices": 28,
+    "manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true
+  },
+  "Boulder_Low": {
+    "triangles": 52,
+    "vertices": 28,
+    "manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true
+  },
+  "Boulder_Long": {
+    "triangles": 52,
+    "vertices": 28,
+    "manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true
+  },
+  "Pebble": {
+    "triangles": 52,
+    "vertices": 28,
+    "manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true
+  },
+  "Grass_Fan": {
+    "triangles": 112,
+    "vertices": 70,
+    "manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true
+  },
+  "Grass_Sparse": {
+    "triangles": 80,
+    "vertices": 50,
+    "manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true
+  },
+  "Grass_Tall": {
+    "triangles": 96,
+    "vertices": 60,
+    "manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true
+  },
+  "Broadleaf_Rosette": {
+    "triangles": 112,
+    "vertices": 70,
+    "manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true
+  },
+  "Twig_Fork": {
+    "triangles": 48,
+    "vertices": 30,
+    "manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true
+  },
+  "arrangement_triangles": 1704
+}

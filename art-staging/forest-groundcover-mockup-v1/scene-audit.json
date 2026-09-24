@@ -1,0 +1,24 @@
+{
+  "instances": {
+    "Tree_Hornbeam": 17,
+    "Tree_Young": 10,
+    "Tree_Uneven": 10,
+    "Tree_Broadleaf": 13,
+    "Tree_Slender": 7,
+    "Tree_Leaning": 1,
+    "Boulder_Long": 3,
+    "Boulder_Low": 8,
+    "Grass_Tall": 16,
+    "Grass_Fan": 16,
+    "Broadleaf_Rosette": 16,
+    "Pebble": 16,
+    "Boulder_Broad": 5,
+    "Grass_Sparse": 40,
+    "Twig_Fork": 6,
+    "Shrub_Master": 14
+  },
+  "trees": 58,
+  "arrangement_triangles": 20414,
+  "preview_terrain_triangles": 24200,
+  "unity_imported": false
+}

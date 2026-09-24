@@ -1,0 +1,101 @@
+{
+  "Cliff_LowLedge": {
+    "triangles": 52,
+    "closed_manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true,
+    "vertex_colors": true,
+    "one_material": true,
+    "origin_at_ground_anchor": true,
+    "unit_bounds_match": true,
+    "passed": true
+  },
+  "Cliff_BrokenSlab": {
+    "triangles": 52,
+    "closed_manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true,
+    "vertex_colors": true,
+    "one_material": true,
+    "origin_at_ground_anchor": true,
+    "unit_bounds_match": true,
+    "passed": true
+  },
+  "Cliff_TalusCluster": {
+    "triangles": 108,
+    "closed_manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true,
+    "vertex_colors": true,
+    "one_material": true,
+    "origin_at_ground_anchor": true,
+    "unit_bounds_match": true,
+    "passed": true
+  },
+  "Shore_WashedStones": {
+    "triangles": 144,
+    "closed_manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true,
+    "vertex_colors": true,
+    "one_material": true,
+    "origin_at_ground_anchor": true,
+    "unit_bounds_match": true,
+    "passed": true
+  },
+  "Coast_DuneGrass": {
+    "triangles": 80,
+    "closed_manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true,
+    "vertex_colors": true,
+    "one_material": true,
+    "origin_at_ground_anchor": true,
+    "unit_bounds_match": true,
+    "passed": true
+  },
+  "Coast_WindScrub": {
+    "triangles": 68,
+    "closed_manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true,
+    "vertex_colors": true,
+    "one_material": true,
+    "origin_at_ground_anchor": true,
+    "unit_bounds_match": true,
+    "passed": true
+  },
+  "Shore_ForkedDriftwood": {
+    "triangles": 72,
+    "closed_manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true,
+    "vertex_colors": true,
+    "one_material": true,
+    "origin_at_ground_anchor": true,
+    "unit_bounds_match": true,
+    "passed": true
+  },
+  "Forest_Bracken": {
+    "triangles": 200,
+    "closed_manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true,
+    "vertex_colors": true,
+    "one_material": true,
+    "origin_at_ground_anchor": true,
+    "unit_bounds_match": true,
+    "passed": true
+  },
+  "Forest_FallenTrunk": {
+    "triangles": 52,
+    "closed_manifold": true,
+    "degenerate_faces": 0,
+    "flat_shaded": true,
+    "vertex_colors": true,
+    "one_material": true,
+    "origin_at_ground_anchor": true,
+    "unit_bounds_match": true,
+    "passed": true
+  }
+}

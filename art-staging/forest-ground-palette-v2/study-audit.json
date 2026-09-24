@@ -1,0 +1,10 @@
+{
+  "changed": "ground corner colours only",
+  "terrain_vertices": 12321,
+  "terrain_triangles": 24200,
+  "added_geometry": 0,
+  "added_materials": 0,
+  "tree_count": 58,
+  "unity_imported": false,
+  "note": "Blender colour study, not a verified Unity terrain implementation or iPhone benchmark."
+}

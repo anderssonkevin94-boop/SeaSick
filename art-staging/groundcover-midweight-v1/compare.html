@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Groundcover Comparison</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#191c1a;color:#f0f1ec;font:15px system-ui;letter-spacing:0}
+header,footer{max-width:1100px;margin:auto;padding:16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+h1{font-size:19px;margin:0 auto 0 0}select{font:inherit;background:#303630;color:inherit;border:1px solid #72816e;padding:10px;border-radius:4px}
+main{max-width:1100px;margin:auto;padding:0 16px}.stage{position:relative;width:100%;aspect-ratio:1500/1250;overflow:hidden;background:#87934d}
+img{display:block;width:100%;height:100%;object-fit:contain}.light{position:absolute;inset:0;clip-path:inset(0 0 0 50%)}
+.line{position:absolute;top:0;bottom:0;left:50%;width:2px;background:white;pointer-events:none}
+.tag{position:absolute;top:12px;background:#191c1ae8;padding:8px 12px;border-radius:4px;font-size:13px}.original{left:12px}.middle{right:12px}
+input{width:100%;accent-color:#aacf90;min-height:44px;margin:0}footer{font-size:13px;color:#c1cabd}a{color:#c8e6ae}
+</style>
+<header><h1>Groundcover</h1><select id="view" aria-label="Camera distance"><option value="close">Close view</option><option value="gameplay">Gameplay view</option></select></header>
+<main><div class="stage" id="stage">
+<img id="original" src="../groundcover-reference-v1/close-view.png" alt="Original groundcover arrangement">
+<img id="light" class="light" src="close-view.png" alt="Middle-weight groundcover arrangement">
+<div class="line" id="line"></div><span class="tag original">Original · 1,704 tris</span><span class="tag middle">Middle-weight · 1,386 tris</span>
+</div><input id="split" type="range" min="0" max="100" value="50" aria-label="Original and middle-weight comparison split"></main>
+<footer><span>18.7% fewer triangles · ground excluded</span><a href="groundcover-midweight-v1.blend">Blender scene</a><a href="README.md">Asset notes</a></footer>
+<script>
+const split=document.getElementById('split'),light=document.getElementById('light'),line=document.getElementById('line');
+split.addEventListener('input',()=>{light.style.clipPath=`inset(0 0 0 ${split.value}%)`;line.style.left=split.value+'%'});
+document.getElementById('view').addEventListener('change',e=>{const name=e.target.value+'-view.png';document.getElementById('original').src='../groundcover-reference-v1/'+name;light.src=name;document.getElementById('stage').style.aspectRatio=e.target.value==='close'?'1500/1250':'1300/1400'});
+</script>
+</html>

@@ -1,0 +1,6 @@
+loaded saved 2026-09-24 17:35  ·  day 0  ·  rung 12  ·  0 camps
+(660.00, 0.00, 81.00): ; walls 0
+(-12.00, 0.00, 81.00): ; walls 0
+loaded saved 2026-09-24 16:09  ·  day 89  ·  rung 12  ·  1 camp
+(660.00, 0.00, 81.00): Campfire, Pier, Storage, Farm, Blacksmith, Sawmill, Fletcher; walls 19
+(-12.00, 0.00, 81.00): ; walls 0
