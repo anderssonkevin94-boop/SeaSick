@@ -316,6 +316,148 @@ namespace SeaSick.Ship.Modular
             bool wheelDipsLongFull = longFullOk && longFullZ > wheelBottomZ;
             Gate("w1x-wheel-dips-at-lightship-and-full-load", wheelDipsShortLight && wheelDipsShortFull && wheelDipsLongLight && wheelDipsLongFull,
                 $"wheel bottom z={F(wheelBottomZ)} (unchanged); waterline z: short-light={F(shortLightZ)} short-full={F(shortFullZ)} long-light={F(longLightZ)} long-full={F(longFullZ)} (all must be > wheel bottom)");
+
+            // =====================================================================
+            // Task C: width-transition module, ported from branch wide-hull
+            // (commit 2521ec0) and RETARGETED from its superseded W1-r2 <->
+            // W2-r1 scaffold to this branch's families, W1-r2 <-> W1x. No
+            // W2-r1 data, meshes, tables, presets or validator code is brought
+            // over -- W2-r1 stays unexposed.
+            //
+            // The schema and assembler ALREADY support a transition: SocketDef
+            // .standard is per-socket, and ShipAssembler's chain-build loop
+            // (see ShipAssembler.cs) only ever compares the two TOUCHING
+            // sockets at a join, never a whole-ship "one standard" invariant --
+            // so no schema or assembler change was needed here either (verified
+            // fresh against this branch's ShipAssembler.cs before writing these
+            // gates). Proven with a SYNTHETIC in-memory transition module, and
+            // the REAL (placeholder, no-mesh) module committed to Resources is
+            // proven refused by the shipyard policy until Astra's model
+            // arrives.
+            // =====================================================================
+            var synthFull = new ModuleDef
+            {
+                id = "test.transition.synthetic.full", version = 1, kind = ModuleKind.Middle, status = ModuleStatus.Prototype,
+                displayName = "Synthetic W1-r2 -> W1x transition (full data, validation only)",
+                lengthU = 6.0f,
+                boundsMinU = new Vector3(0f, -6.25f, -1.92f), boundsMaxU = new Vector3(6f, 6.25f, 2.47f),
+                sockets = new[]
+                {
+                    new SocketDef { id = "AftSocket", role = SocketRole.HullAft, standard = "W1-r2", posU = Vector3.zero },
+                    new SocketDef { id = "ForwardSocket", role = SocketRole.HullFwd, standard = "W1x", posU = new Vector3(6f, 0f, 0f) },
+                },
+                // Borrows Midship_W1's real hydrostatic table just so the
+                // resourcePath/hash resolve and the pipeline has something to
+                // load; the NUMBERS are not claimed to describe a real
+                // transition hull (Astra's delivery replaces this).
+                hydrostatics = new HydrostaticsRef { resourcePath = "ShipModules/Hydrostatics/HullW1r2_v3/Midship_W1",
+                    sourceGeometrySha256 = "9cb49be5b4941aacaa8a3751ea71e0f08dc214f6b70ee49342b736a9688eea3f", validWaterlineZU = new[] { -1.92f, 1.76f } },
+                lightship = new LightshipSpec { massKg = 10000f, rule = "synthetic, validation only" },
+                capacity = new CapacitySpec
+                {
+                    holdCells = new ProvisionalInt { value = 5, source = "synthetic" },
+                    berths = new ProvisionalInt { value = 4, source = "synthetic" },
+                    gunSlots = new ProvisionalSlots { ids = new string[0], source = "synthetic" },
+                    rule = "synthetic, validation only",
+                },
+            };
+            // Hand-written JSON (not ModuleDef -> ModularJson.To(), whose
+            // shim writes a null nested field as a DEFAULT instance rather
+            // than omitting it -- that would round-trip `capacity: null`
+            // into a non-null-but-empty CapacitySpec and defeat this gate):
+            // omitting "capacity"/"hydrostatics"/"lightship" entirely leaves
+            // them genuinely null after Bind(), same as the real placeholder
+            // module before Astra's delivery.
+            string synthBareJson = "{\"schemaVersion\":1,\"id\":\"test.transition.synthetic.bare\",\"version\":1,\"kind\":\"Middle\"," +
+                "\"status\":\"prototype\",\"displayName\":\"Synthetic W1-r2 -> W1x transition (no capacity/hydrostatics, validation only)\"," +
+                "\"lengthU\":6.0,\"sockets\":[" +
+                "{\"id\":\"AftSocket\",\"role\":\"hull.aft\",\"standard\":\"W1-r2\",\"posU\":{\"x\":0,\"y\":0,\"z\":0}}," +
+                "{\"id\":\"ForwardSocket\",\"role\":\"hull.fwd\",\"standard\":\"W1x\",\"posU\":{\"x\":6,\"y\":0,\"z\":0}}]}";
+            var synthReversed = new ModuleDef
+            {
+                id = "test.transition.synthetic.reversed", version = 1, kind = ModuleKind.Middle, status = ModuleStatus.Prototype,
+                displayName = "Synthetic W1x -> W1-r2 transition (validation only)",
+                lengthU = 6.0f,
+                boundsMinU = new Vector3(0f, -6.25f, -1.92f), boundsMaxU = new Vector3(6f, 6.25f, 2.47f),
+                sockets = new[]
+                {
+                    new SocketDef { id = "AftSocket", role = SocketRole.HullAft, standard = "W1x", posU = Vector3.zero },
+                    new SocketDef { id = "ForwardSocket", role = SocketRole.HullFwd, standard = "W1-r2", posU = new Vector3(6f, 0f, 0f) },
+                },
+            };
+            var transitionMods = new List<string>(mods) { ModularJson.To(synthFull), synthBareJson, ModularJson.To(synthReversed) };
+            var transitionNames = names != null ? new List<string>(names) { "synth-full", "synth-bare", "synth-reversed" } : null;
+            var transitionLib = ModuleLibrary.FromJson(stdJson, transitionMods, transitionNames);
+            if (readResourceText != null) transitionLib.LoadHydrostatics(readResourceText);
+            Gate("w1x-transition-synthetics-load", transitionLib.Ok, string.Join(" | ", transitionLib.errors));
+
+            // W1-r2 stern + [synthetic transition, aft=W1-r2/fwd=W1x] + W1x
+            // middle + W1x bow assembles.
+            var bridged = new ShipConfiguration { sternId = ShipConfiguration.V3Stern, bowId = ExpandedPresets.ExpandedBow,
+                rotorId = ShipConfiguration.ReinforcedRotor, carrierId = ShipConfiguration.M1Carrier };
+            bridged.middleIds.Add("test.transition.synthetic.full");
+            bridged.middleIds.Add(ExpandedPresets.ExpandedMiddle);
+            bridged.fittings.Add(new FittingChoice { socketId = ShipConfiguration.ChimneySocket, moduleId = ShipConfiguration.V3Chimney });
+            var bridgedR = ShipAssembler.Assemble(bridged, transitionLib);
+            Gate("w1x-transition-w1r2-stern-w1x-middle-w1x-bow-assembles", bridgedR.ok, bridgedR.Summary());
+
+            // The mirror: W1x stern + [synthetic transition, aft=W1x/fwd=W1-r2]
+            // + W1-r2 middle + W1-r2 bow also assembles -- orientation is a
+            // property of the module, not hard-coded.
+            var reverseBridged = new ShipConfiguration { sternId = ExpandedPresets.ExpandedStern, bowId = ShipConfiguration.V3Bow,
+                rotorId = ShipConfiguration.ReinforcedRotor, carrierId = ShipConfiguration.M1Carrier };
+            reverseBridged.middleIds.Add("test.transition.synthetic.reversed");
+            reverseBridged.middleIds.Add(ShipConfiguration.V3Middle);
+            reverseBridged.fittings.Add(new FittingChoice { socketId = ShipConfiguration.ChimneySocket, moduleId = ShipConfiguration.V3Chimney });
+            var reverseBridgedR = ShipAssembler.Assemble(reverseBridged, transitionLib);
+            Gate("w1x-transition-reversed-w1x-stern-w1r2-middle-w1r2-bow-assembles", reverseBridgedR.ok, reverseBridgedR.Summary());
+
+            // Wrong orientation: the (W1-r2 -> W1x) transition used the OTHER
+            // way round -- a W1x stern feeding straight into its W1-r2 aft
+            // socket -- is refused, same JOIN_PROFILE_MISMATCH rule as any
+            // mismatched pair.
+            var wrongWay = new ShipConfiguration { sternId = ExpandedPresets.ExpandedStern, bowId = ShipConfiguration.V3Bow,
+                rotorId = ShipConfiguration.ReinforcedRotor, carrierId = ShipConfiguration.M1Carrier };
+            wrongWay.middleIds.Add("test.transition.synthetic.full"); // aft=W1-r2, but the stern ahead of it is W1x
+            var wrongWayR = ShipAssembler.Assemble(wrongWay, transitionLib);
+            string wrongWayMsg = First(wrongWayR, "JOIN_PROFILE_MISMATCH");
+            Gate("w1x-transition-wrong-orientation-rejected", !wrongWayR.ok && wrongWayMsg != null, wrongWayMsg ?? Codes(wrongWayR));
+
+            // Capacity/hydrostatics requirements still apply to a transition
+            // module like any other hull section (ShipyardPlanner.* already
+            // loop over every ModuleKind.IsHull() placed module generically --
+            // no special-casing was added or is needed): the BARE synthetic
+            // transition (no lightship/capacity/hydrostatics) is flagged
+            // missing by name.
+            var bareCfg = new ShipConfiguration { sternId = ShipConfiguration.V3Stern, bowId = ExpandedPresets.ExpandedBow,
+                rotorId = ShipConfiguration.ReinforcedRotor, carrierId = ShipConfiguration.M1Carrier };
+            bareCfg.middleIds.Add("test.transition.synthetic.bare");
+            bareCfg.middleIds.Add(ExpandedPresets.ExpandedMiddle);
+            var bareR = ShipAssembler.Assemble(bareCfg, transitionLib);
+            string massMissing = null, capMissing = null;
+            if (bareR.ok)
+            {
+                ShipyardPlanner.ModuleLightshipKg(bareR, transitionLib, out massMissing);
+                ShipyardPlanner.SectionCapacities(bareR, transitionLib, 0f, out capMissing);
+            }
+            var bareHydro = bareR.ok ? AssemblyHydrostatics.For(bareR, transitionLib) : null;
+            Gate("w1x-transition-without-data-flags-missing-capacity-and-mass", bareR.ok && massMissing != null && capMissing != null
+                && bareHydro != null && !bareHydro.Ok,
+                bareR.ok ? $"massMissing='{massMissing}' capMissing='{capMissing}' hydroOk={bareHydro?.Ok} hydroMissing='{bareHydro?.missing}'" : bareR.Summary());
+
+            // The REAL placeholder module committed to Resources (no mesh, no
+            // capacity/hydrostatics yet) is refused by the shipyard's prototype
+            // policy -- not offered to players until Astra's model arrives.
+            var realTransitionCfg = new ShipConfiguration { sternId = ShipConfiguration.V3Stern, bowId = ExpandedPresets.ExpandedBow,
+                rotorId = ShipConfiguration.ReinforcedRotor, carrierId = ShipConfiguration.M1Carrier };
+            realTransitionCfg.middleIds.Add("hull.transition.w1r2-w1x.v1");
+            realTransitionCfg.middleIds.Add(ExpandedPresets.ExpandedMiddle);
+            var policyIssues = ShipyardPolicy.Check(realTransitionCfg, lib);
+            bool placeholderRefused = false; string placeholderMsg = null;
+            foreach (var iss in policyIssues)
+                if (iss.code == "NOT_IN_PROTOTYPE" && iss.message != null && iss.message.Contains("placeholder"))
+                { placeholderRefused = true; placeholderMsg = iss.message; break; }
+            Gate("w1x-real-transition-placeholder-refused-not-in-prototype", placeholderRefused, placeholderMsg ?? "not found among policy issues");
         }
 
         static string S(Vector3 v) => $"({v.x:0.###}, {v.y:0.###}, {v.z:0.###})";
