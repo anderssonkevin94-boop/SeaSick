@@ -84,7 +84,7 @@
             "role": "deck.slot",
             "standard": "",
             "posU": {"x": 5.5, "y": 3.45, "z": 1.76},
-            "yawDeg": 0,
+            "yawDeg": 180,
             "radiusLimit": 0.0,
             "placementRule": "",
             "provisional": true,
@@ -145,27 +145,27 @@
         {
             "id": "DeckSlot_2_-1",
             "socketId": "DeckSlot_2_-1",
-            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "clearanceSizeU": {"x": 1.8, "y": 2.3, "z": 1.65},
             "classes": ["equipment.deck-gun"],
             "provisional": true,
-            "notes": "Clearance borrowed from study C-oversized-deck CannonSocket clearance_box_local (1.8,1.55,1.65); main-deck slots are PROVISIONAL (V3 README: not verified cannon/crew placements)."
+            "notes": "Clearance widened 2026-09-25 to 1.8 x 2.3 x 1.65 (from the study's 1.8x1.55x1.65) to fit Astra's real cannon-astra-v1 kit (1.22 x 2.1816 x 1.2756); main-deck slots are still PROVISIONAL (V3 README: not verified cannon/crew placements)."
         },
         {
             "id": "DeckSlot_2_1",
             "socketId": "DeckSlot_2_1",
-            "clearanceSizeU": {"x": 1.8, "y": 1.55, "z": 1.65},
+            "clearanceSizeU": {"x": 1.8, "y": 2.3, "z": 1.65},
             "classes": ["equipment.deck-gun"],
             "provisional": true,
-            "notes": "Clearance borrowed from study C-oversized-deck CannonSocket clearance_box_local (1.8,1.55,1.65); main-deck slots are PROVISIONAL (V3 README: not verified cannon/crew placements)."
+            "notes": "Clearance widened 2026-09-25 to 1.8 x 2.3 x 1.65 (from the study's 1.8x1.55x1.65) to fit Astra's real cannon-astra-v1 kit (1.22 x 2.1816 x 1.2756); main-deck slots are still PROVISIONAL (V3 README: not verified cannon/crew placements)."
         }
     ],
     "passages": [
         {
             "id": "CrewPassage_Main",
             "centreU": {"x": 6.23, "y": 0, "z": 3.46},
-            "sizeU": {"x": 6.14, "y": 5.35, "z": 3.4},
+            "sizeU": {"x": 6.14, "y": 4.6, "z": 3.4},
             "provisional": true,
-            "notes": "PROVISIONAL centreline crew passage: |y| <= 2.675 = the clear band between the port and starboard deck-slot clearances (3.45 - 1.55/2); height 3.4 u = 1.7 m crew (WorldScale.Person) at 0.5 m/u. Starts at X 3.16, the forward edge of the measured wheel housing ironwork. NOTE the helm (X 4.22-4.58, |y| <= 0.8) stands inside it."
+            "notes": "PROVISIONAL centreline crew passage: |y| <= 2.30 = the clear band between the port and starboard deck-slot clearances (3.45 - 2.3/2), narrowed 2026-09-25 to touch (not overlap) the slot clearances widened for the real cannon; height 3.4 u = 1.7 m crew (WorldScale.Person) at 0.5 m/u. Starts at X 3.16, the forward edge of the measured wheel housing ironwork. NOTE the helm (X 4.22-4.58, |y| <= 0.8) stands inside it."
         }
     ],
     "hydrostatics": {

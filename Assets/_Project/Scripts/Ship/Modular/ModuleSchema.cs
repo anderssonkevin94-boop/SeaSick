@@ -232,6 +232,15 @@ namespace SeaSick.Ship.Modular
         public string source;
     }
 
+    /// A tunable float with the same provenance shape as ProvisionalInt.
+    [Serializable]
+    public class ProvisionalFloat
+    {
+        public float value;
+        public bool provisional = true;
+        public string source;
+    }
+
     [Serializable]
     public class HydrostaticsRef
     {
@@ -319,6 +328,14 @@ namespace SeaSick.Ship.Modular
         public Vector3 footprintU;
         public bool placeholder;
         public string notes;
+        /// Provisional weight this ONE item adds to the weight allowance
+        /// (WeightAllowanceKg) when fitted -- NOT to the ship's lightship
+        /// mass/sim (that stays hull-only; see ShipyardPlanner.ModuleLightshipKg).
+        /// Null = fall back to WeightModel.gunKg (a deck-gun) / 0.
+        public ProvisionalFloat massKg;
+        /// Provisional crew this ONE item needs when fitted (a deck-gun:
+        /// CrewPerGun hands at the gun). Null = fall back to WeightModel.CrewPerGun.
+        public ProvisionalInt crew;
     }
 
     /// A place equipment can stand. Its clearance box has its BASE CENTRE at

@@ -1,0 +1,42 @@
+{
+    "schemaVersion": 1,
+    "id": "equipment.cannon.astra.v1",
+    "version": 1,
+    "kind": "Equipment",
+    "family": "equipment",
+    "status": "prototype",
+    "displayName": "Deck cannon (Astra v1)",
+    "description": "Naval deck cannon, flat-shaded vertex-colour, matched to the approved V8 steamer palette. Carriage on truck wheels; muzzle toward authoring -Y (outboard) at yaw 0 -- a starboard slot (yawDeg 0) fires outboard starboard, a port slot (yawDeg 180) fires outboard port.",
+    "source": "art-staging/cannon-astra-v1/README.md + export-verification.json",
+    "lengthU": 0,
+    "boundsMinU": {"x": -0.61, "y": -2.1816, "z": 0},
+    "boundsMaxU": {"x": 0.61, "y": 0, "z": 1.2756},
+    "boundsNote": "PROVISIONAL: from export-verification.json dimensions_xyz (1.22, 2.1816, 1.2756) centred on X and Z-up from the deck plane, root assumed at the breech end (Cannon_Root, whole-carriage recoil pivot) so the barrel runs -Y to the muzzle. Not independently re-measured from the FBX after import; correct once Unity has imported it (docs/DEV-TOOLS.md import step).",
+    "sockets": [],
+    "visuals": [
+        {
+            "id": "Cannon",
+            "resourcePath": "ShipModules/Meshes/Equipment/Cannon_Astra_v1/Cannon",
+            "placeholder": false,
+            "notes": "Copied from art-staging/cannon-astra-v1/cannon.fbx (2026-09-23 kit), no .meta -- Unity generates one on first import (SeaSick/Modular/Configure Mesh Importers, docs/MODULAR-SHIPS.md §8). Resources.Load returns null before that import has happened (e.g. headlessly); ModularShipView already falls back to a grey placeholder box in that case."
+        }
+    ],
+    "equipmentSlots": [],
+    "passages": [],
+    "physical": {
+        "massKg": {"authored": false, "value": 0, "source": ""},
+        "displacementM3": {"authored": false, "value": 0, "source": ""},
+        "cargoCapacity": {"authored": false, "value": 0, "source": ""},
+        "crewCapacity": {"authored": false, "value": 0, "source": ""},
+        "thrustCoefficient": {"authored": false, "value": 0, "source": ""},
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "equipment": {
+        "equipmentClass": "equipment.deck-gun",
+        "footprintU": {"x": 1.22, "y": 2.1816, "z": 1.2756},
+        "placeholder": false,
+        "notes": "Kit export-verification.json dimensions_xyz exactly: fore-aft (carriage) 1.22, across/outboard (barrel run) 2.1816, height 1.2756. Fore-aft and height fit the existing 1.8 x 1.65 deck-slot clearance; the across dimension does not fit the milestone-1 placeholder clearance (1.55), so the real deck-gun slots were widened to 2.3 u across and CrewPassage_Main narrowed to match (2026-09-25, docs/SHIPYARD-API.md §14) -- both still provisional and free to retune.",
+        "massKg": {"value": 500, "provisional": true, "source": "ShipLoad's lightest gun weight (a swivel), the same provisional figure the implicit hull-form guns used before this module existed."},
+        "crew": {"value": 1, "provisional": true, "source": "CannonBattery works each gun with one named hand (CrewRoster.GunCrew); WeightModel.CrewPerGun was 1 for the same reason."}
+    }
+}
