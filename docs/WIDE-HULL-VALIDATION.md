@@ -355,10 +355,11 @@ hull-kind module generically, transition or not, as proven above.
 
 ## Commits
 
-* `<hash>` — standards.json W2 join profile + the three W2-r1 module JSONs,
-  hydrostatics tables, meshes.
-* `<hash>` — `WideHullValidation.cs`, wired into `ModularShipSelfTest`;
-  existing gate count/allow-list assertions updated (4 lines, 2 files).
-* `<hash>` — `WidePresets.cs`, `ShipyardPolicy` allow-list + family check
-  (Shipyard.cs, 2 lines).
-* `<hash>` — Task C placeholder transition module + this document.
+* `7f1de77` — standards.json W2 join profile + the three W2-r1 module JSONs,
+  hydrostatics tables, meshes, `WidePresets.cs`, `ShipyardPolicy` allow-list +
+  family check (`Shipyard.cs`), existing gate count/allow-list assertions
+  updated for the (then) 15-module library. `97 PASS, 0 FAIL`.
+* `2521ec0` — `WideHullValidation.cs` (Task A gates + Task C synthetic
+  proof), wired into `ModularShipSelfTest`; the placeholder transition
+  module (`hull.transition.w1r2-w2r1.v1.json`); gate count bumped to 16;
+  this document. `127 PASS, 0 FAIL`.
