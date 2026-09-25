@@ -243,7 +243,13 @@ namespace SeaSick.Ship.Modular
             // at the berth.
             var anchor = GetComponent<AnchorController>();
             var rb = GetComponent<Rigidbody>();
-            bool tiedUp = anchor != null && anchor.AtHomeDock;
+            // Anchored or alongside ANY pier counts too (2026-09-25, Kevin at an
+            // outpost pier got "bring her to rest"): the anchor already made
+            // her slow down to moor, and a hull lying at a pier drifts on the
+            // swell faster than 0.3 m/s. The speed check is for no anchor.
+            bool tiedUp = anchor != null && (anchor.AtHomeDock
+                || anchor.CurrentState == AnchorController.State.Anchored
+                || anchor.CurrentState == AnchorController.State.Ashore);
             if (!tiedUp && rb != null)
             {
                 var v = rb.linearVelocity; v.y = 0f;
