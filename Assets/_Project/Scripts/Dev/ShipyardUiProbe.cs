@@ -161,6 +161,7 @@ public class ShipyardUiProbe : MonoBehaviour
         ShipyardService.TestFaultStage = null;
 #endif
         yield return Safe("6 save/load", SaveLoad());
+        yield return Safe("7 deck toggle", DeckToggle());
 
         Gate("persist override never null at any apply", overrideNullAt.Count == 0,
             $"{overrideChecks} applies checked" + (overrideNullAt.Count > 0 ? "; NULL at " + string.Join(", ", overrideNullAt) : ""));
@@ -723,6 +724,95 @@ public class ShipyardUiProbe : MonoBehaviour
         sb.AppendLine($"  INFO integrity saved {savedInteg:F4}, after load {Integrity():F4}");
         Gate("6 after load: exactly one player ship", OneShip(out string oneShip), oneShip);
         CheckForm("6 after load");
+    }
+
+    // ---- 7: deck toggle (Single/Raised), docs/RAISED-DECK.md sec 3/8 -------------------------
+
+    /// Draft-only (never `Confirm`s, so the live ship is never touched):
+    /// disabled-with-reason on standard beam and at 0/3 middles, enabled at
+    /// 1-2 middles on wide beam; toggling to raised swaps stern/bow/middle
+    /// ids to the W1xR family; while raised the beam toggle is refused with
+    /// its own reason and +/- bays are blocked at the 1/2 bounds; toggling
+    /// back restores the single W1x ids. Guns are untouched by either
+    /// toggle (`SetRaisedDeck`/`SetWideBeam` only swap hull ids), checked
+    /// each way.
+    IEnumerator DeckToggle()
+    {
+        sb.AppendLine("7. deck toggle (Single/Raised), mirrors the beam toggle one level up:");
+        yield return EnsureRefittable();
+        var d = NewDraft(out _);
+
+        // Standard beam: disabled with its reason, and SetRaisedDeck(true) itself refuses.
+        if (d.IsWideBeam) d.SetWideBeam(false);
+        string reasonStd = d.RaisedDeckUnavailableReason();
+        Gate("7a deck disabled with reason on standard beam", !d.IsRaisedDeck && reasonStd != null && reasonStd.Contains("wide beam"),
+            reasonStd ?? "null");
+        bool triedStd = d.SetRaisedDeck(true);
+        Gate("7a SetRaisedDeck(true) refused on standard beam", !triedStd && !d.IsRaisedDeck && d.Message == reasonStd,
+            $"ok {triedStd}, message \"{d.Message}\"");
+
+        // Wide beam, 0 middles: still disabled, reason names the bay bound.
+        Gate("7b draft: SetWideBeam(true)", d.SetWideBeam(true) && d.IsWideBeam, Msg(d));
+        while (d.Count > 0) if (!d.RemoveMiddle()) break;
+        Gate("7b setup: 0 middles", d.Count == 0, Msg(d));
+        string reasonZero = d.RaisedDeckUnavailableReason();
+        Gate("7b deck disabled with reason at 0 middles", reasonZero != null && reasonZero.ToLower().Contains("bay"), reasonZero ?? "null");
+
+        // 1-2 middles, wide beam: enabled (no reason).
+        Gate("7c draft: AddMiddle to 1", d.AddMiddle() && d.Count == 1, Msg(d));
+        Gate("7c deck enabled at 1 middle", d.RaisedDeckUnavailableReason() == null, d.RaisedDeckUnavailableReason() ?? "null");
+        Gate("7c draft: AddMiddle to 2", d.AddMiddle() && d.Count == 2, Msg(d));
+        Gate("7c deck enabled at 2 middles", d.RaisedDeckUnavailableReason() == null, d.RaisedDeckUnavailableReason() ?? "null");
+
+        // 3 middles: disabled again.
+        Gate("7d draft: AddMiddle to 3", d.AddMiddle() && d.Count == 3, Msg(d));
+        string reasonThree = d.RaisedDeckUnavailableReason();
+        Gate("7d deck disabled with reason at 3 middles", reasonThree != null && reasonThree.ToLower().Contains("bay"), reasonThree ?? "null");
+        Gate("7d draft: RemoveMiddle back to 2", d.RemoveMiddle() && d.Count == 2, Msg(d));
+
+        // Toggle to raised: swaps all three hull ids, guns kept.
+        string equipBefore = EquipSlots(d.Snapshot());
+        bool toRaised = d.SetRaisedDeck(true);
+        var snap = d.Snapshot();
+        Gate("7e SetRaisedDeck(true) swaps all three hull ids", toRaised && d.IsRaisedDeck
+            && snap.sternId == RaisedPresets.RaisedStern && snap.bowId == RaisedPresets.RaisedBow
+            && snap.middleIds.TrueForAll(m => m == RaisedPresets.RaisedMiddle),
+            $"ok {toRaised}, stern {snap.sternId}, bow {snap.bowId}, middles [{string.Join(",", snap.middleIds)}]");
+        Gate("7e guns kept across the toggle to raised", EquipSlots(snap) == equipBefore, $"before [{equipBefore}] after [{EquipSlots(snap)}]");
+
+        // While raised: beam toggle refused with its own reason.
+        const string beamReason = "A raised deck needs the wide beam.";
+        bool triedBeam = d.SetWideBeam(false);
+        Gate("7f beam toggle refused with its reason while raised", !triedBeam && d.IsRaisedDeck && d.Message == beamReason,
+            $"ok {triedBeam}, message \"{d.Message}\"");
+
+        // +/- bays blocked at the 1/2 bounds while raised.
+        Gate("7g setup: raised at 2 middles", d.Count == 2, Msg(d));
+        bool addAtMax = d.AddMiddle();
+        Gate("7g +bays blocked at the raised max (2)", !addAtMax && d.Count == 2, Msg(d));
+        Gate("7g draft: RemoveMiddle to 1 (raised minimum)", d.RemoveMiddle() && d.Count == 1, Msg(d));
+        bool removeAtMin = d.RemoveMiddle();
+        Gate("7g -bays blocked at the raised minimum (1)", !removeAtMin && d.Count == 1, Msg(d));
+        Gate("7g draft: AddMiddle back to 2", d.AddMiddle() && d.Count == 2, Msg(d));
+
+        // Toggle back: restores single W1x ids, guns kept.
+        string equipRaised = EquipSlots(d.Snapshot());
+        bool toSingle = d.SetRaisedDeck(false);
+        var snapBack = d.Snapshot();
+        Gate("7h SetRaisedDeck(false) restores single W1x hull ids", toSingle && !d.IsRaisedDeck
+            && snapBack.sternId == ExpandedPresets.ExpandedStern && snapBack.bowId == ExpandedPresets.ExpandedBow
+            && snapBack.middleIds.TrueForAll(m => m == ExpandedPresets.ExpandedMiddle),
+            $"ok {toSingle}, stern {snapBack.sternId}, bow {snapBack.bowId}, middles [{string.Join(",", snapBack.middleIds)}]");
+        Gate("7h guns kept across the toggle back to single", EquipSlots(snapBack) == equipRaised,
+            $"before [{equipRaised}] after [{EquipSlots(snapBack)}]");
+    }
+
+    static string EquipSlots(ShipConfiguration c)
+    {
+        var ids = new List<string>();
+        foreach (var e in c.equipment) if (e != null) ids.Add(e.slotId + ":" + e.moduleId);
+        ids.Sort();
+        return string.Join(",", ids);
     }
 
     // ---- the ship's state, and comparing it ----------------------------------------------------

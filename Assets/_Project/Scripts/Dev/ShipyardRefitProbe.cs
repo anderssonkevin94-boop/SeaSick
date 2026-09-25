@@ -74,6 +74,7 @@ public class ShipyardRefitProbe : MonoBehaviour
     int shipId, bodyId, listeners;
     readonly List<CrewAgent> landed = new List<CrewAgent>();
     readonly List<string> draftRows = new List<string>();
+    float midDeckYSingle = float.NaN;
 
     IEnumerator Run()
     {
@@ -220,8 +221,15 @@ public class ShipyardRefitProbe : MonoBehaviour
         if (!found) { Gate("open-water-found", false, "no 600 m disc deeper than 8 m within 8 km"); Finish(null); yield break; }
         sb.AppendLine($"sea trials at {spot:F0}");
         var trials = new List<string>();
+        // raised-long/raised-two-bay reuse the same SeaTrial + row format as
+        // the W1x/W1-r2 trials above them (docs/RAISED-DECK.md sec 9/10) so
+        // roll/pitch/speed/turn/draft compare directly; appended at the END
+        // of this list so the three existing trials keep their own timing
+        // exactly as before (only the equipment block, already placed AFTER
+        // every trial here, runs later as a result).
         foreach (var (name, cfg, hands) in new[] {
-            ("long", ShipConfiguration.Long(), 8), ("two-bays", ShipConfiguration.WithMiddles(2), 8), ("three-bays", ShipConfiguration.WithMiddles(3), 8) })
+            ("long", ShipConfiguration.Long(), 8), ("two-bays", ShipConfiguration.WithMiddles(2), 8), ("three-bays", ShipConfiguration.WithMiddles(3), 8),
+            ("raised-long", RaisedPresets.RaisedLong(), 8), ("raised-two-bay", RaisedPresets.RaisedTwoBay(), 8) })
         {
             if (!anchor.AtHomeDock && !anchor.BerthAtHome(out string bwhy)) sb.AppendLine("berth: " + bwhy);
             yield return new WaitForSeconds(0.5f);
@@ -353,6 +361,11 @@ public class ShipyardRefitProbe : MonoBehaviour
         Gate("battery: 6 guns positioned at their slots", gunsAfterDock == 6,
             $"GunsPerSide {(batteryAfterDock != null ? batteryAfterDock.GunsPerSide : 0)} -> {gunsAfterDock} guns");
         }
+        // ---- (f) raised deck: W1x Long -> raised Long -> raised two-bay -> back to
+        // W1x Long, AFTER the equipment block so it never touches the trials'
+        // sea-state timing (docs/RAISED-DECK.md sec 9/10, sec 11 "Not done
+        // this session" note this probe now closes).
+        yield return RaisedDeckRefit();
         sb.AppendLine("PROVISIONAL two hydrostatic models, ONE mass (rb.mass = module lightship sum), moored at rest (not gated):");
         sb.AppendLine("  config                   | mass | table draft | sim static draft | delta (sim - table) | sim design draft | sim dynamic (keel below local sea)");
         foreach (var r in draftRows) sb.AppendLine("  " + r);
@@ -417,6 +430,117 @@ public class ShipyardRefitProbe : MonoBehaviour
         Gate(name + ": hands on the new deck", onDeck == standing, $"{onDeck}/{standing} at station on deck {worst}");
         sb.AppendLine($"  {name}: {plan.capacityDraft}; lwl {d.lwl:F2} m, {d.massKg / 1000f:F1} t, axle z {d.wheelAxle.z:F3}, helm z {d.helm.z:F3}");
         yield return MeasureDraft(name, plan.draftPlan);
+    }
+
+    // ---- raised deck: W1x Long -> raised Long -> raised two-bay -> W1x Long ----
+
+    /// docs/RAISED-DECK.md sec 9/10/11: live refit through the raised-deck
+    /// family and back. `RefitAndCheck` already gives "applied", "one ship",
+    /// "damage/hold/crew kept" (cargo carried) and "hands on the new deck"
+    /// (crew stand at whatever deckY the ACTIVE hull form has, single or
+    /// raised) for every step; this adds the raised-deck-specific asserts
+    /// the task calls out by name: guns carried (count + slot ids), crew
+    /// aboard <= berths, and for the raised steps, the plan's walkDeckZU ==
+    /// 4.20 and the crew's station deckY sitting well above the single-deck
+    /// baseline (not just "on some deck").
+    IEnumerator RaisedDeckRefit()
+    {
+        sb.AppendLine("(f) raised deck: W1x Long -> raised Long -> raised two-bay -> W1x Long:");
+        if (!anchor.AtHomeDock && !anchor.BerthAtHome(out string rbw)) sb.AppendLine("raised-deck berth: " + rbw);
+        yield return new WaitForSeconds(1f);
+
+        yield return RefitAndCheck("raised-seq: w1x-long-start", ExpandedPresets.ExpandedLong());
+        midDeckYSingle = MidStationDeckY();
+        RaisedStepAsserts("raised-seq: w1x-long-start", ExpandedPresets.ExpandedLong(), false);
+
+        yield return RefitAndCheck("raised-seq: raised-long", RaisedPresets.RaisedLong());
+        RaisedStepAsserts("raised-seq: raised-long", RaisedPresets.RaisedLong(), true);
+
+        yield return RefitAndCheck("raised-seq: raised-two-bay", RaisedPresets.RaisedTwoBay());
+        RaisedStepAsserts("raised-seq: raised-two-bay", RaisedPresets.RaisedTwoBay(), true);
+
+        yield return RefitAndCheck("raised-seq: back-to-w1x-long", ExpandedPresets.ExpandedLong());
+        RaisedStepAsserts("raised-seq: back-to-w1x-long", ExpandedPresets.ExpandedLong(), false);
+
+        // Refusals (docs/RAISED-DECK.md sec 3/9): 0 or 3 raised middles, and
+        // a mixed raised/W1x draft (one raised end, W1x middle).
+        Refuse("raised-zero-middles", RaisedPresets.WithMiddles(0), "RAISED_DECK_BAYS");
+        Refuse("raised-three-middles", RaisedPresets.WithMiddles(3), "RAISED_DECK_BAYS");
+        var mixedDraft = Mod(RaisedPresets.RaisedLong(), c => c.middleIds[0] = ExpandedPresets.ExpandedMiddle);
+        Refuse("raised-mixed-w1x-middle", mixedDraft, "JOIN_PROFILE_MISMATCH");
+    }
+
+    float MidStationDeckY()
+    {
+        var d = yard.ActiveData;
+        return d.stations[d.stations.Length / 2].deckY;
+    }
+
+    void RaisedStepAsserts(string name, ShipConfiguration target, bool raised)
+    {
+        // Guns carried: count and slot ids (the applied-config gate above
+        // already proves yard.Current == target; this names the gun subset
+        // explicitly, the way the task asks for it).
+        var wantGuns = new List<string>();
+        foreach (var e in target.equipment) if (e != null && e.moduleId == ShipConfiguration.EquipmentCannon) wantGuns.Add(e.slotId);
+        wantGuns.Sort();
+        var haveGuns = new List<string>();
+        foreach (var e in yard.Current.equipment) if (e != null && e.moduleId == ShipConfiguration.EquipmentCannon) haveGuns.Add(e.slotId);
+        haveGuns.Sort();
+        Gate(name + ": guns carried (count + slot ids)",
+            haveGuns.Count == wantGuns.Count && string.Join(",", haveGuns) == string.Join(",", wantGuns),
+            $"{haveGuns.Count} guns [{string.Join(",", haveGuns)}] vs expected {wantGuns.Count} [{string.Join(",", wantGuns)}]");
+
+        // Cargo carried: the hold seeded at the start of the run (timber +
+        // stone) is still aboard, non-empty, after this refit.
+        var hold = HoldPerKind();
+        Gate(name + ": cargo carried", hold.Count > 0, Fmt(hold));
+
+        // Exactly one player ship.
+        Gate(name + ": exactly one player ship", OneShipCheck(out string oneDetail), oneDetail);
+
+        // Crew aboard <= berths.
+        var v = yard.Validate(yard.Current);
+        int berths = v.capacityDraft.crewStations;
+        int crewCount = Crew().Count;
+        Gate(name + ": crew aboard <= berths", crewCount <= berths, $"{crewCount} aboard, {berths} berths");
+
+        if (raised)
+        {
+            var plan = v.draftPlan;
+            Gate(name + ": plan walkDeckZU == 4.20", plan != null && Mathf.Approximately(plan.walkDeckZU, 4.20f),
+                plan != null ? $"walkDeckZU {plan.walkDeckZU:F3}" : "no draftPlan");
+
+            // Crew stand heights are on the UPPER deck: each standing hand's
+            // station deckY (what "hands on the new deck" already snapped
+            // them to) sits well above the single-deck baseline captured at
+            // the w1x-long-start step (docs/RAISED-DECK.md sec 6: ~1.22 m
+            // higher at mid-ship).
+            var d = yard.ActiveData;
+            int onUpper = 0, standing = 0; string worst = "";
+            foreach (var c in Crew())
+            {
+                if (!c.Available) continue;
+                standing++;
+                var p = c.transform.localPosition;
+                int si = ShipyardPlanner.NearestStation(d, p.z);
+                float deckY = d.stations[si].deckY;
+                bool ok = Mathf.Abs(p.y - deckY) < 0.1f && (float.IsNaN(midDeckYSingle) || deckY > midDeckYSingle + 0.5f);
+                if (ok) onUpper++; else worst = $"{c.DisplayName} y {p.y:F2} deckY {deckY:F2} (single-deck baseline {midDeckYSingle:F2})";
+            }
+            Gate(name + ": crew stand on the upper deck", onUpper == standing && standing > 0,
+                $"{onUpper}/{standing} on the upper deck {worst}");
+        }
+    }
+
+    bool OneShipCheck(out string detail)
+    {
+        bool same = yard.gameObject.GetInstanceID() == shipId && rb.GetInstanceID() == bodyId;
+        int ships = FindObjectsByType<ShipMotor>(FindObjectsSortMode.None).Length;
+        int yards = FindObjectsByType<ShipyardService>(FindObjectsSortMode.None).Length;
+        int ears = FindObjectsByType<AudioListener>(FindObjectsSortMode.None).Length;
+        detail = $"ship {same}, ShipMotors {ships}, shipyards {yards}, listeners {ears}/{listeners}";
+        return same && ships == 1 && yards == 1 && ears == listeners;
     }
 
     /// PROVISIONAL, printed not gated: at rest and moored, the keel's depth

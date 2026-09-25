@@ -71,6 +71,16 @@ namespace SeaSick.Ship.Modular.EditorTools
                     ("expanded-long", ExpandedPresets.ExpandedLong()),
                     ("expanded-long-top", ExpandedPresets.ExpandedLong()),
                     ("long-top", ShipConfiguration.Long()),
+                    // docs/RAISED-DECK.md sec 9: raised Long and two-bay
+                    // raised, same three views as the W1x expanded hull
+                    // (side, 3/4, top) plus the per-part placement log the
+                    // "-top" renders already produce below.
+                    ("raised-long", RaisedPresets.RaisedLong()),
+                    ("raised-long-side", RaisedPresets.RaisedLong()),
+                    ("raised-long-top", RaisedPresets.RaisedLong()),
+                    ("raised-two-bay", RaisedPresets.RaisedTwoBay()),
+                    ("raised-two-bay-side", RaisedPresets.RaisedTwoBay()),
+                    ("raised-two-bay-top", RaisedPresets.RaisedTwoBay()),
                 };
                 foreach (var (name, cfg) in shots)
                 {
@@ -148,6 +158,13 @@ namespace SeaSick.Ship.Modular.EditorTools
             {
                 camGo.transform.position = b.center + new Vector3(0f, dist * 0.9f, 0f);
                 camGo.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            }
+            else if (name.EndsWith("-side"))
+            {
+                // Straight profile (beam-on, +X), slightly above the
+                // waterline centre for a readable elevation.
+                camGo.transform.position = b.center + new Vector3(dist * 1.0f, dist * 0.08f, 0f);
+                camGo.transform.LookAt(b.center);
             }
             else if (sternClose && res.hasWheel)
             {
