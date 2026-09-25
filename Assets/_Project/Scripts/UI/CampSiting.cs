@@ -48,6 +48,10 @@ namespace SeaSick.UI
         /// no R to turn it, and the thing to tap is the beach.
         public static bool PlacingPier => Placing && Instance.IsPier;
 
+        /// ...or a dry dock, sited the same way (no R, tap the shore) but
+        /// only within reach of the home berth -- see `Outpost.SnapDryDock`.
+        public static bool PlacingDryDock => Placing && Instance.IsDryDock;
+
         /// **...or is it a WALL, which is not one blueprint at all.**
         ///
         /// Kevin's connect-the-dots design (`docs/PLAN-fortress-harbour.md`
@@ -134,9 +138,15 @@ namespace SeaSick.UI
 
         /// What the ghost is facing right now. A pier faces the sea and
         /// nothing the player does turns it -- see `Outpost.SnapPier`.
-        public float Yaw => IsPier ? snappedYaw : heldYaw + turns * TurnStep;
+        public float Yaw => (IsPier || IsDryDock) ? snappedYaw : heldYaw + turns * TurnStep;
 
         bool IsPier => plan.kind == BuildKind.Pier;
+
+        /// **A dry dock is sited by the shore too, and by the home berth.**
+        /// `Outpost.SnapDryDock` walks to the waterline the same way
+        /// `SnapPier` does, but refuses anything too far from `Dock.Home` --
+        /// see `BuildPlans.DryDockMaxFromHome`.
+        bool IsDryDock => plan.kind == BuildKind.DryDock;
 
         /// **A pier is sited by the beach, not by the thumb.** The pointer
         /// picks a stretch of shore; `Outpost.SnapPier` walks to the
@@ -509,6 +519,17 @@ namespace SeaSick.UI
                     if (snapped) valid = outpost.CanPlace(sited, at, snappedYaw, out why);
                 }
             }
+            else if (IsDryDock)
+            {
+                // No ring rule to check first: `Outpost.SnapDryDock` carries
+                // its own reach test (close to the home berth), which is a
+                // different centre than the town's and does not belong
+                // behind `TooFarFromTown`.
+                valid = false;
+                bool snapped = outpost.SnapDryDock(want, out Vector3 centre, out snappedYaw, out why);
+                at = centre;
+                if (snapped) valid = outpost.CanPlace(sited, at, snappedYaw, out why);
+            }
             else valid = Test(at, out why);
             // `Yaw` reads `at`, so the ghost and the test are always asking
             // about the same rectangle on the same ground.
@@ -620,7 +641,8 @@ namespace SeaSick.UI
         /// and never while siting (or moving) the town centre itself -- the
         /// same two conditions `Outpost.TooFarFromTown` refuses on.
         bool HasRing => outpost != null && outpost.HasCampCentre
-                        && plan.kind != BuildKind.Fire && plan.kind != BuildKind.Pier;
+                        && plan.kind != BuildKind.Fire && plan.kind != BuildKind.Pier
+                        && plan.kind != BuildKind.DryDock;
 
         /// **The siting ring, for anything that has to AGREE with it.**
         ///
