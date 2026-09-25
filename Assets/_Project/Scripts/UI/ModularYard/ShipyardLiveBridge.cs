@@ -49,13 +49,13 @@ namespace SeaSick.UI.ModularYard
         /// This section's space budget/berths/hold (pure). Backend:
         /// `ShipyardService.SectionSpace(ShipConfiguration, string)`.
         public SectionSpaceView SectionSpace(ShipConfiguration draft, string sectionKey) =>
-            ShipyardService.SectionSpace(draft, sectionKey);
+            ShipyardService.Player?.SectionSpace(draft, sectionKey);
 
         /// A new draft with `sectionKey`'s berths set to `berths` (clamped),
         /// hold recomputed from what is left of the section's budget.
         /// Backend: `ShipyardService.WithBerths(ShipConfiguration, string, int)`.
         public ShipConfiguration WithBerths(ShipConfiguration draft, string sectionKey, int berths) =>
-            ShipyardService.WithBerths(draft, sectionKey, berths);
+            ShipyardService.Player != null ? ShipyardService.Player.WithBerths(draft, sectionKey, berths) : draft;
 
         /// Renumbers `layouts`' own `middle[i]` keys the same way
         /// `ShipyardDraft.RenumberMiddleKeys` renumbers `equipment` --
