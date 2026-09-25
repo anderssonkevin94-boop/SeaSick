@@ -344,6 +344,19 @@ namespace SeaSick.Ship.Modular
         /// -Y its README states, so its visual carries -90 to fire outboard
         /// at slot yaw 0; footprints and clearances are unaffected.
         public float yawDegU;
+        /// Full authoring-axis rotation of this ONE part (degrees, about
+        /// its own origin, Blender's XYZ Euler order -- X applied first,
+        /// then Y, then Z, matching a manifest's own `rotation_radians`),
+        /// composed with `yawDegU` (docs/RAISED-SECTIONS.md task item 3a).
+        /// `yawDegU` alone only ever turns a part about authoring +Z; a
+        /// part hinged about a DIFFERENT authoring axis (e.g. the raised
+        /// stern/bow's hatch, tilted -80/+80 deg about authoring Y) has no
+        /// correct value to put there -- putting the number in `yawDegU`
+        /// anyway rotates the mesh about the wrong game axis. Zero (the
+        /// default) for every part authored so far except the two hatches
+        /// this field was added for; unset = Vector3.zero, so every
+        /// existing module JSON reads unchanged.
+        public Vector3 rotationDegU;
         public string notes;
     }
 

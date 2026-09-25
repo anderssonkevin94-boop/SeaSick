@@ -30,6 +30,38 @@ namespace SeaSick.Ship.Modular
             return new Quaternion(0f, Mathf.Sin(half), 0f, Mathf.Cos(half));
         }
 
+        /// One axis-angle rotation as a managed quaternion (no
+        /// Quaternion.Euler, same reason as the rest of this class); `axis`
+        /// must be a unit vector.
+        static Quaternion AxisAngleDeg(Vector3 axis, float angleDeg)
+        {
+            float half = angleDeg * Mathf.Deg2Rad * 0.5f;
+            float s = Mathf.Sin(half);
+            return new Quaternion(axis.x * s, axis.y * s, axis.z * s, Mathf.Cos(half));
+        }
+
+        /// A full authoring Euler rotation (`VisualPart.rotationDegU`,
+        /// degrees, Blender's XYZ order -- X applied first, then Y, then Z,
+        /// matching a manifest's own `rotation_radians`) as a game
+        /// rotation. Generalises `AuthoringYawToGame` (the Z-only case) to
+        /// all three authoring axes: the axis swap that converts a
+        /// POSITION (class doc: game = (-y, z, x)) is an orientation-
+        /// REVERSING map (a reflection, not a pure rotation -- its
+        /// determinant is -1), so converting a ROTATION needs the mapped
+        /// axis's angle negated too, EXCEPT where the axis's own sign flip
+        /// (authoring Y, port, maps to game -X) already supplies that
+        /// negation and leaves the angle unchanged. Worked out per axis:
+        /// authoring X -> game +Z, angle negates; authoring Y -> game +X,
+        /// angle UNCHANGED; authoring Z -> game +Y, angle negates (this
+        /// term IS `AuthoringYawToGame`, reused verbatim).
+        public static Quaternion AuthoringEulerToGame(Vector3 eulerDegU)
+        {
+            var qx = AxisAngleDeg(new Vector3(0f, 0f, 1f), -eulerDegU.x);
+            var qy = AxisAngleDeg(new Vector3(1f, 0f, 0f), eulerDegU.y);
+            var qz = AuthoringYawToGame(eulerDegU.z);
+            return qz * qy * qx;
+        }
+
         /// An authoring AABB as a game AABB (the axis swap flips the port
         /// axis, so min and max trade places on game X).
         public static void AuthoringBoxToGame(Vector3 minU, Vector3 maxU, float metresPerUnit,

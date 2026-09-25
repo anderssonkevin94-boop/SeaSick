@@ -66,7 +66,13 @@ namespace SeaSick.Ship.Modular
                         // part's own offset (multi-part visuals only; zero for
                         // every single-piece visual, unchanged from before).
                         inst.transform.localPosition = ModularScale.AuthoringToGame(part.localPositionU, k);
-                        inst.transform.localRotation = ModularScale.AuthoringYawToGame(part.yawDegU) * visualAxisFix * prefab.transform.localRotation;
+                        // yawDegU (about authoring +Z only) composed with the
+                        // full rotationDegU (any authoring axis, e.g. the
+                        // raised stern/bow hatch's -80/+80 deg about Y --
+                        // docs/RAISED-SECTIONS.md task item 3a); zero for
+                        // every part that only ever used yawDegU before.
+                        inst.transform.localRotation = ModularScale.AuthoringYawToGame(part.yawDegU) * ModularScale.AuthoringEulerToGame(part.rotationDegU)
+                            * visualAxisFix * prefab.transform.localRotation;
                         inst.transform.localScale = prefab.transform.localScale * k;
                         foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
                         {

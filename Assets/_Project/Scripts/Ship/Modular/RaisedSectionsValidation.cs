@@ -43,6 +43,7 @@ namespace SeaSick.Ship.Modular
         }
 
         static string F(float v) => v.ToString("0.####", CultureInfo.InvariantCulture);
+        static bool Near(float a, float b, float tol = 1e-3f) => Mathf.Abs(a - b) <= tol;
 
         public static void Body(string stdJson, IList<string> mods, IList<string> names, string hullFormJson, GateFn Gate)
         {
@@ -207,6 +208,31 @@ namespace SeaSick.Ship.Modular
             ReportMix("bow-only", DeckLevel.Low, new[] { DeckLevel.Low }, DeckLevel.Raised);
             ReportMix("stern-and-bow-no-middle-raise", DeckLevel.Raised, Array.Empty<DeckLevel>(), DeckLevel.Low);
             ReportMix("all-three-two-middles", DeckLevel.Raised, new[] { DeckLevel.Raised, DeckLevel.Raised }, DeckLevel.Raised);
+
+            // =============================================================
+            // task item 3a: VisualPart.rotationDegU. A pure Vector3 ->
+            // Quaternion check (ModularScale.AuthoringEulerToGame, no Unity
+            // scene needed) plus the two hatch JSONs actually carrying it
+            // instead of the old yawDegU stand-in.
+            // =============================================================
+            var qy80 = ModularScale.AuthoringEulerToGame(new Vector3(0f, 80f, 0f));
+            var identity = ModularScale.AuthoringEulerToGame(Vector3.zero);
+            Gate("raised-sections-rotation-y-maps-to-game-x-axis",
+                Mathf.Abs(qy80.x) > 0.5f && Mathf.Abs(qy80.y) < 1e-4f && Mathf.Abs(qy80.z) < 1e-4f && identity == Quaternion.identity,
+                $"authoring (0,80,0) deg -> game quaternion ({F(qy80.x)}, {F(qy80.y)}, {F(qy80.z)}, {F(qy80.w)}) (expect only x nonzero)");
+
+            lib.TryGet(RaisedPresets.RaisedStern, out var sternDef);
+            lib.TryGet(RaisedPresets.RaisedBow, out var bowDef);
+            VisualPart sternHatch = null, bowHatch = null;
+            if (sternDef?.visuals != null) foreach (var v in sternDef.visuals) if (v != null && v.id == "RaisedStern__Hatch") sternHatch = v;
+            if (bowDef?.visuals != null) foreach (var v in bowDef.visuals) if (v != null && v.id == "RaisedBowV2__Hatch") bowHatch = v;
+            Gate("raised-sections-hatch-rotation-fixed-not-yaw",
+                sternHatch != null && bowHatch != null
+                    && Near(sternHatch.yawDegU, 0f) && Near(sternHatch.rotationDegU.y, -80f)
+                    && Near(bowHatch.yawDegU, 0f) && Near(bowHatch.rotationDegU.y, 80f),
+                sternHatch != null && bowHatch != null
+                    ? $"stern yaw={F(sternHatch.yawDegU)} rotY={F(sternHatch.rotationDegU.y)}; bow yaw={F(bowHatch.yawDegU)} rotY={F(bowHatch.rotationDegU.y)}"
+                    : "hatch VisualPart missing");
 
             // Chimney X (docs/RAISED-SECTIONS.md sec 5): the -0.84 u
             // midpoint offset is an ALL-raised correction; a mixed ship

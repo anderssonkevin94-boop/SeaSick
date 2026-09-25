@@ -185,8 +185,13 @@
                 "y": 0.0,
                 "z": 4.36
             },
-            "yawDegU": 80.0,
-            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__Hatch, 36 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX. yawDegU from docs/RAISED-DECK.md sec 2 (matches manifest rotation_radians Y, -1.3963/+1.3963 rad)."
+            "yawDegU": 0.0,
+            "rotationDegU": {
+                "x": 0.0,
+                "y": 80.0,
+                "z": 0.0
+            },
+            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__Hatch, 36 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX. rotationDegU.y from manifest rotation_radians (1.3962633609771729 rad = 80 deg) about authoring Y -- a TILT (hinge), not a yaw; fixed 2026-09-25 (docs/RAISED-SECTIONS.md task item 3a), previously wrongly carried in yawDegU (rotates about authoring Z, the wrong axis in game)."
         },
         {
             "id": "RaisedBowV2__InternalLadder",
