@@ -1027,12 +1027,17 @@ namespace SeaSick.World
         /// The ship must be told to recount afterwards — see `CrewRoster`.
         public bool Station(Crew.CrewAgent hand) => Station(hand, false);
 
-        /// **A refit's surplus hands go ashore at home** (Kevin, 2026-09-25:
-        /// never lost, never refused for crew). Only the home settlement,
-        /// fire or no fire, and with no `ProvisionDays` of food booked: they
-        /// bring no stores, and a rolled-back refit must not leave food
-        /// behind. Undone by `Recall` like any other landing.
-        public bool LandSurplusAtHome(Crew.CrewAgent hand) => this == Home && Station(hand, true);
+        /// **A refit's surplus hands go ashore at the outpost that owns the
+        /// ship's home berth** (Kevin, 2026-09-25: never lost, never refused
+        /// for crew; generalised the same day when the home berth itself
+        /// became switchable -- the settlement that takes them is now
+        /// whichever island's outpost that is, `Outpost.Home` no longer
+        /// assumed). Fire or no fire, and with no `ProvisionDays` of food
+        /// booked: they bring no stores, and a rolled-back refit must not
+        /// leave food behind. The CALLER picks the outpost (`ShipyardService`
+        /// resolves it from `Dock.Home`); this no longer gates on `this ==
+        /// Home` itself. Undone by `Recall` like any other landing.
+        public bool LandSurplusFromRefit(Crew.CrewAgent hand) => Station(hand, true);
 
         bool Station(Crew.CrewAgent hand, bool surplusAtHome)
         {
