@@ -103,7 +103,20 @@ namespace SeaSick.UI.ModularYard
                 outline.SetActive(true);
                 var hb = new Bounds(corners[0], Vector3.zero);
                 for (int i = 1; i < 8; i++) hb.Encapsulate(corners[i]);
-                highlightBounds = hb; hasHighlight = true;
+                // `corners` are in the ship's own LOCAL frame (`p.positionM`
+                // is authoring-space, matching the preview ship's zero local
+                // offset under `root`) -- correct as-is for the LineRenderer,
+                // whose positions are local to `outline` (itself parented at
+                // `root` with no offset of its own). `highlightBounds` is
+                // used by `Render()` to point the CAMERA, though, and that
+                // has to be WORLD space to compare against `bounds` (built
+                // from `Renderer.bounds`, already world) -- without this the
+                // camera framed a point ~1000 m from the ship (`root` sits
+                // at z=-1000 off-world) and the section sheet's preview
+                // rendered nothing (2026-09-25 review, empty "SECTION"
+                // viewport).
+                highlightBounds = new Bounds(hb.center + root.transform.position, hb.size);
+                hasHighlight = true;
                 break;
             }
             Render();
