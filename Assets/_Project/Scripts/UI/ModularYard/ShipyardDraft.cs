@@ -33,7 +33,11 @@ namespace SeaSick.UI.ModularYard
         public bool Committed { get; private set; }
         public event Action Changed;
         public int Count => draft.middleIds.Count;
-        public int Maximum => Math.Min(3, library.MaxMiddles);
+        public int Maximum => IsRaisedDeck ? RaisedDeckMaxMiddles : Math.Min(3, library.MaxMiddles);
+        /// Raised-deck family only (docs/RAISED-DECK.md sec 3): 0 middles
+        /// does not close the kit, so RemoveMiddle refuses at 1 instead of 0.
+        public int Minimum => IsRaisedDeck ? RaisedDeckMinMiddles : 0;
+        const int RaisedDeckMinMiddles = 1, RaisedDeckMaxMiddles = 2;
         public string Rotor => draft.rotorId;
         public bool Dirty => !draft.ValueEquals(baseline);
         public bool CanUndo => undo.Count > 0 && !Committed;
@@ -75,11 +79,13 @@ namespace SeaSick.UI.ModularYard
         /// false for the standard W1-r2 family (docs/SHIPYARD-API.md §15).
         public bool IsWideBeam => draft.sternId == ExpandedPresets.ExpandedStern;
 
-        /// The middle module id for the draft's OWN current width family --
-        /// never the standard one outright (that was the 2026-09-25 bug: a
+        /// The middle module id for the draft's OWN current width/deck family
+        /// -- never the standard one outright (that was the 2026-09-25 bug: a
         /// wide-beam ship's AddMiddle used to add a W1-r2 middle, which
-        /// ShipAssembler refuses to join to a W1x stern/bow).
-        string MiddleIdForWidth() => IsWideBeam ? ExpandedPresets.ExpandedMiddle : ShipConfiguration.V3Middle;
+        /// ShipAssembler refuses to join to a W1x stern/bow). Raised-deck
+        /// (docs/RAISED-DECK.md sec 3) is its own family on top of wide.
+        string MiddleIdForWidth() => IsRaisedDeck ? RaisedPresets.RaisedMiddle
+            : IsWideBeam ? ExpandedPresets.ExpandedMiddle : ShipConfiguration.V3Middle;
 
         // First prototype appends/removes the bay immediately behind the bow.
         // Existing bay indices, and therefore equipment references, never shift.
@@ -95,6 +101,7 @@ namespace SeaSick.UI.ModularYard
         public bool RemoveMiddle()
         {
             if (Count == 0) return Refuse("The bow and stern must remain.");
+            if (Count <= Minimum) return Refuse("A raised deck is built for one or two middle bays.");
             if (backend != null && removalBlocker == null)
                 return Refuse("Section availability is not connected yet.");
             string reason = RemovalReason();
@@ -125,6 +132,7 @@ namespace SeaSick.UI.ModularYard
         /// their Y moved), so a fitted gun stays fitted.
         public bool SetWideBeam(bool wide)
         {
+            if (IsRaisedDeck && !wide) return Refuse("A raised deck needs the wide beam.");
             if (IsWideBeam == wide) return false;
             string sternId = wide ? ExpandedPresets.ExpandedStern : ShipConfiguration.V3Stern;
             string bowId = wide ? ExpandedPresets.ExpandedBow : ShipConfiguration.V3Bow;
@@ -134,6 +142,45 @@ namespace SeaSick.UI.ModularYard
             next.sternId = sternId;
             next.bowId = bowId;
             string middleId = wide ? ExpandedPresets.ExpandedMiddle : ShipConfiguration.V3Middle;
+            for (int i = 0; i < next.middleIds.Count; i++) next.middleIds[i] = middleId;
+            return Set(next, ShipAssembler.StdKeyStern);
+        }
+
+        /// True while the draft is built from the raised-deck family
+        /// (W1xR), on top of the wide beam (docs/RAISED-DECK.md sec 3).
+        public bool IsRaisedDeck => draft.sternId == RaisedPresets.RaisedStern;
+
+        /// Null when `SetRaisedDeck(true)` would succeed right now; the
+        /// reason to show next to a disabled toggle otherwise
+        /// (docs/RAISED-DECK.md sec 3/8: needs wide beam + 1-2 middle bays).
+        public string RaisedDeckUnavailableReason()
+        {
+            if (IsRaisedDeck) return null;
+            if (!IsWideBeam) return "A raised deck needs the wide beam.";
+            if (Count < 1 || Count > 2) return "A raised deck is built for one or two middle bays.";
+            if (!CanSelect(ModuleKind.Stern, RaisedPresets.RaisedStern) || !CanSelect(ModuleKind.Bow, RaisedPresets.RaisedBow))
+                return "This deck is unavailable.";
+            return null;
+        }
+
+        /// Swaps EVERY hull section between the W1x (wide, single-deck) and
+        /// W1xR (wide, raised-deck) families at once -- mirrors
+        /// `SetWideBeam` exactly, one level up (docs/RAISED-DECK.md sec 3/8).
+        /// Turning the raised deck OFF drops back to wide W1x, never to the
+        /// standard beam (raised requires wide; `SetWideBeam` is the only
+        /// path back to standard, and it refuses while raised).
+        public bool SetRaisedDeck(bool raised)
+        {
+            if (IsRaisedDeck == raised) return false;
+            if (raised)
+            {
+                string reason = RaisedDeckUnavailableReason();
+                if (reason != null) return Refuse(reason);
+            }
+            var next = Snapshot();
+            next.sternId = raised ? RaisedPresets.RaisedStern : ExpandedPresets.ExpandedStern;
+            next.bowId = raised ? RaisedPresets.RaisedBow : ExpandedPresets.ExpandedBow;
+            string middleId = raised ? RaisedPresets.RaisedMiddle : ExpandedPresets.ExpandedMiddle;
             for (int i = 0; i < next.middleIds.Count; i++) next.middleIds[i] = middleId;
             return Set(next, ShipAssembler.StdKeyStern);
         }
@@ -186,6 +233,7 @@ namespace SeaSick.UI.ModularYard
 
         public bool CanSelect(string kind, string id) => allowed == null || allowed(kind, id);
         public string RemovalReason() => Count == 0 ? "The bow and stern must remain." :
+            Count <= Minimum ? "A raised deck is built for one or two middle bays." :
             backend != null && removalBlocker == null ? "Section availability is not connected yet." :
             removalBlocker?.Invoke(Snapshot(), Count - 1);
 

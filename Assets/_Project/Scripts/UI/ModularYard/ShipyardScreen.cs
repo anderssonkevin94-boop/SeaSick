@@ -14,7 +14,7 @@ namespace SeaSick.UI.ModularYard
         readonly Image image;
         readonly Label count, length, message, badge;
         readonly Label details;
-        readonly Button undo, add, remove, timber, reinforced, beamStandard, beamWide, confirm;
+        readonly Button undo, add, remove, timber, reinforced, beamStandard, beamWide, deckSingle, deckRaised, confirm;
         readonly VisualElement guns;
         readonly Label dryDock;
         readonly Dictionary<int, Vector2> pointers = new Dictionary<int, Vector2>();
@@ -60,6 +60,10 @@ namespace SeaSick.UI.ModularYard
             var beams = Row(scroll, "yard-wheels");
             beamStandard = Command(beams, "Standard", () => draft.SetWideBeam(false));
             beamWide = Command(beams, "Wide", () => draft.SetWideBeam(true));
+            var deckCaption = new Label("Deck"); deckCaption.AddToClassList("yard-caption"); scroll.Add(deckCaption);
+            var decks = Row(scroll, "yard-wheels");
+            deckSingle = Command(decks, "Single", () => draft.SetRaisedDeck(false));
+            deckRaised = Command(decks, "Raised", () => draft.SetRaisedDeck(true));
             var gunsCaption = new Label("Guns"); gunsCaption.AddToClassList("yard-caption"); scroll.Add(gunsCaption);
             guns = new VisualElement(); guns.AddToClassList("yard-guns"); scroll.Add(guns);
             dryDock = new Label(); dryDock.AddToClassList("yard-caption"); dryDock.AddToClassList("yard-dock"); scroll.Add(dryDock);
@@ -116,10 +120,25 @@ namespace SeaSick.UI.ModularYard
             reinforced.SetEnabled(!draft.Committed && draft.CanSelect(ModuleKind.Rotor, ShipConfiguration.ReinforcedRotor));
             timber.EnableInClassList("yard-selected", draft.Rotor == ShipConfiguration.TimberRotor);
             reinforced.EnableInClassList("yard-selected", draft.Rotor == ShipConfiguration.ReinforcedRotor);
-            beamStandard.SetEnabled(!draft.Committed && draft.CanSelect(ModuleKind.Stern, ShipConfiguration.V3Stern));
-            beamWide.SetEnabled(!draft.Committed && draft.CanSelect(ModuleKind.Stern, ExpandedPresets.ExpandedStern));
-            beamStandard.EnableInClassList("yard-selected", !draft.IsWideBeam);
-            beamWide.EnableInClassList("yard-selected", draft.IsWideBeam);
+            // While raised, the beam is locked to wide (docs/RAISED-DECK.md
+            // sec 3/8: "a raised deck needs the wide beam") -- both buttons
+            // disabled, the reason on the one a tap would refuse.
+            beamStandard.SetEnabled(!draft.Committed && !draft.IsRaisedDeck && draft.CanSelect(ModuleKind.Stern, ShipConfiguration.V3Stern));
+            beamStandard.tooltip = draft.IsRaisedDeck ? "A raised deck needs the wide beam." : "Standard beam";
+            beamWide.SetEnabled(!draft.Committed && !draft.IsRaisedDeck && draft.CanSelect(ModuleKind.Stern, ExpandedPresets.ExpandedStern));
+            beamStandard.EnableInClassList("yard-selected", !draft.IsWideBeam && !draft.IsRaisedDeck);
+            beamWide.EnableInClassList("yard-selected", draft.IsWideBeam || draft.IsRaisedDeck);
+            string raisedReason = draft.RaisedDeckUnavailableReason();
+            deckSingle.SetEnabled(!draft.Committed && draft.IsRaisedDeck);
+            deckSingle.tooltip = "Back to a single (non-raised) deck";
+            deckRaised.SetEnabled(!draft.Committed && (draft.IsRaisedDeck || raisedReason == null));
+            deckRaised.tooltip = raisedReason ?? "A flush upper deck over 1-2 middle bays";
+            deckSingle.EnableInClassList("yard-selected", !draft.IsRaisedDeck);
+            deckRaised.EnableInClassList("yard-selected", draft.IsRaisedDeck);
+            // `add`/`remove` above already read `draft.Maximum` and
+            // `draft.RemovalReason()`, both raised-aware (docs/RAISED-DECK.md
+            // sec 3/8: the +/- bay controls lock to the family's own 1-2
+            // bound while raised) -- no separate gate needed here.
             RefreshGuns(report);
             string blocked = draft.CannotConfirm();
             confirm.SetEnabled(string.IsNullOrEmpty(blocked) && preview.Error == null);
