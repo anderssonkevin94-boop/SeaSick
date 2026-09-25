@@ -229,7 +229,9 @@ public class ShipyardRefitProbe : MonoBehaviour
         // every trial here, runs later as a result).
         foreach (var (name, cfg, hands) in new[] {
             ("long", ShipConfiguration.Long(), 8), ("two-bays", ShipConfiguration.WithMiddles(2), 8), ("three-bays", ShipConfiguration.WithMiddles(3), 8),
-            ("raised-long", RaisedPresets.RaisedLong(), 8), ("raised-two-bay", RaisedPresets.RaisedTwoBay(), 8) })
+            ("w1x-long", ExpandedPresets.ExpandedLong(), 8),
+            ("raised-long", OwnGuns(RaisedPresets.RaisedLong()), 8), ("raised-two-bay", OwnGuns(RaisedPresets.RaisedTwoBay()), 8),
+            ("w1x-long-again", ExpandedPresets.ExpandedLong(), 8) })
         {
             if (!anchor.AtHomeDock && !anchor.BerthAtHome(out string bwhy)) sb.AppendLine("berth: " + bwhy);
             yield return new WaitForSeconds(0.5f);
@@ -323,6 +325,7 @@ public class ShipyardRefitProbe : MonoBehaviour
         // Rollback: a forced save failure while landing hands must restore
         // BOTH the crew roster and the home settlement -- hands are never
         // lost, and a failed refit must leave nobody stranded ashore.
+        var preFaultConfig = yard.Current.Clone();
         ShipyardService.TestFaultStage = ShipyardService.FaultBeforePersist;
         var rFaultShort = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
         ShipyardService.TestFaultStage = null;
@@ -331,7 +334,7 @@ public class ShipyardRefitProbe : MonoBehaviour
             foreach (var n in landingNames)
                 if (home.HandNamed(n) != null) { noStrayVillagers = false; stray += n + " "; }
         Gate("hands ashore: forced save failure rolls back hands + villagers",
-            !rFaultShort.ok && yard.Current.ValueEquals(preShortConfig) && Crew().Count == crewCountBefore && noStrayVillagers,
+            !rFaultShort.ok && yard.Current.ValueEquals(preFaultConfig) && Crew().Count == crewCountBefore && noStrayVillagers,
             rFaultShort.ToString().Replace("\n", " | ") + $"; crew {Crew().Count}/{crewCountBefore}; stray villagers: {(noStrayVillagers ? "none" : stray.Trim())}");
 
         var rToShortAgain = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
@@ -448,16 +451,19 @@ public class ShipyardRefitProbe : MonoBehaviour
         sb.AppendLine("(f) raised deck: W1x Long -> raised Long -> raised two-bay -> W1x Long:");
         if (!anchor.AtHomeDock && !anchor.BerthAtHome(out string rbw)) sb.AppendLine("raised-deck berth: " + rbw);
         yield return new WaitForSeconds(1f);
+        // Earlier blocks may have emptied the hold; load a known cargo so
+        // "cargo carried" means something through the raised sequence.
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
 
         yield return RefitAndCheck("raised-seq: w1x-long-start", ExpandedPresets.ExpandedLong());
         midDeckYSingle = MidStationDeckY();
         RaisedStepAsserts("raised-seq: w1x-long-start", ExpandedPresets.ExpandedLong(), false);
 
-        yield return RefitAndCheck("raised-seq: raised-long", RaisedPresets.RaisedLong());
-        RaisedStepAsserts("raised-seq: raised-long", RaisedPresets.RaisedLong(), true);
+        yield return RefitAndCheck("raised-seq: raised-long", OwnGuns(RaisedPresets.RaisedLong()));
+        RaisedStepAsserts("raised-seq: raised-long", OwnGuns(RaisedPresets.RaisedLong()), true);
 
-        yield return RefitAndCheck("raised-seq: raised-two-bay", RaisedPresets.RaisedTwoBay());
-        RaisedStepAsserts("raised-seq: raised-two-bay", RaisedPresets.RaisedTwoBay(), true);
+        yield return RefitAndCheck("raised-seq: raised-two-bay", OwnGuns(RaisedPresets.RaisedTwoBay()));
+        RaisedStepAsserts("raised-seq: raised-two-bay", OwnGuns(RaisedPresets.RaisedTwoBay()), true);
 
         yield return RefitAndCheck("raised-seq: back-to-w1x-long", ExpandedPresets.ExpandedLong());
         RaisedStepAsserts("raised-seq: back-to-w1x-long", ExpandedPresets.ExpandedLong(), false);
@@ -630,6 +636,11 @@ public class ShipyardRefitProbe : MonoBehaviour
     }
 
     // ---- helpers ---------------------------------------------------------------
+
+    /// The raised presets fit every upper-deck slot (10/14 guns); the ship
+    /// owns the W1x Long's 6 and the dry dock is empty, so a refit keeps
+    /// exactly those 6 on their (identical) slot ids.
+    static ShipConfiguration OwnGuns(ShipConfiguration c) => Mod(c, x => x.equipment = ExpandedPresets.ExpandedLong().equipment);
 
     static ShipConfiguration Mod(ShipConfiguration c, System.Action<ShipConfiguration> f) { var x = c.Clone(); f(x); return x; }
     static KeyValuePair<string, int> Pair(string r, int n) => new KeyValuePair<string, int>(r, n);
