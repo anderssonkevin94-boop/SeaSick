@@ -102,6 +102,12 @@ namespace SeaSick.Ship.Modular
             Rejects("policy-rejects-equipment", gun, ShipyardCodes.NotInPrototype);
             var v1 = ShipConfiguration.Short(); v1.middleIds.Add("hull.middle.w1.v1");
             Rejects("policy-rejects-incompatible-reference", v1, ShipyardCodes.NotInPrototype, "JOIN_PROFILE_MISMATCH");
+            foreach (var raised in new[] { RaisedPresets.RaisedLong(), RaisedPresets.RaisedTwoBay() })
+            {
+                var pr = ShipyardPolicy.Check(raised, lib);
+                Gate($"policy-offers-raised-{raised.middleIds.Count}-bay", pr.Count == 0,
+                    pr.Count == 0 ? "no policy rejection" : pr[0].code + " | " + pr[0].message);
+            }
             Rejects("policy-rejects-four-bays", ShipConfiguration.WithMiddles(4), "TOO_MANY_MIDDLES");
             var noWheel = ShipConfiguration.Long(); noWheel.rotorId = ""; noWheel.carrierId = "";
             Rejects("policy-rejects-no-wheel", noWheel, ShipyardCodes.WheelRequired);
@@ -111,8 +117,8 @@ namespace SeaSick.Ship.Modular
                 ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.UpperDeck).Count == 0
                 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment).Count == 1
                 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment)[0] == ShipConfiguration.EquipmentCannon
-                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Stern).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 2
-                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Bow).Count == 2,
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Stern).Count == 3 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 3
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Bow).Count == 3,
                 "rotors " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor))
                 + " middles " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle))
                 + " equipment " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment)));
