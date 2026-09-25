@@ -319,6 +319,14 @@ namespace SeaSick.Ship.Modular
         public Vector3 viewOffset;
         /// Funnel extent along the ship, ship frame (for the deck load).
         public float funnelAftZ, funnelFwdZ;
+        /// docs/RAISED-DECK.md sec 7: the ONE authoring-Z everything that
+        /// stands "on deck" is built against (1.76 single-deck, 4.20 raised).
+        /// Informational -- crew posting, the deck load plan, the gangway and
+        /// the helm all actually read `data.stations[i].deckY`, which
+        /// `RaiseDeck` already carries this same value into (converted to the
+        /// sim frame) for a raised hull; this field is for the shipyard
+        /// report and UI, not a second source of truth.
+        public float walkDeckZU = 1.76f;
         public ShipCapacity capacity;
         /// Per installed hull section, aft to fore: its authored capacity.
         public List<SectionCapacity> sections = new List<SectionCapacity>();
@@ -647,6 +655,22 @@ namespace SeaSick.Ship.Modular
             }
             p.data = reference.Reshaped(p.sLength, p.sBeam, p.sDepth);
             p.data.PinSternFittings(reference, p.sternShiftM);
+
+            // Raised deck (docs/RAISED-DECK.md sec 3/6/7): any installed hull
+            // section from the raised family (W1xR) raises the walkable deck
+            // -- and hence the freeboard, crew height, deck load plan and
+            // green-water threshold -- to the family's upperDeckZU. sDepth is
+            // untouched (HullMeasure.depthU reads deckZU, not upperDeckZU, so
+            // it stays 1 automatically; RaisedDeckPhysics only ever ADDS
+            // freeboard on top of the reshaped single-deck hull).
+            var raisedProfile = RaisedDeckPhysics.FindRaisedProfile(asm, lib);
+            // Every non-raised profile shares deckZU 1.76 today (W1-r2, W1x);
+            // read it off whichever hull section is actually installed
+            // rather than hard-coding, falling back to 1.76 only if the
+            // library somehow has no hull section at all.
+            p.walkDeckZU = raisedProfile != null ? raisedProfile.upperDeckZU : RaisedDeckPhysics.NonRaisedDeckZU(asm, lib);
+            if (raisedProfile != null)
+                p.data = p.data.RaiseDeck((raisedProfile.upperDeckZU - raisedProfile.deckZU) * k);
             // The drawn axle sits on the physics axle along the ship; the
             // datum (authoring Z = 0) on the waterline.
             float axleLocalZ = asm.hasWheel ? asm.wheelAxleM.z : 0f;
@@ -705,6 +729,14 @@ namespace SeaSick.Ship.Modular
             p.lightshipKg = ModuleLightshipKg(asm, lib, out p.massMissing);
             if (p.massMissing == null) p.data.massKg = p.lightshipKg;
             else p.lightshipKg = p.data.massKg;
+            // Raised deck: the extra mass is already inside p.lightshipKg
+            // (each hull.*.w1xr.v1.json's lightship.massKg is the W1x mass +
+            // its own upperStructure), but Reshaped (sDepth == 1) left kg/com
+            // exactly where the single-deck reference had them -- the sim
+            // has not been told the extra mass stands HIGH. This raises
+            // kg/com/gm/gyradiusRoll by the upper structure's own mass
+            // moment (docs/RAISED-DECK.md sec 6). No-op when nothing raised.
+            if (raisedProfile != null) RaisedDeckPhysics.RaiseCoM(p, asm, lib, raisedProfile, k);
             if (p.hydro.Ok)
             {
                 if (refPlan == null)

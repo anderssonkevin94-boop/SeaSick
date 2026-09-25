@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace SeaSick.Steamer
@@ -187,6 +188,56 @@ namespace SeaSick.Steamer
         }
 
         static Vector3 Axes(Vector3 v, float sx, float sy, float sz) => new Vector3(v.x * sx, v.y * sy, v.z * sz);
+
+        /// **Raised deck** (docs/RAISED-DECK.md sec 6, modular shipyard,
+        /// 2026-09-25): a freeboard extension applied AFTER `Reshaped`, only
+        /// for a raised hull family. Appends ONE new top level to every
+        /// station's tables, `extraY` (m) above its OLD `deckY`, wall-sided
+        /// (half-breadth held at the old deck's own value -- the between-deck
+        /// is enclosed and does not flare), and raises `deckY` itself to the
+        /// new top. `depth` grows by `extraY` too (the freeboard the hull
+        /// now has). Nothing BELOW the old deck changes: buoyancy at or under
+        /// the old waterline is bit-for-bit what `Reshaped` gave it.
+        ///
+        /// This is deliberately the SAME mechanism a real wall-sided topside
+        /// would give the strip model: `HullFormBody`'s deck-immersion check
+        /// (`over = level - deckY`) and crew-walking height both read the
+        /// station's own `deckY`, so extending the table converts both at
+        /// once -- the plan's one `walkDeckZU` value (docs/RAISED-DECK.md
+        /// sec 7) is realized here, not threaded as a second field.
+        /// `extraY <= 0` returns an unmodified deep copy (mirrors `Reshaped`'s
+        /// identity contract at its own no-op input).
+        public HullFormData RaiseDeck(float extraY)
+        {
+            var d = (HullFormData)MemberwiseClone();
+            if (extraY <= 0f || stations == null) { if (stations != null) d.stations = (HullFormStation[])stations.Clone(); return d; }
+            d.depth = depth + extraY;
+            d.stations = new HullFormStation[stations.Length];
+            for (int i = 0; i < stations.Length; i++)
+            {
+                var s = stations[i];
+                if (s == null) continue;
+                int n = s.y != null ? s.y.Length : 0;
+                var t = new HullFormStation { z = s.z, dz = s.dz, keelY = s.keelY, deckY = s.deckY + extraY };
+                if (n == 0) { d.stations[i] = t; continue; }
+                float oldDeckY = s.y[n - 1];
+                float hbDeck = s.halfBreadth[n - 1];
+                float areaAdded = 2f * hbDeck * extraY;
+                float newY = oldDeckY + extraY;
+                t.y = new float[n + 1]; t.halfBreadth = new float[n + 1]; t.area = new float[n + 1]; t.momentY = new float[n + 1];
+                Array.Copy(s.y, t.y, n); Array.Copy(s.halfBreadth, t.halfBreadth, n);
+                Array.Copy(s.area, t.area, n); Array.Copy(s.momentY, t.momentY, n);
+                t.y[n] = newY;
+                t.halfBreadth[n] = hbDeck; // wall-sided: unchanged above the old deck
+                t.area[n] = s.area[n - 1] + areaAdded;
+                // Moment of the added rectangular strip about y = 0, its own
+                // centroid at the strip's mid-height, added to the running
+                // integral the old table already carried to oldDeckY.
+                t.momentY[n] = s.momentY[n - 1] + areaAdded * (oldDeckY + extraY * 0.5f);
+                d.stations[i] = t;
+            }
+            return d;
+        }
 
         /// **The stern's own fittings ride with the stern.** The wheel, its
         /// well, the rudder and the helm belong to the stern module, which
