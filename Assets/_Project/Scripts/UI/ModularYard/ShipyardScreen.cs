@@ -1,29 +1,47 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SeaSick.Ship.Modular;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace SeaSick.UI.ModularYard
 {
+    /// **The shipyard overview** (docs/SHIPYARD-SECTIONS-UI.md Step 1): the
+    /// 3D preview on top, a strip of section tiles under it -- tap one to
+    /// open its `ShipyardSectionSheet` (Structure / Guns / Interior) --
+    /// then the whole-ship summary, the ship-wide Beam setting, the
+    /// report's warnings, and [Confirm refit] / [Cancel]. Nothing touches
+    /// the ship until Confirm (the existing atomic `ShipyardDraft.Confirm`).
+    /// Portrait phone first, landscape desktop second (`yard-wide`, set from
+    /// this element's own aspect, same as before).
     public sealed class ShipyardScreen : VisualElement, IDisposable
     {
         readonly ShipyardDraft draft;
         readonly ShipyardLiveBridge live;
         readonly ShipyardPreview preview;
         readonly Image image;
-        readonly Label count, length, message, badge;
-        readonly Label details;
-        readonly Button undo, add, remove, timber, reinforced, beamStandard, beamWide, raiseAll, lowerAll, confirm;
-        readonly VisualElement guns;
-        readonly VisualElement sections;
-        readonly Label dryDock;
+        readonly Label badge;
+        readonly Button undo;
         readonly Dictionary<int, Vector2> pointers = new Dictionary<int, Vector2>();
         readonly Action close;
         string builtKey;
-        string sectionsKey;
         bool disposed;
         readonly IVisualElementScheduledItem refresh;
+
+        // ---- overview ----------------------------------------------------
+        readonly VisualElement overview;
+        readonly VisualElement tiles;
+        readonly VisualElement summary;
+        readonly Label warnings;
+        readonly Label message;
+        readonly Button beamStandard, beamWide, raiseAll, lowerAll, confirm;
+        string tilesKey;
+
+        // ---- section sheet -------------------------------------------------
+        readonly VisualElement sheetHost;
+        ShipyardSectionSheet sheet;
+        string openSectionKey;
 
         public ShipyardScreen(ShipyardDraft draft, Action close, ShipyardLiveBridge live = null)
         {
@@ -32,10 +50,17 @@ namespace SeaSick.UI.ModularYard
             var css = Resources.Load<StyleSheet>("UI/ModularShipyard");
             if (css == null) throw new InvalidOperationException("Missing UI/ModularShipyard.uss");
             styleSheets.Add(css);
+            // The section sheet (ShipyardSectionSheet.cs) borrows SheetKit's
+            // tab strip/buttons/text helpers for its Structure/Guns/Interior
+            // pages -- load Sheets.uss too so those come out styled instead
+            // of bare UI Toolkit defaults. Never `Sheets.Open`/`SheetHost`
+            // themselves: the shipyard stays its own full-screen modal.
+            var sheetsCss = Resources.Load<StyleSheet>("UI/Sheets");
+            if (sheetsCss != null) styleSheets.Add(sheetsCss);
             var header = Row(this, "yard-header");
             IconButton(header, "close", "Cancel and close", Close);
             var title = new Label("Shipyard"); title.AddToClassList("yard-title"); header.Add(title);
-            undo = IconButton(header, "undo", "Undo last change", draft.Undo);
+            undo = IconButton(header, "undo", "Undo last change", () => { CloseSection(); draft.Undo(); });
             var body = Row(this, "yard-body");
             var viewport = new VisualElement(); viewport.AddToClassList("yard-viewport"); body.Add(viewport);
             image = new Image { scaleMode = ScaleMode.StretchToFill }; image.AddToClassList("yard-render"); viewport.Add(image);
@@ -43,49 +68,33 @@ namespace SeaSick.UI.ModularYard
             var views = new VisualElement(); views.AddToClassList("yard-views"); viewport.Add(views);
             IconButton(views, "top", "Top view", () => preview.SetView(true));
             IconButton(views, "perspective", "Three-quarter view", () => preview.SetView(false));
-            // Per-section tap targets over the ship picture itself
-            // (docs/RAISED-SECTIONS.md task item 4): on wide beam, one big
-            // (>=44 pt, .yard Button's own floor) button per hull section,
-            // built fresh in Refresh() whenever the section count/levels
-            // change. Only wide beam ever has a raised id to toggle to.
-            sections = new VisualElement(); sections.AddToClassList("yard-sections"); viewport.Add(sections);
 
             var panel = new VisualElement(); panel.AddToClassList("yard-panel"); body.Add(panel);
-            var scroll = new ScrollView(ScrollViewMode.Vertical) { verticalScrollerVisibility = ScrollerVisibility.Auto };
-            scroll.AddToClassList("yard-options"); panel.Add(scroll);
-            var h = new Label("Hull & paddle wheel"); h.AddToClassList("yard-heading"); scroll.Add(h);
-            var lengthRow = Row(scroll, "yard-length");
-            var sectionLabel = new Label("Middle sections"); sectionLabel.AddToClassList("yard-length-title"); lengthRow.Add(sectionLabel);
-            remove = IconButton(lengthRow, "minus", "Remove last middle section", () => draft.RemoveMiddle());
-            count = new Label(); count.AddToClassList("yard-count"); lengthRow.Add(count);
-            add = IconButton(lengthRow, "plus", "Add middle section before bow", () => draft.AddMiddle());
-            length = new Label(); length.AddToClassList("yard-measure"); scroll.Add(length);
-            var caption = new Label("Paddle wheel"); caption.AddToClassList("yard-caption"); scroll.Add(caption);
-            var wheels = Row(scroll, "yard-wheels");
-            timber = Command(wheels, "Timber", () => draft.ChooseWheel(ShipConfiguration.TimberRotor));
-            reinforced = Command(wheels, "Reinforced", () => draft.ChooseWheel(ShipConfiguration.ReinforcedRotor));
+
+            // ---- overview: tiles, summary, beam, warnings, confirm/cancel
+            overview = new VisualElement(); overview.style.flexGrow = 1f; overview.style.minHeight = 0; panel.Add(overview);
+            var scroll = new VisualElement(); scroll.AddToClassList("yard-options"); overview.Add(scroll);
+            var h = new Label("Hull"); h.AddToClassList("yard-heading"); scroll.Add(h);
+            tiles = new VisualElement(); tiles.AddToClassList("yard-tiles"); scroll.Add(tiles);
             var beamCaption = new Label("Beam"); beamCaption.AddToClassList("yard-caption"); scroll.Add(beamCaption);
             var beams = Row(scroll, "yard-wheels");
             beamStandard = Command(beams, "Standard", () => draft.SetWideBeam(false));
             beamWide = Command(beams, "Wide", () => draft.SetWideBeam(true));
-            // Replaces the old all-or-nothing "Deck: Single/Raised" row
-            // (docs/RAISED-SECTIONS.md task item 4): tap a section on the
-            // ship picture above to raise or lower just that one; these two
-            // stay as the whole-hull shortcut (SetRaisedDeck's existing
-            // uniform swap, aliased RaiseAll/LowerAll).
-            var deckCaption = new Label("Deck (tap a section above, or)"); deckCaption.AddToClassList("yard-caption"); scroll.Add(deckCaption);
+            var deckCaption = new Label("Deck (tap a section tile above, or)"); deckCaption.AddToClassList("yard-caption"); scroll.Add(deckCaption);
             var decks = Row(scroll, "yard-wheels");
             lowerAll = Command(decks, "Lower all", () => draft.LowerAll());
             raiseAll = Command(decks, "Raise all", () => draft.RaiseAll());
-            var gunsCaption = new Label("Guns"); gunsCaption.AddToClassList("yard-caption"); scroll.Add(gunsCaption);
-            guns = new VisualElement(); guns.AddToClassList("yard-guns"); scroll.Add(guns);
-            dryDock = new Label(); dryDock.AddToClassList("yard-caption"); dryDock.AddToClassList("yard-dock"); scroll.Add(dryDock);
-            details = new Label(); details.AddToClassList("yard-details"); scroll.Add(details);
-            message = new Label(); message.AddToClassList("yard-message"); panel.Add(message);
-            var footer = Row(panel, "yard-footer");
+            summary = new VisualElement(); summary.AddToClassList("yard-summary"); scroll.Add(summary);
+            warnings = new Label(); warnings.AddToClassList("yard-warnings"); scroll.Add(warnings);
+            message = new Label(); message.AddToClassList("yard-message"); overview.Add(message);
+            var footer = Row(overview, "yard-footer");
             Command(footer, "Cancel", Close);
             confirm = Command(footer, "Confirm refit", () => { if (draft.Confirm()) Close(); });
             confirm.AddToClassList("yard-confirm");
+
+            // ---- section sheet host (built lazily, swapped in over the overview)
+            sheetHost = new VisualElement(); sheetHost.style.flexGrow = 1f; sheetHost.style.minHeight = 0;
+            sheetHost.style.display = DisplayStyle.None; panel.Add(sheetHost);
 
             preview = new ShipyardPreview(live == null ? null : live.BuildPreview);
             preview.TextureChanged += SetTexture;
@@ -114,28 +123,40 @@ namespace SeaSick.UI.ModularYard
             b.Add(new YardIcon(icon)); parent.Add(b); return b;
         }
         void SetTexture() => image.image = preview.Texture;
+
         void Refresh()
         {
             if (disposed) return;
             var configuration = draft.Snapshot();
-            string key = configuration.ToJson() + "|" + draft.Highlight;
-            if (key != builtKey) { preview.Build(draft.Assembly, draft.Highlight, configuration); builtKey = key; }
-            count.text = draft.Count.ToString();
-            var report = live?.Report(configuration);
-            length.text = live == null ? $"Length   {draft.OriginalLength:0.0} m  \u2192  {draft.Assembly.overallLengthM:0.0} m" :
-                FormatFigure(report?.Figure("overallLength"), "Overall length");
-            add.SetEnabled(draft.Count < draft.Maximum && !draft.Committed && draft.CanSelect(ModuleKind.Middle, ShipConfiguration.V3Middle));
-            string removal = draft.RemovalReason();
-            remove.SetEnabled(string.IsNullOrEmpty(removal) && !draft.Committed);
-            remove.tooltip = removal ?? "Remove last middle section";
+            // While a section sheet is open, the preview is highlighted and
+            // framed on THAT section, not on whatever `draft.Highlight` last
+            // changed (docs/SHIPYARD-SECTIONS-UI.md: "the preview highlights
+            // that section ... and frames it").
+            string previewHighlight = openSectionKey ?? draft.Highlight;
+            string key = configuration.ToJson() + "|" + previewHighlight;
+            if (key != builtKey) { preview.Build(draft.Assembly, previewHighlight, configuration); builtKey = key; }
             undo.SetEnabled(draft.CanUndo);
-            timber.SetEnabled(!draft.Committed && draft.CanSelect(ModuleKind.Rotor, ShipConfiguration.TimberRotor));
-            reinforced.SetEnabled(!draft.Committed && draft.CanSelect(ModuleKind.Rotor, ShipConfiguration.ReinforcedRotor));
-            timber.EnableInClassList("yard-selected", draft.Rotor == ShipConfiguration.TimberRotor);
-            reinforced.EnableInClassList("yard-selected", draft.Rotor == ShipConfiguration.ReinforcedRotor);
-            // While raised, the beam is locked to wide (docs/RAISED-DECK.md
-            // sec 3/8: "a raised deck needs the wide beam") -- both buttons
-            // disabled, the reason on the one a tap would refuse.
+            badge.text = openSectionKey != null ? "SECTION" : (draft.Highlight != null && draft.Highlight.StartsWith("middle[") ? "NEW SECTION" : "PREVIEW");
+
+            if (openSectionKey != null)
+            {
+                // The section sheet may have made this key invalid (removed
+                // it, or the ship shrank under it) -- close back to the
+                // overview rather than showing a sheet for nothing.
+                if (!draft.SectionKeys().Contains(openSectionKey)) { CloseSection(); return; }
+                sheet?.Refresh();
+                return;
+            }
+            RefreshOverview(configuration);
+        }
+
+        // ---- overview --------------------------------------------------------
+
+        void RefreshOverview(ShipConfiguration configuration)
+        {
+            var report = live?.Report(configuration);
+            RefreshTiles();
+
             beamStandard.SetEnabled(!draft.Committed && !draft.IsRaisedDeck && draft.CanSelect(ModuleKind.Stern, ShipConfiguration.V3Stern));
             beamStandard.tooltip = draft.IsRaisedDeck ? "A raised deck needs the wide beam." : "Standard beam";
             beamWide.SetEnabled(!draft.Committed && !draft.IsRaisedDeck && draft.CanSelect(ModuleKind.Stern, ExpandedPresets.ExpandedStern));
@@ -148,142 +169,162 @@ namespace SeaSick.UI.ModularYard
             raiseAll.tooltip = raisedReason ?? "A flush upper deck over every section";
             lowerAll.EnableInClassList("yard-selected", !draft.IsRaisedDeck);
             raiseAll.EnableInClassList("yard-selected", draft.IsRaisedDeck);
-            // `add`/`remove` above already read `draft.Maximum` and
-            // `draft.RemovalReason()`, both raised-aware (docs/RAISED-DECK.md
-            // sec 3/8: the +/- bay controls lock to the library's own bound
-            // while raised) -- no separate gate needed here.
-            RefreshSections();
-            RefreshGuns(report);
+
+            RefreshSummary(report);
+            RefreshWarnings(report);
+
             string blocked = draft.CannotConfirm();
             confirm.SetEnabled(string.IsNullOrEmpty(blocked) && preview.Error == null);
             confirm.tooltip = blocked ?? "Apply this refit";
             string status = preview.Error ?? (!string.IsNullOrEmpty(draft.Message) ? draft.Message :
                 draft.HasBackend ? (draft.Dirty ? blocked ?? "Ready to refit" : "") : "Preview only - live refitting not connected");
-            // Long reasons live in the scrollable report; the footer never pushes the preview away.
             message.text = status != null && status.Length > 100 ? "Refit blocked - see details" : status;
             message.tooltip = status;
-            details.text = ReportText(report, removal, status);
-            details.style.display = live == null ? DisplayStyle.None : DisplayStyle.Flex;
-            badge.text = draft.Highlight != null && draft.Highlight.StartsWith("middle[") ? "NEW SECTION" : "PREVIEW";
         }
 
-        /// Per-section tap targets over the ship picture (docs/RAISED-SECTIONS.md
-        /// task item 4): one big button per `ShipyardDraft.SectionKeys()`
-        /// entry, laid out left-to-right (stern at the aft/left end of the
-        /// row, matching the render's own bow-forward orientation), each
-        /// tap calling `ToggleSection`. Only shown on wide beam -- standard
-        /// beam never has a raised id to toggle to. Rebuilt only when the
-        /// section count or the beam changes (not every 250 ms tick), same
-        /// throttling idea as `Refresh`'s own `builtKey` for the render.
-        static string SectionLabel(string key, int index, int count) =>
-            key == "stern" ? "Stern" : key == "bow" ? "Bow" : count <= 1 ? "Mid" : $"Mid {index}";
-
-        void RefreshSections()
+        /// One tile per `SectionKeys()` entry, a "+" insert tile between
+        /// (and before/after) them -- `[Stern] [+] [Mid 1] [+] [Mid 2] [+] [Bow]`.
+        /// Rebuilt only when the section count changes (`tilesKey`); every
+        /// refresh just re-texts/re-enables what is there, same caching
+        /// idea the old per-section overlay used.
+        void RefreshTiles()
         {
-            if (!draft.IsWideBeam) { sections.style.display = DisplayStyle.None; return; }
-            sections.style.display = DisplayStyle.Flex;
             var keys = draft.SectionKeys();
-            string key = string.Join(",", keys);
-            if (key != sectionsKey)
+            string key = string.Join(",", keys) + "|" + draft.IsWideBeam + "|" + (draft.Count < draft.Maximum);
+            if (key != tilesKey)
             {
-                sections.Clear();
+                tiles.Clear();
+                bool canInsert = draft.Count < draft.Maximum;
                 for (int i = 0; i < keys.Count; i++)
                 {
-                    string k = keys[i]; // captured per-button
-                    var b = new Button(() => draft.ToggleSection(k)) { text = SectionLabel(k, i, keys.Count - 2) };
-                    b.AddToClassList("yard-section-button");
-                    sections.Add(b);
+                    tiles.Add(SectionTile(keys[i]));
+                    bool afterLast = i == keys.Count - 1;
+                    // A "+" belongs between every pair of hull sections --
+                    // i.e. after every tile except the very last (the bow) --
+                    // so it always inserts a MIDDLE at this position.
+                    if (canInsert && !afterLast) tiles.Add(InsertTile(MiddleInsertIndexAfter(keys[i])));
                 }
-                sectionsKey = key;
+                tilesKey = key;
             }
-            for (int i = 0; i < keys.Count && i < sections.childCount; i++)
+            for (int i = 0; i < tiles.childCount; i++)
             {
-                if (!(sections[i] is Button b)) continue;
-                string k = keys[i];
-                bool raised = draft.IsSectionRaised(k);
-                string reason = raised ? null : draft.SectionUnavailableReason(k);
-                b.SetEnabled(!draft.Committed && reason == null);
-                b.tooltip = reason ?? (raised ? "Raised — tap to lower" : "Tap to raise");
-                b.EnableInClassList("yard-selected", raised);
+                if (tiles[i].userData is string sectionKey) UpdateTile(tiles[i], sectionKey);
             }
         }
 
-        /// Big, one-thumb rows: tap a fitted gun to send it to the dry dock,
-        /// tap an empty usable slot with stock in the dock to fit one from
-        /// it. The row only decides whether to call FitGun or RemoveGun --
-        /// the backend decides whether the tap succeeds (docs/SHIPYARD-API.md
-        /// §15: "the UI only displays what comes back").
-        void RefreshGuns(ShipyardReport report)
+        /// The `InsertMiddle` index a "+" tile placed right after `key`
+        /// should use: the middle bays before `key` (inclusive, if `key`
+        /// itself is a middle) plus one.
+        int MiddleInsertIndexAfter(string key)
         {
-            guns.Clear();
-            if (!draft.HasBackend)
-            {
-                var placeholder = new Label("Guns: preview only, live refitting not connected.");
-                placeholder.AddToClassList("yard-caption"); guns.Add(placeholder);
-                dryDock.text = "";
-                return;
-            }
-            int cannonsInDock = DockCount(report, ShipConfiguration.EquipmentCannon);
-            var slots = draft.EquipmentSlots();
-            foreach (var s in slots)
-            {
-                bool occupied = !string.IsNullOrEmpty(s.occupantModuleId);
-                string status; bool enabled;
-                if (occupied) { status = "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
-                else if (!s.usable) { status = s.blockedReason; enabled = false; }
-                else if (cannonsInDock > 0) { status = "Empty — tap to fit from the dry dock"; enabled = !draft.Committed; }
-                else { status = "Empty — no gun in the dry dock"; enabled = false; }
-                string slotId = s.slotId;
-                var row = new Button(() => { if (occupied) draft.RemoveGun(slotId); else draft.FitGun(slotId); });
-                row.AddToClassList("yard-gun-row");
-                row.SetEnabled(enabled);
-                var label = new Label(s.label); label.AddToClassList("yard-gun-label"); row.Add(label);
-                var statusLabel = new Label(status); statusLabel.AddToClassList("yard-gun-status"); row.Add(statusLabel);
-                guns.Add(row);
-            }
-            if (slots.Count == 0)
-            {
-                var none = new Label("No gun slots on this hull."); none.AddToClassList("yard-caption"); guns.Add(none);
-            }
-            var rows = report?.dryDock;
-            if (rows == null || rows.Count == 0) { dryDock.text = "Dry dock: empty."; return; }
-            var parts = new List<string>();
-            foreach (var r in rows) if (r != null && r.inDockNow > 0) parts.Add($"{r.name} ×{r.inDockNow}");
-            dryDock.text = parts.Count > 0 ? "Dry dock: " + string.Join(", ", parts) + "." : "Dry dock: empty.";
+            if (key == ShipAssembler.StdKeyStern) return 0;
+            int idx = IndexOfMiddle(key);
+            return idx >= 0 ? idx + 1 : draft.Count;
+        }
+        static int IndexOfMiddle(string key)
+        {
+            if (string.IsNullOrEmpty(key) || !key.StartsWith("middle[") || !key.EndsWith("]")) return -1;
+            return int.TryParse(key.Substring(7, key.Length - 8), out int i) ? i : -1;
         }
 
-        static int DockCount(ShipyardReport report, string moduleId)
+        Button SectionTile(string key)
         {
-            if (report?.dryDock == null) return 0;
-            foreach (var r in report.dryDock) if (r != null && r.moduleId == moduleId) return r.inDockNow;
-            return 0;
+            var b = new Button(() => OpenSection(key)) { userData = key };
+            b.AddToClassList("yard-tile");
+            var name = new Label(); name.AddToClassList("yard-tile-name"); b.Add(name);
+            var status = new Label(); status.AddToClassList("yard-tile-status"); b.Add(status);
+            return b;
+        }
+
+        Button InsertTile(int index)
+        {
+            var b = new Button(() => draft.InsertMiddle(index)) { text = "+" };
+            b.AddToClassList("yard-tile-insert");
+            b.tooltip = "Add a middle section here";
+            return b;
+        }
+
+        void UpdateTile(VisualElement tile, string key)
+        {
+            if (!(tile is Button b) || b.childCount < 2) return;
+            var name = b[0] as Label;
+            var status = b[1] as Label;
+            if (name == null || status == null) return;
+            name.text = key == ShipAssembler.StdKeyStern ? "Stern" : key == ShipAssembler.StdKeyBow ? "Bow"
+                : $"Mid {IndexOfMiddle(key) + 1}";
+            string level = draft.IsWideBeam ? (draft.IsSectionRaised(key) ? "raised" : "low") : "";
+            var occupancy = live?.Report(draft.Snapshot())?.Section(key);
+            var bits = new List<string>();
+            if (!string.IsNullOrEmpty(level)) bits.Add(level);
+            if (occupancy != null)
+            {
+                bits.Add($"guns {occupancy.guns}");
+                bits.Add($"berths {occupancy.berths}");
+                bits.Add($"hold {occupancy.holdCells}");
+            }
+            status.text = string.Join(" · ", bits);
+            b.SetEnabled(!draft.Committed);
+        }
+
+        void RefreshSummary(ShipyardReport report)
+        {
+            summary.Clear();
+            var row = new VisualElement(); row.AddToClassList("yard-summary-row"); summary.Add(row);
+            void Item(string id, string label)
+            {
+                var f = report?.Figure(id);
+                var l = new Label(FormatFigure(f, label)); l.AddToClassList("yard-summary-item"); row.Add(l);
+            }
+            Item("overallLength", "Length");
+            Item("holdCells", "Hold");
+            Item("crewBerths", "Berths");
+            Item("guns", "Guns");
+            Item("simDraft", "Draft");
+            Item("weightAllowance", "Cargo allowance");
+        }
+
+        void RefreshWarnings(ShipyardReport report)
+        {
+            if (report == null) { warnings.text = ""; return; }
+            var lines = new List<string>();
+            foreach (var note in report.warnings) if (note.code != "PROVISIONAL_TUNING") lines.Add(note.message);
+            foreach (var issue in report.blocking) lines.Add(issue.message);
+            if (!string.IsNullOrEmpty(report.refitNowBlockedBecause)) lines.Add(report.refitNowBlockedBecause);
+            warnings.text = string.Join("\n", lines);
+            warnings.style.display = lines.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         static string FormatFigure(ShipyardFigure figure, string label = null)
         {
-            if (figure == null) return (label ?? "Value") + " unavailable";
-            return (label ?? figure.label) + (figure.provisional ? "*" : "") + "   " +
-                (figure.available ? figure.Format(figure.current) + " \u2192 " + figure.Format(figure.proposed) : "Unavailable");
+            if (figure == null) return (label ?? "Value") + " --";
+            return (label ?? figure.label) + " " + (figure.available ? figure.Format(figure.proposed) : "--");
         }
 
-        string ReportText(ShipyardReport report, string removal, string status)
+        // ---- section sheet -----------------------------------------------------
+
+        void OpenSection(string key)
         {
-            if (live == null) return "";
-            if (report == null) return "Ship report unavailable. Close and reopen the shipyard.";
-            var lines = new List<string> { "Current \u2192 Proposed" };
-            foreach (string id in new[] { "beam", "depth", "holdCells", "weightAllowance", "crewBerths", "displacement", "draft", "simDraft", "guns", "gunSlots" })
-            {
-                var figure = report.Figure(id);
-                if (figure != null) lines.Add(FormatFigure(figure));
-            }
-            lines.Add("* Provisional. Report and sailing flotation use different models.");
-            lines.Add("Wheel choice changes appearance only. No refit cost in this prototype.");
-            if (draft.Count > 0 && !string.IsNullOrEmpty(removal)) lines.Add("Cannot remove section: " + removal);
-            foreach (var note in report.warnings) lines.Add(note.message);
-            foreach (var issue in report.blocking) lines.Add(issue.message);
-            if (!string.IsNullOrEmpty(report.refitNowBlockedBecause)) lines.Add(report.refitNowBlockedBecause);
-            if (!string.IsNullOrEmpty(status) && status != "Ready to refit") lines.Add(status);
-            return string.Join("\n\n", lines);
+            if (draft.Committed) return;
+            openSectionKey = key;
+            overview.style.display = DisplayStyle.None;
+            sheetHost.style.display = DisplayStyle.Flex;
+            sheetHost.Clear();
+            sheet = new ShipyardSectionSheet(draft, preview, key, CloseSection, live);
+            sheetHost.Add(sheet);
+            builtKey = null; // force the preview to rebuild with the section highlight/frame
+            Refresh();
+        }
+
+        void CloseSection()
+        {
+            if (openSectionKey == null) return;
+            openSectionKey = null;
+            sheetHost.style.display = DisplayStyle.None;
+            sheetHost.Clear();
+            sheet = null;
+            overview.style.display = DisplayStyle.Flex;
+            builtKey = null;
+            Refresh();
         }
 
         void Down(PointerDownEvent e)
