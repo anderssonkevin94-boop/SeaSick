@@ -1025,13 +1025,22 @@ namespace SeaSick.World
         /// nothing under it to fall through when the terrain streams out.
         ///
         /// The ship must be told to recount afterwards — see `CrewRoster`.
-        public bool Station(Crew.CrewAgent hand)
+        public bool Station(Crew.CrewAgent hand) => Station(hand, false);
+
+        /// **A refit's surplus hands go ashore at home** (Kevin, 2026-09-25:
+        /// never lost, never refused for crew). Only the home settlement,
+        /// fire or no fire, and with no `ProvisionDays` of food booked: they
+        /// bring no stores, and a rolled-back refit must not leave food
+        /// behind. Undone by `Recall` like any other landing.
+        public bool LandSurplusAtHome(Crew.CrewAgent hand) => this == Home && Station(hand, true);
+
+        bool Station(Crew.CrewAgent hand, bool surplusAtHome)
         {
             // A blueprint is enough to be left behind for. That IS the flow:
             // you site a camp, you leave hands, and what they do first is
             // build the thing you sited. Requiring a finished fire here would
             // have made the feature impossible to reach.
-            if (hand == null || !(HasCamp || Building)) return false;
+            if (hand == null || !(HasCamp || Building || surplusAtHome)) return false;
             string who = hand.DisplayName;
             if (HandNamed(who) != null) return false;
 
@@ -1059,8 +1068,9 @@ namespace SeaSick.World
             // ashore brings `ProvisionDays` of food, so the first buildings
             // go up before the camp has to feed itself. Known hole: dropping
             // and recalling the same man repeatedly books it again.
-            ledger?.Add(Res.Food, Mathf.RoundToInt(OutpostLedger.ProvisionDays
-                * OutpostLedger.EatPerHandPerDay));
+            if (!surplusAtHome)
+                ledger?.Add(Res.Food, Mathf.RoundToInt(OutpostLedger.ProvisionDays
+                    * OutpostLedger.EatPerHandPerDay));
 
             hand.transform.SetParent(transform, true);
             // Off only when nobody is here to see them. Leaving somebody

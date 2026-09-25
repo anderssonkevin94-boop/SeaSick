@@ -416,7 +416,7 @@ namespace SeaSick.Ship.Modular
             {
                 var c = crew[i];
                 if (c == null) continue;
-                if (!home.Station(c))
+                if (!home.LandSurplusAtHome(c))
                 {
                     RestoreLandedHands(landed);
                     why = $"{c.DisplayName} could not be landed ashore";

@@ -63,9 +63,9 @@ namespace SeaSick.Ship.Modular
     /// refused with NOT_IN_PROTOTYPE, IN ADDITION to every milestone-1 rule.
     public static class ShipyardPolicy
     {
-        static readonly string[] Sterns = { ShipConfiguration.V3Stern, ExpandedPresets.ExpandedStern };
-        static readonly string[] Middles = { ShipConfiguration.V3Middle, ExpandedPresets.ExpandedMiddle };
-        static readonly string[] Bows = { ShipConfiguration.V3Bow, ExpandedPresets.ExpandedBow };
+        static readonly string[] Sterns = { ShipConfiguration.V3Stern, ExpandedPresets.ExpandedStern, RaisedPresets.RaisedStern };
+        static readonly string[] Middles = { ShipConfiguration.V3Middle, ExpandedPresets.ExpandedMiddle, RaisedPresets.RaisedMiddle };
+        static readonly string[] Bows = { ShipConfiguration.V3Bow, ExpandedPresets.ExpandedBow, RaisedPresets.RaisedBow };
         static readonly string[] Rotors = { ShipConfiguration.TimberRotor, ShipConfiguration.ReinforcedRotor };
         static readonly string[] Carriers = { ShipConfiguration.M1Carrier };
         static readonly string[] Fittings = { ShipConfiguration.V3Chimney };
@@ -132,8 +132,8 @@ namespace SeaSick.Ship.Modular
             if (d == null) return; // UNKNOWN_MODULE comes from the assembler
             if (d.kind == ModuleKind.Rotor && d.rotor != null && d.rotor.mount != "M1")
                 why = $"{ModuleLibrary.Name(d)} is not part of the prototype shipyard: only the M1 timber and reinforced wheels are offered.";
-            else if (ModuleKind.IsHull(d.kind) && d.family != "W1-r2" && d.family != "W1x")
-                why = $"{ModuleLibrary.Name(d)} is not part of the prototype shipyard: only the W1-r2 low-deck and W1x expanded-beam hulls are offered.";
+            else if (ModuleKind.IsHull(d.kind) && d.family != "W1-r2" && d.family != "W1x" && d.family != "W1xR")
+                why = $"{ModuleLibrary.Name(d)} is not part of the prototype shipyard: only the W1-r2 low-deck, W1x expanded-beam and W1xR raised-deck hulls are offered.";
             else if (d.status == ModuleStatus.Placeholder || d.status == ModuleStatus.IncompatibleReference)
                 why = $"{ModuleLibrary.Name(d)} is a {d.status} part and cannot be built.";
             else
@@ -968,6 +968,20 @@ namespace SeaSick.Ship.Modular
                 int idx = int.Parse(o.sectionKey.Substring(7, o.sectionKey.Length - 8));
                 var without = p.config.Clone();
                 without.middleIds.RemoveAt(idx);
+                // Guns on the leaving bay go to the dry dock, never block the
+                // removal (Kevin, 2026-09-25; ShipyardDraft.RemoveMiddle does
+                // the same); later bays' slots shift down one index.
+                if (without.equipment != null)
+                {
+                    string gone = ShipAssembler.MiddleKey(idx) + "/";
+                    without.equipment.RemoveAll(e => e?.slotId != null && e.slotId.StartsWith(gone));
+                    for (int j = idx + 1; j < p.config.middleIds.Count; j++)
+                    {
+                        string from = ShipAssembler.MiddleKey(j) + "/", to = ShipAssembler.MiddleKey(j - 1) + "/";
+                        foreach (var e in without.equipment)
+                            if (e?.slotId != null && e.slotId.StartsWith(from)) e.slotId = to + e.slotId.Substring(from.Length);
+                    }
+                }
                 var w = ShipyardPlanner.Validate(without, lib, reference, live, false);
                 o.canRemove = w.ok;
                 o.reason = w.ok ? "" : w.issues[0].message;
