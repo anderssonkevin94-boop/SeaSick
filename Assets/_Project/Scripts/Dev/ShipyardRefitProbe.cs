@@ -227,10 +227,16 @@ public class ShipyardRefitProbe : MonoBehaviour
         // of this list so the three existing trials keep their own timing
         // exactly as before (only the equipment block, already placed AFTER
         // every trial here, runs later as a result).
+        // "mixed-raised-stern" (docs/RAISED-SECTIONS.md task item 6): one
+        // per-section ship (raised stern, low middle, low bow) added to the
+        // same bracketing pattern as raised-long/raised-two-bay above it --
+        // w1x-long before, w1x-long-again after, so roll/pitch/speed/turn
+        // compare the same way.
         foreach (var (name, cfg, hands) in new[] {
             ("long", ShipConfiguration.Long(), 8), ("two-bays", ShipConfiguration.WithMiddles(2), 8), ("three-bays", ShipConfiguration.WithMiddles(3), 8),
             ("w1x-long", ExpandedPresets.ExpandedLong(), 8),
             ("raised-long", OwnGuns(RaisedPresets.RaisedLong()), 8), ("raised-two-bay", OwnGuns(RaisedPresets.RaisedTwoBay()), 8),
+            ("mixed-raised-stern", MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Low }, DeckLevel.Low), 8),
             ("w1x-long-again", ExpandedPresets.ExpandedLong(), 8) })
         {
             if (!anchor.AtHomeDock && !anchor.BerthAtHome(out string bwhy)) sb.AppendLine("berth: " + bwhy);
@@ -468,12 +474,117 @@ public class ShipyardRefitProbe : MonoBehaviour
         yield return RefitAndCheck("raised-seq: back-to-w1x-long", ExpandedPresets.ExpandedLong());
         RaisedStepAsserts("raised-seq: back-to-w1x-long", ExpandedPresets.ExpandedLong(), false);
 
-        // Refusals (docs/RAISED-DECK.md sec 3/9): 0 or 3 raised middles, and
-        // a mixed raised/W1x draft (one raised end, W1x middle).
+        // Refusals (docs/RAISED-SECTIONS.md sec 5, superseding the old
+        // "1-2 middles only" cap): 0 middles with BOTH ends raised is still
+        // refused (no room for either end's own wall); 3 fully-connected
+        // raised middles now ASSEMBLES (unverified against Astra's art,
+        // which only ever rendered 1-2 bays -- see ModularShipPreview) so
+        // it is no longer a refusal gate here. A mixed raised/W1x draft
+        // (one raised end, plain W1x middle) is still refused: that is a
+        // hand-built wrong pairing, not something RaisedSections.ToIds
+        // would ever produce.
         Refuse("raised-zero-middles", RaisedPresets.WithMiddles(0), "RAISED_DECK_BAYS");
-        Refuse("raised-three-middles", RaisedPresets.WithMiddles(3), "RAISED_DECK_BAYS");
         var mixedDraft = Mod(RaisedPresets.RaisedLong(), c => c.middleIds[0] = ExpandedPresets.ExpandedMiddle);
         Refuse("raised-mixed-w1x-middle", mixedDraft, "JOIN_PROFILE_MISMATCH");
+
+        // ---- (g) per-section raised deck (docs/RAISED-SECTIONS.md), live --
+        // three mixed configurations built through RaisedSections.ToIds
+        // (never hand-typed wall-variant ids), back to W1x Long.
+        sb.AppendLine("(g) raised sections (per-section), live: stern(wf)+low-middle+bow(wa) -> low+middle.wb+low -> stern(connected)+middle.wf+low-middle+low-bow -> back to w1x Long:");
+
+        var mix1 = MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Low }, DeckLevel.Raised);
+        yield return RefitAndCheck("raised-sections: stern-wf-low-bow-wa", mix1);
+        MixedStepAsserts("raised-sections: stern-wf-low-bow-wa", mix1);
+
+        var mix2 = MixedConfig(DeckLevel.Low, new[] { DeckLevel.Raised }, DeckLevel.Low);
+        yield return RefitAndCheck("raised-sections: low-middle.wb-low", mix2);
+        MixedStepAsserts("raised-sections: low-middle.wb-low", mix2);
+
+        var mix3 = MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Raised, DeckLevel.Low }, DeckLevel.Low);
+        yield return RefitAndCheck("raised-sections: stern-connected-middle.wf-low-low", mix3);
+        MixedStepAsserts("raised-sections: stern-connected-middle.wf-low-low", mix3);
+
+        yield return RefitAndCheck("raised-sections: back-to-w1x-long", ExpandedPresets.ExpandedLong());
+    }
+
+    /// A per-section ship built through `RaisedSections.ToIds` (never a
+    /// hand-typed wall-variant id), fitted with a cannon on every deck-gun
+    /// slot THIS EXACT hull actually offers (docs/RAISED-SECTIONS.md sec
+    /// 10: which pairs survive varies per variant -- e.g. a walled stern/bow
+    /// can drop a pair entirely) so "guns carried or sent to the dry dock"
+    /// between two mixed steps is a real live refit, not a hand-picked slot
+    /// id that might not exist on this particular hull.
+    ShipConfiguration MixedConfig(DeckLevel stern, DeckLevel[] middles, DeckLevel bow)
+    {
+        var (sId, mIds, bId) = RaisedSections.ToIds(stern, middles, bow);
+        var c = new ShipConfiguration { sternId = sId, bowId = bId,
+            rotorId = ShipConfiguration.ReinforcedRotor, carrierId = ShipConfiguration.M1Carrier };
+        c.middleIds.AddRange(mIds);
+        c.fittings.Add(new FittingChoice { socketId = ShipConfiguration.ChimneySocket, moduleId = ShipConfiguration.V3Chimney });
+        var bare = ShipAssembler.Assemble(c, yard.Library);
+        if (bare.ok)
+            foreach (var s in bare.slots)
+                if (s != null && s.role == SocketRole.DeckSlot && s.classes != null && System.Array.IndexOf(s.classes, "equipment.deck-gun") >= 0)
+                    c.equipment.Add(new EquipmentChoice { slotId = s.qualifiedId, moduleId = ShipConfiguration.EquipmentCannon });
+        return c;
+    }
+
+    /// docs/RAISED-SECTIONS.md task item 6: guns carried (whatever slots
+    /// `target` itself resolved to -- `RefitAndCheck` already proved
+    /// `yard.Current` equals `target`, so this just names the subset),
+    /// cargo carried, one ship, crew <= berths, and crew standing heights
+    /// PER SECTION: on a raised section's own stations, ~1.22 m above the
+    /// single-deck baseline captured at the w1x-long-start step; on a low
+    /// section's stations, at that same baseline (not "the whole ship on
+    /// one deck", the all-raised `RaisedStepAsserts` assumption -- a mixed
+    /// ship's crew spread across both levels at once).
+    void MixedStepAsserts(string name, ShipConfiguration target)
+    {
+        var wantGuns = new List<string>();
+        foreach (var e in target.equipment) if (e != null && e.moduleId == ShipConfiguration.EquipmentCannon) wantGuns.Add(e.slotId);
+        wantGuns.Sort();
+        var haveGuns = new List<string>();
+        foreach (var e in yard.Current.equipment) if (e != null && e.moduleId == ShipConfiguration.EquipmentCannon) haveGuns.Add(e.slotId);
+        haveGuns.Sort();
+        Gate(name + ": guns carried (count + slot ids)",
+            haveGuns.Count == wantGuns.Count && string.Join(",", haveGuns) == string.Join(",", wantGuns),
+            $"{haveGuns.Count} guns [{string.Join(",", haveGuns)}] vs expected {wantGuns.Count} [{string.Join(",", wantGuns)}]");
+
+        var hold = HoldPerKind();
+        Gate(name + ": cargo carried", hold.Count > 0, Fmt(hold));
+        Gate(name + ": exactly one player ship", OneShipCheck(out string oneDetail), oneDetail);
+
+        var v = yard.Validate(yard.Current);
+        int berths = v.capacityDraft.crewStations;
+        int crewCount = Crew().Count;
+        Gate(name + ": crew aboard <= berths", crewCount <= berths, $"{crewCount} aboard, {berths} berths");
+
+        var d = yard.ActiveData;
+        int raisedOk = 0, raisedTotal = 0, lowOk = 0, lowTotal = 0; string worst = "";
+        foreach (var c in Crew())
+        {
+            if (!c.Available) continue;
+            var p = c.transform.localPosition;
+            int si = ShipyardPlanner.NearestStation(d, p.z);
+            float deckY = d.stations[si].deckY;
+            bool onRaisedSection = !float.IsNaN(midDeckYSingle) && deckY > midDeckYSingle + 0.5f;
+            bool atOwnStation = Mathf.Abs(p.y - deckY) < 0.1f; // RefitAndCheck already gates this; re-derived here for the split below
+            if (onRaisedSection)
+            {
+                raisedTotal++;
+                bool ok = atOwnStation && (float.IsNaN(midDeckYSingle) || deckY > midDeckYSingle + 0.9f);
+                if (ok) raisedOk++; else worst += $"[raised] {c.DisplayName} y {p.y:F2} deckY {deckY:F2} baseline {midDeckYSingle:F2}; ";
+            }
+            else
+            {
+                lowTotal++;
+                bool ok = atOwnStation;
+                if (ok) lowOk++; else worst += $"[low] {c.DisplayName} y {p.y:F2} deckY {deckY:F2}; ";
+            }
+        }
+        Gate(name + ": crew heights per section (raised ~1.22 m up, low at baseline)",
+            raisedOk == raisedTotal && lowOk == lowTotal,
+            $"raised {raisedOk}/{raisedTotal}, low {lowOk}/{lowTotal} {worst}");
     }
 
     float MidStationDeckY()
