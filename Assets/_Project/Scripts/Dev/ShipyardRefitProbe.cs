@@ -132,7 +132,9 @@ public class ShipyardRefitProbe : MonoBehaviour
         Refuse("raised-deck", Mod(lng, c => c.fittings.Add(new FittingChoice { socketId = "stern/UpperDeckMount", moduleId = "deck.upper.partial.placeholder" })), ShipyardCodes.NotInPrototype);
         Refuse("four-bays", ShipConfiguration.WithMiddles(4), "TOO_MANY_MIDDLES");
         Refuse("stale-draft", ShipConfiguration.Short(), ShipyardCodes.StaleDraft, ShipConfiguration.Short());
-        Refuse("crew-would-not-fit", ShipConfiguration.Short(), ShipyardCodes.CrewWouldNotFit);
+        // 2026-09-25 (Kevin): surplus hands are never a refusal any more --
+        // they go ashore to the home settlement instead. See the dedicated
+        // "hands ashore" gates in the equipment + dry dock block below.
         voyage.RestoreStores(new[] { Pair(Res.Timber, 14), Pair(Res.Stone, 2) }, Banked());
         Refuse("cargo-would-not-fit", ShipConfiguration.Short(), ShipyardCodes.CargoWouldNotFit);
         voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
@@ -278,17 +280,55 @@ public class ShipyardRefitProbe : MonoBehaviour
         yield return new WaitForSeconds(0.3f);
 
         // With her guns off, Short's berths (4) are the only thing left in
-        // the way of 8 hands: first prove that is the ONLY refusal, then land
-        // 4 (the probe's way, as for the trials) and shrink.
-        var rShortFull = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
-        string shortWhy = rShortFull.ToString().Replace("\n", " | ");
-        Gate("hull: Short with 8 hands is refused only for her berths",
-            !rShortFull.ok && shortWhy.Contains("CREW_WOULD_NOT_FIT") && !shortWhy.Contains("EQUIPMENT_WOULD_BE_LOST"), shortWhy);
-        var shortCrew = Crew();
-        for (int i = shortCrew.Count - 1; i >= 4; i--) { landed.Add(shortCrew[i]); shortCrew[i].gameObject.SetActive(false); }
+        // the way of 8 hands: since 2026-09-25 (Kevin) that is never a
+        // refusal any more -- the surplus go ashore to the HOME settlement
+        // as real villagers, atomically with the refit and the save.
+        var home = Outpost.Home;
+        Gate("hands ashore: home settlement present", home != null, home != null ? "found" : "Outpost.Home is null -- cannot test hands ashore");
+        var preShortConfig = yard.Current.Clone();
+        var shortValidation = yard.Validate(ShipConfiguration.Short());
+        int shortBerths = shortValidation.capacityDraft.crewStations;
+        var crewBeforeShort = Crew();
+        int crewCountBefore = crewBeforeShort.Count;
+        var landingNames = new List<string>();
+        for (int i = crewBeforeShort.Count - 1; i >= 0 && i >= shortBerths; i--) landingNames.Add(crewBeforeShort[i].DisplayName);
+        int expectedSurplus = Mathf.Max(0, crewCountBefore - shortBerths);
+
         var rToShort = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
-        Gate("hull: shrink to Short now her guns are off (4 hands)", rToShort.ok && yard.Current.ValueEquals(ShipConfiguration.Short()),
-            rToShort.ToString().Replace("\n", " | "));
+        Gate("hull: Short refits directly, surplus hands go ashore (no refusal)",
+            rToShort.ok && yard.Current.ValueEquals(ShipConfiguration.Short()) && Crew().Count == shortBerths,
+            rToShort.ToString().Replace("\n", " | ") + $"; crew now {Crew().Count} (berths {shortBerths}, expected surplus {expectedSurplus})");
+
+        bool allLanded = home != null && landingNames.Count == expectedSurplus; string landMissing = "";
+        if (home != null)
+            foreach (var n in landingNames)
+                if (home.HandNamed(n) == null) { allLanded = false; landMissing += n + " "; }
+        Gate("hands ashore: surplus became home-settlement villagers", allLanded,
+            home == null ? "no home outpost" : $"landed [{string.Join(",", landingNames)}] (expected {expectedSurplus}), missing [{landMissing.Trim()}]");
+
+        // Recall them (Outpost.Recall, the same path a player uses) so the
+        // rollback test below has the full crew to land again.
+        if (home != null) foreach (var n in landingNames) { var body = home.BodyNamed(n); if (body != null) home.Recall(body, yard.transform); }
+        yield return null;
+        Gate("hands ashore: recalled back aboard for the rollback test", Crew().Count == crewCountBefore, $"{Crew().Count}/{crewCountBefore}");
+
+        // Rollback: a forced save failure while landing hands must restore
+        // BOTH the crew roster and the home settlement -- hands are never
+        // lost, and a failed refit must leave nobody stranded ashore.
+        ShipyardService.TestFaultStage = ShipyardService.FaultBeforePersist;
+        var rFaultShort = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
+        ShipyardService.TestFaultStage = null;
+        bool noStrayVillagers = true; string stray = "";
+        if (home != null)
+            foreach (var n in landingNames)
+                if (home.HandNamed(n) != null) { noStrayVillagers = false; stray += n + " "; }
+        Gate("hands ashore: forced save failure rolls back hands + villagers",
+            !rFaultShort.ok && yard.Current.ValueEquals(preShortConfig) && Crew().Count == crewCountBefore && noStrayVillagers,
+            rFaultShort.ToString().Replace("\n", " | ") + $"; crew {Crew().Count}/{crewCountBefore}; stray villagers: {(noStrayVillagers ? "none" : stray.Trim())}");
+
+        var rToShortAgain = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
+        Gate("hull: shrink to Short after the rollback test", rToShortAgain.ok && yard.Current.ValueEquals(ShipConfiguration.Short())
+            && Crew().Count == shortBerths, rToShortAgain.ToString().Replace("\n", " | "));
         yield return new WaitForSeconds(0.3f);
         Gate("dry dock: the 2 middle guns are stored", yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 2, yard.Dock.ToJson());
 
@@ -297,8 +337,7 @@ public class ShipyardRefitProbe : MonoBehaviour
         var rGrowBack = yard.ApplyRefit(yard.Current, toLongNoMid);
         Gate("hull: grow back to Long, guns still in dock", rGrowBack.ok && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 2,
             rGrowBack.ToString().Replace("\n", " | "));
-        foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
-        landed.Clear();
+        if (home != null) foreach (var n in landingNames) { var body = home.BodyNamed(n); if (body != null) home.Recall(body, yard.transform); }
         yield return new WaitForSeconds(0.3f);
 
         var eFit1 = yard.FitEquipment(yard.Current, midStar, ShipConfiguration.EquipmentCannon);
