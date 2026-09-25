@@ -105,6 +105,16 @@ namespace SeaSick.UI.Sheets
             Sheets.Register<ShipMotor>(m => ShipFor());
             Sheets.Register<AnchorController>(a => ShipFor());
             Sheets.Register<Dock>(d => ShipFor());
+
+            // **A fourth, 2026-09-26: tap the dry dock, get the ship.** Same
+            // idea as `Dock` above -- the building's whole purpose is what
+            // the Manifest sheet's Shipyard button already does (refit her),
+            // so this opens straight to it rather than a sheet of its own.
+            // Takes precedence over the generic `Building` registration just
+            // above for the same reason `Dock` does: `Sheets` resolves by
+            // the most specific component on what was tapped, and a
+            // `DryDockSlip` sits on the same root the `Building` does.
+            Sheets.Register<DryDockSlip>(s => ShipFor());
         }
 
         static ISheet FireFor(Outpost camp, string focus = null)
