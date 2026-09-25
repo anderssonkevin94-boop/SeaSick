@@ -114,60 +114,88 @@ def main():
         bad_join = [s["id"] for s in d["sockets"] if s["id"] in join_ids and s.get("standard") != "W1xR"]
         check(f"{w1xr_id}: join-facing sockets {sorted(join_ids)} use standard W1xR", not bad_join, bad_join)
 
-    # New raised-section wall variants (RAISED-SECTIONS.md sec 3-4). These deliberately
-    # DROP some W1x gun slots and do NOT re-export a fresh hydrostatic table this pass
-    # (upperStructure numbers are analytic, flagged in the JSON) so they are checked
-    # against a lighter set of invariants than the plain w1xr.v1 modules above.
+    # Raised-section modules (docs/RAISED-SECTIONS.md sec 2-4): the three wall middles and
+    # Astra's two raised ends, authored by tools/blender/modular_raised_sections_v1.py +
+    # tools/author_raised_sections.py. Full gates incl. hydrostatics and welded assemblies.
+    STAGE = ROOT / "art-staging/modular-raised-sections-v1"
+    HYDRO_SEC = ROOT / "Assets/_Project/Resources/ShipModules/Hydrostatics/HullW1xRSections_v1"
+    RES = ROOT / "Assets/_Project/Resources"
+    band, clear = (4.62, 5.80), (1.8, 2.3)
     SECTION_MODULES = [
-        ("hull.middle.w1x.v1", "hull.middle.w1xr.wa.v1", {"aft": "W1x", "fwd": "W1xR"}),
-        ("hull.middle.w1x.v1", "hull.middle.w1xr.wf.v1", {"aft": "W1xR", "fwd": "W1x"}),
-        ("hull.middle.w1x.v1", "hull.middle.w1xr.wb.v1", {"aft": "W1x", "fwd": "W1x"}),
+        # label, id, template (full gun set), w1x id, W1x table, aft std, fwd std, stairwell x-ranges
+        ("MiddleWF", "hull.middle.w1xr.wf.v1", "hull.middle.w1xr.v1", "hull.middle.w1x.v1", "Midship_W1", "W1xR", "W1x", [(2.76, 5.96)]),
+        ("MiddleWA", "hull.middle.w1xr.wa.v1", "hull.middle.w1xr.v1", "hull.middle.w1x.v1", "Midship_W1", "W1x", "W1xR", [(0.04, 3.24)]),
+        ("MiddleWB", "hull.middle.w1xr.wb.v1", "hull.middle.w1xr.v1", "hull.middle.w1x.v1", "Midship_W1", "W1x", "W1x", [(2.76, 5.96)]),
+        ("SternWF", "hull.stern.w1xr.wf.v1", "hull.stern.w1xr.v1", "hull.stern.w1x.v1", "Stern_W1", None, "W1x", [(6.06, 9.26)]),
+        ("BowWA", "hull.bow.w1xr.wa.v1", "hull.bow.w1xr.v1", "hull.bow.w1x.v1", "Bow_W1", "W1x", None, []),
     ]
-    for w1x_id, sec_id, wall_standards in SECTION_MODULES:
-        w1x = json.loads((MODDIR / f"{w1x_id}.json").read_text())
-        # The full 4-slot set lives on the plain connected raised middle (w1x's own 2 plus
-        # the 2 NEW upper-deck slots it adds); the wall variants drop from THAT set, not
-        # from w1x's smaller 2-slot set.
-        w1xr_plain = json.loads((MODDIR / "hull.middle.w1xr.v1.json").read_text())
+    for label, sec_id, tpl_id, w1x_id, table_name, aft_std, fwd_std, stairs in SECTION_MODULES:
         d = json.loads((MODDIR / f"{sec_id}.json").read_text())
+        tpl = json.loads((MODDIR / f"{tpl_id}.json").read_text())
+        w1x = json.loads((MODDIR / f"{w1x_id}.json").read_text())
         print(f"\n== {sec_id} ==")
-
         bad_sockets = [s["id"] for s in d["sockets"]
                        if s["role"] not in NON_WALKING_ROLES and s["posU"]["z"] < UPPER_DECK_Z - 1e-6]
         check(f"{sec_id}: no deck.slot/deck.area socket below Z {UPPER_DECK_Z}", not bad_sockets, bad_sockets)
+        bad_passages = [p["id"] for p in d.get("passages", []) if p["centreU"]["z"] - p["sizeU"]["z"] / 2 < UPPER_DECK_Z - 1e-6]
+        check(f"{sec_id}: no passage extending below Z {UPPER_DECK_Z}", not bad_passages, bad_passages)
+        socks = {s["id"]: s for s in d["sockets"]}
+        for sid, std in (("AftSocket", aft_std), ("ForwardSocket", fwd_std)):
+            if std:
+                check(f"{sec_id}: {sid} standard == {std}", socks[sid]["standard"] == std, socks[sid]["standard"])
 
-        aft = next(s for s in d["sockets"] if s["id"] == "AftSocket")
-        fwd = next(s for s in d["sockets"] if s["id"] == "ForwardSocket")
-        check(f"{sec_id}: AftSocket standard == {wall_standards['aft']}", aft["standard"] == wall_standards["aft"])
-        check(f"{sec_id}: ForwardSocket standard == {wall_standards['fwd']}", fwd["standard"] == wall_standards["fwd"])
-
-        full_gun_ids = set(w1xr_plain["capacity"]["gunSlots"]["ids"])
+        def hits(pos):
+            x0, x1 = pos["x"] - clear[0] / 2, pos["x"] + clear[0] / 2
+            y0, y1 = abs(pos["y"]) - clear[1] / 2, abs(pos["y"]) + clear[1] / 2
+            return any(x0 < b and a < x1 and y0 < band[1] and band[0] < y1 for a, b in stairs)
+        tpl_slots = {s["id"]: s for s in tpl["sockets"] if s["role"] == "deck.slot"}
+        expect_drop = {i for i, s in tpl_slots.items() if hits(s["posU"])}
         kept = set(d["capacity"]["gunSlots"]["ids"])
         dropped = set(d.get("droppedGunSlots", {}).get("ids", []))
-        check(f"{sec_id}: kept + dropped gun slots == hull.middle.w1xr.v1's full set", kept | dropped == full_gun_ids,
-              (kept | dropped) ^ full_gun_ids)
-        check(f"{sec_id}: kept and dropped gun slots are disjoint", not (kept & dropped), kept & dropped)
-
-        us = d.get("upperStructure")
-        check(f"{sec_id}: has upperStructure block", us is not None)
-        if us:
-            expect_upper = round(us["deckMassKg"] + us["wallMassKg"] + us.get("stairsMassKg", 0), 2)
-            check(f"{sec_id}: upperStructure.massKg == deckMassKg + wallMassKg + stairsMassKg",
-                  abs(us["massKg"] - expect_upper) < 0.5, f"{us['massKg']} != {expect_upper}")
-            expect_lightship = round(w1x["lightship"]["massKg"] + us["massKg"], 2)
-            check(f"{sec_id}: lightship.massKg == w1x massKg + upperStructure.massKg",
-                  abs(d["lightship"]["massKg"] - expect_lightship) < 0.5,
-                  f"{d['lightship']['massKg']} != {expect_lightship}")
-
-        manifest_path = ROOT / "art-staging/modular-raised-sections-v1" / {
-            "hull.middle.w1xr.wa.v1": "MiddleWA", "hull.middle.w1xr.wf.v1": "MiddleWF", "hull.middle.w1xr.wb.v1": "MiddleWB"
-        }[sec_id] / "manifest.json"
-        check(f"{sec_id}: art-staging manifest exists ({manifest_path.name})", manifest_path.exists())
-        if manifest_path.exists():
-            man = json.loads(manifest_path.read_text())
-            hc = man["hull_shell_check"]
-            check(f"{sec_id}: manifest hull_shell_check has 0 overconnected/degenerate",
-                  hc["overconnected_edges"] == 0 and hc["degenerate_faces"] == 0, hc)
+        check(f"{sec_id}: dropped gun slots == those whose clearance box hits a stairwell", dropped == expect_drop,
+              (dropped, expect_drop))
+        check(f"{sec_id}: kept + dropped == {tpl_id}'s gun slots", kept | dropped == set(tpl["capacity"]["gunSlots"]["ids"]))
+        check(f"{sec_id}: kept gun slots have socket + equipmentSlot, dropped have neither",
+              all(i in socks for i in kept) and not (dropped & set(socks))
+              and {e["socketId"] for e in d["equipmentSlots"] if e["socketId"].startswith("DeckSlot")} == kept)
+        passage_hits = [p["id"] for p in d["passages"] for a, b in stairs
+                        if p["centreU"]["x"] - p["sizeU"]["x"] / 2 < b and a < p["centreU"]["x"] + p["sizeU"]["x"] / 2
+                        and p["sizeU"]["y"] / 2 > band[0]]
+        check(f"{sec_id}: passages keep out of the stair corners", not passage_hits, passage_hits)
+        us = d["upperStructure"]
+        check(f"{sec_id}: upperStructure.massKg == deck + wall + stairs",
+              abs(us["massKg"] - (us["deckMassKg"] + us["wallMassKg"] + us["stairsMassKg"])) < 0.5)
+        cz = (us["deckMassKg"] * UPPER_DECK_Z + us["wallMassKg"] * us["wallAreaCentroidZU"] + us["stairsMassKg"] * 2.98) / us["massKg"]
+        check(f"{sec_id}: upperStructure.centroidZU mass-weighted", abs(us["centroidZU"] - cz) < 0.01, (us["centroidZU"], cz))
+        check(f"{sec_id}: rates 110/95/60", abs(us["deckMassKg"] - us["deckAreaM2"] * 110) < 1 and
+              abs(us["wallMassKg"] - us["wallAreaM2"] * 95) < 1 and abs(us["stairsMassKg"] - 60 * us["stairFlights"]) < 1e-6)
+        check(f"{sec_id}: lightship == {w1x_id} + upperStructure",
+              abs(d["lightship"]["massKg"] - (w1x["lightship"]["massKg"] + us["massKg"])) < 0.5)
+        t = json.loads((HYDRO_SEC / f"{label}.json").read_text())
+        tw = json.loads((HYDRO_W1X / f"{table_name}.json").read_text())
+        va, vb = interp(tw["waterlineZU"], tw["integratedVolumeU3"], 1.76), interp(t["waterlineZU"], t["integratedVolumeU3"], 1.76)
+        check(f"{sec_id}: hydrostatic table matches {w1x_id} below Z 1.76 (volume, <=0.5%)", abs(va - vb) / va <= 0.005,
+              f"{abs(va-vb)/va*100:.3f}%")
+        check(f"{sec_id}: table valid to {UPPER_DECK_Z}", abs(t["validWaterlineZU"][1] - UPPER_DECK_Z) < 1e-6
+              and abs(d["hydrostatics"]["validWaterlineZU"][1] - UPPER_DECK_Z) < 1e-6)
+        check(f"{sec_id}: hydrostatics sha matches the table", d["hydrostatics"]["sourceGeometrySha256"] == t["sourceGeometrySha256"])
+        missing = [v["resourcePath"] for v in d["visuals"] if not (RES / (v["resourcePath"] + ".fbx")).exists()]
+        check(f"{sec_id}: every visual's FBX exists under Resources", not missing, missing)
+        man = json.loads((STAGE / label / "manifest.json").read_text())
+        hc = man["hull_shell_check"]
+        check(f"{sec_id}: Hull_Shell has 0 overconnected edges / degenerate faces",
+              hc["overconnected_edges"] == 0 and hc["degenerate_faces"] == 0, hc)
+        if label.startswith("Middle"):
+            check(f"{sec_id}: Hull_Shell open edges only in the two interface planes",
+                  hc.get("non_interface_boundary", 1) == 0, hc)
+    render = json.loads((STAGE / "render-report.json").read_text())
+    for key, a in render["assemblies"].items():
+        check(f"assembled ship ({key}) {[n for n, _ in a['layout']]}: welded Hull_Shell closed",
+              a["boundary_edges"] == 0 and a["overconnected_edges"] == 0 and a["degenerate_faces"] == 0, a)
+    for label, v in render["variants"].items():
+        out = {n: x for n, x in v["wall_kit_x_extents_local"].items()
+               if "Door_" not in n and not (-0.12 <= x[0] and x[1] <= 6.12)}
+        check(f"{label}: wall kit (excl. open door leaves) lies in [0, 6] (+-0.12 rail cap)", not out, out)
 
     # standards.json has the W1xR joinProfile
     standards = json.loads((ROOT / "Assets/_Project/Resources/ShipModules/standards.json").read_text())

@@ -73,84 +73,70 @@ and hatch pivots), plus tables/mass/capacity by the same method.
   Z = the deck level of the section it stands in; it must not overlap a stairwell
   (if it would, move it aft to clear and say so).
 
-## 8. Data + art results (Claude/Opus 2026-09-25, worktree modular-ships/SeaSick-modular)
-Status: **partial**. Full scope in the task brief was not completed inside the ~300k
-token / 60 min budget; this section records what shipped, what was measured, what was
-approximated, and what is still open.
+## 8. Data + art results (Claude/Opus 2026-09-25, second pass, worktree SeaSick-modular)
+Status: **done, awaiting Kevin's in-game look.** The first pass (3e4fc44) passed its topology
+verifier but failed visually (wb a featureless slab with the stair kit ~20 u away in the wrong
+frame; wa an open shell with a main-deck rail). Rebuilt from scratch; every claim below was
+checked on a render.
 
-**Verifier 1 (Astra's ends kit).** `tools/blender/verify_modular_width_raised_v1.py`
-against the copied `art-staging/modular-width-raised-v1` (LFS files, `git check-attr`
-confirmed `filter=lfs` on the .blend/.fbx/.png): PASS, 30/30 FBX round-trips (triangle
-counts, vertex colours, flat normals).
+**Method** (`tools/blender/modular_raised_sections_v1.py`, no booleans). Import frame proven by
+opening both source .blends directly (stern root x 0, middle root x 9.3, bow root x 15.3; the
+connected middle's parts match `middle-isolated.png`). Astra's forward wall is baked into her
+raised-stern `Hull_Shell`: bulkhead at stern x **9.26** (0.04 inside the 9.30 face), stair notches
+|y| 4.62-5.80 x 6.06-9.26, a sloped companion tunnel from the door to a hatch room open to the
+deck. Wall piece = her stern shell for stern x >= 6.0, z >= 1.70, translated by (6.0 - 9.3);
+aft wall = that piece mirrored (x' = 6 - x). The middle's connected shell supplies the lower hull
+(z <= 1.70) and the plain upper box; pieces welded with Astra's `combined()` weld (T-joints split).
+Fixes needed on the way: her topsides tumble in aft of stern x 6.55 (|y| 6.02 at x 6.0) -> squared
+to 6.04 in the piece; her topside vertex colour is darker than the middle's -> repainted with the
+middle's colour ramp; the hatch room/tunnel replaced by a straight 0.8 u door alcove and the deck
+opening planked over (**no hatch in a middle**: it sat at local x 3.3-4.0, where the chimney lands on
+a one-middle ship). Rails, posts, deck/side/bulkhead plank seams are regenerated per variant (deck
+lanes stop at the notches); stairs, stair guards, nosings, wall guard, door frame and door are her
+meshes re-based; the door keeps its hinge pivot as the object transform.
 
-**New middle variants.** `tools/blender/modular_raised_sections_v1.py` builds
-`hull.middle.w1xr.{wa,wf,wb}.v1` by reproducing `modular_raised_middle_v1.py`'s own
-union/trim of `both-raised.blend` to get a clean `Midship_W1__Hull_Shell`, then instead
-of deleting Astra's raised-stern wall/stair kit (ForwardGuard, TwinStairs, StairGuards,
-StairNosings, PortalFrames, Door — already sitting in the same whole-ship coordinate
-frame, discovered by opening `both-raised.blend` directly and reading object transforms)
-it reparents that kit onto `Midship_W1`, translated +6.0 u for the forward face (as
-authored) or mirrored about X=9.30 for the aft face (interior/raised side flips there).
-The open interface was closed with a native bmesh cap (bisect the shell at Z=1.70, fill
-the resulting sub-loop between Z 1.70-4.20, skipping the two stair-corner Y bands for a
-stairs end) rather than a boolean union — booleaning a solid slab straight into the
-shell repeatedly produced non-manifold edges at the exact-coincident rim, because the
-shell is itself open (non-manifold) at the face being closed and Blender's EXACT solver
-is unreliable against that; the bmesh cap has no such issue.
-`tools/blender/verify_modular_raised_sections_v1.py`: **PASS** for all three (round-trip
-triangle/colour/normal checks, and each `hull_shell_check` is 0 boundary anomalies /
-0 degenerate faces beyond the expected open connected face). It does not assemble the
-(b)/(c)/(d) mixed ships in Blender (time budget) — see Open below.
+**Stair layout.** Stairs rise from the low deck (1.76) at the wall face to the upper deck (4.20)
+3.2 u inboard, in both outboard corners. wf: local x 2.76-5.96; wa: 0.04-3.24; **wb: stairs FORWARD
+only** (two 3.2 u runs do not fit 6 u), aft wall door-only (her piece with the notches capped flat,
+continuous guard rail). Wall kit x-extents: inside [0, 6] except the wall guard rail cap (-0.10 /
+6.10, centred on the wall) and the open door leaves (1.3 u outside the face, as Astra authored).
 
-**Stair fit decision.** Measured directly from Astra's kit inside `both-raised.blend`:
-TwinStairs alone spans a 3.20 u run (world x 6.06-9.26 on the standalone stern); the full
-kit including ForwardGuard/PortalFrames spans ~3.4 u (5.995-9.40). Two such kits at both
-ends of a 6.0 u middle would need ~6.8 u with zero clear deck, well past the spec's
->=0.8 u margin. **wb gets stairs at the FORWARD end only** (Astra's kit as-authored,
-lower risk to reuse unmirrored) and a **door-only closure** at the aft end: a full-beam
-flat bulkhead cap (no stairwell cut) plus a cosmetic Door/PortalFrames pair mirrored
-into place. Crew reach `wb`'s raised deck only via its forward stairs.
+**Renders** (`tools/blender/render_raised_sections_v1.py`, art-staging/modular-raised-sections-v1/):
+per variant `<Label>/threequarter-fwd|aft.png, side.png, top.png`, `SternWF|BowWA/threequarter.png`;
+assemblies `assembled-{a,b,c,d}-{threequarter,threequarter-aft,side,top}.png` with (a) SternWF + low
+middle + BowWA, (b) low stern + wb + low bow, (c) connected raised stern + wf + low middle + low bow,
+(d) low stern + wa + connected raised bow. Low W1x pieces come from their source
+`modular-width-inserts-v1/expanded-ship.blend` (main tree, read-only; same geometry as
+HullW1x_v1). Welded Hull_Shell of all four ships: **0 open / 0 overconnected / 0 degenerate**.
 
-**Dropped gun slots** (clearance box 1.8x2.3x1.65 at Z 4.20 vs. the stairwell footprint,
-checked by X-range overlap, not yet by the real assembler):
-- `hull.middle.w1xr.wa.v1`: drops `DeckSlot_0_-1`/`DeckSlot_0_1` (x=1.5, inside the aft
-  stairwell's local x 0-3.24); keeps `DeckSlot_1_-1`/`DeckSlot_1_1` (x=3.5), provisional.
-- `hull.middle.w1xr.wf.v1`: drops `DeckSlot_1_-1`/`DeckSlot_1_1` (x=3.5, inside the
-  forward stairwell's local x 2.76-6.0); keeps `DeckSlot_0` pair, provisional.
-- `hull.middle.w1xr.wb.v1`: drops all four. `DeckSlot_1` clashes with the forward
-  stairwell as above; `DeckSlot_0` does not geometrically clash with either wall but was
-  dropped as a conservative call (not run against the real assembler this pass) — worth
-  re-checking before shipping.
+**Hydrostatics** (`Hydrostatics/HullW1xRSections_v1/*.json`, module-local shell, deck_z 4.20):
+| module | V(1.76) vs W1x | V(4.20) U^3 |
+|---|---|---|
+| MiddleWF / WA | 254.067 vs 254.287 (0.086%) | 409.205 |
+| MiddleWB | 254.028 vs 254.287 (0.102%) | 405.699 |
+| SternWF | 333.384 vs 333.662 (0.083%) | 566.760 |
+| BowWA | 227.646 vs 227.739 (0.041%) | 413.954 |
 
-**Masses/capacity (all provisional, analytic not measured).** Using the same
-110/95/60 kg rates as RAISED-DECK.md sec 10: `wa`/`wf` upperStructure = deck 1993.2 kg
-(18.12 m^2, carried from `hull.middle.w1xr.v1`) + one wall-with-stairs 2308.5 kg
-(24.3 m^2 = beam 12.08 minus 2x1.18 stair-corner width, times 2.50 m height) + 2 stair
-flights 120 kg = **4421.7 kg**; lightship 13264.4 + 4421.7 = **17686.1 kg**. `wb` adds a
-second, door-only full-beam wall (30.2 m^2 x 95 = 2869.0 kg) instead of a second stair
-pair: upperStructure **7290.7 kg**, lightship **20555.1 kg**. Hold/berth capacity was
-carried unchanged from `hull.middle.w1xr.v1` (10 hold cells, 6 berths) rather than
-re-derived from a fresh hydrostatic table.
+**Mass / capacity** (measured on the shell ABOVE 1.76 -- the w1xr.v1 modules counted walls from 0.84,
+so they double count the W1x band; these do not): deck 110, walls+bulkheads+notch walls 95 kg/m^2,
+60 kg/flight. upperStructure / lightship / hold / berths: wf, wa 4135.5 / 17399.9 kg / 10 / 6;
+wb 4928.4 / 18192.8 / 10 / 6; SternWF 6794.4 / 24199.2 / 13 / 4; BowWA 4849.6 / 16729.1 / 9 / 3.
 
-**Not completed (open, in priority order):**
-1. Astra's two end modules (`hull.stern.w1xr.wf.v1`, `hull.bow.w1xr.wa.v1`) were not
-   authored as module JSON this pass — only their source FBX kit was copied+verified.
-2. No hydrostatic table was re-exported to Z 4.20 for any of the 5 modules in this
-   section (`tools/blender/export_raised_hydrostatics.py` was not run); the mass/capacity
-   numbers above are analytic area x rate, not integrated volume. `hull.middle.w1xr.v1`'s
-   own table (unchanged lower hull) stands in as the sub-1.76 reference.
-3. Deck/wall areas for the new variants were computed analytically (rectangle geometry),
-   not measured off the actual mesh in Blender — a `measure_raised_modules.py`-style pass
-   would be more exact, especially near the stair-corner cutouts.
-4. Multi-module Blender assembly renders for mixed ships (b) low-stern + `wb` middle +
-   low-bow, (c) raised-stern(connected) + `wf` + low-middle + low-bow, (d) low-stern +
-   `wa` + raised-bow(connected) were not produced; only per-variant isolated renders
-   (threequarter/side/top) exist, at `art-staging/modular-raised-sections-v1/<Variant>/`.
-5. Door meshes on all three new variants are cosmetic placements over a fully solid
-   closing bulkhead, not boolean-cut as a walkable hole — flagged in each module JSON's
-   visuals notes.
-6. `DeckSlot_0` on `wb` was dropped by a conservative eyeball call, not the real
-   assembler clearance check; worth revisiting.
+**Gun slots dropped** (clearance box vs stairwell, re-derived by the verifier): wf DeckSlot_1 pair
+(keeps DeckSlot_0); **wa both pairs (none left)** -- DeckSlot_1's box starts at x 2.6 < 3.24;
+wb DeckSlot_1 pair (keeps DeckSlot_0; the aft door wall has no stairwell); **SternWF DeckSlot_2
+pair (none left)** -- box to x 6.4 > 6.06; BowWA keeps all four.
+
+**Verifiers.** `tools/verify_raised_modules.py` 133/133 PASS (all five: face standards, drop set ==
+stairwell hits, passages clear of stair corners, mass arithmetic, table gate <= 0.5 %, sha, FBX
+presence, shell and assembly topology, wall-kit extents). `tools/blender/verify_modular_raised_sections_v1.py`:
+74/74 FBX round-trip PASS.
+
+**Open.** (1) Hatch on Astra's ends is pitched -80 deg about Y; VisualPart has yaw only, so the pitch is
+baked into the exported hatch mesh (pivot recorded) -- the older hull.stern/bow.w1xr.v1 JSONs put
+-80/+80 into yawDegU, which rotates about the wrong axis in game. (2) wa and SternWF carry no guns.
+(3) Doors are open-posed leaves sticking 1.3 u into the low neighbour's deck (Astra's authoring).
+(4) No .meta files (Unity not launched). (5) Chimney must still avoid Astra's end hatches (C# rule).
 
 ## 6. Physics
 Per-section: the freeboard extension (HullFormData.RaiseDeck) applies only to stations
