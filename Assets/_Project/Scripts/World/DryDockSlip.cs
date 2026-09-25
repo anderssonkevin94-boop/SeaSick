@@ -48,19 +48,28 @@ namespace SeaSick.World
 
         public Quaternion Heading => Quaternion.LookRotation(HeadingDir, Vector3.up);
 
-        /// **Where the hull rests, on her keel pads.** Placeholder until the
-        /// art contract's manifest (`art-staging/drydock-slip-v1/manifest.json`,
-        /// not authored yet) gives a real `Ship_Center` marker to read
-        /// instead: dead centre of the slip, at the walkway's height --
-        /// close enough to "on the pads" for a static preview, and the one
-        /// number every reader of this class shares, so a manifest swap only
-        /// has to change this property.
-        public Vector3 ShipCenter => transform.TransformPoint(Vector3.zero);
+        /// **Where the hull rests, on her keel pads** (the art contract,
+        /// `art-staging/drydock-slip-v1/manifest.json`): dead centre of the
+        /// slip along its length, on the channel centreline, at
+        /// `BuildPlans.DryDockKeelAboveDeck` above the walkway -- the pads
+        /// sit ABOVE the walkway, as a real cradle does (see
+        /// `BuildPlans.DryDockDeck`'s comment). A static preview has no
+        /// particular ship length to centre exactly between the sea
+        /// entrance and the head gantry, so this is the slip's own middle
+        /// rather than a per-ship computation; `PreviewAnchor`'s heading
+        /// faces the bow toward the head end, clear of the open sea
+        /// entrance, which is the more important of the two to get right
+        /// for a static shot.
+        public Vector3 ShipCenter =>
+            transform.TransformPoint(new Vector3(0f, BuildPlans.DryDockKeelAboveDeck, 0f));
 
-        /// A world-space anchor (position + rotation, at `ShipCenter` facing
-        /// `Heading`) for whatever stages a ship model here. A plain child
-        /// transform rather than raw numbers, so a caller can parent under
-        /// it and inherit both without recomputing.
+        /// A world-space anchor (position + rotation, at `ShipCenter`) for
+        /// whatever stages a ship model here. Faces the BOW toward the land
+        /// (head) end and the stern toward the sea entrance -- the opposite
+        /// sense from `Heading`, which points `HeadingDir` (land to sea) the
+        /// way a pier's does. A plain child transform rather than raw
+        /// numbers, so a caller can parent under it and inherit both without
+        /// recomputing.
         public Transform PreviewAnchor
         {
             get
@@ -71,7 +80,8 @@ namespace SeaSick.World
                     go.transform.SetParent(transform, false);
                     previewAnchor = go.transform;
                 }
-                previewAnchor.SetPositionAndRotation(ShipCenter, Heading);
+                Quaternion bowToLand = Quaternion.LookRotation(-HeadingDir, Vector3.up);
+                previewAnchor.SetPositionAndRotation(ShipCenter, bowToLand);
                 return previewAnchor;
             }
         }

@@ -773,15 +773,43 @@ namespace SeaSick.World
             ramp.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(drop, Run) * Mathf.Rad2Deg);
         }
 
-        /// **Placeholder boxes for the dry dock (2026-09-26).** The art
-        /// contract (`art-staging/drydock-slip-v1/manifest.json`,
-        /// `DryDock_SeaEnd` / `DryDock_Bay` / `DryDock_Head`) is being
-        /// authored in parallel and does not exist yet -- when it lands this
-        /// is the one place to swap for a `DryDockVisual` kit builder the
-        /// way `PierDeck` calls `PierVisual.Build` first. Open at BOTH ends
-        /// (no gable walls): a ship has to pass through the sea end, and the
-        /// land end is where the head structure stands, not a wall.
+        /// **Astra's real dry-dock kit first, these boxes as the fallback
+        /// (2026-09-26)** -- the same shape as `PierDeck` calling
+        /// `PierVisual.Build` before its own boxes. `DryDockVisual.Build`
+        /// lays the kit under a `DryDockKit` child and reports the kit's
+        /// TRUE overall length (sea end + N bays + head), which is what the
+        /// foundation slab below is sized to -- it need not equal
+        /// `plan.footprint.x` to the centimetre, only close, since the bay
+        /// count is rounded to fill it.
         static void DryDockGeometry(Transform root, BuildPlan plan, float footing)
+        {
+            if (DryDockVisual.Build(root, plan, out float builtLen))
+            {
+                DryDockFoundation(root, builtLen, plan.footprint.y, footing);
+                return;
+            }
+            DryDockBoxes(root, plan, footing);
+        }
+
+        /// The foundation slab under the real kit, sunk to the ground the
+        /// way every other footing here is (see `Raise`'s own comment) --
+        /// the kit's pieces draw the walkway and pads, not a slab, so
+        /// without this the dock would float or bury at whichever corner
+        /// the terrain happens to be highest or lowest at.
+        static void DryDockFoundation(Transform root, float len, float wid, float footing)
+        {
+            var stone = Mat("dock-stone", new Color(0.46f, 0.46f, 0.44f));
+            float slab = 0.6f + Mathf.Max(0f, footing);
+            Box(root, stone, new Vector3(len, slab, wid),
+                new Vector3(0f, -BuildPlans.DryDockDeck - slab * 0.5f, 0f));
+        }
+
+        /// **Placeholder boxes for the dry dock (2026-09-26), now only the
+        /// FALLBACK** if `DryDockVisual`'s kit cannot be used (a missing
+        /// asset, a marker that fails its contract check). Open at BOTH
+        /// ends (no gable walls): a ship has to pass through the sea end,
+        /// and the land end is where the head structure stands, not a wall.
+        static void DryDockBoxes(Transform root, BuildPlan plan, float footing)
         {
             float len = plan.footprint.x, wid = plan.footprint.y;
             var stone = Mat("dock-stone", new Color(0.46f, 0.46f, 0.44f));

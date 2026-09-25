@@ -681,14 +681,29 @@ namespace SeaSick.World
         /// Kevin, relayed 2026-09-25: "pick one size, don't resize per
         /// refit" -- so this is not chosen by the beach the way
         /// `PierLongest` is, and there is no `WithLength` for it.
-        public const float DryDockLength = 22f;
-        /// Metres across: a wide beam hull (up to 12.08 u, `WorldScale`) plus
-        /// a walkway either side to work round her.
-        public const float DryDockWidth = 8f;
-        /// Walkway height above mean water. The pier's own number
-        /// (`PierDeck`) until the art contract's manifest says
-        /// `walkwayHeightM` otherwise.
-        public const float DryDockDeck = 1.2f;
+        /// **2026-09-26, the art contract landed**: Astra's kit chains
+        /// `DryDock_SeaEnd` (1.5 m) + `DryDock_Bay` x6 (3.0 m each) +
+        /// `DryDock_Head` (4.5 m) = 24 m, the manifest's own
+        /// `recommendedBays` for the 19.14 m longest hull -- see
+        /// `DryDockVisual`. Was 22 m before the kit existed.
+        public const float DryDockLength = 24f;
+        /// Metres across, overall footprint INCLUDING the walkways either
+        /// side of the channel -- read off the kit's own combined mesh
+        /// bounds (root-local raw extents.x * the import's x100 scale),
+        /// not the manifest's `channelClearWidthM` (7.445, the clear water
+        /// between the walkways, narrower than the footprint). Was 8 m
+        /// before the kit existed.
+        public const float DryDockWidth = 12f;
+        /// Walkway height above mean water -- the manifest's
+        /// `walkwayHeightM`. Was 1.2 m (the pier's own `PierDeck` number,
+        /// reused as a placeholder) before the kit existed.
+        public const float DryDockDeck = 0.99f;
+        /// Keel pad height above the walkway (the manifest's `keelRestZM`
+        /// 1.21 m is above GROUND, which sits `DryDockDeck` below the
+        /// walkway -- so above the walkway the pads are `1.21 - 0.99`). The
+        /// hull rests ABOVE the walkway she is worked from, as a real
+        /// cradle does.
+        public const float DryDockKeelAboveDeck = 0.22f;
         /// How far a dry dock may stand from the home berth, metres --
         /// "next to the home berth" is a distance, not just "this island".
         public const float DryDockMaxFromHome = 40f;
