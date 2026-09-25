@@ -106,6 +106,10 @@
 .yard-tiles { flex-direction: row; flex-wrap: wrap; padding: 4px 0 8px 0; margin-bottom: 4px; min-height: 84px; }
 .yard Button.yard-tile { flex-grow: 1; flex-basis: 64px; min-height: 80px; flex-direction: column; align-items: center; justify-content: center; padding: 4px; }
 .yard-tile-name { font-size: 14px; -unity-text-align: middle-center; }
+.yard-tile-deck { font-size: 10px; -unity-text-align: middle-center; color: rgb(171, 209, 226);
+    background-color: rgba(171, 209, 226, 0.16); border-radius: 8px; padding: 1px 7px; margin-top: 2px; }
+.yard-tile-deck--raised { color: rgb(22, 43, 57); background-color: rgb(171, 218, 239); }
+.yard-deck-reason { margin-top: -4px; margin-bottom: 6px; white-space: normal; }
 /* min-width: 0 so a long "guns 2 · berths 4 · hold 5" status line can
    actually wrap inside the tile instead of forcing the tile (and this
    flex-wrap row's own height) wider/taller than what yard-tiles
@@ -139,3 +143,18 @@
 .yard-sheet-footer Button { flex-grow: 1; flex-basis: 0; }
 .yard Button.yard-sheet-done { flex-grow: 2; background-color: rgb(171, 218, 239); color: rgb(22, 43, 57); }
 .yard Button.yard-sheet-danger { background-color: rgb(92, 44, 40); border-color: rgb(196, 120, 105); width: 100%; margin-top: 6px; }
+
+/* SheetKit's text/rule/bar helpers are styled for the PAPER sheet theme
+   (dark ink on a light card) -- Sheets.uss's `.sheet-text` is rgb(31,45,56),
+   nearly the same colour as this sheet's own dark navy background, and
+   `.sheet-bar`'s track is a 16% dark tint that disappears the same way.
+   The section sheet borrows those helpers (ShipyardSectionSheet.cs) but
+   sits on `.yard`'s dark background, so both need light-theme colours here
+   rather than in Sheets.uss itself, which other (paper) sheets still use
+   as-is (2026-09-25 phone screenshot: "Hold: 5 cells" and the budget bar's
+   track were both invisible). */
+.yard-sheet .sheet-text { color: rgb(225, 240, 246); }
+.yard-sheet .sheet-muted { color: rgba(225, 240, 246, 0.68); }
+.yard-sheet .sheet-eyebrow { color: rgba(225, 240, 246, 0.68); }
+.yard-sheet .sheet-rule { background-color: rgba(225, 240, 246, 0.22); }
+.yard-sheet .sheet-bar { background-color: rgba(225, 240, 246, 0.18); }
