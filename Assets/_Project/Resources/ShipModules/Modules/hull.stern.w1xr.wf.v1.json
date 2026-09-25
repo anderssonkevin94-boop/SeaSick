@@ -1,0 +1,423 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.stern.w1xr.wf.v1",
+    "version": 1,
+    "kind": "Stern",
+    "family": "W1xR",
+    "status": "prototype",
+    "displayName": "Stern_W1 (raised, end wall forward -- Astra modular-width-raised-v1)",
+    "description": "Raised section (upper deck Z 4.20) closed by an END WALL on its fwd face (bulkhead 1.76-4.20, guard rail, door; twin stairs recessed in the two outboard corners unless noted), for a LOW neighbour on that side. docs/RAISED-SECTIONS.md sec 2-4. Wall faces use join standard W1x, connected faces W1xR.",
+    "source": "art-staging/modular-raised-sections-v1/SternWF/manifest.json",
+    "lengthU": 9.3,
+    "boundsMinU": {
+        "x": -0.23,
+        "y": -6.25,
+        "z": -1.92
+    },
+    "boundsMaxU": {
+        "x": 9.3,
+        "y": 6.25,
+        "z": 4.2
+    },
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.origin",
+            "standard": "",
+            "posU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": "Aft end of the ship; the module origin."
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.fwd",
+            "standard": "W1x",
+            "posU": {
+                "x": 9.3,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "WheelModuleSocket",
+            "role": "wheel",
+            "standard": "M1",
+            "posU": {
+                "x": 0.72,
+                "y": 0,
+                "z": 0.35
+            },
+            "yawDeg": 0,
+            "radiusLimit": 1.64,
+            "placementRule": "",
+            "provisional": false,
+            "notes": "UNCHANGED from hull.stern.w1r2.v3 (manifest fittings.wheel_mount: 'M1 unchanged'). Axle centre. Rotor and carrier are placed here; rotate the rotor only, about game X."
+        },
+        {
+            "id": "Chimney",
+            "role": "fitting.chimney",
+            "standard": "fitting.chimney",
+            "posU": {
+                "x": 0,
+                "y": 0,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "assembled-midpoint",
+            "provisional": false,
+            "notes": "Z raised to 4.20 (upper deck). placementRule stays assembled-midpoint; the rule needs an X offset of -0.84 u so a one-middle raised ship lands on the manifest's chimney_position X 12.30 (today's unmodified midpoint formula gives 13.14 -- same offset a two-middle raised ship needs per docs/RAISED-DECK.md sec 2, unverified by Astra for that case). SocketDef has no offset field: this note is the spec; the C# half (assembler / PlacementRule.AssembledMidpoint) must apply the -0.84 u X offset for family W1xR."
+        }
+    ],
+    "visuals": [
+        {
+            "id": "SternWF__Carrier",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__Carrier",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.72,
+                "y": 0.0,
+                "z": 0.35
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__Carrier.fbx, 260 triangles."
+        },
+        {
+            "id": "SternWF__Door",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__Door",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 9.315,
+                "y": -2.87,
+                "z": 1.76
+            },
+            "yawDegU": -65.0,
+            "notes": "SternWF/SternWF__Door.fbx, 92 triangles. Hinge pivot = localPositionU; open pose as authored (Astra)."
+        },
+        {
+            "id": "SternWF__ForwardGuard",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__ForwardGuard",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__ForwardGuard.fbx, 144 triangles."
+        },
+        {
+            "id": "SternWF__Hatch",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__Hatch",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 6.75,
+                "y": 0.0,
+                "z": 4.36
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__Hatch.fbx, 36 triangles. Hinge pivot = localPositionU; Astra authored it pitched -80 deg about +Y (open), baked into this mesh because VisualPart has yaw only."
+        },
+        {
+            "id": "SternWF__Helm",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__Helm",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__Helm.fbx, 280 triangles."
+        },
+        {
+            "id": "SternWF__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__Hull_Ironwork.fbx, 852 triangles."
+        },
+        {
+            "id": "SternWF__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__Hull_Shell.fbx, 884 triangles."
+        },
+        {
+            "id": "SternWF__InternalLadder",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__InternalLadder",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__InternalLadder.fbx, 108 triangles."
+        },
+        {
+            "id": "SternWF__Plank_Seams",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__Plank_Seams",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__Plank_Seams.fbx, 432 triangles."
+        },
+        {
+            "id": "SternWF__PortalFrames",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__PortalFrames",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__PortalFrames.fbx, 84 triangles."
+        },
+        {
+            "id": "SternWF__Rotor",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__Rotor",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.72,
+                "y": 0.0,
+                "z": 0.35
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__Rotor.fbx, 1616 triangles."
+        },
+        {
+            "id": "SternWF__StairGuards",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__StairGuards",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__StairGuards.fbx, 184 triangles."
+        },
+        {
+            "id": "SternWF__StairNosings",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__StairNosings",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__StairNosings.fbx, 192 triangles."
+        },
+        {
+            "id": "SternWF__TwinStairs",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__TwinStairs",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__TwinStairs.fbx, 256 triangles."
+        },
+        {
+            "id": "SternWF__UpperBraceBolts",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__UpperBraceBolts",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__UpperBraceBolts.fbx, 160 triangles."
+        },
+        {
+            "id": "SternWF__UpperPlanks",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__UpperPlanks",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__UpperPlanks.fbx, 600 triangles."
+        },
+        {
+            "id": "SternWF__UpperPosts",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__UpperPosts",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__UpperPosts.fbx, 300 triangles."
+        },
+        {
+            "id": "SternWF__UpperRails",
+            "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/SternWF/SternWF__UpperRails",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "SternWF/SternWF__UpperRails.fbx, 300 triangles."
+        }
+    ],
+    "equipmentSlots": [],
+    "passages": [
+        {
+            "id": "CrewPassage_Main",
+            "centreU": {
+                "x": 6.13,
+                "y": 0,
+                "z": 5.9
+            },
+            "sizeU": {
+                "x": 5.94,
+                "y": 4.6,
+                "z": 3.4
+            },
+            "provisional": true,
+            "notes": "Upper passage over the raised deck, x 3.16-9.1 (stops short of the end-wall guard rail); |y| <= 2.30, so the stair corners (|y| 4.62-5.80) are not in it. Z centre 5.90, 3.4 tall."
+        }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW1xRSections_v1/SternWF",
+        "sourceGeometrySha256": "8cd8a7fe437d2b80e1e00197ab3cd1f7e6d0084cd233ed73fc06779de7cbf468",
+        "validWaterlineZU": [
+            -1.9199999570846558,
+            4.2
+        ],
+        "offsetZU": 0,
+        "notes": "export_hull_hydrostatics.export_module on the module-local Hull_Shell, deck_z 4.20 (tools/blender/modular_raised_sections_v1.py). Volume to 1.76: 333.3841 U^3 vs hull.stern.w1x.v1 333.6616 U^3 (0.083%, gate <= 0.5%). To 4.20: 566.7596 U^3 (stair notches and the door alcove are outside the shell, so already excluded)."
+    },
+    "lightship": {
+        "massKg": 24199.18,
+        "provisional": true,
+        "rule": "17404.8 kg (hull.stern.w1x.v1 lightship) + 6794.38 kg upper structure."
+    },
+    "capacity": {
+        "holdCells": {
+            "value": 13,
+            "provisional": true,
+            "source": "hull.stern.w1x.v1 9 + round(0.7 x 233.375 / 38.229) = +4; upper volume = own table V(4.20) - V(1.76), stairwells already outside the shell."
+        },
+        "berths": {
+            "value": 4,
+            "provisional": true,
+            "source": "hull.stern.w1x.v1 2 + floor(0.3 x 98.879 U^2 / 12.8) = +2."
+        },
+        "gunSlots": {
+            "ids": [],
+            "provisional": true,
+            "source": "hull.stern.w1xr.v1 gun slots minus those whose clearance box hits a stairwell (dropped: ['DeckSlot_2_-1', 'DeckSlot_2_1']). Provisional."
+        },
+        "rule": "Seeded 2026-09-25 (RaisedDeckData): w1x module capacity + the raised deltas from docs/RAISED-DECK.md sec 5, using this module's own measured W1xR hydrostatic table and Blender deck footprint (not the sec-5 estimate numbers). PROVISIONAL, tune freely."
+    },
+    "physical": {
+        "massKg": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "displacementM3": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "cargoCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "crewCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "thrustCoefficient": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "upperStructure": {
+        "massKg": 6794.38,
+        "centroidZU": 3.3909,
+        "deckMassKg": 2719.18,
+        "deckAreaM2": 24.72,
+        "wallMassKg": 3955.2,
+        "wallAreaM2": 41.634,
+        "wallAreaCentroidZU": 2.8471,
+        "bulkheadAreaM2": 14.076,
+        "stairsMassKg": 120.0,
+        "stairFlights": 2,
+        "source": "Measured on the module-local Hull_Shell ABOVE Z 1.76 (faces clipped at 1.76, so the W1x topside band below it is not double counted -- unlike hull.*.w1xr.v1, whose wall area starts at Z 0.84): deck = flat top cap at 4.20 x 110 kg/m^2; walls = every other face above 1.76 (topsides, bulkheads, stair-notch walls, alcove) x 95 kg/m^2; stairs 60 kg per flight. centroidZU mass-weighted (stairs at 2.98). Provisional."
+    },
+    "droppedGunSlots": {
+        "ids": [
+            "DeckSlot_2_-1",
+            "DeckSlot_2_1"
+        ],
+        "reason": "clearance box 1.8x2.3x1.65 at Z 4.20 around the socket overlaps a stairwell (x [(6.06, 9.26)], |y| 4.62-5.8); RAISED-SECTIONS.md sec 4."
+    },
+    "stairwells": [
+        {
+            "xU": [
+                6.06,
+                9.26
+            ],
+            "absYU": [
+                4.62,
+                5.8
+            ],
+            "zU": [
+                1.76,
+                4.2
+            ],
+            "notes": "Twin stairs, bottom at the wall face (low deck 1.76), top inboard (4.20). Not walkable deck, not in the passage."
+        }
+    ],
+    "walls": {
+        "aft": false,
+        "fwd": true,
+        "notes": "W1x face = END WALL (bulkhead + guard rail + door) toward a LOW neighbour."
+    }
+}
