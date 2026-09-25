@@ -81,6 +81,27 @@ namespace SeaSick.Ship.Modular.EditorTools
                     ("raised-two-bay", RaisedPresets.RaisedTwoBay()),
                     ("raised-two-bay-side", RaisedPresets.RaisedTwoBay()),
                     ("raised-two-bay-top", RaisedPresets.RaisedTwoBay()),
+                    // docs/RAISED-SECTIONS.md task item 6: the same three
+                    // mixed per-section ships ShipyardRefitProbe refits
+                    // through live, rendered here for a look at the art
+                    // (the wall variants -- wf/wa/wb -- were never rendered
+                    // as part of an assembled ship before this), plus the
+                    // 3-middle fully-connected raised ship (data-legal
+                    // since RAISED_DECK_BAYS was relaxed, sec 5, but
+                    // UNVERIFIED against Astra's art -- she only ever
+                    // rendered 1-2 bays).
+                    ("mix1-sternWF-lowMid-bowWA", MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Low }, DeckLevel.Raised)),
+                    ("mix1-sternWF-lowMid-bowWA-side", MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Low }, DeckLevel.Raised)),
+                    ("mix1-sternWF-lowMid-bowWA-top", MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Low }, DeckLevel.Raised)),
+                    ("mix2-lowStern-midWB-lowBow", MixedConfig(DeckLevel.Low, new[] { DeckLevel.Raised }, DeckLevel.Low)),
+                    ("mix2-lowStern-midWB-lowBow-side", MixedConfig(DeckLevel.Low, new[] { DeckLevel.Raised }, DeckLevel.Low)),
+                    ("mix2-lowStern-midWB-lowBow-top", MixedConfig(DeckLevel.Low, new[] { DeckLevel.Raised }, DeckLevel.Low)),
+                    ("mix3-sternConnected-midWF-lowMid-lowBow", MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Raised, DeckLevel.Low }, DeckLevel.Low)),
+                    ("mix3-sternConnected-midWF-lowMid-lowBow-side", MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Raised, DeckLevel.Low }, DeckLevel.Low)),
+                    ("mix3-sternConnected-midWF-lowMid-lowBow-top", MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Raised, DeckLevel.Low }, DeckLevel.Low)),
+                    ("raised-three-middles-UNVERIFIED", RaisedPresets.WithMiddles(3)),
+                    ("raised-three-middles-UNVERIFIED-side", RaisedPresets.WithMiddles(3)),
+                    ("raised-three-middles-UNVERIFIED-top", RaisedPresets.WithMiddles(3)),
                 };
                 foreach (var (name, cfg) in shots)
                 {
@@ -113,6 +134,21 @@ namespace SeaSick.Ship.Modular.EditorTools
         }
 
         static ShipConfiguration WithRotor(ShipConfiguration c, string rotorId) { c.rotorId = rotorId; return c; }
+
+        /// A per-section ship built through `RaisedSections.ToIds` (never a
+        /// hand-typed wall-variant id), same as `ShipyardRefitProbe.MixedConfig`
+        /// one level up but without fitting guns -- these renders are about
+        /// the hull geometry (docs/RAISED-SECTIONS.md task item 6), not the
+        /// battery.
+        static ShipConfiguration MixedConfig(DeckLevel stern, DeckLevel[] middles, DeckLevel bow)
+        {
+            var (sId, mIds, bId) = RaisedSections.ToIds(stern, middles, bow);
+            var c = new ShipConfiguration { sternId = sId, bowId = bId,
+                rotorId = ShipConfiguration.ReinforcedRotor, carrierId = ShipConfiguration.M1Carrier };
+            c.middleIds.AddRange(mIds);
+            c.fittings.Add(new FittingChoice { socketId = ShipConfiguration.ChimneySocket, moduleId = ShipConfiguration.V3Chimney });
+            return c;
+        }
 
         static Bounds WorldBounds(GameObject go)
         {
