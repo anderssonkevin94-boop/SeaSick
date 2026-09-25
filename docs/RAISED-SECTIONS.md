@@ -151,3 +151,31 @@ the levels (§2). Disabled sections say why (e.g. standard beam; 0 middles and t
 end is already raised). Replaces the all-or-nothing Deck toggle (keep a "Raise all /
 Lower all" shortcut if cheap). Guns carry across whenever their slot id survives;
 otherwise they go to the dry dock and the report says so.
+
+## 9. C# implementation (Claude/Opus, 2026-09-25, third pass, worktree SeaSick-modular)
+See docs/SHIPYARD-API.md §17 for the file-by-file summary. Done: item 1 (the
+id mapping, `RaisedSections.cs`, 60/60 combinations gated against the real
+assembler), item 2's physics (per-section `RaiseDeck`, mass/CoM already
+per-section via the existing `upperStructure` summing, chimney X/Z), item 5
+(the stale module-count gates now derive from the loaded library).
+`tools/modular-selftest.sh`: 189 PASS, 0 FAIL.
+
+**Not done, this session** (budget/scope):
+- Item 3 (art/data fixes): the `VisualPart` rotation field for the connected
+  raised stern/bow hatches, and the wall-count-from-1.76 offset note. Neither
+  Blender nor Unity ran this session; a blind JSON+schema edit to a rotation
+  axis with no way to render and check it risked costing Kevin more
+  debugging time than it saved.
+- Item 4 (UI): the shipyard's tap-per-section toggle. `RaisedSections.cs`
+  (`ToIds`/`FromIds`) is written so this is now mostly plumbing --
+  `ShipyardDraft` reads `FromIds` off the current config, a tap flips one
+  section's `DeckLevel`, `RecomputeIds` regenerates all three ids, and the
+  draft re-assembles -- but `ShipyardScreen`'s actual tap targets and
+  disabled-reason strings were not written.
+- Item 6 (probes): `ShipyardRefitProbe`, `ShipyardUiProbe`,
+  `ModularShipPreview` were not extended, same reason as §11's own "not
+  done" in docs/RAISED-DECK.md -- they need Play mode/Editor state this
+  worktree's headless harness cannot exercise, and Unity was never launched.
+- The chimney/stairwell overlap check (sec 5's last sentence) -- the X/Z
+  positioning itself is correct (§17), but nothing checks a chimney against
+  a stairwell's own footprint or moves it aft.

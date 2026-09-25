@@ -785,3 +785,62 @@ docs/RAISED-DECK.md secs 6-10 (data pass) and its "For the C# half" note.
   +/- bay controls to 1-2 while raised, `SetWideBeam` refuses leaving wide
   while raised. **Not compiled by `tools/modular-selftest.sh`** (UI/ is out
   of its scope, same as before this change) — needs Kevin's Unity pass.
+
+## §17 Raised SECTIONS (per-section deck level, docs/RAISED-SECTIONS.md), C# half, 2026-09-25 (Claude/Opus)
+
+Worktree `/Users/kevinandersson/Desktop/SeaSick-modular`, branch
+`modular-ships`, from f19e799 (§16's all-raised C# already merged). Unity
+never launched this session either; `tools/modular-selftest.sh` went
+174 → 189 PASS, 0 FAIL. Items NOT done this session (UI, art/data fixes,
+probes) are in docs/RAISED-SECTIONS.md's own implementation-notes section.
+
+- `RaisedSections.cs` (new): `ToIds(stern, middles[], bow)` — pure,
+  `DeckLevel.Low`/`.Raised` per section → the module id the joint rule
+  calls for (both-raised faces join connected/no-wall; otherwise the
+  raised face gets its own end wall, the `wa`/`wf`/`wb` variants).
+  `FromIds` is the inverse (read a configuration's ids back to levels,
+  for the UI). Both operate entirely inside the W1x/W1xR id space — "raised
+  needs wide beam" holds by construction, `Low` here is never the w1r2 id.
+  `RaisedSectionsValidation.cs` enumerates all 60 level combinations for
+  0-3 middles against the real `ShipAssembler` (59 assemble; the one
+  refusal is 0 middles with both ends raised), checks 3 hand-built wrong
+  pairings hit `JOIN_PROFILE_MISMATCH`, round-trips `FromIds`/`ToIds`, and
+  adds a mixed-ship (raised stern, low middle, low bow) physics/GM report.
+- `ShipAssembler.RAISED_DECK_BAYS` generalised (docs/RAISED-SECTIONS.md
+  sec 5): now only refuses 0 middles with BOTH ends raised, not every
+  raised ship outside 1-2 middles — the old cap predates per-section
+  raising. 3 fully-connected raised middles now assembles (flagged
+  unverified against Astra's art, which only ever rendered 1-2 bays).
+- Chimney's `-0.84 u` midpoint offset now requires the WHOLE installed
+  hull chain to be raised, not just the stern — on a mixed ship (raised
+  stern, low rest) the stern's own Chimney socket already carries the
+  plain midpoint. Z needed no change: each hull module's own socket
+  already bakes in its own section's deck height (1.76/4.20), for every
+  variant including the wall ones, so "Z = the deck of the section it
+  stands in" was already correct by construction.
+  **Not done**: the chimney/stairwell overlap check (sec 5's "must not
+  overlap a stairwell, move it aft") — no geometry for it was wired up
+  this session.
+- Physics generalised to per-section (docs/RAISED-SECTIONS.md sec 6):
+  `HullFormData.RaiseDeck` gained a `(extraY, fromZ, toZ)` overload that
+  only raises stations inside the given range (the old `RaiseDeck(extraY)`
+  is now a thin unbounded-range wrapper, so every all-raised caller is
+  unaffected). `RaisedDeckPhysics.FindRaisedSectionRanges` gives one
+  Z-range per raised hull section (module bounds → ship-frame metres →
+  `ShipyardPlan.data`'s own frame via `viewOffset`, the same conversion
+  the funnel bounds already used); `ShipyardPlanner.PlanFor` calls
+  `RaiseDeck` once per raised section instead of once for the whole hull.
+  Mass/CoM/gyradius needed NO change: `RaisedDeckPhysics.RaiseCoM` already
+  summed every placed module's own `upperStructure` block (only raised
+  modules carry one), so it was already per-section correct even under
+  the old all-or-nothing deck-height code. `ShipyardPlan.walkDeckZU` stays
+  informational, now "the highest deck anywhere on the ship" rather than
+  "the deck" — each station's own `deckY` is the value every real
+  consumer (crew, deck load, helm) reads.
+- **Not done this session** (budget): the UI (`ShipyardDraft`/
+  `ShipyardScreen` tap-to-toggle-per-section, task item 4), the art/data
+  fixes (`VisualPart` rotation field, wall-count offset note, task item 3),
+  and the probes (`ShipyardRefitProbe`, `ShipyardUiProbe`,
+  `ModularShipPreview`, task item 6) — none of these were started. The
+  existing all-raised UI (§16, `IsRaisedDeck`/`SetRaisedDeck`) still works
+  unchanged; it simply does not yet expose per-section control.
