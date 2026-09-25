@@ -69,5 +69,27 @@ namespace SeaSick.Ship.Modular
             var s = S;
             return s != null ? s.Report(draft) : null;
         }
+
+        // ---- equipment + dry dock (2026-09-25, docs/SHIPYARD-API.md §15) --
+
+        public IReadOnlyList<EquipmentSlotView> EquipmentSlots(ShipConfiguration draft)
+        {
+            var s = S;
+            return s != null ? s.EquipmentSlots(draft) : new List<EquipmentSlotView>();
+        }
+
+        public ShipyardEdit FitEquipment(ShipConfiguration draft, string slotId, string moduleId)
+        {
+            var s = S;
+            if (s != null) return s.FitEquipment(draft, slotId, moduleId);
+            return new ShipyardEdit { ok = false, code = "NO_SHIP", message = "There is no ship to refit.", draft = draft };
+        }
+
+        public ShipyardEdit RemoveEquipment(ShipConfiguration draft, string slotId)
+        {
+            var s = S;
+            if (s != null) return s.RemoveEquipment(draft, slotId);
+            return new ShipyardEdit { ok = false, code = "NO_SHIP", message = "There is no ship to refit.", draft = draft };
+        }
     }
 }

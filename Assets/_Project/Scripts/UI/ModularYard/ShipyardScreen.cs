@@ -14,7 +14,9 @@ namespace SeaSick.UI.ModularYard
         readonly Image image;
         readonly Label count, length, message, badge;
         readonly Label details;
-        readonly Button undo, add, remove, timber, reinforced, confirm;
+        readonly Button undo, add, remove, timber, reinforced, beamStandard, beamWide, confirm;
+        readonly VisualElement guns;
+        readonly Label dryDock;
         readonly Dictionary<int, Vector2> pointers = new Dictionary<int, Vector2>();
         readonly Action close;
         string builtKey;
@@ -54,6 +56,13 @@ namespace SeaSick.UI.ModularYard
             var wheels = Row(scroll, "yard-wheels");
             timber = Command(wheels, "Timber", () => draft.ChooseWheel(ShipConfiguration.TimberRotor));
             reinforced = Command(wheels, "Reinforced", () => draft.ChooseWheel(ShipConfiguration.ReinforcedRotor));
+            var beamCaption = new Label("Beam"); beamCaption.AddToClassList("yard-caption"); scroll.Add(beamCaption);
+            var beams = Row(scroll, "yard-wheels");
+            beamStandard = Command(beams, "Standard", () => draft.SetWideBeam(false));
+            beamWide = Command(beams, "Wide", () => draft.SetWideBeam(true));
+            var gunsCaption = new Label("Guns"); gunsCaption.AddToClassList("yard-caption"); scroll.Add(gunsCaption);
+            guns = new VisualElement(); guns.AddToClassList("yard-guns"); scroll.Add(guns);
+            dryDock = new Label(); dryDock.AddToClassList("yard-caption"); dryDock.AddToClassList("yard-dock"); scroll.Add(dryDock);
             details = new Label(); details.AddToClassList("yard-details"); scroll.Add(details);
             message = new Label(); message.AddToClassList("yard-message"); panel.Add(message);
             var footer = Row(panel, "yard-footer");
@@ -107,6 +116,11 @@ namespace SeaSick.UI.ModularYard
             reinforced.SetEnabled(!draft.Committed && draft.CanSelect(ModuleKind.Rotor, ShipConfiguration.ReinforcedRotor));
             timber.EnableInClassList("yard-selected", draft.Rotor == ShipConfiguration.TimberRotor);
             reinforced.EnableInClassList("yard-selected", draft.Rotor == ShipConfiguration.ReinforcedRotor);
+            beamStandard.SetEnabled(!draft.Committed && draft.CanSelect(ModuleKind.Stern, ShipConfiguration.V3Stern));
+            beamWide.SetEnabled(!draft.Committed && draft.CanSelect(ModuleKind.Stern, ExpandedPresets.ExpandedStern));
+            beamStandard.EnableInClassList("yard-selected", !draft.IsWideBeam);
+            beamWide.EnableInClassList("yard-selected", draft.IsWideBeam);
+            RefreshGuns(report);
             string blocked = draft.CannotConfirm();
             confirm.SetEnabled(string.IsNullOrEmpty(blocked) && preview.Error == null);
             confirm.tooltip = blocked ?? "Apply this refit";
@@ -118,6 +132,57 @@ namespace SeaSick.UI.ModularYard
             details.text = ReportText(report, removal, status);
             details.style.display = live == null ? DisplayStyle.None : DisplayStyle.Flex;
             badge.text = draft.Highlight != null && draft.Highlight.StartsWith("middle[") ? "NEW SECTION" : "PREVIEW";
+        }
+
+        /// Big, one-thumb rows: tap a fitted gun to send it to the dry dock,
+        /// tap an empty usable slot with stock in the dock to fit one from
+        /// it. The row only decides whether to call FitGun or RemoveGun --
+        /// the backend decides whether the tap succeeds (docs/SHIPYARD-API.md
+        /// §15: "the UI only displays what comes back").
+        void RefreshGuns(ShipyardReport report)
+        {
+            guns.Clear();
+            if (!draft.HasBackend)
+            {
+                var placeholder = new Label("Guns: preview only, live refitting not connected.");
+                placeholder.AddToClassList("yard-caption"); guns.Add(placeholder);
+                dryDock.text = "";
+                return;
+            }
+            int cannonsInDock = DockCount(report, ShipConfiguration.EquipmentCannon);
+            var slots = draft.EquipmentSlots();
+            foreach (var s in slots)
+            {
+                bool occupied = !string.IsNullOrEmpty(s.occupantModuleId);
+                string status; bool enabled;
+                if (occupied) { status = "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
+                else if (!s.usable) { status = s.blockedReason; enabled = false; }
+                else if (cannonsInDock > 0) { status = "Empty — tap to fit from the dry dock"; enabled = !draft.Committed; }
+                else { status = "Empty — no gun in the dry dock"; enabled = false; }
+                string slotId = s.slotId;
+                var row = new Button(() => { if (occupied) draft.RemoveGun(slotId); else draft.FitGun(slotId); });
+                row.AddToClassList("yard-gun-row");
+                row.SetEnabled(enabled);
+                var label = new Label(s.label); label.AddToClassList("yard-gun-label"); row.Add(label);
+                var statusLabel = new Label(status); statusLabel.AddToClassList("yard-gun-status"); row.Add(statusLabel);
+                guns.Add(row);
+            }
+            if (slots.Count == 0)
+            {
+                var none = new Label("No gun slots on this hull."); none.AddToClassList("yard-caption"); guns.Add(none);
+            }
+            var rows = report?.dryDock;
+            if (rows == null || rows.Count == 0) { dryDock.text = "Dry dock: empty."; return; }
+            var parts = new List<string>();
+            foreach (var r in rows) if (r != null && r.inDockNow > 0) parts.Add($"{r.name} ×{r.inDockNow}");
+            dryDock.text = parts.Count > 0 ? "Dry dock: " + string.Join(", ", parts) + "." : "Dry dock: empty.";
+        }
+
+        static int DockCount(ShipyardReport report, string moduleId)
+        {
+            if (report?.dryDock == null) return 0;
+            foreach (var r in report.dryDock) if (r != null && r.moduleId == moduleId) return r.inDockNow;
+            return 0;
         }
 
         static string FormatFigure(ShipyardFigure figure, string label = null)

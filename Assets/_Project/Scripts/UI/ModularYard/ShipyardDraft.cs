@@ -11,6 +11,11 @@ namespace SeaSick.UI.ModularYard
         ShipConfiguration ReadCurrent();
         string Validate(ShipConfiguration draft);
         bool TryApply(ShipConfiguration expected, ShipConfiguration draft, out string reason);
+        // ---- equipment + dry dock (2026-09-25, docs/SHIPYARD-API.md §15) --
+        // Pure: never touch the ship, the dock or the save.
+        IReadOnlyList<EquipmentSlotView> EquipmentSlots(ShipConfiguration draft);
+        ShipyardEdit FitEquipment(ShipConfiguration draft, string slotId, string moduleId);
+        ShipyardEdit RemoveEquipment(ShipConfiguration draft, string slotId);
     }
 
     public sealed class ShipyardDraft
@@ -66,13 +71,24 @@ namespace SeaSick.UI.ModularYard
             Highlight = highlight; Message = ""; Changed?.Invoke(); return true;
         }
 
+        /// True while the draft is built from the W1x (expanded-beam) family;
+        /// false for the standard W1-r2 family (docs/SHIPYARD-API.md §15).
+        public bool IsWideBeam => draft.sternId == ExpandedPresets.ExpandedStern;
+
+        /// The middle module id for the draft's OWN current width family --
+        /// never the standard one outright (that was the 2026-09-25 bug: a
+        /// wide-beam ship's AddMiddle used to add a W1-r2 middle, which
+        /// ShipAssembler refuses to join to a W1x stern/bow).
+        string MiddleIdForWidth() => IsWideBeam ? ExpandedPresets.ExpandedMiddle : ShipConfiguration.V3Middle;
+
         // First prototype appends/removes the bay immediately behind the bow.
         // Existing bay indices, and therefore equipment references, never shift.
         public bool AddMiddle()
         {
-            if (!CanSelect(ModuleKind.Middle, ShipConfiguration.V3Middle)) return Refuse("This section is unavailable.");
+            string middleId = MiddleIdForWidth();
+            if (!CanSelect(ModuleKind.Middle, middleId)) return Refuse("This section is unavailable.");
             if (Count >= Maximum) return Refuse("Maximum length for this hull.");
-            var next = Snapshot(); next.middleIds.Add(ShipConfiguration.V3Middle);
+            var next = Snapshot(); next.middleIds.Add(middleId);
             return Set(next, ShipAssembler.MiddleKey(Count));
         }
 
@@ -83,8 +99,73 @@ namespace SeaSick.UI.ModularYard
                 return Refuse("Section availability is not connected yet.");
             string reason = RemovalReason();
             if (!string.IsNullOrEmpty(reason)) return Refuse(reason);
-            var next = Snapshot(); next.middleIds.RemoveAt(Count - 1);
-            return Set(next, "bow");
+            var next = Snapshot();
+            int idx = Count - 1;
+            next.middleIds.RemoveAt(idx);
+            // A gun standing on the bay that just left has nowhere to stand
+            // any more (its slot id is gone); take it off to the dry dock
+            // instead of refusing the shrink (2026-09-25, Kevin: "guns
+            // without a slot go to the dry dock", the same equipment API a
+            // player would use by hand -- see docs/SHIPYARD-API.md §15).
+            string prefix = ShipAssembler.MiddleKey(idx) + "/";
+            int orphaned = next.equipment.RemoveAll(e => e != null && e.slotId != null && e.slotId.StartsWith(prefix));
+            bool applied = Set(next, "bow");
+            if (applied && orphaned > 0)
+            {
+                Message = orphaned == 1 ? "1 gun will go to the dry dock." : $"{orphaned} guns will go to the dry dock.";
+                Changed?.Invoke();
+            }
+            return applied;
+        }
+
+        /// Swaps EVERY hull section between the W1-r2 and W1x families at
+        /// once -- the two widths never mix (docs/SHIPYARD-API.md §9,
+        /// enforced by ShipAssembler's join-profile check). Equipment is
+        /// left untouched: the two families share the same slot ids (only
+        /// their Y moved), so a fitted gun stays fitted.
+        public bool SetWideBeam(bool wide)
+        {
+            if (IsWideBeam == wide) return false;
+            string sternId = wide ? ExpandedPresets.ExpandedStern : ShipConfiguration.V3Stern;
+            string bowId = wide ? ExpandedPresets.ExpandedBow : ShipConfiguration.V3Bow;
+            if (!CanSelect(ModuleKind.Stern, sternId) || !CanSelect(ModuleKind.Bow, bowId))
+                return Refuse("This beam is unavailable.");
+            var next = Snapshot();
+            next.sternId = sternId;
+            next.bowId = bowId;
+            string middleId = wide ? ExpandedPresets.ExpandedMiddle : ShipConfiguration.V3Middle;
+            for (int i = 0; i < next.middleIds.Count; i++) next.middleIds[i] = middleId;
+            return Set(next, ShipAssembler.StdKeyStern);
+        }
+
+        // ---- guns + dry dock (2026-09-25) ------------------------------
+
+        /// Every deck-gun slot of the draft (empty or fitted), for the
+        /// screen's gun rows.
+        public IReadOnlyList<EquipmentSlotView> EquipmentSlots() =>
+            backend != null ? backend.EquipmentSlots(Snapshot()) : Array.Empty<EquipmentSlotView>();
+
+        /// Fits a deck cannon on an empty slot. Whether one is actually in
+        /// the dry dock is checked at Confirm time (ApplyRefit); bind a
+        /// picker's enabled state to the report's `dryDock` rows so a tap
+        /// that cannot succeed is never offered.
+        public bool FitGun(string slotId)
+        {
+            if (Committed) return Refuse("This refit is already confirmed.");
+            if (backend == null) return Refuse("Live refitting is not connected.");
+            var edit = backend.FitEquipment(Snapshot(), slotId, ShipConfiguration.EquipmentCannon);
+            if (!edit.ok) return Refuse(edit.message);
+            return Set(edit.draft, slotId);
+        }
+
+        /// Sends the gun fitted at `slotId` to the dry dock.
+        public bool RemoveGun(string slotId)
+        {
+            if (Committed) return Refuse("This refit is already confirmed.");
+            if (backend == null) return Refuse("Live refitting is not connected.");
+            var edit = backend.RemoveEquipment(Snapshot(), slotId);
+            if (!edit.ok) return Refuse(edit.message);
+            return Set(edit.draft, slotId);
         }
 
         public bool ChooseWheel(string id)

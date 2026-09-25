@@ -52,6 +52,11 @@
 .yard-footer { flex-direction: row; padding: 8px; flex-shrink: 0; }
 .yard-footer Button { flex-grow: 1; flex-basis: 0; }
 .yard-footer Button.yard-confirm { flex-grow: 2; background-color: rgb(171, 218, 239); color: rgb(22, 43, 57); }
+.yard-guns { flex-direction: column; }
+.yard Button.yard-gun-row { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; -unity-text-align: middle-left; }
+.yard-gun-label { -unity-text-align: middle-left; flex-shrink: 0; }
+.yard-gun-status { -unity-text-align: middle-right; color: rgb(171, 209, 226); font-size: 12px; flex-grow: 1; margin-left: 8px; white-space: normal; }
+.yard-dock { margin-bottom: 10px; white-space: normal; }
 .yard-wide .yard-body { flex-direction: row; }
 .yard-wide .yard-panel { width: 330px; height: auto; border-top-width: 0; border-left-width: 1px; border-left-color: rgb(101, 136, 154); }
 .yard-wide .yard-viewport { min-width: 200px; }

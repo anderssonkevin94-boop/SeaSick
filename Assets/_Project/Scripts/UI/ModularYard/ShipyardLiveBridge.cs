@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using SeaSick.Ship.Modular;
 using UnityEngine;
 
@@ -31,6 +32,10 @@ namespace SeaSick.UI.ModularYard
             }
             return report;
         }
+
+        public IReadOnlyList<EquipmentSlotView> EquipmentSlots(ShipConfiguration draft) => adapter.EquipmentSlots(draft);
+        public ShipyardEdit FitEquipment(ShipConfiguration draft, string slotId, string moduleId) => adapter.FitEquipment(draft, slotId, moduleId);
+        public ShipyardEdit RemoveEquipment(ShipConfiguration draft, string slotId) => adapter.RemoveEquipment(draft, slotId);
 
         public string RemovalBlocker(ShipConfiguration draft, int index)
         {
