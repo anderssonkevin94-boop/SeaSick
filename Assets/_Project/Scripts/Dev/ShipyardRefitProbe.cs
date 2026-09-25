@@ -492,6 +492,10 @@ public class ShipyardRefitProbe : MonoBehaviour
         // (never hand-typed wall-variant ids), back to W1x Long.
         sb.AppendLine("(g) raised sections (per-section), live: stern(wf)+low-middle+bow(wa) -> low+middle.wb+low -> stern(connected)+middle.wf+low-middle+low-bow -> back to w1x Long:");
 
+        // Raised stern + bow over a low middle: +11 t of ends, but the low
+        // middle still caps her waterline at 1.76, so her cargo allowance
+        // falls to ~2 t (a real CARGO_WOULD_NOT_FIT with the 2.5 t seed).
+        voyage.RestoreStores(new[] { Pair(Res.Timber, 2) }, Banked());
         var mix1 = MixedConfig(DeckLevel.Raised, new[] { DeckLevel.Low }, DeckLevel.Raised);
         yield return RefitAndCheck("raised-sections: stern-wf-low-bow-wa", mix1);
         MixedStepAsserts("raised-sections: stern-wf-low-bow-wa", mix1);
@@ -521,11 +525,20 @@ public class ShipyardRefitProbe : MonoBehaviour
             rotorId = ShipConfiguration.ReinforcedRotor, carrierId = ShipConfiguration.M1Carrier };
         c.middleIds.AddRange(mIds);
         c.fittings.Add(new FittingChoice { socketId = ShipConfiguration.ChimneySocket, moduleId = ShipConfiguration.V3Chimney });
+        // Her OWN guns (the dock starts empty): each keeps its slot if that
+        // slot exists on the new ship, otherwise it goes to the dry dock --
+        // what ShipyardDraft.ToggleSection does for the player.
         var bare = ShipAssembler.Assemble(c, yard.Library);
         if (bare.ok)
+        {
+            var have = new HashSet<string>();
             foreach (var s in bare.slots)
                 if (s != null && s.role == SocketRole.DeckSlot && s.classes != null && System.Array.IndexOf(s.classes, "equipment.deck-gun") >= 0)
-                    c.equipment.Add(new EquipmentChoice { slotId = s.qualifiedId, moduleId = ShipConfiguration.EquipmentCannon });
+                    have.Add(s.qualifiedId);
+            foreach (var e in yard.Current.equipment)
+                if (e != null && have.Contains(e.slotId))
+                    c.equipment.Add(new EquipmentChoice { slotId = e.slotId, moduleId = e.moduleId });
+        }
         return c;
     }
 
