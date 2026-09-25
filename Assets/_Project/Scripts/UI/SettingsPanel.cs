@@ -89,6 +89,10 @@ namespace SeaSick.UI
 
         void OnGUI()
         {
+            // The shipyard is a full-screen UI Toolkit modal that OnGUI
+            // knows nothing about (2026-09-25 review: the gear chip sat at
+            // the left edge over the modal).
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) { if (open) { open = false; DevTools.CloseAll(); } return; }
             int u = HudLayout.Unit;
             float pad = HudLayout.Pad;
 

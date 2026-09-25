@@ -190,6 +190,10 @@ namespace SeaSick.Dev
             // and the strings built on the way are garbage. StatusHUD measured
             // 14.4 KB a frame before it took this guard.
             if (!Showing) return;
+            // The shipyard is a full-screen UI Toolkit modal that OnGUI
+            // knows nothing about (2026-09-25 review: the fps/sea/pop
+            // readout drew over the modal's top-right button).
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) return;
 
             // Re-key the labels a few times a second, not every frame. The
             // keys are rounded numbers, but two of them DECAY (peak frame

@@ -400,6 +400,12 @@ namespace SeaSick.Dev
 
         void OnGUI()
         {
+            // The shipyard is a full-screen UI Toolkit modal that OnGUI
+            // knows nothing about; the same suppression CannonBattery and
+            // PerfHUD already do for MidnightLandHud (2026-09-25 review:
+            // the collapsed "FEEL" button sat on top of the modal's own
+            // Close button).
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) return;
             EnsureStyles();
 
             // Screen.dpi is 0 on some desktop setups; fall back to 1x there

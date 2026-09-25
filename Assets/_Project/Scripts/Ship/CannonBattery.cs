@@ -470,6 +470,10 @@ namespace SeaSick.Ship
         void OnGUI()
         {
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
+            // Same suppression for the shipyard's full-screen UI Toolkit
+            // modal, which OnGUI cannot see on its own (2026-09-25 review:
+            // the port/stbd chips drew over Cancel/Reset section).
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) return;
             // A hull with no gun-port stations is not carrying guns, and two
             // buttons reading "no crew" are two buttons in a thumb's way.
             if (allGuns.Count == 0) return;
