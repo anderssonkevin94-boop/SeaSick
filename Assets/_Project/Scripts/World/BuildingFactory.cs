@@ -108,6 +108,16 @@ namespace SeaSick.World
                 return root;
             }
 
+            if (plan.kind == BuildKind.DryDock)
+            {
+                DryDockGeometry(root.transform, plan, footing);
+                Lamp(root.transform, plan,
+                    new Vector3(-len * 0.5f + 0.6f, 2.1f, wid * 0.5f + 0.2f));
+                root.AddComponent<Building>().Configure(plan);
+                root.AddComponent<DryDockSlip>().Configure(plan);
+                return root;
+            }
+
             if (plan.kind == BuildKind.Fletcher)
             {
                 FletcherShop(root.transform, plan, footing);
@@ -209,6 +219,11 @@ namespace SeaSick.World
             // `Outpost.Raise` does that), so this is tidiness, not safety.
             var pier = root.GetComponent<Pier>();
             if (pier != null) Object.Destroy(pier);
+            // A ghost dry dock never opens the shipyard: same tidiness, same
+            // reason -- it never registers (only `Outpost.Raise` does), this
+            // just keeps a stray component off the preview.
+            var slip = root.GetComponent<DryDockSlip>();
+            if (slip != null) Object.Destroy(slip);
             foreach (var f in root.GetComponentsInChildren<Campfire>(true))
                 Object.Destroy(f);
             // A ghost tower has no gun and cannot be shot: `WatchtowerGun`
@@ -756,6 +771,44 @@ namespace SeaSick.World
             var ramp = Box(root, plank, new Vector3(slope, 0.14f, wid * 0.8f),
                 new Vector3(-len * 0.5f - Run * 0.5f, -drop * 0.5f - 0.07f, 0f));
             ramp.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(drop, Run) * Mathf.Rad2Deg);
+        }
+
+        /// **Placeholder boxes for the dry dock (2026-09-26).** The art
+        /// contract (`art-staging/drydock-slip-v1/manifest.json`,
+        /// `DryDock_SeaEnd` / `DryDock_Bay` / `DryDock_Head`) is being
+        /// authored in parallel and does not exist yet -- when it lands this
+        /// is the one place to swap for a `DryDockVisual` kit builder the
+        /// way `PierDeck` calls `PierVisual.Build` first. Open at BOTH ends
+        /// (no gable walls): a ship has to pass through the sea end, and the
+        /// land end is where the head structure stands, not a wall.
+        static void DryDockGeometry(Transform root, BuildPlan plan, float footing)
+        {
+            float len = plan.footprint.x, wid = plan.footprint.y;
+            var stone = Mat("dock-stone", new Color(0.46f, 0.46f, 0.44f));
+            var timber = Mat("dock-timber", new Color(0.36f, 0.27f, 0.18f));
+            var padMat = Mat("dock-pad", new Color(0.30f, 0.29f, 0.27f));
+
+            // Foundation slab the length of the slip.
+            float slab = 0.6f + Mathf.Max(0f, footing);
+            Box(root, stone, new Vector3(len, slab, wid), new Vector3(0f, -slab * 0.5f, 0f));
+
+            // Low walkway rails either side -- stand-in for `DryDock_Bay`.
+            for (int s = -1; s <= 1; s += 2)
+                Box(root, timber, new Vector3(len, 0.5f, 0.3f),
+                    new Vector3(0f, 0.25f, s * (wid * 0.5f - 0.15f)));
+
+            // A head structure at the land end -- stand-in for `DryDock_Head`.
+            Box(root, timber, new Vector3(1.2f, 1.8f, wid), new Vector3(-len * 0.5f + 0.6f, 0.9f, 0f));
+
+            // Keel pads down the centreline, roughly where a hull would
+            // rest -- stand-in for the manifest's `keelRestZM`.
+            const int PadCount = 5;
+            for (int i = 0; i < PadCount; i++)
+            {
+                float t = (i + 0.5f) / PadCount;
+                float x = -len * 0.4f + t * len * 0.8f;
+                Box(root, padMat, new Vector3(1.4f, 0.5f, 1.0f), new Vector3(x, 0.25f, 0f));
+            }
         }
 
         /// World y a pier post stops at: deeper than this and it is

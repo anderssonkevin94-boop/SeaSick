@@ -118,6 +118,13 @@ public class ShipyardRefitProbe : MonoBehaviour
         // A known state: some damage, two kinds in the hold, the berth.
         string why0;
         if (!anchor.AtHomeDock && !anchor.BerthAtHome(out why0)) sb.AppendLine("could not berth at the start: " + why0);
+        // **2026-09-26: the refit gate now also asks for a dry dock**
+        // (`ShipyardService.CanRefitNow` / `RefitBlockers`, `DryDockSlip`).
+        // Every refit step below would otherwise be refused with "build a
+        // dry dock" instead of exercising what it is actually testing --
+        // this probe's job is the refit gate, not dry-dock siting (a
+        // separate concern), so it injects one directly.
+        EnsureDryDock();
         yield return new WaitForSeconds(0.5f);
         if (hull != null) hull.Batter(yard.transform.position, 0.15f);
         voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
@@ -852,6 +859,25 @@ public class ShipyardRefitProbe : MonoBehaviour
     {
         if (ok) passes++; else fails++;
         sb.Append(ok ? "  PASS " : "  FAIL ").Append(name).Append(" -- ").AppendLine(detail);
+    }
+
+    /// A dry dock on the home berth's island, without going through
+    /// `Outpost.Raise`'s terrain siting -- see the call site. A no-op if
+    /// one is already there.
+    void EnsureDryDock()
+    {
+        if (DryDockSlip.HomeSlip != null) return;
+        var home = Dock.Home;
+        var isle = home != null ? Island.Nearest(home.Berth) : null;
+        var outpost = isle != null ? Outpost.Of(isle) : null;
+        if (outpost == null) { sb.AppendLine("EnsureDryDock: no outpost at the home berth's island"); return; }
+        var go = new GameObject("DryDockSlip (probe-injected)");
+        go.transform.position = home.Berth;
+        var b = go.AddComponent<Building>();
+        b.Configure(BuildPlans.DryDock);
+        var slip = go.AddComponent<DryDockSlip>();
+        slip.Configure(BuildPlans.DryDock);
+        slip.Register(b, outpost);
     }
 
     void Finish(string stopped)

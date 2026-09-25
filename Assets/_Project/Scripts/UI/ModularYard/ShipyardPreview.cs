@@ -63,8 +63,37 @@ namespace SeaSick.UI.ModularYard
             Resize(600, 700);
         }
 
+        /// **Stage the preview IN the world dry dock when there is one**
+        /// (2026-09-26). `root` was always parked off-world at `(0,0,-1000)`
+        /// with the camera's culling mask limited to layer 31, so nothing
+        /// else could ever show through -- fine for an isolated ship on a
+        /// flat colour, wrong for "sitting in the dry dock on her keel
+        /// pads". When `DryDockSlip.HomeSlip` exists this moves `root` onto
+        /// its `PreviewAnchor` (a real world transform) and widens the
+        /// culling mask so the dock and the island around it render too;
+        /// with no dry dock it falls back to exactly the old off-world
+        /// stage. Cheap to call every `Build` -- it only moves a transform
+        /// and flips one int, and the dry dock does not appear or vanish
+        /// mid-session.
+        void StageAt(SeaSick.World.DryDockSlip slip)
+        {
+            if (slip != null)
+            {
+                var anchor = slip.PreviewAnchor;
+                root.transform.SetPositionAndRotation(anchor.position, anchor.rotation);
+                camera.cullingMask = ~0;
+            }
+            else
+            {
+                root.transform.position = new Vector3(0, 0, -1000);
+                root.transform.rotation = Quaternion.identity;
+                camera.cullingMask = 1 << 31;
+            }
+        }
+
         public void Build(AssemblyResult result, string highlight, ShipConfiguration configuration = null)
         {
+            StageAt(SeaSick.World.DryDockSlip.HomeSlip);
             if (factory != null)
             {
                 if (view != null) { view.gameObject.SetActive(false); Delete(view.gameObject); }

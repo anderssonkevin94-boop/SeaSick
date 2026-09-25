@@ -132,10 +132,25 @@ namespace SeaSick.UI.Sheets
         {
             everyoneAshore = SheetKit.Btn("Everyone ashore", EveryoneAshore);
             var row = new List<VisualElement> { everyoneAshore };
+            shipyardBtn = null; shipyardReason = null;
             if (SeaSick.Ship.Modular.ShipyardService.Player != null)
             {
                 everyoneAshore.text = "All ashore";
-                row.Add(SheetKit.Btn("Shipyard", SeaSick.UI.ModularYard.ShipyardLiveBridge.Open));
+                // **The button's state is visible BEFORE opening the modal**
+                // (2026-09-26 UX pass): enabled only when a refit is
+                // actually possible, with every blocker printed underneath
+                // it -- not a tooltip, there is no hover on a phone. Text
+                // and enabled state are set in `ShipyardBlock` (`Refresh`),
+                // the same "build once, re-text on refresh" pattern every
+                // other button on this sheet follows.
+                shipyardBtn = SheetKit.Btn("Shipyard", SeaSick.UI.ModularYard.ShipyardLiveBridge.Open);
+                shipyardReason = SheetKit.Text("", false, true, 11f);
+                shipyardReason.style.whiteSpace = WhiteSpace.Normal;
+                var shipyardCol = new VisualElement();
+                shipyardCol.style.flexDirection = FlexDirection.Column;
+                shipyardCol.Add(shipyardBtn);
+                shipyardCol.Add(shipyardReason);
+                row.Add(shipyardCol);
             }
             // **Make this my home berth** (2026-09-25, Kevin: "make my home
             // berth the pier I built at island_2"). Only where she is lying
@@ -218,6 +233,8 @@ namespace SeaSick.UI.Sheets
         VisualElement aboardCol;
         VisualElement ashoreCol;
         Button everyoneAshore;
+        Button shipyardBtn;
+        Label shipyardReason;
 
         long holdKey = long.MinValue;
         long stopKey = long.MinValue;
@@ -337,6 +354,26 @@ namespace SeaSick.UI.Sheets
             RepairBlock();
             CrewBlock(camp);
             HomeBerthBlock();
+            ShipyardBlock();
+        }
+
+        /// **The Shipyard button's own state, before it is ever tapped**
+        /// (2026-09-26). Enabled with a plain label when a refit is
+        /// possible; disabled with every blocker listed underneath
+        /// otherwise (`ShipyardService.RefitBlockers`, same wording
+        /// `CanRefitNow` gives the modal, so this is never a second story).
+        /// A blocker is refreshed here rather than baked into `BuildActions`
+        /// because the state can change under an open sheet -- she casts
+        /// off, a raid starts -- and this runs every frame `Refresh` does.
+        void ShipyardBlock()
+        {
+            if (shipyardBtn == null) return;
+            var yard = SeaSick.Ship.Modular.ShipyardService.Player;
+            if (yard == null) { shipyardBtn.SetEnabled(false); shipyardReason.text = ""; return; }
+            var blockers = yard.RefitBlockers();
+            shipyardBtn.SetEnabled(blockers.Count == 0);
+            shipyardBtn.text = "Shipyard";
+            shipyardReason.text = blockers.Count == 0 ? "" : string.Join("\n", blockers);
         }
 
         /// Ticks the arm/confirm/feedback text on `homeBerthBtn` in place --

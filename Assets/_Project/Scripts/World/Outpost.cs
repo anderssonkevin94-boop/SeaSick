@@ -385,6 +385,11 @@ namespace SeaSick.World
             // inland (2026-09-23, "anywhere on the island") can be well
             // past the reach -- and the harbour is the plan's Phase 3.
             if (plan.kind == BuildKind.Pier) return false;
+            // A dry dock goes beside the home berth, which is its own reach
+            // rule (`DryDockMaxFromHome`, tested in `CanPlaceDryDock`/
+            // `SnapDryDock`) and may be well outside the town ring the same
+            // way the pier is.
+            if (plan.kind == BuildKind.DryDock) return false;
             float d = Island.FlatDistance(at, campCentre);
             if (d <= TownRadius) return false;
             why = $"too far from the town centre ({d:F0} m, {TownRadius:F0} m is the limit)";
@@ -1998,7 +2003,7 @@ namespace SeaSick.World
                     {
                         if (b == null) continue;
                         var plan = PlanFor(b.planId, b.length);
-                        if (plan.kind == BuildKind.Pier) continue;
+                        if (plan.kind == BuildKind.Pier || plan.kind == BuildKind.DryDock) continue;
                         AddEntry(null, ClearShape.Rect(new Vector3(b.x, 0f, b.z), b.yaw, plan.footprint), wood);
                     }
                 if (ledger.builtWalls != null)
@@ -2039,7 +2044,7 @@ namespace SeaSick.World
             skip = false;
             if (r.isWall) return ClearShape.Line(r.postA, r.postB);
             var plan = PlanFor(r.planId, r.length);
-            if (plan.kind == BuildKind.Pier) { skip = true; return default; }
+            if (plan.kind == BuildKind.Pier || plan.kind == BuildKind.DryDock) { skip = true; return default; }
             return ClearShape.Rect(r.At, r.yaw, plan.footprint);
         }
 
@@ -2152,7 +2157,7 @@ namespace SeaSick.World
         public void CountObstructions(BuildPlan plan, Vector3 at, float yaw, out int trees, out int rocks)
         {
             trees = rocks = 0;
-            if (ledger == null || plan.kind == BuildKind.Pier) return;
+            if (ledger == null || plan.kind == BuildKind.Pier || plan.kind == BuildKind.DryDock) return;
             CountShape(ClearShape.Rect(at, yaw, plan.footprint), out trees, out rocks, out _);
         }
 
@@ -3756,6 +3761,9 @@ namespace SeaSick.World
             // A pier has no "somewhere in the clearing": it stands where the
             // beach meets water deep enough, and only `SnapPier` knows where.
             if (plan.kind == BuildKind.Pier) return null;
+            // Same for a dry dock -- it stands beside the home berth, and
+            // only `SnapDryDock` knows where.
+            if (plan.kind == BuildKind.DryDock) return null;
 
             float len = plan.footprint.x, wid = plan.footprint.y;
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
@@ -3851,6 +3859,15 @@ namespace SeaSick.World
             {
                 var pier = go.GetComponent<Pier>();
                 if (pier != null) pier.Register(b);
+            }
+            // Same idea for a dry dock: only a raised one registers, and it
+            // registers with the outpost that raised it (`this`), so
+            // `DryDockSlip.HomeSlip` can find it by island without a
+            // spatial search.
+            if (plan.kind == BuildKind.DryDock)
+            {
+                var slip = go.GetComponent<DryDockSlip>();
+                if (slip != null) slip.Register(b, this);
             }
             AfterRaised(plan, b);
             return b;
@@ -4039,6 +4056,7 @@ namespace SeaSick.World
             // A pier is half over water by design, so the shore, corner and
             // beach tests below would all refuse it. It has its own.
             if (plan.kind == BuildKind.Pier) return CanPlacePier(plan, at, yaw, out why, out lo, out hi);
+            if (plan.kind == BuildKind.DryDock) return CanPlaceDryDock(plan, at, yaw, out why, out lo, out hi);
 
             // On this island at all. The height test below rejects open water
             // on its own, but it cannot tell the player WHY, and "out past the
@@ -4212,6 +4230,120 @@ namespace SeaSick.World
             { why = "the water here is too shallow for a pier"; return false; }
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
             if (!Clear(at, halfDiag, out string blockedP)) { why = blockedP; return false; }
+            return true;
+        }
+
+        /// **Where a dry dock would go if the player points HERE.** The same
+        /// shore-walk `SnapPier` does -- from the picked point, downhill to
+        /// the waterline, facing straight out -- but the length is FIXED
+        /// (`BuildPlans.DryDockLength`, never chosen by the beach) and the
+        /// result is refused unless it also lands within
+        /// `BuildPlans.DryDockMaxFromHome` of `Dock.Home`: "beside the home
+        /// berth" is the whole point of the building, not an afterthought.
+        ///
+        /// No water-depth search either -- nothing actually sails into a
+        /// dry dock (the live ship stays at her berth; the shipyard just
+        /// STAGES a preview here, see `SeaSick.World.DryDockSlip`), so the
+        /// open end only has to reach the waterline, not `PierBerthDepth`.
+        public bool SnapDryDock(Vector3 picked, out Vector3 centre, out float yaw, out string why)
+        {
+            yaw = 0f;
+            centre = picked;
+            centre.y = BuildPlans.DryDockDeck;
+            why = "";
+            if (!Sited) { why = "this ground was never surveyed"; return false; }
+
+            var home = Dock.Home;
+            if (home == null) { why = "there is no home berth yet"; return false; }
+            if (Island.FlatDistance(picked, home.Berth) > BuildPlans.DryDockMaxFromHome)
+            {
+                why = $"the dry dock must stand beside your home berth ({Dock.HomeLabel})";
+                return false;
+            }
+
+            Vector3 seaward = Downhill(picked, 2f);
+            if (seaward.sqrMagnitude < 1e-6f)
+            {
+                seaward = Island != null ? picked - Island.transform.position : Vector3.forward;
+                seaward.y = 0f;
+                if (seaward.sqrMagnitude < 1e-6f) seaward = Vector3.forward;
+                seaward.Normalize();
+            }
+
+            const float Step = 0.5f, Reach = 60f;
+            bool wet = height(picked.x, picked.z) < 0f;
+            Vector3 dir = wet ? -seaward : seaward;
+            Vector3 a = picked, b = picked;
+            bool crossed = false;
+            for (float d = Step; d <= Reach; d += Step)
+            {
+                b = picked + dir * d;
+                if ((height(b.x, b.z) < 0f) != wet) { crossed = true; break; }
+                a = b;
+            }
+            if (!crossed)
+            {
+                why = wet ? "that is open water -- point at a beach"
+                          : "no shore within reach of that spot";
+                return false;
+            }
+            for (int i = 0; i < 6; i++)
+            {
+                Vector3 m = (a + b) * 0.5f;
+                if ((height(m.x, m.z) < 0f) == wet) a = m; else b = m;
+            }
+            Vector3 shore = (a + b) * 0.5f;
+
+            Vector3 heading = Downhill(shore, 4f);
+            if (heading.sqrMagnitude < 1e-6f) heading = seaward;
+            if (Vector3.Dot(heading, seaward) < 0f) heading = -heading;
+
+            Vector3 land = shore - heading * PierLandIn;
+            float landH = height(land.x, land.z);
+            if (landH <= 0.05f) { why = "there is no beach here to found a dry dock on"; return false; }
+            if ((landH - height(shore.x, shore.z)) / PierLandIn > PierLandSlope)
+            { why = "the beach is too steep for a dry dock"; return false; }
+
+            float length = BuildPlans.DryDockLength;
+            yaw = YawAlong(heading);
+            centre = land + heading * (length * 0.5f);
+            centre.y = BuildPlans.DryDockDeck;
+
+            if (Island.FlatDistance(centre, home.Berth) > BuildPlans.DryDockMaxFromHome)
+            {
+                why = $"the dry dock must stand beside your home berth ({Dock.HomeLabel})";
+                return false;
+            }
+            return true;
+        }
+
+        /// **Can a dry dock stand at this centre and yaw?** The re-ask
+        /// `SnapDryDock`'s answer goes through -- same shape as
+        /// `CanPlacePier` (land under the near end, water at the open end,
+        /// nothing else claiming the footprint) plus the one rule that is
+        /// only the dry dock's: close enough to the home berth.
+        bool CanPlaceDryDock(BuildPlan plan, Vector3 at, float yaw, out string why,
+            out float lo, out float hi)
+        {
+            lo = hi = BuildPlans.DryDockDeck;
+            why = "";
+            var home = Dock.Home;
+            if (home == null) { why = "there is no home berth yet"; return false; }
+            if (Island.FlatDistance(at, home.Berth) > BuildPlans.DryDockMaxFromHome)
+            {
+                why = $"the dry dock must stand beside your home berth ({Dock.HomeLabel})";
+                return false;
+            }
+            float len = plan.footprint.x, wid = plan.footprint.y;
+            Vector3 heading = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+            Vector3 land = at - heading * (len * 0.5f);
+            Vector3 sea = at + heading * (len * 0.5f);
+            if (height(land.x, land.z) <= 0.05f)
+            { why = "there is no beach here to found a dry dock on"; return false; }
+            if (height(sea.x, sea.z) > 0.05f)
+            { why = "the dry dock's open end must reach the water"; return false; }
+            float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
+            if (!Clear(at, halfDiag, out string blockedD)) { why = blockedD; return false; }
             return true;
         }
 
