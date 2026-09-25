@@ -35,6 +35,14 @@ namespace SeaSick.World
         /// the butt standing three metres off in the open -- a thing no
         /// other building in the camp has outside its own footprint.
         Fletcher,
+        /// **A slip beside the home berth, 2026-09-26.** Where the shipyard's
+        /// refits happen and where her equipment waits between fittings --
+        /// see `SeaSick.World.DryDockSlip` and
+        /// `ShipyardService.CanRefitNow`. Sited like a pier -- open end to
+        /// the water, foundations on the beach -- but a FIXED length: built
+        /// once, long enough for the longest ship on the ladder, and never
+        /// resized per refit (Kevin, relayed 2026-09-25: "pick one size").
+        DryDock,
     }
 
     public struct BuildPlan
@@ -643,6 +651,48 @@ namespace SeaSick.World
         /// to lie alongside without touching.
         public const float PierBerthDepth = 2.5f;
 
+        // --- the dry dock (2026-09-26) ---------------------------------------
+
+        /// **The player-built slip.** Sited like a pier (open end to the
+        /// water, foundations on the beach) but the length is fixed rather
+        /// than chosen by the beach -- see `BuildKind.DryDock`. Priced
+        /// against the pier (8 timber / 2 stone) but a bigger structure, more
+        /// like a small storehouse in labour. **Provisional, never played**:
+        /// the art contract (`art-staging/drydock-slip-v1/manifest.json`,
+        /// not authored yet) may ask for different numbers once it lands --
+        /// everything a swap would touch is read from constants here, not
+        /// scattered through the siting code.
+        public static readonly BuildPlan DryDock = new BuildPlan
+        {
+            id = "DryDock",
+            kind = BuildKind.DryDock,
+            label = "dry dock",
+            blurb = "a slip beside the berth, so she can be refitted",
+            resource = Res.Timber,
+            baseCost = 20,
+            baseStoneCost = 8,
+            footprint = new Vector2(DryDockLength, DryDockWidth),
+            ridge = DryDockDeck,
+        };
+
+        /// Metres of dry dock, FIXED -- long enough for the longest ship the
+        /// ladder builds (three middle sections, 19.14 m overall) with room
+        /// for the head structure and the sea-end opening either side.
+        /// Kevin, relayed 2026-09-25: "pick one size, don't resize per
+        /// refit" -- so this is not chosen by the beach the way
+        /// `PierLongest` is, and there is no `WithLength` for it.
+        public const float DryDockLength = 22f;
+        /// Metres across: a wide beam hull (up to 12.08 u, `WorldScale`) plus
+        /// a walkway either side to work round her.
+        public const float DryDockWidth = 8f;
+        /// Walkway height above mean water. The pier's own number
+        /// (`PierDeck`) until the art contract's manifest says
+        /// `walkwayHeightM` otherwise.
+        public const float DryDockDeck = 1.2f;
+        /// How far a dry dock may stand from the home berth, metres --
+        /// "next to the home berth" is a distance, not just "this island".
+        public const float DryDockMaxFromHome = 40f;
+
         // --- the fortification (Phase 1, 2026-09-23) -------------------------
 
         /// **A run of sharpened logs between two posts.**
@@ -732,7 +782,7 @@ namespace SeaSick.World
         /// same blueprint, so keeping it in the list is what stops it becoming
         /// a special case.
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Hut, Farm, Sawmill, Quarry, Fletcher, Kitchen, Blacksmith, Watchtower, Pier };
+            { Campfire, Storage, Hut, Farm, Sawmill, Quarry, Fletcher, Kitchen, Blacksmith, Watchtower, Pier, DryDock };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.
