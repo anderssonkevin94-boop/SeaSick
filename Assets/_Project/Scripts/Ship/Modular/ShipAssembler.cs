@@ -250,6 +250,15 @@ namespace SeaSick.Ship.Modular
             // whatever TOO_MANY_MIDDLES already said for the >= 3 case.
             bool sternRaised = stern != null && stern.def.family == RaisedFamily;
             bool bowRaised = bow != null && bow.def.family == RaisedFamily;
+            // Every installed hull section raised (docs/RAISED-SECTIONS.md
+            // sec 5's chimney rule: "all raised" gets the -0.84 u midpoint
+            // offset, a per-section mix does not) -- checked over the whole
+            // chain, not just the ends, since a mixed ship can have a raised
+            // stern/bow with a low middle between them.
+            bool allHullRaised = chainIntact;
+            if (allHullRaised)
+                foreach (var (key, _, _) in chain)
+                    if (!instances.TryGetValue(key, out var seg) || seg.def.family != RaisedFamily) { allHullRaised = false; break; }
             if (middles.Count == 0 && sternRaised && bowRaised)
                 Reject(r, "RAISED_DECK_BAYS", "middleIds",
                     "With no middle bays, only one end of the ship can be raised — the stern and bow would have to close " +
@@ -354,7 +363,11 @@ namespace SeaSick.Ship.Modular
                 {
                     if (!chainIntact) continue; // the hull reasons are already reported
                     pos.x = (aftEndU.x + tipU.x) * 0.5f;
-                    if (host.def.family == RaisedFamily) pos.x += RaisedChimneyMidpointOffsetU;
+                    // docs/RAISED-SECTIONS.md sec 5: the offset is an
+                    // all-raised-hull correction (Astra's manifest position
+                    // for the fully-connected raised deck); a per-section
+                    // mix (even a raised stern) uses the plain midpoint.
+                    if (allHullRaised) pos.x += RaisedChimneyMidpointOffsetU;
                 }
                 var inst = new Instance { def = def, key = "fitting:" + part, originU = pos,
                     rotation = ModularScale.AuthoringYawToGame(socket.yawDeg) };

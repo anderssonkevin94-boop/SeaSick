@@ -207,6 +207,26 @@ namespace SeaSick.Ship.Modular
             ReportMix("bow-only", DeckLevel.Low, new[] { DeckLevel.Low }, DeckLevel.Raised);
             ReportMix("stern-and-bow-no-middle-raise", DeckLevel.Raised, Array.Empty<DeckLevel>(), DeckLevel.Low);
             ReportMix("all-three-two-middles", DeckLevel.Raised, new[] { DeckLevel.Raised, DeckLevel.Raised }, DeckLevel.Raised);
+
+            // Chimney X (docs/RAISED-SECTIONS.md sec 5): the -0.84 u
+            // midpoint offset is an ALL-raised correction; a mixed ship
+            // (raised stern, low rest) uses the plain midpoint even though
+            // its stern alone is raised.
+            var mixCfgWithChimney = Bare(mixSternId, mixMiddleIds, mixBowId);
+            mixCfgWithChimney.fittings.Add(new FittingChoice { socketId = ShipConfiguration.ChimneySocket, moduleId = ShipConfiguration.V3Chimney });
+            var mixChimneyAsm = ShipAssembler.Assemble(mixCfgWithChimney, lib);
+            var mixChimney = mixChimneyAsm.Find("fitting:" + ShipConfiguration.ChimneySocket);
+
+            var allRaisedCfg = RaisedPresets.RaisedLong();
+            var allRaisedAsm = ShipAssembler.Assemble(allRaisedCfg, lib);
+            var allRaisedChimney = allRaisedAsm.Find("fitting:" + ShipConfiguration.ChimneySocket);
+
+            Gate("raised-sections-chimney-offset-only-when-all-raised",
+                mixChimneyAsm.ok && allRaisedAsm.ok && mixChimney != null && allRaisedChimney != null
+                    && Mathf.Abs(mixChimney.positionU.x - allRaisedChimney.positionU.x - 0.84f) < 1e-3f,
+                mixChimney != null && allRaisedChimney != null
+                    ? $"mixed (stern-only raised) chimney x={F(mixChimney.positionU.x)} u; all-raised chimney x={F(allRaisedChimney.positionU.x)} u (expect +0.84 u apart)"
+                    : $"mixed ok={mixChimneyAsm.ok}, all-raised ok={allRaisedAsm.ok}");
         }
     }
 }
