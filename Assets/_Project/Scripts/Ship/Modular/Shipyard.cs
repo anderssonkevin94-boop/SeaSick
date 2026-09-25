@@ -63,9 +63,10 @@ namespace SeaSick.Ship.Modular
     /// refused with NOT_IN_PROTOTYPE, IN ADDITION to every milestone-1 rule.
     public static class ShipyardPolicy
     {
-        static readonly string[] Sterns = { ShipConfiguration.V3Stern, ExpandedPresets.ExpandedStern, RaisedPresets.RaisedStern };
-        static readonly string[] Middles = { ShipConfiguration.V3Middle, ExpandedPresets.ExpandedMiddle, RaisedPresets.RaisedMiddle };
-        static readonly string[] Bows = { ShipConfiguration.V3Bow, ExpandedPresets.ExpandedBow, RaisedPresets.RaisedBow };
+        static readonly string[] Sterns = { ShipConfiguration.V3Stern, ExpandedPresets.ExpandedStern, RaisedPresets.RaisedStern, RaisedSections.SternRaisedWallFwd };
+        static readonly string[] Middles = { ShipConfiguration.V3Middle, ExpandedPresets.ExpandedMiddle, RaisedPresets.RaisedMiddle,
+            RaisedSections.MiddleRaisedWallAft, RaisedSections.MiddleRaisedWallFwd, RaisedSections.MiddleRaisedWallBoth };
+        static readonly string[] Bows = { ShipConfiguration.V3Bow, ExpandedPresets.ExpandedBow, RaisedPresets.RaisedBow, RaisedSections.BowRaisedWallAft };
         static readonly string[] Rotors = { ShipConfiguration.TimberRotor, ShipConfiguration.ReinforcedRotor };
         static readonly string[] Carriers = { ShipConfiguration.M1Carrier };
         static readonly string[] Fittings = { ShipConfiguration.V3Chimney };

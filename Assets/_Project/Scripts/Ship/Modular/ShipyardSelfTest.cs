@@ -108,6 +108,25 @@ namespace SeaSick.Ship.Modular
                 Gate($"policy-offers-raised-{raised.middleIds.Count}-bay", pr.Count == 0,
                     pr.Count == 0 ? "no policy rejection" : pr[0].code + " | " + pr[0].message);
             }
+            // Every id the per-section levels can produce must pass the policy
+            // (2026-09-25: the wall variants were missing and every mixed ship
+            // was refused at Confirm).
+            {
+                int bad = 0; string first = "";
+                for (int n = 0; n <= 3; n++)
+                    for (int mask = 0; mask < (1 << (n + 2)); mask++)
+                    {
+                        DeckLevel At(int bit) => ((mask >> bit) & 1) == 1 ? DeckLevel.Raised : DeckLevel.Low;
+                        var mids = new DeckLevel[n];
+                        for (int i = 0; i < n; i++) mids[i] = At(i + 1);
+                        var (sId, mIds, bId) = RaisedSections.ToIds(At(0), mids, At(n + 1));
+                        var cfg = ExpandedPresets.ExpandedLong();
+                        cfg.sternId = sId; cfg.bowId = bId; cfg.middleIds = new List<string>(mIds); cfg.equipment.Clear();
+                        var pr = ShipyardPolicy.Check(cfg, lib);
+                        if (pr.Count > 0) { bad++; if (first == "") first = pr[0].message; }
+                    }
+                Gate("policy-offers-every-section-level-combination", bad == 0, bad == 0 ? "all pass" : $"{bad} refused, e.g. {first}");
+            }
             Rejects("policy-rejects-four-bays", ShipConfiguration.WithMiddles(4), "TOO_MANY_MIDDLES");
             var noWheel = ShipConfiguration.Long(); noWheel.rotorId = ""; noWheel.carrierId = "";
             Rejects("policy-rejects-no-wheel", noWheel, ShipyardCodes.WheelRequired);
@@ -117,8 +136,8 @@ namespace SeaSick.Ship.Modular
                 ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.UpperDeck).Count == 0
                 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment).Count == 1
                 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment)[0] == ShipConfiguration.EquipmentCannon
-                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Stern).Count == 3 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 3
-                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Bow).Count == 3,
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Stern).Count == 4 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 6
+                && ShipyardPolicy.AllowedModuleIds(ModuleKind.Bow).Count == 4,
                 "rotors " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor))
                 + " middles " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle))
                 + " equipment " + string.Join(",", ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment)));
