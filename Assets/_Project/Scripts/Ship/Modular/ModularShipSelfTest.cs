@@ -54,6 +54,8 @@ namespace SeaSick.Ship.Modular
             catch (Exception e) { fails++; sb.AppendLine("  FAIL expanded-hull exception -- " + e); }
             try { RaisedDeckValidation.Body(standardsJson, moduleJsons, names, hullFormJson, readResourceText, (n, ok, d) => Gate(n, ok, d)); }
             catch (Exception e) { fails++; sb.AppendLine("  FAIL raised-deck exception -- " + e); }
+            try { RaisedSectionsValidation.Body(standardsJson, moduleJsons, names, (n, ok, d) => Gate(n, ok, d)); }
+            catch (Exception e) { fails++; sb.AppendLine("  FAIL raised-sections exception -- " + e); }
             Passed = passes; Failed = fails;
             sb.AppendLine($"ModularShipSelfTest: {passes} PASS, {fails} FAIL");
             Report = sb.ToString();

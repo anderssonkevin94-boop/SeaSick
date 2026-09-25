@@ -129,9 +129,18 @@ namespace SeaSick.Ship.Modular
         const float RaisedChimneyMidpointOffsetU = -0.84f;
         const string RaisedFamily = "W1xR";
 
-        /// Raised-deck family bay-count gate (docs/RAISED-DECK.md sec 3):
-        /// the kit only closes with 1 or 2 middle bays.
-        const int RaisedDeckMinMiddles = 1, RaisedDeckMaxMiddles = 2;
+        /// Raised-deck family bay-count gate, generalised for per-section
+        /// raising (docs/RAISED-SECTIONS.md sec 5, superseding the old
+        /// "1-2 middles only" rule docs/RAISED-DECK.md sec 3 stated for the
+        /// all-raised preset): with NO middle bays, only one end can be
+        /// raised -- Astra's raised ends have no data for two raised end
+        /// walls butted directly together with nothing between them. With
+        /// one or more middle bays, any per-section combination is left to
+        /// JOIN_PROFILE_MISMATCH (wrong id pairing) and the library's own
+        /// `MaxMiddles` (TOO_MANY_MIDDLES); a fully-connected raised run of
+        /// 3 middle bays is UNVERIFIED against Astra's art (only 1-2 bays
+        /// were ever rendered, docs/RAISED-DECK.md sec 10) but nothing in
+        /// the module data itself forbids it, so it is not blocked here.
 
         public const string StdKeyStern = "stern";
         public const string StdKeyBow = "bow";
@@ -239,9 +248,12 @@ namespace SeaSick.Ship.Modular
             // whole intact chain is raised. 0 or >= 3 middles closes the kit
             // wrong; refused with its own readable code, in addition to
             // whatever TOO_MANY_MIDDLES already said for the >= 3 case.
-            bool raisedEnd = (stern != null && stern.def.family == RaisedFamily) || (bow != null && bow.def.family == RaisedFamily);
-            if (raisedEnd && (middles.Count < RaisedDeckMinMiddles || middles.Count > RaisedDeckMaxMiddles))
-                Reject(r, "RAISED_DECK_BAYS", "middleIds", "A raised deck is built for one or two middle bays.");
+            bool sternRaised = stern != null && stern.def.family == RaisedFamily;
+            bool bowRaised = bow != null && bow.def.family == RaisedFamily;
+            if (middles.Count == 0 && sternRaised && bowRaised)
+                Reject(r, "RAISED_DECK_BAYS", "middleIds",
+                    "With no middle bays, only one end of the ship can be raised — the stern and bow would have to close " +
+                    "directly against each other with no room for either end's own wall.");
 
             Vector3 aftEndU = Vector3.zero, tipU = Vector3.zero;
             if (stern != null)

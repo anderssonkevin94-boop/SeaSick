@@ -82,7 +82,13 @@ namespace SeaSick.Ship.Modular
             RejectMix("raised-w1r2-bow-rejected", raisedW1r2Anything);
 
             // =============================================================
-            // sec 3: RAISED_DECK_BAYS -- 0 and >= 3 middles refused, 1 and 2 ok.
+            // sec 3/docs/RAISED-SECTIONS.md sec 5: RAISED_DECK_BAYS only
+            // blocks 0 middles with BOTH ends raised (no room for either
+            // end's own wall) -- the old "1-2 middles only" cap is gone
+            // (RaisedSectionsValidation enumerates every level combination
+            // for 0-3 middles against this same rule); 3 fully-connected
+            // raised middles now assembles too, though it is UNVERIFIED
+            // against Astra's art (only 1-2 bays were ever rendered).
             // =============================================================
             var bays0 = RaisedPresets.WithMiddles(0);
             var bays0R = ShipAssembler.Assemble(bays0, lib);
@@ -90,7 +96,7 @@ namespace SeaSick.Ship.Modular
 
             var bays3 = RaisedPresets.WithMiddles(3);
             var bays3R = ShipAssembler.Assemble(bays3, lib);
-            Gate("raised-three-middles-rejected-RAISED_DECK_BAYS", !bays3R.ok && bays3R.HasCode("RAISED_DECK_BAYS"), Codes(bays3R));
+            Gate("raised-three-middles-assembles-unverified-art", bays3R.ok, bays3R.Summary());
 
             var longR = ShipAssembler.Assemble(RaisedPresets.RaisedLong(), lib);
             Gate("raised-long-one-middle-assembles", longR.ok, longR.Summary());
