@@ -146,7 +146,7 @@ namespace SeaSick.UI.ModularYard
 
             if (isStern)
             {
-                body.Add(SheetKit.Rule());
+                body.Add(PinnedRule());
                 body.Add(SheetKit.Eyebrow("paddle wheel"));
                 var wheels = new VisualElement(); wheels.AddToClassList("yard-sheet-row"); body.Add(wheels);
                 var timber = new Button(() => { draft.ChooseWheel(ShipConfiguration.TimberRotor); Fill(); }) { text = "Timber" };
@@ -166,6 +166,19 @@ namespace SeaSick.UI.ModularYard
             return int.TryParse(middleKey.Substring(7, middleKey.Length - 8), out int i) ? i : -1;
         }
 
+        /// A bare VisualElement (a rule, the interior page's budget bar) has
+        /// no text/children of its own for Yoga to size from -- without
+        /// pinning min-height and flex-shrink:0 it measures 0x0 and never
+        /// draws, even with an explicit `style.height` set (2026-09-25
+        /// review: the budget bar and the section sheet's rules were both
+        /// invisible; confirmed live via `resolvedStyle`).
+        static VisualElement PinnedRule()
+        {
+            var r = SheetKit.Rule();
+            r.style.minHeight = 1f; r.style.flexShrink = 0f;
+            return r;
+        }
+
         // ---- Guns -------------------------------------------------------------
 
         void BuildGuns()
@@ -175,7 +188,16 @@ namespace SeaSick.UI.ModularYard
                 body.Add(SheetKit.Text("Guns: preview only, live refitting not connected.", false, true));
                 return;
             }
-            var slots = draft.EquipmentSlots();
+            var slots = new List<EquipmentSlotView>(draft.EquipmentSlots());
+            // Starboard together, then port together (the physical grouping
+            // the sheet reads as); within a side, forward before aft, so two
+            // rows that would otherwise both read e.g. "starboard, forward"
+            // never sit next to each other out of order.
+            slots.Sort((a, b) =>
+            {
+                int side = string.CompareOrdinal(b.side, a.side); // "starboard" before "port"
+                return side != 0 ? side : b.positionM.z.CompareTo(a.positionM.z);
+            });
             int inDock = 0;
             var report = live?.Report(draft.Snapshot());
             if (report?.dryDock != null)
@@ -228,21 +250,50 @@ namespace SeaSick.UI.ModularYard
                 return;
             }
 
+            body.Add(SheetKit.Eyebrow("berths"));
             var row = new VisualElement(); row.AddToClassList("yard-sheet-row"); body.Add(row);
-            var minus = new Button(() => SetBerths(space.berths - 1)) { text = "-" };
-            minus.AddToClassList("yard-icon-button"); minus.SetEnabled(space.berths > space.minBerths); row.Add(minus);
+            var minus = new Button(() => SetBerths(space.berths - 1));
+            minus.AddToClassList("yard-icon-button"); minus.SetEnabled(space.berths > space.minBerths);
+            minus.Add(new YardIcon("minus")); row.Add(minus);
             var count = new Label($"{space.berths} berths"); count.AddToClassList("yard-berth-count"); row.Add(count);
-            var plus = new Button(() => SetBerths(space.berths + 1)) { text = "+" };
-            plus.AddToClassList("yard-icon-button"); plus.SetEnabled(space.berths < space.maxBerths); row.Add(plus);
+            var plus = new Button(() => SetBerths(space.berths + 1));
+            plus.AddToClassList("yard-icon-button"); plus.SetEnabled(space.berths < space.maxBerths);
+            plus.Add(new YardIcon("plus")); row.Add(plus);
+            body.Add(SheetKit.Text($"{space.minBerths}-{space.maxBerths} berths fit this section.", false, true, 12f));
 
+            body.Add(PinnedRule());
+            body.Add(SheetKit.Eyebrow("space"));
             body.Add(SheetKit.Text($"Hold: {space.holdCells} cells", false, false, 13f));
+            int used = Mathf.RoundToInt(space.berths * space.berthCost) + space.holdCells;
+            int total = Mathf.Max(used, Mathf.RoundToInt(space.budgetUnits));
             float frac = space.budgetUnits > 0f ? Mathf.Clamp01((space.berths * space.berthCost) / space.budgetUnits) : 0f;
-            body.Add(SheetKit.Bar(frac, SheetTheme.Sea));
+            var bar = SheetKit.Bar(frac, SheetTheme.Sea, 10f);
+            // `.sheet-bar` has no width of its own (Sheets.uss) -- every
+            // other place it's used sits in a container that stretches it,
+            // this one does not, so without an explicit width AND an
+            // explicit min-height/flex-shrink:0 the track measured 0x0 and
+            // never drew (2026-09-25 review: "the budget bar needs a
+            // visible track" -- confirmed live, `resolvedStyle.height` read
+            // 0 even with `style.height` set, because a bare VisualElement
+            // with no text/children has no intrinsic size for Yoga to fall
+            // back on).
+            bar.style.width = Length.Percent(100f);
+            bar.style.minHeight = 10f;
+            bar.style.flexShrink = 0f;
+            body.Add(bar);
+            body.Add(SheetKit.Text($"Space {used} / {total} used", false, true, 12f));
 
+            body.Add(PinnedRule());
             int deltaBerths = space.berths - space.defaultBerths;
             int deltaHold = space.holdCells - Mathf.FloorToInt(space.budgetUnits - space.berthCost * space.defaultBerths);
-            if (deltaBerths != 0)
-                body.Add(SheetKit.Text($"{(deltaBerths > 0 ? "+" : "")}{deltaBerths} berths, {(deltaHold > 0 ? "+" : "")}{deltaHold} hold", false, true, 12f));
+            string sign(int n) => n > 0 ? "+" : n < 0 ? "−" : "±";
+            string effect = deltaBerths == 0 && deltaHold == 0
+                ? "Same as the current fit."
+                : $"{sign(deltaBerths)}{Mathf.Abs(deltaBerths)} berths, {sign(deltaHold)}{Mathf.Abs(deltaHold)} hold vs now";
+            body.Add(SheetKit.Text(effect, false, true, 12f));
+            body.Add(SheetKit.Text(
+                "Every berth this section carries costs hold space; fewer berths leaves more room for cargo.",
+                false, true, 12f));
         }
 
         void SetBerths(int berths)

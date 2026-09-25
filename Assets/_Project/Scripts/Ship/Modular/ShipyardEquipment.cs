@@ -152,7 +152,33 @@ namespace SeaSick.Ship.Modular
                     positionM = new Vector3(s.positionM.x, s.positionM.y, viewZ + s.positionM.z),
                 });
             }
+            AddForeAft(list);
             return list;
+        }
+
+        /// A section+side with more than one slot ("Middle bay 1, starboard
+        /// gun" twice over) is ambiguous -- tag each with its position along
+        /// the ship (game +Z is the bow, `ModularScale`), largest Z first.
+        /// A side with exactly one slot needs no qualifier.
+        static void AddForeAft(List<EquipmentSlotView> list)
+        {
+            var groups = new Dictionary<(string section, string side), List<EquipmentSlotView>>();
+            foreach (var v in list)
+            {
+                var key = (v.sectionKey, v.side);
+                if (!groups.TryGetValue(key, out var g)) groups[key] = g = new List<EquipmentSlotView>();
+                g.Add(v);
+            }
+            foreach (var g in groups.Values)
+            {
+                if (g.Count < 2) continue;
+                g.Sort((a, b) => b.positionM.z.CompareTo(a.positionM.z));
+                for (int i = 0; i < g.Count; i++)
+                {
+                    string where = i == 0 ? "forward" : i == g.Count - 1 ? "aft" : "amidships";
+                    g[i].label = $"{SectionLabel(g[i].sectionKey)}, {g[i].side}, {where}";
+                }
+            }
         }
 
         static string SectionLabel(string sectionKey)
