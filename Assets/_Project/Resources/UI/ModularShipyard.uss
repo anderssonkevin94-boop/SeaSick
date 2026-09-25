@@ -126,6 +126,12 @@
 .yard-sheet { flex-grow: 1; min-height: 0; flex-direction: column; }
 .yard-sheet-head { padding: 8px 12px 0 12px; flex-shrink: 0; }
 .yard-sheet-title { font-size: 18px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf"); }
+/* The strip is rebuilt whole every Fill() now (page count can change --
+   see ShipyardSectionSheet.RebuildStrip), so its holder needs the same
+   pinning every bare/rebuilt element in this file needs (PinnedRule's own
+   comment): without flex-shrink:0 a holder with no intrinsic size of its
+   own can measure short and the tab row goes missing. */
+.yard-sheet-strip { flex-shrink: 0; }
 /* overflow: hidden clips a page that runs long (e.g. a middle section
    with several gun slots) so it disappears under this element's own
    bottom edge instead of painting over yard-sheet-footer's Reset
@@ -158,3 +164,36 @@
 .yard-sheet .sheet-eyebrow { color: rgba(225, 240, 246, 0.68); }
 .yard-sheet .sheet-rule { background-color: rgba(225, 240, 246, 0.22); }
 .yard-sheet .sheet-bar { background-color: rgba(225, 240, 246, 0.18); }
+/* SheetKit.Note's own colours (Sheets.uss) are tuned for the paper sheet
+   theme too, same problem as the block above -- the audit's phone
+   screenshot (docs/SHIPYARD-UX-AUDIT.md, "Structure page") found the note
+   text near-invisible against this dark background and its leading
+   character reading as clipped under the pencil glyph. Lighter text plus
+   room for the glyph fixes both: the glyph is absolutely laid out by
+   Sheets.uss and was sitting flush against the text with no gap. */
+.yard-sheet .sheet-note-text { color: rgb(225, 240, 246); padding-left: 4px; }
+.yard-sheet .sheet-note-glyph { color: rgb(225, 240, 246); }
+
+/* ---- blocking vs advisory text (docs/SHIPYARD-UX-AUDIT.md item 4):
+   a HARD block (report.blocking -- would refuse Confirm, or a slot that
+   cannot be used at all) reads as a warning colour, distinct from
+   SheetKit.Note's neutral/advisory (report.warnings) styling above. */
+.yard-blocking-text { color: rgb(240, 150, 130); font-size: 12px; white-space: normal; margin-top: 2px; }
+.yard Button.yard-gun-row--blocked { border-color: rgba(240, 150, 130, 0.55); background-color: rgba(92, 44, 40, 0.35); }
+.yard Button.yard-gun-row--blocked .yard-gun-label { opacity: 0.75; }
+
+/* ---- Interior: the 2D cutaway ---- */
+.yard-cutaway-hull { position: relative; height: 150px; flex-shrink: 0; margin-bottom: 8px; }
+.yard-cutaway-guns { position: absolute; left: 0; right: 0; top: 0; height: 60%; }
+.yard Button.yard-cutaway-gun { position: absolute; width: 32px; height: 32px; min-width: 32px; min-height: 32px;
+    padding: 0; margin: 0; border-radius: 16px; -unity-text-align: middle-center; font-size: 12px;
+    background-color: rgba(22, 43, 57, 0.85); border-color: rgb(171, 209, 226); }
+.yard Button.yard-cutaway-gun--fitted { background-color: rgb(171, 218, 239); color: rgb(22, 43, 57); }
+.yard-cutaway-cells { position: absolute; left: 6%; right: 6%; bottom: 4%; flex-direction: row; flex-wrap: wrap; }
+.yard Button.yard-cutaway-cell { min-width: 44px; min-height: 44px; flex-grow: 1; flex-basis: 44px; max-width: 64px;
+    align-items: center; justify-content: center; margin: 2px; background-color: rgba(22, 43, 57, 0.7); }
+.yard Button.yard-cutaway-cell--bunk { background-color: rgba(171, 218, 239, 0.22); border-color: rgb(171, 218, 239); }
+.yard-cutaway-cell-icons { flex-direction: row; }
+.yard-cutaway-icon { width: 20px; height: 20px; flex-shrink: 0; }
+.yard-cutaway-cell--bunk .yard-cutaway-icon { width: 16px; height: 20px; }
+.yard-dock-line { margin-top: 4px; }
