@@ -162,6 +162,7 @@ public class ShipyardUiProbe : MonoBehaviour
 #endif
         yield return Safe("6 save/load", SaveLoad());
         yield return Safe("7 deck toggle", DeckToggle());
+        yield return Safe("8 per-section toggle", SectionToggle());
 
         Gate("persist override never null at any apply", overrideNullAt.Count == 0,
             $"{overrideChecks} applies checked" + (overrideNullAt.Count > 0 ? "; NULL at " + string.Join(", ", overrideNullAt) : ""));
@@ -764,10 +765,14 @@ public class ShipyardUiProbe : MonoBehaviour
         Gate("7c draft: AddMiddle to 2", d.AddMiddle() && d.Count == 2, Msg(d));
         Gate("7c deck enabled at 2 middles", d.RaisedDeckUnavailableReason() == null, d.RaisedDeckUnavailableReason() ?? "null");
 
-        // 3 middles: disabled again.
+        // 3 middles: STILL enabled (docs/RAISED-SECTIONS.md sec 5 relaxed
+        // the old all-or-nothing cap of 1-2 middles to the library's
+        // general bound; 3 fully-connected raised middles is now
+        // data-legal, unverified against Astra's art -- ModularShipPreview
+        // renders it for Kevin to look at).
         Gate("7d draft: AddMiddle to 3", d.AddMiddle() && d.Count == 3, Msg(d));
-        string reasonThree = d.RaisedDeckUnavailableReason();
-        Gate("7d deck disabled with reason at 3 middles", reasonThree != null && reasonThree.ToLower().Contains("bay"), reasonThree ?? "null");
+        Gate("7d deck still enabled at 3 middles (old cap removed)", d.RaisedDeckUnavailableReason() == null,
+            d.RaisedDeckUnavailableReason() ?? "null");
         Gate("7d draft: RemoveMiddle back to 2", d.RemoveMiddle() && d.Count == 2, Msg(d));
 
         // Toggle to raised: swaps all three hull ids, guns kept.
@@ -786,10 +791,17 @@ public class ShipyardUiProbe : MonoBehaviour
         Gate("7f beam toggle refused with its reason while raised", !triedBeam && d.IsRaisedDeck && d.Message == beamReason,
             $"ok {triedBeam}, message \"{d.Message}\"");
 
-        // +/- bays blocked at the 1/2 bounds while raised.
+        // +/- bays: the raised-only max of 2 is GONE (docs/RAISED-SECTIONS.md
+        // sec 5 relaxed the old all-or-nothing kit's own cap to the
+        // library's general bound, 3) -- AddMiddle now succeeds to 3 while
+        // raised, same as unraised; the minimum (1, RAISED_DECK_BAYS: 0
+        // middles can never have both ends raised) is unchanged.
         Gate("7g setup: raised at 2 middles", d.Count == 2, Msg(d));
-        bool addAtMax = d.AddMiddle();
-        Gate("7g +bays blocked at the raised max (2)", !addAtMax && d.Count == 2, Msg(d));
+        bool addPastOldMax = d.AddMiddle();
+        Gate("7g +bays now reaches 3 while raised (old cap of 2 removed)", addPastOldMax && d.Count == 3, Msg(d));
+        bool addAtRealMax = d.AddMiddle();
+        Gate("7g +bays blocked at the library's real max (3)", !addAtRealMax && d.Count == 3, Msg(d));
+        Gate("7g draft: RemoveMiddle to 2", d.RemoveMiddle() && d.Count == 2, Msg(d));
         Gate("7g draft: RemoveMiddle to 1 (raised minimum)", d.RemoveMiddle() && d.Count == 1, Msg(d));
         bool removeAtMin = d.RemoveMiddle();
         Gate("7g -bays blocked at the raised minimum (1)", !removeAtMin && d.Count == 1, Msg(d));
@@ -805,6 +817,88 @@ public class ShipyardUiProbe : MonoBehaviour
             $"ok {toSingle}, stern {snapBack.sternId}, bow {snapBack.bowId}, middles [{string.Join(",", snapBack.middleIds)}]");
         Gate("7h guns kept across the toggle back to single", EquipSlots(snapBack) == equipRaised,
             $"before [{equipRaised}] after [{EquipSlots(snapBack)}]");
+    }
+
+    /// Draft-only: per-section ToggleSection (docs/RAISED-SECTIONS.md task
+    /// item 4/6) -- disabled with its reason on standard beam and when the
+    /// only remaining refusal (0 middles, both ends already raised) would
+    /// hit RAISED_DECK_BAYS; ids recomputed via RaisedSections.ToIds after
+    /// each toggle (checked against the SAME function, since ShipyardDraft
+    /// is meant to never duplicate that rule); RaiseAll/LowerAll aliasing
+    /// SetRaisedDeck.
+    IEnumerator SectionToggle()
+    {
+        sb.AppendLine("8. per-section toggle (tap-a-section), on top of the whole-hull toggle in 7:");
+        yield return EnsureRefittable();
+        var d = NewDraft(out _);
+
+        // Standard beam: every section disabled with the wide-beam reason.
+        if (d.IsWideBeam) d.SetWideBeam(false);
+        string reasonStd = d.SectionUnavailableReason(ShipAssembler.StdKeyStern);
+        Gate("8a section disabled with reason on standard beam", reasonStd != null && reasonStd.Contains("wide beam"), reasonStd ?? "null");
+        bool triedStd = d.ToggleSection(ShipAssembler.StdKeyStern);
+        Gate("8a ToggleSection refused on standard beam", !triedStd && !d.IsSectionRaised(ShipAssembler.StdKeyStern), $"ok {triedStd}");
+
+        // Wide beam, 0 middles: ONE end can raise on its own now (the
+        // relaxed rule, docs/RAISED-SECTIONS.md sec 5); the OTHER end then
+        // refuses with the RAISED_DECK_BAYS reason (0 middles, both ends).
+        d.SetWideBeam(true);
+        while (d.Count > 0) if (!d.RemoveMiddle()) break;
+        Gate("8b setup: wide beam, 0 middles", d.IsWideBeam && d.Count == 0, Msg(d));
+        bool sternUp = d.ToggleSection(ShipAssembler.StdKeyStern);
+        var (wantSternId, _, wantBowId) = RaisedSections.ToIds(DeckLevel.Raised, System.Array.Empty<DeckLevel>(), DeckLevel.Low);
+        Gate("8b stern alone raises at 0 middles", sternUp && d.IsSectionRaised(ShipAssembler.StdKeyStern)
+            && d.Snapshot().sternId == wantSternId && d.Snapshot().bowId == wantBowId,
+            $"ok {sternUp}, sternId {d.Snapshot().sternId}, bowId {d.Snapshot().bowId} (want {wantSternId}/{wantBowId})");
+        string reasonBow = d.SectionUnavailableReason(ShipAssembler.StdKeyBow);
+        Gate("8b bow refused (0 middles, both ends would be raised)", reasonBow != null, reasonBow ?? "null");
+        bool bowUp = d.ToggleSection(ShipAssembler.StdKeyBow);
+        Gate("8b ToggleSection(bow) itself refused", !bowUp && !d.IsSectionRaised(ShipAssembler.StdKeyBow), $"ok {bowUp}");
+        d.ToggleSection(ShipAssembler.StdKeyStern); // back down
+        Gate("8b stern back down", !d.IsSectionRaised(ShipAssembler.StdKeyStern), Msg(d));
+
+        // Wide beam, 2 middles: toggle every section one at a time; each
+        // toggle's resulting ids match RaisedSections.ToIds independently
+        // computed from IsSectionRaised (never the same call re-used).
+        d.AddMiddle(); d.AddMiddle();
+        Gate("8c setup: 2 middles", d.Count == 2, Msg(d));
+        var keys = d.SectionKeys();
+        Gate("8c SectionKeys is stern, middle[0], middle[1], bow", keys.Count == 4 && keys[0] == "stern"
+            && keys[1] == "middle[0]" && keys[2] == "middle[1]" && keys[3] == "bow", string.Join(",", keys));
+        foreach (var key in keys)
+        {
+            bool before = d.IsSectionRaised(key);
+            string reason = before ? null : d.SectionUnavailableReason(key);
+            bool applied = d.ToggleSection(key);
+            bool expectOk = before || reason == null;
+            bool stateOk = expectOk ? (applied && d.IsSectionRaised(key) != before) : (!applied && d.IsSectionRaised(key) == before);
+            Gate($"8c ToggleSection({key}) {(expectOk ? "applies" : "refused")}", stateOk,
+                $"before {before}, reason \"{reason}\", applied {applied}, after {d.IsSectionRaised(key)}");
+            if (applied)
+            {
+                var lv = RaisedSections.FromIds(d.Snapshot().sternId, d.Snapshot().middleIds, d.Snapshot().bowId);
+                var (wantS, wantM, wantB) = RaisedSections.ToIds(lv.stern, lv.middles, lv.bow);
+                Gate($"8c ids recomputed after {key}", d.Snapshot().sternId == wantS && d.Snapshot().bowId == wantB
+                    && string.Join(",", d.Snapshot().middleIds) == string.Join(",", wantM),
+                    $"stern {d.Snapshot().sternId}, middles [{string.Join(",", d.Snapshot().middleIds)}], bow {d.Snapshot().bowId}");
+            }
+        }
+
+        // RaiseAll/LowerAll alias SetRaisedDeck exactly.
+        var freshDraft = NewDraft(out _);
+        freshDraft.SetWideBeam(true); freshDraft.AddMiddle();
+        bool raisedAll = freshDraft.RaiseAll();
+        Gate("8d RaiseAll raises every section", raisedAll && freshDraft.IsRaisedDeck
+            && AllSectionsRaised(freshDraft, true), Msg(freshDraft));
+        bool loweredAll = freshDraft.LowerAll();
+        Gate("8d LowerAll lowers every section", loweredAll && !freshDraft.IsRaisedDeck
+            && AllSectionsRaised(freshDraft, false), Msg(freshDraft));
+    }
+
+    static bool AllSectionsRaised(ShipyardDraft d, bool raised)
+    {
+        foreach (var k in d.SectionKeys()) if (d.IsSectionRaised(k) != raised) return false;
+        return true;
     }
 
     static string EquipSlots(ShipConfiguration c)
