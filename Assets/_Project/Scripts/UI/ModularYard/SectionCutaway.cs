@@ -111,13 +111,21 @@ namespace SeaSick.UI.ModularYard
 
         Action<MeshGenerationContext> paintedHull;
 
+        /// The Button is now just the hit box (docs/SHIPYARD-UX-AUDIT.md
+        /// item 5: gun markers were 32pt, below the GDD's 44pt thumb-target
+        /// floor) -- the drawn circle is a separate, still-32px child so
+        /// the visual doesn't have to grow along with the tap target.
         VisualElement BuildGunMarker(GunMarker g, Action<GunMarker> onTap)
         {
-            var b = new Button(() => onTap?.Invoke(g)) { text = g.side == "port" ? "P" : "S" };
+            var b = new Button(() => onTap?.Invoke(g));
             b.AddToClassList("yard-cutaway-gun");
-            b.EnableInClassList("yard-cutaway-gun--fitted", g.occupied);
             b.SetEnabled(g.enabled);
             b.tooltip = string.IsNullOrEmpty(g.label) ? (g.status ?? "") : g.label + " — " + g.status;
+            var dot = new Label(g.side == "port" ? "P" : "S");
+            dot.AddToClassList("yard-cutaway-gun-dot");
+            dot.EnableInClassList("yard-cutaway-gun-dot--fitted", g.occupied);
+            dot.pickingMode = PickingMode.Ignore;
+            b.Add(dot);
             return b;
         }
 
