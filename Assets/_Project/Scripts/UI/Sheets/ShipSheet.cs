@@ -131,17 +131,52 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildActions()
         {
             everyoneAshore = SheetKit.Btn("Everyone ashore", EveryoneAshore);
+            var row = new List<VisualElement> { everyoneAshore };
             if (SeaSick.Ship.Modular.ShipyardService.Player != null)
             {
                 everyoneAshore.text = "All ashore";
-                return SheetKit.Actions(
-                    everyoneAshore,
-                    SheetKit.Btn("Shipyard", SeaSick.UI.ModularYard.ShipyardLiveBridge.Open),
-                    SheetKit.Btn("Cast off", CastOff, true));
+                row.Add(SheetKit.Btn("Shipyard", SeaSick.UI.ModularYard.ShipyardLiveBridge.Open));
             }
-            return SheetKit.Actions(
-                everyoneAshore,
-                SheetKit.Btn("Cast off", CastOff, true));
+            // **Make this my home berth** (2026-09-25, Kevin: "make my home
+            // berth the pier I built at island_2"). Only where she is lying
+            // at a player's pier that is NOT already home -- her own harbour
+            // or her own chosen berth has nothing to offer here. Two-tap
+            // arm/confirm, the same idiom `HomeTab` uses for the other
+            // control that moves something permanent across the world.
+            homeBerthBtn = null;
+            var a = Anchor;
+            if (a != null && a.CurrentDock != null && !a.CurrentDock.IsHome)
+            {
+                homeBerthBtn = SheetKit.Btn("Make this my home berth", MakeHomeBerthPressed);
+                row.Add(homeBerthBtn);
+            }
+            row.Add(SheetKit.Btn("Cast off", CastOff, true));
+            return SheetKit.Actions(row.ToArray());
+        }
+
+        Button homeBerthBtn;
+        float homeBerthArmedUntil = -99f;
+        string homeBerthFeedback;
+        float homeBerthFeedbackUntil = -99f;
+
+        /// First press arms it, second confirms. A one-tap control that
+        /// permanently moves where every refit, every voyage and her own
+        /// spawn happen is exactly the kind of mis-tap `HomeTab` was written
+        /// to guard against, and it lives on the same busy action row.
+        void MakeHomeBerthPressed()
+        {
+            var a = Anchor;
+            if (a == null || a.CurrentDock == null) return;
+            bool armed = Time.unscaledTime < homeBerthArmedUntil;
+            if (!armed) { homeBerthArmedUntil = Time.unscaledTime + 3.5f; return; }
+            homeBerthArmedUntil = -99f;
+            var chosen = a.CurrentDock;
+            SeaSick.World.Dock.SetHome(chosen);
+            var isle = SeaSick.World.Island.Nearest(chosen.Berth);
+            string label = isle != null ? isle.name + " pier" : "her new pier";
+            SeaSick.Save.SaveGame.Autosave("home berth moved to " + label);
+            homeBerthFeedback = "Home berth: " + label;
+            homeBerthFeedbackUntil = Time.unscaledTime + 3f;
         }
 
         AnchorController Anchor => SheetBits.Anchor;
@@ -301,6 +336,20 @@ namespace SeaSick.UI.Sheets
             DeckBlock(v);
             RepairBlock();
             CrewBlock(camp);
+            HomeBerthBlock();
+        }
+
+        /// Ticks the arm/confirm/feedback text on `homeBerthBtn` in place --
+        /// `BuildActions` is not called every frame, only `Refresh` is.
+        void HomeBerthBlock()
+        {
+            if (homeBerthBtn == null) return;
+            if (Time.unscaledTime < homeBerthFeedbackUntil)
+                homeBerthBtn.text = homeBerthFeedback;
+            else if (Time.unscaledTime < homeBerthArmedUntil)
+                homeBerthBtn.text = "Confirm — home berth?";
+            else
+                homeBerthBtn.text = "Make this my home berth";
         }
 
         // --- the hold ------------------------------------------------------------
