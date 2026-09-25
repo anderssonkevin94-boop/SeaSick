@@ -137,67 +137,6 @@ public class ShipyardRefitProbe : MonoBehaviour
         Refuse("cargo-would-not-fit", ShipConfiguration.Short(), ShipyardCodes.CargoWouldNotFit);
         voyage.RestoreStores(new[] { Pair(Res.Timber, 3), Pair(Res.Stone, 2) }, Banked());
 
-        // (b1) An unpaired gun: take only the middle PORT gun off and keep
-        // starboard fitted. `CannonBattery.Fit` used to mirror a single
-        // STARBOARD list to port unconditionally, so this case used to draw
-        // a wrong live battery (a phantom port gun, or a mis-positioned
-        // one); it must now come out honestly asymmetric.
-        var midStar = "middle[0]/DeckSlot_1_-1"; var midPort = "middle[0]/DeckSlot_1_1";
-        var eRemovePortOnly = yard.RemoveEquipment(yard.Current, midPort);
-        Gate("equipment: remove middle port gun only", eRemovePortOnly.ok, eRemovePortOnly.ok ? "removed" : eRemovePortOnly.message);
-        var rPortOnly = yard.ApplyRefit(yard.Current, eRemovePortOnly.draft);
-        Gate("hull: apply with only the middle port gun off", rPortOnly.ok && yard.Current.equipment.Count == 5,
-            rPortOnly.ToString().Replace("\n", " | "));
-        yield return new WaitForSeconds(0.3f);
-        var batteryPortOnly = yard.GetComponent<CannonBattery>();
-        Gate("battery: 5 guns, 2 port, 3 starboard (no mirrored phantom)",
-            batteryPortOnly != null && batteryPortOnly.TotalGuns == 5 && batteryPortOnly.PortCount == 2 && batteryPortOnly.StarboardCount == 3,
-            batteryPortOnly != null
-                ? $"total {batteryPortOnly.TotalGuns}, port {batteryPortOnly.PortCount}, starboard {batteryPortOnly.StarboardCount}"
-                : "no CannonBattery");
-
-        var rPortRestored = yard.ApplyRefit(yard.Current, ShipConfiguration.Long());
-        Gate("hull: restore the middle port gun from the dock", rPortRestored.ok && yard.Current.ValueEquals(ShipConfiguration.Long())
-            && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 0, rPortRestored.ToString().Replace("\n", " | "));
-        yield return new WaitForSeconds(0.3f);
-
-        // (b2) Equipment + dry dock: take the 2 middle guns off, shrink to
-        // Short (now valid), check the dock, grow back without them, fit
-        // them back from the dock, check the battery.
-        var eRemove1 = yard.RemoveEquipment(yard.Current, midStar);
-        Gate("equipment: remove middle starboard gun", eRemove1.ok, eRemove1.ok ? "removed" : eRemove1.message);
-        var eRemove2 = yard.RemoveEquipment(eRemove1.draft, midPort);
-        Gate("equipment: remove middle port gun", eRemove2.ok, eRemove2.ok ? "removed" : eRemove2.message);
-        var rNoMidGuns = yard.ApplyRefit(yard.Current, eRemove2.draft);
-        Gate("equipment: apply with the 2 middle guns off", rNoMidGuns.ok && yard.Current.equipment.Count == 4,
-            rNoMidGuns.ToString().Replace("\n", " | "));
-        yield return new WaitForSeconds(0.3f);
-
-        var rToShort = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
-        Gate("hull: shrink to Short now her guns are off", rToShort.ok && yard.Current.ValueEquals(ShipConfiguration.Short()),
-            rToShort.ToString().Replace("\n", " | "));
-        yield return new WaitForSeconds(0.3f);
-        Gate("dry dock: the 2 middle guns are stored", yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 2, yard.Dock.ToJson());
-
-        var toLongNoMid = ShipConfiguration.Long();
-        toLongNoMid.equipment.RemoveAll(x => x != null && x.slotId != null && x.slotId.StartsWith("middle["));
-        var rGrowBack = yard.ApplyRefit(yard.Current, toLongNoMid);
-        Gate("hull: grow back to Long, guns still in dock", rGrowBack.ok && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 2,
-            rGrowBack.ToString().Replace("\n", " | "));
-        yield return new WaitForSeconds(0.3f);
-
-        var eFit1 = yard.FitEquipment(yard.Current, midStar, ShipConfiguration.EquipmentCannon);
-        Gate("equipment: fit middle starboard gun back", eFit1.ok, eFit1.ok ? "fitted" : eFit1.message);
-        var eFit2 = yard.FitEquipment(eFit1.draft, midPort, ShipConfiguration.EquipmentCannon);
-        Gate("equipment: fit middle port gun back", eFit2.ok, eFit2.ok ? "fitted" : eFit2.message);
-        var rAllGunsBack = yard.ApplyRefit(yard.Current, eFit2.draft);
-        Gate("equipment: apply with all 6 guns back", rAllGunsBack.ok && yard.Current.ValueEquals(ShipConfiguration.Long())
-            && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 0, rAllGunsBack.ToString().Replace("\n", " | "));
-        yield return new WaitForSeconds(0.3f);
-        var batteryAfterDock = yard.GetComponent<CannonBattery>();
-        int gunsAfterDock = batteryAfterDock != null ? 2 * batteryAfterDock.GunsPerSide : 0;
-        Gate("battery: 6 guns positioned at their slots", gunsAfterDock == 6,
-            $"GunsPerSide {(batteryAfterDock != null ? batteryAfterDock.GunsPerSide : 0)} -> {gunsAfterDock} guns");
 
         string tmp = Application.temporaryCachePath;
         ShipyardService.PersistPathOverride = System.IO.Path.Combine(tmp, "ShipyardRefitProbe-persist.json");
@@ -290,6 +229,90 @@ public class ShipyardRefitProbe : MonoBehaviour
             yield return SeaTrial(name, spot, trials);
             foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
             landed.Clear();
+        }
+        // ---- (e) equipment + dry dock, AFTER the sea trials -------------------
+        // It runs last so the trials start when they always have and meet the
+        // same sea (the ocean runs on time): placed before them, it shifted
+        // every trial (A/B 2026-09-25: roll 6-7 deg -> 9 deg, two-bays green
+        // water 1.78 > 1.68 m, identical code). -probeSkipEquipment skips it.
+        bool skipEquipment = System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-probeSkipEquipment") >= 0;
+        if (skipEquipment) sb.AppendLine("equipment block SKIPPED (-probeSkipEquipment)");
+        if (!skipEquipment) {
+        if (!anchor.AtHomeDock && !anchor.BerthAtHome(out string ebw)) sb.AppendLine("equipment berth: " + ebw);
+        yield return new WaitForSeconds(1f);
+        if (!yard.Current.ValueEquals(ShipConfiguration.Long())) yield return RefitAndCheck("long-for-equipment", ShipConfiguration.Long());
+        // (b1) An unpaired gun: take only the middle PORT gun off and keep
+        // starboard fitted. `CannonBattery.Fit` used to mirror a single
+        // STARBOARD list to port unconditionally, so this case used to draw
+        // a wrong live battery (a phantom port gun, or a mis-positioned
+        // one); it must now come out honestly asymmetric.
+        var midStar = "middle[0]/DeckSlot_1_-1"; var midPort = "middle[0]/DeckSlot_1_1";
+        var eRemovePortOnly = yard.RemoveEquipment(yard.Current, midPort);
+        Gate("equipment: remove middle port gun only", eRemovePortOnly.ok, eRemovePortOnly.ok ? "removed" : eRemovePortOnly.message);
+        var rPortOnly = yard.ApplyRefit(yard.Current, eRemovePortOnly.draft);
+        Gate("hull: apply with only the middle port gun off", rPortOnly.ok && yard.Current.equipment.Count == 5,
+            rPortOnly.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+        var batteryPortOnly = yard.GetComponent<CannonBattery>();
+        Gate("battery: 5 guns, 2 port, 3 starboard (no mirrored phantom)",
+            batteryPortOnly != null && batteryPortOnly.TotalGuns == 5 && batteryPortOnly.PortCount == 2 && batteryPortOnly.StarboardCount == 3,
+            batteryPortOnly != null
+                ? $"total {batteryPortOnly.TotalGuns}, port {batteryPortOnly.PortCount}, starboard {batteryPortOnly.StarboardCount}"
+                : "no CannonBattery");
+
+        var rPortRestored = yard.ApplyRefit(yard.Current, ShipConfiguration.Long());
+        Gate("hull: restore the middle port gun from the dock", rPortRestored.ok && yard.Current.ValueEquals(ShipConfiguration.Long())
+            && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 0, rPortRestored.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+
+        // (b2) Equipment + dry dock: take the 2 middle guns off, shrink to
+        // Short (now valid), check the dock, grow back without them, fit
+        // them back from the dock, check the battery.
+        var eRemove1 = yard.RemoveEquipment(yard.Current, midStar);
+        Gate("equipment: remove middle starboard gun", eRemove1.ok, eRemove1.ok ? "removed" : eRemove1.message);
+        var eRemove2 = yard.RemoveEquipment(eRemove1.draft, midPort);
+        Gate("equipment: remove middle port gun", eRemove2.ok, eRemove2.ok ? "removed" : eRemove2.message);
+        var rNoMidGuns = yard.ApplyRefit(yard.Current, eRemove2.draft);
+        Gate("equipment: apply with the 2 middle guns off", rNoMidGuns.ok && yard.Current.equipment.Count == 4,
+            rNoMidGuns.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+
+        // With her guns off, Short's berths (4) are the only thing left in
+        // the way of 8 hands: first prove that is the ONLY refusal, then land
+        // 4 (the probe's way, as for the trials) and shrink.
+        var rShortFull = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
+        string shortWhy = rShortFull.ToString().Replace("\n", " | ");
+        Gate("hull: Short with 8 hands is refused only for her berths",
+            !rShortFull.ok && shortWhy.Contains("CREW_WOULD_NOT_FIT") && !shortWhy.Contains("EQUIPMENT_WOULD_BE_LOST"), shortWhy);
+        var shortCrew = Crew();
+        for (int i = shortCrew.Count - 1; i >= 4; i--) { landed.Add(shortCrew[i]); shortCrew[i].gameObject.SetActive(false); }
+        var rToShort = yard.ApplyRefit(yard.Current, ShipConfiguration.Short());
+        Gate("hull: shrink to Short now her guns are off (4 hands)", rToShort.ok && yard.Current.ValueEquals(ShipConfiguration.Short()),
+            rToShort.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+        Gate("dry dock: the 2 middle guns are stored", yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 2, yard.Dock.ToJson());
+
+        var toLongNoMid = ShipConfiguration.Long();
+        toLongNoMid.equipment.RemoveAll(x => x != null && x.slotId != null && x.slotId.StartsWith("middle["));
+        var rGrowBack = yard.ApplyRefit(yard.Current, toLongNoMid);
+        Gate("hull: grow back to Long, guns still in dock", rGrowBack.ok && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 2,
+            rGrowBack.ToString().Replace("\n", " | "));
+        foreach (var h in landed) if (h != null) h.gameObject.SetActive(true);
+        landed.Clear();
+        yield return new WaitForSeconds(0.3f);
+
+        var eFit1 = yard.FitEquipment(yard.Current, midStar, ShipConfiguration.EquipmentCannon);
+        Gate("equipment: fit middle starboard gun back", eFit1.ok, eFit1.ok ? "fitted" : eFit1.message);
+        var eFit2 = yard.FitEquipment(eFit1.draft, midPort, ShipConfiguration.EquipmentCannon);
+        Gate("equipment: fit middle port gun back", eFit2.ok, eFit2.ok ? "fitted" : eFit2.message);
+        var rAllGunsBack = yard.ApplyRefit(yard.Current, eFit2.draft);
+        Gate("equipment: apply with all 6 guns back", rAllGunsBack.ok && yard.Current.ValueEquals(ShipConfiguration.Long())
+            && yard.Dock.Count(ShipConfiguration.EquipmentCannon) == 0, rAllGunsBack.ToString().Replace("\n", " | "));
+        yield return new WaitForSeconds(0.3f);
+        var batteryAfterDock = yard.GetComponent<CannonBattery>();
+        int gunsAfterDock = batteryAfterDock != null ? 2 * batteryAfterDock.GunsPerSide : 0;
+        Gate("battery: 6 guns positioned at their slots", gunsAfterDock == 6,
+            $"GunsPerSide {(batteryAfterDock != null ? batteryAfterDock.GunsPerSide : 0)} -> {gunsAfterDock} guns");
         }
         sb.AppendLine("PROVISIONAL two hydrostatic models, ONE mass (rb.mass = module lightship sum), moored at rest (not gated):");
         sb.AppendLine("  config                   | mass | table draft | sim static draft | delta (sim - table) | sim design draft | sim dynamic (keel below local sea)");
