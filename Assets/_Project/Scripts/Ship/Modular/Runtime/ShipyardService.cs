@@ -315,17 +315,27 @@ namespace SeaSick.Ship.Modular
             // a refusal here leaves the ship untouched.
             var dockDiff = DryDock.Diff(expected, draft);
             bool dockChanges = dockDiff.Count > 0;
-            if (dockChanges)
+            // Surplus hands (2026-09-25, Kevin): never a refusal -- they go
+            // ashore to the HOME settlement instead. Landing them is a real
+            // scene move, same as the dry dock: it needs somewhere to land
+            // THEM, so it needs the home berth too.
+            int handsAshore = v.handsAshore;
+            if (dockChanges || handsAshore > 0)
             {
                 var homeAnchor = GetComponent<AnchorController>();
                 if (homeAnchor == null || !homeAnchor.AtHomeDock)
                 {
-                    res.issues.Add(new Rejection { code = ShipyardCodes.DryDockNotHere, partId = "",
-                        message = "She must be at her home dry dock to move equipment to or from storage; a plain refit between slots does not." });
+                    string message = dockChanges && handsAshore > 0
+                        ? "She must be at her home dock to move equipment to or from storage and to land hands ashore; a plain refit between slots does not."
+                        : dockChanges
+                            ? "She must be at her home dry dock to move equipment to or from storage; a plain refit between slots does not."
+                            : $"She must be at her home berth to land {Hands(handsAshore)} ashore.";
+                    string code = dockChanges ? ShipyardCodes.DryDockNotHere : ShipyardCodes.HandsAshoreNeedHome;
+                    res.issues.Add(new Rejection { code = code, partId = "", message = message });
                     res.configuration = Current;
                     return res;
                 }
-                if (!dock.CanApply(dockDiff, out string missingId))
+                if (dockChanges && !dock.CanApply(dockDiff, out string missingId))
                 {
                     string missingName = missingId;
                     if (Library != null && Library.TryGet(missingId, out var missingDef)) missingName = ModuleLibrary.Name(missingDef);
@@ -339,8 +349,23 @@ namespace SeaSick.Ship.Modular
             var prevPlan = currentPlan;
             bool prevModular = modularActive;
             var prevDock = dock.Clone();
+
+            // Land the surplus hands FIRST, so the new hull is built and
+            // crewed for the number of hands she will actually carry --
+            // never for more hands than she has berths (SteamerBootstrap.Man
+            // still refuses to over-post a deck). Atomic with the rebuild and
+            // the save below: any failure from here on restores them.
+            var landedHands = new List<SeaSick.Crew.CrewAgent>();
+            if (handsAshore > 0 && !LandSurplusHands(handsAshore, landedHands, out string landWhy))
+            {
+                res.issues.Add(new Rejection { code = ShipyardCodes.ApplyFailed, partId = "", message = landWhy });
+                res.configuration = Current;
+                return res;
+            }
+
             if (!Rebuild(v.plan, out string fail))
             {
+                RestoreLandedHands(landedHands);
                 res.issues.Add(new Rejection { code = ShipyardCodes.ApplyFailed, partId = "", message = fail });
                 res.configuration = Current;
                 return res;
@@ -352,6 +377,7 @@ namespace SeaSick.Ship.Modular
                 string back = null;
                 bool restored = prevModular && prevPlan != null ? Rebuild(prevPlan, out back) : RevertToReference(out back, false);
                 dock = prevDock;
+                RestoreLandedHands(landedHands);
                 res.issues.Add(new Rejection { code = ShipyardCodes.SaveFailed, partId = "",
                     message = "The refit could not be saved (" + saveWhy + "), so it was undone." +
                               (restored ? "" : " Undoing it ALSO failed: " + back) });
@@ -362,6 +388,65 @@ namespace SeaSick.Ship.Modular
             res.configuration = Current;
             Raise();
             return res;
+        }
+
+        static string Hands(int n) => n == 1 ? "1 hand" : $"{n} hands";
+
+        /// **Where the surplus goes.** Picks `n` hands currently aboard (the
+        /// last posted, same order the sea-trial probes have always landed
+        /// by -- who specifically is arbitrary, since GUNS_NEED_CREW already
+        /// guarantees whoever is LEFT is enough to work her) and leaves them
+        /// at the home settlement through `Outpost.Station` -- the same "drop
+        /// a hand at a camp" path a player uses by hand, so a landed hand
+        /// becomes a real, named villager on the ledger, never despawned.
+        /// False (with any partial landing already rolled back) if there is
+        /// no home settlement to land them at, or a hand refuses to land
+        /// (already claimed there under his own name).
+        bool LandSurplusHands(int n, List<SeaSick.Crew.CrewAgent> landed, out string why)
+        {
+            why = null;
+            var home = SeaSick.World.Outpost.Home;
+            if (home == null)
+            {
+                why = $"there is no home settlement to land {Hands(n)} ashore at";
+                return false;
+            }
+            var crew = new List<SeaSick.Crew.CrewAgent>(GetComponentsInChildren<SeaSick.Crew.CrewAgent>(false));
+            for (int i = crew.Count - 1; i >= 0 && landed.Count < n; i--)
+            {
+                var c = crew[i];
+                if (c == null) continue;
+                if (!home.Station(c))
+                {
+                    RestoreLandedHands(landed);
+                    why = $"{c.DisplayName} could not be landed ashore";
+                    return false;
+                }
+                landed.Add(c);
+            }
+            if (landed.Count < n)
+            {
+                RestoreLandedHands(landed);
+                why = $"only {landed.Count} of {n} hands could be landed ashore";
+                return false;
+            }
+            GetComponent<SeaSick.Crew.CrewRoster>()?.Refresh();
+            return true;
+        }
+
+        /// Undoes `LandSurplusHands`: every hand it moved comes back aboard,
+        /// through the same path a player recalling a hand from a camp uses
+        /// (`Outpost.Recall`), and the home settlement's ledger row for him
+        /// goes with it -- a rolled-back refit never leaves a stray villager
+        /// behind who was never really landed.
+        void RestoreLandedHands(List<SeaSick.Crew.CrewAgent> landed)
+        {
+            if (landed == null || landed.Count == 0) return;
+            var home = SeaSick.World.Outpost.Home;
+            foreach (var c in landed)
+                if (c != null) home?.Recall(c, transform);
+            landed.Clear();
+            GetComponent<SeaSick.Crew.CrewRoster>()?.Refresh();
         }
 
         bool Persist(out string why)
