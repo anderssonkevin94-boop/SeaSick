@@ -165,7 +165,7 @@ Milestone-1 codes (docs/MODULAR-SHIPS.md §6) all still apply. Added:
 | `WHEEL_REQUIRED` | no rotor | "A paddle steamer needs her wheel; choose a timber or reinforced M1 wheel." |
 | `CARGO_WOULD_NOT_FIT` (partId `hold`) | cargo units > new hold cells | "She is carrying 16 loads and this ship's hold takes 11. Unload 5 first; nothing is thrown overboard." |
 | `CARGO_WOULD_NOT_FIT` (partId `weight`) | cargo weight > new weight room | "Her cargo weighs 5.5 t and this ship can carry 5.4 t with 4 hands and her guns aboard. …" |
-| `CREW_WOULD_NOT_FIT` | hands aboard > new berths | "8 hands are aboard and this ship has stations for 4. Land 4 first." |
+| `HANDS_ASHORE_NEED_HOME` (2026-09-25, `ApplyRefit` only) | hands aboard > new berths, and she is not at her home berth | "She must be at her home berth to land 4 hands ashore." |
 | `EQUIPMENT_WOULD_BE_LOST` | something positioned on her (the funnel, a deck-load pile) has a place now and none on the draft; OR (2026-09-25) the draft's own `equipment` list still names a slot that no longer exists on the hull it describes (the assembler's `EQUIPMENT_SLOT_UNKNOWN`, translated to this friendlier code+message) | "Deck load pile 3 would have no place on this ship; the refit is refused rather than leave it behind." / "Deck cannon (Astra v1) at middle[0]/DeckSlot_1_1 would have no place on this ship (its slot is gone); take it off to the dry dock first." |
 | `GUNS_NEED_CREW` (2026-09-25) | the draft's fitted guns × their own crew > its berths | "6 guns need 6 hands at the guns and this ship has berths for 4. Take 2 guns off to the dry dock first." |
 | `NOT_IN_DRY_DOCK` (2026-09-25, `ApplyRefit` only) | the draft would take more of a module from the dock than is in stock | "There is no Deck cannon (Astra v1) in the dry dock to fit." |
@@ -179,6 +179,27 @@ Milestone-1 codes (docs/MODULAR-SHIPS.md §6) all still apply. Added:
 | `CANNOT_REFIT_NOW` | §6 | the reason sentence |
 | `APPLY_FAILED`, `SAVE_FAILED` | the rebuild / the save failed; she was put back | |
 | `NO_REFERENCE_HULL` | the steamer's hull form is missing | |
+
+**Surplus hands go ashore, never refused (2026-09-25, Kevin).** A refit whose
+draft has fewer berths than she has hands aboard is no longer refused
+(`CREW_WOULD_NOT_FIT` is retired): `ShipyardValidation.handsAshore` /
+`ShipyardReport` carry the count instead, as a WARNING ("4 hands will go
+ashore." / singular "1 hand will go ashore."), and `ApplyRefit` lands that
+many at the HOME settlement through the same `Outpost.Station` path a player
+uses to drop a hand at a camp by hand — they become real, named villagers on
+the home ledger, never despawned. This only happens at the home berth
+(`HANDS_ASHORE_NEED_HOME` otherwise, same shape as `DRY_DOCK_NOT_HERE`), and
+atomically with the rebuild and the save: a failed rebuild or a failed save
+recalls every landed hand and rolls back the home ledger with everything
+else. `GUNS_NEED_CREW` is unaffected — it still refuses a draft whose fitted
+guns need more hands than the draft's OWN berths, since going ashore only
+ever reduces her crew, never grows it back to work guns she cannot crew.
+
+**"Beam: standard / wide" (2026-09-25).** The shipyard screen's width toggle
+swaps every hull section between the W1-r2 and W1x families at once (§9);
+equipment never needs to move, because the two families share the same
+slot ids (only their Y moved) — gated headlessly,
+`width-toggle-equipment-slot-ids-identical-w1r2-w1x`.
 
 Milestone-1 equipment codes (`EQUIPMENT_SLOT_UNKNOWN`, `EQUIPMENT_WRONG_KIND`,
 `EQUIPMENT_CLASS_NOT_ALLOWED`, `EQUIPMENT_SLOT_TAKEN` — what the brief that
@@ -534,9 +555,9 @@ crew (4a), so both land on the right deck.
    hand) — Kevin/Astra: add gun removal/stores, or change the rule? And:
    should guns move to the slot positions (they stand at the hull form's
    sockets today)?
-3. Short has 4 berths (stern 2 + bow 2): with today's 8 hands aboard, Short
-   is refused (`CREW_WOULD_NOT_FIT`) until 4 are landed; with ≤ 4 hands and
-   ≤ 10 loads she is accepted with 4 guns.
+3. Short has 4 berths (stern 2 + bow 2): with today's 8 hands aboard, the
+   surplus 4 go ashore automatically now (2026-09-25, `HANDS_ASHORE_NEED_HOME`
+   above); with ≤ 10 loads she is accepted with 4 guns.
 4. Cargo weight is checked but has no physical effect on the steamer (the
    lightship mass now is felt: one mass source, §10).
 5. Bow stem X 8.45 was measured by us from the FBX; Astra, please confirm or
