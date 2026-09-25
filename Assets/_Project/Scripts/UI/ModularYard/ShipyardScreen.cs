@@ -14,12 +14,14 @@ namespace SeaSick.UI.ModularYard
         readonly Image image;
         readonly Label count, length, message, badge;
         readonly Label details;
-        readonly Button undo, add, remove, timber, reinforced, beamStandard, beamWide, deckSingle, deckRaised, confirm;
+        readonly Button undo, add, remove, timber, reinforced, beamStandard, beamWide, raiseAll, lowerAll, confirm;
         readonly VisualElement guns;
+        readonly VisualElement sections;
         readonly Label dryDock;
         readonly Dictionary<int, Vector2> pointers = new Dictionary<int, Vector2>();
         readonly Action close;
         string builtKey;
+        string sectionsKey;
         bool disposed;
         readonly IVisualElementScheduledItem refresh;
 
@@ -41,6 +43,12 @@ namespace SeaSick.UI.ModularYard
             var views = new VisualElement(); views.AddToClassList("yard-views"); viewport.Add(views);
             IconButton(views, "top", "Top view", () => preview.SetView(true));
             IconButton(views, "perspective", "Three-quarter view", () => preview.SetView(false));
+            // Per-section tap targets over the ship picture itself
+            // (docs/RAISED-SECTIONS.md task item 4): on wide beam, one big
+            // (>=44 pt, .yard Button's own floor) button per hull section,
+            // built fresh in Refresh() whenever the section count/levels
+            // change. Only wide beam ever has a raised id to toggle to.
+            sections = new VisualElement(); sections.AddToClassList("yard-sections"); viewport.Add(sections);
 
             var panel = new VisualElement(); panel.AddToClassList("yard-panel"); body.Add(panel);
             var scroll = new ScrollView(ScrollViewMode.Vertical) { verticalScrollerVisibility = ScrollerVisibility.Auto };
@@ -60,10 +68,15 @@ namespace SeaSick.UI.ModularYard
             var beams = Row(scroll, "yard-wheels");
             beamStandard = Command(beams, "Standard", () => draft.SetWideBeam(false));
             beamWide = Command(beams, "Wide", () => draft.SetWideBeam(true));
-            var deckCaption = new Label("Deck"); deckCaption.AddToClassList("yard-caption"); scroll.Add(deckCaption);
+            // Replaces the old all-or-nothing "Deck: Single/Raised" row
+            // (docs/RAISED-SECTIONS.md task item 4): tap a section on the
+            // ship picture above to raise or lower just that one; these two
+            // stay as the whole-hull shortcut (SetRaisedDeck's existing
+            // uniform swap, aliased RaiseAll/LowerAll).
+            var deckCaption = new Label("Deck (tap a section above, or)"); deckCaption.AddToClassList("yard-caption"); scroll.Add(deckCaption);
             var decks = Row(scroll, "yard-wheels");
-            deckSingle = Command(decks, "Single", () => draft.SetRaisedDeck(false));
-            deckRaised = Command(decks, "Raised", () => draft.SetRaisedDeck(true));
+            lowerAll = Command(decks, "Lower all", () => draft.LowerAll());
+            raiseAll = Command(decks, "Raise all", () => draft.RaiseAll());
             var gunsCaption = new Label("Guns"); gunsCaption.AddToClassList("yard-caption"); scroll.Add(gunsCaption);
             guns = new VisualElement(); guns.AddToClassList("yard-guns"); scroll.Add(guns);
             dryDock = new Label(); dryDock.AddToClassList("yard-caption"); dryDock.AddToClassList("yard-dock"); scroll.Add(dryDock);
@@ -129,16 +142,17 @@ namespace SeaSick.UI.ModularYard
             beamStandard.EnableInClassList("yard-selected", !draft.IsWideBeam && !draft.IsRaisedDeck);
             beamWide.EnableInClassList("yard-selected", draft.IsWideBeam || draft.IsRaisedDeck);
             string raisedReason = draft.RaisedDeckUnavailableReason();
-            deckSingle.SetEnabled(!draft.Committed && draft.IsRaisedDeck);
-            deckSingle.tooltip = "Back to a single (non-raised) deck";
-            deckRaised.SetEnabled(!draft.Committed && (draft.IsRaisedDeck || raisedReason == null));
-            deckRaised.tooltip = raisedReason ?? "A flush upper deck over 1-2 middle bays";
-            deckSingle.EnableInClassList("yard-selected", !draft.IsRaisedDeck);
-            deckRaised.EnableInClassList("yard-selected", draft.IsRaisedDeck);
+            lowerAll.SetEnabled(!draft.Committed && draft.IsRaisedDeck);
+            lowerAll.tooltip = "Back to a single (non-raised) deck, every section";
+            raiseAll.SetEnabled(!draft.Committed && (draft.IsRaisedDeck || raisedReason == null));
+            raiseAll.tooltip = raisedReason ?? "A flush upper deck over every section";
+            lowerAll.EnableInClassList("yard-selected", !draft.IsRaisedDeck);
+            raiseAll.EnableInClassList("yard-selected", draft.IsRaisedDeck);
             // `add`/`remove` above already read `draft.Maximum` and
             // `draft.RemovalReason()`, both raised-aware (docs/RAISED-DECK.md
-            // sec 3/8: the +/- bay controls lock to the family's own 1-2
-            // bound while raised) -- no separate gate needed here.
+            // sec 3/8: the +/- bay controls lock to the library's own bound
+            // while raised) -- no separate gate needed here.
+            RefreshSections();
             RefreshGuns(report);
             string blocked = draft.CannotConfirm();
             confirm.SetEnabled(string.IsNullOrEmpty(blocked) && preview.Error == null);
@@ -151,6 +165,47 @@ namespace SeaSick.UI.ModularYard
             details.text = ReportText(report, removal, status);
             details.style.display = live == null ? DisplayStyle.None : DisplayStyle.Flex;
             badge.text = draft.Highlight != null && draft.Highlight.StartsWith("middle[") ? "NEW SECTION" : "PREVIEW";
+        }
+
+        /// Per-section tap targets over the ship picture (docs/RAISED-SECTIONS.md
+        /// task item 4): one big button per `ShipyardDraft.SectionKeys()`
+        /// entry, laid out left-to-right (stern at the aft/left end of the
+        /// row, matching the render's own bow-forward orientation), each
+        /// tap calling `ToggleSection`. Only shown on wide beam -- standard
+        /// beam never has a raised id to toggle to. Rebuilt only when the
+        /// section count or the beam changes (not every 250 ms tick), same
+        /// throttling idea as `Refresh`'s own `builtKey` for the render.
+        static string SectionLabel(string key, int index, int count) =>
+            key == "stern" ? "Stern" : key == "bow" ? "Bow" : count <= 1 ? "Mid" : $"Mid {index}";
+
+        void RefreshSections()
+        {
+            if (!draft.IsWideBeam) { sections.style.display = DisplayStyle.None; return; }
+            sections.style.display = DisplayStyle.Flex;
+            var keys = draft.SectionKeys();
+            string key = string.Join(",", keys);
+            if (key != sectionsKey)
+            {
+                sections.Clear();
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    string k = keys[i]; // captured per-button
+                    var b = new Button(() => draft.ToggleSection(k)) { text = SectionLabel(k, i, keys.Count - 2) };
+                    b.AddToClassList("yard-section-button");
+                    sections.Add(b);
+                }
+                sectionsKey = key;
+            }
+            for (int i = 0; i < keys.Count && i < sections.childCount; i++)
+            {
+                if (!(sections[i] is Button b)) continue;
+                string k = keys[i];
+                bool raised = draft.IsSectionRaised(k);
+                string reason = raised ? null : draft.SectionUnavailableReason(k);
+                b.SetEnabled(!draft.Committed && reason == null);
+                b.tooltip = reason ?? (raised ? "Raised — tap to lower" : "Tap to raise");
+                b.EnableInClassList("yard-selected", raised);
+            }
         }
 
         /// Big, one-thumb rows: tap a fitted gun to send it to the dry dock,

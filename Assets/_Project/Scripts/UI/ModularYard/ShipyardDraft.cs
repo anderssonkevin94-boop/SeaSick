@@ -33,11 +33,18 @@ namespace SeaSick.UI.ModularYard
         public bool Committed { get; private set; }
         public event Action Changed;
         public int Count => draft.middleIds.Count;
-        public int Maximum => IsRaisedDeck ? RaisedDeckMaxMiddles : Math.Min(3, library.MaxMiddles);
+        /// docs/RAISED-SECTIONS.md sec 5 relaxed the old raised-only cap of
+        /// 2 middles (the all-or-nothing kit's own limit) to the library's
+        /// general bound -- a fully-connected raised run of 3 is now
+        /// data-legal (unverified against Astra's art, flagged elsewhere;
+        /// nothing stops the player reaching it here).
+        public int Maximum => Math.Min(3, library.MaxMiddles);
         /// Raised-deck family only (docs/RAISED-DECK.md sec 3): 0 middles
-        /// does not close the kit, so RemoveMiddle refuses at 1 instead of 0.
+        /// with BOTH ends raised is refused (RAISED_DECK_BAYS), so
+        /// RemoveMiddle refuses shrinking past 1 while every section is
+        /// currently raised via `RaiseAll`/`IsRaisedDeck`.
         public int Minimum => IsRaisedDeck ? RaisedDeckMinMiddles : 0;
-        const int RaisedDeckMinMiddles = 1, RaisedDeckMaxMiddles = 2;
+        const int RaisedDeckMinMiddles = 1;
         public string Rotor => draft.rotorId;
         public bool Dirty => !draft.ValueEquals(baseline);
         public bool CanUndo => undo.Count > 0 && !Committed;
@@ -101,7 +108,7 @@ namespace SeaSick.UI.ModularYard
         public bool RemoveMiddle()
         {
             if (Count == 0) return Refuse("The bow and stern must remain.");
-            if (Count <= Minimum) return Refuse("A raised deck is built for one or two middle bays.");
+            if (Count <= Minimum) return Refuse("With no middle bays, only one end of the ship can be raised.");
             if (backend != null && removalBlocker == null)
                 return Refuse("Section availability is not connected yet.");
             string reason = RemovalReason();
@@ -132,7 +139,14 @@ namespace SeaSick.UI.ModularYard
         /// their Y moved), so a fitted gun stays fitted.
         public bool SetWideBeam(bool wide)
         {
-            if (IsRaisedDeck && !wide) return Refuse("A raised deck needs the wide beam.");
+            // `IsRaisedDeck` alone (the whole-hull "every section raised,
+            // connected" check) is too narrow a guard here now that a
+            // single section can be raised on its own (docs/RAISED-SECTIONS.md
+            // task item 4) -- e.g. just a raised stern (its own wall-forward
+            // id, not the connected one IsRaisedDeck looks for) would
+            // otherwise pass this guard and then get silently overwritten
+            // to the standard-beam id below, discarding it with no refusal.
+            if (!wide && AnySectionRaised()) return Refuse("A raised deck needs the wide beam.");
             if (IsWideBeam == wide) return false;
             string sternId = wide ? ExpandedPresets.ExpandedStern : ShipConfiguration.V3Stern;
             string bowId = wide ? ExpandedPresets.ExpandedBow : ShipConfiguration.V3Bow;
@@ -150,14 +164,15 @@ namespace SeaSick.UI.ModularYard
         /// (W1xR), on top of the wide beam (docs/RAISED-DECK.md sec 3).
         public bool IsRaisedDeck => draft.sternId == RaisedPresets.RaisedStern;
 
-        /// Null when `SetRaisedDeck(true)` would succeed right now; the
-        /// reason to show next to a disabled toggle otherwise
-        /// (docs/RAISED-DECK.md sec 3/8: needs wide beam + 1-2 middle bays).
+        /// Null when `SetRaisedDeck(true)`/`RaiseAll()` would succeed right
+        /// now; the reason to show next to a disabled toggle otherwise
+        /// (docs/RAISED-SECTIONS.md sec 5: needs wide beam, and at least one
+        /// middle bay -- 0 middles can never have both ends raised at once).
         public string RaisedDeckUnavailableReason()
         {
             if (IsRaisedDeck) return null;
             if (!IsWideBeam) return "A raised deck needs the wide beam.";
-            if (Count < 1 || Count > 2) return "A raised deck is built for one or two middle bays.";
+            if (Count < 1) return "With no middle bays, only one end of the ship can be raised.";
             if (!CanSelect(ModuleKind.Stern, RaisedPresets.RaisedStern) || !CanSelect(ModuleKind.Bow, RaisedPresets.RaisedBow))
                 return "This deck is unavailable.";
             return null;
@@ -168,7 +183,9 @@ namespace SeaSick.UI.ModularYard
         /// `SetWideBeam` exactly, one level up (docs/RAISED-DECK.md sec 3/8).
         /// Turning the raised deck OFF drops back to wide W1x, never to the
         /// standard beam (raised requires wide; `SetWideBeam` is the only
-        /// path back to standard, and it refuses while raised).
+        /// path back to standard, and it refuses while raised). Kept as the
+        /// entry point for existing callers/probes (`RaiseAll`/`LowerAll`
+        /// below are thin aliases, docs/RAISED-SECTIONS.md task item 4).
         public bool SetRaisedDeck(bool raised)
         {
             if (IsRaisedDeck == raised) return false;
@@ -183,6 +200,144 @@ namespace SeaSick.UI.ModularYard
             string middleId = raised ? RaisedPresets.RaisedMiddle : ExpandedPresets.ExpandedMiddle;
             for (int i = 0; i < next.middleIds.Count; i++) next.middleIds[i] = middleId;
             return Set(next, ShipAssembler.StdKeyStern);
+        }
+
+        /// "Raise all" / "Lower all" (docs/RAISED-SECTIONS.md task item 4):
+        /// the replacement for the old all-or-nothing "Deck: Single/Raised"
+        /// row, kept as the exact same uniform swap `SetRaisedDeck` already
+        /// did -- raising every section still needs the RAISED_DECK_BAYS
+        /// gate (0 middles can never have both ends raised at once), which
+        /// `SetRaisedDeck(true)`'s existing `RaisedDeckUnavailableReason`
+        /// check already enforces.
+        public bool RaiseAll() => SetRaisedDeck(true);
+        public bool LowerAll() => SetRaisedDeck(false);
+
+        // ---- per-section raised deck (docs/RAISED-SECTIONS.md task item 4) --
+
+        /// Every hull section instance key in the draft, aft to fore:
+        /// "stern", "middle[0]".."middle[Count-1]", "bow" -- what the
+        /// screen's tap targets iterate to build one big target per section.
+        public IReadOnlyList<string> SectionKeys()
+        {
+            var keys = new List<string> { ShipAssembler.StdKeyStern };
+            for (int i = 0; i < Count; i++) keys.Add(ShipAssembler.MiddleKey(i));
+            keys.Add(ShipAssembler.StdKeyBow);
+            return keys;
+        }
+
+        static int MiddleIndex(string key)
+        {
+            if (string.IsNullOrEmpty(key) || !key.StartsWith("middle[") || !key.EndsWith("]")) return -1;
+            return int.TryParse(key.Substring(7, key.Length - 8), out int i) ? i : -1;
+        }
+
+        RaisedSections.SectionLevels CurrentLevels() => RaisedSections.FromIds(draft.sternId, draft.middleIds, draft.bowId);
+
+        static void SetLevel(ref RaisedSections.SectionLevels levels, string key, DeckLevel value)
+        {
+            if (key == ShipAssembler.StdKeyStern) { levels.stern = value; return; }
+            if (key == ShipAssembler.StdKeyBow) { levels.bow = value; return; }
+            int idx = MiddleIndex(key);
+            if (idx >= 0 && idx < levels.middles.Length) levels.middles[idx] = value;
+        }
+
+        /// Whether `key` (a `SectionKeys()` entry) is currently raised, read
+        /// straight off the draft's own ids via `RaisedSections.FromIds`
+        /// (never a second stored flag -- the id is the single source).
+        public bool IsSectionRaised(string key)
+        {
+            var levels = CurrentLevels();
+            if (key == ShipAssembler.StdKeyStern) return levels.stern == DeckLevel.Raised;
+            if (key == ShipAssembler.StdKeyBow) return levels.bow == DeckLevel.Raised;
+            int idx = MiddleIndex(key);
+            return idx >= 0 && idx < levels.middles.Length && levels.middles[idx] == DeckLevel.Raised;
+        }
+
+        /// True while ANY section is raised, regardless of whether every
+        /// section is (the narrower `IsRaisedDeck`, which only recognises
+        /// the whole-hull "connected" id on the stern). Used to guard
+        /// `SetWideBeam(false)` so a single raised section is never
+        /// silently discarded by leaving the beam.
+        public bool AnySectionRaised()
+        {
+            var levels = CurrentLevels();
+            if (levels.stern == DeckLevel.Raised || levels.bow == DeckLevel.Raised) return true;
+            foreach (var m in levels.middles) if (m == DeckLevel.Raised) return true;
+            return false;
+        }
+
+        /// Null when `ToggleSection(key)` would raise the section right now
+        /// (lowering never needs anything the ship does not already have);
+        /// the reason to show next to a disabled tap target otherwise.
+        /// Probes the REAL assembler with the levels this toggle would
+        /// produce (via `RaisedSections.ToIds`) rather than re-deriving the
+        /// rule by hand, so it never drifts from what `ToggleSection` itself
+        /// would actually do.
+        public string SectionUnavailableReason(string key)
+        {
+            if (!IsWideBeam) return "A raised deck needs the wide beam.";
+            if (IsSectionRaised(key)) return null;
+            var levels = CurrentLevels();
+            SetLevel(ref levels, key, DeckLevel.Raised);
+            var (sId, mIds, bId) = RaisedSections.ToIds(levels.stern, levels.middles, levels.bow);
+            var probe = Snapshot();
+            probe.sternId = sId; probe.middleIds = new List<string>(mIds); probe.bowId = bId;
+            probe.equipment.Clear(); // hull-only probe; ToggleSection handles orphaned guns itself
+            var result = ShipAssembler.Assemble(probe, library);
+            return result.ok ? null : Reason(result);
+        }
+
+        /// Flips one section between Low and Raised, recomputing every
+        /// section's id from the new levels (`RaisedSections.ToIds` --
+        /// toggling one section can change a NEIGHBOUR's own id too, e.g. a
+        /// raised stern next to a middle that just went low switches from
+        /// its connected id to its own wall-forward id). A gun whose slot
+        /// id does not survive the new ids goes to the dry dock, same
+        /// pattern as `RemoveMiddle`'s own orphaned-gun handling, just
+        /// checked by real slot resolution instead of a key prefix (a
+        /// toggle changes a module id, not a whole instance).
+        public bool ToggleSection(string key)
+        {
+            if (Committed) return Refuse("This refit is already confirmed.");
+            string reason = IsSectionRaised(key) ? null : SectionUnavailableReason(key);
+            if (reason != null) return Refuse(reason);
+            var levels = CurrentLevels();
+            SetLevel(ref levels, key, IsSectionRaised(key) ? DeckLevel.Low : DeckLevel.Raised);
+            var (sId, mIds, bId) = RaisedSections.ToIds(levels.stern, levels.middles, levels.bow);
+            var next = Snapshot();
+            next.sternId = sId; next.middleIds = new List<string>(mIds); next.bowId = bId;
+            int orphaned = DropOrphanedGuns(next);
+            bool applied = Set(next, key);
+            if (applied && orphaned > 0)
+            {
+                Message = orphaned == 1 ? "1 gun will go to the dry dock." : $"{orphaned} guns will go to the dry dock.";
+                Changed?.Invoke();
+            }
+            return applied;
+        }
+
+        /// Removes every equipment entry whose slot id does not resolve on
+        /// `next`'s OWN hull (probed bare, equipment-free, so a genuinely
+        /// invalid hull is left for `Set()` to report normally) -- the
+        /// general form of `RemoveMiddle`'s prefix removal, needed here
+        /// because a toggle changes a module id in place rather than
+        /// dropping a whole instance key.
+        int DropOrphanedGuns(ShipConfiguration next)
+        {
+            var bare = next.Clone(); bare.equipment.Clear();
+            var bareAsm = ShipAssembler.Assemble(bare, library);
+            if (!bareAsm.ok) return 0;
+            var validSlotIds = new HashSet<string>();
+            foreach (var s in bareAsm.slots) if (s != null && s.role == SocketRole.DeckSlot) validSlotIds.Add(s.qualifiedId);
+            var kept = new List<EquipmentChoice>();
+            int dropped = 0;
+            foreach (var e in next.equipment)
+            {
+                if (e != null && !string.IsNullOrEmpty(e.slotId) && validSlotIds.Contains(e.slotId)) kept.Add(e);
+                else dropped++;
+            }
+            next.equipment = kept;
+            return dropped;
         }
 
         // ---- guns + dry dock (2026-09-25) ------------------------------
@@ -233,7 +388,7 @@ namespace SeaSick.UI.ModularYard
 
         public bool CanSelect(string kind, string id) => allowed == null || allowed(kind, id);
         public string RemovalReason() => Count == 0 ? "The bow and stern must remain." :
-            Count <= Minimum ? "A raised deck is built for one or two middle bays." :
+            Count <= Minimum ? "With no middle bays, only one end of the ship can be raised." :
             backend != null && removalBlocker == null ? "Section availability is not connected yet." :
             removalBlocker?.Invoke(Snapshot(), Count - 1);
 

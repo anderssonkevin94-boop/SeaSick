@@ -30,6 +30,10 @@
 .yard-render { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
 .yard-badge { position: absolute; left: 12px; top: 12px; background-color: rgb(22, 43, 57); color: rgb(177, 227, 247); padding: 5px 9px; font-size: 12px; border-radius: 3px; }
 .yard-views { position: absolute; right: 8px; top: 8px; }
+.yard-sections { position: absolute; left: 0; right: 0; bottom: 0; flex-direction: row; padding: 6px; }
+.yard-sections Button.yard-section-button { flex-grow: 1; flex-basis: 0; min-height: 48px; margin: 3px;
+    background-color: rgba(22, 43, 57, 0.55); border-color: rgba(171, 223, 246, 0.55); }
+.yard-sections Button.yard-section-button:hover { background-color: rgba(48, 79, 96, 0.75); }
 .yard Button.yard-icon-button { width: 44px; height: 44px; padding: 10px; }
 .yard-icon { width: 24px; height: 24px; flex-shrink: 0; }
 .yard-panel { height: 340px; flex-shrink: 0; border-top-width: 1px; border-top-color: rgb(101, 136, 154); }
