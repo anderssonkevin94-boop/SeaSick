@@ -15,7 +15,47 @@ namespace SeaSick.World
     {
         /// The home pier's dock: the one the voyage closes on, and the one
         /// the spawn berths at. Null until the world build raises it.
+        /// **Switchable** (2026-09-25, Kevin: "make my home berth the pier I
+        /// built at island_2") -- see `SetHome`. Everything that reads
+        /// `Home`/`IsHome` (`AnchorController.AtHomeDock`/`BerthAtHome`,
+        /// `VoyageManager.AtBerth`, `ShipyardService`) follows a move without
+        /// its own code changing.
         public static Dock Home { get; private set; }
+
+        /// **The original harbour's dock**, kept aside once so a chosen pier
+        /// that later gets demolished has somewhere to fall back to. Set
+        /// once, by the first `Configure` (the world build), and never
+        /// itself torn down by `Remove` -- only a runtime pier is.
+        static Dock originalHarbour;
+
+        /// True for the one dock the world itself built, never a player's
+        /// pier.
+        public bool IsOriginalHarbour => this == originalHarbour;
+
+        /// **A label for wherever `Home` is right now**, for a refusal
+        /// sentence or a confirmation toast: "the harbour", or "<island> pier".
+        public static string HomeLabel
+        {
+            get
+            {
+                var d = Home;
+                if (d == null) return "her home berth";
+                if (d.IsOriginalHarbour) return "the harbour";
+                var isle = Island.Nearest(d.Berth);
+                return (isle != null ? isle.name : "her home berth") + " pier";
+            }
+        }
+
+        /// **Move the home berth to `d`.** The old home dock becomes an
+        /// ordinary dock; exactly one dock is ever home. A no-op for `null`
+        /// or the current home.
+        public static void SetHome(Dock d)
+        {
+            if (d == null || d == Home) return;
+            if (Home != null) Home.isHome = false;
+            d.isHome = true;
+            Home = d;
+        }
 
         /// **Every dock that exists right now**, home included. A pier a
         /// camp raises registers here on enable and leaves on disable, so
@@ -73,11 +113,13 @@ namespace SeaSick.World
             return d;
         }
 
-        /// Take a runtime dock down without taking its host with it. Home is
-        /// refused: the voyage closes on it.
+        /// Take a runtime dock down without taking its host with it.
+        /// **A home pier may now be demolished** (2026-09-25): `OnDisable`
+        /// below returns `Home` to the original harbour when that happens,
+        /// the same as any other teardown of the live home dock.
         public static void Remove(Dock d)
         {
-            if (d == null || d.isHome) return;
+            if (d == null) return;
             Destroy(d);
         }
 
@@ -183,6 +225,7 @@ namespace SeaSick.World
             deckY = deck;
             isHome = true;
             if (Home == null) Home = this;
+            if (originalHarbour == null) originalHarbour = this;
         }
 
         void OnEnable()
@@ -194,7 +237,21 @@ namespace SeaSick.World
         void OnDisable()
         {
             All.Remove(this);
-            if (Home == this) Home = null;
+            if (Home == this)
+            {
+                Home = null;
+                // The chosen home berth just went away (demolished, or a
+                // load tearing down a re-raised ledger mid-rebuild): fall
+                // back to the harbour rather than leave `Home` null for
+                // whoever asks next frame. Not for the harbour's OWN
+                // teardown (a scene unload) -- `originalHarbour` dies with
+                // it too, and there is nothing to fall back to.
+                if (originalHarbour != null && originalHarbour != this)
+                {
+                    originalHarbour.isHome = true;
+                    Home = originalHarbour;
+                }
+            }
         }
 
         /// How far off her berth she is, flat. The mooring code eases her in
