@@ -231,7 +231,7 @@ namespace SeaSick.UI.ModularYard
             var row = new VisualElement(); row.AddToClassList("yard-sheet-row"); body.Add(row);
             var minus = new Button(() => SetBerths(space.berths - 1)) { text = "-" };
             minus.AddToClassList("yard-icon-button"); minus.SetEnabled(space.berths > space.minBerths); row.Add(minus);
-            var count = new Label($"{space.berths} berths"); count.AddToClassList("yard-count"); row.Add(count);
+            var count = new Label($"{space.berths} berths"); count.AddToClassList("yard-berth-count"); row.Add(count);
             var plus = new Button(() => SetBerths(space.berths + 1)) { text = "+" };
             plus.AddToClassList("yard-icon-button"); plus.SetEnabled(space.berths < space.maxBerths); row.Add(plus);
 

@@ -36,16 +36,33 @@
 .yard-sections Button.yard-section-button:hover { background-color: rgba(48, 79, 96, 0.75); }
 .yard Button.yard-icon-button { width: 44px; height: 44px; padding: 10px; }
 .yard-icon { width: 24px; height: 24px; flex-shrink: 0; }
-.yard-panel { height: 340px; flex-shrink: 0; border-top-width: 1px; border-top-color: rgb(101, 136, 154); }
+/* 340 -> 460: the overview's own content (Hull tiles, Beam, Deck rows,
+   summary, warnings, footer) does not fit 340px in portrait once
+   yard-tiles/yard-wheels report their TRUE content height (see the two
+   comments above) -- it was only fitting before because those rows'
+   own auto-height was silently under-reporting itself; the ship
+   preview above keeps plenty of room to give some back (2026-09-25
+   phone screenshot: Confirm refit was drawn over Raise all/the
+   summary). Landscape (.yard-wide) overrides this to height: auto. */
+.yard-panel { height: 460px; flex-shrink: 0; border-top-width: 1px; border-top-color: rgb(101, 136, 154); }
 .yard-options { flex-grow: 1; min-height: 0; padding: 12px 12px 0 12px; }
 .yard-heading { font-size: 20px; margin-bottom: 8px; }
 .yard-length { flex-direction: row; align-items: center; }
 .yard-length-title { flex-grow: 1; }
 .yard-count { width: 26px; -unity-text-align: middle-center; font-size: 20px; }
+/* The Interior page's "{n} berths" label needs far more room than the
+   2-digit yard-count it used to share (phone screenshot, 2026-09-25:
+   "-4 berths" clipped to "-4 bertl" inside a 26px box). */
+.yard-berth-count { flex-grow: 1; -unity-text-align: middle-center; font-size: 20px; min-width: 0; }
 .yard-measure { color: rgb(171, 209, 226); margin-top: 2px; margin-bottom: 10px; }
 .yard-details { white-space: normal; font-size: 13px; color: rgb(191, 205, 211); margin: 12px 0; flex-shrink: 0; }
 .yard-caption { color: rgb(173, 194, 205); font-size: 13px; }
-.yard-wheels { flex-direction: row; }
+/* min-height: measured live (2026-09-25 phone screenshot) that this row's
+   own auto height (22-23px) does not track its Button children's real
+   min-height-driven height (44px) -- same understatement as yard-tiles
+   above -- so the next caption in flow ("Deck (tap a section tile
+   above...)") drew over the Standard/Wide row's true bottom edge. */
+.yard-wheels { flex-direction: row; min-height: 50px; }
 .yard-wheels Button { flex-grow: 1; flex-basis: 0; }
 .yard Button.yard-selected { border-color: rgb(171, 223, 246); background-color: rgb(48, 83, 102); }
 .yard-message { color: rgb(191, 205, 211); font-size: 13px; white-space: normal; margin: 4px 12px 0 12px; min-height: 18px; max-height: 54px; flex-shrink: 0; }
@@ -59,17 +76,42 @@
 .yard-guns { flex-direction: column; }
 .yard Button.yard-gun-row { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; -unity-text-align: middle-left; }
 .yard-gun-label { -unity-text-align: middle-left; flex-shrink: 0; }
-.yard-gun-status { -unity-text-align: middle-right; color: rgb(171, 209, 226); font-size: 12px; flex-grow: 1; margin-left: 8px; white-space: normal; }
+/* min-width: 0 overrides a flex item's default auto min-width (its
+   unwrapped content width), which is what let this status text run off
+   the right edge of the phone screen instead of wrapping -- the same
+   flexbox gotcha `.yard`'s own min-width: 0 at the top of this file
+   exists to avoid, just missed here (2026-09-25, phone screenshot). */
+.yard-gun-status { -unity-text-align: middle-right; color: rgb(171, 209, 226); font-size: 12px; flex-grow: 1; flex-shrink: 1; min-width: 0; margin-left: 8px; white-space: normal; }
 .yard-dock { margin-bottom: 10px; white-space: normal; }
 .yard-wide .yard-body { flex-direction: row; }
-.yard-wide .yard-panel { width: 330px; height: auto; border-top-width: 0; border-left-width: 1px; border-left-color: rgb(101, 136, 154); }
+/* 330 -> 420: a gun row's "Middle bay 1, starboard gun" label plus its
+   status text has to share this panel's width, and at 330px the status
+   wrapped to 4-5 lines and pushed the list past yard-sheet-body's
+   overflow: hidden, clipping a row entirely (desktop screenshot,
+   2026-09-25). */
+.yard-wide .yard-panel { width: 420px; height: auto; border-top-width: 0; border-left-width: 1px; border-left-color: rgb(101, 136, 154); }
 .yard-wide .yard-viewport { min-width: 200px; }
+/* Even at 420px, label + status side by side leaves too little room for
+   the status text -- stack them so each gets the row's full width. */
+.yard-wide .yard Button.yard-gun-row { flex-direction: column; align-items: flex-start; }
+.yard-wide .yard-gun-status { -unity-text-align: middle-left; flex-grow: 0; margin-left: 0; margin-top: 2px; }
 
 /* ---- Overview: section tiles (docs/SHIPYARD-SECTIONS-UI.md Step 1) ---- */
-.yard-tiles { flex-direction: row; flex-wrap: wrap; padding: 4px 0 8px 0; }
-.yard Button.yard-tile { flex-grow: 1; flex-basis: 64px; min-height: 56px; flex-direction: column; align-items: center; justify-content: center; padding: 4px; }
+/* min-height matches yard-tile's own min-height: measured live (2026-09-25
+   phone screenshot) that this flex-wrap row's OWN auto height does not
+   track a child grown taller by min-height alone (children reported
+   80.17px tall, the row reported 46.94px) -- the "Beam" caption below it
+   then drew over the tiles' true bottom edge. Pin it explicitly rather
+   than trust the wrap row to size itself from grown children. */
+.yard-tiles { flex-direction: row; flex-wrap: wrap; padding: 4px 0 8px 0; margin-bottom: 4px; min-height: 84px; }
+.yard Button.yard-tile { flex-grow: 1; flex-basis: 64px; min-height: 80px; flex-direction: column; align-items: center; justify-content: center; padding: 4px; }
 .yard-tile-name { font-size: 14px; -unity-text-align: middle-center; }
-.yard-tile-status { font-size: 10px; color: rgb(171, 209, 226); -unity-text-align: middle-center; white-space: normal; }
+/* min-width: 0 so a long "guns 2 · berths 4 · hold 5" status line can
+   actually wrap inside the tile instead of forcing the tile (and this
+   flex-wrap row's own height) wider/taller than what yard-tiles
+   reserved, which let the wrapped second line bleed into the "Beam"
+   caption below it (phone screenshot, 2026-09-25). */
+.yard-tile-status { font-size: 10px; color: rgb(171, 209, 226); -unity-text-align: middle-center; white-space: normal; min-width: 0; }
 .yard Button.yard-tile-insert { flex-grow: 0; flex-basis: 32px; min-width: 32px; min-height: 44px; padding: 0; font-size: 18px; opacity: 0.8; }
 .yard-summary { margin-top: 4px; }
 .yard-summary-row { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
@@ -80,7 +122,17 @@
 .yard-sheet { flex-grow: 1; min-height: 0; flex-direction: column; }
 .yard-sheet-head { padding: 8px 12px 0 12px; flex-shrink: 0; }
 .yard-sheet-title { font-size: 18px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf"); }
-.yard-sheet-body { flex-grow: 1; min-height: 0; padding: 8px 12px; }
+/* overflow: hidden clips a page that runs long (e.g. a middle section
+   with several gun slots) so it disappears under this element's own
+   bottom edge instead of painting over yard-sheet-footer's Reset
+   section/Done buttons below it -- caught on the phone gun-slot
+   screenshot, 2026-09-25. GDD still says "no scrolling: pages you swipe
+   between", so this clips rather than adding a ScrollView. */
+/* padding-top 8 -> 18: the strip's own selected-tab underline sits right
+   at its bottom edge, and 8px left the first line of body text (e.g.
+   "Deck level needs the wide beam...") drawn touching/under it (phone
+   screenshot, 2026-09-25). */
+.yard-sheet-body { flex-grow: 1; min-height: 0; padding: 18px 12px 8px 12px; overflow: hidden; }
 .yard-sheet-row { flex-direction: row; align-items: center; margin-bottom: 8px; }
 .yard-sheet-row Button.yard-seg-button { flex-grow: 1; flex-basis: 0; }
 .yard-sheet-footer { flex-direction: row; padding: 8px; flex-shrink: 0; }
