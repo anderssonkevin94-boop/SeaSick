@@ -67,6 +67,10 @@ namespace SeaSick.Ship.Modular.EditorTools
                     ("long-reinforced", ShipConfiguration.Long()),
                     ("long-timber", WithRotor(ShipConfiguration.Long(), "wheel.rotor.m1.timber")),
                     ("long-plus-two-bays", ShipConfiguration.WithMiddles(3)),
+                    ("expanded-short", ExpandedPresets.ExpandedShort()),
+                    ("expanded-long", ExpandedPresets.ExpandedLong()),
+                    ("expanded-long-top", ExpandedPresets.ExpandedLong()),
+                    ("long-top", ShipConfiguration.Long()),
                 };
                 foreach (var (name, cfg) in shots)
                 {
@@ -74,7 +78,7 @@ namespace SeaSick.Ship.Modular.EditorTools
                     if (!res.ok) { sb.AppendLine($"== {name}: REJECTED {res.Summary()}"); ok = false; continue; }
                     sb.AppendLine($"== {name}: {res.Summary()}  placeholders [{string.Join(", ", res.placeholders)}]");
                     Render(name, res, sb, false);
-                    if (name == "long-reinforced" || name == "long-timber") Render(name + "-stern", res, sb, true);
+                    if (name == "long-reinforced" || name == "long-timber" || name == "expanded-long") Render(name + "-stern", res, sb, true);
                 }
                 var bad = ShipAssembler.Assemble(WithRotor(ShipConfiguration.Long(), "wheel.rotor.m1l.oversized"), lib);
                 sb.AppendLine($"== oversized on the standard stern: ok={bad.ok}");
@@ -89,6 +93,13 @@ namespace SeaSick.Ship.Modular.EditorTools
             File.WriteAllText("Logs/modular-preview.txt", sb.ToString());
             Debug.Log("[ModularShipPreview]\n" + sb);
             EditorApplication.Exit(ok ? 0 : 1);
+        }
+
+        static string GetPath(Transform t, Transform root)
+        {
+            string p = t.name;
+            while (t.parent != null && t.parent != root) { t = t.parent; p = t.name + "/" + p; }
+            return p;
         }
 
         static ShipConfiguration WithRotor(ShipConfiguration c, string rotorId) { c.rotorId = rotorId; return c; }
@@ -117,6 +128,12 @@ namespace SeaSick.Ship.Modular.EditorTools
             view.Build(res);
             var b = WorldBounds(shipGo);
             sb.AppendLine($"   world bounds min {b.min.ToString("F2")} max {b.max.ToString("F2")} size {b.size.ToString("F2")} m");
+            if (name.EndsWith("-top"))
+                // Per-part placement, for multi-part hulls: a half placed twice
+                // (or not at all) shows as an x range off the centreline pattern.
+                foreach (var r in shipGo.GetComponentsInChildren<Renderer>(true))
+                    if (GetPath(r.transform, shipGo.transform).Contains("equipment") || r.name.Contains("Shell"))
+                        sb.AppendLine($"     part {GetPath(r.transform, shipGo.transform),-70} x {r.bounds.min.x:F2}..{r.bounds.max.x:F2}  y {r.bounds.min.y:F2}..{r.bounds.max.y:F2}  z {r.bounds.min.z:F2}..{r.bounds.max.z:F2}");
 
             var camGo = new GameObject("Cam");
             var cam = camGo.AddComponent<Camera>();
@@ -127,7 +144,12 @@ namespace SeaSick.Ship.Modular.EditorTools
             // Three-quarter view from starboard (+X) and slightly aft, looking at the centre.
             camGo.transform.position = b.center + new Vector3(dist * 0.78f, dist * 0.42f, -dist * 0.46f);
             camGo.transform.LookAt(b.center);
-            if (sternClose && res.hasWheel)
+            if (name.EndsWith("-top"))
+            {
+                camGo.transform.position = b.center + new Vector3(0f, dist * 0.9f, 0f);
+                camGo.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+            }
+            else if (sternClose && res.hasWheel)
             {
                 // Close three-quarter view from aft and low, on the wheel pocket.
                 var axle = res.wheelAxleM;
