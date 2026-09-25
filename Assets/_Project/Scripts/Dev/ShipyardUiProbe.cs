@@ -166,6 +166,7 @@ public class ShipyardUiProbe : MonoBehaviour
         yield return Safe("9 section-by-section editing", SectionEditing());
         yield return Safe("10 overview tiles + section sheet", SectionSheetUi());
         yield return Safe("11 interior space budget", InteriorBudget());
+        yield return Safe("12 interior cutaway ui", InteriorCutawayUi());
 
         Gate("persist override never null at any apply", overrideNullAt.Count == 0,
             $"{overrideChecks} applies checked" + (overrideNullAt.Count > 0 ? "; NULL at " + string.Join(", ", overrideNullAt) : ""));
@@ -1049,6 +1050,83 @@ public class ShipyardUiProbe : MonoBehaviour
         foreach (var f in typeof(Clickable).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             if (f.FieldType == typeof(Action) && f.GetValue(b.clickable) is Action a) { a(); invoked++; }
         return invoked > 0;
+    }
+
+    // ---- 12: Interior cutaway UI (2D compartments, 2026-09-26) --------------------
+
+    /// Opens the real modal (same technique as section 10), taps the first
+    /// tile, taps the strip tab whose label STARTS WITH "Interior" (the
+    /// cutaway is always exactly one page, `ShipyardSectionSheet.PlanPages`
+    /// -- unlike Guns, which can now split into "Guns 1/2" etc.), finds the
+    /// cutaway's compartment buttons by class (`yard-cutaway-cell`,
+    /// `yard-cutaway-cell--bunk`) and taps a cargo one. `WithBerths` itself
+    /// is already exercised at the data level by section 11; this checks
+    /// the ON-SCREEN cell picture actually reflects it (a bunk cell
+    /// appears) or, if already clamped at the section's max, that nothing
+    /// throws and the tap is simply absorbed.
+    IEnumerator InteriorCutawayUi()
+    {
+        sb.AppendLine("12. interior cutaway (tap a cell, berths +/-2, clamp reasons):");
+        yield return EnsureRefittable();
+        SheetsApi.Close();
+        string openError = null;
+        try { ShipyardLiveBridge.Open(); }
+        catch (Exception e) { openError = e.GetType().Name + ": " + e.Message; }
+        yield return null;
+        if (!ShipyardModal.IsOpen)
+        {
+            Gate("12 modal opened", false, openError ?? "did not open");
+            yield break;
+        }
+        var modal = FindAnyObjectByType<ShipyardModal>();
+        var doc = modal != null ? modal.GetComponent<UIDocument>() : null;
+        var root = doc != null ? doc.rootVisualElement : null;
+        if (root == null) { Gate("12 modal has a UIDocument root", false, "missing"); yield break; }
+
+        var tileButtons = new List<Button>();
+        root.Query<Button>(className: "yard-tile").ForEach(b => tileButtons.Add(b));
+        Button firstTile = tileButtons.Count > 0 ? tileButtons[0] : null;
+        bool tapped = ClickViaDelegate(firstTile);
+        yield return null; yield return null;
+
+        Button interiorTab = null;
+        root.Query<Button>().ForEach(b => { if (interiorTab == null && !string.IsNullOrEmpty(b.text) && b.text.StartsWith("Interior")) interiorTab = b; });
+        bool tabTapped = ClickViaDelegate(interiorTab);
+        yield return null; yield return null;
+        Gate("12a Interior tab reachable from the strip", tapped && interiorTab != null && tabTapped,
+            $"tile tapped {tapped}, interior tab found {interiorTab != null}, tapped {tabTapped}");
+
+        List<Button> Cells() { var l = new List<Button>(); root.Query<Button>(className: "yard-cutaway-cell").ForEach(b => l.Add(b)); return l; }
+        var cells = Cells();
+        Gate("12b cutaway renders compartment cells", cells.Count > 0, $"{cells.Count} cells");
+
+        int bunksBefore = 0;
+        foreach (var c in cells) if (c.ClassListContains("yard-cutaway-cell--bunk")) bunksBefore++;
+        Button cargoCell = null;
+        foreach (var c in cells) if (!c.ClassListContains("yard-cutaway-cell--bunk")) { cargoCell = c; break; }
+
+        if (cargoCell == null)
+        {
+            Untested("12c tap a cargo cell -> berths +2 (or clamp)", "no cargo cell on this section (every cell already bunks)");
+        }
+        else
+        {
+            bool cellTapped = ClickViaDelegate(cargoCell);
+            yield return null; yield return null;
+            int bunksAfter = 0;
+            foreach (var c in Cells()) if (c.ClassListContains("yard-cutaway-cell--bunk")) bunksAfter++;
+            Gate("12c tap a cargo cell converts it to bunks (or is clamped, never crashes)",
+                cellTapped && bunksAfter >= bunksBefore,
+                $"tapped {cellTapped}, bunk cells {bunksBefore} -> {bunksAfter}");
+        }
+
+        var dockLines = new List<Label>();
+        root.Query<Label>(className: "yard-dock-line").ForEach(l => dockLines.Add(l));
+        Gate("12d dry-dock stock line always shown on the cutaway", dockLines.Count > 0, "yard-dock-line label missing");
+
+        var how12 = new string[1];
+        yield return CloseModal(how12);
+        sb.AppendLine("  12 closed via " + how12[0]);
     }
 
     // ---- 11: Interior space budget (Step 2 backend seam) -------------------------
