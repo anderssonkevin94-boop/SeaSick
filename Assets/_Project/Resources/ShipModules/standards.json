@@ -48,6 +48,18 @@
             "keelZU": -1.92,
             "description": "Hull cross-section interface of the W1-center-expansion-r1 family (deck beam 12.08, +2.8 over W1-r2's 9.28; a centre-widened W1-r2, not an independently modelled cross-section). Length and depth UNCHANGED from W1-r2 (same keelZU/deckZU) -- this supersedes the W2-placeholder/W2-r1 direction as the width upgrade (Astra, 2026-09-25); never joins W1-r2 directly.",
             "sourceNote": "art-staging/modular-width-inserts-v1/manifest.json (added_beam_units 2.8, standard_beam_units 9.28, expanded_beam_units 12.08) + hydrostatics/*.json (deck-level sectional area identical, bit-for-bit, at all 4 touching faces -- stern fwd, middle aft, middle fwd, bow aft -- verified by ExpandedHullValidation). profilePoints NOT independently measured (no interfaces.json loop data shipped with this kit, unlike the W2-r1 kit); left 0, informational only, not read by any code path (ModuleLibrary/ShipAssembler never look at it)."
+        },
+        {
+            "id": "W1xR",
+            "version": 1,
+            "status": "prototype",
+            "profilePoints": 0,
+            "halfBeamU": 6.04,
+            "deckZU": 1.76,
+            "keelZU": -1.92,
+            "description": "Hull cross-section interface of the raised-deck family (continuous flush upper deck at Z 4.20 over the W1x lower hull, between-deck 2.44 u = 1.22 m). deckZU stays the flotation/depth datum (1.76, same as W1x -- underwater form unchanged, sDepth == 1); upperDeckZU is the NEW flush-deck datum. Never joins W1x/W1-r2 directly (no partial raised ends).",
+            "sourceNote": "art-staging/modular-raised-middle-v1/manifest.json (deck_height 4.2, beam 12.08) + docs/RAISED-DECK.md.",
+            "upperDeckZU": 4.2
         }
     ],
     "mountStandards": [
@@ -77,11 +89,17 @@
         }
     ],
     "slotClasses": [
-        {"id": "fitting.chimney", "description": "Funnel/chimney fitting on the ship centreline."},
+        {
+            "id": "fitting.chimney",
+            "description": "Funnel/chimney fitting on the ship centreline."
+        },
         {
             "id": "deck.upper.placeholder",
             "description": "Mount for a partial raised deck. Placeholder interface: no stern authors it yet."
         },
-        {"id": "equipment.deck-gun", "description": "Deck-mounted gun (cannon). Layout only; no balance."}
+        {
+            "id": "equipment.deck-gun",
+            "description": "Deck-mounted gun (cannon). Layout only; no balance."
+        }
     ]
 }

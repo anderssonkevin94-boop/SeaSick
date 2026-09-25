@@ -1,0 +1,427 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.bow.w1xr.v1",
+    "version": 1,
+    "kind": "Bow",
+    "family": "W1xR",
+    "status": "prototype",
+    "displayName": "Bow_W1 (raised deck, W1xR)",
+    "description": "Raised-deck variant of hull.bow.w1x.v1: same W1x lower hull (below Z 1.76) with a flush upper deck at Z 4.20 (between-deck 2.44 u = 1.22 m). Visuals ONLY from the raised kit (art-staging/modular-raised-middle-v1); never mixed with the w1x/w1r2 shell. See docs/RAISED-DECK.md.",
+    "source": "art-staging/modular-raised-middle-v1/manifest.json",
+    "lengthU": 10.98,
+    "boundsMinU": {
+        "x": 0,
+        "y": -6.25,
+        "z": -1.92
+    },
+    "boundsMaxU": {
+        "x": 10.98,
+        "y": 6.25,
+        "z": 4.2
+    },
+    "boundsNote": "X/Y UNCHANGED from hull.bow.w1x.v1 (lower hull/beam untouched by this kit). Z max = the raised Hull_Shell's measured top (deck cap), 4.2 u -- measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1).",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.aft",
+            "standard": "W1xR",
+            "posU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "Stem",
+            "role": "hull.stem",
+            "standard": "",
+            "posU": {
+                "x": 8.45,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "UNCHANGED from hull.bow.w1r2.v3 (README: 'carved prow remains unchanged', inserts taper toward 'the single approved stem'). Not independently re-measured from the FBX (see hull.stern.w1x.v1's boundsNote on the per-part axis-metadata issue found during measurement); carried over from W1-r2's own hand-measured value. Confirmed indirectly: the assembled-midpoint chimney cross-check (hull.stern.w1x.v1's Chimney socket notes) only reproduces the kit's own fittings.chimney_position if the bow's physics length is unchanged, which requires this stem X to be unchanged too."
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.tip",
+            "standard": "",
+            "posU": {
+                "x": 10.98,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": "Tip of the decorative prow; not a join. UNCHANGED (README: prow unchanged)."
+        },
+        {
+            "id": "DeckSlot_0_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 1.5,
+                "y": -4.85,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard from W1-r2's 3.45 by +1.4; see docs/EXPANDED-HULL-VALIDATION.md 'Gun slots'. Close to the aft join (full beam here; the taper starts further forward, same as W1-r2's own bow slots). NEW gun pair (spec sec 5): sockets/equipmentSlots already existed in the w1x source; added to capacity.gunSlots here. Provisional -- assembler check pending."
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 1.5,
+                "y": 4.85,
+                "z": 4.2
+            },
+            "yawDeg": 180,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard by +1.4; see DeckSlot_0_-1. NEW gun pair (spec sec 5): sockets/equipmentSlots already existed in the w1x source; added to capacity.gunSlots here. Provisional -- assembler check pending."
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 3.5,
+                "y": -4.85,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard by +1.4; see DeckSlot_0_-1."
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 3.5,
+                "y": 4.85,
+                "z": 4.2
+            },
+            "yawDeg": 180,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard by +1.4; see DeckSlot_0_-1."
+        }
+    ],
+    "visuals": [
+        {
+            "id": "Bow_W1__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/Bow_W1__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.Bow_W1__Hull_Ironwork, 424 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "Bow_W1__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/Bow_W1__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.Bow_W1__Hull_Shell, 704 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "Bow_W1__Plank_Seams",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/Bow_W1__Plank_Seams",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.Bow_W1__Plank_Seams, 400 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "Bow_W1__Prow",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/Bow_W1__Prow",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.Bow_W1__Prow, 60 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedBowV2__Hatch",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/RaisedBowV2__Hatch",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 2.55,
+                "y": 0.0,
+                "z": 4.36
+            },
+            "yawDegU": 80.0,
+            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__Hatch, 36 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX. yawDegU from docs/RAISED-DECK.md sec 2 (matches manifest rotation_radians Y, -1.3963/+1.3963 rad)."
+        },
+        {
+            "id": "RaisedBowV2__InternalLadder",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/RaisedBowV2__InternalLadder",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__InternalLadder, 108 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedBowV2__PlankDetails",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/RaisedBowV2__PlankDetails",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__PlankDetails, 624 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedBowV2__PortalFrames",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/RaisedBowV2__PortalFrames",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__PortalFrames, 48 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedBowV2__StemExtension",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/RaisedBowV2__StemExtension",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__StemExtension, 12 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedBowV2__UpperBraceBolts",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/RaisedBowV2__UpperBraceBolts",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__UpperBraceBolts, 80 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedBowV2__UpperPosts",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/RaisedBowV2__UpperPosts",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__UpperPosts, 240 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedBowV2__UpperRails",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Bow_W1/RaisedBowV2__UpperRails",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Bow_W1.RaisedBowV2__UpperRails, 240 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        }
+    ],
+    "equipmentSlots": [
+        {
+            "id": "DeckSlot_0_-1",
+            "socketId": "DeckSlot_0_-1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks. NEW gun pair added to capacity here (spec sec 5); provisional, assembler check pending."
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "socketId": "DeckSlot_0_1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks. NEW gun pair added to capacity here (spec sec 5); provisional, assembler check pending."
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "socketId": "DeckSlot_1_-1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "socketId": "DeckSlot_1_1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        }
+    ],
+    "passages": [
+        {
+            "id": "CrewPassage_Main",
+            "centreU": {
+                "x": 2.2,
+                "y": 0,
+                "z": 5.9
+            },
+            "sizeU": {
+                "x": 4.4,
+                "y": 4.6,
+                "z": 3.4
+            },
+            "provisional": true,
+            "notes": "Z raised with the deck (4.20 + 1.70 = 5.90); X/Y extents UNCHANGED from the w1x passage (never narrowed, per docs/RAISED-DECK.md sec 4) -- height stays 3.4 u. PROVISIONAL, UNCHANGED from W1-r2's own passage (|y| <= 2.30): the expanded beam adds width OUTBOARD of the deck-slot line only (the insert sits between the original hull halves and the unmoved centreline), so the centreline crew corridor is untouched. Derivation and the chosen alternative (widening the passage instead) are documented in docs/EXPANDED-HULL-VALIDATION.md."
+        }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW1xR_v1/Bow_W1",
+        "sourceGeometrySha256": "e5e66e41bcdafbffa91b70286210d0f022805aea9a9738cdac73ed46001de751",
+        "validWaterlineZU": [
+            -1.9199999570846558,
+            4.2
+        ],
+        "offsetZU": 0,
+        "notes": "Claude/Opus 2026-09-25 (RaisedDeckData, export_raised_hydrostatics.py wrapping Astra's export_hull_hydrostatics.py on the raised kit's Bow_W1__Hull_Shell.fbx, deck_z=4.20). Table-match gate vs hull.bow.w1x.v1's table below Z 1.76: volume at 1.76 w1x 227.7387 U^3 vs w1xr 227.6575 U^3 (0.0357% relative diff, gate <=0.5%); max sectional-area relative diff 1.5821% (near x=9.232, a small-absolute-area bow-tip/stern-step interpolation-grid artifact after excluding bulkhead step-transition bands -- see docs/RAISED-DECK.md Data results). Both PASS the 0.5% gate. Integrated volume to 4.20: 415.1623 U^3."
+    },
+    "lightship": {
+        "massKg": 16265.25,
+        "provisional": true,
+        "rule": "11879.5 kg (hull.bow.w1x.v1 lightship) + 4385.75 kg (measured upper structure: deck 20.669 m^2 x 110 kg/m^2 = 2273.6 kg, plus topside walls 22.2332 m^2 x 95 kg/m^2 = 2112.15 kg) = 16265.25 kg. Deck area = the Hull_Shell's own flat top cap footprint at Z 4.2 (the structural deck), NOT the decorative UpperPlanks/PlankDetails trim mesh (its footprint is only 0.768 m^2, a small fraction of the deck plan -- it is plank-seam detailing over part of the deck, not the deck surface). Wall area excludes the deck-cap band (centroid z > shell z-max - 0.05) so it is not double counted. measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1)."
+    },
+    "capacity": {
+        "holdCells": {
+            "value": 9,
+            "provisional": true,
+            "source": "w1x Bow_W1 holdCells (6) + round(0.7 x upperVol / 38.229): upperVol = this module's OWN W1xR hydrostatic table integrated to 4.20 minus to 1.76 (187.505 U^3, measured, not the sec-5 deck-waterplane x 2.44 estimate) -> round(0.7 x 187.505 / 38.229) = 3 -> 6 + 3 = 9."
+        },
+        "berths": {
+            "value": 3,
+            "provisional": true,
+            "source": "w1x Bow_W1 berths (2) + floor(0.3 x deckArea / 12.8 U^2): deckArea = measured W1xR deck-cap footprint (82.676 U^2, Blender) -> floor(0.3 x 82.676 / 12.8) = 1 -> 2 + 1 = 3."
+        },
+        "gunSlots": {
+            "ids": [
+                "DeckSlot_1_-1",
+                "DeckSlot_1_1",
+                "DeckSlot_0_-1",
+                "DeckSlot_0_1"
+            ],
+            "provisional": true,
+            "source": "Same designated pair W1-r2's bow uses (DeckSlot_1), moved outboard with the deck edge; both pass the assembler's clearance/passage check against the real cannon (ExpandedHullValidation). PLUS the new ['DeckSlot_0_-1', 'DeckSlot_0_1'] pair (upper deck, Z 4.20, spec sec 5): sockets/equipmentSlots already existed in the w1x source; provisional, assembler check pending."
+        },
+        "rule": "Seeded 2026-09-25 (RaisedDeckData): w1x module capacity + the raised deltas from docs/RAISED-DECK.md sec 5, using this module's own measured W1xR hydrostatic table and Blender deck footprint (not the sec-5 estimate numbers). PROVISIONAL, tune freely."
+    },
+    "physical": {
+        "massKg": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "displacementM3": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "cargoCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "crewCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "thrustCoefficient": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "upperStructure": {
+        "massKg": 4385.75,
+        "centroidZU": 3.5915,
+        "deckMassKg": 2273.6,
+        "deckAreaM2": 20.669,
+        "wallMassKg": 2112.15,
+        "wallAreaM2": 22.2332,
+        "wallAreaCentroidZU": 2.9364691920741914,
+        "source": "Blender measurement 2026-09-25 (RaisedDeckData, tools/blender/measure_raised_modules.py). centroidZU = mass-weighted: (deckMassKg*4.20 + wallMassKg*wallAreaCentroidZU) / massKg. Not read by ModuleDef yet (JsonUtility drops unknown fields on read) -- the C# half (sec 6, HullFormData mass/CoM) should add a matching field and read this."
+    }
+}
