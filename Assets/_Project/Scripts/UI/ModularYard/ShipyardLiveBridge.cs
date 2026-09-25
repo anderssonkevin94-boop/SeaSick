@@ -37,6 +37,35 @@ namespace SeaSick.UI.ModularYard
         public ShipyardEdit FitEquipment(ShipConfiguration draft, string slotId, string moduleId) => adapter.FitEquipment(draft, slotId, moduleId);
         public ShipyardEdit RemoveEquipment(ShipConfiguration draft, string slotId) => adapter.RemoveEquipment(draft, slotId);
 
+        // ---- Step 2 backend seam (docs/SHIPYARD-SECTIONS-UI.md) -----------
+        // ISOLATED ON PURPOSE: `ShipConfiguration.layouts`/`SectionLayout`,
+        // `ShipyardService.SectionSpace`/`WithBerths` and a middle-key
+        // shifter for `layouts` are being built in parallel, in a different
+        // worktree, under these exact names -- they do not exist in THIS
+        // worktree yet, so every call into them is kept to this one block
+        // (plus the Interior page in ShipyardSectionSheet.cs) so reconciling
+        // the two branches only ever touches these few lines.
+
+        /// This section's space budget/berths/hold (pure). Backend:
+        /// `ShipyardService.SectionSpace(ShipConfiguration, string)`.
+        public SectionSpaceView SectionSpace(ShipConfiguration draft, string sectionKey) =>
+            ShipyardService.SectionSpace(draft, sectionKey);
+
+        /// A new draft with `sectionKey`'s berths set to `berths` (clamped),
+        /// hold recomputed from what is left of the section's budget.
+        /// Backend: `ShipyardService.WithBerths(ShipConfiguration, string, int)`.
+        public ShipConfiguration WithBerths(ShipConfiguration draft, string sectionKey, int berths) =>
+            ShipyardService.WithBerths(draft, sectionKey, berths);
+
+        /// Renumbers `layouts`' own `middle[i]` keys the same way
+        /// `ShipyardDraft.RenumberMiddleKeys` renumbers `equipment` --
+        /// wired in as `ShipyardDraft`'s `renumberLayouts` delegate so
+        /// `InsertMiddle`/`RemoveSection` never reference the backend type
+        /// directly. Backend: `ShipConfiguration.ShiftMiddleKeys` (named
+        /// "maybe" in the spec; reconcile the exact name/signature here).
+        public void RenumberLayouts(ShipConfiguration cfg, int fromIndex, int delta) =>
+            ShipConfiguration.ShiftMiddleKeys(cfg, fromIndex, delta);
+
         public string RemovalBlocker(ShipConfiguration draft, int index)
         {
             var section = Report(draft)?.Section(ShipAssembler.MiddleKey(index));

@@ -52,14 +52,28 @@ namespace SeaSick.UI.ModularYard
         public ShipConfiguration Snapshot() => draft.Clone();
         public float OriginalLength { get; }
 
+        /// Isolated seam for the Step 2 backend's `ShipConfiguration.layouts`
+        /// renumbering (docs/SHIPYARD-SECTIONS-UI.md "Draft API additions":
+        /// InsertMiddle/RemoveSection renumber `layouts` the same way they
+        /// renumber `equipment`). That backend does not exist in this
+        /// worktree yet -- wired through here rather than called by name
+        /// from `InsertMiddle`/`RemoveSection` directly, so the one seam
+        /// that needs the other agent's types is this single delegate, set
+        /// by whoever builds the draft (`ShipyardModal.Open` for the real
+        /// screen). Null is a no-op: only `equipment` renumbers until it is
+        /// wired up.
+        readonly Action<ShipConfiguration, int, int> renumberLayouts;
+
         public ShipyardDraft(ModuleLibrary library, ShipConfiguration current, IShipyardRefit backend = null,
             Func<ShipConfiguration, int, string> removalBlocker = null,
-            Func<string, string, bool> allowed = null)
+            Func<string, string, bool> allowed = null,
+            Action<ShipConfiguration, int, int> renumberLayouts = null)
         {
             this.library = library ?? throw new ArgumentNullException(nameof(library));
             this.backend = backend;
             this.removalBlocker = removalBlocker;
             this.allowed = allowed;
+            this.renumberLayouts = renumberLayouts;
             baseline = (current ?? throw new ArgumentNullException(nameof(current))).Clone();
             draft = baseline.Clone();
             Assembly = ShipAssembler.Assemble(draft, library);
@@ -130,6 +144,124 @@ namespace SeaSick.UI.ModularYard
                 Changed?.Invoke();
             }
             return applied;
+        }
+
+        // ---- section-by-section editing (docs/SHIPYARD-SECTIONS-UI.md Step 1) --
+
+        /// Inserts a middle at `index` (0..Count), width/level matching its
+        /// neighbours: a new section is RAISED only when BOTH the section
+        /// that will sit aft of it and the one fwd of it are already
+        /// raised (docs/SHIPYARD-SECTIONS-UI.md "Draft API additions");
+        /// otherwise LOW, even on a wide raised ship. Every existing
+        /// `middle[i]` at or past `index` renumbers by +1 in `equipment`
+        /// (and `layouts`, once the Step 2 backend lands -- see
+        /// `renumberLayouts`). Existing bays before `index` never move.
+        public bool InsertMiddle(int index)
+        {
+            if (Committed) return Refuse("This refit is already confirmed.");
+            if (Count >= Maximum) return Refuse("Maximum length for this hull.");
+            index = Math.Max(0, Math.Min(index, Count));
+            string middleId = MiddleIdForWidth();
+            if (!CanSelect(ModuleKind.Middle, middleId)) return Refuse("This section is unavailable.");
+            var next = Snapshot();
+            if (IsWideBeam)
+            {
+                var levels = CurrentLevels();
+                var middles = new List<DeckLevel>(levels.middles);
+                DeckLevel left = index == 0 ? levels.stern : middles[index - 1];
+                DeckLevel right = index >= middles.Count ? levels.bow : middles[index];
+                DeckLevel inserted = left == DeckLevel.Raised && right == DeckLevel.Raised ? DeckLevel.Raised : DeckLevel.Low;
+                middles.Insert(index, inserted);
+                var (sId, mIds, bId) = RaisedSections.ToIds(levels.stern, middles, levels.bow);
+                next.sternId = sId; next.middleIds = new List<string>(mIds); next.bowId = bId;
+            }
+            else next.middleIds.Insert(index, middleId);
+            RenumberMiddleKeys(next, index, +1);
+            return Set(next, ShipAssembler.MiddleKey(index));
+        }
+
+        /// Removes any ONE middle bay by its instance key -- unlike
+        /// `RemoveMiddle` (last bay only), a section sheet lets the player
+        /// pick which one goes. Guns standing on it go to the dry dock
+        /// (same pattern as `RemoveMiddle`); every later `middle[i]`
+        /// renumbers down by 1 in `equipment` (and `layouts`).
+        public bool RemoveSection(string sectionKey)
+        {
+            if (Committed) return Refuse("This refit is already confirmed.");
+            int index = MiddleIndex(sectionKey);
+            string reason = RemovalReasonFor(index);
+            if (!string.IsNullOrEmpty(reason)) return Refuse(reason);
+            var next = Snapshot();
+            next.middleIds.RemoveAt(index);
+            if (IsWideBeam)
+            {
+                var levels = CurrentLevels();
+                var middles = new List<DeckLevel>(levels.middles);
+                middles.RemoveAt(index);
+                var (sId, mIds, bId) = RaisedSections.ToIds(levels.stern, middles, levels.bow);
+                next.sternId = sId; next.middleIds = new List<string>(mIds); next.bowId = bId;
+            }
+            string prefix = ShipAssembler.MiddleKey(index) + "/";
+            int orphaned = next.equipment.RemoveAll(e => e != null && e.slotId != null && e.slotId.StartsWith(prefix));
+            RenumberMiddleKeys(next, index, -1);
+            string highlight = index > 0 ? ShipAssembler.MiddleKey(index - 1) : ShipAssembler.StdKeyStern;
+            bool applied = Set(next, highlight);
+            if (applied && orphaned > 0)
+            {
+                Message = orphaned == 1 ? "1 gun will go to the dry dock." : $"{orphaned} guns will go to the dry dock.";
+                Changed?.Invoke();
+            }
+            return applied;
+        }
+
+        /// `equipment`'s (and, via `renumberLayouts`, `layouts`') own
+        /// `middle[i]` keys, shifted by `delta` for every `i >= fromIndex`
+        /// -- the general form `AddMiddle`/`RemoveMiddle` never needed
+        /// because they only ever touched the LAST bay.
+        void RenumberMiddleKeys(ShipConfiguration cfg, int fromIndex, int delta)
+        {
+            foreach (var e in cfg.equipment)
+            {
+                if (e == null || string.IsNullOrEmpty(e.slotId)) continue;
+                int idx = SlotMiddleIndex(e.slotId);
+                if (idx >= fromIndex) e.slotId = WithSlotMiddleIndex(e.slotId, idx + delta);
+            }
+            renumberLayouts?.Invoke(cfg, fromIndex, delta);
+        }
+
+        static int SlotMiddleIndex(string slotId)
+        {
+            int slash = slotId.IndexOf('/');
+            return MiddleIndex(slash >= 0 ? slotId.Substring(0, slash) : slotId);
+        }
+
+        static string WithSlotMiddleIndex(string slotId, int newIndex)
+        {
+            int slash = slotId.IndexOf('/');
+            return ShipAssembler.MiddleKey(newIndex) + (slash >= 0 ? slotId.Substring(slash) : "");
+        }
+
+        /// An opaque copy of the draft, taken when a section sheet opens
+        /// (`BeginSection`) so `ResetSection` can put it back untouched.
+        /// The prototype resets the WHOLE draft rather than isolating one
+        /// section's own fields, same simplification `Undo` already makes --
+        /// a section sheet is the only thing editing the draft while it is
+        /// open, so the two read the same.
+        public readonly struct DraftSnapshot
+        {
+            internal readonly ShipConfiguration configuration;
+            internal DraftSnapshot(ShipConfiguration configuration) { this.configuration = configuration; }
+        }
+
+        public DraftSnapshot BeginSection(string key) => new DraftSnapshot(Snapshot());
+
+        /// Puts the draft back to what `BeginSection(key)` captured. `key`
+        /// is taken for symmetry with `BeginSection` and as the highlight
+        /// to restore, not to scope the revert -- see `DraftSnapshot`.
+        public void ResetSection(string key, DraftSnapshot snapshot)
+        {
+            if (Committed || snapshot.configuration == null) return;
+            Set(snapshot.configuration.Clone(), key);
         }
 
         /// Swaps EVERY hull section between the W1-r2 and W1x families at
@@ -391,6 +523,24 @@ namespace SeaSick.UI.ModularYard
             Count <= Minimum ? "With no middle bays, only one end of the ship can be raised." :
             backend != null && removalBlocker == null ? "Section availability is not connected yet." :
             removalBlocker?.Invoke(Snapshot(), Count - 1);
+
+        /// The general form of `RemovalReason()` -- any middle bay by its
+        /// own index, not just the last one (the section sheet's "Remove
+        /// this section" needs to ask about the bay it is showing, which is
+        /// rarely the last). Null = removing it right now would succeed.
+        public string RemovalReasonFor(int index)
+        {
+            if (index < 0 || index >= Count) return "Only a middle section can be removed.";
+            if (Count <= Minimum) return "With no middle bays, only one end of the ship can be raised.";
+            if (backend != null && removalBlocker == null) return "Section availability is not connected yet.";
+            return removalBlocker?.Invoke(Snapshot(), index);
+        }
+
+        /// The Interior page's own `Set` seam: `WithBerths` (Step 2 backend)
+        /// returns a whole new `ShipConfiguration`, not a draft mutation, so
+        /// it goes through the same undo-tracked `Set` every other control
+        /// uses rather than duplicating that bookkeeping in the UI.
+        public bool ReplaceForInterior(ShipConfiguration next, string sectionKey) => Set(next, sectionKey);
 
         public string CannotConfirm()
         {

@@ -163,6 +163,9 @@ public class ShipyardUiProbe : MonoBehaviour
         yield return Safe("6 save/load", SaveLoad());
         yield return Safe("7 deck toggle", DeckToggle());
         yield return Safe("8 per-section toggle", SectionToggle());
+        yield return Safe("9 section-by-section editing", SectionEditing());
+        yield return Safe("10 overview tiles + section sheet", SectionSheetUi());
+        yield return Safe("11 interior space budget", InteriorBudget());
 
         Gate("persist override never null at any apply", overrideNullAt.Count == 0,
             $"{overrideChecks} applies checked" + (overrideNullAt.Count > 0 ? "; NULL at " + string.Join(", ", overrideNullAt) : ""));
@@ -893,6 +896,191 @@ public class ShipyardUiProbe : MonoBehaviour
         bool loweredAll = freshDraft.LowerAll();
         Gate("8d LowerAll lowers every section", loweredAll && !freshDraft.IsRaisedDeck
             && AllSectionsRaised(freshDraft, false), Msg(freshDraft));
+    }
+
+    // ---- 9: section-by-section editing (docs/SHIPYARD-SECTIONS-UI.md Step 1) --
+
+    /// Draft-only, same style as 7/8: `InsertMiddle`/`RemoveSection`
+    /// renumber `equipment`'s own `middle[i]` keys; `layouts` renumbering
+    /// (`ShipyardDraft.renumberLayouts`) is not exercised here because the
+    /// Step 2 backend it calls through `ShipyardLiveBridge.RenumberLayouts`
+    /// is not built in this worktree yet (see docs/SHIPYARD-SECTIONS-UI.md
+    /// and the seam comment on that method).
+    IEnumerator SectionEditing()
+    {
+        sb.AppendLine("9. section-by-section editing (InsertMiddle/RemoveSection/BeginSection+ResetSection):");
+        yield return EnsureRefittable();
+
+        // 9a: InsertMiddle(0) on Long() (1 middle, guns on middle[0]) --
+        // the EXISTING bay's guns renumber to middle[1]; the new bay at 0
+        // carries none.
+        var d = NewDraft(out _);
+        string before9a = EquipSlots(d.Snapshot());
+        bool inserted0 = d.InsertMiddle(0);
+        var after9a = d.Snapshot();
+        string wantAfter9a = before9a.Replace("middle[0]/", "middle[1]/");
+        Gate("9a InsertMiddle(0): count 1 -> 2", inserted0 && d.Count == 2, Msg(d));
+        Gate("9a InsertMiddle(0): existing bay's guns renumber to middle[1]", EquipSlots(after9a) == wantAfter9a,
+            $"before [{before9a}] after [{EquipSlots(after9a)}] want [{wantAfter9a}]");
+        Gate("9a InsertMiddle(0): the new bay (middle[0]) carries no guns",
+            !after9a.equipment.Exists(e => e != null && e.slotId != null && e.slotId.StartsWith("middle[0]/")), EquipSlots(after9a));
+
+        // 9b: InsertMiddle(Count) (append) -- mirrors the old AddMiddle;
+        // no existing key moves.
+        d = NewDraft(out _);
+        string before9b = EquipSlots(d.Snapshot());
+        bool insertedEnd = d.InsertMiddle(d.Count);
+        Gate("9b InsertMiddle(end): count 1 -> 2", insertedEnd && d.Count == 2, Msg(d));
+        Gate("9b InsertMiddle(end): existing bay's guns unmoved", EquipSlots(d.Snapshot()) == before9b,
+            $"before [{before9b}] after [{EquipSlots(d.Snapshot())}]");
+
+        // 9c: RemoveSection of a middle WITH guns -- they go to the dry
+        // dock (draft message, same pattern as RemoveMiddle) and every
+        // later bay renumbers down by 1.
+        d = NewDraft(out _);
+        d.AddMiddle(); // 2 bays; WithMiddles' own rule keeps guns only on middle[0]
+        Gate("9c setup: 2 bays", d.Count == 2, Msg(d));
+        bool removed = d.RemoveSection(ShipAssembler.MiddleKey(0));
+        Gate("9c RemoveSection(middle[0]) applies, count 2 -> 1", removed && d.Count == 1, Msg(d));
+        Gate("9c RemoveSection: its own guns went to the dry dock (message)",
+            !string.IsNullOrEmpty(d.Message) && d.Message.Contains("dry dock"), d.Message);
+        Gate("9c RemoveSection: nothing left referencing the removed bay's own old key (middle[1])",
+            !d.Snapshot().equipment.Exists(e => e != null && e.slotId != null && e.slotId.StartsWith("middle[1]/")), EquipSlots(d.Snapshot()));
+
+        d = NewDraft(out _);
+        bool removedStern = d.RemoveSection(ShipAssembler.StdKeyStern);
+        Gate("9c RemoveSection(stern) refused (middles only)",
+            !removedStern && d.Message == "Only a middle section can be removed.", d.Message);
+
+        // 9d: BeginSection/ResetSection -- the prototype resets the WHOLE
+        // draft (docs comment on `DraftSnapshot`), same simplification
+        // `Undo` already makes.
+        d = NewDraft(out _);
+        d.SetWideBeam(true);
+        var snap = d.BeginSection(ShipAssembler.StdKeyStern);
+        string beforeReset = d.Snapshot().ToJson();
+        bool toggled = d.ToggleSection(ShipAssembler.StdKeyStern);
+        bool changed = d.Snapshot().ToJson() != beforeReset;
+        d.ResetSection(ShipAssembler.StdKeyStern, snap);
+        Gate("9d BeginSection/ResetSection: a toggle in between is undone", toggled && changed && d.Snapshot().ToJson() == beforeReset,
+            $"toggled {toggled}, changed {changed}, restored {d.Snapshot().ToJson() == beforeReset}");
+    }
+
+    // ---- 10: overview tiles + section sheet, in the real modal ------------------
+
+    /// Opens the real modal the way section 3 does (`ShipyardLiveBridge.Open`),
+    /// finds the overview's own tiles by USS class, taps one with the same
+    /// reflection-into-`Clickable` technique `CloseModal` already uses (a
+    /// UI Toolkit click needs a live panel this probe's virtual pointer
+    /// devices are not wired to drive), checks the section sheet came up,
+    /// taps Done, checks it went away, then reopens and checks Reset
+    /// section is there. Closes the modal the same way section 3 does.
+    IEnumerator SectionSheetUi()
+    {
+        sb.AppendLine("10. overview tiles + section sheet (real modal):");
+        yield return EnsureRefittable();
+        SheetsApi.Close();
+        string openError = null;
+        try { ShipyardLiveBridge.Open(); }
+        catch (Exception e) { openError = e.GetType().Name + ": " + e.Message; }
+        yield return null;
+        if (!ShipyardModal.IsOpen)
+        {
+            Gate("10 modal opened", false, openError ?? "did not open");
+            yield break;
+        }
+        var modal = FindAnyObjectByType<ShipyardModal>();
+        var doc = modal != null ? modal.GetComponent<UIDocument>() : null;
+        var root = doc != null ? doc.rootVisualElement : null;
+        if (root == null) { Gate("10 modal has a UIDocument root", false, "missing"); yield break; }
+
+        var tileButtons = new List<Button>();
+        root.Query<Button>(className: "yard-tile").ForEach(b => tileButtons.Add(b));
+        Gate("10a overview tiles present (stern, >=1 middle, bow)", tileButtons.Count >= 3, $"{tileButtons.Count} tiles");
+
+        Button firstTile = tileButtons.Count > 0 ? tileButtons[0] : null;
+        bool tapped = ClickViaDelegate(firstTile);
+        yield return null; yield return null;
+
+        List<VisualElement> SheetEls() { var l = new List<VisualElement>(); root.Query<VisualElement>(className: "yard-sheet").ForEach(e => l.Add(e)); return l; }
+        var sheetEls = SheetEls();
+        Gate("10b tap a tile opens the section sheet (Structure/Guns/Interior pages)",
+            tapped && sheetEls.Count > 0, $"tile found {firstTile != null}, tapped {tapped}, sheet elements {sheetEls.Count}");
+
+        Button doneBtn = null;
+        root.Query<Button>().ForEach(b => { if (doneBtn == null && b.text == "Done") doneBtn = b; });
+        bool doneTapped = ClickViaDelegate(doneBtn);
+        yield return null; yield return null;
+        Gate("10c Done returns to the overview", doneTapped && SheetEls().Count == 0,
+            $"Done found {doneBtn != null}, tapped {doneTapped}, sheet elements left {SheetEls().Count}");
+
+        tapped = ClickViaDelegate(firstTile);
+        yield return null; yield return null;
+        Button resetBtn = null;
+        root.Query<Button>().ForEach(b => { if (resetBtn == null && b.text == "Reset section") resetBtn = b; });
+        Gate("10d Reset section button present while a sheet is open", tapped && resetBtn != null,
+            $"tapped {tapped}, found {resetBtn != null}");
+
+        var how = new string[1];
+        yield return CloseModal(how);
+        sb.AppendLine("  10 closed via " + how[0]);
+    }
+
+    /// The same "find the click delegate on `Clickable` and invoke it by
+    /// reflection" trick `CloseModal` already uses on the Cancel button --
+    /// factored out so the tile/Done/Reset taps above use it too.
+    static bool ClickViaDelegate(Button b)
+    {
+        if (b == null || b.clickable == null) return false;
+        int invoked = 0;
+        foreach (var f in typeof(Clickable).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            if (f.FieldType == typeof(Action) && f.GetValue(b.clickable) is Action a) { a(); invoked++; }
+        return invoked > 0;
+    }
+
+    // ---- 11: Interior space budget (Step 2 backend seam) -------------------------
+
+    /// **Not runnable in this worktree yet.** `ShipyardService.SectionSpace`/
+    /// `WithBerths` and `SectionSpaceView` are the Step 2 backend's own
+    /// types (docs/SHIPYARD-SECTIONS-UI.md), built in parallel in another
+    /// worktree; `ShipyardLiveBridge.SectionSpace`/`WithBerths` (the one
+    /// seam that calls them) will not compile until that lands. Written
+    /// against the documented API so the gates are ready the moment it
+    /// does; until then this whole probe fails to compile, same as every
+    /// other file that touches the seam (ShipyardLiveBridge.cs,
+    /// ShipyardSectionSheet.cs's Interior page).
+    IEnumerator InteriorBudget()
+    {
+        sb.AppendLine("11. interior space budget (berths +/- clamps, ShipyardLiveBridge.SectionSpace/WithBerths):");
+        yield return EnsureRefittable();
+        var bridge = new ShipyardLiveBridge();
+        var cfg = bridge.ReadCurrent();
+        SectionSpaceView space = null;
+        string threw = null;
+        try { space = bridge.SectionSpace(cfg, ShipAssembler.StdKeyStern); }
+        catch (Exception e) { threw = e.GetType().Name + ": " + e.Message; }
+        if (space == null)
+        {
+            Untested("11 SectionSpace(stern)", threw ?? "returned null -- Step 2 backend not wired up yet");
+            yield break;
+        }
+
+        Gate("11a SectionSpace: the default layout is the section's own default berths",
+            space.berths == space.defaultBerths, $"berths {space.berths}, default {space.defaultBerths}");
+
+        var atMin = bridge.WithBerths(cfg, ShipAssembler.StdKeyStern, -999);
+        var minSpace = atMin != null ? bridge.SectionSpace(atMin, ShipAssembler.StdKeyStern) : null;
+        Gate("11b WithBerths clamps below the minimum", minSpace != null && minSpace.berths == space.minBerths,
+            minSpace != null ? $"berths {minSpace.berths}, min {space.minBerths}" : "null");
+
+        var atMax = bridge.WithBerths(cfg, ShipAssembler.StdKeyStern, 999);
+        var maxSpace = atMax != null ? bridge.SectionSpace(atMax, ShipAssembler.StdKeyStern) : null;
+        Gate("11c WithBerths clamps above the maximum", maxSpace != null && maxSpace.berths == space.maxBerths,
+            maxSpace != null ? $"berths {maxSpace.berths}, max {space.maxBerths}" : "null");
+
+        Gate("11d more berths costs hold (or holds the floor)",
+            maxSpace != null && minSpace != null && maxSpace.holdCells <= minSpace.holdCells,
+            maxSpace != null && minSpace != null ? $"min-berths hold {minSpace.holdCells}, max-berths hold {maxSpace.holdCells}" : "n/a");
     }
 
     static bool AllSectionsRaised(ShipyardDraft d, bool raised)

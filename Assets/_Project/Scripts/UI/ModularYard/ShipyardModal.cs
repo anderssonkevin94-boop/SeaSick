@@ -26,7 +26,7 @@ namespace SeaSick.UI.ModularYard
             var library = ModuleLibrary.LoadFromResources();
             var live = backend as ShipyardLiveBridge;
             var draft = new ShipyardDraft(library, backend.ReadCurrent(), backend, removalBlocker,
-                live == null ? null : live.Allowed);
+                live == null ? null : live.Allowed, live == null ? null : (Action<ShipConfiguration, int, int>)live.RenumberLayouts);
             var go = new GameObject("Modular shipyard");
             var modal = go.AddComponent<ShipyardModal>();
             try

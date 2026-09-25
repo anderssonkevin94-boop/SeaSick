@@ -16,10 +16,23 @@ namespace SeaSick.UI.ModularYard
         readonly LineRenderer[] lines = new LineRenderer[12];
         RenderTexture texture;
         Bounds bounds;
+        Bounds highlightBounds;
+        bool hasHighlight;
+        bool focusHighlight;
         float yaw = -38f, pitch = 34f, zoom = 1f;
         public Texture Texture => texture;
         public string Error { get; private set; }
         public event Action TextureChanged;
+
+        /// **Section sheet framing** (docs/SHIPYARD-SECTIONS-UI.md "the
+        /// preview highlights that section ... and frames it"): true trains
+        /// the camera on the last highlighted part's own bounds instead of
+        /// the whole ship's; false (the overview) frames the whole ship as
+        /// before. A no-op while nothing is highlighted -- `Build` sets
+        /// `hasHighlight` only when `highlight` actually matched a placed
+        /// part, so opening a sheet before the first render settles never
+        /// frames an empty box.
+        public void SetFocus(bool focus) { if (focus == focusHighlight) return; focusHighlight = focus; Render(); }
 
         public ShipyardPreview(Func<ShipConfiguration, Transform, GameObject> factory = null)
         {
@@ -76,6 +89,7 @@ namespace SeaSick.UI.ModularYard
             { if (first) { bounds = r.bounds; first = false; } else bounds.Encapsulate(r.bounds); }
             foreach (var t in root.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = 31;
             outline.SetActive(false);
+            hasHighlight = false;
             foreach (var p in result.placed)
             {
                 if (p.instanceKey != highlight) continue;
@@ -86,7 +100,11 @@ namespace SeaSick.UI.ModularYard
                 int edge = 0;
                 for (int i = 0; i < 8; i++) for (int bit = 1; bit <= 4; bit <<= 1)
                     if ((i & bit) == 0) { lines[edge].SetPosition(0, corners[i]); lines[edge++].SetPosition(1, corners[i | bit]); }
-                outline.SetActive(true); break;
+                outline.SetActive(true);
+                var hb = new Bounds(corners[0], Vector3.zero);
+                for (int i = 1; i < 8; i++) hb.Encapsulate(corners[i]);
+                highlightBounds = hb; hasHighlight = true;
+                break;
             }
             Render();
         }
@@ -109,14 +127,15 @@ namespace SeaSick.UI.ModularYard
         public void Render()
         {
             if (texture == null || bounds.size.sqrMagnitude < .001f) return;
+            var frame = focusHighlight && hasHighlight ? highlightBounds : bounds;
             var rotation = Quaternion.Euler(pitch, yaw, 0);
             camera.transform.rotation = rotation;
-            camera.transform.position = bounds.center - rotation * Vector3.forward * 65;
+            camera.transform.position = frame.center - rotation * Vector3.forward * 65;
             float halfX = 0, halfY = 0;
             for (int i = 0; i < 8; i++)
             {
-                Vector3 offset = new Vector3((i & 1) == 0 ? -bounds.extents.x : bounds.extents.x,
-                    (i & 2) == 0 ? -bounds.extents.y : bounds.extents.y, (i & 4) == 0 ? -bounds.extents.z : bounds.extents.z);
+                Vector3 offset = new Vector3((i & 1) == 0 ? -frame.extents.x : frame.extents.x,
+                    (i & 2) == 0 ? -frame.extents.y : frame.extents.y, (i & 4) == 0 ? -frame.extents.z : frame.extents.z);
                 var p = Quaternion.Inverse(rotation) * offset;
                 halfX = Mathf.Max(halfX, Mathf.Abs(p.x)); halfY = Mathf.Max(halfY, Mathf.Abs(p.y));
             }
