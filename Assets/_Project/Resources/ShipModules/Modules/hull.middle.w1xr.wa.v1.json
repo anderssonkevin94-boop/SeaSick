@@ -1,0 +1,80 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.middle.w1xr.wa.v1",
+    "version": 1,
+    "kind": "Middle",
+    "family": "W1xR",
+    "status": "prototype",
+    "displayName": "Midship_W1 (raised deck, wall aft, W1x/W1xR)",
+    "description": "Raised middle with a wall + twin stairs on the AFT face (W1x standard, closes to a low aft neighbour) and a connected FORWARD face (W1xR standard). Same W1x lower hull below Z 1.76 as hull.middle.w1x.v1. Visuals: hull.middle.w1xr.v1's Midship_W1 shell (re-closed at the aft interface) plus Astra's raised-stern wall/stair kit (art-staging/modular-width-raised-v1) mirrored about X=9.30 onto the aft face. See docs/RAISED-SECTIONS.md sec 3-4.",
+    "source": "art-staging/modular-raised-sections-v1/MiddleWA/manifest.json",
+    "lengthU": 6.0,
+    "boundsMinU": { "x": 0, "y": -6.25, "z": -1.92 },
+    "boundsMaxU": { "x": 6.0, "y": 6.25, "z": 4.2 },
+    "boundsNote": "X/Y/Z unchanged from hull.middle.w1xr.v1 -- the wall is an interior closure, not a hull silhouette change.",
+    "sockets": [
+        { "id": "AftSocket", "role": "hull.aft", "standard": "W1x", "posU": {"x":0,"y":0,"z":0}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": false, "notes": "Wall face: W1x standard per RAISED-SECTIONS.md sec 2 (a wall/no-wall pairing, never two raised faces meeting without a wall)." },
+        { "id": "ForwardSocket", "role": "hull.fwd", "standard": "W1xR", "posU": {"x":6.0,"y":0,"z":0}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": false, "notes": "Connected face, unchanged from hull.middle.w1xr.v1." },
+        { "id": "DeckSlot_1_-1", "role": "deck.slot", "standard": "", "posU": {"x":3.5,"y":-4.85,"z":4.2}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": true, "notes": "Kept from hull.middle.w1xr.v1; clearance box measured clear of the aft stairwell (stairwell local x 0-3.24, box x 2.6-4.4 -> just clears). Assembler check pending." },
+        { "id": "DeckSlot_1_1", "role": "deck.slot", "standard": "", "posU": {"x":3.5,"y":4.85,"z":4.2}, "yawDeg":180, "radiusLimit":0.0, "placementRule":"", "provisional": true, "notes": "See DeckSlot_1_-1." },
+        { "id": "DeckAreaSocket", "role": "deck.area", "standard": "", "posU": {"x":3.0,"y":0,"z":4.2}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": true, "notes": "Centre of the free-placement deck area, unchanged from hull.middle.w1xr.v1." }
+    ],
+    "droppedGunSlots": {
+        "ids": ["DeckSlot_0_-1", "DeckSlot_0_1"],
+        "reason": "x=1.5 sits inside the aft stairwell footprint (local x 0-3.24, y-band 4.62-5.80) -- their 1.8x2.3x1.65 clearance box overlaps the stair corners. Dropped per RAISED-SECTIONS.md sec 4."
+    },
+    "visuals": [
+        { "id": "Midship_W1__Hull_Ironwork", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/Midship_W1__Hull_Ironwork", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Carried unchanged from art-staging/modular-raised-middle-v1." },
+        { "id": "Midship_W1__Hull_Shell", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/Midship_W1__Hull_Shell", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Re-closed at the aft face (X=0 local) with a flat bulkhead cap between the two stair-corner Y bands, Z 1.70-4.20; open at the forward face (connected). 0 boundary anomalies, 0 degenerate faces (tools/blender/verify_modular_raised_sections_v1.py)." },
+        { "id": "Midship_W1__Plank_Seams", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/Midship_W1__Plank_Seams", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Carried unchanged." },
+        { "id": "Midship_W1__Rails_Teal", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/Midship_W1__Rails_Teal", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Carried unchanged." },
+        { "id": "RaisedSection__Door_Aft", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/RaisedSection__Door_Aft", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Astra's raised-stern Door, mirrored about X=9.30 (world) onto the aft face. Cosmetic placement over the closed bulkhead; not boolean-cut as a walkable hole -- see docs/RAISED-SECTIONS.md Data+art results for the caveat." },
+        { "id": "RaisedSection__ForwardGuard_Aft", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/RaisedSection__ForwardGuard_Aft", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Astra's ForwardGuard, mirrored." },
+        { "id": "RaisedSection__PortalFrames_Aft", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/RaisedSection__PortalFrames_Aft", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Astra's PortalFrames, mirrored." },
+        { "id": "RaisedSection__StairGuards_Aft", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/RaisedSection__StairGuards_Aft", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Astra's StairGuards, mirrored." },
+        { "id": "RaisedSection__StairNosings_Aft", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/RaisedSection__StairNosings_Aft", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Astra's StairNosings, mirrored." },
+        { "id": "RaisedSection__TwinStairs_Aft", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWA/RaisedSection__TwinStairs_Aft", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Astra's TwinStairs, mirrored; run occupies local x 0-3.24, i.e. the aft 54% of this 6 u bay." }
+    ],
+    "equipmentSlots": [
+        { "id": "DeckSlot_1_-1", "socketId": "DeckSlot_1_-1", "clearanceSizeU": {"x":1.8,"y":2.3,"z":1.65}, "classes": ["equipment.deck-gun"], "provisional": true, "notes": "Kept; assembler check pending (see droppedGunSlots for the pair dropped instead)." },
+        { "id": "DeckSlot_1_1", "socketId": "DeckSlot_1_1", "clearanceSizeU": {"x":1.8,"y":2.3,"z":1.65}, "classes": ["equipment.deck-gun"], "provisional": true, "notes": "Kept; assembler check pending." },
+        { "id": "DeckArea", "socketId": "DeckAreaSocket", "clearanceSizeU": {"x":6.0,"y":12.08,"z":2.66}, "classes": ["equipment.deck-gun"], "provisional": true, "notes": "Whole-bay free-placement footprint, unchanged from hull.middle.w1xr.v1; equipment must still keep clear of the aft stairwell and passage." }
+    ],
+    "passages": [
+        { "id": "CrewPassage_Main", "centreU": {"x":3.0,"y":0,"z":5.9}, "sizeU": {"x":6.0,"y":4.6,"z":3.4}, "provisional": true, "notes": "Unchanged from hull.middle.w1xr.v1 (|y|<=2.30 already excludes the stair corners at |y| 4.62-5.80)." }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW1xRSections_v1/MiddleWA",
+        "notes": "NOT re-exported this pass (time budget) -- hull.middle.w1xr.v1's own table is the placeholder reference below Z 1.76 (unchanged lower hull, so its 0.0%-vs-W1x match gate applies unchanged here). Re-export via tools/blender/export_raised_hydrostatics.py against MiddleWA/Midship_W1__Hull_Shell.fbx is an open follow-up; see docs/RAISED-SECTIONS.md Data+art results."
+    },
+    "lightship": {
+        "massKg": 17686.1,
+        "provisional": true,
+        "rule": "13264.4 kg (hull.middle.w1x.v1 lightship) + 4421.7 kg upperStructure (deck 1993.2 + aft wall-with-stairs 2308.5 + 2 stair flights 120) = 17686.1 kg."
+    },
+    "physical": {
+        "massKg": { "authored": false, "value": 0, "source": "" },
+        "displacementM3": { "authored": false, "value": 0, "source": "" },
+        "cargoCapacity": { "authored": false, "value": 0, "source": "" },
+        "crewCapacity": { "authored": false, "value": 0, "source": "" },
+        "thrustCoefficient": { "authored": false, "value": 0, "source": "" },
+        "notes": "NOT AUTHORED."
+    },
+    "capacity": {
+        "holdCells": { "value": 10, "provisional": true, "source": "Carried from hull.middle.w1xr.v1 (deck footprint/between-deck volume unchanged by the wall)." },
+        "berths": { "value": 6, "provisional": true, "source": "Carried from hull.middle.w1xr.v1." },
+        "gunSlots": { "ids": ["DeckSlot_1_-1", "DeckSlot_1_1"], "provisional": true, "source": "See droppedGunSlots for DeckSlot_0 pair (clashes with the aft stairwell)." },
+        "rule": "PROVISIONAL, carried from hull.middle.w1xr.v1's own capacity minus the dropped gun pair; not independently re-derived from a fresh hydrostatic table this pass."
+    },
+    "upperStructure": {
+        "massKg": 4421.7,
+        "centroidZU": 3.513,
+        "deckMassKg": 1993.2,
+        "deckAreaM2": 18.12,
+        "wallMassKg": 2308.5,
+        "wallAreaM2": 24.3,
+        "stairsMassKg": 120,
+        "stairEnds": ["aft"],
+        "source": "PROVISIONAL, analytic not measured: wallAreaM2 = (beam 12.08 - 2x stair-corner width 1.18) x wall height 2.50 = 9.72 x 2.50 = 24.3; wallMassKg = 24.3 x 95 kg/m^2; stairsMassKg = 2 flights x 60 kg (RAISED-SECTIONS.md sec 4 rates). deckAreaM2/deckMassKg carried from hull.middle.w1xr.v1 (footprint unaffected by the wall). centroidZU = mass-weighted average of deck (4.20) and wall+stairs (2.95, wall-band midpoint). NOT re-derived from a Blender area measurement this pass -- see hydrostatics note."
+    }
+}

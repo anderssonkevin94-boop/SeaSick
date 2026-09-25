@@ -1,0 +1,80 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.middle.w1xr.wf.v1",
+    "version": 1,
+    "kind": "Middle",
+    "family": "W1xR",
+    "status": "prototype",
+    "displayName": "Midship_W1 (raised deck, wall forward, W1x/W1xR)",
+    "description": "Raised middle with a wall + twin stairs on the FORWARD face (W1x standard) and a connected AFT face (W1xR standard) -- the mirror image of hull.middle.w1xr.wa.v1. Astra's raised-stern wall/stair kit is reused AS AUTHORED (translated +6.0 u, no mirror) since its own orientation already faces forward. See docs/RAISED-SECTIONS.md sec 3-4.",
+    "source": "art-staging/modular-raised-sections-v1/MiddleWF/manifest.json",
+    "lengthU": 6.0,
+    "boundsMinU": { "x": 0, "y": -6.25, "z": -1.92 },
+    "boundsMaxU": { "x": 6.0, "y": 6.25, "z": 4.2 },
+    "boundsNote": "X/Y/Z unchanged from hull.middle.w1xr.v1.",
+    "sockets": [
+        { "id": "AftSocket", "role": "hull.aft", "standard": "W1xR", "posU": {"x":0,"y":0,"z":0}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": false, "notes": "Connected face, unchanged from hull.middle.w1xr.v1." },
+        { "id": "ForwardSocket", "role": "hull.fwd", "standard": "W1x", "posU": {"x":6.0,"y":0,"z":0}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": false, "notes": "Wall face: W1x standard per RAISED-SECTIONS.md sec 2." },
+        { "id": "DeckSlot_0_-1", "role": "deck.slot", "standard": "", "posU": {"x":1.5,"y":-4.85,"z":4.2}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": true, "notes": "Kept from hull.middle.w1xr.v1; clearance box (x 0.6-2.4) measured clear of the forward stairwell (local x 2.76-6.0). Assembler check pending." },
+        { "id": "DeckSlot_0_1", "role": "deck.slot", "standard": "", "posU": {"x":1.5,"y":4.85,"z":4.2}, "yawDeg":180, "radiusLimit":0.0, "placementRule":"", "provisional": true, "notes": "See DeckSlot_0_-1." },
+        { "id": "DeckAreaSocket", "role": "deck.area", "standard": "", "posU": {"x":3.0,"y":0,"z":4.2}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": true, "notes": "Unchanged from hull.middle.w1xr.v1." }
+    ],
+    "droppedGunSlots": {
+        "ids": ["DeckSlot_1_-1", "DeckSlot_1_1"],
+        "reason": "x=3.5 sits inside the forward stairwell footprint (local x 2.76-6.0, y-band 4.62-5.80). Dropped per RAISED-SECTIONS.md sec 4."
+    },
+    "visuals": [
+        { "id": "Midship_W1__Hull_Ironwork", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/Midship_W1__Hull_Ironwork", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Carried unchanged." },
+        { "id": "Midship_W1__Hull_Shell", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/Midship_W1__Hull_Shell", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Re-closed at the forward face (X=6.0 local) between the stair-corner Y bands, Z 1.70-4.20; open aft (connected). 0 boundary anomalies, 0 degenerate faces." },
+        { "id": "Midship_W1__Plank_Seams", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/Midship_W1__Plank_Seams", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Carried unchanged." },
+        { "id": "Midship_W1__Rails_Teal", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/Midship_W1__Rails_Teal", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Carried unchanged." },
+        { "id": "RaisedSection__Door_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/RaisedSection__Door_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Astra's Door, as-authored (+6.0 translate). Cosmetic over the closed bulkhead, not boolean-cut -- see docs/RAISED-SECTIONS.md caveat." },
+        { "id": "RaisedSection__ForwardGuard_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/RaisedSection__ForwardGuard_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored." },
+        { "id": "RaisedSection__PortalFrames_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/RaisedSection__PortalFrames_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored." },
+        { "id": "RaisedSection__StairGuards_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/RaisedSection__StairGuards_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored." },
+        { "id": "RaisedSection__StairNosings_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/RaisedSection__StairNosings_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored." },
+        { "id": "RaisedSection__TwinStairs_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWF/RaisedSection__TwinStairs_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored; run occupies local x 2.76-6.0, the forward 54% of this 6 u bay." }
+    ],
+    "equipmentSlots": [
+        { "id": "DeckSlot_0_-1", "socketId": "DeckSlot_0_-1", "clearanceSizeU": {"x":1.8,"y":2.3,"z":1.65}, "classes": ["equipment.deck-gun"], "provisional": true, "notes": "Kept; assembler check pending." },
+        { "id": "DeckSlot_0_1", "socketId": "DeckSlot_0_1", "clearanceSizeU": {"x":1.8,"y":2.3,"z":1.65}, "classes": ["equipment.deck-gun"], "provisional": true, "notes": "Kept; assembler check pending." },
+        { "id": "DeckArea", "socketId": "DeckAreaSocket", "clearanceSizeU": {"x":6.0,"y":12.08,"z":2.66}, "classes": ["equipment.deck-gun"], "provisional": true, "notes": "Unchanged from hull.middle.w1xr.v1; must keep clear of the forward stairwell/passage." }
+    ],
+    "passages": [
+        { "id": "CrewPassage_Main", "centreU": {"x":3.0,"y":0,"z":5.9}, "sizeU": {"x":6.0,"y":4.6,"z":3.4}, "provisional": true, "notes": "Unchanged from hull.middle.w1xr.v1." }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW1xRSections_v1/MiddleWF",
+        "notes": "NOT re-exported this pass (time budget); see hull.middle.w1xr.wa.v1.json's identical note. Follow-up in docs/RAISED-SECTIONS.md Data+art results."
+    },
+    "lightship": {
+        "massKg": 17686.1,
+        "provisional": true,
+        "rule": "Same as hull.middle.w1xr.wa.v1 (mirror-image wall, identical area/mass): 13264.4 + 4421.7 = 17686.1 kg."
+    },
+    "physical": {
+        "massKg": { "authored": false, "value": 0, "source": "" },
+        "displacementM3": { "authored": false, "value": 0, "source": "" },
+        "cargoCapacity": { "authored": false, "value": 0, "source": "" },
+        "crewCapacity": { "authored": false, "value": 0, "source": "" },
+        "thrustCoefficient": { "authored": false, "value": 0, "source": "" },
+        "notes": "NOT AUTHORED."
+    },
+    "capacity": {
+        "holdCells": { "value": 10, "provisional": true, "source": "Carried from hull.middle.w1xr.v1." },
+        "berths": { "value": 6, "provisional": true, "source": "Carried from hull.middle.w1xr.v1." },
+        "gunSlots": { "ids": ["DeckSlot_0_-1", "DeckSlot_0_1"], "provisional": true, "source": "See droppedGunSlots for DeckSlot_1 pair (clashes with the forward stairwell)." },
+        "rule": "PROVISIONAL, carried from hull.middle.w1xr.v1's own capacity minus the dropped gun pair."
+    },
+    "upperStructure": {
+        "massKg": 4421.7,
+        "centroidZU": 3.513,
+        "deckMassKg": 1993.2,
+        "deckAreaM2": 18.12,
+        "wallMassKg": 2308.5,
+        "wallAreaM2": 24.3,
+        "stairsMassKg": 120,
+        "stairEnds": ["fwd"],
+        "source": "PROVISIONAL, analytic (same method/rates as hull.middle.w1xr.wa.v1)."
+    }
+}

@@ -114,6 +114,61 @@ def main():
         bad_join = [s["id"] for s in d["sockets"] if s["id"] in join_ids and s.get("standard") != "W1xR"]
         check(f"{w1xr_id}: join-facing sockets {sorted(join_ids)} use standard W1xR", not bad_join, bad_join)
 
+    # New raised-section wall variants (RAISED-SECTIONS.md sec 3-4). These deliberately
+    # DROP some W1x gun slots and do NOT re-export a fresh hydrostatic table this pass
+    # (upperStructure numbers are analytic, flagged in the JSON) so they are checked
+    # against a lighter set of invariants than the plain w1xr.v1 modules above.
+    SECTION_MODULES = [
+        ("hull.middle.w1x.v1", "hull.middle.w1xr.wa.v1", {"aft": "W1x", "fwd": "W1xR"}),
+        ("hull.middle.w1x.v1", "hull.middle.w1xr.wf.v1", {"aft": "W1xR", "fwd": "W1x"}),
+        ("hull.middle.w1x.v1", "hull.middle.w1xr.wb.v1", {"aft": "W1x", "fwd": "W1x"}),
+    ]
+    for w1x_id, sec_id, wall_standards in SECTION_MODULES:
+        w1x = json.loads((MODDIR / f"{w1x_id}.json").read_text())
+        # The full 4-slot set lives on the plain connected raised middle (w1x's own 2 plus
+        # the 2 NEW upper-deck slots it adds); the wall variants drop from THAT set, not
+        # from w1x's smaller 2-slot set.
+        w1xr_plain = json.loads((MODDIR / "hull.middle.w1xr.v1.json").read_text())
+        d = json.loads((MODDIR / f"{sec_id}.json").read_text())
+        print(f"\n== {sec_id} ==")
+
+        bad_sockets = [s["id"] for s in d["sockets"]
+                       if s["role"] not in NON_WALKING_ROLES and s["posU"]["z"] < UPPER_DECK_Z - 1e-6]
+        check(f"{sec_id}: no deck.slot/deck.area socket below Z {UPPER_DECK_Z}", not bad_sockets, bad_sockets)
+
+        aft = next(s for s in d["sockets"] if s["id"] == "AftSocket")
+        fwd = next(s for s in d["sockets"] if s["id"] == "ForwardSocket")
+        check(f"{sec_id}: AftSocket standard == {wall_standards['aft']}", aft["standard"] == wall_standards["aft"])
+        check(f"{sec_id}: ForwardSocket standard == {wall_standards['fwd']}", fwd["standard"] == wall_standards["fwd"])
+
+        full_gun_ids = set(w1xr_plain["capacity"]["gunSlots"]["ids"])
+        kept = set(d["capacity"]["gunSlots"]["ids"])
+        dropped = set(d.get("droppedGunSlots", {}).get("ids", []))
+        check(f"{sec_id}: kept + dropped gun slots == hull.middle.w1xr.v1's full set", kept | dropped == full_gun_ids,
+              (kept | dropped) ^ full_gun_ids)
+        check(f"{sec_id}: kept and dropped gun slots are disjoint", not (kept & dropped), kept & dropped)
+
+        us = d.get("upperStructure")
+        check(f"{sec_id}: has upperStructure block", us is not None)
+        if us:
+            expect_upper = round(us["deckMassKg"] + us["wallMassKg"] + us.get("stairsMassKg", 0), 2)
+            check(f"{sec_id}: upperStructure.massKg == deckMassKg + wallMassKg + stairsMassKg",
+                  abs(us["massKg"] - expect_upper) < 0.5, f"{us['massKg']} != {expect_upper}")
+            expect_lightship = round(w1x["lightship"]["massKg"] + us["massKg"], 2)
+            check(f"{sec_id}: lightship.massKg == w1x massKg + upperStructure.massKg",
+                  abs(d["lightship"]["massKg"] - expect_lightship) < 0.5,
+                  f"{d['lightship']['massKg']} != {expect_lightship}")
+
+        manifest_path = ROOT / "art-staging/modular-raised-sections-v1" / {
+            "hull.middle.w1xr.wa.v1": "MiddleWA", "hull.middle.w1xr.wf.v1": "MiddleWF", "hull.middle.w1xr.wb.v1": "MiddleWB"
+        }[sec_id] / "manifest.json"
+        check(f"{sec_id}: art-staging manifest exists ({manifest_path.name})", manifest_path.exists())
+        if manifest_path.exists():
+            man = json.loads(manifest_path.read_text())
+            hc = man["hull_shell_check"]
+            check(f"{sec_id}: manifest hull_shell_check has 0 overconnected/degenerate",
+                  hc["overconnected_edges"] == 0 and hc["degenerate_faces"] == 0, hc)
+
     # standards.json has the W1xR joinProfile
     standards = json.loads((ROOT / "Assets/_Project/Resources/ShipModules/standards.json").read_text())
     w1xr_profile = next((j for j in standards["joinProfiles"] if j["id"] == "W1xR"), None)

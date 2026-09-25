@@ -1,0 +1,78 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.middle.w1xr.wb.v1",
+    "version": 1,
+    "kind": "Middle",
+    "family": "W1xR",
+    "status": "prototype",
+    "displayName": "Midship_W1 (raised deck, walls both ends, W1x/W1x)",
+    "description": "Raised middle walled on BOTH faces (W1x standard both ends): stairs at the FORWARD end (Astra's kit as-authored), DOOR-ONLY closure (no stairs) at the AFT end. Measurement shows the full stair+guard kit's footprint is ~3.4 u deep from its wall plane (TwinStairs alone runs 3.2 u); two such kits would need ~6.8 u against this 6.0 u bay with none of the >=0.8 u clear-deck margin the spec asks for, so only ONE end gets stairs. See docs/RAISED-SECTIONS.md sec 3-4 and the Data+art results section for the measurement.",
+    "source": "art-staging/modular-raised-sections-v1/MiddleWB/manifest.json",
+    "lengthU": 6.0,
+    "boundsMinU": { "x": 0, "y": -6.25, "z": -1.92 },
+    "boundsMaxU": { "x": 6.0, "y": 6.25, "z": 4.2 },
+    "boundsNote": "X/Y/Z unchanged from hull.middle.w1xr.v1.",
+    "sockets": [
+        { "id": "AftSocket", "role": "hull.aft", "standard": "W1x", "posU": {"x":0,"y":0,"z":0}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": false, "notes": "Door-only wall face (no stairs): W1x standard." },
+        { "id": "ForwardSocket", "role": "hull.fwd", "standard": "W1x", "posU": {"x":6.0,"y":0,"z":0}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": false, "notes": "Wall-with-stairs face: W1x standard." },
+        { "id": "DeckAreaSocket", "role": "deck.area", "standard": "", "posU": {"x":3.0,"y":0,"z":4.2}, "yawDeg":0, "radiusLimit":0.0, "placementRule":"", "provisional": true, "notes": "Unchanged from hull.middle.w1xr.v1." }
+    ],
+    "droppedGunSlots": {
+        "ids": ["DeckSlot_0_-1", "DeckSlot_0_1", "DeckSlot_1_-1", "DeckSlot_1_1"],
+        "reason": "DeckSlot_1 (x=3.5) clashes with the forward stairwell (local x 2.76-6.0). DeckSlot_0 (x=1.5) is not inside either wall's stairwell/bulkhead footprint, but sits close enough to the aft door-only bulkhead (which spans the full beam, x 0-~0.1) and the crew's only fore-aft route (up the forward stairs, the full 6 u deck, then presumably down again at the next module) that it is dropped here as a conservative provisional call rather than measured against the assembler's real clearance box this pass -- recommend re-checking DeckSlot_0 once the assembler runs this module."
+    },
+    "visuals": [
+        { "id": "Midship_W1__Hull_Ironwork", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/Midship_W1__Hull_Ironwork", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Carried unchanged." },
+        { "id": "Midship_W1__Hull_Shell", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/Midship_W1__Hull_Shell", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Closed at both faces: forward with the stair-corner gaps, aft solid full-beam (no gaps). 0 boundary anomalies, 0 degenerate faces." },
+        { "id": "Midship_W1__Plank_Seams", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/Midship_W1__Plank_Seams", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Carried unchanged." },
+        { "id": "Midship_W1__Rails_Teal", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/Midship_W1__Rails_Teal", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Carried unchanged." },
+        { "id": "RaisedSection__Door_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/RaisedSection__Door_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored, forward end (stairs)." },
+        { "id": "RaisedSection__ForwardGuard_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/RaisedSection__ForwardGuard_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored." },
+        { "id": "RaisedSection__PortalFrames_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/RaisedSection__PortalFrames_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored." },
+        { "id": "RaisedSection__StairGuards_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/RaisedSection__StairGuards_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored." },
+        { "id": "RaisedSection__StairNosings_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/RaisedSection__StairNosings_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored." },
+        { "id": "RaisedSection__TwinStairs_Fwd", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/RaisedSection__TwinStairs_Fwd", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "As-authored; run occupies local x 2.76-6.0." },
+        { "id": "RaisedSection__Door_Aft", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/RaisedSection__Door_Aft", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Mirrored, aft end (door-only, no stairs). Cosmetic over the closed bulkhead -- not a walkable connection between decks at this end; crew reach the raised deck only via the forward stairs." },
+        { "id": "RaisedSection__PortalFrames_Aft", "resourcePath": "ShipModules/Meshes/HullW1xRSections_v1/MiddleWB/RaisedSection__PortalFrames_Aft", "placeholder": false, "localPositionU": {"x":0,"y":0,"z":0}, "yawDegU":0, "notes": "Mirrored, aft end -- frame trim only, no stairs/guards there." }
+    ],
+    "equipmentSlots": [
+        { "id": "DeckArea", "socketId": "DeckAreaSocket", "clearanceSizeU": {"x":6.0,"y":12.08,"z":2.66}, "classes": ["equipment.deck-gun"], "provisional": true, "notes": "Unchanged from hull.middle.w1xr.v1; must keep clear of both walls/the forward stairwell." }
+    ],
+    "passages": [
+        { "id": "CrewPassage_Main", "centreU": {"x":3.0,"y":0,"z":5.9}, "sizeU": {"x":6.0,"y":4.6,"z":3.4}, "provisional": true, "notes": "Unchanged from hull.middle.w1xr.v1. Note this module is a raised-deck dead end aft (door-only wall, no stairs down) -- crew flow assumption for the ship design." }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW1xRSections_v1/MiddleWB",
+        "notes": "NOT re-exported this pass (time budget); see hull.middle.w1xr.wa.v1.json's identical note."
+    },
+    "lightship": {
+        "massKg": 20555.1,
+        "provisional": true,
+        "rule": "13264.4 kg (hull.middle.w1x.v1) + 7290.7 kg upperStructure (deck 1993.2 + fwd wall-with-stairs 2308.5 + aft door-only wall 30.2 m^2 x 95 = 2869.0 + 2 stair flights 120) = 20555.1 kg."
+    },
+    "physical": {
+        "massKg": { "authored": false, "value": 0, "source": "" },
+        "displacementM3": { "authored": false, "value": 0, "source": "" },
+        "cargoCapacity": { "authored": false, "value": 0, "source": "" },
+        "crewCapacity": { "authored": false, "value": 0, "source": "" },
+        "thrustCoefficient": { "authored": false, "value": 0, "source": "" },
+        "notes": "NOT AUTHORED."
+    },
+    "capacity": {
+        "holdCells": { "value": 10, "provisional": true, "source": "Carried from hull.middle.w1xr.v1." },
+        "berths": { "value": 6, "provisional": true, "source": "Carried from hull.middle.w1xr.v1." },
+        "gunSlots": { "ids": [], "provisional": true, "source": "All 4 W1x slot ids dropped this pass -- see droppedGunSlots." },
+        "rule": "PROVISIONAL. No gun slots survive the conservative drop; revisit DeckSlot_0 with a real assembler clearance check before shipping this module."
+    },
+    "upperStructure": {
+        "massKg": 7290.7,
+        "centroidZU": 3.292,
+        "deckMassKg": 1993.2,
+        "deckAreaM2": 18.12,
+        "wallMassKg": 5177.5,
+        "wallAreaM2": 54.5,
+        "stairsMassKg": 120,
+        "stairEnds": ["fwd"],
+        "source": "PROVISIONAL, analytic: wallAreaM2 = fwd wall-with-stairs 24.3 m^2 + aft door-only full-beam wall (12.08 x 2.50 = 30.2 m^2) = 54.5 m^2; wallMassKg = 54.5 x 95. stairsMassKg = 2 flights x 60 (fwd end only). Same rates as hull.middle.w1xr.wa.v1, not independently measured."
+    }
+}
