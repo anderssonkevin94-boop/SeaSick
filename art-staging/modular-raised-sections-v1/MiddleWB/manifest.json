@@ -1,0 +1,258 @@
+{
+  "id": "hull.middle.w1xr.wb.v1",
+  "interface": "W1-center-expansion-r1",
+  "mode": "wb",
+  "stair_ends": [
+    "fwd"
+  ],
+  "length": 6.0,
+  "deck_height": 4.2,
+  "beam": 12.08,
+  "source_axes": "+X forward, +Y port, +Z up",
+  "export_axes": "game (-y,z,x)",
+  "wall_faces": [
+    "fwd (stairs)",
+    "aft (door-only)"
+  ],
+  "hull_shell_check": {
+    "vertices": 79,
+    "triangles": 112,
+    "boundary_edges": 46,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0
+  },
+  "parts": {
+    "Midship_W1__Hull_Ironwork": {
+      "file": "Midship_W1__Hull_Ironwork.fbx",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_radians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "triangles": 360,
+      "topology": {
+        "vertices": 208,
+        "triangles": 360,
+        "boundary_edges": 16,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "Midship_W1__Hull_Shell": {
+      "file": "Midship_W1__Hull_Shell.fbx",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_radians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "triangles": 112,
+      "topology": {
+        "vertices": 79,
+        "triangles": 112,
+        "boundary_edges": 46,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "Midship_W1__Plank_Seams": {
+      "file": "Midship_W1__Plank_Seams.fbx",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_radians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "triangles": 332,
+      "topology": {
+        "vertices": 272,
+        "triangles": 332,
+        "boundary_edges": 152,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "Midship_W1__Rails_Teal": {
+      "file": "Midship_W1__Rails_Teal.fbx",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_radians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "triangles": 208,
+      "topology": {
+        "vertices": 144,
+        "triangles": 208,
+        "boundary_edges": 32,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "RaisedSection__Door_Aft": {
+      "file": "RaisedSection__Door_Aft.fbx",
+      "position": [
+        9.28499984741211,
+        -2.869999885559082,
+        1.7599999904632568
+      ],
+      "rotation_radians": [
+        -0.0,
+        -0.0,
+        -1.1344640254974365
+      ],
+      "triangles": 92,
+      "topology": {
+        "vertices": 60,
+        "triangles": 92,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "RaisedSection__Door_Fwd": {
+      "file": "RaisedSection__Door_Fwd.fbx",
+      "position": [
+        15.315000534057617,
+        -2.869999885559082,
+        1.7599999904632568
+      ],
+      "rotation_radians": [
+        -0.0,
+        -0.0,
+        -1.1344640254974365
+      ],
+      "triangles": 92,
+      "topology": {
+        "vertices": 60,
+        "triangles": 92,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "RaisedSection__ForwardGuard_Fwd": {
+      "file": "RaisedSection__ForwardGuard_Fwd.fbx",
+      "position": [
+        6.0,
+        0.0,
+        0.0
+      ],
+      "rotation_radians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "triangles": 144,
+      "topology": {
+        "vertices": 88,
+        "triangles": 144,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "RaisedSection__PortalFrames_Fwd": {
+      "file": "RaisedSection__PortalFrames_Fwd.fbx",
+      "position": [
+        6.0,
+        0.0,
+        0.0
+      ],
+      "rotation_radians": [
+        0.0,
+        -0.0,
+        0.0
+      ],
+      "triangles": 84,
+      "topology": {
+        "vertices": 56,
+        "triangles": 84,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "RaisedSection__StairGuards_Fwd": {
+      "file": "RaisedSection__StairGuards_Fwd.fbx",
+      "position": [
+        6.0,
+        0.0,
+        0.0
+      ],
+      "rotation_radians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "triangles": 184,
+      "topology": {
+        "vertices": 112,
+        "triangles": 184,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "RaisedSection__StairNosings_Fwd": {
+      "file": "RaisedSection__StairNosings_Fwd.fbx",
+      "position": [
+        6.0,
+        0.0,
+        0.0
+      ],
+      "rotation_radians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "triangles": 192,
+      "topology": {
+        "vertices": 128,
+        "triangles": 192,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    },
+    "RaisedSection__TwinStairs_Fwd": {
+      "file": "RaisedSection__TwinStairs_Fwd.fbx",
+      "position": [
+        6.0,
+        0.0,
+        0.0
+      ],
+      "rotation_radians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "triangles": 256,
+      "topology": {
+        "vertices": 132,
+        "triangles": 256,
+        "boundary_edges": 0,
+        "overconnected_edges": 0,
+        "degenerate_faces": 0
+      }
+    }
+  },
+  "triangles": 2056
+}

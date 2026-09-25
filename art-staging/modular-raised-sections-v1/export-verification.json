@@ -1,0 +1,128 @@
+{
+  "wa": {
+    "parts": {
+      "Midship_W1__Hull_Ironwork": {
+        "triangles": 360
+      },
+      "Midship_W1__Hull_Shell": {
+        "triangles": 108
+      },
+      "Midship_W1__Plank_Seams": {
+        "triangles": 332
+      },
+      "Midship_W1__Rails_Teal": {
+        "triangles": 208
+      },
+      "RaisedSection__Door_Aft": {
+        "triangles": 92
+      },
+      "RaisedSection__ForwardGuard_Aft": {
+        "triangles": 144
+      },
+      "RaisedSection__PortalFrames_Aft": {
+        "triangles": 84
+      },
+      "RaisedSection__StairGuards_Aft": {
+        "triangles": 184
+      },
+      "RaisedSection__StairNosings_Aft": {
+        "triangles": 192
+      },
+      "RaisedSection__TwinStairs_Aft": {
+        "triangles": 256
+      }
+    },
+    "hull_shell_check": {
+      "vertices": 79,
+      "triangles": 108,
+      "boundary_edges": 50,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "wf": {
+    "parts": {
+      "Midship_W1__Hull_Ironwork": {
+        "triangles": 360
+      },
+      "Midship_W1__Hull_Shell": {
+        "triangles": 108
+      },
+      "Midship_W1__Plank_Seams": {
+        "triangles": 332
+      },
+      "Midship_W1__Rails_Teal": {
+        "triangles": 208
+      },
+      "RaisedSection__Door_Fwd": {
+        "triangles": 92
+      },
+      "RaisedSection__ForwardGuard_Fwd": {
+        "triangles": 144
+      },
+      "RaisedSection__PortalFrames_Fwd": {
+        "triangles": 84
+      },
+      "RaisedSection__StairGuards_Fwd": {
+        "triangles": 184
+      },
+      "RaisedSection__StairNosings_Fwd": {
+        "triangles": 192
+      },
+      "RaisedSection__TwinStairs_Fwd": {
+        "triangles": 256
+      }
+    },
+    "hull_shell_check": {
+      "vertices": 79,
+      "triangles": 108,
+      "boundary_edges": 50,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "wb": {
+    "parts": {
+      "Midship_W1__Hull_Ironwork": {
+        "triangles": 360
+      },
+      "Midship_W1__Hull_Shell": {
+        "triangles": 112
+      },
+      "Midship_W1__Plank_Seams": {
+        "triangles": 332
+      },
+      "Midship_W1__Rails_Teal": {
+        "triangles": 208
+      },
+      "RaisedSection__Door_Aft": {
+        "triangles": 92
+      },
+      "RaisedSection__Door_Fwd": {
+        "triangles": 92
+      },
+      "RaisedSection__ForwardGuard_Fwd": {
+        "triangles": 144
+      },
+      "RaisedSection__PortalFrames_Fwd": {
+        "triangles": 84
+      },
+      "RaisedSection__StairGuards_Fwd": {
+        "triangles": 184
+      },
+      "RaisedSection__StairNosings_Fwd": {
+        "triangles": 192
+      },
+      "RaisedSection__TwinStairs_Fwd": {
+        "triangles": 256
+      }
+    },
+    "hull_shell_check": {
+      "vertices": 79,
+      "triangles": 112,
+      "boundary_edges": 46,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0
+    }
+  }
+}
