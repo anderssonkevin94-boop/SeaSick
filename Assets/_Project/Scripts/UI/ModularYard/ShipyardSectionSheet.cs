@@ -17,11 +17,15 @@ namespace SeaSick.UI.ModularYard
     /// overview; [Reset section] puts the draft back to what it was when
     /// the sheet opened (`ShipyardDraft.BeginSection`/`ResetSection`).
     ///
-    /// Built once per section opened, like `ShipyardScreen` itself -- no
-    /// scrolling (GDD "no scrolling: pages you swipe between"), so a page
-    /// that would overflow the band is trimmed to what matters most rather
-    /// than grown; the prototype's three pages are short enough not to need
-    /// `SheetKit.SheetPager`'s own cut-into-pages machinery.
+    /// Built once per section opened, like `ShipyardScreen` itself.
+    /// **Paging** (docs/SHIPYARD-UX-AUDIT.md, 2026-09-26): the GDD's "no
+    /// scrolling: pages you swipe between" does not mean a page may clip --
+    /// Guns/Interior grow extra entries on this SAME top strip ("Guns 1/2")
+    /// when their content does not fit the measured band, exactly the
+    /// pattern `FireSheet`/`ShipSheet` already use for the other sheet
+    /// system. This sheet is its own modal (not `SheetHost`'s frame), so the
+    /// band is measured live off `body`'s own rendered height rather than
+    /// `SheetHost.BandHeight` (a different frame's metric).
     public sealed class ShipyardSectionSheet : VisualElement
     {
         readonly ShipyardDraft draft;
@@ -31,28 +35,45 @@ namespace SeaSick.UI.ModularYard
         readonly Action onDone;
         readonly ShipyardDraft.DraftSnapshot opened;
 
-        readonly VisualElement strip;
+        readonly VisualElement stripHolder;
         readonly VisualElement body;
         readonly Label sectionTitle;
         int page;
         string builtKey;
 
-        static readonly string[] PageLabels = { "Structure", "Guns", "Interior" };
+        /// The first-time cutaway hint (PlayerPrefs so it really only shows
+        /// once, not once per sheet instance).
+        const string HintPrefKey = "SeaSick.Yard.CutawayHintShown";
+        bool hintShown;
+
+        /// A sane guess before the first layout pass hands back the real
+        /// number via `OnBodyGeometry`; a page planned from this guess is
+        /// replanned (and, if the entry count changed, re-strung) the
+        /// moment the true height arrives, so nothing settles on a wrong
+        /// page count for more than one frame.
+        float bandHeight = 220f;
+        bool bandKnown;
+
+        enum PageKind { Structure, Guns, Interior }
+        readonly struct Pg { public readonly PageKind kind; public readonly int part; public Pg(PageKind k, int p) { kind = k; part = p; } }
+        readonly List<Pg> pages = new List<Pg>();
+        string[] stripLabels = Array.Empty<string>();
 
         public ShipyardSectionSheet(ShipyardDraft draft, ShipyardPreview preview, string sectionKey, Action onDone, ShipyardLiveBridge live = null)
         {
             this.draft = draft; this.preview = preview; this.key = sectionKey; this.onDone = onDone; this.live = live;
             opened = draft.BeginSection(sectionKey);
+            hintShown = PlayerPrefs.GetInt(HintPrefKey, 0) != 0;
             AddToClassList("yard-sheet");
             preview.SetFocus(true);
 
             var head = new VisualElement(); head.AddToClassList("yard-sheet-head"); Add(head);
             sectionTitle = new Label(TitleOf(sectionKey)); sectionTitle.AddToClassList("yard-sheet-title"); head.Add(sectionTitle);
 
-            strip = SheetKit.Strip(PageLabels, page, SetPage, SheetTheme.Sea);
-            Add(strip);
+            stripHolder = new VisualElement(); stripHolder.AddToClassList("yard-sheet-strip"); Add(stripHolder);
 
             body = new VisualElement(); body.AddToClassList("yard-sheet-body"); Add(body);
+            body.RegisterCallback<GeometryChangedEvent>(OnBodyGeometry);
 
             var footer = new VisualElement(); footer.AddToClassList("yard-sheet-footer"); Add(footer);
             var reset = new Button(ResetSection) { text = "Reset section" }; reset.AddToClassList("yard-sheet-reset"); footer.Add(reset);
@@ -61,12 +82,29 @@ namespace SeaSick.UI.ModularYard
             Fill();
         }
 
+        /// The real, rendered band height for this modal's own fixed panel
+        /// (460px portrait / auto-but-flex-clamped landscape -- both belong
+        /// to `ShipyardScreen.cs`, not this file) -- measured rather than
+        /// guessed, so paging is correct regardless of that layout's own
+        /// numbers ever changing. Rebuilding only on a real change (>1px)
+        /// avoids a layout/measure loop: `Fill()` clears and refills `body`,
+        /// it never resizes it (fixed by `.yard-sheet-body`'s flex-grow +
+        /// the panel's own fixed/clamped height), so a re-Fill triggered
+        /// from here does not itself raise another geometry event.
+        void OnBodyGeometry(GeometryChangedEvent e)
+        {
+            float h = e.newRect.height;
+            if (h <= 1f || (bandKnown && Mathf.Abs(h - bandHeight) < 1f)) return;
+            bandHeight = h; bandKnown = true;
+            Fill();
+        }
+
         static string TitleOf(string key) => key == "stern" ? "Stern" : key == "bow" ? "Bow"
             : key.StartsWith("middle[") ? "Middle section" : key;
 
         void SetPage(int index)
         {
-            page = Mathf.Clamp(index, 0, PageLabels.Length - 1);
+            page = pages.Count == 0 ? 0 : Mathf.Clamp(index, 0, pages.Count - 1);
             Fill();
         }
 
@@ -92,13 +130,66 @@ namespace SeaSick.UI.ModularYard
         void Fill()
         {
             sectionTitle.text = TitleOf(key);
-            SheetKit.SetStrip(strip, page, PageLabels);
+            PlanPages();
+            page = pages.Count == 0 ? 0 : Mathf.Clamp(page, 0, pages.Count - 1);
+            RebuildStrip();
             body.Clear();
-            switch (page)
+            var pg = pages.Count == 0 ? new Pg(PageKind.Structure, 0) : pages[page];
+            if (pg.kind == PageKind.Structure) BuildStructure();
+            else if (pg.kind == PageKind.Guns) BuildGuns(pg.part);
+            else BuildInterior(pg.part);
+        }
+
+        /// The strip's own child COUNT changes when a page splits/unsplits
+        /// (e.g. a gun fitted/removed changes nothing here, but a section
+        /// swap that changes slot count could), so it is rebuilt whole each
+        /// `Fill()` rather than relabeled in place (`SheetKit.SetStrip`
+        /// assumes the same number of tabs it was built with).
+        void RebuildStrip()
+        {
+            stripHolder.Clear();
+            stripHolder.Add(SheetKit.Strip(stripLabels, page, SetPage, SheetTheme.Sea));
+        }
+
+        // ---- page planning ---------------------------------------------
+
+        /// **Estimated** pixel cost of one gun row and the dry-dock caption
+        /// line -- a gun row can wrap its status text to two lines
+        /// (`.yard-gun-status` is `white-space: normal`), and this sheet has
+        /// no exact per-row measurement the way `SheetKit`'s own constants
+        /// do for the `Sheets` system. Generous on purpose (better to open
+        /// a page early than clip a row) -- NOT verified live on a phone
+        /// this session (no Unity launch); flagged in the handoff report.
+        const float GunRowPxEstimate = 58f;
+        const float DryDockLinePxEstimate = 26f;
+
+        void PlanPages()
+        {
+            pages.Clear();
+            pages.Add(new Pg(PageKind.Structure, 0));
+
+            int gunSlotCount = 0;
+            if (draft.HasBackend) foreach (var s in draft.EquipmentSlots()) if (s.sectionKey == key) gunSlotCount++;
+            int gunRowsPerPage = Mathf.Max(1, Mathf.FloorToInt((bandHeight - DryDockLinePxEstimate) / GunRowPxEstimate));
+            int gunPages = SheetKit.PageCount(Mathf.Max(1, gunSlotCount), gunRowsPerPage);
+            for (int i = 0; i < gunPages; i++) pages.Add(new Pg(PageKind.Guns, i));
+
+            // The cutaway's own footprint is bounded -- a fixed-height hull
+            // picture, one (non-wrapping-in-practice) row of cells, and a
+            // handful of single-line totals -- rather than a growing list,
+            // so it stays one page. A section with an unusually large space
+            // budget could still overflow the cell row's height if it wraps
+            // to several lines; not verified live this session, flagged in
+            // the handoff report alongside the estimate above.
+            pages.Add(new Pg(PageKind.Interior, 0));
+
+            stripLabels = new string[pages.Count];
+            for (int i = 0; i < pages.Count; i++)
             {
-                case 0: BuildStructure(); break;
-                case 1: BuildGuns(); break;
-                default: BuildInterior(); break;
+                var p = pages[i];
+                stripLabels[i] = p.kind == PageKind.Structure ? "Structure"
+                    : p.kind == PageKind.Guns ? SheetKit.PageLabel("Guns", p.part, gunPages)
+                    : "Interior";
             }
         }
 
@@ -181,58 +272,111 @@ namespace SeaSick.UI.ModularYard
 
         // ---- Guns -------------------------------------------------------------
 
-        void BuildGuns()
+        /// One page of this section's gun-slot rows (`part`, 0-based --
+        /// `PlanPages` works out how many parts there are). The dry-dock
+        /// caption is shown on EVERY part (docs/SHIPYARD-UX-AUDIT.md item 3
+        /// -- "always show the dry-dock stock on any page that fits/removes
+        /// guns"), not just the last one.
+        void BuildGuns(int part)
         {
             if (!draft.HasBackend)
             {
                 body.Add(SheetKit.Text("Guns: preview only, live refitting not connected.", false, true));
                 return;
             }
+            var sectionSlots = SectionGunSlots();
+            var report = live?.Report(draft.Snapshot());
+            int inDock = DryDockCount(report);
+
+            int rowsPerPage = Mathf.Max(1, Mathf.FloorToInt((bandHeight - DryDockLinePxEstimate) / GunRowPxEstimate));
+            int from = part * rowsPerPage;
+            int to = Mathf.Min(sectionSlots.Count, from + rowsPerPage);
+
+            if (sectionSlots.Count == 0)
+            {
+                body.Add(SheetKit.Text("No gun slots on this section.", false, true));
+            }
+            else
+            {
+                for (int i = from; i < to; i++) body.Add(GunRow(sectionSlots[i], inDock));
+            }
+            body.Add(DryDockLine(inDock));
+            if (!string.IsNullOrEmpty(draft.Message)) body.Add(SheetKit.Note(draft.Message));
+        }
+
+        /// This section's gun slots, in the SAME order/grouping the old
+        /// single-page Guns list used (starboard together, then port
+        /// together; forward before aft within a side) -- the cutaway reads
+        /// the identical `EquipmentSlotView.label` for these slots, so the
+        /// two pages never tell a different story about where a gun is
+        /// (docs/SHIPYARD-UX-AUDIT.md "For the two changes in flight").
+        List<EquipmentSlotView> SectionGunSlots()
+        {
             var slots = new List<EquipmentSlotView>(draft.EquipmentSlots());
-            // Starboard together, then port together (the physical grouping
-            // the sheet reads as); within a side, forward before aft, so two
-            // rows that would otherwise both read e.g. "starboard, forward"
-            // never sit next to each other out of order.
             slots.Sort((a, b) =>
             {
                 int side = string.CompareOrdinal(b.side, a.side); // "starboard" before "port"
                 return side != 0 ? side : b.positionM.z.CompareTo(a.positionM.z);
             });
-            int inDock = 0;
-            var report = live?.Report(draft.Snapshot());
-            if (report?.dryDock != null)
-                foreach (var r in report.dryDock) if (r != null && r.moduleId == ShipConfiguration.EquipmentCannon) inDock = r.inDockNow;
-
-            bool any = false;
-            foreach (var s in slots)
-            {
-                if (s.sectionKey != key) continue;
-                any = true;
-                bool occupied = !string.IsNullOrEmpty(s.occupantModuleId);
-                string status; bool enabled;
-                if (occupied) { status = "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
-                else if (!s.usable) { status = s.blockedReason; enabled = false; }
-                else if (inDock > 0) { status = "Empty — tap to fit from the dry dock"; enabled = !draft.Committed; }
-                else { status = "Empty — no gun in the dry dock"; enabled = false; }
-                string slotId = s.slotId;
-                var row = new Button(() => { if (occupied) draft.RemoveGun(slotId); else draft.FitGun(slotId); Fill(); });
-                row.AddToClassList("yard-gun-row"); row.SetEnabled(enabled);
-                var label = new Label(s.label); label.AddToClassList("yard-gun-label"); row.Add(label);
-                var statusLabel = new Label(status); statusLabel.AddToClassList("yard-gun-status"); row.Add(statusLabel);
-                body.Add(row);
-            }
-            if (!any) body.Add(SheetKit.Text("No gun slots on this section.", false, true));
-            var dock = new Label($"Dry dock: {(inDock > 0 ? "cannon x" + inDock : "empty")}."); dock.AddToClassList("yard-caption"); body.Add(dock);
+            var section = new List<EquipmentSlotView>();
+            foreach (var s in slots) if (s.sectionKey == key) section.Add(s);
+            return section;
         }
 
-        // ---- Interior (Step 2, docs/SHIPYARD-SECTIONS-UI.md) ------------------
-        // ISOLATED: `ShipyardService.SectionSpace`/`WithBerths` and
-        // `SectionSpaceView` are the Step 2 backend's types, built in
-        // parallel in another worktree -- not present here yet. Every call
-        // into them is kept to this one page (mirrors the seam in
-        // ShipyardLiveBridge.cs) so reconciling only ever touches this block.
+        static int DryDockCount(ShipyardReport report)
+        {
+            int inDock = 0;
+            if (report?.dryDock != null)
+                foreach (var r in report.dryDock) if (r != null && r.moduleId == ShipConfiguration.EquipmentCannon) inDock = r.inDockNow;
+            return inDock;
+        }
 
-        void BuildInterior()
+        /// Always visible, whatever the stock: an empty dock now SAYS how a
+        /// gun gets there instead of a flat "empty" (docs/SHIPYARD-UX-AUDIT.md
+        /// "nowhere does the UI explain how a cannon gets into the dry dock" --
+        /// the only path this prototype has is removing one already fitted,
+        /// so that is what this line says).
+        static VisualElement DryDockLine(int inDock)
+        {
+            string text = inDock > 0
+                ? (inDock == 1 ? "Dry dock: 1 cannon." : $"Dry dock: {inDock} cannons.")
+                : "Dry dock: empty. Remove a gun from any slot to store it here.";
+            var l = new Label(text); l.AddToClassList("yard-caption"); l.AddToClassList("yard-dock-line");
+            return l;
+        }
+
+        Button GunRow(EquipmentSlotView s, int inDock)
+        {
+            bool occupied = !string.IsNullOrEmpty(s.occupantModuleId);
+            string status; bool enabled;
+            if (occupied) { status = "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
+            else if (!s.usable) { status = s.blockedReason; enabled = false; }
+            else if (inDock > 0) { status = "Empty — tap to fit from the dry dock"; enabled = !draft.Committed; }
+            else { status = "Empty — no gun in the dry dock."; enabled = false; }
+            string slotId = s.slotId;
+            var row = new Button(() => { if (occupied) draft.RemoveGun(slotId); else draft.FitGun(slotId); Fill(); });
+            row.AddToClassList("yard-gun-row"); row.SetEnabled(enabled);
+            // A disabled-and-empty row (no gun in dock, or blocked by
+            // clearance) reads as a genuine BLOCK, not just a duller
+            // button -- stronger, visible styling rather than opacity
+            // alone (docs/SHIPYARD-UX-AUDIT.md: "worth a stronger disabled
+            // state, it's subtle").
+            bool blocked = !enabled && !occupied;
+            row.EnableInClassList("yard-gun-row--blocked", blocked);
+            var label = new Label(s.label); label.AddToClassList("yard-gun-label"); row.Add(label);
+            var statusLabel = new Label(status); statusLabel.AddToClassList("yard-gun-status");
+            if (blocked) statusLabel.AddToClassList("yard-blocking-text");
+            row.Add(statusLabel);
+            return row;
+        }
+
+        // ---- Interior: the 2D cutaway (Step 2, docs/SHIPYARD-SECTIONS-UI.md) --
+        // ISOLATED: `ShipyardService.SectionSpace`/`WithBerths` and
+        // `SectionSpaceView` are the Step 2 backend's types. Every call into
+        // them is kept to this one block (mirrors the seam in
+        // ShipyardLiveBridge.cs) so reconciling only ever touches this file.
+
+        void BuildInterior(int part)
         {
             if (live == null)
             {
@@ -243,57 +387,145 @@ namespace SeaSick.UI.ModularYard
             try { space = live.SectionSpace(draft.Snapshot(), key); }
             catch (Exception e) { body.Add(SheetKit.Text("Interior space unavailable: " + e.Message, false, true)); return; }
             if (space == null) { body.Add(SheetKit.Text("Interior space unavailable for this section.", false, true)); return; }
-
             if (!string.IsNullOrEmpty(space.reason))
             {
                 body.Add(SheetKit.Text(space.reason, false, true));
                 return;
             }
 
-            body.Add(SheetKit.Eyebrow("berths"));
-            var row = new VisualElement(); row.AddToClassList("yard-sheet-row"); body.Add(row);
-            var minus = new Button(() => SetBerths(space.berths - 1));
-            minus.AddToClassList("yard-icon-button"); minus.SetEnabled(space.berths > space.minBerths);
-            minus.Add(new YardIcon("minus")); row.Add(minus);
-            var count = new Label($"{space.berths} berths"); count.AddToClassList("yard-berth-count"); row.Add(count);
-            var plus = new Button(() => SetBerths(space.berths + 1));
-            plus.AddToClassList("yard-icon-button"); plus.SetEnabled(space.berths < space.maxBerths);
-            plus.Add(new YardIcon("plus")); row.Add(plus);
-            body.Add(SheetKit.Text($"{space.minBerths}-{space.maxBerths} berths fit this section.", false, true, 12f));
+            // ---- cells: floor(budgetUnits) compartments, each cargo (1
+            // hold cell) or a bunk pair (berthCost 0.5 each -> 2 berths per
+            // cell; an odd total gets one 1-bunk cell). `space.holdCells`
+            // is already the backend's own floor -- never recomputed here,
+            // only split into cells. ---------------------------------------
+            int totalCells = Mathf.FloorToInt(space.budgetUnits);
+            int cargoCells = Mathf.Clamp(space.holdCells, 0, totalCells);
+            int bunkCells = Mathf.Max(0, totalCells - cargoCells);
+            bool oddLastBunk = bunkCells > 0 && space.berths % 2 != 0;
+
+            var cells = new List<SectionCutaway.Cell>(totalCells);
+            for (int i = 0; i < cargoCells; i++) cells.Add(new SectionCutaway.Cell(false, 0, +2));
+            for (int i = 0; i < bunkCells; i++)
+            {
+                bool isOdd = oddLastBunk && i == bunkCells - 1;
+                cells.Add(new SectionCutaway.Cell(true, isOdd ? 1 : 2, isOdd ? -1 : -2));
+            }
+
+            var sectionSlots = SectionGunSlots();
+            var report = live.Report(draft.Snapshot());
+            int inDock = DryDockCount(report);
+            var markers = new List<SectionCutaway.GunMarker>(sectionSlots.Count);
+            foreach (var s in sectionSlots)
+            {
+                bool occupied = !string.IsNullOrEmpty(s.occupantModuleId);
+                string status; bool enabled;
+                if (occupied) { status = "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
+                else if (!s.usable) { status = s.blockedReason; enabled = false; }
+                else if (inDock > 0) { status = "Empty — tap to fit from the dry dock"; enabled = !draft.Committed; }
+                else { status = "Empty — no gun in the dry dock."; enabled = false; }
+                markers.Add(new SectionCutaway.GunMarker
+                {
+                    slotId = s.slotId, side = s.side, label = s.label,
+                    occupied = occupied, enabled = enabled, status = status,
+                });
+            }
+
+            bool isStern = key == ShipAssembler.StdKeyStern;
+            bool isBow = key == ShipAssembler.StdKeyBow;
+            bool raised = draft.IsSectionRaised(key);
+
+            var cutaway = new SectionCutaway();
+            cutaway.Set(isStern, isBow, raised, cells, TapCell, markers, TapGun);
+            body.Add(cutaway);
+
+            if (totalCells == 0)
+                body.Add(SheetKit.Text("This section has no interior space.", false, true, 12f));
+            else if (space.budgetUnits - totalCells > 0.01f)
+                body.Add(SheetKit.Text("A half-unit of space is left over — too small for a whole cell.", false, true, 12f));
+
+            if (!hintShown)
+            {
+                body.Add(SheetKit.Text("Tap a compartment to switch cargo ↔ bunks.", false, true, 12f));
+                hintShown = true;
+                PlayerPrefs.SetInt(HintPrefKey, 1); PlayerPrefs.Save();
+            }
 
             body.Add(PinnedRule());
-            body.Add(SheetKit.Eyebrow("space"));
-            body.Add(SheetKit.Text($"Hold: {space.holdCells} cells", false, false, 13f));
-            int used = Mathf.RoundToInt(space.berths * space.berthCost) + space.holdCells;
-            int total = Mathf.Max(used, Mathf.RoundToInt(space.budgetUnits));
-            float frac = space.budgetUnits > 0f ? Mathf.Clamp01((space.berths * space.berthCost) / space.budgetUnits) : 0f;
-            var bar = SheetKit.Bar(frac, SheetTheme.Sea, 10f);
-            // `.sheet-bar` has no width of its own (Sheets.uss) -- every
-            // other place it's used sits in a container that stretches it,
-            // this one does not, so without an explicit width AND an
-            // explicit min-height/flex-shrink:0 the track measured 0x0 and
-            // never drew (2026-09-25 review: "the budget bar needs a
-            // visible track" -- confirmed live, `resolvedStyle.height` read
-            // 0 even with `style.height` set, because a bare VisualElement
-            // with no text/children has no intrinsic size for Yoga to fall
-            // back on).
-            bar.style.width = Length.Percent(100f);
-            bar.style.minHeight = 10f;
-            bar.style.flexShrink = 0f;
-            body.Add(bar);
-            body.Add(SheetKit.Text($"Space {used} / {total} used", false, true, 12f));
+            int guns = report?.Section(key)?.guns ?? 0;
+            body.Add(SheetKit.Text($"Bunks {space.berths} · Cargo {cargoCells} · Guns {guns}", true, false, 14f));
+            // The min/max RANGE stays visible (the one thing the old +/-
+            // page got right, per docs/SHIPYARD-UX-AUDIT.md) even though the
+            // control is now a tap-a-cell picture rather than a counter --
+            // a tap that would exceed it is silently clamped by WithBerths,
+            // so the range has to be readable up front, not discovered by
+            // trial and error.
+            body.Add(SheetKit.Text($"{space.minBerths}-{space.maxBerths} bunks fit this section.", false, true, 12f));
+            string delta = DeltaVsOpened(space, cargoCells, guns);
+            if (!string.IsNullOrEmpty(delta)) body.Add(SheetKit.Text(delta, false, true, 12f));
 
-            body.Add(PinnedRule());
-            int deltaBerths = space.berths - space.defaultBerths;
-            int deltaHold = space.holdCells - Mathf.FloorToInt(space.budgetUnits - space.berthCost * space.defaultBerths);
-            string sign(int n) => n > 0 ? "+" : n < 0 ? "−" : "±";
-            string effect = deltaBerths == 0 && deltaHold == 0
-                ? "Same as the current fit."
-                : $"{sign(deltaBerths)}{Mathf.Abs(deltaBerths)} berths, {sign(deltaHold)}{Mathf.Abs(deltaHold)} hold vs now";
-            body.Add(SheetKit.Text(effect, false, true, 12f));
-            body.Add(SheetKit.Text(
-                "Every berth this section carries costs hold space; fewer berths leaves more room for cargo.",
-                false, true, 12f));
+            // ---- consequences, right here -- not just on the overview
+            // (docs/SHIPYARD-UX-AUDIT.md: hands ashore / cargo won't fit /
+            // guns need crew). `warnings` (soft/advisory) and `blocking`
+            // (hard, would refuse Confirm) are kept visually distinct --
+            // warnings use the note style, blocking reasons the same
+            // stronger red text a blocked gun row uses. ---------------------
+            if (report != null)
+            {
+                foreach (var w in report.warnings)
+                    if (w.code == "HANDS_ASHORE" || w.code == "FEWER_BERTHS" || w.code == "HOLD_SMALLER")
+                        body.Add(SheetKit.Note(w.message));
+                foreach (var b in report.blocking)
+                    if (b.code == ShipyardCodes.CargoWouldNotFit || b.code == ShipyardCodes.GunsNeedCrew)
+                        body.Add(BlockingText(b.message));
+            }
+
+            body.Add(DryDockLine(inDock));
+            if (!string.IsNullOrEmpty(draft.Message)) body.Add(SheetKit.Note(draft.Message));
+        }
+
+        /// "+2 bunks, −1 cargo" vs the ship's fit when the sheet was opened
+        /// (`opened`, the same snapshot `Reset section` restores) -- "the
+        /// ship's current fit" the brief asks for, read off the exact same
+        /// `SectionSpace`/`Report` views the live numbers above use, never
+        /// a second calculation.
+        string DeltaVsOpened(SectionSpaceView space, int cargoCells, int guns)
+        {
+            SectionSpaceView baseline = null;
+            try { baseline = live.SectionSpace(opened.configuration, key); } catch { }
+            if (baseline == null || !string.IsNullOrEmpty(baseline.reason)) return "";
+            int baseGuns = live.Report(opened.configuration)?.Section(key)?.guns ?? 0;
+            int baseTotal = Mathf.FloorToInt(baseline.budgetUnits);
+            int baseCargo = Mathf.Clamp(baseline.holdCells, 0, baseTotal);
+            int dBerths = space.berths - baseline.berths;
+            int dCargo = cargoCells - baseCargo;
+            int dGuns = guns - baseGuns;
+            if (dBerths == 0 && dCargo == 0 && dGuns == 0) return "Same as the current fit.";
+            var parts = new List<string> { Delta(dBerths, "bunk"), Delta(dCargo, "cargo") };
+            if (dGuns != 0) parts.Add(Delta(dGuns, "gun"));
+            return string.Join(", ", parts) + " vs now.";
+        }
+
+        static string Delta(int n, string noun) =>
+            n == 0 ? $"±0 {noun}" : n > 0 ? $"+{n} {noun}{(n == 1 ? "" : "s")}" : $"−{-n} {noun}{(n == -1 ? "" : "s")}";
+
+        static VisualElement BlockingText(string s)
+        {
+            var l = new Label(s ?? ""); l.AddToClassList("yard-blocking-text"); l.style.whiteSpace = WhiteSpace.Normal;
+            return l;
+        }
+
+        void TapCell(SectionCutaway.Cell c)
+        {
+            SectionSpaceView space;
+            try { space = live.SectionSpace(draft.Snapshot(), key); } catch { return; }
+            if (space == null) return;
+            SetBerths(space.berths + c.berthDelta);
+        }
+
+        void TapGun(SectionCutaway.GunMarker g)
+        {
+            if (g.occupied) draft.RemoveGun(g.slotId); else draft.FitGun(g.slotId);
+            Fill();
         }
 
         void SetBerths(int berths)
