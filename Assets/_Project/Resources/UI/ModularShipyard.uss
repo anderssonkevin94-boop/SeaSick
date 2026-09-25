@@ -64,3 +64,26 @@
 .yard-wide .yard-body { flex-direction: row; }
 .yard-wide .yard-panel { width: 330px; height: auto; border-top-width: 0; border-left-width: 1px; border-left-color: rgb(101, 136, 154); }
 .yard-wide .yard-viewport { min-width: 200px; }
+
+/* ---- Overview: section tiles (docs/SHIPYARD-SECTIONS-UI.md Step 1) ---- */
+.yard-tiles { flex-direction: row; flex-wrap: wrap; padding: 4px 0 8px 0; }
+.yard Button.yard-tile { flex-grow: 1; flex-basis: 64px; min-height: 56px; flex-direction: column; align-items: center; justify-content: center; padding: 4px; }
+.yard-tile-name { font-size: 14px; -unity-text-align: middle-center; }
+.yard-tile-status { font-size: 10px; color: rgb(171, 209, 226); -unity-text-align: middle-center; white-space: normal; }
+.yard Button.yard-tile-insert { flex-grow: 0; flex-basis: 32px; min-width: 32px; min-height: 44px; padding: 0; font-size: 18px; opacity: 0.8; }
+.yard-summary { margin-top: 4px; }
+.yard-summary-row { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
+.yard-summary-item { font-size: 12px; color: rgb(191, 205, 211); margin-right: 10px; }
+.yard-warnings { color: rgb(240, 191, 140); font-size: 12px; white-space: normal; margin-top: 4px; }
+
+/* ---- Section sheet ---- */
+.yard-sheet { flex-grow: 1; min-height: 0; flex-direction: column; }
+.yard-sheet-head { padding: 8px 12px 0 12px; flex-shrink: 0; }
+.yard-sheet-title { font-size: 18px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf"); }
+.yard-sheet-body { flex-grow: 1; min-height: 0; padding: 8px 12px; }
+.yard-sheet-row { flex-direction: row; align-items: center; margin-bottom: 8px; }
+.yard-sheet-row Button.yard-seg-button { flex-grow: 1; flex-basis: 0; }
+.yard-sheet-footer { flex-direction: row; padding: 8px; flex-shrink: 0; }
+.yard-sheet-footer Button { flex-grow: 1; flex-basis: 0; }
+.yard Button.yard-sheet-done { flex-grow: 2; background-color: rgb(171, 218, 239); color: rgb(22, 43, 57); }
+.yard Button.yard-sheet-danger { background-color: rgb(92, 44, 40); border-color: rgb(196, 120, 105); width: 100%; margin-top: 6px; }
