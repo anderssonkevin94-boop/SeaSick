@@ -126,6 +126,18 @@ namespace SeaSick.Save
         /// Added after version 1 shipped, next to `modular` and the same way
         /// -- NOT a version bump (see `SaveGame.Read`).
         public string dryDock = "";
+
+        /// **Her home berth** (2026-09-25, Kevin: "make my home berth the
+        /// pier I built at island_2"), as the world XZ of the chosen
+        /// `Dock.Berth` -- harbour or a player's pier, whichever `Dock.Home`
+        /// is at the moment of saving. Matched back to a `Dock` by nearest
+        /// position once every outpost (and the piers it raises) is rebuilt
+        /// (`SaveGame.Restore`, after step 5). `hasHomeBerth` false in an old
+        /// save changes nothing: `Dock.Home` is already the harbour, from
+        /// the world build's own `Configure`. Added after version 1 shipped
+        /// -- NOT a version bump, same as `modular`/`dryDock`.
+        public bool hasHomeBerth;
+        public float homeBerthX, homeBerthZ;
     }
 
     [System.Serializable]
