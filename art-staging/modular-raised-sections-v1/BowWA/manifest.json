@@ -1,0 +1,212 @@
+{
+  "interface": "W1x (wall faces) / W1xR (connected faces)",
+  "section": "BowWA",
+  "source_axes": "+X forward, +Y port, +Z up",
+  "export_axes": "game (-y,z,x)",
+  "modules": {
+    "BowWA": {
+      "BowWA__Door": {
+        "file": "BowWA/BowWA__Door.fbx",
+        "position": [
+          -0.014999999664723873,
+          -2.869999885559082,
+          1.7599999904632568
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          1.1344640254974365
+        ],
+        "triangles": 92
+      },
+      "BowWA__Hatch": {
+        "file": "BowWA/BowWA__Hatch.fbx",
+        "position": [
+          2.549999952316284,
+          0.0,
+          4.360000133514404
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 36
+      },
+      "BowWA__Hull_Ironwork": {
+        "file": "BowWA/BowWA__Hull_Ironwork.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 424
+      },
+      "BowWA__Hull_Shell": {
+        "file": "BowWA/BowWA__Hull_Shell.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 682
+      },
+      "BowWA__InternalLadder": {
+        "file": "BowWA/BowWA__InternalLadder.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 108
+      },
+      "BowWA__PlankDetails": {
+        "file": "BowWA/BowWA__PlankDetails.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 624
+      },
+      "BowWA__Plank_Seams": {
+        "file": "BowWA/BowWA__Plank_Seams.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 400
+      },
+      "BowWA__PortalFrames": {
+        "file": "BowWA/BowWA__PortalFrames.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 84
+      },
+      "BowWA__Prow": {
+        "file": "BowWA/BowWA__Prow.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 60
+      },
+      "BowWA__RearGuard": {
+        "file": "BowWA/BowWA__RearGuard.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 88
+      },
+      "BowWA__StemExtension": {
+        "file": "BowWA/BowWA__StemExtension.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 12
+      },
+      "BowWA__UpperBraceBolts": {
+        "file": "BowWA/BowWA__UpperBraceBolts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 80
+      },
+      "BowWA__UpperPosts": {
+        "file": "BowWA/BowWA__UpperPosts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 240
+      },
+      "BowWA__UpperRails": {
+        "file": "BowWA/BowWA__UpperRails.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 240
+      }
+    }
+  },
+  "hull_shell_check": {
+    "boundary_edges": 28,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0,
+    "triangles": 682
+  }
+}

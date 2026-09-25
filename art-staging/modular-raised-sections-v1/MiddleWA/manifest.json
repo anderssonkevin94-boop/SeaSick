@@ -1,236 +1,203 @@
 {
-  "id": "hull.middle.w1xr.wa.v1",
-  "interface": "W1-center-expansion-r1",
-  "mode": "wa",
-  "stair_ends": [
-    "aft"
-  ],
-  "length": 6.0,
-  "deck_height": 4.2,
-  "beam": 12.08,
+  "interface": "W1x (wall faces) / W1xR (connected faces)",
+  "section": "MiddleWA",
   "source_axes": "+X forward, +Y port, +Z up",
   "export_axes": "game (-y,z,x)",
-  "wall_faces": [
-    "aft"
-  ],
-  "hull_shell_check": {
-    "vertices": 79,
-    "triangles": 108,
-    "boundary_edges": 50,
-    "overconnected_edges": 0,
-    "degenerate_faces": 0
-  },
-  "parts": {
-    "Midship_W1__Hull_Ironwork": {
-      "file": "Midship_W1__Hull_Ironwork.fbx",
-      "position": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "rotation_radians": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "triangles": 360,
-      "topology": {
-        "vertices": 208,
-        "triangles": 360,
-        "boundary_edges": 16,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
-      }
-    },
-    "Midship_W1__Hull_Shell": {
-      "file": "Midship_W1__Hull_Shell.fbx",
-      "position": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "rotation_radians": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "triangles": 108,
-      "topology": {
-        "vertices": 79,
-        "triangles": 108,
-        "boundary_edges": 50,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
-      }
-    },
-    "Midship_W1__Plank_Seams": {
-      "file": "Midship_W1__Plank_Seams.fbx",
-      "position": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "rotation_radians": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "triangles": 332,
-      "topology": {
-        "vertices": 272,
-        "triangles": 332,
-        "boundary_edges": 152,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
-      }
-    },
-    "Midship_W1__Rails_Teal": {
-      "file": "Midship_W1__Rails_Teal.fbx",
-      "position": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "rotation_radians": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "triangles": 208,
-      "topology": {
-        "vertices": 144,
-        "triangles": 208,
-        "boundary_edges": 32,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
-      }
-    },
-    "RaisedSection__Door_Aft": {
-      "file": "RaisedSection__Door_Aft.fbx",
-      "position": [
-        9.28499984741211,
-        -2.869999885559082,
-        1.7599999904632568
-      ],
-      "rotation_radians": [
-        -0.0,
-        -0.0,
-        -1.1344640254974365
-      ],
-      "triangles": 92,
-      "topology": {
-        "vertices": 60,
-        "triangles": 92,
-        "boundary_edges": 0,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
-      }
-    },
-    "RaisedSection__ForwardGuard_Aft": {
-      "file": "RaisedSection__ForwardGuard_Aft.fbx",
-      "position": [
-        18.600000381469727,
-        0.0,
-        0.0
-      ],
-      "rotation_radians": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "triangles": 144,
-      "topology": {
-        "vertices": 88,
-        "triangles": 144,
-        "boundary_edges": 0,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
-      }
-    },
-    "RaisedSection__PortalFrames_Aft": {
-      "file": "RaisedSection__PortalFrames_Aft.fbx",
-      "position": [
-        18.600000381469727,
-        0.0,
-        0.0
-      ],
-      "rotation_radians": [
-        0.0,
-        -0.0,
-        0.0
-      ],
-      "triangles": 84,
-      "topology": {
-        "vertices": 56,
-        "triangles": 84,
-        "boundary_edges": 0,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
-      }
-    },
-    "RaisedSection__StairGuards_Aft": {
-      "file": "RaisedSection__StairGuards_Aft.fbx",
-      "position": [
-        18.600000381469727,
-        0.0,
-        0.0
-      ],
-      "rotation_radians": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "triangles": 184,
-      "topology": {
-        "vertices": 112,
-        "triangles": 184,
-        "boundary_edges": 0,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
-      }
-    },
-    "RaisedSection__StairNosings_Aft": {
-      "file": "RaisedSection__StairNosings_Aft.fbx",
-      "position": [
-        18.600000381469727,
-        0.0,
-        0.0
-      ],
-      "rotation_radians": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "triangles": 192,
-      "topology": {
-        "vertices": 128,
-        "triangles": 192,
-        "boundary_edges": 0,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
-      }
-    },
-    "RaisedSection__TwinStairs_Aft": {
-      "file": "RaisedSection__TwinStairs_Aft.fbx",
-      "position": [
-        18.600000381469727,
-        0.0,
-        0.0
-      ],
-      "rotation_radians": [
-        0.0,
-        0.0,
-        0.0
-      ],
-      "triangles": 256,
-      "topology": {
-        "vertices": 132,
-        "triangles": 256,
-        "boundary_edges": 0,
-        "overconnected_edges": 0,
-        "degenerate_faces": 0
+  "modules": {
+    "MiddleWA": {
+      "MiddleWA__Door_Aft": {
+        "file": "MiddleWA/MiddleWA__Door_Aft.fbx",
+        "position": [
+          -0.015000343322753906,
+          -2.869999885559082,
+          1.7599999904632568
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          1.1344640254974365
+        ],
+        "triangles": 92
+      },
+      "MiddleWA__EndGuard_Aft": {
+        "file": "MiddleWA/MiddleWA__EndGuard_Aft.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 144
+      },
+      "MiddleWA__Hull_Ironwork": {
+        "file": "MiddleWA/MiddleWA__Hull_Ironwork.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 328
+      },
+      "MiddleWA__Hull_Shell": {
+        "file": "MiddleWA/MiddleWA__Hull_Shell.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 296
+      },
+      "MiddleWA__Plank_Seams": {
+        "file": "MiddleWA/MiddleWA__Plank_Seams.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 32
+      },
+      "MiddleWA__PortalFrames_Aft": {
+        "file": "MiddleWA/MiddleWA__PortalFrames_Aft.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 36
+      },
+      "MiddleWA__StairGuards_Aft": {
+        "file": "MiddleWA/MiddleWA__StairGuards_Aft.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 184
+      },
+      "MiddleWA__StairNosings_Aft": {
+        "file": "MiddleWA/MiddleWA__StairNosings_Aft.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 192
+      },
+      "MiddleWA__TwinStairs_Aft": {
+        "file": "MiddleWA/MiddleWA__TwinStairs_Aft.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 256
+      },
+      "MiddleWA__UpperBraceBolts": {
+        "file": "MiddleWA/MiddleWA__UpperBraceBolts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 80
+      },
+      "MiddleWA__UpperPlanks": {
+        "file": "MiddleWA/MiddleWA__UpperPlanks.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 588
+      },
+      "MiddleWA__UpperPosts": {
+        "file": "MiddleWA/MiddleWA__UpperPosts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 192
+      },
+      "MiddleWA__UpperRails": {
+        "file": "MiddleWA/MiddleWA__UpperRails.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 56
       }
     }
   },
-  "triangles": 1960
+  "hull_shell_check": {
+    "boundary_edges": 46,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0,
+    "triangles": 296,
+    "non_interface_boundary": 0
+  },
+  "walls": {
+    "fwd": null,
+    "aft": "stairs"
+  }
 }

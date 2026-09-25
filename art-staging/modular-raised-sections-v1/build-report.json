@@ -1,0 +1,152 @@
+{
+  "MiddleWF": {
+    "hull_shell_check": {
+      "boundary_edges": 48,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 306,
+      "non_interface_boundary": 0
+    },
+    "measure": {
+      "deckAreaU2": 64.44479501619935,
+      "wallAreaU2": 94.45467185974121,
+      "wallCentroidZU": 2.983982717084015,
+      "bulkheadAreaU2": 29.475199103355408,
+      "stairFlights": 2
+    },
+    "hydrostatics": {
+      "schemaVersion": 1,
+      "file": "HullW1xRSections_v1/MiddleWF.json",
+      "sourceGeometrySha256": "c8ecd18080bf8f6557ec388a3f5e1154af8a48070db66a06a63395c8397ad4c1",
+      "validWaterlineZU": [
+        -1.9199999570846558,
+        4.2
+      ],
+      "uprightOnly": true,
+      "stationCount": 143,
+      "waterlineCount": 66
+    },
+    "walls": {
+      "fwd": "stairs",
+      "aft": null
+    }
+  },
+  "MiddleWA": {
+    "hull_shell_check": {
+      "boundary_edges": 46,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 296,
+      "non_interface_boundary": 0
+    },
+    "measure": {
+      "deckAreaU2": 64.44479887187481,
+      "wallAreaU2": 94.4546674489975,
+      "wallCentroidZU": 2.9839828117860114,
+      "bulkheadAreaU2": 29.475195288658142,
+      "stairFlights": 2
+    },
+    "hydrostatics": {
+      "schemaVersion": 1,
+      "file": "HullW1xRSections_v1/MiddleWA.json",
+      "sourceGeometrySha256": "382a292721ebe18cd96c9324bb72966eb9a916d8fb7a78880280f339d12e2134",
+      "validWaterlineZU": [
+        -1.9199999570846558,
+        4.2
+      ],
+      "uprightOnly": true,
+      "stationCount": 140,
+      "waterlineCount": 66
+    },
+    "walls": {
+      "fwd": null,
+      "aft": "stairs"
+    }
+  },
+  "MiddleWB": {
+    "hull_shell_check": {
+      "boundary_edges": 48,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 382,
+      "non_interface_boundary": 0
+    },
+    "measure": {
+      "deckAreaU2": 63.96159869618714,
+      "wallAreaU2": 128.39734256267548,
+      "wallCentroidZU": 2.8620976451121076,
+      "bulkheadAreaU2": 58.95039391517639,
+      "stairFlights": 2
+    },
+    "hydrostatics": {
+      "schemaVersion": 1,
+      "file": "HullW1xRSections_v1/MiddleWB.json",
+      "sourceGeometrySha256": "2145e2a1faef7846dba25b35ae7ef48b80a97f8277edbbd2bd53f492d96341a2",
+      "validWaterlineZU": [
+        -1.9199999570846558,
+        4.2
+      ],
+      "uprightOnly": true,
+      "stationCount": 168,
+      "waterlineCount": 66
+    },
+    "walls": {
+      "fwd": "stairs",
+      "aft": "door"
+    }
+  },
+  "SternWF": {
+    "hull_shell_check": {
+      "boundary_edges": 22,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 884
+    },
+    "measure": {
+      "deckAreaU2": 98.87942408025265,
+      "wallAreaU2": 166.53475737571716,
+      "wallCentroidZU": 2.8470601627952736,
+      "bulkheadAreaU2": 56.30479848384857,
+      "stairFlights": 2
+    },
+    "hydrostatics": {
+      "schemaVersion": 1,
+      "file": "HullW1xRSections_v1/SternWF.json",
+      "sourceGeometrySha256": "8cd8a7fe437d2b80e1e00197ab3cd1f7e6d0084cd233ed73fc06779de7cbf468",
+      "validWaterlineZU": [
+        -1.9199999570846558,
+        4.2
+      ],
+      "uprightOnly": true,
+      "stationCount": 247,
+      "waterlineCount": 66
+    }
+  },
+  "BowWA": {
+    "hull_shell_check": {
+      "boundary_edges": 28,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 682
+    },
+    "measure": {
+      "deckAreaU2": 82.19299231516197,
+      "wallAreaU2": 109.0229839157546,
+      "wallCentroidZU": 3.0422319868797008,
+      "bulkheadAreaU2": 35.48313742130995,
+      "stairFlights": 0
+    },
+    "hydrostatics": {
+      "schemaVersion": 1,
+      "file": "HullW1xRSections_v1/BowWA.json",
+      "sourceGeometrySha256": "c1b4785b90d247af15017c7f0557350ded500fb2a02ec65f33b7b9cb1ab8e446",
+      "validWaterlineZU": [
+        -1.9199999570846558,
+        4.2
+      ],
+      "uprightOnly": true,
+      "stationCount": 378,
+      "waterlineCount": 66
+    }
+  }
+}

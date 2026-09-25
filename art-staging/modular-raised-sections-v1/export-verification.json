@@ -1,128 +1,298 @@
 {
-  "wa": {
-    "parts": {
-      "Midship_W1__Hull_Ironwork": {
-        "triangles": 360
-      },
-      "Midship_W1__Hull_Shell": {
-        "triangles": 108
-      },
-      "Midship_W1__Plank_Seams": {
-        "triangles": 332
-      },
-      "Midship_W1__Rails_Teal": {
-        "triangles": 208
-      },
-      "RaisedSection__Door_Aft": {
-        "triangles": 92
-      },
-      "RaisedSection__ForwardGuard_Aft": {
-        "triangles": 144
-      },
-      "RaisedSection__PortalFrames_Aft": {
-        "triangles": 84
-      },
-      "RaisedSection__StairGuards_Aft": {
-        "triangles": 184
-      },
-      "RaisedSection__StairNosings_Aft": {
-        "triangles": 192
-      },
-      "RaisedSection__TwinStairs_Aft": {
-        "triangles": 256
-      }
-    },
-    "hull_shell_check": {
-      "vertices": 79,
-      "triangles": 108,
-      "boundary_edges": 50,
-      "overconnected_edges": 0,
-      "degenerate_faces": 0
-    }
+  "BowWA/BowWA__Door.fbx": {
+    "triangles": 92,
+    "colors_and_flat_normals": true
   },
-  "wf": {
-    "parts": {
-      "Midship_W1__Hull_Ironwork": {
-        "triangles": 360
-      },
-      "Midship_W1__Hull_Shell": {
-        "triangles": 108
-      },
-      "Midship_W1__Plank_Seams": {
-        "triangles": 332
-      },
-      "Midship_W1__Rails_Teal": {
-        "triangles": 208
-      },
-      "RaisedSection__Door_Fwd": {
-        "triangles": 92
-      },
-      "RaisedSection__ForwardGuard_Fwd": {
-        "triangles": 144
-      },
-      "RaisedSection__PortalFrames_Fwd": {
-        "triangles": 84
-      },
-      "RaisedSection__StairGuards_Fwd": {
-        "triangles": 184
-      },
-      "RaisedSection__StairNosings_Fwd": {
-        "triangles": 192
-      },
-      "RaisedSection__TwinStairs_Fwd": {
-        "triangles": 256
-      }
-    },
-    "hull_shell_check": {
-      "vertices": 79,
-      "triangles": 108,
-      "boundary_edges": 50,
-      "overconnected_edges": 0,
-      "degenerate_faces": 0
-    }
+  "BowWA/BowWA__Hatch.fbx": {
+    "triangles": 36,
+    "colors_and_flat_normals": true
   },
-  "wb": {
-    "parts": {
-      "Midship_W1__Hull_Ironwork": {
-        "triangles": 360
-      },
-      "Midship_W1__Hull_Shell": {
-        "triangles": 112
-      },
-      "Midship_W1__Plank_Seams": {
-        "triangles": 332
-      },
-      "Midship_W1__Rails_Teal": {
-        "triangles": 208
-      },
-      "RaisedSection__Door_Aft": {
-        "triangles": 92
-      },
-      "RaisedSection__Door_Fwd": {
-        "triangles": 92
-      },
-      "RaisedSection__ForwardGuard_Fwd": {
-        "triangles": 144
-      },
-      "RaisedSection__PortalFrames_Fwd": {
-        "triangles": 84
-      },
-      "RaisedSection__StairGuards_Fwd": {
-        "triangles": 184
-      },
-      "RaisedSection__StairNosings_Fwd": {
-        "triangles": 192
-      },
-      "RaisedSection__TwinStairs_Fwd": {
-        "triangles": 256
-      }
-    },
-    "hull_shell_check": {
-      "vertices": 79,
-      "triangles": 112,
-      "boundary_edges": 46,
-      "overconnected_edges": 0,
-      "degenerate_faces": 0
-    }
+  "BowWA/BowWA__Hull_Ironwork.fbx": {
+    "triangles": 424,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__Hull_Shell.fbx": {
+    "triangles": 682,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__InternalLadder.fbx": {
+    "triangles": 108,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__PlankDetails.fbx": {
+    "triangles": 624,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__Plank_Seams.fbx": {
+    "triangles": 400,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__PortalFrames.fbx": {
+    "triangles": 84,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__Prow.fbx": {
+    "triangles": 60,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__RearGuard.fbx": {
+    "triangles": 88,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__StemExtension.fbx": {
+    "triangles": 12,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__UpperBraceBolts.fbx": {
+    "triangles": 80,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__UpperPosts.fbx": {
+    "triangles": 240,
+    "colors_and_flat_normals": true
+  },
+  "BowWA/BowWA__UpperRails.fbx": {
+    "triangles": 240,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__Door_Aft.fbx": {
+    "triangles": 92,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__EndGuard_Aft.fbx": {
+    "triangles": 144,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__Hull_Ironwork.fbx": {
+    "triangles": 328,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__Hull_Shell.fbx": {
+    "triangles": 296,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__Plank_Seams.fbx": {
+    "triangles": 32,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__PortalFrames_Aft.fbx": {
+    "triangles": 36,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__StairGuards_Aft.fbx": {
+    "triangles": 184,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__StairNosings_Aft.fbx": {
+    "triangles": 192,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__TwinStairs_Aft.fbx": {
+    "triangles": 256,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__UpperBraceBolts.fbx": {
+    "triangles": 80,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__UpperPlanks.fbx": {
+    "triangles": 588,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__UpperPosts.fbx": {
+    "triangles": 192,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWA/MiddleWA__UpperRails.fbx": {
+    "triangles": 56,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__Door_Aft.fbx": {
+    "triangles": 92,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__Door_Fwd.fbx": {
+    "triangles": 92,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__EndGuard_Aft.fbx": {
+    "triangles": 112,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__EndGuard_Fwd.fbx": {
+    "triangles": 144,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__Hull_Ironwork.fbx": {
+    "triangles": 328,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__Hull_Shell.fbx": {
+    "triangles": 382,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__Plank_Seams.fbx": {
+    "triangles": 32,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__PortalFrames_Aft.fbx": {
+    "triangles": 36,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__PortalFrames_Fwd.fbx": {
+    "triangles": 36,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__StairGuards_Fwd.fbx": {
+    "triangles": 184,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__StairNosings_Fwd.fbx": {
+    "triangles": 192,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__TwinStairs_Fwd.fbx": {
+    "triangles": 256,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__UpperBraceBolts.fbx": {
+    "triangles": 80,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__UpperPlanks.fbx": {
+    "triangles": 648,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__UpperPosts.fbx": {
+    "triangles": 240,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWB/MiddleWB__UpperRails.fbx": {
+    "triangles": 56,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__Door_Fwd.fbx": {
+    "triangles": 92,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__EndGuard_Fwd.fbx": {
+    "triangles": 144,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__Hull_Ironwork.fbx": {
+    "triangles": 328,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__Hull_Shell.fbx": {
+    "triangles": 306,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__Plank_Seams.fbx": {
+    "triangles": 32,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__PortalFrames_Fwd.fbx": {
+    "triangles": 36,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__StairGuards_Fwd.fbx": {
+    "triangles": 184,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__StairNosings_Fwd.fbx": {
+    "triangles": 192,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__TwinStairs_Fwd.fbx": {
+    "triangles": 256,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__UpperBraceBolts.fbx": {
+    "triangles": 80,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__UpperPlanks.fbx": {
+    "triangles": 576,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__UpperPosts.fbx": {
+    "triangles": 192,
+    "colors_and_flat_normals": true
+  },
+  "MiddleWF/MiddleWF__UpperRails.fbx": {
+    "triangles": 56,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__Carrier.fbx": {
+    "triangles": 260,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__Door.fbx": {
+    "triangles": 92,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__ForwardGuard.fbx": {
+    "triangles": 144,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__Hatch.fbx": {
+    "triangles": 36,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__Helm.fbx": {
+    "triangles": 280,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__Hull_Ironwork.fbx": {
+    "triangles": 852,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__Hull_Shell.fbx": {
+    "triangles": 884,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__InternalLadder.fbx": {
+    "triangles": 108,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__Plank_Seams.fbx": {
+    "triangles": 432,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__PortalFrames.fbx": {
+    "triangles": 84,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__Rotor.fbx": {
+    "triangles": 1616,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__StairGuards.fbx": {
+    "triangles": 184,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__StairNosings.fbx": {
+    "triangles": 192,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__TwinStairs.fbx": {
+    "triangles": 256,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__UpperBraceBolts.fbx": {
+    "triangles": 160,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__UpperPlanks.fbx": {
+    "triangles": 600,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__UpperPosts.fbx": {
+    "triangles": 300,
+    "colors_and_flat_normals": true
+  },
+  "SternWF/SternWF__UpperRails.fbx": {
+    "triangles": 300,
+    "colors_and_flat_normals": true
   }
 }

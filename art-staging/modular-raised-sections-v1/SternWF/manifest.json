@@ -1,0 +1,268 @@
+{
+  "interface": "W1x (wall faces) / W1xR (connected faces)",
+  "section": "SternWF",
+  "source_axes": "+X forward, +Y port, +Z up",
+  "export_axes": "game (-y,z,x)",
+  "modules": {
+    "SternWF": {
+      "SternWF__Carrier": {
+        "file": "SternWF/SternWF__Carrier.fbx",
+        "position": [
+          0.7200002670288086,
+          0.0,
+          0.3499999940395355
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 260
+      },
+      "SternWF__Door": {
+        "file": "SternWF/SternWF__Door.fbx",
+        "position": [
+          9.315000534057617,
+          -2.869999885559082,
+          1.7599999904632568
+        ],
+        "rotation_radians": [
+          -0.0,
+          -0.0,
+          -1.1344640254974365
+        ],
+        "triangles": 92
+      },
+      "SternWF__ForwardGuard": {
+        "file": "SternWF/SternWF__ForwardGuard.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 144
+      },
+      "SternWF__Hatch": {
+        "file": "SternWF/SternWF__Hatch.fbx",
+        "position": [
+          6.75,
+          0.0,
+          4.360000133514404
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 36
+      },
+      "SternWF__Helm": {
+        "file": "SternWF/SternWF__Helm.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 280
+      },
+      "SternWF__Hull_Ironwork": {
+        "file": "SternWF/SternWF__Hull_Ironwork.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 852
+      },
+      "SternWF__Hull_Shell": {
+        "file": "SternWF/SternWF__Hull_Shell.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 884
+      },
+      "SternWF__InternalLadder": {
+        "file": "SternWF/SternWF__InternalLadder.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "triangles": 108
+      },
+      "SternWF__Plank_Seams": {
+        "file": "SternWF/SternWF__Plank_Seams.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 432
+      },
+      "SternWF__PortalFrames": {
+        "file": "SternWF/SternWF__PortalFrames.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "triangles": 84
+      },
+      "SternWF__Rotor": {
+        "file": "SternWF/SternWF__Rotor.fbx",
+        "position": [
+          0.7200002670288086,
+          0.0,
+          0.3499999940395355
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 1616
+      },
+      "SternWF__StairGuards": {
+        "file": "SternWF/SternWF__StairGuards.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 184
+      },
+      "SternWF__StairNosings": {
+        "file": "SternWF/SternWF__StairNosings.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 192
+      },
+      "SternWF__TwinStairs": {
+        "file": "SternWF/SternWF__TwinStairs.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 256
+      },
+      "SternWF__UpperBraceBolts": {
+        "file": "SternWF/SternWF__UpperBraceBolts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 160
+      },
+      "SternWF__UpperPlanks": {
+        "file": "SternWF/SternWF__UpperPlanks.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 600
+      },
+      "SternWF__UpperPosts": {
+        "file": "SternWF/SternWF__UpperPosts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 300
+      },
+      "SternWF__UpperRails": {
+        "file": "SternWF/SternWF__UpperRails.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 300
+      }
+    }
+  },
+  "hull_shell_check": {
+    "boundary_edges": 22,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0,
+    "triangles": 884
+  }
+}

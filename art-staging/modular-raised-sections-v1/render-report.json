@@ -1,0 +1,194 @@
+{
+  "variants": {
+    "MiddleWF": {
+      "wall_kit_x_extents_local": {
+        "MiddleWF__Door_Fwd": [
+          6.051,
+          7.366
+        ],
+        "MiddleWF__EndGuard_Fwd": [
+          5.82,
+          6.1
+        ],
+        "MiddleWF__PortalFrames_Fwd": [
+          5.9,
+          6.06
+        ],
+        "MiddleWF__StairGuards_Fwd": [
+          2.695,
+          6.025
+        ],
+        "MiddleWF__StairNosings_Fwd": [
+          3.105,
+          5.945
+        ],
+        "MiddleWF__TwinStairs_Fwd": [
+          2.76,
+          5.96
+        ]
+      }
+    },
+    "MiddleWA": {
+      "wall_kit_x_extents_local": {
+        "MiddleWA__Door_Aft": [
+          -1.366,
+          -0.051
+        ],
+        "MiddleWA__EndGuard_Aft": [
+          -0.1,
+          0.18
+        ],
+        "MiddleWA__PortalFrames_Aft": [
+          -0.06,
+          0.1
+        ],
+        "MiddleWA__StairGuards_Aft": [
+          -0.025,
+          3.305
+        ],
+        "MiddleWA__StairNosings_Aft": [
+          0.055,
+          2.895
+        ],
+        "MiddleWA__TwinStairs_Aft": [
+          0.04,
+          3.24
+        ]
+      }
+    },
+    "MiddleWB": {
+      "wall_kit_x_extents_local": {
+        "MiddleWB__Door_Aft": [
+          -1.366,
+          -0.051
+        ],
+        "MiddleWB__Door_Fwd": [
+          6.051,
+          7.366
+        ],
+        "MiddleWB__EndGuard_Aft": [
+          -0.1,
+          0.18
+        ],
+        "MiddleWB__EndGuard_Fwd": [
+          5.82,
+          6.1
+        ],
+        "MiddleWB__PortalFrames_Aft": [
+          -0.06,
+          0.1
+        ],
+        "MiddleWB__PortalFrames_Fwd": [
+          5.9,
+          6.06
+        ],
+        "MiddleWB__StairGuards_Fwd": [
+          2.695,
+          6.025
+        ],
+        "MiddleWB__StairNosings_Fwd": [
+          3.105,
+          5.945
+        ],
+        "MiddleWB__TwinStairs_Fwd": [
+          2.76,
+          5.96
+        ]
+      }
+    }
+  },
+  "assemblies": {
+    "a": {
+      "layout": [
+        [
+          "SternWF",
+          0.0
+        ],
+        [
+          "L_Midship_W1",
+          9.3
+        ],
+        [
+          "BowWA",
+          15.3
+        ]
+      ],
+      "shell_parts": 6,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 1708,
+      "open_edges_at": []
+    },
+    "b": {
+      "layout": [
+        [
+          "L_Stern_W1",
+          0.0
+        ],
+        [
+          "MiddleWB",
+          9.3
+        ],
+        [
+          "L_Bow_W1",
+          15.3
+        ]
+      ],
+      "shell_parts": 10,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 2076,
+      "open_edges_at": []
+    },
+    "c": {
+      "layout": [
+        [
+          "C_Stern_W1",
+          0.0
+        ],
+        [
+          "MiddleWF",
+          9.3
+        ],
+        [
+          "L_Midship_W1",
+          15.3
+        ],
+        [
+          "L_Bow_W1",
+          21.3
+        ]
+      ],
+      "shell_parts": 10,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 1938,
+      "open_edges_at": []
+    },
+    "d": {
+      "layout": [
+        [
+          "L_Stern_W1",
+          0.0
+        ],
+        [
+          "MiddleWA",
+          9.3
+        ],
+        [
+          "C_Bow_W1",
+          15.3
+        ]
+      ],
+      "shell_parts": 7,
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 2148,
+      "open_edges_at": []
+    }
+  }
+}
