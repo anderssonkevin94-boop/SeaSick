@@ -861,7 +861,18 @@ namespace SeaSick.Ship.Modular
             defaultBerths = authoredBerths;
             budgetUnits = authoredHold + berthCost * authoredBerths;
             int byBudget = berthCost > 0f ? Mathf.FloorToInt(budgetUnits / berthCost + 1e-4f) : 0;
-            int authoredMax = c != null && c.maxBerths != null ? Mathf.Max(0, c.maxBerths.value) : int.MaxValue;
+            // `c.maxBerths` is never actually null here: JsonUtility default-
+            // constructs every nested [Serializable] field on a type even
+            // when the JSON omits its key (verified live, 2026-09-25 --
+            // FromJson<CapacitySpec>("{\"holdCells\":{\"value\":5}}") still
+            // returns a non-null `maxBerths` with `value` 0), so the `!=
+            // null` check below was always true and every section's
+            // authored max came back 0 -- collapsing every ship's berths to
+            // 0 and failing every gun-crewed refit with GUNS_NEED_CREW.
+            // `value > 0` is what "authored" actually means for an optional
+            // floor-area cap: nobody would author a positive-berth section
+            // capped at zero.
+            int authoredMax = c != null && c.maxBerths != null && c.maxBerths.value > 0 ? c.maxBerths.value : int.MaxValue;
             maxBerths = Mathf.Max(0, Mathf.Min(byBudget, authoredMax));
             berths = defaultBerths;
             if (cfg?.layouts != null)

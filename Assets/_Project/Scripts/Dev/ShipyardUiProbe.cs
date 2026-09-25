@@ -911,6 +911,19 @@ public class ShipyardUiProbe : MonoBehaviour
         sb.AppendLine("9. section-by-section editing (InsertMiddle/RemoveSection/BeginSection+ResetSection):");
         yield return EnsureRefittable();
 
+        // Setup: back to Long() (1 bay). Sections 1/2/4/5/6 above now
+        // actually CONFIRM real refits (berths no longer collapse to 0 --
+        // see the SectionSpaceFor fix, 2026-09-25), so the live ship can be
+        // at any bay count here depending on where an earlier section left
+        // her; 9a/9b's own comments assume a 1-bay start with guns on
+        // middle[0], same as Long() itself carries by default.
+        if (yard.Current.middleIds.Count != 1)
+        {
+            var r = yard.ApplyRefit(yard.Current, ShipConfiguration.Long());
+            sb.AppendLine("  setup: back to Long() -- " + r.ToString().Replace("\n", " | "));
+            yield return new WaitForSeconds(0.6f);
+        }
+
         // 9a: InsertMiddle(0) on Long() (1 middle, guns on middle[0]) --
         // the EXISTING bay's guns renumber to middle[1]; the new bay at 0
         // carries none.
