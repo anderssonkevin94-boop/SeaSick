@@ -23,7 +23,6 @@ namespace SeaSick.Ship.Modular
         public const string NotInPrototype = "NOT_IN_PROTOTYPE";
         public const string WheelRequired = "WHEEL_REQUIRED";
         public const string CargoWouldNotFit = "CARGO_WOULD_NOT_FIT";
-        public const string CrewWouldNotFit = "CREW_WOULD_NOT_FIT";
         public const string EquipmentWouldBeLost = "EQUIPMENT_WOULD_BE_LOST";
         public const string NoReferenceHull = "NO_REFERENCE_HULL";
         public const string CannotRefitNow = "CANNOT_REFIT_NOW";
@@ -51,6 +50,11 @@ namespace SeaSick.Ship.Modular
         /// ApplyRefit would add to or take from the dry dock, but she is not
         /// at her home berth (AnchorController.AtHomeDock).
         public const string DryDockNotHere = "DRY_DOCK_NOT_HERE";
+        /// ApplyRefit would need to land surplus hands (fewer berths than
+        /// crew aboard), but she is not at her home berth -- there is
+        /// nowhere for them to go ashore TO (2026-09-25, Kevin: "surplus
+        /// hands go ashore, never refused for crew").
+        public const string HandsAshoreNeedHome = "HANDS_ASHORE_NEED_HOME";
     }
 
     /// What the prototype shipyard offers (D5): W1-r2 V3 stern and bow,
@@ -388,6 +392,11 @@ namespace SeaSick.Ship.Modular
         public string rotorId;
         public ShipCapacity capacityCurrent;
         public ShipCapacity capacityDraft;
+        /// Hands aboard now, in excess of the draft's berths (2026-09-25,
+        /// Kevin: "surplus hands go ashore" -- never a refusal). 0 when the
+        /// draft has room for everyone already aboard. `ApplyRefit` lands
+        /// this many at the home settlement; never struck, never lost.
+        public int handsAshore;
         /// Cargo weight room with the hands now aboard, kg (A2).
         public float weightAllowanceCurrentKg, weightAllowanceDraftKg;
         /// What the cargo aboard weighs now, kg.
@@ -553,6 +562,7 @@ namespace SeaSick.Ship.Modular
             if (draftPlan != null && live != null)
             {
                 CheckRetention(v.issues, live, curPlan, draftPlan);
+                v.handsAshore = Mathf.Max(0, live.crewAboard - draftPlan.capacity.crewStations);
                 // **Refused, not struck** (Kevin + Astra, 2026-09-24, kept
                 // 2026-09-25 now that guns are explicit equipment: "Reject
                 // changes that cannot safely retain existing equipment";
@@ -962,9 +972,11 @@ namespace SeaSick.Ship.Modular
             if (cargoKg > room + 1f)
                 issues.Add(new Rejection { code = ShipyardCodes.CargoWouldNotFit, partId = "weight",
                     message = $"Her cargo weighs {cargoKg / 1000f:0.0} t and this ship can carry {Mathf.Max(0f, room) / 1000f:0.0} t with {live.crewAboard} hands and her guns aboard. Unload first; nothing is thrown overboard." });
-            if (live.crewAboard > draft.capacity.crewStations)
-                issues.Add(new Rejection { code = ShipyardCodes.CrewWouldNotFit, partId = "crew",
-                    message = $"{live.crewAboard} hands are aboard and this ship has stations for {draft.capacity.crewStations}. Land {live.crewAboard - draft.capacity.crewStations} first." });
+            // Surplus hands are never a refusal (2026-09-25, Kevin): they go
+            // ashore to the home settlement instead of blocking the refit --
+            // see ShipyardValidation.handsAshore, computed by the caller
+            // (Validate), and ShipyardService.ApplyRefit, which actually
+            // lands them.
             foreach (var item in EquipmentLost(live, cur, draft))
                 issues.Add(new Rejection { code = ShipyardCodes.EquipmentWouldBeLost, partId = item.id,
                     message = $"{item.label} would have no place on this ship; the refit is refused rather than leave it behind." });

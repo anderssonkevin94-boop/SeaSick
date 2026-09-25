@@ -498,7 +498,14 @@ namespace SeaSick.Ship.Modular
             Gate("todays-full-ship-fits-long", toLong.ok, toLong.ok ? toLong.Summary() : toLong.Summary());
             var toShort = ShipyardPlanner.Validate(ShipConfiguration.Short(), lib, reference, loaded);
             Gate("cargo-would-not-fit", !toShort.ok && toShort.HasCode(ShipyardCodes.CargoWouldNotFit), toShort.Summary());
-            Gate("crew-would-not-fit", !toShort.ok && toShort.HasCode(ShipyardCodes.CrewWouldNotFit), $"crew 8 vs short {toShort.capacityDraft.crewStations} stations");
+            // 2026-09-25 (Kevin): surplus hands are never a refusal any more
+            // -- they go ashore to the home settlement. Short's crew of 8 vs
+            // her (say) 4 berths is just a number now (handsAshore), not a
+            // blocking issue; the refit above is still refused, but only for
+            // the cargo, not the crew.
+            Gate("surplus-hands-go-ashore-not-refused", !toShort.issues.Exists(i => i.code == "CREW_WOULD_NOT_FIT")
+                && toShort.handsAshore == Mathf.Max(0, 8 - toShort.capacityDraft.crewStations),
+                $"crew 8 vs short {toShort.capacityDraft.crewStations} stations -> {toShort.handsAshore} hands ashore (not blocking)");
             var noChimney = ShipConfiguration.Long(); noChimney.fittings.Clear();
             var nc = ShipyardPlanner.Validate(noChimney, lib, reference, empty);
             Gate("funnel-would-be-lost", !nc.ok && nc.HasCode(ShipyardCodes.EquipmentWouldBeLost), nc.Summary());

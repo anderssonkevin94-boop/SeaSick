@@ -140,6 +140,9 @@ namespace SeaSick.Ship.Modular
                 r.warnings.Add(new ShipyardNote { code = "HOLD_SMALLER", message = $"The hold shrinks from {current.capacity.holdCells} to {proposed.capacity.holdCells}." });
             if (proposed != null && current != null && proposed.capacity.crewStations < current.capacity.crewStations)
                 r.warnings.Add(new ShipyardNote { code = "FEWER_BERTHS", message = $"Crew berths drop from {current.capacity.crewStations} to {proposed.capacity.crewStations}." });
+            if (v.handsAshore > 0)
+                r.warnings.Add(new ShipyardNote { code = "HANDS_ASHORE",
+                    message = v.handsAshore == 1 ? "1 hand will go ashore." : $"{v.handsAshore} hands will go ashore." });
             r.warnings.Add(new ShipyardNote { code = "PROVISIONAL_TUNING", message = "Capacity and hydrostatics are provisional and will be retuned." });
             return r;
         }
