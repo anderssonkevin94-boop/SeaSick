@@ -36,6 +36,7 @@ namespace SeaSick.UI.ModularYard
         readonly Label warnings;
         readonly Label message;
         readonly Button beamStandard, beamWide, raiseAll, lowerAll, confirm;
+        readonly Label deckReason;
         string tilesKey;
 
         // ---- section sheet -------------------------------------------------
@@ -80,10 +81,11 @@ namespace SeaSick.UI.ModularYard
             var beams = Row(scroll, "yard-wheels");
             beamStandard = Command(beams, "Standard", () => draft.SetWideBeam(false));
             beamWide = Command(beams, "Wide", () => draft.SetWideBeam(true));
-            var deckCaption = new Label("Deck (tap a section tile above, or)"); deckCaption.AddToClassList("yard-caption"); scroll.Add(deckCaption);
+            var deckCaption = new Label("Deck"); deckCaption.AddToClassList("yard-caption"); scroll.Add(deckCaption);
             var decks = Row(scroll, "yard-wheels");
             lowerAll = Command(decks, "Lower all", () => draft.LowerAll());
             raiseAll = Command(decks, "Raise all", () => draft.RaiseAll());
+            deckReason = new Label(); deckReason.AddToClassList("yard-caption"); deckReason.AddToClassList("yard-deck-reason"); scroll.Add(deckReason);
             summary = new VisualElement(); summary.AddToClassList("yard-summary"); scroll.Add(summary);
             warnings = new Label(); warnings.AddToClassList("yard-warnings"); scroll.Add(warnings);
             message = new Label(); message.AddToClassList("yard-message"); overview.Add(message);
@@ -169,6 +171,13 @@ namespace SeaSick.UI.ModularYard
             raiseAll.tooltip = raisedReason ?? "A flush upper deck over every section";
             lowerAll.EnableInClassList("yard-selected", !draft.IsRaisedDeck);
             raiseAll.EnableInClassList("yard-selected", draft.IsRaisedDeck);
+            // Why Raise all/Lower all are greyed out, under the buttons --
+            // a tooltip is invisible on a phone with no hover (2026-09-25
+            // review: standard beam left the pair disabled with no reason
+            // shown anywhere on screen).
+            bool decksUnavailable = !draft.Committed && !draft.IsRaisedDeck && raisedReason != null;
+            deckReason.text = decksUnavailable ? raisedReason : "";
+            deckReason.style.display = decksUnavailable ? DisplayStyle.Flex : DisplayStyle.None;
 
             RefreshSummary(report);
             RefreshWarnings(report);
@@ -232,6 +241,7 @@ namespace SeaSick.UI.ModularYard
             var b = new Button(() => OpenSection(key)) { userData = key };
             b.AddToClassList("yard-tile");
             var name = new Label(); name.AddToClassList("yard-tile-name"); b.Add(name);
+            var deck = new Label(); deck.AddToClassList("yard-tile-deck"); b.Add(deck);
             var status = new Label(); status.AddToClassList("yard-tile-status"); b.Add(status);
             return b;
         }
@@ -246,16 +256,31 @@ namespace SeaSick.UI.ModularYard
 
         void UpdateTile(VisualElement tile, string key)
         {
-            if (!(tile is Button b) || b.childCount < 2) return;
+            if (!(tile is Button b) || b.childCount < 3) return;
             var name = b[0] as Label;
-            var status = b[1] as Label;
-            if (name == null || status == null) return;
+            var deck = b[1] as Label;
+            var status = b[2] as Label;
+            if (name == null || deck == null || status == null) return;
             name.text = key == ShipAssembler.StdKeyStern ? "Stern" : key == ShipAssembler.StdKeyBow ? "Bow"
                 : $"Mid {IndexOfMiddle(key) + 1}";
-            string level = draft.IsWideBeam ? (draft.IsSectionRaised(key) ? "raised" : "low") : "";
+            // Deck level of ITS OWN chip (docs/SHIPYARD-SECTIONS-UI.md
+            // "tiny status (deck level, guns n, berths n, hold n)") -- a
+            // lowercase word buried in the stats line read as part of the
+            // sentence, not as the ship's raised/low state at a glance
+            // (2026-09-25 review).
+            // `IsWideBeam` alone misses a raised deck: `RaiseAll` puts a
+            // RAISED preset (not the EXPANDED one `IsWideBeam` checks) on
+            // the stern, the same reason the beam row above shows Wide as
+            // selected on `IsWideBeam || IsRaisedDeck`, not `IsWideBeam`
+            // alone -- without it, a raised ship's tiles hid the chip this
+            // was added to show (2026-09-25 review).
+            bool wideOrRaised = draft.IsWideBeam || draft.IsRaisedDeck;
+            bool raised = wideOrRaised && draft.IsSectionRaised(key);
+            deck.style.display = wideOrRaised ? DisplayStyle.Flex : DisplayStyle.None;
+            deck.text = raised ? "Raised" : "Low";
+            deck.EnableInClassList("yard-tile-deck--raised", raised);
             var occupancy = live?.Report(draft.Snapshot())?.Section(key);
             var bits = new List<string>();
-            if (!string.IsNullOrEmpty(level)) bits.Add(level);
             if (occupancy != null)
             {
                 bits.Add($"guns {occupancy.guns}");
