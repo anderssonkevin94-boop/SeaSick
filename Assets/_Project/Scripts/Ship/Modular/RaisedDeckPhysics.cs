@@ -28,6 +28,35 @@ namespace SeaSick.Ship.Modular
             return null;
         }
 
+        /// One raised hull section's own extent along the ship, in
+        /// `ShipyardPlan.data`'s own frame (ship-frame metres + viewOffset,
+        /// the same conversion the funnel bounds use), and the family
+        /// profile that raised it.
+        public struct RaisedSectionRange { public float fromZ, toZ; public JoinProfile profile; }
+
+        /// Every placed hull section that resolves a raised profile
+        /// (docs/RAISED-SECTIONS.md sec 6), generalising `FindRaisedProfile`
+        /// (which only ever returned the first one, correct only when a
+        /// raised ship was all-or-nothing) to one range per section, so a
+        /// mixed ship (e.g. raised stern + low middle + low bow) raises only
+        /// the stations that actually belong to its raised section(s).
+        public static List<RaisedSectionRange> FindRaisedSectionRanges(AssemblyResult asm, ModuleLibrary lib, float metresPerUnit, float viewOffsetZ)
+        {
+            var list = new List<RaisedSectionRange>();
+            if (asm == null || !asm.ok || lib == null) return list;
+            foreach (var pm in asm.placed)
+            {
+                if (!ModuleKind.IsHull(pm.kind) || !lib.TryGet(pm.moduleId, out var d) || string.IsNullOrEmpty(d.family)) continue;
+                var prof = lib.FindProfile(d.family);
+                if (prof == null || prof.upperDeckZU <= prof.deckZU + 1e-4f) continue;
+                float fromZ = viewOffsetZ + pm.positionM.z + pm.boundsMinU.x * metresPerUnit;
+                float toZ = viewOffsetZ + pm.positionM.z + pm.boundsMaxU.x * metresPerUnit;
+                if (toZ < fromZ) (fromZ, toZ) = (toZ, fromZ);
+                list.Add(new RaisedSectionRange { fromZ = fromZ, toZ = toZ, profile = prof });
+            }
+            return list;
+        }
+
         /// deckZU of whichever hull family is actually installed (every
         /// non-raised family shares 1.76 today, W1-r2 and W1x alike);
         /// 1.76 if the assembly did not resolve to any known family.

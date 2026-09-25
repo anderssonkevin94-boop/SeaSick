@@ -656,25 +656,38 @@ namespace SeaSick.Ship.Modular
             p.data = reference.Reshaped(p.sLength, p.sBeam, p.sDepth);
             p.data.PinSternFittings(reference, p.sternShiftM);
 
-            // Raised deck (docs/RAISED-DECK.md sec 3/6/7): any installed hull
-            // section from the raised family (W1xR) raises the walkable deck
-            // -- and hence the freeboard, crew height, deck load plan and
-            // green-water threshold -- to the family's upperDeckZU. sDepth is
-            // untouched (HullMeasure.depthU reads deckZU, not upperDeckZU, so
-            // it stays 1 automatically; RaisedDeckPhysics only ever ADDS
+            // The drawn axle sits on the physics axle along the ship; the
+            // datum (authoring Z = 0) on the waterline. Computed here
+            // (before the raised-deck pass below) because converting a
+            // placed hull section's own extent into `p.data`'s frame needs
+            // it, same as the funnel bounds already do further down.
+            float axleLocalZ = asm.hasWheel ? asm.wheelAxleM.z : 0f;
+            p.viewOffset = new Vector3(0f, 0f, p.data.wheelAxle.z - axleLocalZ);
+
+            // Raised deck, PER SECTION (docs/RAISED-SECTIONS.md sec 6): each
+            // installed hull section that resolves a raised profile
+            // (upperDeckZU > deckZU) raises only ITS OWN stations -- the
+            // walkable deck, freeboard, crew height, deck load plan and
+            // green-water threshold follow each section's own level, not
+            // the whole hull (a raised stern next to a low middle keeps the
+            // middle's stations at the low deck). sDepth is untouched
+            // either way (HullMeasure.depthU reads deckZU, not upperDeckZU,
+            // so it stays 1 automatically; RaiseDeck only ever ADDS
             // freeboard on top of the reshaped single-deck hull).
-            var raisedProfile = RaisedDeckPhysics.FindRaisedProfile(asm, lib);
+            var raisedRanges = RaisedDeckPhysics.FindRaisedSectionRanges(asm, lib, k, p.viewOffset.z);
+            JoinProfile raisedProfile = null; // the highest raised profile present, if any -- used below for CoM/report
+            foreach (var rr in raisedRanges)
+            {
+                p.data = p.data.RaiseDeck((rr.profile.upperDeckZU - rr.profile.deckZU) * k, rr.fromZ, rr.toZ);
+                if (raisedProfile == null || rr.profile.upperDeckZU > raisedProfile.upperDeckZU) raisedProfile = rr.profile;
+            }
             // Every non-raised profile shares deckZU 1.76 today (W1-r2, W1x);
             // read it off whichever hull section is actually installed
             // rather than hard-coding, falling back to 1.76 only if the
-            // library somehow has no hull section at all.
+            // library somehow has no hull section at all. Informational
+            // only (report/UI): each station's own deckY is the real value
+            // a mixed ship's crew/deck-load/helm actually read.
             p.walkDeckZU = raisedProfile != null ? raisedProfile.upperDeckZU : RaisedDeckPhysics.NonRaisedDeckZU(asm, lib);
-            if (raisedProfile != null)
-                p.data = p.data.RaiseDeck((raisedProfile.upperDeckZU - raisedProfile.deckZU) * k);
-            // The drawn axle sits on the physics axle along the ship; the
-            // datum (authoring Z = 0) on the waterline.
-            float axleLocalZ = asm.hasWheel ? asm.wheelAxleM.z : 0f;
-            p.viewOffset = new Vector3(0f, 0f, p.data.wheelAxle.z - axleLocalZ);
 
             // The funnel, from the assembly (base-centre pivot, bounds in U).
             p.funnelAftZ = -0.4f; p.funnelFwdZ = 0.4f;

@@ -207,16 +207,32 @@ namespace SeaSick.Steamer
         /// sec 7) is realized here, not threaded as a second field.
         /// `extraY <= 0` returns an unmodified deep copy (mirrors `Reshaped`'s
         /// identity contract at its own no-op input).
-        public HullFormData RaiseDeck(float extraY)
+        public HullFormData RaiseDeck(float extraY) => RaiseDeck(extraY, float.NegativeInfinity, float.PositiveInfinity);
+
+        /// **Per-section raised deck** (docs/RAISED-SECTIONS.md sec 6): the
+        /// same freeboard extension, but restricted to stations whose own
+        /// `z` falls inside `[fromZ, toZ]` (inclusive, ship frame metres --
+        /// the same frame `ShipyardPlan.viewOffset.z + PlacedModule.positionM.z`
+        /// converts a placed hull section's own extent into). A station
+        /// outside the range is carried over unchanged, so calling this once
+        /// per raised section in turn (each with its own range) raises only
+        /// those sections' stations, leaving every low section's deckY at
+        /// its old value -- crew, deck load and the helm read each
+        /// station's own `deckY`, so a mixed ship's crew stand at the right
+        /// height on each section without any second per-station field.
+        public HullFormData RaiseDeck(float extraY, float fromZ, float toZ)
         {
             var d = (HullFormData)MemberwiseClone();
             if (extraY <= 0f || stations == null) { if (stations != null) d.stations = (HullFormStation[])stations.Clone(); return d; }
-            d.depth = depth + extraY;
             d.stations = new HullFormStation[stations.Length];
+            bool any = false;
+            const float rangeEps = 1e-3f;
             for (int i = 0; i < stations.Length; i++)
             {
                 var s = stations[i];
                 if (s == null) continue;
+                if (s.z < fromZ - rangeEps || s.z > toZ + rangeEps) { d.stations[i] = s; continue; }
+                any = true;
                 int n = s.y != null ? s.y.Length : 0;
                 var t = new HullFormStation { z = s.z, dz = s.dz, keelY = s.keelY, deckY = s.deckY + extraY };
                 if (n == 0) { d.stations[i] = t; continue; }
@@ -236,6 +252,7 @@ namespace SeaSick.Steamer
                 t.momentY[n] = s.momentY[n - 1] + areaAdded * (oldDeckY + extraY * 0.5f);
                 d.stations[i] = t;
             }
+            if (any) d.depth = depth + extraY;
             return d;
         }
 

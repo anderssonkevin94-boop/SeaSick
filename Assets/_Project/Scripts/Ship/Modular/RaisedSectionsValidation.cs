@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
+using UnityEngine;
 
 namespace SeaSick.Ship.Modular
 {
@@ -40,7 +42,9 @@ namespace SeaSick.Ship.Modular
             return sb.ToString();
         }
 
-        public static void Body(string stdJson, IList<string> mods, IList<string> names, GateFn Gate)
+        static string F(float v) => v.ToString("0.####", CultureInfo.InvariantCulture);
+
+        public static void Body(string stdJson, IList<string> mods, IList<string> names, string hullFormJson, GateFn Gate)
         {
             var lib = ModuleLibrary.FromJson(stdJson, mods, names);
             if (!lib.Usable) { Gate("raised-sections-library-usable", false, string.Join(" | ", lib.errors)); return; }
@@ -133,6 +137,76 @@ namespace SeaSick.Ship.Modular
             }
             Gate("raised-sections-fromids-toids-round-trip", roundTripBad.Count == 0,
                 roundTripBad.Count == 0 ? $"{roundTripChecked} combinations round-trip" : string.Join(" | ", roundTripBad));
+
+            // =============================================================
+            // docs/RAISED-SECTIONS.md sec 6: a MIXED ship (raised stern,
+            // low middle, low bow) must raise ONLY the stern's stations --
+            // this is what tells apart the per-section RaiseDeck from the
+            // old all-or-nothing one (every existing raised-deck gate used
+            // an all-raised ship, which the per-section version also
+            // handles, but would not by itself prove the range logic works).
+            // =============================================================
+            var reference = ShipyardSelfTest.ReferenceFrom(hullFormJson);
+            Gate("raised-sections-reference-hull-loads", reference != null, reference != null ? $"lwl {F(reference.lwl)} m" : "no hullform.json");
+            if (reference == null) return;
+
+            var refPlan = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), lib, reference, null, out var refAsm);
+            if (refPlan == null || !refAsm.ok) { Gate("raised-sections-reference-plans", false, refAsm.Summary()); return; }
+
+            var (mixSternId, mixMiddleIds, mixBowId) = RaisedSections.ToIds(DeckLevel.Raised, new[] { DeckLevel.Low }, DeckLevel.Low);
+            var mixCfg = Bare(mixSternId, mixMiddleIds, mixBowId);
+            var mixPlan = ShipyardPlanner.PlanFor(mixCfg, lib, reference, refPlan, out var mixAsm);
+            Gate("raised-sections-mixed-raised-stern-plans", mixPlan != null && mixAsm.ok, mixAsm.Summary());
+            if (mixPlan == null) return;
+
+            var stations = mixPlan.data.stations;
+            float lowDeckY = mixPlan.data.stations[stations.Length - 1].deckY; // bow tip, always low in this mix
+            float sternDeckY = mixPlan.data.stations[0].deckY; // stern-most station, raised in this mix
+            int midIdx = stations.Length / 2; // roughly amidships -- inside the low middle bay
+            float midDeckY = mixPlan.data.stations[midIdx].deckY;
+
+            Gate("raised-sections-mixed-stern-station-raised", sternDeckY > lowDeckY + 1.0f,
+                $"stern station[0] deckY={F(sternDeckY)} m vs bow-tip deckY={F(lowDeckY)} m (expect stern ~1.22 m higher)");
+            // Tolerance is the hull's own sheer (deckY already varies gently
+            // along an UNraised hull, e.g. higher at the bow tip than
+            // amidships) -- well under the ~1.22 m a raised section adds, so
+            // this still tells "not raised" apart from "raised" cleanly.
+            Gate("raised-sections-mixed-middle-and-bow-stay-low", Mathf.Abs(midDeckY - lowDeckY) < 0.5f,
+                $"amidships (low middle) station[{midIdx}] deckY={F(midDeckY)} m vs bow-tip deckY={F(lowDeckY)} m (expect close -- sheer only, neither raised)");
+
+            // Sanity floor: the all-raised Long (every station raised) has a
+            // HIGHER minimum deckY than the mixed ship (only the stern
+            // raised) -- proves the range restriction actually did
+            // something, not just that it never fires.
+            var longPlan = ShipyardPlanner.PlanFor(RaisedPresets.RaisedLong(), lib, reference, refPlan, out var longAsm);
+            if (longPlan != null && longAsm.ok)
+            {
+                float longMinDeckY = float.PositiveInfinity;
+                foreach (var s in longPlan.data.stations) if (s != null) longMinDeckY = Mathf.Min(longMinDeckY, s.deckY);
+                float mixMinDeckY = float.PositiveInfinity;
+                foreach (var s in mixPlan.data.stations) if (s != null) mixMinDeckY = Mathf.Min(mixMinDeckY, s.deckY);
+                Gate("raised-sections-mixed-ship-lower-min-deck-than-all-raised", mixMinDeckY < longMinDeckY - 0.5f,
+                    $"mixed min deckY={F(mixMinDeckY)} m vs all-raised-long min deckY={F(longMinDeckY)} m");
+            }
+
+            // GM report across a small set of mixed combinations (task's
+            // "GM table, min GM combo"): the hard gate GM > 0.3 m, same as
+            // the all-raised report already asserts, over a few mixes with
+            // only PART of the ship raised (expected to sit BETWEEN the
+            // all-low and all-raised GM, never below the all-raised one,
+            // since less upper mass stands high the fewer sections raise).
+            void ReportMix(string label, DeckLevel stern, DeckLevel[] mids, DeckLevel bow)
+            {
+                var (sId, mIds, bId) = RaisedSections.ToIds(stern, mids, bow);
+                var plan = ShipyardPlanner.PlanFor(Bare(sId, mIds, bId), lib, reference, refPlan, out var a);
+                if (plan == null || !a.ok) { Gate($"raised-sections-gm-{label}", false, a.Summary()); return; }
+                Gate($"raised-sections-gm-{label}-above-0.3m", plan.data.gm > 0.3f,
+                    $"mass={F(plan.lightshipKg / 1000f)}t KG={F(plan.data.kg)}m GM={F(plan.data.gm)}m");
+            }
+            ReportMix("stern-only", DeckLevel.Raised, new[] { DeckLevel.Low }, DeckLevel.Low);
+            ReportMix("bow-only", DeckLevel.Low, new[] { DeckLevel.Low }, DeckLevel.Raised);
+            ReportMix("stern-and-bow-no-middle-raise", DeckLevel.Raised, Array.Empty<DeckLevel>(), DeckLevel.Low);
+            ReportMix("all-three-two-middles", DeckLevel.Raised, new[] { DeckLevel.Raised, DeckLevel.Raised }, DeckLevel.Raised);
         }
     }
 }
