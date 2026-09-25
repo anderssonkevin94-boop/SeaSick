@@ -18,6 +18,7 @@
             "id": "Cannon",
             "resourcePath": "ShipModules/Meshes/Equipment/Cannon_Astra_v1/Cannon",
             "placeholder": false,
+            "yawDegU": -90,
             "notes": "Copied from art-staging/cannon-astra-v1/cannon.fbx (2026-09-23 kit), no .meta -- Unity generates one on first import (SeaSick/Modular/Configure Mesh Importers, docs/MODULAR-SHIPS.md §8). Resources.Load returns null before that import has happened (e.g. headlessly); ModularShipView already falls back to a grey placeholder box in that case."
         }
     ],

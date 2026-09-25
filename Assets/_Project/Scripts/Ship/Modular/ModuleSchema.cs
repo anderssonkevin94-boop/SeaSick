@@ -302,6 +302,13 @@ namespace SeaSick.Ship.Modular
         /// own manifest `local_position`. Unset = Vector3.zero, so every
         /// existing module JSON reads unchanged.
         public Vector3 localPositionU;
+        /// Yaw of this ONE part about authoring +Z (same sense as a socket's
+        /// yawDeg), applied about the part's own origin. Zero for every kit
+        /// exported in the V8 convention. The cannon kit (cannon-astra-v1)
+        /// imports with its muzzle along authoring +X (bow) instead of the
+        /// -Y its README states, so its visual carries -90 to fire outboard
+        /// at slot yaw 0; footprints and clearances are unaffected.
+        public float yawDegU;
         public string notes;
     }
 

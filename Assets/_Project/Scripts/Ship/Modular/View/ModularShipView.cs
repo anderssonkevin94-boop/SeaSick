@@ -66,7 +66,7 @@ namespace SeaSick.Ship.Modular
                         // part's own offset (multi-part visuals only; zero for
                         // every single-piece visual, unchanged from before).
                         inst.transform.localPosition = ModularScale.AuthoringToGame(part.localPositionU, k);
-                        inst.transform.localRotation = visualAxisFix * prefab.transform.localRotation;
+                        inst.transform.localRotation = ModularScale.AuthoringYawToGame(part.yawDegU) * visualAxisFix * prefab.transform.localRotation;
                         inst.transform.localScale = prefab.transform.localScale * k;
                         foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
                         {
