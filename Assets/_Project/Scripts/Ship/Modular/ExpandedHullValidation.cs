@@ -458,6 +458,42 @@ namespace SeaSick.Ship.Modular
                 if (iss.code == "NOT_IN_PROTOTYPE" && iss.message != null && iss.message.Contains("placeholder"))
                 { placeholderRefused = true; placeholderMsg = iss.message; break; }
             Gate("w1x-real-transition-placeholder-refused-not-in-prototype", placeholderRefused, placeholderMsg ?? "not found among policy issues");
+
+            // =====================================================================
+            // A.5 "Beam: standard / wide" (2026-09-25, the shipyard screen's width
+            // toggle): swaps every hull section between the W1-r2 and W1x families
+            // at once. Equipment follows for free because the two families share
+            // slot ids (only their Y moved, docs/SHIPYARD-API.md §15) -- verify
+            // every gun slot Long() fits carries straight over to the W1x-swapped
+            // equivalent, unchanged, and vice versa.
+            // =====================================================================
+            var stdLong = ShipConfiguration.Long();
+            var wideLong = ExpandedPresets.ExpandedLong();
+            var stdAsm = ShipAssembler.Assemble(stdLong, lib);
+            var wideAsm = ShipAssembler.Assemble(wideLong, lib);
+            bool widthSlotsMatch = stdAsm.ok && wideAsm.ok && stdLong.equipment.Count > 0 && wideLong.equipment.Count > 0
+                && stdLong.equipment.Count == wideLong.equipment.Count;
+            var widthMismatch = new List<string>();
+            if (widthSlotsMatch)
+            {
+                foreach (var e in stdLong.equipment)
+                    if (!HasDeckGunSlot(wideAsm, e.slotId)) { widthSlotsMatch = false; widthMismatch.Add("std->wide missing " + e.slotId); }
+                foreach (var e in wideLong.equipment)
+                    if (!HasDeckGunSlot(stdAsm, e.slotId)) { widthSlotsMatch = false; widthMismatch.Add("wide->std missing " + e.slotId); }
+            }
+            Gate("width-toggle-equipment-slot-ids-identical-w1r2-w1x", widthSlotsMatch,
+                widthSlotsMatch ? $"every fitted slot id ({stdLong.equipment.Count}) resolves on both families (std ok={stdAsm.ok}, wide ok={wideAsm.ok})"
+                    : (widthMismatch.Count > 0 ? string.Join(", ", widthMismatch) : $"std ok={stdAsm.ok} ({Codes(stdAsm)}), wide ok={wideAsm.ok} ({Codes(wideAsm)})"));
+        }
+
+        static bool HasDeckGunSlot(AssemblyResult asm, string qualifiedId)
+        {
+            if (asm?.slots == null) return false;
+            foreach (var s in asm.slots)
+                if (s != null && s.qualifiedId == qualifiedId && s.role == SocketRole.DeckSlot
+                    && s.classes != null && Array.IndexOf(s.classes, "equipment.deck-gun") >= 0)
+                    return true;
+            return false;
         }
 
         static string S(Vector3 v) => $"({v.x:0.###}, {v.y:0.###}, {v.z:0.###})";
