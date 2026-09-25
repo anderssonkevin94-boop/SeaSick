@@ -33,11 +33,35 @@ namespace SeaSick.UI.ModularYard
         readonly VisualElement overview;
         readonly VisualElement tiles;
         readonly VisualElement summary;
+        readonly Label blocking;
         readonly Label warnings;
         readonly Label message;
         readonly Button beamStandard, beamWide, raiseAll, lowerAll, confirm;
         readonly Label deckReason;
+        readonly Label maxLengthReason;
+        readonly Label undoReason;
         string tilesKey;
+
+        // ---- overview paging (docs/SHIPYARD-UX-AUDIT.md item 1/3):
+        // "Hull" (tiles/beam/deck, the editing controls) and "Report"
+        // (summary/blocking/warnings, the read-only figures) never shared
+        // the fixed panel well -- the report half is exactly what the audit
+        // found running off the bottom on both phone and desktop. Splitting
+        // them into two always-separate pages (same fixed-split idiom the
+        // section sheet already uses for Structure/Guns/Interior -- those
+        // never merge even when they'd fit) gives each half the WHOLE
+        // scroll band instead of fighting the other for it.
+        readonly VisualElement hullPage, reportPage;
+        readonly Button pageHull, pageReport;
+        int overviewPage;
+
+        // ---- success feedback (docs/SHIPYARD-UX-AUDIT.md item 2): Confirm
+        // used to close in the same call that set Message = "Refit
+        // confirmed.", so nobody ever saw it. This view replaces the
+        // overview for one beat after a successful Confirm with a plain-
+        // language summary of what just happened and an explicit OK.
+        readonly VisualElement successView;
+        readonly Label successBody;
 
         // ---- section sheet -------------------------------------------------
         readonly VisualElement sheetHost;
@@ -62,6 +86,11 @@ namespace SeaSick.UI.ModularYard
             IconButton(header, "close", "Cancel and close", Close);
             var title = new Label("Shipyard"); title.AddToClassList("yard-title"); header.Add(title);
             undo = IconButton(header, "undo", "Undo last change", () => { CloseSection(); draft.Undo(); });
+            // The tooltip above is invisible on a phone with no hover --
+            // this line says the same thing on screen, only while there is
+            // nothing to undo (docs/SHIPYARD-UX-AUDIT.md item 4).
+            undoReason = new Label(); undoReason.AddToClassList("yard-caption"); undoReason.AddToClassList("yard-deck-reason");
+            undoReason.style.marginLeft = 12; undoReason.style.marginTop = 0; Add(undoReason);
             var body = Row(this, "yard-body");
             var viewport = new VisualElement(); viewport.AddToClassList("yard-viewport"); body.Add(viewport);
             image = new Image { scaleMode = ScaleMode.StretchToFill }; image.AddToClassList("yard-render"); viewport.Add(image);
@@ -75,24 +104,55 @@ namespace SeaSick.UI.ModularYard
             // ---- overview: tiles, summary, beam, warnings, confirm/cancel
             overview = new VisualElement(); overview.style.flexGrow = 1f; overview.style.minHeight = 0; panel.Add(overview);
             var scroll = new VisualElement(); scroll.AddToClassList("yard-options"); overview.Add(scroll);
-            var h = new Label("Hull"); h.AddToClassList("yard-heading"); scroll.Add(h);
-            tiles = new VisualElement(); tiles.AddToClassList("yard-tiles"); scroll.Add(tiles);
-            var beamCaption = new Label("Beam"); beamCaption.AddToClassList("yard-caption"); scroll.Add(beamCaption);
-            var beams = Row(scroll, "yard-wheels");
+
+            var pager = Row(scroll, "yard-wheels");
+            pageHull = Command(pager, "Hull", () => SetOverviewPage(0));
+            pageReport = Command(pager, "Report", () => SetOverviewPage(1));
+
+            hullPage = new VisualElement(); hullPage.style.flexGrow = 1f; hullPage.style.minHeight = 0; scroll.Add(hullPage);
+            tiles = new VisualElement(); tiles.AddToClassList("yard-tiles"); hullPage.Add(tiles);
+            var beamCaption = new Label("Beam"); beamCaption.AddToClassList("yard-caption"); hullPage.Add(beamCaption);
+            var beams = Row(hullPage, "yard-wheels");
             beamStandard = Command(beams, "Standard", () => draft.SetWideBeam(false));
             beamWide = Command(beams, "Wide", () => draft.SetWideBeam(true));
-            var deckCaption = new Label("Deck"); deckCaption.AddToClassList("yard-caption"); scroll.Add(deckCaption);
-            var decks = Row(scroll, "yard-wheels");
+            var deckCaption = new Label("Deck"); deckCaption.AddToClassList("yard-caption"); hullPage.Add(deckCaption);
+            var decks = Row(hullPage, "yard-wheels");
             lowerAll = Command(decks, "Lower all", () => draft.LowerAll());
             raiseAll = Command(decks, "Raise all", () => draft.RaiseAll());
-            deckReason = new Label(); deckReason.AddToClassList("yard-caption"); deckReason.AddToClassList("yard-deck-reason"); scroll.Add(deckReason);
-            summary = new VisualElement(); summary.AddToClassList("yard-summary"); scroll.Add(summary);
-            warnings = new Label(); warnings.AddToClassList("yard-warnings"); scroll.Add(warnings);
+            deckReason = new Label(); deckReason.AddToClassList("yard-caption"); deckReason.AddToClassList("yard-deck-reason"); hullPage.Add(deckReason);
+            maxLengthReason = new Label(); maxLengthReason.AddToClassList("yard-caption"); maxLengthReason.AddToClassList("yard-deck-reason"); hullPage.Add(maxLengthReason);
+
+            reportPage = new VisualElement(); reportPage.style.flexGrow = 1f; reportPage.style.minHeight = 0; scroll.Add(reportPage);
+            summary = new VisualElement(); summary.AddToClassList("yard-summary"); reportPage.Add(summary);
+            // Blocking (report.blocking / CannotConfirm -- would refuse
+            // Confirm) reads in the same red/ember style a blocked gun row
+            // already uses; warnings (report.warnings, advisory only) stay
+            // the neutral note colour. Never concatenated into one label
+            // (docs/SHIPYARD-UX-AUDIT.md item 3).
+            blocking = new Label(); blocking.AddToClassList("yard-blocking-text"); reportPage.Add(blocking);
+            warnings = new Label(); warnings.AddToClassList("yard-warnings"); reportPage.Add(warnings);
+
             message = new Label(); message.AddToClassList("yard-message"); overview.Add(message);
             var footer = Row(overview, "yard-footer");
             Command(footer, "Cancel", Close);
-            confirm = Command(footer, "Confirm refit", () => { if (draft.Confirm()) Close(); });
+            confirm = Command(footer, "Confirm refit", () => {
+                string summaryText = BuildConfirmSummary();
+                if (draft.Confirm()) ShowSuccess(summaryText);
+            });
             confirm.AddToClassList("yard-confirm");
+            SetOverviewPage(0);
+
+            // ---- success view (docs/SHIPYARD-UX-AUDIT.md item 2) -- swapped
+            // in over `overview` after a successful Confirm, not closed
+            // straight away, so "Refit done: ..." is actually seen.
+            successView = new VisualElement(); successView.style.flexGrow = 1f; successView.style.minHeight = 0;
+            successView.style.display = DisplayStyle.None; panel.Add(successView);
+            var successScroll = new VisualElement(); successScroll.AddToClassList("yard-options"); successView.Add(successScroll);
+            var successHeading = new Label("Refit done"); successHeading.AddToClassList("yard-heading"); successScroll.Add(successHeading);
+            successBody = new Label(); successBody.AddToClassList("yard-details"); successScroll.Add(successBody);
+            var successFooter = Row(successView, "yard-footer");
+            var successOk = Command(successFooter, "OK", Close);
+            successOk.AddToClassList("yard-confirm");
 
             // ---- section sheet host (built lazily, swapped in over the overview)
             sheetHost = new VisualElement(); sheetHost.style.flexGrow = 1f; sheetHost.style.minHeight = 0;
@@ -138,6 +198,8 @@ namespace SeaSick.UI.ModularYard
             string key = configuration.ToJson() + "|" + previewHighlight;
             if (key != builtKey) { preview.Build(draft.Assembly, previewHighlight, configuration); builtKey = key; }
             undo.SetEnabled(draft.CanUndo);
+            undoReason.text = draft.CanUndo ? "" : "Nothing to undo yet.";
+            undoReason.style.display = draft.CanUndo ? DisplayStyle.None : DisplayStyle.Flex;
             badge.text = openSectionKey != null ? "SECTION" : (draft.Highlight != null && draft.Highlight.StartsWith("middle[") ? "NEW SECTION" : "PREVIEW");
 
             if (openSectionKey != null)
@@ -187,8 +249,57 @@ namespace SeaSick.UI.ModularYard
             confirm.tooltip = blocked ?? "Apply this refit";
             string status = preview.Error ?? (!string.IsNullOrEmpty(draft.Message) ? draft.Message :
                 draft.HasBackend ? (draft.Dirty ? blocked ?? "Ready to refit" : "") : "Preview only - live refitting not connected");
-            message.text = status != null && status.Length > 100 ? "Refit blocked - see details" : status;
-            message.tooltip = status;
+            // The full reason, always -- a tooltip is invisible on a phone
+            // with no hover, so truncating to "see details" used to hide
+            // the only place the reason was shown at all
+            // (docs/SHIPYARD-UX-AUDIT.md item 4). `.yard-message` wraps and
+            // has no height cap for exactly this.
+            message.text = status ?? "";
+            message.tooltip = status ?? "";
+        }
+
+        void SetOverviewPage(int index)
+        {
+            overviewPage = Mathf.Clamp(index, 0, 1);
+            hullPage.style.display = overviewPage == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            reportPage.style.display = overviewPage == 1 ? DisplayStyle.Flex : DisplayStyle.None;
+            pageHull.EnableInClassList("yard-selected", overviewPage == 0);
+            pageReport.EnableInClassList("yard-selected", overviewPage == 1);
+        }
+
+        /// Plain-language summary of what a successful Confirm just did,
+        /// captured BEFORE `ShipyardDraft.Confirm()` runs (it overwrites
+        /// `Message` with "Refit confirmed." and clears the undo stack) --
+        /// so this reads the same report the overview's Report page was
+        /// already showing the player (docs/SHIPYARD-UX-AUDIT.md item 2).
+        string BuildConfirmSummary()
+        {
+            var report = live?.Report(draft.Snapshot());
+            var parts = new List<string>();
+            var sections = report?.Figure("sections");
+            if (sections != null && sections.available)
+            {
+                int delta = Mathf.RoundToInt(sections.proposed - sections.current);
+                if (delta != 0) parts.Add((delta > 0 ? "+" : "") + delta + (Mathf.Abs(delta) == 1 ? " section" : " sections"));
+            }
+            if (report != null)
+                foreach (var note in report.warnings)
+                    if (note.code != "PROVISIONAL_TUNING") parts.Add(note.message);
+            // Guns-to-dry-dock is carried as `draft.Message` by the structural
+            // edits that caused it (RemoveSection/RemoveMiddle/ToggleSection),
+            // not by the report -- pick it up here if it is still the live
+            // message and hasn't already been said another way.
+            if (!string.IsNullOrEmpty(draft.Message) && draft.Message.Contains("dry dock") && !parts.Contains(draft.Message))
+                parts.Add(draft.Message);
+            return parts.Count > 0 ? "Refit done: " + string.Join(", ", parts) : "Refit done.";
+        }
+
+        void ShowSuccess(string text)
+        {
+            CloseSection();
+            overview.style.display = DisplayStyle.None;
+            successBody.text = text;
+            successView.style.display = DisplayStyle.Flex;
         }
 
         /// One tile per `SectionKeys()` entry, a "+" insert tile between
@@ -199,11 +310,16 @@ namespace SeaSick.UI.ModularYard
         void RefreshTiles()
         {
             var keys = draft.SectionKeys();
-            string key = string.Join(",", keys) + "|" + draft.IsWideBeam + "|" + (draft.Count < draft.Maximum);
+            // The "+" tiles are now ALWAYS present (see InsertTile/
+            // UpdateInsertTile) -- at max length they stay, disabled, with
+            // the reason on screen, rather than vanishing with no
+            // explanation (docs/SHIPYARD-UX-AUDIT.md item 2). So the
+            // rebuild key no longer needs `Count < Maximum`: that only
+            // changes enabled state, handled every refresh below.
+            string key = string.Join(",", keys) + "|" + draft.IsWideBeam;
             if (key != tilesKey)
             {
                 tiles.Clear();
-                bool canInsert = draft.Count < draft.Maximum;
                 for (int i = 0; i < keys.Count; i++)
                 {
                     tiles.Add(SectionTile(keys[i]));
@@ -211,14 +327,18 @@ namespace SeaSick.UI.ModularYard
                     // A "+" belongs between every pair of hull sections --
                     // i.e. after every tile except the very last (the bow) --
                     // so it always inserts a MIDDLE at this position.
-                    if (canInsert && !afterLast) tiles.Add(InsertTile(MiddleInsertIndexAfter(keys[i])));
+                    if (!afterLast) tiles.Add(InsertTile(MiddleInsertIndexAfter(keys[i])));
                 }
                 tilesKey = key;
             }
             for (int i = 0; i < tiles.childCount; i++)
             {
                 if (tiles[i].userData is string sectionKey) UpdateTile(tiles[i], sectionKey);
+                else if (tiles[i].userData is int insertIndex) UpdateInsertTile(tiles[i], insertIndex);
             }
+            bool atMax = draft.Count >= draft.Maximum;
+            maxLengthReason.text = atMax ? $"Longest hull: {draft.Maximum} middle section{(draft.Maximum == 1 ? "" : "s")}." : "";
+            maxLengthReason.style.display = atMax ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         /// The `InsertMiddle` index a "+" tile placed right after `key`
@@ -248,10 +368,22 @@ namespace SeaSick.UI.ModularYard
 
         Button InsertTile(int index)
         {
-            var b = new Button(() => draft.InsertMiddle(index)) { text = "+" };
+            var b = new Button(() => draft.InsertMiddle(index)) { text = "+", userData = index };
             b.AddToClassList("yard-tile-insert");
-            b.tooltip = "Add a middle section here";
             return b;
+        }
+
+        /// Kept enabled/reasoned every refresh rather than rebuilt --
+        /// stays on screen at max length instead of disappearing
+        /// (docs/SHIPYARD-UX-AUDIT.md item 2, "the overview's Insert tile
+        /// table"). The reason is ALSO shown as `maxLengthReason` below the
+        /// tile row (tooltip alone is invisible on phone).
+        void UpdateInsertTile(VisualElement tile, int index)
+        {
+            if (!(tile is Button b)) return;
+            bool atMax = draft.Count >= draft.Maximum;
+            b.SetEnabled(!draft.Committed && !atMax);
+            b.tooltip = atMax ? $"Longest hull: {draft.Maximum} middle section{(draft.Maximum == 1 ? "" : "s")}." : "Add a middle section here";
         }
 
         void UpdateTile(VisualElement tile, string key)
@@ -308,15 +440,31 @@ namespace SeaSick.UI.ModularYard
             Item("weightAllowance", "Cargo allowance");
         }
 
+        /// Blocking (report.blocking, plus `refitNowBlockedBecause` -- would
+        /// refuse Confirm) and warnings (report.warnings, advisory) are kept
+        /// in SEPARATE labels/styles now, never joined into one list
+        /// (docs/SHIPYARD-UX-AUDIT.md item 3: "a blocking reason and an FYI
+        /// read identically"). Every line that exists is listed -- nothing
+        /// is dropped for space; the Report page has the whole band to
+        /// itself for exactly this (see the overview paging above).
         void RefreshWarnings(ShipyardReport report)
         {
-            if (report == null) { warnings.text = ""; return; }
-            var lines = new List<string>();
-            foreach (var note in report.warnings) if (note.code != "PROVISIONAL_TUNING") lines.Add(note.message);
-            foreach (var issue in report.blocking) lines.Add(issue.message);
-            if (!string.IsNullOrEmpty(report.refitNowBlockedBecause)) lines.Add(report.refitNowBlockedBecause);
-            warnings.text = string.Join("\n", lines);
-            warnings.style.display = lines.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            if (report == null)
+            {
+                blocking.text = ""; blocking.style.display = DisplayStyle.None;
+                warnings.text = ""; warnings.style.display = DisplayStyle.None;
+                return;
+            }
+            var blockingLines = new List<string>();
+            foreach (var issue in report.blocking) blockingLines.Add(issue.message);
+            if (!string.IsNullOrEmpty(report.refitNowBlockedBecause)) blockingLines.Add(report.refitNowBlockedBecause);
+            blocking.text = string.Join("\n", blockingLines);
+            blocking.style.display = blockingLines.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+
+            var warningLines = new List<string>();
+            foreach (var note in report.warnings) if (note.code != "PROVISIONAL_TUNING") warningLines.Add(note.message);
+            warnings.text = string.Join("\n", warningLines);
+            warnings.style.display = warningLines.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         static string FormatFigure(ShipyardFigure figure, string label = null)
