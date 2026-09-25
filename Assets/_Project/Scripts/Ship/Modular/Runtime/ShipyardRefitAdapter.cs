@@ -91,5 +91,20 @@ namespace SeaSick.Ship.Modular
             if (s != null) return s.RemoveEquipment(draft, slotId);
             return new ShipyardEdit { ok = false, code = "NO_SHIP", message = "There is no ship to refit.", draft = draft };
         }
+
+        // ---- interior space budget (2026-09-25, docs/SHIPYARD-SECTIONS-UI.md step 2) --
+
+        public SectionSpaceView SectionSpace(ShipConfiguration draft, string sectionKey)
+        {
+            var s = S;
+            return s != null ? s.SectionSpace(draft, sectionKey)
+                : new SectionSpaceView { section = sectionKey ?? "", reason = "There is no ship to refit." };
+        }
+
+        public ShipConfiguration WithBerths(ShipConfiguration draft, string sectionKey, int berths)
+        {
+            var s = S;
+            return s != null ? s.WithBerths(draft, sectionKey, berths) : (draft != null ? draft.Clone() : new ShipConfiguration());
+        }
     }
 }

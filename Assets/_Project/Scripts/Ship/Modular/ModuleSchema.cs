@@ -95,6 +95,10 @@ namespace SeaSick.Ship.Modular
         public string axisConvention;
         /// Upper limit on repeated middle sections (Astra verified 0-3 bays).
         public int maxMiddles;
+        /// One berth's cost in a section's interior space budget (A4 hold-
+        /// cell units), 2026-09-25 (docs/SHIPYARD-SECTIONS-UI.md step 2).
+        /// PROVISIONAL. 0/unset falls back to 0.5 (ModuleLibrary.BerthSpaceUnits).
+        public float berthSpaceUnits;
         public JoinProfile[] joinProfiles;
         public MountStandard[] mountStandards;
         public SlotClass[] slotClasses;
@@ -247,6 +251,11 @@ namespace SeaSick.Ship.Modular
         /// of the assembled ship (checked by the shipyard, not trusted).
         /// One id per gun; a gun PAIR needs a port and a starboard id.
         public ProvisionalSlots gunSlots;
+        /// OPTIONAL floor-area cap on this section's berths (2026-09-25,
+        /// docs/SHIPYARD-SECTIONS-UI.md step 2), independent of the space
+        /// budget. Null = uncapped by floor area; the budget alone caps it
+        /// (`floor(budget / berthSpaceUnits)`).
+        public ProvisionalInt maxBerths;
         /// How the numbers were chosen (for the next person to retune them).
         public string rule;
     }

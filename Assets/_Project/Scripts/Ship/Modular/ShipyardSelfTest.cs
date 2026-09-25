@@ -517,6 +517,104 @@ namespace SeaSick.Ship.Modular
                 Gate("derived-capacity-cross-check", true, string.Join("; ", diff));
             }
 
+            // ---- interior space budget (2026-09-25, docs/SHIPYARD-SECTIONS-UI.md step 2) --
+            {
+                // The DEFAULT layout (no `layouts` entry at all) must
+                // reproduce every hull module's authored capacity EXACTLY --
+                // the guarantee the whole budget model rests on.
+                var rows = new List<string>();
+                bool allMatch = true; int checkedCount = 0;
+                foreach (var d in lib.All)
+                {
+                    if (!ModuleKind.IsHull(d.kind) || d.capacity?.holdCells == null || d.capacity?.berths == null) continue;
+                    checkedCount++;
+                    ShipyardPlanner.SectionSpaceFor(d, lib, null, "x", out float budget, out float cost,
+                        out int secBerths, out int hold, out int defB, out int maxB);
+                    bool ok = hold == d.capacity.holdCells.value && secBerths == d.capacity.berths.value && defB == d.capacity.berths.value;
+                    allMatch &= ok;
+                    rows.Add($"{d.id}: budget {F(budget)} default berths {defB} -> hold {hold} (authored {d.capacity.holdCells.value}), maxBerths {maxB}" + (ok ? "" : " MISMATCH"));
+                }
+                Gate("interior-default-layout-reproduces-authored-capacity-every-module", allMatch && checkedCount > 0,
+                    checkedCount + " modules: " + string.Join(" | ", rows));
+
+                // SectionSpace on a real draft agrees with the planner's own
+                // section list (same numbers, two call paths).
+                var ilDraft = ShipConfiguration.Long();
+                var mid0 = longPlan.sections.Find(s => s.sectionKey == "middle[0]");
+                var space = ShipyardInterior.SectionSpace(ilDraft, "middle[0]", lib);
+                Gate("interior-section-space-matches-planned-section", string.IsNullOrEmpty(space.reason) && mid0 != null
+                    && space.berths == mid0.berths && space.holdCells == mid0.holdCells && space.defaultBerths == mid0.berths,
+                    $"berths {space.berths} hold {space.holdCells} budget {F(space.budgetUnits)} max {space.maxBerths} reason='{space.reason}'");
+
+                // WithBerths: all-hold, and clamped both ways (below 0, past maxBerths).
+                var allHold = ShipyardInterior.WithBerths(ilDraft, "middle[0]", 0, lib);
+                var allHoldSpace = ShipyardInterior.SectionSpace(allHold, "middle[0]", lib);
+                Gate("interior-with-berths-zero-is-all-hold", allHoldSpace.berths == 0
+                    && allHoldSpace.holdCells == Mathf.FloorToInt(allHoldSpace.budgetUnits + 1e-4f),
+                    $"berths {allHoldSpace.berths} hold {allHoldSpace.holdCells} budget {F(allHoldSpace.budgetUnits)}");
+                var overMax = ShipyardInterior.WithBerths(ilDraft, "middle[0]", 9999, lib);
+                var overMaxSpace = ShipyardInterior.SectionSpace(overMax, "middle[0]", lib);
+                var underMin = ShipyardInterior.WithBerths(ilDraft, "middle[0]", -50, lib);
+                var underMinSpace = ShipyardInterior.SectionSpace(underMin, "middle[0]", lib);
+                Gate("interior-with-berths-clamps-both-ways", overMaxSpace.berths == space.maxBerths && underMinSpace.berths == 0,
+                    $"9999 -> {overMaxSpace.berths} (max {space.maxBerths}); -50 -> {underMinSpace.berths}");
+
+                // Setting back to the default REMOVES the layouts entry
+                // (round trip to default is invisible to ValueEquals).
+                var backToDefault = ShipyardInterior.WithBerths(allHold, "middle[0]", space.defaultBerths, lib);
+                Gate("interior-with-berths-back-to-default-clears-layouts-entry", backToDefault.ValueEquals(ilDraft),
+                    backToDefault.ToJson());
+
+                // Section not found / no capacity: a readable reason, not a throw.
+                var noSuchSection = ShipyardInterior.SectionSpace(ilDraft, "middle[7]", lib);
+                Gate("interior-section-space-unknown-section-has-reason", !string.IsNullOrEmpty(noSuchSection.reason), noSuchSection.reason);
+
+                // ---- renumbering on insert/remove (ShipConfiguration.ShiftMiddleKeys) --
+                var ilThree = ShipConfiguration.WithMiddles(3);
+                ilThree.layouts.Add(new SectionLayout { section = "middle[0]", berths = 1 });
+                ilThree.layouts.Add(new SectionLayout { section = "middle[1]", berths = 2 });
+                ilThree.layouts.Add(new SectionLayout { section = "middle[2]", berths = 3 });
+                ilThree.equipment.Add(new EquipmentChoice { slotId = "middle[1]/Test", moduleId = "test" });
+                ilThree.equipment.Add(new EquipmentChoice { slotId = "middle[2]/Test", moduleId = "test" });
+
+                var inserted = ilThree.Clone();
+                ShipConfiguration.ShiftMiddleKeys(inserted, 1, 1); // a middle inserted AT index 1
+                bool insertOk = inserted.layouts.Count == 3
+                    && inserted.layouts.Exists(l => l.section == "middle[0]" && l.berths == 1)
+                    && inserted.layouts.Exists(l => l.section == "middle[2]" && l.berths == 2)
+                    && inserted.layouts.Exists(l => l.section == "middle[3]" && l.berths == 3)
+                    && inserted.equipment.Exists(e => e.slotId == "middle[2]/Test") && inserted.equipment.Exists(e => e.slotId == "middle[3]/Test");
+                Gate("shift-middle-keys-insert-renumbers-layouts-and-equipment", insertOk,
+                    string.Join(", ", inserted.layouts.ConvertAll(l => l.section + ":" + l.berths)) + " | " + string.Join(", ", inserted.equipment.ConvertAll(e => e.slotId)));
+
+                var removed = ilThree.Clone();
+                removed.layouts.RemoveAll(l => l.section == "middle[1]");
+                removed.equipment.RemoveAll(e => e.slotId.StartsWith("middle[1]/"));
+                ShipConfiguration.ShiftMiddleKeys(removed, 2, -1); // middle[1] just left; later keys shift down
+                bool removeOk = removed.layouts.Count == 2
+                    && removed.layouts.Exists(l => l.section == "middle[0]" && l.berths == 1)
+                    && removed.layouts.Exists(l => l.section == "middle[1]" && l.berths == 3)
+                    && removed.equipment.Exists(e => e.slotId == "middle[1]/Test") && !removed.equipment.Exists(e => e.slotId == "middle[2]/Test");
+                Gate("shift-middle-keys-remove-renumbers-layouts-and-equipment", removeOk,
+                    string.Join(", ", removed.layouts.ConvertAll(l => l.section + ":" + l.berths)) + " | " + string.Join(", ", removed.equipment.ConvertAll(e => e.slotId)));
+
+                // ---- JSON round trip, and a missing `layouts` field = defaults --
+                var withLayout = ShipConfiguration.Long();
+                withLayout.layouts.Add(new SectionLayout { section = "middle[0]", berths = 2 });
+                string wlJson = withLayout.ToJson();
+                var wlBack = ShipConfiguration.FromJson(wlJson);
+                Gate("layouts-json-round-trip", wlBack != null && wlBack.ValueEquals(withLayout)
+                    && wlBack.layouts.Count == 1 && wlBack.layouts[0].section == "middle[0]" && wlBack.layouts[0].berths == 2,
+                    wlJson);
+
+                string strippedJson = System.Text.RegularExpressions.Regex.Replace(ModularJson.To(ShipConfiguration.Long()),
+                    ",?\"layouts\"\\s*:\\s*\\[[^\\]]*\\]", "");
+                var strippedBack = ShipConfiguration.FromJson(strippedJson);
+                Gate("missing-layouts-field-is-defaults", strippedBack != null && strippedBack.layouts.Count == 0
+                    && strippedBack.ValueEquals(ShipConfiguration.Long()) && !strippedJson.Contains("\"layouts\""),
+                    strippedJson);
+            }
+
             // ---- retention -----------------------------------------------------
             var loaded = new LiveShipSnapshot { config = ShipConfiguration.Long(), totalHeld = 16, kindsOnDeck = 4, crewAboard = 8 };
             var toLong = ShipyardPlanner.Validate(ShipConfiguration.Long(), lib, reference, loaded);

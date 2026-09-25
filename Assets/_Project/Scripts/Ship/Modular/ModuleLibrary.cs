@@ -32,6 +32,10 @@ namespace SeaSick.Ship.Modular
         public bool Usable => Standards != null;
         public float MetresPerUnit => Standards != null ? Standards.metresPerUnit : 0f;
         public int MaxMiddles => Standards != null ? Standards.maxMiddles : 0;
+        /// One berth's cost in a section's interior space budget, U
+        /// (2026-09-25, docs/SHIPYARD-SECTIONS-UI.md step 2). Falls back to
+        /// 0.5 if standards.json omits or zeroes it (should never happen).
+        public float BerthSpaceUnits => Standards != null && Standards.berthSpaceUnits > 0f ? Standards.berthSpaceUnits : 0.5f;
         public IReadOnlyList<ModuleDef> All => ordered;
 
         public ModuleDef Get(string id)

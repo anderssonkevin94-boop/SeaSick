@@ -3,7 +3,8 @@
     "metresPerUnit": 0.5,
     "axisConvention": "authoring = Blender V8 units, +X bow, +Y port, +Z up; game = (-y, z, x) * metresPerUnit (game +Z bow, +X starboard, +Y up)",
     "maxMiddles": 3,
-    "notes": "metresPerUnit 0.5 decided 2026-09-24 (uniform; see docs/MODULAR-SHIPS.md for the derivation). maxMiddles 3 = the bay counts Astra verified closed in Blender (0-3).",
+    "berthSpaceUnits": 0.5,
+    "notes": "metresPerUnit 0.5 decided 2026-09-24 (uniform; see docs/MODULAR-SHIPS.md for the derivation). maxMiddles 3 = the bay counts Astra verified closed in Blender (0-3). berthSpaceUnits 0.5 (2026-09-25, docs/SHIPYARD-SECTIONS-UI.md step 2): one berth's cost in a section's interior space budget (hold-cell units) -- a bunk + its share of access, PROVISIONAL.",
     "joinProfiles": [
         {
             "id": "W1-r2",

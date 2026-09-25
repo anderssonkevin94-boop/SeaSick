@@ -844,3 +844,96 @@ probes) are in docs/RAISED-SECTIONS.md's own implementation-notes section.
   `ModularShipPreview`, task item 6) — none of these were started. The
   existing all-raised UI (§16, `IsRaisedDeck`/`SetRaisedDeck`) still works
   unchanged; it simply does not yet expose per-section control.
+
+## §18 Interior space budget per section (step 2, docs/SHIPYARD-SECTIONS-UI.md),
+## C# half, 2026-09-25 (Claude/Opus)
+
+Worktree `/Users/kevinandersson/Desktop/SeaSick-modular`, branch
+`modular-ships`, HEAD 51f871b. Unity never launched this session either;
+`tools/modular-selftest.sh` went 192 → 202 PASS, 0 FAIL. Backend only --
+the Interior UI page (docs/SHIPYARD-SECTIONS-UI.md step 2) is a separate
+agent's work, against the exact names below.
+
+- `ShipConfiguration.layouts : List<SectionLayout>` (`SectionLayout { string
+  section; int berths; }`, keyed like `equipment` -- "stern", "middle[0]",
+  "bow"). Additive, no schemaVersion bump; a missing entry (every save
+  written before this field existed included) is the section's AUTHORED
+  default. `Clone`/`ValueEquals`/JSON round-trip all cover it (gated).
+- `standards.json` gained `"berthSpaceUnits": 0.5` (one berth's cost, hold-
+  cell units); `ModuleLibrary.BerthSpaceUnits` reads it, falling back to 0.5.
+  `ModuleSchema.CapacitySpec` gained an optional `maxBerths` (`ProvisionalInt`,
+  null = uncapped by floor area) -- no module authors one yet.
+- A section's budget = authored `holdCells` + `berthSpaceUnits` * authored
+  `berths` (hold-cell units); DEFAULT berths (no `layouts` entry) reproduce
+  the authored `holdCells` EXACTLY, by construction (subtracting what was
+  just added back cancels bit-for-bit) -- gated over every one of the 14
+  hull modules in Resources/ShipModules/Modules, not just the 3 standard
+  ones. `maxBerths` = `floor(budget / berthSpaceUnits)`, capped by the
+  module's own authored `maxBerths` if it has one.
+- `ShipyardPlanner.SectionSpaceFor(ModuleDef, ModuleLibrary, ShipConfiguration
+  cfg, string sectionKey, out budgetUnits, out berthCost, out berths,
+  out holdCells, out defaultBerths, out maxBerths)` is the ONE place this is
+  computed; `cfg` may be null (= every section at its default). Both
+  `ShipyardPlanner.SectionCapacities` (now `(asm, lib, cfg, viewZ, out
+  missing)` -- the old 4-arg overload still exists, `cfg` null) and the new
+  `ShipyardInterior.SectionSpace` call it, so the applied capacity (what
+  `PlanFor`/`ApplyRefit` build the ship from) and the UI's own numbers can
+  never disagree. `berths` is clamped to `[0, maxBerths]` even for an
+  out-of-range `layouts` entry (a hand-edited save), so `holdCells` is never
+  negative.
+- Existing rules already see it, no change needed: `CheckRetention`'s
+  `CARGO_WOULD_NOT_FIT` reads `draft.capacity.holdCells`; `GUNS_NEED_CREW`
+  and `handsAshore` read `draftPlan.capacity.crewStations` -- both now sums
+  of the layout-aware `SectionCapacity.holdCells`/`.berths`.
+- `ShipyardInterior` (new, pure, same shape as `ShipyardEquipment`):
+  `SectionSpace(ShipConfiguration draft, string sectionKey, ModuleLibrary
+  lib) -> SectionSpaceView { string section; float budgetUnits; float
+  berthCost; int berths; int holdCells; int defaultBerths; int minBerths;
+  int maxBerths; string reason; }` (`reason` non-empty = unreadable: does
+  not assemble, no such section, or `NO_CAPACITY`). `WithBerths(draft,
+  sectionKey, berths, lib) -> ShipConfiguration`, clamped, an UNCHANGED copy
+  on a bad section. Setting berths back to the section's default REMOVES its
+  `layouts` entry (rather than writing a redundant one) so a round trip to
+  default and back stays `ValueEquals` to an untouched draft.
+- `ShipyardService.SectionSpace(draft, sectionKey)` / `.WithBerths(draft,
+  sectionKey, berths)` are thin wrappers (fill in `Library`);
+  `ShipyardRefitAdapter` mirrors both exactly for the UI, returning a
+  `reason`-only view / an unchanged clone when there is no ship.
+- `ShipConfiguration.ShiftMiddleKeys(ShipConfiguration cfg, int fromIndex,
+  int delta)` (static; the config is the first argument -- the design doc's
+  short-form call omits it): renumbers every `"middle[i]"` key `>=
+  fromIndex` by `delta` (+1 insert, -1 remove) in BOTH `equipment` slot ids
+  and `layouts[].section`, in place, leaving a key that would go negative
+  untouched. `ShipyardPlanner.Occupancy`'s own middle-removability probe
+  (`SectionOccupancy.canRemove`) now calls it instead of a hand-rolled
+  equipment-only loop, so its layouts move with the bay too. The UI's own
+  draft (`UI/ModularYard/ShipyardDraft.cs`, `InsertMiddle`/`RemoveSection`)
+  may call this directly or keep an equivalent for `equipment` alone --
+  either way the KEYING SCHEME must stay identical (both lists keyed
+  exactly like `ShipAssembler.MiddleKey`).
+- Save: no new field -- `layouts` rides inside the existing
+  `ShipConfiguration` JSON the save's `ship.modular` field already carries
+  (`ModularSave.Encode`/`Decode`), so it needed no code change; verified by
+  a pure JSON-path self-test gate and a live save/load round trip in
+  `ShipyardRefitProbe`.
+- `ShipyardRefitProbe` gained a refit case with a non-default layout: stern
+  all hold, `middle[0]` at max berths, BUILT through
+  `SectionSpace`/`WithBerths` (never a hand-built `SectionLayout`), checked
+  against the live `ShipyardPlan.sections` after `ApplyRefit` and against
+  `voyage.HoldCapacity`, then round-tripped through a real save/load (the
+  existing `ValueEquals` save gate now covers `layouts` for free; one more
+  gate checks the hold capacity survives too).
+- Self-test: 10 new gates --
+  `interior-default-layout-reproduces-authored-capacity-every-module` (all
+  14 hull modules), `interior-section-space-matches-planned-section`,
+  `interior-with-berths-zero-is-all-hold`,
+  `interior-with-berths-clamps-both-ways`,
+  `interior-with-berths-back-to-default-clears-layouts-entry`,
+  `interior-section-space-unknown-section-has-reason`,
+  `shift-middle-keys-insert-renumbers-layouts-and-equipment`,
+  `shift-middle-keys-remove-renumbers-layouts-and-equipment`,
+  `layouts-json-round-trip`, `missing-layouts-field-is-defaults`.
+- **Not done this session** (out of scope, explicitly the UI agent's):
+  the Interior page itself (`UI/ModularYard/`), `InsertMiddle`/
+  `RemoveSection`/`BeginSection`/`ResetSection` (step 1), and
+  `ShipyardUiProbe`'s Interior +/- clamp coverage.

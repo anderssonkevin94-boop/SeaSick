@@ -242,6 +242,37 @@ namespace SeaSick.Ship.Modular
         public bool authored;
     }
 
+    /// One section's interior space budget, for the UI's Interior page
+    /// (2026-09-25, docs/SHIPYARD-SECTIONS-UI.md step 2). Pure; `reason`
+    /// non-empty when the section cannot be edited (no such section, no
+    /// authored capacity, or the draft does not assemble) -- `berths` and
+    /// `holdCells` are still filled in that case (0), never left stale.
+    [Serializable]
+    public class SectionSpaceView
+    {
+        public string section;
+        /// Hold-cell units this section has to spend, aft to fore (authored
+        /// holdCells + berthCost * authored berths -- the DEFAULT layout
+        /// reproduces the authored holdCells exactly).
+        public float budgetUnits;
+        /// One berth's cost, in the same units (ModuleLibrary.BerthSpaceUnits).
+        public float berthCost;
+        /// The draft's current choice for this section (its `layouts` entry,
+        /// or `defaultBerths` when it has none), clamped to [minBerths, maxBerths].
+        public int berths;
+        /// Derived: floor(budgetUnits - berthCost * berths).
+        public int holdCells;
+        /// The section's AUTHORED berths (`capacity.berths.value`) -- what a
+        /// missing `layouts` entry means, and what reproduces today's hold
+        /// cells exactly.
+        public int defaultBerths;
+        public int minBerths;
+        /// floor(budgetUnits / berthCost), capped by the module's own
+        /// authored `capacity.maxBerths` if it has one (floor area).
+        public int maxBerths;
+        public string reason = "";
+    }
+
     /// One thing positioned on the hull that a refit must keep a place for.
     [Serializable]
     public class PositionedItem
@@ -703,8 +734,10 @@ namespace SeaSick.Ship.Modular
             int slots = 0;
             foreach (var s in asm.slots) if (s.role == SocketRole.DeckSlot) slots++;
 
-            // Capacity (A4): the installed sections' AUTHORED blocks, summed.
-            p.sections = SectionCapacities(asm, lib, p.viewOffset.z, out p.capacityMissing);
+            // Capacity (A4, layout-aware since 2026-09-25 step 2): the
+            // installed sections' interior-space-budget blocks, summed --
+            // `cfg`'s own `layouts` (missing entry = the section's default).
+            p.sections = SectionCapacities(asm, lib, cfg, p.viewOffset.z, out p.capacityMissing);
             int hold = 0, berths = 0, gunSlots = 0;
             foreach (var sc in p.sections) { hold += sc.holdCells; berths += sc.berths; gunSlots += sc.gunSlotIds.Count; }
 
@@ -808,6 +841,36 @@ namespace SeaSick.Ship.Modular
             return list;
         }
 
+        /// A section's interior space budget (2026-09-25 step 2, both the
+        /// planner's own SectionCapacities and ShipyardInterior.SectionSpace
+        /// share this one computation): budget = authored holdCells +
+        /// berthCost * authored berths, so DEFAULT berths (no `cfg`/no entry
+        /// for `sectionKey`) reproduces the authored `holdCells` exactly
+        /// (budget - berthCost*defaultBerths == authored holdCells,
+        /// cancelling bit-for-bit). `berths` is clamped to [0, maxBerths]
+        /// even for a bad/out-of-range `layouts` entry (e.g. a hand-edited
+        /// save), so `holdCells` is never negative.
+        public static void SectionSpaceFor(ModuleDef d, ModuleLibrary lib, ShipConfiguration cfg, string sectionKey,
+            out float budgetUnits, out float berthCost, out int berths, out int holdCells,
+            out int defaultBerths, out int maxBerths)
+        {
+            var c = d?.capacity;
+            berthCost = lib != null ? lib.BerthSpaceUnits : 0.5f;
+            int authoredHold = c != null && c.holdCells != null ? Mathf.Max(0, c.holdCells.value) : 0;
+            int authoredBerths = c != null && c.berths != null ? Mathf.Max(0, c.berths.value) : 0;
+            defaultBerths = authoredBerths;
+            budgetUnits = authoredHold + berthCost * authoredBerths;
+            int byBudget = berthCost > 0f ? Mathf.FloorToInt(budgetUnits / berthCost + 1e-4f) : 0;
+            int authoredMax = c != null && c.maxBerths != null ? Mathf.Max(0, c.maxBerths.value) : int.MaxValue;
+            maxBerths = Mathf.Max(0, Mathf.Min(byBudget, authoredMax));
+            berths = defaultBerths;
+            if (cfg?.layouts != null)
+                foreach (var l in cfg.layouts)
+                    if (l != null && l.section == sectionKey) { berths = l.berths; break; }
+            berths = Mathf.Clamp(berths, 0, maxBerths);
+            holdCells = Mathf.Max(0, Mathf.FloorToInt(budgetUnits - berthCost * berths + 1e-4f));
+        }
+
         /// The installed hull sections, aft to fore, with their authored
         /// capacity, ship-frame z span (the ends open-ended) and VALIDATED gun
         /// slots. A listed gun slot counts only if: it is one of the module's
@@ -815,7 +878,16 @@ namespace SeaSick.Ship.Modular
         /// clearance box is non-empty, inside the section (length, and the
         /// join profile's half-beam) and overlaps no crew passage of the
         /// assembled ship (strict, as ShipAssembler checks equipment).
-        public static List<SectionCapacity> SectionCapacities(AssemblyResult asm, ModuleLibrary lib, float viewZ, out string missing)
+        /// Back-compat overload (no draft): every section at its DEFAULT
+        /// layout (no `layouts` overrides at all).
+        public static List<SectionCapacity> SectionCapacities(AssemblyResult asm, ModuleLibrary lib, float viewZ, out string missing) =>
+            SectionCapacities(asm, lib, null, viewZ, out missing);
+
+        /// `cfg`'s own `layouts` (2026-09-25 step 2) pick each section's
+        /// berths vs hold within its interior space budget; a section with
+        /// no entry (or `cfg` null) uses its AUTHORED default, which
+        /// reproduces `holdCells`/`berths` exactly (`SectionSpaceFor`).
+        public static List<SectionCapacity> SectionCapacities(AssemblyResult asm, ModuleLibrary lib, ShipConfiguration cfg, float viewZ, out string missing)
         {
             missing = null;
             var list = new List<SectionCapacity>();
@@ -836,8 +908,7 @@ namespace SeaSick.Ship.Modular
                 var c = d.capacity;
                 sc.authored = c != null && c.holdCells != null && c.berths != null;
                 if (!sc.authored) { missing = missing == null ? ModuleLibrary.Name(d) : missing + ", " + ModuleLibrary.Name(d); continue; }
-                sc.holdCells = Mathf.Max(0, c.holdCells.value);
-                sc.berths = Mathf.Max(0, c.berths.value);
+                SectionSpaceFor(d, lib, cfg, sc.sectionKey, out _, out _, out sc.berths, out sc.holdCells, out _, out _);
                 if (c.gunSlots?.ids == null) continue;
 
                 float half = 0f;
@@ -984,18 +1055,13 @@ namespace SeaSick.Ship.Modular
                 without.middleIds.RemoveAt(idx);
                 // Guns on the leaving bay go to the dry dock, never block the
                 // removal (Kevin, 2026-09-25; ShipyardDraft.RemoveMiddle does
-                // the same); later bays' slots shift down one index.
-                if (without.equipment != null)
-                {
-                    string gone = ShipAssembler.MiddleKey(idx) + "/";
-                    without.equipment.RemoveAll(e => e?.slotId != null && e.slotId.StartsWith(gone));
-                    for (int j = idx + 1; j < p.config.middleIds.Count; j++)
-                    {
-                        string from = ShipAssembler.MiddleKey(j) + "/", to = ShipAssembler.MiddleKey(j - 1) + "/";
-                        foreach (var e in without.equipment)
-                            if (e?.slotId != null && e.slotId.StartsWith(from)) e.slotId = to + e.slotId.Substring(from.Length);
-                    }
-                }
+                // the same); its own interior-layout choice leaves with it;
+                // later bays' equipment AND layouts shift down one index
+                // (ShipConfiguration.ShiftMiddleKeys, step 2).
+                string gone = ShipAssembler.MiddleKey(idx);
+                without.equipment?.RemoveAll(e => e?.slotId != null && e.slotId.StartsWith(gone + "/"));
+                without.layouts?.RemoveAll(l => l != null && l.section == gone);
+                ShipConfiguration.ShiftMiddleKeys(without, idx + 1, -1);
                 var w = ShipyardPlanner.Validate(without, lib, reference, live, false);
                 o.canRemove = w.ok;
                 o.reason = w.ok ? "" : w.issues[0].message;
@@ -1095,6 +1161,69 @@ namespace SeaSick.Ship.Modular
         public static float DeckYAt(HullFormData data, float z) => data.stations[NearestStation(data, z)].deckY;
 
         public static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
+    /// Interior space budget per section (2026-09-25, step 2 of
+    /// docs/SHIPYARD-SECTIONS-UI.md): the pure half of
+    /// `ShipyardService.SectionSpace`/`WithBerths`. Never touches the ship,
+    /// the dock or the save -- same shape as `ShipyardEquipment`.
+    public static class ShipyardInterior
+    {
+        /// The section's space budget, current choice and limits. `reason`
+        /// non-empty (and berths/holdCells left 0) when it cannot be read:
+        /// the draft does not assemble, `sectionKey` names no hull section
+        /// of it, or that section has no authored capacity (NO_CAPACITY).
+        public static SectionSpaceView SectionSpace(ShipConfiguration draft, string sectionKey, ModuleLibrary lib)
+        {
+            var view = new SectionSpaceView { section = sectionKey ?? "" };
+            if (draft == null) { view.reason = "There is no design to check."; return view; }
+            if (lib == null || !lib.Usable) { view.reason = "The ship module data could not be loaded."; return view; }
+            var asm = ShipAssembler.Assemble(draft, lib);
+            if (!asm.ok) { view.reason = "This configuration does not assemble."; return view; }
+            ModuleDef def = null;
+            bool found = false;
+            foreach (var pm in asm.placed)
+            {
+                if (!ModuleKind.IsHull(pm.kind) || pm.instanceKey != sectionKey) continue;
+                if (lib.TryGet(pm.moduleId, out def)) found = true;
+                break;
+            }
+            if (!found || def == null) { view.reason = "There is no such section on this ship."; return view; }
+            if (def.capacity == null || def.capacity.holdCells == null || def.capacity.berths == null)
+            {
+                view.reason = "No capacity is written down for " + ModuleLibrary.Name(def) + ", so her interior cannot be planned.";
+                return view;
+            }
+            ShipyardPlanner.SectionSpaceFor(def, lib, draft, sectionKey, out view.budgetUnits, out view.berthCost,
+                out view.berths, out view.holdCells, out view.defaultBerths, out view.maxBerths);
+            return view;
+        }
+
+        /// A NEW draft with `sectionKey`'s berths set to `berths`, clamped to
+        /// [minBerths, maxBerths] (`SectionSpace`). An UNCHANGED copy of
+        /// `draft` when the section cannot be read (see `SectionSpace`'s
+        /// `reason`) -- never throws, never touches the caller's own draft.
+        /// Setting the clamped value back to the section's default REMOVES
+        /// its `layouts` entry rather than writing a redundant one, so a
+        /// round trip to default and back is invisible to `ValueEquals`.
+        public static ShipConfiguration WithBerths(ShipConfiguration draft, string sectionKey, int berths, ModuleLibrary lib)
+        {
+            var next = draft != null ? draft.Clone() : new ShipConfiguration();
+            var space = SectionSpace(next, sectionKey, lib);
+            if (!string.IsNullOrEmpty(space.reason)) return next;
+            int clamped = Mathf.Clamp(berths, space.minBerths, space.maxBerths);
+            if (next.layouts == null) next.layouts = new List<SectionLayout>();
+            SectionLayout row = null;
+            foreach (var l in next.layouts) if (l != null && l.section == sectionKey) { row = l; break; }
+            if (clamped == space.defaultBerths)
+            {
+                if (row != null) next.layouts.Remove(row);
+                return next;
+            }
+            if (row == null) { row = new SectionLayout { section = sectionKey }; next.layouts.Add(row); }
+            row.berths = clamped;
+            return next;
+        }
     }
 
     /// The ShipSave.modular field (D-S). Empty = the ship was never refitted:

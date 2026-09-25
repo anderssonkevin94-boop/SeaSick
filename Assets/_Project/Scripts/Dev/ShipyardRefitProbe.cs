@@ -167,11 +167,41 @@ public class ShipyardRefitProbe : MonoBehaviour
         if (!anchor.BerthAtHome(out string bw)) sb.AppendLine("could not re-berth: " + bw);
         yield return new WaitForSeconds(1f);
 
-        // ---- (c) save / load ------------------------------------------------
+        // ---- (c) save / load, with a non-default interior layout (2026-09-25 step 2) --
         var saveA = System.IO.Path.Combine(tmp, "ShipyardRefitProbe-a.json");
         var saveOld = System.IO.Path.Combine(tmp, "ShipyardRefitProbe-old.json");
         for (int i = Crew().Count - 1; i >= 4; i--) { var h = Crew()[i]; landed.Add(h); h.gameObject.SetActive(false); }
-        yield return RefitAndCheck("three-bays-for-save", ShipConfiguration.WithMiddles(3));
+
+        // A NON-DEFAULT layout (docs/SHIPYARD-SECTIONS-UI.md step 2): the
+        // stern all hold, the first middle bay at its max berths -- through
+        // the same SectionSpace/WithBerths pure API Astra's Interior page
+        // calls, never hand-built layouts.
+        var layoutBase = ShipConfiguration.WithMiddles(3);
+        var sternSpace0 = yard.SectionSpace(layoutBase, "stern");
+        var midSpace0 = yard.SectionSpace(layoutBase, "middle[0]");
+        Gate("interior-layout: sections readable", string.IsNullOrEmpty(sternSpace0.reason) && string.IsNullOrEmpty(midSpace0.reason),
+            $"stern reason='{sternSpace0.reason}' middle[0] reason='{midSpace0.reason}'");
+        var layoutCfg = yard.WithBerths(layoutBase, "stern", 0);
+        layoutCfg = yard.WithBerths(layoutCfg, "middle[0]", midSpace0.maxBerths);
+        var sternSpace1 = yard.SectionSpace(layoutCfg, "stern");
+        var midSpace1 = yard.SectionSpace(layoutCfg, "middle[0]");
+        Gate("interior-layout: planned (stern all hold, middle[0] at max berths)",
+            sternSpace1.berths == 0 && sternSpace1.holdCells == Mathf.FloorToInt(sternSpace1.budgetUnits + 1e-4f)
+            && midSpace1.berths == midSpace1.maxBerths && midSpace1.berths > midSpace0.defaultBerths,
+            $"stern berths {sternSpace1.berths} hold {sternSpace1.holdCells}/{sternSpace1.budgetUnits:F2}; "
+            + $"middle[0] berths {midSpace1.berths}/{midSpace1.maxBerths} (default {midSpace0.defaultBerths}) hold {midSpace1.holdCells}");
+
+        yield return RefitAndCheck("three-bays-with-interior-layout-for-save", layoutCfg);
+        var appliedPlan = yard.Validate(yard.Current).draftPlan;
+        var appliedStern = appliedPlan?.sections.Find(s => s.sectionKey == "stern");
+        var appliedMid0 = appliedPlan?.sections.Find(s => s.sectionKey == "middle[0]");
+        Gate("interior-layout: applied capacity matches the plan", appliedStern != null && appliedMid0 != null
+            && appliedStern.berths == sternSpace1.berths && appliedStern.holdCells == sternSpace1.holdCells
+            && appliedMid0.berths == midSpace1.berths && appliedMid0.holdCells == midSpace1.holdCells
+            && appliedPlan != null && voyage.HoldCapacity == appliedPlan.capacity.holdCells,
+            $"stern berths {appliedStern?.berths} hold {appliedStern?.holdCells}; middle[0] berths {appliedMid0?.berths} hold {appliedMid0?.holdCells}; "
+            + $"ship hold cap {voyage.HoldCapacity} == plan {appliedPlan?.capacity.holdCells}");
+
         var savedCfg = yard.Current;
         var savedHold = HoldPerKind();
         bool wrote = SaveGame.SaveTo(saveA, "ShipyardRefitProbe");
@@ -182,9 +212,15 @@ public class ShipyardRefitProbe : MonoBehaviour
         {
             yield return SaveGame.Restore(data, this);
             yield return new WaitForSeconds(0.5f);
+            // ValueEquals (updated for step 2) checks `layouts` too, so this
+            // one gate already proves the interior layout round-trips
+            // through the save -- not just middles/rotor/equipment.
             Gate("load-brings-back-saved-configuration", SaveGame.LastRestoreOk && yard.ModularActive && yard.Current.ValueEquals(savedCfg)
                 && SameHold(savedHold, HoldPerKind()) && Mathf.Approximately(motor.HullLength, yard.ActiveData.lwl),
                 $"{SaveGame.LastRestoreNote}; middles {yard.Current.middleIds.Count}; hold {Fmt(HoldPerKind())} vs {Fmt(savedHold)}");
+            Gate("load-brings-back-interior-layout", yard.Current.layouts.Count == savedCfg.layouts.Count
+                && voyage.HoldCapacity == appliedPlan.capacity.holdCells,
+                $"layouts after load [{string.Join(", ", yard.Current.layouts.ConvertAll(l => l.section + ":" + l.berths))}] hold cap {voyage.HoldCapacity}");
             string json = System.IO.File.ReadAllText(saveA);
             string oldJson = System.Text.RegularExpressions.Regex.Replace(json, ",\\s*\"modular\"\\s*:\\s*\"(?:[^\"\\\\]|\\\\.)*\"", "");
             System.IO.File.WriteAllText(saveOld, oldJson);

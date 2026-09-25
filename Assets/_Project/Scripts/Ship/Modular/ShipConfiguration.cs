@@ -30,6 +30,14 @@ namespace SeaSick.Ship.Modular
         public string carrierId;
         public List<FittingChoice> fittings = new List<FittingChoice>();
         public List<EquipmentChoice> equipment = new List<EquipmentChoice>();
+        /// Interior space budget per section (2026-09-25,
+        /// docs/SHIPYARD-SECTIONS-UI.md step 2): berths vs hold, keyed like
+        /// `equipment` ("stern", "middle[0]", "bow"). ADDITIVE field, no
+        /// schemaVersion bump -- a missing entry (including every save
+        /// written before this field existed) is the section's AUTHORED
+        /// default (its `capacity.berths`), which reproduces today's hold
+        /// cells exactly (`ShipyardPlanner.SectionCapacities`).
+        public List<SectionLayout> layouts = new List<SectionLayout>();
 
         // ---- the V3 reference presets ------------------------------------
 
@@ -136,6 +144,7 @@ namespace SeaSick.Ship.Modular
             if (c.middleIds == null) c.middleIds = new List<string>();
             if (c.fittings == null) c.fittings = new List<FittingChoice>();
             if (c.equipment == null) c.equipment = new List<EquipmentChoice>();
+            if (c.layouts == null) c.layouts = new List<SectionLayout>();
             return c;
         }
 
@@ -163,12 +172,67 @@ namespace SeaSick.Ship.Modular
                 if (!Same(a.slotId, b.slotId) || !Same(a.moduleId, b.moduleId)) return false;
                 if ((a.offsetU - b.offsetU).sqrMagnitude > 1e-10f) return false;
             }
+            if (Count(layouts) != Count(o.layouts)) return false;
+            for (int i = 0; i < Count(layouts); i++)
+            {
+                var a = layouts[i]; var b = o.layouts[i];
+                if (a == null || b == null) { if (a != b) return false; continue; }
+                if (!Same(a.section, b.section) || a.berths != b.berths) return false;
+            }
             return true;
         }
 
         static int Count<T>(List<T> l) => l == null ? 0 : l.Count;
         // JsonUtility writes a null string as "", so treat the two as equal.
         static bool Same(string a, string b) => (a ?? "") == (b ?? "");
+
+        // ---- section-key renumbering (2026-09-25, docs/SHIPYARD-SECTIONS-UI.md) --
+
+        /// Renumbers every `"middle[i]"` key with `i >= fromIndex` by
+        /// `delta` (+1 when a middle is INSERTED at `fromIndex`, -1 when one
+        /// is REMOVED at `fromIndex`), in place on `cfg` -- both in
+        /// `equipment` slot ids (qualified `"<section>/<rest>"`) and in
+        /// `layouts` (`section` is the whole key). A key that would go
+        /// negative is left untouched (defensive; no caller should produce
+        /// one). The UI's own draft (`UI/ModularYard/ShipyardDraft.cs`) may
+        /// call this too, or keep its own equivalent for `equipment` --
+        /// either way the section-key SCHEME (both lists keyed the same as
+        /// `ShipAssembler.MiddleKey`) must not drift.
+        public static void ShiftMiddleKeys(ShipConfiguration cfg, int fromIndex, int delta)
+        {
+            if (cfg == null || delta == 0) return;
+            if (cfg.equipment != null)
+                foreach (var e in cfg.equipment)
+                {
+                    if (e?.slotId == null) continue;
+                    int slash = e.slotId.IndexOf('/');
+                    string section = slash >= 0 ? e.slotId.Substring(0, slash) : e.slotId;
+                    int idx = MiddleIndexOf(section);
+                    if (idx < 0 || idx < fromIndex) continue;
+                    int next = idx + delta;
+                    if (next < 0) continue;
+                    string rest = slash >= 0 ? e.slotId.Substring(slash) : "";
+                    e.slotId = MiddleKeyOf(next) + rest;
+                }
+            if (cfg.layouts != null)
+                foreach (var l in cfg.layouts)
+                {
+                    if (l == null) continue;
+                    int idx = MiddleIndexOf(l.section);
+                    if (idx < 0 || idx < fromIndex) continue;
+                    int next = idx + delta;
+                    if (next < 0) continue;
+                    l.section = MiddleKeyOf(next);
+                }
+        }
+
+        static string MiddleKeyOf(int i) => $"middle[{i}]";
+
+        static int MiddleIndexOf(string key)
+        {
+            if (string.IsNullOrEmpty(key) || !key.StartsWith("middle[") || !key.EndsWith("]")) return -1;
+            return int.TryParse(key.Substring(7, key.Length - 8), out int i) ? i : -1;
+        }
     }
 
     [Serializable]
@@ -189,5 +253,17 @@ namespace SeaSick.Ship.Modular
         /// Shift from the slot's socket, in the slot module's authoring axes.
         /// Zero on fixed slots; the position on a free-placement deck area.
         public Vector3 offsetU;
+    }
+
+    /// One hull section's interior space budget choice (2026-09-25,
+    /// docs/SHIPYARD-SECTIONS-UI.md step 2): berths vs hold. Missing from
+    /// `ShipConfiguration.layouts` = the section's authored default.
+    [Serializable]
+    public class SectionLayout
+    {
+        /// "stern", "middle[0]", .., "bow" -- same keying as `equipment`'s
+        /// qualified slot ids (the part before the "/").
+        public string section;
+        public int berths;
     }
 }

@@ -228,6 +228,20 @@ namespace SeaSick.Ship.Modular
         public IReadOnlyList<DryDockRow> DryDockPreview(ShipConfiguration draft) =>
             ShipyardEquipment.DockPreview(current, draft, dock, Library);
 
+        // ---- interior space budget (2026-09-25, docs/SHIPYARD-SECTIONS-UI.md step 2) --
+        //
+        // Pure: read-only for the draft, never touch the ship, the dock or
+        // the save. `WithBerths` returns a NEW draft (see ShipyardInterior).
+
+        /// `sectionKey`'s space budget, current choice and limits, for the
+        /// UI's Interior page.
+        public SectionSpaceView SectionSpace(ShipConfiguration draft, string sectionKey) =>
+            ShipyardInterior.SectionSpace(draft, sectionKey, Library);
+
+        /// A NEW draft with `sectionKey`'s berths set to `berths`, clamped.
+        public ShipConfiguration WithBerths(ShipConfiguration draft, string sectionKey, int berths) =>
+            ShipyardInterior.WithBerths(draft, sectionKey, berths, Library);
+
         /// Whether a refit may be applied right now, and if not, why (a
         /// sentence for the player).
         public bool CanRefitNow(out string reason)
