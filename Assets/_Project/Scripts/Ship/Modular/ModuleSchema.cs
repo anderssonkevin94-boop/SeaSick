@@ -116,6 +116,13 @@ namespace SeaSick.Ship.Modular
         public float keelZU;
         public string description;
         public string sourceNote;
+        /// Raised-deck families only (e.g. W1xR): absolute authoring Z of the
+        /// flush upper deck (4.20 for W1xR). 0 = not a raised profile.
+        /// `deckZU` stays the flotation/depth datum (unchanged from the
+        /// non-raised profile the family is built over) so `sDepth` stays 1;
+        /// this is the NEW datum crew stand on and equipment above 1.76
+        /// resolves against. See docs/RAISED-DECK.md sec 3/6.
+        public float upperDeckZU;
     }
 
     /// A wheel mount interface (stern pocket + carrier + rotor).
@@ -194,6 +201,34 @@ namespace SeaSick.Ship.Modular
         /// sections. Every field is provisional data. Null = none (a hull
         /// section without it cannot be planned: NO_CAPACITY).
         public CapacitySpec capacity;
+        /// Raised-deck families only (docs/RAISED-DECK.md sec 6): the mass
+        /// this module adds ABOVE its non-raised counterpart (the deck cap +
+        /// topside walls from the old deck to the new upper deck), already
+        /// included in `lightship.massKg` (NOT additive on top of it -- this
+        /// block exists so the sim can find the extra mass's own height and
+        /// raise the ship's CoM/GM/roll gyradius by it). Null = no raised
+        /// upper structure on this module.
+        public UpperStructureSpec upperStructure;
+    }
+
+    /// See `ModuleDef.upperStructure`. Every mass in kg, every height an
+    /// ABSOLUTE authoring Z (module datum, same frame as a socket's posU.z),
+    /// not a delta -- callers subtract the profile's keelZU themselves, the
+    /// same way `kg`/`kb` are heights above the keel.
+    [Serializable]
+    public class UpperStructureSpec
+    {
+        /// deckMassKg + wallMassKg. Already inside lightship.massKg once.
+        public float massKg;
+        /// Mass-weighted: (deckMassKg*upperDeckZU + wallMassKg*wallAreaCentroidZU) / massKg.
+        public float centroidZU;
+        public float deckMassKg;
+        public float deckAreaM2;
+        public float wallMassKg;
+        public float wallAreaM2;
+        /// Area centroid of the topside walls (old deck to upper deck), Z.
+        public float wallAreaCentroidZU;
+        public string source;
     }
 
     /// Authored per-module capacity (A4, 2026-09-24). Tunable numbers, not

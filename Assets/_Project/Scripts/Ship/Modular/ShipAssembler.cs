@@ -116,6 +116,23 @@ namespace SeaSick.Ship.Modular
     {
         const float Eps = 1e-3f;
 
+        /// Raised-deck family (docs/RAISED-DECK.md sec 2): the chimney's
+        /// assembled-midpoint X on a W1xR ship needs this offset so a
+        /// one-middle raised ship lands on the raised kit's own manifest
+        /// position (today's unmodified midpoint formula overshoots by
+        /// 0.84 u). standards.json/SocketDef have no per-family offset
+        /// field for this (by design -- see hull.stern.w1xr.v1.json's
+        /// Chimney socket note); it lives here instead. Unverified for a
+        /// two-middle raised ship (Astra's manifest only gives the
+        /// one-middle chimney_position) but applied the same way per the
+        /// spec's note.
+        const float RaisedChimneyMidpointOffsetU = -0.84f;
+        const string RaisedFamily = "W1xR";
+
+        /// Raised-deck family bay-count gate (docs/RAISED-DECK.md sec 3):
+        /// the kit only closes with 1 or 2 middle bays.
+        const int RaisedDeckMinMiddles = 1, RaisedDeckMaxMiddles = 2;
+
         public const string StdKeyStern = "stern";
         public const string StdKeyBow = "bow";
         public const string StdKeyRotor = "rotor";
@@ -214,6 +231,18 @@ namespace SeaSick.Ship.Modular
 
             instances.TryGetValue(StdKeyStern, out var stern);
             instances.TryGetValue(StdKeyBow, out var bow);
+
+            // Raised-deck bay count (docs/RAISED-DECK.md sec 3): a mixed
+            // family is already refused above by JOIN_PROFILE_MISMATCH (the
+            // raised sockets carry standard "W1xR", which no W1x/W1-r2
+            // socket names), so by the time either end is confirmed W1xR the
+            // whole intact chain is raised. 0 or >= 3 middles closes the kit
+            // wrong; refused with its own readable code, in addition to
+            // whatever TOO_MANY_MIDDLES already said for the >= 3 case.
+            bool raisedEnd = (stern != null && stern.def.family == RaisedFamily) || (bow != null && bow.def.family == RaisedFamily);
+            if (raisedEnd && (middles.Count < RaisedDeckMinMiddles || middles.Count > RaisedDeckMaxMiddles))
+                Reject(r, "RAISED_DECK_BAYS", "middleIds", "A raised deck is built for one or two middle bays.");
+
             Vector3 aftEndU = Vector3.zero, tipU = Vector3.zero;
             if (stern != null)
             {
@@ -313,6 +342,7 @@ namespace SeaSick.Ship.Modular
                 {
                     if (!chainIntact) continue; // the hull reasons are already reported
                     pos.x = (aftEndU.x + tipU.x) * 0.5f;
+                    if (host.def.family == RaisedFamily) pos.x += RaisedChimneyMidpointOffsetU;
                 }
                 var inst = new Instance { def = def, key = "fitting:" + part, originU = pos,
                     rotation = ModularScale.AuthoringYawToGame(socket.yawDeg) };
