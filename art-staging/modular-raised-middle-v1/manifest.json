@@ -1,0 +1,485 @@
+{
+  "interface": "W1-center-expansion-r1",
+  "middle_length": 6,
+  "deck_height": 4.2,
+  "beam": 12.08,
+  "source_axes": "+X forward, +Y port, +Z up",
+  "export_axes": "game (-y,z,x)",
+  "assemblies": {
+    "one_middle": {
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 1758
+    },
+    "two_middle": {
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 1864
+    }
+  },
+  "modules": {
+    "Stern_W1": {
+      "Carrier": {
+        "file": "Stern_W1/Carrier.fbx",
+        "position": [
+          0.7200002670288086,
+          0.0,
+          0.3499999940395355
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 260
+      },
+      "RaisedStern__Hatch": {
+        "file": "Stern_W1/RaisedStern__Hatch.fbx",
+        "position": [
+          6.75,
+          0.0,
+          4.360000133514404
+        ],
+        "rotation_radians": [
+          -0.0,
+          -1.3962633609771729,
+          -0.0
+        ],
+        "triangles": 36
+      },
+      "RaisedStern__InternalLadder": {
+        "file": "Stern_W1/RaisedStern__InternalLadder.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "triangles": 108
+      },
+      "RaisedStern__PortalFrames": {
+        "file": "Stern_W1/RaisedStern__PortalFrames.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          -0.0,
+          0.0
+        ],
+        "triangles": 48
+      },
+      "RaisedStern__UpperBraceBolts": {
+        "file": "Stern_W1/RaisedStern__UpperBraceBolts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 160
+      },
+      "RaisedStern__UpperPlanks": {
+        "file": "Stern_W1/RaisedStern__UpperPlanks.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 600
+      },
+      "RaisedStern__UpperPosts": {
+        "file": "Stern_W1/RaisedStern__UpperPosts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 300
+      },
+      "RaisedStern__UpperRails": {
+        "file": "Stern_W1/RaisedStern__UpperRails.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 300
+      },
+      "Rotor": {
+        "file": "Stern_W1/Rotor.fbx",
+        "position": [
+          0.7200002670288086,
+          0.0,
+          0.3499999940395355
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 1616
+      },
+      "Stern_W1__Helm": {
+        "file": "Stern_W1/Stern_W1__Helm.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 280
+      },
+      "Stern_W1__Hull_Ironwork": {
+        "file": "Stern_W1/Stern_W1__Hull_Ironwork.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 852
+      },
+      "Stern_W1__Hull_Shell": {
+        "file": "Stern_W1/Stern_W1__Hull_Shell.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 948
+      },
+      "Stern_W1__Plank_Seams": {
+        "file": "Stern_W1/Stern_W1__Plank_Seams.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 432
+      }
+    },
+    "Midship_W1": {
+      "Midship_W1__Hull_Ironwork": {
+        "file": "Midship_W1/Midship_W1__Hull_Ironwork.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 328
+      },
+      "Midship_W1__Hull_Shell": {
+        "file": "Midship_W1/Midship_W1__Hull_Shell.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 104
+      },
+      "Midship_W1__Plank_Seams": {
+        "file": "Midship_W1/Midship_W1__Plank_Seams.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 32
+      },
+      "RaisedMiddle__UpperBraceBolts": {
+        "file": "Midship_W1/RaisedMiddle__UpperBraceBolts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 80
+      },
+      "RaisedMiddle__UpperPlanks": {
+        "file": "Midship_W1/RaisedMiddle__UpperPlanks.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 480
+      },
+      "RaisedMiddle__UpperPosts": {
+        "file": "Midship_W1/RaisedMiddle__UpperPosts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 144
+      },
+      "RaisedMiddle__UpperRails": {
+        "file": "Midship_W1/RaisedMiddle__UpperRails.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 56
+      }
+    },
+    "Bow_W1": {
+      "Bow_W1__Hull_Ironwork": {
+        "file": "Bow_W1/Bow_W1__Hull_Ironwork.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 424
+      },
+      "Bow_W1__Hull_Shell": {
+        "file": "Bow_W1/Bow_W1__Hull_Shell.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 704
+      },
+      "Bow_W1__Plank_Seams": {
+        "file": "Bow_W1/Bow_W1__Plank_Seams.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 400
+      },
+      "Bow_W1__Prow": {
+        "file": "Bow_W1/Bow_W1__Prow.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 60
+      },
+      "RaisedBowV2__Hatch": {
+        "file": "Bow_W1/RaisedBowV2__Hatch.fbx",
+        "position": [
+          2.549999952316284,
+          0.0,
+          4.360000133514404
+        ],
+        "rotation_radians": [
+          0.0,
+          1.3962633609771729,
+          0.0
+        ],
+        "triangles": 36
+      },
+      "RaisedBowV2__InternalLadder": {
+        "file": "Bow_W1/RaisedBowV2__InternalLadder.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 108
+      },
+      "RaisedBowV2__PlankDetails": {
+        "file": "Bow_W1/RaisedBowV2__PlankDetails.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 624
+      },
+      "RaisedBowV2__PortalFrames": {
+        "file": "Bow_W1/RaisedBowV2__PortalFrames.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 48
+      },
+      "RaisedBowV2__StemExtension": {
+        "file": "Bow_W1/RaisedBowV2__StemExtension.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 12
+      },
+      "RaisedBowV2__UpperBraceBolts": {
+        "file": "Bow_W1/RaisedBowV2__UpperBraceBolts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 80
+      },
+      "RaisedBowV2__UpperPosts": {
+        "file": "Bow_W1/RaisedBowV2__UpperPosts.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 240
+      },
+      "RaisedBowV2__UpperRails": {
+        "file": "Bow_W1/RaisedBowV2__UpperRails.fbx",
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "rotation_radians": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "triangles": 240
+      }
+    }
+  },
+  "chimney_position": [
+    12.300000190734863,
+    0.0,
+    4.199999809265137
+  ],
+  "triangles": 10296,
+  "chimney_file": "Fittings/Chimney.fbx"
+}

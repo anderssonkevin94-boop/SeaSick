@@ -1,0 +1,130 @@
+{
+  "Carrier": {
+    "triangles": 260,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedStern__Hatch": {
+    "triangles": 36,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedStern__InternalLadder": {
+    "triangles": 108,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedStern__PortalFrames": {
+    "triangles": 48,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedStern__UpperBraceBolts": {
+    "triangles": 160,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedStern__UpperPlanks": {
+    "triangles": 600,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedStern__UpperPosts": {
+    "triangles": 300,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedStern__UpperRails": {
+    "triangles": 300,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Rotor": {
+    "triangles": 1616,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Stern_W1__Helm": {
+    "triangles": 280,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Stern_W1__Hull_Ironwork": {
+    "triangles": 852,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Stern_W1__Hull_Shell": {
+    "triangles": 948,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Stern_W1__Plank_Seams": {
+    "triangles": 432,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Midship_W1__Hull_Ironwork": {
+    "triangles": 328,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Midship_W1__Hull_Shell": {
+    "triangles": 104,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Midship_W1__Plank_Seams": {
+    "triangles": 32,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedMiddle__UpperBraceBolts": {
+    "triangles": 80,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedMiddle__UpperPlanks": {
+    "triangles": 480,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedMiddle__UpperPosts": {
+    "triangles": 144,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedMiddle__UpperRails": {
+    "triangles": 56,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Bow_W1__Hull_Ironwork": {
+    "triangles": 424,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Bow_W1__Hull_Shell": {
+    "triangles": 704,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Bow_W1__Plank_Seams": {
+    "triangles": 400,
+    "vertex_colors_and_flat_normals": true
+  },
+  "Bow_W1__Prow": {
+    "triangles": 60,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedBowV2__Hatch": {
+    "triangles": 36,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedBowV2__InternalLadder": {
+    "triangles": 108,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedBowV2__PlankDetails": {
+    "triangles": 624,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedBowV2__PortalFrames": {
+    "triangles": 48,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedBowV2__StemExtension": {
+    "triangles": 12,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedBowV2__UpperBraceBolts": {
+    "triangles": 80,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedBowV2__UpperPosts": {
+    "triangles": 240,
+    "vertex_colors_and_flat_normals": true
+  },
+  "RaisedBowV2__UpperRails": {
+    "triangles": 240,
+    "vertex_colors_and_flat_normals": true
+  }
+}

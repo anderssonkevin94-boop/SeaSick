@@ -1,0 +1,381 @@
+{
+    "schemaVersion": 1,
+    "id": "hull.middle.w1xr.v1",
+    "version": 1,
+    "kind": "Middle",
+    "family": "W1xR",
+    "status": "prototype",
+    "displayName": "Midship_W1 (raised deck, W1xR)",
+    "description": "Raised-deck variant of hull.middle.w1x.v1: same W1x lower hull (below Z 1.76) with a flush upper deck at Z 4.20 (between-deck 2.44 u = 1.22 m). Visuals ONLY from the raised kit (art-staging/modular-raised-middle-v1); never mixed with the w1x/w1r2 shell. See docs/RAISED-DECK.md.",
+    "source": "art-staging/modular-raised-middle-v1/manifest.json",
+    "lengthU": 6.0,
+    "boundsMinU": {
+        "x": 0,
+        "y": -6.25,
+        "z": -1.92
+    },
+    "boundsMaxU": {
+        "x": 6.0,
+        "y": 6.25,
+        "z": 4.2
+    },
+    "boundsNote": "X/Y UNCHANGED from hull.middle.w1x.v1 (lower hull/beam untouched by this kit). Z max = the raised Hull_Shell's measured top (deck cap), 4.2 u -- measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1).",
+    "sockets": [
+        {
+            "id": "AftSocket",
+            "role": "hull.aft",
+            "standard": "W1xR",
+            "posU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "ForwardSocket",
+            "role": "hull.fwd",
+            "standard": "W1xR",
+            "posU": {
+                "x": 6.0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": false,
+            "notes": ""
+        },
+        {
+            "id": "DeckSlot_0_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 1.5,
+                "y": -4.85,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard from W1-r2's 3.45 by +1.4; see docs/EXPANDED-HULL-VALIDATION.md 'Gun slots'. NEW gun pair (spec sec 5): sockets/equipmentSlots already existed in the w1x source; added to capacity.gunSlots here. Provisional -- assembler check pending."
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 1.5,
+                "y": 4.85,
+                "z": 4.2
+            },
+            "yawDeg": 180,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard by +1.4; see DeckSlot_0_-1. NEW gun pair (spec sec 5): sockets/equipmentSlots already existed in the w1x source; added to capacity.gunSlots here. Provisional -- assembler check pending."
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 3.5,
+                "y": -4.85,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard by +1.4; see DeckSlot_0_-1."
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 3.5,
+                "y": 4.85,
+                "z": 4.2
+            },
+            "yawDeg": 180,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Y moved outboard by +1.4; see DeckSlot_0_-1."
+        },
+        {
+            "id": "DeckAreaSocket",
+            "role": "deck.area",
+            "standard": "",
+            "posU": {
+                "x": 3.0,
+                "y": 0,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Centre of the free-placement deck area of this bay."
+        }
+    ],
+    "visuals": [
+        {
+            "id": "Midship_W1__Hull_Ironwork",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Midship_W1/Midship_W1__Hull_Ironwork",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Midship_W1.Midship_W1__Hull_Ironwork, 328 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "Midship_W1__Hull_Shell",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Midship_W1/Midship_W1__Hull_Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Midship_W1.Midship_W1__Hull_Shell, 104 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "Midship_W1__Plank_Seams",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Midship_W1/Midship_W1__Plank_Seams",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Midship_W1.Midship_W1__Plank_Seams, 32 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedMiddle__UpperBraceBolts",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Midship_W1/RaisedMiddle__UpperBraceBolts",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Midship_W1.RaisedMiddle__UpperBraceBolts, 80 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedMiddle__UpperPlanks",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Midship_W1/RaisedMiddle__UpperPlanks",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Midship_W1.RaisedMiddle__UpperPlanks, 480 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedMiddle__UpperPosts",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Midship_W1/RaisedMiddle__UpperPosts",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Midship_W1.RaisedMiddle__UpperPosts, 144 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        },
+        {
+            "id": "RaisedMiddle__UpperRails",
+            "resourcePath": "ShipModules/Meshes/HullW1xR_v1/Midship_W1/RaisedMiddle__UpperRails",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "manifest.json modules.Midship_W1.RaisedMiddle__UpperRails, 56 triangles; measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1): export-verification.json confirms triangle count and vertex-color/flat-normal export for this FBX."
+        }
+    ],
+    "equipmentSlots": [
+        {
+            "id": "DeckSlot_0_-1",
+            "socketId": "DeckSlot_0_-1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks. NEW gun pair added to capacity here (spec sec 5); provisional, assembler check pending."
+        },
+        {
+            "id": "DeckSlot_0_1",
+            "socketId": "DeckSlot_0_1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks. NEW gun pair added to capacity here (spec sec 5); provisional, assembler check pending."
+        },
+        {
+            "id": "DeckSlot_1_-1",
+            "socketId": "DeckSlot_1_-1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        },
+        {
+            "id": "DeckSlot_1_1",
+            "socketId": "DeckSlot_1_1",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Clearance = the same 1.8 x 2.3 x 1.65 box W1-r2's real-cannon slots use (fits Astra's cannon-astra-v1, 1.22 x 2.1816 x 1.2756), unchanged in size; only the Y POSITION moves outboard with the deck edge (see 'Gun slots' in docs/EXPANDED-HULL-VALIDATION.md for the derivation: same passage half-width, slots move outboard by +1.4 u, the same amount the hull's shoulders moved). Verified live by ExpandedHullValidation against the assembler's own clearance/passage checks."
+        },
+        {
+            "id": "DeckArea",
+            "socketId": "DeckAreaSocket",
+            "clearanceSizeU": {
+                "x": 6.0,
+                "y": 12.08,
+                "z": 2.66
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "PROVISIONAL free-placement area: the whole bay deck (length 6.00 x the NEW deck beam 12.08), height 2.66 unchanged. Equipment here reserves its own footprint; it must still keep out of the crew passage."
+        }
+    ],
+    "passages": [
+        {
+            "id": "CrewPassage_Main",
+            "centreU": {
+                "x": 3.0,
+                "y": 0,
+                "z": 5.9
+            },
+            "sizeU": {
+                "x": 6.0,
+                "y": 4.6,
+                "z": 3.4
+            },
+            "provisional": true,
+            "notes": "Z raised with the deck (4.20 + 1.70 = 5.90); X/Y extents UNCHANGED from the w1x passage (never narrowed, per docs/RAISED-DECK.md sec 4) -- height stays 3.4 u. PROVISIONAL, UNCHANGED from W1-r2's own passage (|y| <= 2.30): the expanded beam adds width OUTBOARD of the deck-slot line only (the insert sits between the original hull halves and the unmoved centreline), so the centreline crew corridor is untouched. Derivation and the chosen alternative (widening the passage instead) are documented in docs/EXPANDED-HULL-VALIDATION.md."
+        }
+    ],
+    "hydrostatics": {
+        "resourcePath": "ShipModules/Hydrostatics/HullW1xR_v1/Midship_W1",
+        "sourceGeometrySha256": "176cc9d41373dc1116258dc5288324a7e98ddfd4ec587a524f3964e68cf96a96",
+        "validWaterlineZU": [
+            -1.9199999570846558,
+            4.2
+        ],
+        "offsetZU": 0,
+        "notes": "Claude/Opus 2026-09-25 (RaisedDeckData, export_raised_hydrostatics.py wrapping Astra's export_hull_hydrostatics.py on the raised kit's Midship_W1__Hull_Shell.fbx, deck_z=4.20). Table-match gate vs hull.middle.w1x.v1's table below Z 1.76: volume at 1.76 w1x 254.2866 U^3 vs w1xr 254.2866 U^3 (0.0% relative diff, gate <=0.5%); max sectional-area relative diff 0.0% (near x=5.938, a small-absolute-area bow-tip/stern-step interpolation-grid artifact after excluding bulkhead step-transition bands -- see docs/RAISED-DECK.md Data results). Both PASS the 0.5% gate. Integrated volume to 4.20: 431.1378 U^3."
+    },
+    "lightship": {
+        "massKg": 16215.2,
+        "provisional": true,
+        "rule": "13264.4 kg (hull.middle.w1x.v1 lightship) + 2950.8 kg (measured upper structure: deck 18.12 m^2 x 110 kg/m^2 = 1993.2 kg, plus topside walls 10.08 m^2 x 95 kg/m^2 = 957.6 kg) = 16215.2 kg. Deck area = the Hull_Shell's own flat top cap footprint at Z 4.2 (the structural deck), NOT the decorative UpperPlanks/PlankDetails trim mesh (its footprint is only 0.507 m^2, a small fraction of the deck plan -- it is plank-seam detailing over part of the deck, not the deck surface). Wall area excludes the deck-cap band (centroid z > shell z-max - 0.05) so it is not double counted. measured 2026-09-25 (RaisedDeckData, Blender --background, art-staging/modular-raised-middle-v1)."
+    },
+    "capacity": {
+        "holdCells": {
+            "value": 10,
+            "provisional": true,
+            "source": "w1x Midship_W1 holdCells (7) + round(0.7 x upperVol / 38.229): upperVol = this module's OWN W1xR hydrostatic table integrated to 4.20 minus to 1.76 (176.851 U^3, measured, not the sec-5 deck-waterplane x 2.44 estimate) -> round(0.7 x 176.851 / 38.229) = 3 -> 7 + 3 = 10."
+        },
+        "berths": {
+            "value": 6,
+            "provisional": true,
+            "source": "w1x Midship_W1 berths (5) + floor(0.3 x deckArea / 12.8 U^2): deckArea = measured W1xR deck-cap footprint (72.480 U^2, Blender) -> floor(0.3 x 72.480 / 12.8) = 1 -> 5 + 1 = 6."
+        },
+        "gunSlots": {
+            "ids": [
+                "DeckSlot_1_-1",
+                "DeckSlot_1_1",
+                "DeckSlot_0_-1",
+                "DeckSlot_0_1"
+            ],
+            "provisional": true,
+            "source": "Same designated pair W1-r2's middle uses (DeckSlot_1), moved outboard with the deck edge; both pass the assembler's clearance/passage check against the real cannon (ExpandedHullValidation). PLUS the new ['DeckSlot_0_-1', 'DeckSlot_0_1'] pair (upper deck, Z 4.20, spec sec 5): sockets/equipmentSlots already existed in the w1x source; provisional, assembler check pending."
+        },
+        "rule": "Seeded 2026-09-25 (RaisedDeckData): w1x module capacity + the raised deltas from docs/RAISED-DECK.md sec 5, using this module's own measured W1xR hydrostatic table and Blender deck footprint (not the sec-5 estimate numbers). PROVISIONAL, tune freely."
+    },
+    "physical": {
+        "massKg": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "displacementM3": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "cargoCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "crewCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "thrustCoefficient": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "upperStructure": {
+        "massKg": 2950.8,
+        "centroidZU": 3.6548,
+        "deckMassKg": 1993.2,
+        "deckAreaM2": 18.12,
+        "wallMassKg": 957.6,
+        "wallAreaM2": 10.08,
+        "wallAreaCentroidZU": 2.5200001417761917,
+        "source": "Blender measurement 2026-09-25 (RaisedDeckData, tools/blender/measure_raised_modules.py). centroidZU = mass-weighted: (deckMassKg*4.20 + wallMassKg*wallAreaCentroidZU) / massKg. Not read by ModuleDef yet (JsonUtility drops unknown fields on read) -- the C# half (sec 6, HullFormData mass/CoM) should add a matching field and read this."
+    }
+}
