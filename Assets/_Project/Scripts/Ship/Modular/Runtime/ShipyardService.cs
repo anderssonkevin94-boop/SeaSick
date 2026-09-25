@@ -243,13 +243,36 @@ namespace SeaSick.Ship.Modular
             ShipyardInterior.WithBerths(draft, sectionKey, berths, Library);
 
         /// Whether a refit may be applied right now, and if not, why (a
-        /// sentence for the player).
+        /// sentence for the player) -- the FIRST blocker, in priority order.
+        /// See `RefitBlockers` for every blocker at once (the ship sheet's
+        /// Shipyard button, 2026-09-26).
         public bool CanRefitNow(out string reason)
         {
-            reason = "";
-            if (reference == null) { reason = "This ship has no hull form to refit."; return false; }
-            if (!Library.Usable) { reason = "The ship module data could not be loaded."; return false; }
-            if (SeaSick.Save.SaveGame.Restoring) { reason = "A save is still loading."; return false; }
+            var blockers = RefitBlockers();
+            reason = blockers.Count > 0 ? blockers[0] : "";
+            return blockers.Count == 0;
+        }
+
+        /// **Every reason a refit is blocked right now**, not just the
+        /// first. `CanRefitNow` still exists and still means "the first of
+        /// these, or none" -- `ApplyRefit` and the probes keep asking that
+        /// question exactly as before. This is for a caller that wants to
+        /// SHOW every blocker at once (the ship sheet's Shipyard button:
+        /// Kevin's UX audit, 2026-09-26, "multiple blockers, list them all,
+        /// not one at a time") rather than make the player fix one, tap
+        /// again, and discover the next.
+        ///
+        /// The three fundamental checks (no hull form, module data
+        /// unusable, a save still loading) still short-circuit: nothing
+        /// downstream of them means anything if they fail. Everything after
+        /// is independent and all of it is collected.
+        public List<string> RefitBlockers()
+        {
+            var list = new List<string>();
+            if (reference == null) { list.Add("This ship has no hull form to refit."); return list; }
+            if (!Library.Usable) { list.Add("The ship module data could not be loaded."); return list; }
+            if (SeaSick.Save.SaveGame.Restoring) { list.Add("A save is still loading."); return list; }
+
             // "At rest" is HORIZONTAL way, and tied up at the home dock is at
             // rest by definition (2026-09-24, ShipyardRefitProbe): the full
             // velocity includes the heave of a moored hull in a lively sea,
@@ -267,34 +290,51 @@ namespace SeaSick.Ship.Modular
             if (!tiedUp && rb != null)
             {
                 var v = rb.linearVelocity; v.y = 0f;
-                if (v.magnitude > AtRestSpeed) { reason = "She is under way. Bring her to rest first."; return false; }
+                if (v.magnitude > AtRestSpeed) list.Add("She is under way. Bring her to rest first.");
             }
             if (anchor != null)
             {
                 var st = anchor.CurrentState;
                 bool moored = anchor.AtHomeDock || st == AnchorController.State.Anchored || st == AnchorController.State.Ashore;
-                if (!moored) { reason = "She must be anchored or alongside to be refitted."; return false; }
-                // Refits only happen at the home berth (2026-09-25, Kevin --
-                // stated while making the home berth itself switchable: he
-                // wants his pier at island_2, not anywhere she happens to be
-                // lying). Anchoring off a random island still counts as "at
-                // rest" above; it does not count as home.
-                if (!anchor.AtHomeDock)
+                if (!moored)
                 {
-                    reason = $"Refits are done at your home berth ({SeaSick.World.Dock.HomeLabel}).";
-                    return false;
+                    list.Add("She must be anchored or alongside to be refitted.");
+                }
+                else if (!anchor.AtHomeDock)
+                {
+                    // Refits only happen at the home berth (2026-09-25, Kevin --
+                    // stated while making the home berth itself switchable: he
+                    // wants his pier at island_2, not anywhere she happens to be
+                    // lying). Anchoring off a random island still counts as "at
+                    // rest" above; it does not count as home.
+                    list.Add($"Refits are done at your home berth ({SeaSick.World.Dock.HomeLabel}).");
+                }
+                else if (SeaSick.World.DryDockSlip.HomeSlip == null)
+                {
+                    // **The dry dock gate, 2026-09-26.** She can be moored at
+                    // the home berth with nothing to refit HER on -- the
+                    // shipyard is a building now (`SeaSick.World.DryDockSlip`),
+                    // not just a place to be.
+                    list.Add($"Build a dry dock next to your home berth ({SeaSick.World.Dock.HomeLabel}) to refit her.");
                 }
             }
-            if (SeaSick.Combat.RaidParty.Active != null) { reason = "Not during a raid."; return false; }
+            else if (SeaSick.World.DryDockSlip.HomeSlip == null)
+            {
+                // No `AnchorController` at all (a probe rig, say): the
+                // mooring checks above cannot run, but the dry dock still
+                // can, and its absence is still worth saying.
+                list.Add($"Build a dry dock next to your home berth ({SeaSick.World.Dock.HomeLabel}) to refit her.");
+            }
+            if (SeaSick.Combat.RaidParty.Active != null) list.Add("Not during a raid.");
             var lockOn = GetComponent<SeaSick.Combat.CombatLock>();
-            if (lockOn != null && lockOn.Locked != null) { reason = "Not while she is in a fight."; return false; }
+            if (lockOn != null && lockOn.Locked != null) list.Add("Not while she is in a fight.");
             foreach (var o in SeaSick.World.Outpost.All)
                 if (o != null && o.Ledger != null && o.Ledger.AnyTransferPending())
-                { reason = "Cargo is being carried between the ship and the stores. Wait for the hands to finish."; return false; }
+                { list.Add("Cargo is being carried between the ship and the stores. Wait for the hands to finish."); break; }
             foreach (var c in FindObjectsByType<SeaSick.Crew.CrewAgent>(FindObjectsSortMode.None))
                 if (c != null && c.HomeShip == transform && !c.IsAboard)
-                { reason = $"{c.DisplayName} is ashore. Call the hands back aboard first."; return false; }
-            return true;
+                { list.Add($"{c.DisplayName} is ashore. Call the hands back aboard first."); break; }
+            return list;
         }
 
         // ---- applying -------------------------------------------------------
