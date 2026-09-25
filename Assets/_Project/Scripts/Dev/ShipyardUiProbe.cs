@@ -1040,15 +1040,10 @@ public class ShipyardUiProbe : MonoBehaviour
 
     // ---- 11: Interior space budget (Step 2 backend seam) -------------------------
 
-    /// **Not runnable in this worktree yet.** `ShipyardService.SectionSpace`/
-    /// `WithBerths` and `SectionSpaceView` are the Step 2 backend's own
-    /// types (docs/SHIPYARD-SECTIONS-UI.md), built in parallel in another
-    /// worktree; `ShipyardLiveBridge.SectionSpace`/`WithBerths` (the one
-    /// seam that calls them) will not compile until that lands. Written
-    /// against the documented API so the gates are ready the moment it
-    /// does; until then this whole probe fails to compile, same as every
-    /// other file that touches the seam (ShipyardLiveBridge.cs,
-    /// ShipyardSectionSheet.cs's Interior page).
+    /// Runnable as of 14fc8a0: `ShipyardService.SectionSpace`/`WithBerths`
+    /// (Step 2 backend, docs/SHIPYARD-SECTIONS-UI.md) and the
+    /// `ShipyardLiveBridge` seam that calls them both landed, so this
+    /// section now exercises the real instance API instead of stubbing out.
     IEnumerator InteriorBudget()
     {
         sb.AppendLine("11. interior space budget (berths +/- clamps, ShipyardLiveBridge.SectionSpace/WithBerths):");
