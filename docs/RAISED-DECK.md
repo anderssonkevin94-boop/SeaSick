@@ -228,3 +228,84 @@ ForwardSocket; middle AftSocket+ForwardSocket; bow AftSocket) carry standard `W1
 - `standards.json` gained joinProfile `W1xR` (`keelZU` -1.92, `deckZU` 1.76 unchanged -- the
   flotation datum -- plus a new `upperDeckZU` 4.20 field `JsonUtility` also ignores until a field
   is added).
+
+## 11. C# implementation (Claude/Sonnet, 2026-09-25)
+
+Worktree `/Users/kevinandersson/Desktop/SeaSick-modular`, branch
+`modular-ships`, from bdb3960 (Part A + the raised-deck DATA already merged).
+Unity never launched; `tools/modular-selftest.sh` (headless dotnet compile +
+run against Unity's own Roslyn/CoreModule, not the editor) is the only thing
+actually executed — **169 PASS, 3 FAIL**, all 31 new gates PASS, the 3 FAIL
+are pre-existing (a hard-coded `lib.All.Count == 17` in
+`ModularShipSelfTest.cs` predates this branch's own module-count growth to
+20; unrelated to raised-deck, left alone, flagged for Kevin/Astra).
+
+**Schema/assembler** (§1-2, §3 bays, §4 clearance): `ModuleDef.upperStructure`,
+`JoinProfile.upperDeckZU` now read; `RAISED_DECK_BAYS` (0/≥3 middles) and the
+`-0.84 u` chimney offset (family `W1xR`, a code constant, per the socket
+note — no schema field) added to `ShipAssembler.cs`. Mixing raised with
+W1x/W1-r2 needed NO new code: the existing `JOIN_PROFILE_MISMATCH` check
+already refuses it (raised sockets carry standard `W1xR`, unique to the
+family) — verified live by 4 new gates rather than trusted. The 2 new
+`DeckSlot_0` pairs (middle, bow) were run through the REAL assembler
+(clearance box vs the real cannon vs the crew passage, `RaisedDeckValidation
+.cs`'s `raised-new-decksot0-pairs-pass-real-cannon`) — all 4 PASS, kept as
+authored; nothing was dropped from the JSON.
+
+**Physics** (§6): `HullFormData.RaiseDeck(extraY)` (new method) appends one
+wall-sided top level to every station above its old `deckY` and raises
+`deckY` itself; called from `ShipyardPlanner.PlanFor` (new hook, small diff)
+right after `Reshaped`/`PinSternFittings`, only when an installed hull
+section resolves a join profile with `upperDeckZU > deckZU`
+(`RaisedDeckPhysics.FindRaisedProfile`). `sDepth` needed no code change to
+stay 1: `HullMeasure.depthU` already reads `deckZU` (unchanged, 1.76), never
+`upperDeckZU`. Mass needed no new plumbing either: `lightship.massKg` already
+includes each module's upper structure once, and `ShipyardPlanner.PlanFor`
+already sums it into the one mass source — the actual gap was that
+`Reshaped` (sD == 1) left `kg`/`com`/`gm`/`gyradiusRoll` exactly where the
+un-raised reference had them, so the sim never knew the extra mass stood
+high. `RaisedDeckPhysics.RaiseCoM` (new file) splits `lightshipKg` back into
+"the rest of her" (at her un-raised `kg`) and each raised module's own
+`upperStructure` (deck cap at `upperDeckZU`, walls at their own
+`wallAreaCentroidZU`), re-derives `kg` as the mass-weighted combination,
+shifts `com.y`/`gm` by the same delta, and re-derives `gyradiusRoll` by the
+spec's `k² = (M0 k0² + Σ Mi(di²+ri²)) / M` formula literally (parallel-axis
+term on the base mass's own shift omitted, matching the spec's formula
+as written, not a more exact version — flagged here as a simplification if
+the measured roll ever needs to be exact rather than close).
+
+Measured (headless, `RaisedDeckValidation.cs`'s `raised-report-*` gates),
+single W1x Long vs raised Long vs raised two-bay, all at lightship:
+
+| | mass | draft | KG | GM | roll period T |
+|---|---|---|---|---|---|
+| W1x Long | 42.55 t | 0.861 m | 0.926 m | 2.875 m | 4.01 s |
+| Raised Long | 55.61 t | 0.861 m | 1.354 m | 2.447 m | 4.18 s |
+| Raised two-bay | 71.82 t | 0.861 m | 1.334 m | 2.467 m | 4.17 s |
+
+(draft unchanged: this pure-C# layer solves the DESIGN draft from `Reshaped`,
+which does not itself re-run the waterline solve after `RaiseCoM`; the live
+sim floats on `data.massKg` through `HullFormBody`, which DOES re-derive her
+real draft from the ocean at runtime.) GM drops ~0.43 m (≈15%) on the raised
+Long, hard gate `> 0.3 m` — **PASSES**, both Long and two-bay. Roll period
+rises ~4%. GM at a FULL hold is Kevin's own playtest per
+"Consult before expensive runs"/"Kevin is the probe" — this pure-C# layer
+has no loaded-draft KB/BM solver (that only exists live, in `HullFormBody`,
+re-derived from wherever the rigidbody actually floats).
+
+**Presets, UI**: `RaisedPresets.cs` (`RaisedLong`, `RaisedTwoBay`, no
+`RaisedShort` — refused by `RAISED_DECK_BAYS`) mirrors `ExpandedPresets.cs`.
+`ShipyardDraft`/`ShipyardScreen` (UI/ModularYard, NOT compiled by
+`tools/modular-selftest.sh`, needs Kevin's Unity pass): `IsRaisedDeck`,
+`RaisedDeckUnavailableReason()`, `SetRaisedDeck(bool)` mirror
+`IsWideBeam`/`SetWideBeam`; a "Deck: Single / Raised" row; beam and +/- bay
+controls disabled with their reason while raised, per §8.
+
+**Not done, this session** (budget/scope, see the final report): probes
+(`ShipyardRefitProbe.cs`, `ShipyardUiProbe.cs`, `Editor/ModularShipPreview
+.cs`) were NOT extended — they are deep in Play-mode/Editor state this
+session could not run or verify, and a large blind edit to them risked
+costing Kevin more debugging time than it saved. `walkDeckZU` consumers
+were converted via `RaiseDeck` (station `deckY` is the single value every
+consumer already reads) rather than threaded as a second field everywhere;
+`ShipyardPlan.walkDeckZU` itself is informational (report/UI), not load-bearing.

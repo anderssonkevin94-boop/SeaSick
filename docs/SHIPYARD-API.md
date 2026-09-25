@@ -751,3 +751,37 @@ pair on the FIRST bay (matching what `WithMiddles` itself builds), not the
 geometrically-nearest bay the old implicit rule would have chosen for a
 2- or 3-bay ship refitted before this change shipped — no real save has ever
 had that shape yet, so this was chosen for simplicity over exactness.
+
+## §16 Raised deck (docs/RAISED-DECK.md), C# half, 2026-09-25 (Claude/Sonnet)
+
+Brief section only; the full spec, numbers and self-test list live in
+docs/RAISED-DECK.md secs 6-10 (data pass) and its "For the C# half" note.
+
+- `ModuleDef.upperStructure` (new `UpperStructureSpec`, `ModuleSchema.cs`)
+  and `JoinProfile.upperDeckZU` are read now; `hull.*.w1xr.v1.json`'s and
+  `standards.json`'s existing fields were silently dropped before this.
+- `ShipAssembler` refuses `RAISED_DECK_BAYS` (family `W1xR`, 0 or ≥3
+  middles) and applies the `-0.84 u` chimney midpoint offset for family
+  `W1xR` (a code constant, not a schema field — see the socket note in
+  `hull.stern.w1xr.v1.json`). Mixing raised with W1x/W1-r2 was already
+  refused by the existing `JOIN_PROFILE_MISMATCH` check (a raised socket's
+  standard is `W1xR`, which no other family's socket names) — no new code
+  needed there, only a self-test gate (`RaisedDeckValidation.cs`).
+- `HullFormData.RaiseDeck(extraY)` appends one wall-sided top level to every
+  station above its old `deckY`, and raises `deckY` itself — the single
+  mechanism that both extends the freeboard/deck-immersion physics AND
+  converts every consumer of `station.deckY` (crew posting, `DeckLoadPlan`,
+  the helm) to the new walk height in one step; see `ShipyardPlan.walkDeckZU`
+  for the informational plan value (1.76 / 4.20) and `RaisedDeckPhysics.cs`
+  for how `ShipyardPlanner.PlanFor` finds the installed raised profile and
+  calls it, and for the CoM/GM/roll-gyradius reweighting alongside it.
+- `RaisedPresets.cs` mirrors `ExpandedPresets.cs` one level up: `RaisedLong()`
+  (1 middle), `RaisedTwoBay()` (2 middles); no `RaisedShort()` — 0 middles is
+  refused by `RAISED_DECK_BAYS`.
+- `ShipyardDraft`/`ShipyardScreen` (UI/ModularYard): `IsRaisedDeck`,
+  `RaisedDeckUnavailableReason()`, `SetRaisedDeck(bool)` mirror
+  `IsWideBeam`/`SetWideBeam` one level up; a "Deck: Single / Raised" row next
+  to "Beam: Standard / Wide", `Maximum`/`Minimum`/`RemovalReason()` clamp the
+  +/- bay controls to 1-2 while raised, `SetWideBeam` refuses leaving wide
+  while raised. **Not compiled by `tools/modular-selftest.sh`** (UI/ is out
+  of its scope, same as before this change) — needs Kevin's Unity pass.
