@@ -187,6 +187,13 @@ namespace SeaSick.Save
                 else if (anchor.CurrentState != AnchorController.State.Underway
                          && anchor.CurrentIsland != null) s.anchor = 1;
             }
+            var homeDock = Dock.Home;
+            s.hasHomeBerth = homeDock != null;
+            if (homeDock != null)
+            {
+                var hb = homeDock.Berth;
+                s.homeBerthX = hb.x; s.homeBerthZ = hb.z;
+            }
 
             // Villagers born at a camp. A born row that is still a born row
             // re-grows its own body on load (`Outpost.EnsureBornBodies`), so
@@ -430,6 +437,26 @@ namespace SeaSick.Save
 
             var roster = motor.GetComponent<CrewRoster>();
             if (roster != null) roster.Refresh();
+
+            // 5b. Her home berth (2026-09-25, switchable): every outpost's
+            // piers are rebuilt now (step 5, above), so the dock she chose
+            // -- harbour or a player's pier -- can be found and set BEFORE
+            // the anchor step reads `Dock.Home`. `hasHomeBerth` false (an
+            // old save, or one that never moved it) changes nothing: `Home`
+            // is already the harbour. Not found within a couple of metres
+            // (her pier was demolished) also changes nothing -- she falls
+            // back to the harbour, which is exactly the rule Kevin asked
+            // for.
+            if (data.ship.hasHomeBerth)
+            {
+                var wanted = new Vector3(data.ship.homeBerthX, 0f, data.ship.homeBerthZ);
+                var found = Dock.Nearest(wanted);
+                if (found != null && found.DistanceFrom(wanted) < 3f)
+                    Dock.SetHome(found);
+                else
+                    Debug.LogWarning("SaveGame: her home berth pier is gone; staying at "
+                        + Dock.HomeLabel);
+            }
 
             // 6. The anchor, last, so the camp she lies off is awake to see
             // her arrive. She may have drifted a frame; put her back first.

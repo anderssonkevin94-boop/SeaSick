@@ -260,6 +260,16 @@ namespace SeaSick.Ship.Modular
                 var st = anchor.CurrentState;
                 bool moored = anchor.AtHomeDock || st == AnchorController.State.Anchored || st == AnchorController.State.Ashore;
                 if (!moored) { reason = "She must be anchored or alongside to be refitted."; return false; }
+                // Refits only happen at the home berth (2026-09-25, Kevin --
+                // stated while making the home berth itself switchable: he
+                // wants his pier at island_2, not anywhere she happens to be
+                // lying). Anchoring off a random island still counts as "at
+                // rest" above; it does not count as home.
+                if (!anchor.AtHomeDock)
+                {
+                    reason = $"Refits are done at your home berth ({SeaSick.World.Dock.HomeLabel}).";
+                    return false;
+                }
             }
             if (SeaSick.Combat.RaidParty.Active != null) { reason = "Not during a raid."; return false; }
             var lockOn = GetComponent<SeaSick.Combat.CombatLock>();
@@ -398,23 +408,39 @@ namespace SeaSick.Ship.Modular
 
         static string Hands(int n) => n == 1 ? "1 hand" : $"{n} hands";
 
+        /// **The outpost that owns the ship's home berth** (2026-09-25: the
+        /// berth is now switchable, so this is no longer always
+        /// `Outpost.Home` -- a home berth at island_2's pier lands hands
+        /// with island_2's outpost). Resolved from `Dock.Home`'s own
+        /// position, the same island lookup `AnchorController.ComeAlongside`
+        /// uses when she ties up anywhere: `Island.Nearest` then
+        /// `Outpost.Of`. For the harbour this still resolves to
+        /// `Outpost.Home` -- the harbour's dock sits on the home island.
+        static SeaSick.World.Outpost HomeBerthOutpost()
+        {
+            var dock = SeaSick.World.Dock.Home;
+            if (dock == null) return null;
+            var isle = SeaSick.World.Island.Nearest(dock.Berth);
+            return isle != null ? SeaSick.World.Outpost.Of(isle) : SeaSick.World.Outpost.Home;
+        }
+
         /// **Where the surplus goes.** Picks `n` hands currently aboard (the
         /// last posted, same order the sea-trial probes have always landed
         /// by -- who specifically is arbitrary, since GUNS_NEED_CREW already
         /// guarantees whoever is LEFT is enough to work her) and leaves them
-        /// at the home settlement through `Outpost.Station` -- the same "drop
-        /// a hand at a camp" path a player uses by hand, so a landed hand
-        /// becomes a real, named villager on the ledger, never despawned.
-        /// False (with any partial landing already rolled back) if there is
-        /// no home settlement to land them at, or a hand refuses to land
-        /// (already claimed there under his own name).
+        /// at the outpost that owns the home berth, through `Outpost.Station`
+        /// -- the same "drop a hand at a camp" path a player uses by hand, so
+        /// a landed hand becomes a real, named villager on the ledger, never
+        /// despawned. False (with any partial landing already rolled back)
+        /// if there is no such outpost to land them at, or a hand refuses to
+        /// land (already claimed there under his own name).
         bool LandSurplusHands(int n, List<SeaSick.Crew.CrewAgent> landed, out string why)
         {
             why = null;
-            var home = SeaSick.World.Outpost.Home;
+            var home = HomeBerthOutpost();
             if (home == null)
             {
-                why = $"there is no home settlement to land {Hands(n)} ashore at";
+                why = $"there is no settlement at {SeaSick.World.Dock.HomeLabel} to land {Hands(n)} ashore at";
                 return false;
             }
             var crew = new List<SeaSick.Crew.CrewAgent>(GetComponentsInChildren<SeaSick.Crew.CrewAgent>(false));
@@ -422,7 +448,7 @@ namespace SeaSick.Ship.Modular
             {
                 var c = crew[i];
                 if (c == null) continue;
-                if (!home.LandSurplusAtHome(c))
+                if (!home.LandSurplusFromRefit(c))
                 {
                     RestoreLandedHands(landed);
                     why = $"{c.DisplayName} could not be landed ashore";
@@ -442,13 +468,15 @@ namespace SeaSick.Ship.Modular
 
         /// Undoes `LandSurplusHands`: every hand it moved comes back aboard,
         /// through the same path a player recalling a hand from a camp uses
-        /// (`Outpost.Recall`), and the home settlement's ledger row for him
-        /// goes with it -- a rolled-back refit never leaves a stray villager
-        /// behind who was never really landed.
+        /// (`Outpost.Recall`), and that outpost's ledger row for him goes
+        /// with it -- a rolled-back refit never leaves a stray villager
+        /// behind who was never really landed. Same outpost lookup as the
+        /// landing call: the home berth cannot move mid-refit, so it
+        /// resolves to the same place.
         void RestoreLandedHands(List<SeaSick.Crew.CrewAgent> landed)
         {
             if (landed == null || landed.Count == 0) return;
-            var home = SeaSick.World.Outpost.Home;
+            var home = HomeBerthOutpost();
             foreach (var c in landed)
                 if (c != null) home?.Recall(c, transform);
             landed.Clear();
