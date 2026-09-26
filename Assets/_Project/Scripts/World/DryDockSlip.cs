@@ -70,20 +70,35 @@ namespace SeaSick.World
         /// way a pier's does. A plain child transform rather than raw
         /// numbers, so a caller can parent under it and inherit both without
         /// recomputing.
-        public Transform PreviewAnchor
+        public Transform PreviewAnchor => PreviewAnchorFor(0f);
+
+        /// **Where the bow must stop: the sea-side face of the Head piece**
+        /// (local X, plus a small margin). The Head carries the lifting
+        /// gantry whose beam sits at 3.97 m -- a raised deck reaches ~5.2 m,
+        /// so a bow run in under it went straight through the beam
+        /// (2026-09-26 preview shot). Measured from the slip's own land end
+        /// with `DryDockVisual.HeadLen`, the same figure the kit layout uses.
+        public float BowStopLocalX => -length * 0.5f + DryDockVisual.HeadLen + BowClearanceM;
+        public const float BowClearanceM = 0.4f;
+
+        /// `PreviewAnchor` for a ship whose bow tip lies `bowReachM` ahead of
+        /// its own origin: centred on the slip when she fits, otherwise slid
+        /// toward the sea until the bow stops short of the Head -- a long
+        /// ship's stern overhangs the open sea end instead (a real slip's
+        /// stern end is open water for exactly this reason).
+        public Transform PreviewAnchorFor(float bowReachM)
         {
-            get
+            if (previewAnchor == null)
             {
-                if (previewAnchor == null)
-                {
-                    var go = new GameObject("ShipCenter (placeholder)");
-                    go.transform.SetParent(transform, false);
-                    previewAnchor = go.transform;
-                }
-                Quaternion bowToLand = Quaternion.LookRotation(-HeadingDir, Vector3.up);
-                previewAnchor.SetPositionAndRotation(ShipCenter, bowToLand);
-                return previewAnchor;
+                var go = new GameObject("ShipCenter (placeholder)");
+                go.transform.SetParent(transform, false);
+                previewAnchor = go.transform;
             }
+            float x = Mathf.Max(0f, BowStopLocalX + Mathf.Max(0f, bowReachM));
+            Vector3 pos = transform.TransformPoint(new Vector3(x, BuildPlans.DryDockKeelAboveDeck, 0f));
+            Quaternion bowToLand = Quaternion.LookRotation(-HeadingDir, Vector3.up);
+            previewAnchor.SetPositionAndRotation(pos, bowToLand);
+            return previewAnchor;
         }
         Transform previewAnchor;
 

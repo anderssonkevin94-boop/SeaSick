@@ -75,11 +75,11 @@ namespace SeaSick.UI.ModularYard
         /// stage. Cheap to call every `Build` -- it only moves a transform
         /// and flips one int, and the dry dock does not appear or vanish
         /// mid-session.
-        void StageAt(SeaSick.World.DryDockSlip slip)
+        void StageAt(SeaSick.World.DryDockSlip slip, float bowReachM = 0f)
         {
             if (slip != null)
             {
-                var anchor = slip.PreviewAnchor;
+                var anchor = slip.PreviewAnchorFor(bowReachM);
                 root.transform.SetPositionAndRotation(anchor.position, anchor.rotation);
                 camera.cullingMask = ~0;
             }
@@ -93,6 +93,7 @@ namespace SeaSick.UI.ModularYard
 
         public void Build(AssemblyResult result, string highlight, ShipConfiguration configuration = null)
         {
+            lastResult = result;
             StageAt(SeaSick.World.DryDockSlip.HomeSlip);
             if (factory != null)
             {
@@ -113,6 +114,11 @@ namespace SeaSick.UI.ModularYard
                 view.Build(result);
             }
             Error = view.missingParts.Count > 0 ? "Some ship meshes could not be loaded." : null;
+            // Re-stage now the ship's real length is known: the dry dock
+            // slides a long ship sea-ward so her bow stops short of the Head
+            // gantry (DryDockSlip.PreviewAnchorFor). Bow = root-local +Z.
+            var slipNow = SeaSick.World.DryDockSlip.HomeSlip;
+            if (slipNow != null) StageAt(slipNow, BowReach());
             bool first = true;
             foreach (var r in view.GetComponentsInChildren<Renderer>())
             { if (first) { bounds = r.bounds; first = false; } else bounds.Encapsulate(r.bounds); }
@@ -144,11 +150,68 @@ namespace SeaSick.UI.ModularYard
                 // at z=-1000 off-world) and the section sheet's preview
                 // rendered nothing (2026-09-25 review, empty "SECTION"
                 // viewport).
-                highlightBounds = new Bounds(hb.center + root.transform.position, hb.size);
+                // Every corner through root's full transform: since the dry
+                // dock stages `root` ROTATED (bow to the head end) and, from
+                // 2026-09-26, slid along the slip, adding only its position
+                // framed the camera on open water beside the ship.
+                var wb = new Bounds(root.transform.TransformPoint(corners[0]), Vector3.zero);
+                for (int i = 1; i < 8; i++) wb.Encapsulate(root.transform.TransformPoint(corners[i]));
+                highlightBounds = wb;
                 hasHighlight = true;
                 break;
             }
             Render();
+        }
+
+        AssemblyResult lastResult;
+
+        /// Where a gun slot sits along its own section, 0 = aft end .. 1 =
+        /// fore end, for the Interior cutaway's markers. Both numbers come
+        /// from the assembly frame the preview was built from: the slot's
+        /// raw position and the section's authored length (bounds U.x, the
+        /// same span `RaisedDeckPhysics.FindRaisedSectionRanges` uses), so
+        /// the view offset the equipment views add cancels out.
+        public bool TrySlotAlong(string sectionKey, string slotId, out float along)
+        {
+            along = 0.5f;
+            var r = lastResult;
+            if (r == null || r.placed == null || r.slots == null) return false;
+            float? rawZ = null;
+            foreach (var sl in r.slots) if (sl.qualifiedId == slotId) { rawZ = sl.positionM.z; break; }
+            if (rawZ == null) return false;
+            foreach (var p in r.placed)
+            {
+                if (p.instanceKey != sectionKey) continue;
+                float a = p.positionM.z + p.boundsMinU.x * r.metresPerUnit;
+                float b = p.positionM.z + p.boundsMaxU.x * r.metresPerUnit;
+                if (b < a) (a, b) = (b, a);
+                if (b - a < 0.01f) return false;
+                along = Mathf.Clamp01((rawZ.Value - a) / (b - a));
+                return true;
+            }
+            return false;
+        }
+
+        /// How far ahead of the ship's own origin her bow tip reaches
+        /// (root-local +Z, from every mesh's local bounds), for staging her
+        /// in the dry dock.
+        float BowReach()
+        {
+            if (view == null) return 0f;
+            float reach = 0f; bool any = false;
+            var inv = root.transform.worldToLocalMatrix;
+            foreach (var r in view.GetComponentsInChildren<Renderer>())
+            {
+                if (!r.enabled || !r.gameObject.activeInHierarchy) continue;
+                var lb = r.localBounds; var m = inv * r.localToWorldMatrix;
+                for (int i = 0; i < 8; i++)
+                {
+                    var c = lb.center + Vector3.Scale(lb.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    float z = m.MultiplyPoint3x4(c).z;
+                    if (!any || z > reach) { reach = z; any = true; }
+                }
+            }
+            return any ? reach : 0f;
         }
 
         public void Resize(int width, int height)
