@@ -36,8 +36,7 @@ namespace SeaSick.UI.ModularYard
         readonly Label blocking;
         readonly Label warnings;
         readonly Label message;
-        readonly Button beamStandard, beamWide, raiseAll, lowerAll, confirm;
-        readonly Label deckReason;
+        readonly Button beamStandard, beamWide, confirm;
         readonly Label maxLengthReason;
         readonly Label undoReason;
         string tilesKey;
@@ -124,11 +123,6 @@ namespace SeaSick.UI.ModularYard
             var beams = Row(hullPage, "yard-wheels");
             beamStandard = Command(beams, "Standard", () => draft.SetWideBeam(false));
             beamWide = Command(beams, "Wide", () => draft.SetWideBeam(true));
-            var deckCaption = new Label("Deck"); deckCaption.AddToClassList("yard-caption"); hullPage.Add(deckCaption);
-            var decks = Row(hullPage, "yard-wheels");
-            lowerAll = Command(decks, "Lower all", () => draft.LowerAll());
-            raiseAll = Command(decks, "Raise all", () => draft.RaiseAll());
-            deckReason = new Label(); deckReason.AddToClassList("yard-caption"); deckReason.AddToClassList("yard-deck-reason"); hullPage.Add(deckReason);
             maxLengthReason = new Label(); maxLengthReason.AddToClassList("yard-caption"); maxLengthReason.AddToClassList("yard-deck-reason"); hullPage.Add(maxLengthReason);
 
             reportPage = new VisualElement(); reportPage.style.flexGrow = 1f; reportPage.style.minHeight = 0; scroll.Add(reportPage);
@@ -237,20 +231,6 @@ namespace SeaSick.UI.ModularYard
             beamWide.SetEnabled(!draft.Committed && !draft.IsRaisedDeck && draft.CanSelect(ModuleKind.Stern, ExpandedPresets.ExpandedStern));
             beamStandard.EnableInClassList("yard-selected", !draft.IsWideBeam && !draft.IsRaisedDeck);
             beamWide.EnableInClassList("yard-selected", draft.IsWideBeam || draft.IsRaisedDeck);
-            string raisedReason = draft.RaisedDeckUnavailableReason();
-            lowerAll.SetEnabled(!draft.Committed && draft.IsRaisedDeck);
-            lowerAll.tooltip = "Back to a single (non-raised) deck, every section";
-            raiseAll.SetEnabled(!draft.Committed && (draft.IsRaisedDeck || raisedReason == null));
-            raiseAll.tooltip = raisedReason ?? "A flush upper deck over every section";
-            lowerAll.EnableInClassList("yard-selected", !draft.IsRaisedDeck);
-            raiseAll.EnableInClassList("yard-selected", draft.IsRaisedDeck);
-            // Why Raise all/Lower all are greyed out, under the buttons --
-            // a tooltip is invisible on a phone with no hover (2026-09-25
-            // review: standard beam left the pair disabled with no reason
-            // shown anywhere on screen).
-            bool decksUnavailable = !draft.Committed && !draft.IsRaisedDeck && raisedReason != null;
-            deckReason.text = decksUnavailable ? raisedReason : "";
-            deckReason.style.display = decksUnavailable ? DisplayStyle.Flex : DisplayStyle.None;
 
             RefreshSummary(report);
             RefreshWarnings(report);
