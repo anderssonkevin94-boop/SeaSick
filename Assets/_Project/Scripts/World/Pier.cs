@@ -46,20 +46,25 @@ namespace SeaSick.World
             }
         }
 
-        /// Land-to-sea heading as a rotation whose forward is `HeadingDir`.
-        public Quaternion Heading => Quaternion.LookRotation(HeadingDir, Vector3.up);
+        /// **T-berth (2026-09-26)**: the deterministic default heading with
+        /// no ship's approach to judge by -- perpendicular to the planks,
+        /// not along them. `Dock.HeadingFor` picks whichever of the two
+        /// perpendicular headings actually suits the approach; this is just
+        /// the fallback baked in at build time (a cold spawn, a probe).
+        public Quaternion Heading => Quaternion.LookRotation(
+            new Vector3(HeadingDir.z, 0f, -HeadingDir.x), Vector3.up);
 
-        /// **Where she lies alongside**: `BerthOffset` metres off the pier's
-        /// RIGHT side (right when walking out to sea), level with the
-        /// seaward third of the deck, at mean water. A hull bowsed in here
-        /// with her bow on `Heading` has her port side to the planks.
+        /// **Where she lies**, at the default beam: `BerthOffset` metres
+        /// beyond the sea end, on the pier's own axis, so her side comes to
+        /// rest against the head rather than the end of it. Was an
+        /// alongside offset off the pier's right side; now it is along
+        /// `HeadingDir` past `SeaEnd` -- half a beam and a fender, same
+        /// number, new axis.
         public Vector3 Berth
         {
             get
             {
-                Vector3 along = transform.TransformPoint(new Vector3(length / 6f, 0f, 0f));
-                Vector3 right = Heading * Vector3.right;
-                Vector3 b = along + right * (width * 0.5f + BerthOffset);
+                Vector3 b = SeaEnd + HeadingDir * BerthOffset;
                 b.y = 0f;
                 return b;
             }

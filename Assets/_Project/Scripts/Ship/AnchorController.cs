@@ -35,6 +35,25 @@ namespace SeaSick.Ship
         /// The dock she is lying at, or null if she is anchored off a beach.
         public Dock CurrentDock { get; private set; }
 
+        // --- T-berth (2026-09-26) ---------------------------------------
+        // Where she is actually easing to and turning to, for THIS
+        // berthing -- decided once, in `ComeAlongside`/`BerthAtHome`, from
+        // her live beam and her heading on the approach. `Dock.Berth`/
+        // `Heading` stay the deterministic default for everyone who has
+        // neither (a probe, a save's display point); `MoorAlongside` reads
+        // these instead, because the point of asking the approach at all is
+        // to hold the answer steady while the spring hauls her in, not to
+        // re-ask it every frame and risk it flipping under her.
+        Vector3 berthPos;
+        Quaternion berthHeading = Quaternion.identity;
+        Shipyard yard;
+
+        /// Her beam right now: the live hull's, if a `Shipyard` says so;
+        /// otherwise the same default `HarbourSite`/`Pier` assume when they
+        /// site a berth with no ship built yet.
+        float BerthBeam => yard != null && yard.Node != null
+            ? yard.Node.beam : SeaSick.World.WorldScale.ShipBeam;
+
         /// Lying at her own pier. **This is what "home" means to the voyage
         /// now**: an arrival is a berth you took, not a radius you drifted
         /// across. The old test could not be used once she started the game
@@ -97,6 +116,7 @@ namespace SeaSick.Ship
             hold = GetComponent<ShipHold>();
             gangway = GetComponent<Gangway>();
             crew = GetComponentsInChildren<CrewAgent>(true);
+            yard = GetComponent<Shipyard>();
 
             // Build on demand rather than trusting the scene: Unity does not
             // guarantee script order, and a component that only exists if
@@ -264,6 +284,14 @@ namespace SeaSick.Ship
 
         void ComeAlongside(Dock d)
         {
+            // Decide the berth ONCE, from what is known right now: her live
+            // beam, and her heading on the approach (or, coming through
+            // `BerthAtHome`, whatever heading was just set for the
+            // deterministic teleport -- `HeadingFor` then just confirms it).
+            Vector3 approach = transform.forward; approach.y = 0f;
+            berthPos = d.BerthFor(BerthBeam);
+            berthHeading = d.HeadingFor(approach);
+
             CurrentDock = d;
             CurrentIsland = Island.Nearest(d.Berth);
             // A camp's pier is a landing like any beach: the ground gets
@@ -308,7 +336,12 @@ namespace SeaSick.Ship
             // fault that made every landing fail, just pointing the other way.
             GetUnderway();
 
-            Vector3 p = d.Berth;
+            // No approach to judge here -- she is being SET DOWN, not
+            // sailed in -- so this is `Dock`'s deterministic default
+            // heading, and `BerthFor` takes her live beam if a Shipyard can
+            // give one.
+            Vector3 p = d.BerthFor(BerthBeam);
+            var heading = d.HeadingFor(Vector3.zero);
             // The berth is a place on the WATER, and the water moves. Taking
             // her current Y would set her down at whatever height the trough
             // she was sitting in happened to be — which at sea is metres.
@@ -317,11 +350,11 @@ namespace SeaSick.Ship
                 : transform.position.y;
 
             var rb = GetComponent<Rigidbody>();
-            transform.SetPositionAndRotation(p, d.Heading);
+            transform.SetPositionAndRotation(p, heading);
             if (rb != null)
             {
                 rb.position = p;
-                rb.rotation = d.Heading;
+                rb.rotation = heading;
                 rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
             }
@@ -461,18 +494,28 @@ namespace SeaSick.Ship
             // leave her athwart the pier.
             if (CurrentDock != null)
             {
-                Vector3 target = CurrentDock.Berth;
+                // `berthPos`/`berthHeading` -- decided once in
+                // `ComeAlongside`/`BerthAtHome` from her live beam and her
+                // approach -- not `CurrentDock.Berth`/`Heading` (the
+                // deterministic default): re-asking the dock every frame
+                // would answer a beam that may have changed since (a
+                // refit) and a heading that never looked at how she
+                // actually arrived.
+                Vector3 target = berthPos;
                 target.y = motor.AnchorPoint.y;
                 motor.AnchorPoint = Vector3.Lerp(motor.AnchorPoint, target,
                     1f - Mathf.Exp(-berthSpeed * dt));
-                motor.MooringHeading = CurrentDock.Heading.eulerAngles.y;
-                // At a camp's pier the plank lands on the pier's root. At
-                // home it stays inboard as before: the home pier has its own
-                // arrival and the plank was never part of it.
+                motor.MooringHeading = berthHeading.eulerAngles.y;
+                // At a camp's pier the plank crosses from her side onto the
+                // pier HEAD -- a short hop, not the length of the pier --
+                // and the shore party walks the pier the rest of the way
+                // (see `SendAshore`). At home it stays inboard as before:
+                // the home pier has its own arrival and the plank was never
+                // part of it.
                 if (gangway != null)
                 {
                     if (CurrentDock.IsHome) gangway.Withdraw();
-                    else gangway.ExtendTo(CurrentDock.Landing);
+                    else gangway.ExtendTo(CurrentDock.Head);
                 }
                 return;
             }
@@ -857,9 +900,20 @@ namespace SeaSick.Ship
         {
             if (CurrentIsland == null) return;
             // Land them at the foot of the plank, then they find their own work.
-            Vector3 landing = gangway != null && gangway.Ready
-                ? gangway.LandingPoint
-                : CurrentIsland.ShorePoint(0, 1, transform.position);
+            //
+            // At a pier the plank only reaches the HEAD now (she lies beyond
+            // it, not beside it) -- `gangway.LandingPoint` is the head, not
+            // somewhere to start cutting wood. `CrewAgent.PathToShore` routes
+            // every trip through `gangway.LandingPoint` before the final
+            // point regardless, so handing it the pier's ROOT instead walks
+            // them off the ship, onto the head, down the pier, and only then
+            // to work -- exactly "step onto the head, walk the pier to root"
+            // -- with no pathing changes needed on the crew's side.
+            Vector3 landing = CurrentDock != null
+                ? CurrentDock.Landing
+                : (gangway != null && gangway.Ready
+                    ? gangway.LandingPoint
+                    : CurrentIsland.ShorePoint(0, 1, transform.position));
 
             // Stand harvest nodes on the real trees around the landing, so
             // the crew cut the wood that is actually drawn rather than the
