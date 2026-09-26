@@ -290,14 +290,28 @@ namespace SeaSick.UI.Menus
 
         void OnSaveTargetPicked(string slotId, string name)
         {
+            // Set BEFORE calling SaveManual, not after (2026-09-26 fix):
+            // `SaveManual` saves synchronously and fires `Saved` before
+            // returning, so setting this afterwards meant `OnSaved`'s own
+            // `info.id == pendingExitSlotId` check always compared against
+            // null and never matched -- and the fallback below, seeing
+            // `pendingExitSlotId` already set by the time IT ran, never
+            // fired either (its `== null` guard is for "the event never
+            // came", which stopped being true the moment this line moved
+            // ahead of it). Together the two meant "Save & exit" silently
+            // saved and then hung on the slot list forever. Assigning it
+            // first makes the synchronous path exactly hit the primary
+            // branch in `OnSaved`, which is the actual common case.
+            if (saveAndExitPending) pendingExitSlotId = slotId;
+
             bool ok = SaveSlotsAdapter.SaveManual(slotId, name, out string error);
             if (!ok)
             {
+                if (saveAndExitPending) pendingExitSlotId = null;
                 MenuKit.Toast(document.rootVisualElement, string.IsNullOrEmpty(error)
                     ? "could not save" : error, 2.2f);
                 return;
             }
-            if (saveAndExitPending) pendingExitSlotId = slotId;
             // If the backend saves synchronously (no async Saved event
             // follows), do not wait forever for one: fall back once the
             // frame is idle. `OnSaved` cancels this if the event does fire.
@@ -307,13 +321,20 @@ namespace SeaSick.UI.Menus
 
         void FallbackAfterSave(string slotId)
         {
-            if (saveAndExitPending && pendingExitSlotId == null && Current == Mode.SaveTarget)
+            // `pendingExitSlotId` is now set BEFORE `SaveManual` runs (see
+            // `OnSaveTargetPicked`), so it is no longer a signal that
+            // `OnSaved` has or has not fired yet -- `saveAndExitPending`
+            // itself is: `OnSaved`'s primary path clears it the moment it
+            // successfully exits, so still being true here means that
+            // event never arrived (an async backend, or one that simply
+            // never fired). This callback is cancelled with the rest of
+            // the panel's schedule once `ExitToHome` reloads the scene, so
+            // it never runs a second time after the primary path wins.
+            if (saveAndExitPending && Current == Mode.SaveTarget)
             {
-                // The Saved event never arrived -- assume the synchronous
-                // path and finish the flow ourselves.
-                pendingExitSlotId = slotId;
                 MenuKit.Toast(document.rootVisualElement, "Saved");
                 saveAndExitPending = false;
+                pendingExitSlotId = null;
                 ExitToHome();
             }
             else if (!saveAndExitPending && Current == Mode.SaveTarget)
