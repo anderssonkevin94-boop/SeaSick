@@ -1,18 +1,28 @@
 using SeaSick.UI;
+using SeaSick.UI.Menus;
 using UnityEngine;
 
 namespace SeaSick.Save
 {
-    /// **NEW VOYAGE or CONTINUE, on the first frames.**
+    /// **The HOME screen, on the first frames -- and where a reload from it
+    /// lands.**
     ///
     /// There is no title scene: `Sea.unity` boots straight into sailing and
-    /// the world builds itself on frame one. So this is an overlay, not a
-    /// menu -- it freezes the game (`Time.timeScale = 0`, which also stops
-    /// `TimeOfDay`, whose owner advances it by `deltaTime`), draws two big
-    /// buttons over whatever the HUD is doing, and lets the world finish
-    /// building behind it. NEW forgets the save and unfreezes; CONTINUE
-    /// unfreezes and runs `SaveGame.Restore` over the booted world. With
-    /// no save there is one button, so the flow is the same either way.
+    /// the world builds itself on frame one. So this freezes the game
+    /// (`Time.timeScale = 0`, which also stops `TimeOfDay`, whose owner
+    /// advances it by `deltaTime`) and hands the screen to `GameMenus`
+    /// (Continue / New voyage / Load / Settings), which draws over whatever
+    /// the HUD is doing while the world finishes building behind it.
+    ///
+    /// **2026-09-26: Continue, New and every Load-list row now all go through
+    /// the same door.** `GameMenus` never restores anything itself -- it
+    /// asks `SaveSlots.RequestLoad`/`RequestNewGame` and reloads the scene,
+    /// and `HandleSlotRequest` below is what reads that choice back on the
+    /// way up, before this class even considers showing the Home screen
+    /// again. The one exception is the dev/probe surface (`Forced`,
+    /// `Interactive = false`, `Skip()`), which still resolves in place
+    /// through `Decide`/`RunRestore` exactly as before -- a probe has no
+    /// scene to reload into and no player to show a menu to.
     ///
     /// **It installs itself**, the way `SettingsPanel` does, and only into
     /// a scene with a `VoyageManager` in it: the lab scenes boot straight
@@ -87,6 +97,13 @@ namespace SeaSick.Save
             Instance = this;
             ParseCommandLine();
 
+            // A previous scene -- the Home screen, the Load list, or Pause's
+            // New/Save & exit -- already decided this and reloaded to get
+            // here. That takes precedence over everything below: a probe's
+            // `Forced` flag cannot arrive with a pending slot request too,
+            // and a person who just picked Load is done choosing.
+            if (!Decided && HandleSlotRequest()) return;
+
             haveSave = SaveGame.Exists;
             if (haveSave)
             {
@@ -106,6 +123,36 @@ namespace SeaSick.Save
             showing = true;
             frozenScale = Time.timeScale;
             Time.timeScale = 0f;
+            GameMenus.ShowHome();
+        }
+
+        /// `SaveSlots.PendingNewGame` / `PendingLoadSlot`, read once on the
+        /// way up. Returns true when either fired, in which case `Awake` is
+        /// done -- there is nothing left for the boot overlay to decide.
+        ///
+        /// **This call is the loading-screen hook** the save-slot contract
+        /// asked for: a future progress bar wraps `RestorePending` (or polls
+        /// a progress value beside it) rather than anything here, since this
+        /// is the one place in the whole boot sequence that already knows
+        /// which of the two happened.
+        bool HandleSlotRequest()
+        {
+            if (SaveSlotsAdapter.PendingNewGame)
+            {
+                Chosen = Choice.New;
+                Decided = true;
+                Debug.Log("GameBoot: NEW VOYAGE (from the home screen)");
+                return true;
+            }
+
+            string pending = SaveSlotsAdapter.PendingLoadSlot;
+            if (string.IsNullOrEmpty(pending)) return false;
+
+            bool ok = SaveSlotsAdapter.RestorePending(out string error);
+            Decided = true;
+            Chosen = ok ? Choice.Continue : Choice.New;
+            if (!ok) Debug.LogWarning("GameBoot: RestorePending('" + pending + "') failed: " + error);
+            return true;
         }
 
         static void ParseCommandLine()
@@ -122,12 +169,20 @@ namespace SeaSick.Save
             }
         }
 
+        /// The dev/probe path only now -- see the class doc. A real player's
+        /// Continue/New/Load all go through `GameMenus` and a scene reload
+        /// instead, and never reach this method.
         void Decide(Choice choice, bool forgetSave)
         {
             if (showing)
             {
                 showing = false;
                 Time.timeScale = frozenScale > 0f ? frozenScale : 1f;
+                // `Skip()` calls this out from under an already-showing
+                // `GameMenus.Home` (a probe launched mid-boot) -- the overlay
+                // it drew has to come down too, or it sits there inert with
+                // the world now running underneath it.
+                GameMenus.ForceHide();
             }
             if (Decided) return;
 
@@ -165,66 +220,17 @@ namespace SeaSick.Save
         void OnApplicationQuit() => SaveGame.Autosave("quit");
         void OnApplicationPause(bool paused) { if (paused) SaveGame.Autosave("paused"); }
 
+        /// The interactive Home screen itself is `GameMenus.ShowHome` (UI
+        /// Toolkit, `Scripts/UI/Menus/HomeScreen.cs`) now -- this only covers
+        /// what is left once that overlay is up: the "restoring…" line while
+        /// `RunRestore` (the dev/probe Continue path) is mid-flight. A
+        /// player's Load, which goes through `RestorePending` instead, has
+        /// no such moment in THIS scene -- it happens before this component
+        /// even exists, on the way up in `HandleSlotRequest`.
         void OnGUI()
         {
-            if (!showing)
-            {
-                if (SaveGame.Restoring) DrawLoading();
-                return;
-            }
-
-            // On top of every other panel. The dim is a texture, not a
-            // control, so the buttons below it still get the mouse; the
-            // click-swallower comes LAST, because IMGUI hands an event to
-            // the first control drawn that wants it.
-            GUI.depth = -1000;
-            var full = new Rect(0f, 0f, Screen.width, Screen.height);
-            UITheme.Rect(full, UITheme.PanelSolid);
-            UIBlocker.Block(full);
-
-            int u = HudLayout.Unit;
-            var safe = HudLayout.Safe;
-            float pad = HudLayout.Pad;
-
-            // Sized for a thumb on a phone and a mouse on a monitor alike:
-            // the width follows the unit, which follows the SHORT edge, so
-            // it is the same fraction of the screen in both shapes.
-            float w = Mathf.Min(safe.width - pad * 2f, u * 22f);
-            float bh = u * 3.2f;
-            float titleH = u * 3f;
-            float lineH = u * 1.6f;
-            int rows = haveSave ? 2 : 1;
-            float total = titleH + u
-                        + (haveSave ? lineH + u * 0.6f : 0f)
-                        + rows * bh + (rows - 1) * HudLayout.Gap
-                        + u * 1.4f + lineH;
-            float y = safe.y + Mathf.Max(pad, (safe.height - total) * 0.42f);
-            float x = safe.x + (safe.width - w) * 0.5f;
-
-            GUI.Label(new Rect(x, y, w, titleH), "SEASICK", UITheme.Title);
-            y += titleH + u;
-
-            if (haveSave)
-            {
-                GUI.Label(new Rect(x, y, w, lineH), saveLine, UITheme.Small);
-                y += lineH + u * 0.6f;
-                var cont = new Rect(x, y, w, bh);
-                if (GUI.Button(cont, "CONTINUE", UITheme.Button)) Decide(Choice.Continue, false);
-                y += bh + HudLayout.Gap;
-            }
-
-            var fresh = new Rect(x, y, w, bh);
-            if (GUI.Button(fresh, "NEW VOYAGE", UITheme.Button))
-                Decide(Choice.New, true);
-            y += bh + u * 1.4f;
-
-            GUI.Label(new Rect(x, y, w, lineH),
-                haveSave ? "a new voyage forgets the save" : "no save yet -- SAVE is in the settings drawer",
-                UITheme.Small);
-
-            // Everything the buttons did not take, so nothing underneath
-            // (the helm, the rail tabs) is pressed through the overlay.
-            GUI.Button(full, GUIContent.none, GUIStyle.none);
+            if (showing) return;
+            if (SaveGame.Restoring) DrawLoading();
         }
 
         void DrawLoading()
