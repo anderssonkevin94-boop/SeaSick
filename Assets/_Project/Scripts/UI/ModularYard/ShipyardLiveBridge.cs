@@ -89,8 +89,22 @@ namespace SeaSick.UI.ModularYard
             var bridge = new ShipyardLiveBridge();
             // End island gestures before the modal takes exclusive input.
             CampSiting.End(); WallSiting.End(); Hand.Instance?.Cancel();
-            ShipyardModal.Open(bridge, ShipyardSession.SetWorldInputBlocked, bridge.RemovalBlocker);
+            ShipyardModal.Open(bridge, SetSessionBlocked, bridge.RemovalBlocker);
             Sheets.Sheets.Close();
+        }
+
+        /// **Live-ship hide/restore rides with the modal's own open/close**
+        /// (2026-09-26, fix/yard-hide), not with every `WorldInputBlocked`
+        /// flip: Pause and the Home screen drive that same static through
+        /// `GameMenus.SetWorldBlocked` and must NOT hide her -- only the
+        /// shipyard modal's own `Open`/`OnDisable` call this delegate.
+        /// `ShipyardPreview` now stages the draft ship IN the world dry
+        /// dock, so without this the live ship at her home-pier berth would
+        /// render right alongside it (`ShipyardSession.SetLiveShipHidden`).
+        static void SetSessionBlocked(bool blocked)
+        {
+            ShipyardSession.SetWorldInputBlocked(blocked);
+            ShipyardSession.SetLiveShipHidden(blocked);
         }
     }
 }
