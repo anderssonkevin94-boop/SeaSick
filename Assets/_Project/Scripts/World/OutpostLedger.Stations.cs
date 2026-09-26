@@ -1183,7 +1183,8 @@ namespace SeaSick.World
         bool GatherBlocked(OutpostHand h)
         {
             if (h == null || h.order != OutpostOrder.Gather || string.IsNullOrEmpty(h.target)) return false;
-            if (h.target == Res.Game) return StoreRoomF(Res.Food) <= 0f;
+            // A carcass is meat and hide: full only when neither fits (2026-09-26).
+            if (h.target == Res.Game) return HuntStoreFull();
             if (h.Hauling && h.haulFrom == HaulPlace.Field && h.haulTo == HaulPlace.Store
                 && !WaitingAtStore(h)) return false;
             return RoomFor(h.target) <= 0;
@@ -1282,7 +1283,9 @@ namespace SeaSick.World
         string GatherFullReason(OutpostHand h)
         {
             string into = h.target == Res.Game ? Res.Food : h.target;
-            string head = $"store is full of {Friendly(into)}";
+            string head = h.target == Res.Game
+                ? $"store is full of {Friendly(Res.Food)} and {Friendly(Res.Hide)}"
+                : $"store is full of {Friendly(into)}";
             if (HasHaulChore()) return head + ", hauling for the stations";
             if (Focus != null) return head + ", helping build";
             return head;

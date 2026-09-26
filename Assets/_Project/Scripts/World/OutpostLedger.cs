@@ -2428,9 +2428,12 @@ namespace SeaSick.World
 
                 var store = Store(into, true);
                 // Net of loads walking to the store: the ceiling holds.
-                float room = StoreRoomF(into);
+                // A carcass is meat AND hide (2026-09-26): the hunt stops
+                // only when neither fits (`HuntRoomAnimals`), and the meat
+                // that does not fit is lost at the store below.
+                float meatRoom = hunting ? Mathf.Max(0f, StoreRoomF(Res.Food)) : 0f;
+                float room = hunting ? HuntRoomAnimals() : StoreRoomF(into);
                 if (room <= 0f) continue;
-                if (hunting) room /= Res.MeatPerAnimal;
 
                 float want = Res.GatherRate(h.target) * days * WorkFactorOn(h, into)
                     * PriorityMultiplier(into);
@@ -2478,18 +2481,22 @@ namespace SeaSick.World
 
                 stock.standing -= got;
                 if (h.target == Res.Timber) timberTaken += got;
-                float paid = hunting ? got * Res.MeatPerAnimal : got;
-                store.part += paid;
-                int whole = Mathf.FloorToInt(store.part);
-                if (whole > 0) { store.whole += whole; store.part -= whole; }
-                away.Add(into, paid);
+                float paid = hunting ? Mathf.Min(got * Res.MeatPerAnimal, meatRoom) : got;
+                if (paid > 0f)
+                {
+                    store.part += paid;
+                    int whole = Mathf.FloorToInt(store.part);
+                    if (whole > 0) { store.whole += whole; store.part -= whole; }
+                    away.Add(into, paid);
+                }
 
                 if (hunting)
                 {
                     if (spearWear > 0f) DrawHeld(spear, spearWear * got);
                     // Hide comes home beside the meat, one per animal --
                     // a full hide pile does not stop the hunt, the hide is
-                    // simply lost.
+                    // simply lost (and since 2026-09-26 a full larder does
+                    // not stop it either while there is room for hide).
                     foreach (var drop in Economy.Techs.HuntDrops)
                     {
                         var dropStore = Store(drop.res, true);
@@ -2954,7 +2961,7 @@ namespace SeaSick.World
                         float kills = Res.GatherRate(Res.Game)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
                         if (armed) kills *= BowKillBonus;
-                        if (resource == Res.Food) rate += kills * Res.MeatPerAnimal;
+                        if (resource == Res.Food) { if (StoreRoomF(Res.Food) > 0f) rate += kills * Res.MeatPerAnimal; }
                         else if (resource == Res.Arrows && armed) rate -= kills;
                         else foreach (var drop in Economy.Techs.HuntDrops)
                             if (drop.res == resource) rate += kills * drop.n;
@@ -3033,7 +3040,7 @@ namespace SeaSick.World
                         float kills = Res.GatherRate(Res.Game)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
                         if (HeldOf(Res.Arrows) > 0f) kills *= BowKillBonus;
-                        if (resource == Res.Food) rate += kills * Res.MeatPerAnimal;
+                        if (resource == Res.Food) { if (StoreRoomF(Res.Food) > 0f) rate += kills * Res.MeatPerAnimal; }
                         else foreach (var drop in Economy.Techs.HuntDrops)
                             if (drop.res == Res.Hide) rate += kills * drop.n;
                         continue;
