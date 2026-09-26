@@ -27,14 +27,17 @@ namespace SeaSick.World
     /// end (a free-form wear graph needs crossroads, short stubs and
     /// arbitrary angles her kit does not have, and every junction would be
     /// two translucent ribbons stacked). Instead ONE mesh per camp: a 0.5 m
-    /// lattice sheet over the road cells, each lattice vertex written once,
-    /// draped on the analytic height field. Its alpha is a coverage FIELD --
-    /// the max over capsules between neighbouring road cells -- so a
-    /// junction, a crossing or a bend is simply where two capsules meet; ends
-    /// taper to a point like her `Road_End`. Her palette and cross-section
-    /// (light compacted centre, darker ruts, soft feathered edge) are the
-    /// vertex colours. Depth: `SeaSick/Worn Road` pulls each vertex toward
-    /// the camera along its view ray, so it never z-fights and never floats.
+    /// lattice sheet draped on the analytic height field, each vertex written
+    /// once. v2 (same day, Kevin's screenshots showed staircases and a yard
+    /// stain): the road cells are THINNED to centre-lines, cut into chains,
+    /// relaxed + given a slow wander + Chaikin-smoothed, and each sheet
+    /// vertex stores its distance to the nearest line; the shader turns that
+    /// into coverage per pixel with a little edge noise, at the kit's 2.16 m.
+    /// A junction is just where two distance fields meet; dead ends taper
+    /// like her `Road_End`; a small irregular yard is kept round the fire.
+    /// The build is an iterator stepped within `SliceMs` per frame.
+    /// Depth: `SeaSick/Worn Road` pulls each vertex toward the camera along
+    /// its view ray, so it never z-fights and never floats.
     ///
     /// Persisted in the ledger (`OutpostLedger.roadCell/roadWear`). Lives on
     /// the island GameObject beside `CampPath`, so a scene reload destroys
@@ -94,7 +97,6 @@ namespace SeaSick.World
         byte[] prevLevel;
         bool[] footprint;
         int[] comp;
-        float[] rad, str;                // per drawn cell, cached for the field
         readonly List<int> stack = new List<int>();
         readonly List<int> drawn = new List<int>();
         bool ready;
@@ -105,10 +107,7 @@ namespace SeaSick.World
         GameObject view;
         Mesh mesh;
         static Material material;
-        readonly Dictionary<int, int> vIndex = new Dictionary<int, int>();
-        readonly Dictionary<int, float> hCache = new Dictionary<int, float>();
         readonly List<Vector3> verts = new List<Vector3>();
-        readonly List<Color32> cols = new List<Color32>();
         readonly List<int> tris = new List<int>();
         readonly List<Vector3> route = new List<Vector3>();
 
@@ -177,8 +176,8 @@ namespace SeaSick.World
             prevLevel = new byte[count];
             footprint = new bool[count];
             comp = new int[count];
-            rad = new float[count];
-            str = new float[count];
+            building = null;
+            buildPending = false;
             ready = true;
             Load(camp.Ledger);
             lastSeconds = TimeOfDay.Seconds;
@@ -246,6 +245,7 @@ namespace SeaSick.World
                 ready = false;
                 if (!Ensure()) return;
             }
+            StepBuild(false);
             tick -= Time.unscaledDeltaTime;
             if (tick > 0f) return;
             tick = TickSeconds;
@@ -431,149 +431,498 @@ namespace SeaSick.World
             return true;
         }
 
-        // --- mesh -------------------------------------------------------------
+        // --- drawing: centre-lines ---------------------------------------------
+        //
+        // v2 (2026-09-26, Kevin's screenshots): the v1 field was a max over
+        // capsules between neighbouring 2 m cells, and a union of cell-sized
+        // capsules IS a staircase -- every diagonal drew as steps and a busy
+        // yard drew as one big stain. Now the cleaned cell set is THINNED to
+        // centre-lines (Zhang-Suen), cut into chains between junctions and
+        // ends, jittered a little and Chaikin-smoothed, and the sheet stores
+        // each vertex's DISTANCE to the nearest smoothed line. The shader turns
+        // that distance into coverage per pixel (with a little edge noise), so
+        // an edge is a smooth curve at any zoom and the width is the kit's
+        // everywhere; only a small trodden yard stays round the fire.
 
-        float Radius(int i) => Degree(i) <= 1 ? TipHalfWidth : HalfWidth;
-        float Strength(int i) => Mathf.Lerp(MinOpacity, MaxOpacity, (level[i] - 1) / 6f);
+        /// Kit width: 2.16 m across incl. feather (1.08 half), ~1.76 m core.
+        public static float Wobble = 0.34f;          // edge noise, metres peak-to-peak
+        public static float Jitter = 0.6f;           // centre-line wander, metres (peak)
+        public static float TaperLength = 2.6f;      // dead ends taper over this
+        public static float YardRadius = 2.8f;       // packed earth round the fire
+        public static int SpurCells = 2;             // thinning spurs this short are cut
+        public static float SliceMs = 2.5f;          // main-thread budget per frame
+
+        public static float LastMaxSliceMs { get; private set; }
+        public static int LastSlices { get; private set; }
+
+        const float Step = Cell / Sub;               // 0.5 m sheet lattice
+        const float FarD = 9f;
+
+        struct Seg { public float ax, az, bx, bz, sa, sb, oa, ob; }
+
+        bool[] skel;
+        readonly List<Seg> segs = new List<Seg>();
+        readonly List<int> chain = new List<int>();
+        readonly List<Vector2> pts = new List<Vector2>();
+        readonly List<Vector2> pts2 = new List<Vector2>();
+        readonly List<float> ps = new List<float>(), ps2 = new List<float>();
+        readonly HashSet<long> seenEdge = new HashSet<long>();
+        float[] hCache;                               // per lattice vertex, NaN = unknown
+        readonly List<Vector2> uvs = new List<Vector2>();
+
+        // Scratch shared by every camp (one sheet builds at a time).
+        static float[] sD, sS;
+        static int[] sIdx;
+        static readonly List<int> sTouched = new List<int>();
+        static CampRoads sOwner;
+
+        System.Collections.IEnumerator building;
+        bool buildPending;
+        float buildWork, buildMax;
+        int buildSlices;
+
+        float Strength(int i) => Mathf.Lerp(MinOpacity, MaxOpacity, (Mathf.Max(1, (int)level[i]) - 1) / 6f);
 
         void Rebuild()
         {
-            var watch = System.Diagnostics.Stopwatch.StartNew();
-            EnsureView();
-            verts.Clear(); cols.Clear(); tris.Clear(); vIndex.Clear();
+            buildPending = true;
+            building = null;
+            if (ReferenceEquals(sOwner, this)) sOwner = null;
+        }
 
-            // Cells to tessellate: every road cell and its 8 neighbours,
-            // each once (reuse `comp` as the mark).
-            System.Array.Clear(comp, 0, comp.Length);
-            stack.Clear();
+        /// Runs the pending build within `SliceMs` per frame. `all` finishes
+        /// it now (dev hooks).
+        void StepBuild(bool all)
+        {
+            if (building == null)
+            {
+                if (!buildPending) return;
+                if (sOwner != null && !ReferenceEquals(sOwner, this) && sOwner.building != null)
+                {
+                    if (!all) return;                  // another camp is mid-build: wait a frame
+                    sOwner.StepBuild(true);
+                }
+                buildPending = false;
+                sOwner = this;
+                building = Build();
+                buildWork = 0f; buildMax = 0f; buildSlices = 0;
+            }
+            var w = System.Diagnostics.Stopwatch.StartNew();
+            do
+            {
+                w.Restart();
+                bool more = building.MoveNext();
+                float ms = (float)w.Elapsed.TotalMilliseconds;
+                buildWork += ms; buildMax = Mathf.Max(buildMax, ms); buildSlices++;
+                if (!more)
+                {
+                    building = null;
+                    if (ReferenceEquals(sOwner, this)) sOwner = null;
+                    LastBuildMs = buildWork; LastMaxSliceMs = buildMax; LastSlices = buildSlices;
+                    if (LogBuild)
+                        Debug.Log($"[CampRoads] {camp.name}: {drawn.Count} road cells, {segs.Count} segs, {verts.Count} verts, {tris.Count / 3} tris, "
+                            + $"{buildWork:0.0} ms work in {buildSlices} slices, worst {buildMax:0.00} ms");
+                    return;
+                }
+            } while (all);
+        }
+
+        /// Finish any pending sheet now (dev / probes).
+        public void FinishBuild() => StepBuild(true);
+
+        System.Collections.IEnumerator Build()
+        {
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            float hw = HalfWidth;
+
+            // ---- 1. thin the drawn cells to centre-lines --------------------
+            if (skel == null) skel = new bool[Side * Side];
+            System.Array.Clear(skel, 0, skel.Length);
+            int bx0 = Side, bz0 = Side, bx1 = -1, bz1 = -1;
             foreach (int c in drawn)
             {
-                int cx = c % Side, cz = c / Side;
-                for (int dz = -1; dz <= 1; dz++)
-                    for (int dx = -1; dx <= 1; dx++)
-                    {
-                        int nx = cx + dx, nz = cz + dz;
-                        if (nx < 0 || nz < 0 || nx >= Side || nz >= Side) continue;
-                        int j = nz * Side + nx;
-                        if (comp[j] == 0) { comp[j] = 1; stack.Add(j); }
-                    }
+                skel[c] = true;
+                int x = c % Side, z = c / Side;
+                if (x < bx0) bx0 = x; if (x > bx1) bx1 = x;
+                if (z < bz0) bz0 = z; if (z > bz1) bz1 = z;
             }
-
-            foreach (int c in drawn) { rad[c] = Radius(c); str[c] = Strength(c); }
-
-            foreach (int c in stack)
+            segs.Clear();
+            if (drawn.Count > 0)
             {
-                int cx = c % Side, cz = c / Side;
-                for (int sz = 0; sz < Sub; sz++)
-                    for (int sx = 0; sx < Sub; sx++)
-                    {
-                        int u = cx * Sub + sx, v = cz * Sub + sz;
-                        int a = Vertex(u, v), b = Vertex(u + 1, v), d = Vertex(u, v + 1), e = Vertex(u + 1, v + 1);
-                        if (cols[a].a == 0 && cols[b].a == 0 && cols[d].a == 0 && cols[e].a == 0) continue;
-                        // Clockwise seen from above (Unity front face).
-                        tris.Add(a); tris.Add(d); tris.Add(e);
-                        tris.Add(a); tris.Add(e); tris.Add(b);
-                    }
+                bx0 = Mathf.Max(1, bx0); bz0 = Mathf.Max(1, bz0);
+                bx1 = Mathf.Min(Side - 2, bx1); bz1 = Mathf.Min(Side - 2, bz1);
+                Thin(bx0, bz0, bx1, bz1);
+                if (clock.Elapsed.TotalMilliseconds > SliceMs) { yield return null; clock.Restart(); }
+                for (int k = 0; k < 2; k++) PruneSpurs();
+                if (clock.Elapsed.TotalMilliseconds > SliceMs) { yield return null; clock.Restart(); }
+
+                // ---- 2. chains -> smoothed polylines -> segments --------------
+                TraceChains();
             }
 
+            // The fire yard: a modest trodden disc, only if roads reach it.
+            Vector3 fire = camp.CampCentre;
+            float yardS = 0f;
+            foreach (int c in drawn)
+            {
+                Vector3 p = CentreOf(c);
+                float dx = p.x - fire.x, dz = p.z - fire.z;
+                if (dx * dx + dz * dz <= (YardRadius + Cell) * (YardRadius + Cell)) yardS = Mathf.Max(yardS, Strength(c));
+            }
+            if (yardS > 0f)
+            {
+                // Not a disc (that read as a rug): four overlapping blobs
+                // round the fire, placed by a hash of the fire's cell.
+                int fx = Mathf.RoundToInt(fire.x / Cell), fz = Mathf.RoundToInt(fire.z / Cell);
+                for (int n = 0; n < 4; n++)
+                {
+                    float ang = (n + 0.6f * Hash(fx + n * 17, fz - n * 5)) * Mathf.PI * 0.5f;
+                    float off = 0.35f * YardRadius * (0.6f + 0.6f * Hash(fx - n * 3, fz + n * 23));
+                    float rr = YardRadius * (0.62f + 0.22f * Hash(fx + n * 7, fz + n * 13));
+                    float cx = fire.x + Mathf.Cos(ang) * off, cz = fire.z + Mathf.Sin(ang) * off;
+                    float ys = yardS * 0.85f;
+                    segs.Add(new Seg { ax = cx, az = cz, bx = cx, bz = cz, sa = ys, sb = ys, oa = hw - rr, ob = hw - rr });
+                }
+            }
+            if (clock.Elapsed.TotalMilliseconds > SliceMs) { yield return null; clock.Restart(); }
+
+            // ---- 3. distance + strength per 0.5 m sheet vertex ---------------
+            int count = SubSide * SubSide;
+            if (sD == null || sD.Length != count)
+            {
+                sD = new float[count]; sS = new float[count]; sIdx = new int[count];
+                for (int k = 0; k < count; k++) { sD[k] = FarD; sIdx[k] = -1; }
+                sTouched.Clear();
+                yield return null; clock.Restart();          // first build only: 5 MB of scratch
+            }
+            foreach (int k in sTouched) { sD[k] = FarD; sS[k] = 0f; sIdx[k] = -1; }
+            sTouched.Clear();
+            if (hCache == null || hCache.Length != count)
+            {
+                hCache = new float[count];
+                for (int k = 0; k < count; k++) hCache[k] = float.NaN;
+                yield return null; clock.Restart();
+            }
+            float baseX = (ox - 0.5f) * Cell, baseZ = (oz - 0.5f) * Cell;
+            float reach = hw + 1.3f;
+            int umin = SubSide, vmin = SubSide, umax = -1, vmax = -1;
+            for (int n = 0; n < segs.Count; n++)
+            {
+                Seg sg = segs[n];
+                float grow = reach - Mathf.Min(sg.oa, sg.ob);
+                int u0 = Mathf.Max(0, Mathf.FloorToInt((Mathf.Min(sg.ax, sg.bx) - grow - baseX) / Step));
+                int u1 = Mathf.Min(SubSide - 1, Mathf.CeilToInt((Mathf.Max(sg.ax, sg.bx) + grow - baseX) / Step));
+                int v0 = Mathf.Max(0, Mathf.FloorToInt((Mathf.Min(sg.az, sg.bz) - grow - baseZ) / Step));
+                int v1 = Mathf.Min(SubSide - 1, Mathf.CeilToInt((Mathf.Max(sg.az, sg.bz) + grow - baseZ) / Step));
+                float ex = sg.bx - sg.ax, ez = sg.bz - sg.az;
+                float ll = ex * ex + ez * ez;
+                for (int v = v0; v <= v1; v++)
+                {
+                    float wz = baseZ + v * Step;
+                    for (int u = u0; u <= u1; u++)
+                    {
+                        float wx = baseX + u * Step;
+                        float t = ll > 1e-6f ? Mathf.Clamp01(((wx - sg.ax) * ex + (wz - sg.az) * ez) / ll) : 0f;
+                        float px = sg.ax + ex * t - wx, pz = sg.az + ez * t - wz;
+                        float d = Mathf.Sqrt(px * px + pz * pz) + (sg.oa + (sg.ob - sg.oa) * t);
+                        if (d >= reach) continue;
+                        int k = v * SubSide + u;
+                        if (sIdx[k] == -1)
+                        {
+                            sIdx[k] = -2;
+                            sTouched.Add(k);
+                            if (u < umin) umin = u; if (u > umax) umax = u;
+                            if (v < vmin) vmin = v; if (v > vmax) vmax = v;
+                        }
+                        if (d < sD[k]) sD[k] = d;
+                        float s = (sg.sa + (sg.sb - sg.sa) * t) * Mathf.Clamp01((reach - d) / 1.3f);
+                        if (s > sS[k]) sS[k] = s;
+                    }
+                }
+                if ((n & 15) == 15 && clock.Elapsed.TotalMilliseconds > SliceMs) { yield return null; clock.Restart(); }
+            }
+
+            // ---- 4. the sheet: only quads that can show ----------------------
+            verts.Clear(); uvs.Clear(); tris.Clear();
+            Vector3 origin = view != null ? view.transform.position : camp.CampCentre;
+            float show = hw + 0.5f * Wobble + 0.05f;
+            for (int v = vmin; v < vmax; v++)
+            {
+                for (int u = umin; u < umax; u++)
+                {
+                    int k = v * SubSide + u;
+                    if (sIdx[k] == -1 && sIdx[k + 1] == -1 && sIdx[k + SubSide] == -1 && sIdx[k + SubSide + 1] == -1) continue;
+                    if (Mathf.Min(Mathf.Min(sD[k], sD[k + 1]), Mathf.Min(sD[k + SubSide], sD[k + SubSide + 1])) >= show) continue;
+                    int a = SheetVertex(u, v, baseX, baseZ, origin), b = SheetVertex(u + 1, v, baseX, baseZ, origin);
+                    int d0 = SheetVertex(u, v + 1, baseX, baseZ, origin), e = SheetVertex(u + 1, v + 1, baseX, baseZ, origin);
+                    // Clockwise seen from above (Unity front face); split
+                    // along the diagonal whose ends are closer in distance so
+                    // a curved edge does not zig-zag across quads.
+                    if (Mathf.Abs(sD[k] - sD[k + SubSide + 1]) <= Mathf.Abs(sD[k + 1] - sD[k + SubSide]))
+                    { tris.Add(a); tris.Add(d0); tris.Add(e); tris.Add(a); tris.Add(e); tris.Add(b); }
+                    else
+                    { tris.Add(a); tris.Add(d0); tris.Add(b); tris.Add(b); tris.Add(d0); tris.Add(e); }
+                    // Fresh ground heights are the dear part (first build):
+                    // stop mid-row when the budget is gone.
+                    if ((u & 7) == 7 && clock.Elapsed.TotalMilliseconds > SliceMs) { yield return null; clock.Restart(); }
+                }
+            }
+
+            // ---- 5. upload (the only step that must be one frame) ------------
+            EnsureView();
             mesh.Clear();
             mesh.indexFormat = verts.Count > 65000 ? IndexFormat.UInt32 : IndexFormat.UInt16;
             mesh.SetVertices(verts);
-            mesh.SetColors(cols);
+            mesh.SetUVs(0, uvs);
             mesh.SetTriangles(tris, 0, true);
             mesh.RecalculateNormals();
             var mr = view.GetComponent<MeshRenderer>();
             mr.enabled = tris.Count > 0;
-            CopyTerrainLight(mr.sharedMaterial);
-            LastBuildMs = (float)watch.Elapsed.TotalMilliseconds;
+            var m = mr.sharedMaterial;
+            if (m != null)
+            {
+                if (m.HasProperty("_HalfWidth")) m.SetFloat("_HalfWidth", HalfWidth);
+                if (m.HasProperty("_Feather")) m.SetFloat("_Feather", Feather);
+                if (m.HasProperty("_Wobble")) m.SetFloat("_Wobble", Wobble);
+                // Raw values, as v1's vertex colours were (no sRGB->linear):
+                // the palette was tuned against the meadow that way.
+                if (m.HasProperty("_CentreColour")) m.SetVector("_CentreColour", (Vector4)CentreColour);
+                if (m.HasProperty("_EdgeColour")) m.SetVector("_EdgeColour", (Vector4)EdgeColour);
+            }
+            CopyTerrainLight(m);
             LastVertexCount = verts.Count;
-            if (LogBuild)
-                Debug.Log($"[CampRoads] {camp.name}: {drawn.Count} road cells, {verts.Count} verts, {tris.Count / 3} tris, {LastBuildMs:0.0} ms");
         }
 
-        /// Lattice vertex (u, v) in sub-cell units from cell (0,0)'s centre
-        /// minus half a cell: evaluated and added once per rebuild.
-        int Vertex(int u, int v)
+        int SheetVertex(int u, int v, float baseX, float baseZ, Vector3 origin)
         {
-            int key = v * SubSide + u;
-            if (vIndex.TryGetValue(key, out int idx)) return idx;
-
-            float step = Cell / Sub;
-            float wx = (ox - 0.5f) * Cell + u * step;
-            float wz = (oz - 0.5f) * Cell + v * step;
-
-            if (!hCache.TryGetValue(key, out float h))
-            {
-                h = camp.GroundAt(new Vector3(wx, 0f, wz));
-                hCache[key] = h;
-            }
-
-            // Irregular shoulders: a little value noise on the distance.
-            float wobble = (Noise(wx * 0.55f, wz * 0.55f) - 0.5f) * 0.36f;
-
-            float best = 0f, bestU = 1f;
-            int cx = Mathf.RoundToInt(wx / Cell) - ox, cz = Mathf.RoundToInt(wz / Cell) - oz;
-            for (int dz = -2; dz <= 2; dz++)
-                for (int dx = -2; dx <= 2; dx++)
-                {
-                    int x = cx + dx, z = cz + dz;
-                    if (x < 0 || z < 0 || x >= Side || z >= Side) continue;
-                    int i = z * Side + x;
-                    if (!draw[i]) continue;
-                    float ax = (ox + x) * Cell, az = (oz + z) * Cell;
-                    float ra = rad[i], sa = str[i];
-                    // The cell's own disc.
-                    Field(Dist(wx, wz, ax, az), ra, sa, wobble, ref best, ref bestU);
-                    // Capsules to four forward neighbours (each pair once).
-                    for (int n = 0; n < 4; n++)
-                    {
-                        int ndx = n == 0 ? 1 : n == 1 ? 0 : n == 2 ? 1 : -1;
-                        int ndz = n == 0 ? 0 : 1;
-                        int jx = x + ndx, jz = z + ndz;
-                        if (jx < 0 || jx >= Side || jz >= Side) continue;
-                        int j = i + ndx + ndz * Side;
-                        // All eight links for DRAWING (a staircase of cells
-                        // becomes one smooth diagonal band); `Linked`'s
-                        // stricter rule is only for finding ends.
-                        if (!draw[j]) continue;
-                        float bx = ax + ndx * Cell, bz = az + ndz * Cell;
-                        float ex = bx - ax, ez = bz - az;
-                        float t = Mathf.Clamp01(((wx - ax) * ex + (wz - az) * ez) / (ex * ex + ez * ez));
-                        float d = Dist(wx, wz, ax + ex * t, az + ez * t);
-                        Field(d, Mathf.Lerp(ra, rad[j], t), Mathf.Lerp(sa, str[j], t), wobble, ref best, ref bestU);
-                    }
-                }
-
-            // Astra's cross-section: light compacted crown fading to the
-            // darker shoulder. `bestU` is the distance to the NEAREST
-            // centreline, so a broad trampled yard stays crown-coloured
-            // (per-capsule ruts drew a lattice across a yard -- rejected).
-            Color c = Color.Lerp(CentreColour, EdgeColour, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((bestU - 0.25f) / 0.65f)));
-            float mottle = 0.92f + 0.16f * Noise(wx * 0.23f + 17.1f, wz * 0.23f - 3.7f);
-            c.r *= mottle; c.g *= mottle; c.b *= mottle;
-            c.a = best;
-
+            int k = v * SubSide + u;
+            int idx = sIdx[k];
+            if (idx >= 0) return idx;
+            float wx = baseX + u * Step, wz = baseZ + v * Step;
+            float h = hCache[k];
+            if (float.IsNaN(h)) { h = camp.GroundAt(new Vector3(wx, 0f, wz)); hCache[k] = h; }
             idx = verts.Count;
-            verts.Add(view.transform.InverseTransformPoint(new Vector3(wx, h + Lift, wz)));
-            cols.Add(best < 0.004f ? new Color32(0, 0, 0, 0) : (Color32)c);
-            vIndex[key] = idx;
+            verts.Add(new Vector3(wx - origin.x, h + Lift - origin.y, wz - origin.z));
+            uvs.Add(new Vector2(Mathf.Min(sD[k], FarD), sS[k]));
+            if (sIdx[k] == -1) sTouched.Add(k);
+            sIdx[k] = idx;
             return idx;
         }
 
-        static float Dist(float ax, float az, float bx, float bz)
+        // --- thinning ----------------------------------------------------------
+
+        /// Zhang-Suen: peel boundary cells in two alternating sub-passes until
+        /// only 8-connected centre-lines remain. Endpoints survive, so a road
+        /// keeps its length; a broad yard becomes the paths that cross it.
+        void Thin(int x0, int z0, int x1, int z1)
         {
-            float dx = ax - bx, dz = az - bz;
-            return Mathf.Sqrt(dx * dx + dz * dz);
+            stack.Clear();
+            bool changed = true;
+            int guard = 0;
+            while (changed && guard++ < 64)
+            {
+                changed = false;
+                for (int pass = 0; pass < 2; pass++)
+                {
+                    stack.Clear();
+                    for (int z = z0; z <= z1; z++)
+                        for (int x = x0; x <= x1; x++)
+                        {
+                            int i = z * Side + x;
+                            if (!skel[i]) continue;
+                            bool p2 = skel[i + Side], p3 = skel[i + Side + 1], p4 = skel[i + 1], p5 = skel[i - Side + 1];
+                            bool p6 = skel[i - Side], p7 = skel[i - Side - 1], p8 = skel[i - 1], p9 = skel[i + Side - 1];
+                            int b = (p2 ? 1 : 0) + (p3 ? 1 : 0) + (p4 ? 1 : 0) + (p5 ? 1 : 0) + (p6 ? 1 : 0) + (p7 ? 1 : 0) + (p8 ? 1 : 0) + (p9 ? 1 : 0);
+                            if (b < 2 || b > 6) continue;
+                            int a = (!p2 && p3 ? 1 : 0) + (!p3 && p4 ? 1 : 0) + (!p4 && p5 ? 1 : 0) + (!p5 && p6 ? 1 : 0)
+                                  + (!p6 && p7 ? 1 : 0) + (!p7 && p8 ? 1 : 0) + (!p8 && p9 ? 1 : 0) + (!p9 && p2 ? 1 : 0);
+                            if (a != 1) continue;
+                            if (pass == 0) { if ((p2 && p4 && p6) || (p4 && p6 && p8)) continue; }
+                            else { if ((p2 && p4 && p8) || (p2 && p6 && p8)) continue; }
+                            stack.Add(i);
+                        }
+                    foreach (int i in stack) skel[i] = false;
+                    if (stack.Count > 0) changed = true;
+                }
+            }
         }
 
-        static void Field(float d, float r, float s, float wobble, ref float best, ref float bestU)
+        bool SkelLinked(int i, int dx, int dz)
         {
-            float dd = d + wobble * Mathf.Clamp01(r / HalfWidth);
-            float f = Mathf.Min(Feather, r * 0.9f);
-            float cover = 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((dd - (r - f)) / Mathf.Max(0.001f, f)));
-            float a = cover * s;
-            if (a > best) best = a;
-            if (cover > 0f) bestU = Mathf.Min(bestU, Mathf.Clamp01(dd / Mathf.Max(0.001f, r)));
+            int x = i % Side + dx, z = i / Side + dz;
+            if (x < 0 || z < 0 || x >= Side || z >= Side) return false;
+            if (!skel[z * Side + x]) return false;
+            if (dx == 0 || dz == 0) return true;
+            return !skel[i + dx] && !skel[i + dz * Side];
+        }
+
+        int SkelDegree(int i)
+        {
+            int d = 0;
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                    if ((dx != 0 || dz != 0) && SkelLinked(i, dx, dz)) d++;
+            return d;
+        }
+
+        int SkelNext(int i, int notThis)
+        {
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if ((dx == 0 && dz == 0) || !SkelLinked(i, dx, dz)) continue;
+                    int j = i + dx + dz * Side;
+                    if (j != notThis) return j;
+                }
+            return -1;
+        }
+
+        /// Cut thinning whiskers: an end that reaches a junction within
+        /// `SpurCells` cells is a bump on a broad yard's edge, not a road.
+        void PruneSpurs()
+        {
+            foreach (int start in drawn)
+            {
+                if (!skel[start] || SkelDegree(start) != 1) continue;
+                chain.Clear();
+                int prev = -1, cur = start;
+                while (cur >= 0 && chain.Count <= SpurCells)
+                {
+                    int deg = SkelDegree(cur);
+                    if (deg >= 3) break;
+                    chain.Add(cur);
+                    int nx = SkelNext(cur, prev);
+                    prev = cur; cur = nx;
+                }
+                if (cur >= 0 && chain.Count <= SpurCells && SkelDegree(cur) >= 3)
+                    foreach (int c in chain) skel[c] = false;
+            }
+        }
+
+        static long EdgeKey(int a, int b) => a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
+
+        void TraceChains()
+        {
+            seenEdge.Clear();
+            System.Array.Clear(comp, 0, comp.Length);
+            // Open chains, from every end and junction.
+            foreach (int s in drawn)
+            {
+                if (!skel[s]) continue;
+                int deg = SkelDegree(s);
+                if (deg == 2 || deg == 0) continue;
+                for (int dz = -1; dz <= 1; dz++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if ((dx == 0 && dz == 0) || !SkelLinked(s, dx, dz)) continue;
+                        int j = s + dx + dz * Side;
+                        if (!seenEdge.Add(EdgeKey(s, j))) continue;
+                        chain.Clear();
+                        chain.Add(s);
+                        int prev = s, cur = j;
+                        while (true)
+                        {
+                            chain.Add(cur);
+                            comp[cur] = 1;
+                            if (SkelDegree(cur) != 2) break;
+                            int nx = SkelNext(cur, prev);
+                            if (nx < 0 || !seenEdge.Add(EdgeKey(cur, nx))) break;
+                            prev = cur; cur = nx;
+                        }
+                        comp[s] = 1;
+                        EmitChain(deg <= 1, SkelDegree(chain[chain.Count - 1]) <= 1, false);
+                    }
+            }
+            // Closed loops (every cell degree 2).
+            foreach (int s in drawn)
+            {
+                if (!skel[s] || comp[s] != 0 || SkelDegree(s) != 2) continue;
+                chain.Clear();
+                int prev = -1, cur = s;
+                while (cur >= 0 && comp[cur] == 0)
+                {
+                    comp[cur] = 1;
+                    chain.Add(cur);
+                    int nx = SkelNext(cur, prev);
+                    prev = cur; cur = nx;
+                }
+                chain.Add(s);
+                EmitChain(false, false, true);
+            }
+        }
+
+        /// One chain of skeleton cells -> jittered, Chaikin-smoothed polyline
+        /// -> segments with strength and end taper.
+        void EmitChain(bool openStart, bool openEnd, bool loop)
+        {
+            if (chain.Count < 2) return;
+            pts.Clear(); ps.Clear();
+            for (int n = 0; n < chain.Count; n++)
+            {
+                int c = chain[n];
+                int lx = ox + c % Side, lz = oz + c / Side;
+                float x = lx * Cell, z = lz * Cell;
+                bool pinned = !loop && (n == 0 || n == chain.Count - 1) && !(n == 0 ? openStart : openEnd);
+                if (!pinned)
+                {
+                    // A slow wander (~12 m wavelength), the same every build
+                    // and every load: a per-cell wiggle read as a worm.
+                    x += (Noise(x * 0.08f + 3.1f, z * 0.08f - 7.7f) - 0.5f) * 2f * Jitter;
+                    z += (Noise(x * 0.08f - 11.3f, z * 0.08f + 5.9f) - 0.5f) * 2f * Jitter;
+                }
+                pts.Add(new Vector2(x, z));
+                ps.Add(Strength(c));
+            }
+            // Relax the lattice out of it first (a 30-degree line on 2 m
+            // cells is a run of axis and diagonal steps): Laplacian rounds,
+            // ends held.
+            for (int round = 0; round < 4; round++)
+            {
+                pts2.Clear(); pts2.AddRange(pts);
+                for (int n = 1; n < pts.Count - 1; n++)
+                    pts[n] = 0.5f * pts2[n] + 0.25f * (pts2[n - 1] + pts2[n + 1]);
+            }
+            // Chaikin, three rounds, ends kept (a loop is closed already).
+            for (int round = 0; round < 3; round++)
+            {
+                pts2.Clear(); ps2.Clear();
+                pts2.Add(pts[0]); ps2.Add(ps[0]);
+                for (int n = 0; n < pts.Count - 1; n++)
+                {
+                    Vector2 a = pts[n], b = pts[n + 1];
+                    float sa = ps[n], sb = ps[n + 1];
+                    pts2.Add(Vector2.Lerp(a, b, 0.25f)); ps2.Add(Mathf.Lerp(sa, sb, 0.25f));
+                    pts2.Add(Vector2.Lerp(a, b, 0.75f)); ps2.Add(Mathf.Lerp(sa, sb, 0.75f));
+                }
+                pts2.Add(pts[pts.Count - 1]); ps2.Add(ps[ps.Count - 1]);
+                pts.Clear(); pts.AddRange(pts2);
+                ps.Clear(); ps.AddRange(ps2);
+            }
+            // Arc length for the taper at open ends.
+            float total = 0f;
+            for (int n = 1; n < pts.Count; n++) total += Vector2.Distance(pts[n - 1], pts[n]);
+            float along = 0f, taperDepth = HalfWidth - TipHalfWidth;
+            float prevOff = Off(0f, total, openStart, openEnd, taperDepth);
+            for (int n = 1; n < pts.Count; n++)
+            {
+                along += Vector2.Distance(pts[n - 1], pts[n]);
+                float off = Off(along, total, openStart, openEnd, taperDepth);
+                segs.Add(new Seg
+                {
+                    ax = pts[n - 1].x, az = pts[n - 1].y, bx = pts[n].x, bz = pts[n].y,
+                    sa = ps[n - 1], sb = ps[n], oa = prevOff, ob = off,
+                });
+                prevOff = off;
+            }
+        }
+
+        static float Off(float along, float total, bool openStart, bool openEnd, float depth)
+        {
+            float t = 1f;
+            if (openStart) t = Mathf.Min(t, along / TaperLength);
+            if (openEnd) t = Mathf.Min(t, (total - along) / TaperLength);
+            t = Mathf.Clamp01(t);
+            return depth * (1f - t * t * (3f - 2f * t));
         }
 
         static float Hash(int x, int z)
@@ -614,6 +963,7 @@ namespace SeaSick.World
 
         void OnDestroy()
         {
+            if (ReferenceEquals(sOwner, this)) sOwner = null;
             if (mesh != null) Destroy(mesh);
         }
 
@@ -715,7 +1065,9 @@ namespace SeaSick.World
             }
             r.lastSeconds = TimeOfDay.Seconds;
             r.Pass();
-            return $"{legs.Count} legs, {routed} routed, {r.drawn.Count} road cells, {LastVertexCount} verts, {LastBuildMs:0.0} ms";
+            r.FinishBuild();
+            return $"{legs.Count} legs, {routed} routed, {r.drawn.Count} road cells, {r.segs.Count} segs, {LastVertexCount} verts, "
+                + $"{LastBuildMs:0.0} ms work in {LastSlices} slices, worst slice {LastMaxSliceMs:0.00} ms";
         }
 
         /// Dev: wipe the wear (and the ledger rows) for this camp.
@@ -726,6 +1078,7 @@ namespace SeaSick.World
             System.Array.Clear(r.wear, 0, r.wear.Length);
             System.Array.Clear(r.road, 0, r.road.Length);
             r.Pass();
+            r.FinishBuild();
         }
     }
 }
