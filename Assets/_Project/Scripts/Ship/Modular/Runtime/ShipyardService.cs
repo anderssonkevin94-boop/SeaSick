@@ -307,15 +307,18 @@ namespace SeaSick.Ship.Modular
                     // wants his pier at island_2, not anywhere she happens to be
                     // lying). Anchoring off a random island still counts as "at
                     // rest" above; it does not count as home.
-                    list.Add($"Refits are done at your home berth ({SeaSick.World.Dock.HomeLabel}).");
+                    list.Add($"Refits are done at {SeaSick.World.Dock.HomeLabel}.");
                 }
                 else if (SeaSick.World.DryDockSlip.HomeSlip == null)
                 {
                     // **The dry dock gate, 2026-09-26.** She can be moored at
                     // the home berth with nothing to refit HER on -- the
                     // shipyard is a building now (`SeaSick.World.DryDockSlip`),
-                    // not just a place to be.
-                    list.Add($"Build a dry dock next to your home berth ({SeaSick.World.Dock.HomeLabel}) to refit her.");
+                    // not just a place to be. She is already AT the home
+                    // berth in this branch, so naming it again (2026-09-26:
+                    // was "your home berth (her home berth)") is redundant --
+                    // just say what to build.
+                    list.Add("Build a dry dock next to your home berth to refit her.");
                 }
             }
             else if (SeaSick.World.DryDockSlip.HomeSlip == null)
@@ -323,7 +326,7 @@ namespace SeaSick.Ship.Modular
                 // No `AnchorController` at all (a probe rig, say): the
                 // mooring checks above cannot run, but the dry dock still
                 // can, and its absence is still worth saying.
-                list.Add($"Build a dry dock next to your home berth ({SeaSick.World.Dock.HomeLabel}) to refit her.");
+                list.Add("Build a dry dock next to your home berth to refit her.");
             }
             if (SeaSick.Combat.RaidParty.Active != null) list.Add("Not during a raid.");
             var lockOn = GetComponent<SeaSick.Combat.CombatLock>();

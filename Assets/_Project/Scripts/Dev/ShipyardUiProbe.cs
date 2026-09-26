@@ -140,6 +140,13 @@ public class ShipyardUiProbe : MonoBehaviour
         }
         string why0;
         if (!anchor.AtHomeDock && !anchor.BerthAtHome(out why0)) sb.AppendLine("could not berth at the start: " + why0);
+        // **2026-09-26: the refit gate now also asks for a dry dock**
+        // (`ShipyardService.CanRefitNow` / `RefitBlockers`, `DryDockSlip`).
+        // Every refit below would otherwise be refused with "build a dry
+        // dock" instead of exercising what each section actually tests --
+        // dry-dock siting is a separate concern (`ShipyardRefitProbe`'s own
+        // gate for it), so this injects one directly, same as that probe.
+        EnsureDryDock();
         yield return new WaitForSeconds(0.5f);
         if (hull != null) hull.Batter(yard.transform.position, 0.15f);
         SetHold(5, 2);
@@ -1340,9 +1347,29 @@ public class ShipyardUiProbe : MonoBehaviour
     {
         if (yard.CanRefitNow(out _)) yield break;
         if (!anchor.AtHomeDock) anchor.BerthAtHome(out _);
+        EnsureDryDock();
         float t0 = Time.realtimeSinceStartup;
         while (!yard.CanRefitNow(out _) && Time.realtimeSinceStartup - t0 < 6f) yield return null;
         if (!yard.CanRefitNow(out string why)) sb.AppendLine("  note: cannot refit now: " + why);
+    }
+
+    /// A dry dock on the home berth's island, without going through
+    /// `Outpost.Raise`'s terrain siting -- see the call site. A no-op if
+    /// one is already there. Mirrors `ShipyardRefitProbe.EnsureDryDock`.
+    void EnsureDryDock()
+    {
+        if (DryDockSlip.HomeSlip != null) return;
+        var home = Dock.Home;
+        var isle = home != null ? Island.Nearest(home.Berth) : null;
+        var outpost = isle != null ? Outpost.Of(isle) : null;
+        if (outpost == null) { sb.AppendLine("EnsureDryDock: no outpost at the home berth's island"); return; }
+        var go = new GameObject("DryDockSlip (probe-injected)");
+        go.transform.position = home.Berth;
+        var b = go.AddComponent<Building>();
+        b.Configure(BuildPlans.DryDock);
+        var slip = go.AddComponent<DryDockSlip>();
+        slip.Configure(BuildPlans.DryDock);
+        slip.Register(b, outpost);
     }
 
     void CheckOverride(string where)
