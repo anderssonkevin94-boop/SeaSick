@@ -801,8 +801,40 @@ namespace SeaSick.World
             return PlaytestCostCap > 0 ? Mathf.Min(logs, PlaytestCostCap) : logs;
         }
 
-        /// The two plans that go on a wall line rather than on a plot.
-        public static readonly BuildPlan[] Fortifications = { Palisade, Gate };
+        /// **A chain of ladders and landings up a cliff (2026-09-27).**
+        /// Kevin: *"a ladder-platform-ladder-platform structure to ascend
+        /// the mountains."* Two points like a wall (foot, top), priced by
+        /// the RISE (`LadderCost`), so `baseCost` is zero here for the same
+        /// reason the palisade's is. See `Outpost.Ladders`, `LadderLayout`.
+        public static readonly BuildPlan Ladder = new BuildPlan
+        {
+            id = "ladder",
+            kind = BuildKind.Hut,
+            label = "ladder",
+            blurb = "ladders and landings up a cliff — hands and raiders climb it, animals can't",
+            resource = Res.Timber,
+            baseCost = 0,
+            baseStoneCost = 0,
+            footprint = new Vector2(1.5f, 1.5f),
+            ridge = 2f,
+        };
+
+        /// Timber per metre of rise (PROVISIONAL, 2026-09-27, unplayed).
+        public const float LadderTimberPerMetre = 2f;
+        /// No chain costs less than this (PROVISIONAL).
+        public const int LadderMinCost = 4;
+
+        /// What a chain of this rise costs in timber: 2 per metre, at least
+        /// 4, through the playtest cap like every other price.
+        public static int LadderCost(float rise)
+        {
+            int logs = Mathf.Max(LadderMinCost, Mathf.CeilToInt(Mathf.Max(0f, rise) * LadderTimberPerMetre));
+            return PlaytestCostCap > 0 ? Mathf.Min(logs, PlaytestCostCap) : logs;
+        }
+
+        /// The plans that go on a line between two points rather than on a
+        /// plot (and so are not in `AtACamp`).
+        public static readonly BuildPlan[] Fortifications = { Palisade, Gate, Ladder };
 
         /// **Where the Nth copy of an `allowMultiple` plan would be priced,
         /// 2026-09-27.** Kevin asked for multiple huts and asked, in the

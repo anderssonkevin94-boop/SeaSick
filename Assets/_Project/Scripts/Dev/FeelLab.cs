@@ -64,6 +64,9 @@ namespace SeaSick.Dev
             "SeaSick.Ship.HelmTuning",
             "SeaSick.Ship.HandlingTuning",
             "SeaSick.Ship.JuiceTuning",
+            // The island camera's locked-angle knob (Kevin, 2026-09-27):
+            // "lock in the camera at a certain angle ... a good set one."
+            "SeaSick.CameraRig.IslandCamLock",
         };
 
         /// The spec's range table, keyed "ClassName.fieldName". Anything not
@@ -97,6 +100,11 @@ namespace SeaSick.Dev
             {"JuiceTuning.sprayScale",        (0f, 5f)},   // Kevin pinned 3; particle caps bound it
             {"JuiceTuning.wakeScale",         (0f, 3f)},
             {"JuiceTuning.soundPitchRange",   (0f, 1f)},
+
+            // 20..70: shallow enough to still read as "looking down at the
+            // island" at 20, steep enough to still show a horizon at 70;
+            // default 38 -- see `IslandCamLock`'s own doc comment.
+            {"IslandCamLock.angleDeg", (20f, 70f)},
         };
 
         static (float min, float max) RangeFor(string key, float def)

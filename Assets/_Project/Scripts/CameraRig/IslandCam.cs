@@ -54,6 +54,46 @@ namespace SeaSick.CameraRig
     /// fly-to) were a coin toss: when `Apply` happened to run first it drew
     /// LAST frame's zoom, and the pose this component reported was a frame
     /// ahead of the pose on screen (`IslandCamProbe`: 1.2 m apart in a sweep).
+    /// **The locked-angle mode, Kevin on the phone 2026-09-27:** *"I would
+    /// like to try to lock in the camera at a certain angle that looks good
+    /// when on the island. so I can still go up and down and spin around
+    /// but the actual angle is what I would like to be a good set one."*
+    ///
+    /// A top-level static, not nested in `Feel`, on purpose: `FeelLab`
+    /// discovers a tuning section by resolving a whole class, and `Feel`
+    /// carries two dozen fields that are not this knob's business to expose
+    /// on a phone panel. This class is exactly the two fields Kevin asked
+    /// for and nothing else, registered in `FeelLab.TypeFullNames`.
+    ///
+    /// While `locked`, every shot this component composes — hands-on or
+    /// not, including the authored dock shot and a campless landing's ring
+    /// — renders at exactly `angleDeg`, at every zoom (see `Compose` and
+    /// `Apply`). Zooming still changes distance/height, spinning and
+    /// panning still work; only the tilt gesture itself (two-finger shared
+    /// vertical, the mouse right-drag's vertical component, PageUp/
+    /// PageDown) goes inert — see `OrbitAbout` and `Nudge` — because a tilt
+    /// that can still be nudged is a tilt that drifts off the set angle by
+    /// the next session. A hill in the way is cleared by standing the seat
+    /// further back along the SAME ray (`Compose` grows `span`), never by
+    /// tipping the lens at it.
+    ///
+    /// Default ON. Default 38°: the curve's own middle point is 32° at the
+    /// default 165 m of ground (`Feel.tiltMidDeg`, the shipped dock shot),
+    /// but a single angle has to also serve the close-in 8 m view (the
+    /// curve goes to 20° there) and the far 520 m view (55° there) without
+    /// the curve's help — so 38° sits a few degrees steeper than the
+    /// authored middle, roughly midway through the hand-tilt range
+    /// (`Feel.minTiltDeg` 12°..`Feel.maxTiltDeg` 80°) instead of hugging the
+    /// shallow end, which reads better at both the close and the wide
+    /// zoom. It is also `DockCamTuner`'s own opening guess (`tilt = 38f`)
+    /// for "a good look when nothing else is set" — a second, independent
+    /// read landing on the same number.
+    public static class IslandCamLock
+    {
+        public static bool locked = true;
+        public static float angleDeg = 38f;
+    }
+
     [DefaultExecutionOrder(-40)]
     public class IslandCam : MonoBehaviour
     {
@@ -552,6 +592,9 @@ namespace SeaSick.CameraRig
         public void OrbitAbout(Vector2 screen, float dAzimuthDeg, float dTiltDeg)
         {
             if (!Ready) return;
+            // Locked: the spin half of the gesture still lands, the tilt
+            // half is dropped at the door -- see `IslandCamLock`.
+            if (IslandCamLock.locked) dTiltDeg = 0f;
             Drive();
             if (!orbiting)
             {
@@ -625,7 +668,10 @@ namespace SeaSick.CameraRig
                 azimuthDeg = Mathf.Repeat(Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg, 360f);
 
             Ground = wantGround = ground;
-            tiltBiasDeg = tilt - AutoTilt(ground);
+            // Locked: the bias is meaningless (`Compose` ignores it), and
+            // left at zero rather than a stale reading so lock can be
+            // switched off later without a jump.
+            tiltBiasDeg = IslandCamLock.locked ? 0f : tilt - AutoTilt(ground);
             SetPivot(h);
         }
 
@@ -680,7 +726,8 @@ namespace SeaSick.CameraRig
                 azimuthDeg = Mathf.Repeat(
                     azimuthDeg + orbit * Feel.orbitKeyDegPerSecond * dt, 360f);
 
-            if (tilt != 0f)
+            // Locked: PageUp/PageDown do nothing -- see `IslandCamLock`.
+            if (tilt != 0f && !IslandCamLock.locked)
             {
                 Compose(Pivot, Ground, azimuthDeg, tiltBiasDeg, out float t0, out _);
                 float t1 = Mathf.Clamp(t0 + tilt * Feel.tiltKeyDegPerSecond * dt,
@@ -1004,6 +1051,19 @@ namespace SeaSick.CameraRig
                 shot.span = span;
                 shot.direct = true;
             }
+            else if (IslandCamLock.locked)
+            {
+                // Nobody has taken hold of the view -- this is still
+                // whoever's authored composition (the docked shot, a
+                // campless landing's ring, a `LookAt`/`LookAtGround`
+                // framing) -- but the set angle overrides whatever tilt
+                // THAT shot was authored at, exactly as it would the
+                // moment a hand arrived. Nothing else about the shot
+                // changes: span/ground, the legibility clamp and the
+                // ship-hold slide all stay whoever composed them.
+                shot.tiltDeg = Mathf.Clamp(IslandCamLock.angleDeg,
+                    Feel.minTiltDeg, Feel.yieldMaxTiltDeg);
+            }
             return shot;
         }
 
@@ -1089,7 +1149,15 @@ namespace SeaSick.CameraRig
         {
             float tanHalf = Mathf.Tan(Fov() * 0.5f * Mathf.Deg2Rad);
             span = Mathf.Max(1f, ground / (2f * tanHalf));
-            tiltDeg = Mathf.Clamp(AutoTilt(ground) + bias, Feel.minTiltDeg, Feel.maxTiltDeg);
+
+            // **Locked: one angle, at every zoom.** The curve and the hand
+            // bias are both ignored outright rather than merely overridden
+            // by a bigger number below, so nothing downstream of this line
+            // can read "the curve, plus a bit" and be surprised later.
+            bool locked = IslandCamLock.locked;
+            tiltDeg = locked
+                ? Mathf.Clamp(IslandCamLock.angleDeg, Feel.minTiltDeg, Feel.yieldMaxTiltDeg)
+                : Mathf.Clamp(AutoTilt(ground) + bias, Feel.minTiltDeg, Feel.maxTiltDeg);
 
             // A non-serialisable static, nulled by a play-mode recompile. No
             // height field means no yield, which is the right answer: the
@@ -1106,14 +1174,28 @@ namespace SeaSick.CameraRig
 
                 float rise = need - pivot.y;
                 if (rise <= 0f) return;                 // the pivot is in the hill
-                float wantTilt = Mathf.Asin(Mathf.Clamp01(rise / span)) * Mathf.Rad2Deg;
-                if (wantTilt <= Feel.yieldMaxTiltDeg)
-                    tiltDeg = Mathf.Max(tiltDeg, wantTilt);
+
+                if (locked)
+                {
+                    // The angle cannot move, so the only lever left is
+                    // distance: stand the seat further back along the SAME
+                    // ray, which lifts it exactly as much as raising the
+                    // tilt would have -- see the class doc on `IslandCamLock`.
+                    float sinT = Mathf.Sin(tiltDeg * Mathf.Deg2Rad);
+                    if (sinT <= 1e-3f) return;  // nearly level: distance can't lift the seat
+                    span = Mathf.Max(span, rise / sinT);
+                }
                 else
                 {
-                    tiltDeg = Feel.yieldMaxTiltDeg;
-                    span = rise / Mathf.Max(1e-3f,
-                        Mathf.Sin(Feel.yieldMaxTiltDeg * Mathf.Deg2Rad));
+                    float wantTilt = Mathf.Asin(Mathf.Clamp01(rise / span)) * Mathf.Rad2Deg;
+                    if (wantTilt <= Feel.yieldMaxTiltDeg)
+                        tiltDeg = Mathf.Max(tiltDeg, wantTilt);
+                    else
+                    {
+                        tiltDeg = Feel.yieldMaxTiltDeg;
+                        span = rise / Mathf.Max(1e-3f,
+                            Mathf.Sin(Feel.yieldMaxTiltDeg * Mathf.Deg2Rad));
+                    }
                 }
             }
         }
@@ -1274,7 +1356,8 @@ namespace SeaSick.CameraRig
                   * Mathf.Rad2Deg;
 
             Ground = wantGround = ground;
-            tiltBiasDeg = tilt - AutoTilt(ground);
+            // Locked: same reasoning as `Reground` -- see there.
+            tiltBiasDeg = IslandCamLock.locked ? 0f : tilt - AutoTilt(ground);
             focus = aim;
             Pan = wantPan = Vector3.zero;
             following = null;
