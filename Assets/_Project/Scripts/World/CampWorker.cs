@@ -79,7 +79,7 @@ namespace SeaSick.World
     /// free. `CrewAgent.Puppeted`, set here, is what stops `Station` writing
     /// the body's rotation back on top of the direction they are walking in.
     [RequireComponent(typeof(Crew.CrewAgent))]
-    public class CampWorker : MonoBehaviour
+    public partial class CampWorker : MonoBehaviour
     {
         Outpost camp;
         Crew.CrewAgent agent;
@@ -162,10 +162,6 @@ namespace SeaSick.World
         const float Speed = 2.6f;
         const float SwingSeconds = 2.4f;
         const float RestSeconds = 1.1f;
-        /// A stint of clubbing at a beast. Shorter than a swing at a tree:
-        /// the kill is the ledger's, and all this has to be is long enough to
-        /// read as the man doing the work between arriving and carrying.
-        const float HuntSeconds = 2f;
         /// Arm's length. He closes to this and no further -- walking to the
         /// animal's own position would put him inside it.
         const float HuntReach = 1.2f;
@@ -365,6 +361,7 @@ namespace SeaSick.World
         void ReleaseClaim()
         {
             if (camp != null) { camp.ReleaseTree(this); camp.ReleaseBed(this); camp.ReleaseClearing(this); }
+            Unclaim();   // the beast too: a re-ordered hunter lets it be a goat again
             claimedTree = -1;
             clearing = false;
             fieldNode = null;
@@ -832,121 +829,8 @@ namespace SeaSick.World
             }
         }
 
-        /// **Hunting: he walks the beast down, clubs it, and carries meat
-        /// home -- and he never kills anything.**
-        ///
-        /// Same division as the felling, for the same reason (see the class
-        /// note): the ledger owns what a camp produces, and a beast that died
-        /// because a man reached it would make a herd worth more when
-        /// somebody is watching. `Outpost.SyncHunting` takes animals off the
-        /// crag to match the books, preferring the one a hunter has claimed,
-        /// so the beast that drops is the beast he is standing over. All this
-        /// does is be there for it.
-        ///
-        /// **The target moves**, which is the one thing no other errand has
-        /// to deal with. A grazing goat drifts a dozen metres off its anchor
-        /// and a fleeing one goes twenty-five, so the walk is re-aimed at the
-        /// animal's CURRENT position every frame rather than at a spot taken
-        /// once when he set off. It does not run from him: `Animal.Hunted`
-        /// takes his own body out of that animal's flee scan the moment he
-        /// claims it, without which an errand at twelve-metre flee range and
-        /// arm's-length reach could never finish.
-        ///
-        /// **He carries Food, not Game.** The row says Game -- that is what
-        /// is standing on the island -- and the stock the yield lands in is
-        /// Food, so the pile he walks to, the load in his hands and the
-        /// stack it goes on all have to say Food. `Carries` is the split:
-        /// what he swings at and what he shoulders are two questions and
-        /// this is the one row where they have different answers.
-        void TickHunting(OutpostHand r, float dt)
-        {
-            // It died -- to his club, to another hunter's, or to a cull the
-            // ledger ran while he was walking. Let it go and take the next.
-            if (quarry != null && quarry.Dead) Unclaim();
-
-            switch (phase)
-            {
-                case Phase.Resting:
-                {
-                    acting?.Set(VillagerActing.Mode.None);
-                    bool there = Walk(home, dt);
-                    wait -= dt;
-                    if (wait > 0f) { if (there) FaceRest(dt, 0f); return; }
-                    // **No spear, no hunt, 2026-09-23.** Kevin: "to hunt,
-                    // you need a spear." Checked before `ClaimQuarry` so an
-                    // unarmed hand never claims a beast it cannot take.
-                    bool unarmed = camp != null && camp.Ledger != null && camp.Ledger.HunterBlocker() != null;
-                    if (unarmed || !ClaimQuarry())
-                    {
-                        // Nothing alive on the island, every beast left has
-                        // a man on it, or nobody has a spear. He potters near
-                        // the fire and asks again in a moment -- the same
-                        // answer the cutter gives an island with no wood
-                        // left on it.
-                        Vector2 off = Random.insideUnitCircle.normalized * Random.Range(6f, 12f);
-                        target = Stand(camp.CampCentre + new Vector3(off.x, 0f, off.y));
-                        phase = Phase.Going;
-                        return;
-                    }
-                    phase = Phase.Going;
-                    return;
-                }
-
-                case Phase.Going:
-                    acting?.Set(VillagerActing.Mode.None);
-                    if (quarry == null)
-                    {
-                        // He was only stretching his legs.
-                        if (!Walk(target, dt)) return;
-                        phase = Phase.Resting;
-                        wait = RestSeconds;
-                        return;
-                    }
-                    target = quarry.transform.position;
-                    // Arm's length, tested before the step: `Walk` stops at
-                    // 0.35 m, which is inside the animal.
-                    if (!Near(target, HuntReach)) { Walk(target, dt); return; }
-                    phase = Phase.Working;
-                    wait = HuntSeconds;
-                    // **A spear exists in the ledger now (2026-09-23), but
-                    // not in the pose set.** `VillagerActing` has no hunting
-                    // pose; Hammer is the overhand swing the miners use and
-                    // it is the nearest thing there is. The gate that
-                    // requires the spear lives in `Phase.Resting` above --
-                    // this is only the mime, and it stays Hammer until a
-                    // hunting pose is animated.
-                    acting?.Set(VillagerActing.Mode.Hammer);
-                    return;
-
-                case Phase.Working:
-                    if (quarry == null)
-                    {
-                        // Claim taken off him mid-swing: a re-order, or the
-                        // beast is gone. No meat -- he never finished.
-                        Drop();
-                        phase = Phase.Resting;
-                        wait = RestSeconds;
-                        return;
-                    }
-                    Face(quarry.transform.position - transform.position, dt);
-                    wait -= dt;
-                    if (wait > 0f) return;
-                    carrying = Carries(r);
-                    dropAt = Dropoff(r, carrying);
-                    phase = Phase.Coming;
-                    acting?.Set(VillagerActing.Mode.Carry, carrying, CarryCount(r));
-                    return;
-
-                case Phase.Coming:
-                    // Re-aimed every step: a hut raised mid-carry takes it.
-                    dropAt = Dropoff(r, carrying);
-                    if (!Walk(dropAt, dt)) return;
-                    Drop();
-                    phase = Phase.Resting;
-                    wait = RestSeconds;
-                    return;
-            }
-        }
+        // `TickHunting` lives in CampWorker.Hunting.cs (2026-09-26: stalk to
+        // the books' clock, strike, the beast dies, shoulder the carcass home).
 
         /// Is this row out after the herd?
         bool Hunting(OutpostHand r) =>

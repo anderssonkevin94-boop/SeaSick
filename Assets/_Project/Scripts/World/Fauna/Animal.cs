@@ -45,6 +45,28 @@ namespace SeaSick.World
         /// on this rather than on the object still existing.
         public bool Dead { get; private set; }
 
+        /// **A carcass a hunter is coming for (2026-09-26).** Kevin: *"make
+        /// sure that the animal he kills dies. and that he carries the
+        /// animal back to camp."* An animal that was `Hunted` when the books
+        /// killed it does not vanish after the flop: it lies where it fell
+        /// for up to `CarcassWaitSeconds` for its hunter to shoulder it
+        /// (`HunterProps.Shoulder`). Any other kill clears in 3 s as before.
+        public bool AwaitingHunter => Dead && keepForHunter && !Shouldered;
+
+        /// Down on its side: the flop has finished. A hunter lifts it only
+        /// then, so the fall is always seen.
+        public bool Down => Dead && flopped;
+
+        /// Over a hunter's shoulders. The carrier owns it from here and
+        /// destroys it at the store; the lying-carcass timer lets it be.
+        public bool Shouldered { get; set; }
+
+        bool keepForHunter, flopped;
+        /// Seconds a claimed carcass waits for the man who was stalking it.
+        const float CarcassWaitSeconds = 45f;
+        /// Seconds any other carcass lies before it is cleared.
+        const float CarcassSeconds = 3f;
+
         // ---- placeholder tuning ------------------------------------------
         const float GrazeMin = 3f, GrazeMax = 8f;   // s between wanders
         const float WanderLeash = 12f;              // m from the anchor
@@ -178,6 +200,9 @@ namespace SeaSick.World
         {
             if (Dead) return;
             Dead = true;
+            // The beast a hunter had claimed waits for him (see
+            // `AwaitingHunter`); read before the claim is dropped.
+            keepForHunter = Hunted;
             Hunted = false;
             // Out of the herd BEFORE the flop, not after: while it is in the
             // list it is still a goat to everything that counts one, and the
@@ -185,7 +210,18 @@ namespace SeaSick.World
             if (field != null) field.Remove(this);
             state = State.Dying;
             StartCoroutine(Flop());
-            Destroy(gameObject, 3f);
+            StartCoroutine(Expire(keepForHunter ? CarcassWaitSeconds : CarcassSeconds));
+        }
+
+        /// Clear the carcass after `seconds` -- unless a hunter has it on
+        /// his shoulders by then, in which case it is his to put down.
+        /// (A coroutine and not `Destroy(go, t)`, which cannot be taken
+        /// back.) Coroutines keep running on a disabled behaviour, which
+        /// this is once the flop is over.
+        System.Collections.IEnumerator Expire(float seconds)
+        {
+            yield return new WaitForSeconds(seconds);
+            if (!Shouldered && this != null) Destroy(gameObject);
         }
 
         System.Collections.IEnumerator Flop()
@@ -207,6 +243,7 @@ namespace SeaSick.World
 
             transform.rotation = to;
             transform.position = down;
+            flopped = true;
             // Nothing left to think about. The renderers stay on: this is a
             // carcass, and it is visible until it is destroyed.
             enabled = false;
