@@ -11,6 +11,17 @@ namespace SeaSick.World
     /// centre -- which is fine for running a boat onto a beach and useless
     /// here: a pier is at a fixed place with a fixed heading, and lying
     /// alongside it means matching both.
+    ///
+    /// **T-berth (2026-09-26, Kevin: "pull up to the pier so we're making a
+    /// T shape").** She used to lie ALONG the pier, bow seaward -- which
+    /// meant swinging round and backing in toward the island on the way
+    /// home. Now her centreline runs PERPENDICULAR to the pier's seaward
+    /// axis, her side against the pier's sea end (`head`), midship on the
+    /// pier's own axis: the pier is the stem of the T, she is the crossbar.
+    /// `Berth`/`Heading` stay as the deterministic default (no ship, no
+    /// approach to judge by -- a probe, a save's display point, a cold
+    /// spawn); `BerthFor`/`HeadingFor` take what a live ship actually knows
+    /// (her beam, her heading on the approach) when there is one to ask.
     public class Dock : MonoBehaviour
     {
         /// The home pier's dock: the one the voyage closes on, and the one
@@ -130,13 +141,60 @@ namespace SeaSick.World
         [SerializeField] float deckY;
         [SerializeField] float berthDepth;
 
-        /// Where her centre lies when she is tied up.
+        /// Where her centre lies when she is tied up, at the default beam
+        /// (`WorldScale.ShipBeam`) -- for whoever has no live ship to ask.
+        /// `AnchorController` asks `BerthFor` with the real one instead.
         public Vector3 Berth => berth;
 
-        /// Which way she points at the berth: bow seaward, so she can leave
-        /// without turning in her own length against the pier.
-        public Quaternion Heading => Quaternion.LookRotation(
-            new Vector3(seaward.x, 0f, seaward.y), Vector3.up);
+        /// Half a beam plus a fender's worth of water: how far beyond the
+        /// head her centreline sits so her side can lie against it without
+        /// touching.
+        const float Fender = 0.9f;
+
+        /// Where her centre lies when tied up, for a hull of this beam:
+        /// seaward of the head by half that beam plus a fender, on the
+        /// pier's own axis.
+        public Vector3 BerthFor(float beamMeters)
+        {
+            Vector3 sea = Seaward;
+            float off = beamMeters * 0.5f + Fender;
+            return new Vector3(head.x + sea.x * off, 0f, head.z + sea.y * off);
+        }
+
+        /// The two headings she could take at this berth -- her long axis
+        /// perpendicular to the pier, bow to one side or the other. Which
+        /// one is "A" is arbitrary; it only has to be the same answer every
+        /// time, since `Heading` (no ship, no approach) and a stale save's
+        /// display point both lean on it.
+        Vector3 PerpA
+        {
+            get
+            {
+                Vector3 sea = Seaward;
+                return new Vector3(sea.z, 0f, -sea.x);
+            }
+        }
+        Vector3 PerpB => -PerpA;
+
+        /// Which way she points at the berth with nothing to judge by: the
+        /// deterministic default, `PerpA`. Bow seaward (the old alongside
+        /// heading) would sail her straight into the pier head from here,
+        /// which is exactly the fault this berth exists to fix.
+        public Quaternion Heading => Quaternion.LookRotation(PerpA, Vector3.up);
+
+        /// Which of the two perpendicular headings to take, given her
+        /// heading on the approach (flat; zero/degenerate for "no approach
+        /// to judge by" -- a spawn, a save restore, the home teleport) --
+        /// whichever needs the smaller turn, so she glides in and stops
+        /// rather than spinning on the spot.
+        public Quaternion HeadingFor(Vector3 approachHeadingFlat)
+        {
+            approachHeadingFlat.y = 0f;
+            if (approachHeadingFlat.sqrMagnitude < 1e-6f) return Heading;
+            float da = Vector3.Angle(approachHeadingFlat, PerpA);
+            float db = Vector3.Angle(approachHeadingFlat, PerpB);
+            return Quaternion.LookRotation(da <= db ? PerpA : PerpB, Vector3.up);
+        }
 
         // --- the docked shot, fitted from the framing Kevin flew by hand ---
         //
@@ -252,6 +310,21 @@ namespace SeaSick.World
                     Home = originalHarbour;
                 }
             }
+        }
+
+        /// **How far `pos` is from this pier at all**, flat: the nearer of
+        /// the berth and the pier's own root-to-head line. A save written
+        /// before the T-berth (2026-09-26) holds the OLD alongside berth,
+        /// which lay beside the pier rather than beyond its head; matching
+        /// against the pier itself finds her chosen home either way.
+        public float DistanceFromPier(Vector3 pos)
+        {
+            pos.y = 0f;
+            Vector3 a = root, b = head; a.y = 0f; b.y = 0f;
+            Vector3 ab = b - a;
+            float t = ab.sqrMagnitude > 1e-6f
+                ? Mathf.Clamp01(Vector3.Dot(pos - a, ab) / ab.sqrMagnitude) : 0f;
+            return Mathf.Min(DistanceFrom(pos), Vector3.Distance(pos, a + ab * t));
         }
 
         /// How far off her berth she is, flat. The mooring code eases her in

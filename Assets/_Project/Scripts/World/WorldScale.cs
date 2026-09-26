@@ -97,6 +97,15 @@ namespace SeaSick.World
         /// be compared against it without importing an editor script.
         public const float ShipLength = 24.2f;
 
+        /// Her beam, for anything that needs a hull footprint and has no
+        /// live ship to ask -- world-gen siting a berth before any ship
+        /// exists, or a pier built by a camp. **2026-09-26, T-berth**: a
+        /// modular ship's actual beam varies with her hull (`ShipLadder`,
+        /// 3.4-13 m across the ladder); `AnchorController` reads the live
+        /// `Shipyard.Node.beam` when there is a ship to ask and falls back
+        /// to this otherwise, same as `HarbourSite`/`Pier` always have.
+        public const float ShipBeam = 8.44f;
+
         /// Set by what her WHEELS can be drawn at, not by hull physics.
         ///
         /// Displacement hull speed for her 20.9 m waterline is 11.1 knots --

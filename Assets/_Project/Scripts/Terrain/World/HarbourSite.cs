@@ -133,27 +133,36 @@ namespace SeaSick.Terrain
             // that matters: SHE MUST FLOAT ALONG HER WHOLE LENGTH.
             //
             // Reaching deep water at the head is not the same thing and the
-            // difference is the whole design. She is 24.2 m long and lies
-            // alongside, so half of her extends back toward the beach -- on a
-            // shore that goes from +0.3 m to -10.6 m in forty metres, a pier
-            // long enough to have deep water at its head still leaves her
-            // stern aground. This is exactly why a real pier on a steep-to
-            // coast runs out past the shoal instead of stopping at the first
-            // deep sounding.
+            // difference is the whole design. She is 24.2 m long, and on a
+            // shore that goes from +0.3 m to -10.6 m in forty metres a pier
+            // long enough to have deep water under its own head can still
+            // leave one of her ends aground. This is exactly why a real pier
+            // on a steep-to coast runs out past the shoal instead of
+            // stopping at the first deep sounding.
+            //
+            // **T-BERTH (2026-09-26).** She no longer lies BESIDE this
+            // point, her length running out to sea -- she lies ACROSS it,
+            // beyond the head, her length running ALONG the shore and her
+            // beam the dimension pointing out to sea. So the footprint
+            // sampled below swaps which axis carries which of her numbers:
+            // `t` (her length) now walks `alongAxis`, `b` (her beam) now
+            // walks `sea`, and the candidate berth sits `d + BerthOffset`
+            // out along `sea` -- past the head by half a beam and a fender,
+            // not beside it.
             var alongAxis = new Vector2(-sea.y, sea.x);
             float pier = -1f;
             for (float d = 8f; d <= MaxPier; d += 2f)
             {
-                float bx = root.x + sea.x * d + alongAxis.x * BerthOffset;
-                float bz = root.z + sea.y * d + alongAxis.y * BerthOffset;
+                float bx = root.x + sea.x * (d + BerthOffset);
+                float bz = root.z + sea.y * (d + BerthOffset);
                 bool floats = true;
                 for (float t = -0.5f; t <= 0.5f; t += 0.1f)
                 {
                     // A centreline sounding misses the shoreward corners.
                     for (float b = -.5f; b <= .5f; b += .25f)
                     {
-                        float px = bx + sea.x * t * SeaSick.World.WorldScale.ShipLength + alongAxis.x * b * BerthWidth;
-                        float pz = bz + sea.y * t * SeaSick.World.WorldScale.ShipLength + alongAxis.y * b * BerthWidth;
+                        float px = bx + alongAxis.x * t * SeaSick.World.WorldScale.ShipLength + sea.x * b * BerthWidth;
+                        float pz = bz + alongAxis.y * t * SeaSick.World.WorldScale.ShipLength + sea.y * b * BerthWidth;
                         if (height(px, pz) > -BerthDepth) { floats = false; break; }
                     }
                     if (!floats) break;
@@ -216,20 +225,21 @@ namespace SeaSick.Terrain
             s.head = new Vector3(root.x + sea.x * pier, 0f, root.z + sea.y * pier);
             s.root = new Vector3(root.x, height(root.x, root.z), root.z);
 
-            // She lies ALONGSIDE the head, off to one side by half her beam
-            // plus a fender, not on the end of it -- so the depth that
-            // matters is the depth where her hull is, and it can differ from
-            // the head's by a metre on a shore this steep. Take the shallowest
-            // reading along her whole 24 m length rather than one at her
-            // midpoint, because she grounds by her ends.
-            s.berth = new Vector3(s.head.x + alongAxis.x * BerthOffset, 0f, s.head.z + alongAxis.y * BerthOffset);
+            // She lies ACROSS the head, beyond it by half her beam plus a
+            // fender, not beside it -- so the depth that matters is the
+            // depth where her hull actually sits, which can differ from the
+            // head's own sounding by a metre on a shore this steep. Take the
+            // shallowest reading along her whole 24 m length rather than one
+            // at her midpoint, because she grounds by her ends -- her ends
+            // now run along the shore, not out to sea.
+            s.berth = new Vector3(s.head.x + sea.x * BerthOffset, 0f, s.head.z + sea.y * BerthOffset);
             float shallowest = 999f;
             for (float t = -0.5f; t <= 0.5f; t += 0.1f)
             {
                 for (float b = -.5f; b <= .5f; b += .25f)
                 {
-                    float bx = s.berth.x + sea.x * t * SeaSick.World.WorldScale.ShipLength + alongAxis.x * b * BerthWidth;
-                    float bz = s.berth.z + sea.y * t * SeaSick.World.WorldScale.ShipLength + alongAxis.y * b * BerthWidth;
+                    float bx = s.berth.x + alongAxis.x * t * SeaSick.World.WorldScale.ShipLength + sea.x * b * BerthWidth;
+                    float bz = s.berth.z + alongAxis.y * t * SeaSick.World.WorldScale.ShipLength + sea.y * b * BerthWidth;
                     shallowest = Mathf.Min(shallowest, -height(bx, bz));
                 }
             }
@@ -270,15 +280,15 @@ namespace SeaSick.Terrain
             return s;
         }
 
-        /// How far her centreline lies off the pier head's centreline.
-        ///
-        /// Derived, not chosen, and the first value here was wrong in a way
-        /// no screenshot would have shown from the angles you would look
-        /// from: 6.0 m put her hull 1.7 m INSIDE a 7 m wide head. It is the
-        /// head's half-width plus her half-beam plus a fender:
-        ///     3.5  (DockBuilder.HeadWidth / 2)
-        ///   + 4.22 (her beam is 8.44 m, measured off the hull probes)
-        ///   + 0.9  (fenders, and the slop in a spring line)
-        public const float BerthOffset = 8.62f;
+        /// How far beyond the head her centreline sits, seaward, at the
+        /// default beam (there is no ship built yet at world-gen time to
+        /// ask a real one). **T-berth (2026-09-26)**: she used to lie
+        /// alongside the head, and this was the head's half-width plus her
+        /// half-beam plus a fender -- a lateral offset. Now she lies across
+        /// it, beyond the head rather than beside it, so the head's own
+        /// width drops out and this is just:
+        ///     4.22 (half her assumed 8.44 m beam)
+        ///   + 0.9  (a fender, and the slop in a spring line)
+        public const float BerthOffset = 5.12f;
     }
 }
