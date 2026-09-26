@@ -192,26 +192,40 @@
 .yard Button.yard-gun-row--blocked { border-color: rgba(240, 150, 130, 0.55); background-color: rgba(92, 44, 40, 0.35); }
 .yard Button.yard-gun-row--blocked .yard-gun-label { opacity: 0.75; }
 
-/* ---- Interior: the 2D cutaway ---- */
-.yard-cutaway-hull { position: relative; height: 150px; flex-shrink: 0; margin-bottom: 8px; }
-.yard-cutaway-guns { position: absolute; left: 0; right: 0; top: 0; height: 60%; }
-/* 32 -> 44pt: a touch target below 44pt (docs/SHIPYARD-UX-AUDIT.md item 5,
-   the GDD's own thumb-target rule) -- the hit area, not the drawn circle,
-   which stays visually 32px via the nested `yard-cutaway-gun-dot` below
-   ("the visual can stay smaller inside a bigger hit area"). The button
-   itself is now just a transparent, centred hit box. */
-.yard Button.yard-cutaway-gun { position: absolute; width: 44px; height: 44px; min-width: 44px; min-height: 44px;
+/* ---- Interior: the 2D cutaway (v2, 2026-09-26) ----
+   SectionCutaway.Layout() places every cell / marker absolutely from one
+   measured width and sets the element's own height, so nothing here sizes
+   or positions them -- these rules are look only. */
+.yard-cutaway { flex-shrink: 0; margin-bottom: 6px; }
+.yard Button.yard-cutaway-gun { width: 44px; height: 44px; min-width: 44px; min-height: 44px;
     padding: 0; margin: 0; background-color: transparent; border-width: 0;
     align-items: center; justify-content: center; }
-.yard-cutaway-gun-dot { width: 32px; height: 32px; min-width: 32px; min-height: 32px; border-radius: 16px;
-    -unity-text-align: middle-center; font-size: 12px; border-width: 1px;
-    background-color: rgba(22, 43, 57, 0.85); border-color: rgb(171, 209, 226); color: rgb(231, 241, 246); }
-.yard-cutaway-gun-dot--fitted { background-color: rgb(171, 218, 239); color: rgb(22, 43, 57); }
-.yard-cutaway-cells { position: absolute; left: 6%; right: 6%; bottom: 4%; flex-direction: row; flex-wrap: wrap; }
-.yard Button.yard-cutaway-cell { min-width: 44px; min-height: 44px; flex-grow: 1; flex-basis: 44px; max-width: 64px;
-    align-items: center; justify-content: center; margin: 2px; background-color: rgba(22, 43, 57, 0.7); }
-.yard Button.yard-cutaway-cell--bunk { background-color: rgba(171, 218, 239, 0.22); border-color: rgb(171, 218, 239); }
-.yard-cutaway-cell-icons { flex-direction: row; }
-.yard-cutaway-icon { width: 20px; height: 20px; flex-shrink: 0; }
-.yard-cutaway-cell--bunk .yard-cutaway-icon { width: 16px; height: 20px; }
+.yard Button.yard-cutaway-gun:hover { background-color: transparent; }
+.yard-cutaway-gun-dot { width: 34px; height: 34px; border-radius: 17px; border-width: 2px;
+    align-items: center; justify-content: center;
+    background-color: rgb(22, 43, 57); border-color: rgb(171, 209, 226); }
+.yard-cutaway-gun-dot--fitted { background-color: rgb(171, 218, 239); border-color: rgb(225, 240, 246); }
+.yard-cutaway-gun-dot--blocked { border-color: rgba(240, 150, 130, 0.8); }
+.yard-cutaway-gun-dot .yard-cutaway-icon { width: 22px; height: 22px; }
+.yard-cutaway-gun-side { position: absolute; right: 0; bottom: 1px; width: 15px; height: 15px; border-radius: 8px;
+    font-size: 10px; -unity-text-align: middle-center; padding: 0; margin: 0;
+    background-color: rgb(22, 43, 57); color: rgb(225, 240, 246); border-width: 1px; border-color: rgb(171, 209, 226); }
+.yard-cutaway-lane { font-size: 11px; color: rgba(225, 240, 246, 0.6); padding: 0; margin: 0; }
+.yard Button.yard-cutaway-cell { min-width: 44px; min-height: 44px; margin: 0; padding: 0;
+    align-items: center; justify-content: center; border-width: 1px; border-radius: 4px; }
+.yard Button.yard-cutaway-cell--cargo { background-color: rgba(201, 147, 57, 0.28); border-color: rgb(214, 170, 96); }
+.yard Button.yard-cutaway-cell--cargo:hover { background-color: rgba(201, 147, 57, 0.42); }
+.yard Button.yard-cutaway-cell--bunk { background-color: rgba(120, 190, 225, 0.26); border-color: rgb(171, 218, 239); }
+.yard Button.yard-cutaway-cell--bunk:hover { background-color: rgba(120, 190, 225, 0.40); }
+.yard Button.yard-cutaway-cell--flash { border-width: 3px; border-color: rgb(255, 244, 200); background-color: rgba(255, 236, 170, 0.45); }
+.yard-cutaway-cell .yard-cutaway-icon { width: 28px; height: 28px; }
+.yard-cutaway-icon { width: 18px; height: 18px; flex-shrink: 0; }
+/* Totals row: the same icons as the cells, so it doubles as the legend. */
+.yard-cutaway-totals { flex-direction: row; flex-wrap: wrap; align-items: center; flex-shrink: 0; min-height: 26px; margin-bottom: 2px; }
+.yard-cutaway-total { flex-direction: row; align-items: center; margin-right: 14px; }
+.yard-cutaway-total .yard-cutaway-icon { width: 20px; height: 20px; margin-right: 4px; }
+.yard-cutaway-total-text { font-size: 14px; color: rgb(225, 240, 246); -unity-font-style: bold; padding: 0; margin: 0; }
+.yard-cutaway-swatch { width: 12px; height: 12px; border-radius: 3px; border-width: 1px; margin-right: 4px; }
+.yard-cutaway-delta { font-size: 12px; color: rgba(225, 240, 246, 0.72); white-space: normal; flex-shrink: 0; }
+.yard-cutaway-delta--changed { color: rgb(255, 232, 170); }
 .yard-dock-line { margin-top: 4px; }

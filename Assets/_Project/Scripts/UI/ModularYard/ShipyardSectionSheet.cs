@@ -181,7 +181,8 @@ namespace SeaSick.UI.ModularYard
             // budget could still overflow the cell row's height if it wraps
             // to several lines; not verified live this session, flagged in
             // the handoff report alongside the estimate above.
-            pages.Add(new Pg(PageKind.Interior, 0));
+            interiorPages = InteriorPageCount(gunSlotCount);
+            for (int i = 0; i < interiorPages; i++) pages.Add(new Pg(PageKind.Interior, i));
 
             stripLabels = new string[pages.Count];
             for (int i = 0; i < pages.Count; i++)
@@ -189,8 +190,49 @@ namespace SeaSick.UI.ModularYard
                 var p = pages[i];
                 stripLabels[i] = p.kind == PageKind.Structure ? "Structure"
                     : p.kind == PageKind.Guns ? SheetKit.PageLabel("Guns", p.part, gunPages)
-                    : "Interior";
+                    // "Details", not "Interior 2/2": five tabs on the 420px
+                    // landscape panel clipped "Interior 1/2" to "nterior 1/".
+                    : p.part == 0 ? "Interior" : "Details";
             }
+        }
+
+        // Interior page budget (panel units). The cutaway's own height is
+        // exact (`SectionCutaway.EstimateHeight` runs the same layout math
+        // it draws with); the one-line rows were measured live (2026-09-26,
+        // height + margins); notes are generous estimates, same "open a
+        // page early rather than clip" rule as the gun rows above.
+        const float TotalsPx = 28.5f, DeltaPx = 30.5f, HintPx = 34f, DockPx = 32f, NotePx = 44f, BlockPx = 34f;
+        const float BodyPadPx = 26f; // .yard-sheet-body padding 18 + 8, measured live
+        int interiorPages = 1;
+
+        /// 1, or 2 when the cutaway + totals and the consequences/dry-dock
+        /// lines do not fit one band together (a short landscape band, a
+        /// raised section with a long consequence list): page 1 keeps the
+        /// picture and its numbers, page 2 carries what follows from them.
+        int InteriorPageCount(int gunSlotCount)
+        {
+            if (live == null) return 1;
+            try
+            {
+                var snap = draft.Snapshot();
+                var sp = live.SectionSpace(snap, key);
+                if (sp == null || !string.IsNullOrEmpty(sp.reason)) return 1;
+                int cellsN = Mathf.FloorToInt(sp.budgetUnits);
+                float top = SectionCutaway.EstimateHeight(cellsN, draft.IsSectionRaised(key),
+                    key == ShipAssembler.StdKeyStern, key == ShipAssembler.StdKeyBow, gunSlotCount > 0)
+                    + TotalsPx + DeltaPx + (hintShown ? 0f : HintPx);
+                float rest = DockPx + (string.IsNullOrEmpty(draft.Message) ? 0f : NotePx);
+                var report = live.Report(snap);
+                if (report != null)
+                {
+                    foreach (var w in report.warnings)
+                        if (w.code == "HANDS_ASHORE" || w.code == "FEWER_BERTHS" || w.code == "HOLD_SMALLER") rest += NotePx;
+                    foreach (var b in report.blocking)
+                        if (b.code == ShipyardCodes.CargoWouldNotFit || b.code == ShipyardCodes.GunsNeedCrew) rest += BlockPx;
+                }
+                return top + rest <= bandHeight - BodyPadPx ? 1 : 2;
+            }
+            catch { return 1; }
         }
 
         // ---- Structure ------------------------------------------------------
@@ -403,30 +445,36 @@ namespace SeaSick.UI.ModularYard
             int bunkCells = Mathf.Max(0, totalCells - cargoCells);
             bool oddLastBunk = bunkCells > 0 && space.berths % 2 != 0;
 
+            // Bunks first: the cutaway fills its grid top row first, so the
+            // bunks read as quarters above the cargo in the hold (and, on a
+            // raised section, sit in the between-deck).
             var cells = new List<SectionCutaway.Cell>(totalCells);
-            for (int i = 0; i < cargoCells; i++) cells.Add(new SectionCutaway.Cell(false, 0, +2));
             for (int i = 0; i < bunkCells; i++)
             {
                 bool isOdd = oddLastBunk && i == bunkCells - 1;
                 cells.Add(new SectionCutaway.Cell(true, isOdd ? 1 : 2, isOdd ? -1 : -2));
             }
+            for (int i = 0; i < cargoCells; i++) cells.Add(new SectionCutaway.Cell(false, 0, +2));
 
             var sectionSlots = SectionGunSlots();
             var report = live.Report(draft.Snapshot());
             int inDock = DryDockCount(report);
             var markers = new List<SectionCutaway.GunMarker>(sectionSlots.Count);
-            foreach (var s in sectionSlots)
+            for (int si = 0; si < sectionSlots.Count; si++)
             {
+                var s = sectionSlots[si];
                 bool occupied = !string.IsNullOrEmpty(s.occupantModuleId);
                 string status; bool enabled;
                 if (occupied) { status = "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
                 else if (!s.usable) { status = s.blockedReason; enabled = false; }
                 else if (inDock > 0) { status = "Empty — tap to fit from the dry dock"; enabled = !draft.Committed; }
                 else { status = "Empty — no gun in the dry dock."; enabled = false; }
+                float along = (si + 0.5f) / Mathf.Max(1, sectionSlots.Count);
+                if (preview != null && preview.TrySlotAlong(key, s.slotId, out float real)) along = real;
                 markers.Add(new SectionCutaway.GunMarker
                 {
                     slotId = s.slotId, side = s.side, label = s.label,
-                    occupied = occupied, enabled = enabled, status = status,
+                    occupied = occupied, enabled = enabled, status = status, along = along,
                 });
             }
 
@@ -434,34 +482,59 @@ namespace SeaSick.UI.ModularYard
             bool isBow = key == ShipAssembler.StdKeyBow;
             bool raised = draft.IsSectionRaised(key);
 
-            var cutaway = new SectionCutaway();
-            cutaway.Set(isStern, isBow, raised, cells, TapCell, markers, TapGun);
-            body.Add(cutaway);
+            // Tap feedback: the cell the last tap changed (the bunk/cargo
+            // boundary moved by one cell) glows for a beat. Kept here, not
+            // on the element, because `Fill()` rebuilds the cutaway on every
+            // refresh tick.
+            int flash = -1;
+            if (Time.unscaledTime < flashUntil && totalCells > 0)
+                flash = Mathf.Clamp(lastTapAddedBunks ? bunkCells - 1 : bunkCells, 0, totalCells - 1);
 
-            if (totalCells == 0)
-                body.Add(SheetKit.Text("This section has no interior space.", false, true, 12f));
-            else if (space.budgetUnits - totalCells > 0.01f)
-                body.Add(SheetKit.Text("A half-unit of space is left over — too small for a whole cell.", false, true, 12f));
+            bool showTop = part == 0;
+            bool showRest = interiorPages <= 1 || part >= 1;
 
-            if (!hintShown)
+            if (showTop)
             {
-                body.Add(SheetKit.Text("Tap a compartment to switch cargo ↔ bunks.", false, true, 12f));
+            var cutaway = new SectionCutaway();
+            cutaway.Set(isStern, isBow, raised, cells, TapCell, markers, TapGun, flash);
+            body.Add(cutaway);
+            }
+
+            // Totals, with the same icons the cells use -- this row is the
+            // legend as well as the count.
+            int guns = report?.Section(key)?.guns ?? 0;
+            var totals = new VisualElement(); totals.AddToClassList("yard-cutaway-totals"); if (showTop) body.Add(totals);
+            totals.Add(Total("bunk2", new Color32(171, 218, 239, 255), $"Bunks {space.berths}"));
+            totals.Add(Total("crate", new Color32(246, 220, 170, 255), $"Cargo {cargoCells}"));
+            if (sectionSlots.Count > 0)
+                totals.Add(Total("cannon", new Color32(171, 218, 239, 255), $"Guns {guns}/{sectionSlots.Count}"));
+
+            // One line: what changed vs the opened fit, then the range.
+            // The min/max RANGE stays visible (the one thing the old +/-
+            // page got right, per docs/SHIPYARD-UX-AUDIT.md): a tap that
+            // would exceed it is clamped by WithBerths, so it must be
+            // readable up front.
+            string delta = DeltaVsOpened(space, cargoCells, guns);
+            bool changed = !string.IsNullOrEmpty(delta) && delta != "Same as now";
+            string range = $"{space.minBerths}–{space.maxBerths} bunks fit";
+            // A leftover half unit is said here, in a few words, rather
+            // than on a line of its own that pushed the dry-dock line off
+            // a full bow page (2026-09-26 phone shot).
+            if (totalCells > 0 && space.budgetUnits - totalCells > 0.01f) range += " · ½ unit spare";
+            var deltaLine = new Label(string.IsNullOrEmpty(delta) ? range + "." : $"{delta} · {range}.");
+            deltaLine.AddToClassList("yard-cutaway-delta");
+            deltaLine.EnableInClassList("yard-cutaway-delta--changed", changed);
+            body.Add(deltaLine);
+
+            if (totalCells == 0 && showTop)
+                body.Add(SheetKit.Text("This section has no interior space.", false, true, 12f));
+
+            if (!hintShown && showTop)
+            {
+                body.Add(SheetKit.Text("Tap a compartment to swap cargo ↔ bunks. Tap a gun to fit or unfit it.", false, true, 12f));
                 hintShown = true;
                 PlayerPrefs.SetInt(HintPrefKey, 1); PlayerPrefs.Save();
             }
-
-            body.Add(PinnedRule());
-            int guns = report?.Section(key)?.guns ?? 0;
-            body.Add(SheetKit.Text($"Bunks {space.berths} · Cargo {cargoCells} · Guns {guns}", true, false, 14f));
-            // The min/max RANGE stays visible (the one thing the old +/-
-            // page got right, per docs/SHIPYARD-UX-AUDIT.md) even though the
-            // control is now a tap-a-cell picture rather than a counter --
-            // a tap that would exceed it is silently clamped by WithBerths,
-            // so the range has to be readable up front, not discovered by
-            // trial and error.
-            body.Add(SheetKit.Text($"{space.minBerths}-{space.maxBerths} bunks fit this section.", false, true, 12f));
-            string delta = DeltaVsOpened(space, cargoCells, guns);
-            if (!string.IsNullOrEmpty(delta)) body.Add(SheetKit.Text(delta, false, true, 12f));
 
             // ---- consequences, right here -- not just on the overview
             // (docs/SHIPYARD-UX-AUDIT.md: hands ashore / cargo won't fit /
@@ -469,6 +542,11 @@ namespace SeaSick.UI.ModularYard
             // (hard, would refuse Confirm) are kept visually distinct --
             // warnings use the note style, blocking reasons the same
             // stronger red text a blocked gun row uses. ---------------------
+            if (!showRest)
+            {
+                foreach (var child in body.Children()) child.style.flexShrink = 0f;
+                return;
+            }
             if (report != null)
             {
                 foreach (var w in report.warnings)
@@ -481,6 +559,10 @@ namespace SeaSick.UI.ModularYard
 
             body.Add(DryDockLine(inDock));
             if (!string.IsNullOrEmpty(draft.Message)) body.Add(SheetKit.Note(draft.Message));
+            // Natural height for every line: if the page ever runs long it
+            // is cut at the band's bottom edge (overflow: hidden) instead of
+            // squashing two lines on top of each other.
+            foreach (var child in body.Children()) child.style.flexShrink = 0f;
         }
 
         /// "+2 bunks, −1 cargo" vs the ship's fit when the sheet was opened
@@ -499,10 +581,12 @@ namespace SeaSick.UI.ModularYard
             int dBerths = space.berths - baseline.berths;
             int dCargo = cargoCells - baseCargo;
             int dGuns = guns - baseGuns;
-            if (dBerths == 0 && dCargo == 0 && dGuns == 0) return "Same as the current fit.";
-            var parts = new List<string> { Delta(dBerths, "bunk"), Delta(dCargo, "cargo") };
+            if (dBerths == 0 && dCargo == 0 && dGuns == 0) return "Same as now";
+            var parts = new List<string>();
+            if (dBerths != 0) parts.Add(Delta(dBerths, "bunk"));
+            if (dCargo != 0) parts.Add(Delta(dCargo, "cargo"));
             if (dGuns != 0) parts.Add(Delta(dGuns, "gun"));
-            return string.Join(", ", parts) + " vs now.";
+            return string.Join(", ", parts) + " vs now";
         }
 
         static string Delta(int n, string noun) =>
@@ -514,12 +598,34 @@ namespace SeaSick.UI.ModularYard
             return l;
         }
 
+        float flashUntil;
+        bool lastTapAddedBunks;
+
         void TapCell(SectionCutaway.Cell c)
         {
             SectionSpaceView space;
             try { space = live.SectionSpace(draft.Snapshot(), key); } catch { return; }
             if (space == null) return;
+            lastTapAddedBunks = c.berthDelta > 0;
+            flashUntil = Time.unscaledTime + 0.9f;
+            int before = space.berths;
             SetBerths(space.berths + c.berthDelta);
+            // A clamped tap (already at min/max) changed nothing: no glow,
+            // the range on the delta line says why.
+            SectionSpaceView after = null;
+            try { after = live.SectionSpace(draft.Snapshot(), key); } catch { }
+            if (after == null || after.berths == before) { flashUntil = 0f; Fill(); return; }
+            // One more rebuild once the glow is over, so it does not wait
+            // for an unrelated refresh to go away.
+            schedule.Execute(() => { if (Time.unscaledTime >= flashUntil) Fill(); }).StartingIn(950);
+        }
+
+        static VisualElement Total(string icon, Color color, string text)
+        {
+            var e = new VisualElement(); e.AddToClassList("yard-cutaway-total");
+            e.Add(new CutawayIcon(icon, color));
+            var l = new Label(text); l.AddToClassList("yard-cutaway-total-text"); e.Add(l);
+            return e;
         }
 
         void TapGun(SectionCutaway.GunMarker g)

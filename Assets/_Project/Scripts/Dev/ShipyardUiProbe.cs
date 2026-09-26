@@ -1129,7 +1129,19 @@ public class ShipyardUiProbe : MonoBehaviour
 
         var dockLines = new List<Label>();
         root.Query<Label>(className: "yard-dock-line").ForEach(l => dockLines.Add(l));
-        Gate("12d dry-dock stock line always shown on the cutaway", dockLines.Count > 0, "yard-dock-line label missing");
+        // A short band splits Interior in two (2026-09-26): the picture on
+        // "Interior", its consequences and the dry-dock line on "Details".
+        if (dockLines.Count == 0)
+        {
+            Button part2 = null;
+            root.Query<Button>().ForEach(b => { if (part2 == null && !string.IsNullOrEmpty(b.text) && b.text == "Details") part2 = b; });
+            if (ClickViaDelegate(part2))
+            {
+                yield return null; yield return null;
+                root.Query<Label>(className: "yard-dock-line").ForEach(l => dockLines.Add(l));
+            }
+        }
+        Gate("12d dry-dock stock line always shown on the cutaway (or its 2nd page)", dockLines.Count > 0, "yard-dock-line label missing");
 
         var how12 = new string[1];
         yield return CloseModal(how12);
