@@ -62,6 +62,7 @@ namespace SeaSick.UI.ModularYard
         // language summary of what just happened and an explicit OK.
         readonly VisualElement successView;
         readonly Label successBody;
+        bool successShown;
 
         // ---- section sheet -------------------------------------------------
         readonly VisualElement sheetHost;
@@ -199,7 +200,9 @@ namespace SeaSick.UI.ModularYard
             if (key != builtKey) { preview.Build(draft.Assembly, previewHighlight, configuration); builtKey = key; }
             undo.SetEnabled(draft.CanUndo);
             undoReason.text = draft.CanUndo ? "" : "Nothing to undo yet.";
-            undoReason.style.display = draft.CanUndo ? DisplayStyle.None : DisplayStyle.Flex;
+            // Hidden on the success view: after a Confirm the undo stack is
+            // cleared, and "Nothing to undo yet." there reads like an error.
+            undoReason.style.display = draft.CanUndo || successShown ? DisplayStyle.None : DisplayStyle.Flex;
             badge.text = openSectionKey != null ? "SECTION" : (draft.Highlight != null && draft.Highlight.StartsWith("middle[") ? "NEW SECTION" : "PREVIEW");
 
             if (openSectionKey != null)
@@ -274,24 +277,40 @@ namespace SeaSick.UI.ModularYard
         /// already showing the player (docs/SHIPYARD-UX-AUDIT.md item 2).
         string BuildConfirmSummary()
         {
+            // An itemised list, one short line per thing that changed
+            // (2026-09-26, Kevin: the old one-liner repeated the "Refit done"
+            // heading and buried the dry-dock/hands consequences). Every
+            // number is read off the same report the Report page shows.
             var report = live?.Report(draft.Snapshot());
-            var parts = new List<string>();
-            var sections = report?.Figure("sections");
-            if (sections != null && sections.available)
+            var lines = new List<string>();
+            void FigureLine(string id, string one, string many)
             {
-                int delta = Mathf.RoundToInt(sections.proposed - sections.current);
-                if (delta != 0) parts.Add((delta > 0 ? "+" : "") + delta + (Mathf.Abs(delta) == 1 ? " section" : " sections"));
+                var f = report?.Figure(id);
+                if (f == null || !f.available) return;
+                int from = Mathf.RoundToInt(f.current), to = Mathf.RoundToInt(f.proposed);
+                if (from == to) return;
+                int d = to - from;
+                lines.Add($"{(d > 0 ? "+" : "\u2212")}{Mathf.Abs(d)} {(Mathf.Abs(d) == 1 ? one : many)} ({from} \u2192 {to})");
             }
+            FigureLine("sections", "middle section", "middle sections");
+            FigureLine("crewBerths", "bunk", "bunks");
+            FigureLine("holdCells", "cargo cell", "cargo cells");
+            FigureLine("guns", "gun fitted", "guns fitted");
+            if (report?.dryDock != null)
+                foreach (var row in report.dryDock)
+                {
+                    if (row == null || row.moduleId != ShipConfiguration.EquipmentCannon) continue;
+                    int d = row.inDockAfterApply - row.inDockNow;
+                    if (d > 0) lines.Add(d == 1 ? "1 gun sent to the dry dock" : $"{d} guns sent to the dry dock");
+                    else if (d < 0) lines.Add(-d == 1 ? "1 gun taken from the dry dock" : $"{-d} guns taken from the dry dock");
+                }
             if (report != null)
                 foreach (var note in report.warnings)
-                    if (note.code != "PROVISIONAL_TUNING") parts.Add(note.message);
-            // Guns-to-dry-dock is carried as `draft.Message` by the structural
-            // edits that caused it (RemoveSection/RemoveMiddle/ToggleSection),
-            // not by the report -- pick it up here if it is still the live
-            // message and hasn't already been said another way.
-            if (!string.IsNullOrEmpty(draft.Message) && draft.Message.Contains("dry dock") && !parts.Contains(draft.Message))
-                parts.Add(draft.Message);
-            return parts.Count > 0 ? "Refit done: " + string.Join(", ", parts) : "Refit done.";
+                    if (note.code == "HANDS_ASHORE") lines.Add(note.message.TrimEnd('.'));
+            if (lines.Count == 0) return "No changes to the ship.";
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < lines.Count; i++) { if (i > 0) sb.Append('\n'); sb.Append("\u2022 ").Append(lines[i]); }
+            return sb.ToString();
         }
 
         void ShowSuccess(string text)
@@ -300,6 +319,8 @@ namespace SeaSick.UI.ModularYard
             overview.style.display = DisplayStyle.None;
             successBody.text = text;
             successView.style.display = DisplayStyle.Flex;
+            successShown = true;
+            undoReason.style.display = DisplayStyle.None;
         }
 
         /// One tile per `SectionKeys()` entry, a "+" insert tile between
