@@ -17,7 +17,7 @@ namespace SeaSick.UI.Menus
         public static int ManualCount => SeaSick.Save.SaveSlots.ManualCount;
         public static int AutoCount => SeaSick.Save.SaveSlots.AutoCount;
 
-        public static List<SeaSick.Save.SaveSlotInfo> List() => SeaSick.Save.SaveSlots.List();
+        public static List<SeaSick.Save.SaveSlotInfo> List() => new List<SeaSick.Save.SaveSlotInfo>(SeaSick.Save.SaveSlots.List());
         public static SeaSick.Save.SaveSlotInfo MostRecent() => SeaSick.Save.SaveSlots.MostRecent();
 
         public static bool SaveManual(string slotId, string displayName, out string error) =>
