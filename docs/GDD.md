@@ -145,7 +145,7 @@ Future levels (III, IV) stay unused and unpaid until they are designed.
 | Blacksmith | 1 boards + 1 iron | iron spear | 1 | 1 | — | II | 2 |
 | Quarry | 1 stone | brick | 1 | 2 | tools (0.1 wear/out) | II | 1 |
 
-**Building upgrades (level 2).** Every camp building can rise to level 2 at fire level II, each costing a mix of brick and fine boards — sawmill and blacksmith want 6 brick + 4 fine boards (the most expensive), others 4–8 brick + 2–4 fine boards. Raising a building to level 2 multiplies its work rate by 1.5× and raises its storage ceiling.
+**Building upgrades (level 2).** Every camp building can rise to level 2 at fire level II, each costing a mix of brick and fine boards — sawmill and blacksmith want 6 brick + 4 fine boards (the most expensive), others 4–8 brick + 2–4 fine boards. Raising a building to level 2 multiplies its work rate by 1.5× and raises its storage ceiling. Until a real level-2 model exists, a levelled-up building shows it by turning gold — `BuildingLevelLook` (2026-09-26, Kevin) — and swaps to real art the day a kit has one.
 
 **Hunting hard gate.** To hunt, a hand must carry a spear (stone or iron). A stone spear wears 0.25 per animal (lasts 4 kills); an iron spear wears 1/12 per animal (lasts 12 kills). Each animal hunted drops 1 hide as pay-in — so to reach the blacksmith, a hunter must first have a spear, and that spear's tip must come from stone (to start) or iron (later). Hide is the first treated-goods gate.
 

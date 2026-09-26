@@ -3413,6 +3413,27 @@ namespace SeaSick.World
             if (b == null) return;
             if (plan.id == BuildPlans.Farm.id) PlantFarmBeds?.Invoke(b);
             if (plan.id == BuildPlans.Campfire.id) SpawnCampPug?.Invoke(b);
+            // Gold at level 2, until real art exists (Kevin, 2026-09-26) --
+            // see `BuildingLevelLook`. Both raise paths (a fresh building
+            // and `Adopt` restoring a save) come through here, and `ledger`
+            // is already the one whose `LevelOf` matters by the time either
+            // does.
+            BuildingLevelLook.Apply(b.transform, ledger != null ? ledger.LevelOf(plan.id) : 1);
+        }
+
+        /// **Re-tint every standing `planId` right now.** `OutpostLedger.Upgrade`
+        /// only changes a number; this is what makes the buildings on the
+        /// ground agree with it without waiting for a reload -- called from
+        /// `StationSheet.DoUpgrade` the moment the ledger's call succeeds.
+        /// Levels are per plan per camp (`LevelOf`), so every instance of
+        /// the plan standing here changes, not only the one whose sheet is
+        /// open.
+        public void RetintPlan(string planId)
+        {
+            if (ledger == null || string.IsNullOrEmpty(planId)) return;
+            int level = ledger.LevelOf(planId);
+            foreach (var b in built)
+                if (b != null && b.Id == planId) BuildingLevelLook.Apply(b.transform, level);
         }
 
         /// Share of an island's disc that is worth working. The rest is
