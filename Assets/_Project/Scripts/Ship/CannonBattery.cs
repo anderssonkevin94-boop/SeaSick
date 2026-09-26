@@ -411,12 +411,99 @@ namespace SeaSick.Ship
             return n;
         }
 
+        // ---- auto-fire (2026-09-27) -------------------------------------
+
+        /// The target the guns work on their own, or null for manual only.
+        ///
+        /// Set every frame by `CombatLock` while a lock holds and cleared the
+        /// moment it breaks. Kevin, on the phone, 2026-09-27: "cannons should
+        /// auto fire when engaged". Locking IS the engagement: once you have
+        /// said who the enemy is, steering to bring a side to bear is the
+        /// whole of the gunnery, and a second thumb on a fire button while
+        /// the first one is on the helm is exactly what a one-thumb phone
+        /// cannot do.
+        public Combat.IHittable AutoFireTarget { get; set; }
+
+        /// Shots the guns have fired on their own this session, for the
+        /// play-mode check (`LockOnCheck`).
+        public int AutoShots { get; private set; }
+
+        [Header("Auto-fire")]
+        [Tooltip("Extra metres of slack either side of the target's hull a laid gun may be off and still fire. The shot's own aim assist is 8 m at the muzzle, so this only needs to cover the last of the laying.")]
+        [SerializeField] float autoFireSlack = 2.5f;
+        [Tooltip("Fire out to this fraction of the gun's flat-water reach. Below 1 so a shot that falls just short is not the first thing the lock does.")]
+        [Range(0.5f, 1.2f)] [SerializeField] float autoFireReach01 = 1f;
+
+        /// **Each gun decides for itself.** A gun speaks when it is loaded,
+        /// manned, laid on the target (its own barrel bearing, after the
+        /// handspike traverse, within the hull's width at that range), the
+        /// target is inside its reach, and the first thing along the line of
+        /// fire is not a friendly tower. So nothing new is said about reload,
+        /// crew or traverse: those still decide WHEN a gun is ready, and the
+        /// helm still decides whether a side bears. What goes away is only
+        /// the button press.
+        ///
+        /// Per gun rather than per side: guns reload on their own crew's
+        /// clock, so a side fires as a ripple when it swings onto the target
+        /// and then each gun again as its hand gets it loaded.
+        void AutoFire()
+        {
+            var t = AutoFireTarget;
+            if (t == null || !t.Alive || t is Combat.IFriendly) return;
+            AutoFireSide(starboard, true, t);
+            AutoFireSide(port, false, t);
+        }
+
+        void AutoFireSide(List<Cannon> side, bool starboardSide, Combat.IHittable t)
+        {
+            Vector3 carried = motor != null ? motor.Velocity * velocityInheritance : Vector3.zero;
+            foreach (var c in side)
+            {
+                if (c == null || !c.Ready) continue;
+                Vector3 from = c.MuzzlePoint;
+                Vector3 to = t.HitCentre - from;
+                to.y = 0f;
+                float dist = to.magnitude;
+                if (dist < 0.5f || dist > c.FlatRange * autoFireReach01) continue;
+
+                Vector3 bore = c.FireDirection;
+                bore.y = 0f;
+                if (bore.sqrMagnitude < 1e-6f) continue;
+                float off = Vector3.Angle(bore, to);
+                float allow = Mathf.Atan2(t.HitRadius + autoFireSlack, dist) * Mathf.Rad2Deg;
+                if (off > Mathf.Max(1.5f, allow)) continue;
+
+                // Never through a friend. The first thing along the line
+                // from this muzzle to the target must not be one of ours.
+                var first = Combat.HitTargets.SweepFirst(from, t.HitCentre, 0.3f,
+                                                         out _, self);
+                if (first != null && first is Combat.IFriendly) continue;
+
+                if (!c.Fire(carried)) continue;
+                AutoShots++;
+                Recoil(c, starboardSide);
+            }
+        }
+
+        /// One gun's reaction on the hull, as in `FireBroadside`.
+        void Recoil(Cannon c, bool starboardSide)
+        {
+            var rb = GetComponent<Rigidbody>();
+            if (rb == null) return;
+            float shot = ShotKg[Mathf.Clamp(CalibreLevel, 0, 3)];
+            float perGun = shot * MuzzleSpeed * GasFactor * recoilExaggeration;
+            Vector3 outward = transform.TransformDirection(
+                new Vector3(starboardSide ? 1f : -1f, 0f, 0f));
+            rb.AddForceAtPosition(-outward * perGun, c.transform.position, ForceMode.Impulse);
+        }
+
         void Update()
         {
             float dt = Time.deltaTime;
             ServiceGuns();
             TrainSide(starboard, true, dt);
             TrainSide(port, false, dt);
+            AutoFire();
 
             var kb = UnityEngine.InputSystem.Keyboard.current;
             if (kb == null || SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
@@ -434,7 +521,19 @@ namespace SeaSick.Ship
             // The player's hull is a target now, so every lookup has to say
             // who is asking or the guns train on their own ship.
             if (self == null) self = GetComponent<Combat.PlayerHull>();
-            var target = NearestHostile(transform.position, out float dist, self);
+            // A locked target is the one the guns lay on, even with another
+            // raider nearer: the lock is the player saying which one.
+            Combat.IHittable target;
+            float dist;
+            var locked = AutoFireTarget;
+            if (locked != null && locked.Alive)
+            {
+                target = locked;
+                Vector3 d = locked.HitCentre - transform.position;
+                d.y = 0f;
+                dist = d.magnitude;
+            }
+            else target = NearestHostile(transform.position, out dist, self);
             if (target != null && dist <= GunRange * 1.4f)
             {
                 Vector3 toTarget = target.HitCentre - transform.position;
