@@ -40,8 +40,22 @@ namespace SeaSick.Save
         /// path, never written or deleted by anything after slots shipped:
         /// `SaveSlots` reads it exactly once, to migrate it into manual
         /// slot 1, and leaves it on disk afterwards as Kevin's backup.
-        public static string LegacyPath =>
-            System.IO.Path.Combine(Application.persistentDataPath, FileName);
+        /// **Follows `SaveSlots.EditorTestDirectory` in the editor**, same
+        /// as every slot path (`SaveSlots.PathFor`) -- so with the redirect
+        /// set, `EnsureMigrated` reads and writes entirely inside the
+        /// scratch directory and never touches Kevin's real legacy file,
+        /// even to look for it. A player build always resolves here.
+        public static string LegacyPath
+        {
+            get
+            {
+#if UNITY_EDITOR
+                string ed = SaveSlots.EditorTestDirectory;
+                if (ed != null) return System.IO.Path.Combine(ed, FileName);
+#endif
+                return System.IO.Path.Combine(Application.persistentDataPath, FileName);
+            }
+        }
 
         /// **The slot system's write/read target** (2026-09-26, `SaveSlots`):
         /// whichever slot is "the game being played right now"

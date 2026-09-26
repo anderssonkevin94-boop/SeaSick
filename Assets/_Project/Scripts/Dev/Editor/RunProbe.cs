@@ -309,6 +309,18 @@ public static class RunProbe
     public static void Landscape() => CallEditor("SetLandscapeMode");
     public static void ViewDesk() => CallEditor("DesktopGameView");
     public static void ViewPhone() => CallEditor("PortraitGameView");
+
+    // --- save-folder test redirect (2026-09-26) ------------------------------
+    // Set BEFORE `editor_play`, never after: `GameBoot` can read/migrate
+    // through `SaveSlots` on the very first frames of Play, before any
+    // `unity cmd eval` sent once play has started gets a turn. Backed by
+    // `UnityEditor.SessionState` (`SaveSlots.EditorTestDirectory`), which
+    // -- unlike a runtime static -- is already in place by then. Clear it
+    // when done so the next ordinary session is not left pointed at a
+    // scratch folder.
+    public static void SetSaveDirOverride(string dir) => SeaSick.Save.SaveSlots.EditorTestDirectory = dir;
+    public static void ClearSaveDirOverride() => SeaSick.Save.SaveSlots.EditorTestDirectory = null;
+    public static string GetSaveDirOverride() => SeaSick.Save.SaveSlots.EditorTestDirectory;
     public static void Quality() => CallEditor("ReadQuality");
     // Saves the OPEN scene in place. Coplay's own save_scene takes a NAME
     // and writes Assets/[name].unity, so calling it on Sea.unity forks a

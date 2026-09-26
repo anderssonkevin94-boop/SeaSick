@@ -88,14 +88,62 @@ namespace SeaSick.Save
             lastSaveRealtime = -1f;
         }
 
-        /// **Test-only redirect for every slot file** (never the legacy
-        /// path, which stays put at `Application.persistentDataPath`
-        /// regardless). Null in real play. `SaveSlotsProbe` points this at
-        /// a scratch directory before touching anything, the same way
-        /// `ShipyardService.PersistPathOverride` keeps the modular-ship
-        /// probes off the player's own save -- so a probe run of `m5`
-        /// never means the real `m5`.
-        public static string DirectoryOverride { get; set; }
+#if UNITY_EDITOR
+        const string EditorOverrideKey = "SeaSick.SaveDirOverride";
+
+        /// **The editor-persistent half of the test redirect.** A plain C#
+        /// static set in edit mode is not good enough: `GameBoot` runs
+        /// (`DefaultExecutionOrder(-300)`) and can call into `SaveSlots`
+        /// (and trigger `EnsureMigrated`) on the very first frames of Play,
+        /// before any `unity cmd eval` sent AFTER `editor_play` returns has
+        /// a chance to run, and before any probe's own coroutine reaches
+        /// its `WaitForEndOfFrame`. That is exactly the race that put a
+        /// migrated `seasick-save-m1.json` into Kevin's REAL save folder
+        /// on 2026-09-26. `UnityEditor.SessionState` survives that --
+        /// unlike a runtime static, it is readable from frame 0 of Play as
+        /// long as it was set in edit mode beforehand, whether or not a
+        /// domain reload happens on entering Play. Set it via
+        /// `RunProbe.SetSaveDirOverride(path)` (edit mode, before Play);
+        /// clear it with `RunProbe.ClearSaveDirOverride()`. Compiled out of
+        /// every player build -- `UnityEditor` does not exist there.
+        public static string EditorTestDirectory
+        {
+            get
+            {
+                string v = UnityEditor.SessionState.GetString(EditorOverrideKey, "");
+                return string.IsNullOrEmpty(v) ? null : v;
+            }
+            set
+            {
+                if (string.IsNullOrEmpty(value)) UnityEditor.SessionState.EraseString(EditorOverrideKey);
+                else UnityEditor.SessionState.SetString(EditorOverrideKey, value);
+            }
+        }
+#endif
+
+        static string directoryOverrideRuntime;
+
+        /// **Test-only redirect for every slot file** (`SaveGame.LegacyPath`
+        /// follows it too, in the editor -- see there). Null in real play
+        /// and in any player build. A runtime set (what `SaveSlotsProbe`
+        /// and the shipyard probes do once they are already running) wins
+        /// over the editor-persistent `EditorTestDirectory` set before Play
+        /// -- both point off the player's own save, a probe's own scratch
+        /// dir is just more specific. `ShipyardService.PersistPathOverride`
+        /// is the equivalent for a refit's own file.
+        public static string DirectoryOverride
+        {
+            get
+            {
+                if (directoryOverrideRuntime != null) return directoryOverrideRuntime;
+#if UNITY_EDITOR
+                return EditorTestDirectory;
+#else
+                return null;
+#endif
+            }
+            set { directoryOverrideRuntime = value; }
+        }
 
         public static string PathFor(string slotId) =>
             System.IO.Path.Combine(DirectoryOverride ?? Application.persistentDataPath, "seasick-save-" + slotId + ".json");
