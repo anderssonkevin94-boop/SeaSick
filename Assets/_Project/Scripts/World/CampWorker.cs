@@ -610,7 +610,9 @@ namespace SeaSick.World
             // including the next trip: it lasts a second or two and the
             // next trip's own pickup slack absorbs it. See `TickDelivery`.
             if (TickDelivery(dt)) return;
-            if (camp.Ledger != null && r.Hauling)
+            // A hunt trip is mimed by `TickHunting` (stalk, strike, carry),
+            // not as an armful.
+            if (camp.Ledger != null && r.Hauling && !r.HuntTrip)
             {
                 TickHaul(r, dt);
                 wasHauling = true;
@@ -1682,7 +1684,10 @@ namespace SeaSick.World
         /// never a wrong number.
         float TripFactor(OutpostHand r)
         {
-            if (r.order == OutpostOrder.Gather && !string.IsNullOrEmpty(r.target) && r.target != Res.Game)
+            // A hunter's clock is his meat's (`OutpostLedger.HuntDay`).
+            if (r.order == OutpostOrder.Gather && r.target == Res.Game)
+                return OutpostLedger.WorkFactorOn(r, Res.Food) * camp.Ledger.PriorityMultiplier(Res.Food);
+            if (r.order == OutpostOrder.Gather && !string.IsNullOrEmpty(r.target))
                 return OutpostLedger.WorkFactorOn(r, r.target) * camp.Ledger.PriorityMultiplier(r.target);
             return OutpostLedger.WorkFactor(r);
         }

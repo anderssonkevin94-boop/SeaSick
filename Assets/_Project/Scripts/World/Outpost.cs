@@ -229,6 +229,23 @@ namespace SeaSick.World
                 }
             }
 
+            // The hunt (2026-09-27 trips): the beast a hunter is on, else
+            // the nearest standing one, is where the next carcass comes from.
+            var herd = FaunaHere();
+            if (herd != null && herd.Animals != null)
+            {
+                float bestHunt = float.MaxValue, bestAny = float.MaxValue;
+                foreach (var a in herd.Animals)
+                {
+                    if (a == null || a.Dead) continue;
+                    Vector3 d = a.transform.position - c; d.y = 0f;
+                    float m = d.sqrMagnitude;
+                    if (a.Hunted) bestHunt = Mathf.Min(bestHunt, m); else bestAny = Mathf.Min(bestAny, m);
+                }
+                float best = bestHunt < float.MaxValue ? bestHunt : bestAny;
+                if (best < float.MaxValue) ledger.SetSourceMetres(Res.Game, Mathf.Sqrt(best));
+            }
+
             foreach (var res in Res.Gatherable)
             {
                 if (res == Res.Timber || res == Res.Food || res == Res.Game) continue;

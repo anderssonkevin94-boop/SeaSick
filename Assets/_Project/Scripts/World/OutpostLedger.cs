@@ -133,6 +133,17 @@ namespace SeaSick.World
 
         public bool Hauling => haulCount > 0 && !string.IsNullOrEmpty(haulRes);
 
+        /// **Out after an animal (2026-09-27).** A hunt is a trip on the
+        /// same haul fields (`haulRes == Res.Game`, one carcass, Field ->
+        /// Store): walk out + stalk, the kill, the carry, the deposit
+        /// (`OutpostLedger.Hunting`). `huntKilled` flips at the kill; the
+        /// trip went out with the bow when `huntArmed`. Saved with the rest.
+        public bool HuntTrip => Hauling && haulRes == Res.Game;
+        public bool huntKilled;
+        public bool huntArmed;
+        /// Kills and carcass deposits booked, this session only (probes).
+        [System.NonSerialized] public int huntKills, huntDeposits;
+
         /// Bumped by every trip start, never saved: lets the body
         /// (`CampWorker`) mime each ledger trip exactly once.
         [System.NonSerialized] public int haulSerial;
@@ -2399,116 +2410,14 @@ namespace SeaSick.World
             // decision A): store -> source -> cut an armful -> store, each
             // trip's time its walked distance plus the cutting (`GatherDay`,
             // OutpostLedger.Stations.cs). No per-day `Res.GatherRate`
-            // accrual any more. Only the hunter below keeps a rate.
+            // accrual any more. **Since 2026-09-27 the hunt is trips too**
+            // (`HuntDay`, OutpostLedger.Hunting.cs): stalk, one whole kill,
+            // carry, deposit 4 Food + 1 Hide at the store.
             foreach (var h in hands)
             {
                 if (h == null || h.order != OutpostOrder.Gather) continue;
                 if (string.IsNullOrEmpty(h.target)) continue;
-                if (TripGatherer(h)) { GatherDay(h, days, gatherersBuild); continue; }
-
-                var stock = Stock(h.target);
-                if (stock == null || stock.standing <= 0f) continue;
-
-                // **A hunter is the one hand whose stock and whose pile are
-                // different things.** Game is counted in animals on the
-                // ground; what he carries home is meat, and meat is Food. So
-                // the take is metered in animals against the herd and paid in
-                // `MeatPerAnimal` into the Food pile -- which is also why the
-                // room he has to fill is the FOOD pile's, converted back into
-                // animals before it can limit the kill.
-                bool hunting = h.target == Res.Game;
-                string into = hunting ? Res.Food : h.target;
-
-                // **Hard gate, Kevin 2026-09-23: "to hunt, you need a
-                // spear."** No spear in the pile, no kills -- the hunter's
-                // day goes to nothing, same as a gatherer with nothing
-                // standing. `Stalled` reads the same `HunterBlocker`.
-                string spear = hunting ? SpearInHand() : null;
-                if (hunting && spear == null) continue;
-
-                var store = Store(into, true);
-                // Net of loads walking to the store: the ceiling holds.
-                // A carcass is meat AND hide (2026-09-26): the hunt stops
-                // only when neither fits (`HuntRoomAnimals`), and the meat
-                // that does not fit is lost at the store below.
-                float meatRoom = hunting ? Mathf.Max(0f, StoreRoomF(Res.Food)) : 0f;
-                float room = hunting ? HuntRoomAnimals() : StoreRoomF(into);
-                if (room <= 0f) continue;
-
-                float want = Res.GatherRate(h.target) * days * WorkFactorOn(h, into)
-                    * PriorityMultiplier(into);
-
-                // **A hunter with arrows, Kevin 2026-09-22.** *"build a
-                // fletcher's building as well for bow and arrow."* A bow is
-                // the difference between walking an animal down and taking
-                // it at forty paces, so a quiver is worth `BowKillBonus` on
-                // the kill rate -- and it is SPENT doing it, one arrow the
-                // animal. The quiver is therefore a thing the camp burns
-                // through, not a stock that sits there: stop making arrows
-                // and the hunt quietly falls back to half again slower.
-                //
-                // The bonus is taken only as far as the arrows reach. A
-                // hunter with two arrows left and four animals' worth of day
-                // in him shoots two and walks the rest down, which is what
-                // makes running dry read as a slope rather than a cliff.
-                // Store and station racks alike (`HeldOf`), spent through
-                // `DrawHeld` from the same places.
-                float arrowsHeld = hunting ? HeldOf(Res.Arrows) : 0f;
-                if (hunting && arrowsHeld > 0f)
-                {
-                    float plain = want;
-                    float armed = want * BowKillBonus;
-                    // One arrow per animal taken, so the most the bow can add
-                    // is the arrows in the quiver.
-                    want = Mathf.Min(armed, plain + arrowsHeld);
-                }
-
-                // The spear wears with the kill, so the kill cannot outrun
-                // the spear any more than it can outrun the herd or the
-                // larder -- clamped here, the same shape as the arrows
-                // bonus above.
-                float spearWear = hunting ? Economy.Techs.SpearWear(spear) : 0f;
-                if (hunting && spearWear > 0f) want = Mathf.Min(want, HeldOf(spear) / spearWear);
-
-                float got = Mathf.Min(want, Mathf.Min(stock.standing, room));
-                if (got <= 0f) continue;
-
-                // Spend the quiver against what was actually killed, after
-                // the herd and the larder have had their say -- a hunter
-                // stopped by a full Food pile has not loosed an arrow.
-                if (hunting && arrowsHeld > 0f)
-                    DrawHeld(Res.Arrows, Mathf.Min(got, arrowsHeld));
-
-                stock.standing -= got;
-                if (h.target == Res.Timber) timberTaken += got;
-                float paid = hunting ? Mathf.Min(got * Res.MeatPerAnimal, meatRoom) : got;
-                if (paid > 0f)
-                {
-                    store.part += paid;
-                    int whole = Mathf.FloorToInt(store.part);
-                    if (whole > 0) { store.whole += whole; store.part -= whole; }
-                    away.Add(into, paid);
-                }
-
-                if (hunting)
-                {
-                    if (spearWear > 0f) DrawHeld(spear, spearWear * got);
-                    // Hide comes home beside the meat, one per animal --
-                    // a full hide pile does not stop the hunt, the hide is
-                    // simply lost (and since 2026-09-26 a full larder does
-                    // not stop it either while there is room for hide).
-                    foreach (var drop in Economy.Techs.HuntDrops)
-                    {
-                        var dropStore = Store(drop.res, true);
-                        float dropRoom = Mathf.Max(0f, StoreRoomF(drop.res));
-                        float dropGot = Mathf.Min(drop.n * got, dropRoom);
-                        if (dropGot <= 0f) continue;
-                        dropStore.part += dropGot;
-                        int dw = Mathf.FloorToInt(dropStore.part);
-                        if (dw > 0) { dropStore.whole += dw; dropStore.part -= dw; }
-                        away.Add(drop.res, dropGot);
-                    }
-                }
+                if (TripGatherer(h)) GatherDay(h, days, gatherersBuild);
             }
 
             // --- working at a building ---------------------------------------
@@ -2865,6 +2774,9 @@ namespace SeaSick.World
                 // cannot take one out of.
                 if (h.target == Res.Game)
                 {
+                    // Out on a trip is working: a beast down is fetched
+                    // whatever the store or the spear says now.
+                    if (h.HuntTrip) return null;
                     string blocker = HunterBlocker();
                     if (blocker != null) return blocker;
                     if (GatherBlocked(h)) return GatherFullReason(h);
@@ -2957,10 +2869,10 @@ namespace SeaSick.World
                         // Arrows reads as a drain. Mirrors `Step` term for
                         // term, which is the only way a readout stays honest
                         // about a good that is consumed rather than kept.
-                        bool armed = HeldOf(Res.Arrows) > 0f;
-                        float kills = Res.GatherRate(Res.Game)
+                        // Trips since 2026-09-27: a carcass per hunt trip.
+                        bool armed = HeldOf(Res.Arrows) >= 1f;
+                        float kills = HuntTripPerDay(armed)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
-                        if (armed) kills *= BowKillBonus;
                         if (resource == Res.Food) { if (StoreRoomF(Res.Food) > 0f) rate += kills * Res.MeatPerAnimal; }
                         else if (resource == Res.Arrows && armed) rate -= kills;
                         else foreach (var drop in Economy.Techs.HuntDrops)
@@ -3037,9 +2949,9 @@ namespace SeaSick.World
                         // readout is the POSITIVE terms only, so the arrows
                         // it costs are deliberately not subtracted here --
                         // only the meat (and the hide) they buy is.
-                        float kills = Res.GatherRate(Res.Game)
+                        // Trips since 2026-09-27: a carcass per hunt trip.
+                        float kills = HuntTripPerDay(HeldOf(Res.Arrows) >= 1f)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
-                        if (HeldOf(Res.Arrows) > 0f) kills *= BowKillBonus;
                         if (resource == Res.Food) { if (StoreRoomF(Res.Food) > 0f) rate += kills * Res.MeatPerAnimal; }
                         else foreach (var drop in Economy.Techs.HuntDrops)
                             if (drop.res == Res.Hide) rate += kills * drop.n;

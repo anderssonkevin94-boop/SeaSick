@@ -793,6 +793,9 @@ namespace SeaSick.World
         void DepositHaul(OutpostHand h, bool force = false)
         {
             if (h == null || !h.Hauling) { if (h != null) ClearHaul(h); return; }
+            // A hunt trip (2026-09-27): a killed carcass lands at the store
+            // as meat and hide, an unkilled one was never there.
+            if (h.HuntTrip) { DepositCarcass(h); return; }
             // **A builder's armful into a blueprint** (2026-09-23): through
             // `DeliverToSite`, so it fills the oldest site short of it up to
             // its need and any surplus (a visitor beat him to it, the site
@@ -889,6 +892,7 @@ namespace SeaSick.World
             h.haulFromBay = false;
             h.haulPlaced = false;
             h.haulWalkDays = h.haulWorkDays = 0f;
+            h.huntKilled = h.huntArmed = false;
             h.haulFromX = h.haulFromZ = h.haulToX = h.haulToZ = 0f;
         }
 
@@ -1184,18 +1188,18 @@ namespace SeaSick.World
         {
             if (h == null || h.order != OutpostOrder.Gather || string.IsNullOrEmpty(h.target)) return false;
             // A carcass is meat and hide: full only when neither fits (2026-09-26).
-            if (h.target == Res.Game) return HuntStoreFull();
+            if (h.target == Res.Game) return !h.HuntTrip && HuntStoreFull();
             if (h.Hauling && h.haulFrom == HaulPlace.Field && h.haulTo == HaulPlace.Store
                 && !WaitingAtStore(h)) return false;
             return RoomFor(h.target) <= 0;
         }
 
-        /// **A gatherer who works by trips** (everything but the hunter):
-        /// `GatherDay` spends his whole quantum, whatever is in his arms, so
-        /// the builder and station passes leave him alone.
+        /// **A gatherer who works by trips** (everyone on a Gather order;
+        /// the hunter too since 2026-09-27): `GatherDay` spends his whole
+        /// quantum, whatever is in his arms, so the builder and station
+        /// passes leave him alone.
         static bool TripGatherer(OutpostHand h) =>
-            h != null && h.order == OutpostOrder.Gather && !string.IsNullOrEmpty(h.target)
-            && h.target != Res.Game;
+            h != null && h.order == OutpostOrder.Gather && !string.IsNullOrEmpty(h.target);
 
         /// One gather trip: from the store out to the source, an armful cut
         /// there, back into the store. The armful is the least of
@@ -1226,6 +1230,9 @@ namespace SeaSick.World
         /// help is paid at plain `WorkFactor`, like any builder or hauler.
         void GatherDay(OutpostHand h, float days, bool helpBuild)
         {
+            if (h.target == Res.Game) { HuntDay(h, days, helpBuild); return; }
+            // Re-ordered off the hunt mid-trip: the carcass (if any) lands now.
+            if (h.HuntTrip) DepositCarcass(h);
             float scale = WorkFactorOn(h, h.target) * PriorityMultiplier(h.target);
             float budget = days * scale;
             for (int guard = 0; guard < 64 && budget > Eps; guard++)

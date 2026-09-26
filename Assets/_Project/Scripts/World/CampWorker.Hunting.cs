@@ -17,30 +17,30 @@ namespace SeaSick.World
     /// books had paid. Worse, he did it with a full larder, when the books
     /// were not killing at all (`Stalled` was never asked).
     ///
-    /// Now, still never driving the books:
-    /// - **Stalled = standing at home.** No spear, no room for meat or
-    ///   hide, no game left: he does not go out (the sheets say why:
-    ///   `StallReason`). A beast he already killed is still fetched.
-    /// - **Stalk** his claimed beast at `StalkDistance`, spear upright,
-    ///   while the books work through it (`OutpostLedger.HuntProgress01`).
-    /// - **Strike** once the books are `StrikeAt` of the way through the
-    ///   animal: close to arm's length and jab (`Bend` + `HunterProps`
-    ///   thrust). The kill itself is still `SyncHunting`'s, on the claimed
-    ///   beast, so the goat that drops is the one he is spearing.
-    /// - **Carry**: the carcass waits for him (`Animal.AwaitingHunter`),
-    ///   he shoulders the animal's own body (`HunterProps.Shoulder`), walks
-    ///   it to the store the Food goes to, stoops, and it is gone -- the
-    ///   meat and hide were booked at the kill.
+    /// **2026-09-27: the hunt is a ledger TRIP** (`OutpostLedger.Hunting`),
+    /// and the body follows its phases, never driving them:
+    /// - **No trip = home.** The books start a trip only with a spear, a
+    ///   beast nobody else is on and room for meat or hide; until then he
+    ///   stands at home (the sheets say why: `StallReason`).
+    /// - **Stalk** his claimed beast at `StalkDistance` while the trip's
+    ///   stalk runs.
+    /// - **Strike** in the last `StrikeSeconds` before the books' kill
+    ///   (`OutpostLedger.HuntDaysToKill` on the step grid): close to arm's
+    ///   length and jab. The kill is the books' whole animal; `SyncHunting`
+    ///   drops the claimed beast in that step, so the goat that falls is the
+    ///   one he is spearing.
+    /// - **Carry**: he shoulders the animal's own body (`HunterProps.Shoulder`)
+    ///   and walks it to the store; early, he stands there holding it; he
+    ///   stoops as the deposit comes due and the carcass goes in the step
+    ///   the books put 4 Food and 1 Hide in the store -- not before.
     public partial class CampWorker
     {
         /// Metres he keeps off a beast while the books work through it.
         const float StalkDistance = 4.5f;
         /// Slack past `StalkDistance` before he re-closes on a grazing beast.
         const float StalkSlack = 2f;
-        /// Fraction of the current animal the books must have taken before
-        /// he closes in to strike. The ledger takes ~1 % of an animal per
-        /// 3.6 s quantum, so 0.94 is the last ~20 s of the stalk.
-        const float StrikeAt = 0.94f;
+        /// Real seconds before the books' kill that he closes in to strike.
+        const float StrikeSeconds = 6f;
         /// Seconds of stoop at the store before the carcass is gone.
         const float SetDownSeconds = 0.8f;
         /// Roughly the middle of a goat's flank above its feet, metres.
@@ -48,6 +48,12 @@ namespace SeaSick.World
 
         HunterProps hunterProps;
         float setDownLeft = -1f;
+        /// The ledger trip (`haulSerial`) whose carcass is on his shoulders.
+        int carcassTrip = -1;
+
+        /// The books still have this carcass in his arms.
+        static bool BooksCarrying(OutpostHand r, int trip) =>
+            r.HuntTrip && r.huntKilled && r.haulSerial == trip;
 
         void TickHunting(OutpostHand r, float dt)
         {
@@ -60,24 +66,29 @@ namespace SeaSick.World
             if (phase == Phase.Coming)
             {
                 props.Drive(spear, HunterProps.Pose.Upright);
-                if (!props.HasCarcass) { Drop(); phase = Phase.Resting; wait = RestSeconds; setDownLeft = -1f; return; }
-                if (setDownLeft >= 0f)
-                {
-                    acting?.Set(VillagerActing.Mode.Bend);
-                    setDownLeft -= dt;
-                    if (setDownLeft > 0f) return;
-                    props.PutDown();
-                    setDownLeft = -1f;
-                    Drop();
-                    phase = Phase.Resting;
-                    wait = RestSeconds;
-                    return;
-                }
-                acting?.Set(VillagerActing.Mode.None);
-                // Re-aimed every step: a hut raised mid-carry takes it.
+                if (!props.HasCarcass) { Drop(); phase = Phase.Resting; wait = 0f; setDownLeft = -1f; return; }
+                bool booksHave = BooksCarrying(r, carcassTrip);
                 dropAt = Dropoff(r, Res.Food);
-                if (!Walk(dropAt, dt)) return;
-                setDownLeft = SetDownSeconds;
+                if (setDownLeft < 0f)
+                {
+                    acting?.Set(VillagerActing.Mode.None);
+                    if (!Walk(dropAt, dt)) return;
+                    // At the store. Stoop as the deposit comes due (or at
+                    // once if the books already put it in).
+                    float due = booksHave ? SecondsToDeposit(r) : 0f;
+                    if (due > SetDownSeconds) return;
+                    setDownLeft = SetDownSeconds;
+                }
+                acting?.Set(VillagerActing.Mode.Bend);
+                setDownLeft -= dt;
+                // The carcass goes in the step the books deposit it.
+                if (setDownLeft > 0f || booksHave) return;
+                props.PutDown();
+                setDownLeft = -1f;
+                carcassTrip = -1;
+                Drop();
+                phase = Phase.Resting;
+                wait = 0f;
                 return;
             }
             setDownLeft = -1f;
@@ -85,9 +96,10 @@ namespace SeaSick.World
             // A carcass destroyed under him (it waited too long) is gone.
             if (quarry == null) quarry = null;
             bool fetching = quarry != null && quarry.Dead;
+            bool stalking = r.HuntTrip && (!r.huntKilled || (quarry != null && !quarry.Dead));
 
-            // --- stalled: the books are not hunting, so neither is he -----
-            if (!fetching && ledger != null && ledger.Stalled(r))
+            // --- no hunt in the books: home ------------------------------
+            if (!fetching && !stalking)
             {
                 Unclaim();
                 props.Drive(spear, HunterProps.Pose.Upright);
@@ -97,93 +109,76 @@ namespace SeaSick.World
                 return;
             }
 
-            switch (phase)
+            if (quarry == null && !ClaimQuarry())
             {
-                case Phase.Resting:
+                // Every beast left has a man on it (or none is loaded here):
+                // wait at home; the books go on without a picture.
+                props.Drive(spear, HunterProps.Pose.Upright);
+                acting?.Set(VillagerActing.Mode.None);
+                phase = Phase.Resting;
+                if (Walk(home, dt)) FaceRest(dt, 0f);
+                return;
+            }
+
+            Vector3 at = quarry.transform.position;
+            if (fetching)
+            {
+                // The books took it. Walk to where it fell, watch it go
+                // over, lift it.
+                if (!Near(at, HuntReach))
                 {
+                    phase = Phase.Going;
                     props.Drive(spear, HunterProps.Pose.Upright);
                     acting?.Set(VillagerActing.Mode.None);
-                    bool there = Walk(home, dt);
-                    wait -= dt;
-                    if (wait > 0f) { if (there) FaceRest(dt, 0f); return; }
-                    if (!ClaimQuarry())
-                    {
-                        // Every beast left has a man on it (or none is
-                        // loaded here): wait at home and ask again.
-                        wait = RestSeconds * 3f;
-                        return;
-                    }
-                    phase = Phase.Going;
+                    Walk(StandOffFrom(at, HuntReach * 0.6f), dt);
                     return;
                 }
-
-                case Phase.Going:
-                case Phase.Working:
+                Face(at - transform.position, dt);
+                if (!quarry.Down)
                 {
-                    if (quarry == null) { phase = Phase.Resting; wait = RestSeconds; return; }
-                    Vector3 at = quarry.transform.position;
-
-                    if (fetching)
-                    {
-                        // The books took it. Walk to where it fell, watch it
-                        // go over, lift it.
-                        if (!Near(at, HuntReach))
-                        {
-                            phase = Phase.Going;
-                            props.Drive(spear, HunterProps.Pose.Upright);
-                            acting?.Set(VillagerActing.Mode.None);
-                            Walk(StandOffFrom(at, HuntReach * 0.6f), dt);
-                            return;
-                        }
-                        Face(at - transform.position, dt);
-                        if (!quarry.Down)
-                        {
-                            props.Drive(spear, HunterProps.Pose.Thrust, at + Vector3.up * FlankHeight * 0.5f);
-                            acting?.Set(VillagerActing.Mode.Bend);
-                            return;
-                        }
-                        props.Drive(spear, HunterProps.Pose.Upright);
-                        props.Shoulder(quarry);
-                        quarry = null;               // not Unclaim: it is a carcass now
-                        carrying = Res.Food;
-                        dropAt = Dropoff(r, Res.Food);
-                        acting?.Set(VillagerActing.Mode.None);
-                        phase = Phase.Coming;
-                        return;
-                    }
-
-                    bool strike = ledger != null && ledger.HuntProgress01() >= StrikeAt;
-                    float keep = strike ? HuntReach : StalkDistance;
-                    float slack = strike ? 0f : StalkSlack;
-                    Vector3 d = at - transform.position; d.y = 0f;
-                    if (d.magnitude > keep + slack + 0.35f)
-                    {
-                        phase = Phase.Going;
-                        props.Drive(spear, HunterProps.Pose.Upright);
-                        acting?.Set(VillagerActing.Mode.None);
-                        Walk(StandOffFrom(at, keep), dt);
-                        return;
-                    }
-
-                    phase = Phase.Working;
-                    Face(at - transform.position, dt);
-                    if (strike)
-                    {
-                        props.Drive(spear, HunterProps.Pose.Thrust, at + Vector3.up * FlankHeight);
-                        acting?.Set(VillagerActing.Mode.Bend);
-                    }
-                    else
-                    {
-                        props.Drive(spear, HunterProps.Pose.Upright);
-                        acting?.Set(VillagerActing.Mode.None);
-                    }
+                    props.Drive(spear, HunterProps.Pose.Thrust, at + Vector3.up * FlankHeight * 0.5f);
+                    acting?.Set(VillagerActing.Mode.Bend);
                     return;
                 }
+                props.Drive(spear, HunterProps.Pose.Upright);
+                props.Shoulder(quarry);
+                quarry = null;               // not Unclaim: it is a carcass now
+                carcassTrip = r.HuntTrip && r.huntKilled ? r.haulSerial : -1;
+                carrying = Res.Food;
+                dropAt = Dropoff(r, Res.Food);
+                acting?.Set(VillagerActing.Mode.None);
+                phase = Phase.Coming;
+                return;
+            }
 
-                default:
-                    // Held/Landing/Flying belong to the Hand's throw, which
-                    // runs ahead of this; nothing to mime here.
-                    return;
+            // Stalking: close in for the strike in the last seconds before
+            // the books' kill (or at once if the books already killed).
+            float toKill = r.huntKilled ? 0f
+                : SecondsUntilSpent(OutpostLedger.HuntDaysToKill(r), OutpostLedger.QuantumDays * TripFactor(r));
+            bool strike = toKill <= StrikeSeconds;
+            float keep = strike ? HuntReach : StalkDistance;
+            float slack = strike ? 0f : StalkSlack;
+            Vector3 dv = at - transform.position; dv.y = 0f;
+            if (dv.magnitude > keep + slack + 0.35f)
+            {
+                phase = Phase.Going;
+                props.Drive(spear, HunterProps.Pose.Upright);
+                acting?.Set(VillagerActing.Mode.None);
+                Walk(StandOffFrom(at, keep), dt);
+                return;
+            }
+
+            phase = Phase.Working;
+            Face(at - transform.position, dt);
+            if (strike)
+            {
+                props.Drive(spear, HunterProps.Pose.Thrust, at + Vector3.up * FlankHeight);
+                acting?.Set(VillagerActing.Mode.Bend);
+            }
+            else
+            {
+                props.Drive(spear, HunterProps.Pose.Upright);
+                acting?.Set(VillagerActing.Mode.None);
             }
         }
 
