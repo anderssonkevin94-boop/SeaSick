@@ -95,6 +95,9 @@ namespace SeaSick.Steamer
             // A lab scene with no player ship in it: nothing to convert and
             // nothing to say about it.
             if (yard == null) return;
+            // Already converted this load (the first scene gets both the
+            // attribute and the `sceneLoaded` hook below).
+            if (yard.GetComponent<SeaSick.Ship.Modular.ShipyardService>() != null) return;
 
             // Everything that can fail is loaded BEFORE anything is switched
             // off. The yard has been told not to build, so bailing out half
@@ -110,6 +113,31 @@ namespace SeaSick.Steamer
                 return;
             }
             Convert(yard.gameObject, yard, data);
+        }
+
+        /// **Every scene load, not just the first** (2026-09-26, Kevin's
+        /// phone: "the boat is not visible anymore"). Continue / Load / New
+        /// reload `Sea.unity` mid-session (`GameMenus.ReloadForBoot`), and the
+        /// attribute above fires once per session -- so the reloaded
+        /// PlayerShip was never converted: `SuppressApplyOnStart` (still
+        /// true) kept the ladder yard from building a hull, nothing else
+        /// built one, and she sailed as crew and guns with no boat under
+        /// them, with no `ShipyardService` either -- which is why every
+        /// autosave after a load wrote `modular: ""` and forgot her refit.
+        /// `sceneLoaded` runs after the new scene's Awake/OnEnable and before
+        /// any Start, the same moment the attribute is documented for.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void HookReconvertOnReload()
+        {
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        static void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene,
+                                  UnityEngine.SceneManagement.LoadSceneMode mode)
+        {
+            Shipyard.SuppressApplyOnStart = Selected;
+            ConvertPlayerShip();
         }
 
         /// **Her hull form as she is built today**: the generator's tables at
