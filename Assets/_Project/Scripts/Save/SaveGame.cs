@@ -497,8 +497,18 @@ namespace SeaSick.Save
             if (data.ship.hasHomeBerth)
             {
                 var wanted = new Vector3(data.ship.homeBerthX, 0f, data.ship.homeBerthZ);
-                var found = Dock.Nearest(wanted);
-                if (found != null && found.DistanceFrom(wanted) < 3f)
+                // Matched against the pier, not just the berth point: a save
+                // from before the T-berth stored the old alongside berth,
+                // up to ~9 m beside the pier (see `Dock.DistanceFromPier`).
+                Dock found = null;
+                float best = 10f;
+                foreach (var d in Dock.All)
+                {
+                    if (d == null) continue;
+                    float dd = d.DistanceFromPier(wanted);
+                    if (dd < best) { best = dd; found = d; }
+                }
+                if (found != null)
                     Dock.SetHome(found);
                 else
                     Debug.LogWarning("SaveGame: her home berth pier is gone; staying at "

@@ -312,6 +312,21 @@ namespace SeaSick.World
             }
         }
 
+        /// **How far `pos` is from this pier at all**, flat: the nearer of
+        /// the berth and the pier's own root-to-head line. A save written
+        /// before the T-berth (2026-09-26) holds the OLD alongside berth,
+        /// which lay beside the pier rather than beyond its head; matching
+        /// against the pier itself finds her chosen home either way.
+        public float DistanceFromPier(Vector3 pos)
+        {
+            pos.y = 0f;
+            Vector3 a = root, b = head; a.y = 0f; b.y = 0f;
+            Vector3 ab = b - a;
+            float t = ab.sqrMagnitude > 1e-6f
+                ? Mathf.Clamp01(Vector3.Dot(pos - a, ab) / ab.sqrMagnitude) : 0f;
+            return Mathf.Min(DistanceFrom(pos), Vector3.Distance(pos, a + ab * t));
+        }
+
         /// How far off her berth she is, flat. The mooring code eases her in
         /// on this, and the camera uses it to decide she has arrived.
         public float DistanceFrom(Vector3 pos)
