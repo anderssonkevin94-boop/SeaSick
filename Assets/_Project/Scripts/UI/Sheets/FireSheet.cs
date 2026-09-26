@@ -611,12 +611,11 @@ namespace SeaSick.UI.Sheets
                 // cost, and not tappable -- so the build tab is where a
                 // player finds out the quarry wants the fire at II, not a
                 // building that quietly disappeared.
-                bool unlocked = l.PlanUnlocked(p.id);
-                string price = !unlocked
-                    ? $"{p.label} — {l.PlanLockReason(p.id)}"
-                    : p.stoneCost > 0
-                        ? $"{p.label} — {p.cost} timber {p.stoneCost} stone"
-                        : $"{p.label} — {p.cost} timber";
+                //
+                // **Copies, 2026-09-27**: the row says "×n of m", prices the
+                // NEXT copy (+25% each), and at the cap names the fire level
+                // that opens another -- `OutpostLedger.BuildRowText`.
+                string price = l.BuildRowText(p, out bool unlocked);
                 var planBtn = SheetKit.Btn(price, () =>
                 {
                     CampSiting.Begin(outpost, p, SheetBits.ShipTransform);

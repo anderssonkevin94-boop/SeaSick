@@ -597,15 +597,13 @@ namespace SeaSick.World
             // one-of-each rule, which now has to cover the drawings too --
             // otherwise the way to get two sawmills is to site one twice.
             //
-            // **Phase 1, 2026-09-27: not for every plan any more.** Kevin
-            // wants multiple huts, and "maybe two farms" -- see
-            // `BuildPlan.allowMultiple`. A plan that opts in skips both
-            // checks below outright; everything else keeps the gate.
-            if (!plan.allowMultiple)
-            {
-                if (CountOf(plan.id) > 0) { why = $"there is already a {plan.label} here"; return -1; }
-                if (ledger.Queued(plan.id)) { why = $"a {plan.label} is already going up here"; return -1; }
-            }
+            // **Copies by fire level, 2026-09-27** (Kevin: "lvl 1 campfire
+            // is 2 houses, level 2 is 3 houses, etc."): standing plus drawn
+            // against `Techs.Caps`. A plan capped at one keeps the old
+            // one-of-each refusals word for word; one the fire will open
+            // more of later names the level ("a 3rd shelter needs campfire
+            // II"). See `OutpostLedger.CanAddCopy`.
+            if (!ledger.CanAddCopy(plan.id, out why)) return -1;
             // **The belt, 2026-09-23** -- the sheet already hides a locked
             // plan; this refuses it too, so nothing can queue a station the
             // fire has not opened yet by some other path in.
@@ -632,9 +630,9 @@ namespace SeaSick.World
                 // camp that will not be found again after a save.
                 SetCampCentre(spot);
             }
-            // **Priced through the one hook, 2026-09-27.** A second hut
-            // costs what the first did today -- see `BuildPlans.PriceForCopy`
-            // -- but every reader that prices a build reads THIS, not
+            // **Priced through the one hook, 2026-09-27.** Each copy past
+            // the first costs +25% of the base -- see `BuildPlans.PriceForCopy`
+            // -- and every reader that prices a build reads THIS, not
             // `plan.cost` directly, so a balancing pass changes one function.
             var priced = BuildPlans.PriceForCopy(plan,
                 CountOf(plan.id) + ledger.QueuedCount(plan.id));
@@ -692,6 +690,10 @@ namespace SeaSick.World
         /// when the build FINISHES, which can be days after the player sited
         /// it and on a frame nobody asked a question on.
         public int LastClearingFelled { get; private set; }
+
+        /// The level `Raise` records a new `raised` row at: 1, except while
+        /// `Adopt` is restoring a saved building with its own.
+        int adoptLevel = 1;
 
         /// Draw the blueprint if the ledger says there is one and nothing is
         /// drawing it. Called on arrival, so a camp you sited and sailed away
@@ -2875,8 +2877,20 @@ namespace SeaSick.World
         {
             if (h == null || h.order != OutpostOrder.Work || string.IsNullOrEmpty(h.target))
                 return null;
-            foreach (var b in built) if (b != null && b.Id == h.target) return b;
-            return null;
+            // **Dealt round the copies, 2026-09-27**: the nth Work hand on a
+            // plan stands at its (n mod copies)-th building -- the same deal
+            // `OutpostLedger.StationOfHand` makes -- so two farms or two
+            // towers each get their own hand rather than a queue at the first.
+            int want = ledger != null ? Mathf.Max(0, ledger.OrdinalOfHand(h)) : 0;
+            Building first = null;
+            int k = 0;
+            foreach (var b in built)
+            {
+                if (b == null || b.Id != h.target) continue;
+                if (first == null) first = b;
+                if (k++ == want) return b;
+            }
+            return first;
         }
 
         /// How far off the fire they stand. Close enough to be warming their
@@ -2904,9 +2918,13 @@ namespace SeaSick.World
             get
             {
                 int n = openCapacity;
-                foreach (var b in built)
+                // Each building at its OWN level (2026-09-27).
+                for (int i = 0; i < built.Count; i++)
+                {
+                    var b = built[i];
                     if (b != null)
-                        n += b.StoreCapacity + (ledger != null ? Economy.Techs.StoreBonus(b.Id, ledger.LevelOf(b.Id)) : 0);
+                        n += b.StoreCapacity + (ledger != null ? Economy.Techs.StoreBonus(b.Id, LevelOfBuilding(b)) : 0);
+                }
                 return n;
             }
         }
@@ -3478,22 +3496,55 @@ namespace SeaSick.World
             // and `Adopt` restoring a save) come through here, and `ledger`
             // is already the one whose `LevelOf` matters by the time either
             // does.
-            BuildingLevelLook.Apply(b.transform, ledger != null ? ledger.LevelOf(plan.id) : 1);
+            BuildingLevelLook.Apply(b.transform, LevelOfBuilding(b));
+        }
+
+        /// **This building's own level, 2026-09-27.** `Built` and
+        /// `ledger.raised` grow and shrink together (`Raise` / `Demolish`),
+        /// so its index in one is its row in the other; a row that is not
+        /// its plan's (a hand-written `built`) reads the plan's legacy level.
+        public int LevelOfBuilding(Building b)
+        {
+            if (b == null || ledger == null) return 1;
+            return ledger.LevelAtRaised(built.IndexOf(b), b.Id);
+        }
+
+        /// Which copy of its plan a standing building is (0 = the first
+        /// raised), or -1 -- the key `OutpostLedger.OrdinalOfHand` deals by.
+        public int OrdinalOf(Building b)
+        {
+            if (b == null) return -1;
+            int k = 0;
+            foreach (var x in built)
+            {
+                if (x == b) return k;
+                if (x != null && x.Id == b.Id) k++;
+            }
+            return -1;
+        }
+
+        /// The `raised` row index of a standing building, or -1.
+        public int RaisedIndexOf(Building b) => b != null ? built.IndexOf(b) : -1;
+
+        /// **Re-tint one building, 2026-09-27** -- the one whose level just
+        /// changed (`StationSheet.DoUpgrade`). Its twins keep their own look.
+        public void Retint(Building b)
+        {
+            if (b == null) return;
+            BuildingLevelLook.Apply(b.transform, LevelOfBuilding(b));
         }
 
         /// **Re-tint every standing `planId` right now.** `OutpostLedger.Upgrade`
         /// only changes a number; this is what makes the buildings on the
         /// ground agree with it without waiting for a reload -- called from
         /// `StationSheet.DoUpgrade` the moment the ledger's call succeeds.
-        /// Levels are per plan per camp (`LevelOf`), so every instance of
-        /// the plan standing here changes, not only the one whose sheet is
-        /// open.
+        /// Since 2026-09-27 each building has its own level, so this
+        /// re-tints every copy at ITS level (`Retint(b)` does one).
         public void RetintPlan(string planId)
         {
             if (ledger == null || string.IsNullOrEmpty(planId)) return;
-            int level = ledger.LevelOf(planId);
             foreach (var b in built)
-                if (b != null && b.Id == planId) BuildingLevelLook.Apply(b.transform, level);
+                if (b != null && b.Id == planId) Retint(b);
         }
 
         /// Share of an island's disc that is worth working. The rest is
@@ -3896,7 +3947,7 @@ namespace SeaSick.World
                 buildingReservations.Add(res);
                 // The spiral chose the spot; the save must not let it choose
                 // again. See `OutpostLedger.raised`.
-                if (ledger != null) ledger.RecordRaised(plan.id, p, facing.eulerAngles.y);
+                if (ledger != null) ledger.RecordRaised(plan.id, p, facing.eulerAngles.y, 0f, adoptLevel);
                 AfterRaised(plan, b);
                 return b;
             }
@@ -3933,7 +3984,7 @@ namespace SeaSick.World
             reserved.Add(res);
             buildingReservations.Add(res);
             if (ledger != null) ledger.RecordRaised(plan.id, p, yaw,
-                plan.kind == BuildKind.Pier ? plan.footprint.x : 0f);
+                plan.kind == BuildKind.Pier ? plan.footprint.x : 0f, adoptLevel);
             // The dock hook -- see `RegisterPierDock`. Only a RAISED pier
             // registers; a ghost is made by the factory, not by this method.
             if (plan.kind == BuildKind.Pier)
@@ -4040,6 +4091,10 @@ namespace SeaSick.World
                 var plan = PlanFor(r.planId, r.length);
                 Vector3 at = r.At;
                 if (height != null) at.y = height(at.x, at.z);
+                // **Each building keeps its own level, 2026-09-27**, and an
+                // old save's row (level 0) is migrated here to its plan's old
+                // shared level, so nothing comes back downgraded.
+                adoptLevel = r.level > 0 ? r.level : ledger.LegacyLevelOf(r.planId);
                 var b = Raise(plan, at, r.yaw);
                 if (b == null)
                 {
@@ -4048,6 +4103,7 @@ namespace SeaSick.World
                         + r.x.ToString("F0") + "," + r.z.ToString("F0") + ") any more -- "
                         + (b != null ? "re-sited by the spiral" : "DROPPED"));
                 }
+                adoptLevel = 1;
             }
             // Rows that count a building nobody recorded a spot for (a probe
             // that wrote `built` by hand) still get one, from the spiral.
@@ -4059,8 +4115,13 @@ namespace SeaSick.World
                 wanted[id] = n + 1;
             }
             foreach (var kv in wanted)
+            {
+                // Rowless copies read the plan's legacy level, as they did.
+                adoptLevel = ledger.LegacyLevelOf(kv.Key);
                 for (int i = CountOf(kv.Key); i < kv.Value; i++)
                     if (Raise(PlanNamed(kv.Key)) == null) break;
+                adoptLevel = 1;
+            }
 
             // **Every segment back on its own two posts.** Before
             // `CatchUp`, because `EnsureBlueprints` draws wall SITES and a

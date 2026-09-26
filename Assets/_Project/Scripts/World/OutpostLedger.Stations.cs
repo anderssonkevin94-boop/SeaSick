@@ -557,6 +557,9 @@ namespace SeaSick.World
             if (s == null || count == 0) return false;
             var r = Economy.Recipes.Named(recipeId);
             if (r == null || r.station != s.planId || !RecipeAvailable(r, out _)) return false;
+            // Per building since 2026-09-27: a level-2 recipe wants THIS
+            // copy at level 2, not merely some copy of the plan.
+            if (LevelOf(s.planId, s.ordinal) < r.stationLevel) return false;
             s.orderRecipe = r.id;
             s.orderRepeat = count < 0;
             s.orderLeft = count < 0 ? 0 : count;
@@ -1104,7 +1107,7 @@ namespace SeaSick.World
                 {
                     var r = s.BenchRecipe;
                     if (r == null) { EmptyBench(s); continue; }   // recipe removed from the game
-                    float rate = r.ratePerDay * Economy.Techs.RateMul(s.planId, LevelOf(s.planId))
+                    float rate = r.ratePerDay * Economy.Techs.RateMul(s.planId, LevelOf(s.planId, s.ordinal))
                                  * PriorityMultiplier(r.makes);
                     if (rate <= 0f) break;
                     float perDay = rate / Mathf.Max(1, r.yield);        // bench progress per day

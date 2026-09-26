@@ -55,7 +55,7 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildHeader()
         {
             var l = L;
-            int level = l != null ? l.LevelOf(planId) : 1;
+            int level = outpost != null ? outpost.LevelOfBuilding(building) : 1;
             return SheetKit.Header($"level {level} · {plan.position}", Title, SheetTheme.Moss, "🌾",
                 () => Sheets.Close());
         }
@@ -128,13 +128,16 @@ namespace SeaSick.UI.Sheets
             if (outpost == null || l == null || worker == null) return;
             outpost.CatchUp();
 
-            // Hands on a farm are dealt per plan, not per plot: every
-            // farmhand here works "the farm".
+            // Farmhands are dealt round the farms (2026-09-27, the same
+            // deal as the stations -- `OutpostLedger.OrdinalOfHand`): this
+            // sheet counts the ones at THIS plot. One farm = every farmhand.
+            int mine = outpost.OrdinalOf(building);
             OutpostHand first = null;
             int hands = 0;
             foreach (var h in l.hands)
             {
                 if (h == null || h.order != OutpostOrder.Work || h.target != planId) continue;
+                if (mine >= 0 && l.OrdinalOfHand(h) != mine) continue;
                 if (first == null) first = h;
                 hands++;
             }
@@ -162,7 +165,7 @@ namespace SeaSick.UI.Sheets
             }
 
             // 3. the yield -- the ledger's per-hand figure, times the hands.
-            float per = OutpostLedger.FoodPerHandPerDay * Techs.RateMul(planId, l.LevelOf(planId));
+            float per = OutpostLedger.FoodPerHandPerDay * Techs.RateMul(planId, outpost.LevelOfBuilding(building));
             yieldLine.text = hands <= 1
                 ? $"{per:0.#} food a day with one hand · to the store"
                 : $"{per * hands:0.#} food a day with {hands} hands · to the store";

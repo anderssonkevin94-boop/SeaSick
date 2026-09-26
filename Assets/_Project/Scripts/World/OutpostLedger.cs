@@ -471,6 +471,15 @@ namespace SeaSick.World
         /// a plan of its own size, the chosen length for a pier.
         public float length;
 
+        /// **This building's own level, 2026-09-27** (Kevin: "they have
+        /// their own levels, always"). 0 = a row from a save written before
+        /// levels were per building: it reads the plan's old shared level
+        /// (`OutpostLedger.levels`), so nothing loads downgraded. Every row
+        /// recorded since is born 1, and `Upgrade` writes only its own row.
+        /// It lives on the row so `Outpost.Demolish` taking a row out takes
+        /// that building's level with it and no other copy's shifts.
+        public int level;
+
         public Vector3 At => new Vector3(x, 0f, z);
     }
 
@@ -957,8 +966,15 @@ namespace SeaSick.World
             get
             {
                 int n = 0;
-                foreach (var id in built)
-                    n += BuildPlans.Named(id).houses + Economy.Techs.HousesBonus(id, LevelOf(id));
+                // Per building (2026-09-27): the k-th `built` id of a plan
+                // is its k-th copy, each at its own level.
+                for (int i = 0; i < built.Count; i++)
+                {
+                    string id = built[i];
+                    int k = 0;
+                    for (int j = 0; j < i; j++) if (built[j] == id) k++;
+                    n += BuildPlans.Named(id).houses + Economy.Techs.HousesBonus(id, LevelOf(id, k));
+                }
                 return n;
             }
         }
@@ -1009,8 +1025,11 @@ namespace SeaSick.World
         public class RecipeChoice { public string planId; public string recipeId; }
         public List<RecipeChoice> choices = new List<RecipeChoice>();
 
-        /// One level remembered per building plan -- every building raised
-        /// under one plan id shares its level.
+        /// **LEGACY since 2026-09-27**: one level per plan, from before each
+        /// building had its own (`BuiltBuilding.level`). Kept and still read
+        /// for a `raised` row whose `level` is 0 (an old save), and written
+        /// only for a building with no `raised` row at all (a probe that
+        /// wrote `built` by hand). Nothing else writes it.
         [System.Serializable]
         public class PlanLevel { public string planId; public int level; }
         public List<PlanLevel> levels = new List<PlanLevel>();
@@ -1059,10 +1078,15 @@ namespace SeaSick.World
             return need <= CampfireLevel ? null : $"needs the fire at {Economy.RecipeGraph.Roman(need)}";
         }
 
-        // --- building levels ---
+        // --- building levels (per building since 2026-09-27) ---
+        //
+        // Kevin: "they have their own levels, always." A building's level is
+        // on its `raised` row; its ORDINAL is its place among its plan's
+        // rows, the same key `StationStock.ordinal` uses, so a station and
+        // its level always name the same building.
 
-        /// 1 when never upgraded, and for a plan id no save row mentions.
-        public int LevelOf(string planId)
+        /// The plan-wide level an old save kept, 1 if none.
+        public int LegacyLevelOf(string planId)
         {
             if (levels != null)
                 foreach (var l in levels)
@@ -1070,12 +1094,85 @@ namespace SeaSick.World
             return 1;
         }
 
-        public Economy.UpgradeStep NextUpgrade(string planId) => Economy.Techs.Upgrade(planId, LevelOf(planId) + 1);
+        /// The `raised` row of the `ordinal`-th building of `planId`, or -1.
+        public int RaisedIndexOf(string planId, int ordinal)
+        {
+            if (raised == null || ordinal < 0) return -1;
+            int k = 0;
+            for (int i = 0; i < raised.Count; i++)
+            {
+                if (raised[i] == null || raised[i].planId != planId) continue;
+                if (k == ordinal) return i;
+                k++;
+            }
+            return -1;
+        }
 
-        public bool CanUpgrade(string planId, out string why)
+        /// Level of the building on `raised[raisedIndex]`. When the row is
+        /// missing or is another plan's, `planId`'s legacy level.
+        public int LevelAtRaised(int raisedIndex, string planId = null)
+        {
+            if (raised != null && raisedIndex >= 0 && raisedIndex < raised.Count)
+            {
+                var r = raised[raisedIndex];
+                if (r != null && (planId == null || r.planId == planId))
+                    return r.level > 0 ? r.level : LegacyLevelOf(r.planId);
+            }
+            return string.IsNullOrEmpty(planId) ? 1 : LegacyLevelOf(planId);
+        }
+
+        /// Level of the `ordinal`-th building of `planId` -- a station's own
+        /// level is `LevelOf(s.planId, s.ordinal)`.
+        public int LevelOf(string planId, int ordinal)
+        {
+            int i = RaisedIndexOf(planId, ordinal);
+            return i >= 0 ? LevelAtRaised(i) : LegacyLevelOf(planId);
+        }
+
+        /// **The highest level any standing copy of `planId` has reached**
+        /// -- the plan-wide question (a recipe's station-level gate, a sheet
+        /// with no one building in hand). 1 when never upgraded. A single
+        /// building's number is `LevelOf(planId, ordinal)` / `LevelAtRaised`.
+        public int LevelOf(string planId)
+        {
+            int best = 0;
+            if (raised != null)
+                for (int i = 0; i < raised.Count; i++)
+                    if (raised[i] != null && raised[i].planId == planId)
+                        best = Mathf.Max(best, LevelAtRaised(i));
+            return best > 0 ? best : LegacyLevelOf(planId);
+        }
+
+        /// The next step for the building on `raised[raisedIndex]`.
+        public Economy.UpgradeStep NextUpgradeAt(int raisedIndex, string planId)
+            => Economy.Techs.Upgrade(planId, LevelAtRaised(raisedIndex, planId) + 1);
+
+        /// The lowest-level copy of `planId` (its `raised` index), or -1 --
+        /// what the plan-wide `Upgrade(planId)` takes up.
+        int LowestRaised(string planId)
+        {
+            int pick = -1, lo = int.MaxValue;
+            if (raised != null)
+                for (int i = 0; i < raised.Count; i++)
+                    if (raised[i] != null && raised[i].planId == planId)
+                    {
+                        int lv = LevelAtRaised(i);
+                        if (lv < lo) { lo = lv; pick = i; }
+                    }
+            return pick;
+        }
+
+        /// Plan-wide shims: the lowest copy is the one that goes up next.
+        public Economy.UpgradeStep NextUpgrade(string planId) => NextUpgradeAt(LowestRaised(planId), planId);
+        public bool CanUpgrade(string planId, out string why) => CanUpgradeAt(LowestRaised(planId), planId, out why);
+        public bool Upgrade(string planId) => UpgradeAt(LowestRaised(planId), planId);
+
+        /// Can THIS building (`raised[raisedIndex]`, a `planId`) go up a
+        /// level? `raisedIndex` -1 is a building with no row (legacy).
+        public bool CanUpgradeAt(int raisedIndex, string planId, out string why)
         {
             if (CountBuilt(planId) <= 0) { why = $"no {BuildPlans.Named(planId).label} stands here"; return false; }
-            var next = NextUpgrade(planId);
+            var next = NextUpgradeAt(raisedIndex, planId);
             if (next == null) { why = "already at its top"; return false; }
             if (CampfireLevel < next.campfireLevel)
             { why = $"needs the fire at {Economy.RecipeGraph.Roman(next.campfireLevel)}"; return false; }
@@ -1085,16 +1182,27 @@ namespace SeaSick.World
             return true;
         }
 
-        public bool Upgrade(string planId)
+        /// Pay for and take THIS building up one level. Only its own row
+        /// changes; its twins keep theirs.
+        public bool UpgradeAt(int raisedIndex, string planId)
         {
-            if (!CanUpgrade(planId, out _)) return false;
-            var next = NextUpgrade(planId);
+            if (!CanUpgradeAt(raisedIndex, planId, out _)) return false;
+            var next = NextUpgradeAt(raisedIndex, planId);
             foreach (var line in next.cost) Take(line.res, line.n);
-            if (levels == null) levels = new List<PlanLevel>();
-            bool found = false;
-            foreach (var l in levels)
-                if (l != null && l.planId == planId) { l.level = next.toLevel; found = true; break; }
-            if (!found) levels.Add(new PlanLevel { planId = planId, level = next.toLevel });
+            var row = raised != null && raisedIndex >= 0 && raisedIndex < raised.Count
+                      && raised[raisedIndex] != null && raised[raisedIndex].planId == planId
+                ? raised[raisedIndex] : null;
+            if (row != null) row.level = next.toLevel;
+            else
+            {
+                // No row to carry it (a hand-written `built`): the legacy
+                // plan-wide row, as before 2026-09-27.
+                if (levels == null) levels = new List<PlanLevel>();
+                bool found = false;
+                foreach (var l in levels)
+                    if (l != null && l.planId == planId) { l.level = next.toLevel; found = true; break; }
+                if (!found) levels.Add(new PlanLevel { planId = planId, level = next.toLevel });
+            }
             // The ceiling is pushed in from the buildings on the ground
             // every `Outpost.CatchUp` (same as a fresh raise); nothing here
             // owns a scene reference to force that early, so a level-up's
@@ -1174,8 +1282,11 @@ namespace SeaSick.World
         /// priced per `plan.Yield` outputs -- exactly what the old inline
         /// arithmetic spent, to the bit.
         bool Conversion(string planId, out string makes, out Economy.Ingredient[] takes,
-            out float yield, out float ratePerDay, out string tool, out float toolWear)
+            out float yield, out float ratePerDay, out string tool, out float toolWear, int ordinal = -1)
         {
+            // **The building's own level, 2026-09-27**: a hand's copy
+            // (`OrdinalOfHand`) when one is named, else the plan's best.
+            int lv = ordinal >= 0 ? LevelOf(planId, ordinal) : LevelOf(planId);
             if (Economy.Recipes.StationHasRecipes(planId))
             {
                 var r = RecipeAt(planId);
@@ -1183,7 +1294,7 @@ namespace SeaSick.World
                 makes = r.makes;
                 takes = r.takes;
                 yield = Mathf.Max(1, r.yield);
-                ratePerDay = r.ratePerDay * Economy.Techs.RateMul(planId, LevelOf(planId));
+                ratePerDay = r.ratePerDay * Economy.Techs.RateMul(planId, lv);
                 tool = r.tool;
                 toolWear = r.toolWear;
                 return true;
@@ -1192,7 +1303,7 @@ namespace SeaSick.World
             makes = plan.makes;
             takes = string.IsNullOrEmpty(plan.takes) ? Economy.Cost.None : new[] { new Economy.Ingredient(plan.takes, 1) };
             yield = plan.Yield;
-            ratePerDay = plan.rate * Economy.Techs.RateMul(planId, LevelOf(planId));
+            ratePerDay = plan.rate * Economy.Techs.RateMul(planId, lv);
             tool = null;
             toolWear = 0f;
             return !string.IsNullOrEmpty(makes);
@@ -1231,10 +1342,12 @@ namespace SeaSick.World
         /// `Outpost.Adopt`, and by nothing else.
         public List<BuiltBuilding> raised = new List<BuiltBuilding>();
 
-        public void RecordRaised(string planId, Vector3 at, float yaw, float length = 0f)
+        /// `level` 1 for a new building; `Outpost.Adopt` passes the saved
+        /// row's own (0 = legacy, read through the plan's old level).
+        public void RecordRaised(string planId, Vector3 at, float yaw, float length = 0f, int level = 1)
         {
             raised.Add(new BuiltBuilding
-                { planId = planId, x = at.x, z = at.z, yaw = yaw, length = length });
+                { planId = planId, x = at.x, z = at.z, yaw = yaw, length = length, level = Mathf.Max(0, level) });
         }
 
         /// **Every segment standing on this island, breached or not.**
@@ -1541,9 +1654,15 @@ namespace SeaSick.World
         /// A posted lookout with arrows looses up to five. The away-clock
         /// raid spends them in `Raid()` against its share; the live raid
         /// spends them in `Combat.RaidParty.Begin`, two arrows a raider.
-        public int LookoutVolley(int maxArrows = VolleyArrows)
+        ///
+        /// **Every manned tower looses its own, 2026-09-27** (several towers
+        /// per camp): with no `maxArrows` given the volley is `VolleyArrows`
+        /// per tower with a hand on it, still paid from one quiver and still
+        /// clamped by `RaidShare` at the raid.
+        public int LookoutVolley(int maxArrows = -1)
         {
             if (!LookoutPosted) return 0;
+            if (maxArrows < 0) maxArrows = VolleyArrows * Mathf.Max(1, MannedCopies(WatchtowerId));
             // Store and the fletcher's rack alike (`Take` draws both).
             int held = SpendableOf(Res.Arrows);
             if (held <= 0 || maxArrows <= 0) return 0;
@@ -1556,6 +1675,8 @@ namespace SeaSick.World
         public const string WatchtowerId = "Watchtower";
 
         /// Has a watchtower been raised here at all -- built, not manned.
+        /// ANY of them, since a camp may raise several (2026-09-27); the
+        /// raid clock halves on one, not per tower.
         public bool HasWatchtower => built.Contains(WatchtowerId);
 
         /// Labour standing lookout right now, clamped to one -- a single
@@ -2462,7 +2583,8 @@ namespace SeaSick.World
                 // through it, so a recipe station and a legacy one share one
                 // code path and cannot drift apart.
                 if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,
-                        out float yield, out float ratePerDay, out string tool, out float toolWear))
+                        out float yield, out float ratePerDay, out string tool, out float toolWear,
+                        OrdinalOfHand(h)))
                     continue;
                 if (string.IsNullOrEmpty(makes) || ratePerDay <= 0f) continue;
 
@@ -2903,7 +3025,7 @@ namespace SeaSick.World
                 {
                     if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
                     if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,
-                            out float yield, out float ratePerDay, out _, out _))
+                            out float yield, out float ratePerDay, out _, out _, OrdinalOfHand(h)))
                         continue;
                     if (ratePerDay <= 0f || Stalled(h)) continue;
                     if (makes == resource)
@@ -2980,7 +3102,8 @@ namespace SeaSick.World
                 if (h.order == OutpostOrder.Work)
                 {
                     if (string.IsNullOrEmpty(h.target) || !built.Contains(h.target)) continue;
-                    if (!Conversion(h.target, out string makes, out _, out _, out float ratePerDay, out _, out _))
+                    if (!Conversion(h.target, out string makes, out _, out _, out float ratePerDay, out _, out _,
+                            OrdinalOfHand(h)))
                         continue;
                     if (ratePerDay <= 0f || makes != resource || Stalled(h)) continue;
                     rate += ratePerDay * WorkFactorOn(h, resource) * PriorityMultiplier(resource);

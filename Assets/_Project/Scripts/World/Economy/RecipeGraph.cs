@@ -182,6 +182,23 @@ namespace SeaSick.World.Economy
             for (int L = Techs.MaxCampfireLevel + 1; L < 100; L++)
                 if (Techs.CampfireAt(L) != null) rep.errors.Add($"CampfireLevel {L} is above MaxCampfireLevel");
 
+            // --- copy caps (2026-09-27): real plans, never shrinking ---
+            // Columns past `MaxCampfireLevel` are allowed on purpose: the
+            // table carries fire III/IV ahead of the levels themselves.
+            var capSeen = new HashSet<string>();
+            foreach (var c in Techs.Caps)
+            {
+                if (c == null || string.IsNullOrEmpty(c.planId)) { rep.errors.Add("a BuildingCap row with no plan"); continue; }
+                if (!capSeen.Add(c.planId)) rep.errors.Add($"two BuildingCap rows for '{c.planId}'");
+                if (string.IsNullOrEmpty(BuildPlans.Named(c.planId).id)) rep.errors.Add($"BuildingCap names unknown plan '{c.planId}'");
+                if (c.copies == null || c.copies.Length == 0) { rep.errors.Add($"BuildingCap '{c.planId}' has no columns"); continue; }
+                for (int i = 0; i < c.copies.Length; i++)
+                {
+                    if (c.copies[i] < 1) rep.errors.Add($"BuildingCap '{c.planId}' allows {c.copies[i]} at fire {i + 1}; the floor is 1");
+                    if (i > 0 && c.copies[i] < c.copies[i - 1]) rep.errors.Add($"BuildingCap '{c.planId}' shrinks at fire {i + 1}");
+                }
+            }
+
             // --- plans and rungs only name registered goods ---
             foreach (var p in BuildPlans.AtACamp)
             {

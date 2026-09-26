@@ -63,8 +63,8 @@ namespace SeaSick.World
         /// while the cap is on every reader -- the ledger's blueprint, the
         /// Build menu, the probes -- sees the capped price, and none of them
         /// can reach the raw one by accident.
-        public int cost => BuildPlans.PlaytestCostCap > 0
-            ? Mathf.Min(baseCost, BuildPlans.PlaytestCostCap) : baseCost;
+        public int cost => Scaled(BuildPlans.PlaytestCostCap > 0
+            ? Mathf.Min(baseCost, BuildPlans.PlaytestCostCap) : baseCost, PriceMul);
 
         /// **Stone it costs to raise, as priced.** Kevin, 2026-09-21: *"the
         /// buildings require wood and stone ... all buildings require at
@@ -81,8 +81,8 @@ namespace SeaSick.World
         /// under. Every stone price below is already inside it, so today this
         /// is `baseStoneCost` -- but it goes through the cap so that a raised
         /// stone price can never escape an experiment the timber price is in.
-        public int stoneCost => BuildPlans.PlaytestCostCap > 0
-            ? Mathf.Min(baseStoneCost, BuildPlans.PlaytestCostCap) : baseStoneCost;
+        public int stoneCost => Scaled(BuildPlans.PlaytestCostCap > 0
+            ? Mathf.Min(baseStoneCost, BuildPlans.PlaytestCostCap) : baseStoneCost, PriceMul);
 
         /// **The third part of a price, and nothing charges it yet,
         /// 2026-09-22.** Kevin asked for a quarry that makes "bricks for
@@ -104,8 +104,8 @@ namespace SeaSick.World
         /// and it is lying by the fire, or the building waits.
         public int baseBrickCost;
         /// What anything pays, under the same playtest cap as the other two.
-        public int brickCost => BuildPlans.PlaytestCostCap > 0
-            ? Mathf.Min(baseBrickCost, BuildPlans.PlaytestCostCap) : baseBrickCost;
+        public int brickCost => Scaled(BuildPlans.PlaytestCostCap > 0
+            ? Mathf.Min(baseBrickCost, BuildPlans.PlaytestCostCap) : baseBrickCost, PriceMul);
         /// Units of stores it adds to what this place can keep, PER RESOURCE.
         public int storeCapacity;
         /// Metres: length along the ridge, then width across it.
@@ -207,17 +207,19 @@ namespace SeaSick.World
         public Vector3 front;   // zero = the -X door gable (a struct cannot default it)
         public Vector3 Front => front.sqrMagnitude > 0.001f ? front.normalized : Vector3.left;
 
-        /// **May this camp raise more than one, 2026-09-27?** Kevin: *"you
-        /// can't build multiple of the same buildings. you should be able
-        /// to build multiple huts for instance. maybe two farms? that needs
-        /// help with balancing."* Phase 1 is additive-only: a hut, a store
-        /// hut and the home storehouse may be raised any number of times
-        /// (`Outpost.SiteFresh` reads this to skip its one-of-each gate);
-        /// everything else -- the stations, the farm, the watchtower --
-        /// stays at one until its own design lands. False by default so
-        /// every plan not listed here keeps today's refusal with no
-        /// per-plan opt-out to forget.
-        public bool allowMultiple;
+        /// **How many of this plan a camp may hold is not on the plan any
+        /// more, 2026-09-27** -- it rises with the fire: see
+        /// `Economy.Techs.Caps` / `OutpostLedger.CopyLimit`. (Phase 1's
+        /// `allowMultiple` flag, uncapped, is gone.)
+        ///
+        /// **Price multiplier for the Nth copy, applied AFTER the playtest
+        /// cap.** Zero (every plan as declared, and every struct default)
+        /// means 1. Only `BuildPlans.PriceForCopy` writes it, on a copy of
+        /// the plan -- so a second hut costs 125% of what the first one
+        /// actually paid, even while `PlaytestCostCap` holds the base at 5.
+        public float priceMul;
+        public float PriceMul => priceMul > 0f ? priceMul : 1f;
+        static int Scaled(int n, float mul) => mul == 1f || n <= 0 ? n : Mathf.CeilToInt(n * mul - 1e-4f);
 
         /// **This plan, at a different length along the ridge.** A pier is
         /// as long as the beach makes it (14 m, or up to 24 m out to water
@@ -263,8 +265,6 @@ namespace SeaSick.World
             storeCapacity = 40,
             footprint = new Vector2(8f, 5f),
             ridge = WorldScale.Storehouse,
-            // Phase 1 multi-build, 2026-09-27 -- see `BuildPlan.allowMultiple`.
-            allowMultiple = true,
         };
 
         /// **The first thing you put on an island that is not home.**
@@ -336,8 +336,6 @@ namespace SeaSick.World
             // inside this footprint/ridge, so neither needed correcting.
             prefab = "Settlement/storage_astra",
             front = Vector3.forward,
-            // Phase 1 multi-build, 2026-09-27 -- see `BuildPlan.allowMultiple`.
-            allowMultiple = true,
         };
 
         public static readonly BuildPlan Hut = new BuildPlan
@@ -357,8 +355,6 @@ namespace SeaSick.World
             // inside this footprint/ridge.
             prefab = "Settlement/hut_astra",
             front = Vector3.forward,
-            // Phase 1 multi-build, 2026-09-27 -- see `BuildPlan.allowMultiple`.
-            allowMultiple = true,
         };
 
         public static readonly BuildPlan Sawmill = new BuildPlan
@@ -836,18 +832,24 @@ namespace SeaSick.World
         /// plot (and so are not in `AtACamp`).
         public static readonly BuildPlan[] Fortifications = { Palisade, Gate, Ladder };
 
-        /// **Where the Nth copy of an `allowMultiple` plan would be priced,
-        /// 2026-09-27.** Kevin asked for multiple huts and asked, in the
-        /// same breath, for help balancing a second farm -- so the price a
-        /// SECOND hut or store hut pays is a decision still open, not one
-        /// this pass makes. `existingCount` is how many of `plan` already
-        /// stand or are queued at this camp before the one being priced.
-        /// Every reader that prices a build (`Outpost.SiteFresh` today; the
-        /// build sheet's price line and any dev/probe path later) calls
-        /// this rather than reading `plan.cost` directly, so an escalation
-        /// curve lands here once and reaches every one of them at once.
-        /// Returns `plan` unchanged -- copy N costs what copy one did.
-        public static BuildPlan PriceForCopy(BuildPlan plan, int existingCount) => plan;
+        /// **Each extra copy costs +25% of the base, 2026-09-27 --
+        /// PROVISIONAL, Kevin to tune** (GDD "Multiple buildings"). Kevin:
+        /// *"new houses cost a little bit more maybe."* `existingCount` is
+        /// how many of `plan` already stand or are queued at this camp
+        /// before the one being priced: 0 = the first (100%), 1 = the second
+        /// (125%), 2 = the third (150%). Every part of the price (timber,
+        /// stone, brick) scales and rounds UP on its own, after the playtest
+        /// cap -- see `BuildPlan.priceMul`. Every reader that prices a build
+        /// (`Outpost.SiteFresh`, the build list's row) comes through here.
+        public const float CopyPriceStep = 0.25f;
+
+        public static BuildPlan PriceForCopy(BuildPlan plan, int existingCount)
+        {
+            if (existingCount <= 0) return plan;
+            var copy = plan;
+            copy.priceMul = plan.PriceMul * (1f + CopyPriceStep * existingCount);
+            return copy;
+        }
 
         /// What sizes the HOME village clearing. Not the camp list: home is
         /// the one place with a hand-composed shot to fit buildings into.

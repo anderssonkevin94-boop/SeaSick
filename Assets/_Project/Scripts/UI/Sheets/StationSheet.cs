@@ -86,6 +86,9 @@ namespace SeaSick.UI.Sheets
                 if (built[i] == building) { raisedIndex = i; break; }
         }
 
+        /// **This building's own level** (per building since 2026-09-27).
+        int MyLevel(OutpostLedger l) => l != null ? l.LevelAtRaised(raisedIndex, planId) : 1;
+
         /// The one `StationStock` this card is about, or null.
         StationStock Station(OutpostLedger l) =>
             l != null && raisedIndex >= 0 ? l.StationForRaised(raisedIndex) : null;
@@ -113,7 +116,7 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildHeader()
         {
             var l = L;
-            int level = l != null ? l.LevelOf(planId) : 1;
+            int level = MyLevel(l);
             string where = string.IsNullOrEmpty(plan.position) ? plan.label : plan.position;
             return SheetKit.Header($"level {level} · {where}", Title, SheetTheme.Timber, "⚒",
                 () => Sheets.Close());
@@ -130,11 +133,11 @@ namespace SeaSick.UI.Sheets
             upgradeBtn = null;
             if (ProductionLayout && tab == 0) return BuildProductionActions();
             var l = L;
-            if (l == null || !PageHas(LivePage, KUpgrade) || l.NextUpgrade(planId) == null) return null;
-            int next = l.LevelOf(planId) + 1;
+            if (l == null || !PageHas(LivePage, KUpgrade) || l.NextUpgradeAt(raisedIndex, planId) == null) return null;
+            int next = MyLevel(l) + 1;
             upgradeBtn = SheetKit.Btn($"Raise to level {next}", DoUpgrade, true);
             upgradeBtn.style.height = TouchPx;
-            upgradeBtn.SetEnabled(l.CanUpgrade(planId, out _));
+            upgradeBtn.SetEnabled(l.CanUpgradeAt(raisedIndex, planId, out _));
             return SheetKit.Actions(upgradeBtn);
         }
 
@@ -408,7 +411,7 @@ namespace SeaSick.UI.Sheets
             FillStore(l);
             FillUpgrade(l);
 
-            if (upgradeBtn != null) upgradeBtn.SetEnabled(l.CanUpgrade(planId, out _));
+            if (upgradeBtn != null) upgradeBtn.SetEnabled(l.CanUpgradeAt(raisedIndex, planId, out _));
         }
 
         // --- 2. coming in --------------------------------------------------------
@@ -606,11 +609,14 @@ namespace SeaSick.UI.Sheets
         /// per day (`ratePerDay` × level × hands on it), nothing more.
         string RateNote(OutpostLedger l, Recipe r)
         {
+            // THIS building's hands at THIS building's level (2026-09-27).
+            var here = Station(l);
             int hands = 0;
             foreach (var h in l.hands)
-                if (h != null && h.order == OutpostOrder.Work && h.target == planId) hands++;
+                if (h != null && h.order == OutpostOrder.Work && h.target == planId
+                    && (here == null || l.StationOfHand(h) == here)) hands++;
             if (hands == 0) return " · nobody working it";
-            float rate = r.ratePerDay * Techs.RateMul(planId, l.LevelOf(planId)) * hands;
+            float rate = r.ratePerDay * Techs.RateMul(planId, MyLevel(l)) * hands;
             return $" · +{rate:0.#} {ResDefs.Label(r.makes)}/day with {(hands == 1 ? "1 hand" : hands + " hands")}";
         }
 
@@ -914,9 +920,9 @@ namespace SeaSick.UI.Sheets
         void FillUpgrade(OutpostLedger l)
         {
             if (upgradeHolder == null) return;
-            int level = l.LevelOf(planId);
+            int level = MyLevel(l);
             int max = Techs.MaxLevel(planId);
-            var next = l.NextUpgrade(planId);
+            var next = l.NextUpgradeAt(raisedIndex, planId);
             upgradeLevel.text = next != null ? $"level {level} of {max} · next: level {level + 1}"
                                              : $"level {level} of {max}";
 
@@ -947,7 +953,7 @@ namespace SeaSick.UI.Sheets
                 col.Add(costRow);
                 string effect = EffectLine(next);
                 if (effect.Length > 0) col.Add(SheetKit.Text(effect, false, true, 12f));
-                if (!l.CanUpgrade(planId, out string why))
+                if (!l.CanUpgradeAt(raisedIndex, planId, out string why))
                     col.Add(SheetKit.Note(why));
             }
             SheetBits.Swap(upgradeHolder, col);
@@ -966,11 +972,14 @@ namespace SeaSick.UI.Sheets
         {
             var l = L;
             if (l == null) return;
-            if (l.Upgrade(planId))
+            ResolveRaisedIndex();
+            // THIS building goes up, and only it (2026-09-27: "they have
+            // their own levels, always").
+            if (l.UpgradeAt(raisedIndex, planId))
             {
                 // The building on the ground changes now, not on the next
-                // reload -- see `Outpost.RetintPlan`/`BuildingLevelLook`.
-                outpost?.RetintPlan(planId);
+                // reload -- see `Outpost.Retint`/`BuildingLevelLook`.
+                outpost?.Retint(building);
                 upgradeKey = long.MinValue;
                 Refresh();
             }

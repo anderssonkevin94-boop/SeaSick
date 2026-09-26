@@ -365,13 +365,18 @@ namespace SeaSick.UI.Sheets
                     var p = plan;
                     orders.Add(SheetKit.QuietPx, () =>
                     {
-                        var b = SheetKit.Btn(p.stoneCost > 0
-                            ? $"{p.label} — {p.cost} timber {p.stoneCost} stone"
-                            : $"{p.label} — {p.cost} timber", () =>
+                        // Copies and the next copy's price (2026-09-27),
+                        // the same line the fire's build list prints.
+                        var led = outpost.Ledger;
+                        bool can = true;
+                        string text = led != null ? led.BuildRowText(p, out can)
+                            : $"{p.label} — {p.cost} timber";
+                        var b = SheetKit.Btn(text, () =>
                         {
                             CampSiting.Begin(outpost, p, SheetBits.ShipTransform);
                             Sheets.Close();
                         }, false, true);
+                        b.SetEnabled(can);
                         b.style.marginBottom = 4f;
                         return b;
                     });

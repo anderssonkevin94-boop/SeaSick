@@ -106,8 +106,14 @@ namespace SeaSick.Combat
         /// True only while someone is actually working the tower. A gun with
         /// nobody in it is a target, not a threat — same rule the player's
         /// own battery follows for an unmanned cannon.
+        ///
+        /// **Per tower since 2026-09-27** (several towers on a wall): Work
+        /// hands are dealt round the towers (`OutpostLedger.OrdinalOfHand`),
+        /// so THIS tower -- the nth -- is manned when more than n hands are
+        /// on watch.
         bool Manned => Camp != null && Camp.Ledger != null
-            && Camp.Ledger.HandsOn(World.OutpostOrder.Work, World.OutpostLedger.WatchtowerId) > 0;
+            && Camp.Ledger.HandsOn(World.OutpostOrder.Work, World.OutpostLedger.WatchtowerId)
+               > Mathf.Max(0, Camp.OrdinalOf(Building));
 
         void Update()
         {

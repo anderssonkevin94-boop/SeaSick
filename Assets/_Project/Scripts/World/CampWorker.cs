@@ -1650,7 +1650,7 @@ namespace SeaSick.World
             var rec = st != null ? st.BenchRecipe : null;
             var ledger = camp.Ledger;
             if (rec == null || ledger == null) return float.PositiveInfinity;
-            float rate = rec.ratePerDay * Economy.Techs.RateMul(st.planId, ledger.LevelOf(st.planId))
+            float rate = rec.ratePerDay * Economy.Techs.RateMul(st.planId, ledger.LevelOf(st.planId, st.ordinal))
                          * ledger.PriorityMultiplier(rec.makes);
             float perStep = rate / Mathf.Max(1, rec.yield)
                             * OutpostLedger.QuantumDays * OutpostLedger.WorkFactor(r);

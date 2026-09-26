@@ -34,6 +34,19 @@ namespace SeaSick.World.Economy
         public int housesBonus;
     }
 
+    /// **How many of one plan a camp may raise, by fire level, 2026-09-27.**
+    /// Kevin: *"you can unlock the quantity of some buildings based on
+    /// campfire. so like lvl 1 campfire is 2 houses, level 2 is 3 houses,
+    /// etc. maybe second sawmill in lvl 3 etc."* `copies[i]` is the cap at
+    /// fire level `i + 1`; a fire above the row's length reads its last
+    /// entry. Built AND queued copies both count (`OutpostLedger.CopiesHeld`),
+    /// and a wall tower is a watchtower like any other.
+    public class BuildingCap
+    {
+        public string planId;
+        public int[] copies;
+    }
+
     /// **The tech table.** Fire levels, plan gates and upgrade prices in one
     /// place, so `RecipeGraph.Validate` can walk the whole ladder and say
     /// whether every step is reachable from the one before it.
@@ -79,6 +92,63 @@ namespace SeaSick.World.Economy
             new UpgradeStep { planId = "Storage", toLevel = 2, campfireLevel = 2, rateMul = 1f, storeBonus = 10,
                 cost = Cost.Of(Cost.I(Res.Brick, 6), Cost.I(Res.FineBoards, 2)) },
         };
+
+        /// **Copies per fire level (I, II, III, IV) -- PROVISIONAL, Kevin to
+        /// tune (GDD "Multiple buildings").** A plan with no row here keeps
+        /// the old one-of-each rule (the campfire, the pier, the dry dock).
+        /// Fire III and IV do not exist yet (`MaxCampfireLevel`); the columns
+        /// are here so the day they land the second sawmill needs no data
+        /// pass. A cap of 0 is never written: a plan the fire has not opened
+        /// is refused by `PlanUnlocked`, not by this table.
+        public static readonly BuildingCap[] Caps =
+        {
+            new BuildingCap { planId = "Hut",        copies = new[] { 2, 3, 4, 5 } },
+            new BuildingCap { planId = "Storage",    copies = new[] { 1, 2, 3, 3 } },
+            new BuildingCap { planId = "Storehouse", copies = new[] { 1, 1, 2, 2 } },
+            new BuildingCap { planId = "Watchtower", copies = new[] { 2, 4, 6, 8 } },
+            new BuildingCap { planId = "Farm",       copies = new[] { 1, 2, 2, 3 } },
+            // The second station of a kind at fire III (Kevin: "maybe
+            // second sawmill in lvl 3").
+            new BuildingCap { planId = "Sawmill",    copies = new[] { 1, 1, 2, 2 } },
+            new BuildingCap { planId = "Blacksmith", copies = new[] { 1, 1, 2, 2 } },
+            new BuildingCap { planId = "Kitchen",    copies = new[] { 1, 1, 2, 2 } },
+            new BuildingCap { planId = "Fletcher",   copies = new[] { 1, 1, 2, 2 } },
+            new BuildingCap { planId = "Quarry",     copies = new[] { 1, 1, 2, 2 } },
+        };
+
+        /// The highest fire level the cap table speaks for (its widest row).
+        public static int CapTableLevels
+        {
+            get
+            {
+                int n = 1;
+                foreach (var c in Caps) if (c.copies != null && c.copies.Length > n) n = c.copies.Length;
+                return n;
+            }
+        }
+
+        /// How many of `planId` a camp whose fire is at `fireLevel` may hold.
+        /// 1 for a plan the table does not name.
+        public static int MaxCopies(string planId, int fireLevel)
+        {
+            foreach (var c in Caps)
+            {
+                if (c.planId != planId || c.copies == null || c.copies.Length == 0) continue;
+                int i = System.Math.Max(0, System.Math.Min(fireLevel, c.copies.Length) - 1);
+                return System.Math.Max(1, c.copies[i]);
+            }
+            return 1;
+        }
+
+        /// The lowest fire level at which a camp may hold `copies` of
+        /// `planId`, or 0 when no level in the table allows that many.
+        public static int FireLevelForCopies(string planId, int copies)
+        {
+            int top = CapTableLevels;
+            for (int L = 1; L <= top; L++)
+                if (MaxCopies(planId, L) >= copies) return L;
+            return 0;
+        }
 
         public static CampfireLevel CampfireAt(int level)
         {
