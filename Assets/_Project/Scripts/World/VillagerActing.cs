@@ -69,10 +69,29 @@ namespace SeaSick.World
         {
             count = Mathf.Max(1, count);
             if (Current == mode && load == carrying && loadCount == count) return;
+            // A work point belongs to the job it was given for: an anvil
+            // must not pull the axe of the next job toward it.
+            if (Current != mode) hasWork = false;
             Current = mode;
             load = carrying;
             loadCount = count;
         }
+
+        /// **Where the tool lands**, in world space: the anvil face, the top
+        /// of the log, the ground in front of the hoe, the middle of the pot.
+        /// Optional -- without it each tool strikes a nominal spot in front
+        /// of the body (`NominalWork`), which is where a worker standing at
+        /// his `Worker_Stand` facing the `Bench_Anchor` has his bench. Call
+        /// it AFTER `Set` (a mode change forgets it), every frame or once.
+        /// A point more than `MaxWorkReach` away is ignored, so a stale or
+        /// wrong anchor can never wrench the arm across the camp.
+        public void WorkAt(Vector3 world)
+        {
+            workAt = world;
+            hasWork = true;
+        }
+
+        public void ClearWork() => hasWork = false;
 
         // --- tunables (runtime-added component: these consts ARE the dials) --
 
@@ -93,9 +112,28 @@ namespace SeaSick.World
         /// stoop down onto the stack, never a random slice of a cycle.
         const float Bend_Period = 1.2f;
 
-        /// Shoulder to fingertip, metres. The tool props hang from here.
+        /// Shoulder to fingertip, metres. Only for a rig with no hand bone
+        /// (the old generated crew): the grip is then this far down the arm.
         const float HandDrop = 0.60f;
+        /// Wrist to the middle of the fist, metres along the forearm: where
+        /// a haft actually sits in a closed hand.
+        const float PalmReach = 0.07f;
+        /// A `WorkAt` point further than this from the body is ignored.
+        const float MaxWorkReach = 2.5f;
         const float TAU = Mathf.PI * 2f;
+
+        // --- the tools, in BODY metres (the tool frame: grip at the origin,
+        // +Y up the haft to the head, +Z the side that strikes) ---------------
+
+        // Smith's hammer: a 34 cm haft gripped at the butt, the head across
+        // its top with the face 10 cm out on the strike side.
+        const float Hammer_Reach = 0.30f, Hammer_Face = 0.10f;
+        // Felling axe: 67 cm haft, blade edge 13 cm out from the haft.
+        const float Axe_Reach = 0.56f, Axe_Face = 0.13f;
+        // Hoe: 1.1 m haft, a blade hanging 14 cm back toward the man.
+        const float Hoe_Reach = 1.02f, Hoe_Face = 0.14f;
+        // Handsaw: grip to the middle of the blade, and to its teeth.
+        const float Saw_Reach = 0.33f, Saw_Face = 0.055f;
 
         // --- state ----------------------------------------------------------
 
@@ -110,13 +148,19 @@ namespace SeaSick.World
         float modeClock;             // seconds since `shown` last changed
 
         Transform hips, chest, head, armL, armR, legL, legR;
+        Transform handL, handR;      // the wrists, when the rig has them
+        Vector3 gripRestL, gripRestR; // arm-local grip for a rig with no hand bone
         Vector3 hipsRest;
         float side = 1f;             // +1 if arm_L sits on the body's +X side
         bool bound, tried;
 
+        Vector3 workAt;              // see WorkAt
+        bool hasWork;
+
         /// One prop per mode, built on first use and thereafter toggled. Kept
         /// by mode index so there is no dictionary and no per-frame lookup.
-        /// One slot per `Mode`.
+        /// One slot per `Mode`. They hang off THIS object, not a bone, and
+        /// are placed in world space every frame (`PoseTool`).
         readonly GameObject[] tools = new GameObject[10];
         GameObject carryProp;
         string carryPropFor;
@@ -127,12 +171,15 @@ namespace SeaSick.World
         Vector3 velocity;
         bool sampled;
 
-        void LateUpdate()
+        void LateUpdate() => Step(Time.deltaTime);
+
+        /// One frame of acting. Separate from `LateUpdate` so an edit-mode
+        /// render (`VillagerToolShot`) can drive it with a fixed `dt`.
+        void Step(float dt)
         {
             Bind();
             UndoUnkeyedBends();
 
-            float dt = Time.deltaTime;
             clock += dt;
             modeClock += dt;
             TrackVelocity(dt);
@@ -175,7 +222,10 @@ namespace SeaSick.World
                 if (landTimer >= LandSeconds) Current = Mode.None;
             }
 
-            if (!bound || weight <= 0.0001f) return;
+            if (!bound) return;
+            // A shown tool is placed even at zero weight (the first frame of
+            // a fade-in), or it would hang wherever it was last put.
+            if (weight <= 0.0001f && !HasTool(shown)) return;
             Pose(weight);
         }
 
@@ -192,8 +242,11 @@ namespace SeaSick.World
 
         void OnDestroy()
         {
-            // The props live under BONES, not under this component's object,
-            // so they outlive it unless they are taken down by hand.
+            // The props live on the body, not on this component, so they
+            // outlive it (`CampWorker` destroys just the component) unless
+            // they are taken down by hand. (In edit mode -- the tool shot --
+            // they go with the body, and Destroy is not allowed there.)
+            if (!Application.isPlaying) return;
             for (int i = 0; i < tools.Length; i++)
                 if (tools[i] != null) Destroy(tools[i]);
             if (carryProp != null) Destroy(carryProp);
@@ -219,6 +272,19 @@ namespace SeaSick.World
             legR = Bone(all, "leg_R", "thigh.R", "leg_r");
 
             if (hips != null) hipsRest = hips.localPosition;
+
+            // The wrists. Astra's deckhand has `upper_arm -> forearm -> hand`
+            // and the Idle/Walk clips bend the elbow, so the grip is read off
+            // the live hand bone every frame, never assumed from the shoulder.
+            handL = HandUnder(armL);
+            handR = HandUnder(armR);
+            // No hand bone (the old generated crew: one bone per arm): the
+            // grip is a fingertip's drop below the shoulder, frozen into the
+            // arm's frame so it swings with it.
+            if (armL != null)
+                gripRestL = armL.InverseTransformPoint(armL.position - transform.up * HandDrop * BodyScale);
+            if (armR != null)
+                gripRestR = armR.InverseTransformPoint(armR.position - transform.up * HandDrop * BodyScale);
 
             // WHICH SIDE arm_L is actually on, read off the rig rather than
             // assumed from the letter. The generator authors forward as +X and
@@ -246,6 +312,52 @@ namespace SeaSick.World
             return null;
         }
 
+        /// The shallowest bone under `arm` with "hand" in its name -- the
+        /// wrist, not a finger (`hand_index_01`) that happens to share it.
+        static Transform HandUnder(Transform arm)
+        {
+            if (arm == null) return null;
+            Transform best = null;
+            int bestDepth = int.MaxValue;
+            foreach (var t in arm.GetComponentsInChildren<Transform>(true))
+            {
+                if (t == arm || t.name.IndexOf("hand", System.StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                int depth = 0;
+                for (var p = t; p != null && p != arm; p = p.parent) depth++;
+                if (depth < bestDepth) { best = t; bestDepth = depth; }
+            }
+            return best;
+        }
+
+        /// The body's own scale: every tool length and nominal work spot is
+        /// in BODY metres. The bones' lossy scale (~92x on the deckhand) is
+        /// never used for anything.
+        float BodyScale
+        {
+            get
+            {
+                float s = transform.lossyScale.y;
+                return s > 1e-4f ? s : 1f;
+            }
+        }
+
+        /// The middle of the fist on `arm`, in world space, as the rig is
+        /// posed RIGHT NOW (clip plus whatever has been bent this frame).
+        Vector3 GripOf(Transform arm)
+        {
+            Transform hand = arm == armL ? handL : arm == armR ? handR : null;
+            if (hand != null)
+            {
+                Vector3 wrist = hand.position;
+                Transform fore = hand.parent;
+                Vector3 along = fore != null && fore != transform ? wrist - fore.position : -transform.up;
+                if (along.sqrMagnitude < 1e-10f) along = -transform.up;
+                return wrist + along.normalized * (PalmReach * BodyScale);
+            }
+            return arm.TransformPoint(arm == armL ? gripRestL : gripRestR);
+        }
+
         void TrackVelocity(float dt)
         {
             if (dt <= 0f) return;
@@ -270,6 +382,11 @@ namespace SeaSick.World
             float hipsPitch = 0f, hipsYaw = 0f, hipsDrop = 0f;
             float legLPitch = 0f, legRPitch = 0f;
             bool movesLegs = false;   // modes that own the legs and the hips' height
+            // Tool modes: the body leans and bobs from the numbers here, but
+            // the ARMS are aimed afterwards by `PoseTool` so the tool lands
+            // on the work, and `stroke` is where in the stroke he is (0 = the
+            // blow landing, 1 = the top of the lift).
+            float stroke = 0f;
 
             switch (shown)
             {
@@ -278,8 +395,7 @@ namespace SeaSick.World
                     // Two-handed, overhead, and the DOWN-stroke is the fast
                     // half — a symmetric sine reads as scrubbing, not felling.
                     float k = Strike(clock / Chop_Period, 0.62f);
-                    armLPitch = armRPitch = Mathf.Lerp(-22f, -168f, k);
-                    armLIn = armRIn = Mathf.Lerp(14f, 6f, k);
+                    stroke = k;
                     chestPitch = Mathf.Lerp(24f, -7f, k);
                     hipsPitch = Mathf.Lerp(9f, -3f, k);
                     headPitch = Mathf.Lerp(15f, 1f, k);
@@ -288,9 +404,10 @@ namespace SeaSick.World
 
                 case Mode.Saw:
                 {
+                    // `stroke` here is the push (+1) and pull (-1) along the
+                    // cut, not a lift.
                     float s = Mathf.Sin(TAU * clock / Saw_Period);
-                    armLPitch = armRPitch = -76f + 30f * s;
-                    armLIn = armRIn = 10f;
+                    stroke = s;
                     chestPitch = 15f + 7f * s;
                     hipsYaw = 8f * s;
                     hipsPitch = 7f;
@@ -300,13 +417,11 @@ namespace SeaSick.World
 
                 case Mode.Hammer:
                 {
-                    // One arm. The other holds the work, which is what makes
-                    // it read as a smith rather than a man waving.
+                    // One arm swings; the other holds the work on the anvil,
+                    // which is what makes it read as a smith rather than a
+                    // man waving.
                     float k = Strike(clock / Hammer_Period, 0.58f);
-                    armLPitch = Mathf.Lerp(-18f, -152f, k);
-                    armLIn = 8f;
-                    armRPitch = -54f;
-                    armRIn = 16f;
+                    stroke = k;
                     chestPitch = Mathf.Lerp(16f, 4f, k);
                     headPitch = 16f;
                     hipsPitch = 6f;
@@ -315,12 +430,11 @@ namespace SeaSick.World
 
                 case Mode.Hoe:
                 {
-                    // Reach out, bend, pull back. The bend is in the hips as
-                    // well as the chest: a knee-less rig has nothing else to
-                    // fold at.
-                    float k = 0.5f - 0.5f * Mathf.Cos(TAU * clock / Hoe_Period);
-                    armLPitch = armRPitch = Mathf.Lerp(-74f, -18f, k);
-                    armLIn = armRIn = 9f;
+                    // Lift, then chop the blade into the ground and bend
+                    // into it. The bend is in the hips as well as the chest:
+                    // a knee-less rig has nothing else to fold at.
+                    float k = Strike(clock / Hoe_Period, 0.55f);
+                    stroke = k;
                     chestPitch = Mathf.Lerp(36f, 17f, k);
                     hipsPitch = Mathf.Lerp(17f, 6f, k);
                     hipsDrop = -0.05f * (1f - k);
@@ -331,11 +445,9 @@ namespace SeaSick.World
 
                 case Mode.Stir:
                 {
+                    // `stroke` is the angle round the pot, in radians.
                     float p = TAU * clock / Stir_Period;
-                    armLPitch = -88f + 15f * Mathf.Cos(p);
-                    armLIn = 20f + 12f * Mathf.Sin(p);
-                    armRPitch = -26f;
-                    armRIn = 6f;
+                    stroke = p;
                     chestPitch = 21f;
                     chestYaw = 4f * Mathf.Sin(p);
                     headPitch = 19f;
@@ -423,8 +535,12 @@ namespace SeaSick.World
             // `armIn` is toward the centreline, which is -X for the arm on the
             // +X side. A positive roll about +Z swings a hanging arm toward
             // +X, so the sign of "in" flips with the side the arm is on.
-            Turn(armL, armLPitch, 0f, -armLIn * side, w);
-            Turn(armR, armRPitch, 0f, armRIn * side, w);
+            bool tool = HasTool(shown);
+            if (!tool)
+            {
+                Turn(armL, armLPitch, 0f, -armLIn * side, w);
+                Turn(armR, armRPitch, 0f, armRIn * side, w);
+            }
             Turn(chest, chestPitch, chestYaw, chestRoll, w);
             Turn(head, headPitch, headYaw, 0f, w);
             Turn(hips, hipsPitch, hipsYaw, 0f, w);
@@ -454,6 +570,10 @@ namespace SeaSick.World
                 hips.localPosition = Vector3.Lerp(hips.localPosition, want, w);
                 hipsWritten = true; hipsBeforePos = hipsBefore; hipsAfterPos = hips.localPosition;
             }
+
+            // Arms LAST for a tool: aimed from where the shoulders are after
+            // the lean, so the blow lands where it is meant to.
+            if (tool) PoseTool(shown, stroke, w);
         }
 
         /// A strike cycle: 0 at the bottom of the stroke, 1 at the top, with
@@ -477,7 +597,221 @@ namespace SeaSick.World
             Quaternion a = body * Quaternion.Euler(pitch, yaw, roll) * Quaternion.Inverse(body);
             Quaternion before = b.localRotation;
             b.rotation = Quaternion.Slerp(b.rotation, a * b.rotation, w);
+            Record(b, before);
+        }
+
+        /// Remember a bone this frame bent: the FIRST `before` (what the
+        /// Animator left) and the LAST `after`, so two bends of one bone in
+        /// a frame still undo to the clip.
+        void Record(Transform b, Quaternion before)
+        {
+            if (written.TryGetValue(b, out var had)) before = had.before;
             written[b] = new Written { before = before, after = b.localRotation };
+        }
+
+        // --- the tool arm ---------------------------------------------------
+        //
+        // **Why the old tools struck the air** (Kevin, 2026-09-26: "the
+        // villagers are holding the tools wrong"). The prop was parented to
+        // the UPPER arm with a grip "0.6 m straight down from the shoulder"
+        // and its haft squared to the BODY's up, all frozen at the frame it
+        // was built. On Astra's deckhand the arm hangs out at ~33 degrees
+        // and the clips bend the elbow, so that grip sat a hand's width
+        // inside the real fist, and a haft pointing "up" at build time is a
+        // haft lying ALONG the arm -- raise the arm and the hammer swings
+        // with its head beside the shoulder, lower it and the hammer sticks
+        // out sideways past the anvil. The arm angles were also plain
+        // numbers, so nothing tied the bottom of the stroke to the work.
+        //
+        // Now: the grip is read off the live hand bone; the tool is placed
+        // in WORLD space from the body's axes every frame (no bone roll, no
+        // bone scale); and the swing is a two-link reach -- arm (shoulder
+        // to fist, measured) plus tool (fist to striking face) -- solved in
+        // the vertical plane through the shoulder and the work, so at the
+        // bottom of every stroke the hammer face, the axe edge, the hoe
+        // blade is ON the work point.
+
+        /// The arm that holds the tool: the one on the body's +X, which is
+        /// the right hand (the body faces +Z). On the deckhand that is the
+        /// bone NAMED `upper_arm.L` -- names are no promise about sides.
+        Transform ToolArm => side > 0f ? (armL != null ? armL : armR) : (armR != null ? armR : armL);
+        Transform OffArm { get { var t = ToolArm; return t == armL ? armR : armL; } }
+
+        /// Body-local work spot for each tool, metres: where a worker at his
+        /// stand, facing his bench, has the thing he is working on.
+        static Vector3 NominalWork(Mode m)
+        {
+            switch (m)
+            {
+                case Mode.Hammer: return new Vector3(0.06f, 0.88f, 0.55f); // anvil face
+                case Mode.Chop:   return new Vector3(0.05f, 0.40f, 0.72f); // log on the block
+                case Mode.Saw:    return new Vector3(0.08f, 0.74f, 0.55f); // top of the log on the horse
+                case Mode.Hoe:    return new Vector3(0.05f, 0.02f, 0.95f); // the ground
+                case Mode.Stir:   return new Vector3(0.05f, 0.55f, 0.50f); // the middle of the pot
+            }
+            return new Vector3(0f, 0.9f, 0.5f);
+        }
+
+        Vector3 WorkPoint(Mode m)
+        {
+            if (hasWork && (workAt - transform.position).sqrMagnitude
+                    <= MaxWorkReach * MaxWorkReach * BodyScale * BodyScale)
+                return workAt;
+            return transform.TransformPoint(NominalWork(m));
+        }
+
+        /// Point `arm`'s shoulder-to-fist line at `target`, blended by `w`.
+        /// Only the direction is set: the arm's length (and the clip's elbow
+        /// bend) is whatever the rig has.
+        void Aim(Transform arm, Vector3 target, float w)
+        {
+            if (arm == null || w <= 0f) return;
+            Vector3 s = arm.position;
+            Vector3 have = GripOf(arm) - s, want = target - s;
+            if (have.sqrMagnitude < 1e-10f || want.sqrMagnitude < 1e-10f) return;
+            Quaternion before = arm.localRotation;
+            Quaternion to = Quaternion.FromToRotation(have, want) * arm.rotation;
+            arm.rotation = Quaternion.Slerp(arm.rotation, to, w);
+            Record(arm, before);
+        }
+
+        /// A direction in a swing plane, `deg` degrees from straight down
+        /// toward `fwd`: 0 hanging, 90 out in front, 180 overhead.
+        static Vector3 Dir(float deg, Vector3 down, Vector3 fwd)
+        {
+            float r = deg * Mathf.Deg2Rad;
+            return Mathf.Cos(r) * down + Mathf.Sin(r) * fwd;
+        }
+
+        /// **A strike that lands on `work`.** Arm (length R, measured) and
+        /// tool (grip to striking face: `reach` up the haft, `face` out to
+        /// the strike side) are two links in the vertical plane through the
+        /// shoulder and the work. The wrist angle `alpha` (tool against arm)
+        /// is solved so the face reaches the work at `k = 0`, clamped to what
+        /// a wrist does; `k` then lifts the arm `swingDeg` back up and cocks
+        /// the wrist `cockDeg`. Returns the tool's haft axis `t` and strike
+        /// side `n` from the arm as it ACTUALLY ended up, so a half-faded
+        /// pose still has the tool in the fist.
+        void Swing(Transform arm, Vector3 work, float k, float swingDeg, float cockDeg,
+            float reach, float face, float minAlpha, float maxAlpha, float w,
+            out Vector3 t, out Vector3 n)
+        {
+            float bs = BodyScale;
+            Vector3 up = transform.up, down = -up;
+            Vector3 sh = arm.position;
+            Vector3 fwd = Vector3.ProjectOnPlane(work - sh, up);
+            if (fwd.sqrMagnitude < 1e-6f * bs * bs) fwd = Vector3.ProjectOnPlane(transform.forward, up);
+            fwd.Normalize();
+
+            float r = Mathf.Max(0.05f * bs, (GripOf(arm) - sh).magnitude);
+            float l = reach * bs, f = face * bs;
+            float l2 = Mathf.Sqrt(l * l + f * f);
+            float gamma = Mathf.Atan2(f, l) * Mathf.Rad2Deg;
+
+            Vector3 d = work - sh;
+            float dd = Vector3.Dot(d, down), dz = Vector3.Dot(d, fwd);
+            float dist2 = dd * dd + dz * dz;
+            float cosA = (dist2 - r * r - l2 * l2) / (2f * r * l2);
+            float alpha = Mathf.Acos(Mathf.Clamp(cosA, -1f, 1f)) * Mathf.Rad2Deg + gamma;
+            alpha = Mathf.Clamp(alpha, minAlpha, maxAlpha);
+            float a2 = (alpha - gamma) * Mathf.Deg2Rad;
+            float beta = Mathf.Atan2(l2 * Mathf.Sin(a2), r + l2 * Mathf.Cos(a2)) * Mathf.Rad2Deg;
+            float theta0 = Mathf.Atan2(dz, dd) * Mathf.Rad2Deg - beta;
+            // Never further back than just past overhead.
+            float lift = Mathf.Max(0f, Mathf.Min(swingDeg, 185f - theta0));
+            Aim(arm, sh + Dir(theta0 + lift * k, down, fwd) * r, w);
+
+            Vector3 c = GripOf(arm) - sh;
+            float thetaNow = Mathf.Atan2(Vector3.Dot(c, fwd), Vector3.Dot(c, down)) * Mathf.Rad2Deg;
+            float psi = thetaNow + alpha + cockDeg * k;
+            t = Dir(psi, down, fwd);
+            n = Dir(psi - 90f, down, fwd);
+        }
+
+        /// Aim both arms for the shown tool and put the tool in the fist.
+        void PoseTool(Mode m, float stroke, float w)
+        {
+            Transform arm = ToolArm, off = OffArm;
+            GameObject tool = tools[(int)m];
+            if (arm == null) { if (tool != null) tool.SetActive(false); return; }
+
+            float bs = BodyScale;
+            Vector3 up = transform.up, down = -up;
+            Vector3 right = transform.right;   // toward the tool hand
+            Vector3 work = WorkPoint(m);
+            Vector3 t, n;
+            float offUpHaft = -1f;             // >= 0: off hand on the haft, that far up it
+            Vector3 offAt = work;
+
+            switch (m)
+            {
+                case Mode.Hammer:
+                    // Short wrist-and-elbow blow from above the shoulder,
+                    // face flat onto the anvil; the other hand holds the work
+                    // on the anvil beside it.
+                    Swing(arm, work, stroke, 100f, 25f, Hammer_Reach, Hammer_Face, 60f, 125f, w, out t, out n);
+                    offAt = work - right * (0.20f * bs) + up * (0.04f * bs);
+                    break;
+
+                case Mode.Chop:
+                    // Overhead to the log, arms and haft nearly in line at
+                    // the blow; both hands at the butt.
+                    Swing(arm, work, stroke, 140f, 35f, Axe_Reach, Axe_Face, 20f, 120f, w, out t, out n);
+                    offUpHaft = 0.11f;
+                    break;
+
+                case Mode.Hoe:
+                    // Up to the chest and down into the ground well out in
+                    // front, the front hand a third of the way down the haft.
+                    Swing(arm, work, stroke, 70f, 12f, Hoe_Reach, Hoe_Face, 15f, 110f, w, out t, out n);
+                    offUpHaft = 0.42f;
+                    break;
+
+                case Mode.Saw:
+                {
+                    // The blade runs along the cut, tipped 22 degrees nose
+                    // down, teeth on the log; the stroke slides it along
+                    // itself. The other hand holds the log beside the cut.
+                    Vector3 sh = arm.position;
+                    Vector3 fwd = Vector3.ProjectOnPlane(work - sh, up);
+                    if (fwd.sqrMagnitude < 1e-6f * bs * bs) fwd = Vector3.ProjectOnPlane(transform.forward, up);
+                    fwd.Normalize();
+                    t = Dir(68f, down, fwd);
+                    n = Dir(-22f, down, fwd);
+                    Vector3 cut = work + fwd * (0.13f * bs * stroke);
+                    Aim(arm, cut - t * (Saw_Reach * bs) - n * (Saw_Face * bs), w);
+                    offAt = work - right * (0.26f * bs) + up * (0.03f * bs);
+                    break;
+                }
+
+                case Mode.Stir:
+                {
+                    // Both hands on a paddle, the blade circling in the pot
+                    // and the hands circling above it, smaller.
+                    Vector3 fwd = Vector3.ProjectOnPlane(transform.forward, up).normalized;
+                    Vector3 side2 = Vector3.ProjectOnPlane(right, up).normalized;
+                    Vector3 ring = fwd * Mathf.Cos(stroke) + side2 * Mathf.Sin(stroke);
+                    Vector3 blade = work + ring * (0.09f * bs);
+                    Aim(arm, work + up * (0.50f * bs) - fwd * (0.10f * bs) + ring * (0.05f * bs), w);
+                    Vector3 toBlade = blade - GripOf(arm);
+                    t = toBlade.sqrMagnitude > 1e-8f ? toBlade.normalized : down;
+                    n = Vector3.ProjectOnPlane(fwd, t);
+                    if (n.sqrMagnitude < 1e-6f) n = Vector3.ProjectOnPlane(up, t);
+                    n.Normalize();
+                    offUpHaft = 0.22f;
+                    break;
+                }
+
+                default:
+                    return;
+            }
+
+            Vector3 grip = GripOf(arm);
+            if (offUpHaft >= 0f) offAt = grip + t * (offUpHaft * bs);
+            Aim(off, offAt, w);
+
+            if (tool != null)
+                tool.transform.SetPositionAndRotation(grip, Quaternion.LookRotation(n, t));
         }
 
         /// **A bone the Animator does not key keeps last frame's bend.** The
@@ -675,90 +1009,89 @@ namespace SeaSick.World
         /// A tool in the hand. Primitive on purpose: at the zoom a camp is
         /// read from, a haft and a head is a recognisable axe and anything
         /// more is polygons nobody will ever see.
+        ///
+        /// **The tool frame** (what `PoseTool` places): the origin is the
+        /// middle of the fist, +Y runs up the haft to the head, +Z is the
+        /// side that does the work (hammer face, axe edge, hoe blade, saw
+        /// teeth), X is the axis the swing turns about. Hung off the BODY at
+        /// unit scale, so a tool is sized in body metres whatever the bones'
+        /// scale (Astra's deckhand arm reads ~92x).
         GameObject BuildTool(Mode m)
         {
-            if (armL == null) return null;
+            if (ToolArm == null) return null;
 
             var root = new GameObject("Tool_" + m);
-            root.transform.SetParent(armL, false);
-            // The hand is a fingertip's worth down the arm, and the prop is
-            // squared to the BODY at bind time so it swings with the arm
-            // afterwards without inheriting the bone's unknowable roll.
-            root.transform.localPosition =
-                armL.InverseTransformPoint(armL.position - transform.up * HandDrop);
-            root.transform.localRotation = Quaternion.Inverse(armL.rotation) * transform.rotation;
-            // Sized to the BODY, not the bone: an FBX rig can carry its unit
-            // conversion on the bones (Astra's deckhand arm reads ~92x), and
-            // a prop inheriting that swung axes the size of trees.
-            Vector3 bone = armL.lossyScale, body = transform.lossyScale;
-            root.transform.localScale = new Vector3(body.x / bone.x, body.y / bone.y, body.z / bone.z);
+            root.transform.SetParent(transform, false);
+            root.transform.localScale = Vector3.one;
+            var tr = root.transform;
 
             var wood = Mat("tool_haft", new Color(0.44f, 0.31f, 0.19f));
             var iron = Mat("tool_iron", new Color(0.42f, 0.44f, 0.48f));
 
             switch (m)
             {
+                case Mode.Hammer:
+                {
+                    // 34 cm haft, 4 cm of butt below the fist; the head across
+                    // the top, face 10 cm out on +Z, a short peen behind.
+                    Box(tr, wood, new Vector3(0.035f, 0.34f, 0.035f), new Vector3(0f, 0.13f, 0f));
+                    Box(tr, iron, new Vector3(0.055f, 0.06f, 0.16f), new Vector3(0f, Hammer_Reach, 0.02f));
+                    break;
+                }
                 case Mode.Chop:
                 {
-                    var haft = Prim(PrimitiveType.Cube, root.transform,
-                        new Vector3(0.045f, 0.62f, 0.045f), wood);
-                    haft.transform.localPosition = new Vector3(0f, 0.26f, 0f);
-                    var headB = Prim(PrimitiveType.Cube, root.transform,
-                        new Vector3(0.075f, 0.17f, 0.035f), iron);
-                    headB.transform.localPosition = new Vector3(0.03f, 0.55f, 0f);
-                    headB.transform.localRotation = Quaternion.Euler(0f, 0f, -12f);
+                    // 67 cm haft; the blade a thin cheek in the swing plane,
+                    // edge 13 cm out on +Z, a stubby poll behind.
+                    Box(tr, wood, new Vector3(0.04f, 0.67f, 0.04f), new Vector3(0f, 0.285f, 0f));
+                    Box(tr, iron, new Vector3(0.03f, 0.14f, 0.12f), new Vector3(0f, Axe_Reach, 0.07f));
+                    Box(tr, iron, new Vector3(0.05f, 0.08f, 0.06f), new Vector3(0f, Axe_Reach, -0.02f));
                     break;
                 }
                 case Mode.Saw:
                 {
-                    var blade = Prim(PrimitiveType.Cube, root.transform,
-                        new Vector3(0.012f, 0.13f, 0.56f), iron);
-                    blade.transform.localPosition = new Vector3(0f, 0.06f, 0.24f);
-                    var grip = Prim(PrimitiveType.Cube, root.transform,
-                        new Vector3(0.05f, 0.11f, 0.09f), wood);
-                    grip.transform.localPosition = new Vector3(0f, 0.04f, -0.04f);
-                    break;
-                }
-                case Mode.Hammer:
-                {
-                    var haft = Prim(PrimitiveType.Cube, root.transform,
-                        new Vector3(0.04f, 0.38f, 0.04f), wood);
-                    haft.transform.localPosition = new Vector3(0f, 0.16f, 0f);
-                    var headB = Prim(PrimitiveType.Cube, root.transform,
-                        new Vector3(0.085f, 0.085f, 0.17f), iron);
-                    headB.transform.localPosition = new Vector3(0f, 0.34f, 0f);
+                    // A 50 cm handsaw blade running up +Y from the grip,
+                    // teeth on the +Z edge (a dark strip), the handle behind.
+                    Box(tr, iron, new Vector3(0.008f, 0.50f, 0.11f), new Vector3(0f, Saw_Reach, 0f));
+                    Box(tr, Mat("tool_teeth", new Color(0.22f, 0.23f, 0.25f)),
+                        new Vector3(0.012f, 0.50f, 0.012f), new Vector3(0f, Saw_Reach, Saw_Face));
+                    Box(tr, wood, new Vector3(0.035f, 0.13f, 0.10f), new Vector3(0f, 0.02f, -0.015f));
                     break;
                 }
                 case Mode.Hoe:
                 {
-                    var haft = Prim(PrimitiveType.Cube, root.transform,
-                        new Vector3(0.04f, 0.95f, 0.04f), wood);
-                    haft.transform.localPosition = new Vector3(0f, 0.26f, 0f);
-                    var blade = Prim(PrimitiveType.Cube, root.transform,
-                        new Vector3(0.17f, 0.03f, 0.12f), iron);
-                    blade.transform.localPosition = new Vector3(0f, -0.20f, 0.05f);
-                    blade.transform.localRotation = Quaternion.Euler(28f, 0f, 0f);
+                    // 1.13 m haft, 8 cm of butt below the rear fist; the blade
+                    // a wide plate hanging from the top toward +Z.
+                    Box(tr, wood, new Vector3(0.038f, 1.13f, 0.038f), new Vector3(0f, 0.485f, 0f));
+                    Box(tr, iron, new Vector3(0.17f, 0.025f, 0.15f), new Vector3(0f, Hoe_Reach, 0.07f));
                     break;
                 }
                 case Mode.Stir:
                 {
-                    var haft = Prim(PrimitiveType.Cube, root.transform,
-                        new Vector3(0.028f, 0.46f, 0.028f), wood);
-                    haft.transform.localPosition = new Vector3(0f, 0.14f, 0f);
-                    var bowl = Prim(PrimitiveType.Sphere, root.transform,
-                        Vector3.one * 0.12f, iron);
-                    bowl.transform.localPosition = new Vector3(0f, -0.11f, 0f);
+                    // A long paddle, grip near the top, blade in the pot.
+                    Box(tr, wood, new Vector3(0.03f, 0.66f, 0.03f), new Vector3(0f, 0.27f, 0f));
+                    Box(tr, wood, new Vector3(0.09f, 0.17f, 0.02f), new Vector3(0f, 0.66f, 0f));
                     break;
                 }
             }
             return root;
         }
 
+        static GameObject Box(Transform parent, Material mat, Vector3 size, Vector3 at)
+        {
+            var go = Prim(PrimitiveType.Cube, parent, size, mat);
+            go.transform.localPosition = at;
+            return go;
+        }
+
         static GameObject Prim(PrimitiveType type, Transform parent, Vector3 scale, Material mat)
         {
             var go = GameObject.CreatePrimitive(type);
             var col = go.GetComponent<Collider>();
-            if (col != null) Destroy(col);
+            if (col != null)
+            {
+                if (Application.isPlaying) Destroy(col);
+                else DestroyImmediate(col);   // the edit-mode tool shot
+            }
             go.transform.SetParent(parent, false);
             go.transform.localScale = scale;
             var r = go.GetComponent<MeshRenderer>();
