@@ -1253,7 +1253,7 @@ namespace SeaSick.World
             {
                 var l = list[k];
                 if (l == null || l == except || l.Shape == null) continue;
-                int a = Near(l.Foot, 3), b = Near(l.Top, 3);
+                int a = NearLevel(l.Foot, 3), b = NearLevel(l.Top, 3);
                 if (a < 0 || b < 0 || a == b) continue;
                 // Never below the octile distance, so the heuristic stays
                 // admissible (and a chain is never "free").
@@ -1263,6 +1263,32 @@ namespace SeaSick.World
                 hasLink[a] = true;
                 hasLink[b] = true;
             }
+        }
+
+        /// **The open cell for a ladder's end, on the end's own LEVEL.** A
+        /// top standing a metre or two back from the lip can have its own
+        /// cell closed by the edge, and the nearest open cell in plain
+        /// distance may then be at the FOOT of the cliff -- a link from the
+        /// foot to the foot. So the nearest open cell within 1.5 m of the
+        /// end's height wins; plain `Near` only if there is none.
+        int NearLevel(Vector3 at, int radius)
+        {
+            int i = Index(at);
+            if (i < 0) return -1;
+            int cx = i % n, cy = i / n, best = -1;
+            float bestD = float.MaxValue;
+            for (int dy = -radius; dy <= radius; dy++)
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    int x = cx + dx, y = cy + dy;
+                    if (x < 0 || y < 0 || x >= n || y >= n) continue;
+                    int j = y * n + x;
+                    if (!GroundOpen(j) || Mathf.Abs(hs[j] - at.y) > 1.5f) continue;
+                    float ox = origin.x + x * cell - at.x, oz = origin.y + y * cell - at.z;
+                    float d = ox * ox + oz * oz;
+                    if (d < bestD) { bestD = d; best = j; }
+                }
+            return best >= 0 ? best : Near(at, radius);
         }
 
         /// Two consecutive route cells that are not grid neighbours: a link.
@@ -1278,7 +1304,7 @@ namespace SeaSick.World
         {
             if (!built) Build();
             if (hs == null) return false;
-            int a = Near(p, 3), b = Near(q, 3);
+            int a = NearLevel(p, 3), b = NearLevel(q, 3);
             for (int e = 0; e < links.Count; e++)
                 if (links[e].from == a && links[e].to == b) return true;
             return false;
