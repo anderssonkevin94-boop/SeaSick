@@ -596,8 +596,16 @@ namespace SeaSick.World
             // drawings as there is ground for them. What survives is the
             // one-of-each rule, which now has to cover the drawings too --
             // otherwise the way to get two sawmills is to site one twice.
-            if (CountOf(plan.id) > 0) { why = $"there is already a {plan.label} here"; return -1; }
-            if (ledger.Queued(plan.id)) { why = $"a {plan.label} is already going up here"; return -1; }
+            //
+            // **Phase 1, 2026-09-27: not for every plan any more.** Kevin
+            // wants multiple huts, and "maybe two farms" -- see
+            // `BuildPlan.allowMultiple`. A plan that opts in skips both
+            // checks below outright; everything else keeps the gate.
+            if (!plan.allowMultiple)
+            {
+                if (CountOf(plan.id) > 0) { why = $"there is already a {plan.label} here"; return -1; }
+                if (ledger.Queued(plan.id)) { why = $"a {plan.label} is already going up here"; return -1; }
+            }
             // **The belt, 2026-09-23** -- the sheet already hides a locked
             // plan; this refuses it too, so nothing can queue a station the
             // fire has not opened yet by some other path in.
@@ -624,6 +632,12 @@ namespace SeaSick.World
                 // camp that will not be found again after a save.
                 SetCampCentre(spot);
             }
+            // **Priced through the one hook, 2026-09-27.** A second hut
+            // costs what the first did today -- see `BuildPlans.PriceForCopy`
+            // -- but every reader that prices a build reads THIS, not
+            // `plan.cost` directly, so a balancing pass changes one function.
+            var priced = BuildPlans.PriceForCopy(plan,
+                CountOf(plan.id) + ledger.QueuedCount(plan.id));
             var row = new PendingBuild
             {
                 planId = plan.id,
@@ -633,16 +647,16 @@ namespace SeaSick.World
                 // A pier's length was chosen by the beach, not the plan;
                 // anything else comes back at its own size (0).
                 length = plan.kind == BuildKind.Pier ? plan.footprint.x : 0f,
-                needed = Mathf.Max(0, plan.cost),
+                needed = Mathf.Max(0, priced.cost),
                 // **The second half of the price, 2026-09-21.** Zero on the
                 // campfire, so the first thing anybody builds is paid in
                 // logs exactly as it always was.
-                stoneNeeded = Mathf.Max(0, plan.stoneCost),
+                stoneNeeded = Mathf.Max(0, priced.stoneCost),
                 // **The third part of the price, 2026-09-22.** Zero on every
                 // plan there is; it exists so an upgrade can ask for brick
                 // without re-threading the blueprint. See
                 // `BuildPlan.baseBrickCost`.
-                brickNeeded = Mathf.Max(0, plan.brickCost),
+                brickNeeded = Mathf.Max(0, priced.brickCost),
                 // Born into the two phases; `MigratePending` only has work
                 // to do on rows that came out of an older save.
                 phased = true,

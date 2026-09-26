@@ -1465,6 +1465,19 @@ namespace SeaSick.World
             return false;
         }
 
+        /// How many drawings of `planId` are in the queue right now. `Queued`
+        /// only asks "any at all" (the one-of-each gate); a plan with
+        /// `BuildPlan.allowMultiple` set needs the actual count, so its Nth
+        /// copy can be priced through `BuildPlans.PriceForCopy`.
+        public int QueuedCount(string planId)
+        {
+            if (sites == null || string.IsNullOrEmpty(planId)) return 0;
+            int n = 0;
+            for (int i = 0; i < sites.Count; i++)
+                if (sites[i] != null && sites[i].planId == planId) n++;
+            return n;
+        }
+
         // --- raiders, 2026-09-22 -----------------------------------------------
         //
         // Phase 3 "teeth": a camp on an island with raiders offshore, nobody

@@ -207,6 +207,18 @@ namespace SeaSick.World
         public Vector3 front;   // zero = the -X door gable (a struct cannot default it)
         public Vector3 Front => front.sqrMagnitude > 0.001f ? front.normalized : Vector3.left;
 
+        /// **May this camp raise more than one, 2026-09-27?** Kevin: *"you
+        /// can't build multiple of the same buildings. you should be able
+        /// to build multiple huts for instance. maybe two farms? that needs
+        /// help with balancing."* Phase 1 is additive-only: a hut, a store
+        /// hut and the home storehouse may be raised any number of times
+        /// (`Outpost.SiteFresh` reads this to skip its one-of-each gate);
+        /// everything else -- the stations, the farm, the watchtower --
+        /// stays at one until its own design lands. False by default so
+        /// every plan not listed here keeps today's refusal with no
+        /// per-plan opt-out to forget.
+        public bool allowMultiple;
+
         /// **This plan, at a different length along the ridge.** A pier is
         /// as long as the beach makes it (14 m, or up to 24 m out to water
         /// that will float a hull), and everything downstream -- the ghost,
@@ -251,6 +263,8 @@ namespace SeaSick.World
             storeCapacity = 40,
             footprint = new Vector2(8f, 5f),
             ridge = WorldScale.Storehouse,
+            // Phase 1 multi-build, 2026-09-27 -- see `BuildPlan.allowMultiple`.
+            allowMultiple = true,
         };
 
         /// **The first thing you put on an island that is not home.**
@@ -322,6 +336,8 @@ namespace SeaSick.World
             // inside this footprint/ridge, so neither needed correcting.
             prefab = "Settlement/storage_astra",
             front = Vector3.forward,
+            // Phase 1 multi-build, 2026-09-27 -- see `BuildPlan.allowMultiple`.
+            allowMultiple = true,
         };
 
         public static readonly BuildPlan Hut = new BuildPlan
@@ -341,6 +357,8 @@ namespace SeaSick.World
             // inside this footprint/ridge.
             prefab = "Settlement/hut_astra",
             front = Vector3.forward,
+            // Phase 1 multi-build, 2026-09-27 -- see `BuildPlan.allowMultiple`.
+            allowMultiple = true,
         };
 
         public static readonly BuildPlan Sawmill = new BuildPlan
@@ -785,6 +803,19 @@ namespace SeaSick.World
 
         /// The two plans that go on a wall line rather than on a plot.
         public static readonly BuildPlan[] Fortifications = { Palisade, Gate };
+
+        /// **Where the Nth copy of an `allowMultiple` plan would be priced,
+        /// 2026-09-27.** Kevin asked for multiple huts and asked, in the
+        /// same breath, for help balancing a second farm -- so the price a
+        /// SECOND hut or store hut pays is a decision still open, not one
+        /// this pass makes. `existingCount` is how many of `plan` already
+        /// stand or are queued at this camp before the one being priced.
+        /// Every reader that prices a build (`Outpost.SiteFresh` today; the
+        /// build sheet's price line and any dev/probe path later) calls
+        /// this rather than reading `plan.cost` directly, so an escalation
+        /// curve lands here once and reaches every one of them at once.
+        /// Returns `plan` unchanged -- copy N costs what copy one did.
+        public static BuildPlan PriceForCopy(BuildPlan plan, int existingCount) => plan;
 
         /// What sizes the HOME village clearing. Not the camp list: home is
         /// the one place with a hand-composed shot to fit buildings into.
