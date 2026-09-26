@@ -106,15 +106,33 @@ namespace SeaSick.UI.Sheets
             Sheets.Register<AnchorController>(a => ShipFor());
             Sheets.Register<Dock>(d => ShipFor());
 
-            // **A fourth, 2026-09-26: tap the dry dock, get the ship.** Same
-            // idea as `Dock` above -- the building's whole purpose is what
-            // the Manifest sheet's Shipyard button already does (refit her),
-            // so this opens straight to it rather than a sheet of its own.
+            // **A fourth, 2026-09-26: tap the dry dock, get the Shipyard
+            // button's own press.** Kevin: *"pressing on the building should
+            // be the same as pressing the dry dock button."* Answering with
+            // `ShipFor()` (the Manifest sheet) was a step short of that --
+            // it opened a sheet whose Shipyard button still had to be found
+            // and pressed a second time. This does exactly what that button
+            // does (`ShipyardLiveBridge.Open()`, gated by the same
+            // `ShipyardService.RefitBlockers()`) as a side effect of the
+            // tap: refit possible, the shipyard opens directly and no sheet
+            // is returned; blocked, a small card unfolds beside the building
+            // with the same reasons in plain language and a big disabled
+            // "Open shipyard" button that lights up the moment they clear.
             // Takes precedence over the generic `Building` registration just
             // above for the same reason `Dock` does: `Sheets` resolves by
             // the most specific component on what was tapped, and a
             // `DryDockSlip` sits on the same root the `Building` does.
-            Sheets.Register<DryDockSlip>(s => ShipFor());
+            Sheets.Register<DryDockSlip>(s =>
+            {
+                if (s == null) return null;
+                var yard = SeaSick.Ship.Modular.ShipyardService.Player;
+                if (yard != null && yard.RefitBlockers().Count == 0)
+                {
+                    SeaSick.UI.ModularYard.ShipyardLiveBridge.Open();
+                    return null;
+                }
+                return new DryDockSheet(s);
+            });
         }
 
         static ISheet FireFor(Outpost camp, string focus = null)
