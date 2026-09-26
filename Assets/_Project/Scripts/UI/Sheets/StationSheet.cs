@@ -968,6 +968,9 @@ namespace SeaSick.UI.Sheets
             if (l == null) return;
             if (l.Upgrade(planId))
             {
+                // The building on the ground changes now, not on the next
+                // reload -- see `Outpost.RetintPlan`/`BuildingLevelLook`.
+                outpost?.RetintPlan(planId);
                 upgradeKey = long.MinValue;
                 Refresh();
             }
