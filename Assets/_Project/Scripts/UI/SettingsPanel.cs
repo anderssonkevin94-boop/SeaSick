@@ -57,6 +57,20 @@ namespace SeaSick.UI
             new GameObject("SettingsDrawer").AddComponent<SettingsPanel>();
         }
 
+        /// The attribute fires once per session; a Continue/Load/New reload
+        /// (`GameMenus.ReloadForBoot`) destroys the drawer with the scene and
+        /// left Home/Pause's SETTINGS button opening nothing. Same fix as
+        /// `GameBoot.HookReinstallOnReload` (2026-09-26).
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void HookReinstallOnReload()
+        {
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        static void OnSceneLoaded(UnityEngine.SceneManagement.Scene s,
+                                  UnityEngine.SceneManagement.LoadSceneMode m) => Install();
+
         /// Open the drawer onto its list, no tool selected — what the
         /// Home/Pause menus' SETTINGS button does. They have no tool to hand
         /// it (there may be none in a shipping build) and no way to draw a
