@@ -57,6 +57,21 @@ namespace SeaSick.UI
             new GameObject("SettingsDrawer").AddComponent<SettingsPanel>();
         }
 
+        /// Open the drawer onto its list, no tool selected — what the
+        /// Home/Pause menus' SETTINGS button does. They have no tool to hand
+        /// it (there may be none in a shipping build) and no way to draw a
+        /// callback into an IMGUI drawer, so `GameMenus` polls `IsOpen` and
+        /// comes back once this closes on its own.
+        public static void Open()
+        {
+            if (Instance != null) Instance.open = true;
+        }
+
+        /// Whether the drawer is currently drawn open. `GameMenus` polls this
+        /// to know when to bring its own screen back after handing off to
+        /// SETTINGS — the drawer has no close callback of its own.
+        public static bool IsOpen => Instance != null && Instance.open;
+
         /// Open the drawer straight onto one tool — what F1 and G do. A
         /// shortcut that set the tool without opening the drawer would switch
         /// a tuner on with nowhere for it to draw.
