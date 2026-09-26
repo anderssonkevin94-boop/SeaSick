@@ -32,6 +32,16 @@ namespace SeaSick.Combat
 
         public Phase phase = Phase.ToPile;
 
+        /// Where `RaidParty` put him on the sand. Re-applied on his first
+        /// frame, because `CrewAgent.Start` (which runs after the party
+        /// placed him, before this Update) snaps a crew body to its deck post
+        /// -- ship-local coordinates that, for a parentless raider, are a spot
+        /// beside the world origin. Kevin, 2026-09-26: *"I never see the
+        /// raiders walking on land"* -- they were walking along the sea bed
+        /// from (0, 0) towards the camp.
+        public Vector3 landAt;
+        bool landed;
+
         const float Speed = 2.6f;
         const float TakeSeconds = 0.8f;
         const float PileRadius = 5.2f;
@@ -115,6 +125,12 @@ namespace SeaSick.Combat
 
         void Update()
         {
+            if (!landed)
+            {
+                landed = true;
+                transform.position = landAt;
+            }
+
             float dt = Time.deltaTime;
             switch (phase)
             {

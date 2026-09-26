@@ -84,6 +84,14 @@ namespace SeaSick.Combat
                 Vector3 at = site.shore + tangent * offset;
                 at.y = party.Camp.GroundAt(at);
                 agent.transform.position = at;
+                // Placed again on his first frame: `CrewAgent.Start` writes
+                // his deck post into localPosition, and with no parent that
+                // is a point beside the WORLD ORIGIN -- every party landed
+                // there, under the sea, hundreds of metres from the camp.
+                walker.landAt = at;
+                // A camp body, not a deck hand: no sea-sickness, no station
+                // pose written over the direction he is walking.
+                agent.Puppeted = true;
 
                 agent.gameObject.SetActive(true);
                 party.walkers.Add(walker);
