@@ -651,12 +651,10 @@ real systems run** — it never calls `CompleteVoyage` or sets a phase itself. A
 check that drove the state machine by hand would prove only that the state
 machine can be driven by hand. It is what caught the frame-one voyage.
 
-### `HomePanelShot`
-A real screen grab of the home panel. In the **editor** assembly on purpose:
-`ScreenCapture` lives in a module this project does not give the runtime
-assembly (which is why every other shot renders a camera to a RenderTexture),
-and a camera is no use here anyway — the panel is IMGUI and IMGUI never reaches
-a target texture.
+### `HomePanelShot` — REMOVED 2026-09-26
+Used to grab the "VOYAGE COMPLETE" home panel. The panel is gone (Kevin:
+*"voyage complete still shows up. I don't want that one there at all. It
+doesn't serve a purpose for the game."*) and the tool went with it.
 
 ### Traps this session added to the pile
 - **The editor's Game view is landscape and this game is not.** Ground projected

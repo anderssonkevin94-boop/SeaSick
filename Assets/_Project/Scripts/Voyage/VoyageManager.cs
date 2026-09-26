@@ -10,9 +10,13 @@ namespace SeaSick.Voyage
     /// The voyage: cast off from the pier, work the archipelago island by
     /// island, come back alongside before the crew break — and then spend
     /// what you landed on the village. Gathering happens through the anchor
-    /// and shore-party system; this class owns the hold, the stores, the
-    /// tally and the one moment the player is not steering. UI is dev-grade
-    /// IMGUI until the loop is feel-approved.
+    /// and shore-party system; this class owns the hold, the stores and the
+    /// homecoming bookkeeping. It has no UI of its own (2026-09-26, Kevin:
+    /// *"voyage complete still shows up. I don't want that one there at
+    /// all. It doesn't serve a purpose for the game."* — the old "VOYAGE
+    /// COMPLETE" IMGUI panel, its tally strings and its build buttons are
+    /// gone; building still happens through `TryBuild`, called from
+    /// whatever sheet the village UI puts it on).
     public class VoyageManager : MonoBehaviour
     {
         [SerializeField] ShipMotor ship;
@@ -31,8 +35,9 @@ namespace SeaSick.Voyage
         enum Phase { AtSea, Home }
         Phase phase = Phase.AtSea;
 
-        /// True while she is lying at the pier with the panel up. The anchor
-        /// controller stands its own buttons and its spacebar down on this.
+        /// True while she is lying at the pier, voyage closed, waiting to
+        /// cast off again. The anchor controller stands its own buttons and
+        /// its spacebar down on this.
         public bool AtHome => phase == Phase.Home;
 
         public Transform HomePoint => homePoint;
@@ -121,7 +126,6 @@ namespace SeaSick.Voyage
                 foreach (var kv in banked)
                     for (int i = 0; i < kv.Value; i++) pile.Deposit(kv.Key);
             }
-            panelVersion++;
         }
 
         CrewAgent[] crew;
@@ -131,42 +135,14 @@ namespace SeaSick.Voyage
         /// below — see the note in Update.
         bool seenBerth;
         float voyageStartTime;
-        int pukesAtStart;
-        float completedTime;
-        int completedPukes;
-        float completedWorst;
-        string completedHaul = "";
         int completedSpoiled;
         /// Per resource, in `ResOrder`: "4 timber · 2 boards". Fixed the
         /// moment she ties up, because the room that was short is the room
         /// there WAS, and building a storehouse afterwards must not rewrite
-        /// the tally of the voyage that paid for it.
+        /// the tally of the voyage that paid for it. Read by `SinkProbe`
+        /// through `Spoiled`/`SpoiledDetail` — kept even though the panel
+        /// that used to print it is gone (2026-09-26).
         string completedSpoiledDetail = "";
-        string buildNote = "";
-
-        // --- The home panel's strings ---------------------------------------
-        //
-        // IMGUI runs OnGUI once per EVENT — Layout, Repaint, and one more for
-        // every mouse move — so the dozen interpolations this panel used to
-        // make were made several times a frame, `BankSummary`'s StringBuilder
-        // with them. See StatusHUD for the measurement; this is the same fix.
-        //
-        // None of it moves while the panel is up: the tally is fixed the
-        // moment she ties up, and the stores only change when something is
-        // built. So it is built when the CONTENT changes and not otherwise —
-        // a version the two places that change it bump, plus the two numbers
-        // themselves as a backstop against a path that forgets to.
-        int panelVersion;
-        long panelBuiltFor = long.MinValue;
-        string tallyLine = "";
-        string spoiledLine = "";
-        string storesLine = "";
-        /// True when ANY one pile is at its ceiling, which is what the warning
-        /// colour means now that the ceiling is per resource. A total against a
-        /// total could not say "the timber is full and the boards are not".
-        bool storesFull;
-        string[] planLabels = new string[0];
-        string[] planBlurbs = new string[0];
 
         // --- one fixed order for every list of resources ---------------------
         //
@@ -223,8 +199,6 @@ namespace SeaSick.Voyage
             return false;
         }
 
-        GUIStyle centerLabel, cargoLabel;
-
         void Start()
         {
             if (ship == null) ship = FindFirstObjectByType<ShipMotor>();
@@ -233,20 +207,17 @@ namespace SeaSick.Voyage
             BeginVoyage();
         }
 
-        /// **Cast off.** The "set sail" button on the home panel and the
-        /// spacebar both land here, and so does `Start`. Public so a probe can
-        /// press the button the player presses rather than setting the phase
-        /// behind the game's back — see `SinkProbe`.
+        /// **Cast off.** The spacebar while at home lands here, and so does
+        /// `Start`. Public so a probe can trigger the same path the player
+        /// does rather than setting the phase behind the game's back — see
+        /// `SinkProbe`.
         public void BeginVoyage()
         {
-            // One button, one intention: ending the tally IS casting off.
             if (phase == Phase.Home && anchor != null) anchor.CastOff();
             phase = Phase.AtSea;
-            buildNote = "";
             TakeDeckCargo = false;
             hasLeftHome = false;
             voyageStartTime = Time.time;
-            pukesAtStart = TotalPukes();
             held.Clear();
             TotalHeld = 0;
             if (ship != null) ship.CargoLoad = 0f;
@@ -254,13 +225,6 @@ namespace SeaSick.Voyage
             // has chosen New or Continue, so the call from `Start` cannot
             // overwrite a save with a fresh world.
             Save.SaveGame.Autosave("cast off");
-        }
-
-        int TotalPukes()
-        {
-            int n = 0;
-            foreach (var c in crew) if (c != null) n += c.PukeCount;
-            return n;
         }
 
         /// Loot into the hold, from a shore party or salvaged from the sea.
@@ -429,9 +393,9 @@ namespace SeaSick.Voyage
             else
             {
                 foreach (var c in crew) if (c != null) c.Rest();
-                // Tap-anywhere had to go: the panel has buttons on it now,
-                // and every one of them would also have set sail.
-                // Not while the shipyard is open (2026-09-24, ShipyardUiProbe:
+                // Spacebar is the only way to cast off now that there is no
+                // panel button for it (2026-09-26). Not while the shipyard is
+                // open (2026-09-24, ShipyardUiProbe:
                 // Space here cast her off from under an open refit screen).
                 if (!SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked
                     && Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
@@ -441,14 +405,6 @@ namespace SeaSick.Voyage
 
         void CompleteVoyage()
         {
-            completedTime = Time.time - voyageStartTime;
-            completedPukes = TotalPukes() - pukesAtStart;
-            // Read the crew BEFORE Rest() wipes them, or the tally always
-            // reports a healthy ship coming home.
-            completedWorst = 0f;
-            foreach (var c in crew)
-                if (c != null && c.Sickness01 > completedWorst) completedWorst = c.Sickness01;
-
             // What home can KEEP is not what she can carry. The hold takes
             // 40 to the marked line and 64 with deck cargo; the open beach
             // keeps 30 until somebody builds somewhere to put it. The
@@ -469,7 +425,6 @@ namespace SeaSick.Voyage
             // same way. It is also what makes carrying a second thing home
             // worth the passage instead of a competitor for the first's slots.
             int cap = StoreCapacity;
-            var sb = new StringBuilder();
             var spoil = new StringBuilder();
             var landed = new List<string>();
             completedSpoiled = 0;
@@ -483,10 +438,6 @@ namespace SeaSick.Voyage
                 int take = Mathf.Min(got, Mathf.Max(0, cap - Banked(res)));
                 int lost = got - take;
 
-                if (sb.Length > 0) sb.Append("   ");
-                sb.Append($"+{got} {res.ToLowerInvariant()}");
-                if (lost > 0) sb.Append($" ({take} kept)");
-
                 if (lost > 0)
                 {
                     completedSpoiled += lost;
@@ -498,7 +449,6 @@ namespace SeaSick.Voyage
                 banked[res] = cur + take;
                 for (int i = 0; i < take; i++) landed.Add(res);
             }
-            completedHaul = sb.Length > 0 ? sb.ToString() : "empty hold";
             completedSpoiledDetail = spoil.ToString();
 
             // Carry it ashore piece by piece so the pile visibly grows rather
@@ -509,9 +459,7 @@ namespace SeaSick.Voyage
             TotalHeld = 0;
             ship.CargoLoad = 0f;
             foreach (var c in crew) if (c != null) c.Rest();
-            buildNote = "";
             phase = Phase.Home;
-            panelVersion++;   // the whole tally just changed; see RefreshPanelText
         }
 
         // --- The stores, and what they buy ----------------------------------
@@ -559,19 +507,13 @@ namespace SeaSick.Voyage
         public bool TryBuild(World.BuildPlan plan)
         {
             var village = World.Outpost.Home;
-            if (village == null) { buildNote = "nowhere to build"; return false; }
-            if (Banked(plan.resource) < plan.cost)
-            {
-                buildNote = $"need {plan.cost} {plan.resource.ToLower()}";
-                return false;
-            }
+            if (village == null) return false;
+            if (Banked(plan.resource) < plan.cost) return false;
 
             var raised = village.Raise(plan);
-            if (raised == null) { buildNote = "no room left in the clearing"; return false; }
+            if (raised == null) return false;
 
             SpendBanked(plan.resource, plan.cost);
-            buildNote = $"{plan.label} raised — home keeps {StoreCapacity} of each";
-            panelVersion++;   // "build" becomes "build another"; see RefreshPanelText
             return true;
         }
 
@@ -592,7 +534,6 @@ namespace SeaSick.Voyage
             if (banked[resource] <= 0) banked.Remove(resource);
             var pile = World.Stockpile.Instance;
             if (pile != null) pile.Withdraw(resource, take);
-            panelVersion++;   // the stores moved; see RefreshPanelText
         }
 
         /// **The HOMECOMING's unload only** (2026-09-24). Home is not a camp
@@ -630,190 +571,5 @@ namespace SeaSick.Voyage
             return Vector3.Distance(a, b);
         }
 
-        /// Every line on the home panel, built at most once per thing that
-        /// changes it — a voyage landing, or a building going up.
-        ///
-        /// It is checked here rather than pushed from `CompleteVoyage` so the
-        /// panel cannot draw a stale line if a future path moves the stores
-        /// without saying so: the version catches the changes we know about
-        /// and the two totals catch the ones we do not.
-        void RefreshPanelText()
-        {
-            int total = BankedTotal, cap = StoreCapacity;
-            long key = SeaSick.UI.HudLabel.Key(panelVersion, total, cap);
-            if (key == panelBuiltFor) return;
-            panelBuiltFor = key;
-
-            int m = Mathf.FloorToInt(completedTime / 60f);
-            int sec = Mathf.FloorToInt(completedTime % 60f);
-            // Trips to the rail alone is a misleading number now that the
-            // meter never falls — a crew can be finished having puked twice,
-            // or fine having puked once. Lead with how bad it got.
-            string crewLine = completedPukes == 0
-                ? "the crew kept it together"
-                : $"worst {completedWorst:P0} sick   ·   {completedPukes}× to the rail";
-            tallyLine = $"{m}:{sec:00}   ·   {crewLine}";
-
-            // Named, because which pile overflowed is the whole information.
-            // "12 left on the sand" told the player a number; "12 boards left
-            // on the sand" tells them to build a store hut before the next
-            // time the sawmill has been running.
-            spoiledLine = completedSpoiled > 0
-                ? $"{completedSpoiledDetail} left on the sand — nowhere to keep it"
-                : "";
-
-            // Stores against what they can BE, PER PILE — a bare total cannot
-            // tell you the timber is full while the boards have room, and
-            // which of them is full is the whole reason the buttons below it
-            // exist.
-            storesLine = $"stores — {BankSummary()}";
-            storesFull = false;
-            foreach (var kv in banked) if (kv.Value >= cap) { storesFull = true; break; }
-
-            var plans = World.BuildPlans.All;
-            if (planLabels.Length != plans.Length)
-            {
-                planLabels = new string[plans.Length];
-                planBlurbs = new string[plans.Length];
-            }
-            var village = World.Outpost.Home;
-            for (int i = 0; i < plans.Length; i++)
-            {
-                var plan = plans[i];
-                int have = Banked(plan.resource);
-                bool afford = have >= plan.cost;
-                int already = village != null ? village.CountOf(plan.id) : 0;
-                string res = plan.resource.ToLower();
-                // "×2" read as "build two of them". The second one is
-                // another one.
-                planLabels[i] = already > 0
-                    ? $"build another {plan.label} — {plan.cost} {res}"
-                    : $"build {plan.label} — {plan.cost} {res}";
-                planBlurbs[i] = afford
-                    ? plan.blurb
-                    : $"{plan.blurb}   ·   {have}/{plan.cost} {res}";
-            }
-        }
-
-        void OnGUI()
-        {
-            // At sea the permanent HUD (StatusHUD) covers cargo and distance —
-            // this class only draws the one moment she is tied up and the
-            // player is not steering.
-            if (phase != Phase.Home) return;
-            // Same IMGUI-blind-spot suppression as the rest of the HUD
-            // (2026-09-26 review): this panel is exactly the "New Voyage"
-            // build list, drawn UNDER the Home/Pause card at the one voyage
-            // phase where both can be on screen together.
-            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
-                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
-            RefreshPanelText();
-
-            int u = SeaSick.UI.HudLayout.Unit;
-            var plans = World.BuildPlans.All;
-            float ph = u * (19f + (completedSpoiled > 0 ? 1.9f : 0f) + plans.Length * 4.4f);
-
-            // Clear of the left tab rail, not centred over it. At 0.08 to 0.92
-            // of screen width this panel covered the Yard tab and the open
-            // Yard panel underneath it -- and the yard is the other half of
-            // what you came home to do.
-            var safe = SeaSick.UI.HudLayout.Safe;
-            float pad = SeaSick.UI.HudLayout.Pad;
-            float left = safe.x + pad + SeaSick.UI.HudLayout.RailWidth + SeaSick.UI.HudLayout.Gap;
-            float room = safe.xMax - pad - left;
-            float pw = Mathf.Min(room, u * 30f);
-            var panel = new Rect(left + (room - pw) * 0.5f,
-                                 Mathf.Max(safe.y + pad, safe.y + (safe.height - ph) * 0.42f),
-                                 pw, ph);
-            SeaSick.UI.UITheme.Rect(panel, SeaSick.UI.UITheme.PanelSolid);
-            SeaSick.UI.UITheme.Rect(new Rect(panel.x, panel.y, panel.width, 2f), SeaSick.UI.UITheme.Sea);
-
-            float y = panel.y + u * 1.4f;
-            GUI.Label(new Rect(panel.x, y, panel.width, u * 2f), "VOYAGE COMPLETE", SeaSick.UI.UITheme.Title);
-            y += u * 3.2f;
-            GUI.Label(new Rect(panel.x, y, panel.width, u * 1.8f), completedHaul, SeaSick.UI.UITheme.Strong);
-            y += u * 2.4f;
-
-            if (completedSpoiled > 0)
-            {
-                var was = GUI.color;
-                GUI.color = SeaSick.UI.UITheme.Warn;
-                GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
-                    spoiledLine, SeaSick.UI.UITheme.Small2Centered);
-                GUI.color = was;
-                y += u * 1.9f;
-            }
-
-            GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
-                tallyLine, SeaSick.UI.UITheme.Small2Centered);
-            y += u * 2.2f;
-
-            // Stores against what they can BE — a bare number cannot tell you
-            // the beach is full, and being full is the whole reason the
-            // buttons below it exist. `storesFull` is "any one pile is at its
-            // ceiling", worked out in RefreshPanelText; comparing two totals
-            // here would never go amber once the piles were separate.
-            var fullWas = GUI.color;
-            if (storesFull) GUI.color = SeaSick.UI.UITheme.Warn;
-            GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f),
-                storesLine, SeaSick.UI.UITheme.Small2Centered);
-            GUI.color = fullWas;
-            y += u * 2.4f;
-
-            SeaSick.UI.UITheme.Rect(new Rect(panel.x + u, y, panel.width - u * 2f, 1f),
-                SeaSick.UI.UITheme.Track);
-            y += u * 0.7f;
-
-            float bw = Mathf.Min(panel.width - u * 2f, u * 20f);
-            float bx = panel.center.x - bw * 0.5f;
-            for (int i = 0; i < plans.Length; i++)
-            {
-                var plan = plans[i];
-                var r = new Rect(bx, y, bw, u * 2.4f);
-                SeaSick.UI.UIBlocker.Block(r);
-                GUI.enabled = Banked(plan.resource) >= plan.cost;
-                if (GUI.Button(r, planLabels[i], SeaSick.UI.UITheme.Button)) TryBuild(plan);
-                GUI.enabled = true;
-                y += u * 2.6f;
-
-                GUI.Label(new Rect(panel.x, y, panel.width, u * 1.4f),
-                    planBlurbs[i], SeaSick.UI.UITheme.Small2Centered);
-                y += u * 1.8f;
-            }
-
-            if (!string.IsNullOrEmpty(buildNote))
-                GUI.Label(new Rect(panel.x, y, panel.width, u * 1.6f), buildNote,
-                    SeaSick.UI.UITheme.Small2Centered);
-
-            var btn = new Rect(panel.center.x - u * 6f, panel.yMax - u * 3.4f, u * 12f, u * 2.4f);
-            SeaSick.UI.UIBlocker.Block(btn);
-            if (GUI.Button(btn, "set sail   (space)", SeaSick.UI.UITheme.Button)) BeginVoyage();
-        }
-
-        string HoldSummary()
-        {
-            var sb = new StringBuilder();
-            foreach (var kv in held)
-            {
-                if (sb.Length > 0) sb.Append("  ");
-                sb.Append($"{kv.Key} {kv.Value}");
-            }
-            return sb.ToString();
-        }
-
-        /// "timber 30/30 · boards 12/30" — every pile against its OWN ceiling,
-        /// in `ResOrder`. Built inside `RefreshPanelText` and nowhere else.
-        string BankSummary()
-        {
-            if (banked.Count == 0) return "nothing yet";
-            int cap = StoreCapacity;
-            var sb = new StringBuilder();
-            foreach (var res in InOrder(banked))
-            {
-                if (sb.Length > 0) sb.Append(" · ");
-                sb.Append($"{res.ToLowerInvariant()} {banked[res]}/{cap}");
-            }
-            return sb.ToString();
-        }
     }
 }
