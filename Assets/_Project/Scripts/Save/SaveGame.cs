@@ -499,9 +499,10 @@ namespace SeaSick.Save
                 var wanted = new Vector3(data.ship.homeBerthX, 0f, data.ship.homeBerthZ);
                 // Matched against the pier, not just the berth point: a save
                 // from before the T-berth stored the old alongside berth,
-                // up to ~9 m beside the pier (see `Dock.DistanceFromPier`).
+                // beside the pier -- the harbour's sat ~11 m off its pier
+                // line (measured 2026-09-26), a player pier's ~4 m.
                 Dock found = null;
-                float best = 10f;
+                float best = 15f;
                 foreach (var d in Dock.All)
                 {
                     if (d == null) continue;
