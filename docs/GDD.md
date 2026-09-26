@@ -113,7 +113,27 @@ _The "MVP simple" timer this section used to describe was overtaken on 2026-09-1
 
    **Slope cap for every walker, 2026-09-27.** Kevin: *"villagers and goats can just walk straight up the sides of the mountains."* Every walker now goes through one test (`World/Walkability.cs`): men, raiders and boar stand on nothing steeper than **33°** (no rise over 1.3 m between neighbouring 2 m cells, all eight neighbours), goats **45°**; each step is also checked against the ground 1 m ahead (backstop at 1.25x the cap), so the straight-line fallback, short hops and the last leg to a target on a bank can no longer climb a face. A hand refused by the slope works the target from within 4 m or, after 2 s, from where he stands — an errand never stalls. Stone/ore nodes and hunting quarry the fire cannot reach over the ground (`CampPath.Reachable`, a flood fill at grid build) are skipped for the next nearest. Check: `SlopeCheck.Run("Island_2", "/tmp/seasick-slope.png")` in play mode.
 
-11. **Some camp buildings raise more than one, 2026-09-27.** Kevin: *"you can't build multiple of the same buildings. you should be able to build multiple huts for instance. maybe two farms? that needs help with balancing."* Phase 1 (additive only): a shelter, a store hut and the storehouse may each be raised any number of times at one camp (`BuildPlan.allowMultiple`), and a second one costs what the first did — the escalation Kevin flagged for a second farm is a pricing decision still open (`BuildPlans.PriceForCopy` is the one hook it will land in), not made here. Stations, the farm and the watchtower stay at one-per-camp until their own passes land (the watchtower's is the wall-tower redesign).
+11. **Multiple buildings: copies by campfire level, each with its own level (2026-09-27).** Kevin: *"you can unlock the quantity of some buildings based on campfire. so like lvl 1 campfire is 2 houses, level 2 is 3 houses, etc. maybe second sawmill in lvl 3 etc. and they have their own levels, always. new houses cost a little bit more maybe."* (This replaces the Phase 1 "shelters, store huts and the storehouse may be raised any number of times" rule, and its `BuildPlan.allowMultiple` flag.)
+
+   **Caps — PROVISIONAL, Kevin to tune** (`Economy.Techs.Caps`; built AND queued copies count; a wall tower is a watchtower):
+
+   | Building | fire I | II | III | IV |
+   |---|---|---|---|---|
+   | shelter (Hut) | 2 | 3 | 4 | 5 |
+   | store hut (Storage) | 1 | 2 | 3 | 3 |
+   | storehouse | 1 | 1 | 2 | 2 |
+   | watchtower | 2 | 4 | 6 | 8 |
+   | farm | 1 | 2 | 2 | 3 |
+   | sawmill, forge, kitchen, fletcher's, quarry | 1 | 1 | 2 | 2 |
+   | campfire, pier, dry dock | 1 (one of each, unchanged) | | | |
+
+   Fire III and IV do not exist yet; the table carries them so the second sawmill needs no data pass when they land (`RecipeGraph.Validate` checks the table: real plans, never shrinking, floor 1). At the cap the refusal names the unlock — *"a 3rd shelter needs campfire II"* — and the build list's row says "shelter ×2 of 2 — a 3rd needs campfire II"; below it the row prints "×n of m", the next copy's price and, on the last copy the fire allows, when the next one opens.
+
+   **Price per copy — PROVISIONAL:** each copy past the first costs +25% of the base, per resource, rounded up (copy 2 = 125%, copy 3 = 150%), applied after the playtest cost cap (`BuildPlans.PriceForCopy`).
+
+   **Own levels, always:** each building has its own level (`BuiltBuilding.level`, on its saved `raised` row). An upgrade raises only the building whose card is open; a station works at its own level's rate; beds and store room sum per building at each one's own level; only that building re-tints. A level-2 recipe needs THAT station at level 2. Demolishing one takes its level with it and no twin's shifts. **Old saves:** rows with no level read the plan's old shared level (and `Outpost.Adopt` writes it onto every row), so nothing loads downgraded; no save-version bump.
+
+   **Several farms and towers:** Work hands on one plan are dealt round its copies (the stations' existing deal), so the nth farm or tower gets the nth hand. Raids: one tower or more halves the raid clock, a full lookout still stops it, each manned tower looses its own volley of arrows from the one quiver, and each tower's gun fires only while that tower is manned.
 
 Build order: **1** the god's-eye island (camera, Hand, living villagers) · **2** the sink (rung prices, camp → hold → home) · **3** upkeep and influence · **4** raiders and the watchtower · **5** portfolio and save.
 
