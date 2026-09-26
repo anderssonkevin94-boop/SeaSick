@@ -1321,6 +1321,9 @@ namespace SeaSick.World
                 return;
             }
             acting?.Set(ModeAt(r.target));
+            // The tool's stroke lands on the bench's own work spot (the
+            // forge's anvil, the sawhorse), not a guess in front of him.
+            acting?.WorkAt(face);
 
             // **The rack carry, paced to the books.** The job comes off the
             // bench on a ledger step (`SecondsToJobDone` says which, in real
