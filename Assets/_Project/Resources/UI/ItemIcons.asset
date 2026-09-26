@@ -1,0 +1,62 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ba7085ecd873247b390e616ca96161ff, type: 3}
+  m_Name: ItemIcons
+  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.Sheets.ItemIconSet
+  ids:
+  - Timber
+  - Stone
+  - Hide
+  - Ore
+  - Boards
+  - FineBoards
+  - Iron
+  - Brick
+  - Food
+  - Game
+  - Meals
+  - Spice
+  - Arrows
+  - Spear
+  - IronSpear
+  - Tools
+  - SawBlade
+  - armor
+  - cannon
+  - helmet
+  - shot
+  - rope
+  - sail
+  icons:
+  - {fileID: 2800000, guid: 51162246725c84e6292ae6fca3984ede, type: 3}
+  - {fileID: 2800000, guid: ede6f851718d34630bea487377f3491c, type: 3}
+  - {fileID: 2800000, guid: 4fd6980bb65204cfa80883752f3c18c5, type: 3}
+  - {fileID: 2800000, guid: 652f21a7f8130499fa68f2b8eb000859, type: 3}
+  - {fileID: 2800000, guid: 0b43d2b1faa9744d2b2f15af3d70e6be, type: 3}
+  - {fileID: 2800000, guid: 3513e36859f2f4c0c9565096560d0b1a, type: 3}
+  - {fileID: 2800000, guid: 24b8d808fa37f4d0a8b3ab857f0b7c57, type: 3}
+  - {fileID: 2800000, guid: 5963e5f5b64574629acd16dca430eb3e, type: 3}
+  - {fileID: 2800000, guid: 88b1bea37bf9743c9b6a8e1fe0be6c34, type: 3}
+  - {fileID: 2800000, guid: fc1c5faafd286482e8f1e2d6035bd605, type: 3}
+  - {fileID: 2800000, guid: fd0743e0d5a664c19a8b10d97793266f, type: 3}
+  - {fileID: 2800000, guid: 2f68f244ecb924d1bb16cf0a7d4e1350, type: 3}
+  - {fileID: 2800000, guid: f4866a9e9bbf648e5957e741ecb36c31, type: 3}
+  - {fileID: 2800000, guid: 01ef7c0b1335d40c0b5760f69336bffe, type: 3}
+  - {fileID: 2800000, guid: 065e38f45f7e349e590a25fc27f7d8ec, type: 3}
+  - {fileID: 2800000, guid: 66336521b14364472ad086bce8ec3368, type: 3}
+  - {fileID: 2800000, guid: 293a13a626337447282b899ff2903073, type: 3}
+  - {fileID: 2800000, guid: 0f53a6bfdaa23451a8d625bee2ef542b, type: 3}
+  - {fileID: 2800000, guid: 6efedc8a4fe1b4666a5e57adfe1d0fda, type: 3}
+  - {fileID: 2800000, guid: 91ebd16733e5c4fba9f4c55254656144, type: 3}
+  - {fileID: 2800000, guid: 5375a16424ffa4d8f9b6d454c2c29779, type: 3}
+  - {fileID: 2800000, guid: eabf6e573559b41118ee247dc39659bc, type: 3}
+  - {fileID: 2800000, guid: cb76d60accba14aeea7d060e4d72782c, type: 3}
