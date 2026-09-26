@@ -335,6 +335,17 @@ namespace SeaSick.World
         /// the posts of the segment it replaces.
         public Vector3 postA, postB;
 
+        /// **This row REPLACES a gap, not a whole run (2026-09-26).**
+        /// Kevin: "place the blueprint only for the section being
+        /// replaced" -- set by `Outpost.QueueRepair`, never by a fresh
+        /// `SiteWall`, and read by `Outpost.EnsureBlueprints` to draw the
+        /// partial ghost instead of the full one. A save written before
+        /// this restores it as `false`; `EnsureBlueprints` also asks
+        /// `WallOn` whether a segment already stands on these posts, so an
+        /// old save's already-queued repair still draws the partial ghost
+        /// even though this flag came back empty.
+        public bool isRepair;
+
         public float WallLength => (postB - postA).magnitude;
 
         public Vector3 At => new Vector3(x, 0f, z);

@@ -13,10 +13,12 @@ namespace SeaSick.UI.Sheets
     /// segment carries a collider at all.
     ///
     /// Deliberately small. A wall has one number (how much of it is left),
-    /// one state (whole or breached) and no decisions inside it -- a gate
-    /// opens and shuts by itself (D3), nobody is posted to a wall, and a
-    /// repair queues itself the moment the segment breaks. Anything more on
-    /// this sheet would be inventing a decision the design does not have.
+    /// one state (whole or breached) and one decision on top of that --
+    /// a gate opens and shuts by itself (D3), nobody is posted to a wall,
+    /// and since 2026-09-26 a repair is no longer automatic (Kevin: "if I
+    /// press on it I should have the option to repair it"), so this sheet
+    /// is where that press lands. Anything more on it would be inventing a
+    /// decision the design does not have.
     public class WallSheet : ISheetFramed
     {
         // One thing to look at, so no tab strip -- `SiteSheet`'s rule.
@@ -32,6 +34,7 @@ namespace SeaSick.UI.Sheets
         VisualElement bar;
         VisualElement note;
         Button gateBtn;
+        Button repairBtn;
         int barKey = -99;
 
         public WallSheet(Outpost camp, WallSegment segment)
@@ -53,19 +56,28 @@ namespace SeaSick.UI.Sheets
                 Title, SheetTheme.Timber, wall != null && wall.IsGate ? "⌸" : "▤",
                 () => Sheets.Close());
 
-        /// Two verbs, pinned. "Make this a gate" is not offered on a gate,
-        /// and "Tear down" says what it costs you (nothing) and what it
-        /// gives you back (nothing) in the note above rather than in the
-        /// button, so the button stays a verb.
+        /// **Repair swaps in for "make this a gate" while it's down
+        /// (2026-09-26).** Both buttons are built once, here, and never
+        /// again -- `BuildActions` runs only on open, but a breach or a
+        /// finished repair can happen while the sheet is still up, so
+        /// `Refresh` is what toggles which one shows (`style.display`),
+        /// the same trick `AshoreRail` uses for its own state swap.
+        /// "Tear down" says what it costs you (nothing) and what it gives
+        /// you back (nothing) in the note above rather than in the button,
+        /// so the button stays a verb.
         public VisualElement BuildActions()
         {
+            repairBtn = SheetKit.Btn("Repair", Repair, true);
+
             if (wall != null && wall.IsGate)
                 return SheetKit.Actions(
+                    repairBtn,
                     SheetKit.Btn("Tear down", TearDown, false, true));
 
             gateBtn = SheetKit.Btn("Make this a gate", MakeGate, true);
             return SheetKit.Actions(
                 gateBtn,
+                repairBtn,
                 SheetKit.Btn("Tear down", TearDown, false, true));
         }
 
@@ -108,14 +120,27 @@ namespace SeaSick.UI.Sheets
             note.Add(SheetKit.Note(Story()));
 
             if (gateBtn != null)
+            {
+                gateBtn.style.display = wall.Breached ? DisplayStyle.None : DisplayStyle.Flex;
                 gateBtn.SetEnabled(!wall.Breached && QueuedGate() == null);
+            }
+            if (repairBtn != null)
+            {
+                bool breached = wall.Breached;
+                repairBtn.style.display = breached ? DisplayStyle.Flex : DisplayStyle.None;
+                bool ordered = QueuedRepair() != null;
+                repairBtn.SetEnabled(breached && !ordered);
+                repairBtn.text = ordered ? "Repair ordered" : "Repair";
+            }
         }
 
         string Story()
         {
             if (wall.Breached)
-                return "Broken through. The hands will stock and rebuild it like "
-                    + "any other site.";
+                return QueuedRepair() != null
+                    ? "Repair ordered. The hands will stock and rebuild the gap."
+                    : "Broken through. Order a repair and the hands will rebuild "
+                        + "the gap.";
             if (QueuedGate() != null)
                 return "A gate is on order here. The wall stands until it is built.";
             if (wall.IsGate)
@@ -140,6 +165,32 @@ namespace SeaSick.UI.Sheets
         {
             if (outpost == null || wall == null) return;
             outpost.MakeGate(wall);
+            Refresh();
+        }
+
+        /// A repair queued on this segment's own posts, or null. Mirrors
+        /// `Outpost.QueueRepair`'s own dedup check -- a breached segment
+        /// standing here can only have a repair row on these posts, never
+        /// a fresh site (the ground already refuses one on top of it).
+        PendingBuild QueuedRepair()
+        {
+            var l = outpost != null ? outpost.Ledger : null;
+            if (l == null || l.sites == null || wall == null) return null;
+            foreach (var row in l.sites)
+                if (row != null && row.isWall
+                    && (row.postA - wall.A).sqrMagnitude < 0.05f
+                    && (row.postB - wall.B).sqrMagnitude < 0.05f) return row;
+            return null;
+        }
+
+        /// **The button Kevin asked for (2026-09-26).** "If I press on it
+        /// I should have the option to repair it." Queues the partial site
+        /// on THIS segment's posts -- `Outpost.QueueRepair` dedups, so a
+        /// second press before the sheet refreshes is harmless.
+        void Repair()
+        {
+            if (outpost == null || wall == null) return;
+            outpost.QueueRepair(wall);
             Refresh();
         }
 

@@ -98,8 +98,16 @@ namespace SeaSick.World
         /// hauler walks to and where the sheet hangs: `PendingBuild.x/z`
         /// are that same midpoint, so nothing downstream has to know this
         /// site is a wall.
+        ///
+        /// **`repair` (2026-09-26)**: the segment on these posts already
+        /// stands, broken -- Kevin's own words: "place the blueprint only
+        /// for the section being replaced." So the ghost is
+        /// `BuildingFactory.RepairGhost` (just the missing third, or the
+        /// gate's leaf) instead of `WallGhost` (the whole run), and the
+        /// tap collider is sized to that same gap rather than the full
+        /// segment.
         public static BuildSite PlaceWall(Outpost owner, BuildPlan plan,
-            Vector3 postA, Vector3 postB, bool gate)
+            Vector3 postA, Vector3 postB, bool gate, bool repair = false)
         {
             Vector3 mid = 0.5f * (postA + postB);
             Vector3 run = postB - postA;
@@ -116,11 +124,16 @@ namespace SeaSick.World
             var site = root.AddComponent<BuildSite>();
             site.outpost = owner;
             site.PlanId = plan.id;
-            site.ghost = BuildingFactory.WallGhost(root.transform, postA, postB,
-                gate, AlphaEmpty);
+            site.ghost = repair
+                ? BuildingFactory.RepairGhost(root.transform, postA, postB, gate, AlphaEmpty)
+                : BuildingFactory.WallGhost(root.transform, postA, postB, gate, AlphaEmpty);
 
             // The drawing has to be tappable -- it is how the site's sheet
-            // is opened, the same as any other blueprint.
+            // is opened, the same as any other blueprint. Sized to the
+            // WHOLE segment even for a repair: the broken wall standing
+            // there already owns the middle third visually, but the
+            // player's thumb should still be able to find the site
+            // wherever it lands on the run.
             var box = root.AddComponent<BoxCollider>();
             box.center = new Vector3(0f, BuildPlans.PalisadeHeight * 0.5f, 0f);
             box.size = new Vector3(1.2f, BuildPlans.PalisadeHeight, len);

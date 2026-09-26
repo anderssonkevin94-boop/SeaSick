@@ -183,8 +183,15 @@ namespace SeaSick.World
         }
 
         /// **Hit it.** Clamps at zero, and the crossing is a one-shot: the
-        /// visual breaks, the pathing cells reopen and the camp queues the
-        /// repair, once, however many axes land in the same frame.
+        /// visual breaks and the pathing cells reopen, once, however many
+        /// axes land in the same frame.
+        ///
+        /// **No repair is queued here (Kevin, 2026-09-26): "leave the
+        /// broken asset there. If I press on it I should have the option to
+        /// repair it."** The break used to queue its own full-segment site
+        /// the instant hp hit zero; now the broken visual just stands, and
+        /// `Outpost.QueueRepair` only runs from `WallSheet`'s new button --
+        /// see that sheet for the partial-ghost site it queues instead.
         public void Damage(float amount)
         {
             if (amount <= 0f || Breached) return;
@@ -193,11 +200,10 @@ namespace SeaSick.World
             if (hp > 0f) return;
 
             ShowState();
-            // The hole is a hole for everybody: the raiders walk through it
-            // and so do the hands going out to mend it.
+            // The hole is a hole for everybody: the raiders walk through it,
+            // and so would the hands, once somebody orders it mended.
             var map = Camp != null ? CampPath.For(Camp) : null;
             if (map != null) map.MarkWall(this, false);
-            if (Camp != null) Camp.QueueRepair(this);
         }
 
         /// Put it back up whole. `Outpost.RaiseWall` calls this when a
