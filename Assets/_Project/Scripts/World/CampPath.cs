@@ -337,6 +337,7 @@ namespace SeaSick.World
             // about the palisade it was built under.
             MarkRocks();
             RelayWalls(null);
+            LayLinks(null);
             LabelGround();
 
             watch.Stop();
@@ -394,6 +395,16 @@ namespace SeaSick.World
                         region[nb] = label;
                         stack[top++] = nb;
                     }
+                    // A ladder joins the ground at its two ends (2026-09-27).
+                    if (hasLink != null && hasLink[cur])
+                        for (int e = 0; e < links.Count; e++)
+                        {
+                            if (links[e].from != cur) continue;
+                            int nb = links[e].to;
+                            if (region[nb] != 0 || !GroundOpen(nb)) continue;
+                            region[nb] = label;
+                            stack[top++] = nb;
+                        }
                 }
             }
             int c = Near(camp != null ? camp.CampCentre : Vector3.zero, 6);
@@ -506,6 +517,11 @@ namespace SeaSick.World
         /// pathed by a different rule from the hands would climb the
         /// mountains the hands learnt not to climb.
         public bool Route(Vector3 from, Vector3 to, Walker who, List<Vector3> corners)
+            => Route(from, to, who, corners, true);
+
+        /// `ladders` false: over the ground only (a worn road does not run
+        /// up a ladder, `CampRoads`).
+        public bool Route(Vector3 from, Vector3 to, Walker who, List<Vector3> corners, bool ladders)
         {
             if (corners == null) corners = new List<Vector3>();
             corners.Clear();
@@ -517,7 +533,10 @@ namespace SeaSick.World
             if (a < 0 || b < 0) return false;
             if (a == b) { corners.Add(to); return true; }
 
-            if (!Search(a, b)) return false;
+            useLinks = ladders;
+            bool found = Search(a, b);
+            useLinks = true;
+            if (!found) return false;
 
             // Walk the come-from chain back, into `cells` forwards.
             cells.Clear();
@@ -548,9 +567,17 @@ namespace SeaSick.World
             while (at < last)
             {
                 int far = at + 1;
-                int lookTo = Mathf.Min(last, at + Window);
-                for (int j = lookTo; j > at + 1; j--)
-                    if (Clear(cells[at], cells[j])) { far = j; break; }
+                // **Never pull a corner across a ladder (2026-09-27).** Both
+                // ends of a link hop stay corners, so the walker arrives at
+                // the foot and `LadderClimb` sees the leg up to the top.
+                if (!Hop(cells[at], cells[at + 1]))
+                {
+                    int lookTo = Mathf.Min(last, at + Window);
+                    for (int k = at + 1; k < lookTo; k++)
+                        if (Hop(cells[k], cells[k + 1])) { lookTo = k; break; }
+                    for (int j = lookTo; j > at + 1; j--)
+                        if (Clear(cells[at], cells[j])) { far = j; break; }
+                }
                 at = far;
                 if (far < last) corners.Add(Centre(cells[far]));
             }
@@ -603,6 +630,34 @@ namespace SeaSick.World
                     float step = (d >= 4 ? 1.41421356f : 1f) * cell * pen[nb];
                     float ng = g[cur] + step;
 
+                    if (stamp[nb] != search)
+                    {
+                        stamp[nb] = search;
+                        closed[nb] = false;
+                        g[nb] = ng;
+                        came[nb] = cur;
+                        Push(nb, ng + Heuristic(nb, goal));
+                    }
+                    else if (!closed[nb] && ng < g[nb])
+                    {
+                        g[nb] = ng;
+                        came[nb] = cur;
+                        Push(nb, ng + Heuristic(nb, goal));
+                    }
+                }
+
+                // **Ladders (2026-09-27): an edge off the grid**, priced at
+                // the climb's time so a route takes it only when it is
+                // genuinely shorter. Hands and raiders alike; animals never
+                // search this map.
+                if (!useLinks || hasLink == null || !hasLink[cur]) continue;
+                for (int e = 0; e < links.Count; e++)
+                {
+                    var l = links[e];
+                    if (l.from != cur) continue;
+                    int nb = l.to;
+                    if (!Walk(nb)) continue;
+                    float ng = g[cur] + l.cost;
                     if (stamp[nb] != search)
                     {
                         stamp[nb] = search;
@@ -774,6 +829,7 @@ namespace SeaSick.World
         /// going to walk this one.
         public bool HasRoute(Vector3 from, Vector3 to, Walker who)
         {
+            useLinks = true;
             if (!built) Build();
             if (hs == null) return false;
             mask = MaskFor(who);
@@ -1151,6 +1207,115 @@ namespace SeaSick.World
             int i = Index(at);
             return i >= 0 && open[i] && ((block[i] | wall[i]) & BlockHand) == 0;
         }
+
+        // --- ladders: links off the grid (2026-09-27) -------------------------
+
+        /// One direction of a ladder chain on the map.
+        struct Link { public int from, to; public float cost; }
+
+        readonly List<Link> links = new List<Link>();
+        /// Per cell: does any link start here? (So the search pays one array
+        /// read per expansion, not a list walk.)
+        bool[] hasLink;
+        /// Set per query by `Route` (roads ask without).
+        bool useLinks = true;
+
+        /// Metres of walking one second of climbing is worth, for the link
+        /// cost: about a hand's walking pace.
+        public static float LinkMetresPerSecond = 2.4f;
+
+        /// Links on the map now (both directions count, so 2 per chain).
+        public int LinkCount => links.Count;
+
+        /// **Re-lay every ladder's link from `camp.Ladders`, and re-flood
+        /// the ground** (a plateau joined by a ladder is on the fire's ground
+        /// now, so `Reachable` says yes to what stands on it). `except` is a
+        /// chain coming down that is still in the list. A ladder's ends snap
+        /// to the nearest open cell within a few; one that finds none adds
+        /// nothing.
+        public void RelayLinks(Ladder except = null)
+        {
+            if (!built) Build();
+            if (hs == null) return;
+            LayLinks(except);
+            LabelGround();
+        }
+
+        void LayLinks(Ladder except)
+        {
+            links.Clear();
+            if (hasLink == null || hasLink.Length != n * n) hasLink = new bool[n * n];
+            else System.Array.Clear(hasLink, 0, hasLink.Length);
+            if (camp == null) return;
+            var list = camp.Ladders;
+            if (list == null) return;
+            for (int k = 0; k < list.Count; k++)
+            {
+                var l = list[k];
+                if (l == null || l == except || l.Shape == null) continue;
+                int a = Near(l.Foot, 3), b = Near(l.Top, 3);
+                if (a < 0 || b < 0 || a == b) continue;
+                // Never below the octile distance, so the heuristic stays
+                // admissible (and a chain is never "free").
+                float cost = Mathf.Max(l.ClimbSeconds * LinkMetresPerSecond, Heuristic(a, b) + cell);
+                links.Add(new Link { from = a, to = b, cost = cost });
+                links.Add(new Link { from = b, to = a, cost = cost });
+                hasLink[a] = true;
+                hasLink[b] = true;
+            }
+        }
+
+        /// Two consecutive route cells that are not grid neighbours: a link.
+        bool Hop(int a, int b)
+        {
+            int dx = Mathf.Abs(a % n - b % n), dy = Mathf.Abs(a / n - b / n);
+            return dx > 1 || dy > 1;
+        }
+
+        /// Is there a link between the cells under these two points (either
+        /// way)? For checks.
+        public bool LinkBetween(Vector3 p, Vector3 q)
+        {
+            if (!built) Build();
+            if (hs == null) return false;
+            int a = Near(p, 3), b = Near(q, 3);
+            for (int e = 0; e < links.Count; e++)
+                if (links[e].from == a && links[e].to == b) return true;
+            return false;
+        }
+
+        /// Is this point on the map at all?
+        public bool OnMap(Vector3 at)
+        {
+            if (!built) Build();
+            return hs != null && Index(at) >= 0;
+        }
+
+        /// **Metres of the hands' route over the ground ONLY (no ladders)**,
+        /// or -1 when there is none. Corner to corner, flat. For the ladder
+        /// siting rule "not a cliff -- there's a walk up close by".
+        public float GroundRouteMetres(Vector3 from, Vector3 to)
+        {
+            if (!Route(from, to, Walker.Hand, scratchRoute, false)) return -1f;
+            return RouteMetres(from, scratchRoute);
+        }
+
+        /// Flat metres along `from` then `corners`.
+        public static float RouteMetres(Vector3 from, List<Vector3> corners)
+        {
+            float m = 0f;
+            Vector3 p = from;
+            for (int i = 0; i < corners.Count; i++)
+            {
+                Vector3 q = corners[i];
+                float dx = q.x - p.x, dz = q.z - p.z;
+                m += Mathf.Sqrt(dx * dx + dz * dz);
+                p = q;
+            }
+            return m;
+        }
+
+        readonly List<Vector3> scratchRoute = new List<Vector3>();
 
         // --- binary heap ------------------------------------------------------
 

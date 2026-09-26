@@ -148,6 +148,33 @@ namespace SeaSick.World
             return site;
         }
 
+        /// **The drawing of a LADDER chain (2026-09-27).** The chain itself
+        /// in chalk (`LadderLayout.Draw`, the same shape the finished one
+        /// stands as), rooted at the FOOT -- which is where the row's `x/z`
+        /// are, so the haulers and the builders walk to the bottom -- and
+        /// the log stack beside the foot.
+        public static BuildSite PlaceLadder(Outpost owner, BuildPlan plan, LadderLayout.Shape shape)
+        {
+            var root = new GameObject("BuildSite_" + plan.id);
+            root.transform.SetParent(owner.transform, true);
+            root.transform.SetPositionAndRotation(shape.foot,
+                Quaternion.LookRotation(shape.run, Vector3.up));
+
+            var site = root.AddComponent<BuildSite>();
+            site.outpost = owner;
+            site.PlanId = plan.id;
+            site.ghost = LadderLayout.Draw(root.transform, shape, "LadderGhost", true);
+            foreach (var r in site.ghost.GetComponentsInChildren<MeshRenderer>(true))
+                r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            BuildingFactory.Tint(site.ghost, AlphaEmpty);
+
+            var stackGo = new GameObject("Delivered");
+            stackGo.transform.SetParent(root.transform, false);
+            stackGo.transform.localPosition = new Vector3(1.4f, 0f, -1f);
+            site.stack = stackGo.transform;
+            return site;
+        }
+
         static void Stake(Transform parent, Vector3 at)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);

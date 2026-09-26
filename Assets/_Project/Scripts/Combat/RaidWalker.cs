@@ -400,8 +400,13 @@ namespace SeaSick.Combat
             hasRoute = false;
         }
 
+        /// On a ladder chain (2026-09-27, `World.LadderClimb`): while climbing,
+        /// the climb has the body.
+        readonly World.LadderClimb climb = new World.LadderClimb();
+
         bool Walk(Vector3 to, float dt)
         {
+            if (climb.Active) { climb.Tick(camp, transform, dt); return false; }
             Vector3 here = transform.position;
             Vector3 d = to - here;
             d.y = 0f;
@@ -409,6 +414,9 @@ namespace SeaSick.Combat
             if (dist < 0.35f) { ClearRoute(); return true; }
 
             Vector3 aim = NextCorner(here, to, dist, dt);
+            // The leg up (or down) a ladder chain: the route kept both of
+            // its ends as corners (`CampPath.Route`).
+            if (climb.TryBegin(camp, transform, here, aim, dt)) return false;
 
             Vector3 leg = aim - here;
             leg.y = 0f;

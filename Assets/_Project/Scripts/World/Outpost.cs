@@ -726,6 +726,9 @@ namespace SeaSick.World
                 // by `CanPlaceWall` when it was drawn, and re-testing it
                 // here against the rectangle rules would refuse every
                 // segment in a run to the one beside it.
+                // A ladder chain draws its own chain (`Outpost.Ladders`).
+                if (IsLadderRow(row)) { blueprints.Add(DrawLadderSite(row)); continue; }
+
                 if (row.isWall)
                 {
                     // **A repair draws only the gap (2026-09-26).** The
@@ -823,6 +826,14 @@ namespace SeaSick.World
                     return false;
                 }
                 Save.SaveGame.Autosave("a " + plan.label + " was raised");
+                return true;
+            }
+
+            // A ladder chain is raised along its two points, never refused.
+            if (IsLadderRow(row))
+            {
+                RaiseLadder(row);
+                Save.SaveGame.Autosave("a ladder was raised");
                 return true;
             }
 
@@ -3975,6 +3986,7 @@ namespace SeaSick.World
             RetireAllBlueprints();
             foreach (var w in walls) if (w != null) Destroy(w.gameObject);
             walls.Clear();
+            ClearLadders();
             foreach (var old in built) if (old != null) Destroy(old.gameObject);
             built.Clear();
             reserved.RemoveAll(buildingReservations.Contains);
@@ -4059,6 +4071,7 @@ namespace SeaSick.World
             var savedWalls = new List<BuiltWall>(ledger.builtWalls);
             ledger.builtWalls.Clear();
             foreach (var w in savedWalls) StandWall(w);
+            StandSavedLadders();
 
             ledger.ceilingPer = KeepsOfEach;
             // The rest is what arrival does: blueprint, felling, piles.

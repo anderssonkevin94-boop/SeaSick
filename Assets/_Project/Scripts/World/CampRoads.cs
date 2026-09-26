@@ -1037,7 +1037,7 @@ namespace SeaSick.World
             foreach (var (a, b) in legs)
             {
                 r.route.Clear();
-                if (map == null || !map.Route(a, b, CampPath.Walker.Hand, r.route) || r.route.Count == 0) continue;
+                if (map == null || !map.Route(a, b, CampPath.Walker.Hand, r.route, false) || r.route.Count == 0) continue;
                 routed++;
                 Vector3 prev = a;
                 foreach (var corner in r.route)
