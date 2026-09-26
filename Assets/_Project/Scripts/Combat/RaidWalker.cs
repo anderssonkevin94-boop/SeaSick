@@ -123,6 +123,12 @@ namespace SeaSick.Combat
             Act(World.VillagerActing.Mode.None, null);
         }
 
+        // A walker only exists once he's on the sand (see RaidParty.Begin),
+        // so "enabled" already means "ashore" -- RaiderMarkerField owns the
+        // rest of the little red triangle over him.
+        void OnEnable() => RaiderMarkerField.Enter(this);
+        void OnDisable() => RaiderMarkerField.Leave(this);
+
         void Update()
         {
             if (!landed)
