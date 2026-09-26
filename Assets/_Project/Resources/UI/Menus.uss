@@ -244,3 +244,64 @@
 .menu-pause-chip {
     font-size: 16px;
 }
+
+/* ---------------- loading screen ---------------- */
+
+/* Solid, not a scrim -- this hides whatever is loading behind it (the Home
+ * screen coming up on a cold launch, or the world already running on a
+ * Continue/Load/New reload) rather than dimming it. */
+.loading-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: rgb(20, 29, 36);
+}
+
+.loading-title {
+    font-size: 34px;
+    color: rgb(244, 232, 207);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf");
+    -unity-text-align: middle-center;
+    letter-spacing: 4px;
+    margin-bottom: 28px;
+}
+
+.loading-track {
+    width: 260px;
+    max-width: 70%;
+    height: 10px;
+    border-radius: 5px;
+    background-color: rgba(244, 232, 207, 0.16);
+    overflow: hidden;
+}
+
+.loading-fill {
+    height: 100%;
+    background-color: rgb(46, 126, 163);
+    border-radius: 5px;
+}
+
+.loading-row {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 260px;
+    max-width: 70%;
+    margin-top: 10px;
+}
+
+.loading-stage {
+    font-size: 12px;
+    color: rgba(244, 232, 207, 0.72);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    white-space: normal;
+}
+
+.loading-pct {
+    font-size: 12px;
+    color: rgba(244, 232, 207, 0.72);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}

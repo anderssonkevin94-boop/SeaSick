@@ -88,6 +88,17 @@ namespace SeaSick.Terrain
         }
         public BuildStats LastBuild { get; private set; }
 
+        /// **The loading-screen hook (2026-09-26).** 0 at the first slice, 1
+        /// once `Done`, monotonic in between -- `LoadingScreen`
+        /// (`UI/Menus/LoadingScreen.cs`) polls this rather than the
+        /// coroutine itself, since it has no reference to a populator that
+        /// may not exist yet when it starts polling. A rough split by cost:
+        /// discovery and every shoreline profile are cheap and share the
+        /// first tenth; island-by-island building and dressing -- the
+        /// slices the frame budget above exists for -- are the other nine.
+        /// No behaviour here, only bookkeeping the build already knew.
+        public static float Progress01 { get; private set; }
+
         readonly System.Diagnostics.Stopwatch slice = new System.Diagnostics.Stopwatch();
 
         /// True when the current slice has used its budget: the build
@@ -96,6 +107,10 @@ namespace SeaSick.Terrain
 
         IEnumerator Start()
         {
+            // Statics outlive play mode here (domain reload is off), so a
+            // fresh build has to start this back at zero itself rather than
+            // trust it still is.
+            Progress01 = 0f;
             if (terrain == null || world == null) { Debug.LogError("TerrainWorldPopulator: missing settings"); yield break; }
             var stats = new BuildStats();
             var wall = System.Diagnostics.Stopwatch.StartNew();
@@ -176,6 +191,7 @@ namespace SeaSick.Terrain
             // Sorting reorders the list but not the mask's component ids, so
             // the mapping is rebuilt by id, not by position in the list.
             islands.Sort((a, b) => a.distToHome.CompareTo(b.distToHome));
+            Progress01 = 0.05f;
 
             // Every shoreline first: pure height sampling, no Random, no
             // GameObjects, so it can stop anywhere.
@@ -186,9 +202,12 @@ namespace SeaSick.Terrain
                 profiles[i] = new Profile();
                 var measure = MeasureProfile(islands[i].centre, profiles[i]);
                 while (measure.MoveNext()) yield return null;
+                Progress01 = 0.05f + 0.05f * (i + 1) / Mathf.Max(1, islands.Count);
             }
 
             // Then the islands, nearest first, so home stands before the rest.
+            // This loop is the build's real cost (scenery dressing above
+            // all), so it gets the rest of the bar.
             byComponent = new Island[islands.Count];
             for (int i = 0; i < islands.Count; i++)
             {
@@ -204,6 +223,7 @@ namespace SeaSick.Terrain
                     while (dress.MoveNext()) yield return null;
                 }
                 if (SliceSpent) yield return null;
+                Progress01 = 0.10f + 0.85f * (i + 1) / Mathf.Max(1, islands.Count);
             }
             IslandCount = islands.Count;
 
@@ -214,6 +234,7 @@ namespace SeaSick.Terrain
             // The ship's own gulls, over the open sea. Kevin, 2026-09-22.
             var player = Object.FindFirstObjectByType<SeaSick.Ship.ShipMotor>();
             if (player != null) FaunaField.FollowShip(player.transform);
+            Progress01 = 1f;
             Done = true;
         }
 
