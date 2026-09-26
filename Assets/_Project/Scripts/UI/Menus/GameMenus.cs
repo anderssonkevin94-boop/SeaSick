@@ -39,6 +39,23 @@ namespace SeaSick.UI.Menus
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Install() => EnsureInstance();
 
+        /// Belt-and-braces alongside `GameBoot.HookReinstallOnReload` /
+        /// `PauseChip.HookReinstallOnReload`: `EnsureInstance()` already
+        /// self-heals whenever `ShowHome`/`TogglePause`/etc. is called after
+        /// a mid-session reload with no `GameMenus` left in the new scene,
+        /// so this was never the broken half of the 2026-09-26 reload bug --
+        /// but re-running `Install()` on every `sceneLoaded`, not just the
+        /// first, costs nothing (idempotent) and means a fresh scene always
+        /// has one waiting rather than relying on the next caller to notice.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void HookReinstallOnReload()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoadedReinstall;
+            SceneManager.sceneLoaded += OnSceneLoadedReinstall;
+        }
+
+        static void OnSceneLoadedReinstall(Scene scene, LoadSceneMode mode) => Install();
+
         /// Creates the singleton on demand rather than only through
         /// `Install`. **`GameBoot.Awake` (`DefaultExecutionOrder(-300)`)
         /// calls `ShowHome` before this class's own `Install` is guaranteed

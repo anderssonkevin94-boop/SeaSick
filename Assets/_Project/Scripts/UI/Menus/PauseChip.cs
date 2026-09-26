@@ -1,6 +1,7 @@
 using SeaSick.UI.ModularYard;
 using SeaSick.Voyage;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace SeaSick.UI.Menus
 {
@@ -23,6 +24,21 @@ namespace SeaSick.UI.Menus
             if (FindAnyObjectByType<VoyageManager>() == null) return;
             new GameObject("PauseChip").AddComponent<PauseChip>();
         }
+
+        /// Same fix as `GameBoot.HookReinstallOnReload` and for the same
+        /// reason: `RuntimeInitializeOnLoadMethod` does not refire on a
+        /// mid-session `SceneManager.LoadScene` (Continue/New/Load all
+        /// reload), so without this the pause chip -- along with the whole
+        /// way back to a menu -- silently vanished after the first slot
+        /// load or new voyage. `Install()` is idempotent.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void HookReinstallOnReload()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoadedReinstall;
+            SceneManager.sceneLoaded += OnSceneLoadedReinstall;
+        }
+
+        static void OnSceneLoadedReinstall(Scene scene, LoadSceneMode mode) => Install();
 
         void OnGUI()
         {

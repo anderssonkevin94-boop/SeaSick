@@ -1,6 +1,7 @@
 using SeaSick.UI;
 using SeaSick.UI.Menus;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace SeaSick.Save
 {
@@ -78,6 +79,30 @@ namespace SeaSick.Save
             if (FindAnyObjectByType<Voyage.VoyageManager>() == null) return;
             new GameObject("GameBoot").AddComponent<GameBoot>();
         }
+
+        /// **`RuntimeInitializeOnLoadMethod` fires once per Play session, not
+        /// once per scene** -- 2026-09-26: a Continue/New voyage/Load-a-slot
+        /// reload (`GameMenus.ReloadForBoot`, `SceneManager.LoadScene`) left
+        /// no `GameBoot` in the freshly loaded scene at all, so the pending
+        /// slot request it just set (`SaveSlots.PendingLoadSlot`) was never
+        /// consumed and the player landed in a live, un-decided world with
+        /// no boot overlay and no way back to a menu. `SaveAutosaveTimer`
+        /// dodged this by being `DontDestroyOnLoad`; `GameBoot` cannot be --
+        /// its whole point is a FRESH decision each load -- so instead this
+        /// hooks `SceneManager.sceneLoaded`, which (unlike the attribute)
+        /// really does fire on every load, and re-runs `Install()`. The
+        /// hook itself is registered once, at the same `SubsystemRegistration`
+        /// point every other per-session static resets at; `Install()` stays
+        /// idempotent (the `FindAnyObjectByType` guard) so a double-fire on
+        /// the very first scene is harmless.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void HookReinstallOnReload()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoadedReinstall;
+            SceneManager.sceneLoaded += OnSceneLoadedReinstall;
+        }
+
+        static void OnSceneLoadedReinstall(Scene scene, LoadSceneMode mode) => Install();
 
         /// A probe is running: get out of its way, keep the player's file.
         public static void Skip()
