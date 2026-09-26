@@ -114,6 +114,12 @@ Build order: **1** the god's-eye island (camera, Hand, living villagers) · **2*
 ### Village / base — post-MVP (menu-first)
 Buildings as upgrade cards before they're 3D: housing (crew capacity), blacksmith (ship parts), hospital (heal sickness aftereffects, unlock doctor), farmland (food → cook effectiveness), apothecary (potions). Village becomes a walkable/visible scene only after the loop is proven.
 
+### Worn roads (decided 2026-09-26)
+Kevin: roads form on their own where villagers walk most — *"just make sure that the roads don't overlap and glitch or look bad."* No gameplay effect yet (seam for a later speed bonus: `CampRoads.RoadAt`).
+- **Wear:** every hand step adds its length to its 2 m cell (same world lattice as `CampPath` and walls); wear decays with game time (e-fold 6 days). A cell becomes road at 30 m of wear and stops being road below 14 m (hysteresis — no flicker). Only walkable ground (no sea, cliff, rock, wall; gates are fine), never under a building footprint. One-cell gaps bridged, holes in busy yards closed, one-cell spurs pruned, pieces under 4 cells dropped. Re-evaluated every 30 real seconds (6× per 180 s day); the mesh is rebuilt only when the picture changes. Saved in the outpost ledger (`roadCell`/`roadWear`).
+- **Drawing (chosen):** ONE generated mesh per camp — a 0.5 m lattice sheet draped on the height field, every vertex written once — whose alpha is a coverage field (max over capsules between neighbouring road cells, tapered at ends like Astra's `Road_End`). A junction, a crossing or a bend is just where capsules meet, so nothing is ever stacked or double-blended. Colours and edge feather follow Astra's roads-astra-lvl1-v1 kit (compacted crown → darker shoulder, noisy edge). Shader `SeaSick/Worn Road` pulls vertices toward the camera along the view ray (depth only), so no z-fighting at 150 m and nothing visibly floats; lighting copies the island's terrain material.
+- Rejected: Astra's modules snapped to the graph (a free-form wear graph needs crossroads, stubs and angles the kit lacks; junctions would stack translucent ribbons); a terrain splat mask (touches every terrain chunk and the terrain shader, one mask per island). Torches: later.
+
 ### Ship upgrades — post-MVP
 Modular parts on the ship prefab (hull, sails, rudder, comfort fittings, cargo hold). Player-provided modular 3D assets (hull, mast/sail, cannons, rudder) are the basis of the ship.
 
