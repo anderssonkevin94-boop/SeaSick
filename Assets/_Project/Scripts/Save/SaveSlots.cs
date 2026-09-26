@@ -237,11 +237,16 @@ namespace SeaSick.Save
             finally { IsSaving = false; }
         }
 
-        /// **`SaveGame.Autosave`'s actual write.** Rotates the auto pool
+        /// **`SaveGame.Autosave`'s actual write, and every other AUTOMATIC
+        /// writer's persist target** (`ShipyardService.ApplyRefit` among
+        /// them, 2026-09-26 -- Kevin's rule: an automatic write never
+        /// overwrites a manual save). Rotates the auto pool
         /// (`SaveSlotLogic.PickAutoSlotToWrite`) and never touches
         /// `ActiveSlotId` -- an autosave is a safety net, not a change of
-        /// "which slot am I playing".
-        internal static void WriteAutosave(string reason)
+        /// "which slot am I playing". Returns whether the write actually
+        /// landed, same as `SaveGame.SaveTo`, so a caller with its own
+        /// atomic rollback (the refit) can undo on failure.
+        internal static bool WriteAutosave(string reason)
         {
             string target = SaveSlotLogic.PickAutoSlotToWrite(
                 id => System.IO.File.Exists(PathFor(id)),
@@ -256,6 +261,7 @@ namespace SeaSick.Save
                     lastSaveRealtime = Time.realtimeSinceStartup;
                     Saved?.Invoke(ReadInfo(target, true));
                 }
+                return ok;
             }
             finally { IsSaving = false; }
         }

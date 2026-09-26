@@ -342,9 +342,13 @@ namespace SeaSick.Ship.Modular
 
         // ---- applying -------------------------------------------------------
 
-        /// Where ApplyRefit persists. Null = the player's save
-        /// (`SaveGame.Path`) -- except in a probe session
-        /// (`SaveGame.Suppressed`), where persistence is skipped unless a
+        /// Where ApplyRefit persists. Null = the autosave rotation
+        /// (`SaveSlots.WriteAutosave`, same as the 5-minute timer and every
+        /// other automatic write) -- **never the active slot**, because the
+        /// active slot defaults to `m1` and a refit is not the player
+        /// asking to overwrite their named save (Kevin, 2026-09-26: an
+        /// automatic write never overwrites a manual save). Skipped
+        /// entirely in a probe session (`SaveGame.Suppressed`) unless a
         /// probe points this at a scratch file, so a probe never writes the
         /// player's save.
         public static string PersistPathOverride { get; set; }
@@ -547,17 +551,21 @@ namespace SeaSick.Ship.Modular
             try { TestFault(FaultBeforePersist); }
             catch (ShipyardTestFaultException e) { why = e.Message; return false; }
 #endif
-            string path = PersistPathOverride;
-            if (path == null)
+            if (PersistPathOverride != null)
             {
-                if (SeaSick.Save.SaveGame.Suppressed)
-                {
-                    Debug.Log("[Shipyard] refit not persisted: a probe is driving this session (SaveGame.Suppressed).");
-                    return true;
-                }
-                path = SeaSick.Save.SaveGame.Path;
+                if (SeaSick.Save.SaveGame.SaveTo(PersistPathOverride, "refit")) return true;
+                why = "the save routine refused or failed; see the console";
+                return false;
             }
-            if (SeaSick.Save.SaveGame.SaveTo(path, "refit")) return true;
+            if (SeaSick.Save.SaveGame.Suppressed)
+            {
+                Debug.Log("[Shipyard] refit not persisted: a probe is driving this session (SaveGame.Suppressed).");
+                return true;
+            }
+            // Automatic write -> the autosave rotation, never the active
+            // (manual-by-default) slot. Same target `SaveAutosaveTimer`
+            // uses, so a refit and the 5-minute timer share one pool.
+            if (SeaSick.Save.SaveSlots.WriteAutosave("refit")) return true;
             why = "the save routine refused or failed; see the console";
             return false;
         }
