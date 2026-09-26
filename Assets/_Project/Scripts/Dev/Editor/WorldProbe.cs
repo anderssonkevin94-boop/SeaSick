@@ -22,8 +22,10 @@ public class WorldProbe : MonoBehaviour
         StringBuilder sb = new StringBuilder();
         int fails = 0;
         TerrainWorldPopulator pop = FindAnyObjectByType<TerrainWorldPopulator>();
-        float wait = 0f;
-        while ((pop == null || !pop.Done) && wait < 10f) { wait += Time.deltaTime; yield return null; pop = FindAnyObjectByType<TerrainWorldPopulator>(); }
+        // Real time, and long: the build is sliced across frames (~25 s in
+        // the editor) and the boot overlay holds timeScale at 0.
+        float t0 = Time.realtimeSinceStartup;
+        while ((pop == null || !pop.Done) && Time.realtimeSinceStartup - t0 < 90f) { yield return null; pop = FindAnyObjectByType<TerrainWorldPopulator>(); }
         if (pop == null || !pop.Done) { Finish(sb, 1, "populator never finished"); yield break; }
         var h = Island.TerrainHeight;
 

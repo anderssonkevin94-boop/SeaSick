@@ -1244,6 +1244,22 @@ udid from `xcrun devicectl list devices`.
 - **Throttle on a phone is the telegraph arrows,** not a swipe. `HelmInput`
   reads touch only for the tiller (bottom 45% of the screen, x = rudder); W/S
   are keyboard. Kevin's first instinct was to swipe.
+- **iOS kills an app whose main thread blocks for 10 s while it backgrounds**
+  (0x8BADF00D "scene-update watchdog", 2026-09-25: the phone auto-locked
+  during the one-frame world build). `TerrainWorldPopulator` now builds in
+  `frameBudgetMs` (50) slices -- flood fill, shoreline marches, then island by
+  island with `IslandScenery.BuildSliced` stopping between scatter rows -- and
+  swaps its own `Random.State` around each slice so the islands are identical
+  (fingerprint A/B vs the one-frame build: same hash). Editor: worst frame
+  13-16 s -> ~0.85 s (home island's dock + village siting), world ready after
+  ~25-30 s wall instead of ~16 s. The log line `TerrainWorldPopulator: N
+  islands in S slices, work W ms, max slice M ms (phase)` is the number to
+  read on the phone. Consequences: `Done` comes seconds after play starts, so
+  anything waiting on it needs a real-time wait of 60-90 s (WorldProbe had
+  10 s of scaled time); `SaveGame.Restore` waits with no clock while the
+  build runs (`Failed` ends it), because a clock timeout there fell through to
+  NEW and the first autosave would eat the save. `frameBudgetMs = 0` gives the
+  old one-frame build for an A/B.
 
 
 ## 2026-09-23 — station stock: bays, benches, racks, orders, armful hauling

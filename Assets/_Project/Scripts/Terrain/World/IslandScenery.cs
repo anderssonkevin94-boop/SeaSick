@@ -166,10 +166,29 @@ namespace SeaSick.Terrain
             SeaSick.World.Island isle = null,
             System.Func<float, float, bool> keepOut = null)
         {
+            var built = new GameObject[1];
+            var bake = BuildSliced(parent, centre, meanR, height, terrain, radiusAt, seed, prm,
+                                   isle, keepOut, null, built);
+            while (bake.MoveNext()) { }
+            return built[0];
+        }
+
+        /// `Build`, able to stop between scatter rows so the world build
+        /// can spread one island's bake over several frames (the phone's
+        /// 10 s watchdog, 2026-09-26). It stops only when `spent` says so;
+        /// the scatter's own `System.Random` does not care how many frames
+        /// it took, so the wood comes out identical. The GameObject half at
+        /// the end runs unbroken. The result lands in `built[0]`.
+        public static System.Collections.IEnumerator BuildSliced(Transform parent, Vector3 centre, float meanR,
+            System.Func<float, float, float> height, TerrainSettings terrain,
+            System.Func<float, float> radiusAt, int seed, TerrainParams prm,
+            SeaSick.World.Island isle, System.Func<float, float, bool> keepOut,
+            System.Func<bool> spent, GameObject[] built)
+        {
             if (isle != null && isle.IsHome && terrain != null && terrain.homeIsle && terrain.storybookLandforms)
             {
                 var authored = HomeIslandDressing.Build(parent, centre, meanR, isle, terrain, keepOut);
-                if (authored != null) return authored;
+                if (authored != null) { built[0] = authored; yield break; }
             }
             var rng = new System.Random(seed);
             bool kit = SceneryKit.Available;
@@ -531,6 +550,7 @@ namespace SeaSick.Terrain
 
             for (float z = -maxR; z <= maxR && trees < MaxTrees; z += step)
             {
+                if (spent != null && spent()) yield return null;
                 for (float x = -maxR; x <= maxR && trees < MaxTrees; x += step)
                 {
                     // Every roll this candidate could ever need is drawn up
@@ -765,6 +785,7 @@ namespace SeaSick.Terrain
                 for (float gx = -meanR; gx < meanR; gx += shoreStep)
                 for (float gz = -meanR; gz < meanR; gz += shoreStep)
                 {
+                    if (spent != null && spent()) yield return null;
                     float x = centre.x + gx + 1.6f * Mathf.Sin(gz * 1.73f), z = centre.z + gz + 1.6f * Mathf.Sin(gx * 2.31f);
                     float y = height(x,z);
                     float patch = Mathf.PerlinNoise(x*.09f+37f,z*.09f+17f);
@@ -807,6 +828,7 @@ namespace SeaSick.Terrain
                 float sstep = 7f;
                 for (float z = -maxR * 1.12f; z <= maxR * 1.12f; z += sstep)
                 {
+                    if (spent != null && spent()) yield return null;
                     for (float x = -maxR * 1.12f; x <= maxR * 1.12f; x += sstep)
                     {
                         float jx3 = (float)(srng.NextDouble() - 0.5f) * sstep * 0.9f;
@@ -898,6 +920,7 @@ namespace SeaSick.Terrain
                 float estimate = 0f;
                 for (float z = -maxR; z <= maxR; z += probe)
                 {
+                    if (spent != null && spent()) yield return null;
                     for (float x = -maxR; x <= maxR; x += probe)
                     {
                         float cx = centre.x + x, cz = centre.z + z;
@@ -951,6 +974,7 @@ namespace SeaSick.Terrain
 
                 foreach (var fc in found)
                 {
+                    if (spent != null && spent()) yield return null;
                     if (fc.n < nCut) continue;
                     bool any = false;
                     for (int iz = 0; iz < sub; iz++)
@@ -1051,7 +1075,7 @@ namespace SeaSick.Terrain
             Report.Add(new Dressed { centre = centre, radius = meanR, trees = trees, crops = crops, scrub = bushes });
 
             if (index.Count == 0 && individuals.Count == 0 && rocks == 0 && crops == 0 && bushes == 0
-                && shoreStones == 0 && stacks == 0) return null;
+                && shoreStones == 0 && stacks == 0) yield break;
 
             var go = new GameObject("Scenery");
             go.transform.SetParent(parent, false);
@@ -1111,7 +1135,7 @@ namespace SeaSick.Terrain
                 foreach(var cb in cellList)if(cb.grounding!=null)contacts.AddRange(cb.grounding);
                 go.AddComponent<NatureGrounding>().Configure(wcells,contacts);
             }
-            return go;
+            built[0] = go;
         }
 
         /// One outcrop: a run of shards along the ridge (across the slope,

@@ -326,7 +326,12 @@ namespace SeaSick.Save
             {
                 pop = Object.FindFirstObjectByType<TerrainWorldPopulator>();
                 if (pop != null && pop.Done) break;
-                if (Time.realtimeSinceStartup - t0 > 90f) { Fail("the world never finished building"); yield break; }
+                // No clock while it is building: the build is spread over
+                // frames now, and a phone locked mid-load sits suspended for
+                // as long as it likes. Timing out there would fall through
+                // to a NEW voyage whose first autosave eats the player's file.
+                if (pop != null && pop.Failed) { Fail("the world failed to build"); yield break; }
+                if (pop == null && Time.realtimeSinceStartup - t0 > 90f) { Fail("the world never finished building"); yield break; }
                 yield return null;
             }
             yield return null;

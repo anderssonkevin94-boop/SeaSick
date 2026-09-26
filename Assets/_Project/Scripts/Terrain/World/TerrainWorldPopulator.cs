@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Mathematics;
@@ -25,6 +26,12 @@ namespace SeaSick.Terrain
         public Island Home { get; private set; }
         public bool Done { get; private set; }
 
+        /// The build threw and will never be `Done`. Anything waiting on the
+        /// world (`SaveGame.Restore`) gives up on this instead of a clock,
+        /// because the build now takes seconds and a phone locked halfway
+        /// through it is suspended for as long as it is locked.
+        public bool Failed { get; private set; }
+
         /// The flood-fill grid, kept rather than thrown away: 0 = water,
         /// -1 = land too small to be an island, k > 0 = component k-1. The
         /// minimap draws this instead of a circle per island, because a
@@ -49,9 +56,90 @@ namespace SeaSick.Terrain
 
         float Height(float x, float z) => TerrainHeight.Height(new float2(x, z), prm, lut);
 
-        void Start()
+        /// **The build is sliced across frames (2026-09-26).** Kevin's phone
+        /// was killed mid-load with 0x8BADF00D: it auto-locked while this
+        /// ran as one long frame (~16 s in the editor), and iOS gives a
+        /// backgrounding app 10 s of wall clock to answer. So the build runs
+        /// `frameBudgetMs` at a time: the flood fill, every shoreline march,
+        /// then island by island, with the scenery bake -- most of the cost --
+        /// stopping between its scatter rows. `Done` still flips once, at the
+        /// end; everything that reads the world before then already waits
+        /// for it or null-checks `Home`, as it had to for the frames before
+        /// this Start ran.
+        ///
+        /// **Same seed, same islands.** The code and its order are unchanged;
+        /// what slicing adds is other scripts' Updates between the slices,
+        /// and any of them drawing from `UnityEngine.Random` would reshuffle
+        /// the seeded sequence the resource kinds and props are rolled from.
+        /// So the build keeps its own `Random.State` and swaps it in and out
+        /// around every slice, and hands the game the state an unsliced build
+        /// would have left behind when it is done.
+        [Tooltip("Longest a single frame of the world build may run, in ms. 0 = build in one frame (the old behaviour).")]
+        [Min(0)] public int frameBudgetMs = 50;
+
+        /// What the last build cost, for the phone log and the probes.
+        public struct BuildStats
         {
-            if (terrain == null || world == null) { Debug.LogError("TerrainWorldPopulator: missing settings"); return; }
+            public float totalMs;      // wall clock, first slice to last
+            public float workMs;       // sum of the slices
+            public float maxSliceMs;   // the frame the watchdog cares about
+            public int slices;
+            public string worstPhase;  // what the build was doing in that frame
+        }
+        public BuildStats LastBuild { get; private set; }
+
+        readonly System.Diagnostics.Stopwatch slice = new System.Diagnostics.Stopwatch();
+
+        /// True when the current slice has used its budget: the build
+        /// yields at the next safe point.
+        bool SliceSpent => frameBudgetMs > 0 && slice.ElapsedMilliseconds >= frameBudgetMs;
+
+        IEnumerator Start()
+        {
+            if (terrain == null || world == null) { Debug.LogError("TerrainWorldPopulator: missing settings"); yield break; }
+            var stats = new BuildStats();
+            var wall = System.Diagnostics.Stopwatch.StartNew();
+            var build = Build();
+            var buildRandom = Random.state;
+            while (true)
+            {
+                var outer = Random.state;
+                Random.state = buildRandom;
+                string from = phase;
+                slice.Restart();
+                bool more;
+                try { more = build.MoveNext(); }
+                catch (System.Exception e)
+                {
+                    Random.state = outer;
+                    Failed = true;
+                    Debug.LogException(e, this);
+                    yield break;
+                }
+                slice.Stop();
+                buildRandom = Random.state;
+                Random.state = outer;
+                float ms = (float)slice.Elapsed.TotalMilliseconds;
+                stats.workMs += ms;
+                if (ms > stats.maxSliceMs) { stats.maxSliceMs = ms; stats.worstPhase = from == phase ? phase : from + " > " + phase; }
+                stats.slices++;
+                if (!more) break;
+                yield return null;
+            }
+            // Where an unsliced build would have left the sequence.
+            Random.state = buildRandom;
+            stats.totalMs = (float)wall.Elapsed.TotalMilliseconds;
+            LastBuild = stats;
+            Debug.Log($"TerrainWorldPopulator: {IslandCount} islands in {stats.slices} slices, " +
+                      $"work {stats.workMs:F0} ms, max slice {stats.maxSliceMs:F0} ms ({stats.worstPhase}), wall {stats.totalMs:F0} ms");
+        }
+
+        string phase = "";
+
+        /// The build itself. Every `yield return null` is a point where it
+        /// may stop for the frame; it only does when the slice is spent.
+        IEnumerator Build()
+        {
             if (world.seed != 0) Random.InitState(world.seed);
             prm = TerrainParams.From(terrain);
             lut = TerrainCurveLut.Bake(terrain.profileCurve, Allocator.Persistent);
@@ -81,15 +169,45 @@ namespace SeaSick.Terrain
             IslandScenery.Report.Clear();
 
             Vector3 home = homePoint != null ? homePoint.position : Vector3.zero;
-            var islands = Discover(new float2(home.x, home.z));
+            phase = "discover";
+            var discover = Discover(new float2(home.x, home.z));
+            while (discover.MoveNext()) yield return null;
+            var islands = discovered;
             // Sorting reorders the list but not the mask's component ids, so
             // the mapping is rebuilt by id, not by position in the list.
             islands.Sort((a, b) => a.distToHome.CompareTo(b.distToHome));
+
+            // Every shoreline first: pure height sampling, no Random, no
+            // GameObjects, so it can stop anywhere.
+            var profiles = new Profile[islands.Count];
+            for (int i = 0; i < islands.Count; i++)
+            {
+                phase = "profile " + i;
+                profiles[i] = new Profile();
+                var measure = MeasureProfile(islands[i].centre, profiles[i]);
+                while (measure.MoveNext()) yield return null;
+            }
+
+            // Then the islands, nearest first, so home stands before the rest.
             byComponent = new Island[islands.Count];
             for (int i = 0; i < islands.Count; i++)
-                byComponent[islands[i].id] = BuildIsland(islands[i], i == 0, i, islands.Count);
+            {
+                dressNext = default;
+                phase = "island " + i;
+                byComponent[islands[i].id] = BuildIsland(islands[i], profiles[i], i == 0, i, islands.Count);
+                var job = dressNext;
+                if (job.island != null)
+                {
+                    phase = "dress " + i;
+                    var dress = DressSliced(job.parent, job.parent.position, job.meanR, job.island, job.index,
+                                            () => SliceSpent);
+                    while (dress.MoveNext()) yield return null;
+                }
+                if (SliceSpent) yield return null;
+            }
             IslandCount = islands.Count;
 
+            phase = "monsters, reefs, raiders";
             BuildMonsters(home);
             BuildReefs(home);
             BuildRaiders();
@@ -121,18 +239,23 @@ namespace SeaSick.Terrain
         /// Flood-fill land cells (height > 0.5 m) on a grid; one component =
         /// one island. Centre is the land cell nearest the centroid, so a
         /// crescent still gets a centre on its own ground.
-        List<Found> Discover(float2 home)
+        List<Found> discovered;
+
+        IEnumerator Discover(float2 home)
         {
             float cell = world.scanCell;
             int n = Mathf.CeilToInt(world.discoveryRadius * 2f / cell);
             float2 origin = home - world.discoveryRadius;
             var land = new bool[n * n];
             for (int j = 0; j < n; j++)
+            {
                 for (int i = 0; i < n; i++)
                 {
                     float2 p = origin + (new float2(i, j) + 0.5f) * cell;
                     land[j * n + i] = math.distance(p, home) <= world.discoveryRadius && Height(p.x, p.y) > 0.5f;
                 }
+                if (SliceSpent) yield return null;
+            }
 
             var seen = new bool[n * n];
             var mask = new int[n * n];
@@ -187,17 +310,25 @@ namespace SeaSick.Terrain
             MaskSize = n;
             MaskCell = cell;
             MaskOrigin = new Vector2(origin.x, origin.y);
-            return result;
+            discovered = result;
         }
 
         /// Outline per sector: march out from the centre to the first point
         /// below the waterline. Beach flag: the ground over the first 12 m
         /// inland of that point rises gently.
-        void MeasureProfile(float2 centre, out float[] outline, out bool[] hasBeach, out float meanRadius)
+        /// One island's shoreline, measured ahead of its GameObject.
+        class Profile
+        {
+            public float[] outline;
+            public bool[] hasBeach;
+            public float meanRadius;
+        }
+
+        IEnumerator MeasureProfile(float2 centre, Profile into)
         {
             int sectors = Island.Sectors;
-            outline = new float[sectors];
-            hasBeach = new bool[sectors];
+            var outline = into.outline = new float[sectors];
+            var hasBeach = into.hasBeach = new bool[sectors];
             float sum = 0f;
             for (int s = 0; s < sectors; s++)
             {
@@ -215,13 +346,16 @@ namespace SeaSick.Terrain
                 float h0 = Height(centre.x + dir.x * (shore - 1f), centre.y + dir.y * (shore - 1f));
                 float h1 = Height(centre.x + dir.x * (shore - 13f), centre.y + dir.y * (shore - 13f));
                 hasBeach[s] = shore > 13f && (h1 - h0) / 12f < world.beachMaxSlope;
+                if (SliceSpent) yield return null;
             }
-            meanRadius = sum / sectors;
+            into.meanRadius = sum / sectors;
         }
 
-        Island BuildIsland(Found f, bool isHome, int index, int total)
+        Island BuildIsland(Found f, Profile profile, bool isHome, int index, int total)
         {
-            MeasureProfile(f.centre, out var outline, out var beach, out float meanR);
+            var outline = profile.outline;
+            var beach = profile.hasBeach;
+            float meanR = profile.meanRadius;
             float ring = Mathf.Clamp01(f.distToHome / world.discoveryRadius);
 
             var root = new GameObject(isHome ? "Island_Home" : "Island_" + index);
@@ -302,7 +436,7 @@ namespace SeaSick.Terrain
                     if (site.found) village.Reserve(site.root, 14f);   // the head of the pier
                 }
 
-                Dress(root.transform, root.transform.position, meanR, island, index, village);
+                QueueDress(root.transform, meanR, island, index);
                 return island;
             }
 
@@ -310,7 +444,7 @@ namespace SeaSick.Terrain
             if (shelterOnly)
             {
                 island.Configure("—", 0f, meanR, false, false);
-                Dress(root.transform, root.transform.position, meanR, island, index);
+                QueueDress(root.transform, meanR, island, index);
                 return island;
             }
 
@@ -347,7 +481,7 @@ namespace SeaSick.Terrain
 
             island.RegisterProps(props);
             island.Configure(kind.name, props.Count, meanR, false, false);
-            Dress(root.transform, root.transform.position, meanR, island, index);
+            QueueDress(root.transform, meanR, island, index);
             return island;
         }
 
@@ -400,10 +534,17 @@ namespace SeaSick.Terrain
             // a disc punched through the wood at bake time is a clearing in
             // a place nobody may ever build. `village` is still taken: the
             // re-dress below uses it to re-collapse grass under standing huts.
-            IslandScenery.Build(parent, centre, meanR, Height, terrain,
-                ang => island.RadiusAt(ang), terrain.seed * 7919 + index, prm, island,
-                null);
+            var d = DressSliced(parent, centre, meanR, island, index, null);
+            while (d.MoveNext()) { }
+        }
 
+        IEnumerator DressSliced(Transform parent, Vector3 centre, float meanR, Island island, int index,
+            System.Func<bool> spent)
+        {
+            var bake = IslandScenery.BuildSliced(parent, centre, meanR, Height, terrain,
+                ang => island.RadiusAt(ang), terrain.seed * 7919 + index, prm, island,
+                null, spent, new GameObject[1]);
+            while (bake.MoveNext()) yield return null;
             // **The animals, after the trees.** Kevin, 2026-09-22: wild animals
             // on the islands. Which herds an island carries is read off the
             // same two numbers its wood is (rock and verdancy at the centre),
@@ -417,6 +558,14 @@ namespace SeaSick.Terrain
             FaunaField.Populate(parent, island, terrain.seed * 104729 + index,
                 rockiness, verdancy, Height, sandTop);
         }
+
+        /// Every island is dressed last, so `BuildIsland` names the island
+        /// and the build dresses it -- a frame at a time if it has to.
+        struct DressJob { public Transform parent; public float meanR; public Island island; public int index; }
+        DressJob dressNext;
+
+        void QueueDress(Transform parent, float meanR, Island island, int index) =>
+            dressNext = new DressJob { parent = parent, meanR = meanR, island = island, index = index };
 
         WorldSettings.ResourceKind PickKind(float ring)
         {
