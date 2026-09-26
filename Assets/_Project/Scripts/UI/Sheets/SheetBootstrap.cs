@@ -48,6 +48,14 @@ namespace SeaSick.UI.Sheets
                 return new WallSheet(camp, w);
             });
 
+            // **A ladder chain (2026-09-27)**: height, flights, tear down.
+            Sheets.Register<Ladder>(l =>
+            {
+                if (l == null) return null;
+                var camp = l.Camp != null ? l.Camp : SheetBits.OutpostOf(l);
+                return camp != null ? new LadderSheet(camp, l) : null;
+            });
+
             // A finished building opens its own crafting menu now, 2026-09-23
             // (Kevin: *"a crafting menu in the appropriate buildings"*) --
             // except the fire, which IS the camp, and the watchtower, whose

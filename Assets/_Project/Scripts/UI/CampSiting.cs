@@ -70,6 +70,12 @@ namespace SeaSick.UI
         /// the two halves happen to land in.
         public const string WallPlanId = "palisade";
 
+        /// **...or a LADDER chain (2026-09-27)**: two points, its own tool
+        /// (`LadderSiting`), forked exactly where the wall is.
+        public const string LadderPlanId = "ladder";
+        public static bool PlacingLadder => Placing && Instance.ladderMode;
+        bool ladderMode;
+
         /// Why the spot under the pointer is refused, or "" if it is good.
         /// The sheet prints this; the ghost's colour says the same thing
         /// faster.
@@ -277,6 +283,14 @@ namespace SeaSick.UI
             // rectangle on the end of a thumb, so the ghost, the start
             // point and the yaw all belong to `WallSiting` from here. The
             // ring still gets built: the reach rule is the same rule.
+            Instance.ladderMode = what.id == LadderPlanId;
+            if (Instance.ladderMode)
+            {
+                LadderSiting.Begin(target);
+                Instance.BuildRing();
+                return;
+            }
+
             Instance.wallMode = what.id == WallPlanId;
             if (Instance.wallMode)
             {
@@ -348,6 +362,7 @@ namespace SeaSick.UI
             // A wall's grab target is its loose post, not a footprint —
             // same question, asked of the tool that owns the answer.
             if (s.wallMode) return WallSiting.GrabsPost(screen);
+            if (s.ladderMode) return LadderSiting.GrabsPost(screen);
             if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return false;
             return s.NearGhost(g);
         }
@@ -376,6 +391,7 @@ namespace SeaSick.UI
             var s = Instance;
             if (s == null || s.plan.id == null) return;
             if (s.wallMode) { s.dragging = true; WallSiting.BeginDrag(screen); return; }
+            if (s.ladderMode) { s.dragging = true; LadderSiting.BeginDrag(screen); return; }
             s.dragging = true;
             s.grabOffset = Vector2.zero;
             if (GroundPick.FromScreen(Camera.main, screen, out Vector3 g))
@@ -390,6 +406,7 @@ namespace SeaSick.UI
             var s = Instance;
             if (s == null || !s.dragging || s.plan.id == null) return;
             if (s.wallMode) { WallSiting.DragTo(screen); return; }
+            if (s.ladderMode) { LadderSiting.DragTo(screen); return; }
             if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return;
             s.want = OnGround(g.x + s.grabOffset.x, g.z + s.grabOffset.y);
             s.Evaluate();
@@ -402,6 +419,7 @@ namespace SeaSick.UI
             if (Instance == null) return;
             Instance.dragging = false;
             if (Instance.wallMode) WallSiting.EndDrag();
+            if (Instance.ladderMode) LadderSiting.EndDrag();
         }
 
         /// Is the drawing on the end of a finger right now?
@@ -410,6 +428,7 @@ namespace SeaSick.UI
         void Cancel()
         {
             if (wallMode) { wallMode = false; WallSiting.End(); }
+            if (ladderMode) { ladderMode = false; LadderSiting.End(); }
             plan = default;
             moving = false;
             dragging = false;
@@ -433,6 +452,12 @@ namespace SeaSick.UI
             // **A wall run is somebody else's frame.** Escape, Enter, the
             // tap and the ghost all belong to `WallSiting`; when it says it
             // has finished, the whole mode goes down with it.
+            if (ladderMode)
+            {
+                if (!LadderSiting.Tick(beganFrame)) { Cancel(); return; }
+                Refusal = LadderSiting.Refusal;
+                return;
+            }
             if (wallMode)
             {
                 if (!WallSiting.Tick(beganFrame)) { Cancel(); return; }
@@ -573,17 +598,24 @@ namespace SeaSick.UI
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (Instance == null) return;
             if (Instance.wallMode) WallSiting.Confirm();
+            else if (Instance.ladderMode)
+            {
+                LadderSiting.Confirm();
+                if (!LadderSiting.Active) Instance.Cancel();
+            }
             else Instance.Commit();
         }
 
         /// Is the ✓ live? False draws it muted; `Refusal` says why.
         public static bool CanConfirm =>
-            Placing && (Instance.wallMode ? WallSiting.CanConfirm : Instance.valid);
+            Placing && (Instance.wallMode ? WallSiting.CanConfirm
+                : Instance.ladderMode ? LadderSiting.CanConfirm : Instance.valid);
 
         /// Where the drawing stands, for the buttons to sit under. For a
         /// wall that is the midpoint of the segment being stretched.
         public static Vector3 GhostAt =>
-            Placing ? (Instance.wallMode ? WallSiting.ButtonsAt : Instance.at) : Vector3.zero;
+            Placing ? (Instance.wallMode ? WallSiting.ButtonsAt
+                : Instance.ladderMode ? LadderSiting.ButtonsAt : Instance.at) : Vector3.zero;
 
         /// **Is the watchtower being sited snapped onto the wall?** Read
         /// by the check (`WallTowerCheck`) as well as the label.
@@ -598,7 +630,7 @@ namespace SeaSick.UI
         /// re-evaluate now.
         public static void MoveTo(Vector3 world)
         {
-            if (!Placing || Instance.wallMode) return;
+            if (!Placing || Instance.wallMode || Instance.ladderMode) return;
             Instance.want = world;
             Instance.Evaluate();
         }
@@ -633,6 +665,12 @@ namespace SeaSick.UI
         {
             if (plan.id == null || outpost == null) return;
             if (wallMode) { WallSiting.DrawGUI(); return; }
+            if (ladderMode)
+            {
+                LadderSiting.DrawGUI();
+                if (!LadderSiting.Active) Cancel();
+                return;
+            }
             switch (SitingButtons.Draw(at, valid, Refusal))
             {
                 case SitingButtons.Press.Cancel: Cancel(); break;

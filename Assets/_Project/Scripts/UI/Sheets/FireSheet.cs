@@ -662,6 +662,18 @@ namespace SeaSick.UI.Sheets
             if (MidnightLandHud.Active) wallRow.style.height = 44f;
             target.Add(wallRow);
 
+            // **Ladders up a cliff (2026-09-27)**: two taps, foot then top
+            // (`LadderSiting`). Priced by the rise.
+            var ladderRow = SheetKit.Btn(
+                $"ladder — {BuildPlans.LadderTimberPerMetre:0.#} timber per m of cliff",
+                () =>
+                {
+                    LadderSiting.Start(outpost);
+                    Sheets.Close();
+                }, false, true);
+            if (MidnightLandHud.Active) ladderRow.style.height = 44f;
+            target.Add(ladderRow);
+
             var gateRow = SheetKit.Btn($"gate — {BuildPlans.Gate.cost} timber",
                 () => { }, false, true);
             gateRow.SetEnabled(false);

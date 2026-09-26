@@ -30,6 +30,13 @@ namespace SeaSick.World
             Row = row;
         }
 
+        /// The chain's mesh is its own (built per chain); free it with it.
+        void OnDestroy()
+        {
+            var mf = GetComponent<MeshFilter>();
+            if (mf != null && mf.sharedMesh != null) Destroy(mf.sharedMesh);
+        }
+
         /// Take it down for good: the ledger row goes, the link comes off
         /// the map. Nothing is refunded, the way a wall's tear-down is not.
         public void TearDown()
