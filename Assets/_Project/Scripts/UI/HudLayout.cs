@@ -78,6 +78,15 @@ namespace SeaSick.UI
             Broadside,
 
             // --- bottom-right, upward ---
+            /// The combat lock button (2026-09-27, Kevin: "the click to lock
+            /// button should appear somewhere better on the screen where
+            /// it's easier to press"). Declared FIRST in this column, so it
+            /// sits nearest the safe area's bottom edge and the point-of-sail
+            /// panel + oars/ease row stack ABOVE it -- the button a fight
+            /// asks you to press keeps the thumb's best real estate, rather
+            /// than sharing the shifting bottom-centre prompt slot the way
+            /// it did before this HUD had it.
+            Lock,
             Helm,
             HelmActions,
 

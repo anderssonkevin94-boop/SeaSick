@@ -12,6 +12,15 @@ namespace SeaSick.UI
     /// instead. `Bilge` and `SalvageSpawner` both wrote into the middle of the
     /// water at 0.60 and 0.62 of screen height.
     ///
+    /// **The lock moved out again (2026-09-27).** It has its own corner now
+    /// (`HudLayout.Slot.Lock`, bottom-right) because Kevin could not reliably
+    /// press it while it lived here — a thumb reaching for the shared slot
+    /// was also reaching past the helm. `Rank.Combat` / `Rank.CombatEngaged`
+    /// existed only so the lock could occasionally outrank "come alongside"
+    /// for this slot; with the lock gone from here there is nothing left to
+    /// rank against the anchor, so both are retired rather than left as dead
+    /// bids nobody places.
+    ///
     /// **Priority, not position, is what a caller chooses now.** Everything
     /// asks for the slot; the highest bidder gets it and the rest stay silent.
     /// That is a design statement as much as a layout one: at any moment there
@@ -45,19 +54,12 @@ namespace SeaSick.UI
             public const int Toast = 10;
             /// Throw cargo over the side — always available, never urgent.
             public const int Jettison = 20;
-            /// Lock a target, release a lock.
-            public const int Combat = 30;
+            // Combat = 30 and CombatEngaged = 45 retired 2026-09-27: the lock
+            // button has its own slot now (`HudLayout.Slot.Lock`) and no
+            // longer bids for this one. See the class doc.
             /// Land, come alongside, cast off, recall the crew. This is the
             /// one that moves the ship, so it outranks everything.
             public const int Anchor = 40;
-            /// Lock / release while an enemy is inside lock range AND she is
-            /// underway (2026-09-27). The same precedence the space bar
-            /// already had (`AnchorController.SpacebarCommand` yields to the
-            /// lock with an enemy alongside): a raid comes at a camp, which is
-            /// exactly where "land here" was taking the slot and leaving the
-            /// phone with no way to lock at all. At anchor the anchor still
-            /// wins -- "cast off" is how you get into the fight.
-            public const int CombatEngaged = 45;
             /// Somebody is in the Hand. Outranks even the anchor, and only
             /// while they are held: with a man dangling from the cursor the
             /// one thing the game is asking is where to put him down.

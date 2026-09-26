@@ -13,12 +13,23 @@ namespace SeaSick.Combat
     /// in the shape of a button, with nothing behind it a thumb could press.
     /// The phone's only lock path had been tapping the hull, and that went
     /// out with the rest of the tap-to-sail prototype (f858d54, 2026-09-24),
-    /// leaving the lock -- and the lock camera -- keyboard-only.
-    /// It is a real button in the shared prompt slot now, and a tap on the
-    /// enemy ship itself (top half of the screen, out of the helm's zone)
-    /// locks it too. Both call `ToggleLock` / `LockOn`, the same path as
-    /// space. While a lock holds, the battery fires on its own
-    /// (`CannonBattery.AutoFireTarget`).
+    /// leaving the lock -- and the lock camera -- keyboard-only. It became a
+    /// real button in the shared bottom-centre prompt slot in 04a07b9 (same
+    /// day), and a tap on the enemy ship in the top half of the screen (out
+    /// of the helm's zone) locked it too.
+    ///
+    /// **Moved to its own corner** (2026-09-27, Kevin: "the click to lock
+    /// button should appear somewhere better on the screen where it's easier
+    /// to press. even pressing the ship should work."). The shared slot was
+    /// the wrong home for it: it is ~126 px tall, shares real estate with
+    /// "come alongside", and sits far enough from the thumb's rest position
+    /// that Kevin still could not reliably press it in a fight. It now draws
+    /// itself at a fixed spot -- `HudLayout.Slot.Lock`, bottom-right, nearest
+    /// the safe area's edge -- rather than bidding for the contested slot,
+    /// and a tap locks the enemy ship anywhere on screen, not only the top
+    /// half. Both the button and a tap still call `ToggleLock` / `LockOn`,
+    /// the same path as space. While a lock holds, the battery fires on its
+    /// own (`CannonBattery.AutoFireTarget`).
     ///
     /// Opt-in on purpose. Keeping a target in frame means the view must turn
     /// when they are off the bow, and in a drag-to-steer game turning the view
@@ -126,19 +137,27 @@ namespace SeaSick.Combat
 
         [Header("Tap to lock")]
         [Tooltip("Longest press, seconds, that still counts as a tap rather than a drag or a hold.")]
-        [SerializeField] float tapMaxSeconds = 0.35f;
-        [Tooltip("Furthest a tap may wander, as a fraction of the short screen side.")]
+        [SerializeField] float tapMaxSeconds = 0.25f;
+        [Tooltip("Furthest a tap may wander, as a fraction of the short screen side -- this already comes out close to Apple's own slop constant (~11-12 pt) at phone resolutions, so it is left resolution-relative rather than a hardcoded pixel count.")]
         [SerializeField] float tapMaxMove01 = 0.03f;
+        [Tooltip("Smallest tap radius around a ship's projected hull, points. Generous on purpose: 'even pressing the ship should work' (Kevin, 2026-09-27), not just its exact silhouette.")]
+        [SerializeField] float tapHitRadiusPt = 60f;
 
         Vector2 tapStart;
         float tapStartTime = -1f;
 
-        /// A short tap on an enemy in the TOP half locks it -- the one piece of
-        /// the removed tap-to-sail prototype brought back, and only this piece:
-        /// no tap on water does anything. The bottom half is
-        /// the helm's (`TouchHelm` takes any press there, and a tap there
-        /// means "stop"), so a tap on a ship drawn low on the screen goes to
-        /// the helm as it always did -- the button is the lock there.
+        /// A short tap on an enemy ANYWHERE on screen locks it (2026-09-27;
+        /// this used to be restricted to the top half, out of the helm's
+        /// zone, when the lock button lived in the shared prompt slot and
+        /// needed the bottom half kept clear for it). What still makes this
+        /// safe against the floating stick and against reintroducing
+        /// tap-to-sail is the SAME gesture gate as before: only a release
+        /// that was short (`tapMaxSeconds`) and barely moved (`tapMaxMove01`)
+        /// counts as a tap at all -- a drag that starts on a ship is still a
+        /// drag, and a tap that lands on open water hits nothing and does
+        /// nothing, same as always. A tap on the ship you already have
+        /// locked is a no-op (`LockOn` below refuses it): release is the
+        /// button's job only, so a stray tap near the target can't drop it.
         void TapToLock()
         {
             var p = UnityEngine.InputSystem.Pointer.current;
@@ -148,9 +167,7 @@ namespace SeaSick.Combat
             if (p.press.wasPressedThisFrame)
             {
                 tapStart = p.position.ReadValue();
-                // Input space is origin bottom-left: the top half is y > h/2.
-                bool topHalf = tapStart.y > Screen.height * 0.5f;
-                tapStartTime = topHalf && !UIBlocker.Blocked(tapStart) ? Time.unscaledTime : -1f;
+                tapStartTime = !UIBlocker.Blocked(tapStart) ? Time.unscaledTime : -1f;
                 return;
             }
             if (!p.press.wasReleasedThisFrame || tapStartTime < 0f) return;
@@ -167,13 +184,13 @@ namespace SeaSick.Combat
 
         /// The enemy under a screen point (input space), within break range,
         /// or null. The hit circle is the hull's own projected size, but never
-        /// smaller than a thumb.
+        /// smaller than `tapHitRadiusPt`.
         IHittable PickAt(Vector2 screen)
         {
             var cam = Camera.main;
             if (cam == null) return null;
             if (self == null) self = GetComponent<PlayerHull>();
-            float thumb = ThumbPx * 0.75f;
+            float minR = PtPx(tapHitRadiusPt);
 
             IHittable best = null;
             float bestSq = float.MaxValue;
@@ -184,24 +201,22 @@ namespace SeaSick.Combat
                 Vector3 sp = cam.WorldToScreenPoint(t.HitCentre);
                 if (sp.z <= 0f) continue;
                 Vector3 edge = cam.WorldToScreenPoint(t.HitCentre + cam.transform.right * t.HitRadius);
-                float r = Mathf.Max(thumb, Vector2.Distance(sp, edge));
+                float r = Mathf.Max(minR, Vector2.Distance(sp, edge));
                 float sq = ((Vector2)sp - screen).sqrMagnitude;
                 if (sq <= r * r && sq < bestSq) { bestSq = sq; best = t; }
             }
             return best;
         }
 
-        /// 44 pt in pixels -- Apple's minimum tap target. `Screen.dpi / 160`
-        /// is the same points-to-pixels guess `FeelLab` makes; 0 dpi (some
-        /// desktops) reads as 1x.
-        static float ThumbPx
+        /// Points to pixels. `Screen.dpi / 160` is the same points-to-pixels
+        /// guess `FeelLab` makes; 0 dpi (some desktops, and the editor Game
+        /// view) reads as 1x, so the pt-based floors below fall back to being
+        /// literal pixel counts there rather than vanishing.
+        static float PtPx(float pt)
         {
-            get
-            {
-                float dpi = Screen.dpi;
-                float scale = dpi > 0f ? Mathf.Clamp(dpi / 160f, 1f, 3f) : 1f;
-                return 44f * scale;
-            }
+            float dpi = Screen.dpi;
+            float scale = dpi > 0f ? Mathf.Clamp(dpi / 160f, 1f, 3f) : 1f;
+            return pt * scale;
         }
 
         void Take(IHittable t)
@@ -246,8 +261,46 @@ namespace SeaSick.Combat
             return d.magnitude;
         }
 
-        readonly HudLabel buttonText = new HudLabel();
-        SeaSick.Ship.AnchorController anchor;
+        // ---- the lock button: its own corner, not the shared prompt slot ---
+
+        readonly HudLabel buttonCaption = new HudLabel();
+        static Texture2D roundTex;
+
+        /// A soft-edged filled circle, built once and cached. Same rule as
+        /// the rest of this HUD's text meshes: build once, key off reference
+        /// equality, never regenerate per frame.
+        static Texture2D RoundTex()
+        {
+            if (roundTex != null) return roundTex;
+            const int n = 64;
+            roundTex = new Texture2D(n, n, TextureFormat.RGBA32, false);
+            roundTex.hideFlags = HideFlags.HideAndDontSave;
+            Vector2 c = new Vector2((n - 1) * 0.5f, (n - 1) * 0.5f);
+            float rad = n * 0.5f;
+            var px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float dist = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), c);
+                    px[y * n + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(rad - dist));
+                }
+            roundTex.SetPixels(px);
+            roundTex.Apply();
+            return roundTex;
+        }
+
+        static void DrawRound(Rect r, Color c)
+        {
+            var prev = GUI.color;
+            GUI.color = c;
+            GUI.DrawTexture(r, RoundTex());
+            GUI.color = prev;
+        }
+
+        /// What the button showed LAST frame, so a pulse fires once per new
+        /// candidate rather than every frame the same one is in range.
+        IHittable pulseFrom;
+        float pulseStart = -10f;
 
         void OnGUI()
         {
@@ -294,49 +347,65 @@ namespace SeaSick.Combat
             }
 
             var shown = Locked ?? candidate;
-            if (shown == null) { ButtonRect = default; return; }
+            if (shown == null) { ButtonRect = default; pulseFrom = null; return; }
 
-            // The shared prompt slot, at a rank below the anchor's. This line
-            // used to be pinned at `h − 8.2u` while AnchorController pinned its
-            // BUTTON at `h − 6.9u`, and at 1080x2340 the two rects overlap by
-            // 34 px. Whichever drew second won the pixels; whichever drew
-            // second in the mouse pass won the tap.
-            //
-            // Bid on EVERY event, not only Repaint (see `Prompts`): the old
-            // label bid after its Repaint guard, which was harmless for a
-            // label and would lose the mouse-up for a button.
-            if (anchor == null) anchor = GetComponent<SeaSick.Ship.AnchorController>();
-            bool underway = anchor == null
-                || anchor.CurrentState == SeaSick.Ship.AnchorController.State.Underway;
-            if (!Prompts.Claim(underway ? Prompts.Rank.CombatEngaged : Prompts.Rank.Combat))
-            { ButtonRect = default; return; }
+            // A short pulse the moment a NEW candidate comes into range --
+            // not on every frame the same one sits there, and not while a
+            // lock is held (taking the lock is the payoff; it doesn't need
+            // to keep announcing itself). Cheap: one reference compare and a
+            // float lerp, no allocation.
+            if (Locked == null && !ReferenceEquals(shown, pulseFrom))
+                pulseStart = Time.unscaledTime;
+            pulseFrom = Locked == null ? shown : null;
+            float pulseT = Mathf.Clamp01(1f - (Time.unscaledTime - pulseStart) / 0.4f);
 
-            // A thumb's target: the anchor prompt's 2.7u, but never under
-            // 44 pt. At the clamped 20 px unit that is 54 px, which on a 3x
-            // phone is 18 pt -- a third of Apple's minimum.
-            float bh = Mathf.Max(u * 2.7f, ThumbPx);
-            var r2 = Prompts.Begin().Next(bh);
+            // Its own fixed corner now (`HudLayout.Slot.Lock`, bottom-right,
+            // nearest the safe area's edge) rather than a bid for the shared
+            // prompt slot -- see the class doc for why. ~72 pt, the size
+            // Kevin asked for: the unit-scaled size is primary (it already
+            // matches the rest of the HUD across both target resolutions),
+            // with a points-based floor under it for a device whose `u`
+            // clamps low relative to its real pixel density.
+            float baseD = Mathf.Max(u * 10.5f, PtPx(66f));
+            float diameter = baseD * (1f + 0.16f * pulseT);
+            var r2 = HudLayout.Place(HudLayout.Slot.Lock, diameter, diameter);
             ButtonRect = r2;
-            // Claimed on every event so `TouchHelm` (which takes any press in
-            // the bottom half that nothing has claimed) leaves this one to
-            // the button.
+            // Claimed on every event, same reason the rest of this HUD does:
+            // a button that only claims on Repaint loses the mouse-up that
+            // would have pressed it.
             UIBlocker.Block(r2);
 
+            bool held = Locked != null;
             float dist = Distance(shown);
-            bool slipping2 = Locked != null && dist > breakRange;
-            int state = Locked == null ? 0 : slipping2 ? 2 : 1;
-            bool wide = HudLayout.Wide;
-            if (buttonText.Changed(HudLabel.Key(state, Mathf.RoundToInt(dist), wide ? 1 : 0)))
+            bool slipping2 = held && dist > breakRange;
+
+            if (Event.current.type == EventType.Repaint)
             {
-                string key = wide ? "   (space)" : "";
-                buttonText.Set(state switch
-                {
-                    0 => $"◎  Lock on   ·   {dist:F0} m{key}",
-                    1 => $"Release   ·   {dist:F0} m   ·   guns auto{key}",
-                    _ => $"Lock slipping   ·   {dist:F0} m{key}",
-                });
+                // Ember/red once locked (amber while the lock is slipping,
+                // same fade the target brackets use), a cool highlight that
+                // brightens with the pulse while it's only a candidate.
+                Color fill = held
+                    ? Color.Lerp(new Color(0.82f, 0.20f, 0.16f, 0.97f),
+                                 new Color(0.95f, 0.58f, 0.22f, 0.90f), slipping2 ? 1f : 0f)
+                    : Color.Lerp(new Color(0.10f, 0.20f, 0.28f, 0.92f),
+                                 new Color(0.35f, 0.66f, 0.86f, 1f), pulseT);
+                DrawRound(r2, fill);
+
+                if (buttonCaption.Changed(HudLabel.Key(held ? 1 : 0, Mathf.RoundToInt(dist))))
+                    buttonCaption.Set(held ? "Release" : $"{dist:F0} m");
+
+                // Reticle icon on top, the distance (or "Release") under it --
+                // both fit inside the circle without crowding it.
+                GUI.Label(new Rect(r2.x, r2.y + r2.height * 0.14f, r2.width, r2.height * 0.42f),
+                    "◎", UITheme.Title);
+                GUI.Label(new Rect(r2.x, r2.y + r2.height * 0.58f, r2.width, r2.height * 0.3f),
+                    buttonCaption.Content, UITheme.Small2Centered);
             }
-            if (GUI.Button(r2, buttonText.Content, UITheme.Button)) ToggleLock();
+
+            // Invisible on top of the drawn circle -- GUI.Button's own click
+            // detection is rect-based regardless of what style draws it, so
+            // this still needs to run on every event, not only Repaint.
+            if (GUI.Button(r2, GUIContent.none, GUIStyle.none)) ToggleLock();
         }
     }
 }
