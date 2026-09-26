@@ -82,10 +82,12 @@ namespace SeaSick.UI.Sheets
         Label subtitleLabel;
         Button sortBtn;
         VisualElement scopeSeg;
+        VisualElement tabsRow;
         Button[] tabButtons;
         ItemGrid grid;
         VisualElement detailHolder;
         Label detailSplit;
+        VisualElement rootEl;
         long visibleKey = long.MinValue;
 
         public VisualElement BuildHeader()
@@ -140,20 +142,48 @@ namespace SeaSick.UI.Sheets
             });
             root.Add(scopeSeg);
 
-            root.Add(BuildCategoryTabs());
+            tabsRow = BuildCategoryTabs();
+            root.Add(tabsRow);
 
             grid = new ItemGrid(4, OnTileTap);
-            grid.style.flexGrow = 1f;
-            grid.style.flexShrink = 1f;
-            grid.style.minHeight = 0f;
+            grid.style.flexShrink = 0f;
             grid.style.marginTop = 6f;
             root.Add(grid);
 
             detailHolder = SheetBits.Holder();
             root.Add(detailHolder);
 
+            rootEl = root;
+            // **Measured, not formula-guessed.** `SheetHost.BandHeight` is
+            // built from `Screen.width/height`, and this sheet has no
+            // reliable way to know those agree with the actual card it is
+            // laid out inside (a probe/eval session can leave the Game view
+            // a different shape than the one the HUD is actually rendering
+            // for -- exactly what happened building this sheet: `BandHeight`
+            // came back clamped to its 80-unit floor while the real card was
+            // 350+ units tall). `root.parent` (the host's `page`, fixed to
+            // the true band) is the ground truth instead: once this is
+            // attached, its own geometry and its siblings' settle, and
+            // `SizeGrid` gives the grid everything the scope control, the
+            // category strip and the detail card are not already using.
+            root.RegisterCallback<GeometryChangedEvent>(_ => SizeGrid());
+            detailHolder.RegisterCallback<GeometryChangedEvent>(_ => SizeGrid());
             visibleKey = long.MinValue;
             return root;
+        }
+
+        void SizeGrid()
+        {
+            if (grid == null || rootEl == null) return;
+            var page = rootEl.parent;
+            if (page == null) return;
+            float total = page.resolvedStyle.height;
+            if (total <= 1f) return;
+            float used = scopeSeg.resolvedStyle.height + tabsRow.resolvedStyle.height
+                         + detailHolder.resolvedStyle.height + grid.resolvedStyle.marginTop;
+            float h = total - used - 6f; // small safety margin
+            if (h <= 1f) return; // siblings not measured yet; a later pass fixes this
+            grid.style.height = Mathf.Max(64f, h);
         }
 
         VisualElement BuildCategoryTabs()
@@ -267,6 +297,7 @@ namespace SeaSick.UI.Sheets
             var l = L;
             if (outpost == null || l == null) return;
             outpost.CatchUp();
+            SizeGrid();
 
             long key = ((long)tabIndex * 7 + (int)scope) * 3 + (int)sort;
             key = key * 1000003L + l.Total * 31L;

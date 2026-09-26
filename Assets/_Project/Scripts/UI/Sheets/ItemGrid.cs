@@ -23,6 +23,7 @@ namespace SeaSick.UI.Sheets
     {
         readonly int columns;
         readonly Action<string> onTap;
+        readonly ScrollView scroll;
         readonly VisualElement rows;
         readonly VisualElement emptyNote;
 
@@ -32,16 +33,36 @@ namespace SeaSick.UI.Sheets
 
         List<string> layoutIds = new List<string>();
 
+        /// **Scrolls, unlike the rest of this HUD.** Every other sheet in
+        /// this game trades scrolling for swipeable pages (Kevin, 2026-09-22:
+        /// *"you need to scroll down to see all the options and that's a
+        /// huge no no"*) -- but that ruling was about a page of BUTTONS you
+        /// act on one at a time. The Stores bank is a browse-everything grid
+        /// (the mockup's own `overflow-y: auto`), the tap target is the
+        /// whole tile rather than a strip of text, and paginating it would
+        /// mean guessing how many of twenty-odd resources fit a phone width
+        /// and hiding the rest behind "and 12 more" -- exactly the miss the
+        /// task called out ("All tab = all resources"). A `ScrollView`
+        /// confined to this element's own box, with the header/scope/tabs
+        /// and the detail card all OUTSIDE it, keeps the one no-scroll rule
+        /// that actually matters: nothing the player needs to reach a
+        /// standing decision through is ever below the fold.
         public ItemGrid(int columns, Action<string> onTap)
         {
             this.columns = Mathf.Max(1, columns);
             this.onTap = onTap;
             AddToClassList("stores-grid-wrap");
             style.flexDirection = FlexDirection.Column;
+            style.overflow = Overflow.Hidden;
+
+            scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.style.flexGrow = 1f;
+            scroll.style.flexShrink = 1f;
+            Add(scroll);
 
             rows = new VisualElement();
             rows.AddToClassList("stores-grid");
-            Add(rows);
+            scroll.Add(rows);
 
             emptyNote = SheetKit.Note("Nothing here yet.");
             emptyNote.style.display = DisplayStyle.None;
@@ -104,7 +125,7 @@ namespace SeaSick.UI.Sheets
             layoutIds = idsInOrder;
             rows.Clear();
             emptyNote.style.display = idsInOrder.Count == 0 ? DisplayStyle.Flex : DisplayStyle.None;
-            rows.style.display = idsInOrder.Count == 0 ? DisplayStyle.None : DisplayStyle.Flex;
+            scroll.style.display = idsInOrder.Count == 0 ? DisplayStyle.None : DisplayStyle.Flex;
 
             VisualElement row = null;
             for (int i = 0; i < idsInOrder.Count; i++)
