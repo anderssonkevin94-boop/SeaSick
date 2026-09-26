@@ -63,8 +63,13 @@ namespace SeaSick.UI.Sheets
             var camp = Camp;
             if (camp == null) return;
             if (index == 3) { var s = SheetBootstrap.ShipFor(); if (s != null) Sheets.Open(s); return; }
+            // **Stores, 2026-09-26**: the Melvor-style bank (`StoresSheet`)
+            // replaces the old camp-tab-of-`FireSheet` here. That page is
+            // not gone -- tapping the campfire itself still opens it
+            // (`SheetBootstrap.FireFor`), exactly as before.
+            if (index == 2) { Sheets.Open(new StoresSheet(camp)); return; }
             var sheet = new FireSheet(camp);
-            sheet.FocusSection(index == 0 ? "build" : index == 1 ? "hands" : "camp");
+            sheet.FocusSection(index == 0 ? "build" : "hands");
             Sheets.Open(sheet);
         }
 
@@ -103,8 +108,9 @@ namespace SeaSick.UI.Sheets
             for (int i = 0; i < buttons.Length; i++)
             {
                 bool selected = Sheets.Current is StationSheet && i == 0;
-                if (Sheets.Current is FireSheet fire)
-                    selected = fire.CurrentSection == (i == 0 ? "build" : i == 1 ? "hands" : i == 2 ? "camp" : "ship");
+                if (Sheets.Current is FireSheet fire && i != 2)
+                    selected = fire.CurrentSection == (i == 0 ? "build" : i == 1 ? "hands" : "ship");
+                if (Sheets.Current is StoresSheet && i == 2) selected = true;
                 if (Sheets.Current is ShipSheet && i == 3) selected = true;
                 buttons[i].EnableInClassList("land-nav-selected", selected);
             }

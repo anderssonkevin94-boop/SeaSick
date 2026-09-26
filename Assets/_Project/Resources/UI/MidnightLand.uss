@@ -84,3 +84,82 @@
 .midnight-land .unity-base-dropdown__item { min-height: 44px; }
 .midnight-land .unity-base-dropdown__container-inner { background-color: rgb(32,57,72); }
 .midnight-land .unity-base-dropdown__label { color: rgb(232,242,246); font-size: 14px; }
+
+/* ---------------- segmented control, dark (2026-09-26) ----------------
+   Unstyled under midnight-land before this, so the rations/priority pills
+   in FireSheet's Orders page were drawing the light-theme brass -- fixed
+   here as a side effect, not a second override. */
+.midnight-land .sheet-seg { background-color: rgb(14, 26, 36); border-radius: 9px; }
+.midnight-land .sheet-seg-btn { color: rgb(201, 216, 224); }
+.midnight-land .sheet-seg-btn--on { background-color: rgb(164, 210, 232); color: rgb(11, 23, 32); }
+
+/* ---------------- Stores bank (2026-09-26) ---------------- */
+
+.stores-title {
+    font-size: 20px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.stores-subtitle { font-size: 12px; color: rgb(166, 186, 198); margin-top: 1px; }
+.stores-sort-btn { height: 40px; min-width: 0; padding: 0 12px; font-size: 12px; margin: 0; flex-shrink: 0; flex-grow: 0; }
+
+.stores-tabs { flex-direction: row; justify-content: space-between; margin-top: 6px; }
+.stores-tab {
+    width: 44px; height: 48px; padding: 4px 2px; flex-direction: column;
+    align-items: center; justify-content: center; border-radius: 9px;
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94);
+    margin: 0; flex-shrink: 0;
+}
+.stores-tab--on { background-color: rgb(164, 210, 232); border-color: rgb(164, 210, 232); }
+.stores-tab-icon { width: 24px; height: 24px; }
+.stores-tab-label {
+    font-size: 9px; margin-top: 2px; color: rgb(201, 216, 224);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.stores-tab-all-glyph {
+    height: 24px; -unity-text-align: middle-center; font-size: 14px; color: rgb(201, 216, 224);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.stores-tab--on .stores-tab-label, .stores-tab--on .stores-tab-all-glyph { color: rgb(11, 23, 32); }
+
+.stores-grid-wrap { flex-grow: 1; flex-shrink: 1; min-height: 0; }
+.stores-grid { flex-direction: column; flex-shrink: 1; }
+.stores-grid-row { flex-direction: row; margin-bottom: 6px; }
+.stores-tile {
+    flex-grow: 1; flex-basis: 0; margin: 0 6px 0 0; padding: 0;
+    align-items: center; justify-content: center; position: relative;
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 9px;
+}
+.stores-grid-row > .stores-tile:last-child { margin-right: 0; }
+.stores-tile--dim { background-color: rgb(16, 28, 38); border-color: rgb(28, 46, 59); }
+.stores-tile--on { border-width: 2px; border-color: rgb(164, 210, 232); }
+.stores-tile-icon { width: 58%; height: 58%; opacity: 1; }
+.stores-tile-icon--dim { opacity: 0.3; }
+.stores-qty {
+    position: absolute; right: 5px; bottom: 2px; font-size: 15px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.stores-qty--dim { color: rgb(92, 114, 130); }
+.stores-qty--low { color: rgb(246, 146, 128); }
+
+.stores-detail {
+    flex-direction: row; margin-top: 8px; padding: 10px;
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 10px;
+    flex-shrink: 0;
+}
+.stores-detail-icon-wrap {
+    width: 56px; height: 56px; flex-shrink: 0; align-items: center; justify-content: center;
+    background-color: rgb(14, 26, 36); border-radius: 8px; margin-right: 10px;
+}
+.stores-detail-icon { width: 44px; height: 44px; }
+.stores-detail-col { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.stores-detail-name-row { flex-direction: row; align-items: baseline; flex-wrap: wrap; }
+.stores-detail-name {
+    font-size: 15px; color: rgb(232, 242, 246); margin-right: 6px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.stores-detail-kind { font-size: 11px; color: rgb(166, 186, 198); }
+.stores-detail-blurb { font-size: 12px; color: rgb(201, 216, 224); white-space: normal; margin-top: 2px; }
+.stores-detail-split {
+    font-size: 12px; color: rgb(164, 210, 232); margin-top: 3px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
