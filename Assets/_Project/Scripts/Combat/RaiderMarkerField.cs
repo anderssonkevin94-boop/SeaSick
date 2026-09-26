@@ -78,6 +78,16 @@ namespace SeaSick.Combat
         {
             ashore.Clear();
             instance = null;
+            // `Stand` below is [RuntimeInitializeOnLoadMethod(AfterSceneLoad)],
+            // which fires once per DOMAIN load, not once per SCENE load --
+            // with domain reload off (this project's convention), every
+            // reload after the first left `instance` null forever and the
+            // comment above ("letting Stand put up a fresh instance") never
+            // actually happened again: the field silently stopped drawing
+            // any marker for the rest of the session after one Continue/
+            // Load/New. Call it directly here instead of trusting the
+            // attribute to refire.
+            Stand();
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
