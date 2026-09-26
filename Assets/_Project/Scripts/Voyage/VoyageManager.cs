@@ -377,6 +377,15 @@ namespace SeaSick.Voyage
         {
             if (ship == null || (homePoint == null && World.Dock.Home == null)) return;
 
+            // **A load is not a voyage** (2026-09-26, Kevin: "completed
+            // voyage! set sail or build a store house" after every Continue).
+            // Mid-restore she is warped off the harbour to where the save
+            // left her -- hundreds of metres, which read as "has left" --
+            // and then berthed at her saved home pier, which read as
+            // "arrived". Nothing the restore does to her pose counts; the
+            // first frame after it judges her from wherever she ended up.
+            if (Save.SaveGame.Restoring) return;
+
             if (phase == Phase.AtSea)
             {
                 // You have to actually leave before you can arrive — the ship

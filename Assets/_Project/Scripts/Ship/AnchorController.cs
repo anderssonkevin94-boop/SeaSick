@@ -345,6 +345,15 @@ namespace SeaSick.Ship
             // Done here rather than in a spawner because the dock does not
             // exist until the populator has found the island and built it,
             // which is a frame after anything in Awake could ask.
+            //
+            // **Not under a load** (2026-09-26): a Continue/Load reload starts
+            // the restore in `GameBoot.Awake`, before this ever runs, and the
+            // restore puts her where the save left her. Berthing her at the
+            // harbour first was one of the "four locations" Kevin watched
+            // her flick through -- origin, harbour, saved spot, berth. Count
+            // the spawn berth as had so `SaveGame.Restore` stops waiting on it.
+            if (startAtHomeDock && !startedDocked && SeaSick.Save.SaveGame.Restoring)
+                startedDocked = true;
             if (startAtHomeDock && !startedDocked && Dock.Home != null)
             {
                 startedDocked = true;
