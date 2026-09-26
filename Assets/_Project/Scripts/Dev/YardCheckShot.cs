@@ -232,4 +232,53 @@ public static class YardCheckShot
         var blockers = yard.RefitBlockers();
         return blockers.Count == 0 ? "ENABLED" : "DISABLED: " + string.Join(" || ", blockers);
     }
+
+    // ---- overlay screenshot (2026-09-26) ---------------------------------
+    // `unity cmd capture_game_view` reads back a stale/camera-only frame for
+    // this modal -- it never once showed the Shipyard overlay in this
+    // session even though `DumpState()` and a real desktop screenshot both
+    // confirmed it was on screen -- so this renders the modal's OWN
+    // PanelSettings straight to a RenderTexture (bypassing whatever
+    // capture_game_view reads) and writes a PNG next to the project rather
+    // than under Assets. Two calls because the panel needs a real frame (or
+    // several, play mode is running in real time) between pointing it at
+    // the texture and reading pixels back.
+    public static RenderTexture CaptureRT;
+
+    static PanelSettings ModalSettings()
+    {
+        var modal = Modal;
+        if (modal == null) return null;
+        var f = typeof(ShipyardModal).GetField("settings", BindingFlags.NonPublic | BindingFlags.Instance);
+        return f?.GetValue(modal) as PanelSettings;
+    }
+
+    public static string BeginOverlayCapture(int w, int h)
+    {
+        var settings = ModalSettings();
+        if (settings == null) return "no modal/settings";
+        CaptureRT = new RenderTexture(w, h, 24) { name = "YardCaptureRT" };
+        CaptureRT.Create();
+        settings.targetTexture = CaptureRT;
+        return "capturing " + w + "x" + h;
+    }
+
+    public static string EndOverlayCaptureToFile(string path)
+    {
+        var settings = ModalSettings();
+        if (CaptureRT == null) return "nothing to end (no CaptureRT)";
+        var prevActive = RenderTexture.active;
+        RenderTexture.active = CaptureRT;
+        var tex = new Texture2D(CaptureRT.width, CaptureRT.height, TextureFormat.RGBA32, false);
+        tex.ReadPixels(new Rect(0, 0, CaptureRT.width, CaptureRT.height), 0, 0);
+        tex.Apply();
+        RenderTexture.active = prevActive;
+        var png = tex.EncodeToPNG();
+        System.IO.File.WriteAllBytes(path, png);
+        if (settings != null) settings.targetTexture = null; // restore the real overlay
+        CaptureRT.Release();
+        CaptureRT = null;
+        UnityEngine.Object.Destroy(tex);
+        return "wrote " + path + " (" + png.Length + " bytes)";
+    }
 }

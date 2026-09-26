@@ -41,6 +41,14 @@ namespace SeaSick.UI.ModularYard
         readonly Label maxLengthReason;
         readonly Label undoReason;
         string tilesKey;
+        // 2 sections fit the tile row full-size; 4+ (a full 3-middle hull)
+        // do not -- rather than let the row WRAP (a flex-wrap row's own
+        // auto height does not reliably track wrapped children in this UI
+        // Toolkit version, see the .yard-tiles CSS comment, and a wrapped
+        // second row drew straight over Beam/Deck below it, 2026-09-26
+        // phone screenshot), the row stays single-line and compacts its
+        // tiles instead: smaller type, one short stats line, thinner "+".
+        bool compactTiles;
 
         // ---- overview paging (docs/SHIPYARD-UX-AUDIT.md item 1/3):
         // "Hull" (tiles/beam/deck, the editing controls) and "Report"
@@ -337,6 +345,8 @@ namespace SeaSick.UI.ModularYard
             // explanation (docs/SHIPYARD-UX-AUDIT.md item 2). So the
             // rebuild key no longer needs `Count < Maximum`: that only
             // changes enabled state, handled every refresh below.
+            compactTiles = keys.Count >= 4;
+            tiles.EnableInClassList("yard-tiles--compact", compactTiles);
             string key = string.Join(",", keys) + "|" + draft.IsWideBeam;
             if (key != tilesKey)
             {
@@ -433,14 +443,27 @@ namespace SeaSick.UI.ModularYard
             deck.text = raised ? "Raised" : "Low";
             deck.EnableInClassList("yard-tile-deck--raised", raised);
             var occupancy = live?.Report(draft.Snapshot())?.Section(key);
-            var bits = new List<string>();
-            if (occupancy != null)
+            // Compact (4+ sections, docs above): one short line -- "G2 B4
+            // H5" -- instead of three spelled-out, dot-joined items, which
+            // is what forced yard-tile-status to wrap to a second line and
+            // grow the tile taller than the row it shares (2026-09-26
+            // phone screenshot, 5-section hull).
+            if (compactTiles)
             {
-                bits.Add($"guns {occupancy.guns}");
-                bits.Add($"berths {occupancy.berths}");
-                bits.Add($"hold {occupancy.holdCells}");
+                status.text = occupancy == null ? "" :
+                    $"G{occupancy.guns} B{occupancy.berths} H{occupancy.holdCells}";
             }
-            status.text = string.Join(" · ", bits);
+            else
+            {
+                var bits = new List<string>();
+                if (occupancy != null)
+                {
+                    bits.Add($"guns {occupancy.guns}");
+                    bits.Add($"berths {occupancy.berths}");
+                    bits.Add($"hold {occupancy.holdCells}");
+                }
+                status.text = string.Join(" · ", bits);
+            }
             b.SetEnabled(!draft.Committed);
         }
 

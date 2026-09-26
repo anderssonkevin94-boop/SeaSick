@@ -107,14 +107,18 @@
 .yard-wide .yard-gun-status { -unity-text-align: middle-left; flex-grow: 0; margin-left: 0; margin-top: 2px; }
 
 /* ---- Overview: section tiles (docs/SHIPYARD-SECTIONS-UI.md Step 1) ---- */
-/* min-height matches yard-tile's own min-height: measured live (2026-09-25
-   phone screenshot) that this flex-wrap row's OWN auto height does not
-   track a child grown taller by min-height alone (children reported
-   80.17px tall, the row reported 46.94px) -- the "Beam" caption below it
-   then drew over the tiles' true bottom edge. Pin it explicitly rather
-   than trust the wrap row to size itself from grown children. */
-.yard-tiles { flex-direction: row; flex-wrap: wrap; padding: 4px 0 8px 0; margin-bottom: 4px; min-height: 84px; }
-.yard Button.yard-tile { flex-grow: 1; flex-basis: 64px; min-height: 80px; flex-direction: column; align-items: center; justify-content: center; padding: 4px; }
+/* flex-wrap: wrap used to let a 5-section hull's 9 tiles (5 tiles + 4 "+"
+   inserts) spill onto a second row -- and a flex-wrap row's own auto
+   height does not reliably track wrapped children in this UI Toolkit
+   version (see the min-height history below), so that second row drew
+   straight OVER the Beam/Deck rows underneath instead of pushing them
+   down (2026-09-26 phone screenshot, 3 middles). nowrap + flex-shrink on
+   the tiles themselves (overridden below -- `.yard Button` sets
+   flex-shrink: 0 for every button) keeps everything on ONE row and lets
+   ShipyardScreen.cs's `yard-tiles--compact` (4+ sections) shrink type and
+   content instead of the row ever needing a second line. */
+.yard-tiles { flex-direction: row; flex-wrap: nowrap; padding: 4px 0 8px 0; margin-bottom: 4px; min-height: 84px; }
+.yard Button.yard-tile { flex-grow: 1; flex-shrink: 1; flex-basis: 64px; min-height: 80px; flex-direction: column; align-items: center; justify-content: center; padding: 4px; }
 .yard-tile-name { font-size: 14px; -unity-text-align: middle-center; }
 .yard-tile-deck { font-size: 10px; -unity-text-align: middle-center; color: rgb(171, 209, 226);
     background-color: rgba(171, 209, 226, 0.16); border-radius: 8px; padding: 1px 7px; margin-top: 2px; }
@@ -126,7 +130,27 @@
    reserved, which let the wrapped second line bleed into the "Beam"
    caption below it (phone screenshot, 2026-09-25). */
 .yard-tile-status { font-size: 10px; color: rgb(171, 209, 226); -unity-text-align: middle-center; white-space: normal; min-width: 0; }
-.yard Button.yard-tile-insert { flex-grow: 0; flex-basis: 32px; min-width: 32px; min-height: 44px; padding: 0; font-size: 18px; opacity: 0.8; }
+.yard Button.yard-tile-insert { flex-grow: 0; flex-shrink: 1; flex-basis: 32px; min-width: 32px; min-height: 44px; padding: 0; font-size: 18px; opacity: 0.8; }
+/* Compact mode (4+ sections, ShipyardScreen.RefreshTiles): smaller type
+   and a shorter one-line status (set in code) so the whole row of tiles
+   plus "+" inserts still fits ONE line at phone width instead of
+   wrapping. Tiles still meet the min-height-44 tap target; only their
+   WIDTH and text shrink. */
+.yard .yard-tiles--compact.yard-tiles { min-height: 64px; }
+.yard .yard-tiles--compact Button.yard-tile { min-height: 60px; flex-basis: 44px; padding: 3px 2px; }
+.yard .yard-tiles--compact .yard-tile-name { font-size: 11px; }
+.yard .yard-tiles--compact .yard-tile-deck { font-size: 9px; padding: 0 5px; margin-top: 1px; }
+.yard .yard-tiles--compact .yard-tile-status { font-size: 9px; }
+/* Thin "+" inserts in compact mode -- explicitly called out in the fix
+   ("the '+' tiles become thin"): they stay tappable (min-height 44) but
+   give their width back to the section tiles, which need it more. */
+.yard .yard-tiles--compact Button.yard-tile-insert { flex-basis: 18px; min-width: 18px; font-size: 14px; margin: 3px 1px; }
+/* A tooltip alone (":disabled" opacity 0.45, shared by every button in
+   the yard) is too subtle to read as "this control is off" at max hull
+   length next to otherwise-identical tiles, and is invisible on a phone
+   with no hover anyway -- `maxLengthReason` under the row states WHY in
+   text, this makes the tile itself unmistakably inert. */
+.yard Button.yard-tile-insert:disabled { opacity: 0.28; border-color: rgba(101, 136, 154, 0.4); background-color: rgba(31, 57, 72, 0.5); }
 .yard-summary { margin-top: 4px; }
 .yard-summary-row { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
 .yard-summary-item { font-size: 12px; color: rgb(191, 205, 211); margin-right: 10px; }
