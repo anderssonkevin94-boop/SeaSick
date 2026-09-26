@@ -776,7 +776,14 @@ namespace SeaSick.Combat
         }
 
         /// Ground a raider must not sail over. `limit` is how deep counts as
-        /// too shallow; the raid's own landing zone never is.
+        /// too shallow; in the raid's own landing zone only dry land is.
+        ///
+        /// The zone used to be exempt outright, and a raider runs in at up to
+        /// 17 m/s and sheds way at 2.2 m/s² -- ~65 m to stop. Once `Beached`
+        /// she coasted on over the exempt ground with nothing to undo it and
+        /// stopped at the zone's edge, 30-45 m up the island (Kevin's save,
+        /// second raid on Island_2: at rest with 41 m of hill above her keel).
+        /// Now the shallows are hers but the waterline is a wall.
         bool Solid(float x, float z, float limit)
         {
             var h = Island.TerrainHeight;
@@ -784,7 +791,7 @@ namespace SeaSick.Combat
             if (Raiding)
             {
                 float dx = x - Site.water.x, dz = z - Site.water.z;
-                if (dx * dx + dz * dz < beachZone * beachZone) return false;
+                if (dx * dx + dz * dz < beachZone * beachZone) return h(x, z) > 0f;
             }
             return h(x, z) > -limit;
         }
@@ -851,7 +858,9 @@ namespace SeaSick.Combat
             // and `lastClear` is what makes the skipped frames safe -- a
             // grounding is undone back to the last spot KNOWN to be water,
             // not merely to the previous frame.
-            if (!landClose && ((Time.frameCount + GetInstanceID()) & 7) != 0) return;
+            // A raid is checked every frame: she is running at a beach on
+            // purpose, and there is only ever one of her.
+            if (!landClose && !Raiding && ((Time.frameCount + GetInstanceID()) & 7) != 0) return;
 
             Vector3 f = Forward() * (length * 0.45f);
             Vector3 now = transform.position;
