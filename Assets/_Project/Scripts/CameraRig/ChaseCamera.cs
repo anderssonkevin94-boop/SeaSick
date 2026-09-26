@@ -220,6 +220,16 @@ namespace SeaSick.CameraRig
 
         [Header("Lock framing")]
         [SerializeField] float lockMaxSwingDeg = 78f;
+        /// Upright, the frame is narrow: at 68° vertical on a 1080x2340
+        /// screen the lens sees only ±17° either side. The 78° clamp holds
+        /// both hulls for a target on the beam (checked: ship +3.5°, target
+        /// −3.1° at 60 m) but a target on the quarter or astern falls out of
+        /// the side of the frame (−34° at 60 m dead astern). The phone helm
+        /// is a heading stick whose basis freezes at touch-down
+        /// (`TouchHelm`), so a wider swing does not re-map a drag in
+        /// progress the way it re-mapped the old drag-to-steer. At 140° the
+        /// same astern target sits at ship +11.5° / target −10.6°.
+        [SerializeField] float lockMaxSwingDegPortrait = 140f;
         [SerializeField] float lockPullPerMetre = 0.42f;
         [SerializeField] float lockMaxPull = 34f;
         [Range(0f, 0.8f)] [SerializeField] float lockBias = 0.34f;  // look point toward the target
@@ -266,6 +276,9 @@ namespace SeaSick.CameraRig
         /// The thing to keep in frame, or null for the plain chase view.
         /// Set by CombatLock; cleared when the target dies or breaks away.
         public Transform LockTarget { get; set; }
+
+        /// How far into the lock framing the rig is, 0..1, for `LockOnCheck`.
+        public float LockLevel => lockLevel;
 
         /// A high, steeply-tilted look at a whole island, used when she is
         /// lying at a dock.
@@ -912,8 +925,10 @@ namespace SeaSick.CameraRig
                     // helm never fully inverts.
                     float sternAz = Mathf.Atan2(sternDir.x, sternDir.z) * Mathf.Rad2Deg;
                     float awayAz = Mathf.Atan2(-dirToTarget.x, -dirToTarget.z) * Mathf.Rad2Deg;
+                    float swingMax = Mathf.Lerp(lockMaxSwingDeg, lockMaxSwingDegPortrait,
+                                                Mathf.Max(0f, portrait01));
                     float az = sternAz + Mathf.Clamp(
-                        Mathf.DeltaAngle(sternAz, awayAz), -lockMaxSwingDeg, lockMaxSwingDeg);
+                        Mathf.DeltaAngle(sternAz, awayAz), -swingMax, swingMax);
 
                     Vector3 swung = new Vector3(
                         Mathf.Sin(az * Mathf.Deg2Rad), 0f, Mathf.Cos(az * Mathf.Deg2Rad));
