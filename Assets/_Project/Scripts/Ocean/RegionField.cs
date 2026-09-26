@@ -280,7 +280,11 @@ namespace SeaSick.Ocean
         public float3 ShoreWetDepth(float2 p, NativeArray<float> shore)
         {
             float2 uv = (p - shoreOrigin) * shoreInvSize;
-            if (uv.x < 0f || uv.y < 0f || uv.x > 1f || uv.y > 1f)
+            // The params and the array can disagree for a frame across a
+            // scene reload (Continue/Load): a stale `shoreN` against the
+            // 1-cell placeholder threw IndexOutOfRange from every sampler.
+            if (uv.x < 0f || uv.y < 0f || uv.x > 1f || uv.y > 1f
+                || shore.Length < shoreN * shoreN)
                 return new float3(1f, 1f, 1e9f);
             float2 f = uv * shoreN - 0.5f;
             int2 i0 = math.clamp((int2)math.floor(f), 0, shoreN - 1);
