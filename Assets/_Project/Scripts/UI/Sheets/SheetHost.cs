@@ -228,6 +228,9 @@ namespace SeaSick.UI.Sheets
 
             actions = new VisualElement();
             actions.style.display = DisplayStyle.None;
+            // Never squeezed: the body band (min-height 0) gives way instead,
+            // so a taller action row is never cut off at the card's bottom.
+            actions.style.flexShrink = 0f;
             card.Add(actions);
 
             // The 1px inner rule, last so it sits over the body, and inert so
@@ -347,6 +350,10 @@ namespace SeaSick.UI.Sheets
             page.style.flexDirection = FlexDirection.Column;
             page.style.flexGrow = 1f;
             page.style.flexShrink = 1f;
+            // min-height 0: an action row that grows a line (the Ship
+            // sheet's Shipyard blocker, 2026-09-26) takes its room from the
+            // page's bottom edge instead of being pushed off the card.
+            page.style.minHeight = 0f;
             page.style.overflow = Overflow.Hidden;
             body.Add(page);
             var content = s.Build();

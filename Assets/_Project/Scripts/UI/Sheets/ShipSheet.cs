@@ -85,13 +85,14 @@ namespace SeaSick.UI.Sheets
         void Plan()
         {
             int cargo = CargoCount, crew = CrewRows;
+            float reasonPx = ShipyardReasonPx();
             long key = cargo * 1000003L + crew * 131L
-                       + Mathf.RoundToInt(SheetHost.BandHeight) * 31L;
+                       + Mathf.RoundToInt(SheetHost.BandHeight) * 31L + Mathf.RoundToInt(reasonPx) * 7L;
             if (key == shipPlanKey) return;
             shipPlanKey = key;
 
-            cargoPerPage = SheetHost.RowsThatFit(SheetKit.RowPx, SheetKit.EyebrowPx);
-            crewPerPage = SheetHost.RowsThatFit(SheetKit.RowPx, SheetKit.EyebrowPx);
+            cargoPerPage = SheetHost.RowsThatFit(SheetKit.RowPx, SheetKit.EyebrowPx + reasonPx);
+            crewPerPage = SheetHost.RowsThatFit(SheetKit.RowPx, SheetKit.EyebrowPx + reasonPx);
             cargoPages = SheetKit.PageCount(Mathf.Max(1, cargo), cargoPerPage);
             crewPages = SheetKit.PageCount(Mathf.Max(1, crew), crewPerPage);
 
@@ -103,6 +104,20 @@ namespace SeaSick.UI.Sheets
             for (int i = 0; i < crewPages; i++)
                 labels[1 + cargoPages + i] = SheetKit.PageLabel("crew", i, crewPages);
             if (tab >= n) tab = n - 1;
+        }
+
+        /// Height the Shipyard blocker line takes above the action row
+        /// (`BuildActions`), taken out of the page band so rows are never
+        /// planned under it. ~60 characters per 11 px line at sheet width.
+        static float ShipyardReasonPx()
+        {
+            var yard = SeaSick.Ship.Modular.ShipyardService.Player;
+            if (yard == null) return 0f;
+            var blockers = yard.RefitBlockers();
+            if (blockers.Count == 0) return 0f;
+            int lines = 0;
+            foreach (var b in blockers) lines += Mathf.Max(1, Mathf.CeilToInt((b?.Length ?? 0) / 60f));
+            return lines * 15f + 3f;
         }
 
         /// Which section (and which page of it) index `page` is.
@@ -144,13 +159,18 @@ namespace SeaSick.UI.Sheets
                 // the same "build once, re-text on refresh" pattern every
                 // other button on this sheet follows.
                 shipyardBtn = SheetKit.Btn("Shipyard", SeaSick.UI.ModularYard.ShipyardLiveBridge.Open);
+                row.Add(shipyardBtn);
+                // The reason used to sit UNDER the button inside the 61 px
+                // action row and was cut off by the card's bottom edge
+                // (2026-09-26 phone shot). It is now its own full-width line
+                // ABOVE the buttons (the action row wraps), and `Plan`
+                // reserves its height out of the page band so the page
+                // above never runs under it.
                 shipyardReason = SheetKit.Text("", false, true, 11f);
                 shipyardReason.style.whiteSpace = WhiteSpace.Normal;
-                var shipyardCol = new VisualElement();
-                shipyardCol.style.flexDirection = FlexDirection.Column;
-                shipyardCol.Add(shipyardBtn);
-                shipyardCol.Add(shipyardReason);
-                row.Add(shipyardCol);
+                shipyardReason.style.flexGrow = 0f; shipyardReason.style.flexShrink = 0f;
+                shipyardReason.style.marginBottom = 3f;
+                shipyardReason.style.display = DisplayStyle.None;
             }
             // **Make this my home berth** (2026-09-25, Kevin: "make my home
             // berth the pier I built at island_2"). Only where she is lying
@@ -166,7 +186,27 @@ namespace SeaSick.UI.Sheets
                 row.Add(homeBerthBtn);
             }
             row.Add(SheetKit.Btn("Cast off", CastOff, true));
-            return SheetKit.Actions(row.ToArray());
+            var actions = SheetKit.Actions(row.ToArray());
+            if (shipyardReason == null) return actions;
+            // A COLUMN (reason line over the button row), not the row's own
+            // flex-wrap: a wrapped row under-reports its height in this UI
+            // Toolkit version (the same quirk yard-tiles pins around), which
+            // left the buttons hanging off the card's bottom edge.
+            var col = new VisualElement();
+            col.AddToClassList(SheetTheme.Actions);
+            col.style.flexDirection = FlexDirection.Column;
+            col.style.alignItems = Align.Stretch;
+            col.style.flexWrap = Wrap.NoWrap; // .sheet-actions wraps, which in a column spills sideways
+            col.style.flexShrink = 0f;
+            col.style.paddingTop = 5f; // the line costs the page as little as it can
+            actions.RemoveFromClassList(SheetTheme.Actions);
+            actions.style.flexDirection = FlexDirection.Row;
+            actions.style.flexWrap = Wrap.NoWrap;
+            actions.style.alignItems = Align.Center;
+            actions.style.flexShrink = 0f;
+            col.Add(shipyardReason);
+            col.Add(actions);
+            return col;
         }
 
         Button homeBerthBtn;
@@ -374,6 +414,7 @@ namespace SeaSick.UI.Sheets
             shipyardBtn.SetEnabled(blockers.Count == 0);
             shipyardBtn.text = "Shipyard";
             shipyardReason.text = blockers.Count == 0 ? "" : string.Join("\n", blockers);
+            shipyardReason.style.display = blockers.Count == 0 ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         /// Ticks the arm/confirm/feedback text on `homeBerthBtn` in place --
