@@ -684,6 +684,18 @@ namespace SeaSick.World
             RelayWalls(blocked ? null : seg);
         }
 
+        /// Can this walker stand in the cell under `at`? For checks
+        /// (`WallTowerCheck`). False off the map.
+        public bool WalkableAt(Vector3 at, Walker who)
+        {
+            if (!built) Build();
+            if (hs == null) return false;
+            int i = Index(at);
+            if (i < 0) return false;
+            mask = MaskFor(who);
+            return Walk(i);
+        }
+
         /// **Re-lay the wall layer as it stands** -- a wall tower came or
         /// went (`Outpost.TouchWallTowers`), which changes no segment.
         public void RelayWallLayer()

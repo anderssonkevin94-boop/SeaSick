@@ -220,5 +220,9 @@ namespace SeaSick.World
 
         /// The standing posts, for checks.
         public int PostCount => posts.Count;
+
+        /// Is a post standing on this node? For checks (`WallTowerCheck`).
+        public bool HasPostAt(Vector3 node)
+            => posts.TryGetValue(Key(node), out var p) && p != null;
     }
 }
