@@ -106,8 +106,17 @@ namespace SeaSick.UI
         {
             // The shipyard is a full-screen UI Toolkit modal that OnGUI
             // knows nothing about (2026-09-25 review: the gear chip sat at
-            // the left edge over the modal).
-            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) { if (open) { open = false; DevTools.CloseAll(); } return; }
+            // the left edge over the modal). `GameMenus` gets the same
+            // suppression (2026-09-26 review: the gear chip sat over Home)
+            // -- EXCEPT when it is `GameMenus` itself that opened this drawer
+            // (`OpenSettingsFromMenu`/`SettingsHostedByMenu`): `Current`
+            // stays Home/Pause/etc. the whole time that drawer is up, so
+            // gating on it unconditionally closed the drawer the instant it
+            // opened.
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
+                || (SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None
+                    && !SeaSick.UI.Menus.GameMenus.SettingsHostedByMenu))
+            { if (open) { open = false; DevTools.CloseAll(); } return; }
             int u = HudLayout.Unit;
             float pad = HudLayout.Pad;
 

@@ -629,6 +629,25 @@ namespace SeaSick.UI.Sheets
             if (Instance == null) Instance = this;
             EnsureBuilt();
             if (root == null) return;
+
+            // The chart instrument (and the rest of this document -- the
+            // sheet card, the place label, the ashore rail) is a UI Toolkit
+            // tree with no OnGUI event of its own, so none of the IMGUI
+            // `ShipyardModal.IsOpen`/`GameMenus.Current` bail-outs the rest
+            // of the HUD uses ever touched it (2026-09-26 review: the chart
+            // dial and "heavy to the east" line drew straight through the
+            // Home/Pause/Save card, and the shipyard modal sits at the same
+            // sorting order this document uses so it needed the same gate).
+            // Hiding the WHOLE root rather than picking apart which child is
+            // "the chart" is deliberate: nothing in this document should be
+            // interactive while either owns the screen (both already block
+            // world input), and a sheet left open behind one would still be
+            // ticking its refresh/pager underneath for no one to see.
+            bool suppressed = SeaSick.UI.ModularYard.ShipyardModal.IsOpen
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None;
+            root.style.display = suppressed ? DisplayStyle.None : DisplayStyle.Flex;
+            if (suppressed) return;
+
             // A page swap destroys the element a slide is running on, and a
             // scheduler on a dead element never reports finishing. Without
             // this, one interrupted swipe would lock the pager for the rest

@@ -240,6 +240,11 @@ namespace SeaSick.Voyage
             // discarded passes were the game's biggest source of GC garbage.
             if (Event.current.type != EventType.Repaint) return;
             if (Time.time > messageUntil) return;
+            // Same IMGUI-blind-spot suppression as the rest of the HUD
+            // (2026-09-26 review: "+2 timber" floated over the Home card --
+            // this is what that was, not `CampToasts`/`ReturnSummary`).
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
             // High and centred under the compass, not a full-width strip
             // across the middle of the water. The rect was the whole screen
             // width at 0.62 of its height -- text centred in it, but a full

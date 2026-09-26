@@ -29,6 +29,16 @@ namespace SeaSick.UI.Menus
         public static GameMenus Instance { get; private set; }
         public static Mode Current { get; private set; } = Mode.None;
 
+        /// True while `OpenSettingsFromMenu` has swapped this screen out for
+        /// `SettingsPanel`'s own drawer -- `Current` stays whatever it was
+        /// (Home/Pause/...) the whole time so `Update` knows what to restore,
+        /// so it alone cannot tell a world-HUD element "the menu card is up,
+        /// hide" from "the menu asked for the settings drawer instead, which
+        /// draws through its OWN OnGUI and needs to not be caught by the same
+        /// gate" (2026-09-26: `SettingsPanel.OnGUI` suppressing itself on
+        /// `Current != None` closed the drawer the instant it opened).
+        public static bool SettingsHostedByMenu => Instance != null && Instance.settingsReturnMode != Mode.None;
+
         PanelSettings settings;
         UIDocument document;
         bool saveAndExitPending;

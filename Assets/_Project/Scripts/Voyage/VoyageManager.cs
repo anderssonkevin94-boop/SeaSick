@@ -692,6 +692,12 @@ namespace SeaSick.Voyage
             // this class only draws the one moment she is tied up and the
             // player is not steering.
             if (phase != Phase.Home) return;
+            // Same IMGUI-blind-spot suppression as the rest of the HUD
+            // (2026-09-26 review): this panel is exactly the "New Voyage"
+            // build list, drawn UNDER the Home/Pause card at the one voyage
+            // phase where both can be on screen together.
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
             RefreshPanelText();
 
             int u = SeaSick.UI.HudLayout.Unit;

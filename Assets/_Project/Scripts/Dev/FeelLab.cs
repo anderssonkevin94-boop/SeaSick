@@ -404,8 +404,10 @@ namespace SeaSick.Dev
             // knows nothing about; the same suppression CannonBattery and
             // PerfHUD already do for MidnightLandHud (2026-09-25 review:
             // the collapsed "FEEL" button sat on top of the modal's own
-            // Close button).
+            // Close button). `GameMenus` gets the same blind spot
+            // (2026-09-26 review: the FEEL toggle sat over the Home card).
             if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) return;
+            if (SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
             EnsureStyles();
 
             // Screen.dpi is 0 on some desktop setups; fall back to 1x there

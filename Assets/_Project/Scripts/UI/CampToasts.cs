@@ -21,6 +21,10 @@ namespace SeaSick.UI
     {
         void OnGUI()
         {
+            // Same IMGUI-blind-spot suppression as the rest of the HUD
+            // (2026-09-26 review: "+2 timber" floated over the Home card).
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
             var outpost = Here();
             if (outpost == null) return;
             // Both declare themselves through `HudLayout.ToastRow`, and both

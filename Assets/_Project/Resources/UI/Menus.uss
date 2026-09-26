@@ -101,6 +101,25 @@
     margin-bottom: 8px;
 }
 
+/* A row with `Rename`/`Delete` (Load mode, a real save) narrows
+ * `.menu-slot-sub`'s column enough that "<location> · <date>" wraps to a
+ * second line -- and the row's OWN box did not grow to include it
+ * (2026-09-26 review: the wrapped remainder drew past this row's border,
+ * into the row below). Reproduced with `align-items: flex-start` too, so
+ * it is not a cross-axis centering bug; it reads as Yoga sizing this row
+ * from `.menu-slot-name`'s single-line height before `.menu-slot-sub`'s
+ * wrap is known. `min-height` does not fix the measurement, but it
+ * reserves enough box for the worst case (name + a 2-line sub) so the wrap
+ * always lands INSIDE the border instead of past it. Kept off the base
+ * `.menu-slot-row` and applied only from `SlotListScreen.Row` to the rows
+ * that actually carry the buttons narrowing them (`--with-actions`):
+ * `.menu-scroll` is a fixed 460px/8-row budget with no scrollbar (see its
+ * own comment), so taking every row to the 2-line height starved the
+ * bottom of the list instead -- row 8 dropped off the end. */
+.menu-slot-row--with-actions {
+    min-height: 84px;
+}
+
 .menu-slot-row--empty {
     background-color: rgba(31, 45, 56, 0.02);
     border-color: rgba(31, 45, 56, 0.15);

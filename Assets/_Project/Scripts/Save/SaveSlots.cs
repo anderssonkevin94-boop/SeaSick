@@ -202,14 +202,43 @@ namespace SeaSick.Save
 
         /// Cheap, derived from the save itself -- no island name is ever
         /// saved (see `SaveData`/`OutpostSave`), so this reads the ship's
-        /// own state instead of the world she is sitting in.
+        /// own state instead of the world she is sitting in. The raw XZ
+        /// coordinates used to leak straight into the row ("anchored near
+        /// (492, 80)"), which means nothing to a player -- this asks
+        /// `SeaSick.World.Island.Nearest`, the same registry the swell
+        /// warning and `PlaceLabel` use, for the island's own name instead.
+        /// The registry is only populated while a world scene is actually
+        /// loaded (true for every slot list -- Home/Load/Pause/Save all sit
+        /// over the live game), but a menu shown with none loaded (a probe,
+        /// a bare lab scene) degrades to the old numeric fallback rather
+        /// than throwing.
         static string DescribeLocation(SaveData d)
         {
             if (d?.ship == null) return "";
             if (d.ship.anchor == 2) return "home berth";
+            string isle = NearestIslandName(d.ship.x, d.ship.z);
             if (d.ship.anchor == 1)
-                return "anchored near (" + Mathf.RoundToInt(d.ship.x) + ", " + Mathf.RoundToInt(d.ship.z) + ")";
-            return "under way near (" + Mathf.RoundToInt(d.ship.x) + ", " + Mathf.RoundToInt(d.ship.z) + ")";
+                return isle != null ? "at " + isle + " pier" : "anchored offshore";
+            return isle != null ? "off " + isle : "at sea";
+        }
+
+        /// `Island.Nearest` plus the same "Island_3" -> "Island 3" cleanup
+        /// `PlaceLabel.Pretty` does for the compass caption -- kept as a
+        /// small local copy rather than a cross-namespace dependency on a
+        /// UI Toolkit element for one string transform. Null when no island
+        /// registry exists (world not loaded) rather than a placeholder, so
+        /// the caller can fall back to the coordinate-free "at sea" text.
+        static string NearestIslandName(float x, float z)
+        {
+            SeaSick.World.Island isle;
+            try { isle = SeaSick.World.Island.Nearest(new Vector3(x, 0f, z)); }
+            catch { return null; }
+            if (isle == null) return null;
+            string raw = isle.name;
+            if (string.IsNullOrEmpty(raw)) return null;
+            raw = raw.Replace('_', ' ').Trim();
+            while (raw.Contains("  ")) raw = raw.Replace("  ", " ");
+            return raw.Length == 0 ? null : char.ToUpperInvariant(raw[0]) + raw.Substring(1);
         }
 
         static SaveSlotInfo ReadInfo(string id, bool isAuto)

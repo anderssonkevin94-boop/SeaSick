@@ -555,6 +555,11 @@ namespace SeaSick.Ship
             // sheet docks to the bottom of a portrait phone and the stick
             // would be drawn under it, on a ship that is anchored anyway.
             if (SeaSick.CameraRig.IslandCam.Engaged) return;
+            // Same IMGUI-blind-spot suppression as the rest of the HUD
+            // (2026-09-26 review: the throttle stick and the oars/ease
+            // chips sat under the Home card, thumb-reachable through it).
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
 
             int u = HudLayout.Unit;
 

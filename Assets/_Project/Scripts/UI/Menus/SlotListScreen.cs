@@ -68,9 +68,16 @@ namespace SeaSick.UI.Menus
         static VisualElement Row(SeaSick.Save.SaveSlotInfo info, Mode mode, VisualElement dialogHost,
                                  Action refresh, Action<string> pickLoad, Action<string, string> pickSave)
         {
+            // Only a real Load-mode row (not an autosave, not empty) carries
+            // `Rename`/`Delete` in the row itself -- see the wrap-clipping
+            // note below, where this decides both the row's CSS class and
+            // how much of the subtitle it dares show on one line.
+            bool hasRowActions = mode == Mode.Load && !info.isAuto && info.exists;
+
             var row = new VisualElement();
             row.AddToClassList("menu-slot-row");
             if (!info.exists) row.AddToClassList("menu-slot-row--empty");
+            if (hasRowActions) row.AddToClassList("menu-slot-row--with-actions");
 
             var main = new VisualElement(); main.AddToClassList("menu-slot-main");
             row.Add(main);
@@ -87,8 +94,22 @@ namespace SeaSick.UI.Menus
             }
             main.Add(nameRow);
 
+            // `Rename`/`Delete` (below) sit in the SAME row and narrow this
+            // column enough that the full three-part line wraps to a second
+            // line the row's own height does not account for -- the wrapped
+            // remainder draws past the row's border, into the row below it
+            // (2026-09-26 review, reproduced back to the coordinate-only
+            // text this replaced, so it was never about the island name
+            // being long). Rather than chase the Yoga/UI-Toolkit measure
+            // order that under-sizes the row for wrapped text, the Load
+            // row with buttons drops the play-time third: location + date
+            // is enough to tell one save from another, and the full line
+            // (still) shows on the Save-target list, which never carries
+            // these buttons.
             string sub = info.exists
-                ? $"{info.location}  ·  {SaveSlotsAdapter.FormatWhen(info.savedAtUtc)}  ·  {SaveSlotsAdapter.FormatPlayTime(info.playSeconds)}"
+                ? (hasRowActions
+                    ? $"{info.location}  ·  {SaveSlotsAdapter.FormatWhen(info.savedAtUtc)}"
+                    : $"{info.location}  ·  {SaveSlotsAdapter.FormatWhen(info.savedAtUtc)}  ·  {SaveSlotsAdapter.FormatPlayTime(info.playSeconds)}")
                 : (mode == Mode.SaveTarget ? "tap to save here" : "nothing saved yet");
             var subLbl = new Label(sub); subLbl.AddToClassList("menu-slot-sub");
             main.Add(subLbl);

@@ -147,6 +147,12 @@ namespace SeaSick.Ship
             if (!Flooding && !overloaded) return;
 
             if (voyage == null || voyage.TotalHeld <= 0) return;
+            // Same IMGUI-blind-spot suppression as the rest of the HUD
+            // (2026-09-26 review): a "jettison cargo" prompt is exactly the
+            // kind of thumb-reachable button that must not poke through a
+            // menu card.
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
 
             // The shared prompt slot, at the lowest rank of anything you can
             // press: throwing cargo over the side matters, but it never

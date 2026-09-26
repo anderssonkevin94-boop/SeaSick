@@ -31,6 +31,10 @@ namespace SeaSick.Combat
             // the measurement — IMGUI runs OnGUI once per event, and the
             // discarded passes were the game's biggest source of GC garbage.
             if (Event.current.type != EventType.Repaint) return;
+            // Same IMGUI-blind-spot suppression as the rest of the HUD
+            // (2026-09-26 review).
+            if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
             if (cam == null) cam = Camera.main;
             if (cam == null) return;
 

@@ -192,8 +192,11 @@ namespace SeaSick.Dev
             if (!Showing) return;
             // The shipyard is a full-screen UI Toolkit modal that OnGUI
             // knows nothing about (2026-09-25 review: the fps/sea/pop
-            // readout drew over the modal's top-right button).
+            // readout drew over the modal's top-right button). Same blind
+            // spot for `GameMenus` (2026-09-26 review: the readout sat over
+            // the Home/Pause card).
             if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) return;
+            if (SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
 
             // Re-key the labels a few times a second, not every frame. The
             // keys are rounded numbers, but two of them DECAY (peak frame
