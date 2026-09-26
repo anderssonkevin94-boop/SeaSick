@@ -80,7 +80,17 @@ namespace SeaSick.UI.Menus
 
         void OnDestroy()
         {
-            if (Instance == this) Instance = null;
+            // `Current` is a static, so -- unlike `Instance`, freshly wired
+            // up by the next `EnsureInstance()` -- nothing else touches it
+            // on a reload. Found alongside the reinstall bug, 2026-09-26:
+            // `ReloadForBoot` (Continue/New/every Load row) never reset it,
+            // so a session that reloaded FROM the Home screen (every real
+            // session does) came back up still reading `Current == Home`
+            // forever after -- which is also what `PauseChip.OnGUI` gates
+            // on, so the pause chip, and the whole way back to a menu,
+            // silently never appeared again. This object going away IS the
+            // scene going away, so nothing it was showing survives it.
+            if (Instance == this) { Instance = null; Current = Mode.None; }
             SaveSlotsAdapter.Saved -= OnSaved;
             // A runtime `PanelSettings` instance is not scene state -- Unity
             // will not collect it on its own just because the scene that
