@@ -1,6 +1,7 @@
 using SeaSick.Ship;
 using SeaSick.World;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace SeaSick.UI.Sheets
 {
@@ -27,6 +28,30 @@ namespace SeaSick.UI.Sheets
             // by `Awake` the world build has already noted the start island.
             ChartData.ResetForPlay();
         }
+
+        /// **`RuntimeInitializeOnLoadMethod` fires once per Play session, not
+        /// once per scene** -- same bug class as `GameBoot`'s reinstall fix
+        /// (2026-09-26): a Continue/New voyage/Load-a-slot reload
+        /// (`GameMenus.ReloadForBoot`, `SceneManager.LoadScene`) never runs
+        /// `Boot()` again, so `ChartData`'s islands/raiders/track and
+        /// `Discovery`'s per-island state from the PREVIOUS game survived
+        /// into the freshly loaded scene. A New voyage started after a
+        /// Continue kept the old game's chart; a Load could mix two games'
+        /// discoveries together. Hooking `SceneManager.sceneLoaded` (fires on
+        /// every load, unlike the attribute) reruns the same wipe each time,
+        /// synchronously as part of the scene load and so well before
+        /// `GameBoot.RunRestore`'s coroutine ever gets a frame to apply a
+        /// loaded save's chart data back on top of it. The hook itself is
+        /// registered once, at the same `SubsystemRegistration` point every
+        /// other per-session static resets at.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void HookResetOnReload()
+        {
+            SceneManager.sceneLoaded -= OnSceneLoadedReset;
+            SceneManager.sceneLoaded += OnSceneLoadedReset;
+        }
+
+        static void OnSceneLoadedReset(Scene scene, LoadSceneMode mode) => ChartData.ResetForPlay();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Stand()
