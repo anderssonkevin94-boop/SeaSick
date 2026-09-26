@@ -50,6 +50,14 @@ namespace SeaSick.UI
             /// Land, come alongside, cast off, recall the crew. This is the
             /// one that moves the ship, so it outranks everything.
             public const int Anchor = 40;
+            /// Lock / release while an enemy is inside lock range AND she is
+            /// underway (2026-09-27). The same precedence the space bar
+            /// already had (`AnchorController.SpacebarCommand` yields to the
+            /// lock with an enemy alongside): a raid comes at a camp, which is
+            /// exactly where "land here" was taking the slot and leaving the
+            /// phone with no way to lock at all. At anchor the anchor still
+            /// wins -- "cast off" is how you get into the fight.
+            public const int CombatEngaged = 45;
             /// Somebody is in the Hand. Outranks even the anchor, and only
             /// while they are held: with a man dangling from the cursor the
             /// one thing the game is asking is where to put him down.
