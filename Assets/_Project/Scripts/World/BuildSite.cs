@@ -262,6 +262,15 @@ namespace SeaSick.World
             }
         }
 
+        /// A ladder site's chain mesh is built per site (`LadderLayout.Draw`);
+        /// free it with the drawing.
+        void OnDestroy()
+        {
+            if (ghost == null || PlanId != BuildPlans.Ladder.id) return;
+            var mf = ghost.GetComponent<MeshFilter>();
+            if (mf != null && mf.sharedMesh != null) Destroy(mf.sharedMesh);
+        }
+
         /// Take the drawing down. The row it was drawing is the caller's to
         /// clear — this must never be the thing that decides a build is over.
         public void Retire()
