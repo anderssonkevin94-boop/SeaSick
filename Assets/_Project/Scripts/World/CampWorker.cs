@@ -867,7 +867,9 @@ namespace SeaSick.World
                 Vector3 d = a.transform.position - from;
                 d.y = 0f;
                 float m = d.sqrMagnitude;
-                if (m < bestSq) { bestSq = m; best = a; }
+                // A goat on a crag the hunter cannot climb is not quarry
+                // (2026-09-27); the next nearest is.
+                if (m < bestSq && CampPath.Reachable(camp, a.transform.position)) { bestSq = m; best = a; }
             }
             if (best == null) return false;
 
@@ -2166,7 +2168,7 @@ namespace SeaSick.World
                 Vector3 d = n.transform.position - from;
                 d.y = 0f;
                 float m = d.sqrMagnitude;
-                if (m < best) { best = m; near = n; }
+                if (m < best && CampPath.Reachable(camp, n.transform.position)) { best = m; near = n; }
             }
             return near;
         }
@@ -2317,7 +2319,8 @@ namespace SeaSick.World
                     Vector3 d = n.transform.position - from;
                     d.y = 0f;
                     float m = d.sqrMagnitude;
-                    if (m < best) { best = m; near = n; }
+                    // Not a rock up a cliff (2026-09-27): skip to the next.
+                    if (m < best && CampPath.Reachable(camp, n.transform.position)) { best = m; near = n; }
                 }
                 if (near != null) return Stand(near.transform.position, near.StandOff);
             }
@@ -2420,6 +2423,29 @@ namespace SeaSick.World
                 next = alt;
             }
 
+            // **The slope guard (2026-09-27).** Kevin: *"villagers and goats
+            // can just walk straight up the sides of the mountains."* The
+            // route keeps off steep cells, but the straight line (a failed
+            // or pending plan, a target off the grid), every hop under
+            // `NextCorner`'s 6 m, and the last leg from the snapped cell up
+            // to a tree on a slope never asked. So every step does now, with
+            // the same numbers as the grid (`Walkability`). Refused: he
+            // stands, re-asks, and a target he cannot climb to counts as
+            // reached from the foot (`SlopeArrive`) or after `SlopeGiveUp`
+            // seconds of standing -- an errand must never stall on a hill.
+            // Somebody already on ground too steep for him (dropped there)
+            // may always walk off it downhill.
+            if (!Walkability.MayStep(camp, here, next, Walkability.Feet.Man))
+            {
+                routeAge = Mathf.Max(routeAge, RePlanSeconds - 0.5f);
+                slopeStuck += dt;
+                if (dist < SlopeArrive || slopeStuck > SlopeGiveUp)
+                { slopeStuck = 0f; ClearRoute(); return true; }
+                Face(leg, dt);
+                return false;
+            }
+            slopeStuck = 0f;
+
             next.y = camp.GroundAt(next);
             CampRoads.Walked(camp, here, next);   // feet wear roads in (2026-09-26)
             transform.position = next;
@@ -2457,6 +2483,16 @@ namespace SeaSick.World
         /// through a wall". On top of `RePlanSeconds`, so about four seconds
         /// between asks: a gate the player puts in is found that quickly.
         const float NoRouteBackoff = 3f;
+
+        /// Metres from a target a hand stops at when the ground up to it is
+        /// too steep: the tree on the bank is worked from its foot.
+        /// (`CampPath.ReachCells` is the same distance for target picks.)
+        const float SlopeArrive = 4f;
+        /// Seconds a hand stands refused by the slope before calling the
+        /// errand reached where he is. Only a grid/step disagreement or a
+        /// target that slipped the reachability filter gets here.
+        const float SlopeGiveUp = 2f;
+        float slopeStuck;
 
         void ClearRoute()
         {

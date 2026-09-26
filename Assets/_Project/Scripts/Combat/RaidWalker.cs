@@ -417,11 +417,27 @@ namespace SeaSick.Combat
 
             Vector3 step = leg / legLen * Mathf.Min(Speed * dt, legLen);
             Vector3 next = here + step;
+            // **Raiders climb no better than the hands (2026-09-27).** Same
+            // backstop as `CampWorker.Walk`, same numbers (`World.Walkability`):
+            // the straight-line fallback used to carry a party up a cliff
+            // face. Refused, he waits for a re-plan; close to the goal, or
+            // after a couple of seconds, that is as far as he gets.
+            if (!World.Walkability.MayStep(camp, here, next, World.Walkability.Feet.Man))
+            {
+                routeAge = Mathf.Max(routeAge, RePlanSeconds - 0.5f);
+                slopeStuck += dt;
+                if (dist < 4f || slopeStuck > 2f) { slopeStuck = 0f; ClearRoute(); return true; }
+                Face(leg, dt);
+                return false;
+            }
+            slopeStuck = 0f;
             next.y = camp.GroundAt(next);
             transform.position = next;
             Face(leg, dt);
             return false;
         }
+
+        float slopeStuck;
 
         Vector3 NextCorner(Vector3 here, Vector3 to, float dist, float dt)
         {

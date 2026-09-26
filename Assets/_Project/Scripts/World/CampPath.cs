@@ -65,11 +65,18 @@ namespace SeaSick.World
     {
         // --- tunables (runtime-added component: these statics ARE the dials) -
 
-        /// Ground steeper than this is not walked up. 38° sits deliberately
-        /// between the "sleek hills" the island style aims for (walkable) and
-        /// the cliff shards and steep domes (not). Beaches and clearings are
-        /// far below it.
-        public static float MaxSlopeDegrees = 38f;
+        /// Ground steeper than this is not walked up. **Now the one shared
+        /// number (2026-09-27), `Walkability.ManMaxDegrees` (33°)**: it was
+        /// 38° here and tested on four axes only, and the animals and every
+        /// fallback walk had caps of their own or none (see `Walkability`).
+        /// Still between the "sleek hills" the island style aims for
+        /// (walkable) and the cliff shards and steep domes (not). Beaches and
+        /// clearings are far below it.
+        public static float MaxSlopeDegrees
+        {
+            get => Walkability.ManMaxDegrees;
+            set => Walkability.ManMaxDegrees = value;
+        }
 
         /// Below this is sea, not beach. Generous downward so the waterline
         /// itself and the pier approach stay walkable.
@@ -281,10 +288,16 @@ namespace SeaSick.World
                     hs[row + x] = camp.GroundAt(new Vector3(origin.x + x * cell, 0f, wz));
             }
 
-            // Slope from the neighbouring cells. Over a ~5 m span, a mean
-            // 38° is a wall to a man 1.8 m tall, which is the test we want —
-            // not the micro-roughness a finer difference would pick up.
+            // **Slope: the steepest rise to ANY of the eight neighbours
+            // (2026-09-27, `Walkability.SteepestRise`).** It was the larger
+            // of the two AXIS differences, which reads a slope running
+            // diagonally to the grid at 1/sqrt(2) of its real steepness --
+            // a 45 degree flank came out as 35 and stayed open. The span is
+            // one 2 m cell, which is also the largest step a man takes
+            // between two cells he is routed through, so "no rise over
+            // 1.3 m between neighbouring cells" is the same statement.
             float limit = Mathf.Tan(Mathf.Clamp(MaxSlopeDegrees, 5f, 80f) * Mathf.Deg2Rad);
+            slopeClosed = 0;
             for (int y = 0; y < n; y++)
             {
                 int row = y * n;
@@ -294,23 +307,9 @@ namespace SeaSick.World
                     float h = hs[i];
                     if (h <= SeaLevelY) { open[i] = false; pen[i] = 1f; continue; }
 
-                    // **Measured over a two-cell stencil, 2026-09-23.** The
-                    // comment above is the reason: a mean 38° over about
-                    // five metres is what a man cannot walk up, and now
-                    // that a cell is 2 m the immediate neighbour would be
-                    // measuring the ground's roughness rather than its
-                    // shape -- which would close cells all over a hillside
-                    // the hands have been crossing happily for a month.
-                    int r = Mathf.Max(1, Mathf.RoundToInt(2f / cell));
-                    float span = r * cell;
-                    float dx = 0f, dz = 0f;
-                    if (x >= r) dx = Mathf.Max(dx, Mathf.Abs(h - hs[i - r]));
-                    if (x < n - r) dx = Mathf.Max(dx, Mathf.Abs(h - hs[i + r]));
-                    if (y >= r) dz = Mathf.Max(dz, Mathf.Abs(h - hs[i - r * n]));
-                    if (y < n - r) dz = Mathf.Max(dz, Mathf.Abs(h - hs[i + r * n]));
-
-                    float slope = Mathf.Max(dx, dz) / span;
+                    float slope = Walkability.SteepestRise(hs, n, x, y, cell);
                     open[i] = slope <= limit;
+                    if (!open[i]) slopeClosed++;
                     float k = slope / limit;
                     pen[i] = 1f + SlopePenalty * k * k;
                 }
@@ -338,6 +337,7 @@ namespace SeaSick.World
             // about the palisade it was built under.
             MarkRocks();
             RelayWalls(null);
+            LabelGround();
 
             watch.Stop();
             LastBuildMs = (float)watch.Elapsed.TotalMilliseconds;
@@ -350,6 +350,135 @@ namespace SeaSick.World
                           $"({half:0} m half-extent) built in {LastBuildMs:0.0} ms, " +
                           $"{Walkable():0.0}% walkable.");
         }
+
+        // --- ground reachability (2026-09-27) ---------------------------------
+
+        /// Land cells closed by slope alone, at the last build.
+        int slopeClosed;
+        /// Which piece of connected walkable ground each cell is on (ground
+        /// and rocks only, NOT walls: a wall is the player's to open with a
+        /// gate, a cliff is not). 0 = not walkable.
+        int[] region;
+        int campRegion;
+
+        /// **Flood the walkable ground once, at build.** 25 600 cells, a
+        /// single pass with a flat stack -- well under a millisecond -- and
+        /// it turns "can the hands get to that tree at all" from an A*
+        /// search into an array read, which is what lets every target pick
+        /// skip the ones up a cliff (`Reachable`).
+        void LabelGround()
+        {
+            int count = n * n;
+            region = new int[count];
+            var stack = new int[count];
+            int label = 0;
+            for (int s = 0; s < count; s++)
+            {
+                if (region[s] != 0 || !GroundOpen(s)) continue;
+                label++;
+                int top = 0;
+                stack[top++] = s;
+                region[s] = label;
+                while (top > 0)
+                {
+                    int cur = stack[--top];
+                    int cx = cur % n, cy = cur / n;
+                    for (int d = 0; d < 8; d++)
+                    {
+                        int nx = cx + DX[d], ny = cy + DY[d];
+                        if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+                        int nb = ny * n + nx;
+                        if (region[nb] != 0 || !GroundOpen(nb)) continue;
+                        // Same corner rule as the search.
+                        if (d >= 4 && (!GroundOpen(cy * n + nx) || !GroundOpen(ny * n + cx))) continue;
+                        region[nb] = label;
+                        stack[top++] = nb;
+                    }
+                }
+            }
+            int c = Near(camp != null ? camp.CampCentre : Vector3.zero, 6);
+            campRegion = c >= 0 ? region[c] : 0;
+        }
+
+        bool GroundOpen(int i) => open[i] && (block[i] & BlockHand) == 0;
+
+        /// The cell for a point if its ground is open, else the nearest open
+        /// one within `radius` cells; -1 if none or off the map.
+        int Near(Vector3 at, int radius)
+        {
+            int i = Index(at);
+            if (i < 0) return -1;
+            if (GroundOpen(i)) return i;
+            int cx = i % n, cy = i / n, best = -1;
+            float bestD = float.MaxValue;
+            for (int dy = -radius; dy <= radius; dy++)
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    int x = cx + dx, y = cy + dy;
+                    if (x < 0 || y < 0 || x >= n || y >= n) continue;
+                    int j = y * n + x;
+                    if (!GroundOpen(j)) continue;
+                    float d = dx * dx + dy * dy;
+                    if (d < bestD) { bestD = d; best = j; }
+                }
+            return best;
+        }
+
+        /// Cells a target may stand off the walkable ground and still count
+        /// as reached: a tree or a rock at the foot of a slope is worked
+        /// from the foot. Two cells (4 m) -- `CampWorker.Walk` arrives
+        /// within `SlopeArrive` of a target it cannot climb to.
+        public const int ReachCells = 2;
+
+        /// **Can the camp's people walk to this point from the fire, over
+        /// the ground?** Ignores walls (a gate fixes those) and is true
+        /// whenever the map cannot say -- off the grid, not built, no camp
+        /// cell -- so nothing that worked before this existed is refused
+        /// for want of an answer.
+        public bool Reachable(Vector3 at)
+        {
+            if (!built) Build();
+            if (hs == null || region == null || campRegion == 0) return true;
+            if (Index(at) < 0) return true;
+            int c = Near(at, ReachCells);
+            return c >= 0 && region[c] == campRegion;
+        }
+
+        /// Shortcut: true when the camp has no map to ask.
+        public static bool Reachable(Outpost camp, Vector3 at)
+        {
+            var map = camp != null ? For(camp) : null;
+            return map == null || map.Reachable(at);
+        }
+
+        // --- read-outs for Dev/Editor/SlopeCheck -----------------------------
+
+        public bool Built => built && hs != null;
+        public int Side => n;
+        public Vector2 Origin => origin;
+        /// % of LAND cells (above `SeaLevelY`) closed by slope.
+        public float SlopeClosedPercent
+        {
+            get
+            {
+                if (hs == null) return 0f;
+                int land = 0;
+                for (int i = 0; i < hs.Length; i++) if (hs[i] > SeaLevelY) land++;
+                return land > 0 ? 100f * slopeClosed / land : 0f;
+            }
+        }
+        /// 0 sea, 1 closed by slope, 2 rock, 3 wall, 4 open on the fire's
+        /// ground, 5 open but cut off from the fire.
+        public int CellKind(int x, int y)
+        {
+            int i = y * n + x;
+            if (hs[i] <= SeaLevelY) return 0;
+            if (!open[i]) return 1;
+            if ((block[i] & BlockHand) != 0) return 2;
+            if ((wall[i] & BlockHand) != 0) return 3;
+            return region != null && campRegion != 0 && region[i] == campRegion ? 4 : 5;
+        }
+        public float HeightAtCell(int x, int y) => hs[y * n + x];
 
         float Walkable()
         {

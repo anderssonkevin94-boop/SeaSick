@@ -358,9 +358,21 @@ namespace SeaSick.World
             // call per frame: a box reject per segment of each walled camp,
             // no allocation (`CampPath.BlocksAnimal`).
             if (CampPath.BlocksAnimal(transform.position, next, AnimalClearance)) return true;
+            // Nor up (or down) a face steeper than it can climb (2026-09-27,
+            // Kevin: goats walked "straight up the sides of the mountains").
+            // Wander and flight targets were checked, the ground between
+            // was not. Same rule, same numbers as every other walker
+            // (`Walkability.MayStep`); treated like the beach and the wall.
+            if (!Walkability.MayStep(heightFn ??= field.Height, transform.position, next, Feet)) return true;
             transform.position = next;
             return false;
         }
+
+        /// `field.Height` as a delegate, made once: a method group passed per
+        /// frame would allocate per animal per frame.
+        System.Func<float, float, float> heightFn;
+
+        Walkability.Feet Feet => kind == Kind.Goat ? Walkability.Feet.Goat : Walkability.Feet.Man;
 
         /// Metres of body kept off a palisade: a goat or a boar is wider
         /// than a man, so a little more than `CampPath.WallClearance`.

@@ -45,10 +45,12 @@ namespace SeaSick.World
         public const float CampKeepOut = 25f;       // m clear of a camp centre
         public const float HerdSpread = 8f;         // m, members about their anchor
 
-        // Slope an animal will stand on, metres of rise per metre. Goats like
-        // slopes; a boar on a 1.6 gradient reads as a mountain goat.
-        public const float GoatMaxSlope = 1.6f;
-        public const float BoarMaxSlope = 0.8f;
+        // Slope an animal will stand on, metres of rise per metre. **From
+        // `Walkability` since 2026-09-27** (Kevin: goats walked "straight up
+        // the sides of the mountains"): a goat was 1.6 (58 degrees) on a
+        // one-metre cross, now 45 degrees; a boar walks what a man walks.
+        public static float GoatMaxSlope => Walkability.Grade(Walkability.Feet.Goat);
+        public static float BoarMaxSlope => Walkability.Grade(Walkability.Feet.Man);
 
         /// Seeded per island, called once after its scenery is built. Returns
         /// the fauna root (with its `FaunaLod`) or null when nothing lives
@@ -125,11 +127,11 @@ namespace SeaSick.World
             float h = f.Height(p.x, p.z);
             if (h < f.SandTop + 0.5f) return false;
 
-            // Slope from a one-metre cross, which is the scale of a hoof
-            // rather than of the landform.
-            float hx = Mathf.Abs(f.Height(p.x + 1f, p.z) - f.Height(p.x - 1f, p.z)) * 0.5f;
-            float hz = Mathf.Abs(f.Height(p.x, p.z + 1f) - f.Height(p.x, p.z - 1f)) * 0.5f;
-            if (Mathf.Max(hx, hz) > maxSlope) return false;
+            // Slope to all eight neighbours two metres off -- the same test
+            // a camp's path grid makes of a cell (`Walkability`). Was the
+            // larger AXIS gradient on a one-metre cross, which read a
+            // diagonal flank at 1/sqrt(2) of its real steepness.
+            if (Walkability.SteepestRise(f.Height, p.x, p.z, h) > maxSlope) return false;
 
             if (f.CampKeepOut > 0f)
             {
