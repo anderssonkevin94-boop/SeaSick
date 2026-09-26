@@ -693,8 +693,16 @@ namespace SeaSick.World
                 // segment in a run to the one beside it.
                 if (row.isWall)
                 {
+                    // **A repair draws only the gap (2026-09-26).** The
+                    // stored flag is the normal answer; `WallOn` is asked
+                    // too so a repair queued by an OLD save -- before this
+                    // flag existed, and Kevin has one right now -- still
+                    // gets the partial ghost once it is re-sited, rather
+                    // than the full-run one it would draw by the flag
+                    // alone.
+                    bool repair = row.isRepair || WallOn(row.postA, row.postB) != null;
                     var wallSite = BuildSite.PlaceWall(this, plan, row.postA, row.postB,
-                        row.planId == BuildPlans.Gate.id);
+                        row.planId == BuildPlans.Gate.id, repair);
                     wallSite.Bind(row);
                     wallSite.Refresh(row);
                     blueprints.Add(wallSite);
@@ -4713,19 +4721,51 @@ namespace SeaSick.World
             return row;
         }
 
+        /// **The replaced share of a repair, 2026-09-26.** A breach takes
+        /// the middle THIRD of a plain run (`WallBoxes`'s own "Broken = the
+        /// middle third missing"), so that is what the repair pays for --
+        /// not the whole segment again. A gate's breach is the whole leaf
+        /// (nothing about it is "a third"), so a gate repair still pays
+        /// what raising one always has.
+        ///
+        /// **Flagging for Kevin**: 1/3 is a straight read of the visual
+        /// gap, not a balance pass -- change it here if a repair should
+        /// cost more or less once he has played one.
+        const float PalisadeRepairShare = 1f / 3f;
+
+        /// One resource's share of a repair: the full amount times the
+        /// share, rounded up, never less than 1 of anything the plan
+        /// actually wants (0 stays 0 -- the palisade and gate charge no
+        /// stone or brick today, so this only bites the log count, but it
+        /// is written to hold if that ever changes).
+        static int RepairShareOf(int full, float share)
+            => full <= 0 ? 0 : Mathf.Max(1, Mathf.CeilToInt(full * share));
+
         /// The row itself, shared by siting, the gate and the repair. It
         /// does NOT test the ground: a gate and a repair are both on a line
         /// that already proved itself.
-        PendingBuild QueueWallRow(BuildPlan plan, Vector3 a, Vector3 b, bool fresh = false)
+        PendingBuild QueueWallRow(BuildPlan plan, Vector3 a, Vector3 b, bool fresh = false,
+            bool repair = false)
         {
             Vector3 mid = 0.5f * (a + b);
             float len = Vector3.Distance(new Vector3(a.x, 0f, a.z), new Vector3(b.x, 0f, b.z));
             Vector3 run = b - a;
             run.y = 0f;
+            bool isGatePlan = plan.id == BuildPlans.Gate.id;
+            // **The palisade is priced by the metre (D1), the gate is
+            // priced flat.** `BuildPlan.cost` is zero on the palisade
+            // precisely so nothing can price a wall by the plan.
+            int fullNeeded = isGatePlan ? Mathf.Max(0, plan.cost) : BuildPlans.PalisadeCost(len);
+            int fullStone = Mathf.Max(0, plan.stoneCost);
+            int fullBrick = Mathf.Max(0, plan.brickCost);
+            // Only a plain run's repair is a fraction (see
+            // `PalisadeRepairShare`) -- a gate repair pays in full.
+            float share = repair && !isGatePlan ? PalisadeRepairShare : 1f;
             var row = new PendingBuild
             {
                 planId = plan.id,
                 isWall = true,
+                isRepair = repair,
                 postA = a,
                 postB = b,
                 x = mid.x,
@@ -4733,13 +4773,9 @@ namespace SeaSick.World
                 yaw = run.sqrMagnitude > 0.0001f
                     ? Quaternion.LookRotation(run.normalized, Vector3.up).eulerAngles.y : 0f,
                 length = len,
-                // **The palisade is priced by the metre (D1), the gate is
-                // priced flat.** `BuildPlan.cost` is zero on the palisade
-                // precisely so nothing can price a wall by the plan.
-                needed = plan.id == BuildPlans.Palisade.id
-                    ? BuildPlans.PalisadeCost(len) : Mathf.Max(0, plan.cost),
-                stoneNeeded = Mathf.Max(0, plan.stoneCost),
-                brickNeeded = Mathf.Max(0, plan.brickCost),
+                needed = RepairShareOf(fullNeeded, share),
+                stoneNeeded = RepairShareOf(fullStone, share),
+                brickNeeded = RepairShareOf(fullBrick, share),
                 phased = true,
             };
             if (fresh) TakeFootprint(row);
@@ -4768,10 +4804,12 @@ namespace SeaSick.World
             return QueueWallRow(BuildPlans.Gate, seg.A, seg.B);
         }
 
-        /// **A breach is a repair site.** Queued once per breach (the
-        /// segment only crosses zero once), on the same posts, and stocked
-        /// and built like anything else -- which is the acceptance test's
-        /// last step: *"the hands rebuild it after"*.
+        /// **A repair site, ordered by hand (Kevin, 2026-09-26): "if I
+        /// press on it I should have the option to repair it."** No longer
+        /// queued by `WallSegment.Damage` -- only `WallSheet`'s Repair
+        /// button calls this now, and it is a no-op the second time (same
+        /// dedup this always had), so a double tap before the sheet
+        /// refreshes cannot queue two sites on the same gap.
         public PendingBuild QueueRepair(WallSegment seg)
         {
             if (seg == null || ledger == null) return null;
@@ -4781,9 +4819,11 @@ namespace SeaSick.World
                     && (row.postA - seg.A).sqrMagnitude < 0.05f
                     && (row.postB - seg.B).sqrMagnitude < 0.05f) return row;
             // A breached gate is repaired as the gate it is; anything else
-            // is a palisade again.
+            // is a palisade again. `repair: true` prices it by the gap
+            // (`PalisadeRepairShare`) and tells `EnsureBlueprints` to draw
+            // the partial ghost instead of the whole run.
             return QueueWallRow(seg.IsGate ? BuildPlans.Gate : BuildPlans.Palisade,
-                seg.A, seg.B);
+                seg.A, seg.B, fresh: false, repair: true);
         }
 
         /// The segment on these posts, or null. Posts are on the 2 m

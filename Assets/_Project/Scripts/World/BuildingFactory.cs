@@ -442,6 +442,47 @@ namespace SeaSick.World
             return root;
         }
 
+        /// **A repair's ghost: only the gap (2026-09-26).** Kevin: "place
+        /// the blueprint only for the section being replaced" -- a breach
+        /// takes the middle THIRD of a plain run (`WallBoxes`'s "Broken =
+        /// the middle third missing" above) or the whole leaf of a gate
+        /// (`WallVisual.GateSpan`), so this draws exactly that piece and
+        /// nothing either side of it, at the same height convention
+        /// `WallBoxes` uses (the root already sits at the two posts'
+        /// average height, so the piece needs no lift).
+        ///
+        /// **Always the plain box**, even when Astra's kit is loaded --
+        /// slicing the kit's quarter-metre tiling down to a partial run is
+        /// an art job for later, not a 30-minute repair-flow change. This
+        /// is the same box `WallBoxes` already falls back to everywhere
+        /// the kit fails to load, so it reads as "wall" without claiming
+        /// to be the finished piece.
+        public static GameObject RepairGhost(Transform parent, Vector3 a, Vector3 b,
+            bool gate, float alpha)
+        {
+            Vector3 mid = 0.5f * (a + b);
+            Vector3 run = b - a;
+            run.y = 0f;
+            float len = Mathf.Max(0.5f, run.magnitude);
+            Quaternion facing = run.sqrMagnitude > 0.0001f
+                ? Quaternion.LookRotation(run.normalized, Vector3.up) : Quaternion.identity;
+
+            var root = new GameObject(gate ? "Blueprint_gate_repair" : "Blueprint_palisade_repair");
+            root.transform.SetParent(parent, true);
+            root.transform.SetPositionAndRotation(mid, facing);
+
+            float railH = BuildPlans.PalisadeHeight;
+            float drop = 0.35f;
+            // A gate's whole leaf breaks (nothing beside it does); a plain
+            // run only loses its middle third.
+            float gapLen = gate ? Mathf.Min(len, WallVisual.GateSpan) : len / 3f;
+            Box(root.transform, "RepairGap", new Vector3(0f, railH * 0.5f - drop, 0f),
+                new Vector3(0.28f, railH + drop, gapLen), WallMat);
+
+            Tint(root, alpha);
+            return root;
+        }
+
         static Material WallMat => Mat("PalisadeRun", new Color(0.46f, 0.36f, 0.24f));
         static Material PostMat => Mat("PalisadePost", new Color(0.38f, 0.29f, 0.19f));
 
