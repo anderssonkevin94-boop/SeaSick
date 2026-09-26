@@ -33,6 +33,18 @@ namespace SeaSick.Save
         /// button -- so the console can say.
         public string reason = "";
 
+        /// **The slot system's label** (`SaveSlots`, 2026-09-26). A manual
+        /// save (`SaveManual`/`Rename`) writes whatever the player chose;
+        /// an autosave writes its own slot's default name (`"Autosave 1"`
+        /// etc.), never a custom one. Empty in a save written before slots
+        /// existed (the migrated file too: migration copies the bytes
+        /// as-is), which reads back as "" here, not null (see the class
+        /// doc) -- `SaveSlots` falls back to a default label whenever this
+        /// is blank. Added after version 1 shipped -- NOT a version bump,
+        /// same reasoning as `modular` below: an old save must still load,
+        /// just without a custom name.
+        public string slotDisplayName = "";
+
         /// `TimeOfDay.Seconds`. Scrubbed back FIRST on load, before any ledger
         /// is asked to catch up.
         public double timeSeconds;

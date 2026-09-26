@@ -36,8 +36,22 @@ namespace SeaSick.Save
     {
         public const string FileName = "seasick-save.json";
 
-        public static string Path =>
+        /// **The pre-slots single file** (2026-09-21..2026-09-25). A fixed
+        /// path, never written or deleted by anything after slots shipped:
+        /// `SaveSlots` reads it exactly once, to migrate it into manual
+        /// slot 1, and leaves it on disk afterwards as Kevin's backup.
+        public static string LegacyPath =>
             System.IO.Path.Combine(Application.persistentDataPath, FileName);
+
+        /// **The slot system's write/read target** (2026-09-26, `SaveSlots`):
+        /// whichever slot is "the game being played right now"
+        /// (`SaveSlots.ActiveSlotId`), or manual slot 1 before anything has
+        /// been loaded or explicitly saved this session. Every caller below
+        /// and every other script that reads `SaveGame.Path` (the SAVE
+        /// button, the refit-persist call in `ShipyardService`, the probes)
+        /// is unchanged -- only what the path resolves to moved, from one
+        /// fixed file to a slot.
+        public static string Path => SaveSlots.ResolveActivePath();
 
         public static bool Exists => System.IO.File.Exists(Path);
 
@@ -69,18 +83,30 @@ namespace SeaSick.Save
         // --- writing ----------------------------------------------------------
 
         /// The game's own saves: on an anchor, a departure, a building, a
-        /// quit. Silent no-op until the player has picked New or Continue.
+        /// quit, or the 5-minute timer (`SaveAutosaveTimer`). Silent no-op
+        /// until the player has picked New or Continue. **Never writes a
+        /// manual slot** (Kevin, 2026-09-26) -- it rotates a `SaveSlots`
+        /// autosave slot instead, even when a manual slot is the one
+        /// currently active, so an autosave can never clobber a save the
+        /// player named and chose to keep.
         public static void Autosave(string reason)
         {
             if (!GameBoot.Decided || Suppressed || Restoring) return;
-            Save(reason);
+            SaveSlots.WriteAutosave(reason);
         }
 
         /// The button. Not gated on `Suppressed`: a person pressing SAVE
-        /// means it.
+        /// means it. Writes the active slot (`Path`) -- manual if one is
+        /// loaded, else the slot-1 default.
         public static bool Save(string reason) => SaveTo(Path, reason);
 
-        public static bool SaveTo(string path, string reason)
+        public static bool SaveTo(string path, string reason) => SaveTo(path, reason, null);
+
+        /// As `SaveTo(path, reason)`, plus a hook to touch the captured
+        /// `SaveData` before it is serialised -- `SaveSlots` uses it to
+        /// stamp `slotDisplayName` without duplicating the capture/write
+        /// plumbing here.
+        public static bool SaveTo(string path, string reason, System.Action<SaveData> customize)
         {
             if (!Application.isPlaying) return false;
             if (saving) return false;      // a raise inside a capture must not recurse
@@ -94,6 +120,7 @@ namespace SeaSick.Save
                     return false;
                 }
                 data.reason = reason;
+                customize?.Invoke(data);
                 string json = JsonUtility.ToJson(data, true);
                 string dir = System.IO.Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
@@ -294,6 +321,7 @@ namespace SeaSick.Save
                 if (d.seen == null) d.seen = new List<SeenSave>();
                 if (d.ship.modular == null) d.ship.modular = "";
                 if (d.ship.dryDock == null) d.ship.dryDock = "";
+                if (d.slotDisplayName == null) d.slotDisplayName = "";
                 if (d.trackX == null) d.trackX = new List<float>();
                 if (d.trackZ == null) d.trackZ = new List<float>();
                 if (d.trackAt == null) d.trackAt = new List<double>();
