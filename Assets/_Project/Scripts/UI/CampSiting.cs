@@ -419,6 +419,7 @@ namespace SeaSick.UI
             Refusal = "";
             ClearLine = "";
             valid = false;
+            onWall = false;
             if (ghost != null) { Destroy(ghost); ghost = null; }
             if (ring != null) { Destroy(ring.gameObject); ring = null; }
         }
@@ -530,7 +531,19 @@ namespace SeaSick.UI
                 at = centre;
                 if (snapped) valid = outpost.CanPlace(sited, at, snappedYaw, out why);
             }
-            else valid = Test(at, out why);
+            else
+            {
+                // **A watchtower near a wall snaps onto it (2026-09-27).**
+                // Within `Outpost.WallTowerSnap` of a wall post or line the
+                // drawing jumps to that node and becomes part of the wall --
+                // and the town reach does not apply to it. Anywhere else,
+                // exactly as before.
+                Vector3 node = want;
+                onWall = plan.id == OutpostLedger.WatchtowerId
+                    && outpost.FindWallNode(want, Outpost.WallTowerSnap, out node);
+                if (onWall) at = node;
+                valid = Test(at, out why);
+            }
             // `Yaw` reads `at`, so the ghost and the test are always asking
             // about the same rectangle on the same ground.
 
@@ -546,6 +559,8 @@ namespace SeaSick.UI
             {
                 outpost.CountObstructions(sited, at, Yaw, out int trees, out int rocks);
                 ClearLine = FormatClearLine(trees, rocks);
+                if (onWall)
+                    ClearLine = string.IsNullOrEmpty(ClearLine) ? OnWallLine : OnWallLine + " · " + ClearLine;
             }
 
             Place(at);
@@ -570,9 +585,29 @@ namespace SeaSick.UI
         public static Vector3 GhostAt =>
             Placing ? (Instance.wallMode ? WallSiting.ButtonsAt : Instance.at) : Vector3.zero;
 
+        /// **Is the watchtower being sited snapped onto the wall?** Read
+        /// by the check (`WallTowerCheck`) as well as the label.
+        bool onWall;
+        public static bool OnWall => Placing && Instance.onWall;
+
+        /// What the label under a snapped tower says.
+        public const string OnWallLine = "on the wall";
+
+        /// **Where the drawing is being asked about**, for a check that
+        /// drives the real siting path: move it as a tap would, and
+        /// re-evaluate now.
+        public static void MoveTo(Vector3 world)
+        {
+            if (!Placing || Instance.wallMode) return;
+            Instance.want = world;
+            Instance.Evaluate();
+        }
+
         void Commit()
         {
             if (!valid) return;
+            bool joinWall = onWall;
+            Vector3 node = at;
             int wanted = outpost.Site(sited, at, Yaw, movingRow, out string siteWhy);
             if (wanted < 0)
             {
@@ -583,6 +618,9 @@ namespace SeaSick.UI
                 Refusal = siteWhy;
                 return;
             }
+            // Sited on a wall: a standing run through the node is split
+            // there, so the tower stands between two runs, not on one.
+            if (joinWall) outpost.JoinTowerToWall(node);
 
             DropTheViewOn(outpost);
             Cancel();

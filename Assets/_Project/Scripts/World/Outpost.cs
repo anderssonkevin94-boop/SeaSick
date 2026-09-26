@@ -23,7 +23,7 @@ namespace SeaSick.World
     /// A site is CHOSEN on ground that is already flat enough, its corners
     /// are measured, and the building sits at its highest corner with a
     /// footing deep enough to bridge down to its lowest.
-    public class Outpost : MonoBehaviour
+    public partial class Outpost : MonoBehaviour
     {
         /// The home settlement. Kept as a static because the voyage loop is
         /// still berth-to-berth and the panel asks about home specifically --
@@ -407,6 +407,10 @@ namespace SeaSick.World
             // `SnapDryDock`) and may be well outside the town ring the same
             // way the pier is.
             if (plan.kind == BuildKind.DryDock) return false;
+            // A watchtower snapped onto the wall is part of the wall, and a
+            // wall may run further than the camp (2026-09-27,
+            // `Outpost.WallTowers.cs`).
+            if (IsTowerPlan(plan) && OnWallNode(at)) return false;
             float d = Island.FlatDistance(at, campCentre);
             if (d <= TownRadius) return false;
             why = $"too far from the town centre ({d:F0} m, {TownRadius:F0} m is the limit)";
@@ -4136,7 +4140,11 @@ namespace SeaSick.World
             }
 
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
-            if (!Clear(at, halfDiag, out string blocked)) { why = blocked; return false; }
+            // A tower ON the wall is not refused by the wall it joins.
+            wallTowerNode = IsTowerPlan(plan) && OnWallNode(at) ? at : (Vector3?)null;
+            bool clear = Clear(at, halfDiag, out string blocked);
+            wallTowerNode = null;
+            if (!clear) { why = blocked; return false; }
             return true;
         }
 
@@ -4469,6 +4477,7 @@ namespace SeaSick.World
                     float need = halfDiag + rHalf;
                     if (row.isWall)
                     {
+                        if (TowerJoins(row.postA, row.postB)) continue;
                         // A wall row is a LINE, not a disc round its
                         // midpoint: measuring a 12 m segment as a circle
                         // would refuse a hut six metres off either end of
@@ -4495,6 +4504,7 @@ namespace SeaSick.World
             {
                 var w = walls[i];
                 if (w == null) continue;
+                if (TowerJoins(w.A, w.B)) continue;
                 if (w.FlatDistanceTo(p) < halfDiag + WallClearance)
                 {
                     why = w.IsGate ? "the gate is in the way" : "the wall is in the way";
@@ -4626,6 +4636,8 @@ namespace SeaSick.World
             {
                 var bld = built[i];
                 if (bld == null) continue;
+                // A run may end AT a watchtower: that is the wall tower.
+                if (TowerEndsRun(bld.Id, bld.transform.position, a, b)) continue;
                 Vector2 fp = bld.Footprint;
                 float halfDiag = 0.5f * Mathf.Sqrt(fp.x * fp.x + fp.y * fp.y);
                 if (WallSegment.FlatDistance(a, b, bld.transform.position)
@@ -4645,6 +4657,7 @@ namespace SeaSick.World
                         { why = "there is already a wall going up there"; return false; }
                         continue;
                     }
+                    if (TowerEndsRun(row.planId, row.At, a, b)) continue;
                     var plan = PlanFor(row.planId, row.length);
                     float rl = plan.footprint.x, rw = plan.footprint.y;
                     float rHalf = 0.5f * Mathf.Sqrt(rl * rl + rw * rw);

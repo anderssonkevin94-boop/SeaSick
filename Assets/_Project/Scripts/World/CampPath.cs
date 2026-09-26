@@ -684,6 +684,15 @@ namespace SeaSick.World
             RelayWalls(blocked ? null : seg);
         }
 
+        /// **Re-lay the wall layer as it stands** -- a wall tower came or
+        /// went (`Outpost.TouchWallTowers`), which changes no segment.
+        public void RelayWallLayer()
+        {
+            if (!built) Build();
+            if (hs == null) return;
+            RelayWalls(null);
+        }
+
         /// The same for a line the caller describes itself -- what a wall
         /// SITE uses to keep the ground it is drawn on to itself. Goes on
         /// the rock layer, so a wall re-lay never wipes it.
@@ -753,7 +762,20 @@ namespace SeaSick.World
                     }
                 }
             }
+
+            // **Wall towers are wall (2026-09-27).** The node a tower stands
+            // on blocks everybody while the tower stands, whatever the runs
+            // either side of it are doing -- a breach beside a tower is a
+            // hole in the run, not round the tower.
+            camp.WallTowerNodes(towerNodes);
+            for (int k = 0; k < towerNodes.Count; k++)
+            {
+                int i = Index(towerNodes[k]);
+                if (i >= 0) wall[i] |= BlockBoth;
+            }
         }
+
+        readonly List<Vector3> towerNodes = new List<Vector3>();
 
         // --- walls as LINES: the continuous test ------------------------------
 

@@ -409,6 +409,9 @@ namespace SeaSick.World
         public static Vector3 WorkSpot(Outpost outpost, Building b)
         {
             if (outpost == null || b == null) return Vector3.zero;
+            // A tower on the wall: its door is on the camp side of the wall
+            // (2026-09-27), whatever side the model's own mark is on.
+            if (outpost.IsWallTower(b)) return outpost.WallTowerDoor(b);
             var marks = MarksOf(b);
             if (marks.stand != null)
             {

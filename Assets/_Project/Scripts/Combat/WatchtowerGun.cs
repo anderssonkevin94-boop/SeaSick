@@ -84,6 +84,23 @@ namespace SeaSick.Combat
         void Start()
         {
             BuildGun();
+            // A tower raised on a wall node is part of the wall: the post
+            // there comes down and the node blocks raiders (2026-09-27,
+            // `Outpost.WallTowers.cs`). Start, not OnEnable: by now the
+            // building stands where it will stay. A ghost's gun is destroyed
+            // before it ever starts, so it never touches the wall.
+            started = true;
+            if (Camp != null) Camp.TouchWallTowers();
+        }
+
+        bool started;
+
+        /// Knocked down (`Outpost.Demolish`, which has already taken it out
+        /// of `Built`) or unloaded: the post goes back up on its node and the
+        /// node's cell reopens to whatever the runs say.
+        void OnDestroy()
+        {
+            if (started && Camp != null) Camp.TouchWallTowers();
         }
 
         /// True only while someone is actually working the tower. A gun with

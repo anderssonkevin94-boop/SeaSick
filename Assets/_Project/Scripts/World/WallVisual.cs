@@ -46,6 +46,13 @@ namespace SeaSick.World
         /// leaving the node) makes a bend acute enough to trim.
         public const float AcuteTrim = 45f;
 
+        /// **Metres a run gives up at a wall tower's node** (2026-09-27):
+        /// Astra's tower is 2.28 m across its legs, so a run stopping 1 m
+        /// short of the node ends just inside them rather than running its
+        /// stakes through the tower's middle. Whole quarters, so the tiling
+        /// is unchanged. A guess until Kevin sees it on the phone.
+        public const float TowerTrim = 1.0f;
+
         /// Pieces are sunk this far below the lowest ground they span, the
         /// post a little further: the kit's stakes reach 0.08 m under their
         /// root, which is a shallow embed on a slope.
@@ -68,9 +75,12 @@ namespace SeaSick.World
             public bool trimA, trimB;
             /// Stand a post at each uncovered end, under the segment root.
             public bool ownPosts;
+            /// A wall tower stands on this end's node (2026-09-27): the run
+            /// stops `TowerTrim` short of it, at the tower's legs.
+            public bool towerA, towerB;
 
             public int Key => (gate ? 1 : 0) | (flip ? 2 : 0) | (trimA ? 4 : 0)
-                | (trimB ? 8 : 0) | (ownPosts ? 16 : 0);
+                | (trimB ? 8 : 0) | (ownPosts ? 16 : 0) | (towerA ? 32 : 0) | (towerB ? 64 : 0);
         }
 
         // --- the kit ---------------------------------------------------------
@@ -183,7 +193,12 @@ namespace SeaSick.World
             }
             else
             {
-                s.Tile(whole, 0f, L, fit.trimA, fit.trimB);
+                // A wall tower's end stops at the tower's legs; its own
+                // trim replaces the acute-bend quarter there.
+                float u0 = fit.towerA ? Mathf.Min(TowerTrim, 0.5f * L) : 0f;
+                float u1 = fit.towerB ? Mathf.Max(u0, L - TowerTrim) : L;
+                bool tA = fit.trimA && !fit.towerA, tB = fit.trimB && !fit.towerB;
+                s.Tile(whole, u0, u1, tA, tB);
 
                 // **Breached = the middle third gone**: the outer thirds
                 // keep their stakes, the middle is stumps. There are no
@@ -192,10 +207,10 @@ namespace SeaSick.World
                 // a hole, and a hole may have gaps in it.
                 if (broken != null)
                 {
-                    float third = L / 3f;
-                    s.Tile(broken, 0f, third, fit.trimA, false);
-                    s.Metres(broken, breach, third, 2f * third);
-                    s.Tile(broken, 2f * third, L, false, fit.trimB);
+                    float third = (u1 - u0) / 3f;
+                    s.Tile(broken, u0, u0 + third, tA, false);
+                    s.Metres(broken, breach, u0 + third, u0 + 2f * third);
+                    s.Tile(broken, u0 + 2f * third, u1, false, tB);
                 }
             }
 

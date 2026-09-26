@@ -96,6 +96,14 @@ namespace SeaSick.World
         {
             var fit = new WallVisual.Fit { gate = gate, flip = WallVisual.Flip(a, b, Centre) };
             Vector3 ab = WallVisual.Flat(b - a);
+            // A wall tower on either node (2026-09-27): the run stops at
+            // its legs. Not for a gate -- a tower never snaps to a gate's
+            // posts, and a gate's module owns its own ends.
+            if (!gate && Camp != null)
+            {
+                fit.towerA = Camp.WallTowerAt(a) != null;
+                fit.towerB = Camp.WallTowerAt(b) != null;
+            }
             for (int i = 0; i < segs.Count; i++)
             {
                 var s = segs[i];
@@ -158,6 +166,8 @@ namespace SeaSick.World
                 AddEnd(nodes, s.B, s.A - s.B, gateHere);
             }
 
+            CoverTowers(nodes);
+
             if (postRoot == null)
             {
                 postRoot = new GameObject("WallPosts").transform;
@@ -198,6 +208,14 @@ namespace SeaSick.World
             }
             n.covered |= gateHere;
             n.outgoing.Add(WallVisual.Flat(outward));
+        }
+
+        /// A wall tower stands in for the post on its node (2026-09-27).
+        void CoverTowers(Dictionary<long, Node> nodes)
+        {
+            if (Camp == null) return;
+            foreach (var n in nodes.Values)
+                if (!n.covered && Camp.WallTowerAt(n.at) != null) n.covered = true;
         }
 
         /// The standing posts, for checks.
