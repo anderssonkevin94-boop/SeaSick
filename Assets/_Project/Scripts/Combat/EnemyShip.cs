@@ -114,7 +114,36 @@ namespace SeaSick.Combat
         // off the moment they get interesting.
         [SerializeField] float hullBeam = 7.5f;
 
+        // **The land is read off the height field, not off a circle.**
+        // Kevin, 2026-09-26: *"enemy ships are sailing through my island."*
+        // Islands out here are lobed, 300-1200 m across, and the per-bearing
+        // outline the old avoidance used is the FIRST water crossing from
+        // the centre: every arm beyond a bay, and every neighbour that is
+        // not `Island.Nearest` to the lookahead point, was open sea to a
+        // raider. Measured on Kevin's save: patrol hulls had ground above
+        // the keel in 11% of samples. So both the steering and the hard
+        // stop now ask `Island.TerrainHeight` directly.
+        [SerializeField] float draught = 3.2f;      // ground shallower than this stops her dead (1.5 m keel + a trough)
+        [SerializeField] float steerDepth = 5f;     // ...and shallower than this is steered round
+        [SerializeField] float planEvery = 0.3f;    // seconds between bearing fans
+        // On a raid the ground this close to Site.water is hers to run up;
+        // everywhere else, including the rest of the camp's own island, is
+        // solid. The old exemption was the whole home island, so a raider
+        // whose camp lay on the far side sailed straight across it and
+        // "beached" on the first shallows she met, 200 m from the camp.
+        [SerializeField] float beachZone = 45f;
+        [SerializeField] float raidGiveUpSeconds = 150f;
+
         Island home;
+        float steerOffset;   // degrees off the goal bearing the last fan chose
+        float nextPlanAt;
+        bool landClose;      // the last fan saw ground inside its reach
+        Vector3 lastClear;   // where the hard stop last found her in water
+        bool haveClear;
+        float circleExtra;   // degrees further round her circle, off a neighbour's shore
+        bool runIn;          // on a raid: open water all the way to the landing
+        int raidSign;        // on a raid: which way round her island she is going
+        float raidStartedAt;
         int patrolSign = 1;
         int damage;
         float diedAt = -1f;
@@ -180,6 +209,10 @@ namespace SeaSick.Combat
             if (!Alive) return;
             Site = site;
             Current = Duty.Raid;
+            raidStartedAt = Time.time;
+            nextPlanAt = 0f;
+            runIn = false;
+            raidSign = 0;
             Beached = false;
             party = null;
         }
@@ -555,8 +588,10 @@ namespace SeaSick.Combat
 
             Vector3 goal = DecideGoal();
             float desired = Steer(goal);
+            Vector3 before = transform.position;
             SailToward(desired, dt);
             KeepClear();
+            HoldOffLand(before);
             TryFire();
             RideSea(dt);
             Flash();
@@ -579,14 +614,43 @@ namespace SeaSick.Combat
                 // raid by fighting the ship, which is the whole bargain.
                 if (Health01 < 0.5f) { EndRaid(); return CircleGoal(centre, pos); }
 
+                // She could not find a way round in time (a bay, a reef):
+                // give it up rather than press into a coast forever.
+                if (!Beached && Time.time - raidStartedAt > raidGiveUpSeconds)
+                { EndRaid(); return CircleGoal(centre, pos); }
+
+                // Shallow water only counts as arrived INSIDE the beach zone:
+                // anywhere else it is a coast in the way, not the landing.
+                float toSite = Flat(Site.water - pos).sqrMagnitude;
                 if (!Beached
-                    && (Flat(Site.water - pos).sqrMagnitude <= beachStop * beachStop
-                        || DepthAt(pos) < beachDepth))
+                    && (toSite <= beachStop * beachStop
+                        || (toSite <= beachZone * beachZone && DepthAt(pos) < beachDepth)))
                 {
                     Beached = true;
                     party = RaidParty.Begin(this);
                 }
-                return Site.water;
+                if (Beached || Island.TerrainHeight == null) return Site.water;
+
+                // Run in only once the line to the landing is water. Until
+                // then she sails her station circle -- which clears her own
+                // island by construction -- round to the landing's side. A
+                // camp on the far shore used to mean a beeline at it: across
+                // the island before the height-field stop, into the near
+                // bay after it.
+                if (Time.time >= nextPlanAt)
+                {
+                    Vector3 line = Flat(Site.water - pos);
+                    float d = line.magnitude;
+                    runIn = d < 1f || ClearRun(pos, Mathf.Atan2(line.x, line.z) * Mathf.Rad2Deg, d) >= d - 0.5f;
+                }
+                if (runIn) return Site.water;
+                if (raidSign == 0)
+                {
+                    Vector3 a = Flat(pos - centre), b = Flat(Site.water - centre);
+                    raidSign = Mathf.DeltaAngle(Mathf.Atan2(a.x, a.z) * Mathf.Rad2Deg,
+                                                Mathf.Atan2(b.x, b.z) * Mathf.Rad2Deg) >= 0f ? 1 : -1;
+                }
+                return CircleGoal(centre, pos, raidSign);
             }
 
             float playerToIsland = player != null
@@ -640,12 +704,30 @@ namespace SeaSick.Combat
         /// Steer to a point further round the circle than we are now, which
         /// gives a smooth orbit instead of the in-out weave you get from
         /// chasing the nearest point on it.
-        Vector3 CircleGoal(Vector3 centre, Vector3 pos)
+        Vector3 CircleGoal(Vector3 centre, Vector3 pos) => CircleGoal(centre, pos, patrolSign);
+
+        Vector3 CircleGoal(Vector3 centre, Vector3 pos, int patrolSign)
         {
             Vector3 fromCentre = Flat(pos - centre);
             if (fromCentre.sqrMagnitude < 1f) fromCentre = Vector3.forward;
             float ang = Mathf.Atan2(fromCentre.x, fromCentre.z) * Mathf.Rad2Deg
                         + orbitLeadDeg * patrolSign;
+
+            // Her station circle is sized off her own island and can run
+            // across a neighbour's: aim further round it, past that shore,
+            // rather than at a point on land she would circle forever.
+            // Re-asked at the fan's rate, not every frame.
+            if (Island.TerrainHeight != null && Time.time >= nextPlanAt)
+            {
+                circleExtra = 0f;
+                for (int k = 0; k <= 12; k++)
+                {
+                    float a = (ang + k * 10f * patrolSign) * Mathf.Deg2Rad;
+                    Vector3 q = centre + new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * orbitRadius;
+                    if (!Solid(q.x, q.z, steerDepth)) { circleExtra = k * 10f * patrolSign; break; }
+                }
+            }
+            ang += circleExtra;
             return centre + new Vector3(
                 Mathf.Sin(ang * Mathf.Deg2Rad), 0f, Mathf.Cos(ang * Mathf.Deg2Rad)) * orbitRadius;
         }
@@ -663,21 +745,134 @@ namespace SeaSick.Combat
             float reach = Mathf.Max(lookahead, speed * 5f);
             Vector3 probe = pos + dir * reach;
 
-            // Islands are not circles, so ask for the shoreline distance on the
-            // bearing we are actually approaching from. A raider's own island
-            // is still solid — orbiting it must not mean sailing through it.
-            var isle = Island.Nearest(probe);
-            // On a raid the camp's own shore is the destination, not a hazard.
-            // Avoidance would bend her round the island forever and she would
-            // never land. Every other island, and every reef, still turns her.
-            if (isle != null && !(Raiding && isle == home))
-                dir = Avoid(pos, dir, isle.transform.position, isle.RadiusToward(probe));
+            if (Island.TerrainHeight == null)
+            {
+                // No height field (a test scene): the old circle model.
+                var isle = Island.Nearest(probe);
+                if (isle != null && !(Raiding && isle == home))
+                    dir = Avoid(pos, dir, isle.transform.position, isle.RadiusToward(probe));
+            }
 
             var reef = Reef.Nearest(probe);
             if (reef != null)
                 dir = Avoid(pos, dir, reef.transform.position, reef.Radius);
 
-            return Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+            float want = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+            if (Island.TerrainHeight == null) return want;
+
+            // The land itself: a fan of bearings round the one she wants,
+            // nearest first, and the first whose line is clear water wins.
+            // Re-cast a few times a second rather than every frame -- a
+            // ray is ~7 height samples, and the answer only changes as fast
+            // as she can turn. Staggered per hull, and off `UnityEngine.Random`
+            // so the seeded world sequence is never drawn from.
+            if (Time.time >= nextPlanAt)
+            {
+                nextPlanAt = Time.time + planEvery * (0.8f + 0.4f * Mathf.Repeat(GetInstanceID() * 0.618f, 1f));
+                float toGoal2 = Flat(goal - pos).magnitude;
+                steerOffset = PlanOffset(pos, want, Mathf.Min(reach, Mathf.Max(toGoal2, 30f)));
+            }
+            return want + steerOffset;
+        }
+
+        /// Ground a raider must not sail over. `limit` is how deep counts as
+        /// too shallow; the raid's own landing zone never is.
+        bool Solid(float x, float z, float limit)
+        {
+            var h = Island.TerrainHeight;
+            if (h == null) return false;
+            if (Raiding)
+            {
+                float dx = x - Site.water.x, dz = z - Site.water.z;
+                if (dx * dx + dz * dz < beachZone * beachZone) return false;
+            }
+            return h(x, z) > -limit;
+        }
+
+        /// Metres of clear water along a bearing, up to `reach`.
+        float ClearRun(Vector3 pos, float bearing, float reach)
+        {
+            const float Step = 12f;
+            float r = bearing * Mathf.Deg2Rad;
+            float sx = Mathf.Sin(r), sz = Mathf.Cos(r);
+            for (float t = Step; t <= reach + 0.01f; t += Step)
+                if (Solid(pos.x + sx * t, pos.z + sz * t, steerDepth)) return t - Step;
+            return reach;
+        }
+
+        /// How far off `want` to steer so the line ahead is water. Tries the
+        /// side she already favoured first, so she does not dither between
+        /// two ways round the same headland.
+        float PlanOffset(Vector3 pos, float want, float reach)
+        {
+            landClose = false;
+            if (ClearRun(pos, want, reach) >= reach) return 0f;
+            landClose = true;
+
+            float first = steerOffset >= 0f ? 1f : -1f;
+            float bestOffset = steerOffset, bestRun = -1f;
+            for (int k = 1; k <= 12; k++)
+            {
+                for (int side = 0; side < 2; side++)
+                {
+                    float off = (side == 0 ? first : -first) * k * 15f;
+                    float run = ClearRun(pos, want + off, reach);
+                    if (run >= reach) return off;
+                    if (run > bestRun) { bestRun = run; bestOffset = off; }
+                }
+            }
+            if (bestRun > 0f) return bestOffset;   // boxed in: the most water ahead
+
+            // Already in the shallows, every line blocked at its first step:
+            // head for the deepest water round her, never further up the beach.
+            var h = Island.TerrainHeight;
+            float deepest = float.MaxValue;
+            for (int k = 0; k < 12; k++)
+            {
+                float off = k * 30f - 180f;
+                float r = (want + off) * Mathf.Deg2Rad;
+                float g = h(pos.x + Mathf.Sin(r) * 15f, pos.z + Mathf.Cos(r) * 15f);
+                if (g < deepest) { deepest = g; bestOffset = off; }
+            }
+            return bestOffset;
+        }
+
+        /// The hard stop. If this frame's move put her keel or her bow on
+        /// ground she was not on a moment ago, it is undone and she loses
+        /// way -- touching bottom costs, as it does the player. A hull that
+        /// was already on the ground (a shove, a bad spawn) is let move, or
+        /// she could never get off; the fan is already steering her out.
+        void HoldOffLand(Vector3 before)
+        {
+            var h = Island.TerrainHeight;
+            if (h == null) return;
+            // Open water and nothing near: check one frame in eight. The
+            // fan's rays are the early warning; this is the wall behind them,
+            // and `lastClear` is what makes the skipped frames safe -- a
+            // grounding is undone back to the last spot KNOWN to be water,
+            // not merely to the previous frame.
+            if (!landClose && ((Time.frameCount + GetInstanceID()) & 7) != 0) return;
+
+            Vector3 f = Forward() * (length * 0.45f);
+            Vector3 now = transform.position;
+            if (!Solid(now.x, now.z, draught) && !Solid(now.x + f.x, now.z + f.z, draught)
+                && !Solid(now.x - f.x, now.z - f.z, draught))
+            {
+                lastClear = now; haveClear = true;
+                return;
+            }
+
+            speed *= 0.5f;
+            nextPlanAt = 0f;   // re-plan now: whatever she was steering for is wrong
+            if (haveClear)
+            {
+                transform.position = new Vector3(lastClear.x, now.y, lastClear.z);
+                return;
+            }
+            // Never been in clear water (a bad spawn, a shove): she may move,
+            // but only off the ground, never further up it.
+            if (h(now.x, now.z) > h(before.x, before.z))
+                transform.position = new Vector3(before.x, now.y, before.z);
         }
 
         /// Push the heading sideways when the line ahead passes too close to a
@@ -904,14 +1099,15 @@ namespace SeaSick.Combat
         {
             Vector3 pos = transform.position;
 
-            var isle = Island.Nearest(pos);
-            // Same exemption as Steer, and a harder one: this shove is the
-            // solid shoreline, so leaving it on would physically hold her off
-            // the sand she is trying to run up. When EndRaid fires it comes
-            // back and pushes her out again, which is exactly the shove off
-            // the beach she wants anyway.
-            if (isle != null && !(Raiding && isle == home))
-                Shove(isle.transform.position, isle.RadiusToward(pos), hullMargin);
+            // The circle shove is the fallback for a scene with no height
+            // field; with one, `HoldOffLand` is the shoreline, and a radial
+            // shove off a lobed island's centre only teleported her sideways.
+            if (Island.TerrainHeight == null)
+            {
+                var isle = Island.Nearest(pos);
+                if (isle != null && !(Raiding && isle == home))
+                    Shove(isle.transform.position, isle.RadiusToward(pos), hullMargin);
+            }
 
             var reef = Reef.Nearest(pos);
             if (reef != null) Shove(reef.transform.position, reef.Radius, hullMargin * 0.5f);
@@ -1062,9 +1258,42 @@ namespace SeaSick.Combat
         public static EnemyShip Spawn(Island island, float radius, int direction, string name,
             int ladderNode)
         {
+            // Her station circle is sized off her own island alone, and in
+            // a tight group it runs across the neighbours (Kevin's save:
+            // Island_15's circle was 7/72 land and the raider spent her
+            // watch pinned in a pocket between three islands). Widen it, up
+            // to 200 m, to the ring with the least land on it.
+            var hf = Island.TerrainHeight;
+            if (hf != null)
+            {
+                float best = radius; int bestSolid = int.MaxValue;
+                Vector3 c = island.transform.position;
+                for (float grow = 0f; grow <= 200f; grow += 50f)
+                {
+                    int solid = 0;
+                    for (int k = 0; k < 36; k++)
+                    {
+                        float a = k * 10f * Mathf.Deg2Rad;
+                        if (hf(c.x + Mathf.Sin(a) * (radius + grow), c.z + Mathf.Cos(a) * (radius + grow)) > -5f) solid++;
+                    }
+                    if (solid < bestSolid) { bestSolid = solid; best = radius + grow; }
+                    if (solid == 0) break;
+                }
+                radius = best;
+            }
+
             float ang = Random.Range(0f, 360f);
             Vector3 pos = island.transform.position + new Vector3(
                 Mathf.Sin(ang * Mathf.Deg2Rad), 0f, Mathf.Cos(ang * Mathf.Deg2Rad)) * radius;
+            // Her station circle can cross a neighbour's shore: start her in
+            // deep water on it, not inside somebody else's island.
+            var h = Island.TerrainHeight;
+            for (int k = 1; h != null && h(pos.x, pos.z) > -6f && k < 24; k++)
+            {
+                float a = (ang + k * 15f) * Mathf.Deg2Rad;
+                pos = island.transform.position + new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * radius;
+                if (h(pos.x, pos.z) <= -6f) ang += k * 15f;
+            }
 
             var go = new GameObject(name);
             go.transform.position = pos;
