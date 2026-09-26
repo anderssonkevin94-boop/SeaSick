@@ -1,0 +1,227 @@
+/* Home / Load / Pause / Save-list.
+ *
+ * Loaded alongside Sheets.uss (GameMenus.cs adds both to the root), so every
+ * button, rule and label here can borrow SheetKit's builders and SheetTheme's
+ * classes -- the parchment card look is the game's one look, not a menu of
+ * its own. This file only adds what a full-screen modal needs that a sheet
+ * never did: a dimming scrim behind the card, a centred title block, and the
+ * save-slot list rows.
+ */
+
+.menu-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+}
+
+.menu-scrim {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(10, 16, 20, 0.55);
+}
+
+/* The menu's own card -- wider than a world sheet (it is the whole screen's
+ * business, not one object's), capped so it never sprawls on a desk. */
+.menu-card {
+    background-color: rgb(244, 232, 207);
+    border-radius: 10px;
+    border-width: 2px;
+    border-color: rgb(31, 45, 56);
+    padding: 20px;
+    width: 100%;
+    max-width: 460px;
+}
+
+.menu-card--wide {
+    max-width: 620px;
+}
+
+.menu-title {
+    font-size: 26px;
+    color: rgb(31, 45, 56);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf");
+    -unity-text-align: middle-center;
+    margin-bottom: 4px;
+}
+
+.menu-subtitle {
+    font-size: 13px;
+    color: rgba(31, 45, 56, 0.62);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    -unity-text-align: middle-center;
+    white-space: normal;
+    margin-bottom: 14px;
+}
+
+/* One big decision per screen, stacked and full-width -- the phone-thumb
+ * button, same floor (44pt-ish at the default panel scale) as the sheet
+ * action row. */
+.menu-btn {
+    height: 48px;
+    margin-bottom: 10px;
+}
+
+.menu-btn:disabled {
+    opacity: 0.4;
+}
+
+/* The small back arrow at the top-left of a pushed screen (Load, from Home). */
+.menu-back {
+    height: 34px;
+    width: 34px;
+    border-radius: 17px;
+    margin-bottom: 10px;
+    align-self: flex-start;
+}
+
+/* ---------------- the slot list ---------------- */
+
+/* The slot list: a plain column, not a scroll view (see SlotListScreen.cs).
+ * `overflow: hidden` is a guard, not a scrollbar -- 8 rows always fits. */
+.menu-scroll {
+    max-height: 460px;
+    overflow: hidden;
+}
+
+.menu-slot-row {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(31, 45, 56, 0.05);
+    border-width: 1px;
+    border-color: rgba(31, 45, 56, 0.25);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+}
+
+.menu-slot-row--empty {
+    background-color: rgba(31, 45, 56, 0.02);
+    border-color: rgba(31, 45, 56, 0.15);
+}
+
+.menu-slot-main {
+    flex-direction: column;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.menu-slot-name {
+    font-size: 15px;
+    color: rgb(31, 45, 56);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+    white-space: normal;
+}
+
+.menu-slot-sub {
+    font-size: 11px;
+    color: rgba(31, 45, 56, 0.62);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    white-space: normal;
+    margin-top: 2px;
+}
+
+.menu-slot-tag {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: rgb(244, 232, 207);
+    background-color: rgb(46, 126, 163);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-left: 8px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+
+.menu-slot-actions {
+    flex-direction: row;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.menu-slot-actions > Button {
+    height: 30px;
+    margin: 0;
+    margin-left: 6px;
+}
+
+/* ---------------- confirm / prompt dialog ---------------- */
+
+.menu-dialog-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(10, 16, 20, 0.45);
+}
+
+.menu-dialog {
+    background-color: rgb(244, 232, 207);
+    border-radius: 10px;
+    border-width: 2px;
+    border-color: rgb(31, 45, 56);
+    padding: 18px;
+    width: 100%;
+    max-width: 380px;
+}
+
+.menu-dialog-body {
+    font-size: 14px;
+    color: rgb(31, 45, 56);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    white-space: normal;
+    margin-bottom: 14px;
+}
+
+.menu-dialog-field {
+    margin-bottom: 14px;
+    font-size: 14px;
+}
+
+.menu-dialog-actions {
+    flex-direction: row;
+}
+
+.menu-dialog-actions > Button {
+    flex-grow: 1;
+    flex-basis: 0;
+    height: 40px;
+    margin-right: 8px;
+}
+
+.menu-dialog-actions > Button:last-child {
+    margin-right: 0;
+}
+
+/* ---------------- toast ---------------- */
+
+.menu-toast {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 40px;
+    align-items: center;
+}
+
+.menu-toast-body {
+    background-color: rgb(31, 45, 56);
+    color: rgb(244, 232, 207);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+    font-size: 12px;
+    border-radius: 16px;
+    padding: 8px 16px;
+}
+
+/* ---------------- pause chip (the small in-world button) ---------------- */
+
+.menu-pause-chip {
+    font-size: 16px;
+}
