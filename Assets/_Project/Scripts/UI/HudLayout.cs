@@ -65,6 +65,13 @@ namespace SeaSick.UI
             RailSettings,
             RailYard,
             RailHome,
+            /// The pause button (2026-09-26). Last in the rail, so it does
+            /// not push the three tabs above it down when a scene has no
+            /// `VoyageManager` yet and the chip stays hidden -- see
+            /// `PauseChip`. Thumb-reachable for the same reason the rest of
+            /// the rail is: this column already sits at `RailTop01` of the
+            /// safe area on purpose.
+            RailPause,
 
             // --- bottom-left, upward ---
             Nav,
@@ -94,7 +101,7 @@ namespace SeaSick.UI
             Slot.Crew => Column.TopLeft,
             Slot.Map or Slot.Wind or Slot.Ship or Slot.Perf
                 or Slot.CampCrew => Column.TopRight,
-            Slot.RailSettings or Slot.RailYard or Slot.RailHome => Column.Rail,
+            Slot.RailSettings or Slot.RailYard or Slot.RailHome or Slot.RailPause => Column.Rail,
             Slot.Nav or Slot.Broadside => Column.BottomLeft,
             Slot.Wheel => Column.BottomCentre,
             _ => Column.BottomRight,
