@@ -303,6 +303,19 @@ namespace SeaSick.UI.Sheets
 
             card.style.display = DisplayStyle.Flex;
             shadow.style.display = DisplayStyle.Flex;
+
+            // **A tall sheet sits over the chart instead of under it.** The
+            // chart is drawn in `EnsureBuilt` after `layer`, so it normally
+            // wins the z-order -- invisible for the standard band (the chart
+            // lives in the untouched two-thirds of the screen), but Stores'
+            // full-height band (`ISheetFramed.WantsTallSheet`) reaches into
+            // the chart's top-right corner. The chart is deliberately "never
+            // hidden" (its own doc comment), so this covers it with the
+            // opaque card rather than hiding the instrument itself -- Kevin's
+            // own call on the mockup: the chart can be covered while Stores
+            // is open.
+            if (framed != null && framed.WantsTallSheet) layer.BringToFront();
+            else layer.SendToBack();
         }
 
         ISheetFramed framed;
@@ -592,6 +605,17 @@ namespace SeaSick.UI.Sheets
             {
                 float ceiling = safe.height - (MidnightLandHud.TopHeight + MidnightLandHud.NavHeight + 160f) / PanelScale;
                 size.y = Mathf.Min(Mathf.Max(size.y, 480f / PanelScale), ceiling);
+            }
+            // **Tall sheet, 2026-09-26.** `ISheetFramed.WantsTallSheet` is the
+            // minimal opt-in: rather than changing every sheet's band, one
+            // flag lets a sheet ask for the space between the top resource
+            // bar and the bottom nav instead of the bottom third. Phone only
+            // -- a desk sheet is already close to full height.
+            else if (!HudLayout.Wide && Sheets.Current is ISheetFramed tallFramed && tallFramed.WantsTallSheet)
+            {
+                float reserve = (MidnightLandHud.Active ? MidnightLandHud.TopHeight + MidnightLandHud.NavHeight : 0f) / PanelScale + Margin * 2f;
+                float ceiling = safe.height - reserve;
+                size.y = Mathf.Max(size.y, ceiling);
             }
             return size;
         }

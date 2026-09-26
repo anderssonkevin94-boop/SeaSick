@@ -75,6 +75,11 @@ namespace SeaSick.UI.Sheets
         public int Tab { get { return 0; } }
         public void SetTab(int index) { }
 
+        // Kevin's mockup verdict, 2026-09-26: the bank fills the screen
+        // between the resource bar and the bottom nav (several rows of
+        // tiles plus the detail card), not the standard one-row band.
+        public bool WantsTallSheet => true;
+
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
 
         // --- chrome kept between refreshes -----------------------------------
@@ -199,6 +204,10 @@ namespace SeaSick.UI.Sheets
                 b.tooltip = Tabs[i].label;
                 if (i == 0)
                 {
+                    // "All" is the big glyph and nothing else -- the mockup
+                    // shows it once, not once big and once small underneath
+                    // (2026-09-26 fix: this branch used to fall through to
+                    // the shared label below too).
                     var glyph = new Label("All");
                     glyph.AddToClassList("stores-tab-all-glyph");
                     glyph.pickingMode = PickingMode.Ignore;
@@ -211,11 +220,11 @@ namespace SeaSick.UI.Sheets
                     icon.image = ItemIconSet.Get(Tabs[i].iconId);
                     icon.pickingMode = PickingMode.Ignore;
                     b.Add(icon);
+                    var lab = new Label(Tabs[i].label);
+                    lab.AddToClassList("stores-tab-label");
+                    lab.pickingMode = PickingMode.Ignore;
+                    b.Add(lab);
                 }
-                var lab = new Label(Tabs[i].label);
-                lab.AddToClassList("stores-tab-label");
-                lab.pickingMode = PickingMode.Ignore;
-                b.Add(lab);
                 row.Add(b);
                 tabButtons[i] = b;
             }

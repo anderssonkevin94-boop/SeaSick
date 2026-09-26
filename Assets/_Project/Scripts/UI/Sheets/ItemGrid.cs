@@ -58,6 +58,11 @@ namespace SeaSick.UI.Sheets
             scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1f;
             scroll.style.flexShrink = 1f;
+            // Touch/drag scrolling stays (ScrollView handles that itself);
+            // only the desktop-style scrollbar-with-arrow-buttons chrome is
+            // hidden -- the mockup's own `overflow-y: auto` never drew one.
+            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             Add(scroll);
 
             rows = new VisualElement();

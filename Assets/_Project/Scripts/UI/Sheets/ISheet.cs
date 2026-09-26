@@ -82,5 +82,16 @@ namespace SeaSick.UI.Sheets
         Color Accent { get; }
 
         VisualElement BuildActions();
+
+        /// **Opt-in, 2026-09-26.** True asks the host to give this sheet the
+        /// full band between the top resource bar and the bottom nav instead
+        /// of the standard third-of-screen card -- the Stores bank needs
+        /// several rows of tiles plus a detail card, which the standard band
+        /// only ever shows one row of (Kevin's mockup verdict: "give me
+        /// exactly that"). Default false so every other framed sheet is
+        /// unaffected; only `SheetHost.FrameSizeScreen` reads it, and only on
+        /// the phone shape -- a desk sheet is already a near-full-height
+        /// column.
+        bool WantsTallSheet => false;
     }
 }
