@@ -977,6 +977,18 @@ namespace SeaSick.World
         /// caller can check.
         public float CellSize => cell;
 
+        /// **Can a worn road lie here? (2026-09-26, `CampRoads`).** Open
+        /// ground a hand may stand on: not sea, not too steep, no rock, no
+        /// standing wall. A gate is open to hands, so a road runs through
+        /// it. False off the map or before it is built.
+        public bool RoadGround(Vector3 at)
+        {
+            if (!built) Build();
+            if (hs == null) return false;
+            int i = Index(at);
+            return i >= 0 && open[i] && ((block[i] | wall[i]) & BlockHand) == 0;
+        }
+
         // --- binary heap ------------------------------------------------------
 
         void Push(int cellIndex, float f)

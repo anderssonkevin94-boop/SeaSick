@@ -2526,6 +2526,7 @@ namespace SeaSick.World
             }
 
             next.y = camp.GroundAt(next);
+            CampRoads.Walked(camp, here, next);   // feet wear roads in (2026-09-26)
             transform.position = next;
             Face(leg, dt);
             return false;

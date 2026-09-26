@@ -2694,6 +2694,8 @@ namespace SeaSick.World
         const float CatchUpEvery = 0.25f;
         float nextCatchUp;
 
+        CampRoads roads;
+
         void Update()
         {
             // **The books settle on their own while a camp is watched,
@@ -2708,6 +2710,10 @@ namespace SeaSick.World
             // quantum of game time, so this adds reconciliation passes,
             // not simulation -- and the camp page already ran one of them
             // every frame whenever it was up.
+            // Worn roads (2026-09-26) tick on their own component; this
+            // only makes sure a loaded camp draws its roads without waiting
+            // for somebody to take a step.
+            if (roads == null && Sited) roads = CampRoads.For(this);
             if (!Watched) return;
             // Four times a second, not sixty: `CatchUp` reconciles the
             // props and the bodies as well as running the tick, and the
