@@ -889,6 +889,40 @@ art).
 Reach for it BEFORE the Unity focus trick. It answers in seconds and does not
 need the editor, the bridge, or Kevin's window focus.
 
+**2026-09-27: it now compiles with Unity's defines, and works from a worktree.**
+Two more ways it had been lying, both fixed:
+
+- **No scripting defines.** It passed no `-define:` at all, so every
+  `#if UNITY_EDITOR || DEVELOPMENT_BUILD` member did not exist to it, and
+  `ShipyardRefitProbe` failed with three CS0117s (`TestFaultStage`,
+  `FaultBeforePersist`) that Unity never reported. It now reads the `-define:`
+  lines from Unity's own response file for the **editor** build of each
+  assembly, `Library/Bee/artifacts/<hash>E.dag/Assembly-CSharp.rsp` and
+  `…/Assembly-CSharp-Editor.rsp`: 144 and 142 defines, including
+  `UNITY_EDITOR`, `DEBUG` and `UNITY_IOS`. The two lists differ: the editor
+  assembly gets `NET_4_6` and `UNITY_EDITOR_ONLY_COMPILATION`. The first line
+  of output names the file the defines came from. If it says `FALLBACK`, no
+  response file was found and it used a hard-coded 13 (UNITY_EDITOR, DEBUG,
+  UNITY_IOS, …), so let Unity compile once. `DEVELOPMENT_BUILD` is *not* an
+  editor define. It exists only in the player dag (`<hash>PDevDbg.dag`), and
+  the editor gets the same code through the `UNITY_EDITOR ||` half.
+- **Zero sources in a worktree.** The `-not -path "*/worktrees/*"` filter
+  matched the checkout's own path under `.claude/worktrees/<name>/`, so it
+  compiled nothing. (In a worktree it then died on the missing `Library`; with
+  one present it would have printed `clean.`) The filter now matches paths
+  relative to the project root, and an empty source list exits 2, never
+  `clean.`. A worktree has no `Library` of its own, so it borrows the main
+  checkout's reference DLLs and defines (it prints that it did). Its sources
+  are always its own.
+
+Re-proved on 2026-09-27 as described above: one unknown type in
+`ShipyardRefitProbe.cs` → `Assembly-CSharp errors 1` with file and line;
+one in `Dev/Editor/AddBilge.cs` → `Assembly-CSharp-Editor errors 1`; both
+exit 1, both reverted. What it still does NOT check is a **release player
+build**, where neither `UNITY_EDITOR` nor `DEVELOPMENT_BUILD` is defined.
+`ShipyardRefitProbe.cs:378` uses those guarded members without a guard of its
+own, so a non-development build would fail on it.
+
 ### `RunProbe.ViewDesk()` / `ViewPhone()` — check the HUD in both shapes
 
 Landscape became first-class on 2026-09-11 without the phone being retired, so
