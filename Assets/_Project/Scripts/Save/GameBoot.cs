@@ -120,14 +120,31 @@ namespace SeaSick.Save
         void Awake()
         {
             Instance = this;
+
+            // `Decided`/`Chosen` are statics, and -- same bug, same day,
+            // 2026-09-26 -- `ResetForPlay` (`SubsystemRegistration`) only
+            // runs once per Play session, never again on a mid-session
+            // reload. Without this, the FIRST Continue/New/Load of a
+            // session leaves `Decided == true` forever after: every
+            // following reload's `Awake` hit `if (Decided) return;` before
+            // ever looking at the slot request that reload was FOR, so a
+            // second Load (or the Home screen `ExitToHome`/`Save & exit`
+            // is supposed to land on) silently never happened -- the
+            // player dropped straight into a live, undecided world with
+            // no boot overlay, same symptom as the reinstall bug, one
+            // layer up. This object's `Awake` running at all IS "a fresh
+            // scene, nobody has decided here yet" -- there is no case
+            // where a stale `true` from the PREVIOUS scene should survive
+            // into this one.
+            Decided = false;
+            Chosen = Choice.None;
+
             ParseCommandLine();
 
-            // A previous scene -- the Home screen, the Load list, or Pause's
-            // New/Save & exit -- already decided this and reloaded to get
-            // here. That takes precedence over everything below: a probe's
-            // `Forced` flag cannot arrive with a pending slot request too,
-            // and a person who just picked Load is done choosing.
-            if (!Decided && HandleSlotRequest()) return;
+            // A pending choice made just before THIS reload -- the Home
+            // screen, the Load list, or Pause's New/Save & exit -- takes
+            // precedence over everything below.
+            if (HandleSlotRequest()) return;
 
             haveSave = SaveGame.Exists;
             if (haveSave)
