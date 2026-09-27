@@ -60,7 +60,9 @@ namespace SeaSick.World
                 var n = scratch[i];
                 var d = StoneDeposit.Dress(n);
                 // A rock on a building plot is the plot's (see `GatherSync`).
-                if (d != null && !n.HeldBySite) units += d.Units;
+                // Nor is a rock a gather party took by name: it left the
+                // seam when it was taken (`OutpostLedger.GroundTaken`).
+                if (d != null && !n.HeldBySite && !o.Ledger.Taken(n)) units += d.Units;
             }
             scratch.Clear();
             if (settled) o.Ledger.SizeStoneToDeposits(units);

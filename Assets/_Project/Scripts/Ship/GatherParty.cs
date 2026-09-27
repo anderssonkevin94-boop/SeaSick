@@ -37,14 +37,17 @@ namespace SeaSick.Ship
     /// Food: there is no ship ration logic in the code yet, so a party eats
     /// nothing extra.
     ///
-    /// **What persists.** Sources are taken the way the plain shore party
-    /// takes them: a felled tree stays felled in the island's mesh, a loose
-    /// rock is hidden (`SceneryRocks.SetHidden`, no remnant), a kit deposit
-    /// shows its remnant -- for as long as the island stays built this
-    /// session. Not across save/load: booking a party's take into the
-    /// survey ledger would have `GatherSync` hide a SECOND, different set of
-    /// rocks to match the books (it draws the gathered set nearest the
-    /// clearing first), so that is a follow-up, not a guess.
+    /// **What persists (2026-09-27).** Every source a hand cuts is booked
+    /// BY NAME into the island's ledger (`OutpostLedger.BookGroundTake`: a
+    /// loose rock by its index, a tree by its index, a kit deposit or an
+    /// ore/spice prop by where it was made), and its whole yield leaves the
+    /// island's stock -- `standing` and `standingMax` together, so the
+    /// camp's count-derived picture (`GatherSync`, nearest the camp first)
+    /// hides nothing extra, and every camp order leaves the named sources
+    /// out. `GroundTaken.Apply` draws the set gone on every `CatchUp`, so it
+    /// survives save/load (`SaveGame` keeps a camp-less ledger that has
+    /// named takes) and an island rebuilt from scratch; a camp made there
+    /// later starts from the reduced stock and never sees those sources.
     public class GatherParty : MonoBehaviour
     {
         // --- Kevin's playtest dials (GDD, trips) --------------------------
@@ -204,6 +207,9 @@ namespace SeaSick.Ship
             if (Room <= 0) { why = "the hold is full"; return false; }
             island = anchor.CurrentIsland;
             if (Combat.EnemyShip.CountAt(island) > 0) { why = "raiders on this island"; return false; }
+            // The island's books are where the take is written; the survey
+            // runs while the camera rises, so this is a moment at most.
+            if (Outpost.Surveying(island)) { why = "still looking the island over"; return false; }
 
             landing = anchor.PartyLanding();
             StandSources(island, landing);
@@ -217,6 +223,7 @@ namespace SeaSick.Ship
             DeliveredUnits = 0;
             Trips = 0;
             SourcesTaken = 0;
+            BookedSources = 0;
             StopReason = "";
             Recalling = false;
             Out = true;
@@ -298,11 +305,23 @@ namespace SeaSick.Ship
             return per * Mathf.Max(1, units);
         }
 
-        /// A source came out of the ground.
+        /// A source came out of the ground: booked by name into the island's
+        /// ledger with its WHOLE yield (a rock broken for less than it holds
+        /// is still gone), before the node is harvested.
         public void Cut(CrewAgent who, ResourceNode n, string res, int units)
         {
             SourcesTaken++;
+            var o = Outpost.Of(island);
+            if (o != null && o.Ledger != null && n != null)
+            {
+                o.Ledger.BookGroundTake(n, UnitsIn(n));
+                BookedSources++;
+            }
+            else Debug.LogWarning($"GatherParty: no ledger on {(island != null ? island.name : "?")} -- this take will not persist");
         }
+
+        /// Sources booked into the island's ledger this party (for the check).
+        public int BookedSources { get; private set; }
 
         /// A load reached the hold. Only what actually went in counts.
         public void Delivered(CrewAgent who, string res, int units)
@@ -418,8 +437,16 @@ namespace SeaSick.Ship
         {
             if (n == null || n.Harvested || !n.isActiveAndEnabled) return false;
             if (!Res.IsGatherable(n.Resource)) return false;
+            if (TakenByName(n, isle)) return false;
             if (n.Home == isle) return true;
             return party != null && party.partyRocks.Contains(n);
+        }
+
+        /// Booked gone by an earlier party (`OutpostLedger.GroundTaken`).
+        static bool TakenByName(ResourceNode n, Island isle)
+        {
+            var o = Outpost.Of(isle);
+            return o != null && o.Ledger != null && o.Ledger.Taken(n);
         }
 
         static int UnitsIn(ResourceNode n)
@@ -502,9 +529,11 @@ namespace SeaSick.Ship
             if (rocks == null || rocks.Materialized) return;   // a camp's nodes stand there
             var picks = new List<(float d2, int i)>();
             var h = Island.TerrainHeight;
+            var books = Outpost.Of(isle) != null ? Outpost.Of(isle).Ledger : null;
             for (int i = 0; i < rocks.Count; i++)
             {
                 if (rocks.IsHidden(i)) continue;
+                if (books != null && books.RockTaken(i)) continue;
                 var r = rocks.RockAt(i);
                 Vector3 d = r.at - from; d.y = 0f;
                 if (d.sqrMagnitude > Reach * Reach) continue;

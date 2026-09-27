@@ -122,6 +122,9 @@ namespace SeaSick.World
         Terrain.SceneryWood wood;
         int treeIndex = -1;
 
+        /// The scenery tree this node stands on, or -1 (not a scenery tree).
+        public int TreeIndex => wood != null ? treeIndex : -1;
+
         /// A node standing on a real tree in the island's scenery mesh.
         ///
         /// It has no renderer of its own — the tree is already drawn, as part
@@ -191,6 +194,24 @@ namespace SeaSick.World
                 return;
             }
             gameObject.SetActive(false);
+        }
+
+        /// **Taken off the ground by name** (`OutpostLedger.GroundTaken`,
+        /// the gather party's takes): no longer a target, and drawn gone --
+        /// a kit deposit as its remnant, a scenery rock hidden, a plain prop's
+        /// renderers off. Unlike `Harvest` it never destroys or deactivates
+        /// the object, so it is safe from inside a pass over `All`.
+        public void MarkTaken()
+        {
+            if (harvested) return;
+            harvested = true;
+            Claim = default;
+            if (deposit != null) { ShowDeposit(); return; }
+            if (wood != null) return;     // the tree is felled in the mesh by `GroundTaken`
+            if (renderers == null) renderers = GetComponentsInChildren<Renderer>(true);
+            foreach (var r in renderers) if (r != null) r.enabled = false;
+            if (colliders == null) colliders = GetComponentsInChildren<Collider>(true);
+            foreach (var c in colliders) if (c != null) c.enabled = false;
         }
 
         void Update()

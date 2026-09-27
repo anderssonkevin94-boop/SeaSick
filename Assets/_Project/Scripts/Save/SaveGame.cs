@@ -278,7 +278,10 @@ namespace SeaSick.Save
                 var l = o.Ledger;
                 bool worth = o.IsHome || o.HasCampCentre
                     || l.hands.Count > 0 || l.built.Count > 0
-                    || (l.raised != null && l.raised.Count > 0) || l.SiteCount > 0;
+                    || (l.raised != null && l.raised.Count > 0) || l.SiteCount > 0
+                    // A camp-less island a gather party worked (2026-09-27):
+                    // its named takes and reduced stock ARE state now.
+                    || l.HasGroundTaken;
                 if (!worth) continue;
                 Vector3 c = o.CampCentre;
                 var isle = o.Island;

@@ -76,7 +76,7 @@ namespace SeaSick.World
                 if (s.resource == Res.Timber || s.resource == Res.Food) continue;
                 if (!Res.IsGatherable(s.resource)) continue;
 
-                var order = OrderFor(e, island, s.resource);
+                var order = OrderFor(e, island, s.resource, o.Ledger);
                 if (order.Length == 0) continue;
                 if (s.resource == Res.Stone && SyncDeposits(o.Ledger, s, order)) continue;
 
@@ -146,9 +146,10 @@ namespace SeaSick.World
         /// Rebuilt when the cached list no longer matches what is in
         /// `ResourceNode.All` (the island streamed out and back, a node was
         /// destroyed) -- checked by count and by identity, no allocation.
-        static ResourceNode[] OrderFor(Entry e, Island island, string resource)
+        static ResourceNode[] OrderFor(Entry e, Island island, string resource, OutpostLedger ledger)
         {
             scratch.Clear();
+            bool named = ledger != null && ledger.HasGroundTaken;
             var all = ResourceNode.All;
             for (int i = 0; i < all.Count; i++)
             {
@@ -158,6 +159,12 @@ namespace SeaSick.World
                 // clearing hides it, not the seam. Leaving it out here keeps
                 // the seam's prefix a prefix of the rocks it actually owns.
                 if (n.HeldBySite) continue;
+                // A source a gather party took by name (2026-09-27) is out
+                // of the seam altogether: its units left `standing` AND
+                // `standingMax` together, so the count here never covers it
+                // and the prefix never lands on it (`OutpostLedger
+                // .GroundTaken`, drawn gone by `GroundTaken.Apply`).
+                if (named && ledger.Taken(n)) continue;
                 scratch.Add(n);
             }
 

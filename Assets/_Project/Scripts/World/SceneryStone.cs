@@ -109,8 +109,13 @@ namespace SeaSick.World
             LastIndexed = rocks.Count;
             LastMade = LastOffGrid = LastLow = LastUnreachable = LastOverCap = 0;
             picks.Clear();
+            var ledger = o.Ledger;
+            bool named = ledger != null && ledger.HasGroundTaken;
             for (int i = 0; i < rocks.Count; i++)
             {
+                // Taken by a gather party by name (2026-09-27): gone for
+                // good, hidden by `GroundTaken.Apply`, no node of the camp's.
+                if (named && ledger.RockTaken(i)) continue;
                 var r = rocks.RockAt(i);
                 Vector3 p = r.at;
                 if (p.x < lo.x || p.x > hi.x || p.z < lo.y || p.z > hi.y) { LastOffGrid++; continue; }

@@ -167,6 +167,9 @@ namespace SeaSick.World
             // kit deposit, an island with none gets some laid, and the seam
             // is sized to them once. See `StoneDeposits`.
             StoneDeposits.EnsureOn(this);
+            // What a gather party took by name stays gone (2026-09-27):
+            // before the camp's count-based pictures, which leave it out.
+            GroundTaken.Apply(this);
             ReconcileWood();
             ReconcileCrops();
             ReconcileGame();
@@ -1772,18 +1775,25 @@ namespace SeaSick.World
             // below. The order rebuilds whenever that set changes.
             EnsureClearing(false);
             Vector3 c = CampCentre;
+            // A gather party's named takes (`OutpostLedger.GroundTaken`) are
+            // no tree of the camp's either: left out like a plot's, and the
+            // order rebuilds when one is added.
+            int namedTaken = ledger != null ? ledger.GroundTakenCount : 0;
             if (fellOrder != null && fellOrderVersion == clearVersion
+                && fellOrderTaken == namedTaken
                 && ReferenceEquals(fellOrderWood, wood)
                 && (fellOrderFrom - c).sqrMagnitude < 0.25f) return;
 
+            bool anyNamed = ledger != null && ledger.takenTrees != null && ledger.takenTrees.Count > 0;
             int count = 0;
             for (int i = 0; i < wood.TreeCount; i++)
-                if (i >= siteTree.Length || !siteTree[i]) count++;
+                if ((i >= siteTree.Length || !siteTree[i]) && !(anyNamed && ledger.TreeTaken(i))) count++;
             var idx = new int[count];
             var d2 = new float[count];
             for (int i = 0, n = 0; i < wood.TreeCount; i++)
             {
                 if (i < siteTree.Length && siteTree[i]) continue;
+                if (anyNamed && ledger.TreeTaken(i)) continue;
                 idx[n] = i;
                 Vector3 p = wood.TreeAt(i).baseAt - c;
                 p.y = 0f;
@@ -1793,6 +1803,7 @@ namespace SeaSick.World
             System.Array.Sort(d2, idx);
             fellOrder = idx;
             fellOrderVersion = clearVersion;
+            fellOrderTaken = namedTaken;
             if (posInOrder == null || posInOrder.Length != wood.TreeCount)
                 posInOrder = new int[wood.TreeCount];
             for (int i = 0; i < posInOrder.Length; i++) posInOrder[i] = -1;
@@ -1822,6 +1833,8 @@ namespace SeaSick.World
         /// Tree index -> its place in `fellOrder`, -1 for a plot's tree.
         int[] posInOrder;
         int fellOrderVersion = -1;
+        /// `ledger.GroundTakenCount` the order was built against.
+        int fellOrderTaken = -1;
         int fellCursor;
         Vector3 fellOrderFrom;
         Terrain.SceneryWood fellOrderWood;
