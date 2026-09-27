@@ -138,13 +138,19 @@ namespace SeaSick.Ship.Modular
                     { blocked = $"stands in the crew passage ({r.id})"; break; }
                 int slash = s.qualifiedId.LastIndexOf('/');
                 string sectionKey = slash > 0 ? s.qualifiedId.Substring(0, slash) : s.qualifiedId;
+                // A slot on an upper-deck layer ("fitting:bow/ForedeckMount/
+                // Foredeck_Cannon_Port", 2026-09-27) belongs to its host
+                // section's Guns page.
+                string layerHost = ShipAssembler.UpperDeckHostKey(sectionKey);
+                string where = layerHost != null ? SectionLabel(layerHost) + " foredeck" : SectionLabel(sectionKey);
+                if (layerHost != null) sectionKey = layerHost;
                 string side = s.positionM.x > 0f ? "starboard" : "port";
                 list.Add(new EquipmentSlotView
                 {
                     slotId = s.qualifiedId,
                     sectionKey = sectionKey,
                     side = side,
-                    label = $"{SectionLabel(sectionKey)}, {side} gun",
+                    label = $"{where}, {side} gun",
                     accepts = s.classes,
                     occupantModuleId = s.occupiedBy ?? "",
                     usable = blocked.Length == 0,
@@ -165,6 +171,7 @@ namespace SeaSick.Ship.Modular
             var groups = new Dictionary<(string section, string side), List<EquipmentSlotView>>();
             foreach (var v in list)
             {
+                if (v.slotId.StartsWith("fitting:")) continue; // an upper-deck layer's slot is already named by its layer
                 var key = (v.sectionKey, v.side);
                 if (!groups.TryGetValue(key, out var g)) groups[key] = g = new List<EquipmentSlotView>();
                 g.Add(v);

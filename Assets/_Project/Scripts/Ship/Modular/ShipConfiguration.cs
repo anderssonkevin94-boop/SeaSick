@@ -214,6 +214,16 @@ namespace SeaSick.Ship.Modular
                     string rest = slash >= 0 ? e.slotId.Substring(slash) : "";
                     e.slotId = MiddleKeyOf(next) + rest;
                 }
+            // Upper-deck layers (2026-09-27) ride their section too: a
+            // fitting socket "middle[i]/ThirdDeckMount", and equipment
+            // standing on a fitting "fitting:middle[i]/<socket>/<slot>".
+            if (cfg.fittings != null)
+                foreach (var f in cfg.fittings)
+                    if (f?.socketId != null) f.socketId = ShiftKey(f.socketId, "", fromIndex, delta);
+            if (cfg.equipment != null)
+                foreach (var e in cfg.equipment)
+                    if (e?.slotId != null && e.slotId.StartsWith("fitting:"))
+                        e.slotId = ShiftKey(e.slotId.Substring("fitting:".Length), "fitting:", fromIndex, delta);
             if (cfg.layouts != null)
                 foreach (var l in cfg.layouts)
                 {
@@ -224,6 +234,15 @@ namespace SeaSick.Ship.Modular
                     if (next < 0) continue;
                     l.section = MiddleKeyOf(next);
                 }
+        }
+
+        static string ShiftKey(string qualified, string prefix, int fromIndex, int delta)
+        {
+            int slash = qualified.IndexOf('/');
+            string section = slash >= 0 ? qualified.Substring(0, slash) : qualified;
+            int idx = MiddleIndexOf(section);
+            if (idx < 0 || idx < fromIndex || idx + delta < 0) return prefix + qualified;
+            return prefix + MiddleKeyOf(idx + delta) + (slash >= 0 ? qualified.Substring(slash) : "");
         }
 
         static string MiddleKeyOf(int i) => $"middle[{i}]";

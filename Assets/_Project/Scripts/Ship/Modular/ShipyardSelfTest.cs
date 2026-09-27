@@ -133,7 +133,7 @@ namespace SeaSick.Ship.Modular
             var unknown = ShipConfiguration.Long(); unknown.middleIds[0] = "hull.middle.future.v9";
             Rejects("policy-rejects-unknown-id", unknown, "UNKNOWN_MODULE");
             Gate("allowed-ids-for-pickers",
-                ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.UpperDeck).Count == 0
+                ShipyardPolicy.AllowedModuleIds(ModuleKind.Rotor).Count == 2 && ShipyardPolicy.AllowedModuleIds(ModuleKind.UpperDeck).Count == 4
                 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment).Count == 1
                 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Equipment)[0] == ShipConfiguration.EquipmentCannon
                 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Stern).Count == 4 && ShipyardPolicy.AllowedModuleIds(ModuleKind.Middle).Count == 6

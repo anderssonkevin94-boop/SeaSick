@@ -178,7 +178,7 @@ namespace SeaSick.Ship.Modular
         public ShipyardReport Report(ShipConfiguration draft)
         {
             var v = Validate(draft);
-            var r = ShipyardReport.From(v, v.currentPlan, v.draftPlan, Library.MetresPerUnit);
+            var r = ShipyardReport.From(v, v.currentPlan, v.draftPlan, Library.MetresPerUnit, Library);
             if (!CanRefitNow(out string why)) r.refitNowBlockedBecause = why;
             r.dryDock.AddRange(DryDockPreview(draft));
             return r;

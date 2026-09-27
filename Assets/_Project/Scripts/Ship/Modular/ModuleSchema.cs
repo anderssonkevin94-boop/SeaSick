@@ -232,6 +232,14 @@ namespace SeaSick.Ship.Modular
         public float wallAreaM2;
         /// Area centroid of the topside walls (old deck to upper deck), Z.
         public float wallAreaCentroidZU;
+        /// Height of the deck plate itself, module-local Z (2026-09-27, for
+        /// UpperDeck fittings: third deck / foredeck). 0 = the installed
+        /// raised profile's `upperDeckZU` (every hull.*.w1xr module, whose
+        /// deck plate IS that profile's deck). Every Z in this block is
+        /// module-local; `RaisedDeckPhysics.RaiseCoM` adds the placed
+        /// module's own origin Z (0 for hull sections, the mount height for
+        /// a fitting).
+        public float deckZU;
         public string source;
     }
 
@@ -392,6 +400,21 @@ namespace SeaSick.Ship.Modular
         /// The SlotClass id of the socket this fitting plugs into.
         public string socketClass;
         public string originNote;
+        /// UpperDeck fittings (2026-09-27): how far this layer raises its
+        /// host section's walking deck (third deck: 2.44 u over the 4.20
+        /// raised deck). > 0 = an ENCLOSED layer: the host section's
+        /// stations get `HullFormData.RaiseDeck` by this much again and a
+        /// chimney standing on the host rises with it. 0 = open platform
+        /// (the foredeck): mass and CoM only.
+        public float layerRiseU;
+        /// Visual part ids of the HOST section this fitting covers and
+        /// replaces (Astra's review scene hides them: the raised deck's
+        /// rails/posts/planks, its hatch lid, helm, prow). ShipAssembler
+        /// drops them from the host's placed visuals.
+        public string[] hidesHostVisuals;
+        /// Non-empty = Astra's contract says this art is unfinished; the
+        /// shipyard report shows it as an ART_UNREVIEWED warning line.
+        public string unreviewedNote;
     }
 
     [Serializable]

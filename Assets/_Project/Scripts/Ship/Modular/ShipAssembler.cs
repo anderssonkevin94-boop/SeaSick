@@ -374,6 +374,36 @@ namespace SeaSick.Ship.Modular
                 instances[inst.key] = inst; order.Add(inst);
             }
 
+            // ---- 3b. upper-deck layers (2026-09-27) -----------------------
+            // An ENCLOSED upper-deck layer (fitting.layerRiseU > 0, the third
+            // deck) lifts a chimney that stands inside its host section's
+            // length onto its own new deck (Astra's third-layer manifest:
+            // "Chimney placement is raised, not mesh-scaled" -- chimney_position
+            // Z 6.64 = 4.20 + 2.44). Done after every fitting is placed so the
+            // config's fitting order does not matter.
+            var hiddenHostVisuals = new Dictionary<string, HashSet<string>>();
+            foreach (var up in order)
+            {
+                if (up.def.kind != ModuleKind.UpperDeck || up.def.fitting == null) continue;
+                string upHost = UpperDeckHostKey(up.key);
+                if (upHost == null || !instances.TryGetValue(upHost, out var hostInst)) continue;
+                if (up.def.fitting.hidesHostVisuals != null && up.def.fitting.hidesHostVisuals.Length > 0)
+                {
+                    if (!hiddenHostVisuals.TryGetValue(upHost, out var set)) hiddenHostVisuals[upHost] = set = new HashSet<string>();
+                    foreach (var id in up.def.fitting.hidesHostVisuals) if (!string.IsNullOrEmpty(id)) set.Add(id);
+                }
+                float rise = up.def.fitting.layerRiseU;
+                if (rise <= 0f) continue;
+                float x0 = hostInst.originU.x, x1 = hostInst.originU.x + hostInst.def.lengthU;
+                foreach (var f in order)
+                {
+                    if (f.def.kind != ModuleKind.Fitting || !f.key.StartsWith("fitting:")) continue;
+                    if (f.originU.x < x0 - Eps || f.originU.x > x1 + Eps) continue;
+                    if (f.def.fitting?.socketClass != SocketRole.FittingChimney) continue;
+                    f.originU.z += rise;
+                }
+            }
+
             // ---- 4. passages and slots -----------------------------------
             var passages = new List<Reservation>();
             foreach (var inst in order)
@@ -486,7 +516,7 @@ namespace SeaSick.Ship.Modular
                     placeholder = d.status == ModuleStatus.Placeholder,
                     boundsMinU = d.boundsMinU,
                     boundsMaxU = d.boundsMaxU,
-                    visuals = d.visuals ?? new VisualPart[0],
+                    visuals = VisibleVisuals(d, inst.key, hiddenHostVisuals),
                 });
                 if (d.status == ModuleStatus.Placeholder) r.placeholders.Add(inst.key);
                 if (d.equipmentSlots != null)
@@ -529,6 +559,25 @@ namespace SeaSick.Ship.Modular
         }
 
         // ---- helpers ------------------------------------------------------
+
+        /// "fitting:middle[0]/ThirdDeckMount" -> "middle[0]"; null for
+        /// anything that is not a fitting instance key.
+        public static string UpperDeckHostKey(string fittingInstanceKey)
+        {
+            if (string.IsNullOrEmpty(fittingInstanceKey) || !fittingInstanceKey.StartsWith("fitting:")) return null;
+            string q = fittingInstanceKey.Substring("fitting:".Length);
+            SplitQualified(q, out var host, out _);
+            return host;
+        }
+
+        static VisualPart[] VisibleVisuals(ModuleDef d, string key, Dictionary<string, HashSet<string>> hidden)
+        {
+            var all = d.visuals ?? new VisualPart[0];
+            if (!hidden.TryGetValue(key, out var set) || set.Count == 0) return all;
+            var kept = new List<VisualPart>();
+            foreach (var v in all) if (v == null || !set.Contains(v.id)) kept.Add(v);
+            return kept.ToArray();
+        }
 
         static ModuleDef Resolve(AssemblyResult r, ModuleLibrary lib, string part, string id)
         {

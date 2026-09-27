@@ -57,6 +57,21 @@ namespace SeaSick.Ship.Modular
             return list;
         }
 
+        /// The join profile of the first installed hull section with a
+        /// known family (any family, raised or not) -- the keel datum for
+        /// `RaiseCoM` on a single-deck ship carrying an upper-deck layer.
+        public static JoinProfile AnyHullProfile(AssemblyResult asm, ModuleLibrary lib)
+        {
+            if (asm == null || !asm.ok || lib == null) return null;
+            foreach (var pm in asm.placed)
+                if (ModuleKind.IsHull(pm.kind) && lib.TryGet(pm.moduleId, out var d) && !string.IsNullOrEmpty(d.family))
+                {
+                    var prof = lib.FindProfile(d.family);
+                    if (prof != null) return prof;
+                }
+            return null;
+        }
+
         /// deckZU of whichever hull family is actually installed (every
         /// non-raised family shares 1.76 today, W1-r2 and W1x alike);
         /// 1.76 if the assembly did not resolve to any known family.
@@ -99,16 +114,22 @@ namespace SeaSick.Ship.Modular
 
             foreach (var pm in asm.placed)
             {
-                if (!ModuleKind.IsHull(pm.kind) || !lib.TryGet(pm.moduleId, out var mdef) || mdef.upperStructure == null) continue;
+                // Hull sections AND upper-deck layers (2026-09-27): every
+                // Z in an upperStructure block is module-local, so the placed
+                // origin's own Z is added (0 for a hull section).
+                if (!(ModuleKind.IsHull(pm.kind) || pm.kind == ModuleKind.UpperDeck)
+                    || !lib.TryGet(pm.moduleId, out var mdef) || mdef.upperStructure == null) continue;
                 var us = mdef.upperStructure;
                 if (us.massKg <= 0f) continue;
+                float oz = pm.positionU.z;
                 upperMassSum += us.massKg;
-                float centroidM = (us.centroidZU - keelU) * metresPerUnit;
+                float centroidM = (us.centroidZU + oz - keelU) * metresPerUnit;
                 upperMomentSum += us.massKg * centroidM;
-                if (us.deckMassKg > 0f) parts.Add((us.deckMassKg, upperDeckM, beamM * beamM / 12f));
+                float deckPlateM = us.deckZU > 0f ? (us.deckZU + oz - keelU) * metresPerUnit : upperDeckM;
+                if (us.deckMassKg > 0f) parts.Add((us.deckMassKg, deckPlateM, beamM * beamM / 12f));
                 if (us.wallMassKg > 0f)
                 {
-                    float wallM = (us.wallAreaCentroidZU - keelU) * metresPerUnit;
+                    float wallM = (us.wallAreaCentroidZU + oz - keelU) * metresPerUnit;
                     parts.Add((us.wallMassKg, wallM, (beamM * 0.5f) * (beamM * 0.5f)));
                 }
             }

@@ -70,6 +70,12 @@ namespace SeaSick.Ship.Modular
         static readonly string[] Rotors = { ShipConfiguration.TimberRotor, ShipConfiguration.ReinforcedRotor };
         static readonly string[] Carriers = { ShipConfiguration.M1Carrier };
         static readonly string[] Fittings = { ShipConfiguration.V3Chimney };
+        /// Upper-deck layers (2026-09-27, Kevin: "import whatever assets Astra
+        /// has made ... so that includes the upper decks"): the third deck
+        /// per connected raised section and the gun foredeck on the V3 bow.
+        /// Offered with an ART_UNREVIEWED warning (their `fitting.unreviewedNote`);
+        /// the assembler's socket classes decide where each one goes.
+        static readonly string[] UpperDecks = { UpperDeckLayers.ThirdStern, UpperDeckLayers.ThirdMiddle, UpperDeckLayers.ThirdBow, UpperDeckLayers.Foredeck };
         static readonly string[] Equipment = { ShipConfiguration.EquipmentCannon };
         static readonly string[] None = new string[0];
 
@@ -87,6 +93,7 @@ namespace SeaSick.Ship.Modular
                 case ModuleKind.Carrier: return Carriers;
                 case ModuleKind.Fitting: return Fittings;
                 case ModuleKind.Equipment: return Equipment;
+                case ModuleKind.UpperDeck: return UpperDecks;
                 default: return None;
             }
         }
@@ -110,7 +117,11 @@ namespace SeaSick.Ship.Modular
                 if (f == null) continue;
                 if (lib != null && lib.TryGet(f.moduleId, out var fd) && fd.kind == ModuleKind.UpperDeck)
                 {
-                    r.Add(Reject(f.socketId, "Raised decks are not part of the prototype shipyard yet."));
+                    // The assembler checks the socket class (third deck only
+                    // on its own connected raised section, foredeck only on
+                    // the V3 bow); the policy only keeps placeholders out.
+                    if (Array.IndexOf(UpperDecks, f.moduleId) < 0)
+                        r.Add(Reject(f.socketId, $"{ModuleLibrary.Name(fd)} is not part of the prototype shipyard."));
                     continue;
                 }
                 if (Array.IndexOf(Fittings, f.moduleId) < 0 || f.socketId != ShipConfiguration.ChimneySocket)
@@ -720,6 +731,14 @@ namespace SeaSick.Ship.Modular
             // only (report/UI): each station's own deckY is the real value
             // a mixed ship's crew/deck-load/helm actually read.
             p.walkDeckZU = raisedProfile != null ? raisedProfile.upperDeckZU : RaisedDeckPhysics.NonRaisedDeckZU(asm, lib);
+            // Enclosed upper-deck layers (the third deck, 2026-09-27): the
+            // same per-section freeboard/walk-height mechanism once more, on
+            // top of the raised deck, over only the host section's stations.
+            foreach (var lr in UpperDeckLayers.EnclosedRanges(asm, lib, k, p.viewOffset.z))
+            {
+                p.data = p.data.RaiseDeck(lr.riseU * k, lr.fromZ, lr.toZ);
+                p.walkDeckZU = Mathf.Max(p.walkDeckZU, lr.topDeckZU);
+            }
 
             // The funnel, from the assembly (base-centre pivot, bounds in U).
             p.funnelAftZ = -0.4f; p.funnelFwdZ = 0.4f;
@@ -783,7 +802,12 @@ namespace SeaSick.Ship.Modular
             // has not been told the extra mass stands HIGH. This raises
             // kg/com/gm/gyradiusRoll by the upper structure's own mass
             // moment (docs/RAISED-DECK.md sec 6). No-op when nothing raised.
-            if (raisedProfile != null) RaisedDeckPhysics.RaiseCoM(p, asm, lib, raisedProfile, k);
+            // Upper-deck layers (third deck, foredeck) carry their own
+            // upperStructure too, so they go through the same reweighting --
+            // also on a single-deck ship (the foredeck on the V3 bow), where
+            // any installed hull profile supplies the keel datum.
+            var comProfile = raisedProfile ?? (UpperDeckLayers.AnyInstalled(asm) ? RaisedDeckPhysics.AnyHullProfile(asm, lib) : null);
+            if (comProfile != null) RaisedDeckPhysics.RaiseCoM(p, asm, lib, comProfile, k);
             if (p.hydro.Ok)
             {
                 if (refPlan == null)
@@ -852,12 +876,19 @@ namespace SeaSick.Ship.Modular
         /// save), so `holdCells` is never negative.
         public static void SectionSpaceFor(ModuleDef d, ModuleLibrary lib, ShipConfiguration cfg, string sectionKey,
             out float budgetUnits, out float berthCost, out int berths, out int holdCells,
+            out int defaultBerths, out int maxBerths) =>
+            SectionSpaceFor(d, 0, 0, lib, cfg, sectionKey, out budgetUnits, out berthCost, out berths, out holdCells, out defaultBerths, out maxBerths);
+
+        /// Same, with an upper-deck layer's authored hold cells/berths ADDED
+        /// to the section's own (2026-09-27; `UpperDeckLayers.ExtraCapacity`).
+        public static void SectionSpaceFor(ModuleDef d, int extraHold, int extraBerths, ModuleLibrary lib, ShipConfiguration cfg, string sectionKey,
+            out float budgetUnits, out float berthCost, out int berths, out int holdCells,
             out int defaultBerths, out int maxBerths)
         {
             var c = d?.capacity;
             berthCost = lib != null ? lib.BerthSpaceUnits : 0.5f;
-            int authoredHold = c != null && c.holdCells != null ? Mathf.Max(0, c.holdCells.value) : 0;
-            int authoredBerths = c != null && c.berths != null ? Mathf.Max(0, c.berths.value) : 0;
+            int authoredHold = (c != null && c.holdCells != null ? Mathf.Max(0, c.holdCells.value) : 0) + Mathf.Max(0, extraHold);
+            int authoredBerths = (c != null && c.berths != null ? Mathf.Max(0, c.berths.value) : 0) + Mathf.Max(0, extraBerths);
             defaultBerths = authoredBerths;
             budgetUnits = authoredHold + berthCost * authoredBerths;
             int byBudget = berthCost > 0f ? Mathf.FloorToInt(budgetUnits / berthCost + 1e-4f) : 0;
@@ -872,7 +903,7 @@ namespace SeaSick.Ship.Modular
             // `value > 0` is what "authored" actually means for an optional
             // floor-area cap: nobody would author a positive-berth section
             // capped at zero.
-            int authoredMax = c != null && c.maxBerths != null && c.maxBerths.value > 0 ? c.maxBerths.value : int.MaxValue;
+            int authoredMax = c != null && c.maxBerths != null && c.maxBerths.value > 0 ? c.maxBerths.value + Mathf.Max(0, extraBerths) : int.MaxValue;
             maxBerths = Mathf.Max(0, Mathf.Min(byBudget, authoredMax));
             berths = defaultBerths;
             if (cfg?.layouts != null)
@@ -919,8 +950,12 @@ namespace SeaSick.Ship.Modular
                 var c = d.capacity;
                 sc.authored = c != null && c.holdCells != null && c.berths != null;
                 if (!sc.authored) { missing = missing == null ? ModuleLibrary.Name(d) : missing + ", " + ModuleLibrary.Name(d); continue; }
-                SectionSpaceFor(d, lib, cfg, sc.sectionKey, out _, out _, out sc.berths, out sc.holdCells, out _, out _);
-                if (c.gunSlots?.ids == null) continue;
+                // Upper-deck layers standing on this section (2026-09-27):
+                // their own authored capacity is ADDED to the section's
+                // interior budget, and their gun slots count as its own.
+                var layers = UpperDeckLayers.On(asm, lib, pm.instanceKey);
+                UpperDeckLayers.ExtraCapacity(layers, out int extraHold, out int extraBerths);
+                SectionSpaceFor(d, extraHold, extraBerths, lib, cfg, sc.sectionKey, out _, out _, out sc.berths, out sc.holdCells, out _, out _);
 
                 float half = 0f;
                 if (d.sockets != null)
@@ -931,39 +966,49 @@ namespace SeaSick.Ship.Modular
                             if (prof != null) half = Mathf.Max(half, prof.halfBeamU);
                         }
                 var port = new List<float>(); var star = new List<float>();
-                foreach (var id in c.gunSlots.ids)
+                var owners = new List<(PlacedModule placed, ModuleDef def, string prefix)> { (pm, d, "") };
+                foreach (var (lp, ld) in layers) owners.Add((lp, ld, lp.instanceKey.Substring("fitting:".Length) + "/"));
+                foreach (var (opm, od, prefix) in owners)
                 {
-                    string why = null;
-                    EquipmentSlotDef es = null;
-                    if (d.equipmentSlots != null) foreach (var e in d.equipmentSlots) if (e != null && e.id == id) es = e;
-                    var so = es != null ? ModuleLibrary.FindSocketById(d, es.socketId) : null;
-                    if (sc.gunSlotIds.Contains(id)) why = "listed twice";
-                    else if (es == null || so == null) why = "no such equipment slot";
-                    else if (so.role != SocketRole.DeckSlot) why = "not a fixed deck slot";
-                    else if (es.classes == null || Array.IndexOf(es.classes, "equipment.deck-gun") < 0) why = "does not take a deck gun";
-                    else if (!(es.clearanceSizeU.x > 0f && es.clearanceSizeU.y > 0f && es.clearanceSizeU.z > 0f)) why = "no clearance";
-                    Vector3 mn = default, mx = default;
-                    if (why == null)
+                    var oc = od.capacity;
+                    if (oc?.gunSlots?.ids == null) continue;
+                    // The owner's own origin relative to the section's (0 for
+                    // the section itself; the mount offset for a layer).
+                    var rel = opm.positionU - pm.positionU;
+                    foreach (var id in oc.gunSlots.ids)
                     {
-                        var cs = es.clearanceSizeU;
-                        mn = new Vector3(so.posU.x - cs.x * 0.5f, so.posU.y - cs.y * 0.5f, so.posU.z);
-                        mx = new Vector3(so.posU.x + cs.x * 0.5f, so.posU.y + cs.y * 0.5f, so.posU.z + cs.z);
-                        if (mn.x < -Eps || mx.x > len + Eps || (half > 0f && (mn.y < -half - Eps || mx.y > half + Eps)))
-                            why = "clearance sticks out of the section";
+                        string why = null;
+                        EquipmentSlotDef es = null;
+                        if (od.equipmentSlots != null) foreach (var e in od.equipmentSlots) if (e != null && e.id == id) es = e;
+                        var so = es != null ? ModuleLibrary.FindSocketById(od, es.socketId) : null;
+                        if (sc.gunSlotIds.Contains(prefix + id)) why = "listed twice";
+                        else if (es == null || so == null) why = "no such equipment slot";
+                        else if (so.role != SocketRole.DeckSlot) why = "not a fixed deck slot";
+                        else if (es.classes == null || Array.IndexOf(es.classes, "equipment.deck-gun") < 0) why = "does not take a deck gun";
+                        else if (!(es.clearanceSizeU.x > 0f && es.clearanceSizeU.y > 0f && es.clearanceSizeU.z > 0f)) why = "no clearance";
+                        Vector3 mn = default, mx = default;
+                        if (why == null)
+                        {
+                            var cs = es.clearanceSizeU;
+                            mn = rel + new Vector3(so.posU.x - cs.x * 0.5f, so.posU.y - cs.y * 0.5f, so.posU.z);
+                            mx = rel + new Vector3(so.posU.x + cs.x * 0.5f, so.posU.y + cs.y * 0.5f, so.posU.z + cs.z);
+                            if (mn.x < -Eps || mx.x > len + Eps || (half > 0f && (mn.y < -half - Eps || mx.y > half + Eps)))
+                                why = "clearance sticks out of the section";
+                        }
+                        if (why == null)
+                        {
+                            mn += pm.positionU; mx += pm.positionU;
+                            foreach (var r in asm.reservations)
+                                if (r.kind == "passage"
+                                    && mn.x < r.maxU.x - Eps && r.minU.x < mx.x - Eps
+                                    && mn.y < r.maxU.y - Eps && r.minU.y < mx.y - Eps
+                                    && mn.z < r.maxU.z - Eps && r.minU.z < mx.z - Eps)
+                                { why = "clearance overlaps the crew passage " + r.id; break; }
+                        }
+                        if (why != null) { sc.gunSlotProblems.Add($"{opm.instanceKey}/{id}: {why}"); continue; }
+                        sc.gunSlotIds.Add(prefix + id);
+                        (so.posU.y < 0f ? port : star).Add(viewZ + pm.positionM.z + (rel.x + so.posU.x) * k);
                     }
-                    if (why == null)
-                    {
-                        mn += pm.positionU; mx += pm.positionU;
-                        foreach (var r in asm.reservations)
-                            if (r.kind == "passage"
-                                && mn.x < r.maxU.x - Eps && r.minU.x < mx.x - Eps
-                                && mn.y < r.maxU.y - Eps && r.minU.y < mx.y - Eps
-                                && mn.z < r.maxU.z - Eps && r.minU.z < mx.z - Eps)
-                            { why = "clearance overlaps the crew passage " + r.id; break; }
-                    }
-                    if (why != null) { sc.gunSlotProblems.Add($"{pm.instanceKey}/{id}: {why}"); continue; }
-                    sc.gunSlotIds.Add(id);
-                    (so.posU.y < 0f ? port : star).Add(viewZ + pm.positionM.z + so.posU.x * k);
                 }
                 port.Sort(); star.Sort();
                 for (int i = 0; i < Mathf.Min(port.Count, star.Count); i++) sc.gunPairZs.Add(0.5f * (port[i] + star[i]));
@@ -1205,7 +1250,8 @@ namespace SeaSick.Ship.Modular
                 view.reason = "No capacity is written down for " + ModuleLibrary.Name(def) + ", so her interior cannot be planned.";
                 return view;
             }
-            ShipyardPlanner.SectionSpaceFor(def, lib, draft, sectionKey, out view.budgetUnits, out view.berthCost,
+            UpperDeckLayers.ExtraCapacity(UpperDeckLayers.On(asm, lib, sectionKey), out int extraHold, out int extraBerths);
+            ShipyardPlanner.SectionSpaceFor(def, extraHold, extraBerths, lib, draft, sectionKey, out view.budgetUnits, out view.berthCost,
                 out view.berths, out view.holdCells, out view.defaultBerths, out view.maxBerths);
             return view;
         }

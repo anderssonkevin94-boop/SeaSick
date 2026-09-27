@@ -81,7 +81,7 @@ namespace SeaSick.Ship.Modular
             return string.Join("\n", parts);
         }
 
-        public static ShipyardReport From(ShipyardValidation v, ShipyardPlan current, ShipyardPlan proposed, float metresPerUnit)
+        public static ShipyardReport From(ShipyardValidation v, ShipyardPlan current, ShipyardPlan proposed, float metresPerUnit, ModuleLibrary lib = null)
         {
             var r = new ShipyardReport { ok = v.ok };
             r.blocking.AddRange(v.issues);
@@ -143,6 +143,10 @@ namespace SeaSick.Ship.Modular
             if (v.handsAshore > 0)
                 r.warnings.Add(new ShipyardNote { code = "HANDS_ASHORE",
                     message = v.handsAshore == 1 ? "1 hand will go ashore." : $"{v.handsAshore} hands will go ashore." });
+            // Upper-deck layers (2026-09-27): Astra's third deck / foredeck are
+            // offered before her review -- say so, and name the known gaps.
+            if (proposed?.assembly != null && lib != null)
+                r.warnings.AddRange(UpperDeckLayers.Warnings(proposed.assembly, lib));
             r.warnings.Add(new ShipyardNote { code = "PROVISIONAL_TUNING", message = "Capacity and hydrostatics are provisional and will be retuned." });
             return r;
         }
