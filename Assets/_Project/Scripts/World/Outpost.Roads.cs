@@ -55,8 +55,15 @@ namespace SeaSick.World
                 if (map != null && !map.OnMap(p)) { why = "too far from the camp"; return false; }
                 if (GroundAt(p) < CampPath.SeaLevelY + 0.05f) { why = "that's in the water"; return false; }
                 if (map != null && !map.RoadGround(p)) { why = "nobody can walk there — too steep, rock or wall"; return false; }
-                var hit = BuildingOn(p);
+                // **Never through a building, by the ribbon's width
+                // (2026-09-27).** The centre line alone let the ribbon's
+                // edge lie over a footprint. Tapered at the tips like the
+                // drawing, so a road can still end at a door.
+                float fromEnd = Mathf.Min(i, steps - i) * (len / steps);
+                float margin = Mathf.Min(CampRoads.HalfWidth, CampRoads.TipHalfWidth + fromEnd);
+                var hit = BuildingOn(p, margin);
                 if (hit != null) { why = $"it runs through the {hit.Label}"; return false; }
+                if (BuildingSiteOn(p, margin, out BuildPlan site)) { why = $"it runs through the {site.label} going up there"; return false; }
             }
 
             // The same segment twice is nonsense; crossing one is a crossroads.
@@ -82,8 +89,31 @@ namespace SeaSick.World
         static float Flat(Vector3 p, Vector3 q)
             => Mathf.Sqrt((p.x - q.x) * (p.x - q.x) + (p.z - q.z) * (p.z - q.z));
 
-        /// The standing building (not a wall) whose footprint covers `p`, or null.
-        Building BuildingOn(Vector3 p)
+        /// The queued building (not a wall, ladder or road) whose footprint,
+        /// grown by `margin`, covers `p` -- true with its plan.
+        bool BuildingSiteOn(Vector3 p, float margin, out BuildPlan hit)
+        {
+            hit = default;
+            if (ledger == null || ledger.sites == null) return false;
+            foreach (var row in ledger.sites)
+            {
+                if (row == null || string.IsNullOrEmpty(row.planId)) continue;
+                if (row.isWall || IsRoadRow(row) || IsLadderRow(row)) continue;
+                var plan = PlanFor(row.planId, row.length);
+                Vector2 f = plan.footprint;
+                if (f.x <= 0f || f.y <= 0f) continue;
+                Quaternion q = Quaternion.Euler(0f, row.yaw, 0f);
+                Vector3 d = p - new Vector3(row.x, 0f, row.z); d.y = 0f;
+                if (Mathf.Abs(Vector3.Dot(d, q * Vector3.right)) <= 0.5f * f.x + margin
+                    && Mathf.Abs(Vector3.Dot(d, q * Vector3.forward)) <= 0.5f * f.y + margin)
+                { hit = plan; return true; }
+            }
+            return false;
+        }
+
+        /// The standing building (not a wall) whose footprint, grown by
+        /// `margin`, covers `p`, or null.
+        Building BuildingOn(Vector3 p, float margin = 0.1f)
         {
             for (int k = 0; k < built.Count; k++)
             {
@@ -95,8 +125,8 @@ namespace SeaSick.World
                 Vector3 d = p - t.position; d.y = 0f;
                 Vector3 r = t.right; r.y = 0f; r.Normalize();
                 Vector3 fw = t.forward; fw.y = 0f; fw.Normalize();
-                if (Mathf.Abs(Vector3.Dot(d, r)) <= 0.5f * f.x + 0.1f
-                    && Mathf.Abs(Vector3.Dot(d, fw)) <= 0.5f * f.y + 0.1f)
+                if (Mathf.Abs(Vector3.Dot(d, r)) <= 0.5f * f.x + margin
+                    && Mathf.Abs(Vector3.Dot(d, fw)) <= 0.5f * f.y + margin)
                     return bd;
             }
             return null;

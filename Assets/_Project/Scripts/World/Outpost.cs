@@ -4750,11 +4750,33 @@ namespace SeaSick.World
             // and the raise that came later would be refused on ground the
             // ghost went green on. `Outpost.RaiseRow` takes a row OUT of the
             // queue before raising it, so nothing refuses itself.
-            if (ledger != null && ledger.sites != null)
+            //
+            // **Never while `Adopt` stands a saved building (2026-09-27).**
+            // Kevin: *"I placed the roads and it moved my storage hut."* A
+            // road row queued beside the hut was measured here as a 2x2 m
+            // disc round its midpoint, the reload's `Raise` at the hut's own
+            // saved spot was refused by it, and `Adopt` fell back to the
+            // spiral -- a new spot, autosaved over the old one. A building
+            // that already stands was there before any drawing queued near
+            // it (every drawing was tested against it when sited), so a
+            // promise never refuses it.
+            if (!adoptingRows && ledger != null && ledger.sites != null)
                 foreach (var row in ledger.sites)
                 {
                     if (row == null || string.IsNullOrEmpty(row.planId)) continue;
                     if (row == IgnoreSite) continue;
+                    // A road segment is a LINE with the ribbon's width, like
+                    // a wall, not a disc round its midpoint.
+                    if (IsRoadRow(row))
+                    {
+                        if (WallSegment.FlatDistance(row.postA, row.postB, p)
+                            < halfDiag + CampRoads.HalfWidth)
+                        {
+                            why = "the road going in there is in the way";
+                            return false;
+                        }
+                        continue;
+                    }
                     var plan = PlanFor(row.planId, row.length);
                     float rl = plan.footprint.x, rw = plan.footprint.y;
                     float rHalf = 0.5f * Mathf.Sqrt(rl * rl + rw * rw) + spacing * 0.5f;
