@@ -126,7 +126,8 @@ namespace SeaSick.UI.Sheets
         VisualElement rootEl, seg, goalBlock, todayBlock;
         // goal
         Label goalTitle, goalWhy, goalProgress;
-        VisualElement goalBar, chainHolder, stepCard;
+        VisualElement goalBar, stepCard;
+        ScrollView chainHolder;
         Label stepTitle, stepDetail;
         Button goBtn;
         // today
@@ -196,7 +197,17 @@ namespace SeaSick.UI.Sheets
             goalProgress = Classed(new Label(), "ov-progress");
             block.Add(goalProgress);
 
-            chainHolder = Classed(new VisualElement(), "ov-chain");
+            // A ScrollView, not a plain VisualElement: `.ov-block` is
+            // flex-shrink:0 so it fits on ONE page whenever it can, but a
+            // long chain (many unmet requirements) still has to fit
+            // somewhere when the segmented view gives it the whole page and
+            // it is STILL too tall -- `.ov-root`'s `overflow:hidden` was
+            // silently eating the first-step/Go card off the bottom of the
+            // screen with no way to reach it. `.ov-block-solo` (toggled in
+            // `ApplySplit`, only while this block has the page to itself)
+            // lets the chain list -- and only the chain list -- shrink and
+            // scroll, so the head and the Go button stay pinned and visible.
+            chainHolder = Classed(new ScrollView(ScrollViewMode.Vertical), "ov-chain");
             block.Add(chainHolder);
 
             stepCard = Classed(new VisualElement(), "ov-step");
@@ -258,8 +269,15 @@ namespace SeaSick.UI.Sheets
         {
             if (seg == null) return;
             seg.style.display = split ? DisplayStyle.Flex : DisplayStyle.None;
+            bool goalSolo = split && segment == 0;
+            bool todaySolo = split && segment == 1;
             goalBlock.style.display = !split || segment == 0 ? DisplayStyle.Flex : DisplayStyle.None;
             todayBlock.style.display = !split || segment == 1 ? DisplayStyle.Flex : DisplayStyle.None;
+            // Only a block with the WHOLE page to itself is allowed to grow
+            // into it and clip its own chain scrollable -- two blocks stacked
+            // on one page keep their natural heights unchanged.
+            goalBlock.EnableInClassList("ov-block-solo", goalSolo);
+            todayBlock.EnableInClassList("ov-block-solo", todaySolo);
         }
 
         /// Measured, not guessed (the `StoresSheet` lesson: `BandHeight` can
@@ -274,9 +292,16 @@ namespace SeaSick.UI.Sheets
             if (page == null) return;
             float avail = page.resolvedStyle.height;
             if (float.IsNaN(avail) || avail <= 1f) return;
-            if (goalBlock.resolvedStyle.display == DisplayStyle.Flex && goalBlock.layout.height > 1f)
+            // Skip the measurement while a block is "solo" (`ov-block-solo`,
+            // flex-grow:1) -- its layout height is then whatever the page
+            // handed it, not what its content actually needs, and feeding
+            // that back in would make the split permanent even after the
+            // chain that caused it shrinks back down.
+            if (goalBlock.resolvedStyle.display == DisplayStyle.Flex && goalBlock.layout.height > 1f
+                && !goalBlock.ClassListContains("ov-block-solo"))
                 goalH = goalBlock.layout.height + goalBlock.resolvedStyle.marginTop + goalBlock.resolvedStyle.marginBottom;
-            if (todayBlock.resolvedStyle.display == DisplayStyle.Flex && todayBlock.layout.height > 1f)
+            if (todayBlock.resolvedStyle.display == DisplayStyle.Flex && todayBlock.layout.height > 1f
+                && !todayBlock.ClassListContains("ov-block-solo"))
                 todayH = todayBlock.layout.height + todayBlock.resolvedStyle.marginTop + todayBlock.resolvedStyle.marginBottom;
             if (goalH <= 1f || todayH <= 1f) return;
             const float JoinMargin = 24f;

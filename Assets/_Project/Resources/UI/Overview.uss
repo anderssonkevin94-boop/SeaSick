@@ -16,10 +16,29 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 
-.ov-root { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-height: 0; overflow: hidden; }
+/* `SheetHost.FillTab` force-sets every sheet's root to `flex-shrink: 0`
+   (deliberately -- "never squeezed", 2026-09-23) so a page that overflows
+   the band gets cut at the bottom instead of squashing every block into
+   overlapping garbage. That means THIS class's own `flex-shrink` never
+   actually reaches Yoga -- an inline style always beats a stylesheet rule --
+   so nothing here shrank to the page's real height and the chain's own
+   `.ov-block-solo` scrolling had no bounded box to scroll inside: it still
+   measured out to its natural (unclipped) size, taller than the page, and
+   the tail of it -- the first-step/Go card -- was `page`'s OWN
+   `overflow: hidden` quietly eating it, one level higher than anything in
+   this file could see. `max-height: 100%` sidesteps flex-shrink entirely:
+   it bounds this element against `page`'s resolved height directly, so a
+   short chain still hugs its own content (no dead space added) and a long
+   one is finally bounded for `.ov-block-solo` to actually shrink against. */
+.ov-root { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-height: 0; max-height: 100%; overflow: hidden; }
 .ov-seg { margin-bottom: 8px; flex-shrink: 0; }
 .ov-seg .sheet-seg-btn { height: 44px; flex-grow: 1; font-size: 14px; }
 .ov-block { flex-direction: column; flex-shrink: 0; margin-bottom: 6px; }
+/* A block with the whole page to itself (segmented view, one side shown):
+   let it fill the page so its OWN scrollable (`.ov-chain`) can be bounded
+   and scroll, instead of the block just growing past the page and losing
+   whatever comes after the scrollable to `.ov-root`'s `overflow: hidden`. */
+.ov-block-solo { flex-grow: 1; flex-shrink: 1; min-height: 0; }
 
 .ov-eyebrow {
     font-size: 12px; color: rgb(164, 210, 232); letter-spacing: 1px; margin: 6px 0 4px 0;
@@ -42,6 +61,10 @@
 }
 
 /* --- the chain --- */
+/* Only grows/shrinks when its `.ov-block-solo` parent is filling the page;
+   inside a normal (non-solo) block it keeps its natural full height, same
+   as before. */
+.ov-chain { flex-grow: 1; flex-shrink: 1; min-height: 40px; }
 .ov-chain-list { flex-direction: column; }
 .ov-row {
     flex-direction: row; align-items: center; min-height: 48px; padding: 5px 10px; margin-bottom: 5px;

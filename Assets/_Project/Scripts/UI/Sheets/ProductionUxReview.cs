@@ -98,9 +98,17 @@ namespace SeaSick.UI.Sheets
             if (sheet == null) yield break;
             var report = new StringBuilder();
             int failures = 0;
+            // **Obsolete gate, updated 2026-09-27.** `StationSheet` used to be
+            // a two-tab Production/Upgrade card; the station-page redesign
+            // (concept A2, one tall page per building) dropped tabs entirely
+            // -- `TabLabels` now always returns null by design. The old
+            // assertion here failed on every run since that redesign landed,
+            // not because the page was broken. The gate now asserts the
+            // CURRENT contract (no tabs) instead of the old one, so a
+            // regression that brought tabs back would still be caught.
             var labels = sheet.TabLabels;
-            report.AppendLine("Tabs: " + string.Join(", ",labels ?? Array.Empty<string>()));
-            if (labels == null || labels.Length != 2 || labels[0] != "Production" || labels[1] != "Upgrade") failures++;
+            report.AppendLine("Tabs: " + (labels == null ? "none (one-page station card)" : string.Join(", ", labels)));
+            if (labels != null) failures++;
             var root = SheetHost.Instance.GetComponent<UIDocument>().rootVisualElement;
             var body = root.Q(className:"sheet-body");
             var card = root.Q(className:"sheet-card");
