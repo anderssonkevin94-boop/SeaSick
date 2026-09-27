@@ -384,40 +384,54 @@ namespace SeaSick.World
         Vector3 campCentre;
         bool hasCampCentre;
 
-        /// **How far from the town centre anything else may be sited, metres.**
-        ///
-        /// Kevin, 2026-09-23: *"i want you to be able to choose where you
-        /// want on the island to build your town center"* -- and once it
-        /// stands, the rest of the town goes NEAR it. The town centre itself
-        /// (the campfire, the first thing sited) has no reach rule at all:
-        /// anywhere `CanPlace` takes is fine. A guess; the dial.
+        /// **Legacy number, no longer a build limit (2026-09-27).** Kevin:
+        /// *"I want to do away with the 40 m building radius for the
+        /// campfire... The whole island should be built if you want it
+        /// to."* `TooFarFromTown` no longer reads this at all -- kept only
+        /// because a handful of camera-framing call sites (`AnchorController`'s
+        /// arrival shot) still want a sane "close to the fire" default and
+        /// there is no reason to invent a second number for that. See
+        /// `docs/GDD.md` for the dated decision.
         public const float TownRadius = 40f;
 
         /// **The one reach rule**, asked by `SiteFresh` (so the raise and the
-        /// queue agree) and by `CampSiting` (so the ghost and the ring agree).
-        /// False, with nothing to say, while there is no town centre yet or
-        /// when the thing being sited IS the town centre.
+        /// queue agree) and by `CampSiting` (so the ghost agrees). False,
+        /// with nothing to say, while there is no town centre yet or when
+        /// the thing being sited IS the town centre.
+        ///
+        /// **The ring is gone (2026-09-27).** What is left of it is the one
+        /// thing Kevin asked to keep: nothing may be sited where the camp's
+        /// own people cannot walk to build and work it -- a hand does not
+        /// teleport, and neither does a ladder-less cliff top. `CampPath.
+        /// Reachable` is the SAME walkability map the hands' own errands
+        /// already use (ladders count: a plateau joined by one is on the
+        /// fire's ground), so a hut that passes this can actually be built
+        /// and staffed. The "why keep it near the fire" reason that used to
+        /// live in this refusal now lives in `CampSiting.WalkLabel` instead
+        /// -- the walk every haul already pays, shown rather than enforced.
         public bool TooFarFromTown(BuildPlan plan, Vector3 at, out string why)
         {
             why = "";
             if (!hasCampCentre || plan.kind == BuildKind.Fire) return false;
-            // A pier goes where the deep water is, which for a town sited
-            // inland (2026-09-23, "anywhere on the island") can be well
-            // past the reach -- and the harbour is the plan's Phase 3.
+            // A pier goes where the deep water is, and a dry dock beside the
+            // home berth (its own reach rule, `DryDockMaxFromHome`) -- both
+            // are shoreline placements CampPath's ground map has no opinion
+            // about worth asking.
             if (plan.kind == BuildKind.Pier) return false;
-            // A dry dock goes beside the home berth, which is its own reach
-            // rule (`DryDockMaxFromHome`, tested in `CanPlaceDryDock`/
-            // `SnapDryDock`) and may be well outside the town ring the same
-            // way the pier is.
             if (plan.kind == BuildKind.DryDock) return false;
             // A watchtower snapped onto the wall is part of the wall, and a
             // wall may run further than the camp (2026-09-27,
-            // `Outpost.WallTowers.cs`).
+            // `Outpost.WallTowers.cs`) -- moot now that the ring is gone, but
+            // harmless to keep: a wall node is reachable by definition (the
+            // wall itself only stands where `CanPlaceWall` found a walkable
+            // line to it).
             if (IsTowerPlan(plan) && OnWallNode(at)) return false;
-            float d = Island.FlatDistance(at, campCentre);
-            if (d <= TownRadius) return false;
-            why = $"too far from the town centre ({d:F0} m, {TownRadius:F0} m is the limit)";
-            return true;
+            if (!CampPath.Reachable(this, at))
+            {
+                why = "no walkable path from the camp reaches this ground";
+                return true;
+            }
+            return false;
         }
 
         /// **Move the camp's centre, and everything keyed to it.** The
@@ -443,6 +457,23 @@ namespace SeaSick.World
         /// a loaded camp whose centre fell back to the clearing would key
         /// itself somewhere nobody lives.
         public bool HasCampCentre => hasCampCentre;
+
+        /// **The walk from the stores to a spot, metres (2026-09-27,
+        /// replaces `TownRadius`'s refusal with a number).** The same route
+        /// `CampPath` would actually send a hand along -- ground only, no
+        /// ladders, which is what `SaveTripGeometry`'s haul legs use too --
+        /// falling back to the straight line (no penalty) when the map has
+        /// no answer, which is the same "never refuse for want of an
+        /// answer" rule `CampPath.Reachable` already keeps. -1 with no camp
+        /// centre yet. See `CampSiting.WalkLabel` for the words this feeds.
+        public float WalkMetresFromStores(Vector3 at)
+        {
+            if (!hasCampCentre) return -1f;
+            var map = CampPath.For(this);
+            float m = map != null ? map.GroundRouteMetres(campCentre, at) : -1f;
+            if (m < 0f) m = Island.FlatDistance(at, campCentre);
+            return m;
+        }
 
         /// **The drawings standing here, one per queued site.** Rebuilt
         /// from the ledger whenever the island is loaded -- never the only

@@ -12,13 +12,19 @@ namespace SeaSick.UI
     /// your thumb. You put it where you like, it stays there as a drawing,
     /// and the hands you leave behind walk up from the landing and build it.
     /// Kevin, 2026-09-23: the town centre (the fire) goes ANYWHERE the
-    /// ground takes it -- no ring round the ship, no pre-made clearing --
-    /// and everything after it goes within `Outpost.TownRadius` of it.
+    /// ground takes it -- no ring round the ship, no pre-made clearing.
+    /// Kevin, 2026-09-27: *"I want to do away with the 40 m building radius
+    /// for the campfire... The whole island should be built if you want it
+    /// to."* So does everything else now -- anywhere `Outpost.CanPlace`
+    /// and `Outpost.TooFarFromTown` (reachability only, since this decision)
+    /// take it. What used to be the ring is now `WalkLabel`: the walk from
+    /// the stores, in words, coloured amber then ember with distance, never
+    /// refusing.
     ///
     /// This is the interface half of that. It owns exactly three things — the
-    /// preview ghost, the ring on the ground, and the tap — and it owns no
-    /// rules: whether a spot will take a building is `Outpost.CanPlace`, which
-    /// is the same call the real raise makes. **A ghost that goes green on one
+    /// preview ghost, the walk label, and the tap — and it owns no rules:
+    /// whether a spot will take a building is `Outpost.CanPlace`, which is
+    /// the same call the real raise makes. **A ghost that goes green on one
     /// test and a raise that refuses on another is the bug this shape exists
     /// to prevent**, and the way to keep it prevented is that there is only
     /// one test.
@@ -35,8 +41,8 @@ namespace SeaSick.UI
         /// where you want on the island to build your town center"* -- so it
         /// refuses nothing now. `AnchorController` still frames
         /// `RingCentre`/`RingRadius` on arrival, which with no camp is this
-        /// much ground round the landing. The siting rule is
-        /// `Outpost.TownRadius`, round the town centre, once there is one.
+        /// much ground round the landing. There is no siting rule about
+        /// distance any more (2026-09-27) -- see `Outpost.TooFarFromTown`.
         public static float SiteRadius = 80f;
 
         public static CampSiting Instance { get; private set; }
@@ -70,12 +76,11 @@ namespace SeaSick.UI
         /// the two halves happen to land in.
         public const string WallPlanId = "palisade";
 
-        /// **Metres past the furthest wall post the camera's own reach
-        /// stands, on top of `Outpost.WallExtentFromCentre` (2026-09-27).**
-        /// Slack for a tower snapping past the very end of the run
-        /// (`WallTowerSnap`), and for the ghost's own footprint, so the
-        /// camera does not stop exactly at the last post with the drawing
-        /// hanging half off screen.
+        /// **Metres past the furthest wall post (or the island's own
+        /// shore) the camera's own reach stands, 2026-09-27.** Slack for a
+        /// tower snapping past the very end of a run (`WallTowerSnap`), and
+        /// for the ghost's own footprint, so the camera does not stop
+        /// exactly at an edge with the drawing hanging half off screen.
         public const float WallReachMargin = 20f;
 
         /// **...or a LADDER chain (2026-09-27)**: two points, its own tool
@@ -125,11 +130,31 @@ namespace SeaSick.UI
             GUI.Label(r, line, UITheme.Small2Centered);
         }
 
+        /// **Draw the walk label, stacked under wherever `DrawClearLine`
+        /// put its line** (2026-09-27) -- the two can be on screen together
+        /// ("clears 2 trees" and "84 m from stores" are both true of the
+        /// same spot), so this claims the row below rather than the same
+        /// one. Tinted amber/ember past `AmberMetres`/`EmberMetres`; never a
+        /// refusal, so it draws whether or not a clear line is showing.
+        public static void DrawWalkLine(Vector3 world, int buttonCount, string line, Color tint)
+        {
+            if (string.IsNullOrEmpty(line)) return;
+            var row = SitingButtons.Cluster(world, buttonCount);
+            if (row.width <= 0f) return;
+            var r = new Rect(row.center.x - HudLayout.Unit * 9f,
+                row.yMax + SitingButtons.Gap * 0.5f + HudLayout.Unit * 1.5f,
+                HudLayout.Unit * 18f, HudLayout.Unit * 1.4f);
+            UITheme.Rect(r, UITheme.Panel);
+            var prevColor = GUI.color;
+            GUI.color = tint;
+            GUI.Label(r, line, UITheme.Small2Centered);
+            GUI.color = prevColor;
+        }
+
         BuildPlan plan;
         Outpost outpost;
         Transform ship;
         GameObject ghost;
-        LineRenderer ring;
         Vector3 at;
         bool valid;
 
@@ -278,21 +303,26 @@ namespace SeaSick.UI
                 ? Instance.outpost.AutoYaw(Instance.outpost.CampCentre + Vector3.forward * 10f) : 0f;
             Instance.movingRow = move;
             Instance.moving = move != null;
-            // **Widen the camera's own reach to the camp's walls (2026-09-27,
-            // watchtowers-on-the-wall).** The ghost's reach test already
-            // exempts a tower snapped onto the wall from `TownRadius`
-            // (`Outpost.TooFarFromTown`), but the camera the thumb points
-            // with has no such exemption -- it was left wherever
-            // `DropTheViewOn` last put it, 35 m above whatever was sited
-            // before, and a run built past the campfire's ring is simply off
-            // screen there. `IslandCam.ClampPivot` reads this for exactly the
-            // life of this session; `Cancel` puts it back. Harmless (0 m) on
-            // a camp with no wall yet.
+            // **Widen the camera's own reach to the whole island (2026-09-27,
+            // "the whole island should be built if you want it to").** The
+            // ghost's reach test no longer refuses anywhere on the island
+            // (`Outpost.TooFarFromTown` now only asks whether the ground is
+            // walkable), but the camera the thumb points with has its own
+            // clamp -- it was left wherever `DropTheViewOn` last put it, 35 m
+            // above whatever was sited before, and a spot on the far shore is
+            // simply off screen there. `IslandCam.ClampPivot` reads this for
+            // exactly the life of this session; `Cancel` puts it back. Grown
+            // from the wall's own reach too (2026-09-27, watchtowers-on-the-
+            // wall), so a run that happens to run further than the shore's
+            // measured radius is still on screen. Harmless (0 m) with no
+            // camp centre or island yet.
             if (Instance.outpost != null && Instance.outpost.HasCampCentre)
             {
                 CameraRig.IslandCam.ExtraReachCentre = Instance.outpost.CampCentre;
-                CameraRig.IslandCam.ExtraReachRadius =
-                    Instance.outpost.WallExtentFromCentre() + WallReachMargin;
+                float islandSpan = Instance.outpost.Island != null
+                    ? Instance.outpost.Island.MaxRadius : 0f;
+                CameraRig.IslandCam.ExtraReachRadius = Mathf.Max(
+                    Instance.outpost.WallExtentFromCentre(), islandSpan) + WallReachMargin;
             }
             // The ghost must not be refused by the drawing it IS -- see
             // `Outpost.IgnoreSite`. Cleared in `Cancel`, which every exit
@@ -310,13 +340,11 @@ namespace SeaSick.UI
 
             // **The wall fork.** A palisade is a run of posts, not a
             // rectangle on the end of a thumb, so the ghost, the start
-            // point and the yaw all belong to `WallSiting` from here. The
-            // ring still gets built: the reach rule is the same rule.
+            // point and the yaw all belong to `WallSiting` from here.
             Instance.ladderMode = what.id == LadderPlanId;
             if (Instance.ladderMode)
             {
                 LadderSiting.Begin(target);
-                Instance.BuildRing();
                 return;
             }
 
@@ -324,41 +352,29 @@ namespace SeaSick.UI
             if (Instance.wallMode)
             {
                 WallSiting.Begin(target, what, shipTransform);
-                Instance.BuildRing();
                 return;
             }
 
             Instance.want = Instance.StartPoint();
-            Instance.BuildRing();
         }
 
         /// **Where the drawing appears before anyone has moved it.**
         ///
         /// It has to appear somewhere: the thumb is not carrying it any more.
         /// A blueprint being moved starts on itself; anything else starts on
-        /// the middle of the screen, which is what the player is looking at —
-        /// pulled back inside the ring when the middle of the screen is off
-        /// the reach, so the first thing the player sees is a legal spot and
-        /// a live ✓ rather than a red refusal.
+        /// the middle of the screen, which is what the player is looking
+        /// at -- anywhere on the island is a fair start now (2026-09-27, no
+        /// more ring to pull it back inside of).
         Vector3 StartPoint()
         {
             if (moving && movingRow != null)
                 return OnGround(movingRow.x, movingRow.z);
 
-            Vector3 c = Centre();
             var cam = Camera.main;
             if (cam != null && GroundPick.FromScreen(cam,
                     new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out Vector3 mid))
-            {
-                // No town centre yet (or this IS it): anywhere goes, so the
-                // middle of the screen is the answer as it stands.
-                if (!HasRing) return mid;
-                var d = new Vector2(mid.x - c.x, mid.z - c.z);
-                if (d.magnitude <= Outpost.TownRadius * 0.95f) return mid;
-                d = d.normalized * (Outpost.TownRadius * 0.6f);
-                return OnGround(c.x + d.x, c.z + d.y);
-            }
-            return c;
+                return mid;
+            return Centre();
         }
 
         static Vector3 OnGround(float x, float z)
@@ -466,12 +482,12 @@ namespace SeaSick.UI
             outpost = null;
             Refusal = "";
             ClearLine = "";
+            WalkLine = "";
             valid = false;
             onWall = false;
             CameraRig.IslandCam.ExtraReachCentre = null;
             CameraRig.IslandCam.ExtraReachRadius = 0f;
             if (ghost != null) { Destroy(ghost); ghost = null; }
-            if (ring != null) { Destroy(ring.gameObject); ring = null; }
         }
 
         void Update()
@@ -619,9 +635,49 @@ namespace SeaSick.UI
                     ClearLine = string.IsNullOrEmpty(ClearLine) ? OnWallLine : OnWallLine + " · " + ClearLine;
             }
 
+            // **The walk, in words (2026-09-27) -- what replaced the 40 m
+            // refusal.** Only on a valid spot, past the town centre itself
+            // (there is nowhere to walk FROM until the fire stands) and
+            // never on the fire's own siting (it IS the stores).
+            WalkLine = "";
+            if (valid && outpost != null && outpost.HasCampCentre && plan.kind != BuildKind.Fire)
+            {
+                WalkLine = WalkLabel(outpost, at, out Color tint);
+                WalkTint = tint;
+            }
+
             Place(at);
             ShowGhost(true);
         }
+
+        /// **"84 m from stores · ~70 s round trip — slower hauling."**
+        ///
+        /// Kevin, 2026-09-27: doing away with the 40 m ring needs "a reason
+        /// to keep things near the centre" that comes from what already
+        /// exists, made visible -- every haul the ledger runs already pays
+        /// for distance (`OutpostLedger.PathFactor`/`WalkMetresPerSecond`,
+        /// `Outpost.SaveTripGeometry`); this is the same arithmetic, asked
+        /// about the spot under the thumb before it is committed to. Never
+        /// a refusal -- the colour is the only opinion it has.
+        public static string WalkLabel(Outpost outpost, Vector3 at, out Color tint)
+        {
+            tint = UITheme.TextDim;
+            float m = outpost != null ? outpost.WalkMetresFromStores(at) : -1f;
+            if (m < 0f) return "";
+            float seconds = 2f * m * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond;
+            tint = m > EmberMetres ? UITheme.Bad : m > AmberMetres ? UITheme.Warn : UITheme.TextDim;
+            return $"{m:F0} m from stores · ~{seconds:F0} s round trip — slower hauling";
+        }
+
+        /// Past this many metres from the stores, the walk label turns
+        /// amber; past `EmberMetres`, ember. Never a refusal -- a colour
+        /// only, same spirit as the ghost's own colouring.
+        public const float AmberMetres = 60f;
+        public const float EmberMetres = 120f;
+
+        /// The walk label for the spot under the ghost right now, or "".
+        public static string WalkLine { get; private set; } = "";
+        public static Color WalkTint { get; private set; } = Color.white;
 
         /// **The only way a building gets placed.** The ✓ button, or Enter.
         public static void Confirm()
@@ -709,6 +765,7 @@ namespace SeaSick.UI
                 case SitingButtons.Press.Confirm: Commit(); break;
             }
             if (valid) DrawClearLine(at, 3, ClearLine);
+            if (valid) DrawWalkLine(at, 3, WalkLine, WalkTint);
         }
 
         /// **Drop the view on to what was just sited**: Kevin's call, 35 m
@@ -732,26 +789,21 @@ namespace SeaSick.UI
         /// The ground test, plus the one rule that is not about the ground.
         bool Test(Vector3 p, out string why)
         {
-            // The ring first: it is the rule the player can SEE, so it should
-            // be the reason they are given when both are broken.
+            // Reachability first (2026-09-27: all `TooFarFromTown` asks now)
+            // -- it is the rule the player can see acted on (the walk label),
+            // so it should be the reason they are given when both are broken.
             if (outpost.TooFarFromTown(plan, p, out why)) return false;
             return outpost.CanPlace(plan, p, Yaw, out why);
         }
 
         /// The town centre once one is sited (fire or its blueprint), else
-        /// the ship -- which with no ring only seeds where the ghost starts.
+        /// the ship -- which only seeds where the ghost starts.
         Vector3 Centre()
             => outpost != null && outpost.HasCampCentre ? outpost.CampCentre
              : ship != null ? ship.position : Vector3.zero;
 
-        /// **Is there a reach to draw?** Only once the town centre is down,
-        /// and never while siting (or moving) the town centre itself -- the
-        /// same two conditions `Outpost.TooFarFromTown` refuses on.
-        bool HasRing => outpost != null && outpost.HasCampCentre
-                        && plan.kind != BuildKind.Fire && plan.kind != BuildKind.Pier
-                        && plan.kind != BuildKind.DryDock;
-
-        /// **The siting ring, for anything that has to AGREE with it.**
+        /// **The arrival shot's own framing point, for anything that has to
+        /// AGREE with it.**
         ///
         /// Kevin on the phone, 2026-09-22: landing at a fresh island panned
         /// the camera to the middle of the island, while the only ground that
@@ -769,8 +821,8 @@ namespace SeaSick.UI
             return outpost != null ? outpost.CampCentre : Vector3.zero;
         }
 
-        /// ...and how wide the arrival shot frames round it. Since 2026-09-23
-        /// this refuses nothing: see `SiteRadius` and `Outpost.TownRadius`.
+        /// ...and how wide the arrival shot frames round it. Refuses nothing
+        /// (2026-09-23) -- see `SiteRadius`.
         public static float RingRadius => SiteRadius;
 
         void Place(Vector3 p)
@@ -800,48 +852,6 @@ namespace SeaSick.UI
         void ShowGhost(bool on)
         {
             if (ghost != null && ghost.activeSelf != on) ghost.SetActive(on);
-        }
-
-        /// The ring on the ground round the town centre: the reach, drawn where the
-        /// decision is being made rather than written in the sheet. Faint on
-        /// purpose (2026-09-23) -- it is a hint about the rule, and the ghost's
-        /// red and the refusal line are what say no. None before the town
-        /// centre is sited: there is no reach to show.
-        ///
-        /// Sampled against the height field so it climbs the beach instead of
-        /// slicing through it, and built ONCE — she is anchored, so it does
-        /// not move, and 96 evaluations of the height function every frame is
-        /// not a thing to spend on a circle.
-        void BuildRing()
-        {
-            if (!HasRing) return;
-            var go = new GameObject("SiteRing");
-            go.transform.SetParent(transform, false);
-            ring = go.AddComponent<LineRenderer>();
-            ring.useWorldSpace = true;
-            ring.loop = true;
-            ring.widthMultiplier = 0.6f;
-            ring.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            ring.receiveShadows = false;
-            ring.material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-            ring.material.SetColor("_BaseColor", new Color(0.74f, 0.83f, 0.90f, 1f));
-
-            const int Segments = 96;
-            ring.positionCount = Segments;
-            var h = GroundPick.Height;
-            Vector3 c = Centre();
-            for (int i = 0; i < Segments; i++)
-            {
-                float a = i * Mathf.PI * 2f / Segments;
-                float x = c.x + Mathf.Cos(a) * Outpost.TownRadius;
-                float z = c.z + Mathf.Sin(a) * Outpost.TownRadius;
-                // Over water the field returns sea bed, so the ring would
-                // disappear under the sea for most of its length. Clamp it to
-                // just above sea level, which is where the player is looking
-                // from anyway.
-                float y = h != null ? Mathf.Max(h(x, z), 0.2f) : 0.2f;
-                ring.SetPosition(i, new Vector3(x, y + 0.35f, z));
-            }
         }
     }
 }

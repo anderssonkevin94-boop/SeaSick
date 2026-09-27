@@ -98,12 +98,24 @@ namespace SeaSick.World
         /// fixed and the EXTENT is what gives (see `Build`).
         public static float DesiredCell = 2f;
 
-        /// Hard cap on the grid's side length in cells. This, not the island,
-        /// is what bounds the build cost on a phone. 160 cells of 2 m is a
-        /// 320 m square centred on the camp -- more than twice the hundred
-        /// metres a hand's errands cover, and 25 600 cells is about 1.3 MB
-        /// of arrays and ~25 k height samples to build.
-        public static int MaxCells = 160;
+        /// **Hard cap on the grid's side length in cells.** This, not the
+        /// island, is what bounds the build cost on a phone.
+        ///
+        /// **Raised 160 -> 320, 2026-09-27** (Kevin: doing away with the 40 m
+        /// building radius -- "the whole island should be built if you want
+        /// it to"): `Reachable` and `Walkability` now have to answer for any
+        /// spot on the island the player might site at, not just the
+        /// hundred-odd metres round the fire the old ring allowed. 320 cells
+        /// of 2 m is a 640 m square centred on the camp (half-extent 320 m),
+        /// which covers every island short of an exceptionally large one --
+        /// `Build` still asks for `Island.MaxRadius` first and only hits this
+        /// ceiling on the biggest islands, where the far shore simply falls
+        /// back to the old "no map, no refusal" behaviour rather than being
+        /// tested. 102 400 cells is ~2.9 MB of arrays (~10 float/int/byte
+        /// arrays at 4/1 bytes each) and ~102 k height samples to build --
+        /// four times the old 25 600/1.3 MB, still a one-shot lazy build, not
+        /// a per-frame cost.
+        public static int MaxCells = 320;
 
         /// Ceiling on A* expansions per query. A route that needs more than
         /// this is a route across the whole island, and the straight-line
@@ -242,12 +254,21 @@ namespace SeaSick.World
 
             Vector3 c = camp.CampCentre;
 
-            // Cover the island, or a sensible patch of a big one. A hand's
-            // errands are local; what is off the map falls back to the old
-            // straight line, which is no worse than today.
+            // **Cover the whole island (2026-09-27), not a disc round the
+            // fire.** Until this decision a camp's ground map only had to
+            // answer for the hundred-odd metres the 40 m build ring and a
+            // hand's errands both stayed inside of, so the old upper clamp
+            // (260 m half-extent) quietly cut a big island off at the knees.
+            // Now any point on the island can be sited at, and `Reachable`
+            // has to have an opinion about it -- so the target is the
+            // island's OWN measured radius, floored for a tiny islet's own
+            // errand range and otherwise uncapped here; `MaxCells` below is
+            // the one place cost is actually bounded. What still falls off
+            // the edge (an exceptionally large island) falls back to the old
+            // "no map, no refusal" behaviour, same as it always did.
             var isle = camp.Island;
             float want = isle != null ? isle.MaxRadius + 40f : 160f;
-            want = Mathf.Clamp(want, 80f, 260f);
+            want = Mathf.Max(want, 80f);
 
             // **The cell is fixed at 2 m and the EXTENT gives.** A wall post
             // snaps to a 2 m step (`Outpost.WallPostStep`) and the segment
