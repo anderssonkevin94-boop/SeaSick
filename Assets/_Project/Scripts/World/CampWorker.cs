@@ -125,7 +125,7 @@ namespace SeaSick.World
         Vector3 flyOverLand;   // the last point under him that was island
         float flySpin, flyFor;
 
-        enum Phase { Resting, Going, Working, Coming, Held, Landing, Flying }
+        enum Phase { Resting, Going, Working, Coming, Held, Landing, Flying, Downed }
 
         /// **Tunables, as plain statics.** This component is added at runtime
         /// by `Outpost.PuppetsToWork`, so a `[SerializeField]` on it is a dial
@@ -576,6 +576,31 @@ namespace SeaSick.World
                 Drop();
                 Remove(agent);
                 return;
+            }
+
+            // **Downed (death/rescue phase 1, 2026-09-27).** Lie flat where
+            // he stands, snapped to the terrain, and stop -- no walking, no
+            // work, until `Revive` or `Die` says otherwise. Restorable: this
+            // is pose only, driven every frame off `r.downed`, so a load
+            // that happens mid-down just reapplies it once the body ticks.
+            if (r.downed)
+            {
+                if (phase != Phase.Downed)
+                {
+                    phase = Phase.Downed;
+                    Vector3 p = transform.position;
+                    p.y = camp.GroundAt(p);
+                    transform.position = p;
+                    transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 90f);
+                }
+                return;
+            }
+            if (phase == Phase.Downed)
+            {
+                // Revived: stand back up where he was laid down.
+                phase = Phase.Resting;
+                transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
+                wait = 0f;
             }
 
             // **This body is the walker** (2026-09-27): where he stands is

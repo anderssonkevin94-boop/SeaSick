@@ -187,6 +187,14 @@ namespace SeaSick.Combat
             }
             ended = true;
             Camp.Ledger.raids++;
+            // **Lived through a raid** (death/rescue phase 1, 2026-09-27):
+            // every hand still on the roster when the raiders withdraw gets
+            // the event -- a downed one included, since he made it, just
+            // not unhurt.
+            if (Camp.Ledger.hands != null)
+                foreach (var h in Camp.Ledger.hands)
+                    if (h != null)
+                        World.Life.Lives.Log(h.name, World.Life.LifeEvents.SurvivedRaid, Camp.Ledger.CampLabel);
             RaidDirector.ReportResult(Camp, Stolen > 0
                 ? $"the raiders got away with {Stolen}"
                 : "the raiders fled with nothing");

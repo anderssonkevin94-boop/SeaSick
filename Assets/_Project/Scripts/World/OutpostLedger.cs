@@ -172,6 +172,21 @@ namespace SeaSick.World
         /// does not advance his legs. Not saved.
         [System.NonSerialized] public bool driven;
 
+        // --- downed (death/rescue phase 1, 2026-09-27) ----------------------
+        //
+        // Always downed before dead (docs/PLAN-DEATH-RESCUE.md, "Deaths").
+        // While `downed` is true: `WorkFactor` is 0 (no productive output,
+        // no new trips/orders -- see `OutpostLedger.WorkFactor`), and
+        // `downedLeft` only ticks in real, unscaled-by-pause time while the
+        // camp is WATCHED and running (`Outpost.Update` -> `TickDowned`) --
+        // never in `Step`'s game-day quanta, so nobody dies while the
+        // player is away or the game is paused. His load stays on him in
+        // phase 1 (phase 2 drops it where he fell). Default false/0/"" so
+        // an old save reads as "nobody is down".
+        public bool downed;
+        public float downedLeft;
+        public string downedCause = "";
+
         public TripLeg Leg => (TripLeg)tripLeg;
 
         public bool Hauling => haulCount > 0 && !string.IsNullOrEmpty(haulRes);
@@ -578,7 +593,8 @@ namespace SeaSick.World
             for (int i = 0; i < Names.Length; i++)
             {
                 string candidate = Names[(int)((h + (uint)i) % (uint)Names.Length)];
-                if (ledger.Hand(candidate) == null && !used.Contains(candidate))
+                if (ledger.Hand(candidate) == null && !used.Contains(candidate)
+                    && !SeaSick.World.Life.Lives.IsTaken(candidate))
                     return candidate;
             }
             // All 24 spoken for: keep recruiting rather than stall on a
@@ -586,7 +602,8 @@ namespace SeaSick.World
             for (int i = 1; i < 999; i++)
             {
                 string candidate = "Hand " + i;
-                if (ledger.Hand(candidate) == null && !used.Contains(candidate))
+                if (ledger.Hand(candidate) == null && !used.Contains(candidate)
+                    && !SeaSick.World.Life.Lives.IsTaken(candidate))
                     return candidate;
             }
             return "Hand " + (ledger.hands.Count + 1);
@@ -897,7 +914,7 @@ namespace SeaSick.World
         // bench/site work needs him standing there. See
         // docs/DELIVERY-ON-ARRIVAL.md.)
         public static float WorkFactor(OutpostHand h) =>
-            h == null ? 0f
+            h == null || h.downed ? 0f
                 : Mathf.Max(StarvingWorkFloor, Mathf.Clamp01(h.mood / 0.5f)) * (1f + MealWorkBonus(h));
 
         /// **Hunger slows a hand; it does not stop one, 2026-09-23.** Kevin
@@ -918,7 +935,8 @@ namespace SeaSick.World
         /// Without this a camp that ran out once could never recover: the
         /// hungrier they got the less food they brought in.
         public static float WorkFactorOn(OutpostHand h, string produces) =>
-            Economy.FoodBook.IsFoodish(produces) ? (h == null ? 0f : 1f) : WorkFactor(h);
+            h != null && h.downed ? 0f
+                : Economy.FoodBook.IsFoodish(produces) ? (h == null ? 0f : 1f) : WorkFactor(h);
 
         /// **The pace this hand's CURRENT job is paid at, 0..1** -- the
         /// factor `Step` actually scales his day by, dispatched the way
@@ -2614,7 +2632,7 @@ namespace SeaSick.World
             builderHands.Clear();
             foreach (var h in hands)
             {
-                if (h == null) continue;
+                if (h == null || h.downed) continue;
                 // (A trip gatherer's help is `GatherDay`'s -- his arms too --
                 // so only a blocked HUNTER joins the builders here.)
                 if (h.order == OutpostOrder.Build
@@ -2648,7 +2666,7 @@ namespace SeaSick.World
             // carry, deposit 4 Food + 1 Hide at the store.
             foreach (var h in hands)
             {
-                if (h == null || h.order != OutpostOrder.Gather) continue;
+                if (h == null || h.downed || h.order != OutpostOrder.Gather) continue;
                 if (string.IsNullOrEmpty(h.target)) continue;
                 if (TripGatherer(h)) GatherDay(h, days, gatherersBuild);
             }
@@ -2662,7 +2680,7 @@ namespace SeaSick.World
             // description of what its job is worth.
             foreach (var h in hands)
             {
-                if (h == null || h.order != OutpostOrder.Work) continue;
+                if (h == null || h.downed || h.order != OutpostOrder.Work) continue;
                 if (string.IsNullOrEmpty(h.target)) continue;
                 // Assigned to something that is not standing here. Can happen
                 // to a saved hand whose building was never restored; produce
@@ -2816,6 +2834,7 @@ namespace SeaSick.World
                         born = true,
                     });
                     away.born.Add(name);
+                    Life.Lives.Log(name, Life.LifeEvents.Born, CampLabel);
                 }
             }
 
@@ -3279,7 +3298,7 @@ namespace SeaSick.World
                 foreach (var h in hands)
                 {
                     if (feeding >= want) break;
-                    if (h == null) continue;
+                    if (h == null || h.downed) continue;
                     var from = pass == 0 ? OutpostOrder.Idle : OutpostOrder.Build;
                     if (h.order != from) continue;
                     h.order = OutpostOrder.Gather;
@@ -3313,7 +3332,7 @@ namespace SeaSick.World
             if (!Building || hands == null) return 0;
             int n = 0;
             foreach (var h in hands)
-                if (h != null && h.order == OutpostOrder.Idle)
+                if (h != null && !h.downed && h.order == OutpostOrder.Idle)
                 { h.order = OutpostOrder.Build; h.target = ""; n++; }
             return n;
         }

@@ -35,6 +35,33 @@ namespace SeaSick.World
         static readonly List<Outpost> all = new List<Outpost>();
         public static IReadOnlyList<Outpost> All => all;
 
+        /// **A death removes the body, too** (death/rescue phase 1,
+        /// 2026-09-27). `OutpostLedger.Die` is pure data -- no scene
+        /// reference, by design -- so it raises `Life.Lives.Died` and
+        /// leaves finding and destroying the parked `CrewAgent` to whoever
+        /// owns a scene. This is that: one static subscriber, alive for the
+        /// life of the process, searching every outpost for the body
+        /// wearing the dead name.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void InstallDeathHook()
+        {
+            Life.Lives.Died -= OnAnyoneDied;   // domain reload may be off
+            Life.Lives.Died += OnAnyoneDied;
+        }
+
+        static void OnAnyoneDied(Life.GraveRecord grave)
+        {
+            if (grave == null || string.IsNullOrEmpty(grave.name)) return;
+            foreach (var o in all)
+            {
+                var body = o != null ? o.BodyNamed(grave.name) : null;
+                if (body == null) continue;
+                CampWorker.Remove(body);
+                Destroy(body.gameObject);
+                return;
+            }
+        }
+
         /// Summed `MakeRatePerDay` for `resource` over every camp that
         /// exists -- "how fast is this being made, across the whole
         /// archipelago," for the target line. Allocation-free.
@@ -1194,6 +1221,7 @@ namespace SeaSick.World
                 order = Building ? OutpostOrder.Build : OutpostOrder.Gather,
                 target = Building ? "" : Res.Timber,
             });
+            Life.Lives.Log(who, Life.LifeEvents.WentAshore, ledger?.CampLabel ?? "");
 
             // **Rations from the ship** (Kevin, 2026-09-23): every hand left
             // ashore brings `ProvisionDays` of food, so the first buildings
@@ -1263,6 +1291,7 @@ namespace SeaSick.World
             if (hand == null || ship == null) return false;
             var row = HandNamed(hand.DisplayName);
             if (row == null) return false;
+            Life.Lives.Log(row.name, Life.LifeEvents.WentAboard, ledger?.CampLabel ?? "");
             // Puts down any armful first -- a haul never leaves with the hand.
             ledger.RemoveHand(row);
             hand.transform.SetParent(ship, true);
@@ -2874,6 +2903,16 @@ namespace SeaSick.World
             // this only makes sure a loaded camp has one.
             if (roads == null && Sited) roads = CampRoads.For(this);
             if (!Watched) return;
+
+            // **The downed timer** (death/rescue phase 1, 2026-09-27): real,
+            // unscaled-by-pause seconds, only while this camp is watched AND
+            // the game is actually running -- never during a paused menu
+            // (`Time.timeScale` is 0 then, which `CatchUp`'s own unscaled
+            // clock below does NOT respect on its own) and never during an
+            // offline time-away run (`AwayProgress.Running`), so D2's rule
+            // holds: nobody dies while the player is away or paused.
+            if (Time.timeScale > 0f && !SeaSick.Save.AwayProgress.Running)
+                ledger?.TickDowned(Time.unscaledDeltaTime);
             // Four times a second, not sixty: `CatchUp` reconciles the
             // props and the bodies as well as running the tick, and the
             // tick itself only advances on a `QuantumDays` quantum (3.6 s) anyway. A hut

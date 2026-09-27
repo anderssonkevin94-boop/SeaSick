@@ -88,6 +88,7 @@ namespace SeaSick.World
             if (h.huntArmed && HeldOf(Res.Arrows) > 0f) DrawHeld(Res.Arrows, Mathf.Min(1f, HeldOf(Res.Arrows)));
             h.huntKilled = true;
             h.huntKills++;
+            Life.Lives.Log(h.name, Life.LifeEvents.HuntingKill, CampLabel);
             return true;
         }
 

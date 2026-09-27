@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using SeaSick.World.Life;
 
 namespace SeaSick.World
 {
@@ -866,6 +867,102 @@ namespace SeaSick.World
             return hands.Remove(h);
         }
 
+        // --- downed / dead (death/rescue phase 1, 2026-09-27) ----------------
+        //
+        // docs/PLAN-DEATH-RESCUE.md, "Deaths": always downed before dead. A
+        // downed hand lies where he fell with a lenient timer; if nobody
+        // comes in time (phase 2's drag-to-hut) he dies.
+
+        /// **What a camp label reads as** in a life event or story, until
+        /// camps have names of their own: the fire's key. Good enough for
+        /// phase 1's templates ("hungry ... at 12,-4"); a later pass can
+        /// swap this for an authored name without touching any save data,
+        /// since the string is generated, not stored per event as a lookup
+        /// key.
+        public string CampLabel => string.IsNullOrEmpty(campName) ? keyX + "," + keyZ : campName;
+
+        /// The island's name, set by `Outpost.WireWalkerGuard`; not saved
+        /// (the scene re-supplies it every load).
+        [System.NonSerialized] public string campName;
+
+        /// Knock this hand down. No-op if he already is, or is not on the
+        /// roster. His current load stays on him (phase 1; phase 2 drops it
+        /// where he fell -- see `OutpostHand.downed`'s doc).
+        public bool Down(OutpostHand h, string cause = "")
+        {
+            if (h == null || hands == null || !hands.Contains(h) || h.downed) return false;
+            h.downed = true;
+            h.downedLeft = LifeTuning.DownedSeconds;
+            h.downedCause = cause ?? "";
+            // A trip he was only walking OUT to fetch has nothing in his
+            // arms yet: cancel it, so its units are not claimed by a man
+            // lying in the grass (`Claimed`) and someone else can go.
+            if (h.Hauling && !h.haulPicked) ClearHaul(h);
+            return true;
+        }
+
+        /// Bring a downed hand back (phase 2/dev use -- nothing in phase 1
+        /// calls this on its own; the dev panel does).
+        public void Revive(OutpostHand h)
+        {
+            if (h == null) return;
+            h.downed = false;
+            h.downedLeft = 0f;
+            h.downedCause = "";
+        }
+
+        /// **The timer runs out, or the dev panel says "Kill".** Logs the
+        /// death, writes the grave, deposits whatever load he was carrying
+        /// so nothing vanishes (TODO phase 2: drop it where he fell instead
+        /// of at the store), removes him from the roster the same way
+        /// `RemoveHand` does, and raises `Lives.Died` for phase 3's
+        /// tombstone flow. Safe to call on a hand who was never downed
+        /// (the dev panel's "Kill" button).
+        public void Die(OutpostHand h, string cause = "")
+        {
+            if (h == null || hands == null || !hands.Contains(h)) return;
+            string label = CampLabel;
+            if (string.IsNullOrEmpty(cause)) cause = h.downedCause;
+            var record = Lives.Record(h.name);
+            int bornDay = record != null ? record.bornDay : -1;
+            var grave = new GraveRecord
+            {
+                name = h.name,
+                camp = label,
+                bornDay = bornDay,
+                diedDay = TimeOfDay.Day,
+                cause = cause ?? "",
+            };
+            grave.story = LifeStory.Build(record, grave);
+
+            // Whatever he was carrying is put down before he leaves the
+            // books -- see the class doc: nothing vanishes.
+            RemoveHand(h);
+
+            Lives.Bury(grave);
+        }
+
+        /// **The downed timer, real seconds, watched-and-running only.**
+        /// Called once a frame from `Outpost.Update` while this camp is
+        /// watched, guarded there against a paused game and an offline
+        /// catch-up run -- never from `Step`'s game-day quanta, which is
+        /// how an away camp and a paused menu both leave a downed hand
+        /// exactly as they found him (D2: "nobody dies while I'm away").
+        public void TickDowned(float realDeltaSeconds)
+        {
+            if (hands == null || realDeltaSeconds <= 0f) return;
+            // Copy first: `Die` mutates `hands`, which this loop is walking.
+            downedScratch.Clear();
+            foreach (var h in hands) if (h != null && h.downed) downedScratch.Add(h);
+            foreach (var h in downedScratch)
+            {
+                h.downedLeft -= realDeltaSeconds;
+                if (h.downedLeft <= 0f) Die(h, h.downedCause);
+            }
+        }
+
+        [System.NonSerialized] readonly List<OutpostHand> downedScratch = new List<OutpostHand>();
+
         static void ClearHaul(OutpostHand h)
         {
             h.haulRes = "";
@@ -1243,6 +1340,12 @@ namespace SeaSick.World
             foreach (var h in hands)
             {
                 if (h == null) continue;
+                // **Downed (death/rescue phase 1): no new work, no new
+                // trips.** `WorkFactor` is already 0 for him, but a downed
+                // hand should not even be READ by the dispatcher -- his
+                // load stays on him (phase 1: nothing is dropped), so skip
+                // him outright rather than trust a zero budget alone.
+                if (h.downed) continue;
                 float budget = days * WorkFactor(h);
                 if (h.order == OutpostOrder.Work && IsStation(h.target))
                 {

@@ -78,6 +78,16 @@ namespace SeaSick.Save
         public List<float> trackX = new List<float>();
         public List<float> trackZ = new List<float>();
         public List<double> trackAt = new List<double>();
+
+        /// **The global life registry** (death/rescue phase 1, 2026-09-27,
+        /// `SeaSick.World.Life.Lives`): one row per name with any event on
+        /// them, and one per grave. Global rather than per-outpost -- a hand
+        /// moves between the ship and any camp over a life. Added after
+        /// version 1 shipped and deliberately NOT a version bump, same
+        /// reasoning as `seen`/`trackX` above: an old save has nobody's
+        /// story logged yet, which is exactly what an empty list means.
+        public List<SeaSick.World.Life.LifeRecord> lives = new List<SeaSick.World.Life.LifeRecord>();
+        public List<SeaSick.World.Life.GraveRecord> graveyard = new List<SeaSick.World.Life.GraveRecord>();
     }
 
     [System.Serializable]

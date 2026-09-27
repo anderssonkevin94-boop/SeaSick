@@ -4,6 +4,7 @@ using SeaSick.Ship;
 using SeaSick.Terrain;
 using SeaSick.Voyage;
 using SeaSick.World;
+using SeaSick.World.Life;
 using UnityEngine;
 
 namespace SeaSick.Save
@@ -199,6 +200,10 @@ namespace SeaSick.Save
             d.timeSeconds = TimeOfDay.Seconds;
             d.savedAtUtcTicks = System.DateTime.UtcNow.Ticks;
 
+            // Death/rescue phase 1: the global life registry rides the save
+            // the same way `TimeOfDay`/`OceanTime` would if they needed to.
+            Lives.SyncTo(d.lives, d.graveyard);
+
             // --- the ship -------------------------------------------------
             var s = d.ship;
             s.rung = yard != null ? yard.NodeIndex : -1;
@@ -343,6 +348,10 @@ namespace SeaSick.Save
                 if (d.trackX == null) d.trackX = new List<float>();
                 if (d.trackZ == null) d.trackZ = new List<float>();
                 if (d.trackAt == null) d.trackAt = new List<double>();
+                // Death/rescue phase 1: an old save has nobody's story yet.
+                if (d.lives == null) d.lives = new List<LifeRecord>();
+                if (d.graveyard == null) d.graveyard = new List<GraveRecord>();
+                Lives.SyncFrom(d.lives, d.graveyard);
                 return d;
             }
             catch (System.Exception e)

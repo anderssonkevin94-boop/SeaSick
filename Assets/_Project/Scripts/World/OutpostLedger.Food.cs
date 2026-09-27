@@ -198,10 +198,19 @@ namespace SeaSick.World
         /// arrival in `DepositHaul`. Mood keeps its old shape: an empty
         /// stomach drops it, a fed hand climbs back (half rations never
         /// recover), plus the last meal's bonus while he is fed.
+        /// **The last game day `EatStep` logged a Hungry life event.** Not
+        /// saved -- worst case a load re-logs the same day once, which
+        /// `Lives.Log`'s repeat-collapse absorbs for free. Guards against
+        /// logging every quantum of a hungry day (several a second while
+        /// watched) rather than once.
+        [System.NonSerialized] int hungryLoggedDay = -1;
+
         void EatStep(float days)
         {
             if (hands == null || hands.Count == 0) return;
             bool starved = rations == Rations.None;
+            int today = TimeOfDay.Day;
+            bool logHungryToday = today != hungryLoggedDay;
             float drain = EatPerHandPerDay * (rations == Rations.Half ? 0.5f : 1f) * days;
             float hungryBelow = EconomyTuning.HungryBelow;
             bool anyEmpty = false;
@@ -209,6 +218,11 @@ namespace SeaSick.World
             {
                 var h = hands[hi];
                 if (h == null) continue;
+                // **Downed (death/rescue phase 1): no eating, no hunger
+                // drain.** A hand lying where he fell is not walking to the
+                // store, and his stomach is not the camp's problem right
+                // now -- docs/PLAN-DEATH-RESCUE.md, "Deaths".
+                if (h.downed) continue;
                 h.full = Mathf.Max(0f, h.full - drain);
 
                 if (!starved && h.full < hungryBelow && !h.eating && !h.walkingIn
@@ -231,6 +245,7 @@ namespace SeaSick.World
                 {
                     anyEmpty = true;
                     h.mood = Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days);
+                    if (logHungryToday) Life.Lives.Log(h.name, Life.LifeEvents.Hungry, CampLabel);
                 }
                 else
                 {
@@ -247,6 +262,7 @@ namespace SeaSick.World
                     h.mood = Mathf.Min(1f, h.mood + WarmMoodBonusPerDay * days);
             }
             if (anyEmpty) { hungerDays += days; away.hungryDays += days; }
+            if (logHungryToday) hungryLoggedDay = today;
         }
 
         /// **The meal is eaten where it was picked up** (the store), on
