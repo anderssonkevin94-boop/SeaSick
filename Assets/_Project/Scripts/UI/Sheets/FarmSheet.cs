@@ -6,29 +6,30 @@ using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    /// **The farm's sheet, 2026-09-23 -- `StationSheet`'s template, farm
-    /// rows.** Top to bottom as the food flows:
+    /// **The farm's page -- `StationSheet`'s frame, farm rows (concept A2,
+    /// 2026-09-27).** The same full-height page and kit (`StationPage`):
     ///
-    /// 1. **the farmhand** -- the same `WorkerSlot` every building has;
-    /// 2. **the beds** -- this farm's six, ripe or cut, straight off the
-    ///    field (`Outpost.FarmBeds`, the beds `FarmBedView` dresses), and
-    ///    when the next one stands again (`Outpost.NextBedDays`);
-    /// 3. **the yield** -- `OutpostLedger.FoodPerHandPerDay` a hand, into
-    ///    the store. No order and no chips: a field is not told what to make;
-    /// 4. **what is kept** -- food in store and how long it lasts at the
-    ///    ration they are on (`SheetBits.FoodDays`);
-    /// 5. **why it's stopped** -- the farmhand's `StallReason`.
+    /// 1. **header** -- ☰, "Farm", "Level N · island", a pill (working /
+    ///    growing / no worker);
+    /// 2. **the farmhand** -- the same worker card every station has;
+    /// 3. **the beds** -- this farm's beds, ripe or cut, straight off the
+    ///    field (`Outpost.FarmBeds`), and when the next one stands again
+    ///    (`Outpost.NextBedDays`);
+    /// 4. **food out** -- `OutpostLedger.FoodPerHandPerDay` a hand, into the
+    ///    store, and how long the store lasts at the ration they are on;
+    /// 5. **why it's stopped** -- the farmhand's `StallReason`;
+    /// 6. **upgrade** -- only once the farm has a second level
+    ///    (`Techs.MaxLevel("Farm")` is 1 today).
     ///
-    /// A farm has no upgrade today (`Techs.MaxLevel("Farm") == 1`), so row 6
-    /// is skipped. One page: the rows cost ~150 panel units and a phone band
-    /// is ~175 (`StationSheet.Band`, measured at 1080x2340).
+    /// No recipe cards and no order: a field is not told what to make.
     public class FarmSheet : ISheetFramed
     {
         readonly Outpost outpost;
         readonly Building building;
         readonly string planId;
         readonly BuildPlan plan;
-        int tab = -1;
+        readonly bool hasUpgrade;
+        int raisedIndex = -1;
 
         public FarmSheet(Outpost o, Building b)
         {
@@ -36,15 +37,18 @@ namespace SeaSick.UI.Sheets
             building = b;
             planId = b != null ? b.Id : BuildPlans.Farm.id;
             plan = BuildPlans.Named(planId);
+            hasUpgrade = Techs.MaxLevel(planId) > 1;
         }
 
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
 
-        public string Title => plan.label;
+        public string Title => StationPage.Cap(plan.label);
         public Color Accent => SheetTheme.Moss;
+        public bool WantsTallSheet => true;
         public string[] TabLabels => null;
-        public int Tab => tab;
-        public void SetTab(int index) { tab = index; }
+        public int Tab => 0;
+        public void SetTab(int index) { }
+        public VisualElement BuildActions() => null;
 
         public Vector3 AnchorWorld => building != null
             ? building.transform.position
@@ -52,74 +56,112 @@ namespace SeaSick.UI.Sheets
 
         public bool StillValid => outpost != null && outpost.Ledger != null && building != null;
 
+        StationPage.Header header;
+
         public VisualElement BuildHeader()
         {
-            var l = L;
-            int level = outpost != null ? outpost.LevelOfBuilding(building) : 1;
-            return SheetKit.Header($"level {level} · {plan.position}", Title, SheetTheme.Moss, "🌾",
-                () => Sheets.Close());
+            header = new StationPage.Header(Title, true, () => StationPage.OpenLedgerFor(outpost));
+            return header.Root;
         }
-
-        public VisualElement BuildActions() => null;
 
         // --- built once -------------------------------------------------------
 
-        WorkerSlot worker;
-        VisualElement pips;
+        VisualElement root;
+        StationPage.WorkerCard worker;
+        StationPage.UpgradeCard upgrade;
+        VisualElement bedRow;
         Label bedsLine;
         Label yieldLine;
         Label keptLine;
         Label stallLine;
         readonly List<bool> beds = new List<bool>();
 
-        const float PipPx = 22f;
-
         public VisualElement Build()
         {
-            var root = new VisualElement();
-            root.style.flexDirection = FlexDirection.Column;
+            root = StationPage.Root("st-page");
+            StationPage.FitToParent(root);
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.AddToClassList("st-scroll");
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
+            root.Add(scroll);
+            var col = new VisualElement();
+            col.AddToClassList("st-content");
+            scroll.Add(col);
 
-            worker = new WorkerSlot(outpost, planId, () => Refresh());
-            root.Add(worker.Root);
+            // 2. the farmhand
+            var ws = Section(col, null);
+            ws.style.marginTop = 0f;
+            worker = new StationPage.WorkerCard(outpost, planId, () => Refresh());
+            ws.Add(worker.Root);
 
-            var bedRow = new VisualElement();
-            bedRow.style.flexDirection = FlexDirection.Row;
-            bedRow.style.alignItems = Align.Center;
-            var lead = SheetKit.Eyebrow("the beds");
-            lead.style.width = StationSheet.LeadPx;
-            lead.style.flexShrink = 0f;
-            lead.style.marginBottom = 0f;
-            bedRow.Add(lead);
-            pips = new VisualElement();
-            pips.style.flexDirection = FlexDirection.Row;
-            pips.style.height = PipPx;
-            pips.style.marginBottom = 2f;
-            pips.pickingMode = PickingMode.Ignore;
+            // 3. the beds
+            var bs = Section(col, "BEDS");
+            var bedCard = StationPage.Card();
+            var bedCol = new VisualElement(); bedCol.AddToClassList("st-col");
+            bedRow = new VisualElement(); bedRow.AddToClassList("st-beds");
+            bedRow.pickingMode = PickingMode.Ignore;
             for (int i = 0; i < Mathf.Max(1, plan.beds); i++)
             {
                 var p = new VisualElement();
-                p.style.width = PipPx;
-                p.style.height = PipPx;
-                p.style.marginRight = 6f;
-                p.style.borderTopLeftRadius = p.style.borderTopRightRadius =
-                    p.style.borderBottomLeftRadius = p.style.borderBottomRightRadius = 4f;
-                p.style.borderTopWidth = p.style.borderBottomWidth =
-                    p.style.borderLeftWidth = p.style.borderRightWidth = 1f;
-                p.style.borderTopColor = p.style.borderBottomColor =
-                    p.style.borderLeftColor = p.style.borderRightColor = SheetTheme.InkDim;
+                p.AddToClassList("st-bed");
                 p.pickingMode = PickingMode.Ignore;
-                pips.Add(p);
+                bedRow.Add(p);
             }
-            bedRow.Add(pips);
-            root.Add(bedRow);
-            bedsLine = StationSheet.LeadLine(root, "");
-            yieldLine = StationSheet.LeadLine(root, "making");
-            keptLine = StationSheet.LeadLine(root, "going out");
-            stallLine = StationSheet.LeadLine(root, "");
-            stallLine.style.color = SheetTheme.Ember;
+            bedCol.Add(bedRow);
+            bedsLine = StationPage.Text("", "st-line");
+            bedCol.Add(bedsLine);
+            bedCard.Add(bedCol);
+            bs.Add(bedCard);
+
+            // 4. food out
+            var fs = Section(col, "FOOD OUT");
+            var foodCard = StationPage.Card();
+            var icon = StationPage.Icon(Res.Food, "st-flow-icon");
+            icon.style.marginRight = 14f;
+            icon.style.marginBottom = 0f;
+            foodCard.Add(icon);
+            var foodCol = new VisualElement(); foodCol.AddToClassList("st-col");
+            yieldLine = StationPage.Text("", "st-line");
+            keptLine = StationPage.Text("", "st-line");
+            keptLine.AddToClassList("st-muted");
+            foodCol.Add(yieldLine);
+            foodCol.Add(keptLine);
+            foodCard.Add(foodCol);
+            fs.Add(foodCard);
+
+            // 5. why it's stopped
+            stallLine = StationPage.Text("", "st-stall");
+            fs.Add(stallLine);
+
+            // 6. upgrade
+            if (hasUpgrade)
+            {
+                upgrade = new StationPage.UpgradeCard(DoUpgrade);
+                col.Add(upgrade.Root);
+            }
 
             Refresh();
             return root;
+        }
+
+        static VisualElement Section(VisualElement col, string eyebrow)
+        {
+            var s = new VisualElement();
+            s.AddToClassList("st-section");
+            if (eyebrow != null) s.Add(StationPage.Text(eyebrow, "st-eyebrow"));
+            col.Add(s);
+            return s;
+        }
+
+        void ResolveRaisedIndex()
+        {
+            raisedIndex = -1;
+            if (outpost == null || building == null) return;
+            var built = outpost.Built;
+            for (int i = 0; i < built.Count; i++)
+                if (built[i] == building) { raisedIndex = i; break; }
         }
 
         public void Refresh()
@@ -127,10 +169,12 @@ namespace SeaSick.UI.Sheets
             var l = L;
             if (outpost == null || l == null || worker == null) return;
             outpost.CatchUp();
+            ResolveRaisedIndex();
+            int level = outpost.LevelOfBuilding(building);
 
-            // Farmhands are dealt round the farms (2026-09-27, the same
-            // deal as the stations -- `OutpostLedger.OrdinalOfHand`): this
-            // sheet counts the ones at THIS plot. One farm = every farmhand.
+            // Farmhands are dealt round the farms (2026-09-27, the same deal
+            // as the stations -- `OutpostLedger.OrdinalOfHand`): this page
+            // counts the ones at THIS plot. One farm = every farmhand.
             int mine = outpost.OrdinalOf(building);
             OutpostHand first = null;
             int hands = 0;
@@ -143,42 +187,64 @@ namespace SeaSick.UI.Sheets
             }
             worker.Update(l, first, Mathf.Max(0, hands - 1));
 
-            // 2. the beds
+            // 3. the beds
             int found = outpost.FarmBeds(building, beds);
             int ripe = 0;
-            for (int i = 0; i < pips.childCount; i++)
+            for (int i = 0; i < bedRow.childCount; i++)
             {
                 bool known = i < found;
                 bool up = known && beds[i];
                 if (up) ripe++;
-                pips[i].style.backgroundColor = !known ? new Color(0f, 0f, 0f, 0f)
-                    : up ? SheetTheme.Moss : new Color(SheetTheme.Timber.r, SheetTheme.Timber.g, SheetTheme.Timber.b, 0.35f);
+                bedRow[i].EnableInClassList("st-bed--ripe", up);
+                bedRow[i].EnableInClassList("st-bed--cut", known && !up);
             }
-            if (found == 0)
-            {
-                bedsLine.text = "the beds are not in sight";
-            }
+            if (found == 0) bedsLine.text = "the beds are not in sight";
             else
             {
                 string next = ripe >= found ? "all standing" : "next in " + Days(outpost.NextBedDays);
-                bedsLine.text = $"{ripe} of {found} beds ripe · {next}";
+                bedsLine.text = $"{ripe} of {found} ripe · {next}";
             }
 
-            // 3. the yield -- the ledger's per-hand figure, times the hands.
-            float per = OutpostLedger.FoodPerHandPerDay * Techs.RateMul(planId, outpost.LevelOfBuilding(building));
+            // 4. food out -- the ledger's per-hand figure, times the hands.
+            float per = OutpostLedger.FoodPerHandPerDay * Techs.RateMul(planId, level);
             yieldLine.text = hands <= 1
-                ? $"{per:0.#} food a day with one hand · to the store"
-                : $"{per * hands:0.#} food a day with {hands} hands · to the store";
-
-            // 4. what is kept
+                ? $"{per:0.#} food a day · to the store"
+                : $"{per * hands:0.#} food a day with {hands} hands";
             float stored = l.CountOf(Res.Food) + (l.Store(Res.Food)?.part ?? 0f);
             float days = SheetBits.FoodDays(l);
             keptLine.text = days < 0f
-                ? $"{stored:0.#} food stored · {SheetBits.FoodDaysLine(l)}"
-                : $"{stored:0.#} food stored · lasts {days:0.#} days";
+                ? $"{stored:0.#} stored · {SheetBits.FoodDaysLine(l)}"
+                : $"{stored:0.#} stored · lasts {days:0.#} days";
 
             // 5. why it's stopped
-            stallLine.text = StationSheet.StallText(l, first, false);
+            string why = StationSheet.StallText(l, first, false);
+            stallLine.text = why;
+            stallLine.style.display = string.IsNullOrEmpty(why) ? DisplayStyle.None : DisplayStyle.Flex;
+
+            // the header
+            if (header != null)
+            {
+                header.SetSub($"Level {level} · {StationPage.IslandName(outpost)}");
+                if (first == null) header.SetPill("no worker", StationPage.PillBad);
+                else if (!string.IsNullOrEmpty(why)) header.SetPill("waiting", StationPage.PillWait);
+                else if (ripe > 0) header.SetPill("working", StationPage.PillGood);
+                else header.SetPill("growing", StationPage.PillWait);
+                header.Refresh();
+            }
+
+            upgrade?.Update(l, raisedIndex, planId, level);
+        }
+
+        void DoUpgrade()
+        {
+            var l = L;
+            if (l == null) return;
+            ResolveRaisedIndex();
+            if (l.UpgradeAt(raisedIndex, planId))
+            {
+                outpost?.Retint(building);
+                Refresh();
+            }
         }
 
         /// "~0.5 day", "~3 days", "any moment" -- never "Infinity".

@@ -1,0 +1,265 @@
+/* ------------------------------------------------------------------
+ * The station page (concept A2, Kevin approved the Melvor-style
+ * redesign 2026-09-27). One full-height page per production building:
+ * header -> worker card -> recipe cards -> the order -> in and out ->
+ * why it stopped -> upgrade. Mockup: LedgerStation (390x844 pt).
+ *
+ * Every size here is PANEL UNITS, not mockup pixels. On the phone one
+ * panel unit is ~0.7 pt (DEV-TOOLS: ~2.05 game-view px a unit on a 3x
+ * iPhone), so the mockup's numbers are scaled ~1.3x and its 20-pt gaps
+ * tightened to 14 so the whole page fits the tall band without a scroll.
+ * Loaded by `StationSheet`/`FarmSheet` onto their own roots only; every
+ * selector is under `.st` so nothing here reaches another sheet.
+ * ------------------------------------------------------------------ */
+
+.st .unity-label {
+    color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    margin: 0;
+    padding: 0;
+}
+
+.st-page {
+    background-color: rgb(15, 27, 37);
+    border-radius: 14px;
+    padding: 10px 10px 12px 10px;
+    flex-direction: column;
+}
+
+.st-scroll { flex-grow: 1; flex-shrink: 1; min-height: 0; }
+.st-content { flex-direction: column; flex-grow: 1; }
+.st-section { flex-direction: column; margin-top: 14px; flex-shrink: 0; }
+
+.st .st-black { -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st .st-muted { color: rgb(166, 186, 198); }
+.st .st-eyebrow {
+    font-size: 14px;
+    color: rgb(127, 151, 166);
+    letter-spacing: 1.6px;
+    margin-bottom: 8px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+
+/* --- the header ------------------------------------------------------ */
+
+.st-head { flex-direction: row; align-items: center; margin-bottom: 10px; }
+.st-head-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; margin-left: 12px; margin-right: 8px; }
+.st .st-title { font-size: 29px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st .st-sub { font-size: 17px; color: rgb(166, 186, 198); margin-top: 2px; }
+
+.st .st-square {
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    border-radius: 14px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    margin: 0;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+}
+.st .st-square:hover { background-color: rgb(26, 48, 64); }
+.st .st-square:disabled { opacity: 0.35; }
+.st-glyph { width: 26px; height: 26px; }
+
+.st-pill {
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 18px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: 10px;
+    background-color: rgb(31, 74, 60);
+}
+.st .st-pill-text { font-size: 15px; color: rgb(159, 224, 194); -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st-pill--wait { background-color: rgb(74, 58, 26); }
+.st .st-pill--wait .st-pill-text { color: rgb(240, 195, 106); }
+.st-pill--bad { background-color: rgb(74, 35, 32); }
+.st .st-pill--bad .st-pill-text { color: rgb(246, 146, 128); }
+
+/* --- cards and buttons ---------------------------------------------- */
+
+.st-card {
+    flex-direction: row;
+    align-items: center;
+    padding: 12px 14px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(30, 51, 68);
+    border-radius: 18px;
+    flex-shrink: 0;
+}
+
+.st .st-btn {
+    height: 56px;
+    padding: 0 20px;
+    margin: 0 0 0 8px;
+    border-radius: 13px;
+    background-color: rgb(26, 48, 64);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    color: rgb(232, 242, 246);
+    font-size: 18px;
+    flex-shrink: 0;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-btn:hover { background-color: rgb(34, 60, 78); }
+.st .st-btn:disabled { opacity: 0.4; }
+
+/* --- the worker ------------------------------------------------------- */
+
+.st-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 26px;
+    background-color: rgb(44, 74, 94);
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.st .st-avatar-text { font-size: 22px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st-worker-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; margin-left: 14px; }
+.st .st-worker-name { font-size: 20px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st .st-worker-sub { font-size: 16px; color: rgb(166, 186, 198); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* --- recipes ---------------------------------------------------------- */
+
+.st-grid { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
+.st-recipe {
+    width: 48.5%;
+    padding: 12px;
+    margin-bottom: 0;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    border-radius: 18px;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+.st-recipe--row2 { margin-top: 12px; }
+.st-recipe--on { background-color: rgb(26, 48, 64); border-color: rgb(164, 210, 232); border-width: 3px; padding: 11px; }
+.st-recipe--locked { border-width: 0; padding: 14px; }
+.st-tile {
+    height: 72px;
+    background-color: rgb(14, 26, 36);
+    border-radius: 13px;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+.st-tile-icon { width: 56px; height: 56px; -unity-background-scale-mode: scale-to-fit; }
+.st-recipe--locked .st-tile-icon { opacity: 0.4; }
+.st-name-row { flex-direction: row; align-items: flex-end; justify-content: space-between; margin-bottom: 6px; }
+.st .st-recipe-name { font-size: 20px; flex-shrink: 1; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st .st-recipe--locked .st-recipe-name { color: rgb(166, 186, 198); }
+.st .st-yield { font-size: 17px; color: rgb(166, 186, 198); margin-left: 6px; }
+.st .st-recipe--locked .st-yield { color: rgb(110, 132, 148); }
+.st-takes { flex-direction: row; flex-wrap: wrap; align-items: center; margin-bottom: 8px; min-height: 24px; }
+.st-small-icon { width: 22px; height: 22px; margin-right: 5px; -unity-background-scale-mode: scale-to-fit; flex-shrink: 0; }
+.st .st-takes-text { font-size: 16px; color: rgb(201, 216, 224); margin-right: 6px; }
+.st .st-recipe--locked .st-takes-text { color: rgb(166, 186, 198); }
+.st-bar { height: 8px; background-color: rgb(14, 26, 36); border-radius: 4px; overflow: hidden; margin-bottom: 6px; }
+.st-bar-fill { height: 8px; background-color: rgb(159, 224, 194); width: 0; }
+.st .st-recipe-state { font-size: 15px; color: rgb(166, 186, 198); min-height: 20px; white-space: normal; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st .st-state--make { color: rgb(159, 224, 194); }
+.st .st-state--wait { color: rgb(240, 195, 106); }
+.st .st-state--lock { color: rgb(246, 146, 128); }
+
+.st-dots { flex-direction: row; justify-content: center; margin-top: 4px; }
+.st .st-dot-btn {
+    width: 44px;
+    height: 32px;
+    margin: 0;
+    padding: 0;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    align-items: center;
+    justify-content: center;
+}
+.st-dot { width: 10px; height: 10px; border-radius: 5px; background-color: rgb(44, 74, 94); }
+.st-dot--on { background-color: rgb(164, 210, 232); }
+
+/* --- the order -------------------------------------------------------- */
+
+.st-seg {
+    flex-direction: row;
+    padding: 5px;
+    background-color: rgb(11, 22, 32);
+    border-width: 2px;
+    border-color: rgb(30, 51, 68);
+    border-radius: 18px;
+    flex-shrink: 0;
+}
+.st .st-seg-btn {
+    flex-grow: 1;
+    flex-basis: 0;
+    height: 56px;
+    margin: 0 0 0 5px;
+    padding: 0;
+    border-radius: 13px;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(232, 242, 246);
+    font-size: 19px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .st-seg-btn--first { margin-left: 0; }
+.st .st-seg-btn:hover { background-color: rgba(164, 210, 232, 0.08); }
+.st .st-seg-btn--inf { font-size: 24px; }
+.st .st-seg-btn--on { background-color: rgb(164, 210, 232); color: rgb(11, 23, 32); }
+.st .st-seg-btn--on:hover { background-color: rgb(194, 228, 242); }
+.st .st-seg-btn--stop {
+    flex-grow: 1.3;
+    border-width: 2px;
+    border-color: rgb(246, 146, 128);
+    background-color: rgb(42, 26, 26);
+    color: rgb(246, 146, 128);
+    font-size: 18px;
+}
+.st .st-seg-btn--stop:hover { background-color: rgb(58, 34, 34); }
+.st .st-seg-btn:disabled { opacity: 0.35; }
+
+/* --- in and out ------------------------------------------------------- */
+
+.st-flow { padding: 12px 8px; }
+.st-flow-cell { flex-grow: 1; flex-basis: 0; flex-direction: column; align-items: center; }
+.st-flow-icon { width: 44px; height: 44px; -unity-background-scale-mode: scale-to-fit; margin-bottom: 4px; }
+.st-ring { width: 44px; height: 44px; margin-bottom: 4px; }
+.st .st-flow-value { font-size: 20px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st .st-flow-label { font-size: 15px; color: rgb(166, 186, 198); }
+.st-arrow { width: 24px; height: 24px; flex-shrink: 0; }
+
+.st .st-stall { font-size: 16px; color: rgb(246, 146, 128); margin-top: 10px; white-space: normal; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+
+/* --- the farm's beds -------------------------------------------------- */
+
+.st-beds { flex-direction: row; margin-bottom: 10px; }
+.st-bed { width: 36px; height: 36px; border-radius: 9px; margin-right: 8px; border-width: 2px; border-color: rgb(44, 74, 94); background-color: rgb(14, 26, 36); }
+.st-bed--ripe { background-color: rgb(159, 224, 194); border-color: rgb(159, 224, 194); }
+.st-bed--cut { background-color: rgb(74, 58, 26); }
+.st-col { flex-direction: column; flex-grow: 1; }
+.st .st-line { font-size: 17px; }
+
+/* --- upgrade ---------------------------------------------------------- */
+
+.st-upgrade { border-color: rgb(107, 82, 32); margin-top: 14px; }
+.st-upgrade-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.st .st-upgrade-title { font-size: 19px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st-cost { flex-direction: row; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.st .st-cost-text { font-size: 16px; margin-right: 10px; }
+.st .st-cost--ok { color: rgb(159, 224, 194); }
+.st .st-cost--short { color: rgb(246, 146, 128); }
+.st .st-upgrade-btn {
+    border-color: rgb(107, 82, 32);
+    background-color: rgb(30, 26, 16);
+    color: rgb(240, 195, 106);
+    font-size: 16px;
+    padding: 0 16px;
+}
+.st .st-upgrade-btn:hover { background-color: rgb(44, 38, 22); }
+.st .st-upgrade-btn--go { background-color: rgb(240, 195, 106); color: rgb(30, 26, 16); border-color: rgb(240, 195, 106); }
+.st .st-upgrade-btn--go:hover { background-color: rgb(248, 214, 140); }
+.st .st-upgrade-btn:disabled { opacity: 1; }

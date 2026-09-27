@@ -6,39 +6,46 @@ using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    /// **Every building's sheet, one template, 2026-09-23.**
+    /// **The station page, concept A2 (Kevin approved the Melvor-style
+    /// redesign, 2026-09-27).** Every production building opens ONE
+    /// full-height page (`WantsTallSheet`), read top to bottom:
     ///
-    /// Kevin approved it: the sheet reads top to bottom as the material flow,
-    /// the player's one decision in the middle --
+    /// 1. **header** -- ☰ (the Ledger drawer, `OpenLedger`), the name,
+    ///    "Level N · island", and a status pill (working / waiting / no
+    ///    worker / output full);
+    /// 2. **the worker** -- avatar, name, role · mood; Assign / Swap /
+    ///    Unassign;
+    /// 3. **recipes** -- a two-column grid of cards (icon, ×yield, inputs and
+    ///    time, the running order's bar and "making 7 of 10"; locked cards
+    ///    dashed with the reason). A tap picks the order's recipe. More cards
+    ///    than fit PAGE with dots, never a scroll;
+    /// 4. **the order** -- one segmented control ∞ / 5 / 10 / 20 / Stop;
+    /// 5. **in and out** -- bay → bench ring → rack of THIS building;
+    /// 6. **why it's stopped** -- the ledger's `StallReason`, when it is;
+    /// 7. **upgrade** -- this building's next level, its price, one button.
     ///
-    /// 1. **the worker** -- who is on it, post a hand / stand them down;
-    /// 2. **coming in** -- the bay per input and the bench;
-    /// 3. **making** -- the running order and STOP, then the recipes, a
-    ///    picked one opening the ∞/5/10/20/50/100 chips;
-    /// 4. **going out** -- the rack and where it goes;
-    /// 5. **why it's stopped**, when it is -- the ledger's `StallReason`;
-    /// 6. **upgrade** -- the next level and what it costs.
-    ///
-    /// A building without a row skips it (a store has no worker, a hut
-    /// only an upgrade). **Rows that do not fit one page PAGE** -- the frame
-    /// has no scroll (`SheetHost`): `Plan` lays the rows out in order into
-    /// as many band-high pages as they take, so the forge's five recipes are
-    /// "make 1/2", "make 2/2" on a phone and the same sheet is one or two
-    /// pages on a desk. Every height it adds up is `SheetKit`'s (the USS,
-    /// rounded up) or a height this file sets itself.
+    /// **Sized to fit the phone's tall band without a scroll** (Kevin's
+    /// no-scroll rule, 2026-09-22). The body sits in a vertical ScrollView
+    /// only as a safety net: on the phone the page fits and it never moves;
+    /// on the desk's shorter column it scrolls with the wheel.
     ///
     /// **It reads and it calls; it never decides.** Every number comes off
-    /// `OutpostLedger`; every button is a verb the ledger or `Outpost`
-    /// already had (`PlaceOrder`, `StopOrder`, `Assign`, `OrderIdle`,
-    /// `Upgrade`).
+    /// `OutpostLedger` for THIS built instance (`StationForRaised`); every
+    /// button is a verb the ledger or `Outpost` already had (`PlaceOrder`,
+    /// `StopOrder`, `Assign`, `OrderIdle`, `UpgradeAt`).
     ///
-    /// **Built once, updated in place (1cf73f9).** `SheetHost` calls
-    /// `Refresh` every 0.25 s whatever the thumb is doing, and a UI Toolkit
-    /// click needs its press and release on the SAME element -- so nothing a
-    /// finger can land on is rebuilt on that timer. Rows are made in `Build`
-    /// (and when a TAP changes their shape) and only re-texted after.
-    public partial class StationSheet : ISheetFramed
+    /// **Built once, re-texted after (1cf73f9).** `SheetHost` calls
+    /// `Refresh` every 0.25 s, and a UI Toolkit click needs its press and
+    /// release on the SAME element -- so nothing a finger can land on is
+    /// rebuilt on that timer.
+    public class StationSheet : ISheetFramed
     {
+        /// **The ☰ hook.** Whoever owns the Ledger drawer sets this
+        /// (`StationSheet.OpenLedger = ledgerDrawer.Open`, `MidnightLandHud`).
+        /// Until it does, ☰ falls back to the camp overview's own hook, then
+        /// to the camp overview sheet itself (`StationPage.OpenLedgerFor`).
+        public static System.Action OpenLedger;
+
         readonly Outpost outpost;
         readonly Building building;
         readonly string planId;
@@ -48,19 +55,13 @@ namespace SeaSick.UI.Sheets
         readonly bool hasWorker;
         readonly bool isStore;
 
-        int tab = -1;
-
         /// **This built instance's index into `ledger.raised`** (and into
-        /// `Outpost.Built` -- `Outpost.Raise` appends to both together and
-        /// `Demolish` removes the pair). `OutpostLedger.StationForRaised`
-        /// turns it into the one `StationStock` this sheet is about.
-        /// **Re-resolved every `Refresh`**: an earlier building demolished
-        /// while this card is open moves it, and a stale index reads
-        /// somebody else's bay.
+        /// `Outpost.Built`). Re-resolved every `Refresh`: an earlier
+        /// building demolished while this page is open moves it.
         int raisedIndex = -1;
 
-        /// The recipe a tap has picked but not yet ordered -- local to the
-        /// card. Reveals the amount chips under that one row.
+        /// The recipe a tap picked -- the order's recipe for the next amount
+        /// tap. Null = whatever is running, else the station's default.
         string pickedRecipe;
 
         public StationSheet(Outpost o, Building b)
@@ -74,7 +75,6 @@ namespace SeaSick.UI.Sheets
             hasWorker = BuildPlans.HasPosition(planId) && hasMake;
             isStore = planId == BuildPlans.Storage.id;
             ResolveRaisedIndex();
-            if (ProductionLayout) tab = 0;
         }
 
         void ResolveRaisedIndex()
@@ -89,18 +89,21 @@ namespace SeaSick.UI.Sheets
         /// **This building's own level** (per building since 2026-09-27).
         int MyLevel(OutpostLedger l) => l != null ? l.LevelAtRaised(raisedIndex, planId) : 1;
 
-        /// The one `StationStock` this card is about, or null.
+        /// The one `StationStock` this page is about, or null.
         StationStock Station(OutpostLedger l) =>
             l != null && raisedIndex >= 0 ? l.StationForRaised(raisedIndex) : null;
 
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
-        internal bool ProductionLayout => MidnightLandHud.Active && hasMake;
+
+        /// The retired dropdown layout's flag; `SheetHost.FrameSizeScreen`
+        /// still asks. Always false: the page is a tall sheet now.
+        internal bool ProductionLayout => false;
 
         // --- the frame -------------------------------------------------------
 
         public Color Accent => SheetTheme.Timber;
-        public string Title => ProductionLayout && !string.IsNullOrEmpty(plan.label)
-            ? char.ToUpperInvariant(plan.label[0]) + plan.label.Substring(1) : plan.label;
+        public string Title => StationPage.Cap(plan.label);
+        public bool WantsTallSheet => true;
 
         public Vector3 AnchorWorld => building != null
             ? building.transform.position
@@ -108,388 +111,495 @@ namespace SeaSick.UI.Sheets
 
         public bool StillValid => outpost != null && outpost.Ledger != null && building != null;
 
-        public int Tab { get { Plan(); return tab; } }
-        public void SetTab(int index) { tab = index; }
+        // One page: no host tab strip, no host action row (the upgrade is a
+        // card on the page, the order is the segmented control).
+        public string[] TabLabels => null;
+        public int Tab => 0;
+        public void SetTab(int index) { }
+        public VisualElement BuildActions() => null;
 
-        public string[] TabLabels { get { Plan(); return labels.Length > 1 ? labels : null; } }
+        StationPage.Header header;
 
         public VisualElement BuildHeader()
         {
-            var l = L;
-            int level = MyLevel(l);
-            string where = string.IsNullOrEmpty(plan.position) ? plan.label : plan.position;
-            return SheetKit.Header($"level {level} · {where}", Title, SheetTheme.Timber, "⚒",
-                () => Sheets.Close());
+            header = new StationPage.Header(Title, hasMake, () => StationPage.OpenLedgerFor(outpost));
+            return header.Root;
         }
 
-        Button upgradeBtn;
+        // --- the thumb floor, shared ----------------------------------------
 
-        /// **Raising it is the upgrade row's button**, pinned under the page
-        /// that carries the upgrade row and nowhere else. 44 tall like every
-        /// other thumb target here; the six units over `ActionsPx` are
-        /// counted in `Band`.
-        public VisualElement BuildActions()
-        {
-            upgradeBtn = null;
-            if (ProductionLayout && tab == 0) return BuildProductionActions();
-            var l = L;
-            if (l == null || !PageHas(LivePage, KUpgrade) || l.NextUpgradeAt(raisedIndex, planId) == null) return null;
-            int next = MyLevel(l) + 1;
-            upgradeBtn = SheetKit.Btn($"Raise to level {next}", DoUpgrade, true);
-            upgradeBtn.style.height = TouchPx;
-            upgradeBtn.SetEnabled(l.CanUpgradeAt(raisedIndex, planId, out _));
-            return SheetKit.Actions(upgradeBtn);
-        }
-
-        // --- the page plan ---------------------------------------------------
-
-        /// The thumb floor, in panel units -- `SheetKit.Tabs`' 44.
+        /// The old sheets' thumb floor in panel units -- `FireSheet` still
+        /// reads it.
         internal const float TouchPx = 44f;
-
-        const int KWorker = 0, KIn = 1, KMaking = 2, KRecipe = 3, KOut = 4, KStall = 5,
-                  KUpgrade = 6, KStore = 7, KFlow = 8;
-
-        struct Blk { public int kind; public int arg; public float px; }
-
-        readonly List<List<Blk>> pages = new List<List<Blk>>();
-        string[] labels = { "make" };
-        long planKey = long.MinValue;
-        long builtKey = long.MinValue;
-
-        // What each row costs, in panel units. Rows this file lays out set
-        // their own heights to these; text rows use `SheetKit`'s.
-        // **Phone first, measured 2026-09-23:** the portrait band is ~175
-        // units (`SheetHost.BandHeight` at 1080x2340), so the live rows wear
-        // a small lead label on their left instead of an eyebrow line above.
-        internal const float WorkerPx = TouchPx + 4f;           // 44 button + 2 above/below
-        const float OrderRowPx = TouchPx + 4f;
-        const float MakingPx = OrderRowPx;
-        const float RecipePx = 48f;                              // 4 pad, 18 name, 16 line, 4 pad (+6)
-        const float ToolLinePx = 14f;
-        const float ChipsPx = TouchPx + 8f;                      // 6 above, 2 below
-        const float OutPx = SheetKit.TextPx;
-        internal const float StallPx = SheetKit.TextPx + 2f;
-        internal const float LeadPx = 72f;                       // the lead label's width
-        const float UpgradePx = SheetKit.RulePx + SheetKit.EyebrowPx + 3f * SheetKit.TextPx + SheetKit.NotePx;
-        const int StoreLinesMax = 5;                             // two kinds a line
-        const float StorePx = SheetKit.EyebrowPx + StoreLinesMax * SheetKit.TextPx;
-
-        /// The band a page may fill: the host's, less the upgrade button's
-        /// extra height and a few units of honesty for rounding.
-        internal static float Band => SheetHost.BandHeight - 2f;
-
-        int MaxInputs
-        {
-            get
-            {
-                int n = 0;
-                foreach (var r in Recipes.At(planId)) n = Mathf.Max(n, r.takes.Length);
-                return Mathf.Max(1, n);
-            }
-        }
-
-        float InPx => (MaxInputs + 1) * SheetKit.TextPx;
-
-        /// **The rows, in the template's order, poured into band-high pages.**
-        /// Keyed on everything that changes a row's height: the band, the
-        /// recipe list, the upgrade. None of those move on the timer, so a
-        /// page never re-plans under a finger.
-        void Plan()
-        {
-            float band = Band;
-            var recipes = hasMake ? Recipes.At(planId) : null;
-            int rc = recipes != null ? recipes.Count : 0;
-            long key = Mathf.RoundToInt(band) * 1000003L + rc * 131L + MaxInputs * 7L
-                       + (hasUpgrade ? 1 : 0) + (hasWorker ? 2 : 0) + (ProductionLayout ? 1000000007L : 0L);
-            if (key == planKey && pages.Count > 0) return;
-            planKey = key;
-
-            // Tasks stay stable across phone sizes; only the classic layout pours blocks into pages.
-            if (ProductionLayout)
-            {
-                pages.Clear();
-                pages.Add(new List<Blk>());
-                if (hasUpgrade) pages.Add(new List<Blk> { new Blk { kind = KUpgrade, px = UpgradePx } });
-                labels = hasUpgrade ? new[] { "Production", "Upgrade" } : new[] { "Production" };
-                tab = Mathf.Clamp(tab, 0, pages.Count - 1);
-                return;
-            }
-
-            var flow = new List<Blk>();
-            if (hasWorker) flow.Add(new Blk { kind = KWorker, px = WorkerPx });
-            if (isStore) flow.Add(new Blk { kind = KStore, px = StorePx });
-            if (hasMake)
-            {
-                // **Kevin's order (2026-09-23): in, the ORDER, out, why.** The
-                // rows read as the material flow and the one decision the
-                // player owns -- the recipe and its chips -- sits in the
-                // middle, under the thumb, before what comes out of it.
-                flow.Add(new Blk { kind = KIn, px = InPx });
-                flow.Add(new Blk { kind = KMaking, px = MakingPx });
-                for (int i = 0; i < rc; i++)
-                    flow.Add(new Blk { kind = KRecipe, arg = i,
-                        px = RecipePx + (recipes[i].tool != null ? ToolLinePx : 0f) });
-                flow.Add(new Blk { kind = KOut, px = OutPx });
-                flow.Add(new Blk { kind = KStall, px = StallPx });
-            }
-            if (hasUpgrade) flow.Add(new Blk { kind = KUpgrade, px = UpgradePx });
-
-            pages.Clear();
-            var page = new List<Blk>();
-            float used = 0f;
-            bool chipsReserved = false;
-            foreach (var b in flow)
-            {
-                // A page that holds a recipe holds room for its chips too,
-                // so picking one can never push the page past the band.
-                float need = b.px + (b.kind == KRecipe && !chipsReserved ? ChipsPx : 0f);
-                if (page.Count > 0 && used + need > band)
-                {
-                    pages.Add(page);
-                    page = new List<Blk>();
-                    used = 0f;
-                    chipsReserved = false;
-                    need = b.px + (b.kind == KRecipe ? ChipsPx : 0f);
-                }
-                if (b.kind == KRecipe) chipsReserved = true;
-                page.Add(b);
-                used += need;
-            }
-            if (page.Count > 0) pages.Add(page);
-            if (pages.Count == 0) pages.Add(new List<Blk>());
-
-            // Named by what a page opens with; "make 1/2" where there are two.
-            var names = new string[pages.Count];
-            for (int i = 0; i < pages.Count; i++) names[i] = NameOf(pages[i]);
-            if (labels.Length != pages.Count) labels = new string[pages.Count];
-            for (int i = 0; i < pages.Count; i++)
-            {
-                int of = 0, at = 0;
-                for (int j = 0; j < pages.Count; j++)
-                    if (names[j] == names[i]) { if (j < i) at++; of++; }
-                labels[i] = SheetKit.PageLabel(names[i], at, of);
-            }
-            if (tab >= pages.Count) tab = pages.Count - 1;
-        }
-
-        static string NameOf(List<Blk> page)
-        {
-            if (page.Count == 0) return "make";
-            switch (page[0].kind)
-            {
-                case KFlow: return "overview";
-                case KWorker:
-                case KIn:
-                case KMaking:
-                case KOut:
-                case KStall: return "work";
-                case KRecipe: return "make";
-                case KStore: return "store";
-                default: return "upgrade";
-            }
-        }
-
-        List<Blk> LivePage
-        {
-            get
-            {
-                Plan();
-                return pages[Mathf.Clamp(tab < 0 ? 0 : tab, 0, pages.Count - 1)];
-            }
-        }
-
-        static bool PageHas(List<Blk> page, int kind)
-        {
-            foreach (var b in page) if (b.kind == kind) return true;
-            return false;
-        }
 
         // --- the pieces kept between refreshes --------------------------------
 
         VisualElement root;
-        WorkerSlot worker;
-        Label[] inLines;
-        Label benchLine;
-        VisualElement orderRow;
-        Label orderTitle, orderSub;
-        Button orderStop;
-        StationStock orderStopStation;
-        Label outLine;
-        Label stallLine;
-        Label[] storeLines;
-        Label upgradeLevel;
-        Label flowInput, flowOutput, flowState, flowInputName, flowOutputName;
-        VisualElement flowProgress;
-        VisualElement upgradeHolder;
-        long upgradeKey = long.MinValue;
+        StationPage.WorkerCard worker;
+        StationPage.UpgradeCard upgrade;
 
-        /// One row per recipe on the live page, built once per `Build` and
-        /// updated in place after -- see `RecipeRowRefs`.
-        readonly Dictionary<string, RecipeRowRefs> recipeRows = new Dictionary<string, RecipeRowRefs>();
+        // recipes
+        sealed class RecipeCard
+        {
+            public Recipe r;
+            public VisualElement root, icon, barHolder, bar;
+            public Label name, yield, state;
+            public Label[] takes;
+            public Label time;
+            public StationPage.DashedFrame dashes;
+            public bool locked;
+        }
+        readonly List<RecipeCard> cards = new List<RecipeCard>();
+        int perPage = 2, recipePage;
+        VisualElement dots;
+        Label orderEyebrow;
+
+        // the order
+        static readonly int[] Amounts = { OutpostLedger.RepeatOrder, 5, 10, 20 };
+        readonly Button[] amountBtns = new Button[Amounts.Length];
+        Button stopBtn;
+
+        /// The size of each station's running order as it was placed, so a
+        /// card can say "making 7 of 10" -- the ledger keeps only what is
+        /// left. Best effort: an order placed elsewhere is sized on sight.
+        static readonly Dictionary<StationStock, int> OrderTotals = new Dictionary<StationStock, int>();
+
+        // in and out
+        VisualElement bayIcon, rackIcon;
+        Label bayValue, benchValue, benchLabel, rackValue;
+        StationPage.BenchRing ring;
+        Label stallLine;
+
+        // the store
+        Label[] storeLines;
+        const int StoreLinesMax = 5;
 
         public VisualElement Build()
         {
-            root = new VisualElement();
-            root.style.flexDirection = FlexDirection.Column;
-            Fill();
+            cards.Clear();
+            storeLines = null; stallLine = null; worker = null; upgrade = null;
+
+            root = StationPage.Root("st-page");
+            // The host pins content at its natural height (flex-shrink 0),
+            // so the page asks for exactly the band -- the scroll view
+            // inside then has a bounded viewport to (almost never) scroll.
+            StationPage.FitToParent(root);
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.AddToClassList("st-scroll");
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
+            root.Add(scroll);
+            var col = new VisualElement();
+            col.AddToClassList("st-content");
+            scroll.Add(col);
+
+            bool first = true;
+            VisualElement Section(string eyebrow, out Label eyebrowLabel)
+            {
+                var s = new VisualElement();
+                s.AddToClassList("st-section");
+                if (first) s.style.marginTop = 0f;
+                first = false;
+                eyebrowLabel = null;
+                if (eyebrow != null)
+                {
+                    eyebrowLabel = StationPage.Text(eyebrow, "st-eyebrow");
+                    s.Add(eyebrowLabel);
+                }
+                col.Add(s);
+                return s;
+            }
+
+            if (hasWorker)
+            {
+                var s = Section(null, out _);
+                worker = new StationPage.WorkerCard(outpost, planId, () => Refresh());
+                s.Add(worker.Root);
+            }
+
+            if (isStore)
+            {
+                var s = Section("ON THE RACKS", out _);
+                var card = StationPage.Card();
+                var lines = new VisualElement(); lines.AddToClassList("st-col");
+                card.Add(lines);
+                storeLines = new Label[StoreLinesMax];
+                for (int i = 0; i < storeLines.Length; i++)
+                {
+                    storeLines[i] = StationPage.Text("", "st-line");
+                    lines.Add(storeLines[i]);
+                }
+                s.Add(card);
+            }
+
+            if (hasMake)
+            {
+                BuildRecipes(Section("RECIPES", out _));
+                BuildOrder(Section("ORDER", out orderEyebrow));
+                BuildFlow(Section("IN AND OUT", out _));
+            }
+
+            if (hasUpgrade)
+            {
+                upgrade = new StationPage.UpgradeCard(DoUpgrade);
+                if (first) upgrade.Root.style.marginTop = 0f;
+                col.Add(upgrade.Root);
+            }
+
             Refresh();
             return root;
         }
 
-        /// The live page's rows, from nothing. Only ever called from `Build`
-        /// (a tab change) or when the plan itself moved (the band changed
-        /// shape) -- never because a number did.
-        void Fill()
-        {
-            worker = null; inLines = null; benchLine = null;
-            flowInput = flowOutput = flowState = flowInputName = flowOutputName = null; flowProgress = null;
-            orderRow = null; orderTitle = null; orderSub = null; orderStop = null; orderStopStation = null;
-            outLine = null; stallLine = null; storeLines = null;
-            upgradeLevel = null; upgradeHolder = null; upgradeKey = long.MinValue;
-            recipeRows.Clear();
-            root.Clear();
-            ResetProductionElements();
-            builtKey = planKey;
+        // --- 3. recipes -------------------------------------------------------
 
-            var page = LivePage;
-            if (ProductionLayout && tab == 0) { BuildProduction(); return; }
-            foreach (var b in page)
+        void BuildRecipes(VisualElement s)
+        {
+            var recipes = Recipes.At(planId);
+            perPage = PerPage(recipes.Count);
+            var grid = new VisualElement();
+            grid.AddToClassList("st-grid");
+            s.Add(grid);
+            for (int i = 0; i < recipes.Count; i++)
             {
-                switch (b.kind)
+                var c = BuildCard(recipes[i]);
+                if (i % perPage >= 2) c.root.AddToClassList("st-recipe--row2");
+                cards.Add(c);
+                grid.Add(c.root);
+            }
+
+            dots = null;
+            int pages = Mathf.CeilToInt(recipes.Count / (float)perPage);
+            if (pages > 1)
+            {
+                dots = new VisualElement();
+                dots.AddToClassList("st-dots");
+                for (int p = 0; p < pages; p++)
                 {
-                    case KFlow: BuildFlow(); break;
-                    case KWorker:
-                        worker = new WorkerSlot(outpost, planId, () => Refresh());
-                        root.Add(worker.Root);
-                        break;
-                    case KIn: BuildIn(); break;
-                    case KMaking: BuildMaking(); break;
-                    case KRecipe:
-                        var r = Recipes.At(planId)[b.arg];
-                        var refs = BuildRecipeRow(r);
-                        recipeRows[r.id] = refs;
-                        root.Add(refs.row);
-                        break;
-                    case KOut: BuildOut(); break;
-                    case KStall: BuildStall(); break;
-                    case KStore: BuildStore(); break;
-                    case KUpgrade: BuildUpgrade(); break;
+                    int page = p;
+                    var b = new Button(() => { recipePage = page; ShowRecipePage(); });
+                    b.AddToClassList("st-dot-btn");
+                    b.text = "";
+                    var dot = new VisualElement();
+                    dot.AddToClassList("st-dot");
+                    dot.pickingMode = PickingMode.Ignore;
+                    b.Add(dot);
+                    dots.Add(b);
+                }
+                s.Add(dots);
+            }
+
+            // Open on the page that holds what is running.
+            var l = L;
+            var st = Station(l);
+            var order = st != null && l != null ? l.OrderAt(planId, st.ordinal) : default;
+            recipePage = 0;
+            if (order.Active && order.recipe != null)
+                for (int i = 0; i < cards.Count; i++)
+                    if (cards[i].r.id == order.recipe.id) recipePage = i / perPage;
+            ShowRecipePage();
+        }
+
+        /// **Two cards a page, or four when two rows fit the band.** Four is
+        /// the design (the forge's five page as 4 + 1), but on a phone the
+        /// second row costs ~230 units the tall band does not have with the
+        /// order, flow and upgrade below it, so the grid pages at two there.
+        /// Worked out from the band BEFORE building -- a page never re-plans
+        /// under a finger.
+        static int PerPage(int count)
+        {
+            if (count <= 2) return 2;
+            float frame = SheetHost.FrameSizeScreen().y * SheetHost.PanelScale;
+            float avail = frame - SheetHost.BorderPx - 82f - SheetHost.BodyPadPx - 22f;
+            const float Rest = 575f, CardRow = 232f;
+            return avail >= Rest + 2f * CardRow + 12f ? 4 : 2;
+        }
+
+        void ShowRecipePage()
+        {
+            for (int i = 0; i < cards.Count; i++)
+                cards[i].root.style.display = i / perPage == recipePage ? DisplayStyle.Flex : DisplayStyle.None;
+            if (dots != null)
+                for (int p = 0; p < dots.childCount; p++)
+                    dots[p][0].EnableInClassList("st-dot--on", p == recipePage);
+        }
+
+        RecipeCard BuildCard(Recipe r)
+        {
+            var c = new RecipeCard { r = r };
+            c.root = new VisualElement();
+            c.root.AddToClassList("st-recipe");
+
+            var tile = new VisualElement(); tile.AddToClassList("st-tile");
+            c.icon = StationPage.Icon(r.makes, "st-tile-icon");
+            tile.Add(c.icon);
+            c.root.Add(tile);
+
+            var nameRow = new VisualElement(); nameRow.AddToClassList("st-name-row");
+            c.name = StationPage.Text(StationPage.Cap(r.label), "st-recipe-name");
+            c.yield = StationPage.Text($"×{Mathf.Max(1, r.yield)}", "st-yield");
+            nameRow.Add(c.name); nameRow.Add(c.yield);
+            c.root.Add(nameRow);
+
+            var takes = new VisualElement(); takes.AddToClassList("st-takes");
+            c.takes = new Label[r.takes.Length];
+            for (int i = 0; i < r.takes.Length; i++)
+            {
+                takes.Add(StationPage.Icon(r.takes[i].res, "st-small-icon"));
+                c.takes[i] = StationPage.Text($"{r.takes[i].n} {ResDefs.Label(r.takes[i].res)}", "st-takes-text");
+                takes.Add(c.takes[i]);
+            }
+            c.time = StationPage.Text("", "st-takes-text");
+            takes.Add(c.time);
+            c.root.Add(takes);
+
+            c.barHolder = new VisualElement(); c.barHolder.AddToClassList("st-bar");
+            c.bar = new VisualElement(); c.bar.AddToClassList("st-bar-fill");
+            c.barHolder.Add(c.bar);
+            c.root.Add(c.barHolder);
+
+            c.state = StationPage.Text("", "st-recipe-state");
+            c.root.Add(c.state);
+
+            // UI Toolkit has no dashed border: a locked card draws its own.
+            c.dashes = new StationPage.DashedFrame(18f, 2f, StationPage.Edge);
+            c.dashes.style.display = DisplayStyle.None;
+            c.root.Add(c.dashes);
+
+            // Registered once, gated on `c.locked` read at the tap.
+            c.root.RegisterCallback<ClickEvent>(_ => PickRecipe(c));
+            return c;
+        }
+
+        void PickRecipe(RecipeCard c)
+        {
+            if (c.locked) return;
+            var l = L;
+            ResolveRaisedIndex();
+            var st = Station(l);
+            pickedRecipe = c.r.id;
+            // A running order switches recipe at once, keeping its amount:
+            // the tap IS the order's recipe (the mockup's one decision).
+            if (st != null && l != null)
+            {
+                var order = l.OrderAt(planId, st.ordinal);
+                if (order.Active && order.recipe != null && order.recipe.id != c.r.id)
+                {
+                    int count = order.repeat ? OutpostLedger.RepeatOrder : order.remaining;
+                    if (l.PlaceOrder(planId, c.r.id, count, st.ordinal)) OrderTotals[st] = count;
                 }
             }
+            Refresh();
         }
 
-        public void Refresh()
+        /// "needs campfire II and a saw blade", or null when the recipe can
+        /// be ordered HERE. This building's own level gates its level-2
+        /// recipes (`PlaceOrder` refuses them the same way).
+        string LockWhy(OutpostLedger l, Recipe r)
+        {
+            bool ok = l.RecipeAvailable(r, out string why);
+            bool levelShort = MyLevel(l) < r.stationLevel;
+            if (ok && !levelShort) return null;
+            var parts = new List<string>(3);
+            if (l.CampfireLevel < r.campfireLevel) parts.Add("campfire " + RecipeGraph.Roman(r.campfireLevel));
+            if (levelShort) parts.Add($"level {r.stationLevel}");
+            if (r.tool != null && l.CountOf(r.tool) <= 0) parts.Add("a " + ResDefs.Label(r.tool));
+            return parts.Count > 0 ? "needs " + string.Join(" and ", parts) : why;
+        }
+
+        /// One batch's time on the bench at THIS building's level, from the
+        /// same numbers the ledger works with (`ratePerDay` × level, a
+        /// `TimeOfDay.DayLength` day).
+        string BatchTime(Recipe r, int level)
+        {
+            float rate = r.ratePerDay * Techs.RateMul(planId, level);
+            if (rate <= 0f) return "";
+            float secs = TimeOfDay.DayLength * Mathf.Max(1, r.yield) / rate;
+            return secs < 90f ? $"· {Mathf.RoundToInt(secs)} s" : $"· {secs / 60f:0.#} min";
+        }
+
+        string SelectedId(OutpostLedger l, StationStock st)
+        {
+            if (pickedRecipe != null)
+                foreach (var c in cards) if (c.r.id == pickedRecipe) return pickedRecipe;
+            if (st != null)
+            {
+                var order = l.OrderAt(planId, st.ordinal);
+                if (order.Active && order.recipe != null) return order.recipe.id;
+            }
+            var feed = Feeding(l, st);
+            if (feed != null) return feed.id;
+            return cards.Count > 0 ? cards[0].r.id : null;
+        }
+
+        void FillRecipes(OutpostLedger l, StationStock st, OutpostHand hand, string selected)
+        {
+            if (cards.Count == 0) return;
+            int level = MyLevel(l);
+            var order = st != null ? l.OrderAt(planId, st.ordinal) : default;
+            string stall = hand != null ? l.StallReason(hand) : null;
+            foreach (var c in cards)
+            {
+                var r = c.r;
+                string lockWhy = LockWhy(l, r);
+                c.locked = lockWhy != null;
+                bool active = order.Active && order.recipe != null && order.recipe.id == r.id;
+                bool picked = !c.locked && selected == r.id;
+
+                c.root.EnableInClassList("st-recipe--locked", c.locked);
+                c.root.EnableInClassList("st-recipe--on", picked);
+                c.dashes.style.display = c.locked ? DisplayStyle.Flex : DisplayStyle.None;
+                c.time.text = BatchTime(r, level);
+
+                c.state.RemoveFromClassList("st-state--make");
+                c.state.RemoveFromClassList("st-state--wait");
+                c.state.RemoveFromClassList("st-state--lock");
+                c.barHolder.style.visibility = active && !c.locked ? Visibility.Visible : Visibility.Hidden;
+
+                if (c.locked)
+                {
+                    c.state.text = lockWhy;
+                    c.state.AddToClassList("st-state--lock");
+                }
+                else if (active)
+                {
+                    float p = st.BenchRecipe == r
+                        ? (st.benchState == BenchState.Finished ? 1f : Mathf.Clamp01(st.benchProgress)) : 0f;
+                    c.bar.style.width = Length.Percent(p * 100f);
+                    if (hand == null)
+                    {
+                        c.state.text = "waiting for a worker";
+                        c.state.AddToClassList("st-state--wait");
+                    }
+                    else if (!string.IsNullOrEmpty(stall) && st.benchState != BenchState.Working)
+                    {
+                        c.state.text = stall;
+                        c.state.AddToClassList("st-state--wait");
+                    }
+                    else
+                    {
+                        c.state.text = MakingText(st, order, r);
+                        c.state.AddToClassList("st-state--make");
+                    }
+                }
+                else c.state.text = picked ? "pick an amount below" : "tap to make";
+            }
+        }
+
+        /// "making 7 of 10" off the order's size as placed and what is left
+        /// (`orderLeft` counts OUTPUT units, a batch at a time).
+        static string MakingText(StationStock st, StationOrder order, Recipe r)
+        {
+            if (order.repeat) return "making · until stopped";
+            if (!OrderTotals.TryGetValue(st, out int total) || total < order.remaining || total <= 0)
+                OrderTotals[st] = total = order.remaining;
+            int made = total - order.remaining;
+            int now = Mathf.Min(total, made + 1);
+            return $"making {now} of {total}";
+        }
+
+        // --- 4. the order -------------------------------------------------------
+
+        void BuildOrder(VisualElement s)
+        {
+            var seg = new VisualElement();
+            seg.AddToClassList("st-seg");
+            for (int i = 0; i < Amounts.Length; i++)
+            {
+                int count = Amounts[i];
+                var b = new Button(() => PlaceAmount(count));
+                b.text = count < 0 ? "∞" : count.ToString();
+                b.AddToClassList("st-seg-btn");
+                if (i == 0) b.AddToClassList("st-seg-btn--first");
+                if (count < 0) b.AddToClassList("st-seg-btn--inf");
+                amountBtns[i] = b;
+                seg.Add(b);
+            }
+            stopBtn = new Button(() =>
+            {
+                var l = L;
+                ResolveRaisedIndex();
+                var st = Station(l);
+                if (st == null) return;
+                l.StopOrder(planId, st.ordinal);
+                OrderTotals.Remove(st);
+                Refresh();
+            }) { text = "Stop" };
+            stopBtn.AddToClassList("st-seg-btn");
+            stopBtn.AddToClassList("st-seg-btn--stop");
+            seg.Add(stopBtn);
+            s.Add(seg);
+        }
+
+        void PlaceAmount(int count)
         {
             var l = L;
-            if (outpost == null || l == null || root == null) return;
-            outpost.CatchUp();
             ResolveRaisedIndex();
-            if (building != null && raisedIndex < 0)
-            {
-                // Standing, but no longer among `outpost.Built` -- a frame
-                // gap around a demolish. Blank rather than borrow a station.
-                root.Clear();
-                recipeRows.Clear();
-                worker = null; inLines = null; orderRow = null; outLine = null; stallLine = null;
-                storeLines = null; upgradeHolder = null;
-                return;
-            }
-
-            Plan();
-            if (builtKey != planKey) Fill();
-
-            var station = Station(l);
-            RefreshFlow(l, station);
-            var hand = HandOn(l, station);
-            RefreshProduction(l, station, hand);
-            worker?.Update(l, hand);
-            FillIn(l, station);
-            FillMaking(l, station);
-            FillRecipes(l, station);
-            FillOut(l, station);
-            FillStall(l, station, hand);
-            FillStore(l);
-            FillUpgrade(l);
-
-            if (upgradeBtn != null) upgradeBtn.SetEnabled(l.CanUpgradeAt(raisedIndex, planId, out _));
+            var st = Station(l);
+            if (st == null) return;
+            string id = SelectedId(l, st);
+            if (id == null) return;
+            if (l.PlaceOrder(planId, id, count, st.ordinal)) OrderTotals[st] = count;
+            Refresh();
         }
 
-        // --- 2. coming in --------------------------------------------------------
-
-        void BuildFlow()
+        void FillOrder(OutpostLedger l, StationStock st, string selected)
         {
-            var row = new VisualElement(); row.AddToClassList("land-flow"); root.Add(row);
-            VisualElement Cell(string icon)
+            if (stopBtn == null) return;
+            var sel = Recipes.Named(selected);
+            orderEyebrow.text = sel != null ? "ORDER · " + sel.label.ToUpperInvariant() : "ORDER";
+            var order = st != null ? l.OrderAt(planId, st.ordinal) : default;
+            bool active = order.Active && order.recipe != null;
+            bool canOrder = st != null && sel != null && LockWhy(l, sel) == null;
+
+            int on = -1;
+            if (active && order.recipe.id == selected)
             {
-                var cell = new VisualElement(); cell.AddToClassList("land-flow-cell");
-                cell.Add(new LandIcon(icon)); row.Add(cell); return cell;
+                if (order.repeat) on = 0;
+                else if (OrderTotals.TryGetValue(st, out int total))
+                    for (int i = 1; i < Amounts.Length; i++) if (Amounts[i] == total) on = i;
             }
-            void Arrow() { var arrow = new LandIcon("arrow"); arrow.AddToClassList("land-flow-arrow"); row.Add(arrow); }
-            var input = Cell(planId == BuildPlans.Sawmill.id ? "logs" : "stores");
-            flowInputName = SheetKit.Text("Timber", false, false, 13); input.Add(flowInputName);
-            flowInput = SheetKit.Text("", true, false, 20); input.Add(flowInput);
+            for (int i = 0; i < amountBtns.Length; i++)
+            {
+                amountBtns[i].EnableInClassList("st-seg-btn--on", i == on);
+                amountBtns[i].SetEnabled(canOrder);
+            }
+            stopBtn.SetEnabled(active);
+        }
+
+        // --- 5. in and out ------------------------------------------------------
+
+        void BuildFlow(VisualElement s)
+        {
+            var card = StationPage.Card();
+            card.AddToClassList("st-flow");
+
+            VisualElement Cell()
+            {
+                var cell = new VisualElement(); cell.AddToClassList("st-flow-cell");
+                card.Add(cell);
+                return cell;
+            }
+            void Arrow() => card.Add(new StationPage.Glyph("arrow", StationPage.Dim, "st-arrow"));
+
+            var bay = Cell();
+            bayIcon = StationPage.Icon(null, "st-flow-icon"); bay.Add(bayIcon);
+            bayValue = StationPage.Text("", "st-flow-value"); bay.Add(bayValue);
+            bay.Add(StationPage.Text("waiting", "st-flow-label"));
             Arrow();
-            var bench = Cell("saw");
-            flowState = SheetKit.Text("Idle", false, false, 13); bench.Add(flowState);
-            var track = new VisualElement(); track.AddToClassList("land-flow-progress"); bench.Add(track);
-            flowProgress = new VisualElement(); flowProgress.AddToClassList("land-flow-progress-fill"); track.Add(flowProgress);
+            var bench = Cell();
+            ring = new StationPage.BenchRing(); bench.Add(ring);
+            benchValue = StationPage.Text("", "st-flow-value"); bench.Add(benchValue);
+            benchLabel = StationPage.Text("on the bench", "st-flow-label"); bench.Add(benchLabel);
             Arrow();
-            var output = Cell(planId == BuildPlans.Sawmill.id ? "planks" : "stores");
-            flowOutputName = SheetKit.Text("Boards", false, false, 13); output.Add(flowOutputName);
-            flowOutput = SheetKit.Text("", true, false, 20); output.Add(flowOutput);
-        }
+            var rack = Cell();
+            rackIcon = StationPage.Icon(null, "st-flow-icon"); rack.Add(rackIcon);
+            rackValue = StationPage.Text("", "st-flow-value"); rack.Add(rackValue);
+            rack.Add(StationPage.Text("finished", "st-flow-label"));
+            s.Add(card);
 
-        void RefreshFlow(OutpostLedger ledger, StationStock station)
-        {
-            if (flowInput == null) return;
-            var recipe = Feeding(ledger, station);
-            string input = recipe != null && recipe.takes.Length > 0 ? recipe.takes[0].res : Res.Timber;
-            string output = station?.BenchMakes ?? recipe?.makes ?? Res.Boards;
-            flowInputName.text = ResDefs.Label(input);
-            flowOutputName.text = ResDefs.Label(output);
-            flowInput.text = station == null ? "--" : $"{station.BayCount(input)}/{station.InputCap}";
-            if (recipe != null && recipe.takes.Length > 1 && station != null)
-            {
-                int held = 0;
-                foreach (var ingredient in recipe.takes) held += station.BayCount(ingredient.res);
-                flowInputName.text = "Input bay";
-                flowInput.text = $"{held}/{station.InputCap * recipe.takes.Length}";
-            }
-            flowOutput.text = station == null ? "--" : $"{station.RackTotal}/{station.OutputCap}";
-            flowState.text = station == null ? "Unavailable" : station.benchState == BenchState.Working ? (planId == BuildPlans.Sawmill.id ? "Cutting" : "Working")
-                : station.benchState == BenchState.Finished ? "Ready" : station.benchState == BenchState.Loaded ? "Loaded" : "Idle";
-            float progress = station == null ? 0f : station.benchState == BenchState.Finished ? 1f : Mathf.Clamp01(station.benchProgress);
-            flowProgress.style.width = Length.Percent(progress * 100f);
-        }
-
-        /// A lead label and its line -- "IN  timber 3 of 6 in the bay".
-        /// The lead is the row's name; lines after the first leave it blank
-        /// so the column still reads as one block.
-        internal static Label LeadLine(VisualElement parent, string lead, bool muted = false)
-        {
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.pickingMode = PickingMode.Ignore;
-            var l = SheetKit.Eyebrow(lead ?? "");
-            l.style.width = LeadPx;
-            l.style.flexShrink = 0f;
-            l.style.marginBottom = 0f;
-            row.Add(l);
-            var t = SheetKit.Text("", false, muted, 13f);
-            t.style.flexGrow = 1f;
-            t.style.flexShrink = 1f;
-            row.Add(t);
-            parent.Add(row);
-            return t;
-        }
-
-        void BuildIn()
-        {
-            inLines = new Label[MaxInputs];
-            for (int i = 0; i < inLines.Length; i++)
-                inLines[i] = LeadLine(root, i == 0 ? "coming in" : "");
-            benchLine = LeadLine(root, "", true);
+            stallLine = StationPage.Text("", "st-stall");
+            s.Add(stallLine);
         }
 
         /// The recipe the bay is being filled for: the order's, else what is
@@ -497,359 +607,41 @@ namespace SeaSick.UI.Sheets
         Recipe Feeding(OutpostLedger l, StationStock s) =>
             (s != null ? (s.OrderRecipe ?? s.BenchRecipe) : null) ?? l.RecipeAt(planId);
 
-        void FillIn(OutpostLedger l, StationStock station)
+        void FillFlow(OutpostLedger l, StationStock st, OutpostHand hand, string selected)
         {
-            if (inLines == null) return;
-            var r = Feeding(l, station);
-            for (int i = 0; i < inLines.Length; i++)
+            if (bayValue == null) return;
+            var r = (st != null ? (st.BenchRecipe ?? st.OrderRecipe) : null) ?? Recipes.Named(selected) ?? Feeding(l, st);
+            string input = r != null && r.takes.Length > 0 ? r.takes[0].res : null;
+            string output = st?.BenchMakes ?? r?.makes;
+            StationPage.SetIcon(bayIcon, input);
+            StationPage.SetIcon(rackIcon, output);
+
+            if (st == null)
             {
-                var lab = inLines[i];
-                if (r == null || i >= r.takes.Length || station == null)
-                {
-                    lab.text = i == 0 ? "nothing ordered yet" : "";
-                    lab.style.color = SheetTheme.InkDim;
-                    lab.parent.style.display = i == 0 ? DisplayStyle.Flex : DisplayStyle.None;
-                    continue;
-                }
-                var t = r.takes[i];
-                int bay = station.BayCount(t.res);
-                lab.text = $"{ResDefs.Label(t.res)} {bay} of {station.InputCap} in the bay"
-                           + $" · {l.StoreCountOf(t.res)} in store";
-                lab.style.color = bay >= t.n ? SheetTheme.Moss : SheetTheme.Ember;
-                lab.parent.style.display = DisplayStyle.Flex;
+                bayValue.text = rackValue.text = benchValue.text = "--";
+                ring.Value = 0f;
+                stallLine.style.display = DisplayStyle.None;
+                return;
             }
-            if (benchLine != null)
-                benchLine.text = station == null ? "" : BenchLine(station);
-        }
-
-        static string BenchLine(StationStock s)
-        {
-            string what = s.BenchRecipe != null ? " " + s.BenchRecipe.label : "";
-            switch (s.benchState)
+            if (r != null && r.takes.Length > 1)
             {
-                case BenchState.Loaded: return $"bench · loaded{what}";
-                case BenchState.Working:
-                    return $"bench · making{what} ({Mathf.RoundToInt(Mathf.Clamp01(s.benchProgress) * 100f)}%)";
-                case BenchState.Finished: return $"bench · finished{what}, waiting for the rack";
-                default: return "bench · empty";
+                int held = 0;
+                foreach (var t in r.takes) held += st.BayCount(t.res);
+                bayValue.text = $"{held} / {st.InputCap * r.takes.Length}";
             }
-        }
+            else bayValue.text = input != null ? $"{st.BayCount(input)} / {st.InputCap}" : "--";
 
-        // --- 3. making: the order and STOP -----------------------------------------
+            float p = st.benchState == BenchState.Finished ? 1f
+                    : st.benchState == BenchState.Empty ? 0f : Mathf.Clamp01(st.benchProgress);
+            ring.Value = p;
+            benchValue.text = st.benchState == BenchState.Empty ? "empty" : $"{Mathf.RoundToInt(p * 100f)}%";
+            benchLabel.text = st.benchState == BenchState.Finished ? "done, to the rack" : "on the bench";
+            rackValue.text = $"{st.RackTotal} / {st.OutputCap}";
+            rackValue.EnableInClassList("st-cost--short", st.RackFull);
 
-        /// **The running order and its STOP** -- Kevin's rule: a station
-        /// keeps making what it was told until the player says otherwise,
-        /// so "what" and "stop" sit together where the eye lands. The row and
-        /// STOP are built once; with no order the same row says so and STOP
-        /// is hidden (its height kept, so nothing below moves).
-        void BuildMaking()
-        {
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.alignItems = Align.Center;
-            row.style.height = OrderRowPx;
-            var lead = SheetKit.Eyebrow("making");
-            lead.style.width = LeadPx;
-            lead.style.flexShrink = 0f;
-            row.Add(lead);
-
-            var left = new VisualElement();
-            left.style.flexDirection = FlexDirection.Column;
-            left.style.flexGrow = 1f;
-            left.style.flexShrink = 1f;
-            orderTitle = SheetKit.Text("", true, false, 14f);
-            left.Add(orderTitle);
-            orderSub = SheetKit.Text("", false, true, 12f);
-            left.Add(orderSub);
-            row.Add(left);
-
-            var l = L;
-            orderStop = SheetKit.Btn("STOP", () =>
-            {
-                if (orderStopStation == null || l == null) return;
-                l.StopOrder(planId, orderStopStation.ordinal);
-                Refresh();
-            }, true);
-            orderStop.style.height = TouchPx;
-            orderStop.style.minWidth = 96f;
-            orderStop.style.flexGrow = 0f;
-            orderStop.style.flexShrink = 0f;
-            orderStop.style.backgroundColor = SheetTheme.Ember;
-            orderStop.style.borderTopColor = orderStop.style.borderBottomColor =
-                orderStop.style.borderLeftColor = orderStop.style.borderRightColor = SheetTheme.Ember;
-            row.Add(orderStop);
-
-            orderRow = row;
-            root.Add(row);
-        }
-
-        void FillMaking(OutpostLedger l, StationStock station)
-        {
-            if (orderRow == null) return;
-            var order = station != null ? l.OrderAt(planId, station.ordinal) : default;
-            bool active = station != null && order.Active && order.recipe != null;
-            // The station this order lives on can shift ordinal under a
-            // demolish elsewhere; STOP reads this field fresh.
-            orderStopStation = active ? station : null;
-            orderStop.style.visibility = active ? Visibility.Visible : Visibility.Hidden;
-            orderStop.SetEnabled(active);
-            if (active)
-            {
-                orderTitle.text = order.recipe.label;
-                orderSub.text = (order.repeat ? "∞ until stopped" : $"{order.remaining} left") + RateNote(l, order.recipe);
-            }
-            else
-            {
-                orderTitle.text = "no order";
-                orderSub.text = hasMake ? "pick what to make below" : "";
-            }
-        }
-
-        /// " · +4 boards a day with 1 hand" -- the ledger's own sum per hand
-        /// per day (`ratePerDay` × level × hands on it), nothing more.
-        string RateNote(OutpostLedger l, Recipe r)
-        {
-            // THIS building's hands at THIS building's level (2026-09-27).
-            var here = Station(l);
-            int hands = 0;
-            foreach (var h in l.hands)
-                if (h != null && h.order == OutpostOrder.Work && h.target == planId
-                    && (here == null || l.StationOfHand(h) == here)) hands++;
-            if (hands == 0) return " · nobody working it";
-            float rate = r.ratePerDay * Techs.RateMul(planId, MyLevel(l)) * hands;
-            return $" · +{rate:0.#} {ResDefs.Label(r.makes)}/day with {(hands == 1 ? "1 hand" : hands + " hands")}";
-        }
-
-        // --- 3b. the recipes ---------------------------------------------------------
-
-        /// **One recipe row's stable parts.** Everything a tap can land on --
-        /// the row and, while it is picked, its amount chips -- is built once
-        /// and kept; `Refresh` re-texts labels and toggles visibility. A
-        /// rebuilt row between press and release loses the tap (1cf73f9).
-        class RecipeRowRefs
-        {
-            public VisualElement row;
-            public Label[] ingLabels;
-            public Label toolLine;
-            public Label lockLabel;
-            public VisualElement waitingChip;
-            public VisualElement makingChip;
-            public VisualElement amountHolder;
-            public bool chipsBuilt;
-            public bool available;
-        }
-
-        RecipeRowRefs BuildRecipeRow(Recipe r)
-        {
-            var refs = new RecipeRowRefs();
-
-            var left = new VisualElement();
-            left.style.flexDirection = FlexDirection.Column;
-            left.style.flexGrow = 1f;
-            left.style.flexShrink = 1f;
-            left.Add(SheetKit.Text(r.label, true, false, 14f));
-
-            var ingRow = new VisualElement();
-            ingRow.style.flexDirection = FlexDirection.Row;
-            ingRow.style.flexWrap = Wrap.Wrap;
-            var ingLabels = new Label[r.takes.Length];
-            for (int i = 0; i < r.takes.Length; i++)
-            {
-                if (i > 0) ingRow.Add(SheetKit.Text(", ", false, true, 12f));
-                var lab = SheetKit.Text("", false, false, 12f);
-                ingLabels[i] = lab;
-                ingRow.Add(lab);
-            }
-            ingRow.Add(SheetKit.Text($" → {r.yield} {r.label}", false, true, 12f));
-            left.Add(ingRow);
-            refs.ingLabels = ingLabels;
-
-            if (r.tool != null)
-            {
-                refs.toolLine = SheetKit.Text("", false, false, 11f);
-                left.Add(refs.toolLine);
-            }
-
-            var right = SheetBits.Holder();
-            right.style.flexShrink = 0f;
-            refs.lockLabel = SheetKit.Text("", false, true, 11f);
-            refs.lockLabel.style.display = DisplayStyle.None;
-            right.Add(refs.lockLabel);
-            refs.waitingChip = SheetKit.Chip("waiting", "", SheetTheme.Ember);
-            refs.waitingChip.style.display = DisplayStyle.None;
-            right.Add(refs.waitingChip);
-            refs.makingChip = SheetKit.Chip("state", "making", SheetTheme.Moss);
-            refs.makingChip.style.display = DisplayStyle.None;
-            right.Add(refs.makingChip);
-
-            var head = SheetKit.Row(left, right);
-            head.style.alignItems = Align.Center;
-
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Column;
-            row.style.paddingTop = 4f;
-            row.style.paddingBottom = 4f;
-            row.style.minHeight = TouchPx;
-            row.Add(head);
-            refs.amountHolder = SheetBits.Holder();
-            row.Add(refs.amountHolder);
-
-            // Registered once and gated on `refs.available`, so a locked row
-            // does nothing without being rebuilt to lose the handler. A
-            // picked row can always be un-picked, even if it has locked since.
-            row.RegisterCallback<ClickEvent>(_ =>
-            {
-                if (!refs.available && pickedRecipe != r.id) return;
-                pickedRecipe = pickedRecipe == r.id ? null : r.id;
-                Refresh();
-            });
-            refs.row = row;
-            return refs;
-        }
-
-        void FillRecipes(OutpostLedger l, StationStock station)
-        {
-            if (recipeRows.Count == 0) return;
-            foreach (var r in Recipes.At(planId))
-                if (recipeRows.TryGetValue(r.id, out var refs)) UpdateRecipeRow(refs, r, l, station);
-        }
-
-        void UpdateRecipeRow(RecipeRowRefs refs, Recipe r, OutpostLedger l, StationStock station)
-        {
-            bool available = l.RecipeAvailable(r, out string lockWhy);
-            var order = station != null ? l.OrderAt(planId, station.ordinal) : default;
-            bool isActive = order.Active && order.recipe != null && order.recipe.id == r.id;
-            bool isPicked = pickedRecipe == r.id;
-
-            for (int i = 0; i < r.takes.Length; i++)
-            {
-                int have = l.CountOf(r.takes[i].res);
-                int need = r.takes[i].n;
-                refs.ingLabels[i].text = $"{ResDefs.Label(r.takes[i].res)} {have}/{need}";
-                refs.ingLabels[i].style.color = have >= need ? SheetTheme.Moss : SheetTheme.Ember;
-            }
-            if (refs.toolLine != null)
-            {
-                bool hasTool = l.CountOf(r.tool) > 0;
-                refs.toolLine.text = $"needs a {ResDefs.Label(r.tool)} (wears)";
-                refs.toolLine.style.color = hasTool ? SheetTheme.Moss : SheetTheme.Ember;
-            }
-
-            // Chips come up on a pick and down on an un-pick or an order --
-            // both taps, never the timer.
-            if (available && isPicked && station != null)
-            {
-                if (!refs.chipsBuilt)
-                {
-                    SheetBits.Swap(refs.amountHolder, AmountChips(l, station, r.id));
-                    refs.chipsBuilt = true;
-                }
-            }
-            else if (refs.chipsBuilt)
-            {
-                SheetBits.Swap(refs.amountHolder, null);
-                refs.chipsBuilt = false;
-            }
-
-            refs.lockLabel.style.display = DisplayStyle.None;
-            refs.waitingChip.style.display = DisplayStyle.None;
-            refs.makingChip.style.display = DisplayStyle.None;
-            if (!available)
-            {
-                refs.lockLabel.text = lockWhy;
-                refs.lockLabel.style.display = DisplayStyle.Flex;
-            }
-            else if (isActive)
-            {
-                var missing = Cost.Missing(r.takes, res => l.CountOf(res));
-                if (missing.Count > 0)
-                {
-                    SheetKit.SetChip(refs.waitingChip, ResDefs.Label(missing[0].res));
-                    refs.waitingChip.style.display = DisplayStyle.Flex;
-                }
-                else refs.makingChip.style.display = DisplayStyle.Flex;
-            }
-
-            refs.row.style.opacity = available ? 1f : 0.5f;
-            refs.row.EnableInClassList("sheet-clickable", available);
-            refs.row.style.backgroundColor = isPicked
-                ? new Color(SheetTheme.Brass.r, SheetTheme.Brass.g, SheetTheme.Brass.b, 0.14f)
-                : (StyleColor)StyleKeyword.Null;
-            refs.available = available;
-        }
-
-        static readonly (string label, int count)[] AmountOptions =
-        {
-            ("∞", OutpostLedger.RepeatOrder),
-            ("5", 5), ("10", 10), ("20", 20), ("50", 50), ("100", 100),
-        };
-
-        /// **"make an order and keep making that order until you tell it to
-        /// stop, and/or set amounts like 5, 10, 20, 50, 100"** -- Kevin. One
-        /// tap places the order; STOP is the confirm and the undo.
-        VisualElement AmountChips(OutpostLedger l, StationStock station, string recipeId)
-        {
-            var row = new VisualElement();
-            row.style.flexDirection = FlexDirection.Row;
-            row.style.marginTop = 6f;
-            row.style.marginBottom = 2f;
-            for (int i = 0; i < AmountOptions.Length; i++)
-            {
-                var (label, count) = AmountOptions[i];
-                var b = SheetKit.Btn(label, () =>
-                {
-                    l.PlaceOrder(planId, recipeId, count, station.ordinal);
-                    pickedRecipe = null;
-                    Refresh();
-                });
-                b.style.height = TouchPx;
-                b.style.minWidth = TouchPx;
-                b.style.flexGrow = 1f;
-                b.style.flexShrink = 1f;
-                b.style.paddingLeft = 4f;
-                b.style.paddingRight = 4f;
-                if (i < AmountOptions.Length - 1) b.style.marginRight = 6f;
-                row.Add(b);
-            }
-            // A chip tap must not also pick/un-pick the row it sits in.
-            row.RegisterCallback<ClickEvent>(e => e.StopPropagation());
-            return row;
-        }
-
-        // --- 4. going out ------------------------------------------------------------
-
-        void BuildOut()
-        {
-            outLine = LeadLine(root, "going out");
-        }
-
-        void FillOut(OutpostLedger l, StationStock station)
-        {
-            if (outLine == null) return;
-            if (station == null) { outLine.text = ""; return; }
-            string makes = station.BenchMakes ?? Feeding(l, station)?.makes;
-            string what = makes != null ? " " + ResDefs.Label(makes) : "";
-            // Racks only ever go to the store (`OutpostLedger.RackChore`);
-            // a full store is what holds them on the rack.
-            string where = makes != null && l.StoreCountOf(makes) >= l.ceilingPer
-                ? "store full, it waits here"
-                : "goes to the store";
-            outLine.text = $"rack · {station.RackTotal} of {station.OutputCap}{what} · {where}";
-            outLine.style.color = station.RackFull ? SheetTheme.Ember : SheetTheme.Ink;
-        }
-
-        // --- 5. why it's stopped -------------------------------------------------------
-
-        void BuildStall()
-        {
-            stallLine = LeadLine(root, "");
-            stallLine.style.color = SheetTheme.Ember;
-        }
-
-        void FillStall(OutpostLedger l, StationStock station, OutpostHand hand)
-        {
-            if (stallLine == null) return;
-            stallLine.text = StallText(l, hand, station != null && l.OrderAt(planId, station.ordinal).Active);
+            string why = StallText(l, hand, l.OrderAt(planId, st.ordinal).Active);
+            stallLine.text = why;
+            stallLine.style.display = string.IsNullOrEmpty(why) ? DisplayStyle.None : DisplayStyle.Flex;
         }
 
         /// The ledger's `StallReason` for the hand on it; with nobody on it,
@@ -864,23 +656,10 @@ namespace SeaSick.UI.Sheets
             return wantsHand ? "stopped · nobody working it" : "";
         }
 
-        // --- the store's racks -----------------------------------------------------------
-
-        void BuildStore()
-        {
-            root.Add(SheetKit.Eyebrow("on the racks"));
-            storeLines = new Label[StoreLinesMax];
-            for (int i = 0; i < storeLines.Length; i++)
-            {
-                storeLines[i] = SheetKit.Text("", false, false, 13f);
-                root.Add(storeLines[i]);
-            }
-        }
+        // --- the store's racks -----------------------------------------------------
 
         readonly List<string> held = new List<string>();
 
-        /// What the store holds, two kinds a line, each against the shelf
-        /// it fills (`ceilingPer`) -- the same numbers the camp's gauges use.
         void FillStore(OutpostLedger l)
         {
             if (storeLines == null) return;
@@ -893,7 +672,6 @@ namespace SeaSick.UI.Sheets
                 string text = "";
                 if (a < held.Count) text = StoreBit(l, held[a]);
                 if (b < held.Count) text += "   ·   " + StoreBit(l, held[b]);
-                // The last line says how many more there are, never drops them.
                 if (i == storeLines.Length - 1 && held.Count > storeLines.Length * 2)
                     text = $"{StoreBit(l, held[a])} · and {held.Count - a - 1} more kinds";
                 if (i == 0 && held.Count == 0) text = "the store is empty";
@@ -905,68 +683,51 @@ namespace SeaSick.UI.Sheets
         static string StoreBit(OutpostLedger l, string res) =>
             $"{ResDefs.Label(res)} {l.StoreCountOf(res)}/{l.ceilingPer}";
 
-        // --- 6. upgrade ----------------------------------------------------------------
+        // --- refresh ------------------------------------------------------------------
 
-        void BuildUpgrade()
+        public void Refresh()
         {
-            if (root.childCount > 0) root.Add(SheetKit.Rule());
-            root.Add(SheetKit.Eyebrow("upgrade"));
-            upgradeLevel = SheetKit.Text("", true, false, 14f);
-            root.Add(upgradeLevel);
-            upgradeHolder = SheetBits.Holder();
-            root.Add(upgradeHolder);
-        }
+            var l = L;
+            if (outpost == null || l == null || root == null) return;
+            outpost.CatchUp();
+            ResolveRaisedIndex();
+            if (building != null && raisedIndex < 0) return;   // a frame gap around a demolish
 
-        void FillUpgrade(OutpostLedger l)
-        {
-            if (upgradeHolder == null) return;
-            int level = MyLevel(l);
-            int max = Techs.MaxLevel(planId);
-            var next = l.NextUpgradeAt(raisedIndex, planId);
-            upgradeLevel.text = next != null ? $"level {level} of {max} · next: level {level + 1}"
-                                             : $"level {level} of {max}";
+            var st = Station(l);
+            var hand = HandOn(l, st);
+            string selected = hasMake ? SelectedId(l, st) : null;
 
-            long key = level * 1000003L;
-            if (next != null)
-                foreach (var c in next.cost) key = key * 31 + l.CountOf(c.res);
-            if (key == upgradeKey) return;
-            upgradeKey = key;
-
-            // No buttons in here -- the raise button is the action row's --
-            // so rebuilding this block on a changed price loses no tap.
-            var col = new VisualElement();
-            col.style.flexDirection = FlexDirection.Column;
-            if (next == null)
+            if (header != null)
             {
-                col.Add(SheetKit.Text("as good as it gets", false, true, 12f));
-            }
-            else
-            {
-                var costRow = new VisualElement();
-                costRow.style.flexDirection = FlexDirection.Row;
-                costRow.style.flexWrap = Wrap.Wrap;
-                for (int i = 0; i < next.cost.Length; i++)
+                header.SetSub($"Level {MyLevel(l)} · {StationPage.IslandName(outpost)}");
+                if (hasMake)
                 {
-                    if (i > 0) costRow.Add(SheetKit.Text(", ", false, true, 12f));
-                    costRow.Add(IngredientLine(l, next.cost[i].res, next.cost[i].n));
+                    var (text, kind) = Pill(l, st, hand);
+                    header.SetPill(text, kind);
                 }
-                col.Add(costRow);
-                string effect = EffectLine(next);
-                if (effect.Length > 0) col.Add(SheetKit.Text(effect, false, true, 12f));
-                if (!l.CanUpgradeAt(raisedIndex, planId, out string why))
-                    col.Add(SheetKit.Note(why));
+                header.Refresh();
             }
-            SheetBits.Swap(upgradeHolder, col);
+            worker?.Update(l, hand, 0);
+            FillRecipes(l, st, hand, selected);
+            FillOrder(l, st, selected);
+            FillFlow(l, st, hand, selected);
+            FillStore(l);
+            upgrade?.Update(l, raisedIndex, planId, MyLevel(l));
         }
 
-        static string EffectLine(UpgradeStep step)
+        /// The header's word for this building right now.
+        static (string, int) Pill(OutpostLedger l, StationStock st, OutpostHand hand)
         {
-            var parts = new List<string>(2);
-            if (step.storeBonus != 0) parts.Add($"+{step.storeBonus} stores");
-            if (step.housesBonus != 0) parts.Add(step.housesBonus == 1 ? "+1 bed" : $"+{step.housesBonus} beds");
-            if (Mathf.Abs(step.rateMul - 1f) > 0.001f) parts.Add($"×{step.rateMul:0.#} rate");
-            return string.Join(", ", parts);
+            if (st == null) return ("--", StationPage.PillWait);
+            if (hand == null) return ("no worker", StationPage.PillBad);
+            if (st.RackFull) return ("output full", StationPage.PillBad);
+            if (st.benchState == BenchState.Working) return ("working", StationPage.PillGood);
+            if (!string.IsNullOrEmpty(l.StallReason(hand))) return ("waiting", StationPage.PillWait);
+            if (!st.HasOrder && st.benchState == BenchState.Empty) return ("idle", StationPage.PillWait);
+            return ("working", StationPage.PillGood);
         }
+
+        // --- 7. upgrade ------------------------------------------------------------------
 
         void DoUpgrade()
         {
@@ -980,7 +741,6 @@ namespace SeaSick.UI.Sheets
                 // The building on the ground changes now, not on the next
                 // reload -- see `Outpost.Retint`/`BuildingLevelLook`.
                 outpost?.Retint(building);
-                upgradeKey = long.MinValue;
                 Refresh();
             }
         }
@@ -1011,116 +771,515 @@ namespace SeaSick.UI.Sheets
         }
     }
 
-    /// **The worker slot at the top of a building's sheet.** The same verbs
-    /// the camp sheet's lookout row and the hand sheet already press -- post
-    /// the first idle hand (`SheetBits.FirstIdle` + `Outpost.Assign`, the
-    /// "post a lookout" control) and stand them down (`Outpost.OrderIdle`,
-    /// the hand sheet's "stand down") -- on one 44-unit button whose verb
-    /// follows the slot. Built once; `Update` re-texts it, and the button
-    /// reads who is in the slot at the moment it is pressed.
-    internal sealed class WorkerSlot
+    /// **The station page's kit** -- the pieces `StationSheet` and
+    /// `FarmSheet` share: the header, the worker card, the upgrade card,
+    /// item icons and the three drawn glyphs. Styles live in
+    /// `Resources/UI/Station.uss`, attached to each root this hands out.
+    internal static class StationPage
     {
-        readonly Outpost outpost;
-        readonly string planId;
-        readonly string position;
-        readonly System.Action changed;
-        readonly Label who;
-        readonly Label sub;
-        readonly Button btn;
-        readonly bool compact;
-        OutpostHand current;
+        public const int PillGood = 0, PillWait = 1, PillBad = 2;
 
-        public readonly VisualElement Root;
+        public static readonly Color Edge = new Color32(44, 74, 94, 255);
+        public static readonly Color Dim = new Color32(110, 132, 148, 255);
+        public static readonly Color Ink = new Color32(232, 242, 246, 255);
+        public static readonly Color Mint = new Color32(159, 224, 194, 255);
+        public static readonly Color Track = new Color32(30, 51, 68, 255);
 
-        public WorkerSlot(Outpost o, string planId, System.Action changed, bool compact = false)
+        static StyleSheet sheet;
+        static bool loaded;
+
+        static StyleSheet Sheet
         {
-            this.compact = compact;
-            outpost = o;
-            this.planId = planId;
-            this.changed = changed;
-            position = BuildPlans.PositionAt(planId);
-            if (string.IsNullOrEmpty(position)) position = "hand";
-
-            Root = new VisualElement();
-            Root.style.flexDirection = FlexDirection.Row;
-            Root.style.alignItems = Align.Center;
-            Root.style.height = StationSheet.TouchPx;
-            Root.style.marginTop = 2f;
-            Root.style.marginBottom = 2f;
-
-            var lead = SheetKit.Eyebrow(position);
-            lead.style.width = StationSheet.LeadPx;
-            lead.style.flexShrink = 0f;
-            lead.style.marginBottom = 0f;
-            Root.Add(lead);
-            who = SheetKit.Text("", true, false, 14f);
-            who.style.flexGrow = 1f;
-            who.style.flexShrink = 1f;
-            Root.Add(who);
-
-            sub = SheetKit.Text("", false, true, 12f);
-            sub.style.marginRight = 8f;
-            Root.Add(sub);
-
-            btn = SheetKit.Btn("", Press, false, true);
-            btn.style.height = StationSheet.TouchPx;
-            btn.style.minWidth = 120f;
-            btn.style.fontSize = 13f;
-            btn.style.flexShrink = 0f;
-            Root.Add(btn);
-            if (MidnightLandHud.Active)
+            get
             {
-                lead.style.width = 52f;
-                btn.style.minWidth = 108f;
-                who.style.minWidth = 0f;
-                who.style.whiteSpace = WhiteSpace.NoWrap;
-                who.style.overflow = Overflow.Hidden;
-                who.style.textOverflow = TextOverflow.Ellipsis;
-            }
-            if (compact)
-            {
-                lead.text = "CREW";
-                sub.style.display = DisplayStyle.None;
-                btn.style.minWidth = 116f;
-            }
-        }
-
-        public void Update(OutpostLedger l, OutpostHand hand, int others = 0)
-        {
-            current = hand;
-            if (hand != null)
-            {
-                who.text = hand.name;
-                sub.text = others > 0 ? $"+{others} more" : "";
-                btn.text = compact ? "Stand down" : "stand down";
-                btn.SetEnabled(true);
-            }
-            else
-            {
-                who.text = compact ? "Unassigned" : "nobody";
-                sub.text = SheetBits.FirstIdle(l) == null ? "no idle hand" : "";
-                btn.text = compact ? (SheetBits.FirstIdle(l) != null ? "Assign worker" : "Manage crew") : $"post a {position}";
-                btn.SetEnabled(compact || SheetBits.FirstIdle(l) != null);
-            }
-        }
-
-        void Press()
-        {
-            var l = outpost != null ? outpost.Ledger : null;
-            if (l == null) return;
-            if (current != null) outpost.OrderIdle(current);
-            else
-            {
-                var free = SheetBits.FirstIdle(l);
-                if (free != null) outpost.Assign(free, planId);
-                else if (compact)
+                if (!loaded)
                 {
-                    var crew = new FireSheet(outpost);
-                    crew.FocusSection("hands");
-                    Sheets.Open(crew);
+                    loaded = true;
+                    sheet = Resources.Load<StyleSheet>("UI/Station");
+                    if (sheet == null) Debug.LogWarning("[Sheets] Resources/UI/Station.uss is missing — the station page will be unstyled.");
+                }
+                return sheet;
+            }
+        }
+
+        /// A root the page's styles reach: `.st` plus its own class.
+        public static VisualElement Root(string cls)
+        {
+            var e = new VisualElement();
+            e.AddToClassList("st");
+            e.AddToClassList(cls);
+            if (Sheet != null) e.styleSheets.Add(Sheet);
+            return e;
+        }
+
+        /// The page asks for exactly the host's band: 100 % first, then the
+        /// band's measured height once it is laid out (a percentage of a
+        /// flex-grown parent is not always resolved), so the scroll view
+        /// inside has a bounded viewport rather than its content's height.
+        public static void FitToParent(VisualElement page)
+        {
+            page.style.height = Length.Percent(100);
+            page.RegisterCallback<AttachToPanelEvent>(_ =>
+            {
+                var parent = page.parent;
+                if (parent == null) return;
+                void Fit()
+                {
+                    float h = parent.contentRect.height;
+                    if (h > 1f && Mathf.Abs(page.resolvedStyle.height - h) > 0.5f) page.style.height = h;
+                }
+                parent.RegisterCallback<GeometryChangedEvent>(__ => Fit());
+                Fit();
+            });
+        }
+
+        public static Label Text(string text, string cls)
+        {
+            var l = new Label(text ?? "");
+            l.AddToClassList(cls);
+            l.pickingMode = PickingMode.Ignore;
+            return l;
+        }
+
+        public static VisualElement Card()
+        {
+            var c = new VisualElement();
+            c.AddToClassList("st-card");
+            return c;
+        }
+
+        /// An item icon from `ItemIconSet` (the Stores bank's own PNGs), or
+        /// an empty square of the same size when there is none.
+        public static VisualElement Icon(string res, string cls)
+        {
+            var e = new VisualElement();
+            e.AddToClassList(cls);
+            e.pickingMode = PickingMode.Ignore;
+            SetIcon(e, res);
+            return e;
+        }
+
+        /// Re-points an icon only when the item changes, so the 0.25 s
+        /// refresh does not re-set a background four times a second.
+        public static void SetIcon(VisualElement e, string res)
+        {
+            if (e == null || Equals(e.userData, res)) return;
+            e.userData = res;
+            var tex = res != null ? ItemIconSet.Get(res) : null;
+            e.style.backgroundImage = tex != null ? new StyleBackground(tex) : new StyleBackground(StyleKeyword.None);
+        }
+
+        public static string Cap(string s) =>
+            string.IsNullOrEmpty(s) ? "" : char.ToUpperInvariant(s[0]) + s.Substring(1);
+
+        /// ☰: the drawer when its owner has wired the hook, else the camp
+        /// overview (the drawer's own first row) -- never a dead button.
+        public static void OpenLedgerFor(Outpost camp)
+        {
+            if (StationSheet.OpenLedger != null) { StationSheet.OpenLedger(); return; }
+            if (CampOverviewSheet.OpenLedger != null) { CampOverviewSheet.OpenLedger(); return; }
+            var overview = camp != null ? LedgerDrawer.CampOverview(camp) : null;
+            if (overview != null) Sheets.Open(overview);
+        }
+
+        public static string IslandName(Outpost o)
+        {
+            if (o == null || o.Island == null) return "";
+            return o.Island.IsHome ? "home island" : o.Island.gameObject.name;
+        }
+
+        // --- the header ----------------------------------------------------
+
+        /// ☰ · name + "Level N · island" · status pill · close.
+        public sealed class Header
+        {
+            public readonly VisualElement Root;
+            readonly Label sub;
+            readonly VisualElement pill;
+            readonly Label pillText;
+            readonly Button menu;
+            int pillKind = -1;
+
+            public Header(string title, bool withPill, System.Action onMenu)
+            {
+                Root = StationPage.Root("st-head");
+
+                menu = new Button(() => onMenu?.Invoke()) { text = "" };
+                menu.AddToClassList("st-square");
+                menu.tooltip = "Open the ledger";
+                menu.Add(new Glyph("menu", Ink, "st-glyph"));
+                Root.Add(menu);
+
+                var words = new VisualElement(); words.AddToClassList("st-head-words");
+                words.Add(Text(title, "st-title"));
+                sub = Text("", "st-sub");
+                words.Add(sub);
+                Root.Add(words);
+
+                pill = new VisualElement(); pill.AddToClassList("st-pill");
+                pill.pickingMode = PickingMode.Ignore;
+                pillText = Text("", "st-pill-text");
+                pill.Add(pillText);
+                pill.style.display = withPill ? DisplayStyle.Flex : DisplayStyle.None;
+                Root.Add(pill);
+
+                var close = new Button(() => Sheets.Close()) { text = "" };
+                close.AddToClassList("st-square");
+                close.tooltip = "Close";
+                close.Add(new Glyph("close", Ink, "st-glyph"));
+                Root.Add(close);
+                Refresh();
+            }
+
+            public void SetSub(string s) { if (sub.text != s) sub.text = s; }
+
+            public void SetPill(string text, int kind)
+            {
+                if (pillText.text != text) pillText.text = text;
+                if (kind == pillKind) return;
+                pillKind = kind;
+                pill.EnableInClassList("st-pill--wait", kind == PillWait);
+                pill.EnableInClassList("st-pill--bad", kind == PillBad);
+            }
+
+            public void Refresh() { }
+        }
+
+        // --- the worker card -------------------------------------------------
+
+        /// Avatar, name, role · mood, and the slot's verbs: Assign when it is
+        /// empty, Swap (for the first idle hand) and Unassign when it is not
+        /// -- the same `Outpost.Assign` / `Outpost.OrderIdle` the old worker
+        /// slot pressed. Built once; `Update` re-texts it and the buttons
+        /// read who is in the slot at the moment they are pressed.
+        public sealed class WorkerCard
+        {
+            public readonly VisualElement Root;
+            readonly Outpost outpost;
+            readonly string planId;
+            readonly string role;
+            readonly System.Action changed;
+            readonly Label initial, name, sub;
+            readonly Button main, off;
+            OutpostHand current;
+
+            public WorkerCard(Outpost o, string planId, System.Action changed)
+            {
+                outpost = o;
+                this.planId = planId;
+                this.changed = changed;
+                role = BuildPlans.PositionAt(planId);
+                if (string.IsNullOrEmpty(role)) role = "hand";
+
+                Root = Card();
+                var avatar = new VisualElement(); avatar.AddToClassList("st-avatar");
+                initial = Text("?", "st-avatar-text");
+                avatar.Add(initial);
+                Root.Add(avatar);
+
+                var words = new VisualElement(); words.AddToClassList("st-worker-words");
+                name = Text("", "st-worker-name");
+                sub = Text("", "st-worker-sub");
+                words.Add(name); words.Add(sub);
+                Root.Add(words);
+
+                main = new Button(Main) { text = "Assign" };
+                main.AddToClassList("st-btn");
+                Root.Add(main);
+                off = new Button(Off) { text = "Unassign" };
+                off.AddToClassList("st-btn");
+                Root.Add(off);
+            }
+
+            public void Update(OutpostLedger l, OutpostHand hand, int others)
+            {
+                current = hand;
+                var free = SheetBits.FirstIdle(l);
+                if (hand != null)
+                {
+                    string n = string.IsNullOrEmpty(hand.name) ? "?" : hand.name;
+                    initial.text = n.Substring(0, 1).ToUpperInvariant();
+                    name.text = n;
+                    sub.text = $"{role} · {hand.MoodWord}" + (others > 0 ? $" · +{others} more" : "");
+                    main.text = "Swap";
+                    main.style.display = free != null ? DisplayStyle.Flex : DisplayStyle.None;
+                    main.SetEnabled(free != null);
+                    off.style.display = DisplayStyle.Flex;
+                }
+                else
+                {
+                    initial.text = "?";
+                    name.text = "Nobody";
+                    sub.text = free != null ? $"needs a {role}" : "no idle hand to post";
+                    main.text = "Assign";
+                    main.style.display = DisplayStyle.Flex;
+                    main.SetEnabled(free != null);
+                    off.style.display = DisplayStyle.None;
                 }
             }
-            changed?.Invoke();
+
+            void Main()
+            {
+                var l = outpost != null ? outpost.Ledger : null;
+                if (l == null) return;
+                var free = SheetBits.FirstIdle(l);
+                if (free == null) return;
+                if (current != null) outpost.OrderIdle(current);
+                outpost.Assign(free, planId);
+                changed?.Invoke();
+            }
+
+            void Off()
+            {
+                if (outpost == null || current == null) return;
+                outpost.OrderIdle(current);
+                changed?.Invoke();
+            }
+        }
+
+        // --- the upgrade card --------------------------------------------------
+
+        /// "Level 2 · 1.5× faster", the price with have/need per item, and
+        /// one button that is "Upgrade" when it can be and otherwise names
+        /// what is missing ("Campfire II", "Need 2 brick"). The cost row is
+        /// rebuilt only when the level changes -- a tap -- and has no
+        /// buttons in it; the button itself is built once.
+        public sealed class UpgradeCard
+        {
+            public readonly VisualElement Root;
+            readonly Label title;
+            readonly VisualElement cost;
+            readonly Button btn;
+            readonly List<(Label label, string res, int n)> lines = new List<(Label, string, int)>();
+            int builtLevel = -1;
+
+            public UpgradeCard(System.Action upgrade)
+            {
+                Root = Card();
+                Root.AddToClassList("st-upgrade");
+                var words = new VisualElement(); words.AddToClassList("st-upgrade-words");
+                title = Text("", "st-upgrade-title");
+                words.Add(title);
+                cost = new VisualElement(); cost.AddToClassList("st-cost");
+                words.Add(cost);
+                Root.Add(words);
+                btn = new Button(upgrade) { text = "Upgrade" };
+                btn.AddToClassList("st-btn");
+                btn.AddToClassList("st-upgrade-btn");
+                Root.Add(btn);
+            }
+
+            public void Update(OutpostLedger l, int raisedIndex, string planId, int level)
+            {
+                var next = l.NextUpgradeAt(raisedIndex, planId);
+                if (next == null)
+                {
+                    title.text = $"Level {level} · top level";
+                    if (builtLevel != level) { cost.Clear(); lines.Clear(); builtLevel = level; }
+                    btn.style.display = DisplayStyle.None;
+                    return;
+                }
+                title.text = $"Level {next.toLevel} · {Effect(next)}";
+                if (builtLevel != level)
+                {
+                    builtLevel = level;
+                    cost.Clear();
+                    lines.Clear();
+                    foreach (var c in next.cost)
+                    {
+                        cost.Add(Icon(c.res, "st-small-icon"));
+                        var lab = Text("", "st-cost-text");
+                        cost.Add(lab);
+                        lines.Add((lab, c.res, c.n));
+                    }
+                }
+                foreach (var (label, res, n) in lines)
+                {
+                    int have = l.SpendableOf(res);
+                    label.text = $"{Mathf.Min(have, 9999)}/{n} {ResDefs.Label(res)}";
+                    label.EnableInClassList("st-cost--ok", have >= n);
+                    label.EnableInClassList("st-cost--short", have < n);
+                }
+
+                bool can = l.CanUpgradeAt(raisedIndex, planId, out string why);
+                btn.style.display = DisplayStyle.Flex;
+                btn.text = can ? "Upgrade" : Short(l, next, why);
+                btn.SetEnabled(can);
+                btn.EnableInClassList("st-upgrade-btn--go", can);
+            }
+
+            static string Short(OutpostLedger l, UpgradeStep next, string why)
+            {
+                if (l.CampfireLevel < next.campfireLevel) return "Campfire " + RecipeGraph.Roman(next.campfireLevel);
+                var missing = Cost.Missing(next.cost, l.SpendableOf);
+                if (missing.Count > 0) return $"Need {missing[0].n} {ResDefs.Label(missing[0].res)}";
+                return string.IsNullOrEmpty(why) ? "Not yet" : Cap(why);
+            }
+
+            static string Effect(UpgradeStep step)
+            {
+                var parts = new List<string>(3);
+                if (Mathf.Abs(step.rateMul - 1f) > 0.001f) parts.Add($"{step.rateMul:0.#}× faster");
+                if (step.storeBonus != 0) parts.Add($"+{step.storeBonus} stores");
+                if (step.housesBonus != 0) parts.Add(step.housesBonus == 1 ? "+1 bed" : $"+{step.housesBonus} beds");
+                return parts.Count > 0 ? string.Join(" · ", parts) : "stronger";
+            }
+        }
+
+        // --- drawn pieces --------------------------------------------------------
+
+        /// ☰, ✕ and → drawn with `Painter2D`, so no font has to carry them.
+        public sealed class Glyph : VisualElement
+        {
+            readonly string kind;
+            readonly Color color;
+
+            public Glyph(string kind, Color color, string cls)
+            {
+                this.kind = kind;
+                this.color = color;
+                AddToClassList(cls);
+                pickingMode = PickingMode.Ignore;
+                generateVisualContent += Draw;
+            }
+
+            void Draw(MeshGenerationContext ctx)
+            {
+                var r = contentRect;
+                float s = Mathf.Min(r.width, r.height) / 24f;
+                if (s <= 0f) return;
+                var p = ctx.painter2D;
+                p.strokeColor = color;
+                p.lineWidth = 2.4f * s;
+                p.lineCap = LineCap.Round;
+                p.lineJoin = LineJoin.Round;
+                void Line(float x0, float y0, float x1, float y1)
+                {
+                    p.BeginPath();
+                    p.MoveTo(new Vector2(x0 * s, y0 * s));
+                    p.LineTo(new Vector2(x1 * s, y1 * s));
+                    p.Stroke();
+                }
+                switch (kind)
+                {
+                    case "menu": Line(4, 7, 20, 7); Line(4, 12, 20, 12); Line(4, 17, 20, 17); break;
+                    case "close": Line(6, 6, 18, 18); Line(18, 6, 6, 18); break;
+                    default:
+                        Line(5, 12, 19, 12);
+                        p.BeginPath();
+                        p.MoveTo(new Vector2(13 * s, 6 * s));
+                        p.LineTo(new Vector2(19 * s, 12 * s));
+                        p.LineTo(new Vector2(13 * s, 18 * s));
+                        p.Stroke();
+                        break;
+                }
+            }
+        }
+
+        /// The bench's progress as a ring: a dim track and a mint arc from
+        /// twelve o'clock. Repaints only when the value moves.
+        public sealed class BenchRing : VisualElement
+        {
+            float shown = -1f;
+
+            public float Value
+            {
+                get => shown;
+                set
+                {
+                    float v = Mathf.Clamp01(value);
+                    if (Mathf.Abs(v - shown) < 0.002f) return;
+                    shown = v;
+                    MarkDirtyRepaint();
+                }
+            }
+
+            public BenchRing()
+            {
+                AddToClassList("st-ring");
+                pickingMode = PickingMode.Ignore;
+                generateVisualContent += Draw;
+            }
+
+            void Draw(MeshGenerationContext ctx)
+            {
+                var r = contentRect;
+                float w = Mathf.Max(3f, r.width * 0.09f);
+                float rad = Mathf.Min(r.width, r.height) * 0.5f - w * 0.5f;
+                if (rad <= 0f) return;
+                var c = new Vector2(r.width * 0.5f, r.height * 0.5f);
+                var p = ctx.painter2D;
+                p.lineWidth = w;
+                p.strokeColor = Track;
+                p.BeginPath();
+                p.Arc(c, rad, 0f, 360f);
+                p.Stroke();
+                if (shown <= 0.001f) return;
+                p.strokeColor = Mint;
+                p.lineCap = LineCap.Round;
+                p.BeginPath();
+                p.Arc(c, rad, -90f, -90f + 360f * Mathf.Min(shown, 0.999f));
+                p.Stroke();
+            }
+        }
+
+        /// A dashed rounded outline laid over a card (UI Toolkit borders are
+        /// solid only) -- the mockup's "locked" recipe.
+        public sealed class DashedFrame : VisualElement
+        {
+            readonly float radius, width;
+            readonly Color color;
+            const float Dash = 9f, Gap = 6f;
+
+            public DashedFrame(float radius, float width, Color color)
+            {
+                this.radius = radius;
+                this.width = width;
+                this.color = color;
+                pickingMode = PickingMode.Ignore;
+                style.position = Position.Absolute;
+                style.left = 0f; style.top = 0f; style.right = 0f; style.bottom = 0f;
+                generateVisualContent += Draw;
+            }
+
+            void Draw(MeshGenerationContext ctx)
+            {
+                var r = contentRect;
+                float h = width * 0.5f;
+                float x0 = h, y0 = h, x1 = r.width - h, y1 = r.height - h;
+                float rad = Mathf.Min(radius, (x1 - x0) * 0.5f, (y1 - y0) * 0.5f);
+                if (rad <= 0f) return;
+                var p = ctx.painter2D;
+                p.strokeColor = color;
+                p.lineWidth = width;
+                void Dashes(Vector2 a, Vector2 b)
+                {
+                    float len = Vector2.Distance(a, b);
+                    if (len <= 0f) return;
+                    var d = (b - a) / len;
+                    for (float t = 0f; t < len; t += Dash + Gap)
+                    {
+                        p.BeginPath();
+                        p.MoveTo(a + d * t);
+                        p.LineTo(a + d * Mathf.Min(len, t + Dash));
+                        p.Stroke();
+                    }
+                }
+                Dashes(new Vector2(x0 + rad, y0), new Vector2(x1 - rad, y0));
+                Dashes(new Vector2(x1, y0 + rad), new Vector2(x1, y1 - rad));
+                Dashes(new Vector2(x1 - rad, y1), new Vector2(x0 + rad, y1));
+                Dashes(new Vector2(x0, y1 - rad), new Vector2(x0, y0 + rad));
+                void Corner(float cx, float cy, float a0)
+                {
+                    p.BeginPath();
+                    p.Arc(new Vector2(cx, cy), rad, a0, a0 + 90f);
+                    p.Stroke();
+                }
+                Corner(x0 + rad, y0 + rad, 180f);
+                Corner(x1 - rad, y0 + rad, 270f);
+                Corner(x1 - rad, y1 - rad, 0f);
+                Corner(x0 + rad, y1 - rad, 90f);
+            }
         }
     }
 }
