@@ -290,7 +290,11 @@ namespace SeaSick.CameraRig
 
             // Rule 4: while siting a building, Hand pick-up is off — every
             // LMB drag during that mode grabs the land, never a villager.
-            pickupCandidate = CampSiting.Placing ? null : hand.PickAt(pos, forPickup: true);
+            // Death/rescue phase 3: while a tombstone must be sited
+            // (`World.Life.GraveGate.Blocking`), a press ashore never picks
+            // up a villager either.
+            pickupCandidate = (CampSiting.Placing || World.Life.GraveGate.Blocking)
+                ? null : hand.PickAt(pos, forPickup: true);
             pmode = PMode.Pending;
         }
 
@@ -381,10 +385,27 @@ namespace SeaSick.CameraRig
             TapAt = pos;
             TapDownFrame = downFrame;
 
+            // **Death/rescue phase 3.** A pending tombstone owns every tap
+            // ashore until it is sited -- moves the ghost, never opens a
+            // building/villager sheet or follows anybody. Camera fly-to
+            // (double-tap) and pan/zoom stay allowed, per Kevin's brief.
+            if (allowConsequence && World.Life.GraveGate.Blocking)
+            {
+                World.Life.GravePlacementFlow.HandleTap(pos);
+                lastTapPos = pos;
+                lastTapTime = Time.unscaledTime;
+                return;
+            }
+
             if (allowConsequence)
             {
                 bool isDouble = GestureClassifier.IsDoubleTap(lastTapPos, lastTapTime, pos, Time.unscaledTime, Screen.height);
                 if (isDouble) cam.FlyTo(pos);
+                else if (World.Life.GravePlacementFlow.TryOpenStoryAt(pos))
+                {
+                    // A tap on a standing tombstone opens its story instead
+                    // of whatever (if anything) stands behind it.
+                }
                 else
                 {
                     // **The building is asked FIRST, 2026-09-27** -- same
@@ -646,7 +667,8 @@ namespace SeaSick.CameraRig
                 return;
             }
 
-            oneFingerCandidate = CampSiting.Placing ? null : hand.PickAt(tp.pos, forPickup: true);
+            oneFingerCandidate = (CampSiting.Placing || World.Life.GraveGate.Blocking)
+                ? null : hand.PickAt(tp.pos, forPickup: true);
         }
 
         void UpdateOneFinger()

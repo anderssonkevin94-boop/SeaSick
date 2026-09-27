@@ -56,6 +56,10 @@ namespace SeaSick.World.Life
         /// came").
         public string cause = "";
         public float x, z;
+        /// **Phase 3.** Which way the tombstone faces (world degrees round
+        /// Y, `Quaternion.Euler(0, yaw, 0)`) -- toward the fire at the
+        /// moment it was sited. 0 until `placed` is true.
+        public float yaw;
         /// Exactly 3 sentences, built once at death by `LifeStory.Build` and
         /// saved rather than regenerated, so a story never changes under a
         /// tombstone the player already read.

@@ -125,6 +125,12 @@ namespace SeaSick.Dev
             }
             else GUILayout.Label("Nobody has died yet.");
 
+            // Phase 3: the same graveyard list the story card's own button
+            // opens (`GravePlacementFlow.ShowAllGraves`), so the dev panel
+            // never needs its own copy of that list.
+            if (GUILayout.Button("All graves", GUILayout.Height(RowH)))
+                GravePlacementFlow.ShowAllGraves();
+
             GUILayout.EndArea();
             GUI.matrix = old;
         }

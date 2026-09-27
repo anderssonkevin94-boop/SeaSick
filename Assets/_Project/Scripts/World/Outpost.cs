@@ -4154,6 +4154,12 @@ namespace SeaSick.World
         /// (plain `Raise(plan, at, yaw)`), which may still refuse.
         public Building Raise(BuildPlan plan, Vector3 at, float yaw, bool force)
         {
+            // **Phase 3's blocking gate.** A pending tombstone must be sited
+            // before the player can start anything new -- never refuses
+            // `Adopt`'s `force: true` restore, only a fresh player-chosen
+            // placement.
+            if (!force && Life.GraveGate.Blocking) return null;
+
             float lo, hi;
             if (!CanPlace(plan, at, yaw, out _, out lo, out hi))
             {
@@ -4358,6 +4364,15 @@ namespace SeaSick.World
             StandSavedRoads();
 
             ledger.ceilingPer = KeepsOfEach;
+
+            // **Every already-sited grave, exactly where it stood
+            // (2026-09-28, death/rescue phase 3).** Same "buildings never
+            // move" shape as the loop above: x/z verbatim off
+            // `GraveRecord`, only Y re-sampled. A grave still pending
+            // placement is not restored here -- `GravePlacementFlow` finds
+            // it on its own once this camp is watched.
+            Life.GravePlacementFlow.RestoreGraves(this);
+
             // The rest is what arrival does: blueprint, felling, piles.
             CatchUp();
             return true;

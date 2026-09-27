@@ -1001,6 +1001,12 @@ namespace SeaSick.World
             if (string.IsNullOrEmpty(cause)) cause = h.downedCause;
             var record = Lives.Record(h.name);
             int bornDay = record != null ? record.bornDay : -1;
+            // **Phase 3's first-pass grave spot.** Captured before
+            // `RemoveHand` drops his row -- `HandAt` is pure ledger data (no
+            // scene reference), so this is safe on a headless/unwatched camp
+            // too. `GravePlacementFlow` offers this as the default ghost
+            // spot and the player may move it before confirming.
+            Vector3 diedAt = HandAt(h);
             var grave = new GraveRecord
             {
                 name = h.name,
@@ -1008,6 +1014,8 @@ namespace SeaSick.World
                 bornDay = bornDay,
                 diedDay = TimeOfDay.Day,
                 cause = cause ?? "",
+                x = diedAt.x,
+                z = diedAt.z,
             };
             grave.story = LifeStory.Build(record, grave);
 

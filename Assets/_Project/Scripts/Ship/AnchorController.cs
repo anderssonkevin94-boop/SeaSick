@@ -1029,6 +1029,12 @@ namespace SeaSick.Ship
 
         void WeighAnchor()
         {
+            // **Death/rescue phase 3.** A pending tombstone at the camp the
+            // player is anchored at blocks casting off -- covers the
+            // button, the space-bar shortcut and `CastOff()` all at once,
+            // the one place all three converge.
+            if (SeaSick.World.Life.GraveGate.Blocking) return;
+
             timer = weighTime;
             if (timer > 0f) { CurrentState = State.Weighing; return; }
             GetUnderway();
