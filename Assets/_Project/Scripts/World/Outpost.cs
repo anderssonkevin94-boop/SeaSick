@@ -3018,13 +3018,29 @@ namespace SeaSick.World
             get
             {
                 int n = openCapacity;
+                bool campfireBuilt = false;
                 // Each building at its OWN level (2026-09-27).
                 for (int i = 0; i < built.Count; i++)
                 {
                     var b = built[i];
                     if (b != null)
+                    {
                         n += b.StoreCapacity + (ledger != null ? Economy.Techs.StoreBonus(b.Id, LevelOfBuilding(b)) : 0);
+                        if (b.Id == BuildPlans.Campfire.id) campfireBuilt = true;
+                    }
                 }
+                // **A camp under construction still needs somewhere to keep
+                // rations (2026-09-27 food-rework smoke test).** `Station`
+                // lands `ProvisionDays` of ship's biscuit with the first
+                // hands left at a SITED blueprint, before the fire itself is
+                // raised -- `Building` is true, `HasCamp` is not, and the
+                // fire is not yet in `built`. Bare, unclaimed ground still
+                // keeps nothing (`openCapacity` 0, Kevin 2026-09-22), but a
+                // camp somebody is actively building earns the fire's own
+                // ceiling early, or every ration landed there is silently
+                // refused by `Add`'s room check and the camp starves before
+                // its first log is cut.
+                if (!campfireBuilt && Building) n += OutpostLedger.CampfireCeiling;
                 return n;
             }
         }
