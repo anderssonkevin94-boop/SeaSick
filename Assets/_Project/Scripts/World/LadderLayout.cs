@@ -44,7 +44,12 @@ namespace SeaSick.World
         public const float MinRise = 3f;
         /// More than this is too high for one chain.
         public const float MaxRise = 24f;
-        /// Farthest the top may be from the foot, flat metres.
+        /// No longer a hard cap on placement (Kevin, 2026-09-27: "remove
+        /// this requirement" -- the ghost showed a good chain and it still
+        /// refused). Kept as the reach heuristic `Outpost.LadderLeg` uses to
+        /// judge whether a route's aim point is "at" a chain's end; `Plan`
+        /// already follows the terrain for any run, so nothing else in the
+        /// chain depends on this number.
         public const float MaxRun = 8f;
         /// Seconds per metre of rise up (or down) a ladder. What the link in
         /// `CampPath` costs, and how long a climb takes to watch.
@@ -137,7 +142,6 @@ namespace SeaSick.World
 
             float run = Flat(foot, top);
             if (run < 0.5f) { why = "tap the top of the cliff, not the foot again"; return false; }
-            if (run > MaxRun + 0.01f) { why = $"too far — the top must be within {MaxRun:0} m of the foot"; return false; }
 
             System.Func<float, float, float> h = (x, z) => ground(new Vector3(x, 0f, z));
             if (!Walkability.Standable(h, foot.x, foot.z, Walkability.Feet.Man))
