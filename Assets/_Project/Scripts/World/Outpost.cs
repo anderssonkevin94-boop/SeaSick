@@ -4101,7 +4101,13 @@ namespace SeaSick.World
                 // old save's row (level 0) is migrated here to its plan's old
                 // shared level, so nothing comes back downgraded.
                 adoptLevel = r.level > 0 ? r.level : ledger.LegacyLevelOf(r.planId);
+                // A dry dock past its cap is a duplicate the old restore bug
+                // let the player build again -- keep the first, drop the rest
+                // (see Outpost.DryDockRestore.cs).
+                if (SkipExtraDryDockRow(plan)) { adoptLevel = 1; continue; }
+                adoptingRows = true;
                 var b = Raise(plan, at, r.yaw);
+                adoptingRows = false;
                 if (b == null)
                 {
                     b = Raise(plan);
@@ -4128,6 +4134,9 @@ namespace SeaSick.World
                     if (Raise(PlanNamed(kv.Key)) == null) break;
                 adoptLevel = 1;
             }
+            // A pier or dry dock the spiral could not stand is a phantom
+            // `built` row -- see `ReconcileSpecialRows`.
+            ReconcileSpecialRows();
 
             // **Every segment back on its own two posts.** Before
             // `CatchUp`, because `EnsureBlueprints` draws wall SITES and a
@@ -4489,12 +4498,19 @@ namespace SeaSick.World
         {
             lo = hi = BuildPlans.DryDockDeck;
             why = "";
-            var home = Dock.Home;
-            if (home == null) { why = "there is no home berth yet"; return false; }
-            if (Island.FlatDistance(at, home.Berth) > BuildPlans.DryDockMaxFromHome)
+            // Not asked while `Adopt` restores a saved row: `SaveGame` sets
+            // the player's home berth only AFTER every camp is adopted, and
+            // this rule against the harbour dropped every saved dry dock
+            // (Kevin, 2026-09-27). See Outpost.DryDockRestore.cs.
+            if (!adoptingRows)
             {
-                why = $"the dry dock must stand beside your home berth ({Dock.HomeLabel})";
-                return false;
+                var home = Dock.Home;
+                if (home == null) { why = "there is no home berth yet"; return false; }
+                if (Island.FlatDistance(at, home.Berth) > BuildPlans.DryDockMaxFromHome)
+                {
+                    why = $"the dry dock must stand beside your home berth ({Dock.HomeLabel})";
+                    return false;
+                }
             }
             float len = plan.footprint.x, wid = plan.footprint.y;
             Vector3 heading = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;

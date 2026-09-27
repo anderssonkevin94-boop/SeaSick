@@ -1200,6 +1200,20 @@ false` before play.
   launches, not two frames.
 - **`ShipHold` and `Stockpile` do not follow the numbers.** Both are manual
   stacks; a restore rebuilds them unit by unit.
+- **A restore must not re-ask a SITING rule that reads state the load has
+  not restored yet** (2026-09-27, "I have to re-build my dry dock every
+  time"). `SaveGame.Apply` adopts the camps (step 5) BEFORE it re-points
+  `Dock.Home` at the player's pier (5b); `Adopt` re-raises every saved row
+  through `CanPlace`, and `CanPlaceDryDock`'s "within 40 m of `Dock.Home`"
+  was answered against the harbour -- every dry dock was DROPPED on load,
+  its `raised` row with it, while `built` kept counting it (four in Kevin's
+  save). `Outpost.adoptingRows` now skips that rule for saved rows, and
+  `ReconcileSpecialRows` drops `built` entries nothing stands for (piers and
+  dry docks have no spiral fallback), because the copy cap counts `built`.
+  Anything new that `CanPlace` reads from a global (home berth, fire level,
+  a tech) must answer the same during `Adopt`, or be skipped there. The
+  `Outpost.Adopt: ... DROPPED` warning is the tell -- grep for it after a
+  load.
 
 ## 2026-09-22 — the game on an iPhone
 

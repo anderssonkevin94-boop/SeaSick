@@ -515,6 +515,10 @@ namespace SeaSick.Save
                     Debug.LogWarning("SaveGame: her home berth pier is gone; staying at "
                         + Dock.HomeLabel);
             }
+            // 5c. A dry dock an older build's load dropped (it asked for the
+            // home berth before 5b set it) stands again beside the berth
+            // now that it is the right one. See Outpost.DryDockRestore.cs.
+            Outpost.ResiteOrphanDryDocks();
 
             // 6. The anchor, last, so the camp she lies off is awake to see
             // her arrive. She may have drifted a frame; put her back first.

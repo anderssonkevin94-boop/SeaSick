@@ -73,6 +73,13 @@ namespace SeaSick.UI.Sheets
                     var wcamp = seg.Camp != null ? seg.Camp : SheetBits.OutpostOf(seg);
                     return wcamp != null ? new WallSheet(wcamp, seg) : null;
                 }
+                // A dry dock answers through its own `DryDockSlip`
+                // registration below. `Sheets.TryCreateFor` walks the
+                // components IN ORDER and `Building` sits before
+                // `DryDockSlip` on the root, so without this a tap on a dry
+                // dock at a real camp got the camp's fire sheet ("a pier:
+                // the fire") and never reached the shipyard (2026-09-27).
+                if (b.GetComponent<DryDockSlip>() != null) return null;
                 var camp = SheetBits.OutpostOf(b);
                 if (b.Kind == BuildKind.Fire) return FireFor(camp);
                 if (b.Id == OutpostLedger.WatchtowerId) return FireFor(camp, FireSheet.FocusLookout);
