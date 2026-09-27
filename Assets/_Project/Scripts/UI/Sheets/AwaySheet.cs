@@ -14,7 +14,7 @@ namespace SeaSick.UI.Sheets
     /// progress until the report is in. Reads only; decides nothing.
     public class AwaySheet : ISheetFramed
     {
-        public string Title => "While you were away";
+        public string Title => "Welcome back";
         public Color Accent => SheetTheme.Moss;
         public bool WantsTallSheet => true;
         public string[] TabLabels => null;
