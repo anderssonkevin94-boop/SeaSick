@@ -83,6 +83,10 @@ namespace SeaSick.World.Economy
                 cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 4)) },
             new UpgradeStep { planId = "Fletcher", toLevel = 2, campfireLevel = 2,
                 cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 3)) },
+            // Fishing hut, 2026-09-27: priced like the fletcher (a small
+            // station), rate x1.5 like every station. Provisional.
+            new UpgradeStep { planId = "FishingHut", toLevel = 2, campfireLevel = 2,
+                cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 3)) },
             new UpgradeStep { planId = "Quarry", toLevel = 2, campfireLevel = 2,
                 cost = Cost.Of(Cost.I(Res.Brick, 8), Cost.I(Res.FineBoards, 2)) },
             new UpgradeStep { planId = "Hut", toLevel = 2, campfireLevel = 2, rateMul = 1f, housesBonus = 1,
@@ -107,6 +111,9 @@ namespace SeaSick.World.Economy
             new BuildingCap { planId = "Storehouse", copies = new[] { 1, 1, 2, 2 } },
             new BuildingCap { planId = "Watchtower", copies = new[] { 2, 4, 6, 8 } },
             new BuildingCap { planId = "Farm",       copies = new[] { 1, 2, 2, 3 } },
+            // Food without a field (2026-09-27): a second hut at fire II,
+            // like the farm. Provisional.
+            new BuildingCap { planId = "FishingHut", copies = new[] { 1, 2, 2, 3 } },
             // The second station of a kind at fire III (Kevin: "maybe
             // second sawmill in lvl 3").
             new BuildingCap { planId = "Sawmill",    copies = new[] { 1, 1, 2, 2 } },

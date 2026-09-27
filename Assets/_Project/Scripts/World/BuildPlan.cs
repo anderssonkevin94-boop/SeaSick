@@ -630,6 +630,63 @@ namespace SeaSick.World
             front = Vector3.forward,
         };
 
+        /// **The fishing hut, 2026-09-27.** Kevin: *"fishing hut exists,
+        /// import whatever assets Astra has made."* A station like the
+        /// kitchen -- one position, a bench, a rack the haulers empty into
+        /// the store -- whose input is the sea rather than a pile: its one
+        /// recipe ("fish", `Recipes.All`) takes nothing and makes Food, so a
+        /// fisher needs no bay filled and never waits on a hauler.
+        ///
+        /// **Sited at the shore**, which is its own rule (`Outpost.CanPlace`
+        /// through `FishingHutShore`): every corner on dry ground at least
+        /// `FishingHutFloor` above mean water -- lower than the ordinary
+        /// building floor, which stands well back from the sand -- and water
+        /// at least `FishingHutWaterDepth` deep within `FishingHutReach` of
+        /// the footprint's edge in any direction. Orientation-free on
+        /// purpose: the siting ghost's yaw is held from where the fire is
+        /// (`CampSiting.Begin`), and a rule that wanted the back to the
+        /// water would refuse most of a coast until the player found R.
+        ///
+        /// Astra's level-one kit (art-staging/fishing-hut-astra-lvl1-v1): a
+        /// 5.5 x 5.2 m plot, 3.2 m to the canvas ridge, front -Y in Blender
+        /// (= +Z here, the dry-land approach; the windbreak and the net rack
+        /// are the back, toward the shore). 4 visual fish slots on the crate,
+        /// which the README says are NOT a capacity -- `outputSlots` is a
+        /// separate, provisional number the view maps onto them.
+        /// **Numbers provisional, never played.**
+        public static readonly BuildPlan FishingHut = new BuildPlan
+        {
+            id = "FishingHut",
+            baseStoneCost = 2,
+            label = "fishing hut",
+            blurb = "a fisher works the shallows and brings home fish; food without a field",
+            resource = Res.Timber,
+            baseCost = 14,
+            footprint = new Vector2(5.5f, 5.2f),
+            ridge = 3.2f,
+            position = "fisher",
+            inputSlots = 1,         // nothing comes in; 1 keeps the sheet's bay row sane
+            outputSlots = 8,
+            makes = Res.Food,
+            // Informational only -- `Recipes.All` ("fish") is what runs.
+            rate = 4f,
+            prefab = "Settlement/fishinghut_astra",
+            front = Vector3.forward,
+        };
+
+        /// Lowest a fishing hut's corner may stand, metres above mean water
+        /// -- on the upper beach, where no other building may go
+        /// (`Outpost.minHeight` is the sand plus 1.2 m). **Provisional.**
+        public const float FishingHutFloor = 0.4f;
+        /// Water it needs within reach, metres below mean water: enough to
+        /// float a skiff and a line. **Provisional.**
+        public const float FishingHutWaterDepth = 0.5f;
+        /// How far past the footprint's edge the water may be, metres.
+        /// Kevin's brief said ~6; 7 because the beach falls ~0.15 m per
+        /// metre and a corner at `FishingHutFloor` is ~2.7 m from the
+        /// waterline before the water is any depth. **Provisional.**
+        public const float FishingHutReach = 7f;
+
         /// **A pier, 2026-09-21.** Kevin: *"I'd like a pier asset to be
         /// buildable to make it easier to dock with the island."*
         ///
@@ -862,7 +919,7 @@ namespace SeaSick.World
         /// same blueprint, so keeping it in the list is what stops it becoming
         /// a special case.
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Hut, Farm, Sawmill, Quarry, Fletcher, Kitchen, Blacksmith, Watchtower, Pier, DryDock };
+            { Campfire, Storage, Hut, Farm, FishingHut, Sawmill, Quarry, Fletcher, Kitchen, Blacksmith, Watchtower, Pier, DryDock };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.

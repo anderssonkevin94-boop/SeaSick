@@ -4286,8 +4286,13 @@ namespace SeaSick.World
             // already stands on is refusing the wrong rule. Only a
             // FREE-STANDING watchtower keeps the ordinary building limit.
             bool isWallTower = IsTowerPlan(plan) && OnWallNode(at);
+            // **The fishing hut stands at the shore (2026-09-27)**: its
+            // corners may go down onto the upper beach, where nothing else is
+            // allowed, and it must have fishable water close by.
+            bool isShoreHut = plan.id == BuildPlans.FishingHut.id;
             if (!Corners(at, Quaternion.Euler(0f, yaw, 0f), len, wid, isWallTower,
-                    out lo, out hi, out string footing))
+                    out lo, out hi, out string footing,
+                    isShoreHut ? BuildPlans.FishingHutFloor : float.NaN))
             {
                 // The corner test knows which of the two it tripped on and
                 // by how much; guessing from the CENTRE's height (what this
@@ -4303,7 +4308,48 @@ namespace SeaSick.World
             bool clear = Clear(at, halfDiag, out string blocked);
             wallTowerNode = null;
             if (!clear) { why = blocked; return false; }
+            if (isShoreHut && !FishingHutShore(at, yaw, len, wid, out _))
+            {
+                why = $"a fishing hut must stand at the shore -- no water {BuildPlans.FishingHutWaterDepth:0.#} m deep "
+                    + $"within {BuildPlans.FishingHutReach:0} m of it";
+                return false;
+            }
             return true;
+        }
+
+        /// **Is there fishable water beside this plot?** Samples rings every
+        /// metre out to `BuildPlans.FishingHutReach` past the footprint's
+        /// edge (a rectangle grown by that distance, 24 bearings a ring) and
+        /// answers with the first point at least `FishingHutWaterDepth` under
+        /// mean water. `water` is that point, for a caller that wants to turn
+        /// the hut's back to it. Height is the terrain's own field, water at
+        /// 0 -- the same field `SnapPier` reads (`-height >= PierBerthDepth`).
+        public bool FishingHutShore(Vector3 at, float yaw, float len, float wid, out Vector3 water)
+        {
+            water = at;
+            if (height == null) return false;
+            var facing = Quaternion.Euler(0f, yaw, 0f);
+            const int Bearings = 24;
+            for (float d = 1f; d <= BuildPlans.FishingHutReach + 1e-3f; d += 1f)
+            {
+                float hx = len * 0.5f + d, hz = wid * 0.5f + d;
+                for (int k = 0; k < Bearings; k++)
+                {
+                    float t = k * Mathf.PI * 2f / Bearings;
+                    // Onto the grown rectangle along this bearing.
+                    float sx = Mathf.Sin(t), cz = Mathf.Cos(t);
+                    float scale = Mathf.Min(
+                        Mathf.Abs(sx) > 1e-4f ? hx / Mathf.Abs(sx) : float.MaxValue,
+                        Mathf.Abs(cz) > 1e-4f ? hz / Mathf.Abs(cz) : float.MaxValue);
+                    Vector3 p = at + facing * new Vector3(sx * scale, 0f, cz * scale);
+                    if (-height(p.x, p.z) >= BuildPlans.FishingHutWaterDepth)
+                    {
+                        water = p;
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         /// **Where a pier would go if the player points HERE.**
@@ -5223,8 +5269,11 @@ namespace SeaSick.World
         /// line) while still keeping the beach test. False for everything
         /// else, including a free-standing watchtower.
         bool Corners(Vector3 p, Quaternion facing, float len, float wid, bool relaxSlope,
-            out float lo, out float hi, out string fail)
+            out float lo, out float hi, out string fail, float floor = float.NaN)
         {
+            // `floor`: the lowest a corner may stand; NaN is the island's own
+            // building floor. Only the fishing hut passes one (its beach).
+            float minCorner = float.IsNaN(floor) ? minHeight : floor;
             lo = float.MaxValue; hi = float.MinValue;
             fail = "";
             for (int sx = -1; sx <= 1; sx += 2)
@@ -5235,9 +5284,10 @@ namespace SeaSick.World
                     if (h < lo) lo = h;
                     if (h > hi) hi = h;
                 }
-            if (lo < minHeight)
+            if (lo < minCorner)
             {
-                fail = "a corner of it is down on the beach";
+                fail = float.IsNaN(floor) ? "a corner of it is down on the beach"
+                    : "a corner of it is in the water";
                 return false;
             }
             float span = Mathf.Sqrt(len * len + wid * wid);

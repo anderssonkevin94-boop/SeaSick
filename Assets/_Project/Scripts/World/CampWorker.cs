@@ -2030,6 +2030,8 @@ namespace SeaSick.World
                     case "Anvil_Anchor":
                     case "Shaping_Anchor":
                     case "Prep_Anchor":
+                    // The fishing hut's cutting board (2026-09-27).
+                    case "Catch_Anchor":
                         if (benchAlt == null) benchAlt = t;
                         break;
                 }
@@ -2233,6 +2235,9 @@ namespace SeaSick.World
                 case "smith": return VillagerActing.Mode.Hammer;
                 case "farmhand": return VillagerActing.Mode.Hoe;
                 case "cook": return VillagerActing.Mode.Stir;
+                // Gutting the catch on the prep board, stooped over the
+                // bench -- the fishing hut, 2026-09-27. No tool in hand.
+                case "fisher": return VillagerActing.Mode.Bend;
                 default: return VillagerActing.Mode.Hammer;
             }
         }

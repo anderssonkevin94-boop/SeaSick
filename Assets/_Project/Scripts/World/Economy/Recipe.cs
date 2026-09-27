@@ -65,6 +65,18 @@ namespace SeaSick.World.Economy
             new Recipe { id = "meals", station = "Kitchen", makes = Res.Meals, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Food, 1)), ratePerDay = 3f },
 
+            // --- fishing hut (2026-09-27) ---
+            // **A catch: no takes.** The sea is the input, so the bench loads
+            // with nothing in the bay (`TryLoad` checks no lines) and the
+            // fisher never waits on a hauler. Food is Raw; `RecipeGraph`
+            // allows a raw good ONLY from a recipe that takes nothing, which
+            // is gathering at a station, not making. 4 a hand-day: two-thirds
+            // of a farmhand (`OutpostLedger.FoodPerHandPerDay`, 6), because
+            // the farm costs a field and the hut costs only a shore.
+            // **Provisional, never played.**
+            new Recipe { id = "fish", station = "FishingHut", makes = Res.Food, yield = 1,
+                takes = Cost.None, ratePerDay = 4f },
+
             // --- fletcher ---
             new Recipe { id = "arrows", station = "Fletcher", makes = Res.Arrows, yield = 3,
                 takes = Cost.Of(Cost.I(Res.Timber, 1)), ratePerDay = 3f },

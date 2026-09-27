@@ -192,7 +192,7 @@ namespace SeaSick.World
         /// one generic reader working on every kit, per Kevin's rule of
         /// extending the reader rather than special-casing a building.
         static readonly string[] BenchLoadedNames = { "Bench_Loaded", "Work_Preparing", "Work_Heating", "Work_Shaping" };
-        static readonly string[] BenchCuttingNames = { "Bench_Cutting", "Work_Cooking", "Work_Forging", "Work_Fletching" };
+        static readonly string[] BenchCuttingNames = { "Bench_Cutting", "Work_Cooking", "Work_Forging", "Work_Fletching", "Work_Catch" };
         static readonly string[] BenchFinishedNames = { "Bench_Finished", "Work_Finished" };
 
         void DiscoverSlots()

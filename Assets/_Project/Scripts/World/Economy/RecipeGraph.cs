@@ -63,7 +63,7 @@ namespace SeaSick.World.Economy
             {
                 if (!ids.Add(r.id)) rep.errors.Add($"recipe '{r.id}' defined twice");
                 if (!known.Contains(r.makes)) rep.errors.Add($"recipe '{r.id}' makes unknown '{r.makes}'");
-                else if (ResDefs.IsRaw(r.makes)) rep.errors.Add($"recipe '{r.id}' makes raw '{r.makes}'; raw is gathered, never made");
+                else if (ResDefs.IsRaw(r.makes) && !IsCatch(r)) rep.errors.Add($"recipe '{r.id}' makes raw '{r.makes}'; raw is gathered, never made");
                 if (!stations.Contains(r.station)) rep.errors.Add($"recipe '{r.id}' is at unknown station '{r.station}'");
                 if (r.yield < 1) rep.errors.Add($"recipe '{r.id}' yields {r.yield}");
                 if (r.ratePerDay <= 0f) rep.errors.Add($"recipe '{r.id}' has no rate");
@@ -84,6 +84,10 @@ namespace SeaSick.World.Economy
                     rep.errors.Add($"recipe '{r.id}' needs fire level {r.campfireLevel}, above the top ({Techs.MaxCampfireLevel})");
                 if (ResDefs.TryGet(r.makes, out var md) && r.campfireLevel < md.campfireLevel)
                     rep.errors.Add($"recipe '{r.id}' is offered at fire {r.campfireLevel} but '{r.makes}' is a fire-{md.campfireLevel} resource");
+                // A catch is gathering at a station, not making: it does not
+                // turn a raw good into a made one, so it stays out of the
+                // made-by table the tier rules below read.
+                if (IsCatch(r) && ResDefs.IsRaw(r.makes)) continue;
                 if (!madeBy.TryGetValue(r.makes, out var list)) madeBy[r.makes] = list = new List<Recipe>();
                 list.Add(r);
             }
@@ -219,6 +223,14 @@ namespace SeaSick.World.Economy
             }
             return rep;
         }
+
+        /// **A catch (2026-09-27, the fishing hut):** a station recipe that
+        /// takes nothing and no tool. The one shape allowed to produce a Raw
+        /// good -- the sea is its input, the way the field is a farm's --
+        /// and the only shape that may take nothing at all: a made good
+        /// (Treated/Item) still needs a real recipe with inputs.
+        public static bool IsCatch(Recipe r) =>
+            r != null && (r.takes == null || r.takes.Length == 0) && r.tool == null;
 
         static bool AllIn(Ingredient[] cost, HashSet<string> have)
         {
