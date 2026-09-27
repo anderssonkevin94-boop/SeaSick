@@ -1354,6 +1354,59 @@ rather than a hardcoded day count; and the sawmill gate now measures against
 `timberTaken` — logs that actually left the ground — instead of a rate bound
 that trip-timed gathering had made loose enough to pass with nothing sawn.
 
+## 2026-09-27 — delivery on arrival: trips are walked (docs/DELIVERY-ON-ARRIVAL.md)
+
+**The trip-timing bullets above are HISTORY.** Kevin, 2026-09-27: no time or
+equation in carrying; a load counts only when the villager has delivered it.
+There is no trip timer any more (`haulLeft`/`haulDays`/`haulWalkDays`/
+`haulWorkDays` are dead fields kept for old saves; `PathFactor` survives only in
+display estimates). New invariants every probe/self-test must respect:
+
+- **Stock changes only at PICKUP and DROP-OFF events.** A source (store pile,
+  rack, bay, standing stock, the herd, the ship's hold) loses the load when the
+  walker FINISHES the work at it (`FinishPickup` → `PickUp`, clamped to what is
+  really there); the destination (store, bay, site, hold) gains it when the
+  walker ARRIVES (`DepositHaul`). In between, `haulPicked` says it is on him.
+  A load he is still walking out to fetch is only PLANNED: it reserves room at
+  the destination (`InFlightTo`, `RoomFor`, `NetShort`) and is a claim on the
+  source (`Claimed` / `StoreFree` / `FieldFree` / `RowFree`), but no count moves.
+- **`CarriedOf(res)` counts picked loads only.** Conservation checks are
+  `source + CarriedOf + destination` — a planned load is still in its source.
+- **Stationary work keeps a timer**: cutting at the source (tuning asset
+  seconds per unit), the 1 s pickup stoop, the spear jab (`JabSeconds`), the
+  bench recipe, clearing, hammering. Clearing and hammering and the bench run
+  only while the hand is AT the site/bench (`WalkTo`; a driven body within
+  `OnSiteMetres`).
+- **Walking is not scaled by hunger.** `WorkFactor` scales stationary work only;
+  `walkingIn` no longer zeroes it.
+- **Who walks**: a watched camp's `CampWorker` (`OutpostHand.driven`, set by
+  `BodyAt` every frame, cleared by `BodyReleased` in `OnDisable`); otherwise the
+  ledger's invisible walker in `Step`, at 2.6 m/s along the leg's `CampPath`
+  length (`OutpostLedger.router`, set by `Outpost.CatchUp`; straight line when
+  there is no grid). `Tick` still advances whole quanta, so one long tick and
+  many short ones still land on the same books for an UNWATCHED camp (D2 holds
+  there); a watched camp is paced by its bodies and is not bit-comparable.
+- **Measured vs forecast.** `DeliveredPerDay(res)` is measured (moving average
+  of real store drop-offs, not saved). `RatePerDay`/`MakeRatePerDay`/
+  `GatherTripPerDay`/`HuntTripPerDay`/`TripDays` are forecasts for the sheets
+  and must never book anything.
+
+**Traps.** (1) A ledger with no centre and no placed ends walks
+`DefaultLegMetres` legs — give test ledgers `SetCentre`. (2) A hunt is a claim
+on the herd count (`GameUnclaimed`), not on a `Claimed` source; the kill IS
+the pickup. (3) Re-ordering a hand mid-trip no longer lands his load: whatever
+pass owns him now walks it there; only `RemoveHand` / station teardown still
+force a picked load into the store (it exists), and a planned load is simply
+cancelled (`CancelPlanned`). (4) `StationStockSelfTest` sections (j)/(k)/(l)/(o)
+were rewritten for the walk model and have NOT been run yet as of the commit
+that introduced them — run them before trusting a FAIL elsewhere.
+
+New gates in `StationStockSelfTest` (o): `store-grows-only-at-dropoff` (a busy
+camp stepped per quantum for 3 days; no step's store growth exceeds that
+step's drop-offs) and `watched-vs-unwatched-one-day` (the same two-cutter camp
+ticked alone vs driven by stand-in bodies walking 0.1 s frames; timber within
+20 % / 4 logs).
+
 ### Edit-mode render check for a villager's pose or props
 No play mode and no dedicated probe file needed for a one-off look at what
 `VillagerActing` does to a body. Instantiate the `CrewMember` prefab

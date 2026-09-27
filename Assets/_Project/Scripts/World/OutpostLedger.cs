@@ -3133,6 +3133,9 @@ namespace SeaSick.World
         /// actually pays -- a gatherer stalled on a full pile or a worked-out
         /// stock does not count, same as `Step` would skip them. Read-only,
         /// allocation-free: called once a frame per resource.
+        /// (2026-09-27) A FORECAST for the sheets, never booking: trips are
+        /// walked and goods count on arrival (docs/DELIVERY-ON-ARRIVAL.md);
+        /// the measured figure is `DeliveredPerDay`.
         public float RatePerDay(string resource)
         {
             float rate = 0f;

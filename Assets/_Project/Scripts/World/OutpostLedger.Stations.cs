@@ -280,6 +280,8 @@ namespace SeaSick.World
             return SecondsToDays(2f * walk + work);
         }
 
+        /// **DISPLAY estimate only (2026-09-27)** -- nothing books through it;
+        /// what really came in is `DeliveredPerDay`.
         /// **Units a day one full-strength gatherer brings in** of `res`:
         /// an armful per gather trip (`Field -> Store`). What the readouts
         /// (`RatePerDay`, `MakeRatePerDay`) show in place of the old flat
@@ -708,13 +710,15 @@ namespace SeaSick.World
             };
         }
 
-        /// Units of `res` in hands' arms right now. Not in `CountOf`.
+        /// Units of `res` in hands' arms right now -- PICKED UP, on him
+        /// (2026-09-27: a load he is still walking out to fetch is still at
+        /// its source). Not in `CountOf`.
         public int CarriedOf(string res)
         {
             int n = 0;
             if (hands != null)
                 foreach (var h in hands)
-                    if (h != null && h.Hauling && h.haulRes == res) n += h.haulCount;
+                    if (h != null && h.Hauling && h.haulPicked && h.haulRes == res && !h.HuntTrip) n += h.haulCount;
             return n;
         }
 

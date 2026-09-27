@@ -267,71 +267,88 @@ namespace SeaSick.World
                     + $"timber {t0:0.##}->{TimberAll(o):0.##}, stone {st0:0.##}->{StoneAll(o):0.##}");
             }
 
-            // --- (j) trip time is distance ----------------------------------
+            // --- (j) trips are WALKED (2026-09-27, docs/DELIVERY-ON-ARRIVAL.md)
             {
+                float day = TimeOfDay.DayLength, qs = OutpostLedger.QuantumDays * day;
+                float v = OutpostLedger.WalkMetresPerSecond;
+                // One quantum: the builder is at the store (0 m), stoops 1 s,
+                // PICKS UP (the store drops now) and is carrying the rest.
                 var near = Site(true, 100f);
+                double nn = near.lastTicked;
+                near.Tick(nn + qs + 1e-3); nn += qs;
+                var h0 = near.hands[0];
+                float wantLeft = 100f - v * (qs - OutpostLedger.HandleSeconds);
+                Gate(sb, ref fails, "trip-picked-at-pickup-walked-after",
+                    h0.Hauling && h0.haulPicked && h0.Leg == TripLeg.ToDrop && Mathf.Abs(h0.legLeft - wantLeft) < 0.05f
+                    && near.sites[0].done == 0,
+                    $"after {qs:0.0} s: leg {h0.Leg}, picked {h0.haulPicked}, {h0.legLeft:0.00} m left (want {wantLeft:0.00}), "
+                    + $"store timber {near.StoreCountOf(Res.Timber)}, site {near.sites[0].done}/5");
+                // The site counts the logs on ARRIVAL: 1 s + 100 m / 2.6 m/s.
+                double arrive = OutpostLedger.HandleSeconds + 100.0 / v, seen = -1;
+                for (int i = 2; i <= 40 && seen < 0; i++)
+                {
+                    near.Tick(i * qs + 1e-3);
+                    if (near.sites[0].done > 0) seen = i * qs;
+                }
+                Gate(sb, ref fails, "site-counts-on-arrival",
+                    seen >= arrive - 1e-3 && seen <= arrive + qs + 1e-3,
+                    $"first logs counted at {seen:0.0} s; the walk lands at {arrive:0.0} s (quantum {qs:0.0} s)");
                 var far = Site(true, 200f);
-                double nn = near.lastTicked, nf = far.lastTicked;
-                Advance(near, ref nn, 0.1);
-                Advance(far, ref nf, 0.1);
-                float dn = near.hands[0].haulDays, df = far.hands[0].haulDays;
-                float want = (2f * 100f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
-                              + OutpostLedger.HandleSeconds) / TimeOfDay.DayLength;
-                Gate(sb, ref fails, "trip-days-is-distance",
-                    near.hands[0].Hauling && Mathf.Abs(dn - want) < 1e-4f,
-                    $"100 m store->site trip {dn * TimeOfDay.DayLength:0.0} s, expected {want * TimeOfDay.DayLength:0.0} s "
-                    + $"(2 x 100 m x {OutpostLedger.PathFactor} / {OutpostLedger.WalkMetresPerSecond} m/s + {OutpostLedger.HandleSeconds} s)");
-                // A cut trip: walk out, 5 s a log, walk back.
-                var cut = Site(false, 7.07f);
-                double nc = cut.lastTicked;
-                Advance(cut, ref nc, 0.1);
-                var ch = cut.hands[0];
-                float wantCut = (2f * 20f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
-                                 + OutpostLedger.HandleSeconds + ch.haulCount * Playtest.CutSecondsPerLog) / TimeOfDay.DayLength;
-                Gate(sb, ref fails, "cut-trip-5s-a-log",
-                    ch.Hauling && ch.haulFrom == HaulPlace.Field && ch.haulRes == Res.Timber
-                    && Mathf.Abs(ch.haulDays - wantCut) < 1e-4f,
-                    $"{ch.haulCount} logs cut 20 m out: {ch.haulDays * TimeOfDay.DayLength:0.0} s, expected {wantCut * TimeOfDay.DayLength:0.0} s");
+                near = Site(true, 100f);
+                nn = near.lastTicked;
+                double nf = far.lastTicked;
                 double tn = StockedAt(near, nn), tf = StockedAt(far, nf);
                 double ratio = tf / System.Math.Max(1e-6, tn);
-                Gate(sb, ref fails, "twice-as-far-twice-as-long", df > dn * 1.9f && ratio > 1.7 && ratio < 2.1,
-                    $"trip {dn * TimeOfDay.DayLength:0.0} s vs {df * TimeOfDay.DayLength:0.0} s; stocked at {tn:0.00} d (100 m) vs {tf:0.00} d (200 m), x{ratio:0.00} "
-                    + $"(observed on the {OutpostLedger.QuantumDays:0.00}-day quantum)");
+                Gate(sb, ref fails, "twice-as-far-twice-as-long", ratio > 1.7 && ratio < 2.1,
+                    $"stocked at {tn:0.00} d (100 m) vs {tf:0.00} d (200 m), x{ratio:0.00}");
+                // A cut trip: the island gives nothing up until the cutting
+                // ends -- 20 m out is 7.7 s, so after one quantum he is still
+                // walking and every tree is standing.
+                var cut = Site(false, 7.07f);
+                double nc = cut.lastTicked;
+                cut.Tick(nc + qs + 1e-3);
+                var ch = cut.hands[0];
+                float wantWork = OutpostLedger.HandleSeconds + ch.haulCount * Playtest.CutSecondsPerLog;
+                Gate(sb, ref fails, "cut-nothing-leaves-the-island-before-pickup",
+                    ch.Hauling && ch.haulFrom == HaulPlace.Field && !ch.haulPicked && ch.Leg == TripLeg.ToPickup
+                    && Mathf.Abs(cut.Stock(Res.Timber).standing - 40f) < 1e-3f && Mathf.Abs(ch.workLeft - wantWork) < 1e-3f,
+                    $"leg {ch.Leg}, standing {cut.Stock(Res.Timber).standing:0.#}/40, cutting {ch.workLeft:0.0} s booked (want {wantWork:0.0})");
             }
 
             // --- (k) gathering is trips (Kevin, 2026-09-23) -----------------
             {
-                // (1) one gatherer, trees 20 m from the store.
+                // (1) one gatherer, trees 20 m from the store: walk 7.7 s,
+                // cut 1 + 2 x 5 s, walk back 7.7 s -- the first armful is
+                // counted at ~26 s; at 36 s he is cutting the second (both
+                // logs still standing: nothing leaves the island early).
                 var gt = Gatherers(1, 20);
                 var gh = gt.hands[0];
                 double ng = gt.lastTicked;
-                Advance(gt, ref ng, 0.1);
-                float wantSec = 2f * 20f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
-                                + OutpostLedger.HandleSeconds + 2f * Playtest.CutSecondsPerLog;
-                bool firstTrip = gh.Hauling && gh.haulFrom == HaulPlace.Field && gh.haulTo == HaulPlace.Store
-                                 && gh.haulRes == Res.Timber && gh.haulCount == 2
-                                 && Mathf.Abs(gh.haulDays * TimeOfDay.DayLength - wantSec) < 0.01f;
-                float tripSec = gh.haulDays * TimeOfDay.DayLength;
-                Advance(gt, ref ng, 0.1);                    // 36 s: the first armful (30.7 s) is in
-                Gate(sb, ref fails, "gather-trip-2-logs-timed",
-                    firstTrip && gt.StoreCountOf(Res.Timber) == 2 && gt.CarriedOf(Res.Timber) == 2
-                    && Mathf.Abs(gt.Stock(Res.Timber).standing - 36f) < 1e-3f,
-                    $"trip {gh.haulCount} logs {tripSec:0.00} s (want {wantSec:0.00} s = 2 x 20 x {OutpostLedger.PathFactor} / "
-                    + $"{OutpostLedger.WalkMetresPerSecond} + {OutpostLedger.HandleSeconds} + 2 x {Playtest.CutSecondsPerLog}); "
-                    + $"at 36 s store {gt.StoreCountOf(Res.Timber)}, arms {gt.CarriedOf(Res.Timber)}, standing {gt.Stock(Res.Timber).standing:0.#}");
+                float leg = 20f / OutpostLedger.WalkMetresPerSecond;
+                float cutS = OutpostLedger.HandleSeconds + 2f * Playtest.CutSecondsPerLog;
+                float firstIn = 2f * leg + cutS;
+                Advance(gt, ref ng, 0.2);                    // 36 s
+                bool secondPicked = 36f >= firstIn + leg + cutS;
+                Gate(sb, ref fails, "gather-trip-2-logs-walked",
+                    gt.StoreCountOf(Res.Timber) == 2 && gt.CarriedOf(Res.Timber) == (secondPicked ? 2 : 0)
+                    && Mathf.Abs(gt.Stock(Res.Timber).standing - (secondPicked ? 36f : 38f)) < 1e-3f,
+                    $"first armful lands at {firstIn:0.0} s; at 36 s store {gt.StoreCountOf(Res.Timber)}, "
+                    + $"arms {gt.CarriedOf(Res.Timber)}, standing {gt.Stock(Res.Timber).standing:0.#}, leg {gh.Leg}");
 
-                // A gatherer leaving mid-trip (`RemoveHand`) puts his armful
-                // in the store: nothing lost, the trees booked as felled.
+                // A gatherer leaving mid-trip (`RemoveHand`) before he has
+                // cut anything takes nothing and leaves nothing: the trees
+                // are still standing. Nothing lost, nothing made.
                 var lv = Gatherers(1, 20);
                 double nl = lv.lastTicked;
                 Advance(lv, ref nl, 0.1);
                 var lh = lv.hands[0];
                 bool midTrip = lh.Hauling && lh.haulFrom == HaulPlace.Field;
+                bool picked = lh.haulPicked;
+                int store0 = lv.StoreCountOf(Res.Timber) + (picked ? lh.haulCount : 0);
                 lv.RemoveHand(lh);
                 Gate(sb, ref fails, "gather-leaving-hand-drops-nothing",
-                    midTrip && !lh.Hauling && lv.StoreCountOf(Res.Timber) == 2 && Mathf.Abs(GatherAll(lv) - 40f) < 1e-3f
-                    && Mathf.Abs(lv.timberTaken - 2f) < 1e-3f,
-                    $"mid-trip {midTrip}, store {lv.StoreCountOf(Res.Timber)}, {GatherAll(lv):0.##} of 40 accounted, felled {lv.timberTaken:0.#}");
+                    midTrip && !lh.Hauling && lv.StoreCountOf(Res.Timber) == store0 && Mathf.Abs(GatherAll(lv) - 40f) < 1e-3f,
+                    $"mid-trip {midTrip} (picked {picked}), store {lv.StoreCountOf(Res.Timber)}, {GatherAll(lv):0.##} of 40 accounted, felled {lv.timberTaken:0.#}");
 
                 // (2) D2: ten 0.1-day ticks vs one 1-day tick vs ragged.
                 foreach (double span in new[] { 1.0, 1.7 })
@@ -417,19 +434,26 @@ namespace SeaSick.World
                 p.clearSited = true;
                 c2.hands.RemoveAt(1);                         // one builder
                 double nc2 = c2.lastTicked;
-                Advance(c2, ref nc2, 0.1);                    // 18 s: five 3.6 s quanta
+                string clearRes = rock ? Res.Stone : Res.Timber;
+                int before = c2.StoreCountOf(clearRes);
+                Advance(c2, ref nc2, 0.1);                    // 18 s
+                bool clearedFirst = p.Cleared;
+                int landed = c2.StoreCountOf(clearRes) + c2.CarriedOf(clearRes) - before;
+                Advance(c2, ref nc2, 0.1);
                 float clearSec = rock ? Playtest.ClearSecondsPerRock : 2f * Playtest.ClearSecondsPerTree;
-                float tickSec = QuantaIn(0.1) * OutpostLedger.QuantumDays * TimeOfDay.DayLength;
-                float wantBuilt = (tickSec - clearSec) / TimeOfDay.DayLength;
-                Gate(sb, ref fails, rock ? "clear-rock-8s" : "clear-2-trees-10s",
-                    p.Cleared && Mathf.Abs(p.built - wantBuilt) < 1e-4f,
-                    $"{(rock ? "1 rock" : "2 trees")} cleared {p.Cleared}; of an {tickSec:0.#} s tick "
-                    + $"{p.built * TimeOfDay.DayLength:0.00} s went on building (want {tickSec - clearSec:0.00} s, i.e. {clearSec:0} s clearing)");
+                // (2026-09-27) What comes off the plot is CARRIED to the
+                // store, and he walks back to the plot: clearing costs its
+                // seconds plus those walks, and the hammering starts after.
+                Gate(sb, ref fails, rock ? "clear-rock-8s-carried" : "clear-2-trees-10s-carried",
+                    clearedFirst && landed == 2 && c2.StoreCountOf(clearRes) - before == 2 && p.built > 0f,
+                    $"{(rock ? "1 rock" : "2 trees")} ({clearSec:0} s of cutting) cleared in the first 18 s {clearedFirst}, "
+                    + $"{landed} {clearRes} carried to the store, then {p.built * TimeOfDay.DayLength:0.0} s of hammering");
             }
 
             Tempo(sb, ref fails);
             Transfers(sb, ref fails);
             Deposits(sb, ref fails);
+            Delivery(sb, ref fails);
 
             sb.AppendLine(fails == 0 ? "ALL PASS" : $"{fails} FAILED");
             if (fails == 0) Debug.Log(sb.ToString()); else Debug.LogError(sb.ToString());
@@ -641,7 +665,9 @@ namespace SeaSick.World
                 var s = l.StationOf(BuildPlans.Sawmill.id);
                 l.PlaceOrder(BuildPlans.Sawmill.id, "boards", OutpostLedger.RepeatOrder);
                 var h = l.hands[0];
-                float tripSec = l.TripDays(Res.Timber, 2, HaulPlace.Store, -1, HaulPlace.Station, 0) * day;
+                // Walked (2026-09-27): he starts at the store, stoops 1 s,
+                // carries 15 m.
+                float tripSec = OutpostLedger.HandleSeconds + 15f / OutpostLedger.WalkMetresPerSecond;
                 double landedAt = -1;
                 bool fetched = false;
                 for (int i = 1; i <= 40 && landedAt < 0; i++)
@@ -650,10 +676,8 @@ namespace SeaSick.World
                     if (h.Hauling && h.haulTo == HaulPlace.Station) fetched = true;
                     if (fetched && !h.Hauling && s.benchState != BenchState.Empty) landedAt = i * q;
                 }
-                float wantTrip = 2f * 15f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
-                                 + OutpostLedger.HandleSeconds;
                 Gate(sb, ref fails, "sawyer-fetch-lands-within-a-quantum",
-                    fetched && Mathf.Abs(tripSec - wantTrip) < 0.01f && OutpostLedger.HandleSeconds <= 1f
+                    fetched && OutpostLedger.HandleSeconds <= 1f
                     && landedAt >= tripSec - 1e-3 && landedAt <= tripSec + q + 1e-3,
                     $"store->sawmill 15 m, 2 logs: trip {tripSec:0.00} s (1 s to pick up), log on the bench at "
                     + $"{landedAt:0.0} s (quantum {q:0.0} s)");
@@ -909,16 +933,14 @@ namespace SeaSick.World
                 double now = l.lastTicked;
                 Advance(l, ref now, 0.02);
                 var h = l.hands[0];
-                float want = l.TripDays(T, 2, HaulPlace.Store, -1, HaulPlace.Ship, -1);
-                float wantSec = 2f * 30f * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond
-                                + OutpostLedger.HandleSeconds;
-                bool ok = h.Hauling && h.haulTo == HaulPlace.Ship && h.haulCount == 2 && h.haulPlaced
-                          && Mathf.Abs(h.haulDays - want) < 1e-6f
-                          && Mathf.Abs(want * TimeOfDay.DayLength - wantSec) < 0.01f
-                          && Mathf.Abs(h.haulToX - 30f) < 1e-3f;
+                // One quantum: stoop 1 s at the store, pick up, walk toward
+                // the gangway 30 m off -- the rest of the quantum's metres.
+                float qs = OutpostLedger.QuantumDays * TimeOfDay.DayLength;
+                float wantLeft = 30f - OutpostLedger.WalkMetresPerSecond * (qs - OutpostLedger.HandleSeconds);
+                bool ok = h.Hauling && h.haulTo == HaulPlace.Ship && h.haulCount == 2 && h.haulPicked
+                          && Mathf.Abs(h.legLeft - wantLeft) < 0.05f && Mathf.Abs(h.haulToX - 30f) < 1e-3f;
                 Gate(sb, ref fails, "transfer-trip-is-walked", ok,
-                    $"armful {h.haulCount} to {h.haulTo}, booked {h.haulDays * TimeOfDay.DayLength:0.00} s "
-                    + $"(want {wantSec:0.00} s = 2 x 30 m x {OutpostLedger.PathFactor} / {OutpostLedger.WalkMetresPerSecond} + {OutpostLedger.HandleSeconds}), "
+                    $"armful {h.haulCount} to {h.haulTo}, picked {h.haulPicked}, {h.legLeft:0.00} m left (want {wantLeft:0.00}), "
                     + $"drop at x {h.haulToX:0.#}");
             }
 
@@ -1112,31 +1134,101 @@ namespace SeaSick.World
             Gate(sb, ref fails, "deposits-no-seam-no-stone", !noStock && bare.Stock(Res.Stone) == null && bare.stoneDepositsV == 0,
                 "a camp with no Stone stock gets none from rocks");
 
-            // A gatherer's trip out of the field: 3 stone, walk 0.3 d, cut 0.2 d.
+            // Since 2026-09-27 the island and the store give a load up only
+            // at the PICKUP, so the "booked but not lifted" corrections are
+            // gone: the stock already is what stands / what is on the pile.
             var g = new OutpostLedger();
-            var man = new OutpostHand { name = "Gatherer", order = OutpostOrder.Gather, target = Res.Stone,
+            g.AddStanding(Res.Stone, 5f).regrowPerDay = 0f;
+            g.hands.Add(new OutpostHand { name = "Gatherer", order = OutpostOrder.Gather, target = Res.Stone,
                 haulRes = Res.Stone, haulCount = 3, haulFrom = HaulPlace.Field, haulTo = HaulPlace.Store,
-                haulDays = 1f, haulLeft = 0.9f, haulWalkDays = 0.3f, haulWorkDays = 0.2f };
-            g.hands.Add(man);
-            int walking = g.UncutFromField(Res.Stone);
-            man.haulLeft = 0.4f;     // past the cut: carrying
-            int carrying = g.UncutFromField(Res.Stone);
-            int ore = g.UncutFromField(Res.Ore);
-            Gate(sb, ref fails, "deposits-uncut-still-in-the-rock", walking == 3 && carrying == 0 && ore == 0,
-                $"walking out {walking}, carrying {carrying}, other resource {ore}");
+                tripLeg = (int)TripLeg.ToPickup });
+            Gate(sb, ref fails, "deposits-uncut-still-in-the-rock",
+                g.UncutFromField(Res.Stone) == 0 && Mathf.Abs(g.Stock(Res.Stone).standing - 5f) < 1e-4f,
+                $"walking out for 3: standing {g.Stock(Res.Stone).standing:0.#} (untouched), uncut correction {g.UncutFromField(Res.Stone)}");
 
-            // A builder's armful booked out of a store of 2 (left 2 behind).
             var b = new OutpostLedger();
-            b.Store(Res.Stone, true).whole = 2;
-            var builder = new OutpostHand { name = "Builder", order = OutpostOrder.Build,
+            b.Store(Res.Stone, true).whole = 6;
+            b.hands.Add(new OutpostHand { name = "Builder", order = OutpostOrder.Build,
                 haulRes = Res.Stone, haulCount = 4, haulFrom = HaulPlace.Store, haulTo = HaulPlace.Site,
-                haulDays = 1f, haulLeft = 0.95f, haulWalkDays = 0.2f, haulWorkDays = 0.05f };
-            b.hands.Add(builder);
-            int onPile = b.OnStorePile(Res.Stone);
-            builder.haulLeft = 0.5f; // lifted
-            int lifted = b.OnStorePile(Res.Stone);
-            Gate(sb, ref fails, "deposits-booked-stays-on-pile", onPile == 6 && lifted == 2 && b.StoreCountOf(Res.Stone) == 2,
-                $"booked, not lifted: {onPile} on the pile (store 2); lifted: {lifted}");
+                tripLeg = (int)TripLeg.ToPickup });
+            Gate(sb, ref fails, "deposits-planned-stays-on-pile", b.OnStorePile(Res.Stone) == 6 && b.StoreCountOf(Res.Stone) == 6,
+                $"planned, not lifted: {b.OnStorePile(Res.Stone)} on the pile (store {b.StoreCountOf(Res.Stone)})");
+        }
+
+        // --- (o) delivery on arrival (2026-09-27, docs/DELIVERY-ON-ARRIVAL.md) ---
+
+        /// **Nothing is counted before its drop-off; a watched camp and an
+        /// unwatched one land on the same order of goods.**
+        ///
+        /// (1) A busy camp (cutters, a sawyer, a hauler, a builder) stepped a
+        ///     quantum at a time for 3 days: in no step does the store GROW
+        ///     (summed over resources) by more than the units dropped off at
+        ///     it in that step (`deliveredEvents`), and the island's timber
+        ///     never shrinks by more than the units picked up.
+        /// (2) Watched vs unwatched: two copies of a two-cutter camp for one
+        ///     day. One is ticked alone (the invisible walkers); the other has
+        ///     its hands DRIVEN by a stand-in body that walks each leg at
+        ///     2.6 m/s in 0.1 s frames and reports `BodyAt` / `BodyArrived` /
+        ///     `BodyWorked`, ticked every frame. Timber in store within 20 %
+        ///     (or 4 logs) of each other.
+        static void Delivery(StringBuilder sb, ref int fails)
+        {
+            float day = TimeOfDay.DayLength, qs = OutpostLedger.QuantumDays * day;
+            {
+                var l = Busy();
+                string[] res = { Res.Timber, Res.Boards, Res.Stone, Res.Food };
+                bool ok = true;
+                string why = "";
+                int steps = Mathf.RoundToInt(3f / OutpostLedger.QuantumDays);
+                for (int i = 1; i <= steps && ok; i++)
+                {
+                    int grew = 0;
+                    int[] before = new int[res.Length];
+                    for (int k = 0; k < res.Length; k++) before[k] = l.StoreCountOf(res[k]);
+                    int ev = l.deliveredEvents;
+                    l.Tick(i * qs + 1e-3);
+                    for (int k = 0; k < res.Length; k++) grew += Mathf.Max(0, l.StoreCountOf(res[k]) - before[k]);
+                    int dropped = l.deliveredEvents - ev;
+                    if (grew > dropped) { ok = false; why = $"step {i}: store grew {grew}, dropped off {dropped}"; }
+                }
+                Gate(sb, ref fails, "store-grows-only-at-dropoff", ok,
+                    ok ? $"{steps} steps, {l.deliveredEvents} units dropped off, no unit counted early" : why);
+            }
+            {
+                var a = Gatherers(2, 40);
+                var b = Gatherers(2, 40);
+                double t = 0;
+                for (int i = 1; i <= Mathf.RoundToInt(1f / OutpostLedger.QuantumDays); i++) a.Tick(i * qs + 1e-3);
+                const float frame = 0.1f;
+                int frames = Mathf.RoundToInt(day / frame);
+                var pos = new Vector3[b.hands.Count];
+                for (int f = 1; f <= frames; f++)
+                {
+                    for (int k = 0; k < b.hands.Count; k++)
+                    {
+                        var h = b.hands[k];
+                        b.BodyAt(h, pos[k]);
+                        var v = b.HaulOf(h);
+                        if (!v.active) continue;
+                        if (v.leg == TripLeg.ToPickup || v.leg == TripLeg.ToDrop)
+                        {
+                            Vector3 goal = v.leg == TripLeg.ToPickup ? v.fromAt : v.toAt;
+                            Vector3 d = goal - pos[k]; d.y = 0f;
+                            float stepM = OutpostLedger.WalkMetresPerSecond * frame;
+                            if (d.magnitude <= stepM) { pos[k] = goal; b.BodyAt(h, pos[k]); b.BodyArrived(h); }
+                            else pos[k] += d.normalized * stepM;
+                        }
+                        else if (v.leg == TripLeg.AtPickup) b.BodyWorked(h, frame);
+                    }
+                    t = f * frame;
+                    b.Tick(t + 1e-3);
+                }
+                int ta = a.StoreCountOf(Res.Timber), tb = b.StoreCountOf(Res.Timber);
+                bool close = Mathf.Abs(ta - tb) <= Mathf.Max(4, 0.2f * Mathf.Max(ta, tb)) && ta > 0 && tb > 0;
+                Gate(sb, ref fails, "watched-vs-unwatched-one-day", close,
+                    $"one day, two cutters 20 m out: unwatched {ta} logs in store (standing {a.Stock(Res.Timber).standing:0}), "
+                    + $"watched (driven bodies) {tb} (standing {b.Stock(Res.Timber).standing:0})");
+            }
         }
 
         static void Gate(StringBuilder sb, ref int fails, string name, bool ok, string detail)
