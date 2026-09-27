@@ -61,7 +61,7 @@ namespace SeaSick.World
     /// (`Blocks`, `BlocksAnimal`) -- so no fallback, short hop or cut corner
     /// can carry a body through a palisade.
     [DisallowMultipleComponent]
-    public class CampPath : MonoBehaviour
+    public partial class CampPath : MonoBehaviour
     {
         // --- tunables (runtime-added component: these statics ARE the dials) -
 
@@ -359,6 +359,7 @@ namespace SeaSick.World
             MarkRocks();
             RelayWalls(null);
             LayLinks(null);
+            RelayRoads();
             LabelGround();
 
             watch.Stop();
@@ -582,6 +583,7 @@ namespace SeaSick.World
             // single straight run a camp's ground actually offers, so it
             // costs nothing visible and bounds the work at a few tens of
             // thousands of reads.
+            RoadPrefix();
             const int Window = 24;
             int at = 0;
             int last = cells.Count - 1;
@@ -597,7 +599,7 @@ namespace SeaSick.World
                     for (int k = at + 1; k < lookTo; k++)
                         if (Hop(cells[k], cells[k + 1])) { lookTo = k; break; }
                     for (int j = lookTo; j > at + 1; j--)
-                        if (Clear(cells[at], cells[j])) { far = j; break; }
+                        if (Clear(cells[at], cells[j]) && KeepsRoad(at, j)) { far = j; break; }
                 }
                 at = far;
                 if (far < last) corners.Add(Centre(cells[far]));
@@ -648,7 +650,7 @@ namespace SeaSick.World
                         if (!Walk(cy * n + nx) || !Walk(ny * n + cx)) continue;
                     }
 
-                    float step = (d >= 4 ? 1.41421356f : 1f) * cell * pen[nb];
+                    float step = (d >= 4 ? 1.41421356f : 1f) * cell * pen[nb] * RoadCost(cur, nb);
                     float ng = g[cur] + step;
 
                     if (stamp[nb] != search)

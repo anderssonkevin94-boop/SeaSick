@@ -704,7 +704,10 @@ namespace SeaSick.World
                     // on it. Same order the ledger spends its hand-days in
                     // (`OutpostLedger.Step`), so the picture and the books
                     // agree about what the camp is doing.
-                    var focus = camp != null && camp.Ledger != null ? camp.Ledger.Focus : null;
+                    // **The plot the BOOKS sent him to** (2026-09-27 ladder),
+                    // not the oldest site: the books only clear/hammer while
+                    // his body stands at the plot they chose.
+                    var focus = camp != null && camp.Ledger != null ? camp.Ledger.BuildSiteFor(r) : null;
 
                     // **Clearing before raising, and before hauling,
                     // 2026-09-23.** Kevin's rule: any blueprint may be
@@ -811,7 +814,7 @@ namespace SeaSick.World
                         // to do** (2026-09-27): the books hammer only while
                         // a builder is ON it (`OutpostLedger.WalkTo`), so a
                         // rest walk home between swings would pause it.
-                        var f = camp.Ledger != null ? camp.Ledger.Focus : null;
+                        var f = camp.Ledger != null ? camp.Ledger.BuildSiteFor(r) : null;
                         if (r.order == OutpostOrder.Build && f != null && f.Cleared && f.Stocked && !f.Complete)
                         {
                             wait = SwingSeconds * Random.Range(0.85f, 1.35f);
@@ -1063,7 +1066,7 @@ namespace SeaSick.World
         /// haul) picks up again.
         bool NextClearing()
         {
-            var focus = camp != null && camp.Ledger != null ? camp.Ledger.Focus : null;
+            var focus = camp != null && camp.Ledger != null ? camp.Ledger.BuildSiteFor(Row) : null;
             if (focus != null && camp.ClaimClearing(focus, this, out clearAt, out clearIsRock))
             {
                 target = Stand(clearAt, clearIsRock ? ClearRockStandOff : 1.1f);
@@ -2260,7 +2263,10 @@ namespace SeaSick.World
             float legLen = leg.magnitude;
             if (legLen < 0.0001f) return false;
 
-            Vector3 step = leg / legLen * Mathf.Min(Speed * dt, legLen);
+            // A player's road (2026-09-27): ×`CampRoads.SpeedMultiplier` on a
+            // road cell -- the same rule the route prices and the invisible
+            // walker meters (`Outpost.WalkedMetres`).
+            Vector3 step = leg / legLen * Mathf.Min(Speed * CampRoads.SpeedAt(camp, here) * dt, legLen);
             Vector3 next = here + step;
 
             // **The wall guard (2026-09-24).** Kevin: *"villagers ... walk
@@ -2320,7 +2326,6 @@ namespace SeaSick.World
             slopeStuck = 0f;
 
             next.y = camp.GroundAt(next);
-            CampRoads.Walked(camp, here, next);   // feet wear roads in (2026-09-26)
             transform.position = next;
             Face(leg, dt);
             return false;

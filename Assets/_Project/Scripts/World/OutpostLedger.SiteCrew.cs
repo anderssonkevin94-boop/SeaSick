@@ -87,7 +87,6 @@ namespace SeaSick.World
         {
             var list = new List<SiteHand>();
             if (site == null || hands == null) return list;
-            var working = WorkingSite;
             foreach (var h in hands)
             {
                 if (h == null || h.order != OutpostOrder.Build) continue;
@@ -101,7 +100,7 @@ namespace SeaSick.World
                     list.Add(new SiteHand { hand = h, verb = verb, res = h.haulRes, load = h.haulCount });
                     continue;
                 }
-                if (working != site) continue;
+                if (BuildSiteFor(h) != site) continue;
                 list.Add(new SiteHand { hand = h, verb = !site.Cleared ? "clearing the plot" : "building" });
             }
             return list;
@@ -115,8 +114,7 @@ namespace SeaSick.World
         public float HammerSecondsLeft(PendingBuild p)
         {
             if (p == null || !p.Stocked || !p.Cleared || p.Complete) return -1f;
-            if (WorkingSite != p) return -1f;
-            int crew = HammerCrew();
+            int crew = HammerCrew(p);
             if (crew <= 0) return -1f;
             float days = Mathf.Max(0f, p.LabourNeeded - p.built) / Economy.EconomyTuning.CrewSpeed(crew);
             return days * TimeOfDay.DayLength;
@@ -137,7 +135,7 @@ namespace SeaSick.World
             {
                 float s = HammerSecondsLeft(p);
                 if (s >= 0f) return $"hammering · {Mathf.CeilToInt(s)} s left";
-                return anyBuilder ? "stocked · waiting its turn" : "stocked · no builder";
+                return anyBuilder ? "stocked · a builder is on the way" : "stocked · no builder";
             }
             if (!p.Cleared)
                 return anyBuilder ? "clearing the plot" : "no builder to clear the plot";

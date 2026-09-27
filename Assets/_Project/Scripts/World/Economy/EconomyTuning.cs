@@ -85,6 +85,10 @@ namespace SeaSick.World.Economy
         public float metresPerPalisadeLog = 2f;
         [Tooltip("Ladder chain: timber per metre of rise.")]
         public float ladderTimberPerMetre = 2f;
+        [Tooltip("Road: metres of road one stone buys (PROVISIONAL 2026-09-27).")]
+        public float roadMetresPerStone = 4f;
+        [Tooltip("Road: how much faster a villager walks on a road (1.3 = 30% faster). Pathing prices a road cell at 1/this.")]
+        public float roadSpeedMultiplier = 1.3f;
         [Tooltip("Hammer seconds per log of a wall/gate/ladder row (they have no plan row).")]
         public float hammerSecondsPerLineLog = 3f;
         [Tooltip("Crew exponent: N builders hammer N^x times as fast as one (1 = linear, 0.75 = diminishing).")]
@@ -215,6 +219,8 @@ namespace SeaSick.World.Economy
         public static float CopyPriceStep => F(t => t.copyPriceStep, 0.25f);
         public static float MetresPerPalisadeLog => Mathf.Max(0.1f, F(t => t.metresPerPalisadeLog, 2f));
         public static float LadderTimberPerMetre => F(t => t.ladderTimberPerMetre, 2f);
+        public static float RoadMetresPerStone => Mathf.Max(0.5f, F(t => t.roadMetresPerStone, 4f));
+        public static float RoadSpeedMultiplier => Mathf.Clamp(F(t => t.roadSpeedMultiplier, 1.3f), 1f, 3f);
         public static float HammerSecondsPerLineLog => F(t => t.hammerSecondsPerLineLog, 3f);
         public static float CrewExponent => Mathf.Clamp(F(t => t.crewExponent, 0.75f), 0.1f, 1f);
         public static float ClearSecondsPerTree => F(t => t.clearSecondsPerTree, 5f);

@@ -215,15 +215,10 @@ namespace SeaSick.World
             if (map == null || !CampPath.Budget()) return -1f;
             walkedScratch.Clear();
             if (!map.Route(a, b, CampPath.Walker.Hand, walkedScratch) || walkedScratch.Count == 0) return -1f;
-            float len = 0f;
-            Vector3 p = a;
-            for (int i = 0; i < walkedScratch.Count; i++)
-            {
-                Vector3 c = walkedScratch[i];
-                len += new Vector2(c.x - p.x, c.z - p.z).magnitude;
-                p = c;
-            }
-            return len + new Vector2(b.x - p.x, b.z - p.z).magnitude;
+            // Road metres count 1/`CampRoads.SpeedMultiplier` (2026-09-27):
+            // the invisible walker takes as long as the body would.
+            walkedScratch.Add(b);
+            return map.EffectiveMetres(a, walkedScratch);
         }
         readonly List<Vector3> walkedScratch = new List<Vector3>();
 
@@ -790,6 +785,8 @@ namespace SeaSick.World
                 // segment in a run to the one beside it.
                 // A ladder chain draws its own chain (`Outpost.Ladders`).
                 if (IsLadderRow(row)) { blueprints.Add(DrawLadderSite(row)); continue; }
+                // A road segment draws its own ribbon (`Outpost.Roads`).
+                if (IsRoadRow(row)) { blueprints.Add(DrawRoadSite(row)); continue; }
 
                 if (row.isWall)
                 {
@@ -896,6 +893,14 @@ namespace SeaSick.World
             {
                 RaiseLadder(row);
                 Save.SaveGame.Autosave("a ladder was raised");
+                return true;
+            }
+
+            // A road segment is laid along its two points, never refused.
+            if (IsRoadRow(row))
+            {
+                RaiseRoad(row);
+                Save.SaveGame.Autosave("a road was laid");
                 return true;
             }
 
@@ -2845,9 +2850,8 @@ namespace SeaSick.World
             // quantum of game time, so this adds reconciliation passes,
             // not simulation -- and the camp page already ran one of them
             // every frame whenever it was up.
-            // Worn roads (2026-09-26) tick on their own component; this
-            // only makes sure a loaded camp draws its roads without waiting
-            // for somebody to take a step.
+            // The player's roads (2026-09-27) draw on their own component;
+            // this only makes sure a loaded camp has one.
             if (roads == null && Sited) roads = CampRoads.For(this);
             if (!Watched) return;
             // Four times a second, not sixty: `CatchUp` reconciles the
@@ -4134,6 +4138,7 @@ namespace SeaSick.World
             foreach (var w in walls) if (w != null) Destroy(w.gameObject);
             walls.Clear();
             ClearLadders();
+            ClearRoads();
             foreach (var old in built) if (old != null) Destroy(old.gameObject);
             built.Clear();
             reserved.RemoveAll(buildingReservations.Contains);
@@ -4238,6 +4243,7 @@ namespace SeaSick.World
             ledger.builtWalls.Clear();
             foreach (var w in savedWalls) StandWall(w);
             StandSavedLadders();
+            StandSavedRoads();
 
             ledger.ceilingPer = KeepsOfEach;
             // The rest is what arrival does: blueprint, felling, piles.

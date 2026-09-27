@@ -61,6 +61,14 @@ namespace SeaSick.UI.Sheets
                 return camp != null ? new LadderSheet(camp, l) : null;
             });
 
+            // **A length of the player's road (2026-09-27)**: length, tear down.
+            Sheets.Register<RoadSegment>(r =>
+            {
+                if (r == null) return null;
+                var camp = r.Camp != null ? r.Camp : SheetBits.OutpostOf(r);
+                return camp != null ? new RoadSheet(camp, r) : null;
+            });
+
             // A finished building opens its own crafting menu now, 2026-09-23
             // (Kevin: *"a crafting menu in the appropriate buildings"*) --
             // except the fire, which IS the camp, and the watchtower, whose

@@ -10,7 +10,7 @@ namespace SeaSick.UI.Sheets
     {
         const int Limit = 12;
         readonly Label[] labels = new Label[Limit];
-        readonly List<(Building building, string status)> warnings = new List<(Building, string)>();
+        readonly List<(Vector3 at, string status)> warnings = new List<(Vector3, string)>();
         readonly List<Rect> occupied = new List<Rect>();
         readonly VisualElement chart;
         Outpost previous;
@@ -61,8 +61,20 @@ namespace SeaSick.UI.Sheets
                     var building = camp.Built[i];
                     if (building == null) continue;
                     string status = Status(camp.Ledger, camp.Ledger.StationForRaised(i));
-                    if (status != null) warnings.Add((building, status));
+                    if (status != null) warnings.Add((building.transform.position, status));
                 }
+                // **A blueprint nothing can supply** (Kevin, 2026-09-27): a
+                // small warning over the site; the reason is on its sheet.
+                var sites = camp.Ledger != null ? camp.Ledger.sites : null;
+                if (sites != null)
+                    foreach (var site in sites)
+                    {
+                        string issue = camp.Ledger.SiteIssueShort(site);
+                        if (issue == null) continue;
+                        var at = site.At;
+                        at.y = camp.GroundAt(at);
+                        warnings.Add((at, issue));
+                    }
             }
             occupied.Clear();
             int count = 0;
@@ -74,8 +86,7 @@ namespace SeaSick.UI.Sheets
             foreach (var warning in warnings)
             {
                 if (count >= Limit) break;
-                if (warning.building == null) continue;
-                var point = camera.WorldToScreenPoint(warning.building.transform.position + Vector3.up * 4f);
+                var point = camera.WorldToScreenPoint(warning.at + Vector3.up * 4f);
                 if (point.z <= 0f) continue;
                 var rect = new Rect(point.x-55f/scale, Screen.height-point.y-26f/scale, 110f/scale, 24f/scale);
                 if (!guiSafe.Contains(rect.min) || !guiSafe.Contains(rect.max)

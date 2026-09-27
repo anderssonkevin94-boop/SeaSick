@@ -2393,36 +2393,9 @@ namespace SeaSick.World
                     continue;
                 }
 
-                bool started = false;
-                for (int si = 0; si < sites.Count && budget > Eps; si++)
-                {
-                    var site = sites[si];
-                    if (site == null || site.Complete) continue;
-                    if (!site.Cleared || site.Stocked)
-                    {
-                        // Clearing and hammering happen ON the site: he walks
-                        // there first (a body is there when it stands by it).
-                        if (!WalkTo(h, site.At, ref budget, scale)) return;
-                        if (budget <= Eps) return;
-                    }
-                    if (!site.Cleared)
-                    {
-                        PayClear(h, site, ref budget);
-                        if (h.Hauling) { started = true; break; }   // a cleared log to carry
-                        if (!site.Cleared) continue;   // the day went on the plot
-                    }
-                    if (site.Stocked)
-                    {
-                        PayBuild(site, ref budget);
-                        // The record of who's away doesn't care whether the
-                        // raise was seen -- `Outpost.FinishReady` stands the
-                        // mesh up on the next `CatchUp`.
-                        if (site.Complete) away.raised.Add(site.planId);
-                        continue;
-                    }
-                    if (StartSiteTrip(h, site)) { started = true; break; }
-                }
-                if (!started) return;
+                // Kevin's ladder (2026-09-27): fetch from the store, work a
+                // plot, cut/quarry, else wait -- OutpostLedger.SiteLadder.cs.
+                if (!LadderStep(h, ref budget, scale)) return;
             }
         }
 
@@ -2498,7 +2471,7 @@ namespace SeaSick.World
             // **Diminishing returns, 2026-09-27**: N builders at the site
             // hammer N^0.75 as fast as one (`EconomyTuning.CrewSpeed`), so
             // each one's hand-day is worth CrewSpeed(N)/N of a lone man's.
-            int crew = Mathf.Max(1, HammerCrew());
+            int crew = Mathf.Max(1, HammerCrew(pending));
             float eff = Economy.EconomyTuning.CrewSpeed(crew) / crew;
             float spend = Mathf.Min(labour, want / eff);
             pending.built = Mathf.Min(pending.LabourNeeded, pending.built + spend * eff);
@@ -3291,29 +3264,18 @@ namespace SeaSick.World
             foreach (var h in hands)
                 if (h != null && h.order == OutpostOrder.Build)
                 { builders++; strength += WorkFactor(h); if (h.walkingIn) walking++; }
-            if (builders == 0) return "";
+            if (builders == 0) return SiteIssue(p) ?? "";
             if (walking == builders)
                 return "They are still on their way up from the ship.";
             if (strength <= 0.001f)
                 return "They are too hungry to work. Feed the camp and they pick the tools back up.";
             if (Hungry && strength <= builders * StarvingWorkFloor + 0.001f)
                 return "They are starving and working at a third of the pace. Feed the camp.";
-            int ahead = 0;
-            if (sites != null)
-                foreach (var s in sites)
-                {
-                    if (s == p) break;
-                    if (s != null && !s.Complete) ahead++;
-                }
-            if (ahead > 0)
-                return ahead == 1
-                    ? "Waiting its turn: the builders finish the site before it first."
-                    : $"Waiting its turn: {ahead} sites ahead of it in the queue.";
-            // First in the queue and nobody moving (2026-09-24): the material
-            // is nowhere to be had. Say which, and where it could come from.
-            string shortfall = SiteShortfall();
-            if (shortfall != null)
-                return "Waiting on materials: " + shortfall + ". Send a hand for it, or order it made.";
+            // Sites are worked side by side now (the ladder), so there is no
+            // "waiting its turn"; what can stop one is a material nothing
+            // can supply.
+            string issue = SiteIssue(p);
+            if (issue != null) return issue;
             return "";
         }
 

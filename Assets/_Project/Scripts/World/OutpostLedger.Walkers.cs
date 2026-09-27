@@ -60,7 +60,11 @@ namespace SeaSick.World
             float straight = Vector3.Distance(a, b);
             if (straight < 1f || router == null) return straight;
             float r = router(a, b);
-            return r >= straight ? r : straight;
+            // A road leg may meter under the straight line (road metres
+            // count 1/`CampRoads.SpeedMultiplier`), never under that.
+            if (r < 0f) return straight;
+            float floor = straight / CampRoads.SpeedMultiplier;
+            return r >= floor ? r : floor;
         }
 
         /// **Where the island's `res` is fetched from**, for a walker that

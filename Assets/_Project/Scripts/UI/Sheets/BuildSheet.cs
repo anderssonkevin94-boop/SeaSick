@@ -173,7 +173,8 @@ namespace SeaSick.UI.Sheets
         Label lockedEyebrow, emptyNote, gateNote;
         Button[] tabButtons;
         readonly List<Card> mainCards = new List<Card>(), lockedCards = new List<Card>();
-        Card wallCard, ladderCard;
+        Card wallCard, ladderCard, roadCard;
+        VisualElement roadHolder;
 
         public VisualElement Build()
         {
@@ -205,6 +206,18 @@ namespace SeaSick.UI.Sheets
 
             mainHolder = new VisualElement();
             list.Add(mainHolder);
+            // The road (2026-09-27): drawn tap to tap like the wall, shown
+            // on the first tab so it is the first thing the list offers
+            // after the houses.
+            roadHolder = new VisualElement();
+            list.Add(roadHolder);
+            roadCard = NewCard(roadHolder);
+            roadCard.custom = () =>
+            {
+                if (outpost == null) return;
+                RoadSiting.Start(outpost);
+                Sheets.Close();
+            };
             emptyNote = CampPages.Classed(new Label("Nothing in this group the fire allows yet."), "cp-note");
             list.Add(emptyNote);
 
@@ -391,6 +404,9 @@ namespace SeaSick.UI.Sheets
                 BindMain(l, c, plans[k], states[k]);
             }
 
+            bool roads = tab == (int)Group.Shelter;
+            roadHolder.style.display = roads ? DisplayStyle.Flex : DisplayStyle.None;
+            if (roads) BindRoad(l, stone);
             bool defence = tab == (int)Group.Defence;
             extrasHolder.style.display = defence ? DisplayStyle.Flex : DisplayStyle.None;
             if (defence) BindDefence(l, timber);
@@ -482,6 +498,16 @@ namespace SeaSick.UI.Sheets
                 if (c.pin.text != pt) c.pin.text = pt;
                 c.pin.EnableInClassList("cp-pin--on", pinned);
             }
+        }
+
+        void BindRoad(OutpostLedger l, int stone)
+        {
+            var road = BuildPlans.Road;
+            roadCard.state = State.Ready;
+            roadCard.Look(State.Short);   // outlined like the wall: a drawing, priced by length
+            roadCard.costs[0].Set(Res.Stone, $"{stone} · 1 per {BuildPlans.RoadMetresPerStone:0.#} m", stone <= 0);
+            roadCard.costs[1].Hide(); roadCard.costs[2].Hide();
+            roadCard.Texts("Road", "tap to tap", "ok", road.blurb ?? "", null);
         }
 
         void BindDefence(OutpostLedger l, int timber)

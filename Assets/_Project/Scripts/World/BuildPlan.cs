@@ -909,6 +909,37 @@ namespace SeaSick.World
             return EconomyFeel.Price(logs);
         }
 
+        /// **A length of road the player lays (2026-09-27).** Kevin: *"I'd
+        /// rather place it myself, give the villagers a slight speed boost
+        /// when using it."* Drawn tap-to-tap like a wall (`UI/RoadSiting`),
+        /// one site per segment, priced by LENGTH in stone (`RoadCost`), so
+        /// `baseCost` is zero. Not in `Fortifications`: it is not a defence,
+        /// and the recipe validator walks that list. `Named` knows it.
+        public static readonly BuildPlan Road = new BuildPlan
+        {
+            id = "road",
+            kind = BuildKind.Hut,
+            label = "road",
+            blurb = "your people walk faster on it, and take it when it's quicker",
+            resource = Res.Stone,
+            baseCost = 0,
+            baseStoneCost = 0,
+            footprint = new Vector2(2f, 2f),
+            ridge = 0.2f,
+        };
+
+        /// Metres of road one stone buys (PROVISIONAL, unplayed) -- the
+        /// tuning asset's `roadMetresPerStone`.
+        public static float RoadMetresPerStone => EconomyTuning.RoadMetresPerStone;
+
+        /// Stone for a road segment this long: one per `RoadMetresPerStone`,
+        /// at least one, then FEEL's cost multiplier like every other price.
+        public static int RoadCost(float metres)
+        {
+            int stone = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(0f, metres) / RoadMetresPerStone - 0.001f));
+            return EconomyFeel.Price(stone);
+        }
+
         /// The plans that go on a line between two points rather than on a
         /// plot (and so are not in `AtACamp`).
         public static readonly BuildPlan[] Fortifications = { Palisade, Gate, Ladder };
@@ -952,6 +983,7 @@ namespace SeaSick.World
         {
             foreach (var p in AtACamp) if (p.id == id) return p;
             foreach (var p in Fortifications) if (p.id == id) return p;
+            if (id == Road.id) return Road;
             foreach (var p in All) if (p.id == id) return p;
             return default;
         }

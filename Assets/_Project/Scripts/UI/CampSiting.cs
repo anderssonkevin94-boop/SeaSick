@@ -89,6 +89,11 @@ namespace SeaSick.UI
         public static bool PlacingLadder => Placing && Instance.ladderMode;
         bool ladderMode;
 
+        /// **...or a ROAD (2026-09-27)**: tap to tap, its own tool
+        /// (`RoadSiting`), forked exactly where the wall is.
+        public const string RoadPlanId = "road";
+        bool roadMode;
+
         /// Why the spot under the pointer is refused, or "" if it is good.
         /// The sheet prints this; the ghost's colour says the same thing
         /// faster.
@@ -346,6 +351,13 @@ namespace SeaSick.UI
                 return;
             }
 
+            Instance.roadMode = what.id == RoadPlanId;
+            if (Instance.roadMode)
+            {
+                RoadSiting.Begin(target);
+                return;
+            }
+
             Instance.wallMode = what.id == WallPlanId;
             if (Instance.wallMode)
             {
@@ -406,6 +418,7 @@ namespace SeaSick.UI
             // same question, asked of the tool that owns the answer.
             if (s.wallMode) return WallSiting.GrabsPost(screen);
             if (s.ladderMode) return LadderSiting.GrabsPost(screen);
+            if (s.roadMode) return RoadSiting.GrabsPoint(screen);
             if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return false;
             return s.NearGhost(g);
         }
@@ -435,6 +448,7 @@ namespace SeaSick.UI
             if (s == null || s.plan.id == null) return;
             if (s.wallMode) { s.dragging = true; WallSiting.BeginDrag(screen); return; }
             if (s.ladderMode) { s.dragging = true; LadderSiting.BeginDrag(screen); return; }
+            if (s.roadMode) { s.dragging = true; RoadSiting.BeginDrag(screen); return; }
             s.dragging = true;
             s.grabOffset = Vector2.zero;
             if (GroundPick.FromScreen(Camera.main, screen, out Vector3 g))
@@ -450,6 +464,7 @@ namespace SeaSick.UI
             if (s == null || !s.dragging || s.plan.id == null) return;
             if (s.wallMode) { WallSiting.DragTo(screen); return; }
             if (s.ladderMode) { LadderSiting.DragTo(screen); return; }
+            if (s.roadMode) { RoadSiting.DragTo(screen); return; }
             if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return;
             s.want = OnGround(g.x + s.grabOffset.x, g.z + s.grabOffset.y);
             s.Evaluate();
@@ -463,6 +478,7 @@ namespace SeaSick.UI
             Instance.dragging = false;
             if (Instance.wallMode) WallSiting.EndDrag();
             if (Instance.ladderMode) LadderSiting.EndDrag();
+            if (Instance.roadMode) RoadSiting.EndDrag();
         }
 
         /// Is the drawing on the end of a finger right now?
@@ -472,6 +488,7 @@ namespace SeaSick.UI
         {
             if (wallMode) { wallMode = false; WallSiting.End(); }
             if (ladderMode) { ladderMode = false; LadderSiting.End(); }
+            if (roadMode) { roadMode = false; RoadSiting.End(); }
             plan = default;
             moving = false;
             dragging = false;
@@ -500,6 +517,12 @@ namespace SeaSick.UI
             {
                 if (!LadderSiting.Tick(beganFrame)) { Cancel(); return; }
                 Refusal = LadderSiting.Refusal;
+                return;
+            }
+            if (roadMode)
+            {
+                if (!RoadSiting.Tick(beganFrame)) { Cancel(); return; }
+                Refusal = RoadSiting.Refusal;
                 return;
             }
             if (wallMode)
@@ -667,6 +690,7 @@ namespace SeaSick.UI
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (Instance == null) return;
             if (Instance.wallMode) WallSiting.Confirm();
+            else if (Instance.roadMode) RoadSiting.Confirm();
             else if (Instance.ladderMode)
             {
                 LadderSiting.Confirm();
@@ -678,12 +702,14 @@ namespace SeaSick.UI
         /// Is the ✓ live? False draws it muted; `Refusal` says why.
         public static bool CanConfirm =>
             Placing && (Instance.wallMode ? WallSiting.CanConfirm
+                : Instance.roadMode ? RoadSiting.CanConfirm
                 : Instance.ladderMode ? LadderSiting.CanConfirm : Instance.valid);
 
         /// Where the drawing stands, for the buttons to sit under. For a
         /// wall that is the midpoint of the segment being stretched.
         public static Vector3 GhostAt =>
             Placing ? (Instance.wallMode ? WallSiting.ButtonsAt
+                : Instance.roadMode ? RoadSiting.ButtonsAt
                 : Instance.ladderMode ? LadderSiting.ButtonsAt : Instance.at) : Vector3.zero;
 
         /// **Is the watchtower being sited snapped onto the wall?** Read
@@ -699,7 +725,7 @@ namespace SeaSick.UI
         /// re-evaluate now.
         public static void MoveTo(Vector3 world)
         {
-            if (!Placing || Instance.wallMode || Instance.ladderMode) return;
+            if (!Placing || Instance.wallMode || Instance.ladderMode || Instance.roadMode) return;
             Instance.want = world;
             Instance.Evaluate();
         }
@@ -734,6 +760,12 @@ namespace SeaSick.UI
         {
             if (plan.id == null || outpost == null) return;
             if (wallMode) { WallSiting.DrawGUI(); return; }
+            if (roadMode)
+            {
+                RoadSiting.DrawGUI();
+                if (!RoadSiting.Active) Cancel();
+                return;
+            }
             if (ladderMode)
             {
                 LadderSiting.DrawGUI();

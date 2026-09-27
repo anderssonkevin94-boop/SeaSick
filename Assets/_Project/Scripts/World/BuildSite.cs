@@ -175,6 +175,41 @@ namespace SeaSick.World
             return site;
         }
 
+        /// **The drawing of a ROAD segment (2026-09-27).** A chalk ribbon
+        /// draped from end to end (`RoadStrip`), rooted at the middle --
+        /// which is where the row's `x/z` are, so the carriers and the
+        /// builder walk there -- with a flat tap box along it and the stone
+        /// stack a pace off the side.
+        public static BuildSite PlaceRoad(Outpost owner, BuildPlan plan, Vector3 a, Vector3 b)
+        {
+            a.y = owner.GroundAt(a);
+            b.y = owner.GroundAt(b);
+            Vector3 run = b - a; run.y = 0f;
+            float len = Mathf.Max(0.5f, run.magnitude);
+            Vector3 mid = 0.5f * (a + b);
+            var root = new GameObject("BuildSite_" + plan.id);
+            root.transform.SetParent(owner.transform, true);
+            root.transform.SetPositionAndRotation(mid,
+                run.sqrMagnitude > 1e-4f ? Quaternion.LookRotation(run.normalized, Vector3.up) : Quaternion.identity);
+
+            var site = root.AddComponent<BuildSite>();
+            site.outpost = owner;
+            site.PlanId = plan.id;
+            site.ghost = RoadStrip.Make(root.transform, a, b, owner.GroundAt, "RoadGhost");
+            BuildingFactory.Tint(site.ghost, AlphaEmpty);
+
+            var box = root.AddComponent<BoxCollider>();
+            box.isTrigger = true;
+            box.center = new Vector3(0f, 0.2f + 0.5f * Mathf.Abs(b.y - a.y), 0f);
+            box.size = new Vector3(RoadStrip.Width, 0.8f + Mathf.Abs(b.y - a.y), len);
+
+            var stackGo = new GameObject("Delivered");
+            stackGo.transform.SetParent(root.transform, false);
+            stackGo.transform.localPosition = new Vector3(RoadStrip.Width, 0f, 0f);
+            site.stack = stackGo.transform;
+            return site;
+        }
+
         static void Stake(Transform parent, Vector3 at)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
