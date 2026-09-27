@@ -220,6 +220,35 @@ namespace SeaSick.World.Economy
                 if (!string.IsNullOrEmpty(p.makes) && !string.IsNullOrEmpty(p.takes) && !Recipes.StationHasRecipes(p.id))
                     rep.warnings.Add($"plan '{p.id}' converts {p.takes}→{p.makes} on the old plan fields with no Recipe; add one");
             }
+            // --- food (2026-09-27 rework): crops grow, dishes are cooked ---
+            int farmTop = Techs.MaxLevel(BuildPlans.Farm.id);
+            foreach (var c in FoodBook.Crops)
+            {
+                if (!ResDefs.TryGet(c.res, out var cd)) { rep.errors.Add($"crop '{c.res}' is not in ResDefs"); continue; }
+                if (cd.tier != ResTier.Raw || cd.source != ResSource.Grown)
+                    rep.errors.Add($"crop '{c.res}' must be Raw and Grown");
+                if (madeBy.ContainsKey(c.res)) rep.errors.Add($"crop '{c.res}' has a recipe; crops grow, never made");
+                if (c.growSeconds <= 0f || c.yield < 1) rep.errors.Add($"crop '{c.res}' grows {c.growSeconds}s for {c.yield}");
+                if (c.farmLevel > farmTop) rep.errors.Add($"crop '{c.res}' needs farm {c.farmLevel}; the farm tops out at {farmTop}");
+            }
+            foreach (var d in ResDefs.All)
+                if (d.source == ResSource.Grown && FoodBook.Crop(d.id) == null)
+                    rep.errors.Add($"'{d.id}' is Grown but no farm plot grows it");
+            foreach (var e in FoodBook.Edibles)
+            {
+                if (!known.Contains(e.res)) { rep.errors.Add($"edible '{e.res}' is not in ResDefs"); continue; }
+                if (FoodBook.Fill(e.res) <= 0f) rep.errors.Add($"edible '{e.res}' fills nothing");
+                if (!e.raw && !madeBy.ContainsKey(e.res)) rep.errors.Add($"dish '{e.res}' has no recipe");
+                if (e.raw && ResDefs.Tier(e.res) != ResTier.Raw) rep.errors.Add($"'{e.res}' is eaten raw but is not a raw good");
+                if (ResDefs.Category(e.res) != ResCategory.Food) rep.warnings.Add($"edible '{e.res}' is not on the Food tab");
+            }
+            {
+                bool cookedAtOne = false;
+                foreach (var r in Recipes.All)
+                    if (r.campfireLevel <= 1 && r.stationLevel <= 1 && FoodBook.IsDish(r.makes)) cookedAtOne = true;
+                if (!cookedAtOne) rep.errors.Add("no dish can be cooked at fire I: a new camp could only eat raw");
+            }
+
             foreach (var k in ShipPrices.Priced)
                 if (!known.Contains(k)) rep.errors.Add($"ShipPrices.Priced names unknown '{k}'");
             for (int i = 1; i < 40; i++)

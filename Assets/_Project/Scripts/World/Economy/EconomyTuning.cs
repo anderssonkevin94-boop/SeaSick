@@ -115,12 +115,50 @@ namespace SeaSick.World.Economy
         public int rockLarge = 8;
 
         [Header("Hunting and food")]
-        public float meatPerAnimal = 4f;
+        public float meatPerAnimal = 3f;
         public int hidePerAnimal = 1;
         [Tooltip("Animals one stone spear lasts.")]
         public float stoneSpearAnimals = 4f;
         [Tooltip("Animals one iron spear lasts.")]
         public float ironSpearAnimals = 12f;
+
+        [Serializable]
+        public class CropRow
+        {
+            public string res;
+            public int farmLevel = 1;
+            [Tooltip("Real seconds from planting to ripe.")]
+            public float growSeconds;
+            public int yield;
+        }
+
+        [Serializable]
+        public class DishRow
+        {
+            public string res;
+            [Tooltip("Of a day's need (1.0 = a full day).")]
+            public float fill;
+            public float moodPerDay;
+            [Tooltip("0.1 = works 10% faster while this was the last meal.")]
+            public float workBonus;
+        }
+
+        [Header("Food (2026-09-27 rework; empty rows = the code tables in Economy/FoodBook.cs)")]
+        [Tooltip("Overrides for FoodBook.Crops, matched by res.")]
+        public CropRow[] crops = new CropRow[0];
+        [Tooltip("Overrides for FoodBook.Edibles, matched by res.")]
+        public DishRow[] dishes = new DishRow[0];
+        [Tooltip("Fullness below which a hand goes to storage to eat (0..1).")]
+        public float hungryBelow = 0.4f;
+        [Tooltip("Fill of a raw crop/fish eaten when nothing cooked is left.")]
+        public float rawFill = 0.25f;
+        [Tooltip("Mood a day while a hand's last meal was raw.")]
+        public float rawMoodPerDay = -0.1f;
+        [Tooltip("Farmhand's stationary seconds to plant / harvest one plot.")]
+        public float plantSeconds = 4f;
+        public float harvestSeconds = 4f;
+        [Tooltip("Plots per farm at level 1, 2, 3.")]
+        public int[] plotsPerFarmLevel = { 6, 9, 12 };
 
         [Header("Warmth")]
         public float warmHutRadius = 30f;
@@ -187,6 +225,24 @@ namespace SeaSick.World.Economy
                     foreach (var c in Techs.Caps)
                         if (c.planId == row.planId) c.copies = row.copies;
                 }
+            if (crops != null)
+                foreach (var row in crops)
+                {
+                    var c = row != null ? FoodBook.Crop(row.res) : null;
+                    if (c == null) continue;
+                    if (row.farmLevel > 0) c.farmLevel = row.farmLevel;
+                    if (row.growSeconds > 0f) c.growSeconds = row.growSeconds;
+                    if (row.yield > 0) c.yield = row.yield;
+                }
+            if (dishes != null)
+                foreach (var row in dishes)
+                {
+                    var d = row != null ? FoodBook.Edible(row.res) : null;
+                    if (d == null) continue;
+                    if (row.fill > 0f) d.fill = row.fill;
+                    d.moodPerDay = row.moodPerDay;
+                    d.workBonus = row.workBonus;
+                }
             if (recipes != null)
                 foreach (var row in recipes)
                 {
@@ -225,6 +281,19 @@ namespace SeaSick.World.Economy
         public static float CrewExponent => Mathf.Clamp(F(t => t.crewExponent, 0.75f), 0.1f, 1f);
         public static float ClearSecondsPerTree => F(t => t.clearSecondsPerTree, 5f);
         public static float ClearSecondsPerRock => F(t => t.clearSecondsPerRock, 8f);
+        public static float HungryBelow => Mathf.Clamp01(F(t => t.hungryBelow, 0.4f));
+        public static float RawFill => Mathf.Max(0.01f, F(t => t.rawFill, 0.25f));
+        public static float RawMoodPerDay => F(t => t.rawMoodPerDay, -0.1f);
+        public static float PlantSeconds => Mathf.Max(0.1f, F(t => t.plantSeconds, 4f));
+        public static float HarvestSeconds => Mathf.Max(0.1f, F(t => t.harvestSeconds, 4f));
+        public static int PlotsAt(int farmLevel)
+        {
+            var t = Active;
+            int[] row = t != null && t.plotsPerFarmLevel != null && t.plotsPerFarmLevel.Length > 0
+                ? t.plotsPerFarmLevel : new[] { 6, 9, 12 };
+            int i = Mathf.Clamp(farmLevel, 1, row.Length) - 1;
+            return Mathf.Max(1, row[i]);
+        }
         public static float WarmHutRadius => F(t => t.warmHutRadius, 30f);
         public static float WarmMoodBonusPerDay => F(t => t.warmMoodBonusPerDay, 0.1f);
 
@@ -249,7 +318,7 @@ namespace SeaSick.World.Economy
             return Mathf.Max(1, sizeClass <= 0 ? t.rockSmall : sizeClass == 1 ? t.rockMedium : t.rockLarge);
         }
 
-        public static float MeatPerAnimal => F(t => t.meatPerAnimal, 4f);
+        public static float MeatPerAnimal => F(t => t.meatPerAnimal, 3f);
         public static int HidePerAnimal { get { var t = Active; return t != null ? Mathf.Max(0, t.hidePerAnimal) : 1; } }
         public static float SpearAnimals(bool iron) =>
             Mathf.Max(1f, iron ? F(t => t.ironSpearAnimals, 12f) : F(t => t.stoneSpearAnimals, 4f));

@@ -69,12 +69,104 @@ namespace SeaSick.UI.Sheets
         VisualElement root;
         StationPage.WorkerCard worker;
         StationPage.UpgradeCard upgrade;
-        VisualElement bedRow;
         Label bedsLine;
+        VisualElement plotGrid, picker, cropRow;
+        Label pickerTitle, pickerInfo;
+        Button repeatBtn;
+        int pickedPlot = -1;
+        long plotKey = long.MinValue;
+
+        static Button FarmBtn(string text, System.Action act)
+        {
+            var b = new Button(act) { text = text };
+            b.AddToClassList("st-seg-btn");
+            b.style.minHeight = StationSheet.TouchPx;
+            b.style.marginRight = 6f;
+            b.style.marginTop = 6f;
+            return b;
+        }
+
+        FarmPlot Picked()
+        {
+            var l = L;
+            if (l == null || pickedPlot < 0) return null;
+            var list = l.PlotsOf(Mathf.Max(0, outpost.OrdinalOf(building)));
+            return pickedPlot < list.Count ? list[pickedPlot] : null;
+        }
+
+        static string Clock(float secs)
+        {
+            int s = Mathf.CeilToInt(secs);
+            return $"{s / 60}:{s % 60:00}";
+        }
+
+        void FillPlots(OutpostLedger l)
+        {
+            var list = l.PlotsOf(Mathf.Max(0, outpost.OrdinalOf(building)));
+            long key = list.Count * 131L + pickedPlot;
+            foreach (var p in list)
+                key = key * 31 + (p.crop?.GetHashCode() ?? 0) + (int)p.state * 7 + (p.repeat ? 1 : 0)
+                      + Mathf.CeilToInt(p.SecondsLeft) * 13;
+            int ripe = 0, growing = 0;
+            float soonest = float.MaxValue;
+            foreach (var p in list)
+            {
+                if (p.state == PlotState.Ripe) ripe++;
+                if (p.state == PlotState.Growing) { growing++; soonest = Mathf.Min(soonest, p.SecondsLeft); }
+            }
+            bedsLine.text = list.Count == 0 ? "no plots yet"
+                : $"{ripe} ripe · {growing} growing" + (soonest < float.MaxValue ? $" · next in {Clock(soonest)}" : "");
+            lastRipe = ripe;
+            if (key == plotKey) return;
+            plotKey = key;
+
+            plotGrid.Clear();
+            for (int i = 0; i < list.Count; i++)
+            {
+                int idx = i;
+                var p = list[i];
+                var tile = new Button(() => { pickedPlot = pickedPlot == idx ? -1 : idx; plotKey = long.MinValue; Refresh(); });
+                tile.AddToClassList("st-seg-btn");
+                tile.style.width = Length.Percent(31f);
+                tile.style.minHeight = 64f;
+                tile.style.marginRight = 4f;
+                tile.style.marginBottom = 4f;
+                tile.style.flexDirection = FlexDirection.Column;
+                if (idx == pickedPlot) tile.AddToClassList("st-seg-btn--on");
+                string icon = string.IsNullOrEmpty(p.crop) ? "＋" : p.state == PlotState.Growing && p.Grow01 < 0.5f ? "🌱" : FoodBook.Icon(p.crop);
+                string name = string.IsNullOrEmpty(p.crop) ? "Empty" : StationPage.Cap(ResDefs.Label(p.crop));
+                string state = p.state == PlotState.Ripe ? $"ripe · {FoodBook.Crop(p.crop)?.yield ?? 0}"
+                    : p.state == PlotState.Growing ? Clock(p.SecondsLeft)
+                    : string.IsNullOrEmpty(p.crop) ? "tap to plant" : "to plant";
+                tile.text = $"{icon} {name}\n{state}" + (p.repeat && !string.IsNullOrEmpty(p.crop) ? " ↻" : "");
+                plotGrid.Add(tile);
+            }
+
+            var pk = Picked();
+            picker.style.display = pk != null ? DisplayStyle.Flex : DisplayStyle.None;
+            if (pk == null) return;
+            pickerTitle.text = $"Plot {pickedPlot + 1} · " + (string.IsNullOrEmpty(pk.crop) ? "empty" : ResDefs.Label(pk.crop));
+            cropRow.Clear();
+            foreach (var c in FoodBook.Crops)
+            {
+                string crop = c.res;
+                bool ok = l.CropUnlocked(pk, crop, out string why);
+                var b = FarmBtn(ok ? $"{c.icon} {StationPage.Cap(ResDefs.Label(crop))}" : $"{c.icon} 🔒 {why}",
+                    () => { L?.SetPlotCrop(Picked(), crop, Picked()?.repeat ?? true); plotKey = long.MinValue; Refresh(); });
+                b.SetEnabled(ok);
+                if (pk.crop == crop) b.AddToClassList("st-seg-btn--on");
+                cropRow.Add(b);
+            }
+            var def = FoodBook.Crop(pk.crop);
+            pickerInfo.text = def == null ? "pick a crop; the farmhand plants it"
+                : $"{def.growSeconds / 60f:0.#} min · {def.yield} per harvest · {def.PerHour:0} an hour";
+            repeatBtn.text = pk.repeat ? "↻ Replant on repeat: on" : "↻ Replant on repeat: off";
+        }
+
+        int lastRipe;
         Label yieldLine;
         Label keptLine;
         Label stallLine;
-        readonly List<bool> beds = new List<bool>();
 
         public VisualElement Build()
         {
@@ -96,29 +188,40 @@ namespace SeaSick.UI.Sheets
             worker = new StationPage.WorkerCard(outpost, planId, () => Refresh());
             ws.Add(worker.Root);
 
-            // 3. the beds
-            var bs = Section(col, "BEDS");
-            var bedCard = StationPage.Card();
-            var bedCol = new VisualElement(); bedCol.AddToClassList("st-col");
-            bedRow = new VisualElement(); bedRow.AddToClassList("st-beds");
-            bedRow.pickingMode = PickingMode.Ignore;
-            for (int i = 0; i < Mathf.Max(1, plan.beds); i++)
-            {
-                var p = new VisualElement();
-                p.AddToClassList("st-bed");
-                p.pickingMode = PickingMode.Ignore;
-                bedRow.Add(p);
-            }
-            bedCol.Add(bedRow);
+            // 3. the plots (food rework, 2026-09-27): one tile per plot with
+            // its own timer; tap a plot to pick its crop underneath.
+            var bs = Section(col, "PLOTS");
+            plotGrid = new VisualElement();
+            plotGrid.style.flexDirection = FlexDirection.Row;
+            plotGrid.style.flexWrap = Wrap.Wrap;
+            bs.Add(plotGrid);
             bedsLine = StationPage.Text("", "st-line");
-            bedCol.Add(bedsLine);
-            bedCard.Add(bedCol);
-            bs.Add(bedCard);
+            bs.Add(bedsLine);
+            picker = StationPage.Card();
+            picker.style.flexDirection = FlexDirection.Column;
+            picker.style.marginTop = 8f;
+            pickerTitle = StationPage.Text("", "st-line");
+            picker.Add(pickerTitle);
+            cropRow = new VisualElement();
+            cropRow.style.flexDirection = FlexDirection.Row;
+            cropRow.style.flexWrap = Wrap.Wrap;
+            picker.Add(cropRow);
+            pickerInfo = StationPage.Text("", "st-line");
+            pickerInfo.AddToClassList("st-muted");
+            picker.Add(pickerInfo);
+            var actions = new VisualElement();
+            actions.style.flexDirection = FlexDirection.Row;
+            repeatBtn = FarmBtn("↻ Replant on repeat", () => { var p = Picked(); if (p != null) L?.SetPlotCrop(p, p.crop, !p.repeat); Refresh(); });
+            repeatBtn.style.flexGrow = 1f;
+            actions.Add(repeatBtn);
+            actions.Add(FarmBtn("Clear plot", () => { var p = Picked(); if (p != null) L?.SetPlotCrop(p, "", p.repeat); Refresh(); }));
+            picker.Add(actions);
+            bs.Add(picker);
 
             // 4. food out
             var fs = Section(col, "FOOD OUT");
             var foodCard = StationPage.Card();
-            var icon = StationPage.Icon(Res.Food, "st-flow-icon");
+            var icon = StationPage.Icon(Res.Potato, "st-flow-icon");
             icon.style.marginRight = 14f;
             icon.style.marginBottom = 0f;
             foodCard.Add(icon);
@@ -187,34 +290,18 @@ namespace SeaSick.UI.Sheets
             }
             worker.Update(l, first, Mathf.Max(0, hands - 1));
 
-            // 3. the beds
-            int found = outpost.FarmBeds(building, beds);
-            int ripe = 0;
-            for (int i = 0; i < bedRow.childCount; i++)
-            {
-                bool known = i < found;
-                bool up = known && beds[i];
-                if (up) ripe++;
-                bedRow[i].EnableInClassList("st-bed--ripe", up);
-                bedRow[i].EnableInClassList("st-bed--cut", known && !up);
-            }
-            if (found == 0) bedsLine.text = "the beds are not in sight";
-            else
-            {
-                string next = ripe >= found ? "all standing" : "next in " + Days(outpost.NextBedDays);
-                bedsLine.text = $"{ripe} of {found} ripe · {next}";
-            }
+            // 3. the plots
+            FillPlots(l);
+            int ripe = lastRipe;
 
-            // 4. food out -- the ledger's per-hand figure, times the hands.
-            float per = OutpostLedger.FoodPerHandPerDay * Techs.RateMul(planId, level);
-            yieldLine.text = hands <= 1
-                ? $"{per:0.#} food a day · to the store"
-                : $"{per * hands:0.#} food a day with {hands} hands";
-            float stored = l.CountOf(Res.Food) + (l.Store(Res.Food)?.part ?? 0f);
+            // 4. food out: crops in the store, and how long the camp eats.
+            int crops = 0;
+            foreach (var c in FoodBook.Crops) crops += l.StoreCountOf(c.res);
+            yieldLine.text = $"{crops} crops in store · carried in by the farmhand";
             float days = SheetBits.FoodDays(l);
             keptLine.text = days < 0f
-                ? $"{stored:0.#} stored · {SheetBits.FoodDaysLine(l)}"
-                : $"{stored:0.#} stored · lasts {days:0.#} days";
+                ? SheetBits.FoodDaysLine(l)
+                : $"{l.FoodFill():0.#} meals of food · lasts {days:0.#} days";
 
             // 5. why it's stopped
             string why = StationSheet.StallText(l, first, false);

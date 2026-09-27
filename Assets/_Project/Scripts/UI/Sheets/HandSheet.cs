@@ -1,64 +1,43 @@
+using System.Collections.Generic;
 using SeaSick.World;
+using SeaSick.World.Economy;
 using UnityEngine;
 using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    /// **One villager, and everything you can tell them.**
+    /// **One villager, option A (Kevin picked it, 2026-09-27).** One page,
+    /// no tabs, in the Midnight `.st` cards the Station / Stores / People
+    /// pages already wear:
     ///
-    /// `CampCrewList` is this list down the right-hand side of the screen for
-    /// everybody at once: a name, then three verbs under it, then the options
-    /// under whichever verb is open (CampCrewList.cs:166-252). A sheet is
-    /// about ONE thing, so the three verbs are three blocks and nothing is
-    /// folded away -- and it unfolds beside the person it is about, which is
-    /// the whole reason the redesign is worth doing.
+    /// 1. **header** -- avatar with a job badge, the name, "Job · Place",
+    ///    a status pill (working / helping build / waiting / stuck, from
+    ///    `OutpostLedger.StallReason`) and ×;
+    /// 2. **Now** -- what he carries (item icon + count) and the walked
+    ///    trip's legs (fetch · work · carry · drop, from the saved walker
+    ///    state `OutpostHand.tripLeg`); when stuck, the reason under it;
+    /// 3. **three chips** -- Mood, Sleeps (warm / cold hut), Food (the
+    ///    camp's days of food, `SheetBits.FoodDays`);
+    /// 4. **Jobs** -- a 3-wide tile grid, posts → gather → the open site.
+    ///    A tile IS the order: one tap, the same `Outpost.Assign` /
+    ///    `OrderGather` / `OrderBuild` the old list pressed. A full post
+    ///    reads "swap with Tam" and trades jobs; a locked tile is dashed
+    ///    with a two-word reason and toasts the whole reason on tap; a
+    ///    worked-out seam is dimmed. More than fit PAGE with dots, never a
+    ///    scroll;
+    /// 5. **Stand down / Back aboard** pinned at the bottom.
+    ///
+    /// Siting a new building is gone from here -- it lives in ☰ Build.
     ///
     /// **Kept by name, not by reference.** The rows are rebuilt from the
-    /// ledger and a cached row is a row that outlives the hand -- the same
-    /// reason `CampCrewList` keys its open row on `h.name`.
+    /// ledger and a cached row is a row that outlives the hand.
+    ///
+    /// **Built once, re-texted after.** `SheetHost` refreshes every 0.25 s
+    /// and a UI Toolkit click needs press and release on the SAME element,
+    /// so tiles are rebuilt only when the SET of jobs changes (a building
+    /// raised, a site sited), never on the timer.
     public class HandSheet : ISheetFramed
     {
-        // --- the frame (2026-09-22, "pages you swipe between") --------------
-        //
-        // Two sections, and they answer different questions: "orders" is what
-        // you can TELL them, "about" is who they are and why they are in the
-        // mood they are in. The two verbs that are neither -- stand down, and
-        // back aboard -- are the pinned action row, reachable from both.
-        //
-        // **Orders is as many pages as it takes.** A camp with a sawmill, a
-        // quarry and five seams offers more verbs than a phone's bottom third
-        // can hold, and the answer is more pages, never a scroll: "orders
-        // 1/2", "orders 2/2", "about".
-        int tab = -1;
-
-        readonly SheetPager orders = new SheetPager();
-        int orderPages = 1;
-        string[] labels = { "orders", "about" };
-        long planKey = long.MinValue;
-
-        public int Tab { get { Plan(); return tab; } }
-        public void SetTab(int index) { tab = index; }
-        public string[] TabLabels { get { Plan(); return labels; } }
-        public Color Accent => SheetTheme.Brass;
-
-        /// The page index of the "about" section -- the last one, whatever
-        /// the orders ran to.
-        int AboutPage => orderPages;
-
-        /// **The body the camera should watch.** `Sheets.Open` reads this and
-        /// puts `IslandCam` on him, so a hand who walks off to a seam while
-        /// his card is open stays in the frame (Kevin, 2026-09-22: "I want
-        /// the camera to follow them"). Null before his body is raised, which
-        /// simply means nothing to follow yet.
-        public Transform FollowTarget
-        {
-            get
-            {
-                var body = outpost != null ? outpost.BodyNamed(who) : null;
-                return body != null ? body.transform : null;
-            }
-        }
-
         readonly Outpost outpost;
         readonly string who;
 
@@ -68,15 +47,34 @@ namespace SeaSick.UI.Sheets
             this.who = who;
         }
 
-        public string Title => who;
-
         OutpostHand Hand => outpost != null ? outpost.HandNamed(who) : null;
+        OutpostLedger L => outpost != null ? outpost.Ledger : null;
+
+        // --- ISheet / ISheetFramed -------------------------------------------
+
+        public string Title => who;
+        public Color Accent => MidnightLandHud.Ice;
+        public bool WantsTallSheet => true;
+        public string[] TabLabels => null;
+        public int Tab => 0;
+        public void SetTab(int index) { }
+        public VisualElement BuildActions() => null;
 
         public bool StillValid => outpost != null && outpost.Ledger != null && Hand != null;
 
-        /// Where he is standing. The parked body is the honest answer; the
-        /// fire is the fallback for a hand whose body has not been raised yet
-        /// (`OutpostHand.born`, before `Outpost.SpawnVillager` runs).
+        /// **The body the camera should watch.** `Sheets.Open` reads this and
+        /// puts `IslandCam` on him (Kevin, 2026-09-22: "I want the camera to
+        /// follow them"). Null before his body is raised.
+        public Transform FollowTarget
+        {
+            get
+            {
+                var body = outpost != null ? outpost.BodyNamed(who) : null;
+                return body != null ? body.transform : null;
+            }
+        }
+
+        /// Where he is standing; the fire before his body is raised.
         public Vector3 AnchorWorld
         {
             get
@@ -87,321 +85,810 @@ namespace SeaSick.UI.Sheets
             }
         }
 
-        // --- the pieces kept between refreshes ---------------------------------
+        // --- styles ------------------------------------------------------------
 
-        Label doing;
-        Label cause;
-        VisualElement verbs;
-        long verbsKey = long.MinValue;
+        static StyleSheet handSheet;
+        static bool handLoaded;
 
-        public VisualElement BuildHeader() =>
-            SheetKit.Header("hand", Title, SheetTheme.Brass,
-                SheetBits.JobGlyph(Hand), () => Sheets.Close());
-
-        /// **Standing them down and sending them back aboard are pinned.**
-        /// They were the last two rows of a long list of verbs, which on a
-        /// phone meant scrolling past every job on the island to stop
-        /// somebody doing one.
-        public VisualElement BuildActions()
+        static VisualElement Styled(VisualElement e)
         {
-            var h = Hand;
-            stand = SheetKit.Btn("stand down", () =>
+            if (!handLoaded)
             {
-                outpost.OrderIdle(Hand);
-                Dirty();
-            });
-            stand.SetEnabled(h != null && h.order != OutpostOrder.Idle);
-
-            back = SheetKit.Btn("back aboard", BackAboard);
-            back.SetEnabled(SheetBits.Anchor != null && outpost != null
-                            && outpost.BodyNamed(who) != null);
-            return SheetKit.Actions(stand, back);
+                handLoaded = true;
+                handSheet = Resources.Load<StyleSheet>("UI/Hand");
+                if (handSheet == null) Debug.LogWarning("[Sheets] Resources/UI/Hand.uss is missing — the hand sheet will be half styled.");
+            }
+            if (handSheet != null) e.styleSheets.Add(handSheet);
+            return e;
         }
 
-        Button stand;
-        Button back;
+        static VisualElement Box(string cls)
+        {
+            var e = new VisualElement { pickingMode = PickingMode.Ignore };
+            e.AddToClassList(cls);
+            return e;
+        }
+
+        static Label Text(string cls) => StationPage.Text("", cls);
+
+        static void Set(Label l, string s)
+        {
+            s = s ?? "";
+            if (l != null && l.text != s) l.text = s;
+        }
+
+        static void Show(VisualElement e, bool on)
+        {
+            if (e == null) return;
+            e.style.display = on ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        static void Tone(Label l, int tone)
+        {
+            l.EnableInClassList("hs-tone--good", tone == 0);
+            l.EnableInClassList("hs-tone--warn", tone == 1);
+            l.EnableInClassList("hs-tone--bad", tone == 2);
+        }
+
+        // --- the header ---------------------------------------------------------
+
+        Label hInitial, hName, hSub, hPill;
+        VisualElement hPillBox, hBadge, hBadgeIco;
+        int pillKind = -1;
+
+        public VisualElement BuildHeader()
+        {
+            var root = Styled(StationPage.Root("st-head"));
+
+            var av = Box("hs-av");
+            var circle = Box("st-avatar");
+            hInitial = Text("st-avatar-text");
+            circle.Add(hInitial);
+            av.Add(circle);
+            hBadge = Box("hs-badge");
+            hBadgeIco = Box("hs-badge-ico");
+            hBadge.Add(hBadgeIco);
+            av.Add(hBadge);
+            root.Add(av);
+
+            var words = Box("st-head-words");
+            hName = Text("st-title");
+            hSub = Text("st-sub");
+            words.Add(hName);
+            words.Add(hSub);
+            root.Add(words);
+
+            hPillBox = Box("st-pill");
+            hPill = Text("st-pill-text");
+            hPillBox.Add(hPill);
+            root.Add(hPillBox);
+
+            var close = new Button(() => Sheets.Close()) { text = "" };
+            close.AddToClassList("st-square");
+            close.tooltip = "Close";
+            close.Add(new StationPage.Glyph("close", StationPage.Ink, "st-glyph"));
+            root.Add(close);
+
+            pillKind = -1;
+            FillHeader(L, Hand);
+            return root;
+        }
+
+        void FillHeader(OutpostLedger l, OutpostHand h)
+        {
+            if (hName == null || l == null || h == null) return;
+            Set(hInitial, SheetBits.Initial(who));
+            Set(hName, who);
+            Set(hSub, JobPlace(l, h));
+            string icon = JobIcon(h);
+            Show(hBadge, icon != null);
+            StationPage.SetIcon(hBadgeIco, icon);
+
+            var (text, kind) = Pill(l, h);
+            Set(hPill, text);
+            if (kind != pillKind)
+            {
+                pillKind = kind;
+                hPillBox.EnableInClassList("st-pill--wait", kind == StationPage.PillWait);
+                hPillBox.EnableInClassList("st-pill--bad", kind == StationPage.PillBad);
+            }
+        }
+
+        /// "Sawyer · Sawmill", "Gatherer · Timber", "Hunter · the wilds",
+        /// "Builder · Hut site", "No job · by the fire".
+        static string JobPlace(OutpostLedger l, OutpostHand h)
+        {
+            switch (h.order)
+            {
+                case OutpostOrder.Work:
+                {
+                    var plan = BuildPlans.Named(h.target);
+                    string post = string.IsNullOrEmpty(plan.position) ? "worker" : plan.position;
+                    return $"{StationPage.Cap(post)} · {StationPage.Cap(plan.label)}";
+                }
+                case OutpostOrder.Gather:
+                    if (h.target == Res.Game) return "Hunter · the wilds";
+                    return "Gatherer · " + StationPage.Cap(ResDefs.Label(h.target));
+                case OutpostOrder.Build:
+                {
+                    var site = l.BuildSiteFor(h) ?? l.Focus;
+                    return site == null ? "Builder · nothing sited" : "Builder · " + SiteName(site);
+                }
+                default:
+                    return "No job · by the fire";
+            }
+        }
+
+        /// The status pill. Stuck = `StallReason` names something that
+        /// stops him (or the hunt gate / a wall); slow and walking up are
+        /// amber; an idle hand is waiting; a builder is "helping build"
+        /// whether the player sent him or the idle-hand ladder did
+        /// (`OutpostLedger.EnlistFree` puts every free hand on the sites).
+        static (string, int) Pill(OutpostLedger l, OutpostHand h)
+        {
+            if (h.order == OutpostOrder.Idle) return ("waiting", StationPage.PillWait);
+            if (h.walkingIn) return ("walking up", StationPage.PillWait);
+            if (StuckReason(l, h) != null) return ("stuck", StationPage.PillBad);
+            string why = l.StallReason(h);
+            if (why != null) return ("slow", StationPage.PillWait);
+            if (h.order == OutpostOrder.Build) return ("helping build", StationPage.PillGood);
+            return ("working", StationPage.PillGood);
+        }
+
+        /// Why he is stopped, or null -- the same rule `PeopleSheet` uses
+        /// for its Stuck filter: a stall, a body walled off, or a hunter
+        /// with no spear. "Working slowly" is not stuck.
+        static string StuckReason(OutpostLedger l, OutpostHand h)
+        {
+            if (h.order == OutpostOrder.Idle || h.walkingIn) return null;
+            if (h.order == OutpostOrder.Gather && h.target == Res.Game && l.HunterBlocker() != null)
+                return "no spear, no hunting — the forge makes one from a board and a stone";
+            if (!l.Stalled(h) && string.IsNullOrEmpty(h.bodyBlocked)) return null;
+            return l.StallReason(h);
+        }
+
+        // --- the page -------------------------------------------------------------
+
+        VisualElement root, toast;
+        Label toastText;
+        IVisualElementScheduledItem toastHide;
+
+        // now
+        VisualElement nowIco;
+        Label nowT, nowS, stuckLine;
+        VisualElement legsRow;
+        readonly VisualElement[] legs = new VisualElement[4];
+        readonly Label[] legText = new Label[4];
+
+        // chips
+        Label moodV, sleepV, foodV;
+
+        // jobs
+        Label jobsEm;
+        VisualElement grid, dots;
+        readonly List<Tile> tiles = new List<Tile>();
+        string jobsKey;
+        int perPage = 9, page;
+
+        // actions
+        Button stand, back;
 
         public VisualElement Build()
         {
-            doing = null; cause = null; verbs = null;
-            Plan();
+            tiles.Clear();
+            jobsKey = null;
+            page = 0;
 
-            var root = new VisualElement();
-            root.style.flexDirection = FlexDirection.Column;
+            root = Styled(StationPage.Root("st-page"));
+            StationPage.FitToParent(root);
 
-            if (tab >= AboutPage)
+            // A safety net only: on the phone the page fits; the desk's
+            // shorter column can wheel it.
+            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.AddToClassList("st-scroll");
+            scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
+            scroll.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
+            root.Add(scroll);
+            var col = new VisualElement();
+            col.AddToClassList("st-content");
+            scroll.Add(col);
+
+            // --- Now
+            var now = StationPage.Card();
+            now.AddToClassList("hs-now");
+            var top = Box("hs-now-top");
+            var icoBox = Box("hs-now-ico");
+            nowIco = Box("hs-now-ico-img");
+            icoBox.Add(nowIco);
+            top.Add(icoBox);
+            var words = Box("hs-now-words");
+            nowT = Text("hs-now-t");
+            nowS = Text("hs-now-s");
+            words.Add(nowT);
+            words.Add(nowS);
+            top.Add(words);
+            now.Add(top);
+            legsRow = Box("hs-legs");
+            for (int i = 0; i < legs.Length; i++)
             {
-                var h = Hand;
-                root.Add(SheetKit.Row(
-                    SheetKit.Token(SheetBits.Initial(who), h != null && h.Angry,
-                        SheetBits.JobGlyph(h)),
-                    SheetKit.Col(
-                        doing = SheetKit.Text("", true),
-                        cause = SheetKit.Text("", false, true, 12f))));
+                legs[i] = Box("hs-leg");
+                if (i == 0) legs[i].AddToClassList("hs-leg--first");
+                legText[i] = Text("hs-leg-t");
+                legs[i].Add(legText[i]);
+                legsRow.Add(legs[i]);
             }
-            else
-            {
-                verbs = SheetBits.Holder();
-                verbs.Add(orders.Build(Mathf.Max(0, tab)));
-                root.Add(verbs);
-            }
+            now.Add(legsRow);
+            col.Add(now);
 
+            stuckLine = Text("st-stall");
+            col.Add(stuckLine);
+
+            // --- chips
+            var chips = Box("hs-chips");
+            moodV = Chip(chips, "MOOD", true);
+            sleepV = Chip(chips, "SLEEPS", false);
+            foodV = Chip(chips, "FOOD", false);
+            col.Add(chips);
+
+            // --- jobs
+            var eye = Box("hs-eye-row");
+            eye.Add(StationPage.Text("JOBS", "st-eyebrow"));
+            jobsEm = Text("hs-eye-em");
+            eye.Add(jobsEm);
+            col.Add(eye);
+            grid = Box("hs-grid");
+            grid.pickingMode = PickingMode.Position;
+            col.Add(grid);
+            dots = Box("st-dots");
+            dots.pickingMode = PickingMode.Position;
+            col.Add(dots);
+
+            // --- actions, pinned under the scroll
+            var acts = Box("hs-acts");
+            acts.pickingMode = PickingMode.Position;
+            stand = new Button(StandDown) { text = "Stand down" };
+            stand.AddToClassList("st-btn");
+            stand.AddToClassList("hs-act");
+            stand.AddToClassList("hs-act--first");
+            stand.AddToClassList("hs-act--stop");
+            back = new Button(BackAboard) { text = "Back aboard" };
+            back.AddToClassList("st-btn");
+            back.AddToClassList("hs-act");
+            acts.Add(stand);
+            acts.Add(back);
+            root.Add(acts);
+
+            // --- the toast, over everything
+            toast = Box("hs-toast");
+            toastText = Text("hs-toast-t");
+            toast.Add(toastText);
+            toast.style.display = DisplayStyle.None;
+            root.Add(toast);
+
+            perPage = TilesPerPage();
             Refresh();
             return root;
         }
 
-        // --- the page plan --------------------------------------------------
-        //
-        // Worked out from the band the frame actually has (`SheetHost`), so
-        // the same hand is two pages of verbs on a phone and one on a desk
-        // without a number being written down twice.
-
-        void Plan()
+        static Label Chip(VisualElement row, string key, bool first)
         {
-            var l = outpost != null ? outpost.Ledger : null;
-            var h = Hand;
-            if (l == null || h == null) return;
-
-            long key = (l.built.Count * 31L + l.stocks.Count) * 31L
-                       + (l.Pending != null ? 1 : 0) * 7919L
-                       + (int)h.order * 131L
-                       + (h.target != null ? h.target.GetHashCode() : 0)
-                       + Mathf.RoundToInt(SheetHost.BandHeight) * 1000003L;
-            if (key == planKey) return;
-            planKey = key;
-
-            BuildOrderRows(l, h);
-            orders.Lay(SheetHost.BandHeight);
-            orderPages = orders.Pages;
-
-            if (labels.Length != orderPages + 1) labels = new string[orderPages + 1];
-            for (int i = 0; i < orderPages; i++)
-                labels[i] = SheetKit.PageLabel("orders", i, orderPages);
-            labels[orderPages] = "about";
-
-            if (tab >= labels.Length) tab = labels.Length - 1;
+            var c = Box("hs-chip");
+            if (first) c.AddToClassList("hs-chip--first");
+            c.Add(StationPage.Text(key, "hs-chip-k"));
+            var v = Text("hs-chip-v");
+            c.Add(v);
+            row.Add(c);
+            return v;
         }
+
+        /// **Three rows a page when they fit, fewer when they do not** --
+        /// worked out from the frame BEFORE building (same arithmetic as
+        /// `StationSheet.PerPage`), so a page never re-plans under a finger.
+        static int TilesPerPage()
+        {
+            float frame = SheetHost.FrameSizeScreen().y * SheetHost.PanelScale;
+            float avail = frame - SheetHost.BorderPx - 82f - SheetHost.BodyPadPx - 22f;
+            // Now card + stall line + chips + eyebrow + dots + actions + gaps.
+            const float Rest = 420f, Row = 122f;
+            int rows = Mathf.Clamp(Mathf.FloorToInt((avail - Rest) / Row), 1, 3);
+            return rows * 3;
+        }
+
+        void ShowToast(string text)
+        {
+            if (toast == null || string.IsNullOrEmpty(text)) return;
+            Set(toastText, StationPage.Cap(text));
+            toast.style.display = DisplayStyle.Flex;
+            toast.BringToFront();
+            toastHide?.Pause();
+            toastHide = toast.schedule.Execute(() => toast.style.display = DisplayStyle.None);
+            toastHide.ExecuteLater(2600);
+        }
+
+        // --- refresh ------------------------------------------------------------------
 
         public void Refresh()
         {
-            var l = outpost != null ? outpost.Ledger : null;
+            var l = L;
             var h = Hand;
             if (l == null || h == null) return;
             outpost.CatchUp();
 
-            // **Why nothing is coming home, 2026-09-23.** `StallReason`
-            // names the same thing `Stalled` already gates on -- so it goes
-            // on the doing line, next to the word it explains, one line:
-            // "gathering timber · pile is full". A stall already says why,
-            // so the mood line drops its own extra clause rather than
-            // repeat it (the reason wins the row over the mood word).
-            string stall = l.StallReason(h);
-            if (doing != null)
-                doing.text = Cap(h.Doing) + (stall != null ? " · " + stall : "");
-            if (cause != null) cause.text = Mood(l, h, stall != null);
-            if (stand != null) stand.SetEnabled(h.order != OutpostOrder.Idle);
-            if (back != null)
-                back.SetEnabled(SheetBits.Anchor != null && outpost.BodyNamed(who) != null);
-            if (verbs == null) return;
+            FillHeader(l, h);
+            if (root == null) return;
+            FillNow(l, h);
+            FillChips(l, h);
+            FillJobs(l, h);
 
-            // The verb lists change only when the camp does -- a building
-            // raised, a seam worked out, a blueprint sited. `Plan` is keyed
-            // on exactly that (plus the band), so pressing one of them does
-            // not rebuild the list under the finger that is pressing it.
-            long before = planKey;
-            Plan();
-            if (planKey == before && verbsKey == planKey) return;
-            verbsKey = planKey;
-            verbs.Clear();
-            verbs.Add(orders.Build(Mathf.Clamp(tab, 0, orderPages - 1)));
+            stand.SetEnabled(h.order != OutpostOrder.Idle);
+            back.SetEnabled(SheetBits.Anchor != null && outpost.BodyNamed(who) != null);
         }
 
-        /// The mood word and, where the ledger knows one, what caused it.
-        /// Nothing here decides a mood: `OutpostHand.MoodWord`, `hungerDays`
-        /// and `raids` are the ledger's own, and this only reads them out.
-        ///
-        /// **A hunter stood down by his own empty hands says so here,
-        /// 2026-09-23.** He is still ORDERED to hunt -- the gather verb
-        /// above only refuses a NEW order -- so his status line is the one
-        /// place left that tells you why nothing is coming home.
-        ///
-        /// `reasonShown` is true once the doing line already carries a
-        /// `StallReason` -- the hunt blocker included, since that is now
-        /// one of its causes too -- so this does not spend the row saying
-        /// it twice.
-        static string Mood(OutpostLedger l, OutpostHand h, bool reasonShown)
+        // --- Now ------------------------------------------------------------------------
+
+        void FillNow(OutpostLedger l, OutpostHand h)
         {
-            string word = h.MoodWord;
-            if (word.Length == 0) word = "content";
-            // **Warmth, 2026-09-27.** Not a stall reason and not a cause
-            // `MoodWord` itself tracks -- a standing fact about where this
-            // hand lives, shown every time regardless of `reasonShown`.
-            word += l.IsHandWarm(h) ? " · warm (+mood)" : " · cold hut";
-            if (reasonShown) return word;
-            if (h.order == OutpostOrder.Gather && h.target == Res.Game)
+            string main, sub, icon;
+            if (h.Hauling)
             {
-                string blocker = l.HunterBlocker();
-                if (blocker != null) return word + " · " + blocker;
-            }
-            if (l.Hungry) return word + " · the food pile is empty";
-            if (l.hungerDays > 0.05f)
-                return word + $" · {l.hungerDays:0.#} days gone short";
-            if (l.raids > 0)
-                return word + (l.raids == 1 ? " · the camp was raided"
-                                            : $" · raided {l.raids} times");
-            return word;
-        }
-
-        static string Cap(string s) =>
-            string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
-
-        // --- the three verbs, out of the same three lists ------------------------
-
-        void BuildOrderRows(OutpostLedger l, OutpostHand h)
-        {
-            orders.Clear();
-
-            // ASSIGN -- `Outpost.Positions()` (Outpost.cs:1716), pressed with
-            // `Outpost.Assign` (CampCrewList.cs:177).
-            orders.Add(SheetKit.EyebrowPx, () => SheetKit.Eyebrow("put to work"));
-            var posts = outpost.Positions();
-            if (posts.Count == 0)
-                orders.Add(SheetKit.NotePx, () => SheetKit.Note("Nothing here to work at"));
-            foreach (var id in posts)
-            {
-                string planId = id;
-                orders.Add(SheetKit.QuietPx, () =>
-                {
-                    var hand = Hand;
-                    var plan = BuildPlans.Named(planId);
-                    bool already = hand != null && hand.order == OutpostOrder.Work
-                                   && hand.target == planId;
-                    var b = SheetKit.Btn($"{plan.position} at the {plan.label}", () =>
-                    {
-                        outpost.Assign(Hand, planId);
-                        Dirty();
-                    }, false, true);
-                    b.SetEnabled(!already);
-                    b.style.marginBottom = 4f;
-                    return b;
-                });
-            }
-
-            // GATHER -- `Outpost.Gatherable()` (Outpost.cs:1705), pressed with
-            // `Outpost.OrderGather` (CampCrewList.cs:198). A worked-out stock
-            // is still listed: an empty seam is information, and hiding it
-            // would look like the menu was broken.
-            //
-            // **The hunt is a hard gate, 2026-09-23.** Kevin: "no spear, no
-            // kills." `Res.Game` is gathering like any other seam except a
-            // hunter needs one in the pile first (`OutpostLedger.HunterBlocker`),
-            // so its row says so and refuses the order rather than sending
-            // somebody out to throw their hands at a boar.
-            orders.Add(SheetKit.EyebrowPx, () => SheetKit.Eyebrow("send out for"));
-            foreach (var res in outpost.Gatherable())
-            {
-                string r = res;
-                orders.Add(SheetKit.QuietPx, () =>
-                {
-                    var led = outpost.Ledger;
-                    var hand = Hand;
-                    string blocker = r == Res.Game && led != null ? led.HunterBlocker() : null;
-                    string tail;
-                    if (blocker != null)
-                    {
-                        tail = $" — {blocker} — the forge makes one from a board and a stone";
-                    }
-                    else
-                    {
-                        var stock = led != null ? led.Stock(r) : null;
-                        float standing = stock != null ? stock.standing : 0f;
-                        // **Store-only, against the store's own ceiling**
-                        // (2026-09-23 stations): `ceilingPer` is never a
-                        // limit on a station's bay/bench/rack, so pairing it
-                        // with the camp TOTAL (`CountOf`) could print "25/20"
-                        // the moment a sawmill is holding stock of its own.
-                        tail = standing < 1f
-                            ? " — worked out"
-                            : $" — {(led != null ? led.StoreCountOf(r) : 0)}/{(led != null ? led.ceilingPer : 0)} kept";
-                    }
-                    bool already = hand != null && hand.order == OutpostOrder.Gather
-                                   && hand.target == r;
-                    var b = SheetKit.Btn(CampLoading.Lower(r) + tail, () =>
-                    {
-                        outpost.OrderGather(Hand, r);
-                        Dirty();
-                    }, false, true);
-                    b.SetEnabled(!already && blocker == null);
-                    b.style.marginBottom = 4f;
-                    return b;
-                });
-            }
-
-            // BUILD -- the drawing that is already up takes this hand
-            // (`Outpost.OrderBuild`, Outpost.cs:1680); the list below sites a
-            // new one, straight into `CampSiting` the way the crew list's
-            // build verb does (CampCrewList.cs:236).
-            orders.Add(SheetKit.EyebrowPx, () => SheetKit.Eyebrow("build"));
-            if (outpost.Building)
-            {
-                orders.Add(SheetKit.QuietPx, () =>
-                {
-                    var led = outpost.Ledger;
-                    var p = led != null ? led.Pending : null;
-                    if (p == null) return null;
-                    var hand = Hand;
-                    var plan = BuildPlans.Named(p.planId);
-                    bool already = hand != null && hand.order == OutpostOrder.Build;
-                    var b = SheetKit.Btn($"work on the {plan.label}", () =>
-                    {
-                        outpost.OrderBuild(Hand);
-                        Dirty();
-                    }, false, true);
-                    b.SetEnabled(!already);
-                    b.style.marginBottom = 4f;
-                    return b;
-                });
+                icon = h.haulRes;
+                string load = $"{h.haulCount} {ResDefs.Label(h.haulRes)}";
+                if (h.HuntTrip && !h.huntKilled) { main = "Out after game"; icon = Res.Game; }
+                else if (h.haulPicked) main = $"Carrying {load} to the {PlaceName(l, h.haulTo, h.haulToStation)}";
+                else main = $"Fetching {load} from the {PlaceName(l, h.haulFrom, h.haulFromStation)}";
+                sub = DoingLine(l, h);
             }
             else
             {
-                foreach (var plan in outpost.Buildable())
+                icon = JobIcon(h);
+                main = DoingLine(l, h);
+                sub = NowSub(l, h);
+            }
+            StationPage.SetIcon(nowIco, icon);
+            Set(nowT, main);
+            Set(nowS, sub);
+
+            // The walked trip: fetch (to pickup) · work (at pickup) · carry
+            // (to drop) · drop (at drop). Hidden with no trip on.
+            var leg = h.Leg;
+            bool trip = leg != TripLeg.None && h.Hauling;
+            Show(legsRow, trip);
+            if (trip)
+            {
+                int on = (int)leg - 1;
+                for (int i = 0; i < legs.Length; i++)
                 {
-                    var p = plan;
-                    orders.Add(SheetKit.QuietPx, () =>
-                    {
-                        // Copies and the next copy's price (2026-09-27),
-                        // the same line the fire's build list prints.
-                        var led = outpost.Ledger;
-                        bool can = true;
-                        string text = led != null ? led.BuildRowText(p, out can)
-                            : $"{p.label} — {p.cost} timber";
-                        var b = SheetKit.Btn(text, () =>
-                        {
-                            CampSiting.Begin(outpost, p, SheetBits.ShipTransform);
-                            Sheets.Close();
-                        }, false, true);
-                        b.SetEnabled(can);
-                        b.style.marginBottom = 4f;
-                        return b;
-                    });
+                    Set(legText[i], LegName(h, i));
+                    legs[i].EnableInClassList("hs-leg--done", i < on);
+                    legs[i].EnableInClassList("hs-leg--on", i == on);
                 }
+            }
+
+            string stuck = StuckReason(l, h);
+            Set(stuckLine, stuck != null ? StationPage.Cap(stuck) : "");
+            Show(stuckLine, stuck != null);
+        }
+
+        static string LegName(OutpostHand h, int i)
+        {
+            switch (i)
+            {
+                case 0: return "fetch";
+                case 1:
+                    if (h.haulFrom != HaulPlace.Field) return "load";
+                    if (h.haulRes == Res.Game) return "hunt";
+                    if (h.haulRes == Res.Timber) return "cut";
+                    if (h.haulRes == Res.Stone || h.haulRes == Res.Ore) return "dig";
+                    return "work";
+                case 2: return "carry";
+                default: return "drop";
             }
         }
 
-        /// A press changed what the verbs say. Both keys go back so the next
-        /// `Refresh` re-cuts the pages as well as re-drawing them -- an order
-        /// taken can shorten the list, and a page plan that does not move
-        /// with it is a strip pointing at a page that is no longer there.
-        void Dirty()
+        static string PlaceName(OutpostLedger l, HaulPlace p, int station)
         {
-            planKey = long.MinValue;
-            verbsKey = long.MinValue;
+            switch (p)
+            {
+                case HaulPlace.Store: return "store";
+                case HaulPlace.Site: return "site";
+                case HaulPlace.Field: return "island";
+                case HaulPlace.Station:
+                {
+                    var list = l.Stations;
+                    if (list != null && station >= 0 && station < list.Count && list[station] != null)
+                        return BuildPlans.Named(list[station].planId).label;
+                    return "bench";
+                }
+                default: return "camp";
+            }
+        }
+
+        /// "Sawyer at the sawmill", "Gathering timber", "Building the hut".
+        static string DoingLine(OutpostLedger l, OutpostHand h)
+        {
+            switch (h.order)
+            {
+                case OutpostOrder.Work:
+                {
+                    var plan = BuildPlans.Named(h.target);
+                    return $"{StationPage.Cap(h.Doing)} at the {plan.label}";
+                }
+                case OutpostOrder.Build:
+                {
+                    var site = l.BuildSiteFor(h) ?? l.Focus;
+                    return site == null ? "Nothing sited to build" : "Building the " + SiteName(site).ToLowerInvariant();
+                }
+                case OutpostOrder.Idle:
+                    return "Standing by the fire";
+                default:
+                    return StationPage.Cap(h.Doing);
+            }
+        }
+
+        static string NowSub(OutpostLedger l, OutpostHand h)
+        {
+            switch (h.order)
+            {
+                case OutpostOrder.Gather:
+                    if (h.target == Res.Game) return $"{l.StoreCountOf(Res.Food)} food in the store";
+                    return $"{l.StoreCountOf(h.target)} / {l.ceilingPer} kept in the store";
+                case OutpostOrder.Build:
+                {
+                    var site = l.BuildSiteFor(h) ?? l.Focus;
+                    return site != null ? l.SiteLine(site) : "";
+                }
+                case OutpostOrder.Idle:
+                    return l.Building ? "free hands help at the sites on their own" : "waiting for orders";
+                default:
+                    return "between trips";
+            }
+        }
+
+        static string SiteName(PendingBuild p)
+        {
+            if (p == null) return "";
+            if (p.isWall) return "Wall";
+            return StationPage.Cap(BuildPlans.Named(p.planId).label);
+        }
+
+        // --- chips ------------------------------------------------------------------------
+
+        void FillChips(OutpostLedger l, OutpostHand h)
+        {
+            string mood = h.MoodWord;
+            Set(moodV, mood.Length == 0 ? "Content" : StationPage.Cap(mood));
+            Tone(moodV, h.Angry ? 2 : mood.Length > 0 ? 1 : 0);
+
+            int index = l.hands.IndexOf(h);
+            bool warm = l.IsHandWarm(h);
+            bool bed = index >= 0 && index < l.HousingCapacity;
+            Set(sleepV, warm ? "Warm hut" : bed ? "Cold hut" : "No bed");
+            Tone(sleepV, warm ? 0 : bed ? 1 : 2);
+
+            float days = SheetBits.FoodDays(l);
+            if (days < 0f) { Set(foodV, "None"); Tone(foodV, 2); }
+            else
+            {
+                Set(foodV, days >= 10f ? $"{days:0} days" : days < 1f ? "< 1 day" : $"{days:0.#} days");
+                Tone(foodV, days < 1f ? 2 : days < 3f ? 1 : 0);
+            }
+        }
+
+        // --- jobs -------------------------------------------------------------------------
+
+        enum JobKind { Post, Gather, Build }
+
+        struct Job
+        {
+            public JobKind kind;
+            public string id;
+        }
+
+        sealed class Tile
+        {
+            public Job job;
+            public Button root;
+            public VisualElement icon, who;
+            public Label name, sub, whoText;
+            public StationPage.DashedFrame dashes;
+            public string toast;     // what a tap says instead of ordering, or null
+            public bool here;
+        }
+
+        /// Posts → gather → the open site, in the order the menu offers them.
+        List<Job> Jobs()
+        {
+            var list = new List<Job>();
+            foreach (var id in outpost.Positions()) list.Add(new Job { kind = JobKind.Post, id = id });
+            foreach (var r in outpost.Gatherable()) list.Add(new Job { kind = JobKind.Gather, id = r });
+            if (outpost.Building) list.Add(new Job { kind = JobKind.Build, id = "" });
+            return list;
+        }
+
+        void FillJobs(OutpostLedger l, OutpostHand h)
+        {
+            Set(jobsEm, $"tap to move {who}");
+
+            var jobs = Jobs();
+            var sb = new System.Text.StringBuilder();
+            foreach (var j in jobs) sb.Append((int)j.kind).Append(j.id).Append('|');
+            string key = sb.ToString();
+            if (key != jobsKey)
+            {
+                jobsKey = key;
+                RebuildTiles(jobs);
+            }
+
+            foreach (var t in tiles) FillTile(l, h, t);
+        }
+
+        void RebuildTiles(List<Job> jobs)
+        {
+            grid.Clear();
+            tiles.Clear();
+            for (int i = 0; i < jobs.Count; i++)
+            {
+                var t = new Tile { job = jobs[i] };
+                t.root = new Button(() => Press(t)) { text = "" };
+                t.root.AddToClassList("hs-tile");
+                if ((i % perPage) % 3 == 2) t.root.AddToClassList("hs-tile--col3");
+                t.icon = Box("hs-tile-ico");
+                StationPage.SetIcon(t.icon, JobIconOf(jobs[i]));
+                t.root.Add(t.icon);
+                t.name = Text("hs-tile-n");
+                t.sub = Text("hs-tile-s");
+                t.root.Add(t.name);
+                t.root.Add(t.sub);
+                t.who = Box("hs-who");
+                t.whoText = Text("hs-who-t");
+                t.who.Add(t.whoText);
+                t.root.Add(t.who);
+                t.dashes = new StationPage.DashedFrame(16f, 2f, StationPage.Edge);
+                t.root.Add(t.dashes);
+                tiles.Add(t);
+                grid.Add(t.root);
+            }
+
+            dots.Clear();
+            int pages = Mathf.Max(1, Mathf.CeilToInt(jobs.Count / (float)perPage));
+            if (page >= pages) page = pages - 1;
+            if (pages > 1)
+                for (int p = 0; p < pages; p++)
+                {
+                    int pg = p;
+                    var b = new Button(() => { page = pg; ShowPage(); }) { text = "" };
+                    b.AddToClassList("st-dot-btn");
+                    var dot = Box("st-dot");
+                    b.Add(dot);
+                    dots.Add(b);
+                }
+            Show(dots, pages > 1);
+            ShowPage();
+        }
+
+        void ShowPage()
+        {
+            for (int i = 0; i < tiles.Count; i++)
+                tiles[i].root.style.display = i / perPage == page ? DisplayStyle.Flex : DisplayStyle.None;
+            for (int p = 0; p < dots.childCount; p++)
+                dots[p][0].EnableInClassList("st-dot--on", p == page);
+        }
+
+        void FillTile(OutpostLedger l, OutpostHand h, Tile t)
+        {
+            string name, sub, badge = null, toastText = null;
+            bool here = false, locked = false, dim = false;
+
+            switch (t.job.kind)
+            {
+                case JobKind.Post:
+                {
+                    var plan = BuildPlans.Named(t.job.id);
+                    name = StationPage.Cap(plan.label);
+                    here = h.order == OutpostOrder.Work && h.target == t.job.id;
+                    var other = FirstOn(l, h, t.job.id);
+                    int filled = CountOn(l, h, t.job.id);
+                    int posts = Mathf.Max(1, outpost.CountOf(t.job.id));
+                    string role = string.IsNullOrEmpty(plan.position) ? "hand" : plan.position;
+                    if (here) sub = "here now";
+                    else if (other != null && filled >= posts)
+                    {
+                        sub = "swap with " + other.name;
+                        badge = SheetBits.Initial(other.name);
+                    }
+                    else if (filled > 0) { sub = "join " + other.name; badge = filled.ToString(); }
+                    else sub = "no " + role;
+                    break;
+                }
+                case JobKind.Gather:
+                {
+                    string r = t.job.id;
+                    name = r == Res.Game ? "Hunt" : StationPage.Cap(ResDefs.Label(r));
+                    here = h.order == OutpostOrder.Gather && h.target == r;
+                    string blocker = r == Res.Game ? l.HunterBlocker() : null;
+                    var stock = l.Stock(r);
+                    float standing = stock != null ? stock.standing : 0f;
+                    int others = CountGather(l, h, r);
+                    if (others > 0) badge = others.ToString();
+                    if (blocker != null && !here)
+                    {
+                        locked = true;
+                        sub = "needs spear";
+                        toastText = "Hunting needs a spear — the forge makes one from a board and a stone.";
+                    }
+                    else if (standing < 1f && !here)
+                    {
+                        dim = true;
+                        sub = "worked out";
+                        toastText = $"The {ResDefs.Label(r)} here is worked out — nothing left to gather.";
+                    }
+                    else if (here) sub = "here now";
+                    else if (r == Res.Game) sub = $"{l.StoreCountOf(Res.Food)} food";
+                    else sub = $"{l.StoreCountOf(r)} / {l.ceilingPer}";
+                    break;
+                }
+                default:
+                {
+                    int n = l.SiteCount;
+                    var site = l.Focus;
+                    name = n > 1 ? $"{n} sites" : SiteName(site) + " site";
+                    here = h.order == OutpostOrder.Build;
+                    sub = here ? "here now" : "help build";
+                    int crew = 0;
+                    foreach (var o in l.hands)
+                        if (o != null && o != h && o.order == OutpostOrder.Build) crew++;
+                    if (crew > 0) badge = crew.ToString();
+                    break;
+                }
+            }
+
+            t.here = here;
+            t.toast = toastText;
+            Set(t.name, name);
+            Set(t.sub, sub);
+            Show(t.who, badge != null);
+            Set(t.whoText, badge ?? "");
+            t.root.EnableInClassList("hs-tile--on", here);
+            t.root.EnableInClassList("hs-tile--lock", locked);
+            t.root.EnableInClassList("hs-tile--out", dim);
+            Show(t.dashes, locked);
+        }
+
+        static OutpostHand FirstOn(OutpostLedger l, OutpostHand me, string planId)
+        {
+            foreach (var o in l.hands)
+                if (o != null && o != me && o.order == OutpostOrder.Work && o.target == planId) return o;
+            return null;
+        }
+
+        static int CountOn(OutpostLedger l, OutpostHand me, string planId)
+        {
+            int n = 0;
+            foreach (var o in l.hands)
+                if (o != null && o != me && o.order == OutpostOrder.Work && o.target == planId) n++;
+            return n;
+        }
+
+        static int CountGather(OutpostLedger l, OutpostHand me, string res)
+        {
+            int n = 0;
+            foreach (var o in l.hands)
+                if (o != null && o != me && o.order == OutpostOrder.Gather && o.target == res) n++;
+            return n;
+        }
+
+        // --- the tap ------------------------------------------------------------------
+
+        /// **A tile is the order.** The same `Outpost` verbs the old list
+        /// pressed; a full post trades jobs (he takes the post, whoever was
+        /// on it takes his old job).
+        void Press(Tile t)
+        {
+            var l = L;
+            var h = Hand;
+            if (l == null || h == null) return;
+            if (t.here) { ShowToast($"{who} is already on this."); return; }
+            if (t.toast != null) { ShowToast(t.toast); return; }
+
+            bool ok;
+            switch (t.job.kind)
+            {
+                case JobKind.Post:
+                {
+                    string planId = t.job.id;
+                    var other = FirstOn(l, h, planId);
+                    int posts = Mathf.Max(1, outpost.CountOf(planId));
+                    bool swap = other != null && CountOn(l, h, planId) >= posts;
+                    var oldOrder = h.order;
+                    string oldTarget = h.target;
+                    ok = outpost.Assign(h, planId);
+                    if (ok && swap)
+                    {
+                        GiveJob(other, oldOrder, oldTarget, planId);
+                        ShowToast($"{who} and {other.name} swapped.");
+                    }
+                    break;
+                }
+                case JobKind.Gather:
+                    ok = outpost.OrderGather(h, t.job.id);
+                    break;
+                default:
+                    ok = outpost.OrderBuild(h);
+                    break;
+            }
+            if (!ok) ShowToast("That order didn't take.");
+            Refresh();
+        }
+
+        /// The swapped-out hand takes the job the tapped hand just left.
+        void GiveJob(OutpostHand o, OutpostOrder order, string target, string leftPost)
+        {
+            switch (order)
+            {
+                case OutpostOrder.Work:
+                    if (target != leftPost && outpost.Assign(o, target)) return;
+                    break;
+                case OutpostOrder.Gather:
+                    if (outpost.OrderGather(o, target)) return;
+                    break;
+                case OutpostOrder.Build:
+                    if (outpost.OrderBuild(o)) return;
+                    break;
+            }
+            outpost.OrderIdle(o);
+        }
+
+        // --- icons ----------------------------------------------------------------------
+
+        /// The item a post makes, for its tile: the plan's own `makes`, else
+        /// its first recipe's, else a generic mark.
+        static string PostIcon(string planId)
+        {
+            var plan = BuildPlans.Named(planId);
+            if (!string.IsNullOrEmpty(plan.makes) && ItemIconSet.Get(plan.makes) != null) return plan.makes;
+            var recipes = Recipes.At(planId);
+            if (recipes.Count > 0 && recipes[0] != null && !string.IsNullOrEmpty(recipes[0].makes)) return recipes[0].makes;
+            if (planId == OutpostLedger.WatchtowerId) return "helmet";
+            return "Tools";
+        }
+
+        static string JobIconOf(Job j)
+        {
+            switch (j.kind)
+            {
+                case JobKind.Post: return PostIcon(j.id);
+                case JobKind.Gather: return j.id;
+                default: return "Tools";
+            }
+        }
+
+        static string JobIcon(OutpostHand h)
+        {
+            switch (h.order)
+            {
+                case OutpostOrder.Work: return PostIcon(h.target);
+                case OutpostOrder.Gather: return string.IsNullOrEmpty(h.target) ? null : h.target;
+                case OutpostOrder.Build: return "Tools";
+                default: return null;
+            }
+        }
+
+        // --- the two pinned verbs --------------------------------------------------------
+
+        /// Idle = free for the idle-hand ladder, which puts him on the sites
+        /// by itself while any blueprint stands (`OutpostLedger.EnlistFree`).
+        void StandDown()
+        {
+            var h = Hand;
+            if (outpost == null || h == null) return;
+            outpost.OrderIdle(h);
+            if (outpost.Building) ShowToast($"{who} stands down — free hands help at the sites.");
             Refresh();
         }
 
         /// `Outpost.Recall(body, ship)` -- the same call the ashore column
-        /// makes (CampSheet.cs:519), including the roster recount the ship
-        /// needs afterwards (CampSheet.cs:521).
+        /// makes, with the roster recount the ship needs afterwards.
         void BackAboard()
         {
             var anchor = SheetBits.Anchor;

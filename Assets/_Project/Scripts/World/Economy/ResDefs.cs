@@ -28,6 +28,9 @@ namespace SeaSick.World.Economy
         Drop,
         /// Only ever a recipe's output.
         Made,
+        /// Grown on a farm plot (food rework, 2026-09-27): raw, never made,
+        /// never gathered off the island.
+        Grown,
     }
 
     /// **Which Stores tab a resource lands on** (2026-09-26). Independent of
@@ -80,7 +83,22 @@ namespace SeaSick.World.Economy
             new ResDef { id = Res.Stone, label = "stone", tier = ResTier.Raw, source = ResSource.Gathered, campfireLevel = 1,
                 blurb = "rough stone, off the grey boulders", category = ResCategory.Raw },
             new ResDef { id = Res.Food, label = "food", tier = ResTier.Raw, source = ResSource.Gathered, campfireLevel = 1,
-                blurb = "berries, wheat, meat: what the camp eats", category = ResCategory.Food },
+                blurb = "wild berries and roots, foraged; eaten raw at a quarter", category = ResCategory.Food },
+            // --- food rework, 2026-09-27: crops, catch, meat ---
+            new ResDef { id = Res.Potato, label = "potato", tier = ResTier.Raw, source = ResSource.Grown, campfireLevel = 1,
+                blurb = "the staple; fast to grow, fine raw in a pinch", category = ResCategory.Food },
+            new ResDef { id = Res.Carrot, label = "carrot", tier = ResTier.Raw, source = ResSource.Grown, campfireLevel = 1,
+                blurb = "second veg; stew and roast", category = ResCategory.Food },
+            new ResDef { id = Res.Onion, label = "onion", tier = ResTier.Raw, source = ResSource.Grown, campfireLevel = 2,
+                blurb = "the stew gate; a farm II crop", category = ResCategory.Food },
+            new ResDef { id = Res.Wheat, label = "wheat", tier = ResTier.Raw, source = ResSource.Grown, campfireLevel = 2,
+                blurb = "only useful through the mill; a farm II crop", category = ResCategory.Food },
+            new ResDef { id = Res.Apple, label = "apple", tier = ResTier.Raw, source = ResSource.Grown, campfireLevel = 2,
+                blurb = "an orchard crop; a farm III plot", category = ResCategory.Food },
+            new ResDef { id = Res.Fish, label = "fish", tier = ResTier.Raw, source = ResSource.Gathered, campfireLevel = 1,
+                blurb = "off the fishing hut; grill it or eat it raw", category = ResCategory.Food },
+            new ResDef { id = Res.Meat, label = "meat", tier = ResTier.Raw, source = ResSource.Hunted, campfireLevel = 1,
+                blurb = "off every animal a hunter brings home", category = ResCategory.Food },
             new ResDef { id = Res.Game, label = "game", tier = ResTier.Raw, source = ResSource.Hunted, campfireLevel = 1,
                 blurb = "the herd on the island, counted in animals", category = ResCategory.Food },
             new ResDef { id = Res.Hide, label = "hide", tier = ResTier.Raw, source = ResSource.Drop, campfireLevel = 1,
@@ -94,6 +112,8 @@ namespace SeaSick.World.Economy
             // --- treated ---
             new ResDef { id = Res.Boards, label = "boards", tier = ResTier.Treated, source = ResSource.Made, campfireLevel = 1,
                 blurb = "timber sawn square", category = ResCategory.Material },
+            new ResDef { id = Res.Flour, label = "flour", tier = ResTier.Treated, source = ResSource.Made, campfireLevel = 2,
+                blurb = "wheat ground at the mill; bread and biscuit", category = ResCategory.Food },
             new ResDef { id = Res.Iron, label = "iron", tier = ResTier.Treated, source = ResSource.Made, campfireLevel = 2,
                 blurb = "ore smelted to a bar", category = ResCategory.Material },
             new ResDef { id = Res.Brick, label = "brick", tier = ResTier.Treated, source = ResSource.Made, campfireLevel = 2,
@@ -102,8 +122,23 @@ namespace SeaSick.World.Economy
                 blurb = "boards cut true on an iron saw", category = ResCategory.Material },
 
             // --- items ---
-            new ResDef { id = Res.Meals, label = "meals", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
-                blurb = "food cooked; feeds better than it was", category = ResCategory.Food },
+            // --- dishes (food rework, 2026-09-27; fill values in `FoodBook`) ---
+            new ResDef { id = Res.BakedPotato, label = "baked potato", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
+                blurb = "a potato in the coals", category = ResCategory.Food },
+            new ResDef { id = Res.GrilledFish, label = "grilled fish", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
+                blurb = "a fish over the fire", category = ResCategory.Food },
+            new ResDef { id = Res.RoastCarrots, label = "roast carrots", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
+                blurb = "two carrots, a proper plate", category = ResCategory.Food },
+            new ResDef { id = Res.Bread, label = "bread", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "flour baked; a little cheer", category = ResCategory.Food },
+            new ResDef { id = Res.VegStew, label = "vegetable stew", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "potato, carrot, onion; lifts the mood", category = ResCategory.Food },
+            new ResDef { id = Res.FishPie, label = "fish pie", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "fish, potato and flour; hands work faster on it", category = ResCategory.Food },
+            new ResDef { id = Res.HuntersStew, label = "hunter's stew", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "meat and three veg; the best plate in camp", category = ResCategory.Food },
+            new ResDef { id = Res.Meals, label = "ship's biscuit", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,
+                blurb = "hard bread for the hold; keeps a crew at sea", category = ResCategory.Food },
             new ResDef { id = Res.Arrows, label = "arrows", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
                 blurb = "spent by hunters and lookouts", category = ResCategory.Gear },
             new ResDef { id = Res.Spear, label = "spear", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,

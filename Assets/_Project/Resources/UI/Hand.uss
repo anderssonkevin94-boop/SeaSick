@@ -1,0 +1,153 @@
+/* ------------------------------------------------------------------
+ * The hand sheet (option A, Kevin picked it 2026-09-27): header with
+ * avatar + job badge + status pill, the Now card (load + trip legs),
+ * three condition chips, a 3-wide job tile grid, Stand down / Back
+ * aboard. Rides on Station.uss (`.st`), which `HandSheet` loads first;
+ * everything here is `.hs-*` under `.st` so it reaches nothing else.
+ * PANEL UNITS, same scale notes as Station.uss.
+ * ------------------------------------------------------------------ */
+
+/* --- header ---------------------------------------------------------- */
+
+.hs-av { width: 56px; height: 56px; flex-shrink: 0; }
+.hs-av .st-avatar { width: 56px; height: 56px; border-radius: 28px; }
+.hs-badge {
+    position: absolute;
+    right: -5px;
+    bottom: -5px;
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    background-color: rgb(15, 27, 37);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    align-items: center;
+    justify-content: center;
+}
+.hs-badge-ico { width: 20px; height: 20px; -unity-background-scale-mode: scale-to-fit; }
+
+/* --- the Now card ------------------------------------------------------ */
+
+.hs-now { flex-direction: column; align-items: stretch; }
+.hs-now-top { flex-direction: row; align-items: center; }
+.hs-now-ico {
+    width: 52px;
+    height: 52px;
+    border-radius: 13px;
+    background-color: rgb(14, 26, 36);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+}
+.hs-now-ico-img { width: 40px; height: 40px; -unity-background-scale-mode: scale-to-fit; }
+.hs-now-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.st .hs-now-t { font-size: 19px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st .hs-now-s { font-size: 15px; color: rgb(166, 186, 198); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.hs-legs { flex-direction: row; margin-top: 10px; }
+.hs-leg {
+    flex-grow: 1;
+    flex-basis: 0;
+    height: 30px;
+    margin-left: 6px;
+    border-radius: 9px;
+    background-color: rgb(14, 26, 36);
+    align-items: center;
+    justify-content: center;
+}
+.hs-leg--first { margin-left: 0; }
+.st .hs-leg-t { font-size: 14px; color: rgb(127, 151, 166); -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.hs-leg--done { background-color: rgb(31, 74, 60); }
+.st .hs-leg--done .hs-leg-t { color: rgb(159, 224, 194); }
+.hs-leg--on { background-color: rgb(164, 210, 232); }
+.st .hs-leg--on .hs-leg-t { color: rgb(11, 23, 32); }
+
+/* --- chips ------------------------------------------------------------- */
+
+.hs-chips { flex-direction: row; margin-top: 12px; flex-shrink: 0; }
+.hs-chip {
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    margin-left: 8px;
+    padding: 8px 10px;
+    border-radius: 14px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(30, 51, 68);
+    flex-direction: column;
+}
+.hs-chip--first { margin-left: 0; }
+.st .hs-chip-k { font-size: 13px; color: rgb(127, 151, 166); letter-spacing: 1px; }
+.st .hs-chip-v { font-size: 18px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st .hs-tone--good { color: rgb(159, 224, 194); }
+.st .hs-tone--warn { color: rgb(240, 195, 106); }
+.st .hs-tone--bad { color: rgb(246, 146, 128); }
+
+/* --- jobs -------------------------------------------------------------- */
+
+.hs-eye-row { flex-direction: row; align-items: flex-end; margin-top: 14px; margin-bottom: 8px; }
+.st .hs-eye-row .st-eyebrow { margin-bottom: 0; }
+.st .hs-eye-em { font-size: 14px; color: rgb(110, 132, 148); margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+
+.hs-grid { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; flex-shrink: 0; }
+.st .hs-tile {
+    width: 32%;
+    height: 112px;
+    margin: 0 2% 10px 0;
+    padding: 8px 6px;
+    border-radius: 16px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.st .hs-tile--col3 { margin-right: 0; }
+.st .hs-tile:hover { background-color: rgb(26, 48, 64); }
+.st .hs-tile--on { background-color: rgb(26, 48, 64); border-width: 3px; border-color: rgb(164, 210, 232); padding: 7px 5px; }
+.st .hs-tile--lock { border-width: 0; padding: 10px 8px; }
+.st .hs-tile--out { opacity: 0.45; }
+.hs-tile-ico { width: 44px; height: 44px; margin-bottom: 4px; -unity-background-scale-mode: scale-to-fit; }
+.hs-tile--lock .hs-tile-ico { opacity: 0.4; }
+.st .hs-tile-n { font-size: 17px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.st .hs-tile-s { font-size: 14px; color: rgb(166, 186, 198); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.st .hs-tile--on .hs-tile-s { color: rgb(159, 224, 194); }
+.st .hs-tile--lock .hs-tile-s { color: rgb(246, 146, 128); }
+.st .hs-tile--lock .hs-tile-n { color: rgb(166, 186, 198); }
+.hs-who {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 12px;
+    background-color: rgb(44, 74, 94);
+    align-items: center;
+    justify-content: center;
+}
+.st .hs-who-t { font-size: 13px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+
+/* --- the actions and the toast ------------------------------------------ */
+
+.hs-acts { flex-direction: row; margin-top: 10px; flex-shrink: 0; }
+.st .hs-act { flex-grow: 1; flex-basis: 0; margin: 0 0 0 8px; padding: 0 8px; }
+.st .hs-act--first { margin-left: 0; }
+.st .hs-act--stop { border-color: rgb(246, 146, 128); background-color: rgb(42, 26, 26); color: rgb(246, 146, 128); }
+.st .hs-act--stop:hover { background-color: rgb(58, 34, 34); }
+
+.hs-toast {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 80px;
+    padding: 10px 14px;
+    border-radius: 14px;
+    background-color: rgba(8, 16, 24, 0.96);
+    border-width: 2px;
+    border-color: rgb(240, 195, 106);
+}
+.st .hs-toast-t { font-size: 16px; white-space: normal; }

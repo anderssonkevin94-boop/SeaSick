@@ -449,7 +449,15 @@ namespace SeaSick.UI.Sheets
                 c.root.EnableInClassList("st-recipe--locked", c.locked);
                 c.root.EnableInClassList("st-recipe--on", picked);
                 c.dashes.style.display = c.locked ? DisplayStyle.Flex : DisplayStyle.None;
-                c.time.text = BatchTime(r, level);
+                c.time.text = BatchTime(r, level)
+                    + (FoodBook.IsDish(r.makes) ? $" · fill {FoodBook.Fill(r.makes):0.##}" : "");
+                for (int ti = 0; ti < c.takes.Length && ti < r.takes.Length; ti++)
+                {
+                    var line = r.takes[ti];
+                    int have = l.StoreCountOf(line.res) + (st != null ? st.BayCount(line.res) : 0);
+                    c.takes[ti].text = $"{line.n} {ResDefs.Label(line.res)} ({have})";
+                    c.takes[ti].EnableInClassList("st-state--wait", have < line.n);
+                }
 
                 c.state.RemoveFromClassList("st-state--make");
                 c.state.RemoveFromClassList("st-state--wait");
@@ -529,6 +537,119 @@ namespace SeaSick.UI.Sheets
             stopBtn.AddToClassList("st-seg-btn--stop");
             seg.Add(stopBtn);
             s.Add(seg);
+
+            // **Keep in stock (2026-09-27, food rework phase 2)**: queue the
+            // selected recipe as "keep 10"; the queue below is worked
+            // top-down, each line with its own N and status.
+            keepBtn = new Button(QueueKeep) { text = "Keep 10 in stock" };
+            keepBtn.AddToClassList("st-seg-btn");
+            keepBtn.style.marginTop = 8f;
+            keepBtn.style.minHeight = TouchPx;
+            s.Add(keepBtn);
+            queueEyebrow = StationPage.Text("STANDING ORDERS · TOP-DOWN", "st-eyebrow");
+            queueEyebrow.style.marginTop = 12f;
+            s.Add(queueEyebrow);
+            queueList = new VisualElement();
+            s.Add(queueList);
+        }
+
+        Button keepBtn;
+        Label queueEyebrow;
+        VisualElement queueList;
+        long queueKey = long.MinValue;
+
+        void QueueKeep()
+        {
+            var l = L;
+            ResolveRaisedIndex();
+            var st = Station(l);
+            if (st == null || l == null) return;
+            string id = SelectedId(l, st);
+            if (id == null) return;
+            l.QueueOrder(StationIndexOf(l, st), id, OrderMode.Keep, 10);
+            queueKey = long.MinValue;
+            Refresh();
+        }
+
+        int StationIndexOf(OutpostLedger l, StationStock st) =>
+            l != null && st != null && l.Stations is IList<StationStock> list ? list.IndexOf(st) : -1;
+
+        void FillQueue(OutpostLedger l, StationStock st, string selected)
+        {
+            if (queueList == null) return;
+            int si = StationIndexOf(l, st);
+            var q = si >= 0 ? l.QueueAt(si) : null;
+            int slots = si >= 0 ? l.QueueSlots(si) : 0;
+            var sel = Recipes.Named(selected);
+            bool canKeep = si >= 0 && sel != null && LockWhy(l, sel) == null
+                && (q.Count < slots || HasLine(q, selected));
+            keepBtn.SetEnabled(canKeep);
+            queueEyebrow.text = $"STANDING ORDERS · {(q != null ? q.Count : 0)}/{slots} · TOP-DOWN";
+
+            long key = si * 7919L + slots;
+            var status = new List<string>();
+            if (q != null)
+                for (int i = 0; i < q.Count; i++)
+                {
+                    string line = l.QueueStatus(si, i);
+                    status.Add(line);
+                    key = key * 31 + q[i].recipe.GetHashCode();
+                    key = key * 31 + q[i].n * 3 + (int)q[i].mode;
+                    key = key * 31 + line.GetHashCode();
+                }
+            if (key == queueKey) return;
+            queueKey = key;
+            queueList.Clear();
+            if (q == null || q.Count == 0)
+            {
+                queueList.Add(StationPage.Text("no standing orders", "st-line"));
+                return;
+            }
+            for (int i = 0; i < q.Count; i++)
+            {
+                int idx = i;
+                var o = q[i];
+                var r = Recipes.Named(o.recipe);
+                var card = StationPage.Card();
+                card.style.marginTop = 6f;
+                card.style.alignItems = Align.Center;
+                card.Add(StationPage.Icon(r?.makes, "st-small-icon"));
+                var colL = new VisualElement(); colL.AddToClassList("st-col");
+                colL.style.flexGrow = 1f;
+                string mode = o.mode == OrderMode.Keep ? $"Keep {o.n}"
+                    : o.mode == OrderMode.Repeat ? "Repeat" : $"Make {o.n}";
+                colL.Add(StationPage.Text($"{i + 1}. {mode} {r?.label ?? o.recipe}", "st-line"));
+                var st2 = StationPage.Text(status[i], "st-line");
+                st2.AddToClassList("st-muted");
+                colL.Add(st2);
+                card.Add(colL);
+                if (o.mode != OrderMode.Repeat)
+                {
+                    card.Add(SmallBtn("−", () => { l.SetQueuedN(si, idx, o.n - (o.n > 10 ? 5 : 1)); queueKey = long.MinValue; Refresh(); }));
+                    card.Add(SmallBtn("+", () => { l.SetQueuedN(si, idx, o.n + (o.n >= 10 ? 5 : 1)); queueKey = long.MinValue; Refresh(); }));
+                }
+                if (i > 0) card.Add(SmallBtn("↑", () => { l.MoveQueued(si, idx, -1); queueKey = long.MinValue; Refresh(); }));
+                card.Add(SmallBtn("✕", () => { l.UnqueueOrder(si, idx); queueKey = long.MinValue; Refresh(); }));
+                queueList.Add(card);
+            }
+        }
+
+        static bool HasLine(IReadOnlyList<QueuedOrder> q, string id)
+        {
+            if (q == null) return false;
+            foreach (var o in q) if (o.recipe == id) return true;
+            return false;
+        }
+
+        static Button SmallBtn(string text, System.Action act)
+        {
+            var b = new Button(act) { text = text };
+            b.AddToClassList("st-seg-btn");
+            b.style.minWidth = TouchPx;
+            b.style.minHeight = TouchPx;
+            b.style.flexGrow = 0f;
+            b.style.marginLeft = 4f;
+            return b;
         }
 
         void PlaceAmount(int count)
@@ -710,6 +831,7 @@ namespace SeaSick.UI.Sheets
             worker?.Update(l, hand, 0);
             FillRecipes(l, st, hand, selected);
             FillOrder(l, st, selected);
+            FillQueue(l, st, selected);
             FillFlow(l, st, hand, selected);
             FillStore(l);
             upgrade?.Update(l, raisedIndex, planId, MyLevel(l), GoalPin.IsUpgradePinned(outpost, raisedIndex, planId));

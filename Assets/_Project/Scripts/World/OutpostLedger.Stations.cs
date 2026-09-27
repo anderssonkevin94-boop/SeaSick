@@ -553,6 +553,10 @@ namespace SeaSick.World
             s.orderRecipe = r.id;
             s.orderRepeat = count < 0;
             s.orderLeft = count < 0 ? 0 : count;
+            // The single order replaces the queue (2026-09-27 phase 2).
+            if (s.queue == null) s.queue = new List<QueuedOrder>();
+            s.queue.Clear();
+            s.queue.Add(new QueuedOrder { recipe = r.id, mode = count < 0 ? OrderMode.Repeat : OrderMode.Count, n = s.orderLeft });
             return true;
         }
 
@@ -566,7 +570,7 @@ namespace SeaSick.World
         public void StopOrder(int stationIndex)
         {
             var s = StationAt(stationIndex);
-            if (s != null) s.ClearOrder();
+            if (s != null) { s.ClearOrder(); s.queue?.Clear(); }
         }
 
         public void StopOrder(string planId, int ordinal = 0)
@@ -774,6 +778,9 @@ namespace SeaSick.World
             // A hunt trip (2026-09-27): a killed carcass lands at the store
             // as meat and hide, an unkilled one was never there.
             if (h.HuntTrip) { DepositCarcass(h); return; }
+            // **A meal** (food rework, 2026-09-27): picked up at the store,
+            // eaten there -- never put down.
+            if (h.eating) { EatMeal(h); return; }
             // **Nothing to put down** (2026-09-27): a load he never picked up
             // was only planned -- the source still has it.
             if (!h.haulPicked) { CancelPlanned(h); return; }
@@ -877,6 +884,7 @@ namespace SeaSick.World
             h.tripLeg = 0;
             h.haulPicked = false;
             h.legLeft = h.workLeft = 0f;
+            h.eating = false;
         }
 
         /// Every load put down now, before station indices shift.
@@ -1054,6 +1062,7 @@ namespace SeaSick.World
             s.benchOut = yield;
             if (r.tool != null && r.toolWear > 0f) DrawHeld(r.tool, r.toolWear * yield);
             away.Add(r.makes, yield);
+            QueueFinished(s, r, yield);
             if (!s.orderRepeat && s.orderRecipe == r.id)
             {
                 s.orderLeft -= yield;
@@ -1230,6 +1239,7 @@ namespace SeaSick.World
         void StepStations(float days, bool gatherersHaul)
         {
             if (hands == null) return;
+            ResolveOrders();
             foreach (var h in hands)
             {
                 if (h == null) continue;
@@ -1263,9 +1273,9 @@ namespace SeaSick.World
 
         string GatherFullReason(OutpostHand h)
         {
-            string into = h.target == Res.Game ? Res.Food : h.target;
+            string into = h.target == Res.Game ? Res.Meat : h.target;
             string head = h.target == Res.Game
-                ? $"store is full of {Friendly(Res.Food)} and {Friendly(Res.Hide)}"
+                ? $"store is full of {Friendly(Res.Meat)} and {Friendly(Res.Hide)}"
                 : $"store is full of {Friendly(into)}";
             if (HasHaulChore()) return head + ", hauling for the stations";
             if (Focus != null) return head + ", helping build";

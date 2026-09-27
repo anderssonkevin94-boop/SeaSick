@@ -96,8 +96,8 @@ namespace SeaSick.World
                 phase = Phase.Coming;
                 props.Drive(spear, HunterProps.Pose.Upright);
                 acting?.Set(VillagerActing.Mode.None);
-                carrying = Res.Food;
-                dropAt = Dropoff(r, Res.Food);
+                carrying = Res.Meat;
+                dropAt = Dropoff(r, Res.Meat);
                 if (!Walk(dropAt, dt)) return;
                 // The drop-off event: meat and hide into the store now; he
                 // stoops and the carcass goes down.

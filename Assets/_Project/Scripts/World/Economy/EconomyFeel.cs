@@ -23,7 +23,7 @@ namespace SeaSick.World.Economy
         /// Cut / quarry / pick speed at the source. 2 = twice as fast.
         public static float gatherSpeedMultiplier = 1f;
         /// Food per animal a hunter brings home (asset default 4).
-        public static float meatPerAnimal = 4f;
+        public static float meatPerAnimal = 3f;
         /// Hide per animal (asset default 1; whole units, rounded).
         public static float hidePerAnimal = 1f;
 

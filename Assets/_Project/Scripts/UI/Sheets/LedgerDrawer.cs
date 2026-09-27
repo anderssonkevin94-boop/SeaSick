@@ -393,7 +393,7 @@ namespace SeaSick.UI.Sheets
             }
             var stock = l.Stock(res);
             bool worked = res != Res.Game && (stock == null || stock.standing < 1f);
-            float fill = l.Fill01(res == Res.Game ? Res.Food : res);
+            float fill = l.Fill01(res == Res.Game ? Res.Meat : res);
             if (res == Res.Game && l.HunterBlocker() != null) { row.Set("no spear", Bad, 0f); return; }
             if (worked) { row.Set("none left", Bad, 0f); return; }
             if (stall != null) { row.Set(stall, Bad, fill); return; }

@@ -300,7 +300,7 @@ namespace SeaSick.World
             // the grass is the one silhouette here that is taller than it is
             // wide, so the quiver reads from the air without a label.
             if (resource == Res.Arrows) return PileShape.Bundle;
-            if (resource == Res.Food || resource == Res.Game) return PileShape.Sacks;
+            if (Economy.FoodBook.IsFoodish(resource)) return PileShape.Sacks;
             return PileShape.Heap;
         }
 

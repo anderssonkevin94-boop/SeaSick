@@ -807,7 +807,7 @@ namespace SeaSick.UI.Sheets
             // never meant to hold more than the four gatherables it shipped
             // with, and a quarry (or a sawmill and a smithy both running) can
             // now put five or six kinds on the fire at once.
-            long key = l.ceilingPer * 1000003L + l.hands.Count;
+            long key = l.ceilingPer * 1000003L + l.hands.Count + Mathf.RoundToInt(l.FoodFill() * 4f) * 7919L;
             foreach (var r in shown)
             {
                 key = key * 31 + r.GetHashCode();
@@ -851,13 +851,13 @@ namespace SeaSick.UI.Sheets
                     float days = SheetBits.FoodDays(l);
                     if (l.hands.Count == 0 || days < 0f)
                     {
-                        big = campKept.ToString();
-                        small = l.hands.Count == 0 ? "kept · nobody eats" : "kept · they eat nothing";
+                        big = l.FoodFill().ToString("0");
+                        small = l.hands.Count == 0 ? "meals kept · nobody eats" : "meals kept · they eat nothing";
                     }
                     else
                     {
                         big = days.ToString("0.#");
-                        small = $"days · {campKept} kept";
+                        small = $"days · {l.FoodFill():0} meals kept";
                     }
                 }
                 else

@@ -86,42 +86,63 @@ namespace SeaSick.World
 
         void TryResolve()
         {
-            var isle = Island.Nearest(transform.position);
-            crops = Terrain.SceneryCrops.On(isle);
             var outpost = GetComponentInParent<Outpost>();
             ledger = outpost != null ? outpost.Ledger : null;
-            if (crops == null || crops.BedCount == 0 || ledger == null) return;
-
-            cropIndex = new int[bedGroups.Count];
-            for (int i = 0; i < bedGroups.Count; i++)
-            {
-                int best = -1; float bestSq = MatchReach * MatchReach;
-                Vector3 at = bedGroups[i].anchor.position;
-                for (int c = 0; c < crops.BedCount; c++)
-                {
-                    Vector3 d = crops.BedAt(c).at - at; d.y = 0f;
-                    float sq = d.sqrMagnitude;
-                    if (sq < bestSq) { bestSq = sq; best = c; }
-                }
-                cropIndex[i] = best;
-            }
+            if (ledger == null) return;
             resolved = true;
         }
 
+        /// Which copy of the farm this building is: the nearest `raised`
+        /// Farm row, counted in order (as `OutpostLedger.PlanPlace` counts).
+        int FarmOrdinal()
+        {
+            if (ledger == null || ledger.raised == null) return 0;
+            int k = 0, best = 0; float bestSq = float.MaxValue;
+            foreach (var r in ledger.raised)
+            {
+                if (r == null || r.planId != BuildPlans.Farm.id) continue;
+                Vector3 d = r.At - transform.position; d.y = 0f;
+                if (d.sqrMagnitude < bestSq) { bestSq = d.sqrMagnitude; best = k; }
+                k++;
+            }
+            return best;
+        }
+
+        int[] shownStage;
+
+        /// **Beds show their plot (food rework, 2026-09-27)**: bed i is plot
+        /// i of this farm -- soil when empty, sprout for the first half of
+        /// the growth, growing after, ripe when ready. The sheaves are the
+        /// crops in the store. Placeholder: every crop wears the kit's one
+        /// wheat-ish mesh until per-crop art exists.
         void Apply()
         {
+            var plots = ledger.PlotsOf(FarmOrdinal());
+            if (shownStage == null || shownStage.Length != bedGroups.Count)
+            {
+                shownStage = new int[bedGroups.Count];
+                for (int i = 0; i < shownStage.Length; i++) shownStage[i] = -1;
+            }
             for (int i = 0; i < bedGroups.Count; i++)
             {
-                int ci = cropIndex[i];
-                bool ripe = ci >= 0 && !crops.BedAt(ci).harvested;
-                if (ripe == shownRipe[i]) continue;
-                shownRipe[i] = ripe;
+                int stage = 0;
+                if (i < plots.Count)
+                {
+                    var p = plots[i];
+                    if (p.state == PlotState.Ripe) stage = 3;
+                    else if (p.state == PlotState.Growing) stage = p.Grow01 < 0.5f ? 1 : 2;
+                }
+                if (stage == shownStage[i]) continue;
+                shownStage[i] = stage;
                 var g = bedGroups[i];
-                if (g.ripe != null) g.ripe.SetActive(ripe);
-                // Sprout/Growing intentionally never shown -- see class doc.
+                if (g.sprout != null) g.sprout.SetActive(stage == 1);
+                if (g.growing != null) g.growing.SetActive(stage == 2);
+                if (g.ripe != null) g.ripe.SetActive(stage == 3);
             }
 
-            int food = Mathf.Clamp(ledger.StoreCountOf(Res.Food), 0, sheafSlots.Count);
+            int stored = 0;
+            foreach (var c in Economy.FoodBook.Crops) stored += ledger.StoreCountOf(c.res);
+            int food = Mathf.Clamp(stored, 0, sheafSlots.Count);
             if (food != shownFood)
             {
                 for (int i = 0; i < sheafSlots.Count; i++) sheafSlots[i].SetActive(i < food);

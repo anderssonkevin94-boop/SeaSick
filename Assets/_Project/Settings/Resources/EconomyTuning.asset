@@ -254,13 +254,6 @@ MonoBehaviour:
     takes:
     - res: Boards
       n: 2
-  - recipeId: meals
-    yield: 1
-    ratePerDay: 3
-    toolWear: 0
-    takes:
-    - res: Food
-      n: 1
   - recipeId: fish
     yield: 1
     ratePerDay: 4
@@ -330,7 +323,7 @@ MonoBehaviour:
   rockSmall: 2
   rockMedium: 4
   rockLarge: 8
-  meatPerAnimal: 4
+  meatPerAnimal: 3
   hidePerAnimal: 1
   stoneSpearAnimals: 4
   ironSpearAnimals: 12

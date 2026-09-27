@@ -59,9 +59,36 @@ namespace SeaSick.World
     ///
     /// Saved inside the ledger (`OutpostLedger.stations`), so everything here
     /// is JsonUtility-shaped: lists, public fields, no dictionaries.
+    /// How a queued station order runs (2026-09-27, food rework phase 2).
+    public enum OrderMode
+    {
+        /// Make `n`, then the entry is done.
+        Count = 0,
+        /// Make until stopped (blocks the entries under it).
+        Repeat = 1,
+        /// **Keep `n` in stock**: work while the camp holds fewer than `n`
+        /// and every ingredient is to hand; otherwise idle (with a reason)
+        /// and let the next entry run.
+        Keep = 2,
+    }
+
+    /// One line of a station's short order queue, worked top-down.
+    [System.Serializable]
+    public class QueuedOrder
+    {
+        public string recipe = "";
+        public OrderMode mode;
+        public int n;
+    }
+
     [System.Serializable]
     public class StationStock
     {
+        /// **The order queue (phase 2, 2026-09-27).** When it has entries the
+        /// ledger projects the first workable one into `orderRecipe` /
+        /// `orderLeft` / `orderRepeat` each step (`ResolveOrders`), so every
+        /// bench/haul path keeps reading those. Empty = the old single order.
+        public List<QueuedOrder> queue = new List<QueuedOrder>();
         public string planId = "";
         /// Which of this plan's built instances (0 for the first).
         public int ordinal;

@@ -29,7 +29,7 @@ namespace SeaSick.World
         /// loads walking to the store, like every other trip's room.
         bool HuntStoreFull()
         {
-            if (RoomFor(Res.Food) > 0) return false;
+            if (RoomFor(Res.Meat) > 0) return false;
             foreach (var drop in Economy.Techs.HuntDrops)
                 if (drop.n > 0 && RoomFor(drop.res) > 0) return false;
             return true;
@@ -98,8 +98,8 @@ namespace SeaSick.World
         {
             if (h.huntKilled)
             {
-                int meat = Mathf.Min(Mathf.RoundToInt(Res.MeatPerAnimal), RoomFor(Res.Food));
-                if (meat > 0) { Store(Res.Food, true).whole += meat; away.Add(Res.Food, meat); NoteDelivered(Res.Food, meat); }
+                int meat = Mathf.Min(Mathf.RoundToInt(Res.MeatPerAnimal), RoomFor(Res.Meat));
+                if (meat > 0) { Store(Res.Meat, true).whole += meat; away.Add(Res.Meat, meat); NoteDelivered(Res.Meat, meat); }
                 foreach (var drop in Economy.Techs.HuntDrops)
                 {
                     int n = Mathf.Min(drop.n, RoomFor(drop.res));

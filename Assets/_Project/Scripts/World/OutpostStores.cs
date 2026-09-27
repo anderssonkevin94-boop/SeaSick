@@ -88,8 +88,39 @@ namespace SeaSick.World
         /// going up -- it is two other numbers that get better while it
         /// lasts.
         public const string Arrows = "Arrows";
+        /// **Wild forage since the food rework (2026-09-27)**: berries and
+        /// roots off the island itself, what a hand told to gather food
+        /// brings in, eaten raw at a quarter. The farm, the fishing hut and
+        /// the hunt no longer land here -- they make crops, fish and meat
+        /// (`Economy.FoodBook`). An old save's Food pile is turned into potatoes
+        /// once on load (`OutpostLedger.MigrateFood`). For "how much food
+        /// does this camp have" read `OutpostLedger.FoodFill`, never this.
         public const string Food = "Food";
+        /// **Ship's biscuit since the food rework**: hard bread for the hold,
+        /// baked at the kitchen from flour. Kept under the old key so every
+        /// old Meals pile and ship-hold row is biscuit now.
         public const string Meals = "Meals";
+
+        // --- the food rework, 2026-09-27 (docs/GDD.md "Food") -----------------
+        // Crops grow on farm plots, fish come off the fishing hut, meat off
+        // the hunt; the kitchen cooks them into dishes; villagers eat the
+        // best dish in store. Fill/buff values live in `Economy.FoodBook`.
+        public const string Potato = "Potato";
+        public const string Carrot = "Carrot";
+        public const string Onion = "Onion";
+        public const string Wheat = "Wheat";
+        public const string Apple = "Apple";
+        public const string Fish = "Fish";
+        public const string Meat = "Meat";
+        /// Wheat ground at the mill (fire II).
+        public const string Flour = "Flour";
+        public const string BakedPotato = "BakedPotato";
+        public const string GrilledFish = "GrilledFish";
+        public const string RoastCarrots = "RoastCarrots";
+        public const string Bread = "Bread";
+        public const string VegStew = "VegStew";
+        public const string FishPie = "FishPie";
+        public const string HuntersStew = "HuntersStew";
 
         // --- the chains, 2026-09-23 -----------------------------------------
         //
@@ -203,6 +234,10 @@ namespace SeaSick.World
             IronSpear => 2,
             Arrows => 12,
             Meals => 4,
+            Potato => 6, Carrot => 6, Onion => 6, Wheat => 5, Apple => 6,
+            Fish => 5, Meat => 3, Flour => 4,
+            BakedPotato => 4, GrilledFish => 4, RoastCarrots => 4, Bread => 6,
+            VegStew => 3, FishPie => 4, HuntersStew => 4,
             _ => 3,
         };
 
@@ -232,6 +267,21 @@ namespace SeaSick.World
             IronSpear => new Color(0.56f, 0.52f, 0.46f),
             SawBlade => new Color(0.62f, 0.64f, 0.68f),
             FineBoards => new Color(0.78f, 0.62f, 0.38f),
+            Potato => new Color(0.70f, 0.56f, 0.36f),
+            Carrot => new Color(0.90f, 0.50f, 0.18f),
+            Onion => new Color(0.85f, 0.78f, 0.62f),
+            Wheat => new Color(0.86f, 0.74f, 0.40f),
+            Apple => new Color(0.78f, 0.22f, 0.20f),
+            Fish => new Color(0.55f, 0.65f, 0.72f),
+            Meat => new Color(0.66f, 0.28f, 0.26f),
+            Flour => new Color(0.94f, 0.92f, 0.86f),
+            BakedPotato => new Color(0.62f, 0.44f, 0.24f),
+            GrilledFish => new Color(0.66f, 0.54f, 0.40f),
+            RoastCarrots => new Color(0.82f, 0.42f, 0.16f),
+            Bread => new Color(0.80f, 0.62f, 0.34f),
+            VegStew => new Color(0.60f, 0.42f, 0.22f),
+            FishPie => new Color(0.84f, 0.66f, 0.38f),
+            HuntersStew => new Color(0.52f, 0.30f, 0.20f),
             _ => new Color(0.5f, 0.5f, 0.5f),
         };
     }

@@ -2062,7 +2062,7 @@ namespace SeaSick.World
         /// on all come off this, so all three agree.
         ///
         /// Everything else carries what `WhatFor` says, unchanged.
-        string Carries(OutpostHand r) => Hunting(r) ? Res.Food : WhatFor(r);
+        string Carries(OutpostHand r) => Hunting(r) ? Res.Meat : WhatFor(r);
 
         /// **How many units are in his arms**, for `VillagerActing.Set`'s
         /// visible stack (Kevin, 2026-09-23: *"if they carry 3 logs, you see

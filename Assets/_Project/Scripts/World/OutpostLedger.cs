@@ -156,6 +156,18 @@ namespace SeaSick.World
         /// A farmhand's harvest not yet carried to the store (whole units
         /// are carried; the fraction waits here).
         public float basket;
+
+        // --- eating by fill (food rework, 2026-09-27; OutpostLedger.Food.cs) ---
+        /// How full he is, 0..1; drains `EatPerHandPerDay` x rations a game
+        /// day. Below `EconomyTuning.HungryBelow` he walks to the store and
+        /// eats. Old saves: the initialiser (full).
+        public float full = 1f;
+        /// The last thing he ate: its mood/work bonus holds while he is fed.
+        public string lastMeal = "";
+        /// The load in his arms is his meal: he eats it at the store instead
+        /// of putting it down.
+        public bool eating;
+
         /// A body is walking this hand right now (`CampWorker`): the ledger
         /// does not advance his legs. Not saved.
         [System.NonSerialized] public bool driven;
@@ -847,7 +859,7 @@ namespace SeaSick.World
         {
             if (priority == WorkPriority.Even) return 1f;
             bool boostFood = priority == WorkPriority.FoodFirst;
-            if (resource == Res.Food) return boostFood ? 1.25f : 0.8f;
+            if (Economy.FoodBook.IsFoodish(resource)) return boostFood ? 1.25f : 0.8f;
             if (resource == Res.Timber) return boostFood ? 0.8f : 1.25f;
             return 1f;
         }
@@ -886,7 +898,7 @@ namespace SeaSick.World
         // docs/DELIVERY-ON-ARRIVAL.md.)
         public static float WorkFactor(OutpostHand h) =>
             h == null ? 0f
-                : Mathf.Max(StarvingWorkFloor, Mathf.Clamp01(h.mood / 0.5f));
+                : Mathf.Max(StarvingWorkFloor, Mathf.Clamp01(h.mood / 0.5f)) * (1f + MealWorkBonus(h));
 
         /// **Hunger slows a hand; it does not stop one, 2026-09-23.** Kevin
         /// chose it after the stuck-buildings repro: at mood 0 the old
@@ -906,7 +918,7 @@ namespace SeaSick.World
         /// Without this a camp that ran out once could never recover: the
         /// hungrier they got the less food they brought in.
         public static float WorkFactorOn(OutpostHand h, string produces) =>
-            produces == Res.Food ? (h == null ? 0f : 1f) : WorkFactor(h);
+            Economy.FoodBook.IsFoodish(produces) ? (h == null ? 0f : 1f) : WorkFactor(h);
 
         /// **The pace this hand's CURRENT job is paid at, 0..1** -- the
         /// factor `Step` actually scales his day by, dispatched the way
@@ -940,8 +952,7 @@ namespace SeaSick.World
             get
             {
                 if (hands.Count == 0) return false;
-                var food = Store(Res.Food);
-                return food == null || (food.whole == 0 && food.part <= 0f);
+                return BestMeal() == null && FoodFill() <= 0f;
             }
         }
 
@@ -959,7 +970,7 @@ namespace SeaSick.World
             {
                 if (hands.Count == 0) return 1f;
                 if (rations == Rations.None) return 0f;
-                return Mathf.Clamp01((CountOf(Res.Food) + (Store(Res.Food)?.part ?? 0f))
+                return Mathf.Clamp01(FoodFill()
                     / (hands.Count * EatPerHandPerDay * EatMultiplier * DaysOfFoodForBrightFire));
             }
         }
@@ -1032,7 +1043,7 @@ namespace SeaSick.World
                 int cap = HousingCapacity;
                 if (cap <= 0) return "no beds";
                 if (Housed >= cap) return $"{Housed} of {cap} beds";
-                if (SpendableOf(Res.Food) < RecruitFoodCost) return "no food to feed a newcomer";
+                if (FoodFill() < RecruitFoodCost) return "no food to feed a newcomer";
                 float daysLeft = Mathf.Max(0f, DaysPerRecruit - recruitProgress);
                 return $"{Housed} of {cap} beds · a new hand in {daysLeft:0.#} days";
             }
@@ -2229,6 +2240,8 @@ namespace SeaSick.World
         public OutpostStock AddField(BuildPlan plan)
         {
             if (plan.beds <= 0 || string.IsNullOrEmpty(plan.makes)) return null;
+            // The farm grows per plot since the food rework (`FarmPlot`).
+            if (plan.id == BuildPlans.Farm.id) return null;
             return AddStanding(plan.makes, plan.FieldStanding, plan.bedRegrowPerDay);
         }
 
@@ -2509,6 +2522,9 @@ namespace SeaSick.World
             // Anything a body over-delivered since the last tick goes on the
             // pile before a single count is read. See `ReconcileSites`.
             MigratePending();
+            MigrateFood();
+            EnsurePlots();
+            GrowPlots(days);
             ReconcileSites();
             DecayDelivered(days);
             FeedFirst();
@@ -2635,6 +2651,9 @@ namespace SeaSick.World
                 // **Carrying his basket to the store** (2026-09-27): walked
                 // by the station pass; no harvesting on the way.
                 if (h.Hauling) continue;
+                // **Farm plots (food rework, 2026-09-27)**: crops per plot,
+                // plant and harvest, each harvest carried to the store.
+                if (h.target == BuildPlans.Farm.id) { FarmDay(h, days); continue; }
                 // **At the field to work it.**
                 bool hasPost = PlanPlace(h.target, OrdinalOfHand(h), out var postAt);
                 float walkBudget = days * WorkFactor(h);
@@ -2744,76 +2763,11 @@ namespace SeaSick.World
 
             // --- upkeep: eating -----------------------------------------------
             //
-            // Runs after production, so a farmhand's own harvest this same
-            // quantum is there to be eaten from -- and every quantum, not
-            // once a day, so D2 holds (ten days in one `Tick` call and ten
-            // calls of one day each spend identical food).
-            int eaters = hands.Count;
-            if (eaters > 0)
-            {
-                var food = Store(Res.Food);
-                // **Rations, 2026-09-22.** `EatMultiplier` is what `rations`
-                // actually pays out against `EatPerHandPerDay` -- 1, a half,
-                // or nothing. On `None` the pile is never touched at all, not
-                // even if there is plenty sitting in it: it is a choice, not
-                // a shortage.
-                float need = eaters * EatPerHandPerDay * EatMultiplier * days;
-                float have = food != null ? food.whole + food.part : 0f;
-                float eaten = Mathf.Min(need, have);
-                if (eaten > 0f)
-                {
-                    food.part -= eaten;
-                    while (food.part < 0f && food.whole > 0) { food.whole--; food.part += 1f; }
-                    if (food.part < 0f) food.part = 0f;
-                    foodEaten += eaten;
-                    away.eaten += eaten;
-                }
-                // **`None` is a hungry day by definition, 2026-09-22** --
-                // there is no ration to have fallen short of, so `need`
-                // itself is zero and the ordinary `eaten < need` test would
-                // never fire. Nobody starves or leaves on this yet -- the
-                // debt still just gets recorded for the sheet.
-                bool starved = rations == Rations.None;
-                if (starved || eaten < need) { hungerDays += days; away.hungryDays += days; }
-
-                // **Mood, per quantum, so D2 (path independence) holds
-                // exactly as the rest of `Step` does.** `fed01` is how much
-                // of today's (rationed) need this quantum actually paid; a
-                // hand not fully fed slides toward angry at
-                // `MoodDropPerHungryDay`, scaled by how short they went, and
-                // a hand fully fed climbs back at `MoodRecoverPerFedDay`. A
-                // hand restored from an old save already has `mood = 1f`
-                // (the field's default), which reads as a content hand with
-                // no history to make up.
-                //
-                // **Half rations never recover, 2026-09-22** -- a hand fed
-                // its full (halved) ration still grumbles rather than settling,
-                // dropping at half `MoodDropPerHungryDay` instead of climbing.
-                // `None` drops every hand at the full rate regardless of what
-                // is sitting in the pile, same as the hunger-day accounting
-                // above.
-                float fed01 = need > 0f ? eaten / need : 1f;
-                for (int hi = 0; hi < hands.Count; hi++)
-                {
-                    var h = hands[hi];
-                    if (h == null) continue;
-                    if (starved)
-                        h.mood = Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days);
-                    else if (fed01 >= 1f)
-                        h.mood = rations == Rations.Half
-                            ? Mathf.Max(0f, h.mood - MoodDropPerHungryDay * 0.5f * days)
-                            : Mathf.Min(1f, h.mood + MoodRecoverPerFedDay * days);
-                    else
-                        h.mood = Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days * (1f - fed01));
-
-                    // **Warmth, 2026-09-27.** On top of the hunger arithmetic
-                    // above, same clamp, same per-day pace: a hand in a Hut
-                    // within `WarmHutRadius` climbs a little further toward
-                    // content. See `IsHandWarm` for who counts.
-                    if (IsHandWarm(hi))
-                        h.mood = Mathf.Min(1f, h.mood + WarmMoodBonusPerDay * days);
-                }
-            }
+            // Since the food rework (2026-09-27) every hand has a fullness
+            // that drains, and a hungry hand WALKS to the store for the best
+            // dish there (`EatStep`, OutpostLedger.Food.cs). Still every
+            // quantum, so D2 holds.
+            EatStep(days);
 
             // --- upkeep: recruiting ---------------------------------------------
             //
@@ -2823,13 +2777,13 @@ namespace SeaSick.World
             // regardless. Checked against the pile AFTER eating, so a camp
             // that just fed its last hand on its last three Food does not
             // also recruit off the same three.
-            if (Housed < HousingCapacity && SpendableOf(Res.Food) >= RecruitFoodCost)
+            if (Housed < HousingCapacity && FoodFill() >= RecruitFoodCost)
             {
                 recruitProgress += days;
                 if (recruitProgress >= DaysPerRecruit)
                 {
                     recruitProgress -= DaysPerRecruit;
-                    Take(Res.Food, RecruitFoodCost);
+                    TakeFill(RecruitFoodCost);
                     string name = VillagerNames.NextFor(this);
                     hands.Add(new OutpostHand
                     {
@@ -3007,6 +2961,7 @@ namespace SeaSick.World
                 // stalled for having nothing to show for standing watch.
                 if (h.target == WatchtowerId) return null;
                 if (IsStation(h.target)) return StationStallCause(h);
+                if (h.target == BuildPlans.Farm.id) return FarmStallCause(h);
                 if (!Conversion(h.target, out string makes, out Economy.Ingredient[] takes,
                         out _, out float ratePerDay, out string tool, out _))
                     return "not set to make anything";
@@ -3088,7 +3043,7 @@ namespace SeaSick.World
                         bool armed = HeldOf(Res.Arrows) >= 1f;
                         float kills = HuntTripPerDay(armed)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
-                        if (resource == Res.Food) { if (StoreRoomF(Res.Food) > 0f) rate += kills * Res.MeatPerAnimal; }
+                        if (resource == Res.Meat) { if (StoreRoomF(Res.Meat) > 0f) rate += kills * Res.MeatPerAnimal; }
                         else if (resource == Res.Arrows && armed) rate -= kills;
                         else foreach (var drop in Economy.Techs.HuntDrops)
                             if (drop.res == resource) rate += kills * drop.n;
@@ -3132,8 +3087,8 @@ namespace SeaSick.World
             // whole point of the readout. Scaled by `EatMultiplier`, 2026-09-22,
             // so the readout agrees with `Step`: a camp on half or no rations
             // does not drain a full ration it was never going to spend.
-            if (resource == Res.Food && hands.Count > 0)
-                rate -= hands.Count * EatPerHandPerDay * EatMultiplier;
+            // (Eating is in FILL since the food rework: `FillPerDay`, not a
+            // per-resource drain -- which dish goes depends on the larder.)
 
             return rate;
         }
@@ -3159,7 +3114,7 @@ namespace SeaSick.World
                     // pile at all.
                     if (h.target == Res.Game)
                     {
-                        if ((resource != Res.Food && resource != Res.Hide) || Stalled(h)) continue;
+                        if ((resource != Res.Meat && resource != Res.Hide) || Stalled(h)) continue;
                         // The bow, as `Step` and `RatePerDay` have it. This
                         // readout is the POSITIVE terms only, so the arrows
                         // it costs are deliberately not subtracted here --
@@ -3167,7 +3122,7 @@ namespace SeaSick.World
                         // Trips since 2026-09-27: a carcass per hunt trip.
                         float kills = HuntTripPerDay(HeldOf(Res.Arrows) >= 1f)
                                       * WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
-                        if (resource == Res.Food) { if (StoreRoomF(Res.Food) > 0f) rate += kills * Res.MeatPerAnimal; }
+                        if (resource == Res.Meat) { if (StoreRoomF(Res.Meat) > 0f) rate += kills * Res.MeatPerAnimal; }
                         else foreach (var drop in Economy.Techs.HuntDrops)
                             if (drop.res == Res.Hide) rate += kills * drop.n;
                         continue;
@@ -3269,8 +3224,7 @@ namespace SeaSick.World
         public void FeedFirst()
         {
             if (hands == null || hands.Count == 0) return;
-            var food = Store(Res.Food);
-            float have = food != null ? food.whole + food.part : 0f;
+            float have = FoodFill();
             float day = hands.Count * EatPerHandPerDay;
 
             if (have >= day * FedDays)

@@ -1200,8 +1200,10 @@ namespace SeaSick.World
             // go up before the camp has to feed itself. Known hole: dropping
             // and recalling the same man repeatedly books it again.
             if (!surplusAtHome)
-                ledger?.Add(Res.Food, Mathf.RoundToInt(OutpostLedger.ProvisionDays
-                    * OutpostLedger.EatPerHandPerDay));
+                // Ship's biscuit since the food rework (2026-09-27): as many
+                // as it takes to fill `ProvisionDays` hand-days.
+                ledger?.Add(Res.Meals, Mathf.RoundToInt(OutpostLedger.ProvisionDays
+                    * OutpostLedger.EatPerHandPerDay / Economy.FoodBook.Fill(Res.Meals)));
 
             hand.transform.SetParent(transform, true);
             // Off only when nobody is here to see them. Leaving somebody

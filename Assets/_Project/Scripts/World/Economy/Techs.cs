@@ -74,7 +74,7 @@ namespace SeaSick.World.Economy
                 // is 7 logs through the sawmill, 12 stone a quarter-hour of
                 // one hand, 4 hide = 4 kills on one stone spear.
                 cost = Cost.Of(Cost.I(Res.Boards, 20), Cost.I(Res.Stone, 12), Cost.I(Res.Hide, 4)),
-                unlocksPlans = new[] { "Quarry" },
+                unlocksPlans = new[] { "Quarry", "Mill" },
                 blurb = "opens the quarry, the forge's iron work, and every building's second level",
             },
         };
@@ -91,6 +91,17 @@ namespace SeaSick.World.Economy
                 cost = Cost.Of(Cost.I(Res.Brick, 6), Cost.I(Res.FineBoards, 4)) },
             new UpgradeStep { planId = "Kitchen", toLevel = 2, campfireLevel = 2,
                 cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 4)) },
+            // Food rework (2026-09-27): Kitchen III (fish pie, hunter's
+            // stew) and Farm II/III (onion+wheat, apple; 9/12 plots) all at
+            // fire II until fire III exists. Provisional prices.
+            new UpgradeStep { planId = "Kitchen", toLevel = 3, campfireLevel = 2,
+                cost = Cost.Of(Cost.I(Res.Brick, 8), Cost.I(Res.FineBoards, 6)) },
+            new UpgradeStep { planId = "Farm", toLevel = 2, campfireLevel = 2, rateMul = 1f,
+                cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.Boards, 6)) },
+            new UpgradeStep { planId = "Farm", toLevel = 3, campfireLevel = 2, rateMul = 1f,
+                cost = Cost.Of(Cost.I(Res.Brick, 8), Cost.I(Res.FineBoards, 4)) },
+            new UpgradeStep { planId = "Mill", toLevel = 2, campfireLevel = 2,
+                cost = Cost.Of(Cost.I(Res.Brick, 6), Cost.I(Res.FineBoards, 3)) },
             new UpgradeStep { planId = "Fletcher", toLevel = 2, campfireLevel = 2,
                 cost = Cost.Of(Cost.I(Res.Brick, 4), Cost.I(Res.FineBoards, 3)) },
             // Fishing hut, 2026-09-27: priced like the fletcher (a small
@@ -129,6 +140,7 @@ namespace SeaSick.World.Economy
             new BuildingCap { planId = "Sawmill",    copies = new[] { 1, 1, 2, 2 } },
             new BuildingCap { planId = "Blacksmith", copies = new[] { 1, 1, 2, 2 } },
             new BuildingCap { planId = "Kitchen",    copies = new[] { 1, 1, 2, 2 } },
+            new BuildingCap { planId = "Mill",       copies = new[] { 1, 1, 1, 2 } },
             new BuildingCap { planId = "Fletcher",   copies = new[] { 1, 1, 2, 2 } },
             new BuildingCap { planId = "Quarry",     copies = new[] { 1, 1, 2, 2 } },
         };

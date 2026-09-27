@@ -50,6 +50,13 @@ namespace SeaSick.World.Economy
     /// they unlock at, which is the order a station sheet lists them in.
     public static class Recipes
     {
+        /// Output units a hand-day for a batch of `yield` that takes
+        /// `seconds` of REAL time at the 180 s game day the design table was
+        /// priced against (food rework, 2026-09-27).
+        public const float PricedDaySeconds = 180f;
+        public static float Cook(float seconds, int yield) =>
+            yield * PricedDaySeconds / UnityEngine.Mathf.Max(0.1f, seconds);
+
         public static readonly Recipe[] All =
         {
             // --- sawmill ---
@@ -65,20 +72,45 @@ namespace SeaSick.World.Economy
                 takes = Cost.Of(Cost.I(Res.Boards, 2)), ratePerDay = 2f,
                 campfireLevel = 2, tool = Res.SawBlade, toolWear = 0.05f },
 
-            // --- kitchen ---
-            new Recipe { id = "meals", station = "Kitchen", makes = Res.Meals, yield = 1,
-                takes = Cost.Of(Cost.I(Res.Food, 1)), ratePerDay = 3f },
+            // --- kitchen: dishes (food rework, 2026-09-27) ---
+            // Cook times are REAL seconds at today's 180 s day (`Cook`), per
+            // the approved design table; the first recipe is the kitchen's
+            // default. Fill values and buffs are `Economy.FoodBook`'s.
+            new Recipe { id = "baked-potato", station = "Kitchen", makes = Res.BakedPotato, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Potato, 1)), ratePerDay = Cook(15f, 1) },
+            new Recipe { id = "grilled-fish", station = "Kitchen", makes = Res.GrilledFish, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Fish, 1)), ratePerDay = Cook(20f, 1) },
+            new Recipe { id = "roast-carrots", station = "Kitchen", makes = Res.RoastCarrots, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Carrot, 2)), ratePerDay = Cook(20f, 1) },
+            new Recipe { id = "bread", station = "Kitchen", makes = Res.Bread, yield = 3,
+                takes = Cost.Of(Cost.I(Res.Flour, 2)), ratePerDay = Cook(45f, 3),
+                campfireLevel = 2, stationLevel = 2 },
+            new Recipe { id = "veg-stew", station = "Kitchen", makes = Res.VegStew, yield = 3,
+                takes = Cost.Of(Cost.I(Res.Potato, 2), Cost.I(Res.Carrot, 1), Cost.I(Res.Onion, 1)),
+                ratePerDay = Cook(60f, 3), campfireLevel = 2, stationLevel = 2 },
+            new Recipe { id = "ships-biscuit", station = "Kitchen", makes = Res.Meals, yield = 4,
+                takes = Cost.Of(Cost.I(Res.Flour, 2)), ratePerDay = Cook(60f, 4),
+                campfireLevel = 2, stationLevel = 2 },
+            new Recipe { id = "fish-pie", station = "Kitchen", makes = Res.FishPie, yield = 4,
+                takes = Cost.Of(Cost.I(Res.Fish, 2), Cost.I(Res.Potato, 2), Cost.I(Res.Flour, 1)),
+                ratePerDay = Cook(90f, 4), campfireLevel = 2, stationLevel = 3 },
+            new Recipe { id = "hunters-stew", station = "Kitchen", makes = Res.HuntersStew, yield = 4,
+                takes = Cost.Of(Cost.I(Res.Meat, 1), Cost.I(Res.Potato, 2), Cost.I(Res.Carrot, 1), Cost.I(Res.Onion, 1)),
+                ratePerDay = Cook(90f, 4), campfireLevel = 2, stationLevel = 3 },
+            // (Harvest feast -- Kitchen IV, fire III -- waits for fire III.)
+
+            // --- mill (fire II): 2 wheat -> 1 flour, 30 s ---
+            new Recipe { id = "flour", station = "Mill", makes = Res.Flour, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Wheat, 2)), ratePerDay = Cook(30f, 1), campfireLevel = 2 },
 
             // --- fishing hut (2026-09-27) ---
             // **A catch: no takes.** The sea is the input, so the bench loads
             // with nothing in the bay (`TryLoad` checks no lines) and the
-            // fisher never waits on a hauler. Food is Raw; `RecipeGraph`
+            // fisher never waits on a hauler. Fish is Raw; `RecipeGraph`
             // allows a raw good ONLY from a recipe that takes nothing, which
-            // is gathering at a station, not making. 4 a hand-day: two-thirds
-            // of a farmhand (`OutpostLedger.FoodPerHandPerDay`, 6), because
-            // the farm costs a field and the hut costs only a shore.
-            // **Provisional, never played.**
-            new Recipe { id = "fish", station = "FishingHut", makes = Res.Food, yield = 1,
+            // is gathering at a station, not making. 4 a hand-day.
+            // **Provisional, never played.** Makes fish since the food rework.
+            new Recipe { id = "fish", station = "FishingHut", makes = Res.Fish, yield = 1,
                 takes = Cost.None, ratePerDay = 4f },
 
             // --- fletcher ---

@@ -429,7 +429,7 @@ namespace SeaSick.World
             id = "Farm",
             baseStoneCost = 2,
             label = "farm plot",
-            blurb = "a farmhand grows food out of the ground",
+            blurb = "a farmhand plants and harvests crops, plot by plot",
             resource = Res.Timber,
             baseCost = 12,
             footprint = new Vector2(4.66f, 4.69f),
@@ -444,7 +444,7 @@ namespace SeaSick.World
             // plot unchanged.
             ridge = 2.03f,
             position = "farmhand",
-            makes = Res.Food,
+            makes = Res.Potato,
             rate = OutpostLedger.FoodPerHandPerDay,
             beds = FarmBeds,
             unitsPerBed = FarmUnitsPerBed,
@@ -498,7 +498,7 @@ namespace SeaSick.World
             id = "Kitchen",
             baseStoneCost = 4,
             label = "kitchen",
-            blurb = "a cook turns food into meals",
+            blurb = "a cook turns crops, fish and meat into dishes that feed better",
             resource = Res.Timber,
             baseCost = 16,
             footprint = new Vector2(6.26f, 6.12f),
@@ -510,9 +510,9 @@ namespace SeaSick.World
             // sawmill's borrowed guess.
             inputSlots = 4,
             outputSlots = 6,
-            takes = Res.Food,
-            makes = Res.Meals,
-            rate = 3f,
+            takes = Res.Potato,
+            makes = Res.BakedPotato,
+            rate = 12f,
             prefab = "Settlement/kitchen_astra",
             front = Vector3.forward,
         };
@@ -535,6 +535,29 @@ namespace SeaSick.World
         /// has no tower model to wear, so like the pier it stands extruded
         /// from `footprint` and `ridge` rather than an authored prefab.
         /// **A guess, never played.**
+        /// **The mill, fire II (food rework, 2026-09-27).** Two wheat grind
+        /// to one flour; bread and biscuit want it. PLACEHOLDER ART: wears
+        /// the sawmill model until Astra makes a mill.
+        public static readonly BuildPlan Mill = new BuildPlan
+        {
+            id = "Mill",
+            baseStoneCost = 6,
+            label = "mill",
+            blurb = "a miller grinds wheat into flour for bread",
+            resource = Res.Timber,
+            baseCost = 18,
+            footprint = new Vector2(5.2f, 4.8f),
+            ridge = 3.6f,
+            position = "miller",
+            inputSlots = 6,
+            outputSlots = 6,
+            takes = Res.Wheat,
+            makes = Res.Flour,
+            rate = 6f,
+            prefab = "Settlement/sawmill",
+            front = Vector3.forward,
+        };
+
         public static readonly BuildPlan Watchtower = new BuildPlan
         {
             id = "Watchtower",
@@ -691,7 +714,7 @@ namespace SeaSick.World
             position = "fisher",
             inputSlots = 1,         // nothing comes in; 1 keeps the sheet's bay row sane
             outputSlots = 8,
-            makes = Res.Food,
+            makes = Res.Fish,
             // Informational only -- `Recipes.All` ("fish") is what runs.
             rate = 4f,
             prefab = "Settlement/fishinghut_astra",
@@ -975,7 +998,7 @@ namespace SeaSick.World
         /// same blueprint, so keeping it in the list is what stops it becoming
         /// a special case.
         public static readonly BuildPlan[] AtACamp =
-            { Campfire, Storage, Hut, Farm, FishingHut, Sawmill, Quarry, Fletcher, Kitchen, Blacksmith, Watchtower, Pier, DryDock };
+            { Campfire, Storage, Hut, Farm, FishingHut, Sawmill, Quarry, Fletcher, Kitchen, Mill, Blacksmith, Watchtower, Pier, DryDock };
 
         /// Look a plan up by the id a ledger row carries. A save restores ids,
         /// not structs, and so does an assignment.

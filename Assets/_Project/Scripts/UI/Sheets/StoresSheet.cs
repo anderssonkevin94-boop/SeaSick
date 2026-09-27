@@ -94,6 +94,24 @@ namespace SeaSick.UI.Sheets
         Label detailSplit;
         VisualElement rootEl;
         long visibleKey = long.MinValue;
+        VisualElement larderRow, rationSeg;
+        Label larderLine;
+        const int FoodTab = 3;
+
+        void FillLarder(OutpostLedger l)
+        {
+            if (larderRow == null) return;
+            bool on = tabIndex == FoodTab;
+            larderRow.style.display = on ? DisplayStyle.Flex : DisplayStyle.None;
+            if (!on) return;
+            SheetKit.SetSegmented(rationSeg, l.rations == Rations.Full ? 0 : l.rations == Rations.Half ? 1 : 2);
+            float days = l.DaysOfFood;
+            int fed = 0;
+            foreach (var h in l.hands) if (h != null && h.full > 0f) fed++;
+            string lasts = float.IsInfinity(days) ? "nobody eats"
+                : $"lasts {days * TimeOfDay.DayLength / 60f:0} min ({days:0.#} days)";
+            larderLine.text = $"{l.FoodFill():0.#} meals · {lasts} · {fed}/{l.hands.Count} fed · cooked {l.CookedFill():0.#}";
+        }
 
         public VisualElement BuildHeader()
         {
@@ -149,6 +167,25 @@ namespace SeaSick.UI.Sheets
 
             tabsRow = BuildCategoryTabs();
             root.Add(tabsRow);
+
+            // **The larder (food rework, 2026-09-27)**: the Food tab is a
+            // food view of storage -- how long the camp lasts, the rations
+            // switch, and a save toggle per dish in the detail card.
+            larderRow = new VisualElement();
+            larderRow.style.flexDirection = FlexDirection.Column;
+            larderRow.style.marginTop = 6f;
+            larderLine = new Label();
+            larderLine.AddToClassList("stores-subtitle");
+            larderRow.Add(larderLine);
+            rationSeg = SheetKit.Segmented(new[] { "Full", "Half", "None" }, 0, i =>
+            {
+                var l = L;
+                if (l == null) return;
+                l.rations = i == 0 ? Rations.Full : i == 1 ? Rations.Half : Rations.None;
+                SheetKit.SetSegmented(rationSeg, i);
+            });
+            larderRow.Add(rationSeg);
+            root.Add(larderRow);
 
             grid = new ItemGrid(4, OnTileTap);
             grid.style.flexShrink = 0f;
@@ -323,6 +360,7 @@ namespace SeaSick.UI.Sheets
 
             RefreshCells();
             SubtitleLine(l);
+            FillLarder(l);
             if (sortBtn != null) sortBtn.text = InstanceSortLabel();
             if (detailSplit != null && !string.IsNullOrEmpty(selectedId))
                 detailSplit.text = $"Camp {CampQty(l, selectedId)}  ·  Ship {ShipQty(l, selectedId)}";
@@ -394,6 +432,27 @@ namespace SeaSick.UI.Sheets
             detailSplit = new Label($"Camp {CampQty(l, def.id)}  ·  Ship {ShipQty(l, def.id)}");
             detailSplit.AddToClassList("stores-detail-split");
             col.Add(detailSplit);
+
+            // A dish's (or raw food's) worth and its eat/save switch.
+            if (l != null && FoodBook.IsEdible(def.id))
+            {
+                string id = def.id;
+                string bonus = FoodBook.BonusLine(id);
+                var fill = new Label($"fill {FoodBook.Fill(id):0.##}" + (bonus.Length > 0 ? " · " + bonus : "")
+                    + (FoodBook.IsDish(id) ? " · eaten best first" : " · eaten only if nothing cooked"));
+                fill.AddToClassList("stores-detail-blurb");
+                col.Add(fill);
+                Button save = null;
+                save = SheetKit.Btn(l.DishSaved(id) ? "Saved · not eaten" : "Eaten · tap to save", () =>
+                {
+                    var lx = L;
+                    if (lx == null) return;
+                    lx.SetDishSaved(id, !lx.DishSaved(id));
+                    save.text = lx.DishSaved(id) ? "Saved · not eaten" : "Eaten · tap to save";
+                });
+                save.style.minHeight = 44f;
+                col.Add(save);
+            }
 
             card.Add(col);
             SheetBits.Swap(detailHolder, card);
