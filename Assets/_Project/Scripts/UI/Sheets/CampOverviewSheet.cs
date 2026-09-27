@@ -581,7 +581,7 @@ namespace SeaSick.UI.Sheets
                 {
                     var b = BuiltOf(s.planId);
                     if (b != null) Sheets.Open(new StationSheet(outpost, b));
-                    else OpenFire("build");
+                    else OpenFire("build", s.planId);
                     break;
                 }
                 case GoalAction.AssignHand:
@@ -592,7 +592,7 @@ namespace SeaSick.UI.Sheets
                     break;
                 }
                 case GoalAction.Build:
-                    OpenFire("build");
+                    OpenFire("build", s.planId);
                     break;
             }
         }
@@ -629,13 +629,12 @@ namespace SeaSick.UI.Sheets
             return null;
         }
 
-        /// The old camp sheet, at one of its sections -- the build list and
-        /// the hands still live there until the drawer's pages replace them.
-        void OpenFire(string section)
+        /// The drawer's own pages (2026-09-27): Camp › Build (on the group
+        /// `planId` is in) or Camp › People -- no longer the old camp sheet.
+        void OpenFire(string section, string planId = null)
         {
-            var fs = new FireSheet(outpost);
-            fs.FocusSection(section);
-            Sheets.Open(fs);
+            var page = section == "hands" ? CampAlerts.People(outpost) : CampAlerts.BuildList(outpost, planId);
+            if (page != null) Sheets.Open(page);
         }
 
         static string Cap(string s) =>
