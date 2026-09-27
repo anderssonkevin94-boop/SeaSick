@@ -48,7 +48,8 @@ public static class HuntCheck
         return l;
     }
 
-    /// **The hunt is a trip (2026-09-27).** Steps a bare camp one quantum
+    /// **The hunt is a WALK (2026-09-27, docs/DELIVERY-ON-ARRIVAL.md):**
+    /// walk up to the beast, jab, carry, deposit -- no stalk timer. Steps a bare camp one quantum
     /// at a time and asserts, at every step: Hide whole moves only in a step
     /// that booked a carcass deposit, by exactly +1 (0 when full); Food by
     /// +4 (less when full) in that step and never otherwise; the herd drops
@@ -62,7 +63,7 @@ public static class HuntCheck
         var sb = new StringBuilder("HuntCheck.Ledger (hunt = trip)\n");
         bool pass = true;
         float q = OutpostLedger.QuantumDays * TimeOfDay.DayLength;
-        sb.AppendLine($"trip {TimeOfDay.DayLength * new OutpostLedger().HuntTripDays(false):0}s (armed {TimeOfDay.DayLength * new OutpostLedger().HuntTripDays(true):0}s), {new OutpostLedger().HuntTripPerDay(false):0.00} kills/day");
+        sb.AppendLine($"est. trip {TimeOfDay.DayLength * new OutpostLedger().HuntTripDays(false):0}s (armed {TimeOfDay.DayLength * new OutpostLedger().HuntTripDays(true):0}s), {new OutpostLedger().HuntTripPerDay(false):0.00} kills/day");
 
         foreach (int food in new[] { 0, 30 })
         {
@@ -139,7 +140,7 @@ public static class HuntCheck
     {
         var h = l.hands[0];
         return $"food {l.Store(Res.Food).whole}+{l.Store(Res.Food).part:0.###} hide {l.Store(Res.Hide).whole}+{l.Store(Res.Hide).part:0.###} game {l.Stock(Res.Game).standing:0.###} "
-               + $"trip {(h.HuntTrip ? (h.huntKilled ? "carry" : "stalk") : "none")} left {h.haulLeft:0.0000}";
+               + $"trip {(h.HuntTrip ? (h.huntKilled ? "carry" : "stalk") : "none")} leg {h.Leg} {h.legLeft:0.000}m {h.workLeft:0.000}s at {h.wx:0.00},{h.wz:0.00}";
     }
 
     static int HidePer()
@@ -200,7 +201,7 @@ public static class HuntCheck
         var l = camp.Ledger;
         var sb = new StringBuilder("HuntCheck.Report\n");
         float game1 = l.Stock(Res.Game) != null ? l.Stock(Res.Game).standing : 0f;
-        sb.AppendLine($"game {game0:0.00} -> {game1:0.00} (kills {game0 - game1:0.00}), days to kill {OutpostLedger.HuntDaysToKill(hunter):0.000}, trip {(hunter.HuntTrip ? (hunter.huntKilled ? "carry" : "stalk") : "none")}");
+        sb.AppendLine($"game {game0:0.00} -> {game1:0.00} (kills {game0 - game1:0.00}), leg {hunter.Leg} (work left {hunter.workLeft:0.0}s), trip {(hunter.HuntTrip ? (hunter.huntKilled ? "carry" : "walk up/jab") : "none")}");
         sb.AppendLine($"food {food0} -> {l.CountOf(Res.Food)}, hide {hide0} -> {l.CountOf(Res.Hide)}, spear {spear0:0.00} -> {SpearHeld(l):0.00} ({l.SpearInHand() ?? "none"})");
         sb.AppendLine($"hunter {hunter.name}: order {hunter.order}/{hunter.target}, stall '{l.StallReason(hunter) ?? "none"}'");
 

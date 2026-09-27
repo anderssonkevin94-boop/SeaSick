@@ -178,6 +178,9 @@ namespace SeaSick.World
             // ledger is told how many are offshore and never guesses. Sink
             // them and the clock stops.
             ledger.raiders = Combat.EnemyShip.CountAt(Island);
+            // The invisible walkers' legs are measured on this camp's own
+            // path grid while it exists (2026-09-27).
+            if (ledger.router == null) ledger.router = WalkedMetres;
             ledger.Tick(TimeOfDay.Seconds);
             FeedTheFire();
 
@@ -201,7 +204,29 @@ namespace SeaSick.World
             EnsureBornBodies();
         }
 
-        /// **What the ledger needs to time a trip, 2026-09-23.** The books
+        /// **Walked metres between two points on this camp's `CampPath`
+        /// grid**, or -1 when there is no grid or no plan budget this frame
+        /// (the walker then takes the straight line). One plan per LEG of an
+        /// invisible walker, never per step (2026-09-27).
+        float WalkedMetres(Vector3 a, Vector3 b)
+        {
+            var map = CampPath.For(this);
+            if (map == null || !CampPath.Budget()) return -1f;
+            walkedScratch.Clear();
+            if (!map.Route(a, b, CampPath.Walker.Hand, walkedScratch) || walkedScratch.Count == 0) return -1f;
+            float len = 0f;
+            Vector3 p = a;
+            for (int i = 0; i < walkedScratch.Count; i++)
+            {
+                Vector3 c = walkedScratch[i];
+                len += new Vector2(c.x - p.x, c.z - p.z).magnitude;
+                p = c;
+            }
+            return len + new Vector2(b.x - p.x, b.z - p.z).magnitude;
+        }
+        readonly List<Vector3> walkedScratch = new List<Vector3>();
+
+        /// **Where the invisible walkers fetch from, 2026-09-23.** The books
         /// know where every building and site stands but not where a tree or
         /// a rock is, so while the camp is WATCHED this saves, per gathered
         /// resource, the straight-line metres from the camp centre to the
@@ -1549,9 +1574,12 @@ namespace SeaSick.World
                     i++;
                 }
 
-                if (height != null) spot.y = height(spot.x, spot.z);
-
                 var worker = a.gameObject.activeInHierarchy ? CampWorker.Of(a) : null;
+                // **Where his invisible walker got to** (2026-09-27): a body
+                // put down fresh stands where the books have him, carrying
+                // what he carries (docs/DELIVERY-ON-ARRIVAL.md).
+                if (worker == null && row.wHas) { spot = new Vector3(row.wx, 0f, row.wz); lookAt = spot + a.transform.forward; }
+                if (height != null) spot.y = height(spot.x, spot.z);
                 if (worker != null)
                 {
                     // On their feet and being watched: this is a change of

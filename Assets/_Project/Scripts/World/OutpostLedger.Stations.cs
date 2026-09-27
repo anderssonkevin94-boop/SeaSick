@@ -270,25 +270,8 @@ namespace SeaSick.World
 
         static float SecondsToDays(float seconds) => seconds / Mathf.Max(0.0001f, TimeOfDay.DayLength);
 
-        /// **Start a trip whose time is its distance.** Walk from the
-        /// drop-off to the pickup, cut `n` there if it is the island, pick
-        /// up, walk back. The route and phases go on the hand (saved).
-        void StartTimedTrip(OutpostHand h, string res, int n, HaulPlace from, int fromStation,
-            HaulPlace to, int toStation, PendingBuild site = null, bool fromBay = false)
-        {
-            float leg = LegMetres(res, from, fromStation, to, toStation, site);
-            float walk = leg / WalkMetresPerSecond;
-            float work = HandleSeconds + (from == HaulPlace.Field ? n * GatherSecondsPerUnit(res) : 0f);
-            StartTrip(h, res, n, from, fromStation, to, toStation, SecondsToDays(2f * walk + work), fromBay);
-            h.haulWalkDays = SecondsToDays(walk);
-            h.haulWorkDays = SecondsToDays(work);
-            h.haulPlaced = PlaceOf(from, fromStation, site, out var fa) & PlaceOf(to, toStation, site, out var ta);
-            h.haulFromX = fa.x; h.haulFromZ = fa.z;
-            h.haulToX = ta.x; h.haulToZ = ta.z;
-        }
-
-        /// **Game-days of one trip** (for sheets and probes): the same
-        /// arithmetic `StartTimedTrip` books.
+        /// **Game-days of one trip -- a DISPLAY estimate only** (2026-09-27:
+        /// nothing books through this; trips are walked, docs/DELIVERY-ON-ARRIVAL.md).
         public float TripDays(string res, int n, HaulPlace from, int fromStation,
             HaulPlace to, int toStation, PendingBuild site = null)
         {
@@ -707,7 +690,7 @@ namespace SeaSick.World
         public HaulView HaulOf(OutpostHand h)
         {
             if (h == null || !h.Hauling) return new HaulView { fromStation = -1, toStation = -1 };
-            float total = Mathf.Max(Eps, h.haulDays);
+            MigrateTrip(h);
             return new HaulView
             {
                 active = true,
@@ -717,13 +700,11 @@ namespace SeaSick.World
                 fromStation = h.haulFrom == HaulPlace.Station ? h.haulFromStation : -1,
                 to = h.haulTo,
                 toStation = h.haulTo == HaulPlace.Station ? h.haulToStation : -1,
-                progress01 = Mathf.Clamp01(1f - h.haulLeft / total),
+                leg = h.Leg,
+                picked = h.haulPicked,
                 placed = h.haulPlaced,
                 fromAt = new Vector3(h.haulFromX, 0f, h.haulFromZ),
                 toAt = new Vector3(h.haulToX, 0f, h.haulToZ),
-                walkOutEnd01 = Mathf.Clamp01(h.haulWalkDays / total),
-                workEnd01 = Mathf.Clamp01((h.haulWalkDays + h.haulWorkDays) / total),
-                totalSeconds = h.haulDays * TimeOfDay.DayLength,
             };
         }
 
@@ -771,21 +752,6 @@ namespace SeaSick.World
             return (ceilingPer - whole - InFlightTo(HaulPlace.Store, -1, res)) - part;
         }
 
-        void StartTrip(OutpostHand h, string res, int n, HaulPlace from, int fromStation,
-            HaulPlace to, int toStation, float tripDays, bool fromBay = false)
-        {
-            h.haulSerial++;
-            h.haulFromBay = fromBay;
-            h.haulRes = res;
-            h.haulCount = n;
-            h.haulFrom = from;
-            h.haulFromStation = fromStation;
-            h.haulTo = to;
-            h.haulToStation = toStation;
-            h.haulDays = Mathf.Max(Eps, tripDays);
-            h.haulLeft = h.haulDays;
-        }
-
         /// Put the load down where it was going (the store if that station
         /// is gone). Never drops anything. **The store's ceiling holds**: a
         /// store-bound load that no longer fits (something else filled the
@@ -800,13 +766,15 @@ namespace SeaSick.World
             // A hunt trip (2026-09-27): a killed carcass lands at the store
             // as meat and hide, an unkilled one was never there.
             if (h.HuntTrip) { DepositCarcass(h); return; }
+            // **Nothing to put down** (2026-09-27): a load he never picked up
+            // was only planned -- the source still has it.
+            if (!h.haulPicked) { CancelPlanned(h); return; }
             // **A builder's armful into a blueprint** (2026-09-23): through
             // `DeliverToSite`, so it fills the oldest site short of it up to
             // its need and any surplus (a visitor beat him to it, the site
             // was cancelled) goes on the pile -- never past a need, never lost.
             if (h.haulTo == HaulPlace.Site)
             {
-                if (h.haulFrom == HaulPlace.Field && h.haulRes == Res.Timber) timberTaken += h.haulCount;
                 DeliverToSite(h.haulRes, h.haulCount);
                 ClearHaul(h);
                 return;
@@ -832,7 +800,6 @@ namespace SeaSick.World
                 // trip), and it is what the camp gathered while away. Booked
                 // per unit put down, so a load that waits at a full store is
                 // booked once, as it goes in.
-                if (h.haulRes == Res.Timber) timberTaken += put;
                 away.Add(h.haulRes, put);
             }
             if (h.haulFrom == HaulPlace.Ship)
@@ -864,12 +831,13 @@ namespace SeaSick.World
                     h.haulCount -= back;
                 }
             }
+            if (h.haulTo == HaulPlace.Store) NoteDelivered(h.haulRes, put);
             if (h.haulCount <= 0) { ClearHaul(h); return; }
-            h.haulLeft = 0f;                 // at the store, waiting for room
+            h.tripLeg = (int)TripLeg.AtDrop;  // at the store, waiting for room
         }
 
         /// A hand standing at a full store with a load it cannot put down.
-        static bool WaitingAtStore(OutpostHand h) => h.Hauling && h.haulLeft <= Eps;
+        static bool WaitingAtStore(OutpostHand h) => h.Hauling && h.Leg == TripLeg.AtDrop;
 
         /// **A hand leaves the camp's books** (recalled aboard, carried to a
         /// berth): whatever is in their arms is put down first -- at its
@@ -898,6 +866,9 @@ namespace SeaSick.World
             h.haulWalkDays = h.haulWorkDays = 0f;
             h.huntKilled = h.huntArmed = false;
             h.haulFromX = h.haulFromZ = h.haulToX = h.haulToZ = 0f;
+            h.tripLeg = 0;
+            h.haulPicked = false;
+            h.legLeft = h.workLeft = 0f;
         }
 
         /// Every load put down now, before station indices shift.
@@ -905,16 +876,6 @@ namespace SeaSick.World
         {
             if (hands == null) return;
             foreach (var h in hands) if (h != null && h.Hauling) DepositHaul(h, true);
-        }
-
-        /// False when the hand is stuck at a full store: its day stops there.
-        bool AdvanceHaul(OutpostHand h, ref float budget)
-        {
-            float d = Mathf.Min(budget, h.haulLeft);
-            h.haulLeft -= d;
-            budget -= d;
-            if (h.haulLeft <= Eps) DepositHaul(h);
-            return !WaitingAtStore(h);
         }
 
         /// A job an idle hand (or a gatherer whose store is full) could do.
@@ -946,7 +907,7 @@ namespace SeaSick.World
                 {
                     if (line.n <= 0) continue;
                     int space = s.InputCap - s.BayCount(line.res) - InFlightTo(HaulPlace.Station, i, line.res);
-                    int inStore = StoreCountOf(line.res);
+                    int inStore = StoreFree(line.res);
                     if (space <= 0 || inStore <= 0) continue;
                     c = new Chore
                     {
@@ -967,12 +928,13 @@ namespace SeaSick.World
                 var r = Manned(s) ? s.OrderRecipe : null;
                 foreach (var row in s.bay)
                 {
-                    if (row == null || row.whole <= 0 || Wants(r, row.resource)) continue;
+                    int free = RowFree(i, row, true);
+                    if (row == null || free <= 0 || Wants(r, row.resource)) continue;
                     int room = StoreRoomNet(row.resource);
                     if (room <= 0) continue;
                     c = new Chore
                     {
-                        res = row.resource, n = Mathf.Min(Res.Armful(row.resource), Mathf.Min(row.whole, room)),
+                        res = row.resource, n = Mathf.Min(Res.Armful(row.resource), Mathf.Min(free, room)),
                         source = row, from = HaulPlace.Station, fromStation = i,
                         to = HaulPlace.Store, toStation = -1, fromBay = true,
                     };
@@ -997,12 +959,13 @@ namespace SeaSick.World
             if (s == null || s.rack == null) return false;
             foreach (var row in s.rack)
             {
-                if (row == null || row.whole <= 0) continue;
+                int free = RowFree(i, row, false);
+                if (row == null || free <= 0) continue;
                 int room = StoreRoomNet(row.resource);
                 if (room <= 0) continue;
                 c = new Chore
                 {
-                    res = row.resource, n = Mathf.Min(Res.Armful(row.resource), Mathf.Min(row.whole, room)),
+                    res = row.resource, n = Mathf.Min(Res.Armful(row.resource), Mathf.Min(free, room)),
                     source = row, from = HaulPlace.Station, fromStation = i,
                     to = HaulPlace.Store, toStation = -1,
                 };
@@ -1013,7 +976,7 @@ namespace SeaSick.World
 
         void BeginChore(OutpostHand h, Chore c)
         {
-            c.source.whole -= c.n;
+            // The source gives the load up at the PICKUP, not now.
             StartTimedTrip(h, c.res, c.n, c.from, c.fromStation, c.to, c.toStation, null, c.fromBay);
         }
 
@@ -1106,6 +1069,10 @@ namespace SeaSick.World
 
                 if (s.benchState == BenchState.Loaded || s.benchState == BenchState.Working)
                 {
+                    // **At the bench to work it** (2026-09-27): the job's
+                    // timer runs only while he stands there.
+                    if (StationPlace(si, out var benchAt) && !WalkTo(h, benchAt, ref budget, WorkFactor(h))) break;
+                    if (budget <= Eps) break;
                     var r = s.BenchRecipe;
                     if (r == null) { EmptyBench(s); continue; }   // recipe removed from the game
                     float rate = r.ratePerDay * Economy.Techs.RateMul(s.planId, LevelOf(s.planId, s.ordinal))
@@ -1151,11 +1118,10 @@ namespace SeaSick.World
                     if (have >= line.n) continue;
                     int space = s.InputCap - have;
                     if (space <= 0) continue;
-                    int inStore = StoreCountOf(line.res);
+                    int inStore = StoreFree(line.res);
                     if (inStore > 0)
                     {
                         int n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, inStore));
-                        Store(line.res).whole -= n;
                         StartTimedTrip(h, line.res, n, HaulPlace.Store, -1, HaulPlace.Station, si);
                         return true;
                     }
@@ -1163,13 +1129,10 @@ namespace SeaSick.World
                     // call) and his armful goes straight into his own bay.
                     if (Res.IsGatherable(line.res) && line.res != Res.Game)
                     {
-                        var stock = Stock(line.res);
-                        int standing = stock != null ? Mathf.FloorToInt(stock.standing) : 0;
+                        int standing = FieldFree(line.res);
                         if (standing > 0)
                         {
                             int n = Mathf.Min(Res.Armful(line.res), Mathf.Min(space, standing));
-                            stock.standing -= n;
-                            if (line.res == Res.Timber) timberTaken += n;
                             StartTimedTrip(h, line.res, n, HaulPlace.Field, -1, HaulPlace.Station, si);
                             return true;
                         }
@@ -1213,11 +1176,9 @@ namespace SeaSick.World
         bool StartGatherTrip(OutpostHand h)
         {
             string res = h.target;
-            var stock = Stock(res);
-            int standing = stock != null ? Mathf.FloorToInt(stock.standing + 1e-4f) : 0;
+            int standing = FieldFree(res);
             int n = Mathf.Min(Res.Armful(res), Mathf.Min(RoomFor(res), standing));
             if (n <= 0) return false;
-            stock.standing = Mathf.Max(0f, stock.standing - n);
             StartTimedTrip(h, res, n, HaulPlace.Field, -1, HaulPlace.Store, -1);
             return true;
         }
@@ -1235,13 +1196,14 @@ namespace SeaSick.World
         void GatherDay(OutpostHand h, float days, bool helpBuild)
         {
             if (h.target == Res.Game) { HuntDay(h, days, helpBuild); return; }
-            // Re-ordered off the hunt mid-trip: the carcass (if any) lands now.
-            if (h.HuntTrip) DepositCarcass(h);
+            // Re-ordered off the hunt mid-trip: a beast not yet jabbed is let
+            // be; a carcass on his shoulders is still carried home (below).
+            if (h.HuntTrip && !h.huntKilled) ClearHaul(h);
             float scale = WorkFactorOn(h, h.target) * PriorityMultiplier(h.target);
             float budget = days * scale;
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
-                if (h.Hauling) { if (!AdvanceHaul(h, ref budget)) return; continue; }
+                if (h.Hauling) { if (!AdvanceHaul(h, ref budget, scale)) return; continue; }
                 if (!StartGatherTrip(h)) break;
             }
             if (budget <= Eps || h.Hauling || RoomFor(h.target) > 0 || scale <= 0f) return;
@@ -1267,7 +1229,7 @@ namespace SeaSick.World
                 if (h.order == OutpostOrder.Work && IsStation(h.target))
                 {
                     var s = StationOfHand(h);
-                    if (s == null) { if (h.Hauling) DepositHaul(h); continue; }
+                    if (s == null) { if (h.Hauling) AdvanceHaul(h, ref budget); continue; }
                     WorkerDay(h, s, stations.IndexOf(s), ref budget);
                 }
                 else if (TripGatherer(h))
@@ -1279,12 +1241,12 @@ namespace SeaSick.World
                 {
                     HaulerDay(h, ref budget);
                 }
-                else if (h.Hauling && h.haulTo != HaulPlace.Site
-                         && !(IsTransferHaul(h) && builderScratch.Contains(h)))
+                else if (h.Hauling && !builderScratch.Contains(h))
                 {
-                    // (A builder's site load is the builder pass's own, and
-                    // so is a transfer armful a builder is walking.)
-                    DepositHaul(h);
+                    // **A load in his arms is walked where it was going**
+                    // (2026-09-27): re-ordered mid-trip, he still carries
+                    // it there. (A builder's loads are the builder pass's.)
+                    AdvanceHaul(h, ref budget);
                 }
             }
         }

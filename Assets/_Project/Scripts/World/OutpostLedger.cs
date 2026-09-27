@@ -131,6 +131,37 @@ namespace SeaSick.World
         public float haulFromX, haulFromZ, haulToX, haulToZ;
         public float haulWalkDays, haulWorkDays;
 
+        // --- the walker (2026-09-27, docs/DELIVERY-ON-ARRIVAL.md) ----------
+        //
+        // Kevin: *"A villager walking with that resource has that resource on
+        // him and it gets where it gets when it gets there."* A trip is a
+        // walk, not a timer: `tripLeg` says which part of it he is in, and the
+        // books change only at the pickup (end of `AtPickup`) and the drop-off
+        // (arrival at the end of `ToDrop`). The legs are walked by the body
+        // while the camp is watched (`driven`) and by the ledger's own
+        // invisible walker otherwise. All saved; all default to "standing at
+        // the camp centre, carrying nothing", which is what an old save reads as.
+        /// `TripLeg` as an int (JsonUtility-safe). 0 = no trip / an old save's.
+        public int tripLeg;
+        /// The load has left its source and is on him. False while he is
+        /// still walking out to fetch it (the load is only PLANNED then).
+        public bool haulPicked;
+        /// Metres left on the current leg (headless walker only).
+        public float legLeft;
+        /// Seconds of stationary work left at the pickup (full strength).
+        public float workLeft;
+        /// Where he is (world x,z). `wHas` false = never placed: the centre.
+        public bool wHas;
+        public float wx, wz;
+        /// A farmhand's harvest not yet carried to the store (whole units
+        /// are carried; the fraction waits here).
+        public float basket;
+        /// A body is walking this hand right now (`CampWorker`): the ledger
+        /// does not advance his legs. Not saved.
+        [System.NonSerialized] public bool driven;
+
+        public TripLeg Leg => (TripLeg)tripLeg;
+
         public bool Hauling => haulCount > 0 && !string.IsNullOrEmpty(haulRes);
 
         /// **Out after an animal (2026-09-27).** A hunt is a trip on the
@@ -848,8 +879,13 @@ namespace SeaSick.World
         /// nothing at mood 0. So a starving camp does not stop dead, it
         /// just gets slower, which is what makes the decline something the
         /// player can see coming and catch.
+        // (`walkingIn` no longer zeroes the factor, 2026-09-27: every trip
+        // is walked from where the hand really is -- a man still coming up
+        // from the gangway starts his first trip from the gangway -- and
+        // bench/site work needs him standing there. See
+        // docs/DELIVERY-ON-ARRIVAL.md.)
         public static float WorkFactor(OutpostHand h) =>
-            h == null || h.walkingIn ? 0f
+            h == null ? 0f
                 : Mathf.Max(StarvingWorkFloor, Mathf.Clamp01(h.mood / 0.5f));
 
         /// **Hunger slows a hand; it does not stop one, 2026-09-23.** Kevin
@@ -870,7 +906,7 @@ namespace SeaSick.World
         /// Without this a camp that ran out once could never recover: the
         /// hungrier they got the less food they brought in.
         public static float WorkFactorOn(OutpostHand h, string produces) =>
-            produces == Res.Food ? (h == null || h.walkingIn ? 0f : 1f) : WorkFactor(h);
+            produces == Res.Food ? (h == null ? 0f : 1f) : WorkFactor(h);
 
         /// **The pace this hand's CURRENT job is paid at, 0..1** -- the
         /// factor `Step` actually scales his day by, dispatched the way
@@ -2301,11 +2337,13 @@ namespace SeaSick.World
 
                 // The pile first (Kevin, 2026-09-20: *"they gathered logs for
                 // it but it never built"*): timber already cut is carried.
-                var pile = Store(res);
-                if (pile != null && pile.whole > 0)
+                // (Nothing leaves a source until the PICKUP, 2026-09-27: the
+                // `*Free` counts leave out what other walkers are already
+                // on their way to fetch.)
+                int pileFree = StoreFree(res);
+                if (pileFree > 0)
                 {
-                    int n = Mathf.Min(cap, pile.whole);
-                    pile.whole -= n;
+                    int n = Mathf.Min(cap, pileFree);
                     StartTimedTrip(h, res, n, HaulPlace.Store, -1, HaulPlace.Site, -1, site);
                     return true;
                 }
@@ -2313,26 +2351,19 @@ namespace SeaSick.World
                 if (stations != null)
                     for (int i = 0; i < stations.Count; i++)
                     {
-                        var row = stations[i]?.Rack(res);
-                        if (row == null || row.whole <= 0) continue;
-                        int n = Mathf.Min(cap, row.whole);
-                        row.whole -= n;
+                        int free = RowFree(i, stations[i]?.Rack(res), false);
+                        if (free <= 0) continue;
+                        int n = Mathf.Min(cap, free);
                         StartTimedTrip(h, res, n, HaulPlace.Station, i, HaulPlace.Site, -1, site);
                         return true;
                     }
                 // Then cut or quarry it. Brick has no seam: nobody quarries a
                 // brick out of a hillside.
                 if (res == Res.Brick) continue;
-                var stock = Stock(res);
-                int standing = stock != null ? Mathf.FloorToInt(stock.standing + 1e-4f) : 0;
+                int standing = FieldFree(res);
                 if (standing <= 0) continue;
                 {
                     int n = Mathf.Min(cap, standing);
-                    stock.standing = Mathf.Max(0f, stock.standing - n);
-                    // `timberTaken` (which trees the scene shows felled) is
-                    // booked when the armful LANDS (`DepositHaul`), so the
-                    // body chopping through the trip sees its tree go over
-                    // at the end of it, not two trees drop at the start.
                     StartTimedTrip(h, res, n, HaulPlace.Field, -1, HaulPlace.Site, -1, site);
                     return true;
                 }
@@ -2347,24 +2378,18 @@ namespace SeaSick.World
         /// site, exactly as "the haulers move on to the next one".
         void BuilderDay(OutpostHand h, ref float budget)
         {
+            float scale = WorkFactor(h);
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
                 if (h.Hauling)
                 {
                     // A transfer armful (2026-09-24) is walked by the builder
-                    // pass's `TransferDay`, not put down here.
+                    // pass's `TransferDay`, not here.
                     if (IsTransferHaul(h)) return;
-                    if (h.haulTo != HaulPlace.Site)
-                    {
-                        // A station load from a job he just left: put it down.
-                        DepositHaul(h);
-                        if (h.Hauling) return;
-                        continue;
-                    }
-                    float d = Mathf.Min(budget, h.haulLeft);
-                    h.haulLeft -= d;
-                    budget -= d;
-                    if (h.haulLeft <= Eps) DepositHaul(h);
+                    // **Any load in his arms is walked where it was going**
+                    // (2026-09-27) -- a site armful, a cleared log to the
+                    // store, a station load from a job he just left.
+                    if (!AdvanceHaul(h, ref budget, scale)) return;
                     continue;
                 }
 
@@ -2373,8 +2398,19 @@ namespace SeaSick.World
                 {
                     var site = sites[si];
                     if (site == null || site.Complete) continue;
-                    PayClear(site, ref budget);
-                    if (!site.Cleared) continue;   // the day went on the plot
+                    if (!site.Cleared || site.Stocked)
+                    {
+                        // Clearing and hammering happen ON the site: he walks
+                        // there first (a body is there when it stands by it).
+                        if (!WalkTo(h, site.At, ref budget, scale)) return;
+                        if (budget <= Eps) return;
+                    }
+                    if (!site.Cleared)
+                    {
+                        PayClear(h, site, ref budget);
+                        if (h.Hauling) { started = true; break; }   // a cleared log to carry
+                        if (!site.Cleared) continue;   // the day went on the plot
+                    }
                     if (site.Stocked)
                     {
                         PayBuild(site, ref budget);
@@ -2406,7 +2442,7 @@ namespace SeaSick.World
         /// or `ClearStonePerRock` stone/ore, up to the pile's ceiling). The
         /// SCENE shows it by reading the same integer (`Outpost.SyncClearing`)
         /// -- the ledger never needs to know which tree it was.
-        void PayClear(PendingBuild pending, ref float labour)
+        void PayClear(OutpostHand h, PendingBuild pending, ref float labour)
         {
             if (pending == null) return;
             for (int guard = 0; guard < 256 && labour > 0f && !pending.Cleared; guard++)
@@ -2430,13 +2466,26 @@ namespace SeaSick.World
                     labour -= need;
                     pending.clearDone = k + 1;
                 }
-                if (tree) Add(Res.Timber, 1);
+                string res;
+                int n;
+                if (tree) { res = Res.Timber; n = 1; }
                 else
                 {
                     // Rocks run stone first, ore last (`clearOre`).
                     int rock = k - pending.clearTrees;
                     bool ore = rock >= pending.clearRocks - pending.clearOre;
-                    Add(ore ? Res.Ore : Res.Stone, ClearStonePerRock);
+                    res = ore ? Res.Ore : Res.Stone;
+                    n = ClearStonePerRock;
+                }
+                // **What came off the plot is CARRIED to the store**
+                // (2026-09-27): it is in his arms at the site and counts when
+                // it lands. What the store has no room for is left lying (as
+                // `Add` always clamped it).
+                int carry = h != null ? Mathf.Min(n, RoomFor(res)) : 0;
+                if (carry > 0)
+                {
+                    StartTimedTrip(h, res, carry, HaulPlace.Site, -1, HaulPlace.Store, -1, pending, false, true);
+                    return;
                 }
             }
         }
@@ -2538,6 +2587,7 @@ namespace SeaSick.World
             // pile before a single count is read. See `ReconcileSites`.
             MigratePending();
             ReconcileSites();
+            DecayDelivered(days);
             FeedFirst();
             EnlistFree();
             EnsureStations();
@@ -2607,8 +2657,8 @@ namespace SeaSick.World
                 if (h.order == OutpostOrder.Build
                     || (gatherersBuild && !TripGatherer(h) && GatherBlocked(h)))
                     builderHands.Add(h);
-                else if (h.Hauling && h.haulTo == HaulPlace.Site && !TripGatherer(h))
-                    DepositHaul(h, true);   // re-ordered mid-trip: it lands now
+                // (A load re-ordered mid-trip is WALKED there by whichever
+                // pass owns him now -- 2026-09-27; no load lands untouched.)
             }
             foreach (var h in builderHands)
             {
@@ -2659,6 +2709,13 @@ namespace SeaSick.World
                 // `StepStations` below. This loop is left with the buildings
                 // whose input is the ground (the farm).
                 if (IsStation(h.target)) continue;
+                // **Carrying his basket to the store** (2026-09-27): walked
+                // by the station pass; no harvesting on the way.
+                if (h.Hauling) continue;
+                // **At the field to work it.**
+                bool hasPost = PlanPlace(h.target, OrdinalOfHand(h), out var postAt);
+                float walkBudget = days * WorkFactor(h);
+                if (hasPost && !WalkTo(h, postAt, ref walkBudget, WorkFactor(h))) continue;
 
                 // **One conversion, whatever the station.** `Conversion`
                 // reads the chosen (or default) recipe for a station with a
@@ -2680,8 +2737,9 @@ namespace SeaSick.World
                 if (tool != null && HeldOf(tool) <= 0f) continue;
 
                 var made = Store(makes, true);
-                float room = StoreRoomF(makes);
-                if (room <= 0f) continue;
+                // Room net of what is already in his basket.
+                float room = StoreRoomF(makes) - h.basket;
+                if (room <= 0f) { CarryBasket(h, makes, hasPost, postAt); continue; }
 
                 float want = Mathf.Min(ratePerDay * days * WorkFactorOn(h, makes)
                     * PriorityMultiplier(makes), room);
@@ -2746,10 +2804,12 @@ namespace SeaSick.World
 
                 if (tool != null && toolWear > 0f) DrawHeld(tool, toolWear * want);
 
-                made.part += want;
-                int whole = Mathf.FloorToInt(made.part);
-                if (whole > 0) { made.whole += whole; made.part -= whole; }
-                away.Add(makes, want);
+                // **Into his basket, not the store** (2026-09-27): the
+                // harvest counts when he carries it in (`CarryBasket`).
+                h.basket += want;
+                if (h.basket + 1e-4f >= Mathf.Max(1, Res.Armful(makes))
+                    || StoreRoomF(makes) - h.basket < 1f)
+                    CarryBasket(h, makes, hasPost, postAt);
             }
 
             // --- stations and hauling, 2026-09-23 ----------------------------
@@ -3265,6 +3325,32 @@ namespace SeaSick.World
         /// the queue once there are `FedDays` of food in. Hunting is exempt
         /// from the hunger penalty (`WorkFactorOn`), so a starving camp can
         /// always eat its way back -- if the island has game.
+        /// Where the `ordinal`-th raised `planId` stands.
+        bool PlanPlace(string planId, int ordinal, out Vector3 at)
+        {
+            at = default;
+            if (raised == null) return false;
+            int k = 0;
+            foreach (var r in raised)
+            {
+                if (r == null || r.planId != planId) continue;
+                if (k++ == Mathf.Max(0, ordinal)) { at = r.At; return true; }
+            }
+            return false;
+        }
+
+        /// **A farmhand shoulders the whole units in his basket** and walks
+        /// them to the store (a picked-up trip: they are already in his arms).
+        void CarryBasket(OutpostHand h, string makes, bool hasPost, Vector3 postAt)
+        {
+            int n = Mathf.FloorToInt(h.basket + 1e-4f);
+            if (n <= 0 || h.Hauling) return;
+            h.basket = Mathf.Max(0f, h.basket - n);
+            if (hasPost) { h.wHas = true; if (!h.driven) { h.wx = postAt.x; h.wz = postAt.z; } }
+            StartTimedTrip(h, makes, n, HaulPlace.Field, -1, HaulPlace.Store, -1, null, false, true);
+            if (hasPost) { h.haulFromX = postAt.x; h.haulFromZ = postAt.z; }
+        }
+
         public void FeedFirst()
         {
             if (hands == null || hands.Count == 0) return;

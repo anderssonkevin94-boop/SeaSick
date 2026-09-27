@@ -61,47 +61,18 @@ namespace SeaSick.World
             return true;
         }
 
-        /// Units of `res` a trip has booked out of the FIELD (a gatherer's
-        /// armful, a builder quarrying for his site) that the body has not
-        /// finished cutting yet (`progress01 < workEnd01`): still part of the
-        /// rock on the ground as far as anyone looking is concerned.
-        public int UncutFromField(string res)
-        {
-            if (hands == null || string.IsNullOrEmpty(res)) return 0;
-            int n = 0;
-            for (int i = 0; i < hands.Count; i++)
-            {
-                var h = hands[i];
-                if (h == null || !h.Hauling || h.haulFrom != HaulPlace.Field || h.haulRes != res) continue;
-                var v = HaulOf(h);
-                if (v.progress01 < v.workEnd01) n += Mathf.Max(0, v.count);
-            }
-            return n;
-        }
+        /// Units of `res` a trip has taken out of the FIELD that are not cut
+        /// yet. **Always 0 since 2026-09-27** (docs/DELIVERY-ON-ARRIVAL.md):
+        /// the island gives a load up at the pickup, when the cutting ends,
+        /// so the stock already IS what stands on the ground. Kept for callers.
+        public int UncutFromField(string res) => 0;
 
-        /// **What the store's pile physically holds of `res`**: the store's
-        /// count plus the units a trip has already booked OUT of it
-        /// (`HaulPlace.Store`) that the body has not picked up yet.
-        ///
-        /// Kevin, phone 2026-09-24: *"they gather it ... and take it to the
-        /// hut but nothing is placed."* A builder's armful comes out of the
-        /// store when his trip is BOOKED -- the same ledger step a gatherer's
-        /// stone lands in whenever a blueprint is waiting for stone -- so the
-        /// stack was drawn for no frames at all. Read by `CampPiles` and
+        /// **What the store's pile physically holds of `res`.** Since
+        /// 2026-09-27 the store changes only at pickup and drop-off events,
+        /// so this is simply the store's count (the loads a walker is on his
+        /// way to fetch are still on the pile). Read by `CampPiles` and
         /// `StoreStockView`.
-        public int OnStorePile(string res)
-        {
-            if (string.IsNullOrEmpty(res)) return 0;
-            int n = StoreCountOf(res);
-            if (hands == null) return n;
-            for (int i = 0; i < hands.Count; i++)
-            {
-                var h = hands[i];
-                if (h == null || !h.Hauling || h.haulFrom != HaulPlace.Store || h.haulRes != res) continue;
-                var v = HaulOf(h);
-                if (v.progress01 < v.workEnd01) n += Mathf.Max(0, v.count);
-            }
-            return n;
-        }
+        public int OnStorePile(string res) =>
+            string.IsNullOrEmpty(res) ? 0 : StoreCountOf(res);
     }
 }

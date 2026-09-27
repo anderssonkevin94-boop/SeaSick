@@ -220,24 +220,32 @@ namespace SeaSick.World
         public HaulPlace to;
         /// Station index when `to == Station`, else -1.
         public int toStation;
-        /// 0 when the trip starts (at the drop-off, empty-handed), 1 when
-        /// the load is put down there.
-        public float progress01;
-        /// The route below was booked (false for a trip from an old save).
+        /// Which part of the walk he is in (2026-09-27): out to the pickup,
+        /// working it, carrying, at the drop-off. The books change at the
+        /// end of `AtPickup` (pickup) and on arrival (drop-off) only.
+        public TripLeg leg;
+        /// The load is on him (false while he walks out to fetch it).
+        public bool picked;
+        /// The route's two ends are known.
         public bool placed;
-        /// Pickup point (store / rack / bay; the camp centre for a Field
-        /// trip -- the body picks its own tree, the leg is
-        /// `OutpostLedger.SourceMetres`), world x,z with y 0.
+        /// Pickup point (store / rack / bay / the island source the ledger
+        /// measured; a body picks its own tree), world x,z with y 0.
         public Vector3 fromAt;
-        /// Drop-off point, where the trip starts and ends. y 0.
+        /// Drop-off point. y 0.
         public Vector3 toAt;
-        /// progress01 at which the hand reaches the pickup (walking empty
-        /// from `toAt` to `fromAt` until here).
-        public float walkOutEnd01;
-        /// progress01 at which cutting/picking up ends and the carry back
-        /// to `toAt` starts.
-        public float workEnd01;
-        /// Seconds of game time the whole trip takes at full work factor.
-        public float totalSeconds;
+    }
+
+    /// **The parts of a walked trip (2026-09-27, docs/DELIVERY-ON-ARRIVAL.md).**
+    public enum TripLeg
+    {
+        None = 0,
+        /// Walking out to the source, empty-handed.
+        ToPickup = 1,
+        /// Standing at the source working it (cutting, a stoop, a jab).
+        AtPickup = 2,
+        /// Carrying the load to its drop-off.
+        ToDrop = 3,
+        /// At the drop-off, holding it until there is room.
+        AtDrop = 4,
     }
 }

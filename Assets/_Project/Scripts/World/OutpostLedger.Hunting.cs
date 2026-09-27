@@ -2,32 +2,26 @@ using UnityEngine;
 
 namespace SeaSick.World
 {
-    /// **A hunt is a TRIP (2026-09-27).**
+    /// **A hunt is a WALK (2026-09-27, docs/DELIVERY-ON-ARRIVAL.md).**
     ///
-    /// Kevin, phone playtest: *"we need fur/hide as a resource ... the fur
-    /// number doesn't seem to be accurate."* Until today the hunt was the one
-    /// gather order still booked as a per-day accrual: `Game.standing` fell a
-    /// fraction every step and meat and hide went into the stores' `.part`
-    /// at the same time, so the Hide count ticked over at arbitrary moments
-    /// (mid-stalk, or before the carcass was home). Now a hunter works the
-    /// way every other gatherer has since 2026-09-23 (`GatherDay`): one
-    /// trip at a time, on the hand's saved haul fields
-    /// (`haulRes == Res.Game`, one carcass, `Field -> Store`):
+    /// Kevin: *"it should be them walking up to an animal, jabbing it with
+    /// its spear, picking it up and walking back. There should be no
+    /// arbitrary timer."* A hunter's trip is an ordinary walked trip on the
+    /// hand's haul fields (`haulRes == Res.Game`, one carcass, `Field ->
+    /// Store`):
     ///
-    /// 1. **walk out + stalk** -- `haulWalkDays` out and a stalk long enough
-    ///    that the whole trip keeps the old kill rate (`Res.GatherRate(Game)`
-    ///    animals a day, x `BowKillBonus` with an arrow in the quiver);
-    /// 2. **the kill** -- the step whose work reaches the end of the stalk:
-    ///    ONE whole animal off `Game.standing`, the spear worn `SpearWear`
-    ///    once, an arrow loosed if the trip went out armed (`huntKilled`);
-    /// 3. **the carry** -- `haulWalkDays` back to the store;
-    /// 4. **the deposit** -- `Res.MeatPerAnimal` Food and `Techs.HuntDrops`
-    ///    (1 Hide) as WHOLE units, as far as each fits; what does not fit is
-    ///    lost (the 2026-09-26 rule: a hunt stops only when neither fits).
+    /// 1. **walk to the animal** -- claimed (`GameUnclaimed`); the body walks
+    ///    to the real beast, the invisible walker to where the herd was last
+    ///    measured (`SourceMetres(Game)`);
+    /// 2. **the jab** -- `JabSeconds` of pose at the beast, then the pickup
+    ///    event IS the kill (`HuntKill`): one animal off `Game.standing`, the
+    ///    spear worn `SpearWear`, an arrow loosed if he went out armed;
+    /// 3. **the carry** -- the carcass on his shoulders, walked home;
+    /// 4. **the drop-off** -- `Res.MeatPerAnimal` Food and `Techs.HuntDrops`
+    ///    (1 Hide) as WHOLE units, as far as each fits, on arrival.
     ///
-    /// All of it is in `Step`, so a watched camp and an unwatched one land
-    /// on the same books at any tick size (D2), and a trip split by a save
-    /// resumes from its saved fields.
+    /// No stalk timer, no kill-rate schedule: the limits are a beast to
+    /// claim, a spear, and room for meat or hide.
     public partial class OutpostLedger
     {
         /// True when neither the meat nor any drop of a carcass has room --
@@ -41,24 +35,15 @@ namespace SeaSick.World
             return true;
         }
 
-        /// Seconds of stalking for one animal: the old kill rate's whole
-        /// animal-time less the two walked legs (never under a handling).
-        float HuntStalkSeconds(bool armed, float walkSeconds)
-        {
-            float perDay = Res.GatherRate(Res.Game) * (armed ? BowKillBonus : 1f);
-            float animal = TimeOfDay.DayLength / Mathf.Max(0.0001f, perDay);
-            return Mathf.Max(HandleSeconds, animal - 2f * walkSeconds);
-        }
-
-        /// **Game-days of one hunt trip** (for readouts): the same
-        /// arithmetic `StartHuntTrip` books.
+        /// **Game-days of one hunt trip -- a DISPLAY estimate only**: walk
+        /// out, the jab, walk back. Nothing books through it.
         public float HuntTripDays(bool armed)
         {
-            float walk = LegMetres(Res.Game, HaulPlace.Field, -1, HaulPlace.Store, -1, null) / WalkMetresPerSecond;
-            return SecondsToDays(2f * walk + HuntStalkSeconds(armed, walk));
+            float walk = SourceMetres(Res.Game) / WalkMetresPerSecond;
+            return SecondsToDays(2f * walk + JabSeconds);
         }
 
-        /// Animals a day one full-strength hunter brings home.
+        /// Animals a day one hunter could bring home (display estimate).
         public float HuntTripPerDay(bool armed)
         {
             float d = HuntTripDays(armed);
@@ -83,10 +68,7 @@ namespace SeaSick.World
             if (SpearInHand() == null || HuntStoreFull() || GameUnclaimed(h) < 1) return false;
             bool armed = HeldOf(Res.Arrows) >= 1f;
             StartTimedTrip(h, Res.Game, 1, HaulPlace.Field, -1, HaulPlace.Store, -1);
-            float walk = h.haulWalkDays * TimeOfDay.DayLength;
-            h.haulWorkDays = SecondsToDays(HuntStalkSeconds(armed, walk));
-            h.haulDays = Mathf.Max(Eps, 2f * h.haulWalkDays + h.haulWorkDays);
-            h.haulLeft = h.haulDays;
+            h.workLeft = JabSeconds;
             h.huntArmed = armed;
             h.huntKilled = false;
             return true;
@@ -117,55 +99,33 @@ namespace SeaSick.World
             if (h.huntKilled)
             {
                 int meat = Mathf.Min(Mathf.RoundToInt(Res.MeatPerAnimal), RoomFor(Res.Food));
-                if (meat > 0) { Store(Res.Food, true).whole += meat; away.Add(Res.Food, meat); }
+                if (meat > 0) { Store(Res.Food, true).whole += meat; away.Add(Res.Food, meat); NoteDelivered(Res.Food, meat); }
                 foreach (var drop in Economy.Techs.HuntDrops)
                 {
                     int n = Mathf.Min(drop.n, RoomFor(drop.res));
                     if (n <= 0) continue;
                     Store(drop.res, true).whole += n;
                     away.Add(drop.res, n);
+                    NoteDelivered(drop.res, n);
                 }
                 h.huntDeposits++;
             }
             ClearHaul(h);
         }
 
-        /// **A hunter's quantum, by trips.** The work clock is scaled as the
-        /// old rate was (`WorkFactorOn(Food)` x `PriorityMultiplier(Food)`).
-        /// With the store full for both halves of a carcass the rest of the
-        /// quantum helps (builds or hauls), exactly as `GatherDay`.
+        /// **A hunter's quantum, by walks.** Stationary work (the jab) is
+        /// paid at `WorkFactorOn(Food)` x `PriorityMultiplier(Food)`; the
+        /// walking is what it is. With the store full for both halves of a
+        /// carcass the rest of the quantum helps (builds or hauls), exactly
+        /// as `GatherDay`.
         void HuntDay(OutpostHand h, float days, bool helpBuild)
         {
             float scale = WorkFactorOn(h, Res.Food) * PriorityMultiplier(Res.Food);
             float budget = days * scale;
             for (int guard = 0; guard < 64 && budget > Eps; guard++)
             {
-                if (h.Hauling && !h.HuntTrip)
-                {
-                    // A load from helping (a haul, a site armful) first.
-                    if (!AdvanceHaul(h, ref budget)) return;
-                    continue;
-                }
-                if (h.HuntTrip)
-                {
-                    if (!h.huntKilled)
-                    {
-                        float toKill = Mathf.Max(0f, h.haulLeft - h.haulWalkDays);
-                        float d = Mathf.Min(budget, toKill);
-                        h.haulLeft -= d;
-                        budget -= d;
-                        if (toKill - d > Eps) break;          // still stalking
-                        h.haulLeft = h.haulWalkDays;
-                        if (!HuntKill(h)) { ClearHaul(h); break; }
-                        continue;
-                    }
-                    float c = Mathf.Min(budget, h.haulLeft);
-                    h.haulLeft -= c;
-                    budget -= c;
-                    if (h.haulLeft > Eps) break;              // still carrying
-                    DepositCarcass(h);
-                    continue;
-                }
+                // Any load in his arms (a carcass, or one from helping) first.
+                if (h.Hauling) { if (!AdvanceHaul(h, ref budget, scale)) return; continue; }
                 if (!StartHuntTrip(h)) break;
             }
             if (budget <= Eps || h.Hauling || !HuntStoreFull() || scale <= 0f) return;
@@ -176,14 +136,6 @@ namespace SeaSick.World
                 if (help > Eps && !h.Hauling) TransferDay(h, ref help);
             }
             else HaulerDay(h, ref help);
-        }
-
-        /// **Game-days of work until this hunter's kill**, 0 once the animal
-        /// is down or with no hunt under way. The body strikes on this.
-        public static float HuntDaysToKill(OutpostHand h)
-        {
-            if (h == null || !h.HuntTrip || h.huntKilled) return 0f;
-            return Mathf.Max(0f, h.haulLeft - h.haulWalkDays);
         }
     }
 }

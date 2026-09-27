@@ -274,7 +274,12 @@ namespace SeaSick.World
             {
                 if (hands != null)
                     foreach (var h in hands)
-                        if (h != null && h.Hauling && h.haulTo == HaulPlace.Ship) DepositToShip(h, false);
+                        if (h != null && h.Hauling && h.haulTo == HaulPlace.Ship)
+                        {
+                            // Not yet picked up: nothing to take back.
+                            if (!h.haulPicked) CancelPlanned(h);
+                            else DepositToShip(h, false);
+                        }
                 return;
             }
             if (transfers == null) return;
@@ -299,17 +304,16 @@ namespace SeaSick.World
                 int n = Mathf.Min(Mathf.Max(1, Res.Armful(res)), o.left);
                 if (o.toShip)
                 {
-                    n = Mathf.Min(n, Mathf.Min(StoreCountOf(res), ShipRoomNet()));
+                    n = Mathf.Min(n, Mathf.Min(StoreFree(res), ShipRoomNet()));
                     if (n <= 0) continue;
-                    Store(res).whole -= n;
+                    // The store gives it up at the PICKUP (2026-09-27).
                     StartTimedTrip(h, res, n, HaulPlace.Store, -1, HaulPlace.Ship, -1);
                 }
                 else
                 {
-                    n = Mathf.Min(n, Mathf.Min(cargo.HeldOf(res), RoomFor(res)));
+                    n = Mathf.Min(n, Mathf.Min(cargo.HeldOf(res) - Claimed(HaulPlace.Ship, -1, res, false), RoomFor(res)));
                     if (n <= 0) continue;
-                    n = cargo.Take(res, n);
-                    if (n <= 0) continue;
+                    // The hold gives it up at the PICKUP (the gangway foot).
                     StartTimedTrip(h, res, n, HaulPlace.Ship, -1, HaulPlace.Store, -1);
                 }
                 if (o.left != TransferAll) o.left -= n;

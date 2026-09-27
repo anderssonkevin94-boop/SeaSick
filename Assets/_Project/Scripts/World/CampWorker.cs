@@ -436,7 +436,15 @@ namespace SeaSick.World
         public static readonly List<CampWorker> Bodies = new List<CampWorker>();
 
         void OnEnable() { if (!Bodies.Contains(this)) Bodies.Add(this); }
-        void OnDisable() { Bodies.Remove(this); Drop(); ReleaseClaim(); }
+        void OnDisable()
+        {
+            Bodies.Remove(this);
+            Drop();
+            ReleaseClaim();
+            // The invisible walker takes over from where this body stood
+            // (2026-09-27, docs/DELIVERY-ON-ARRIVAL.md).
+            if (row != null && camp != null && camp.Ledger != null) camp.Ledger.BodyReleased(row);
+        }
 
         void Drop()
         {
@@ -562,6 +570,10 @@ namespace SeaSick.World
                 return;
             }
 
+            // **This body is the walker** (2026-09-27): where he stands is
+            // where the books have him, and the ledger leaves his legs to him.
+            camp.Ledger?.BodyAt(r, transform.position);
+
             // A new order means a new errand. Without this a hand told to go
             // to the mill finishes walking to the tree first.
             //
@@ -615,7 +627,7 @@ namespace SeaSick.World
             if (TickDelivery(dt)) return;
             // A hunt trip is mimed by `TickHunting` (stalk, strike, carry),
             // not as an armful.
-            if (camp.Ledger != null && r.Hauling && !r.HuntTrip)
+            if (camp.Ledger != null && r.Hauling && (!r.HuntTrip || !Hunting(r)))
             {
                 TickHaul(r, dt);
                 wasHauling = true;
@@ -1309,74 +1321,35 @@ namespace SeaSick.World
 
         // --- hauling (2026-09-23) ----------------------------------------------
 
-        /// **Mime the ledger's own trip.** `OutpostLedger.HaulOf(row)` is the
-        /// one account of where a hauling hand is and what is on his
-        /// shoulder -- station input and output, a builder's site stocking, a
-        /// stationed worker fetching his own raw, all the same shape (see the
-        /// "trip timing" doc block on `OutpostLedger.Stations`). This reads
-        /// it fresh every frame and paints the picture; it keeps no walk
-        /// schedule of its own that could drift from the books.
+        /// **Walk the trip -- the body IS the walker (2026-09-27).**
         ///
-        /// **Paced to the deposit, 2026-09-24.** Kevin, phone playtest: *"a
-        /// villager brought logs to the fletchery and stood there, in the
-        /// middle of the asset, for about 40 seconds before placing them."*
-        /// The old mime walked each stage when `progress01` said so and then
-        /// held at the drop-off until it read 1. Three things put daylight
-        /// between that and the books:
+        /// Kevin: *"A villager walking with that resource has that resource
+        /// on him and it gets where it gets when it gets there ... Only when
+        /// a villager has delivered the object will the object be counted."*
+        /// The ledger no longer times a trip; while the camp is watched this
+        /// body walks it and tells the books the two events
+        /// (docs/DELIVERY-ON-ARRIVAL.md):
         ///
-        /// 1. The ledger only moves in `QuantumDays` steps (0.02 day = 3.6 s at
-        ///    the playtest day length; 18 s before 2026-09-24), so `progress01` is a staircase:
-        ///    the "carry" stage was seen up to a step late and the deposit
-        ///    lands up to a step after the continuous clock reaches 1.
-        /// 2. The trip is paid at the hand's work factor (hunger floors it
-        ///    at 0.35), so a 10 s leg in the books can be 29 s of real time
-        ///    while the body still walks it in 10.
-        /// 3. The books time abstract legs (straight line x `PathFactor`,
-        ///    a Field leg measured from the camp centre); the body walks its
-        ///    own tree, its own route.
+        ///   - `ToPickup`: walk his own route to the pickup (his own tree or
+        ///     prop on the island; the stack, rack or bay otherwise), then
+        ///     `BodyArrived`;
+        ///   - `AtPickup`: the stationary work (a chop per unit at Kevin's
+        ///     dials, a stoop at a pile) paid by `BodyWorked` in game
+        ///     seconds; its end is the PICKUP (the source gives it up now);
+        ///   - `ToDrop`: carry it (the load is on him), then `BodyArrived` --
+        ///     the DROP-OFF: the bay/rack/pile/site/hold fills this frame, and
+        ///     he sets it down;
+        ///   - `AtDrop`: a full store; he stands holding it until room comes.
         ///
-        /// So the body stops reading the stage off `progress01` and instead
-        /// asks **when the ledger will put this load down**, in real seconds
-        /// from now (`SecondsToDeposit`, the exact step arithmetic of
-        /// `AdvanceHaul`). The schedule is then its own walk:
-        ///
-        ///   - walk out at once;
-        ///   - at the pickup, work it (chop at a tree, a stoop at a store or
-        ///     rack) until `due <= walkBack + LeaveLead`, where `walkBack` is
-        ///     the body's REAL route from the pickup to the drop-off over
-        ///     `Speed` (`BackSeconds`, a `CampPath` plan like `Walk` uses);
-        ///   - carry it back, arriving as the step lands;
-        ///   - on arrival still ahead of the books, hold it at most
-        ///     `MaxHoldSeconds` and then set it down anyway (Kevin's rule:
-        ///     never stand holding it);
-        ///   - the moment the books deposit (the trip ends), set it down
-        ///     (`EndTripMime`) -- the same frame the bay/rack/pile fills.
-        ///
-        /// Equivalently, in the brief's terms: leave the pickup once
-        /// `progress01 >= 1 - walkBack / tripRealSeconds`, where
-        /// `tripRealSeconds` is the trip's length on the real clock at this
-        /// hand's work factor, rounded to the ledger's step grid.
-        ///
-        /// A clock the body cannot predict (time paused, a hand the books
-        /// are not paying) falls back to the ledger's own stage thresholds.
-        ///
-        /// **Teleport-free catch-up, still.** A hand who goes from unwatched
-        /// to watched mid-trip walks from wherever he stands; one the books
-        /// already have carrying, with no time left to fetch it properly,
-        /// shoulders it where he is. One that is still short of the drop-off
-        /// when the books deposit walks the last few metres and sets it down
-        /// (`TailMetres`), rather than having it vanish from his arms.
+        /// Where he stands goes into the books every frame (`BodyAt`, in
+        /// `Update`), so when nobody is watching any more the invisible
+        /// walker carries on from exactly here.
         void TickHaul(OutpostHand r, float dt)
         {
-            var view = camp.Ledger.HaulOf(r);
+            var ledger = camp.Ledger;
+            var view = ledger.HaulOf(r);
             if (!view.active) return;
 
-            // A different trip than the one this body was last picturing --
-            // a fresh haul, or a row that was doing something else (its own
-            // claimed tree, a bed, a clearing) right up until it picked this
-            // one up. The last trip's load is put down where it was going
-            // first (it went into the books this step), and whatever the old
-            // trip or the old errand had claimed is not this trip's to keep.
             if (r.haulSerial != mimedTrip)
             {
                 bool settingDown = EndTripMime();
@@ -1386,87 +1359,57 @@ namespace SeaSick.World
                 if (settingDown) return;     // `TickDelivery` owns the next moment
             }
 
-            // Real seconds until the ledger step that puts this load down.
-            // Infinity when it cannot be known; 0 when the books already have
-            // him standing at a full store with it.
-            float due = SecondsToDeposit(r);
-            bool clockKnown = !float.IsInfinity(due);
-            bool booksCarrying = view.progress01 >= view.workEnd01;
-
-            if (!mimeLoaded)
+            switch (view.leg)
             {
-                Vector3 pick = view.from == HaulPlace.Field ? HaulPickupSpot(view) : mimePick;
-                bool atPick = Walk(pick, dt);
-                if (atPick)
+                case TripLeg.ToPickup:
                 {
-                    // Early at the pickup (the usual case): work it until the
-                    // walk back will land on the deposit.
+                    phase = Phase.Going;
+                    acting?.Set(VillagerActing.Mode.None);
+                    Vector3 pick = view.from == HaulPlace.Field ? HaulPickupSpot(view) : mimePick;
+                    if (!Walk(pick, dt)) return;
+                    r.walkingIn = false;
+                    ledger.BodyArrived(r);
+                    return;
+                }
+                case TripLeg.AtPickup:
+                {
+                    phase = Phase.Working;
+                    r.walkingIn = false;
                     Face(PickFace(view) - transform.position, dt);
                     acting?.Set(PickMode(view));
-                    bool go = clockKnown
-                        ? due <= BackSeconds(pick, mimeDrop) + LeaveLead
-                        : booksCarrying;
-                    if (!go) return;
+                    ledger.BodyWorked(r, dt * ClockRate());
+                    return;
                 }
-                else
+                case TripLeg.ToDrop:
                 {
-                    acting?.Set(VillagerActing.Mode.None);
-                    // Still walking out. Normally that is all -- even when
-                    // his own walk is longer than the books' and they have
-                    // him carrying already, he goes on to the pickup: a man
-                    // who turns round on the path with a load he never
-                    // picked up is a worse lie than one who is late. The one
-                    // exception is a body that joined this trip already past
-                    // its walk out (he came on screen mid-trip, or the Hand
-                    // just set him down) with too little time left to walk
-                    // to the pickup and back: he shoulders it where he is.
-                    if (!booksCarrying || !mimeJoinedLate) return;
-                    if (clockKnown)
+                    phase = Phase.Coming;
+                    mimeLoaded = true;
+                    acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
+                    if (!Walk(mimeDrop, dt)) return;
+                    mimeArrived = true;
+                    Face(mimeFace - transform.position, dt);
+                    ledger.BodyArrived(r);           // the drop-off event
+                    if (!r.Hauling || r.haulSerial != mimedTrip)
                     {
-                        float fetch = FlatDistance(transform.position, pick) / Speed
-                                      + BackSeconds(pick, mimeDrop);
-                        if (due >= fetch) return;
+                        // Delivered: set it down, here, now.
+                        mimeLoaded = mimeArrived = false;
+                        StartPlace(mimeFace);
                     }
+                    return;
                 }
-                mimeLoaded = true;
+                default:
+                    // At a full store: he holds it until room comes.
+                    Face(mimeFace - transform.position, dt);
+                    acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
+                    return;
             }
-
-            // Set down early (held `MaxHoldSeconds` and the books still had
-            // not caught up): he waits beside it, empty-handed, until the
-            // step that deposits it ends the trip.
-            if (mimePlaced)
-            {
-                acting?.Set(VillagerActing.Mode.None);
-                Face(mimeFace - transform.position, dt);
-                return;
-            }
-
-            acting?.Set(VillagerActing.Mode.Carry, view.resource, Mathf.Max(1, view.count));
-            if (!mimeArrived)
-            {
-                if (!Walk(mimeDrop, dt)) return;
-                mimeArrived = true;
-            }
-            Face(mimeFace - transform.position, dt);
-
-            // At the drop-off ahead of the books. At a full store the books
-            // say exactly this -- standing there holding it until room comes
-            // (`DepositHaul`, `haulLeft` 0) -- so he holds it as long as that
-            // lasts. Otherwise a moment's grace for the step to land, then
-            // the load goes down.
-            if (view.progress01 >= 1f - 1e-4f) return;
-            mimeHold += dt;
-            if (mimeHold < MaxHoldSeconds) return;
-            mimePlaced = true;
-            StartPlace(mimeFace);
         }
 
         // --- pacing the mime to the books (2026-09-24) ---------------------
 
-        /// Seconds early a body leaves the pickup / the bench: the deposit
-        /// is SEEN a little after its ledger step (`Outpost.CatchUp` runs
-        /// four times a second), and arriving a hair early is a set-down on
-        /// the step; a hair late is a load that vanishes a pace short.
+        /// Seconds early a body leaves the bench: a job's end is SEEN a
+        /// little after its ledger step (`Outpost.CatchUp` runs four times a
+        /// second).
         const float LeaveLead = 0.15f;
         /// Longest a body stands at the drop-off holding a load the books
         /// have not put down yet. Kevin's rule: then set it down anyway.
@@ -1496,11 +1439,6 @@ namespace SeaSick.World
         string mimeRes;
         int mimeCount;
 
-        // The body's own walk back from pickup to drop-off, cached per trip.
-        bool backKnown;
-        float backSeconds;
-        Vector3 backFrom, backTo;
-        readonly List<Vector3> backRoute = new List<Vector3>();
 
         /// Resolve this trip's two ends to where a body actually stands:
         /// Astra's `Input_Pickup`/`Output_Dropoff` at a station (never the
@@ -1513,8 +1451,7 @@ namespace SeaSick.World
         {
             mimeLoaded = mimeArrived = mimePlaced = false;
             mimeHold = 0f;
-            backKnown = false;
-            mimeJoinedLate = view.progress01 > view.walkOutEnd01;
+            mimeJoinedLate = view.picked;
             mimeRes = view.resource;
             mimeCount = Mathf.Max(1, view.count);
             mimeDrop = TripEnd(view.to, view.toStation, view.toAt, view.resource, true, out mimeFace);
@@ -1533,7 +1470,6 @@ namespace SeaSick.World
             bool holding = mimeLoaded && !mimePlaced;
             mimeLoaded = mimeArrived = mimePlaced = false;
             mimeHold = 0f;
-            backKnown = false;
             if (!holding) return false;
             float left = FlatDistance(transform.position, mimeDrop);
             if (left <= 0.6f) { StartPlace(mimeFace); return true; }
@@ -1552,7 +1488,6 @@ namespace SeaSick.World
             mimedTrip = -1;
             mimeLoaded = mimeArrived = mimePlaced = false;
             mimeHold = 0f;
-            backKnown = false;
             CancelDelivery();
         }
 
@@ -1623,23 +1558,6 @@ namespace SeaSick.World
             return PileSpot(res);
         }
 
-        /// Real seconds until the ledger step that deposits this hand's
-        /// load, or +infinity when that cannot be predicted.
-        ///
-        /// Exactly `AdvanceHaul`'s arithmetic: every step
-        /// (`OutpostLedger.QuantumDays` of game time) spends
-        /// `QuantumDays x TripFactor` of the trip's `haulLeft` (game-days of
-        /// work), first thing in the hand's day, and the load goes down in
-        /// the step that takes `haulLeft` to zero. So the deposit is
-        /// `ceil(haulLeft / perStep)` steps after the ledger's last one
-        /// (`lastTicked`), converted from the game clock to real seconds.
-        float SecondsToDeposit(OutpostHand r)
-        {
-            // Already at zero: standing at a full store in the books.
-            if (r.haulLeft <= 1e-5f) return 0f;
-            return SecondsUntilSpent(r.haulLeft, OutpostLedger.QuantumDays * TripFactor(r));
-        }
-
         /// Real seconds until the bench's current job comes off it (the step
         /// in which `WorkerDay` calls `FinishJob`), or +infinity. Same step
         /// arithmetic as the haul, over bench progress: `WorkerDay` advances
@@ -1678,25 +1596,6 @@ namespace SeaSick.World
             return Mathf.Max(0f, gameLeft / rate) + CatchUpLag;
         }
 
-        /// **Which work factor the ledger spends this hand's trip at.** A
-        /// replica of the dispatch in `OutpostLedger.Step`, deliberately:
-        /// a trip gatherer's arms are advanced by `GatherDay` at
-        /// `WorkFactorOn(target) x PriorityMultiplier(target)`; everybody
-        /// else's (a station worker in `WorkerDay`, a hauler in
-        /// `HaulerDay`, a builder in `BuilderDay`) at plain `WorkFactor`. If
-        /// the ledger's passes change, this changes with them -- the cost
-        /// of getting it wrong is a body that arrives a step early or late,
-        /// never a wrong number.
-        float TripFactor(OutpostHand r)
-        {
-            // A hunter's clock is his meat's (`OutpostLedger.HuntDay`).
-            if (r.order == OutpostOrder.Gather && r.target == Res.Game)
-                return OutpostLedger.WorkFactorOn(r, Res.Food) * camp.Ledger.PriorityMultiplier(Res.Food);
-            if (r.order == OutpostOrder.Gather && !string.IsNullOrEmpty(r.target))
-                return OutpostLedger.WorkFactorOn(r, r.target) * camp.Ledger.PriorityMultiplier(r.target);
-            return OutpostLedger.WorkFactor(r);
-        }
-
         /// Game seconds per real (scaled) second: `TimeOfDay` is advanced by
         /// `SkyDirector` at its own time scale, which nothing here should
         /// hard-code. Measured once a frame for every worker, smoothed, and
@@ -1720,55 +1619,6 @@ namespace SeaSick.World
             }
             clockLast = now;
             return clockRate;
-        }
-
-        /// **The body's own walk time from pickup to drop-off**, over the
-        /// same route `Walk` will take: straight under 6 m (`NextCorner`),
-        /// else a `CampPath` plan. Planned once per trip under the shared
-        /// plan budget; while the budget is spent this frame, the straight
-        /// line x `PathFactor` stands in and the plan is tried again next
-        /// frame. (`Walk` retires corners within `CornerReach`, so the real
-        /// walk is a touch shorter than the polyline: the body arrives a
-        /// little early and the hold covers it.)
-        float BackSeconds(Vector3 from, Vector3 to)
-        {
-            if (backKnown
-                && FlatDistance(from, backFrom) < 1f && FlatDistance(to, backTo) < 1f)
-                return backSeconds;
-
-            float straight = FlatDistance(from, to);
-            backFrom = from;
-            backTo = to;
-            if (straight < 6f)
-            {
-                backSeconds = straight / Speed;
-                backKnown = true;
-                return backSeconds;
-            }
-
-            var map = CampPath.For(camp);
-            if (map != null && CampPath.Budget())
-            {
-                backKnown = true;
-                if (map.Route(from, to, CampPath.Walker.Hand, backRoute) && backRoute.Count > 0)
-                {
-                    float len = 0f;
-                    Vector3 p = from;
-                    for (int i = 0; i < backRoute.Count; i++)
-                    {
-                        len += FlatDistance(p, backRoute[i]);
-                        p = backRoute[i];
-                    }
-                    len += FlatDistance(p, to);
-                    backSeconds = len / Speed;
-                    return backSeconds;
-                }
-                // No route worth having: `Walk` goes straight, so does this.
-                backSeconds = straight / Speed;
-                return backSeconds;
-            }
-            backKnown = false;
-            return straight * OutpostLedger.PathFactor / Speed;
         }
 
         /// The pose at a pickup: the swing that suits the material at the
