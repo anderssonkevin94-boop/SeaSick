@@ -132,7 +132,7 @@
 }
 
 .sheet-eyebrow {
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 1.2px;
     color: rgba(31, 45, 56, 0.62);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
@@ -221,7 +221,7 @@
 
 .sheet-btn--quiet {
     height: 26px;
-    font-size: 11px;
+    font-size: 13px;
     border-width: 1px;
     border-color: rgba(31, 45, 56, 0.45);
     background-color: rgba(0, 0, 0, 0);
@@ -251,14 +251,15 @@
     position: absolute;
     right: -2px;
     bottom: -2px;
-    width: 14px;
-    height: 14px;
-    border-radius: 7px;
+    width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    padding: 0;
     background-color: rgb(244, 232, 207);
     border-width: 1px;
     border-color: rgb(31, 45, 56);
     color: rgb(31, 45, 56);
-    font-size: 8px;
+    font-size: 13px;
     -unity-text-align: middle-center;
 }
 
@@ -279,7 +280,7 @@
 }
 
 .sheet-store-small {
-    font-size: 11px;
+    font-size: 13px;
     color: rgba(31, 45, 56, 0.62);
     margin-left: 4px;
     margin-bottom: 3px;
@@ -320,7 +321,7 @@
 
 .sheet-note-text {
     color: rgb(31, 45, 56);
-    font-size: 12px;
+    font-size: 13px;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
     white-space: normal;
     flex-shrink: 1;
@@ -342,7 +343,7 @@
     border-width: 0;
     background-color: rgba(0, 0, 0, 0);
     color: rgba(31, 45, 56, 0.62);
-    font-size: 12px;
+    font-size: 13px;
     margin: 0;
 }
 
@@ -373,7 +374,7 @@
 }
 
 .sheet-rail-label {
-    font-size: 9px;
+    font-size: 12px;
     letter-spacing: 1.2px;
     color: rgba(31, 45, 56, 0.62);
     rotate: -90deg;
@@ -424,7 +425,7 @@
     position: absolute;
     width: 18px;
     height: 18px;
-    font-size: 10px;
+    font-size: 13px;
     color: rgb(31, 45, 56);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Fraunces-Black.ttf");
     -unity-text-align: middle-center;
@@ -450,7 +451,7 @@
 }
 
 .chart-tab-text {
-    font-size: 12px;
+    font-size: 13px;
     color: rgb(31, 45, 56);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
     white-space: nowrap;

@@ -8,7 +8,7 @@
     font-size: 20px; color: rgb(232, 242, 246);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
-.ov-subtitle { font-size: 12px; color: rgb(166, 186, 198); margin-top: 1px; }
+.ov-subtitle { font-size: 13px; color: rgb(166, 186, 198); margin-top: 1px; }
 .ov-head-btn {
     width: 44px; height: 44px; margin: 0 8px 0 0; padding: 0; flex-shrink: 0;
     font-size: 20px; color: rgb(232, 242, 246);
@@ -93,7 +93,7 @@
     font-size: 15px; color: rgb(232, 242, 246);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
-.ov-row-how { font-size: 12px; color: rgb(166, 186, 198); white-space: normal; }
+.ov-row-how { font-size: 13px; color: rgb(166, 186, 198); white-space: normal; }
 .ov-row-qty {
     font-size: 14px; margin-left: 6px; flex-shrink: 0; -unity-text-align: middle-right;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
@@ -112,7 +112,7 @@
     font-size: 14px; color: rgb(232, 242, 246); white-space: normal;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
-.ov-step-detail { font-size: 12px; color: rgb(166, 186, 198); white-space: normal; }
+.ov-step-detail { font-size: 13px; color: rgb(166, 186, 198); white-space: normal; }
 .ov-go {
     height: 44px; min-width: 64px; padding: 0 14px; margin: 0; flex-shrink: 0;
     border-width: 0; border-radius: 10px; font-size: 14px;
@@ -140,7 +140,7 @@
 }
 .ov-tile--short { border-color: rgb(246, 146, 128); }
 .ov-tile-icon { width: 26px; height: 26px; margin-right: 6px; flex-shrink: 0; }
-.ov-tile-name { font-size: 12px; color: rgb(166, 186, 198); margin-right: 6px; }
+.ov-tile-name { font-size: 13px; color: rgb(166, 186, 198); margin-right: 6px; }
 .ov-tile-q {
     font-size: 14px; color: rgb(232, 242, 246);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
@@ -158,7 +158,7 @@
 .ov-raise:disabled { background-color: rgb(44, 74, 94); color: rgb(127, 151, 166); }
 
 .ov-line { font-size: 14px; color: rgb(201, 216, 224); white-space: normal; }
-.ov-line-muted { font-size: 12px; color: rgb(166, 186, 198); margin-top: 2px; }
+.ov-line-muted { font-size: 13px; color: rgb(166, 186, 198); margin-top: 2px; }
 .ov-kv { flex-direction: row; justify-content: space-between; align-items: center; min-height: 22px; }
 .ov-kv-k { font-size: 14px; color: rgb(232, 242, 246); flex-shrink: 1; }
 .ov-kv-v {

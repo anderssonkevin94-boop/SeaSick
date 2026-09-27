@@ -44,7 +44,7 @@ namespace SeaSick.UI
             builtFor = Unit;
 
             small = new GUIStyle(GUI.skin.label)
-            { fontSize = Unit - 2, normal = { textColor = TextDim }, alignment = TextAnchor.MiddleLeft };
+            { fontSize = Mathf.Max(13, Unit - 2), normal = { textColor = TextDim }, alignment = TextAnchor.MiddleLeft };
             body = new GUIStyle(GUI.skin.label)
             { fontSize = Unit, normal = { textColor = Text }, alignment = TextAnchor.MiddleLeft };
             strong = new GUIStyle(GUI.skin.label)
@@ -204,7 +204,8 @@ namespace SeaSick.UI
             get
             {
                 Build();
-                if (small2Centered == null || small2Centered.fontSize != Unit - 2)
+                // 13 px floor (2026-09-27 text size): Unit bottoms out at 11.
+                if (small2Centered == null || small2Centered.fontSize != small.fontSize)
                     small2Centered = new GUIStyle(small) { alignment = TextAnchor.MiddleCenter };
                 return small2Centered;
             }

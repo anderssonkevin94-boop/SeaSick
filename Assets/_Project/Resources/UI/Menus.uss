@@ -139,7 +139,7 @@
 }
 
 .menu-slot-sub {
-    font-size: 11px;
+    font-size: 13px;
     color: rgba(31, 45, 56, 0.62);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
     white-space: normal;
@@ -147,7 +147,7 @@
 }
 
 .menu-slot-tag {
-    font-size: 9px;
+    font-size: 12px;
     letter-spacing: 1px;
     color: rgb(244, 232, 207);
     background-color: rgb(46, 126, 163);
@@ -234,7 +234,7 @@
     background-color: rgb(31, 45, 56);
     color: rgb(244, 232, 207);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
-    font-size: 12px;
+    font-size: 13px;
     border-radius: 16px;
     padding: 8px 16px;
 }
@@ -294,14 +294,14 @@
 }
 
 .loading-stage {
-    font-size: 12px;
+    font-size: 13px;
     color: rgba(244, 232, 207, 0.72);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
     white-space: normal;
 }
 
 .loading-pct {
-    font-size: 12px;
+    font-size: 13px;
     color: rgba(244, 232, 207, 0.72);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }

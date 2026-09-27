@@ -39,15 +39,15 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
     white-space: nowrap; margin-left: 5px;
 }
-.land-day { font-size: 12px; margin-left: 4px; }
+.land-day { font-size: 13px; margin-left: 4px; }
 .land-resources .land-icon { width: 22px; height: 22px; }
 .land-resource { min-width: 0; flex-shrink: 1; }
-.land-resource > Label { font-size: 12px; margin-left: 3px; }
+.land-resource > Label { font-size: 13px; margin-left: 3px; }
 .land-building-status {
     position: absolute; width: 110px; height: 24px;
     background-color: rgb(22,42,56); color: rgb(255,171,142);
     border-color: rgb(164,210,232); border-width: 1px; border-radius: 4px;
-    -unity-text-align: middle-center; font-size: 11px; white-space: nowrap;
+    -unity-text-align: middle-center; font-size: 13px; white-space: nowrap;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
 }
 .land-nav-button {
@@ -103,8 +103,8 @@
     font-size: 20px; color: rgb(232, 242, 246);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
-.stores-subtitle { font-size: 12px; color: rgb(166, 186, 198); margin-top: 1px; }
-.stores-sort-btn { height: 40px; min-width: 0; padding: 0 12px; font-size: 12px; margin: 0; flex-shrink: 0; flex-grow: 0; }
+.stores-subtitle { font-size: 13px; color: rgb(166, 186, 198); margin-top: 1px; }
+.stores-sort-btn { height: 40px; min-width: 0; padding: 0 12px; font-size: 13px; margin: 0; flex-shrink: 0; flex-grow: 0; }
 
 .stores-tabs { flex-direction: row; justify-content: space-between; margin-top: 6px; }
 .stores-tab {
@@ -116,7 +116,7 @@
 .stores-tab--on { background-color: rgb(164, 210, 232); border-color: rgb(164, 210, 232); }
 .stores-tab-icon { width: 26px; height: 26px; min-width: 26px; min-height: 26px; flex-shrink: 0; }
 .stores-tab-label {
-    font-size: 10px; margin-top: 3px; padding: 0; flex-shrink: 0; color: rgb(201, 216, 224);
+    font-size: 13px; margin-top: 3px; padding: 0; flex-shrink: 0; color: rgb(201, 216, 224);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
 }
 .stores-tab-all-glyph {
@@ -161,9 +161,9 @@
     font-size: 15px; color: rgb(232, 242, 246); margin-right: 6px;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
-.stores-detail-kind { font-size: 11px; color: rgb(166, 186, 198); }
-.stores-detail-blurb { font-size: 12px; color: rgb(201, 216, 224); white-space: normal; margin-top: 2px; }
+.stores-detail-kind { font-size: 13px; color: rgb(166, 186, 198); }
+.stores-detail-blurb { font-size: 13px; color: rgb(201, 216, 224); white-space: normal; margin-top: 2px; }
 .stores-detail-split {
-    font-size: 12px; color: rgb(164, 210, 232); margin-top: 3px;
+    font-size: 13px; color: rgb(164, 210, 232); margin-top: 3px;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
 }
