@@ -170,7 +170,7 @@ namespace SeaSick.Save
         static IEnumerator SimulateRun(double s, bool capped)
         {
             yield return Run(s, capped, "dev", false, true);
-            string path = System.IO.Path.Combine(Application.persistentDataPath, "away-scratch.json");
+            string path = System.IO.Path.Combine(SaveSlots.DirectoryOverride ?? Application.persistentDataPath, "away-scratch.json");
             SaveGame.SaveTo(path, "away-probe");
             Debug.Log("AwayProgress: scratch save -> " + path);
         }
