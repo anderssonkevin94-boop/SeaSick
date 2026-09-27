@@ -1,0 +1,137 @@
+/* Camp › Overview -- the goal chain (CampOverviewSheet, 2026-09-27).
+   Colours from Kevin's GoalChain / Camp navigation mockups:
+   card #13222E, raised #1A3040, border #2C4A5E, ice #A4D2E8,
+   pearl #E8F2F6, muted #A6BAC6, green #9FE0C2, amber #F0C36A, red #F69280. */
+
+.ov-head-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.ov-title {
+    font-size: 20px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-subtitle { font-size: 12px; color: rgb(166, 186, 198); margin-top: 1px; }
+.ov-head-btn {
+    width: 44px; height: 44px; margin: 0 8px 0 0; padding: 0; flex-shrink: 0;
+    font-size: 20px; color: rgb(232, 242, 246);
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 10px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+
+.ov-root { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-height: 0; overflow: hidden; }
+.ov-seg { margin-bottom: 8px; flex-shrink: 0; }
+.ov-seg .sheet-seg-btn { height: 44px; flex-grow: 1; font-size: 14px; }
+.ov-block { flex-direction: column; flex-shrink: 0; margin-bottom: 6px; }
+
+.ov-eyebrow {
+    font-size: 12px; color: rgb(164, 210, 232); letter-spacing: 1px; margin: 6px 0 4px 0;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+
+/* --- NEXT GOAL --- */
+.ov-goal-head { flex-direction: column; }
+.ov-goal-head .ov-eyebrow { margin-top: 0; margin-bottom: 0; }
+.ov-goal-title {
+    font-size: 22px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-goal-why { font-size: 13px; color: rgb(166, 186, 198); white-space: normal; }
+.ov-bar { height: 10px; margin-top: 8px; background-color: rgb(19, 34, 46); border-radius: 5px; overflow: hidden; }
+.ov-bar-fill { height: 10px; background-color: rgb(164, 210, 232); border-radius: 5px; }
+.ov-progress {
+    font-size: 13px; color: rgb(166, 186, 198); margin: 4px 0 6px 0;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+
+/* --- the chain --- */
+.ov-chain-list { flex-direction: column; }
+.ov-row {
+    flex-direction: row; align-items: center; min-height: 48px; padding: 5px 10px; margin-bottom: 5px;
+    background-color: rgb(19, 34, 46); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 12px;
+}
+.ov-row--no { border-color: rgb(246, 146, 128); }
+.ov-dot {
+    width: 22px; height: 22px; flex-shrink: 0; border-radius: 11px; margin-right: 8px;
+    -unity-text-align: middle-center; font-size: 13px; color: rgb(11, 23, 32);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-row--ok .ov-dot { background-color: rgb(159, 224, 194); }
+.ov-row--no .ov-dot { background-color: rgb(246, 146, 128); }
+.ov-row--wait .ov-dot { background-color: rgb(240, 195, 106); }
+.ov-icon { width: 30px; height: 30px; flex-shrink: 0; margin-right: 8px; }
+.ov-row-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.ov-row-name {
+    font-size: 15px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-row-how { font-size: 12px; color: rgb(166, 186, 198); white-space: normal; }
+.ov-row-qty {
+    font-size: 14px; margin-left: 6px; flex-shrink: 0; -unity-text-align: middle-right;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-row--ok .ov-row-qty { color: rgb(159, 224, 194); }
+.ov-row--no .ov-row-qty { color: rgb(246, 146, 128); }
+.ov-row--wait .ov-row-qty { color: rgb(240, 195, 106); }
+
+/* --- first step --- */
+.ov-step {
+    flex-direction: row; align-items: center; padding: 10px 12px; margin-top: 4px;
+    background-color: rgb(19, 34, 46); border-width: 1.5px; border-color: rgb(164, 210, 232); border-radius: 12px;
+}
+.ov-step-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; margin-right: 10px; }
+.ov-step-title {
+    font-size: 14px; color: rgb(232, 242, 246); white-space: normal;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-step-detail { font-size: 12px; color: rgb(166, 186, 198); white-space: normal; }
+.ov-go {
+    height: 44px; min-width: 64px; padding: 0 14px; margin: 0; flex-shrink: 0;
+    border-width: 0; border-radius: 10px; font-size: 14px;
+    background-color: rgb(164, 210, 232); color: rgb(11, 23, 32);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-go:disabled { background-color: rgb(44, 74, 94); color: rgb(127, 151, 166); }
+
+/* --- campfire card, being built, today --- */
+.ov-card {
+    flex-direction: column; padding: 12px; margin-bottom: 4px;
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 12px;
+}
+.ov-card-top { flex-direction: row; justify-content: space-between; align-items: flex-end; }
+.ov-card-title {
+    font-size: 17px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-card-blurb { font-size: 13px; color: rgb(201, 216, 224); white-space: normal; margin-top: 4px; }
+.ov-tiles { margin-top: 8px; }
+.ov-tiles-row { flex-direction: row; }
+.ov-tile {
+    flex-grow: 1; flex-basis: 0; flex-direction: row; align-items: center; padding: 6px 8px; margin-right: 6px;
+    background-color: rgb(19, 34, 46); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 9px;
+}
+.ov-tile--short { border-color: rgb(246, 146, 128); }
+.ov-tile-icon { width: 26px; height: 26px; margin-right: 6px; flex-shrink: 0; }
+.ov-tile-name { font-size: 12px; color: rgb(166, 186, 198); margin-right: 6px; }
+.ov-tile-q {
+    font-size: 14px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-tile--short .ov-tile-q { color: rgb(246, 146, 128); }
+.ov-card-note {
+    font-size: 13px; color: rgb(246, 146, 128); white-space: normal; margin-top: 8px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.ov-raise {
+    height: 46px; margin: 8px 0 0 0; border-width: 0; border-radius: 10px; font-size: 15px;
+    background-color: rgb(164, 210, 232); color: rgb(11, 23, 32);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-raise:disabled { background-color: rgb(44, 74, 94); color: rgb(127, 151, 166); }
+
+.ov-line { font-size: 14px; color: rgb(201, 216, 224); white-space: normal; }
+.ov-line-muted { font-size: 12px; color: rgb(166, 186, 198); margin-top: 2px; }
+.ov-kv { flex-direction: row; justify-content: space-between; align-items: center; min-height: 22px; }
+.ov-kv-k { font-size: 14px; color: rgb(232, 242, 246); flex-shrink: 1; }
+.ov-kv-v {
+    font-size: 14px; color: rgb(232, 242, 246); margin-left: 8px; -unity-text-align: middle-right;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ov-kv-v--bad { color: rgb(246, 146, 128); }

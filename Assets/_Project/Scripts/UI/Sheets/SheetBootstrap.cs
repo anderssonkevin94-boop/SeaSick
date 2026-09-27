@@ -32,7 +32,12 @@ namespace SeaSick.UI.Sheets
             // The fire IS the camp. Kevin, 2026-09-21: "press on the campfire
             // to get the options menu for building" -- that menu is now the
             // camp sheet, and the build list is a block inside it.
-            Sheets.Register<Campfire>(f => FireFor(SheetBits.OutpostOf(f)));
+            // **2026-09-27, the Melvor-style redesign**: the fire opens the
+            // camp's OVERVIEW (next goal, its chain, the first step) rather
+            // than the old camp sheet's first page. The old sheet stays one
+            // tap away -- the overview's ☰ and every Go that needs the build
+            // list or the hands -- until the ledger drawer replaces it.
+            Sheets.Register<Campfire>(f => OverviewFor(SheetBits.OutpostOf(f)));
 
             // **A length of wall is its own thing, 2026-09-23.** Before
             // the `Building` rule below, because a `WallSegment` IS a
@@ -81,7 +86,7 @@ namespace SeaSick.UI.Sheets
                 // the fire") and never reached the shipyard (2026-09-27).
                 if (b.GetComponent<DryDockSlip>() != null) return null;
                 var camp = SheetBits.OutpostOf(b);
-                if (b.Kind == BuildKind.Fire) return FireFor(camp);
+                if (b.Kind == BuildKind.Fire) return OverviewFor(camp);
                 if (b.Id == OutpostLedger.WatchtowerId) return FireFor(camp, FireSheet.FocusLookout);
                 if (camp == null || camp.Ledger == null) return null;
                 // The farm has its own sheet since 2026-09-23 (the building
@@ -155,6 +160,15 @@ namespace SeaSick.UI.Sheets
             if (camp == null || camp.Ledger == null) return null;
             if (!camp.HasCamp && !camp.Building) return null;
             return new FireSheet(camp, focus);
+        }
+
+        /// The camp's overview (`CampOverviewSheet`), on the same terms as
+        /// `FireFor`: a camp, or at least a fire going up.
+        static ISheet OverviewFor(Outpost camp)
+        {
+            if (camp == null || camp.Ledger == null) return null;
+            if (!camp.HasCamp && !camp.Building) return null;
+            return new CampOverviewSheet(camp);
         }
 
         internal static ISheet ShipFor()
