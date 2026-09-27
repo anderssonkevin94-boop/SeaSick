@@ -225,7 +225,7 @@ namespace SeaSick.World
             SyncHunting();
             // The piles beside the fire are drawn from the stores, so they
             // want to exist wherever the stores are being looked at.
-            if (HasCamp) CampPiles.EnsureOn(this);
+            if (HasCamp) { CampPiles.EnsureOn(this); GroundLoadPiles.EnsureOn(this); }
             // A hut that filled itself while nobody was here has people in it
             // now. Same reason the raise cannot live in the tick: the
             // arithmetic recruits, but only a scene can put a body in.
@@ -2912,7 +2912,14 @@ namespace SeaSick.World
             // offline time-away run (`AwayProgress.Running`), so D2's rule
             // holds: nobody dies while the player is away or paused.
             if (Time.timeScale > 0f && !SeaSick.Save.AwayProgress.Running)
+            {
                 ledger?.TickDowned(Time.unscaledDeltaTime);
+                // **The rescuer (death/rescue phase 2, 2026-09-27):** picks
+                // who goes after a downed hand. The walk itself is the
+                // rescuer's own `CampWorker.Update`, watched-only same as
+                // the downed timer above.
+                ledger?.DispatchRescuers();
+            }
             // Four times a second, not sixty: `CatchUp` reconciles the
             // props and the bodies as well as running the tick, and the
             // tick itself only advances on a `QuantumDays` quantum (3.6 s) anyway. A hut

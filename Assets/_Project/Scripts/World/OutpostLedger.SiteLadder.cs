@@ -80,7 +80,7 @@ namespace SeaSick.World
             if (site == null || hands == null) return 0;
             int n = 0;
             foreach (var h in hands)
-                if (h != null && !h.downed && !h.Hauling && BuildSiteFor(h) == site) n++;
+                if (h != null && !h.Busy && !h.Hauling && BuildSiteFor(h) == site) n++;
             return n;
         }
 

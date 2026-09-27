@@ -88,13 +88,19 @@ namespace SeaSick.Dev
                 {
                     if (hnd == null) continue;
                     GUILayout.BeginHorizontal();
-                    string label = hnd.name + (hnd.downed
-                        ? "  [DOWN " + Mathf.CeilToInt(hnd.downedLeft) + "s]" : "");
-                    GUILayout.Label(label, GUILayout.Width(170));
+                    string state = hnd.downed
+                        ? (hnd.reached ? "  [DOWN, reached]" : "  [DOWN " + Mathf.CeilToInt(hnd.downedLeft) + "s]")
+                        : hnd.recovering ? "  [recovering " + hnd.recoverLeft.ToString("0.00") + "d]"
+                        : !string.IsNullOrEmpty(hnd.rescuing) ? "  [rescuing " + hnd.rescuing + "]"
+                        : "";
+                    string label = hnd.name + state;
+                    GUILayout.Label(label, GUILayout.Width(220));
                     if (!hnd.downed)
                     {
                         if (GUILayout.Button("Down", GUILayout.Height(RowH)))
                             camp.Ledger.Down(hnd, LifeEvents.KilledInRaid);
+                        if (GUILayout.Button("Accident", GUILayout.Height(RowH)))
+                            camp.Ledger.Down(hnd, LifeEvents.HuntingAccident);
                     }
                     else
                     {

@@ -130,6 +130,14 @@ namespace SeaSick.World.Life
                     {
                         "Carried " + (string.IsNullOrEmpty(e.other) ? "somebody" : e.other) + " back to a hut, hurt but standing.",
                         "Dragged " + (string.IsNullOrEmpty(e.other) ? "a friend" : e.other) + " home when they went down.",
+                        "Went out for " + (string.IsNullOrEmpty(e.other) ? "a fallen shipmate" : e.other) + " and brought them home on their feet.",
+                    });
+                case LifeEvents.Downed:
+                    return Pick(h, salt, new[]
+                    {
+                        "Was carried home once, and walked again.",
+                        "Went down at " + camp + ", and got back up.",
+                        "Fell " + CountWord(e.count) + " and was carried home every time.",
                     });
                 case LifeEvents.Hungry:
                     return Pick(h, salt, new[]

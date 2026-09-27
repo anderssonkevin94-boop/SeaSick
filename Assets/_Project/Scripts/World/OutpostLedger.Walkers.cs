@@ -187,6 +187,7 @@ namespace SeaSick.World
                 if (h == null || !h.Hauling || h.haulPicked || h.HuntTrip) continue;
                 if (h.haulFrom != from || h.haulRes != res) continue;
                 if (from == HaulPlace.Station && (h.haulFromStation != station || h.haulFromBay != bay)) continue;
+                if (from == HaulPlace.Ground && h.haulFromStation != station) continue;
                 n += h.haulCount;
             }
             return n;
@@ -262,6 +263,31 @@ namespace SeaSick.World
                     if (got < want) ReturnToOrder(res, false, want - got);
                     break;
                 }
+                case HaulPlace.Ground:
+                {
+                    // **A dropped load's pickup** (death/rescue phase 2):
+                    // the whole row goes at once -- it was one hand's armful
+                    // to begin with -- and the row is gone from the ground
+                    // once it is taken. Somebody beat him to it (a raid, the
+                    // dev panel) = nothing there any more, same as any other
+                    // source running dry.
+                    if (groundLoads == null || h.haulFromStation < 0 || h.haulFromStation >= groundLoads.Count) { got = 0; break; }
+                    var row = groundLoads[h.haulFromStation];
+                    got = row != null ? Mathf.Min(want, row.count) : 0;
+                    if (got > 0)
+                    {
+                        groundLoads.RemoveAt(h.haulFromStation);
+                        // Every OTHER in-flight ground trip whose index
+                        // pointed past this row shifts down one, the same
+                        // way `DemolishBuilt` re-numbers stations.
+                        if (hands != null)
+                            foreach (var o in hands)
+                                if (o != null && o != h && o.Hauling && o.haulFrom == HaulPlace.Ground
+                                    && o.haulFromStation > h.haulFromStation)
+                                    o.haulFromStation--;
+                    }
+                    break;
+                }
                 default:
                     got = want;          // a site's cleared log: already in hand
                     break;
@@ -279,6 +305,16 @@ namespace SeaSick.World
             if (!PickUp(h)) { ClearHaul(h); return; }
             h.tripLeg = (int)TripLeg.ToDrop;
             h.legLeft = RouteMetres(HandAt(h), DropPoint(h));
+            // **The hunting accident, acted on now** (death/rescue phase 2):
+            // the trip's fields (`haulPicked` in particular) are settled by
+            // this point, so `Down` -> `DropCarriedLoad` drops the carcass
+            // as a ground load exactly where he stands, same as any other
+            // load in his arms.
+            if (h.huntAccidentPending)
+            {
+                h.huntAccidentPending = false;
+                Down(h, Life.LifeEvents.HuntingAccident);
+            }
         }
 
         /// A leg's end reached (by the walker or by the body).

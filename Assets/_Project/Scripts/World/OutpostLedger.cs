@@ -186,6 +186,53 @@ namespace SeaSick.World
         public bool downed;
         public float downedLeft;
         public string downedCause = "";
+        /// **A rescuer has reached him (phase 2).** The timer is stopped
+        /// for good the moment his rescuer arrives -- set once, never
+        /// cleared except by `Revive`/`Die`. Default false: an old save's
+        /// downed hand (there were none before phase 2) reads as
+        /// "not reached yet", which just means a rescuer is re-dispatched.
+        public bool reached;
+
+        // --- rescue / drag (death/rescue phase 2, 2026-09-27) ---------------
+        //
+        // docs/PLAN-DEATH-RESCUE.md, "Deaths": a nearby free hand runs over
+        // and drags a downed hand back to a hut. `rescuing` lives on the
+        // RESCUER (the downed hand's own name, or "" when he is not one);
+        // `dragged` lives on the DOWNED hand (his rescuer has him and they
+        // are walking together); `recovering`/`recoverLeft` also live on the
+        // downed hand, once he is laid down safe. All watched-only to move
+        // (`OutpostLedger.DispatchRescuers`, `CampWorker`'s own tick) except
+        // recovery, which ticks in `Step`'s ordinary game-day quanta so it
+        // keeps going while nobody is looking (docs: "recovery... MAY
+        // advance in game time, unwatched too -- that only helps").
+        /// The name of the downed hand THIS hand is walking to / dragging.
+        /// "" = not rescuing anybody.
+        public string rescuing = "";
+        /// This (downed) hand's rescuer has him and they are walking
+        /// together to a hut. False until `reached`, and again once he is
+        /// laid down to recover.
+        public bool dragged;
+        /// Laid down safe (a hut, or the fire with no hut), healing.
+        /// `WorkFactor` is 0 the same way `downed`'s is.
+        public bool recovering;
+        /// Game-days of recovery left. Ticks in `Step` (unwatched included).
+        public float recoverLeft;
+        /// Laid down in a hut (true) or by the fire, no hut standing
+        /// (false) -- set once, when the drag finishes, purely for the row
+        /// text (`Doing`).
+        public bool recoverAtHut;
+        /// **The rescuer has reached him and they are walking together**
+        /// (mirrors the downed hand's own `reached`, kept on the rescuer
+        /// too so `Doing` can tell "running to" from "dragging" without a
+        /// ledger reference). Not saved: a reload mid-drag just reads as
+        /// "running to" for one frame until `CampWorker` re-derives it from
+        /// the downed hand's own (saved) `reached`.
+        [System.NonSerialized] public bool draggingNow;
+
+        /// **Out of the ordinary dispatch (phase 2)**: downed, recovering,
+        /// being dragged, or off rescuing somebody -- no new orders, no
+        /// productive work, same as `downed` alone was in phase 1.
+        public bool Busy => downed || recovering || dragged || !string.IsNullOrEmpty(rescuing);
 
         public TripLeg Leg => (TripLeg)tripLeg;
 
@@ -199,6 +246,14 @@ namespace SeaSick.World
         public bool HuntTrip => Hauling && haulRes == Res.Game;
         public bool huntKilled;
         public bool huntArmed;
+        /// **A hunting accident was rolled at this kill** (death/rescue
+        /// phase 2), consumed right after `FinishPickup` -- not acted on
+        /// inside `HuntKill` itself, which runs before the pickup has
+        /// finished updating the trip's own fields (`haulPicked` in
+        /// particular): downing him there would stamp on state `PickUp` is
+        /// still writing. Not saved -- it never survives past the same
+        /// frame it is set on.
+        [System.NonSerialized] public bool huntAccidentPending;
         /// Kills and carcass deposits booked, this session only (probes).
         [System.NonSerialized] public int huntKills, huntDeposits;
 
@@ -211,6 +266,15 @@ namespace SeaSick.World
         {
             get
             {
+                // **Death/rescue phase 2 states outrank the ordinary
+                // order** -- a downed/dragged/recovering hand, or one off
+                // rescuing somebody, is not doing his job right now.
+                if (downed)
+                    return reached ? "down" : "down · " + Mmss(downedLeft);
+                if (recovering) return recoverAtHut ? "recovering in the hut" : "recovering by the fire";
+                if (dragged) return "being carried home";
+                if (!string.IsNullOrEmpty(rescuing))
+                    return (draggingNow ? "dragging " : "running to ") + rescuing;
                 switch (order)
                 {
                     case OutpostOrder.Gather:
@@ -225,6 +289,13 @@ namespace SeaSick.World
                     default: return "idle";
                 }
             }
+        }
+
+        /// "2:31" from a real-seconds count, for the downed row (`Doing`).
+        static string Mmss(float seconds)
+        {
+            int s = Mathf.Max(0, Mathf.CeilToInt(seconds));
+            return (s / 60) + ":" + (s % 60).ToString("00");
         }
 
         /// Furious, not just short-tempered. `OutpostLedger.AngryCount` counts
@@ -914,7 +985,7 @@ namespace SeaSick.World
         // bench/site work needs him standing there. See
         // docs/DELIVERY-ON-ARRIVAL.md.)
         public static float WorkFactor(OutpostHand h) =>
-            h == null || h.downed ? 0f
+            h == null || h.Busy ? 0f
                 : Mathf.Max(StarvingWorkFloor, Mathf.Clamp01(h.mood / 0.5f)) * (1f + MealWorkBonus(h));
 
         /// **Hunger slows a hand; it does not stop one, 2026-09-23.** Kevin
@@ -935,7 +1006,7 @@ namespace SeaSick.World
         /// Without this a camp that ran out once could never recover: the
         /// hungrier they got the less food they brought in.
         public static float WorkFactorOn(OutpostHand h, string produces) =>
-            h != null && h.downed ? 0f
+            h != null && h.Busy ? 0f
                 : Economy.FoodBook.IsFoodish(produces) ? (h == null ? 0f : 1f) : WorkFactor(h);
 
         /// **The pace this hand's CURRENT job is paid at, 0..1** -- the
@@ -2803,6 +2874,10 @@ namespace SeaSick.World
             // for, unless they went to the build above) haul for them.
             StepStations(days, !gatherersBuild);
 
+            // **Recovery** (death/rescue phase 2): a hand laid down safe by
+            // his rescuer heals on the ordinary clock, watched or not.
+            StepRecovery(days);
+
             // --- upkeep: eating -----------------------------------------------
             //
             // Since the food rework (2026-09-27) every hand has a fullness
@@ -2932,6 +3007,10 @@ namespace SeaSick.World
         public string StallReason(OutpostHand h)
         {
             if (h == null) return null;
+            // **Downed/dragging/recovering (death/rescue): not a stall,
+            // never flagged "stuck".** `Doing` already says what he is
+            // doing; this must not pile a warning on top of it.
+            if (h.downed || h.recovering || h.dragged || !string.IsNullOrEmpty(h.rescuing)) return null;
             if (h.walkingIn) return "still on the way up from the ship";
             // The body's own reason first (walled off): the books say he is
             // working, the feet say he cannot get there. Display only.

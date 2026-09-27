@@ -607,6 +607,12 @@ namespace SeaSick.World
             // where the books have him, and the ledger leaves his legs to him.
             camp.Ledger?.BodyAt(r, transform.position);
 
+            // **The rescuer (death/rescue phase 2), ahead of everything
+            // else** -- a hand sent to drag somebody home is not doing his
+            // ordinary job right now, the same priority `TickTower` has
+            // over the rest of the loop.
+            if (TickRescue(r, dt)) return;
+
             // A new order means a new errand. Without this a hand told to go
             // to the mill finishes walking to the tree first.
             //

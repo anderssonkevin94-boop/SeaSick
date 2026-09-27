@@ -89,6 +89,23 @@ namespace SeaSick.World
             h.huntKilled = true;
             h.huntKills++;
             Life.Lives.Log(h.name, Life.LifeEvents.HuntingKill, CampLabel);
+
+            // **Hunting accidents** (death/rescue phase 2, 2026-09-27):
+            // rolled only at the jab, and only while a BODY is walking this
+            // trip -- `h.driven` is true exactly while the camp is watched
+            // and `CampWorker` is miming him, false in catch-up/away steps,
+            // so this never fires headless. Iron halves the stone chance.
+            // The carcass is already his (picked up above): if he goes
+            // down carrying it, `Down` drops it on the ground where he
+            // stands, same as anything else.
+            if (h.driven)
+            {
+                float chance = Life.LifeTuning.HuntAccidentChance * (spear == Res.IronSpear ? 0.5f : 1f);
+                // Flagged, not acted on here -- see `huntAccidentPending`'s
+                // doc: `PickUp`/`FinishPickup` are still writing this trip's
+                // fields at this point.
+                if (Random.value < chance) h.huntAccidentPending = true;
+            }
             return true;
         }
 

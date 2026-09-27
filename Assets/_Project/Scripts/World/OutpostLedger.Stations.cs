@@ -254,8 +254,46 @@ namespace SeaSick.World
                 // end is the bound `ICargoSide`'s; none bound = unplaced, and
                 // the leg falls back to `DefaultLegMetres`.
                 case HaulPlace.Ship: return cargo != null && cargo.GangwayAt(out at);
+                case HaulPlace.Ground:
+                    if (groundLoads == null || station < 0 || station >= groundLoads.Count) return false;
+                    var gl = groundLoads[station];
+                    if (gl == null) return false;
+                    at = new Vector3(gl.x, 0f, gl.z);
+                    return true;
             }
             return false;
+        }
+
+        // --- dropped ground loads (death/rescue phase 2, 2026-09-27) --------
+        //
+        // docs/DELIVERY-ON-ARRIVAL.md's rule extended to a hand who goes
+        // down or dies: "only when a villager has delivered the object will
+        // the object be counted" -- a load he had picked up is just as
+        // physical lying in the grass as it is on his shoulders. One row
+        // per drop; the FIRST rung of the idle-hand ladder (`FindHaulerChore`)
+        // sends an idle hand to walk it home, the ordinary way (`HaulPlace.
+        // Ground`, an index into this list, exactly the way `Station`'s
+        // index is into `Stations`).
+
+        /// One load on the ground, saved. `claimed` mirrors the pattern
+        /// every other source uses (`Claimed`): true once a hand is walking
+        /// to fetch it, so two hands never go for the same pile.
+        [System.Serializable]
+        public class GroundLoad
+        {
+            public string res;
+            public int count;
+            public float x, z;
+        }
+
+        /// Saved. Old saves: empty (JsonUtility-safe).
+        public List<GroundLoad> groundLoads = new List<GroundLoad>();
+
+        void AddGroundLoad(string res, int count, Vector3 at)
+        {
+            if (string.IsNullOrEmpty(res) || count <= 0) return;
+            if (groundLoads == null) groundLoads = new List<GroundLoad>();
+            groundLoads.Add(new GroundLoad { res = res, count = count, x = at.x, z = at.z });
         }
 
         /// Metres of one leg between pickup and drop-off, **for the display
@@ -885,39 +923,77 @@ namespace SeaSick.World
         /// (the scene re-supplies it every load).
         [System.NonSerialized] public string campName;
 
+        /// **Drop whatever is picked up, right here** (death/rescue phase
+        /// 2): a hand who goes down or dies is physical, same as any other
+        /// carrier (docs/DELIVERY-ON-ARRIVAL.md) -- his load does not
+        /// vanish and does not ride him into the ground; it becomes a
+        /// `GroundLoad` at his own spot (`HandAt`) for somebody else to
+        /// collect. A load only PLANNED (not yet picked up) is simply
+        /// cancelled -- the source still has it, nobody has to fetch it
+        /// from the grass.
+        void DropCarriedLoad(OutpostHand h)
+        {
+            if (h == null || !h.Hauling) return;
+            if (!h.haulPicked) { CancelPlanned(h); return; }
+            // A hunt/meal/site/ship/station load all carry the same way: a
+            // resource and a count in his arms. Ground loads are plain
+            // stock, so a hunt trip's carcass (not yet Meat/Hide) is left
+            // to spill as `Res.Game` -- fine, it is still "a load on the
+            // ground", collected the same way as everything else.
+            if (h.haulCount > 0 && !string.IsNullOrEmpty(h.haulRes))
+                AddGroundLoad(h.haulRes, h.haulCount, HandAt(h));
+            ClearHaul(h);
+        }
+
         /// Knock this hand down. No-op if he already is, or is not on the
-        /// roster. His current load stays on him (phase 1; phase 2 drops it
-        /// where he fell -- see `OutpostHand.downed`'s doc).
+        /// roster. **Drops whatever he had picked up where he stands**
+        /// (phase 2) -- a planned-but-not-picked load is just cancelled.
         public bool Down(OutpostHand h, string cause = "")
         {
             if (h == null || hands == null || !hands.Contains(h) || h.downed) return false;
             h.downed = true;
+            h.reached = false;
             h.downedLeft = LifeTuning.DownedSeconds;
             h.downedCause = cause ?? "";
-            // A trip he was only walking OUT to fetch has nothing in his
-            // arms yet: cancel it, so its units are not claimed by a man
-            // lying in the grass (`Claimed`) and someone else can go.
-            if (h.Hauling && !h.haulPicked) ClearHaul(h);
+            DropCarriedLoad(h);
+            // A rescuer already on his way to somewhere else, downed
+            // himself: his rescue resets (docs: "if the rescuer is himself
+            // downed, the downed hand's rescue resets") -- `DispatchRescuers`
+            // picks somebody new next tick.
+            h.rescuing = "";
+            Life.Lives.Log(h.name, Life.LifeEvents.Downed, CampLabel);
             return true;
         }
 
         /// Bring a downed hand back (phase 2/dev use -- nothing in phase 1
-        /// calls this on its own; the dev panel does).
+        /// calls this on its own; the dev panel does). Clears the rescue/
+        /// recovery state too, whichever of it applies.
         public void Revive(OutpostHand h)
         {
             if (h == null) return;
             h.downed = false;
             h.downedLeft = 0f;
             h.downedCause = "";
+            h.reached = false;
+            h.dragged = false;
+            h.recovering = false;
+            h.recoverLeft = 0f;
+            ClearRescuerOf(h);
+        }
+
+        /// Whoever was rescuing `h` is freed to go back to his own work.
+        void ClearRescuerOf(OutpostHand h)
+        {
+            if (h == null || hands == null) return;
+            foreach (var o in hands) if (o != null && o.rescuing == h.name) o.rescuing = "";
         }
 
         /// **The timer runs out, or the dev panel says "Kill".** Logs the
-        /// death, writes the grave, deposits whatever load he was carrying
-        /// so nothing vanishes (TODO phase 2: drop it where he fell instead
-        /// of at the store), removes him from the roster the same way
-        /// `RemoveHand` does, and raises `Lives.Died` for phase 3's
-        /// tombstone flow. Safe to call on a hand who was never downed
-        /// (the dev panel's "Kill" button).
+        /// death, writes the grave, drops whatever load he was carrying
+        /// where he stood (phase 2, same as `Down`), removes him from the
+        /// roster the same way `RemoveHand` does, and raises `Lives.Died`
+        /// for phase 3's tombstone flow. Safe to call on a hand who was
+        /// never downed (the dev panel's "Kill" button).
         public void Die(OutpostHand h, string cause = "")
         {
             if (h == null || hands == null || !hands.Contains(h)) return;
@@ -935,8 +1011,10 @@ namespace SeaSick.World
             };
             grave.story = LifeStory.Build(record, grave);
 
-            // Whatever he was carrying is put down before he leaves the
-            // books -- see the class doc: nothing vanishes.
+            // Whatever he was carrying is dropped where he stood, before he
+            // leaves the books -- see the class doc: nothing vanishes.
+            DropCarriedLoad(h);
+            ClearRescuerOf(h);
             RemoveHand(h);
 
             Lives.Bury(grave);
@@ -948,12 +1026,15 @@ namespace SeaSick.World
         /// catch-up run -- never from `Step`'s game-day quanta, which is
         /// how an away camp and a paused menu both leave a downed hand
         /// exactly as they found him (D2: "nobody dies while I'm away").
+        /// **Stopped for good once his rescuer reaches him** (`reached`,
+        /// phase 2) -- from then on the drag itself decides his fate, not
+        /// this clock.
         public void TickDowned(float realDeltaSeconds)
         {
             if (hands == null || realDeltaSeconds <= 0f) return;
             // Copy first: `Die` mutates `hands`, which this loop is walking.
             downedScratch.Clear();
-            foreach (var h in hands) if (h != null && h.downed) downedScratch.Add(h);
+            foreach (var h in hands) if (h != null && h.downed && !h.reached) downedScratch.Add(h);
             foreach (var h in downedScratch)
             {
                 h.downedLeft -= realDeltaSeconds;
@@ -962,6 +1043,85 @@ namespace SeaSick.World
         }
 
         [System.NonSerialized] readonly List<OutpostHand> downedScratch = new List<OutpostHand>();
+
+        // --- the rescuer (death/rescue phase 2, 2026-09-27) ------------------
+        //
+        // Picking who goes is the ledger's job (plain data, same as every
+        // other dispatch in this file); the walk itself is the rescuer's
+        // own `CampWorker` -- see `CampWorker.TickRescue`. Called every
+        // watched-and-running frame right beside `TickDowned`
+        // (`Outpost.Update`), so a rescuer is sent within the same frame a
+        // hand goes down.
+
+        /// Send the nearest free hand after every downed hand who does not
+        /// have one yet: **prefer idle, then any hand not downed, dragged,
+        /// recovering or already rescuing somebody** (`OutpostHand.Busy`
+        /// covers the first three; the fourth is `rescuing` itself). Only
+        /// one rescuer per downed hand. A hand chosen mid-haul drops his
+        /// load where he stands first, the same way `Down` does.
+        public void DispatchRescuers()
+        {
+            if (hands == null) return;
+            // Orphaned rescues first: a rescuer whose man is gone from the
+            // roster (recalled, died) or back on his feet stands down.
+            foreach (var o in hands)
+            {
+                if (o == null || string.IsNullOrEmpty(o.rescuing)) continue;
+                var t = Hand(o.rescuing);
+                if (t == null || !t.downed) o.rescuing = "";
+            }
+            foreach (var down in hands)
+            {
+                // A reached hand whose rescuer vanished (recalled, downed
+                // himself) is sent a new one; his timer stays stopped.
+                if (down == null || !down.downed) continue;
+                bool has = false;
+                foreach (var o in hands) if (o != null && o.rescuing == down.name) { has = true; break; }
+                if (has) continue;
+
+                OutpostHand best = null;
+                bool bestIdle = false;
+                float bestDist = float.MaxValue;
+                Vector3 at = HandAt(down);
+                foreach (var o in hands)
+                {
+                    if (o == null || o == down || o.Busy) continue;
+                    bool idle = o.order == OutpostOrder.Idle;
+                    float d = Vector3.SqrMagnitude(HandAt(o) - at);
+                    if (best == null || (idle && !bestIdle) || (idle == bestIdle && d < bestDist))
+                    {
+                        best = o; bestIdle = idle; bestDist = d;
+                    }
+                }
+                if (best == null) continue;
+                // He drops whatever he was carrying first (docs: "a hand
+                // carrying a picked load drops it where he stands first").
+                DropCarriedLoad(best);
+                best.rescuing = down.name;
+            }
+        }
+
+        // --- recovery (death/rescue phase 2, 2026-09-27) ---------------------
+
+        /// **Recovery ticks in the ordinary game-day quantum** (`Step`),
+        /// unlike the downed timer and the drag itself -- docs: "recovery...
+        /// MAY advance in game time, unwatched too, that only helps." Stands
+        /// him back up once `recoverLeft` runs out.
+        void StepRecovery(float days)
+        {
+            if (hands == null || days <= 0f) return;
+            foreach (var h in hands)
+            {
+                if (h == null || !h.recovering) continue;
+                h.recoverLeft -= days;
+                if (h.recoverLeft <= 0f)
+                {
+                    h.recovering = false;
+                    h.recoverLeft = 0f;
+                    h.dragged = false;
+                }
+            }
+        }
 
         static void ClearHaul(OutpostHand h)
         {
@@ -1008,6 +1168,28 @@ namespace SeaSick.World
         bool FindHaulerChore(out Chore c)
         {
             c = default;
+            // **First rung (death/rescue phase 2): bring a dropped load
+            // home.** Ahead of the stations' own bay-filling -- a load
+            // lying in the grass where somebody fell is more urgent than
+            // background hauling, and it is small (one hand's armful) so it
+            // never starves the stations for long.
+            if (groundLoads != null)
+                for (int i = 0; i < groundLoads.Count; i++)
+                {
+                    var g = groundLoads[i];
+                    if (g == null || g.count <= 0 || string.IsNullOrEmpty(g.res)) continue;
+                    int free = g.count - Claimed(HaulPlace.Ground, i, g.res, false);
+                    if (free <= 0) continue;
+                    int room = StoreRoomNet(g.res);
+                    if (room <= 0) continue;
+                    c = new Chore
+                    {
+                        res = g.res, n = Mathf.Min(free, room),
+                        source = null, from = HaulPlace.Ground, fromStation = i,
+                        to = HaulPlace.Store, toStation = -1,
+                    };
+                    return true;
+                }
             if (stations == null || stations.Count == 0) return false;
             for (int i = 0; i < stations.Count; i++)
             {
@@ -1340,12 +1522,12 @@ namespace SeaSick.World
             foreach (var h in hands)
             {
                 if (h == null) continue;
-                // **Downed (death/rescue phase 1): no new work, no new
-                // trips.** `WorkFactor` is already 0 for him, but a downed
-                // hand should not even be READ by the dispatcher -- his
-                // load stays on him (phase 1: nothing is dropped), so skip
-                // him outright rather than trust a zero budget alone.
-                if (h.downed) continue;
+                // **Downed, recovering, dragged or off rescuing (death/
+                // rescue): no new work, no new trips.** `WorkFactor` is
+                // already 0 for him, but a busy hand should not even be
+                // READ by the dispatcher -- skip him outright rather than
+                // trust a zero budget alone.
+                if (h.Busy) continue;
                 float budget = days * WorkFactor(h);
                 if (h.order == OutpostOrder.Work && IsStation(h.target))
                 {

@@ -44,6 +44,12 @@ namespace SeaSick.World
         /// pier deck, so a hand cannot path out to the head -- or the
         /// plank's landing on a beach. Appended LAST: saved as an int.
         Ship,
+        /// **A load dropped on the ground (death/rescue phase 2,
+        /// 2026-09-27)**: a hand who goes down or dies drops whatever he
+        /// had picked up exactly where he stood. The index is into
+        /// `OutpostLedger.groundLoads` (the same way `Station`'s index is
+        /// into `Stations`). Appended LAST too, for the same save reason.
+        Ground,
     }
 
     /// **A production station's own stock, one per BUILT instance
