@@ -11,13 +11,21 @@ using UnityEngine;
 ///
 /// 1. Finds a wall node: a lattice point inside (else the end of) the first
 ///    standing plain segment. With none -- or with `farWall` -- it queues an
-///    8 m run 46 m from the fire (past `Outpost.TownRadius`) through
-///    `Outpost.SiteWall` and force-completes it (DEV ONLY: writes the books).
+///    8 m run 62 m from the fire (past `Outpost.TownRadius`, and past the
+///    46 m this used to test at -- Kevin's phone bug was past 40 m but
+///    still snapped there) through `Outpost.SiteWall` and force-completes
+///    it (DEV ONLY: writes the books).
 /// 2. Sites a watchtower through the REAL siting path: `CampSiting.Begin`,
 ///    the drawing moved 1.4 m off the node (`CampSiting.MoveTo`, what a tap
 ///    does), then `CampSiting.Confirm` (the ✓). Reports whether it snapped,
 ///    the label, and any refusal (the one-of-each rule and a locked plan
-///    refuse here exactly as in play).
+///    refuse here exactly as in play). **Also asks the camera** whether the
+///    node is inside `IslandCam.ClampPivot`'s reach -- `MoveTo` alone would
+///    pass even if the phone's thumb could never have panned or dragged
+///    there, which is exactly the shape of bug this project already hit
+///    once (`CanPlace` was fine in isolation; the phone still could not
+///    reach the spot to ask it). `IslandCam.ExtraReachCentre/Radius`,
+///    widened by `CampSiting.Begin`, is what is being asked here.
 /// 3. Force-completes the tower row and reports: the tower on the node,
 ///    its distance from the fire (may exceed 40 m), the post at the node
 ///    hidden, the node's cell blocked for raiders AND hands, and the
@@ -29,6 +37,12 @@ using UnityEngine;
 /// e.g. `unity cmd eval --json --code 'return WallTowerCheck.Run(false, "/tmp/walltower.png");'`
 public static class WallTowerCheck
 {
+    /// Metres from the fire the queued run goes when `farWall` is asked
+    /// for, or when no wall stands to test against at all. Past
+    /// `Outpost.TownRadius` (40) by enough margin that a fix which only
+    /// nudges the reach a few metres would still be caught failing.
+    const float FarWallDistance = 62f;
+
     public static string Run(bool farWall = false, string capturePath = null)
     {
         var sb = new StringBuilder("WallTowerCheck.Run\n");
@@ -56,7 +70,7 @@ public static class WallTowerCheck
             }
         if (!haveNode)
         {
-            float r = farWall ? 46f : 20f;
+            float r = farWall ? FarWallDistance : 20f;
             for (int k = 0; k < 16 && !haveNode; k++)
             {
                 float t = k * Mathf.PI * 2f / 16f;
@@ -80,6 +94,20 @@ public static class WallTowerCheck
         // --- 2. site the tower through the siting mode ------------------------
         CampSiting.Begin(camp, BuildPlans.Watchtower, camp.transform);
         if (!CampSiting.Placing) return sb.Append("FAIL: CampSiting did not start (no instance?)").ToString();
+
+        // **The camera's own reach (2026-09-27 fix).** `CampSiting.Begin`
+        // widens `IslandCam.ExtraReachCentre/Radius` to the camp's walls'
+        // extent; ask `ClampPivot` whether the far node itself is still
+        // admissible, which is the thing `MoveTo` below cannot tell us --
+        // it moves the ghost directly and never touches the camera at all.
+        float fromFireNow = Flat(node, camp.CampCentre);
+        var islandCam = Object.FindFirstObjectByType<SeaSick.CameraRig.IslandCam>();
+        bool camReach = islandCam == null // no island camera in this scene: not this check's problem
+            || (islandCam.ClampPivot(node) - node).sqrMagnitude < 0.25f;
+        sb.AppendLine($"camera reach: node is {fromFireNow:F0} m from the fire, "
+            + $"ExtraReachRadius {SeaSick.CameraRig.IslandCam.ExtraReachRadius:F0} m, "
+            + $"ClampPivot admits it: {(camReach ? "YES" : "NO -- the thumb could not have panned here")}");
+
         CampSiting.MoveTo(node + new Vector3(1.2f, 0f, 0.7f));
         bool snapped = CampSiting.OnWall;
         Vector3 ghostAt = CampSiting.GhostAt;
@@ -129,7 +157,7 @@ public static class WallTowerCheck
         sb.AppendLine($"lookout door {door:F1}: walkable {doorOpen}, route from fire {doorReach}, "
             + $"straight line to fire crosses no wall {doorInside}");
 
-        bool pass = snapped && postHidden && raiderBlocked && doorReach && runs >= 1;
+        bool pass = snapped && camReach && postHidden && raiderBlocked && doorReach && runs >= 1;
         sb.AppendLine(pass ? "PASS" : "FAIL (see lines above)");
 
         if (!string.IsNullOrEmpty(capturePath))

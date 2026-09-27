@@ -70,6 +70,14 @@ namespace SeaSick.UI
         /// the two halves happen to land in.
         public const string WallPlanId = "palisade";
 
+        /// **Metres past the furthest wall post the camera's own reach
+        /// stands, on top of `Outpost.WallExtentFromCentre` (2026-09-27).**
+        /// Slack for a tower snapping past the very end of the run
+        /// (`WallTowerSnap`), and for the ghost's own footprint, so the
+        /// camera does not stop exactly at the last post with the drawing
+        /// hanging half off screen.
+        public const float WallReachMargin = 20f;
+
         /// **...or a LADDER chain (2026-09-27)**: two points, its own tool
         /// (`LadderSiting`), forked exactly where the wall is.
         public const string LadderPlanId = "ladder";
@@ -270,6 +278,22 @@ namespace SeaSick.UI
                 ? Instance.outpost.AutoYaw(Instance.outpost.CampCentre + Vector3.forward * 10f) : 0f;
             Instance.movingRow = move;
             Instance.moving = move != null;
+            // **Widen the camera's own reach to the camp's walls (2026-09-27,
+            // watchtowers-on-the-wall).** The ghost's reach test already
+            // exempts a tower snapped onto the wall from `TownRadius`
+            // (`Outpost.TooFarFromTown`), but the camera the thumb points
+            // with has no such exemption -- it was left wherever
+            // `DropTheViewOn` last put it, 35 m above whatever was sited
+            // before, and a run built past the campfire's ring is simply off
+            // screen there. `IslandCam.ClampPivot` reads this for exactly the
+            // life of this session; `Cancel` puts it back. Harmless (0 m) on
+            // a camp with no wall yet.
+            if (Instance.outpost != null && Instance.outpost.HasCampCentre)
+            {
+                CameraRig.IslandCam.ExtraReachCentre = Instance.outpost.CampCentre;
+                CameraRig.IslandCam.ExtraReachRadius =
+                    Instance.outpost.WallExtentFromCentre() + WallReachMargin;
+            }
             // The ghost must not be refused by the drawing it IS -- see
             // `Outpost.IgnoreSite`. Cleared in `Cancel`, which every exit
             // from this mode goes through.
@@ -444,6 +468,8 @@ namespace SeaSick.UI
             ClearLine = "";
             valid = false;
             onWall = false;
+            CameraRig.IslandCam.ExtraReachCentre = null;
+            CameraRig.IslandCam.ExtraReachRadius = 0f;
             if (ghost != null) { Destroy(ghost); ghost = null; }
             if (ring != null) { Destroy(ring.gameObject); ring = null; }
         }

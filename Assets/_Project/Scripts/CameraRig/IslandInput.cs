@@ -668,7 +668,16 @@ namespace SeaSick.CameraRig
                     }
                     else if (oneSub == OneFingerSub.DraggingSite)
                     {
+                        // **Edge-pan while carrying a drawing (2026-09-27).**
+                        // A watchtower snapping onto the wall may need to
+                        // travel further than one screen holds (a run built
+                        // well past `Outpost.TownRadius`, Kevin: "along any
+                        // side of the wall"), and a one-thumb drag has no
+                        // second gesture free to pan with mid-carry — the
+                        // thumb IS the only finger. Same trick `Holding`
+                        // already uses for a carried villager.
                         CampSiting.DragTo(pos);
+                        EdgePan(pos);
                         return; // ...nor a carried drawing: no pinch mid-drag
                     }
 

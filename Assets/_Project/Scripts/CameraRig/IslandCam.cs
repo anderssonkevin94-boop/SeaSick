@@ -316,6 +316,14 @@ namespace SeaSick.CameraRig
         /// the lower half of the screen with it.
         public static bool Engaged { get; private set; }
 
+        /// **An extra disc `ClampPivot` may also reach, on top of the
+        /// ship/island ones (2026-09-27).** Null and 0 do nothing -- see
+        /// `Outpost.WallExtentFromCentre` and `ClampPivot`'s own comment.
+        /// `CampSiting` sets this for the life of a siting session and clears
+        /// it when the mode ends; nothing else should need it.
+        public static Vector3? ExtraReachCentre;
+        public static float ExtraReachRadius;
+
         /// What the view is centred on, for the readout and the probe.
         public Vector3? FocusPoint => focus;
         public Transform Following => following;
@@ -1420,6 +1428,14 @@ namespace SeaSick.CameraRig
             if (focus.HasValue)
                 shipReach = Mathf.Max(shipReach,
                     World.Island.FlatDistance(focus.Value, ship));
+            // **While siting a watchtower onto a wall (2026-09-27):
+            // `CampSiting` widens this to the camp's own walls' extent, so a
+            // run built past the campfire's `TownRadius` is still on screen
+            // to drag or tap at -- see `ExtraReachCentre`. Additive only: it
+            // never pulls the reach IN, only ever lets it stand as it was.
+            if (ExtraReachCentre.HasValue)
+                shipReach = Mathf.Max(shipReach,
+                    World.Island.FlatDistance(ExtraReachCentre.Value, ship) + ExtraReachRadius);
             for (int i = 0; i < 8; i++)
             {
                 p = ClampDisc(p, ship, shipReach);

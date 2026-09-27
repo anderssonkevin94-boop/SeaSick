@@ -33,6 +33,41 @@ namespace SeaSick.World
         /// being sited snaps onto the wall.
         public const float WallTowerSnap = 3f;
 
+        /// **How far the furthest wall post stands from the town centre,
+        /// metres. 0 with no wall at all.**
+        ///
+        /// A wall has no reach limit (`CanPlaceWall` never asks
+        /// `TooFarFromTown`), so Kevin can and does walk a run well past
+        /// `TownRadius` -- and 2026-09-27, wanted a watchtower along ANY
+        /// side of it. The siting ghost's own reach test is exempt for a
+        /// tower on the wall already (`TooFarFromTown`, `CanPlace`), but the
+        /// CAMERA the player points with is not: it was left on whatever it
+        /// was last zoomed to (`CampSiting.DropTheViewOn`, 35 m above the
+        /// last thing sited), so a wall run beyond that is off screen and
+        /// the thumb cannot drag or tap anywhere near it. `CampSiting` reads
+        /// this to widen `IslandCam`'s pan reach for exactly the life of a
+        /// siting session, so "any side of the wall" is also reachable, not
+        /// only placeable.
+        public float WallExtentFromCentre()
+        {
+            float best = 0f;
+            Vector3 c = CampCentre;
+            for (int i = 0; i < walls.Count; i++)
+            {
+                var w = walls[i];
+                if (w == null) continue;
+                best = Mathf.Max(best, Island.FlatDistance(w.A, c), Island.FlatDistance(w.B, c));
+            }
+            if (ledger != null && ledger.sites != null)
+                foreach (var row in ledger.sites)
+                {
+                    if (row == null || !row.isWall) continue;
+                    best = Mathf.Max(best, Island.FlatDistance(row.postA, c),
+                        Island.FlatDistance(row.postB, c));
+                }
+            return best;
+        }
+
         /// Set only for the length of one `CanPlace` of a tower on the wall:
         /// the wall runs that pass through this node do not refuse it.
         Vector3? wallTowerNode;
