@@ -1002,6 +1002,73 @@ namespace SeaSick.World
             }
         }
 
+        // --- warmth: a hut near the fire, 2026-09-27 --------------------------
+        //
+        // Kevin's item "1" alongside item 12's item "4" (the walk label):
+        // GDD's item 12 shipped the label and left "an aura or morale
+        // incentive for building close" as his call, separately. This is
+        // that call. No per-hand bed assignment exists anywhere in this file
+        // -- `Housed` is just `hands.Count` against `HousingCapacity` -- so
+        // warmth is handed out the same way beds always implicitly have
+        // been: first come, first served, by a hand's own place in `hands`,
+        // against however many warm beds stand right now.
+
+        /// Metres a Hut can stand from the fire (`keyX`/`keyZ`) and still
+        /// keep its residents warm. `keyX`/`keyZ` are `SetKey`'s own
+        /// rounding of the fire's position to the metre -- plenty precise
+        /// against a 30 m line.
+        public const float WarmHutRadius = 30f;
+
+        /// Provisional, unplayed, 2026-09-27: mood a warm hand gains per
+        /// day, on top of the ordinary hunger arithmetic below, climbing
+        /// toward the same cap (`mood`'s own ceiling of 1) that recovery
+        /// already climbs toward -- no second cap to invent. Mood over 0.5
+        /// buys nothing more from `WorkFactor` (it already saturates
+        /// there), so in practice this speeds a hungry hand's recovery
+        /// rather than helping a content one.
+        public const float WarmMoodBonusPerDay = 0.1f;
+
+        /// Is the `raised` row at `i` a Hut standing within `WarmHutRadius`
+        /// of the fire? Straight-line distance -- the same measure a Hut's
+        /// siting ghost judges itself by (`CampSiting.WarmthLabel`), since
+        /// neither has a ground route worth asking `CampPath` for over a
+        /// line this short.
+        bool IsWarmRow(int i)
+        {
+            var b = raised[i];
+            if (b == null || b.planId != BuildPlans.Hut.id) return false;
+            float dx = b.x - keyX, dz = b.z - keyZ;
+            return dx * dx + dz * dz <= WarmHutRadius * WarmHutRadius;
+        }
+
+        /// Warm beds this camp has right now: `houses` (plus any tech
+        /// bonus, at that building's own level) summed over every Hut
+        /// standing within `WarmHutRadius`, upgraded or not -- an upgraded
+        /// hut is still warm if it is still close. Order matches `raised`,
+        /// which is the order `IsHandWarm` fills from.
+        public int WarmBedCapacity
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < raised.Count; i++)
+                    if (IsWarmRow(i))
+                        n += BuildPlans.Named(raised[i].planId).houses
+                            + Economy.Techs.HousesBonus(raised[i].planId, LevelAtRaised(i));
+                return n;
+            }
+        }
+
+        /// Is `hands[handIndex]` one of the warm ones? Deterministic: warm
+        /// beds fill first, by hand order, the same "no assignment table"
+        /// shortcut `HousingCapacity`/`Housed` already take for beds in
+        /// general.
+        public bool IsHandWarm(int handIndex) => handIndex >= 0 && handIndex < WarmBedCapacity;
+
+        /// Is `h` one of the warm ones? Reads its place in `hands`; -1
+        /// (not on this roster) always reads cold.
+        public bool IsHandWarm(OutpostHand h) => IsHandWarm(hands.IndexOf(h));
+
         // --- the fire: tech tree, building levels, recipes, 2026-09-23 -------
         //
         // Kevin: *"to hunt, you need a spear."* The tree hangs off the fire,
@@ -2724,8 +2791,9 @@ namespace SeaSick.World
                 // is sitting in the pile, same as the hunger-day accounting
                 // above.
                 float fed01 = need > 0f ? eaten / need : 1f;
-                foreach (var h in hands)
+                for (int hi = 0; hi < hands.Count; hi++)
                 {
+                    var h = hands[hi];
                     if (h == null) continue;
                     if (starved)
                         h.mood = Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days);
@@ -2735,6 +2803,13 @@ namespace SeaSick.World
                             : Mathf.Min(1f, h.mood + MoodRecoverPerFedDay * days);
                     else
                         h.mood = Mathf.Max(0f, h.mood - MoodDropPerHungryDay * days * (1f - fed01));
+
+                    // **Warmth, 2026-09-27.** On top of the hunger arithmetic
+                    // above, same clamp, same per-day pace: a hand in a Hut
+                    // within `WarmHutRadius` climbs a little further toward
+                    // content. See `IsHandWarm` for who counts.
+                    if (IsHandWarm(hi))
+                        h.mood = Mathf.Min(1f, h.mood + WarmMoodBonusPerDay * days);
                 }
             }
 

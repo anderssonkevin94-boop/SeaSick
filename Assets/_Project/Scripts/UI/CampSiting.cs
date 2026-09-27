@@ -646,6 +646,16 @@ namespace SeaSick.UI
                 WalkTint = tint;
             }
 
+            // **Warmth (2026-09-27) -- Kevin's "1" alongside the walk
+            // label's "4".** A Hut only: whether this spot falls inside
+            // `OutpostLedger.WarmHutRadius` and its residents would draw
+            // the mood bonus, or not. Keeps `WalkLine` -- this is its own
+            // line, same rule as the walk label about when it has anything
+            // to say.
+            WarmthLine = "";
+            if (valid && outpost != null && outpost.HasCampCentre && plan.id == BuildPlans.Hut.id)
+                WarmthLine = WarmthLabel(outpost, at);
+
             Place(at);
             ShowGhost(true);
         }
@@ -678,6 +688,24 @@ namespace SeaSick.UI
         /// The walk label for the spot under the ghost right now, or "".
         public static string WalkLine { get; private set; } = "";
         public static Color WalkTint { get; private set; } = Color.white;
+
+        /// **"warm — near the fire" / "cold — far from the fire" (2026-09-27).**
+        /// A Hut only: straight-line distance from `at` to the fire against
+        /// `OutpostLedger.WarmHutRadius` -- the same measure a standing
+        /// hut is judged by (`OutpostLedger.IsHandWarm`'s own row test), a
+        /// ghost having no ground route yet worth asking `CampPath` for
+        /// over a line this short. Never a refusal, same spirit as
+        /// `WalkLabel`.
+        public static string WarmthLabel(Outpost outpost, Vector3 at)
+        {
+            if (outpost == null) return "";
+            float m = Island.FlatDistance(at, outpost.CampCentre);
+            return m <= OutpostLedger.WarmHutRadius ? "warm — near the fire" : "cold — far from the fire";
+        }
+
+        /// The warmth label for the spot under the ghost right now (Hut
+        /// only), or "".
+        public static string WarmthLine { get; private set; } = "";
 
         /// **The only way a building gets placed.** The ✓ button, or Enter.
         public static void Confirm()

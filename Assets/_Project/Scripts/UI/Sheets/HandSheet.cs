@@ -233,6 +233,10 @@ namespace SeaSick.UI.Sheets
         {
             string word = h.MoodWord;
             if (word.Length == 0) word = "content";
+            // **Warmth, 2026-09-27.** Not a stall reason and not a cause
+            // `MoodWord` itself tracks -- a standing fact about where this
+            // hand lives, shown every time regardless of `reasonShown`.
+            word += l.IsHandWarm(h) ? " · warm (+mood)" : " · cold hut";
             if (reasonShown) return word;
             if (h.order == OutpostOrder.Gather && h.target == Res.Game)
             {
