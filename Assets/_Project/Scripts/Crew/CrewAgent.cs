@@ -223,6 +223,8 @@ namespace SeaSick.Crew
             Station, Bailing, Returning,
             // phase 5a: the rail round-trip a heave now takes
             RailGoing, AtRail, RailHold, RailReturning,
+            // phase 5b: the haul -- a hand sent to throw the line
+            HaulGoing, Hauling, HaulReturning,
             // ashore
             GoingAshore, ToNode, Chopping, ToShip, Idling, Boarding
         }
@@ -237,7 +239,14 @@ namespace SeaSick.Crew
         public Transform HomeShip => ship;
         public bool IsAboard => state == State.Station || state == State.Bailing
             || state == State.Returning || state == State.RailGoing
-            || state == State.AtRail || state == State.RailHold || state == State.RailReturning;
+            || state == State.AtRail || state == State.RailHold || state == State.RailReturning
+            || state == State.HaulGoing || state == State.Hauling || state == State.HaulReturning;
+
+        /// **5b.** Out at the rail hauling a swimmer in, one way or another
+        /// (walking out, hauling, or walking back) -- `Available` is already
+        /// false for all three, this is just for anyone who wants to say why.
+        public bool IsHauling => state == State.HaulGoing || state == State.Hauling
+            || state == State.HaulReturning;
 
         Transform ship;
         Vector3 shoreTarget;
@@ -668,6 +677,28 @@ namespace SeaSick.Crew
                     }
                     break;
 
+                // --- phase 5b: the haul --------------------------------------
+                case State.HaulGoing:
+                    if (WalkTo(haulRailLocal, dt))
+                    {
+                        state = State.Hauling;
+                        haulTimer = OverboardTuning.HaulSeconds;
+                        EnsureHaulLine();
+                    }
+                    break;
+
+                case State.Hauling:
+                    TickHaul(dt);
+                    break;
+
+                case State.HaulReturning:
+                    if (WalkTo(stationLocal, dt))
+                    {
+                        transform.localRotation = Quaternion.identity;
+                        state = State.Station;
+                    }
+                    break;
+
                 case State.GoingAshore:
                     if (FollowPath(dt, 0.4f)) SeekWork();
                     break;
@@ -961,6 +992,35 @@ namespace SeaSick.Crew
             Vector3 worldPos = transform.position;
             if (Ocean.OceanSampler.Ready) worldPos.y = Ocean.OceanSampler.SampleImmediate(worldPos).height;
 
+            bool wasScripted = scriptedTrip;
+            forcedTrip = false;
+            scriptedTrip = false;
+            warnActive = false;
+
+            GoOverboardAt(worldPos, wasScripted);
+        }
+
+        /// **Dev panel (5b)**: skip the whole grip/warning sequence and drop
+        /// this hand straight in the water a fixed distance off the ship's
+        /// SIDE (whichever side her own rail is on) -- for testing Throw
+        /// line quickly without waiting on real weather.
+        public void DebugDropOverboardNear(float sideMetres)
+        {
+            if (!IsAboard || AtCamp) return;
+            Vector3 outward = ship != null
+                ? ship.right * Mathf.Sign(railLocal.x != 0f ? railLocal.x : 1f)
+                : transform.right;
+            Vector3 worldPos = transform.position + outward * Mathf.Abs(sideMetres);
+            if (Ocean.OceanSampler.Ready) worldPos.y = Ocean.OceanSampler.SampleImmediate(worldPos).height;
+            GoOverboardAt(worldPos, false);
+        }
+
+        /// Shared by the real fall and the dev drop: splash, banner, haptic,
+        /// a brief real-time slow-down (only if nothing else has already
+        /// touched `Time.timeScale`), a swimmer spawned at `worldPos`, and
+        /// this body pulled off the roster.
+        void GoOverboardAt(Vector3 worldPos, bool scripted)
+        {
             Ocean.DynamicWaterSim.Splash(worldPos, 5f, 1f);
             Banner.Show("MAN OVERBOARD!");
             OverboardHaptics.Fall();
@@ -970,12 +1030,7 @@ namespace SeaSick.Crew
                 SlowMoRunner.Run(0.35f, 0.5f);
 
             var hullT = ship;
-            bool wasScripted = scriptedTrip;
-            forcedTrip = false;
-            scriptedTrip = false;
-            warnActive = false;
-
-            var swimmer = Swimmer.Spawn(this, hullT, worldPos, wasScripted);
+            var swimmer = Swimmer.Spawn(this, hullT, worldPos, scripted);
 
             // Off the books: the station empties (`Available` already false
             // mid-trip; `CrewRoster.Refresh` drops the cached array so
@@ -984,6 +1039,120 @@ namespace SeaSick.Crew
             var roster = hullT != null ? hullT.GetComponentInParent<CrewRoster>() : null;
             if (roster != null) roster.Refresh();
         }
+
+        // ------------------------------------------------- the haul (5b)
+        //
+        // `RescueHud` decides WHO gets sent and WHEN (nearest available hand,
+        // in reach, ship slow enough); this is just the walk-out/haul/walk-
+        // back the crew member does once picked.
+
+        Vector3 haulRailLocal;
+        Swimmer haulTarget;
+        float haulTimer;
+        LineRenderer haulLine;
+
+        /// **5b: send this hand to haul `swimmer` aboard.** Refuses if this
+        /// hand isn't `Available` (already covers bailing, at the rail,
+        /// hauling somebody else, resting off a rescue, ashore...). Walks to
+        /// the rail on the SWIMMER's side of the hull, at roughly her own
+        /// fore/aft position, then hauls for `OverboardTuning.HaulSeconds`.
+        public bool StartHaul(Swimmer swimmer)
+        {
+            if (!Available || swimmer == null || ship == null) return false;
+
+            Vector3 local = ship.InverseTransformPoint(swimmer.WorldPosition);
+            float side = Mathf.Sign(local.x != 0f ? local.x
+                : (railLocal.x != 0f ? railLocal.x : 1f));
+            float halfLen = motor != null ? Mathf.Max(1f, motor.HullLength * 0.5f - 1.5f) : Mathf.Abs(railLocal.z) + 1f;
+            float z = Mathf.Clamp(local.z, -halfLen, halfLen);
+            haulRailLocal = new Vector3(Mathf.Abs(railLocal.x) * side, railLocal.y, z);
+
+            haulTarget = swimmer;
+            state = State.HaulGoing;
+            return true;
+        }
+
+        /// Hauling in place: the line is drawn every frame, the swimmer is
+        /// pulled toward the rail, and the timer runs down to a rescue --
+        /// unless she's already been resolved some other way, or the ship
+        /// has moved so far that the line would have to stretch past
+        /// `haulSlipMultiple` times the throw reach, in which case it slips
+        /// and the hand comes back empty-handed.
+        void TickHaul(float dt)
+        {
+            if (haulTarget == null || haulTarget.Resolved) { EndHaul(); return; }
+
+            Vector3 railWorld = ship != null ? ship.TransformPoint(haulRailLocal) : transform.position;
+            float dist = Vector3.Distance(railWorld, haulTarget.WorldPosition);
+            if (dist > OverboardTuning.ThrowReachMetres * OverboardTuning.HaulSlipMultiple)
+            {
+                EndHaul();
+                return;
+            }
+
+            haulTarget.BeingHauled = true;
+            haulTarget.HaulAnchor = railWorld;
+            UpdateHaulLine(railWorld, haulTarget.WorldPosition);
+
+            haulTimer -= dt;
+            if (haulTimer <= 0f)
+            {
+                string rescuerName = DisplayName;
+                var swimmer = haulTarget;
+                haulTarget = null;
+                DestroyHaulLine();
+                swimmer.Rescue(rescuerName);
+                restLeft = Mathf.Max(restLeft, OverboardTuning.RescuerRecoverSeconds);
+                state = State.HaulReturning;
+            }
+        }
+
+        /// Line slipped, or the swimmer resolved some other way (rescued by
+        /// nobody -- can't happen today -- washed ashore, lost, or her whole
+        /// game object gone): let go and walk back.
+        void EndHaul()
+        {
+            if (haulTarget != null) haulTarget.BeingHauled = false;
+            haulTarget = null;
+            DestroyHaulLine();
+            state = State.HaulReturning;
+        }
+
+        void EnsureHaulLine()
+        {
+            if (haulLine != null) return;
+            var go = new GameObject("HaulLine");
+            haulLine = go.AddComponent<LineRenderer>();
+            haulLine.useWorldSpace = true;
+            haulLine.positionCount = 2;
+            haulLine.widthMultiplier = 0.05f;
+            haulLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            haulLine.receiveShadows = false;
+            haulLine.alignment = LineAlignment.View;
+            var sh = Shader.Find("Universal Render Pipeline/Unlit");
+            if (sh == null) sh = Shader.Find("Unlit/Color");
+            var mat = new Material(sh) { hideFlags = HideFlags.DontSave };
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", new Color(0.92f, 0.87f, 0.72f));
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", new Color(0.92f, 0.87f, 0.72f));
+            haulLine.material = mat;
+        }
+
+        void UpdateHaulLine(Vector3 fromWorld, Vector3 toWorld)
+        {
+            if (haulLine == null) return;
+            haulLine.SetPosition(0, fromWorld + Vector3.up * 0.6f);
+            haulLine.SetPosition(1, toWorld);
+        }
+
+        void DestroyHaulLine()
+        {
+            if (haulLine == null) return;
+            if (haulLine.material != null) Destroy(haulLine.material);
+            Destroy(haulLine.gameObject);
+            haulLine = null;
+        }
+
+        void OnDestroy() => DestroyHaulLine();
 
         /// **`Swimmer.Rescue`**: this exact body is still here (deactivated,
         /// never destroyed) — stand it back up on its old post.
@@ -1241,6 +1410,17 @@ namespace SeaSick.Crew
                 float outward = Mathf.Sign(railLocal.x != 0f ? railLocal.x : 1f);
                 transform.localRotation = Quaternion.Euler(0f, 90f * outward, 0f)
                     * Quaternion.Euler(52f + heave, 0f, 0f);
+            }
+            else if (state == State.Hauling)
+            {
+                // Leaning back into the line, hand over hand -- the mirror
+                // of the rail-retch lean (forward and down), this one's
+                // backward and up. Same "reads from the chase camera"
+                // sizing as the rest of the rail poses.
+                float pull = Mathf.Abs(Mathf.Sin(Time.time * 5f)) * 10f;
+                float outward = Mathf.Sign(haulRailLocal.x != 0f ? haulRailLocal.x : 1f);
+                transform.localRotation = Quaternion.Euler(0f, 90f * outward, 0f)
+                    * Quaternion.Euler(-18f - pull, 0f, 0f);
             }
             else if (state == State.Bailing)
             {

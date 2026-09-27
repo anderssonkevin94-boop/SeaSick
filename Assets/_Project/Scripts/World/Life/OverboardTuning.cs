@@ -65,6 +65,22 @@ namespace SeaSick.World.Life
         [Tooltip("Sea-legs points gained per rescue (LifeRecord.seaLegs, 0..1).")]
         public float rescueSeaLegsGain = 0.08f;
 
+        [Header("The rescue (phase 5b)")]
+        [Tooltip("Metres from the hull's rail/side (not its centre) within which \"Throw line\" appears.")]
+        public float throwReachMetres = 9f;
+        [Tooltip("Ship speed (m/s) above which she's too fast to throw a line, even in reach.")]
+        public float throwMaxSpeed = 1.8f;
+        [Tooltip("Half the hull's beam, metres -- used to find the nearest point on her SIDE rather than her centre when judging reach and where a haul happens.")]
+        public float hullHalfBeamMetres = 3.5f;
+        [Tooltip("Real seconds a haul takes once a crew member reaches the rail.")]
+        public float haulSeconds = 4f;
+        [Tooltip("Metres/second the swimmer is pulled toward the rail during a haul.")]
+        public float haulPullSpeed = 2.5f;
+        [Tooltip("A haul this far past throwReachMetres (as a multiple) slips the line and cancels the haul.")]
+        public float haulSlipMultiple = 1.6f;
+        [Tooltip("Real seconds the rescuer stays off station after a successful haul, on top of the swimmer's own rescueOffStationSeconds.")]
+        public float rescuerRecoverSeconds = 6f;
+
         [Header("Scripted first time")]
         [Tooltip("Real seconds under way (calm-ish water) before the scripted first man-overboard fires.")]
         public float firstTimeSailSeconds = 90f;
@@ -117,6 +133,13 @@ namespace SeaSick.World.Life
         public static float RescueSicknessSpike => D != null ? D.rescueSicknessSpike : 0.9f;
         public static float RescueOffStationSeconds => D != null ? D.rescueOffStationSeconds : 30f;
         public static float RescueSeaLegsGain => D != null ? D.rescueSeaLegsGain : 0.08f;
+        public static float ThrowReachMetres => D != null ? D.throwReachMetres : 9f;
+        public static float ThrowMaxSpeed => D != null ? D.throwMaxSpeed : 1.8f;
+        public static float HullHalfBeamMetres => D != null ? D.hullHalfBeamMetres : 3.5f;
+        public static float HaulSeconds => D != null ? D.haulSeconds : 4f;
+        public static float HaulPullSpeed => D != null ? D.haulPullSpeed : 2.5f;
+        public static float HaulSlipMultiple => D != null ? D.haulSlipMultiple : 1.6f;
+        public static float RescuerRecoverSeconds => D != null ? D.rescuerRecoverSeconds : 6f;
         public static float FirstTimeSailSeconds => D != null ? D.firstTimeSailSeconds : 90f;
         public static float FirstTimeMaxRoughness => D != null ? D.firstTimeMaxRoughness : 0.35f;
         public static float FirstTimeSwimSeconds => D != null ? D.firstTimeSwimSeconds : 240f;

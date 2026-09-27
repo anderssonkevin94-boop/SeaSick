@@ -154,6 +154,36 @@ namespace SeaSick.Ship
         public bool Sailing => sailTo.HasValue;
         public Vector3? SailTarget => sailTo;
 
+        // --- steer-toward (man overboard, phase 5b) --------------------------
+        Transform steerTarget;
+        /// A drag within this many degrees of the swimmer's bearing only
+        /// sets speed; further off, it takes the helm back (man overboard).
+        const float SteerKeepDeg = 50f;
+        /// Direct-rudder mode: a thumb asking for more rudder than this
+        /// takes the helm back from the swimmer steer.
+        const float SteerKeepRudder = 0.35f;
+        string steerTargetName;
+
+        /// **Tap a swimmer / the edge arrow -> heading-only autopilot toward
+        /// them.** Unlike `SailTo`, this NEVER touches the throttle — the
+        /// player keeps the engine, this only keeps the bow pointed at
+        /// `target` every frame. Ends the moment the player's thumb touches
+        /// the stick (drag OR tap) or a steering key is held, when `target`
+        /// resolves (its GameObject is destroyed — a Unity "fake null", so
+        /// the plain `!= null` check below already catches it), or by an
+        /// explicit `CancelSteerToward()`. Called by `RescueHud`, which is
+        /// the thing that intercepts the tap before `TouchHelm` ever sees it
+        /// (see that class for how).
+        public void SteerToward(Transform target, string label)
+        {
+            steerTarget = target;
+            steerTargetName = label;
+        }
+
+        public void CancelSteerToward() { steerTarget = null; }
+        public bool SteeringToward => steerTarget != null;
+        public string SteerTargetName => steerTargetName;
+
         void SteerForSailTo()
         {
             if (!sailTo.HasValue || motor == null) return;
@@ -258,6 +288,39 @@ namespace SeaSick.Ship
             }
 
             if (!Mathf.Approximately(testRudder, 0f)) { manualRudder = testRudder; manualSteer = true; }
+
+            // Man overboard (5b): steering toward a swimmer, same "any
+            // thumb on the stick wins" cancellation as `SailTo` below, but
+            // this one never sets throttleOrder -- the player's own hand on
+            // the engine is untouched throughout.
+            //
+            // Kevin: *"tap the swimmer and the heading autopilot steers
+            // toward them. I still control the throttle."* The stick is
+            // also the throttle, so a thumb on it must NOT cancel the
+            // steer by itself: only a drag that clearly asks for another
+            // heading does (autopilot mode: pointing more than
+            // `SteerKeepDeg` away from the swimmer; direct mode: a real
+            // rudder deflection). Otherwise the drag's distance sets the
+            // speed and the swimmer keeps the heading.
+            if (steerTarget != null)
+            {
+                Vector3 d = steerTarget.position - transform.position; d.y = 0f;
+                float bearing = d.sqrMagnitude > 0.01f ? Mathf.Atan2(d.x, d.z) * Mathf.Rad2Deg : motor.Heading;
+                bool cancel = manualSteer;
+                if (!cancel && helm.Dragging)
+                {
+                    if (direct) cancel = stickRudderActive && Mathf.Abs(stickRudder) > SteerKeepRudder;
+                    else if (helm.HasDragDirection)
+                        cancel = Mathf.Abs(Mathf.DeltaAngle(helm.DragHeadingDeg, bearing)) > SteerKeepDeg;
+                }
+                if (cancel) steerTarget = null;
+                else
+                {
+                    targetHeadingDeg = bearing;
+                    hasTarget = true;
+                    stickRudderActive = false;   // the swimmer, not the thumb, has the blade
+                }
+            }
 
             // A tapped destination steers until the player takes the helm
             // back: a thumb on the stick, a tap (which rang her down), or a
@@ -553,6 +616,8 @@ namespace SeaSick.Ship
             throttleOrder = 0f;
             astern = false;
             rudder = 0f;
+            // (A stop tap keeps a swimmer steer: stopping to coast up to
+            // someone in the water is exactly how the line gets thrown.)
         }
 
         /// **Hook, not a mechanic.** How hard the burn notch is eating wood

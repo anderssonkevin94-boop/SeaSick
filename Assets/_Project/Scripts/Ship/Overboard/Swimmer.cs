@@ -35,12 +35,31 @@ namespace SeaSick.Ship.Overboard
         public Vector3 WorldPosition => transform.position;
         public bool Resolved { get; private set; }
 
+        /// **5b: the ship's own hull, for reach/haul checks** — `RescueHud`
+        /// judges "within reach" off the nearest point on the SIDE of this
+        /// transform, not this swimmer's spawning ship reference (same
+        /// transform, exposed read-only rather than reaching at `ship`
+        /// through a friend-class assumption).
+        public Transform Hull => ship;
+
+        /// **5b, set by `CrewAgent.TickHaul`.** While true, `Update` pulls
+        /// this swimmer toward `HaulAnchor` instead of drifting on her own —
+        /// the visible "being hauled in" motion. Cleared by the haul ending,
+        /// one way or the other.
+        public bool BeingHauled { get; set; }
+        public Vector3 HaulAnchor { get; set; }
+
         CrewAgent origin;              // the body to reactivate on rescue -- may be destroyed already
         Transform ship;                // her hull, for Rescue()'s BoardShip
         Vector3 driftVel;
         GameObject visual;
         Light glow;
         static Material headMat;
+
+        // --- phase 5b: the countdown ring ------------------------------------
+        const int RingSegments = 28;
+        LineRenderer ring;
+        Material ringMat;
 
         /// **Spawn one.** `agent` keeps its body (deactivated, not
         /// destroyed) so `Rescue()` can hand it straight back; `firstTime`
@@ -99,25 +118,113 @@ namespace SeaSick.Ship.Overboard
             glow.range = 6f;
             glow.intensity = 1.4f;
             glow.color = new Color(1f, 0.92f, 0.75f);
+
+            // A flat ring on the water, draining white -> amber -> red with
+            // `TimeLeft01` -- same LineRenderer-loop shape as `SelectionRing`.
+            // World space (not a child transform) so its own scale never
+            // rides the head's bob.
+            var ringGo = new GameObject("Ring");
+            ringGo.transform.SetParent(transform, false);
+            ring = ringGo.AddComponent<LineRenderer>();
+            ring.useWorldSpace = true;
+            ring.loop = true;
+            ring.positionCount = RingSegments;
+            ring.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            ring.receiveShadows = false;
+            ring.alignment = LineAlignment.View;
+            ring.textureMode = LineTextureMode.Stretch;
+            var sh = Shader.Find("Universal Render Pipeline/Unlit");
+            if (sh == null) sh = Shader.Find("Unlit/Color");
+            ringMat = new Material(sh) { hideFlags = HideFlags.DontSave };
+            if (ringMat.HasProperty("_Surface")) ringMat.SetFloat("_Surface", 1f);
+            if (ringMat.HasProperty("_SrcBlend")) ringMat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            if (ringMat.HasProperty("_DstBlend")) ringMat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            if (ringMat.HasProperty("_ZWrite")) ringMat.SetFloat("_ZWrite", 0f);
+            ringMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            ringMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            ring.material = ringMat;
         }
 
-        void OnDestroy() => all.Remove(this);
+        void OnDestroy()
+        {
+            all.Remove(this);
+            if (ringMat != null) Destroy(ringMat);
+        }
 
         void Update()
         {
             if (Resolved) return;
             float dt = Time.deltaTime;
 
-            // Ride the real wave. One-shot per swimmer per frame -- well
-            // inside OceanSampler's "under ~8 a frame" budget even with a
-            // handful of people in the water at once.
-            Vector3 pos = transform.position + driftVel * dt;
+            // Ride the real wave -- unless the haul has hold of her, in which
+            // case she's pulled toward the rail instead of drifting on her
+            // own (`CrewAgent.TickHaul` sets `BeingHauled`/`HaulAnchor` every
+            // frame while it holds). One-shot ocean sample per swimmer per
+            // frame either way -- well inside OceanSampler's "under ~8 a
+            // frame" budget even with a handful of people in the water at
+            // once.
+            Vector3 pos = BeingHauled
+                ? Vector3.MoveTowards(transform.position, HaulAnchor, OverboardTuning.HaulPullSpeed * dt)
+                : transform.position + driftVel * dt;
             if (Ocean.OceanSampler.Ready)
                 pos.y = Ocean.OceanSampler.SampleImmediate(pos).height + 0.15f;
             transform.position = pos;
 
             TimeLeft -= dt;
             if (TimeLeft <= 0f) ResolveTimeout();
+
+            UpdateRing();
+        }
+
+        /// White -> amber -> red as `TimeLeft01` drains, shrinking a little
+        /// with it, and sized off the CHASE CAMERA's distance/height so it
+        /// reads the same whether she's close under the bow or half a
+        /// screen away (the build brief's "read from the chase camera
+        /// height").
+        void UpdateRing()
+        {
+            if (ring == null) return;
+            float t = TimeLeft01;
+            Color col = t > 0.5f
+                ? Color.Lerp(new Color(1f, 0.7f, 0.15f), Color.white, Mathf.InverseLerp(0.5f, 1f, t))
+                : Color.Lerp(new Color(0.95f, 0.15f, 0.1f), new Color(1f, 0.7f, 0.15f), Mathf.InverseLerp(0f, 0.5f, t));
+
+            var cam = Camera.main;
+            float camDist = cam != null ? Vector3.Distance(cam.transform.position, transform.position) : 30f;
+            float legibility = Mathf.Clamp(camDist / 28f, 0.7f, 2.6f);
+
+            float radius = Mathf.Lerp(0.55f, 1.15f, t) * legibility;
+            float width = Mathf.Lerp(0.05f, 0.11f, t) * legibility;
+            ring.widthMultiplier = width;
+            col.a = 0.85f;
+            if (ringMat.HasProperty("_BaseColor")) ringMat.SetColor("_BaseColor", col);
+            if (ringMat.HasProperty("_Color")) ringMat.SetColor("_Color", col);
+
+            Vector3 centre = transform.position;
+            for (int i = 0; i < RingSegments; i++)
+            {
+                float a = i / (float)RingSegments * Mathf.PI * 2f;
+                Vector3 p = centre + new Vector3(Mathf.Cos(a) * radius, 0.05f, Mathf.Sin(a) * radius);
+                if (Ocean.OceanSampler.Ready) p.y = Ocean.OceanSampler.SampleImmediate(p).height + 0.05f;
+                ring.SetPosition(i, p);
+            }
+        }
+
+        /// **5b.** The nearest point on the hull's SIDE (rail), not her
+        /// centre -- a rectangle `hullHalfBeamMetres` wide and
+        /// `ShipMotor.HullLength` long, in the hull's own local space. Used
+        /// by `RescueHud` for the reach check and by `CrewAgent.StartHaul`
+        /// for where the haul happens.
+        public Vector3 NearestHullSide()
+        {
+            if (ship == null) return transform.position;
+            Vector3 local = ship.InverseTransformPoint(transform.position);
+            var motor = ship.GetComponent<Ship.ShipMotor>();
+            float halfLen = motor != null ? Mathf.Max(1f, motor.HullLength * 0.5f) : 12f;
+            float halfBeam = OverboardTuning.HullHalfBeamMetres;
+            float side = Mathf.Sign(local.x != 0f ? local.x : 1f);
+            float z = Mathf.Clamp(local.z, -halfLen, halfLen);
+            return ship.TransformPoint(new Vector3(halfBeam * side, 0f, z));
         }
 
         void ResolveTimeout()

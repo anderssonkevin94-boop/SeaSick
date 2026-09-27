@@ -168,6 +168,11 @@ namespace SeaSick.Dev
                     c.DebugAdjustGrip(-0.5f);
                 if (GUILayout.Button("MOB", GUILayout.Height(RowH)))
                     c.ForceOverboardSequence(scripted: false);
+                // Phase 5b: skip the grip/warning wait entirely and drop
+                // them 6m off the side, already in Throw Line's reach --
+                // for testing the rescue itself.
+                if (GUILayout.Button("6m off side", GUILayout.Height(RowH)))
+                    c.DebugDropOverboardNear(6f);
                 GUILayout.EndHorizontal();
             }
 
