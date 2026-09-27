@@ -261,6 +261,23 @@ namespace SeaSick.UI.ModularYard
                 if (!raised && reason != null) body.Add(SheetKit.Text(reason, false, true, 12f));
             }
 
+            // Upper-deck layer (2026-09-27): third deck over a connected
+            // raised section, gun foredeck on the standard bow. Astra's art is
+            // unreviewed; the report says so (ART_UNREVIEWED).
+            string layer = draft.UpperDeckOption(key);
+            if (layer != null || draft.HasUpperDeck(key))
+            {
+                bool fitted = draft.HasUpperDeck(key);
+                bool isFore = layer == UpperDeckLayers.Foredeck;
+                body.Add(SheetKit.Eyebrow(isFore ? "gun foredeck" : "third deck"));
+                var urow = new VisualElement(); urow.AddToClassList("yard-sheet-row"); body.Add(urow);
+                var noneBtn = new Button(() => { if (fitted) draft.ToggleUpperDeck(key); Fill(); }) { text = "None" };
+                noneBtn.AddToClassList("yard-seg-button"); noneBtn.EnableInClassList("yard-selected", !fitted); urow.Add(noneBtn);
+                var fitBtn = new Button(() => { if (!fitted) draft.ToggleUpperDeck(key); Fill(); }) { text = isFore ? "Foredeck" : "Third deck" };
+                fitBtn.AddToClassList("yard-seg-button"); fitBtn.EnableInClassList("yard-selected", fitted); urow.Add(fitBtn);
+                body.Add(SheetKit.Text("New art, not reviewed yet.", false, true, 12f));
+            }
+
             if (isMiddle)
             {
                 int index = IndexOf(key);

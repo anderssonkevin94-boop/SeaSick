@@ -177,6 +177,9 @@ namespace SeaSick.UI.ModularYard
             }
             else next.middleIds.Insert(index, middleId);
             RenumberMiddleKeys(next, index, +1);
+            // A neighbour that turned from connected to a wall variant loses
+            // its third-deck socket; its layer goes too (2026-09-27).
+            UpperDeckLayers.DropOrphaned(next, library);
             return Set(next, ShipAssembler.MiddleKey(index));
         }
 
@@ -202,8 +205,11 @@ namespace SeaSick.UI.ModularYard
                 next.sternId = sId; next.middleIds = new List<string>(mIds); next.bowId = bId;
             }
             string prefix = ShipAssembler.MiddleKey(index) + "/";
-            int orphaned = next.equipment.RemoveAll(e => e != null && e.slotId != null && e.slotId.StartsWith(prefix));
+            int orphaned = next.equipment.RemoveAll(e => e != null && e.slotId != null
+                && (e.slotId.StartsWith(prefix) || e.slotId.StartsWith("fitting:" + prefix)));
+            next.fittings?.RemoveAll(f => f != null && f.socketId != null && f.socketId.StartsWith(prefix));
             RenumberMiddleKeys(next, index, -1);
+            UpperDeckLayers.DropOrphaned(next, library);
             string highlight = index > 0 ? ShipAssembler.MiddleKey(index - 1) : ShipAssembler.StdKeyStern;
             bool applied = Set(next, highlight);
             if (applied && orphaned > 0)
@@ -438,11 +444,38 @@ namespace SeaSick.UI.ModularYard
             var (sId, mIds, bId) = RaisedSections.ToIds(levels.stern, levels.middles, levels.bow);
             var next = Snapshot();
             next.sternId = sId; next.middleIds = new List<string>(mIds); next.bowId = bId;
+            UpperDeckLayers.DropOrphaned(next, library); // a third deck needs its connected raised section
             int orphaned = DropOrphanedGuns(next);
             bool applied = Set(next, key);
             if (applied && orphaned > 0)
             {
                 Message = orphaned == 1 ? "1 gun will go to the dry dock." : $"{orphaned} guns will go to the dry dock.";
+                Changed?.Invoke();
+            }
+            return applied;
+        }
+
+        // ---- upper-deck layers (2026-09-27): third deck / gun foredeck --------
+
+        /// The upper-deck layer this section can carry (third deck on a
+        /// connected raised section, foredeck on the V3 bow), or null.
+        public string UpperDeckOption(string key) => UpperDeckLayers.OptionFor(draft, key, library, out _);
+
+        public bool HasUpperDeck(string key) => UpperDeckLayers.Has(draft, key);
+
+        /// Fits or removes this section's upper-deck layer. Removing the
+        /// foredeck sends its guns to the dry dock (the draft's own dock diff).
+        public bool ToggleUpperDeck(string key)
+        {
+            if (Committed) return Refuse("This refit is already confirmed.");
+            bool had = HasUpperDeck(key);
+            if (!had && UpperDeckOption(key) == null) return Refuse("This section cannot carry an upper deck.");
+            var next = UpperDeckLayers.With(Snapshot(), key, !had, library);
+            int guns = draft.equipment.Count - next.equipment.Count;
+            bool applied = Set(next, key);
+            if (applied && guns > 0)
+            {
+                Message = guns == 1 ? "1 gun will go to the dry dock." : $"{guns} guns will go to the dry dock.";
                 Changed?.Invoke();
             }
             return applied;
