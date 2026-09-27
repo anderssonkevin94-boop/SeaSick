@@ -1,0 +1,28 @@
+{
+    "schemaVersion": 1,
+    "id": "module.bunk",
+    "version": 1,
+    "displayName": "Bunk",
+    "description": "Two berths.",
+    "placement": "inner",
+    "capacity": {
+        "cargo": 0,
+        "berths": 2
+    },
+    "crew": 0,
+    "massKg": 150,
+    "onePerShip": false,
+    "dockLevel": 1,
+    "equipmentId": "",
+    "effects": [],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 3
+        },
+        {
+            "item": "hide",
+            "count": 1
+        }
+    ]
+}

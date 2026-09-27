@@ -58,6 +58,8 @@ namespace SeaSick.Ship.Modular
             catch (Exception e) { fails++; sb.AppendLine("  FAIL raised-sections exception -- " + e); }
             try { UpperDeckValidation.Body(standardsJson, moduleJsons, names, hullFormJson, (n, ok, d) => Gate(n, ok, d)); }
             catch (Exception e) { fails++; sb.AppendLine("  FAIL upper-deck exception -- " + e); }
+            try { SlotModelValidation.Body(standardsJson, moduleJsons, names, hullFormJson, readResourceText, (n, ok, d) => Gate(n, ok, d)); }
+            catch (Exception e) { fails++; sb.AppendLine("  FAIL slots exception -- " + e); }
             Passed = passes; Failed = fails;
             sb.AppendLine($"ModularShipSelfTest: {passes} PASS, {fails} FAIL");
             Report = sb.ToString();
@@ -248,13 +250,13 @@ namespace SeaSick.Ship.Modular
             cfg.equipment.Add(new EquipmentChoice { slotId = "middle[1]/DeckArea", moduleId = Cannon, offsetU = new Vector3(0.25f, -3.4f, 0f) });
             string json = cfg.ToJson();
             var back = ShipConfiguration.FromJson(json);
-            Gate("config-round-trip", back != null && back.ValueEquals(cfg) && back.schemaVersion == ShipConfiguration.SupportedSchemaVersion && back.middleIds.Count == 2, json);
+            Gate("config-round-trip", back != null && back.ValueEquals(cfg) && back.schemaVersion == ShipConfiguration.LegacySchemaVersion && back.middleIds.Count == 2, json);
 
             string future = json.Substring(0, json.Length - 1) + ",\"futureField\":42,\"futureBlock\":{\"a\":[1,2,3],\"b\":\"x\"}}";
             var fut = ShipConfiguration.FromJson(future);
             Gate("config-unknown-field-ignored", fut != null && fut.ValueEquals(cfg), "extra fields futureField/futureBlock");
 
-            var newer = ShipConfiguration.FromJson(json.Replace("\"schemaVersion\":" + ShipConfiguration.SupportedSchemaVersion, "\"schemaVersion\":99"));
+            var newer = ShipConfiguration.FromJson(json.Replace("\"schemaVersion\":" + ShipConfiguration.LegacySchemaVersion, "\"schemaVersion\":99"));
             var nr = ShipAssembler.Assemble(newer, lib);
             Gate("config-schema-99-rejected", newer != null && newer.schemaVersion == 99 && !nr.ok && nr.HasCode("CONFIG_SCHEMA_TOO_NEW"),
                 First(nr, "CONFIG_SCHEMA_TOO_NEW") ?? Codes(nr));

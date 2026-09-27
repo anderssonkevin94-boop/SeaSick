@@ -1,0 +1,30 @@
+{
+    "schemaVersion": 1,
+    "id": "module.bilgepump",
+    "version": 1,
+    "displayName": "Bilge pump",
+    "description": "Bails water aboard twice as fast. Hold only, one per ship.",
+    "placement": "hold",
+    "capacity": {
+        "cargo": 0,
+        "berths": 0
+    },
+    "crew": 0,
+    "massKg": 200,
+    "onePerShip": true,
+    "dockLevel": 2,
+    "equipmentId": "",
+    "effects": [
+        "bail:2"
+    ],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 3
+        },
+        {
+            "item": "iron",
+            "count": 1
+        }
+    ]
+}

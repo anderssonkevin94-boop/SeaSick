@@ -937,3 +937,162 @@ agent's work, against the exact names below.
   the Interior page itself (`UI/ModularYard/`), `InsertMiddle`/
   `RemoveSection`/`BeginSection`/`ResetSection` (step 1), and
   `ShipyardUiProbe`'s Interior +/- clamp coverage.
+
+## §19 Slots API (2026-09-27, phase 1 of the slot shipyard) — for the phase-2 screen
+
+Kevin's decisions: the player fills small plan grids with **modules** (cannon,
+bunk, crate, bilge pump, lookout, repair bench); capacity = the **sum of the
+fitted modules** (the sections' authored capacity blocks and `layouts` no longer
+count for a slot ship). One gun port per side per deck above the Hold (the Hold
+has none); cannons only in ports. Modules are items built at the dock (FREE +
+INSTANT for now) and kept in the dry-dock store; removing a section or lowering
+a deck returns its modules to the store (never stranded). Slots are the only
+limit (no module-count cap). The stern has a FIXED 2-berth cabin that is part
+of the hull, so an empty hull can sail. Old saves convert automatically:
+today's Long = 6 cannons + 4 crates + 3 bunks = **16 cargo, 8 berths (2 cabin +
+6), 6 guns on the same mounts, same mass and draft**. Design page:
+`scratchpad/shipyard/index.html`.
+
+### Data
+
+| What | Where |
+| --- | --- |
+| Grids, cabin, deck heights, catalog list, dock levels 1–5 | `Resources/ShipModules/standards.json` → `slotModel` (`SlotModelDef`) |
+| One file per buildable module | `Resources/ShipModules/Catalog/module.*.json` (`CatalogModule`) |
+| Schema classes | `Scripts/Ship/Modular/SlotSchema.cs` |
+| Pure rules (layout, migrate, normalize, check, totals) | `Scripts/Ship/Modular/SlotModel.cs` |
+| Read model + draft (UI-facing) | `Scripts/Ship/Modular/ShipyardSlots.cs` |
+| Gates (32) | `Scripts/Ship/Modular/SlotModelValidation.cs` (runs inside `tools/modular-selftest.sh`) |
+
+- **Decks** (`SlotDeck`): 0 `Hold`, 1 `Deck`, 2 `Upper`, 3 `Top`. Hold + Deck are
+  always open. Upper opens on a RAISED section (wide beam, W1xR) or under the
+  foredeck on the standard bow; Top opens under a third-deck layer.
+- **Grids** (per section kind × deck × beam): Hold stern 2 / mid 4 / bow 2
+  (wide 3 / 6 / 3); Deck/Upper/Top stern 2 ports + 1, mid 2 ports + 2, bow
+  2 ports (wide: +1 / +2 / +1 centre-row cells). Long = 8 + 9 = 17 cells,
+  6 ports. Cell ids are stable per grid: `P0`, `S0` (the gun ports on decks
+  1–3), `P1`, `S1`, `M0`, `M1`. Rows: `Port`, `Mid`, `Stbd`.
+- **Catalog** (all PROVISIONAL): cannon (port only, 1 hand, 500 kg, dock I,
+  `equipmentId` = `equipment.cannon.astra.v1`), bunk (2 berths, 150 kg, I),
+  crate (4 cargo, 120 kg, I), bilge pump (Hold only, one per ship, II), lookout
+  (top-most deck only, one per ship, III), repair bench (any cell incl. a port,
+  1 hand, one per ship, IV). `placement`: `port` | `inner` (not a port) | `any`
+  | `hold` | `topmost`. Build prices are data (`buildCost`), unused while free.
+- **Dock levels** (`DockLimits.For(lib, level)` → `DockLevelDef`): I Slip 3
+  sections, Hold+Deck, standard beam · II Wide slip + wide · III Crane 4
+  sections, Upper on 3 · IV Covered yard 5 sections, Upper on all, Top on 2 ·
+  V Master yard Top on all. Upgrade costs/fire level are data only. **Phase 1
+  does not enforce the dock building's level**: `ShipyardService.DockLevel`
+  defaults to `DockLimits.Unenforced` (5); phase 4 sets it from the building.
+
+### Configuration (schema 3)
+
+```csharp
+public class ShipConfiguration {        // SupportedSchemaVersion = 3
+    public List<SlotFit> fits;          // ADDITIVE; empty + ignored below schema 3
+    public bool UsesSlots { get; }      // schemaVersion >= 3
+}
+public class SlotFit { string section; int deck; string cell; string moduleId; }  // "middle[0]", 1, "P0", "module.cannon"
+```
+- A new `ShipConfiguration` and every preset (`Long()`, `WithMiddles`, …) is
+  still **schema 2** (legacy path unchanged). `SlotModel.Migrate(cfg, lib, out
+  overflow)` makes it schema 3; `ModularSave.Decode(...)` now always returns a
+  slot config (an old save → migrated; `out overflow` = catalog ids with no cell,
+  which `ShipyardService` puts in the store). `ModularSave.StandardSlots(lib)` =
+  the standard steamer as slots.
+- In a slot config the deck-gun `equipment` is **derived** from the cannon fits
+  (`SlotModel.Normalized`): each cannon in a port becomes an `EquipmentChoice` on
+  that section/deck/side's authored gun slot, so the assembler, `FittedGun`s and
+  `CannonBattery` work unchanged. A cannon in a port with no authored mount (e.g.
+  a Top deck) still counts, warns `GUN_PORT_NO_MOUNT`, and is not drawn.
+- `ShiftMiddleKeys` renumbers `fits` too. `DryDock.Diff` counts **fits** for
+  slot configs (store keys are catalog ids; an old store's
+  `equipment.cannon.astra.v1` is renamed `module.cannon` on load).
+- Mass: non-cannon modules are in `lightshipKg` as (fitted − the standard
+  fit-out 930 kg), because the hull masses were calibrated on today's steamer,
+  which already carries that fit-out; cannons stay in `gunsWeightKg`. The fitted
+  modules' total mass and centre are on `ShipyardPlan.fitMassKg / fitCentreM`
+  (report figures `fitMass`, `fitCentreHeight`) — **report only: the sailing
+  model's CoG does not follow them yet**.
+
+### The draft (what the screen calls)
+
+```csharp
+// From the live ship:
+ShipyardSlotDraft d = ShipyardService.Player.BeginSlotDraft();
+// Detached (preview/tests): new ShipyardSlotDraft(lib, currentCfg, store, backend = null, dockLevel = -1)
+
+ShipyardSlotsView View();                     // everything the screen shows, plain data
+List<ModuleOptionView> Options(string sectionKey, int deck, string cellId); // the add drawer
+
+bool Place(string sectionKey, int deck, string cellId, string moduleId);  // empty cell, from the store
+bool BuildAndPlace(string sectionKey, int deck, string cellId, string moduleId); // one undo step
+bool Remove(string sectionKey, int deck, string cellId);                  // -> store
+bool Move(string fromSection, int fromDeck, string fromCell,
+          string toSection, int toDeck, string toCell);                   // filled target = swap
+bool BuildModule(string moduleId);                                        // free, instant, undoable
+bool AddSection(int index);            // 0 = behind the stern .. middleIds.Count = before the bow
+bool RemoveSection(string sectionKey); // middles only; its modules -> store
+bool RaiseDeck(string sectionKey);     // opens the next deck (Upper, then Top)
+bool LowerDeck(string sectionKey);     // takes the top deck off; its modules -> store
+void Undo();                           // one step, builds included
+ShipyardSlotsView Validate();          // = View()
+bool Apply();                          // builds + refit + save, atomic (ApplyRefit)
+
+string Message, MessageCode;  bool Dirty, CanUndo, Applied;  int Changes;
+event Action Changed;          IReadOnlyList<string> Builds;  DryDock Store();
+```
+Every command either changes the draft (one undo step, `true`) or refuses with
+`Message`/`MessageCode` and changes nothing. After every change the draft is
+normalized: anything with no place any more leaves the draft and shows up in the
+store (`Message` says how many). Nothing touches the ship, store or save until
+`Apply`.
+
+### The read model (`ShipyardSlotsView`)
+
+```
+sections[]  SlotSectionView { key, kind, name ("Mid 1"), moduleId, wide, topDeck,
+              canRemove/removeReason, canRaise/raiseReason, canLower/lowerReason,
+              decks[4] SlotDeckView { deckIndex, name, unlocked, lockedReason, isNextRaise,
+                used, total, cells[] SlotCellView { cellId, row (Port/Mid/Stbd),
+                isGunPort, hasMount, moduleId or null } } }
+totals      SlotTotalsView { guns, gunPorts, crew (aboard), berths, cargo (aboard),
+              cargoCap, cells, cellsUsed, draftM (NaN = unknown), fitMassT }
+blockers[]  SlotIssueView { code, text, fixId }     // stop Confirm
+warnings[]  SlotIssueView { code, text, fixId }
+store[]     StoreRowView { moduleId, name, description, inStore (after this draft),
+              aboard, locked, dockLevel, onePerShip, placement, cargo, berths, crew, massKg }
+dockLevel, dockName, dirty, canUndo, canApply, changes, message, messageCode,
+builds[], refitNowBlockedBecause
+```
+`fixId`: `remove:<section>/<deck>/<cell>`, `build:<moduleId>`, `add-bunk`,
+`unload`, `lighten`, `upgrade-dock` ("" = no fix button).
+`ModuleOptionView { moduleId, name, action, reason, inStore }`, `action` =
+`place` | `build-place` | `move-here` (one-per-ship fitted elsewhere) |
+`not-here` | `locked`.
+
+### Codes
+
+Blockers (plus every existing code: `CARGO_WOULD_NOT_FIT`, `OVERLOADED`, …):
+`SLOT_WRONG_KIND`, `MODULE_LOCKED`, `ONE_PER_SHIP`, `DOCK_LEVEL`, `NO_CATALOG`,
+`MODULE_UNKNOWN`. Warnings: `GUNS_SHORT_OF_HANDS` (cannons > hands aboard, capped
+by berths — replaces the `GUNS_NEED_CREW` blocker for slot ships),
+`GUN_PORT_NO_MOUNT`, and the existing `HANDS_ASHORE`. Command-only refusals:
+`SLOT_OCCUPIED`, `SLOT_UNKNOWN`, `DECK_LOCKED`, `NOT_IN_STORE`, `TOO_MANY_MIDDLES`.
+
+### Backend seam
+
+`IShipyardSlotsBackend { ReadCurrent(); ReadStore(); DockLevel; CrewAboard;
+CargoAboard; Report(draft); TryApply(expected, draft, builds, out reason) }` —
+`ShipyardService` implements it; `ShipyardService.ApplyRefit(expected, draft,
+builds)` is the new overload (builds join the store in the same atomic step; the
+old 2-argument call still works and migrates a v2 draft). `ShipyardService.Current`
+is always a slot config now.
+
+### Legacy screen (phase 1 left it in place)
+
+The old `UI/ModularYard` screen keeps working on the slot config: `ShipyardDraft`
+normalizes every edit, its `FitGun`/`RemoveGun` fit/remove a cannon in the port
+that mount serves, `RemoveSection` sends the section's fits to the store. Its
+Interior berths slider (`layouts`) has **no effect** on a slot ship — phase 2
+replaces it with the grids.

@@ -57,6 +57,7 @@ namespace SeaSick.Ship.Modular
         {
             var lib = ModuleLibrary.FromJson(stdJson, mods, names);
             if (readResourceText != null) lib.LoadHydrostatics(readResourceText);
+            if (readResourceText != null) lib.LoadCatalog(readResourceText);
             var reference = ReferenceFrom(hullFormJson);
             Gate("shipyard-reference-hull-loads", reference != null, reference != null
                 ? $"lwl {F(reference.lwl)} m, beam {F(reference.beam)}, draft {F(reference.draft)}, {F(reference.massKg / 1000f)} t"
@@ -697,21 +698,21 @@ namespace SeaSick.Ship.Modular
             string saveJson = ModularJson.To(save);
             var back = ModularJson.From<ShipSaveShape>(saveJson);
             var cfgBack = ModularSave.Decode(back.modular, lib, out bool has, out string warn);
-            Gate("save-field-round-trip", has && warn == null && cfgBack.ValueEquals(three), saveJson.Length + " chars");
+            Gate("save-field-round-trip", has && warn == null && cfgBack.ValueEquals(SlotModel.Migrate(three, lib, out _)), saveJson.Length + " chars");
 
             string oldJson = ModularJson.To(new OldShipSaveShape { rung = 2, crewNames = new List<string> { "Bo" } });
             var old = ModularJson.From<ShipSaveShape>(oldJson);
             var oldCfg = ModularSave.Decode(old.modular, lib, out bool oldHas, out string oldWarn);
-            Gate("old-save-without-field-is-long", old.modular == "" && !oldHas && oldWarn == null && oldCfg.ValueEquals(ShipConfiguration.Long()),
+            Gate("old-save-without-field-is-long", old.modular == "" && !oldHas && oldWarn == null && oldCfg.ValueEquals(ModularSave.StandardSlots(lib)),
                 oldJson);
 
             var future = ShipConfiguration.Long(); future.middleIds[0] = "hull.middle.w1r2.v9";
             var fut = new ShipSaveShape { modular = ModularSave.Encode(future) };
             var futBack = ModularJson.From<ShipSaveShape>(ModularJson.To(fut));
             var futCfg = ModularSave.Decode(futBack.modular, lib, out bool futHas, out string futWarn);
-            Gate("save-unknown-module-falls-back-with-warning", futHas && futWarn != null && futCfg.ValueEquals(ShipConfiguration.Long()), futWarn ?? "no warning");
+            Gate("save-unknown-module-falls-back-with-warning", futHas && futWarn != null && futCfg.ValueEquals(ModularSave.StandardSlots(lib)), futWarn ?? "no warning");
             var junk = ModularSave.Decode("{not json", lib, out bool junkHas, out string junkWarn);
-            Gate("save-unreadable-field-falls-back", junkHas && junkWarn != null && junk.ValueEquals(ShipConfiguration.Long()), junkWarn ?? "no warning");
+            Gate("save-unreadable-field-falls-back", junkHas && junkWarn != null && junk.ValueEquals(ModularSave.StandardSlots(lib)), junkWarn ?? "no warning");
         }
     }
 }

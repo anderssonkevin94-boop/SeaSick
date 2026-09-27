@@ -1,0 +1,30 @@
+{
+    "schemaVersion": 1,
+    "id": "module.cannon",
+    "version": 1,
+    "displayName": "Cannon",
+    "description": "A deck gun in a gun port. Needs one hand to work.",
+    "placement": "port",
+    "capacity": {
+        "cargo": 0,
+        "berths": 0
+    },
+    "crew": 1,
+    "massKg": 500,
+    "onePerShip": false,
+    "dockLevel": 1,
+    "equipmentId": "equipment.cannon.astra.v1",
+    "effects": [
+        "gun"
+    ],
+    "buildCost": [
+        {
+            "item": "iron",
+            "count": 2
+        },
+        {
+            "item": "boards",
+            "count": 2
+        }
+    ]
+}

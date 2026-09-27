@@ -1,0 +1,24 @@
+{
+    "schemaVersion": 1,
+    "id": "module.crate",
+    "version": 1,
+    "displayName": "Crate",
+    "description": "Four cargo cells.",
+    "placement": "inner",
+    "capacity": {
+        "cargo": 4,
+        "berths": 0
+    },
+    "crew": 0,
+    "massKg": 120,
+    "onePerShip": false,
+    "dockLevel": 1,
+    "equipmentId": "",
+    "effects": [],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 4
+        }
+    ]
+}

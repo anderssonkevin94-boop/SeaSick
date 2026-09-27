@@ -42,7 +42,7 @@ namespace SeaSick.Ship.Modular
     /// Validate / BuildPreview / CanRefitNow touch nothing. ApplyRefit is
     /// atomic: any exception rolls her back to the previous build.
     [DisallowMultipleComponent]
-    public class ShipyardService : MonoBehaviour
+    public class ShipyardService : MonoBehaviour, IShipyardSlotsBackend
     {
         /// The player's shipyard handle; null when the player is not on the
         /// steamer (the ladder ship) or before the conversion ran.
@@ -102,7 +102,10 @@ namespace SeaSick.Ship.Modular
             reference = referenceData;
             referenceHull = v8Hull;
             referenceWheel = v8Wheel;
-            current = ShipConfiguration.Long();
+            // Slots (2026-09-27): her configuration is always a slot one
+            // (schema 3) -- the standard steamer is Long() migrated, so a
+            // draft and the dry-dock diff always compare like with like.
+            current = ModularSave.StandardSlots(Library);
             currentPlan = null;
             modularActive = false;
             dock = DryDock.Empty();
@@ -172,7 +175,8 @@ namespace SeaSick.Ship.Modular
         /// Pure: checks the draft against the prototype policy, the module
         /// rules and what she is carrying now. Changes nothing.
         public ShipyardValidation Validate(ShipConfiguration draft) =>
-            ShipyardPlanner.Validate(draft != null ? draft.Clone() : null, Library, reference, Snapshot());
+            ShipyardPlanner.Validate(draft == null ? null : draft.UsesSlots ? draft.Clone() : SlotModel.Migrate(draft, Library, out _),
+                Library, reference, Snapshot());
 
         /// Validate, as the rich current-vs-proposed report the UI displays.
         public ShipyardReport Report(ShipConfiguration draft)
@@ -360,9 +364,19 @@ namespace SeaSick.Ship.Modular
         /// all pass. If the save cannot be written she is rebuilt as she was
         /// and the call fails (SAVE_FAILED): on false, ship and save are both
         /// as they were. No resource is spent.
-        public ShipyardApplyResult ApplyRefit(ShipConfiguration expected, ShipConfiguration draft)
+        public ShipyardApplyResult ApplyRefit(ShipConfiguration expected, ShipConfiguration draft) =>
+            ApplyRefit(expected, draft, null);
+
+        /// Slots (2026-09-27): the same, and `builds` (catalog ids the
+        /// draft built -- free and instant for now) are added to the store
+        /// in the same atomic step, before the draft's fits are taken from it.
+        public ShipyardApplyResult ApplyRefit(ShipConfiguration expected, ShipConfiguration draft, IReadOnlyList<string> builds)
         {
             var res = new ShipyardApplyResult();
+            // A v1/v2 draft (an old caller) is judged as slots, like the live ship.
+            if (draft != null && !draft.UsesSlots) draft = SlotModel.Migrate(draft, Library, out _);
+            if (draft != null) draft = SlotModel.Normalized(draft, Library);
+            if (expected != null && !expected.UsesSlots) expected = SlotModel.Migrate(expected, Library, out _);
             if (expected == null || !expected.ValueEquals(current))
             {
                 res.issues.Add(new Rejection { code = ShipyardCodes.StaleDraft, partId = "",
@@ -391,7 +405,19 @@ namespace SeaSick.Ship.Modular
             // module id, same count). Checked BEFORE anything is rebuilt, so
             // a refusal here leaves the ship untouched.
             var dockDiff = DryDock.Diff(expected, draft);
-            bool dockChanges = dockDiff.Count > 0;
+            bool dockChanges = dockDiff.Count > 0 || (builds != null && builds.Count > 0);
+            var withBuilds = dock.Clone();
+            if (builds != null)
+                foreach (var b in builds)
+                {
+                    if (Library.Catalog == null || !Library.Catalog.TryGet(b, out var cm) || cm.dockLevel > DockLevel)
+                    {
+                        res.issues.Add(new Rejection { code = SlotCodes.ModuleLocked, partId = b ?? "", message = $"{b} cannot be built at this dry dock." });
+                        res.configuration = Current;
+                        return res;
+                    }
+                    withBuilds.Add(b);
+                }
             // Surplus hands (2026-09-25, Kevin): never a refusal -- they go
             // ashore to the HOME settlement instead. Landing them is a real
             // scene move, same as the dry dock: it needs somewhere to land
@@ -412,7 +438,7 @@ namespace SeaSick.Ship.Modular
                     res.configuration = Current;
                     return res;
                 }
-                if (dockChanges && !dock.CanApply(dockDiff, out string missingId))
+                if (dockChanges && !withBuilds.CanApply(dockDiff, out string missingId))
                 {
                     string missingName = missingId;
                     if (Library != null && Library.TryGet(missingId, out var missingDef)) missingName = ModuleLibrary.Name(missingDef);
@@ -447,7 +473,7 @@ namespace SeaSick.Ship.Modular
                 res.configuration = Current;
                 return res;
             }
-            if (dockChanges) dock.Apply(dockDiff);
+            if (dockChanges) { dock = withBuilds; dock.Apply(dockDiff); }
             if (!Persist(out string saveWhy))
             {
                 // Swap back: the previous build, through the same path.
@@ -580,7 +606,19 @@ namespace SeaSick.Ship.Modular
 
         /// Load path (SaveGame.Restore, alongside ApplyFromSave). A
         /// missing/unreadable field is an empty dock, never a refusal.
-        public void ApplyDryDockFromSave(string field) => dock = DryDock.FromJson(field);
+        public void ApplyDryDockFromSave(string field)
+        {
+            dock = DryDock.FromJson(field);
+            // A v2 store kept guns under their equipment id; the slot store
+            // keys on catalog ids ("module.cannon").
+            SlotModel.MigrateStore(dock, Library);
+            // Modules an old configuration's migration found no cell for
+            // (ApplyFromSave runs first) land here, never lost.
+            foreach (var id in pendingOverflow) dock.Add(id);
+            pendingOverflow.Clear();
+        }
+
+        readonly List<string> pendingOverflow = new List<string>();
 
         /// Load path (SaveGame.Restore, before the hold and crew come back).
         /// Skips the refit guards and the cargo/crew checks -- the save was
@@ -589,8 +627,10 @@ namespace SeaSick.Ship.Modular
         /// falls back to the standard steamer with a warning.
         public void ApplyFromSave(string field)
         {
-            var cfg = ModularSave.Decode(field, Library, out bool has, out string warning);
+            var cfg = ModularSave.Decode(field, Library, out bool has, out string warning, out var overflow);
             if (warning != null) Debug.LogWarning("[Shipyard] " + warning);
+            pendingOverflow.Clear();
+            pendingOverflow.AddRange(overflow);
             if (!has)
             {
                 // An old save: the standard steamer, drawn as she always was.
@@ -688,7 +728,7 @@ namespace SeaSick.Ship.Modular
                 AssembleReference();
                 if (view != null) { view.gameObject.SetActive(false); Destroy(view.gameObject); }
                 if (referenceHull != null) referenceHull.SetActive(true);
-                view = null; currentPlan = null; current = ShipConfiguration.Long(); modularActive = false;
+                view = null; currentPlan = null; current = ModularSave.StandardSlots(Library); modularActive = false;
                 if (raise) Raise();
                 return true;
             }
@@ -713,6 +753,27 @@ namespace SeaSick.Ship.Modular
             fittedGuns = plan.fittedGuns,
         };
 
+        // ---- slots (2026-09-27, docs/SHIPYARD-API.md "Slots API") -----------
+
+        /// The home dry dock's level for the slot rules. Phase 1: not
+        /// enforced (DockLimits.Unenforced = 5, today's prototype offers
+        /// every hull); the Dock tab (phase 4) sets it from the building.
+        public int DockLevel { get; set; } = DockLimits.Unenforced;
+
+        /// A fresh slot draft of the live ship for the yard screen.
+        public ShipyardSlotDraft BeginSlotDraft() => new ShipyardSlotDraft(Library, this);
+
+        ShipConfiguration IShipyardSlotsBackend.ReadCurrent() => Current;
+        DryDock IShipyardSlotsBackend.ReadStore() => Dock;
+        int IShipyardSlotsBackend.CrewAboard => CrewAboard();
+        int IShipyardSlotsBackend.CargoAboard => Snapshot().totalHeld;
+        bool IShipyardSlotsBackend.TryApply(ShipConfiguration expected, ShipConfiguration draft, IReadOnlyList<string> builds, out string reason)
+        {
+            var r = ApplyRefit(expected, draft, builds);
+            reason = r.ok ? null : (r.issues.Count > 0 ? r.issues[0].message : "Refit could not be applied.");
+            return r.ok;
+        }
+
         // ---- the live snapshot ----------------------------------------------
 
         int CrewAboard()
@@ -725,7 +786,7 @@ namespace SeaSick.Ship.Modular
         /// What she carries now, for the planner's retention checks.
         public LiveShipSnapshot Snapshot()
         {
-            var s = new LiveShipSnapshot { config = current.Clone(), crewAboard = CrewAboard(), hasChimney = true };
+            var s = new LiveShipSnapshot { config = current.Clone(), crewAboard = CrewAboard(), hasChimney = true, dockLevel = DockLevel };
             var voyage = FindFirstObjectByType<SeaSick.Voyage.VoyageManager>();
             if (voyage != null)
             {

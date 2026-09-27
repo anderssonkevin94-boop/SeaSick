@@ -338,6 +338,10 @@ namespace SeaSick.Ship.Modular
         public int crewAboard;
         public bool hasChimney = true;
         public WeightModel weights = WeightModel.Default;
+        /// The home dry dock's level, for the slot rules (MODULE_LOCKED,
+        /// DOCK_LEVEL). Phase 1: DockLimits.Unenforced (5) -- the dock
+        /// building's own level is wired in with the Dock tab (phase 4).
+        public int dockLevel = DockLimits.Unenforced;
     }
 
     /// Everything a validated configuration implies. Read-only for the UI;
@@ -371,6 +375,15 @@ namespace SeaSick.Ship.Modular
         /// report and UI, not a second source of truth.
         public float walkDeckZU = 1.76f;
         public ShipCapacity capacity;
+        /// Slot configurations (schema 3) only: the sum of the fitted
+        /// modules (capacity comes from here, not the sections' authored
+        /// blocks), their total mass and its centre, ship frame, metres.
+        /// The non-cannon modules' mass is IN `lightshipKg` (cannons are
+        /// weighed as guns, `gunsWeightKg`, as before).
+        public bool usesSlots;
+        public SlotTotals slots;
+        public float fitMassKg;
+        public Vector3 fitCentreM;
         /// Per installed hull section, aft to fore: its authored capacity.
         public List<SectionCapacity> sections = new List<SectionCapacity>();
         /// Hull sections without a capacity block / without lightship data
@@ -434,6 +447,9 @@ namespace SeaSick.Ship.Modular
     {
         public bool ok;
         public readonly List<Rejection> issues = new List<Rejection>();
+        /// Slot-rule warnings (GUNS_SHORT_OF_HANDS, GUN_PORT_NO_MOUNT); the
+        /// report adds them to its own warnings.
+        public readonly List<ShipyardNote> slotWarnings = new List<ShipyardNote>();
         public AssemblyResult assembly;
         /// Drawn hull at the waterline, prow excluded, metres.
         public float hullLengthM;
@@ -559,6 +575,9 @@ namespace SeaSick.Ship.Modular
                 return v;
             }
             var w = live != null ? live.weights : WeightModel.Default;
+            // A slot draft is judged as it would be applied: stranded fits
+            // gone (to the store), deck guns derived from its cannons.
+            if (draft != null && draft.UsesSlots) draft = SlotModel.Normalized(draft, lib);
             var refPlan = PlanFor(ShipConfiguration.Long(), lib, reference, null, w, out _);
             var draftPlan = PlanFor(draft, lib, reference, refPlan, w, out var asm);
             v.assembly = asm;
@@ -623,7 +642,9 @@ namespace SeaSick.Ship.Modular
                 // assembler's EQUIPMENT_SLOT_UNKNOWN, above); a gun the draft
                 // keeps but cannot crew is GUNS_NEED_CREW, below. Nothing
                 // strikes a gun silently any more -- see the dry dock (D5).
-                if (draftPlan.gunsCrewNeeded > draftPlan.capacity.crewStations)
+                if (draft.UsesSlots)
+                    SlotModel.Check(draft, lib, live.dockLevel, Mathf.Min(live.crewAboard, draftPlan.capacity.crewStations), v.issues, v.slotWarnings);
+                else if (draftPlan.gunsCrewNeeded > draftPlan.capacity.crewStations)
                     v.issues.Add(new Rejection { code = ShipyardCodes.GunsNeedCrew, partId = "guns",
                         message = $"{draftPlan.capacity.guns} guns need {draftPlan.gunsCrewNeeded} hands at the guns and this ship has berths for {draftPlan.capacity.crewStations}. " +
                                   $"Take {draftPlan.gunsCrewNeeded - draftPlan.capacity.crewStations} guns off to the dry dock first." });
@@ -684,6 +705,7 @@ namespace SeaSick.Ship.Modular
             ShipyardPlan refPlan, WeightModel w, out AssemblyResult asm)
         {
             if (cfg == null) { asm = ShipAssembler.Assemble(null, lib); return null; }
+            if (cfg.UsesSlots) cfg = SlotModel.Normalized(cfg, lib);
             asm = ShipAssembler.Assemble(cfg, lib);
             if (!asm.ok || reference == null) return null;
             if (!HullMeasure.TryMeasure(asm, lib, out var m)) return null;
@@ -778,6 +800,18 @@ namespace SeaSick.Ship.Modular
             var star = new List<Vector3>();
             foreach (var g in p.fittedGuns) if (g.side == "starboard") star.Add(g.positionM);
             p.data.gunSockets = star.ToArray();
+            // Slots (schema 3, 2026-09-27): capacity = the SUM of the fitted
+            // modules (+ the stern's fixed cabin), replacing the sections'
+            // authored blocks; gun slots = the open decks' gun ports.
+            if (cfg.UsesSlots)
+            {
+                p.usesSlots = true;
+                p.capacityMissing = lib.Catalog != null && lib.Catalog.Ok ? null : "the shipyard's module list";
+                p.slots = SlotModel.Totals(cfg, lib);
+                hold = p.slots.cargo; berths = p.slots.berths; gunSlots = p.slots.gunPorts;
+                foreach (var sc in p.sections) SlotModel.SectionTotals(cfg, lib, sc.sectionKey, out sc.holdCells, out sc.berths);
+                FitMass(p, cfg, lib, asm);
+            }
             p.capacity = new ShipCapacity
             {
                 holdCells = hold, crewStations = berths, equipmentSlots = slots, gunSlots = gunSlots,
@@ -793,6 +827,11 @@ namespace SeaSick.Ship.Modular
             // geometry (volume, design draft) stays the reshaped form's, so her
             // static waterline in the sim is wherever that mass floats her.
             p.lightshipKg = ModuleLightshipKg(asm, lib, out p.massMissing);
+            // Fitted modules are part of her (their own provisional mass);
+            // cannons stay in gunsWeightKg, as every gun always has.
+            // The hull's own lightship already carries the standard fit-out
+            // (it was calibrated on today's steamer): count the difference.
+            if (p.usesSlots) p.lightshipKg += p.slots.nonCannonMassKg - SlotModel.StandardFitOutKg(lib);
             if (p.massMissing == null) p.data.massKg = p.lightshipKg;
             else p.lightshipKg = p.data.massKg;
             // Raised deck: the extra mass is already inside p.lightshipKg
@@ -820,6 +859,31 @@ namespace SeaSick.Ship.Modular
             }
             else p.loadDisplacementKg = p.lightshipKg;
             return p;
+        }
+
+        /// The fitted modules' total mass and its centre, ship frame (each at
+        /// its own slot: guns up high raise it). Report-only in phase 1: the
+        /// sailing model's centre of gravity is not moved by it yet.
+        static void FitMass(ShipyardPlan p, ShipConfiguration cfg, ModuleLibrary lib, AssemblyResult asm)
+        {
+            var layout = SlotModel.Layout(cfg, lib);
+            var zs = lib.Standards?.slotModel?.deckZU;
+            float k = asm.metresPerUnit, total = 0f; var moment = Vector3.zero;
+            foreach (var f in cfg.fits)
+            {
+                if (lib.Catalog == null || !lib.Catalog.TryGet(f.moduleId, out var m)) continue;
+                var s = SlotModel.Find(layout, f.section);
+                var pm = asm.Find(f.section);
+                if (s == null || pm == null) continue;
+                float half = 0f;
+                if (lib.TryGet(s.moduleId, out var d) && d.sockets != null)
+                    foreach (var so in d.sockets)
+                        if (so != null && so.role == SocketRole.HullAft) { var pr = lib.FindProfile(so.standard); if (pr != null) half = pr.halfBeamU; }
+                var pos = SlotModel.FitPositionM(s, f, pm.positionU, half, zs, k, p.viewOffset.z);
+                total += m.massKg; moment += pos * m.massKg;
+            }
+            p.fitMassKg = total;
+            p.fitCentreM = total > 0f ? moment / total : Vector3.zero;
         }
 
         /// Sum of every placed module's `lightship.massKg` (hull sections
@@ -1291,7 +1355,24 @@ namespace SeaSick.Ship.Modular
         /// but unusable field (unreadable, future module id, not in the
         /// prototype) falls back to Long() with a warning -- never refuses
         /// the save.
-        public static ShipConfiguration Decode(string json, ModuleLibrary lib, out bool hasConfig, out string warning)
+        public static ShipConfiguration Decode(string json, ModuleLibrary lib, out bool hasConfig, out string warning) =>
+            Decode(json, lib, out hasConfig, out warning, out _);
+
+        /// Always returns a SLOT configuration (schema 3, 2026-09-27): an
+        /// old save (no field, v1 or v2) is migrated by SlotModel.Migrate so
+        /// she carries exactly what she did. `overflow`: catalog ids the
+        /// migration found no cell for -- the caller puts them in the store.
+        public static ShipConfiguration Decode(string json, ModuleLibrary lib, out bool hasConfig, out string warning, out List<string> overflow)
+        {
+            var cfg = DecodeLegacy(json, lib, out hasConfig, out warning);
+            return SlotModel.Migrate(cfg, lib, out overflow);
+        }
+
+        /// The standard steamer as slots: Long() migrated (6 cannons, 4
+        /// crates, 3 bunks + the 2-berth stern cabin = 16 / 8 / 6).
+        public static ShipConfiguration StandardSlots(ModuleLibrary lib) => SlotModel.Migrate(ShipConfiguration.Long(), lib, out _);
+
+        static ShipConfiguration DecodeLegacy(string json, ModuleLibrary lib, out bool hasConfig, out string warning)
         {
             warning = null;
             hasConfig = !string.IsNullOrEmpty(json);
@@ -1305,7 +1386,8 @@ namespace SeaSick.Ship.Modular
             // A v1 document never carried equipment (guns were implicit); give
             // it explicit guns before checking it against today's rules, so
             // an existing refitted save loads with the same guns.
-            if (cfg.schemaVersion < ShipConfiguration.SupportedSchemaVersion) cfg = cfg.MigratedToV2();
+            if (cfg.schemaVersion < ShipConfiguration.LegacySchemaVersion) cfg = cfg.MigratedToV2();
+            if (cfg.UsesSlots) cfg = SlotModel.Normalized(cfg, lib);
             var why = new List<Rejection>(ShipyardPolicy.Check(cfg, lib));
             why.AddRange(ShipAssembler.Assemble(cfg, lib).rejections);
             if (why.Count > 0)

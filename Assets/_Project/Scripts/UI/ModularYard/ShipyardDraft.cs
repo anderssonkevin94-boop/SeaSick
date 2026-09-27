@@ -89,6 +89,9 @@ namespace SeaSick.UI.ModularYard
         bool Set(ShipConfiguration next, string highlight)
         {
             if (Committed) return Refuse("This refit is already confirmed.");
+            // Slot configurations (schema 3): fits with no place any more go
+            // to the store, deck guns follow the cannon fits.
+            if (next.UsesSlots) next = SlotModel.Normalized(next, library);
             var result = ShipAssembler.Assemble(next, library);
             if (!result.ok) return Refuse(Reason(result));
             if (next.ValueEquals(draft)) return false;
@@ -195,6 +198,8 @@ namespace SeaSick.UI.ModularYard
             string reason = RemovalReasonFor(index);
             if (!string.IsNullOrEmpty(reason)) return Refuse(reason);
             var next = Snapshot();
+            // Its fitted modules go to the store (slot configs), never onto a neighbour.
+            next.fits?.RemoveAll(f => f != null && f.section == sectionKey);
             next.middleIds.RemoveAt(index);
             if (IsWideBeam)
             {
@@ -520,6 +525,17 @@ namespace SeaSick.UI.ModularYard
         {
             if (Committed) return Refuse("This refit is already confirmed.");
             if (backend == null) return Refuse("Live refitting is not connected.");
+            if (draft.UsesSlots)
+            {
+                // Slots: a cannon fit in the port that mount serves (the
+                // phase-2 screen uses ShipyardSlotDraft instead).
+                if (!SlotModel.CellForMount(draft, library, slotId, out var sec, out int deck, out var cell))
+                    return Refuse("That gun slot has no gun port on this ship.");
+                var nextFit = Snapshot();
+                nextFit.fits.RemoveAll(f => f.SameCell(sec, deck, cell));
+                nextFit.fits.Add(new SlotFit { section = sec, deck = deck, cell = cell, moduleId = SlotModel.Cannon(library.Catalog) });
+                return Set(nextFit, slotId);
+            }
             var edit = backend.FitEquipment(Snapshot(), slotId, ShipConfiguration.EquipmentCannon);
             if (!edit.ok) return Refuse(edit.message);
             return Set(edit.draft, slotId);
@@ -530,6 +546,14 @@ namespace SeaSick.UI.ModularYard
         {
             if (Committed) return Refuse("This refit is already confirmed.");
             if (backend == null) return Refuse("Live refitting is not connected.");
+            if (draft.UsesSlots)
+            {
+                if (!SlotModel.CellForMount(draft, library, slotId, out var sec, out int deck, out var cell))
+                    return Refuse("That gun slot has no gun port on this ship.");
+                var nextOff = Snapshot();
+                if (nextOff.fits.RemoveAll(f => f.SameCell(sec, deck, cell)) == 0) return Refuse("No gun stands there.");
+                return Set(nextOff, slotId);
+            }
             var edit = backend.RemoveEquipment(Snapshot(), slotId);
             if (!edit.ok) return Refuse(edit.message);
             return Set(edit.draft, slotId);

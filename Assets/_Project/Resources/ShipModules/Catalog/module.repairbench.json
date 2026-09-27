@@ -1,0 +1,30 @@
+{
+    "schemaVersion": 1,
+    "id": "module.repairbench",
+    "version": 1,
+    "displayName": "Repair bench",
+    "description": "Mends the hull at sea from boards in cargo. Needs one hand, one per ship.",
+    "placement": "any",
+    "capacity": {
+        "cargo": 0,
+        "berths": 0
+    },
+    "crew": 1,
+    "massKg": 300,
+    "onePerShip": true,
+    "dockLevel": 4,
+    "equipmentId": "",
+    "effects": [
+        "repair"
+    ],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 6
+        },
+        {
+            "item": "iron",
+            "count": 2
+        }
+    ]
+}

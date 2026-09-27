@@ -147,6 +147,21 @@ namespace SeaSick.Ship.Modular
             // offered before her review -- say so, and name the known gaps.
             if (proposed?.assembly != null && lib != null)
                 r.warnings.AddRange(UpperDeckLayers.Warnings(proposed.assembly, lib));
+            r.warnings.AddRange(v.slotWarnings);
+            if (proposed != null && proposed.usesSlots)
+            {
+                r.figures.Add(new ShipyardFigure { id = "gunPorts", label = "Gun ports", unit = "", provisional = true,
+                    current = current != null ? current.capacity.gunSlots : 0f, proposed = proposed.capacity.gunSlots, available = current != null });
+                r.figures.Add(new ShipyardFigure { id = "cannons", label = "Cannons fitted", unit = "", provisional = true,
+                    current = current != null && current.usesSlots ? current.slots.cannons : (current != null ? current.capacity.guns : 0f),
+                    proposed = proposed.slots.cannons, available = current != null });
+                r.figures.Add(new ShipyardFigure { id = "fitMass", label = "Fitted modules", unit = "t", provisional = true,
+                    current = current != null ? current.fitMassKg / 1000f : 0f, proposed = proposed.fitMassKg / 1000f, available = current != null,
+                    note = "Sum of the fitted modules' provisional masses (cannons included)." });
+                r.figures.Add(new ShipyardFigure { id = "fitCentreHeight", label = "Fitted modules' centre above the waterline", unit = "m", provisional = true,
+                    current = current != null ? current.fitCentreM.y : 0f, proposed = proposed.fitCentreM.y, available = current != null && proposed.fitMassKg > 0f,
+                    note = "Guns up high raise it. Report only: the sailing model's centre of gravity does not follow it yet." });
+            }
             r.warnings.Add(new ShipyardNote { code = "PROVISIONAL_TUNING", message = "Capacity and hydrostatics are provisional and will be retuned." });
             return r;
         }

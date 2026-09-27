@@ -122,6 +122,12 @@ namespace SeaSick.Ship.Modular
 
         static Dictionary<string, int> Counts(ShipConfiguration c)
         {
+            // A slot configuration (schema 3, 2026-09-27): the store holds
+            // catalog modules, and what she carries is her FITS (her deck-gun
+            // equipment is derived from the cannon fits, so never counted
+            // twice). Both sides of a diff must be the same schema --
+            // ShipyardService keeps its live configuration migrated to slots.
+            if (c != null && c.UsesSlots) return SlotModel.FittedCounts(c);
             var m = new Dictionary<string, int>();
             if (c?.equipment == null) return m;
             foreach (var e in c.equipment)

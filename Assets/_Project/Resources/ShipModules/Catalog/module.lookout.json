@@ -1,0 +1,30 @@
+{
+    "schemaVersion": 1,
+    "id": "module.lookout",
+    "version": 1,
+    "displayName": "Lookout",
+    "description": "Spots raiders and islands further. Top-most deck only, one per ship.",
+    "placement": "topmost",
+    "capacity": {
+        "cargo": 0,
+        "berths": 0
+    },
+    "crew": 0,
+    "massKg": 100,
+    "onePerShip": true,
+    "dockLevel": 3,
+    "equipmentId": "",
+    "effects": [
+        "spot:1.5"
+    ],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 4
+        },
+        {
+            "item": "iron",
+            "count": 1
+        }
+    ]
+}

@@ -102,6 +102,9 @@ namespace SeaSick.Ship.Modular
         public JoinProfile[] joinProfiles;
         public MountStandard[] mountStandards;
         public SlotClass[] slotClasses;
+        /// Shipyard slots (2026-09-27): plan grids, the fixed stern cabin,
+        /// the module catalog list and the dry-dock levels. See SlotSchema.cs.
+        public SlotModelDef slotModel;
         public string notes;
     }
 

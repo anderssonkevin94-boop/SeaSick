@@ -20,9 +20,21 @@ namespace SeaSick.Ship.Modular
         /// 2026-09-25: guns are explicit `equipment` entries now, not
         /// implicit hull-form sockets (docs/SHIPYARD-API.md). A v1 document
         /// still reads (MigratedToV2 below), never refused.
-        public const int SupportedSchemaVersion = 2;
+        /// Bumped to 3 2026-09-27: shipyard SLOTS (`fits`). A v3 document's
+        /// capacity is the sum of its fitted modules and its deck-gun
+        /// `equipment` is DERIVED from its cannon fits (SlotModel.Normalized).
+        /// A v1/v2 document still reads and is converted by
+        /// SlotModel.Migrate (ModularSave.Decode, ShipyardService).
+        public const int SupportedSchemaVersion = 3;
+        /// The last schema WITHOUT slots (explicit guns, authored section
+        /// capacity + `layouts`). Every preset below still builds this one,
+        /// so the legacy path and its tests stay exactly as they were.
+        public const int LegacySchemaVersion = 2;
+        public const int SlotsSchemaVersion = 3;
 
-        public int schemaVersion = SupportedSchemaVersion;
+        /// Defaults to the LEGACY schema: a hand-built configuration is a
+        /// v2 one until SlotModel.Migrate turns it into slots.
+        public int schemaVersion = LegacySchemaVersion;
         public string sternId;
         public List<string> middleIds = new List<string>();
         public string bowId;
@@ -38,6 +50,12 @@ namespace SeaSick.Ship.Modular
         /// default (its `capacity.berths`), which reproduces today's hold
         /// cells exactly (`ShipyardPlanner.SectionCapacities`).
         public List<SectionLayout> layouts = new List<SectionLayout>();
+        /// Shipyard slots (schema 3, 2026-09-27): every module fitted in a
+        /// section's deck grid. Empty and ignored below schema 3.
+        public List<SlotFit> fits = new List<SlotFit>();
+
+        /// True for a schema-3 (slot) configuration.
+        public bool UsesSlots => schemaVersion >= SlotsSchemaVersion;
 
         // ---- the V3 reference presets ------------------------------------
 
@@ -72,6 +90,7 @@ namespace SeaSick.Ship.Modular
         {
             var c = new ShipConfiguration
             {
+                schemaVersion = LegacySchemaVersion,
                 sternId = V3Stern,
                 bowId = V3Bow,
                 rotorId = ReinforcedRotor,
@@ -106,8 +125,8 @@ namespace SeaSick.Ship.Modular
         public ShipConfiguration MigratedToV2()
         {
             var m = Clone();
-            if (m.schemaVersion >= SupportedSchemaVersion) return m;
-            m.schemaVersion = SupportedSchemaVersion;
+            if (m.schemaVersion >= LegacySchemaVersion) return m;
+            m.schemaVersion = LegacySchemaVersion;
             if (m.equipment.Count > 0) return m; // already explicit; nothing to invent
             if (!string.IsNullOrEmpty(m.bowId))
             {
@@ -145,6 +164,8 @@ namespace SeaSick.Ship.Modular
             if (c.fittings == null) c.fittings = new List<FittingChoice>();
             if (c.equipment == null) c.equipment = new List<EquipmentChoice>();
             if (c.layouts == null) c.layouts = new List<SectionLayout>();
+            if (c.fits == null) c.fits = new List<SlotFit>();
+            c.fits.RemoveAll(f => f == null || string.IsNullOrEmpty(f.moduleId) || string.IsNullOrEmpty(f.section) || string.IsNullOrEmpty(f.cell));
             return c;
         }
 
@@ -178,6 +199,16 @@ namespace SeaSick.Ship.Modular
                 var a = layouts[i]; var b = o.layouts[i];
                 if (a == null || b == null) { if (a != b) return false; continue; }
                 if (!Same(a.section, b.section) || a.berths != b.berths) return false;
+            }
+            // Fits compare as a set (their order carries no meaning).
+            if (Count(fits) != Count(o.fits)) return false;
+            if (Count(fits) > 0)
+            {
+                var mine = new List<string>(); var theirs = new List<string>();
+                foreach (var f in fits) mine.Add(f?.ToString() ?? "");
+                foreach (var f in o.fits) theirs.Add(f?.ToString() ?? "");
+                mine.Sort(StringComparer.Ordinal); theirs.Sort(StringComparer.Ordinal);
+                for (int i = 0; i < mine.Count; i++) if (mine[i] != theirs[i]) return false;
             }
             return true;
         }
@@ -224,6 +255,14 @@ namespace SeaSick.Ship.Modular
                 foreach (var e in cfg.equipment)
                     if (e?.slotId != null && e.slotId.StartsWith("fitting:"))
                         e.slotId = ShiftKey(e.slotId.Substring("fitting:".Length), "fitting:", fromIndex, delta);
+            if (cfg.fits != null)
+                foreach (var f in cfg.fits)
+                {
+                    if (f == null) continue;
+                    int idx = MiddleIndexOf(f.section);
+                    if (idx < 0 || idx < fromIndex || idx + delta < 0) continue;
+                    f.section = MiddleKeyOf(idx + delta);
+                }
             if (cfg.layouts != null)
                 foreach (var l in cfg.layouts)
                 {

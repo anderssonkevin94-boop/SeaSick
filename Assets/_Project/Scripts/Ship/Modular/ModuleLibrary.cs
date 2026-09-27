@@ -69,6 +69,7 @@ namespace SeaSick.Ship.Modular
             }
             var loaded = FromJson(std.text, texts, names);
             loaded.LoadHydrostatics(path => { var t = Resources.Load<TextAsset>(path); return t != null ? t.text : null; });
+            loaded.LoadCatalog(path => { var t = Resources.Load<TextAsset>(path); return t != null ? t.text : null; });
             return loaded;
         }
 
@@ -95,6 +96,21 @@ namespace SeaSick.Ship.Modular
                 hydro[d.id] = t;
             }
         }
+
+        /// The shipyard's buildable modules (2026-09-27, slots). Null until
+        /// LoadCatalog ran; the slot model refuses to plan without it.
+        public ModuleCatalog Catalog { get; private set; }
+
+        /// Reads every catalog module standards.json `slotModel.catalog`
+        /// lists, through `readText` (Resources path -> JSON, null if absent).
+        public void LoadCatalog(Func<string, string> readText)
+        {
+            Catalog = ModuleCatalog.Load(Standards?.slotModel?.catalog, readText);
+            standardFitOutKg = -1f;
+        }
+
+        /// Cache for SlotModel.StandardFitOutKg (-1 = not computed).
+        internal float standardFitOutKg = -1f;
 
         /// The module's hydrostatic table, or null.
         public HydroTable Hydrostatics(string id) => id != null && hydro.TryGetValue(id, out var t) ? t : null;
