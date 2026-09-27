@@ -263,3 +263,11 @@
 .st .st-upgrade-btn--go { background-color: rgb(240, 195, 106); color: rgb(30, 26, 16); border-color: rgb(240, 195, 106); }
 .st .st-upgrade-btn--go:hover { background-color: rgb(248, 214, 140); }
 .st .st-upgrade-btn:disabled { opacity: 1; }
+.st .st-pin {
+    align-self: flex-start; height: 30px; margin: 6px 0 0 0; padding: 0 12px; border-radius: 15px;
+    background-color: rgb(19, 34, 46); border-width: 1.5px; border-color: rgb(44, 74, 94);
+    color: rgb(164, 210, 232); font-size: 13px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.st .st-pin:hover { background-color: rgb(32, 57, 72); }
+.st .st-pin--on { border-color: rgb(159, 224, 194); color: rgb(159, 224, 194); }

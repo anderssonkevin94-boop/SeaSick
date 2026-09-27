@@ -48,6 +48,14 @@
 /* --- NEXT GOAL --- */
 .ov-goal-head { flex-direction: column; }
 .ov-goal-head .ov-eyebrow { margin-top: 0; margin-bottom: 0; }
+.ov-eyebrow-row { flex-direction: row; align-items: center; justify-content: space-between; }
+.ov-clear-goal {
+    height: 30px; margin: 0; padding: 0 12px; border-radius: 15px; font-size: 13px;
+    background-color: rgb(19, 34, 46); border-width: 1.5px; border-color: rgb(44, 74, 94);
+    color: rgb(164, 210, 232);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.ov-clear-goal:hover { background-color: rgb(32, 57, 72); }
 .ov-goal-title {
     font-size: 22px; color: rgb(232, 242, 246);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");

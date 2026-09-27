@@ -31,6 +31,7 @@ namespace SeaSick.UI.Sheets
         readonly Label logs, boards, crew, food, day;
         readonly BuildingStatusLabels buildingStatus;
         readonly AlertStrip alerts;
+        readonly GoalBar goalBar;
         readonly LedgerDrawer ledgerDrawer;
         float nextUpdate;
 
@@ -51,6 +52,7 @@ namespace SeaSick.UI.Sheets
             // Added last, so the drawer and its scrim draw over everything
             // else in this document.
             alerts = new AlertStrip(root);
+            goalBar = new GoalBar(root);
             menu = new Button(() => ledgerDrawer.Toggle());
             menu.AddToClassList("ledger-menu");
             menu.tooltip = "The ledger: camp, gather, make, sea";
@@ -78,7 +80,7 @@ namespace SeaSick.UI.Sheets
             if (!active)
             {
                 NavigationRect = ResourcesRect = Rect.zero;
-                buildingStatus.Hide(); alerts.Hide(); return;
+                buildingStatus.Hide(); alerts.Hide(); goalBar.Hide(); return;
             }
             float scale = SheetHost.PanelScale;
             var safe = Screen.safeArea;
@@ -93,6 +95,10 @@ namespace SeaSick.UI.Sheets
             // The top chrome: the ☰ and the bar, plus the strip while it
             // has a chip up (an empty strip must not eat world taps).
             float chrome = BarHeight + (AlertStrip.Showing ? 6f + AlertStrip.Height : 0f);
+            // The pinned goal's slim bar (GoalBar): under the strip, or in
+            // its slot when the strip is empty.
+            float goalH = goalBar.Place(Camp, left, right, topY + BarHeight + 6f);
+            if (goalH > 0f) chrome += AlertStrip.Showing ? goalH : 6f + goalH;
             ResourcesRect = new Rect(safe.xMin + 8f / scale, Screen.height - safe.yMax + 8f / scale,
                 safe.width - 16f / scale, chrome / scale);
             // No bottom nav: a zero-height line at the foot of the safe area,

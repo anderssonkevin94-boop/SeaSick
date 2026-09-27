@@ -242,7 +242,7 @@ namespace SeaSick.UI.Sheets
 
             if (hasUpgrade)
             {
-                upgrade = new StationPage.UpgradeCard(DoUpgrade);
+                upgrade = new StationPage.UpgradeCard(DoUpgrade, TogglePin);
                 if (first) upgrade.Root.style.marginTop = 0f;
                 col.Add(upgrade.Root);
             }
@@ -712,7 +712,7 @@ namespace SeaSick.UI.Sheets
             FillOrder(l, st, selected);
             FillFlow(l, st, hand, selected);
             FillStore(l);
-            upgrade?.Update(l, raisedIndex, planId, MyLevel(l));
+            upgrade?.Update(l, raisedIndex, planId, MyLevel(l), GoalPin.IsUpgradePinned(outpost, raisedIndex, planId));
         }
 
         /// The header's word for this building right now.
@@ -743,6 +743,19 @@ namespace SeaSick.UI.Sheets
                 outpost?.Retint(building);
                 Refresh();
             }
+        }
+
+        /// "Set as goal": this building's next level becomes the camp's
+        /// goal (the overview and the goal bar chase it); a second tap
+        /// clears it back to the fire.
+        void TogglePin()
+        {
+            var l = L;
+            if (l == null) return;
+            ResolveRaisedIndex();
+            if (GoalPin.IsUpgradePinned(outpost, raisedIndex, planId)) GoalPin.Clear(outpost);
+            else GoalPin.SetUpgrade(outpost, raisedIndex, planId);
+            Refresh();
         }
 
         // --- shared ----------------------------------------------------------------------
@@ -1050,10 +1063,13 @@ namespace SeaSick.UI.Sheets
             readonly Label title;
             readonly VisualElement cost;
             readonly Button btn;
+            /// "Set as goal" (GoalPin): shown while the upgrade cannot be
+            /// paid, so the camp overview and the goal bar can chase it.
+            readonly Button pinBtn;
             readonly List<(Label label, string res, int n)> lines = new List<(Label, string, int)>();
             int builtLevel = -1;
 
-            public UpgradeCard(System.Action upgrade)
+            public UpgradeCard(System.Action upgrade, System.Action pin = null)
             {
                 Root = Card();
                 Root.AddToClassList("st-upgrade");
@@ -1062,6 +1078,13 @@ namespace SeaSick.UI.Sheets
                 words.Add(title);
                 cost = new VisualElement(); cost.AddToClassList("st-cost");
                 words.Add(cost);
+                if (pin != null)
+                {
+                    pinBtn = new Button(pin) { text = "Set as goal" };
+                    pinBtn.AddToClassList("st-pin");
+                    pinBtn.style.display = DisplayStyle.None;
+                    words.Add(pinBtn);
+                }
                 Root.Add(words);
                 btn = new Button(upgrade) { text = "Upgrade" };
                 btn.AddToClassList("st-btn");
@@ -1069,11 +1092,12 @@ namespace SeaSick.UI.Sheets
                 Root.Add(btn);
             }
 
-            public void Update(OutpostLedger l, int raisedIndex, string planId, int level)
+            public void Update(OutpostLedger l, int raisedIndex, string planId, int level, bool pinned = false)
             {
                 var next = l.NextUpgradeAt(raisedIndex, planId);
                 if (next == null)
                 {
+                    if (pinBtn != null) pinBtn.style.display = DisplayStyle.None;
                     title.text = $"Level {level} · top level";
                     if (builtLevel != level) { cost.Clear(); lines.Clear(); builtLevel = level; }
                     btn.style.display = DisplayStyle.None;
@@ -1106,6 +1130,13 @@ namespace SeaSick.UI.Sheets
                 btn.text = can ? "Upgrade" : Short(l, next, why);
                 btn.SetEnabled(can);
                 btn.EnableInClassList("st-upgrade-btn--go", can);
+                if (pinBtn != null)
+                {
+                    pinBtn.style.display = can ? DisplayStyle.None : DisplayStyle.Flex;
+                    string pt = pinned ? "Goal ✓ · clear" : "Set as goal";
+                    if (pinBtn.text != pt) pinBtn.text = pt;
+                    pinBtn.EnableInClassList("st-pin--on", pinned);
+                }
             }
 
             static string Short(OutpostLedger l, UpgradeStep next, string why)

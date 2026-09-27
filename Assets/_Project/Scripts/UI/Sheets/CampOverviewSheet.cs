@@ -125,7 +125,9 @@ namespace SeaSick.UI.Sheets
 
         VisualElement rootEl, seg, goalBlock, todayBlock;
         // goal
-        Label goalTitle, goalWhy, goalProgress;
+        Label goalTitle, goalWhy, goalProgress, goalEyebrow;
+        Button clearGoalBtn;
+        int pinVersion = -1;
         VisualElement goalBar, stepCard;
         ScrollView chainHolder;
         Label stepTitle, stepDetail;
@@ -183,7 +185,16 @@ namespace SeaSick.UI.Sheets
 
             var head = new VisualElement();
             head.AddToClassList("ov-goal-head");
-            head.Add(Classed(new Label("NEXT GOAL"), "ov-eyebrow"));
+            // The eyebrow says whose goal it is; a pinned one (GoalPin, the
+            // station page's "Set as goal") carries a Clear back to the fire.
+            var eyeRow = Classed(new VisualElement(), "ov-eyebrow-row");
+            goalEyebrow = Classed(new Label("NEXT GOAL"), "ov-eyebrow");
+            eyeRow.Add(goalEyebrow);
+            clearGoalBtn = new Button(ClearGoal) { text = "Clear goal" };
+            clearGoalBtn.AddToClassList("ov-clear-goal");
+            clearGoalBtn.style.display = DisplayStyle.None;
+            eyeRow.Add(clearGoalBtn);
+            head.Add(eyeRow);
             goalTitle = Classed(new Label(), "ov-goal-title");
             head.Add(goalTitle);
             goalWhy = Classed(new Label(), "ov-goal-why");
@@ -328,10 +339,11 @@ namespace SeaSick.UI.Sheets
             // The chain is recomputed once a second -- it walks the books,
             // and nothing on it moves faster than a hand's trip.
             float now = Time.unscaledTime;
-            if (chain == null || now >= nextCompute)
+            if (chain == null || now >= nextCompute || pinVersion != GoalPin.Version)
             {
                 nextCompute = now + 1f;
-                chain = GoalChain.NextCampfire(l);
+                pinVersion = GoalPin.Version;
+                chain = GoalChain.ForCamp(l);
                 DrawGoal(chain);
             }
             DrawFire(l);
@@ -345,6 +357,8 @@ namespace SeaSick.UI.Sheets
             if (key == chainKey) return;
             chainKey = key;
 
+            goalEyebrow.text = c.Pinned ? "YOUR GOAL" : "NEXT GOAL";
+            clearGoalBtn.style.display = c.Pinned ? DisplayStyle.Flex : DisplayStyle.None;
             goalTitle.text = c.title ?? "";
             goalWhy.text = c.why ?? "";
             float f = c.total > 0 ? (float)c.ready / c.total : 1f;
@@ -362,7 +376,8 @@ namespace SeaSick.UI.Sheets
                 stepCard.style.display = DisplayStyle.Flex;
                 stepTitle.text = "First step: " + s.title;
                 stepDetail.text = s.detail ?? "";
-                goBtn.text = s.action == GoalAction.Complete ? "Raise" : "Go";
+                goBtn.text = s.action != GoalAction.Complete ? "Go"
+                    : c.kind == GoalKind.Upgrade ? "Upgrade" : "Raise";
                 goBtn.SetEnabled(s.action != GoalAction.None);
             }
             else if (c.HasGoal)
@@ -559,7 +574,8 @@ namespace SeaSick.UI.Sheets
             switch (s.action)
             {
                 case GoalAction.Complete:
-                    Raise();
+                    if (chain.kind == GoalKind.Upgrade) UpgradeGoal(chain);
+                    else Raise();
                     break;
                 case GoalAction.OpenStation:
                 {
@@ -579,6 +595,28 @@ namespace SeaSick.UI.Sheets
                     OpenFire("build");
                     break;
             }
+        }
+
+        /// A pinned building's level-up, paid from the overview: THIS
+        /// building, the same call its station page's Upgrade makes.
+        void UpgradeGoal(GoalChain c)
+        {
+            var l = L;
+            if (l == null || !l.UpgradeAt(c.raisedIndex, c.planId)) return;
+            var built = outpost.Built;
+            if (built != null && c.raisedIndex >= 0 && c.raisedIndex < built.Count && built[c.raisedIndex] != null)
+                outpost.Retint(built[c.raisedIndex]);
+            chain = null;
+            chainKey = long.MinValue;
+            Refresh();
+        }
+
+        void ClearGoal()
+        {
+            GoalPin.Clear(outpost);
+            chain = null;
+            chainKey = long.MinValue;
+            Refresh();
         }
 
         Building BuiltOf(string planId)

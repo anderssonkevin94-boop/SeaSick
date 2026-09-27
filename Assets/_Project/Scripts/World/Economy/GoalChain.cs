@@ -57,6 +57,19 @@ namespace SeaSick.World.Economy
         public string res;
     }
 
+    /// What a whole chain is the goal OF -- so the Go button knows what
+    /// "pay it" means.
+    public enum GoalKind
+    {
+        Campfire,
+        /// One building's next level (`raisedIndex`).
+        Upgrade,
+        /// The next copy of a plan (sited from the build list).
+        Build,
+        /// Any named price.
+        Cost,
+    }
+
     /// One line of the chain.
     public class GoalRow
     {
@@ -114,6 +127,12 @@ namespace SeaSick.World.Economy
 
         public string title;
         public string why;
+        public GoalKind kind;
+        /// Upgrade / Build: the plan. Upgrade: the building's `raised` row.
+        public string planId;
+        public int raisedIndex = -1;
+        /// True when the player pinned this goal (not the fire's default).
+        public bool Pinned;
         public int ready, total;
         /// False when there is no goal to show (the fire is at its top).
         public bool HasGoal;
@@ -161,14 +180,45 @@ namespace SeaSick.World.Economy
             return g;
         }
 
+        /// The camp's goal: the pinned one (`OutpostLedger.ActiveGoal`) if
+        /// the player set one, else the fire's next level.
+        public static GoalChain ForCamp(OutpostLedger l)
+        {
+            var p = l != null ? l.ActiveGoal : null;
+            if (p == null) return NextCampfire(l);
+            GoalChain g = p.kind == PinnedGoal.Upgrade
+                ? UpgradeAt(l, l.RaisedIndexOf(p.planId, p.ordinal), p.planId)
+                : NextCopy(l, p.planId);
+            g.Pinned = true;
+            return g;
+        }
+
         /// A building's next level (the lowest standing copy, as
         /// `OutpostLedger.Upgrade(planId)` takes up).
-        public static GoalChain NextUpgrade(OutpostLedger l, string planId)
+        public static GoalChain NextUpgrade(OutpostLedger l, string planId) =>
+            UpgradeAt(l, l != null && !string.IsNullOrEmpty(planId) ? LowestRaised(l, planId) : -1, planId);
+
+        static int LowestRaised(OutpostLedger l, string planId)
         {
-            var g = new GoalChain();
+            int pick = -1, lo = int.MaxValue;
+            if (l.raised != null)
+                for (int i = 0; i < l.raised.Count; i++)
+                    if (l.raised[i] != null && l.raised[i].planId == planId)
+                    {
+                        int lv = l.LevelAtRaised(i);
+                        if (lv < lo) { lo = lv; pick = i; }
+                    }
+            return pick;
+        }
+
+        /// THIS building's next level: the one on `raised[raisedIndex]`
+        /// (2026-09-27, "they have their own levels, always").
+        public static GoalChain UpgradeAt(OutpostLedger l, int raisedIndex, string planId)
+        {
+            var g = new GoalChain { kind = GoalKind.Upgrade, planId = planId, raisedIndex = raisedIndex };
             if (l == null || string.IsNullOrEmpty(planId)) return g;
             string label = Cap(BuildPlans.Named(planId).label ?? planId);
-            var step = l.NextUpgrade(planId);
+            var step = l.NextUpgradeAt(raisedIndex, planId);
             if (step == null)
             {
                 g.title = $"{label} at its top";
@@ -191,16 +241,56 @@ namespace SeaSick.World.Economy
                     new GoalStep { action = GoalAction.None, title = $"raise the fire to {RecipeGraph.Roman(step.campfireLevel)} first",
                         detail = "the fire's own goal" });
             w.Lines(step.cost);
-            g.CanComplete = l.CanUpgrade(planId, out _);
+            g.CanComplete = l.CanUpgradeAt(raisedIndex, planId, out _);
             g.Finish(GoalAction.Complete, $"take the {BuildPlans.Named(planId).label} to level {step.toLevel}",
                 $"pays {Cost.Describe(step.cost)} from the store", planId);
+            return g;
+        }
+
+        /// The next copy of a plan, at its copy price
+        /// (`OutpostLedger.PriceOfNext`) and inside its cap (`CanAddCopy`).
+        /// Done = sited from the build list; the builders haul the price.
+        public static GoalChain NextCopy(OutpostLedger l, string planId)
+        {
+            var g = new GoalChain { kind = GoalKind.Build, planId = planId };
+            if (l == null || string.IsNullOrEmpty(planId)) return g;
+            var plan = BuildPlans.Named(planId);
+            string label = plan.label ?? planId;
+            int held = l.CopiesHeld(planId);
+            g.HasGoal = true;
+            g.title = held > 0 ? $"A {OutpostLedger.Nth(held + 1)} {label}" : $"Build {Article(label)}";
+            g.why = Sentence(plan.blurb);
+            var w = new Walker(l, g);
+            bool gateOpen = true;
+            if (!l.PlanUnlocked(planId))
+            {
+                gateOpen = false;
+                w.Gate(GoalRowKind.Gate, null, $"Campfire {RecipeGraph.Roman(Techs.PlanLevel(planId))}",
+                    l.PlanLockReason(planId), "raise",
+                    new GoalStep { action = GoalAction.None, title = "raise the fire first", detail = "the fire's own goal" });
+            }
+            else if (!l.CanAddCopy(planId, out string why))
+            {
+                gateOpen = false;
+                w.Gate(GoalRowKind.Gate, null, Cap(why), "the fire opens more", "cap",
+                    new GoalStep { action = GoalAction.None, title = "raise the fire first", detail = why });
+            }
+            var priced = l.PriceOfNext(plan);
+            var cost = new List<Ingredient>(3);
+            if (priced.cost > 0) cost.Add(new Ingredient(Res.Timber, priced.cost));
+            if (priced.stoneCost > 0) cost.Add(new Ingredient(Res.Stone, priced.stoneCost));
+            if (priced.brickCost > 0) cost.Add(new Ingredient(Res.Brick, priced.brickCost));
+            var arr = cost.ToArray();
+            w.Lines(arr);
+            g.CanComplete = gateOpen && Cost.Affordable(arr, l.SpendableOf);
+            g.Finish(GoalAction.Build, $"site the {label}", $"from the build list · {Cost.Describe(arr)}", planId);
             return g;
         }
 
         /// Any price with a name -- a ship section, a rung. `why` is one line.
         public static GoalChain ForCost(OutpostLedger l, string title, string why, Ingredient[] cost)
         {
-            var g = new GoalChain { title = title, why = why, HasGoal = true };
+            var g = new GoalChain { title = title, why = why, HasGoal = true, kind = GoalKind.Cost };
             if (l == null) return g;
             new Walker(l, g).Lines(cost);
             g.CanComplete = Cost.Affordable(cost, l.SpendableOf);
