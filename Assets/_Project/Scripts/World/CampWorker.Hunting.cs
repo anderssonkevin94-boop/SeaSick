@@ -43,7 +43,10 @@ namespace SeaSick.World
             bool trip = r.HuntTrip && view.active;
 
             // --- the carcass just went into the store: set it down --------
-            if (!trip && props.HasCarcass)
+            // (Also a carcass left on his shoulders by a trip that ended
+            // some other way.) Runs before the next trip's walk, which the
+            // books may already have planned in the same frame.
+            if (setDownLeft >= 0f || (!trip && props.HasCarcass))
             {
                 props.Drive(spear, HunterProps.Pose.Upright);
                 if (setDownLeft < 0f) setDownLeft = SetDownSeconds;
@@ -96,8 +99,10 @@ namespace SeaSick.World
                 carrying = Res.Food;
                 dropAt = Dropoff(r, Res.Food);
                 if (!Walk(dropAt, dt)) return;
-                // The drop-off event: meat and hide into the store now.
+                // The drop-off event: meat and hide into the store now; he
+                // stoops and the carcass goes down.
                 ledger.BodyArrived(r);
+                setDownLeft = SetDownSeconds;
                 return;
             }
             fallWait = 0f;

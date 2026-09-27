@@ -807,6 +807,16 @@ namespace SeaSick.World
                     // (`OutpostLedger.PayBuild`); this is the picture of it.
                     if (raising)
                     {
+                        // **He stays on the site while there is hammering
+                        // to do** (2026-09-27): the books hammer only while
+                        // a builder is ON it (`OutpostLedger.WalkTo`), so a
+                        // rest walk home between swings would pause it.
+                        var f = camp.Ledger != null ? camp.Ledger.Focus : null;
+                        if (r.order == OutpostOrder.Build && f != null && f.Cleared && f.Stocked && !f.Complete)
+                        {
+                            wait = SwingSeconds * Random.Range(0.85f, 1.35f);
+                            return;
+                        }
                         Drop();
                         phase = Phase.Resting;
                         wait = RestSeconds * 0.5f;
