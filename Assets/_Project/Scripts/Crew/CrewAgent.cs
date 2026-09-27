@@ -213,6 +213,20 @@ namespace SeaSick.Crew
         World.ResourceNode targetNode;
         GameObject carried;
         string carriedResource;
+        int carriedCount = 1;
+
+        /// **The gather party this hand is out with, or null (2026-09-27).**
+        /// Set by `GoAshoreInParty`, cleared the moment he is back aboard. A
+        /// party hand works only what the party asks for (`NextSource`),
+        /// cuts at the party's dials (`WorkSeconds`), carries a whole armful,
+        /// and puts it in the SHIP'S HOLD through the party -- never into a
+        /// camp's pile, which is the difference from the plain shore party.
+        Ship.GatherParty party;
+        public Ship.GatherParty Party => party;
+
+        /// Units in his arms right now (0 when empty), for the party's
+        /// "in hand" count.
+        public int CarriedUnits => string.IsNullOrEmpty(carriedResource) ? 0 : carriedCount;
         int hitsLeft;
         float swingTimer;
 
@@ -240,6 +254,17 @@ namespace SeaSick.Crew
             state = State.GoingAshore;
         }
 
+        /// Go ashore as one of a gather party. Same walk down the plank as
+        /// `GoAshore`; what differs is what he looks for once he is there.
+        public void GoAshoreInParty(Ship.GatherParty withParty, Vector3 landingPoint,
+            World.Island island, Ship.ShipHold shipHold, Ship.Gangway plank,
+            Voyage.VoyageManager voyageManager)
+        {
+            if (IsAshore) return;
+            party = withParty;
+            GoAshore(landingPoint, island, shipHold, plank, voyageManager);
+        }
+
         /// Recall to the ship. Drops any claim and walks back.
         public void ReturnAboard()
         {
@@ -256,8 +281,29 @@ namespace SeaSick.Crew
         }
 
         /// Look for the next thing to cut. Nothing left means idle on the beach.
-        void SeekWork()
+        void SeekWork() => SeekWork(false);
+
+        void SeekWork(bool fromDeck)
         {
+            if (party != null)
+            {
+                // The party decides: the next source it wants worked, claimed
+                // for him, or nothing -- and nothing means walk home.
+                targetNode = party.NextSource(this);
+                if (targetNode == null)
+                {
+                    PathToShip(ship != null ? ship.TransformPoint(stationLocal) : transform.position);
+                    state = State.Boarding;
+                    return;
+                }
+                // Off the deck he goes down the plank first; from the beach
+                // (or the last rock) it is a straight walk the party has
+                // already checked is walkable from the landing.
+                if (fromDeck) PathToShore(targetNode.transform.position);
+                else SetPath(targetNode.transform.position);
+                state = State.ToNode;
+                return;
+            }
             if (workIsland == null || (voyage != null && voyage.HoldFull))
             {
                 state = State.Idling;
@@ -280,6 +326,17 @@ namespace SeaSick.Crew
             if (carried != null) Destroy(carried);
             carried = null;
             if (string.IsNullOrEmpty(carriedResource)) { carriedResource = null; return; }
+
+            // A gather party carries for the SHIP: straight into the hold,
+            // past any camp (there is usually none; if there is, a party is
+            // still the ship's errand, not the camp's).
+            if (party != null)
+            {
+                party.Delivered(this, carriedResource, carriedCount);
+                carriedResource = null;
+                carriedCount = 1;
+                return;
+            }
 
             // **A camp takes what is cut on its own island.**
             //
@@ -543,6 +600,21 @@ namespace SeaSick.Crew
 
                 case State.ToNode:
                     if (targetNode == null || targetNode.Harvested) { SeekWork(); break; }
+                    if (party != null)
+                    {
+                        // The last waypoint is the source; stand off by its
+                        // own size (a big boulder is not worked from inside).
+                        if (FollowPath(dt, Mathf.Max(1.9f, targetNode.StandOff + 0.6f)))
+                        {
+                            carriedCount = party.ArmfulAt(targetNode);
+                            hitsLeft = Mathf.Max(1, Mathf.CeilToInt(
+                                party.WorkSeconds(targetNode.Resource, carriedCount)
+                                / Mathf.Max(0.05f, swingInterval)));
+                            swingTimer = 0f;
+                            state = State.Chopping;
+                        }
+                        break;
+                    }
                     // Stop a pace short so they stand beside the tree, not in it.
                     if (WalkNear(targetNode.transform.position, 1.9f, dt))
                     {
@@ -564,8 +636,19 @@ namespace SeaSick.Crew
                         if (hitsLeft <= 0)
                         {
                             string res = targetNode.Resource;
-                            targetNode.Harvest();
-                            if (workIsland != null) workIsland.Extract(1f);
+                            if (party != null)
+                            {
+                                // Book the island's stock as the source comes
+                                // out of the ground, then take it away.
+                                party.Cut(this, targetNode, res, carriedCount);
+                                targetNode.Harvest();
+                            }
+                            else
+                            {
+                                targetNode.Harvest();
+                                if (workIsland != null) workIsland.Extract(1f);
+                                carriedCount = 1;
+                            }
                             targetNode = null;
                             PickUp(res);
                             PathToShip(hold != null ? hold.DropPoint
@@ -589,7 +672,7 @@ namespace SeaSick.Crew
                     if (FollowPath(dt, 1.2f))
                     {
                         DropOff();
-                        SeekWork();
+                        SeekWork(true);
                     }
                     break;
 
@@ -611,6 +694,15 @@ namespace SeaSick.Crew
                     if (FollowPath(dt, 0.35f))
                     {
                         transform.SetParent(ship, true);
+                        // A party hand recalled with a load walked it over the
+                        // plank: it goes in the hold, not over the side.
+                        if (party != null)
+                        {
+                            if (!string.IsNullOrEmpty(carriedResource)) DropOff();
+                            var p = party;
+                            party = null;
+                            p.Boarded(this);
+                        }
                         ReturnToStation();
                     }
                     break;

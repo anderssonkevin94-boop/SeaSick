@@ -108,6 +108,7 @@ namespace SeaSick.Ship
         readonly HudLabel repairText = new HudLabel();
         readonly HudLabel statusText = new HudLabel();
         readonly HudLabel deckCargoText = new HudLabel();
+        readonly HudLabel partyText = new HudLabel();
 
         void Start()
         {
@@ -896,6 +897,62 @@ namespace SeaSick.Ship
             SeaSick.Save.SaveGame.Autosave("anchored off " + (isle != null ? isle.name : "nothing"));
         }
 
+        // --- Gather party (2026-09-27) --------------------------------------
+        //
+        // Kevin: "yes go ahead with the gather party." A few hands go ashore
+        // for ONE raw good and carry it into the hold; see `GatherParty`.
+        // The ship is `Ashore` while any of them is out, so there is no
+        // cast-off until they are back -- the prompt says so and offers the
+        // recall in its place.
+
+        /// Where a party (or the plain shore party) steps onto the land.
+        public Vector3 PartyLanding()
+        {
+            if (CurrentIsland == null) return transform.position;
+            return CurrentDock != null
+                ? CurrentDock.Landing
+                : (gangway != null && gangway.Ready
+                    ? gangway.LandingPoint
+                    : CurrentIsland.ShorePoint(0, 1, transform.position));
+        }
+
+        /// Can a gather party go from here right now?
+        public bool CanSendParty(out string why)
+        {
+            why = "";
+            if (CurrentIsland == null) { why = "not at an island"; return false; }
+            if (CurrentState != State.Anchored) { why = $"not lying at anchor ({CurrentState})"; return false; }
+            if (landingPending) { why = "still coming alongside"; return false; }
+            if (voyage != null && voyage.AtHome) { why = "at home"; return false; }
+            return true;
+        }
+
+        /// The party's hands walk down the plank; she is `Ashore` until the
+        /// last of them is back (`AllAboard`).
+        public void PutPartyAshore(GatherParty p, System.Collections.Generic.List<CrewAgent> who, Vector3 landing)
+        {
+            if (p == null || who == null || who.Count == 0) return;
+            for (int i = 0; i < who.Count; i++)
+            {
+                if (!Ours(who[i])) continue;
+                Vector3 spread = transform.right * ((i - (who.Count - 1) * 0.5f) * 2.2f);
+                who[i].GoAshoreInParty(p, landing + spread, CurrentIsland, hold, gangway, voyage);
+            }
+            CurrentState = State.Ashore;
+        }
+
+        GatherParty party;
+        GatherParty Party => party != null ? party : (party = GatherParty.For(this));
+
+        void DrawGatherParty(ref Prompts.Stack stack, float bh, GUIStyle buttonStyle)
+        {
+            if (CurrentIsland == null || CampSiting.Placing) return;
+            var r = stack.Next(bh);
+            UIBlocker.Block(r);
+            if (GUI.Button(r, "⛏  Send gather party", buttonStyle))
+                SeaSick.UI.Sheets.GatherPartySheet.Open(this, Party);
+        }
+
         void SendAshore()
         {
             if (CurrentIsland == null) return;
@@ -942,6 +999,7 @@ namespace SeaSick.Ship
 
         void RecallCrew()
         {
+            if (party != null && party.Out) party.Recall("recalled");
             // Parked camp hands are not ours to recall -- they live there now.
             foreach (var c in crew) if (Ours(c)) c.ReturnAboard();
         }
@@ -1084,6 +1142,9 @@ namespace SeaSick.Ship
         {
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
+            // The gather party's sheet owns the bottom of the screen while
+            // it is up.
+            if (SeaSick.UI.Sheets.GatherPartySheet.IsOpen) return;
             // Two panels offering to cast off in the same corner of the
             // screen is a choice nobody wants to make -- the same rule the
             // dock prompt already applies against the beach one.
@@ -1192,6 +1253,7 @@ namespace SeaSick.Ship
                     if (GUI.Button(primary, "⚓  Cast off   (space)", buttonStyle)) WeighAnchor();
 
                     if (!sheetHud) DrawMakeCamp(ref stack, u, bh, buttonStyle, infoStyle);
+                    if (!sheetHud) DrawGatherParty(ref stack, bh, buttonStyle);
 
                     // While the sheet HUD is up, the ship's own sheet carries
                     // the shore party, the deck cargo and the repairs. Only
@@ -1220,6 +1282,22 @@ namespace SeaSick.Ship
                     // before pressing.
                     var primary = stack.Next(bh);
                     UIBlocker.Block(primary);
+
+                    // A gather party out: the recall is the party's, and the
+                    // line under it says why there is no cast-off.
+                    if (party != null && party.Out)
+                    {
+                        if (GUI.Button(primary, party.Recalling
+                                ? "⛏  coming back aboard…"
+                                : "⛏  Recall party   (space)", buttonStyle)) RecallCrew();
+                        int out_ = party.Ashore;
+                        if (partyText.Changed(HudLabel.Key(party.DeliveredUnits, out_,
+                                party.Recalling ? 1 : 0, party.Target)))
+                            partyText.Set($"{party.StatusLine}\n{out_} hand{(out_ == 1 ? "" : "s")} ashore — recall first to cast off");
+                        GUI.Label(stack.Next(u * 3.2f), partyText.Content, infoStyle);
+                        break;
+                    }
+
                     if (GUI.Button(primary, "recall crew aboard   (space)", buttonStyle)) RecallCrew();
 
                     if (!sheetHud) DrawMakeCamp(ref stack, u, bh, buttonStyle, infoStyle);
