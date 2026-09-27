@@ -126,6 +126,8 @@ namespace SeaSick.UI.Sheets
             CampOverviewFactory = c => new CampOverviewSheet(c);
             CampOverviewSheet.OpenLedger = Open;
             StationSheet.OpenLedger = Open;
+            BuildSheet.OpenLedger = Open;
+            PeopleSheet.OpenLedger = Open;
             var style = Resources.Load<StyleSheet>("UI/Ledger");
             if (style != null) root.styleSheets.Add(style);
             else Debug.LogWarning("[Ledger] Resources/UI/Ledger.uss is missing — the ledger drawer will be unstyled.");
@@ -294,8 +296,7 @@ namespace SeaSick.UI.Sheets
 
             var people = NewRow(campCard, Land("crew"), "People", false);
             people.open = () => CampAlerts.People(MidnightLandHud.Camp);
-            people.current = () => Sheets.Current is HandSheet
-                || (Sheets.Current is FireSheet f && f.CurrentSection == "hands");
+            people.current = () => Sheets.Current is PeopleSheet || Sheets.Current is HandSheet;
             updates.Add(() =>
             {
                 var l = Ledger;
@@ -308,7 +309,7 @@ namespace SeaSick.UI.Sheets
 
             var build = NewRow(campCard, Land("build"), "Build", false);
             build.open = () => CampAlerts.BuildList(MidnightLandHud.Camp);
-            build.current = () => Sheets.Current is FireSheet f && f.CurrentSection == "build";
+            build.current = () => Sheets.Current is BuildSheet;
             updates.Add(() =>
             {
                 var l = Ledger;

@@ -129,19 +129,12 @@ namespace SeaSick.UI.Sheets
             return why.Length > 24 ? why.Substring(0, 23) + "…" : why;
         }
 
-        internal static ISheet People(Outpost camp)
-        {
-            var s = new FireSheet(camp);
-            s.FocusSection("hands");
-            return s;
-        }
+        /// Camp › People (2026-09-27; was the campfire sheet's hands tab).
+        internal static ISheet People(Outpost camp) => camp != null ? new PeopleSheet(camp) : null;
 
-        internal static ISheet BuildList(Outpost camp)
-        {
-            var s = new FireSheet(camp);
-            s.FocusSection("build");
-            return s;
-        }
+        /// Camp › Build (2026-09-27; was the campfire sheet's build tab).
+        internal static ISheet BuildList(Outpost camp, string focusPlanId = null) =>
+            camp != null ? new BuildSheet(camp, focusPlanId) : null;
 
         /// The forge's own page if the camp has one, else the build list
         /// (where the forge is put up).
@@ -151,7 +144,7 @@ namespace SeaSick.UI.Sheets
                 foreach (var b in camp.Built)
                     if (b != null && b.Id == BuildPlans.Blacksmith.id)
                         return Sheets.TryCreateFor(b) ?? new StationSheet(camp, b);
-            return BuildList(camp);
+            return BuildList(camp, BuildPlans.Blacksmith.id);
         }
     }
 }
