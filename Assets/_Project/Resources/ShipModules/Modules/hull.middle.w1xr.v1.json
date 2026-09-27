@@ -125,6 +125,21 @@
             "placementRule": "",
             "provisional": true,
             "notes": "Centre of the free-placement deck area of this bay."
+        },
+        {
+            "id": "ThirdDeckMount",
+            "role": "deck.upper",
+            "standard": "deck.third.w1xr.middle",
+            "posU": {
+                "x": 0,
+                "y": 0,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Third-deck mount (art-staging/modular-third-layer-v1 mount_position, module-local). Only on the CONNECTED raised variant; the wall variants (wa/wf/wb) have no third-deck art."
         }
     ],
     "visuals": [

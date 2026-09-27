@@ -1,0 +1,239 @@
+{
+    "schemaVersion": 1,
+    "id": "deck.third.stern.w1xr.v1",
+    "version": 1,
+    "kind": "UpperDeck",
+    "family": "W1xR3",
+    "status": "prototype",
+    "displayName": "Third deck (stern)",
+    "description": "Third deck layer over a raised (W1xR, connected) stern: upper-only shell, walls and new walking deck at Z 6.64 (rise 2.44 u = 1.22 m over the 4.20 deck). Origin = the host's ThirdDeckMount (host origin + (0,0,4.20)). Lower deck stays the floor (open shell bottom).",
+    "source": "art-staging/modular-third-layer-v1/manifest.json",
+    "lengthU": 9.3,
+    "boundsMinU": {
+        "x": 0,
+        "y": -6.25,
+        "z": -1.76
+    },
+    "boundsMaxU": {
+        "x": 9.3,
+        "y": 6.25,
+        "z": 2.44
+    },
+    "boundsNote": "PROVISIONAL: host X/beam extent, Z from the manifest (parts at -1.76 reach back down to the old rail line; deck at +2.44). Not re-measured from the FBX.",
+    "sockets": [],
+    "visuals": [
+        {
+            "id": "Upper_Stern_W1__BraceExtensions",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__BraceExtensions",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__BraceExtensions.fbx, 208 triangles (manifest)."
+        },
+        {
+            "id": "Upper_Stern_W1__Hatch",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__Hatch",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 6.75,
+                "y": 0.0,
+                "z": 2.6
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__Hatch.fbx, 36 triangles (manifest).",
+            "rotationDegU": {
+                "x": -0.0,
+                "y": -80.0,
+                "z": -0.0
+            }
+        },
+        {
+            "id": "Upper_Stern_W1__Helm",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__Helm",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -1.76
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__Helm.fbx, 280 triangles (manifest)."
+        },
+        {
+            "id": "Upper_Stern_W1__InternalLadder",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__InternalLadder",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -1.76
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__InternalLadder.fbx, 108 triangles (manifest)."
+        },
+        {
+            "id": "Upper_Stern_W1__PortalFrames",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__PortalFrames",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -1.76
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__PortalFrames.fbx, 48 triangles (manifest)."
+        },
+        {
+            "id": "Upper_Stern_W1__Shell",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__Shell",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__Shell.fbx, 192 triangles (manifest)."
+        },
+        {
+            "id": "Upper_Stern_W1__UpperPlanks",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__UpperPlanks",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -1.76
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__UpperPlanks.fbx, 240 triangles (manifest)."
+        },
+        {
+            "id": "Upper_Stern_W1__UpperPosts",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__UpperPosts",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -1.76
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__UpperPosts.fbx, 300 triangles (manifest)."
+        },
+        {
+            "id": "Upper_Stern_W1__UpperRails",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__UpperRails",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": -1.76
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__UpperRails.fbx, 300 triangles (manifest)."
+        },
+        {
+            "id": "Upper_Stern_W1__WallPlanks",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Stern_W1/Upper_Stern_W1__WallPlanks",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "Stern_W1/Upper_Stern_W1__WallPlanks.fbx, 636 triangles (manifest)."
+        }
+    ],
+    "equipmentSlots": [],
+    "passages": [
+        {
+            "id": "CrewPassage_Third",
+            "centreU": {
+                "x": 4.65,
+                "y": 0,
+                "z": 4.14
+            },
+            "sizeU": {
+                "x": 9.3,
+                "y": 4.6,
+                "z": 3.4
+            },
+            "provisional": true,
+            "notes": "Centreline crew passage over the third deck, |y| <= 2.30 like every deck below (never narrowed), 3.4 u = 1.7 m tall."
+        }
+    ],
+    "physical": {
+        "massKg": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "displacementM3": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "cargoCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "crewCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "thrustCoefficient": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "lightship": {
+        "massKg": 5019.28,
+        "provisional": true,
+        "rule": "= upperStructure.massKg: deck 26.7287 m^2 (host W1xR deck cap) x 110 kg/m^2 + walls 21.25 m^2 (host raised wall area 29.2677 m^2 x 2.44/3.36 rise ratio) x 95 kg/m^2 + ladder 60 kg. ESTIMATE, not measured on the FBX."
+    },
+    "capacity": {
+        "holdCells": {
+            "value": 5,
+            "provisional": true,
+            "source": "round(0.7 x upperVol / 38.229), upperVol = host deck-cap footprint 106.915 U^2 x rise 2.44 = 260.873 U^3 (the raised-section rule, docs/RAISED-DECK.md sec 5)."
+        },
+        "berths": {
+            "value": 2,
+            "provisional": true,
+            "source": "floor(0.3 x 106.915 U^2 / 12.8) (the raised-section rule)."
+        },
+        "rule": "ADDED to the host section's own capacity/interior budget (ShipyardPlanner.SectionCapacities). Seeded 2026-09-27, PROVISIONAL, tune freely. Headroom between decks is 1.22 m -- Astra: crew clearance NOT certified."
+    },
+    "upperStructure": {
+        "massKg": 5019.28,
+        "centroidZU": 1.9346,
+        "deckZU": 2.44,
+        "deckMassKg": 2940.16,
+        "deckAreaM2": 26.7287,
+        "wallMassKg": 2079.12,
+        "wallAreaM2": 21.254,
+        "wallAreaCentroidZU": 1.22,
+        "source": "Module-local Z (origin on the 4.20 deck); RaisedDeckPhysics adds the placed origin's Z. Estimate, see lightship.rule."
+    },
+    "fitting": {
+        "socketClass": "deck.third.w1xr.stern",
+        "originNote": "host origin + (0,0,4.20): the manifest's mount_position, module-local",
+        "layerRiseU": 2.44,
+        "hidesHostVisuals": [
+            "RaisedStern__Hatch",
+            "RaisedStern__UpperPlanks",
+            "RaisedStern__UpperPosts",
+            "RaisedStern__UpperRails",
+            "Stern_W1__Helm"
+        ],
+        "unreviewedNote": "Third deck (Astra modular-third-layer-v1, 2026-09-26): geometry prototype only -- crew headroom, access/edge guards on a partial third deck, cannon recoil, stability and iPhone cost NOT certified. Art unreviewed."
+    }
+}

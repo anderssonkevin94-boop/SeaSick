@@ -89,6 +89,17 @@
             "placementRule": "",
             "provisional": true,
             "notes": ""
+        },
+        {
+            "id": "ForedeckMount",
+            "role": "deck.upper",
+            "standard": "deck.foredeck.w1r2",
+            "posU": {"x": 0, "y": 0, "z": 0},
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Raised gun foredeck mount: the foredeck shares the bow origin (art-staging/modular-foredeck-v1 README). One per bow."
         }
     ],
     "visuals": [

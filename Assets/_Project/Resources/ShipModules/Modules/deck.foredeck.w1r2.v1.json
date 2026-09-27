@@ -1,0 +1,281 @@
+{
+    "schemaVersion": 1,
+    "id": "deck.foredeck.w1r2.v1",
+    "version": 1,
+    "kind": "UpperDeck",
+    "family": "W1-r2",
+    "status": "prototype",
+    "displayName": "Raised gun foredeck",
+    "description": "Tapered forward gun platform over the V3 bow (Astra modular-foredeck-v1 narrow): walking deck at bow-local Z 4.20, centreline stairs (8 treads, 1.32 wide, run 2.88) from the main deck, two gun openings in the side rails. Open underneath (not enclosed, no buoyancy).",
+    "source": "art-staging/modular-foredeck-v1/narrow/manifest.json",
+    "lengthU": 0,
+    "boundsMinU": {
+        "x": 2.0,
+        "y": -3.3,
+        "z": 1.76
+    },
+    "boundsMaxU": {
+        "x": 9.3,
+        "y": 3.3,
+        "z": 5.3
+    },
+    "boundsNote": "PROVISIONAL: deck_outline + stair bottom_x, main deck 1.76 up to the rail tops (~1.1 u over the 4.20 deck). Not re-measured from the FBX.",
+    "sockets": [
+        {
+            "id": "Foredeck_Cannon_Starboard",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 5.8581,
+                "y": -2.0755,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "manifest socket, rotation_euler z 0 -> yaw 0 (starboard, outboard)."
+        },
+        {
+            "id": "Foredeck_Cannon_Port",
+            "role": "deck.slot",
+            "standard": "",
+            "posU": {
+                "x": 5.8581,
+                "y": 2.0755,
+                "z": 4.2
+            },
+            "yawDeg": 180,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "manifest socket, rotation_euler z pi -> yaw 180 (port, outboard)."
+        },
+        {
+            "id": "Foredeck_StairBottom",
+            "role": "deck.stair",
+            "standard": "",
+            "posU": {
+                "x": 2.0181,
+                "y": 0.0,
+                "z": 1.7978
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "stair foot on the main deck"
+        },
+        {
+            "id": "Foredeck_StairTop",
+            "role": "deck.stair",
+            "standard": "",
+            "posU": {
+                "x": 4.8981,
+                "y": 0.0,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "stair head on the foredeck"
+        }
+    ],
+    "visuals": [
+        {
+            "id": "Foredeck__Deck",
+            "resourcePath": "ShipModules/Meshes/Foredeck_v1/Narrow/Foredeck__Deck",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDegU": 0.0,
+            "notes": "narrow/models/Deck.fbx; same origin as the bow, identity local transform (README contract)."
+        },
+        {
+            "id": "Foredeck__Frame",
+            "resourcePath": "ShipModules/Meshes/Foredeck_v1/Narrow/Foredeck__Frame",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDegU": 0.0,
+            "notes": "narrow/models/Frame.fbx; same origin as the bow, identity local transform (README contract)."
+        },
+        {
+            "id": "Foredeck__Rails",
+            "resourcePath": "ShipModules/Meshes/Foredeck_v1/Narrow/Foredeck__Rails",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDegU": 0.0,
+            "notes": "narrow/models/Rails.fbx; same origin as the bow, identity local transform (README contract)."
+        },
+        {
+            "id": "Foredeck__Stairs",
+            "resourcePath": "ShipModules/Meshes/Foredeck_v1/Narrow/Foredeck__Stairs",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDegU": 0.0,
+            "notes": "narrow/models/Stairs.fbx; same origin as the bow, identity local transform (README contract)."
+        },
+        {
+            "id": "Foredeck__Seams",
+            "resourcePath": "ShipModules/Meshes/Foredeck_v1/Narrow/Foredeck__Seams",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "yawDegU": 0.0,
+            "notes": "narrow/models/Seams.fbx; same origin as the bow, identity local transform (README contract)."
+        }
+    ],
+    "equipmentSlots": [
+        {
+            "id": "Foredeck_Cannon_Starboard",
+            "socketId": "Foredeck_Cannon_Starboard",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Same 1.8 x 2.3 x 1.65 clearance as every real-cannon slot; Astra's static fit shows the existing cannon clears rails/frame/stairs. Recoil/aiming NOT certified."
+        },
+        {
+            "id": "Foredeck_Cannon_Port",
+            "socketId": "Foredeck_Cannon_Port",
+            "clearanceSizeU": {
+                "x": 1.8,
+                "y": 2.3,
+                "z": 1.65
+            },
+            "classes": [
+                "equipment.deck-gun"
+            ],
+            "provisional": true,
+            "notes": "Same 1.8 x 2.3 x 1.65 clearance as every real-cannon slot; Astra's static fit shows the existing cannon clears rails/frame/stairs. Recoil/aiming NOT certified."
+        }
+    ],
+    "passages": [
+        {
+            "id": "Foredeck_Stair",
+            "centreU": {
+                "x": 3.94,
+                "y": 0,
+                "z": 3.46
+            },
+            "sizeU": {
+                "x": 3.88,
+                "y": 1.6,
+                "z": 3.4
+            },
+            "provisional": true,
+            "notes": "Reserves the stair footprint (x 2.02-4.90, 1.32 clear + margin) from the main deck approach up to the landing, per the README ('reserve the stair footprint, approach and landing against equipment')."
+        },
+        {
+            "id": "Foredeck_Landing",
+            "centreU": {
+                "x": 5.9,
+                "y": 0,
+                "z": 5.9
+            },
+            "sizeU": {
+                "x": 2.0,
+                "y": 1.6,
+                "z": 3.4
+            },
+            "provisional": true,
+            "notes": "Central upper landing at the stair head, between the two gun clearances (|y| >= 0.925)."
+        }
+    ],
+    "physical": {
+        "massKg": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "displacementM3": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "cargoCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "crewCapacity": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "thrustCoefficient": {
+            "authored": false,
+            "value": 0,
+            "source": ""
+        },
+        "notes": "NOT AUTHORED. Must not be inferred from mesh size, section length or wheel radius."
+    },
+    "lightship": {
+        "massKg": 1099.21,
+        "provisional": true,
+        "rule": "deck outline 16.566 U^2 = 4.141 m^2 x 110 kg/m^2 + rails 5.59 m x 40 kg/m + frame 300 kg + stairs 120 kg. ESTIMATE, not measured."
+    },
+    "capacity": {
+        "holdCells": {
+            "value": 0,
+            "provisional": true,
+            "source": "open platform, no enclosed volume"
+        },
+        "berths": {
+            "value": 0,
+            "provisional": true,
+            "source": "open platform, no berths"
+        },
+        "gunSlots": {
+            "ids": [
+                "Foredeck_Cannon_Starboard",
+                "Foredeck_Cannon_Port"
+            ],
+            "provisional": true,
+            "source": "the manifest's two cannon sockets"
+        },
+        "rule": "ADDED to the bow section's capacity: +2 gun slots, no hold, no berths. Seeded 2026-09-27, PROVISIONAL."
+    },
+    "upperStructure": {
+        "massKg": 1099.21,
+        "centroidZU": 3.8432,
+        "deckZU": 4.2,
+        "deckMassKg": 455.56,
+        "deckAreaM2": 4.141,
+        "wallMassKg": 643.65,
+        "wallAreaM2": 0,
+        "wallAreaCentroidZU": 3.5,
+        "source": "Module-local Z (origin = bow origin, datum). Estimate, see lightship.rule."
+    },
+    "fitting": {
+        "socketClass": "deck.foredeck.w1r2",
+        "originNote": "the bow's own origin, identity local transform",
+        "layerRiseU": 0,
+        "hidesHostVisuals": [],
+        "unreviewedNote": "Raised gun foredeck (Astra modular-foredeck-v1, 2026-09-24): static fit prototype -- crew headroom under it, gun recoil/aiming, colliders, balance and iPhone cost NOT certified; on a short ship the chimney is close to the stair approach. Art unreviewed."
+    }
+}

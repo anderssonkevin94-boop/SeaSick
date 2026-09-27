@@ -101,6 +101,22 @@
         {
             "id": "equipment.deck-gun",
             "description": "Deck-mounted gun (cannon). Layout only; no balance."
+        },
+        {
+            "id": "deck.third.w1xr.stern",
+            "description": "Third-deck mount over a connected raised stern (modular-third-layer-v1)."
+        },
+        {
+            "id": "deck.third.w1xr.middle",
+            "description": "Third-deck mount over a connected raised middle (modular-third-layer-v1)."
+        },
+        {
+            "id": "deck.third.w1xr.bow",
+            "description": "Third-deck mount over a connected raised bow (modular-third-layer-v1)."
+        },
+        {
+            "id": "deck.foredeck.w1r2",
+            "description": "Raised gun foredeck mount on the V3 (W1-r2) bow (modular-foredeck-v1 narrow)."
         }
     ]
 }

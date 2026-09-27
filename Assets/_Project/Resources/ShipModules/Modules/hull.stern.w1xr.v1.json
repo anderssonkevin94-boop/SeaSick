@@ -110,6 +110,21 @@
             "placementRule": "",
             "provisional": true,
             "notes": "Y moved outboard from W1-r2's 3.45 by +1.4; see DeckSlot_2_-1."
+        },
+        {
+            "id": "ThirdDeckMount",
+            "role": "deck.upper",
+            "standard": "deck.third.w1xr.stern",
+            "posU": {
+                "x": 0,
+                "y": 0,
+                "z": 4.2
+            },
+            "yawDeg": 0,
+            "radiusLimit": 0.0,
+            "placementRule": "",
+            "provisional": true,
+            "notes": "Third-deck mount (art-staging/modular-third-layer-v1 mount_position, module-local). Only on the CONNECTED raised variant; the wall variants (wa/wf/wb) have no third-deck art."
         }
     ],
     "visuals": [
