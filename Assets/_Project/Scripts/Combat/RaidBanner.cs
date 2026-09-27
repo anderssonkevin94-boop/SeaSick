@@ -42,6 +42,12 @@ namespace SeaSick.UI
                 phase = 3;
             }
 
+            // **Ashore, the alert strip says it, 2026-09-27**: its RAID chip
+            // (tap -> the lookout) replaces this line while the land HUD is
+            // up. The after-raid verdict (phase 3) still shows here, and at
+            // sea this banner is the only voice.
+            if (phase != 3 && Sheets.AlertStrip.ShowsRaid && Sheets.MidnightLandHud.Active) return;
+
             int stolen = SeaSick.Combat.RaidParty.Active != null ? SeaSick.Combat.RaidParty.Active.Stolen : 0;
             int ashore = SeaSick.Combat.RaidParty.Active != null ? SeaSick.Combat.RaidParty.Active.Ashore : 0;
             long key = HudLabel.Key(outpost.GetInstanceID(), stolen, ashore, phase);

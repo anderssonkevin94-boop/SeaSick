@@ -9,17 +9,29 @@ namespace SeaSick.UI.Sheets
     {
         public static bool Enabled { get; set; } = true;
         public static bool Active => Enabled && Sheets.SuppressLegacy;
-        public const float NavHeight = 64f;
-        public const float TopHeight = 46f;
+        /// **No bottom nav since 2026-09-27** (the ledger drawer holds its
+        /// four destinations). Kept as a named 0 so every frame/reserve sum
+        /// in `SheetHost` still reads the same.
+        public const float NavHeight = 0f;
+        /// The resource bar itself.
+        public const float BarHeight = 46f;
+        /// Everything the top of the land HUD reserves: the bar, a gap, and
+        /// the alert strip under it. `SheetHost` and the chart instrument
+        /// read this, so a tall sheet and the dial both start below the
+        /// chips.
+        public const float TopHeight = BarHeight + 6f + AlertStrip.Height;
+        const float MenuWidth = 46f;
         public static Rect NavigationRect { get; private set; }
         public static Rect ResourcesRect { get; private set; }
         public static Color Pearl => new Color32(232, 242, 246, 255);
         public static Color Ice => new Color32(164, 210, 232, 255);
         public static Color Muted => new Color32(166, 186, 198, 255);
-        readonly VisualElement top, nav;
+        readonly VisualElement top;
+        readonly Button menu;
         readonly Label logs, boards, crew, food, day;
         readonly BuildingStatusLabels buildingStatus;
-        readonly Button[] buttons = new Button[4];
+        readonly AlertStrip alerts;
+        readonly LedgerDrawer ledgerDrawer;
         float nextUpdate;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -34,18 +46,17 @@ namespace SeaSick.UI.Sheets
             food = Resource(top, "food", "Stored food at current rations; excludes future gathering");
             day = new Label(); day.AddToClassList("land-day"); top.Add(day);
             buildingStatus = new BuildingStatusLabels(root);
-            nav = new VisualElement(); nav.AddToClassList("land-nav"); root.Add(nav);
-            string[] names = { "Build", "Crew", "Stores", "Ship" };
-            string[] icons = { "build", "crew", "stores", "ship" };
-            for (int i = 0; i < names.Length; i++)
-            {
-                int index = i;
-                var button = new Button(() => Open(index));
-                button.AddToClassList("land-nav-button");
-                button.tooltip = names[i];
-                button.Add(new LandIcon(icons[i])); button.Add(new Label(names[i]));
-                nav.Add(button); buttons[i] = button;
-            }
+            // **The ☰ replaces the bottom nav, 2026-09-27** (Melvor
+            // redesign): Build/Crew/Stores/Ship live in the ledger drawer.
+            // Added last, so the drawer and its scrim draw over everything
+            // else in this document.
+            alerts = new AlertStrip(root);
+            menu = new Button(() => ledgerDrawer.Toggle());
+            menu.AddToClassList("ledger-menu");
+            menu.tooltip = "The ledger: camp, gather, make, sea";
+            menu.Add(new LedgerDrawer.Glyph(LedgerDrawer.Glyph.Kind.Menu));
+            root.Add(menu);
+            ledgerDrawer = new LedgerDrawer(root);
         }
 
         static Label Resource(VisualElement parent, string icon, string hint)
@@ -58,42 +69,42 @@ namespace SeaSick.UI.Sheets
         public static Outpost Camp => Sheets.Anchor != null && Sheets.Anchor.CurrentIsland != null
             ? Outpost.Of(Sheets.Anchor.CurrentIsland) : null;
 
-        void Open(int index)
-        {
-            var camp = Camp;
-            if (camp == null) return;
-            if (index == 3) { var s = SheetBootstrap.ShipFor(); if (s != null) Sheets.Open(s); return; }
-            // **Stores, 2026-09-26**: the Melvor-style bank (`StoresSheet`)
-            // replaces the old camp-tab-of-`FireSheet` here. That page is
-            // not gone -- tapping the campfire itself still opens it
-            // (`SheetBootstrap.FireFor`), exactly as before.
-            if (index == 2) { Sheets.Open(new StoresSheet(camp)); return; }
-            var sheet = new FireSheet(camp);
-            sheet.FocusSection(index == 0 ? "build" : "hands");
-            Sheets.Open(sheet);
-        }
-
         public void Tick(VisualElement root)
         {
             bool active = Active;
             root.EnableInClassList("midnight-land", active);
-            top.style.display = nav.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
-            if (!active) { NavigationRect = ResourcesRect = Rect.zero; buildingStatus.Hide(); return; }
+            top.style.display = menu.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
+            ledgerDrawer.Tick(active, root, alerts.LastCount);
+            if (!active)
+            {
+                NavigationRect = ResourcesRect = Rect.zero;
+                buildingStatus.Hide(); alerts.Hide(); return;
+            }
             float scale = SheetHost.PanelScale;
             var safe = Screen.safeArea;
             float left = safe.xMin * scale + 8f, right = (Screen.width - safe.xMax) * scale + 8f;
-            top.style.left = nav.style.left = left;
-            top.style.right = nav.style.right = right;
-            top.style.top = (Screen.height - safe.yMax) * scale + 8f;
-            nav.style.bottom = safe.yMin * scale + 8f;
+            float topY = (Screen.height - safe.yMax) * scale + 8f;
+            menu.style.left = left;
+            menu.style.top = topY;
+            top.style.left = left + MenuWidth + 6f;
+            top.style.right = right;
+            top.style.top = topY;
+            alerts.Place(left, right, topY + BarHeight + 6f);
+            // The top chrome: the ☰ and the bar, plus the strip while it
+            // has a chip up (an empty strip must not eat world taps).
+            float chrome = BarHeight + (AlertStrip.Showing ? 6f + AlertStrip.Height : 0f);
             ResourcesRect = new Rect(safe.xMin + 8f / scale, Screen.height - safe.yMax + 8f / scale,
-                safe.width - 16f / scale, TopHeight / scale);
-            NavigationRect = new Rect(safe.xMin + 8f / scale, Screen.height - safe.yMin - (NavHeight + 8f) / scale,
-                safe.width - 16f / scale, NavHeight / scale);
+                safe.width - 16f / scale, chrome / scale);
+            // No bottom nav: a zero-height line at the foot of the safe area,
+            // so `SheetHost`'s `claimed.yMax` and the overlap tests still
+            // read a sane rect.
+            NavigationRect = new Rect(safe.xMin + 8f / scale, Screen.height - safe.yMin - 8f / scale,
+                safe.width - 16f / scale, 0f);
             if (!SheetHost.FrameOpen) HudLayout.ClaimSheet(NavigationRect);
             buildingStatus.Tick(Camp, scale);
             if (Time.unscaledTime < nextUpdate) return;
             nextUpdate = Time.unscaledTime + .25f;
+            alerts.Refresh(Camp);
             var ledger = Camp != null ? Camp.Ledger : null;
             logs.text = CompactCount(ledger != null ? ledger.StoreCountOf(Res.Timber) : 0);
             boards.text = CompactCount(ledger != null ? ledger.StoreCountOf(Res.Boards) : 0);
@@ -105,15 +116,6 @@ namespace SeaSick.UI.Sheets
                 ? SheetTheme.Ember : days < 3f && days >= 0f ? Ice : Pearl;
             food.parent.tooltip = SheetBits.FoodDaysLine(ledger) + "; stored supply only, excludes future gathering";
             day.text = "Day " + TimeOfDay.Day;
-            for (int i = 0; i < buttons.Length; i++)
-            {
-                bool selected = Sheets.Current is StationSheet && i == 0;
-                if (Sheets.Current is FireSheet fire && i != 2)
-                    selected = fire.CurrentSection == (i == 0 ? "build" : i == 1 ? "hands" : "ship");
-                if (Sheets.Current is StoresSheet && i == 2) selected = true;
-                if (Sheets.Current is ShipSheet && i == 3) selected = true;
-                buttons[i].EnableInClassList("land-nav-selected", selected);
-            }
         }
 
         internal static string CompactCount(int count) => count < 1000 ? count.ToString()

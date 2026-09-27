@@ -1,0 +1,137 @@
+/* ---------------- Ledger drawer + alert strip (2026-09-27) ----------------
+   Concept A1 of the Melvor redesign (Kevin: "this looks good, the UI that
+   is"). Sizes and colours are the mockup's, 390x844 CSS px -> panel units
+   1:1 (the land panel is 430 wide on a phone). Owned by LedgerDrawer.cs /
+   AlertStrip.cs; MidnightLand.uss is not touched. */
+
+/* the menu button, top-left, beside the resource bar */
+.ledger-menu {
+    position: absolute; width: 46px; height: 46px; margin: 0; padding: 11px;
+    background-color: rgb(22, 42, 56); border-color: rgb(164, 210, 232);
+    border-width: 1px; border-radius: 6px;
+}
+.ledger-menu:hover { background-color: rgb(32, 57, 72); }
+.ledger-glyph { width: 100%; height: 100%; }
+
+/* ---------------- alert strip ---------------- */
+.ledger-alerts {
+    position: absolute; height: 36px; flex-direction: row; overflow: hidden;
+}
+.ledger-chip {
+    flex-shrink: 0; height: 36px; margin: 0 6px 0 0; padding: 0 12px;
+    border-radius: 18px; border-width: 1.5px; font-size: 13px; white-space: nowrap;
+    -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+}
+.ledger-chip--raid { background-color: rgb(228, 98, 58); border-width: 0; color: rgb(255, 255, 255);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.ledger-chip--raid:hover { background-color: rgb(240, 120, 80); }
+.ledger-chip--bad { background-color: rgb(42, 26, 26); border-color: rgb(246, 146, 128); color: rgb(246, 146, 128); }
+.ledger-chip--bad:hover { background-color: rgb(58, 34, 34); }
+.ledger-chip--warn { background-color: rgb(42, 36, 21); border-color: rgb(201, 147, 57); color: rgb(240, 195, 106); }
+.ledger-chip--warn:hover { background-color: rgb(58, 50, 28); }
+
+/* ---------------- drawer ---------------- */
+.ledger-layer {
+    position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+}
+.ledger-scrim {
+    position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+    background-color: rgb(7, 17, 26); opacity: 0;
+    transition-property: opacity; transition-duration: 0.18s;
+}
+.ledger-layer--open > .ledger-scrim { opacity: 0.6; }
+.ledger-drawer {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 316px;
+    padding: 16px 12px 16px 12px; flex-direction: column;
+    background-color: rgb(15, 27, 37);
+    border-right-width: 1.5px; border-color: rgb(44, 74, 94);
+    translate: -110% 0;
+    transition-property: translate; transition-duration: 0.2s;
+    transition-timing-function: ease-out-cubic;
+}
+.ledger-layer--open > .ledger-drawer { translate: 0 0; }
+
+.ledger-head { flex-direction: row; align-items: center; padding: 0 4px; margin-bottom: 12px; flex-shrink: 0; }
+.ledger-head-col { flex-grow: 1; flex-shrink: 1; min-width: 0; flex-direction: column; }
+.ledger-title {
+    font-size: 21px; color: rgb(232, 242, 246); margin: 0; padding: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ledger-subtitle {
+    font-size: 13px; color: rgb(166, 186, 198); margin: 2px 0 0 0; padding: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.ledger-head-btn {
+    width: 44px; height: 44px; flex-shrink: 0; margin: 0 0 0 10px; padding: 12px;
+    border-radius: 12px; border-width: 1.5px; border-color: rgb(44, 74, 94);
+    background-color: rgb(19, 34, 46);
+}
+.ledger-head-btn:hover { background-color: rgb(32, 57, 72); }
+
+.ledger-scroll { flex-grow: 1; flex-shrink: 1; }
+.ledger-group { flex-direction: column; margin-bottom: 12px; }
+.ledger-group-label {
+    padding: 0 6px; margin: 0 0 4px 0; font-size: 11px; color: rgb(127, 151, 166);
+    letter-spacing: 1.2px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ledger-card {
+    flex-direction: column; padding: 4px;
+    background-color: rgb(19, 34, 46); border-width: 1.5px; border-color: rgb(30, 51, 68); border-radius: 14px;
+}
+
+.ledger-row {
+    flex-direction: row; align-items: center; min-height: 44px; margin: 0; padding: 5px 8px;
+    border-width: 0; border-radius: 10px; background-color: rgba(0, 0, 0, 0);
+    -unity-text-align: middle-left;
+}
+.ledger-row:hover { background-color: rgba(164, 210, 232, 0.08); }
+.ledger-row--on {
+    background-color: rgb(44, 74, 94);
+    border-left-width: 3px; border-left-color: rgb(164, 210, 232);
+}
+.ledger-row--on:hover { background-color: rgb(44, 74, 94); }
+.ledger-row--locked { opacity: 0.55; }
+
+.ledger-icon-box {
+    width: 34px; height: 34px; flex-shrink: 0; margin-right: 10px;
+    border-radius: 9px; background-color: rgb(14, 26, 36);
+    align-items: center; justify-content: center;
+}
+.ledger-icon { width: 26px; height: 26px; }
+
+.ledger-row-text { flex-grow: 1; flex-shrink: 1; min-width: 0; flex-direction: column; }
+.ledger-row-line { flex-direction: row; align-items: center; justify-content: space-between; }
+.ledger-row-name {
+    font-size: 15px; color: rgb(232, 242, 246); margin: 0 8px 0 0; padding: 0;
+    white-space: nowrap; flex-shrink: 0;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.ledger-sub {
+    font-size: 12px; margin: 0; padding: 0; white-space: nowrap; flex-shrink: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; -unity-text-align: middle-right;
+    color: rgb(166, 186, 198);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.ledger-sub--ok { color: rgb(159, 224, 194); }
+.ledger-sub--bad { color: rgb(246, 146, 128); }
+.ledger-sub--warn { color: rgb(240, 195, 106); }
+.ledger-sub--dim { color: rgb(166, 186, 198); }
+.ledger-sub--off { color: rgb(110, 132, 148); }
+.ledger-sub--blue { color: rgb(164, 210, 232); }
+
+.ledger-bar {
+    height: 4px; margin-top: 4px; border-radius: 2px; overflow: hidden;
+    background-color: rgb(11, 22, 32);
+}
+.ledger-bar-fill { height: 4px; width: 0; border-radius: 2px; background-color: rgb(164, 210, 232); }
+.ledger-bar--ok { background-color: rgb(159, 224, 194); }
+.ledger-bar--bad { background-color: rgb(246, 146, 128); }
+.ledger-bar--warn { background-color: rgb(240, 195, 106); }
+.ledger-bar--dim { background-color: rgb(166, 186, 198); }
+.ledger-bar--off { background-color: rgb(110, 132, 148); }
+.ledger-bar--blue { background-color: rgb(164, 210, 232); }
