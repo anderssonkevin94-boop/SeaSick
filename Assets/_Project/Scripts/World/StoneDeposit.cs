@@ -52,7 +52,37 @@ namespace SeaSick.World
 
         [SerializeField] Shape shape;
         public Shape Kind => shape;
-        public int Units => UnitsBy[(int)shape];
+        public int Units => rocks != null ? sceneryUnits : UnitsBy[(int)shape];
+
+        // --- a baked scenery rock (2026-09-27) ----------------------------------
+
+        /// Kevin, phone 2026-09-27: *"there are so many rocks on the island
+        /// but I guess they don't qualify as a stone resource, please change
+        /// so they do."* A deposit can also stand for one of the island's
+        /// loose scenery rocks (`Terrain.SceneryRocks`): nothing is
+        /// instantiated -- the rock is already drawn, welded into its cell --
+        /// and being worked out HIDES it (its vertices collapse), no
+        /// remnant. Units by size, `SceneryRocks.UnitsOf` (2 / 4 / 8).
+        Terrain.SceneryRocks rocks;
+        int rockIndex = -1, sceneryUnits;
+        public bool IsScenery => rocks != null;
+        public Terrain.SceneryRocks SceneryRocks => rocks;
+        public int SceneryIndex => rockIndex;
+
+        /// Put a deposit on a node standing on scenery rock `i`. Idempotent.
+        public static StoneDeposit DressScenery(ResourceNode n, Terrain.SceneryRocks rocks, int i)
+        {
+            if (n == null || n.Resource != Res.Stone || rocks == null || i < 0 || i >= rocks.Count) return null;
+            if (n.Deposit != null) return n.Deposit;
+            var d = n.gameObject.AddComponent<StoneDeposit>();
+            var r = rocks.RockAt(i);
+            d.rocks = rocks;
+            d.rockIndex = i;
+            d.sceneryUnits = Terrain.SceneryRocks.UnitsOf(r);
+            d.StandOff = Mathf.Max(1.1f, r.radius * 0.8f + 0.7f);
+            n.Deposit = d;
+            return d;
+        }
         public static int UnitsOf(Shape s) => UnitsBy[(int)s];
 
         /// How far from the node's pivot a worker stands to swing at it: the
@@ -196,6 +226,13 @@ namespace SeaSick.World
         /// remnant. Idempotent. Called through `ResourceNode`.
         public void Show(bool worked, bool gone)
         {
+            if (rocks != null)
+            {
+                // A scenery rock leaves no remnant: worked out is gone.
+                ShowsDepleted = false;
+                rocks.SetHidden(rockIndex, worked || gone);
+                return;
+            }
             ShowsDepleted = worked && !gone;
             if (full == null)
             {

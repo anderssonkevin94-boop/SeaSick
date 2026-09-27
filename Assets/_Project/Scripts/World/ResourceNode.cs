@@ -197,7 +197,8 @@ namespace SeaSick.World
         {
             // A scenery node draws nothing of its own, so there is no shake
             // to animate -- the strike reads on the crew, not on the tree.
-            if (wood != null) return;
+            // Nor does a baked scenery rock (`StoneDeposit.IsScenery`).
+            if (wood != null || (deposit != null && deposit.IsScenery)) return;
             if (Time.time > shakeUntil)
             {
                 if (shakeStrength > 0f)

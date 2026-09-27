@@ -20,6 +20,10 @@ namespace SeaSick.World
     ///   and the camp centre, both saved, so a reload lays the same rocks.
     /// - `OutpostLedger.SizeStoneToDeposits` gets the island's total units.
     ///
+    /// - **The island's loose scenery rocks count (2026-09-27,
+    ///   `SceneryStone`)**: stood as Stone nodes first, so they are in the
+    ///   sum, and an island that has them gets nothing laid.
+    ///
     /// Called from `Outpost.CatchUp`, right after `PlaceCampStone`.
     /// Idempotent and cheap after the first call.
     public static class StoneDeposits
@@ -41,8 +45,14 @@ namespace SeaSick.World
             var isle = o.Island;
             if (isle == null || o.Ledger.Stock(Res.Stone) == null) return;
 
+            // The island's loose scenery rocks first (2026-09-27): they are
+            // stone too, and an island that has them needs no rocks laid.
+            // Not settled yet (the bake or the path grid is still coming) ->
+            // the seam waits, so it is sized to every rock, not to half.
+            bool settled = SceneryStone.Ensure(o);
+
             Collect(isle);
-            if (scratch.Count == 0 && o.HasGround) { Lay(o, isle); Collect(isle); }
+            if (settled && scratch.Count == 0 && o.HasGround) { Lay(o, isle); Collect(isle); }
 
             float units = 0f;
             for (int i = 0; i < scratch.Count; i++)
@@ -53,7 +63,7 @@ namespace SeaSick.World
                 if (d != null && !n.HeldBySite) units += d.Units;
             }
             scratch.Clear();
-            o.Ledger.SizeStoneToDeposits(units);
+            if (settled) o.Ledger.SizeStoneToDeposits(units);
         }
 
         static void Collect(Island isle)

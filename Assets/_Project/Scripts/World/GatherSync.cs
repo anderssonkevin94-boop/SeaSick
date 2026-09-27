@@ -41,6 +41,7 @@ namespace SeaSick.World
         static readonly Dictionary<Outpost, Entry> cache = new Dictionary<Outpost, Entry>();
         static readonly List<Outpost> dead = new List<Outpost>();
         static readonly List<ResourceNode> scratch = new List<ResourceNode>();
+        static readonly HashSet<ResourceNode> present = new HashSet<ResourceNode>();
 
         /// Hide or show this outpost's non-timber props to match its ledger.
         /// Idempotent; cheap unless the camp moved or the props changed.
@@ -162,9 +163,15 @@ namespace SeaSick.World
 
             if (e.order.TryGetValue(resource, out var cached) && cached.Length == scratch.Count)
             {
+                // A set, not `List.Contains`: with the island's scenery rocks
+                // standing as nodes (2026-09-27, up to `SceneryStone.MaxNodes`)
+                // the n^2 scan was ~60k compares on every quarter-second sync.
+                present.Clear();
+                for (int i = 0; i < scratch.Count; i++) present.Add(scratch[i]);
                 bool same = true;
                 for (int i = 0; i < cached.Length && same; i++)
-                    if (cached[i] == null || !scratch.Contains(cached[i])) same = false;
+                    if (cached[i] == null || !present.Contains(cached[i])) same = false;
+                present.Clear();
                 if (same) return cached;
             }
 

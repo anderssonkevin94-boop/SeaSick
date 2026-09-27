@@ -3144,7 +3144,10 @@ namespace SeaSick.World
 
             campStone.Clear();
             foreach (var n in ResourceNode.All)
-                if (n != null && n.Home == Island && n.Resource == Res.Stone) campStone.Add(n);
+                if (n != null && n.Home == Island && n.Resource == Res.Stone
+                    // A scenery rock's node IS that rock (2026-09-27,
+                    // `SceneryStone`): it never walks into the ring.
+                    && (n.Deposit == null || !n.Deposit.IsScenery)) campStone.Add(n);
             if (campStone.Count == 0) return;
 
             // Outside the clearing, so a boulder is never standing where a

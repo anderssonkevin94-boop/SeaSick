@@ -20,7 +20,14 @@ namespace SeaSick.World
     {
         /// Bumped when the one-off seam sizing changes. Saved; an old save
         /// reads 0 and is sized once on its next `CatchUp`.
-        public const int StoneDepositsVersion = 1;
+        ///
+        /// **2 (2026-09-27): the island's loose scenery rocks are stone**
+        /// (`SceneryStone`). Every save sized at 1 is sized once more, now
+        /// with those rocks in the sum -- so a seam worked below them (Kevin's
+        /// Island_2: 0 standing) comes back as exactly the rocks he can see,
+        /// all of them standing, and an old save loads with nothing gathered.
+        /// Still only ever raised.
+        public const int StoneDepositsVersion = 2;
 
         /// Which `StoneDepositsVersion` this camp's Stone stock was last
         /// sized to. See `SizeStoneToDeposits`.
