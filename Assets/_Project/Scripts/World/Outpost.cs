@@ -212,7 +212,7 @@ namespace SeaSick.World
         float WalkedMetres(Vector3 a, Vector3 b)
         {
             var map = CampPath.For(this);
-            if (map == null || !CampPath.Budget()) return -1f;
+            if (map == null || (CampPath.NoBuildForRoutes && !map.Built) || !CampPath.Budget()) return -1f;
             walkedScratch.Clear();
             if (!map.Route(a, b, CampPath.Walker.Hand, walkedScratch) || walkedScratch.Count == 0) return -1f;
             // Road metres count 1/`CampRoads.SpeedMultiplier` (2026-09-27):

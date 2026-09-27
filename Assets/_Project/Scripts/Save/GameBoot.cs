@@ -264,7 +264,10 @@ namespace SeaSick.Save
         {
             // Time away (2026-09-27): a resume from the background plays the
             // real time it was suspended through the camps (AwayProgress).
-            if (paused) { SaveGame.Autosave("paused"); AwayProgress.NotePaused(); }
+            // Not mid-catch-up: the books are half-played (absences swapped,
+            // stride widened). The save from before it stays, and its own
+            // `savedAtUtc` replays the whole span on the next load.
+            if (paused) { if (!AwayProgress.Running) SaveGame.Autosave("paused"); AwayProgress.NotePaused(); }
             else AwayProgress.Resumed(this);
         }
 

@@ -129,6 +129,11 @@ namespace SeaSick.World
         /// whole camp is re-tasked at once.
         public static int PlansPerFrame = 2;
 
+        /// Set by `Save.AwayProgress` for the length of a time-away catch-up:
+        /// an invisible walker's leg (`Outpost.WalkedMetres`) is planned only
+        /// on a grid that is already up, never builds one mid-chunk.
+        public static bool NoBuildForRoutes;
+
         public static bool LogBuild = true;
 
         // --- build cost, for the record ------------------------------------

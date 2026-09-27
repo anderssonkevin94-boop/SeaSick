@@ -40,9 +40,18 @@ namespace SeaSick.Save
         public const double MinCardSeconds = 120.0;
         const float ChunkDays = 0.25f;
 
-        public static float FrameBudgetMs = 25f;
-        public static float SoftBudgetSeconds = 12f;
+        /// Work per frame: at least this, and up to `MaxFrameBudgetMs` when a
+        /// frame's own cost (render, the rest of the game) is high, so the
+        /// catch-up is ~3/4 work and ~1/4 frames. The card shows a progress
+        /// line; 10-15 fps on it is not a hitch anyone sees.
+        public static float FrameBudgetMs = 33f;
+        public static float MaxFrameBudgetMs = 100f;
+        public static float SoftBudgetSeconds = 8f;
         public static float HardBudgetSeconds = 40f;
+        /// A frame that takes longer than this between two slices of work is
+        /// a stall, not waiting (the app suspended again, a drawable that
+        /// never came): only this much of it counts toward the budgets.
+        public const float MaxFrameGapMs = 250f;
 
         public static bool Running { get; private set; }
         public static float Progress01 { get; private set; }
@@ -64,6 +73,7 @@ namespace SeaSick.Save
             Running = false; Progress01 = 0f; Last = null;
             CardPending = false; SavePending = false; pausedAtUtc = default;
             OutpostLedger.CatchUpStride = 1;
+            CampPath.NoBuildForRoutes = false;
         }
 
         public static void FlushSave()
@@ -90,6 +100,21 @@ namespace SeaSick.Save
             public double awaySeconds, simSeconds;
             public bool capped, dropped;
             public float wallSeconds;
+            /// Main-thread work only (between frames), and frames it spread over.
+            public float cpuMs;
+            public int frames;
+            /// The slowest single chunk (every camp once), for the log.
+            public float maxChunkMs;
+            /// Setup (settle + hide bodies) and bodies-back, inside `cpuMs`.
+            public float setupMs, finishMs;
+            /// Frame gaps past `MaxFrameGapMs`, left out of the budgets.
+            public float stalledSeconds;
+            /// The card's footer: honest about where the time went.
+            public string Timing =>
+                $"{cpuMs:0} ms work over {frames} frame{(frames == 1 ? "" : "s")}"
+                + (stalledSeconds >= 1f ? $", {wallSeconds:0.0} s wall" : "")
+                + (stride > 1 ? $", step ×{stride}" : "")
+                + (dropped ? ", cut short" : "");
             public long steps;
             public int stride = 1;
             public List<CampReport> camps = new List<CampReport>();
@@ -186,7 +211,17 @@ namespace SeaSick.Save
             if (card && awaySeconds >= MinCardSeconds && why == "resume")
                 UI.Sheets.Sheets.Open(new UI.Sheets.AwaySheet());
 
+            // `wall` is what the player waited, `cpu` is main-thread work
+            // only. The budgets run on wall MINUS stalls (`MaxFrameGapMs`):
+            // on the phone the one "cut short" 4-minute resume (2026-09-27:
+            // 53.6 s for ~100 ms of work) was time the coroutine was not
+            // being given frames, and it must never drop real progress.
             var wall = Stopwatch.StartNew();
+            var cpu = Stopwatch.StartNew();
+            var gap = new Stopwatch();
+            double stalledMs = 0.0;
+            int frames = 1;
+            float budgetMs = FrameBudgetMs;
             long steps0 = OutpostLedger.StepsRun;
             double start = TimeOfDay.Seconds;
             double target = start + awaySeconds * System.Math.Max(0.0, TimeOfDay.Scale);
@@ -210,13 +245,22 @@ namespace SeaSick.Save
                 rep.camps.Add(new CampReport { camp = o, name = CampName(o) });
             }
 
+            rep.setupMs = (float)cpu.Elapsed.TotalMilliseconds;
             OutpostLedger.CatchUpStride = 1;
+            // An invisible walker's leg is measured on a grid that is up, or
+            // is the straight line (as when the frame's plan budget is spent):
+            // a camp whose grid was thrown away (a load's `Adopt`) would
+            // otherwise rebuild it inside a chunk -- 1 s in the editor, several
+            // on the phone, measured 2026-09-27.
+            CampPath.NoBuildForRoutes = true;
             try
             {
                 double now = start;
+                double rateFrom = start; float rateW = 0f;
                 var frame = Stopwatch.StartNew();
                 while (now < target)
                 {
+                    double chunk0 = cpu.Elapsed.TotalMilliseconds;
                     double next = System.Math.Min(target, now + chunk);
                     TimeOfDay.Scrub(next);
                     float chunkDays = (float)((next - now) / day);
@@ -229,9 +273,10 @@ namespace SeaSick.Save
                         if (stall != null) { rep.camps[i].stalledDays += chunkDays; rep.camps[i].stall = stall; }
                     }
                     now = next;
+                    rep.maxChunkMs = Mathf.Max(rep.maxChunkMs, (float)(cpu.Elapsed.TotalMilliseconds - chunk0));
                     Progress01 = (float)((now - start) / System.Math.Max(1e-6, target - start));
 
-                    float w = (float)wall.Elapsed.TotalSeconds;
+                    float w = (float)((wall.Elapsed.TotalMilliseconds - stalledMs) / 1000.0);
                     if (w > HardBudgetSeconds && now < target)
                     {
                         // Out of time: the rest is dropped, not banked.
@@ -239,19 +284,30 @@ namespace SeaSick.Save
                         rep.dropped = true;
                         break;
                     }
-                    double done = now - start;
-                    if (done > chunk && OutpostLedger.CatchUpStride < 5)
+                    // Project the rest at the rate measured since the last
+                    // stride change, over at least two game days of work:
+                    // one slow first chunk (a settle, a GC) is not a rate.
+                    double done = now - rateFrom;
+                    if (done >= 8.0 * chunk && OutpostLedger.CatchUpStride < 5)
                     {
-                        double projected = w / done * (target - start);
+                        double projected = w + (w - rateW) / done * (target - now);
                         if (projected > SoftBudgetSeconds)
                         {
                             OutpostLedger.CatchUpStride = OutpostLedger.CatchUpStride < 2 ? 2 : 5;
                             rep.stride = OutpostLedger.CatchUpStride;
+                            rateFrom = now; rateW = w;
                         }
                     }
-                    if (frame.Elapsed.TotalMilliseconds > FrameBudgetMs)
+                    if (frame.Elapsed.TotalMilliseconds > budgetMs)
                     {
+                        cpu.Stop();
+                        gap.Restart();
                         yield return null;
+                        double g = gap.Elapsed.TotalMilliseconds;
+                        if (g > MaxFrameGapMs) stalledMs += g - MaxFrameGapMs;
+                        budgetMs = Mathf.Clamp(3f * Mathf.Min((float)g, MaxFrameGapMs), FrameBudgetMs, MaxFrameBudgetMs);
+                        cpu.Start();
+                        frames++;
                         frame.Restart();
                     }
                 }
@@ -260,6 +316,7 @@ namespace SeaSick.Save
             finally
             {
                 OutpostLedger.CatchUpStride = 1;
+                CampPath.NoBuildForRoutes = false;
                 TimeOfDay.Scrub(target);
                 for (int i = 0; i < camps.Count; i++)
                 {
@@ -273,8 +330,8 @@ namespace SeaSick.Save
                     if (prev != null && prev.Open) Merge(prev, rec);
                     L.away = prev ?? new OutpostLedger.Absence();
                 }
-                wall.Stop();
-                rep.wallSeconds = (float)wall.Elapsed.TotalSeconds;
+                rep.frames = frames;
+                rep.stalledSeconds = (float)(stalledMs / 1000.0);
                 rep.steps = OutpostLedger.StepsRun - steps0;
                 Running = false;
                 Progress01 = 1f;
@@ -283,6 +340,7 @@ namespace SeaSick.Save
 
             // Bodies back on the camps that were being watched; their own
             // "while you were gone" card would repeat this one.
+            double fin0 = cpu.Elapsed.TotalMilliseconds;
             foreach (var o in watched)
             {
                 if (o == null) continue;
@@ -290,6 +348,11 @@ namespace SeaSick.Save
                 o.ShowHands(true);
                 o.DismissReturn();
             }
+            wall.Stop();
+            cpu.Stop();
+            rep.finishMs = (float)(cpu.Elapsed.TotalMilliseconds - fin0);
+            rep.cpuMs = (float)cpu.Elapsed.TotalMilliseconds;
+            rep.wallSeconds = (float)wall.Elapsed.TotalSeconds;
 
             Debug.Log(Describe(rep, why));
             // A load saves once the restore has finished (the ship is not
@@ -352,7 +415,7 @@ namespace SeaSick.Save
         {
             var sb = new System.Text.StringBuilder();
             sb.Append($"AwayProgress ({why}): {Span(r.awaySeconds)} away{(r.capped ? " (capped at 12 h)" : "")}, ")
-              .Append($"{r.simSeconds / Mathf.Max(1f, TimeOfDay.DayLength):0.#} game days in {r.wallSeconds:0.00} s wall, ")
+              .Append($"{r.simSeconds / Mathf.Max(1f, TimeOfDay.DayLength):0.#} game days in {r.wallSeconds:0.00} s wall ({r.cpuMs:0} ms CPU over {r.frames} frames: setup {r.setupMs:0}, worst chunk {r.maxChunkMs:0.0}, bodies back {r.finishMs:0}; stalled {r.stalledSeconds:0.0} s), ")
               .Append($"{r.steps} ledger steps, stride {r.stride}{(r.dropped ? ", REST DROPPED (hard budget)" : "")}");
             foreach (var c in r.camps)
             {

@@ -79,7 +79,7 @@ namespace SeaSick.UI.Sheets
 
             var foot = StationPage.Text(
                 (r.capped ? "Time away counts up to 12 h. " : "") + "Raids wait for you."
-                + $"  ({r.wallSeconds:0.0} s to catch up{(r.stride > 1 ? $", step ×{r.stride}" : "")}{(r.dropped ? ", cut short" : "")})",
+                + $"  ({r.Timing})",
                 "st-line");
             foot.AddToClassList("st-muted");
             foot.style.marginTop = 10f;
