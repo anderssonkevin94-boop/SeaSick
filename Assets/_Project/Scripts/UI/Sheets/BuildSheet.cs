@@ -132,6 +132,7 @@ namespace SeaSick.UI.Sheets
             public Label name, tag, blurb, copies;
             public VisualElement costLine;
             public CostSlot[] costs;
+            public Button pin;
             public BuildPlan plan;
             public State state;
             public Action custom;
@@ -279,6 +280,18 @@ namespace SeaSick.UI.Sheets
             c.costLine.Add(c.copies);
             words.Add(c.costLine);
             c.root.Add(words);
+
+            // "Set as goal" on a short card (`GoalPin.SetBuild`: the next
+            // copy becomes the camp's goal, chased on the overview). A button
+            // inside the card's button: its press is stopped here so the
+            // card itself never sees it and does not start siting.
+            c.pin = new Button(() => TogglePin(c)) { text = "Set as goal" };
+            c.pin.AddToClassList("cp-pin");
+            c.pin.RegisterCallback<PointerDownEvent>(e => e.StopPropagation());
+            c.pin.RegisterCallback<PointerUpEvent>(e => e.StopPropagation());
+            c.pin.RegisterCallback<ClickEvent>(e => e.StopPropagation());
+            c.pin.style.display = DisplayStyle.None;
+            c.root.Add(c.pin);
             into.Add(c.root);
             return c;
         }
@@ -297,6 +310,14 @@ namespace SeaSick.UI.Sheets
             if (tabButtons == null) return;
             for (int i = 0; i < tabButtons.Length; i++)
                 tabButtons[i].EnableInClassList("cp-tab--on", i == tab);
+        }
+
+        void TogglePin(Card c)
+        {
+            if (outpost == null || c.plan.id == null) return;
+            if (GoalPin.IsBuildPinned(outpost, c.plan.id)) GoalPin.Clear(outpost);
+            else GoalPin.SetBuild(outpost, c.plan.id);
+            Refresh();
         }
 
         void Tap(Card c)
@@ -390,6 +411,7 @@ namespace SeaSick.UI.Sheets
                 c.state = State.Locked;
                 c.Look(State.Locked);
                 c.Texts(Cap(p.label), "campfire " + RecipeGraph.Roman(need), null, p.blurb ?? "", null);
+                c.pin.style.display = DisplayStyle.None;
             }
             bool anyLocked = locked.Count > 0;
             lockedEyebrow.style.display = anyLocked ? DisplayStyle.Flex : DisplayStyle.None;
@@ -450,6 +472,16 @@ namespace SeaSick.UI.Sheets
                 default: tag = top > 1 ? "full" : "built"; tone = null; break;
             }
             c.Texts(Cap(p.label), tag, tone, p.blurb ?? "", copies);
+
+            bool pinned = GoalPin.IsBuildPinned(outpost, p.id);
+            bool showPin = st == State.Short || pinned;
+            c.pin.style.display = showPin ? DisplayStyle.Flex : DisplayStyle.None;
+            if (showPin)
+            {
+                string pt = pinned ? "Goal ✓" : "Set as goal";
+                if (c.pin.text != pt) c.pin.text = pt;
+                c.pin.EnableInClassList("cp-pin--on", pinned);
+            }
         }
 
         void BindDefence(OutpostLedger l, int timber)

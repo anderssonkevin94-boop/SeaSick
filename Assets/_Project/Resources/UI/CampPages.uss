@@ -106,6 +106,13 @@
 }
 .cp-root .cp-cost--short .cp-cost-q { color: rgb(246, 146, 128); }
 .cp-root .cp-copies { font-size: 12px; color: rgb(164, 210, 232); margin-left: 2px; }
+.cp-pin {
+    height: 44px; min-width: 64px; padding: 0 10px; margin: 0 0 0 8px; flex-shrink: 0; white-space: normal;
+    border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 10px; font-size: 12px;
+    background-color: rgb(19, 34, 46); color: rgb(164, 210, 232); -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-pin--on { border-color: rgb(159, 224, 194); color: rgb(159, 224, 194); }
 
 /* --- People: one row per hand --- */
 .cp-hand {
