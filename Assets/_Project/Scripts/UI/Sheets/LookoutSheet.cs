@@ -69,6 +69,7 @@ namespace SeaSick.UI.Sheets
         // --- header -------------------------------------------------------------
 
         WatchTiles.Head head;
+        string pillWho = "\0";
 
         public VisualElement BuildHeader()
         {
@@ -86,7 +87,18 @@ namespace SeaSick.UI.Sheets
             var post = SheetBits.Lookout(l);
             if (towers <= 0) head.SetPill("No tower", StationPage.PillWait);
             else if (post == null) head.SetPill("Nobody on watch", StationPage.PillBad);
-            else head.SetPill(post.name + " on watch", StationPage.PillGood);
+            else head.SetPill(post.name + " on watch ›", StationPage.PillGood);
+            // **The lookout is selectable from his tower's card (2026-09-27).**
+            // A tap on the tower in the world opens this card, not him (he is
+            // posted here, `Hand.VillagerOverBuilding`), so his name on the
+            // pill opens his sheet -- the same one a tap on his body does.
+            string who = post != null ? post.name : null;
+            if (who != pillWho)
+            {
+                pillWho = who;
+                head.PillTap = who == null ? null
+                    : (System.Action)(() => Sheets.Open(new HandSheet(outpost, who)));
+            }
         }
 
         // --- the page -------------------------------------------------------------

@@ -232,6 +232,43 @@ namespace SeaSick.UI
         /// every frame costs two `WorldToScreenPoint`s a body and nothing
         /// else.
         public Crew.CrewAgent PickAt(Vector2 screen, bool forPickup)
+            => PickAt(screen, forPickup, false);
+
+        /// **Somebody right under the finger, 2026-09-27**: the tight,
+        /// zoom-aware radius round the body (`PickRadius*`), never the
+        /// generous follow radius, and never refused for being small on
+        /// screen. What a tap on a building asks before the building wins:
+        /// a villager who is NOT posted at that building, stood on or by
+        /// its footprint, is picked only when the finger is on HIM
+        /// (`WorldPicker.Tap`, `IslandInput.RegisterTap`).
+        public Crew.CrewAgent PickNear(Vector2 screen) => PickAt(screen, false, true);
+
+        /// **Is this villager posted at this building?** Kevin's tap rule
+        /// (2026-09-27): "when pressing on a building someone is STATIONED
+        /// at, the building wins" -- he is reachable from its menu. Anybody
+        /// else stood on or by it is not, so a tap on HIM picks him.
+        public bool PostedAt(Crew.CrewAgent a, Building b)
+        {
+            if (a == null || b == null) return false;
+            var camp = b.GetComponentInParent<Outpost>();
+            if (camp == null) camp = Camp;
+            if (camp == null) return false;
+            var row = camp.HandNamed(a.DisplayName);
+            return row != null && ReferenceEquals(camp.WorkplaceOf(row), b);
+        }
+
+        /// **Who a tap on `b` is really about** (null = the building): the
+        /// villager right under the finger (`PickNear`) unless he is posted
+        /// at `b`. Shared by `WorldPicker.Tap` and `IslandInput.RegisterTap`
+        /// so the sheet and the camera follow agree.
+        public Crew.CrewAgent VillagerOverBuilding(Vector2 screen, Building b)
+        {
+            var near = PickNear(screen);
+            if (near == null) return null;
+            return b != null && PostedAt(near, b) ? null : near;
+        }
+
+        Crew.CrewAgent PickAt(Vector2 screen, bool forPickup, bool tight)
         {
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return null;
             var cam = Lens();
@@ -250,6 +287,7 @@ namespace SeaSick.UI
             scanPicked = null;
             float h = Screen.height;
 
+            scanTight = tight;
             Scan(parked, screen, forPickup, cam, isleAt, isleR, h, false);
 
             // Crew on her deck are pickable too — that IS how somebody gets
@@ -266,6 +304,7 @@ namespace SeaSick.UI
 
         float scanBest;
         Crew.CrewAgent scanPicked;
+        bool scanTight;
 
         void Scan(Crew.CrewAgent[] list, Vector2 screen, bool forPickup, Camera cam,
             Vector3 isleAt, float isleR, float screenH, bool shipCrew)
@@ -289,7 +328,7 @@ namespace SeaSick.UI
                 float tall = Mathf.Abs(head.y - foot.y);
                 if (forPickup && tall < Feel.PickMinScreen01 * screenH) continue;
 
-                float limit = forPickup
+                float limit = forPickup || scanTight
                     ? Mathf.Clamp(Feel.PickRadiusOfHeight * tall,
                         Feel.PickRadiusMin01 * screenH, Feel.PickRadiusMax01 * screenH)
                     : Feel.FollowRadius01 * screenH;

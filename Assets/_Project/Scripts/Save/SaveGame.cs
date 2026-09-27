@@ -197,6 +197,7 @@ namespace SeaSick.Save
             d.worldSeed = pop.world != null ? pop.world.seed : 0;
             d.savedAt = System.DateTime.Now.ToString("yyyy-MM-dd HH:mm");
             d.timeSeconds = TimeOfDay.Seconds;
+            d.savedAtUtcTicks = System.DateTime.UtcNow.Ticks;
 
             // --- the ship -------------------------------------------------
             var s = d.ship;
@@ -523,6 +524,13 @@ namespace SeaSick.Save
             // now that it is the right one. See Outpost.DryDockRestore.cs.
             Outpost.ResiteOrphanDryDocks();
 
+            // 5d. **Time away** (2026-09-27): the real time since this save
+            // was written, capped at 12 h, played through every camp's own
+            // ledger -- before the anchor step, so no camp is watched yet
+            // and every hand is an invisible walker. Raids stay frozen.
+            // Saves itself when done. See AwayProgress.
+            yield return AwayProgress.FromSave(data);
+
             // 6. The anchor, last, so the camp she lies off is awake to see
             // her arrive. She may have drifted a frame; put her back first.
             if (anchor != null)
@@ -545,6 +553,7 @@ namespace SeaSick.Save
             LastRestoreOk = true;
             LastRestoreNote = "loaded " + Summary(data);
             Restoring = false;
+            AwayProgress.FlushSave();   // time away played: save it now
             Debug.Log("SaveGame: loaded <- " + Path + "   " + Summary(data)
                 + "   (" + restored + " of " + data.outposts.Count + " outposts)");
         }

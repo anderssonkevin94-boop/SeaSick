@@ -4086,8 +4086,32 @@ namespace SeaSick.World
             => Raise(plan, at, AutoYaw(at));
 
         public Building Raise(BuildPlan plan, Vector3 at, float yaw)
+            => Raise(plan, at, yaw, force: false);
+
+        /// **`force` is Kevin's "buildings never move" rule (2026-09-27).**
+        /// `Adopt` calls this with `force: true` for every saved row: the
+        /// saved spot is never refused and never spiral-searched away from.
+        /// If the ground no longer agrees with it (a terrain change, a new
+        /// overlap), it stands there anyway and a warning says why -- a
+        /// player-chosen NEW placement still goes through `force: false`
+        /// (plain `Raise(plan, at, yaw)`), which may still refuse.
+        public Building Raise(BuildPlan plan, Vector3 at, float yaw, bool force)
         {
-            if (!CanPlace(plan, at, yaw, out _, out float lo, out float hi)) return null;
+            float lo, hi;
+            if (!CanPlace(plan, at, yaw, out _, out lo, out hi))
+            {
+                if (!force) return null;
+                // `relaxSlope: true` here only to make sure this NEVER fails --
+                // the saved spot stands regardless of steepness or beach; the
+                // corner heights are still sampled honestly so the building
+                // doesn't float or sink.
+                if (!Corners(at, Quaternion.Euler(0f, yaw, 0f), plan.footprint.x, plan.footprint.y,
+                        true, out lo, out hi, out _))
+                    lo = hi = at.y;
+                Debug.LogWarning("Outpost.Raise: " + plan.label + " stood at its saved spot ("
+                    + at.x.ToString("F0") + "," + at.z.ToString("F0")
+                    + ") despite failing CanPlace -- buildings never move (Kevin's rule, 2026-09-27).");
+            }
 
             float len = plan.footprint.x, wid = plan.footprint.y;
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
@@ -4226,14 +4250,20 @@ namespace SeaSick.World
                 // (see Outpost.DryDockRestore.cs).
                 if (SkipExtraDryDockRow(plan)) { adoptLevel = 1; continue; }
                 adoptingRows = true;
-                var b = Raise(plan, at, r.yaw);
+                // **Kevin's rule (2026-09-27): saved buildings never move.**
+                // `force: true` means this NEVER falls back to the spiral and
+                // NEVER drops the row -- an invalid saved spot still stands,
+                // exactly where it was saved, with a warning logged instead.
+                var b = Raise(plan, at, r.yaw, force: true);
                 adoptingRows = false;
-                if (b == null)
+                // Self-check: X/Z must match the saved spot exactly (Y is
+                // legitimately re-sampled off the terrain's own height field,
+                // not "moved"). This is the guarantee `force` exists for.
+                if (b != null)
                 {
-                    b = Raise(plan);
-                    Debug.LogWarning("Outpost.Adopt: " + plan.label + " would not stand at ("
-                        + r.x.ToString("F0") + "," + r.z.ToString("F0") + ") any more -- "
-                        + (b != null ? "re-sited by the spiral" : "DROPPED"));
+                    float dx = b.transform.position.x - at.x, dz = b.transform.position.z - at.z;
+                    System.Diagnostics.Debug.Assert(dx * dx + dz * dz < 0.0001f,
+                        "Outpost.Adopt: " + plan.label + " landed off its saved spot");
                 }
                 adoptLevel = 1;
             }

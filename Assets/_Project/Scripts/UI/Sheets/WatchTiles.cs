@@ -113,7 +113,11 @@ namespace SeaSick.UI.Sheets
 
                 pill = Box("st-pill");
                 pillText = StationPage.Text("", "st-pill-text");
+                pillText.pickingMode = PickingMode.Ignore;
                 pill.Add(pillText);
+                // Tappable when the card says so (`PillTap`): the lookout's
+                // pill opens his own sheet (2026-09-27).
+                pill.RegisterCallback<ClickEvent>(_ => PillTap?.Invoke());
                 Root.Add(pill);
 
                 var close = new Button(() => Sheets.Close()) { text = "" };
@@ -124,6 +128,9 @@ namespace SeaSick.UI.Sheets
             }
 
             public void SetSub(string s) => Set(sub, s);
+
+            /// What a tap on the pill does, or null for nothing.
+            public System.Action PillTap;
 
             public void SetPill(string text, int kind)
             {

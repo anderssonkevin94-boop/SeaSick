@@ -310,6 +310,12 @@ public static class RunProbe
     public static void ViewDesk() => CallEditor("DesktopGameView");
     public static void ViewPhone() => CallEditor("PortraitGameView");
 
+    // --- time away (2026-09-27) --------------------------------------------
+    // In Play with a game loaded: play `hours` of app-closed time through
+    // every camp (AwayProgress), log wall time + per-camp summary, write a
+    // scratch save (persistentDataPath/away-scratch.json), open the card.
+    public static void AwayHours(float hours) => SeaSick.Save.AwayProgress.Simulate(hours);
+
     // --- save-folder test redirect (2026-09-26) ------------------------------
     // Set BEFORE `editor_play`, never after: `GameBoot` can read/migrate
     // through `SaveSlots` on the very first frames of Play, before any

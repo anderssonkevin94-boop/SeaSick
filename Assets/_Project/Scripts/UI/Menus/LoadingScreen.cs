@@ -107,6 +107,8 @@ namespace SeaSick.UI.Menus
         float fullSince = -1f;
         bool fadingOut;
         bool done;
+        /// Faded out: nothing covers the game any more (the time-away card waits for this).
+        public bool Finished => done;
 
         void Awake()
         {
@@ -220,6 +222,7 @@ namespace SeaSick.UI.Menus
             if (computed > overallProgress) overallProgress = computed;
 
             string label = worldP < 1f ? "Raising islands…"
+                : AwayProgress.Running ? $"Your camps kept working… {Mathf.RoundToInt(AwayProgress.Progress01 * 100f)}%"
                 : restoreProgress < 1f ? "Loading your voyage…"
                 : "Launching the ship…";
             stageLabel.text = label;

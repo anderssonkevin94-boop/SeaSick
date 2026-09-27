@@ -49,6 +49,10 @@ namespace SeaSick.Save
         /// is asked to catch up.
         public double timeSeconds;
 
+        /// `DateTime.UtcNow.Ticks` when written (2026-09-27, time away). 0 on
+        /// a save from before the field: no time away is played for it.
+        public long savedAtUtcTicks;
+
         public ShipSave ship = new ShipSave();
 
         /// The hold, per resource.

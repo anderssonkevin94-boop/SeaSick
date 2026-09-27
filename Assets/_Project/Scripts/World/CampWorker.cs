@@ -2253,13 +2253,27 @@ namespace SeaSick.World
             Vector3 d = to - here;
             d.y = 0f;
             float dist = d.magnitude;
-            if (dist < 0.35f) { ClearRoute(); return true; }
+            if (dist < 0.35f) { ClearRoute(); ResetStall(to, 0f); return true; }
+
+            // **The stall guard (2026-09-27).** Kevin's phone: a hand stood
+            // motionless against a wall tower's ladder, between the runs, for
+            // good -- the wall guard below pins a body in the corner two
+            // runs make and has nothing to slide along, and nothing ever
+            // gave up. Every walk now watches its own progress: no metre
+            // gained on the SAME target for `StallSeconds` and he steps out
+            // of wherever he is wedged, re-plans, and says why on his sheet
+            // (`bodyBlocked` -> `StallReason`); close enough and clear of any
+            // wall, the errand counts as reached where he stands.
+            if (TickStall(here, to, dist, dt)) { ClearRoute(); return true; }
+            if (escapeLeft > 0f) { StepEscape(here, dt); return false; }
 
             // Where to head THIS frame: the next corner of the route if there
             // is one, otherwise the target itself — which is exactly the
             // straight line this used to be, and is what a failed plan falls
             // back to.
             Vector3 aim = NextCorner(here, to, dist, dt);
+            if (stallNote != null && row != null && string.IsNullOrEmpty(row.bodyBlocked))
+                row.bodyBlocked = stallNote;
             // The leg up (or down) a ladder chain: the route kept both of
             // its ends as corners (`CampPath.Route`).
             if (climb.TryBegin(camp, transform, here, aim, dt)) return false;
@@ -2335,6 +2349,121 @@ namespace SeaSick.World
             transform.position = next;
             Face(leg, dt);
             return false;
+        }
+
+        // --- the stall guard -------------------------------------------------------
+
+        /// Seconds without a metre of progress toward the same target before
+        /// a walker counts as stuck.
+        const float StallSeconds = 5f;
+        /// Stuck this close to the target, with no wall between, is arrived.
+        const float StallArrive = 2.5f;
+        /// After this many escapes that did not help, a target within
+        /// `StallGiveUpArrive` (no wall between) is called reached anyway.
+        const int StallEscapesBeforeGiveUp = 3;
+        const float StallGiveUpArrive = 5f;
+        const float EscapeSeconds = 0.8f;
+
+        Vector3 stallFor;
+        float stallBest, stallFor_t;
+        int stallEscapes;
+        float escapeLeft;
+        Vector3 escapeDir;
+        /// Shown on the hand's sheet while he is stuck (`bodyBlocked`).
+        string stallNote;
+
+        void ResetStall(Vector3 to, float dist)
+        {
+            stallFor = to;
+            stallBest = dist;
+            stallFor_t = 0f;
+            stallEscapes = 0;
+            escapeLeft = 0f;
+            stallNote = null;
+        }
+
+        /// True when the errand should count as reached where he stands.
+        bool TickStall(Vector3 here, Vector3 to, float dist, float dt)
+        {
+            float mx = to.x - stallFor.x, mz = to.z - stallFor.z;
+            if (mx * mx + mz * mz > 1f) { ResetStall(to, dist); return false; }
+            if (dist < stallBest - 1f)
+            {
+                stallBest = dist;
+                stallFor_t = 0f;
+                stallEscapes = 0;
+                stallNote = null;
+                return false;
+            }
+            if (escapeLeft > 0f) return false;
+            stallFor_t += dt;
+            if (stallFor_t < StallSeconds) return false;
+            stallFor_t = 0f;
+
+            bool walled = CampPath.Crosses(camp, here, to, CampPath.Walker.Hand);
+            // Walled off with no way round already says so ("needs a gate",
+            // `NextCorner`) and waits for one; stepping about would not help.
+            if (walled && !hasRoute && routeAge < 0f) return false;
+            if (!walled && (dist < StallArrive
+                || (stallEscapes >= StallEscapesBeforeGiveUp && dist < StallGiveUpArrive)))
+            {
+                ResetStall(to, 0f);
+                return true;
+            }
+
+            // Wedged: step out, then ask for a fresh route.
+            stallEscapes++;
+            stallBest = dist;
+            stallNote = "stuck — can't get through to where he's going";
+            if (PickEscape(here, to, out escapeDir)) escapeLeft = EscapeSeconds;
+            hasRoute = false;
+            route.Clear();
+            routeAt = 0;
+            if (routeAge > 0f) routeAge = 0f;   // !hasRoute + age >= 0: re-planned next step
+            return false;
+        }
+
+        /// The free direction out of a wedge: of eight, the one whose stride
+        /// is not refused by a wall or the slope and lands furthest from any
+        /// wall line, ties toward the target.
+        bool PickEscape(Vector3 here, Vector3 to, out Vector3 dir)
+        {
+            dir = Vector3.zero;
+            Vector3 toT = to - here; toT.y = 0f;
+            if (toT.sqrMagnitude > 1e-6f) toT.Normalize();
+            float best = float.MinValue;
+            var walls = camp.Walls;
+            for (int k = 0; k < 8; k++)
+            {
+                float t = k * Mathf.PI * 0.25f;
+                var d = new Vector3(Mathf.Sin(t), 0f, Mathf.Cos(t));
+                Vector3 q = here + d * 1.2f;
+                if (CampPath.Blocks(camp, here, q, CampPath.Walker.Hand, CampPath.WallClearance, out _)) continue;
+                if (!Walkability.MayStep(camp, here, q, Walkability.Feet.Man)) continue;
+                float clear = 3f;
+                if (walls != null)
+                    for (int i = 0; i < walls.Count; i++)
+                    {
+                        var w = walls[i];
+                        if (w == null || w.Breached) continue;
+                        clear = Mathf.Min(clear, w.FlatDistanceTo(q));
+                    }
+                float score = clear + 0.25f * Vector3.Dot(d, toT);
+                if (score > best) { best = score; dir = d; }
+            }
+            return best > float.MinValue;
+        }
+
+        void StepEscape(Vector3 here, float dt)
+        {
+            escapeLeft -= dt;
+            Vector3 next = here + escapeDir * (Speed * dt);
+            if (CampPath.Blocks(camp, here, next, CampPath.Walker.Hand, CampPath.WallClearance, out _)
+                || !Walkability.MayStep(camp, here, next, Walkability.Feet.Man))
+            { escapeLeft = 0f; return; }
+            next.y = camp.GroundAt(next);
+            transform.position = next;
+            Face(escapeDir, dt);
         }
 
         // --- routing -----------------------------------------------------------

@@ -64,7 +64,11 @@ namespace SeaSick.UI.Sheets
                     into.Add(new Alert { text = "Food · under a day", tone = Tone.Bad, open = () => Larder(camp) });
             }
 
-            if (l.HasWatchtower && !l.LookoutPosted)
+            // Nobody ASSIGNED (2026-09-27), not "guard below full": a posted
+            // lookout in low spirits guards at under full strength
+            // (`OutpostLedger.Guard`), and the alert said "Nobody on watch"
+            // while he stood at the tower -- his sheet names the slowness.
+            if (l.HasWatchtower && SheetBits.Lookout(l) == null)
                 into.Add(new Alert { text = "Nobody on watch", tone = Tone.Warn, open = () => new LookoutSheet(camp) });
 
             // One chip per stuck hand -- the hand is where the fix is (his

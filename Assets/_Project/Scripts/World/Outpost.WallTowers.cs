@@ -339,8 +339,26 @@ namespace SeaSick.World
         /// every run leaving the node and on the fire's side of each, just
         /// outside the footprint -- so the man is never put on the wall line
         /// or outside the ring. Falls back to toward-the-fire.
+        ///
+        /// **And a spot he can actually stand on (2026-09-27).** Kevin's
+        /// phone: a hand stood motionless against a wall tower's ladder,
+        /// between the runs, forever. The door was only ever tested against
+        /// the runs' ANGLES: at 1.9 m and 30° off a run it sat under a metre
+        /// from the palisade, in a cell the run's supercover had blocked (or
+        /// on ground too steep -- towers go on stilts on slopes), so the
+        /// route ended one cell short and the last straight leg ran him into
+        /// the corner the two runs make at the tower, where the wall guard
+        /// pinned him with nothing to slide along. Now each candidate
+        /// direction is also tried a stride and two strides further out, and
+        /// a spot counts only if it keeps `DoorWallClear` off every wall line
+        /// and is open ground on the path grid. Cached a second per tower:
+        /// `CampWorker.WorkSpot` asks every frame.
         public Vector3 WallTowerDoor(Building b)
         {
+            int key = b.GetInstanceID();
+            if (doorCache.TryGetValue(key, out var hit)
+                && Time.time < hit.until && hit.walls == walls.Count) return hit.at;
+
             Vector3 node = b.transform.position;
             Vector3 toFire = CampCentre - node;
             toFire.y = 0f;
@@ -361,6 +379,7 @@ namespace SeaSick.World
             Vector3 bestDir = toFire;
             float bestAngle = float.MaxValue;
             const int Dirs = 32;
+            doorDirs.Clear();
             for (int k = 0; k < Dirs; k++)
             {
                 float t = k * Mathf.PI * 2f / Dirs;
@@ -375,11 +394,46 @@ namespace SeaSick.World
                 }
                 if (!ok) continue;
                 float ang = Vector3.Angle(d, toFire);
+                doorDirs.Add((ang, d));
                 if (ang < bestAngle) { bestAngle = ang; bestDir = d; }
             }
+            doorDirs.Sort((x, y) => x.ang.CompareTo(y.ang));
+
             Vector3 spot = node + bestDir * reach;
             spot.y = GroundAt(spot);
+            var map = GetComponent<CampPath>();
+            bool found = false;
+            for (int step = 0; step < 3 && !found; step++)
+                for (int k = 0; k < doorDirs.Count && !found; k++)
+                {
+                    Vector3 p = node + doorDirs[k].dir * (reach + step * 0.8f);
+                    if (!DoorClearOfWalls(p)) continue;
+                    if (map != null && map.Built && !map.WalkableAt(p, CampPath.Walker.Hand)) continue;
+                    p.y = GroundAt(p);
+                    spot = p;
+                    found = true;
+                }
+            doorCache[key] = (spot, Time.time + 1f, walls.Count);
             return spot;
         }
+
+        /// Metres a wall tower's door keeps off every wall line: the walk
+        /// guard's clearance (`CampPath.WallClearance`) with room to turn.
+        const float DoorWallClear = 1.0f;
+
+        bool DoorClearOfWalls(Vector3 p)
+        {
+            for (int i = 0; i < walls.Count; i++)
+            {
+                var w = walls[i];
+                if (w == null || w.Breached) continue;
+                if (w.FlatDistanceTo(p) < DoorWallClear) return false;
+            }
+            return true;
+        }
+
+        readonly List<(float ang, Vector3 dir)> doorDirs = new List<(float, Vector3)>(32);
+        readonly Dictionary<int, (Vector3 at, float until, int walls)> doorCache =
+            new Dictionary<int, (Vector3, float, int)>();
     }
 }

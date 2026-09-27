@@ -400,8 +400,14 @@ namespace SeaSick.CameraRig
                     // resolved what is under this point for its own cursor;
                     // ask it rather than resolving a second answer that
                     // could disagree.
+                    //
+                    // Refined 2026-09-27 (`Hand.VillagerOverBuilding`): the
+                    // building wins only over the hands POSTED at it; anybody
+                    // else right under the cursor is followed instead.
                     var t = hand.Preview(pos);
-                    if (t.building != null) BuildMenuRequest.Open(hand.Camp, t.building);
+                    var over = t.building != null ? hand.VillagerOverBuilding(pos, t.building) : null;
+                    if (over != null) cam.FollowThis(over.transform);
+                    else if (t.building != null) BuildMenuRequest.Open(hand.Camp, t.building);
                     // A tap on the DRAWING is a question about the drawing:
                     // what it still wants, and whether to give it up or put
                     // it somewhere else. Kevin, 2026-09-21.

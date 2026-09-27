@@ -2272,10 +2272,21 @@ namespace SeaSick.World
         ///
         /// Nothing here touches the scene, the terrain or a MonoBehaviour, so
         /// it works for an island that is not loaded — which is the point.
+        /// Step multiple for `AwayProgress` only; see `Tick`. Never saved.
+        public static int CatchUpStride = 1;
+
+        /// Steps run by every ledger this session (the catch-up's cost meter).
+        public static long StepsRun;
+
         public void Tick(double nowSeconds)
         {
             float dayLength = Mathf.Max(0.0001f, TimeOfDay.DayLength);
-            double quantum = QuantumDays * dayLength;
+            // **Time away (2026-09-27)**: `AwayProgress` may widen the step to
+            // a whole multiple of the quantum ONLY when a long catch-up would
+            // blow its wall-clock budget. Whole multiples keep `lastTicked` on
+            // the quantum grid; 1 (the default) is the game's only step.
+            int stride = CatchUpStride < 1 ? 1 : CatchUpStride;
+            double quantum = QuantumDays * stride * dayLength;
             if (quantum <= 0.0) return;
 
             double elapsed = nowSeconds - lastTicked;
@@ -2299,7 +2310,8 @@ namespace SeaSick.World
             const long MaxSteps = 50000;
             long run = steps > MaxSteps ? MaxSteps : steps;
 
-            for (long i = 0; i < run; i++) Step(QuantumDays);
+            for (long i = 0; i < run; i++) Step(QuantumDays * stride);
+            StepsRun += run;
 
             // Advance the FULL elapsed quanta even when the run was clamped,
             // or the ledger would owe the same debt again on the next call and

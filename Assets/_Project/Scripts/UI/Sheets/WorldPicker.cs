@@ -114,6 +114,14 @@ namespace SeaSick.UI.Sheets
             // volume, so the ray goes on through it; a SOLID collider with no
             // sheet (the ground, a rock) is something the eye sees in front,
             // and the tap stops there.
+            //
+            // **Refined 2026-09-27: the building wins only over the people
+            // POSTED at it.** Kevin: "when pressing on a building someone is
+            // STATIONED at, the building wins" -- they are one tap away in
+            // its menu. A villager who is NOT posted there (walking past,
+            // stood by it, stuck against it) is reachable from nowhere else,
+            // so a tap right on HIS body (the tight pick radius, not the
+            // generous follow radius) is about him (`Hand.VillagerOverBuilding`).
             var ray = cam.ScreenPointToRay(screen);
             int n = Physics.RaycastNonAlloc(ray, Hits, 6000f, ~0, QueryTriggerInteraction.Collide);
             System.Array.Sort(Hits, 0, n, NearestFirst.Instance);
@@ -122,7 +130,16 @@ namespace SeaSick.UI.Sheets
                 var col = Hits[i].collider;
                 if (col == null) continue;
                 var sheet = Sheets.TryCreateFor(col);
-                if (sheet != null) { Sheets.Open(sheet); return; }
+                if (sheet != null)
+                {
+                    var h0 = Hand.Instance;
+                    var man = h0 != null
+                        ? h0.VillagerOverBuilding(screen, col.GetComponentInParent<World.Building>())
+                        : null;
+                    var his = man != null ? Sheets.TryCreateFor(man) : null;
+                    Sheets.Open(his ?? sheet);
+                    return;
+                }
                 if (!col.isTrigger) break;
             }
 

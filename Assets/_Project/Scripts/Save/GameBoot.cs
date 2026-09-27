@@ -260,7 +260,13 @@ namespace SeaSick.Save
         }
 
         void OnApplicationQuit() => SaveGame.Autosave("quit");
-        void OnApplicationPause(bool paused) { if (paused) SaveGame.Autosave("paused"); }
+        void OnApplicationPause(bool paused)
+        {
+            // Time away (2026-09-27): a resume from the background plays the
+            // real time it was suspended through the camps (AwayProgress).
+            if (paused) { SaveGame.Autosave("paused"); AwayProgress.NotePaused(); }
+            else AwayProgress.Resumed(this);
+        }
 
         /// The interactive Home screen itself is `GameMenus.ShowHome` (UI
         /// Toolkit, `Scripts/UI/Menus/HomeScreen.cs`) now -- this only covers
