@@ -2321,56 +2321,6 @@ namespace SeaSick.World
             return 0;
         }
 
-        /// Start one builder's fetch for `site`: the first material it is
-        /// short of (timber, stone, brick -- `BuilderWants`' order) that has
-        /// a source -- the store, then a station rack, then (timber and stone
-        /// only) the island itself. False when nothing it wants can be got
-        /// or every unit it wants is already in somebody's arms.
-        bool StartSiteTrip(OutpostHand h, PendingBuild site)
-        {
-            for (int k = 0; k < 3; k++)
-            {
-                string res = k == 0 ? Res.Timber : k == 1 ? Res.Stone : Res.Brick;
-                int need = NetShort(site, res);
-                if (need <= 0) continue;
-                int cap = Mathf.Min(Res.Armful(res), need);
-
-                // The pile first (Kevin, 2026-09-20: *"they gathered logs for
-                // it but it never built"*): timber already cut is carried.
-                // (Nothing leaves a source until the PICKUP, 2026-09-27: the
-                // `*Free` counts leave out what other walkers are already
-                // on their way to fetch.)
-                int pileFree = StoreFree(res);
-                if (pileFree > 0)
-                {
-                    int n = Mathf.Min(cap, pileFree);
-                    StartTimedTrip(h, res, n, HaulPlace.Store, -1, HaulPlace.Site, -1, site);
-                    return true;
-                }
-                // Then a station's output rack (a240cdf): as good as the store.
-                if (stations != null)
-                    for (int i = 0; i < stations.Count; i++)
-                    {
-                        int free = RowFree(i, stations[i]?.Rack(res), false);
-                        if (free <= 0) continue;
-                        int n = Mathf.Min(cap, free);
-                        StartTimedTrip(h, res, n, HaulPlace.Station, i, HaulPlace.Site, -1, site);
-                        return true;
-                    }
-                // Then cut or quarry it. Brick has no seam: nobody quarries a
-                // brick out of a hillside.
-                if (res == Res.Brick) continue;
-                int standing = FieldFree(res);
-                if (standing <= 0) continue;
-                {
-                    int n = Mathf.Min(cap, standing);
-                    StartTimedTrip(h, res, n, HaulPlace.Field, -1, HaulPlace.Site, -1, site);
-                    return true;
-                }
-            }
-            return false;
-        }
-
         /// **One builder's share of a quantum**, spent down the queue oldest
         /// first: clear the plot, fetch its materials trip by trip, and --
         /// only once every one is IN -- stand it up. A hand whose site has
@@ -2927,7 +2877,7 @@ namespace SeaSick.World
         /// is short of something that exists somewhere to fetch. Otherwise
         /// the oldest unstocked site's shortfall, e.g. "needs 6 stone for
         /// the Hut — none in the store, no rock to quarry here". The same
-        /// tests `StartSiteTrip` makes, read without moving anything.
+        /// tests `FetchForSites` makes, read without moving anything.
         public string SiteShortfall()
         {
             if (sites == null) return null;
@@ -2959,7 +2909,7 @@ namespace SeaSick.World
 
         /// Is there any of this to fetch for a site: the store, a station's
         /// output rack, or (timber and stone) the ground. Mirrors the order
-        /// `StartSiteTrip` looks in.
+        /// `FetchForSites` looks in.
         bool SiteSourceExists(string res)
         {
             var pile = Store(res);

@@ -37,6 +37,24 @@ namespace SeaSick.World
         [System.NonSerialized] readonly Dictionary<OutpostHand, PendingBuild> workSite =
             new Dictionary<OutpostHand, PendingBuild>();
 
+        /// **Stuck-hand safeguard.** A DRIVEN body only walks toward a
+        /// clearing plot while it holds a claim on a tree/rock there
+        /// (`Outpost.ClaimClearing`, `CampWorker`); when every obstruction on
+        /// his plot is somebody else's (or already gone), the body parks
+        /// where it stands and never approaches -- so `WalkToPlot`'s reach
+        /// check fails forever and the ladder's sticky `workSite` would hold
+        /// him on a plot he can never work. Distinguishes that from an
+        /// ordinary approach (still walking, just not there yet) by whether
+        /// the body has actually MOVED since the last failed check; a hand
+        /// parked in the same spot for `StallLimit` consecutive ladder steps
+        /// is dropped back to the ladder so the next `LadderStep` picks again
+        /// (a fetch trip, a different plot, or the fire).
+        [System.NonSerialized] readonly Dictionary<OutpostHand, int> clearStall =
+            new Dictionary<OutpostHand, int>();
+        [System.NonSerialized] readonly Dictionary<OutpostHand, Vector3> clearStallPos =
+            new Dictionary<OutpostHand, Vector3>();
+        const int StallLimit = 4;
+
         static bool PlotWork(PendingBuild s) =>
             s != null && !s.Complete && (!s.Cleared || s.Stocked);
 
@@ -79,7 +97,36 @@ namespace SeaSick.World
                 if (site == null) return FetchForSites(h, true);   // 3. off the island
                 workSite[h] = site;
             }
-            if (!WalkToPlot(h, site, ref budget, scale)) return false;
+            if (!WalkToPlot(h, site, ref budget, scale))
+            {
+                // Stall guard: a driven body stuck outside reach of an
+                // uncleared plot (nothing left there for him to claim) never
+                // closes the distance on his own -- release him rather than
+                // hold the plot forever.
+                if (h.driven && !site.Cleared)
+                {
+                    Vector3 at = HandAt(h);
+                    bool moved = !clearStallPos.TryGetValue(h, out var last) ||
+                        Vector3.Distance(at, last) > 0.05f;
+                    clearStallPos[h] = at;
+                    if (moved) clearStall.Remove(h);
+                    else
+                    {
+                        clearStall.TryGetValue(h, out int stalls);
+                        if (++stalls > StallLimit)
+                        {
+                            clearStall.Remove(h);
+                            clearStallPos.Remove(h);
+                            workSite.Remove(h);
+                            return budget > Eps;
+                        }
+                        clearStall[h] = stalls;
+                    }
+                }
+                return false;
+            }
+            clearStall.Remove(h);
+            clearStallPos.Remove(h);
             if (budget <= Eps) return false;
             if (!site.Cleared)
             {
