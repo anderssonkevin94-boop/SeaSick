@@ -242,7 +242,8 @@ namespace SeaSick.UI
             // 2026-09-26's review caught "Yard >" poking into the Pause/Save
             // card from underneath.
             if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
-                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None
+                || SeaSick.UI.Sheets.SeaLedger.IsOpen) return;
             int u = HudLayout.Unit;
             float w = Mathf.Min(HudLayout.Safe.width * 0.46f, u * 26f);
             float pad = HudLayout.Pad;

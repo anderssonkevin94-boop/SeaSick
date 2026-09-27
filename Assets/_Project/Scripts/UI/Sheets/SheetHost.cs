@@ -53,6 +53,7 @@ namespace SeaSick.UI.Sheets
         ChartInstrument chart;
         SelectionRing ring;
         MidnightLandHud land;
+        SeaLedger sea;
         bool midnight;
         readonly BuildingSheetFocus buildingFocus = new BuildingSheetFocus();
 
@@ -139,6 +140,9 @@ namespace SeaSick.UI.Sheets
             // them.
             chart = new ChartInstrument(root);
             land = new MidnightLandHud(root);
+            // The sea twin of the land drawer: added after it, so it draws
+            // over everything else in this document too.
+            sea = new SeaLedger(root);
             if (ring == null) ring = gameObject.AddComponent<SelectionRing>();
             chromeBuilt = true;
         }
@@ -682,6 +686,7 @@ namespace SeaSick.UI.Sheets
             runtimePanel.referenceResolution = MidnightLandHud.Active && !HudLayout.Wide
                 ? new Vector2Int(430, 932) : originalResolution;
             land.Tick(root);
+            sea.Tick(root);
             var panelSize = new Vector2(root.resolvedStyle.width, root.resolvedStyle.height);
             if (midnight != MidnightLandHud.Active || (panelSize - lastPanelSize).sqrMagnitude > 1f)
             {

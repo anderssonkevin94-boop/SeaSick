@@ -58,6 +58,7 @@ namespace SeaSick.UI
         {
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
+            if (SeaSick.UI.Sheets.SeaLedger.IsOpen) return;   // IMGUI would draw over the sea drawer
             // IMGUI calls OnGUI once per EVENT, not once per frame: Layout,
             // Repaint, and one more for every MouseMove the editor or the
             // player generates. This panel only draws, so everything it does

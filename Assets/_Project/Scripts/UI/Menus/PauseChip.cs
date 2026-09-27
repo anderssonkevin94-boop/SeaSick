@@ -46,6 +46,18 @@ namespace SeaSick.UI.Menus
             if (ShipyardModal.IsOpen) return;
             if (GameMenus.Current != GameMenus.Mode.None) return;    // a menu already owns the screen
 
+            // **The ledger at sea (2026-09-27)**: the sea twin of the land
+            // drawer's ☰, top of the rail while she is under way. Takes the
+            // Settings slot, whose tab only shows while its drawer is open --
+            // and then this steps aside, so the two never share it.
+            if (SeaSick.UI.Sheets.SeaLedger.Available && !SettingsPanel.IsOpen && !SeaSick.UI.Sheets.SeaLedger.IsOpen)
+            {
+                var led = HudLayout.Place(HudLayout.Slot.RailSettings, HudLayout.RailWidth, HudLayout.RailButtonHeight);
+                UIBlocker.Block(led);
+                if (GUI.Button(led, "Ledger", UITheme.Button)) SeaSick.UI.Sheets.SeaLedger.Toggle();
+            }
+            if (SeaSick.UI.Sheets.SeaLedger.IsOpen) return;   // IMGUI would draw over the drawer
+
             var tab = HudLayout.Place(HudLayout.Slot.RailPause, HudLayout.RailWidth, HudLayout.RailButtonHeight);
             UIBlocker.Block(tab);
             // `UITheme.Button` directly, not a copy -- see `SettingsPanel`'s
