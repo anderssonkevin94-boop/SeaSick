@@ -202,6 +202,11 @@ namespace SeaSick.Terrain
             // `SceneryGround`: Kevin, 2026-09-22, so a building raised on top
             // of one can collapse it the way a felled tree collapses.
             var groundIndex = new List<SceneryGround.Patch>();
+            // Every LOOSE rock (2026-09-27, `SceneryRocks`): the ones a camp
+            // may quarry. Cliff shards and the rest of the landform are only
+            // counted, so the check can say how many were left standing.
+            var rockIndex = new List<SceneryRocks.Rock>();
+            int landformRocks = 0;
             var individuals = new List<(string id, Vector3 at, float yaw, Vector3 scale)>();
             var cellMap = new Dictionary<long, CellBuild>();
             var cellList = new List<CellBuild>();
@@ -613,7 +618,7 @@ namespace SeaSick.Terrain
                         {
                             int made = Formation(new Vector3(wx, h, wz), sx, sz, slope, proud, rockiness,
                                 height, sand, seed, cliffTp, boulders, CellFor, ref cliffs,
-                                cragScale, headlandShare);
+                                cragScale, headlandShare, rockIndex);
                             rocks += made;
                             formations++;
                         }
@@ -634,7 +639,9 @@ namespace SeaSick.Terrain
                                                         SeaSick.World.WorldScale.BoulderMax, rRockA);
                                 var sc = new Vector3(size * 0.5f, size * 0.5f * (0.7f + 0.5f * rRockC),
                                                      size * 0.5f * (0.8f + 0.4f * rRockB));
+                                int rs0 = cb.v0.Count, rs1 = cb.v1.Count;
                                 StampBoth(cb, tp, tp, at, rYaw * Mathf.PI * 2f, sc, sc);
+                                RecordRock(rockIndex, ref landformRocks, cb, rs0, rs1, at, SceneryRocks.Source.Lone);
                                 cb.Grow(at, size, size);
                             }
                             rocks++;
@@ -884,7 +891,14 @@ namespace SeaSick.Terrain
                             // Sunk a third: a boulder sitting ON sand is a
                             // prop, one buried in it is a boulder.
                             var at3 = new Vector3(wx3, h3 - size * 0.16f, wz3);
+                            int rs0 = cb.v0.Count, rs1 = cb.v1.Count;
                             StampBoth(cb, tp, tp, at3, rYaw3 * Mathf.PI * 2f, sc, sc);
+                            // Loose only where a man can stand beside it: a
+                            // boulder in the surf is coastline.
+                            if (h3 > DryShore)
+                                RecordRock(rockIndex, ref landformRocks, cb, rs0, rs1,
+                                           new Vector3(wx3, h3, wz3), SceneryRocks.Source.Shore);
+                            else landformRocks++;
                             cb.Grow(new Vector3(wx3, h3, wz3), size, size);
                             shoreStones++;
                         }
@@ -1042,8 +1056,13 @@ namespace SeaSick.Terrain
                     var pos=accent.position;
                     if(keepOut!=null && keepOut(pos.x,pos.z)) continue;
                     var tp=nature.Get(accent.name); if(tp==null) continue;
-                    var cb=CellFor(pos.x,pos.z); int start=cb.v0.Count;
+                    var cb=CellFor(pos.x,pos.z); int start=cb.v0.Count, start1=cb.v1.Count;
                     StampBoth(cb,tp,null,pos,accent.yaw,Vector3.one*accent.scale,Vector3.one);
+                    // Astra's loose stones are stone (2026-09-27); her
+                    // `Cliff_*` slab and talus are the landform.
+                    if(accent.name.StartsWith("Boulder_",System.StringComparison.Ordinal))
+                        RecordRock(rockIndex,ref landformRocks,cb,start,start1,pos,SceneryRocks.Source.Accent);
+                    else if(accent.name.StartsWith("Cliff_",System.StringComparison.Ordinal)) landformRocks++;
                     cb.Grow(pos,tp.radius*accent.scale,tp.height*accent.scale);
                     groundIndex.Add(new SceneryGround.Patch {baseAt=pos,cell=cb.index,vertStart=start,vertCount=cb.v0.Count-start});
                 }
@@ -1064,7 +1083,7 @@ namespace SeaSick.Terrain
                 + $"-> {trees} trees ({trees / ha:F0}/ha, stand {closedPct:F0}% / glade {openPct:F0}%), "
                 + $"{bushes} scrub, {crops} wheat over {cropArea:F2} ha ({100f * cropArea / ha:F1}% of the island"
                 + (cropCut > 0f ? $", eroded to {cropCut:F2}" : "") + "), "
-                + $"{rocks} rocks ({cliffs} cliffs), {shoreStones} shore stones, {stacks} sea stacks, {cellList.Count} cells, "
+                + $"{rocks} rocks ({cliffs} cliffs, {rockIndex.Count} loose = stone), {shoreStones} shore stones, {stacks} sea stacks, {cellList.Count} cells, "
                 + $"{tri0} tris LOD0 / {tri1} LOD1{(kit ? "" : " [cones fallback]")}");
 
             // Replace, never append: the flora tuner re-dresses an island in
@@ -1129,6 +1148,9 @@ namespace SeaSick.Terrain
             if (groundIndex.Count > 0)
                 go.AddComponent<SceneryGround>().Configure(wcells, groundIndex);
             go.AddComponent<SceneryLod>().Configure(wcells, terrain);
+            // Always, even empty: its presence is how a camp knows the bake
+            // is done and its loose rocks have been counted (`SceneryStone`).
+            go.AddComponent<SceneryRocks>().Configure(wcells, rockIndex, landformRocks + cliffs);
             if(nature!=null)
             {
                 var contacts=new List<NatureGrounding.Anchor>();
@@ -1150,7 +1172,7 @@ namespace SeaSick.Terrain
             System.Func<float, float, float> height, float sand, int seed,
             SceneryKit.Template[] cliffTp, SceneryKit.Template[] boulders,
             System.Func<float, float, CellBuild> cellFor, ref int cliffs,
-            float scale = 1f, float headlandShare = 0.14f)
+            float scale = 1f, float headlandShare = 0.14f, List<SceneryRocks.Rock> loose = null)
         {
             var lr = new System.Random(seed * 31 + Mathf.RoundToInt(c.x * 7.3f) * 131 + Mathf.RoundToInt(c.z * 13.1f));
             // Three tiers, not two. Kevin liked the outcrops and asked for
@@ -1209,11 +1231,50 @@ namespace SeaSick.Terrain
                 var tp = boulders[lr.Next(boulders.Length)];
                 var cb = cellFor(px, pz);
                 var sc = new Vector3(size * 0.5f, size * 0.4f, size * 0.45f);
+                int rs0 = cb.v0.Count, rs1 = cb.v1.Count;
                 StampBoth(cb, tp, tp, new Vector3(px, ph, pz), (float)lr.NextDouble() * Mathf.PI * 2f, sc, sc);
+                if (loose != null)
+                {
+                    int ignored = 0;
+                    RecordRock(loose, ref ignored, cb, rs0, rs1, new Vector3(px, ph, pz), SceneryRocks.Source.Scree);
+                    cliffs += ignored;      // an oversize scree stone is counted with the crag
+                }
                 cb.Grow(new Vector3(px, ph, pz), size, size);
                 made++;
             }
             return made;
+        }
+
+        /// Ground height (m) above which a tideline boulder is on dry beach
+        /// and counts as a loose rock; below it, it stands in the surf.
+        const float DryShore = 0.5f;
+
+        /// **Index a loose rock just stamped** (`SceneryRocks`): the vertex
+        /// runs it owns from `s0`/`s1` to the ends of the cell's buffers, and
+        /// its size measured off those vertices. One wider than
+        /// `SceneryRocks.MaxLooseRadius` is a landmark and only counted.
+        static void RecordRock(List<SceneryRocks.Rock> into, ref int landform, CellBuild cb,
+            int s0, int s1, Vector3 ground, SceneryRocks.Source source)
+        {
+            int n0 = cb.v0.Count - s0;
+            if (into == null || n0 <= 0) return;
+            float reach = 0f, top = ground.y;
+            for (int i = s0; i < cb.v0.Count; i++)
+            {
+                var p = cb.v0[i];
+                float dx = p.x - ground.x, dz = p.z - ground.z;
+                reach = Mathf.Max(reach, dx * dx + dz * dz);
+                top = Mathf.Max(top, p.y);
+            }
+            reach = Mathf.Sqrt(reach);
+            if (reach > SceneryRocks.MaxLooseRadius) { landform++; return; }
+            into.Add(new SceneryRocks.Rock
+            {
+                at = ground, cell = cb.index,
+                vertStart = s0, vertCount = n0,
+                lod1Start = s1, lod1Count = cb.v1.Count - s1,
+                radius = reach, height = top - ground.y, source = source,
+            });
         }
 
         static void StampBoth(CellBuild cb, SceneryKit.Template tp0, SceneryKit.Template tp1,
