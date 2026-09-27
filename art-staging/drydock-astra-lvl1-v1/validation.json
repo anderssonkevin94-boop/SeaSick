@@ -1,0 +1,13 @@
+{
+  "triangles": 7192,
+  "modules": {
+    "Walkways": 3872,
+    "Ship_Cradle": 1408,
+    "Lifting_Gantry": 784,
+    "Work_Shelter": 864,
+    "Timber_Stock": 264
+  },
+  "source_up": "Z",
+  "sea_direction": "-Y",
+  "ship_included": false
+}

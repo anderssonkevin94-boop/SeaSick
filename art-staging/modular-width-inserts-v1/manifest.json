@@ -1,0 +1,615 @@
+{
+  "standard": "W1-center-expansion-r1",
+  "source": "/Users/kevinandersson/Desktop/SeaSick/art-staging/modular-hull-family-v3/long/ship.blend",
+  "added_beam_units": 2.8,
+  "standard_beam_units": 9.28,
+  "expanded_beam_units": 12.08,
+  "depth_changed": false,
+  "coordinates": "Blender +X bow, +Y port, +Z up; existing authoring units, not declared game metres",
+  "runtime_scaling": false,
+  "modules": {
+    "Stern_W1": {
+      "parts": [
+        {
+          "name": "Carrier",
+          "file": "models/Stern_W1/Carrier.fbx",
+          "triangles": 260,
+          "local_position": [
+            0.7200002670288086,
+            0.0,
+            0.3499999940395355
+          ]
+        },
+        {
+          "name": "Rotor",
+          "file": "models/Stern_W1/Rotor.fbx",
+          "triangles": 1616,
+          "local_position": [
+            0.7200002670288086,
+            0.0,
+            0.3499999940395355
+          ]
+        },
+        {
+          "name": "Stern_W1__Core__Hull_Ironwork",
+          "file": "models/Stern_W1/Stern_W1__Core__Hull_Ironwork.fbx",
+          "triangles": 122,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Core__Hull_Shell",
+          "file": "models/Stern_W1/Stern_W1__Core__Hull_Shell.fbx",
+          "triangles": 532,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Core__Plank_Seams",
+          "file": "models/Stern_W1/Stern_W1__Core__Plank_Seams.fbx",
+          "triangles": 306,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Core__Rails_Teal",
+          "file": "models/Stern_W1/Stern_W1__Core__Rails_Teal.fbx",
+          "triangles": 128,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Helm",
+          "file": "models/Stern_W1/Stern_W1__Helm.fbx",
+          "triangles": 280,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Housing_AccessPanel",
+          "file": "models/Stern_W1/Stern_W1__Housing_AccessPanel.fbx",
+          "triangles": 648,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Housing_Ironwork",
+          "file": "models/Stern_W1/Stern_W1__Housing_Ironwork.fbx",
+          "triangles": 472,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Housing_Lid",
+          "file": "models/Stern_W1/Stern_W1__Housing_Lid.fbx",
+          "triangles": 142,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Insert_Plank_Joints",
+          "file": "models/Stern_W1/Stern_W1__Insert_Plank_Joints.fbx",
+          "triangles": 24,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Insert_Port__Hull_Ironwork",
+          "file": "models/Stern_W1/Stern_W1__Insert_Port__Hull_Ironwork.fbx",
+          "triangles": 10,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Insert_Port__Hull_Shell",
+          "file": "models/Stern_W1/Stern_W1__Insert_Port__Hull_Shell.fbx",
+          "triangles": 70,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Insert_Port__Rails_Teal",
+          "file": "models/Stern_W1/Stern_W1__Insert_Port__Rails_Teal.fbx",
+          "triangles": 16,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Insert_Starboard__Hull_Ironwork",
+          "file": "models/Stern_W1/Stern_W1__Insert_Starboard__Hull_Ironwork.fbx",
+          "triangles": 10,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Insert_Starboard__Hull_Shell",
+          "file": "models/Stern_W1/Stern_W1__Insert_Starboard__Hull_Shell.fbx",
+          "triangles": 66,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Insert_Starboard__Rails_Teal",
+          "file": "models/Stern_W1/Stern_W1__Insert_Starboard__Rails_Teal.fbx",
+          "triangles": 16,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Port__Hull_Ironwork",
+          "file": "models/Stern_W1/Stern_W1__Port__Hull_Ironwork.fbx",
+          "triangles": 411,
+          "local_position": [
+            0.0,
+            1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Port__Hull_Shell",
+          "file": "models/Stern_W1/Stern_W1__Port__Hull_Shell.fbx",
+          "triangles": 237,
+          "local_position": [
+            0.0,
+            1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Port__Plank_Seams",
+          "file": "models/Stern_W1/Stern_W1__Port__Plank_Seams.fbx",
+          "triangles": 208,
+          "local_position": [
+            0.0,
+            1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Port__Rails_Teal",
+          "file": "models/Stern_W1/Stern_W1__Port__Rails_Teal.fbx",
+          "triangles": 224,
+          "local_position": [
+            0.0,
+            1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Starboard__Hull_Ironwork",
+          "file": "models/Stern_W1/Stern_W1__Starboard__Hull_Ironwork.fbx",
+          "triangles": 411,
+          "local_position": [
+            0.0,
+            -1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Starboard__Hull_Shell",
+          "file": "models/Stern_W1/Stern_W1__Starboard__Hull_Shell.fbx",
+          "triangles": 233,
+          "local_position": [
+            0.0,
+            -1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Starboard__Plank_Seams",
+          "file": "models/Stern_W1/Stern_W1__Starboard__Plank_Seams.fbx",
+          "triangles": 208,
+          "local_position": [
+            0.0,
+            -1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Stern_W1__Starboard__Rails_Teal",
+          "file": "models/Stern_W1/Stern_W1__Starboard__Rails_Teal.fbx",
+          "triangles": 224,
+          "local_position": [
+            0.0,
+            -1.399999976158142,
+            0.0
+          ]
+        }
+      ],
+      "length": 9.3,
+      "hydrostatics": {
+        "schemaVersion": 1,
+        "file": "hydrostatics/Stern_W1.json",
+        "sourceGeometrySha256": "28dbe864ddea34db101e56eb9c41709d71d1fd59a09518099216c2e2d23f1ce2",
+        "validWaterlineZU": [
+          -1.9199999570846558,
+          1.76
+        ],
+        "uprightOnly": true,
+        "stationCount": 203,
+        "waterlineCount": 66
+      }
+    },
+    "Midship_W1": {
+      "parts": [
+        {
+          "name": "Midship_W1__Insert_Plank_Joints",
+          "file": "models/Midship_W1/Midship_W1__Insert_Plank_Joints.fbx",
+          "triangles": 36,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Insert_Port__Hull_Shell",
+          "file": "models/Midship_W1/Midship_W1__Insert_Port__Hull_Shell.fbx",
+          "triangles": 8,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Insert_Starboard__Hull_Shell",
+          "file": "models/Midship_W1/Midship_W1__Insert_Starboard__Hull_Shell.fbx",
+          "triangles": 8,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Port__Hull_Ironwork",
+          "file": "models/Midship_W1/Midship_W1__Port__Hull_Ironwork.fbx",
+          "triangles": 180,
+          "local_position": [
+            0.0,
+            1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Port__Hull_Shell",
+          "file": "models/Midship_W1/Midship_W1__Port__Hull_Shell.fbx",
+          "triangles": 60,
+          "local_position": [
+            0.0,
+            1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Port__Plank_Seams",
+          "file": "models/Midship_W1/Midship_W1__Port__Plank_Seams.fbx",
+          "triangles": 144,
+          "local_position": [
+            0.0,
+            1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Port__Rails_Teal",
+          "file": "models/Midship_W1/Midship_W1__Port__Rails_Teal.fbx",
+          "triangles": 104,
+          "local_position": [
+            0.0,
+            1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Starboard__Hull_Ironwork",
+          "file": "models/Midship_W1/Midship_W1__Starboard__Hull_Ironwork.fbx",
+          "triangles": 180,
+          "local_position": [
+            0.0,
+            -1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Starboard__Hull_Shell",
+          "file": "models/Midship_W1/Midship_W1__Starboard__Hull_Shell.fbx",
+          "triangles": 60,
+          "local_position": [
+            0.0,
+            -1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Starboard__Plank_Seams",
+          "file": "models/Midship_W1/Midship_W1__Starboard__Plank_Seams.fbx",
+          "triangles": 144,
+          "local_position": [
+            0.0,
+            -1.399999976158142,
+            0.0
+          ]
+        },
+        {
+          "name": "Midship_W1__Starboard__Rails_Teal",
+          "file": "models/Midship_W1/Midship_W1__Starboard__Rails_Teal.fbx",
+          "triangles": 104,
+          "local_position": [
+            0.0,
+            -1.399999976158142,
+            0.0
+          ]
+        }
+      ],
+      "length": 6.0,
+      "hydrostatics": {
+        "schemaVersion": 1,
+        "file": "hydrostatics/Midship_W1.json",
+        "sourceGeometrySha256": "9688f920c0b0f2ea6b52bebe111a8a7a833884f59a803e96c1e8c5585bd1fe5d",
+        "validWaterlineZU": [
+          -1.9199999570846558,
+          1.76
+        ],
+        "uprightOnly": true,
+        "stationCount": 99,
+        "waterlineCount": 66
+      }
+    },
+    "Bow_W1": {
+      "parts": [
+        {
+          "name": "Bow_W1__Insert_Plank_Joints",
+          "file": "models/Bow_W1/Bow_W1__Insert_Plank_Joints.fbx",
+          "triangles": 196,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Insert_Port__Hull_Ironwork",
+          "file": "models/Bow_W1/Bow_W1__Insert_Port__Hull_Ironwork.fbx",
+          "triangles": 4,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Insert_Port__Hull_Shell",
+          "file": "models/Bow_W1/Bow_W1__Insert_Port__Hull_Shell.fbx",
+          "triangles": 22,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Insert_Port__Rails_Teal",
+          "file": "models/Bow_W1/Bow_W1__Insert_Port__Rails_Teal.fbx",
+          "triangles": 12,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Insert_Starboard__Hull_Ironwork",
+          "file": "models/Bow_W1/Bow_W1__Insert_Starboard__Hull_Ironwork.fbx",
+          "triangles": 4,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Insert_Starboard__Hull_Shell",
+          "file": "models/Bow_W1/Bow_W1__Insert_Starboard__Hull_Shell.fbx",
+          "triangles": 22,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Insert_Starboard__Rails_Teal",
+          "file": "models/Bow_W1/Bow_W1__Insert_Starboard__Rails_Teal.fbx",
+          "triangles": 12,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Port__Hull_Ironwork",
+          "file": "models/Bow_W1/Bow_W1__Port__Hull_Ironwork.fbx",
+          "triangles": 248,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Port__Hull_Shell",
+          "file": "models/Bow_W1/Bow_W1__Port__Hull_Shell.fbx",
+          "triangles": 247,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Port__Plank_Seams",
+          "file": "models/Bow_W1/Bow_W1__Port__Plank_Seams.fbx",
+          "triangles": 428,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Port__Rails_Teal",
+          "file": "models/Bow_W1/Bow_W1__Port__Rails_Teal.fbx",
+          "triangles": 210,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Prow",
+          "file": "models/Bow_W1/Bow_W1__Prow.fbx",
+          "triangles": 60,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Starboard__Hull_Ironwork",
+          "file": "models/Bow_W1/Bow_W1__Starboard__Hull_Ironwork.fbx",
+          "triangles": 248,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Starboard__Hull_Shell",
+          "file": "models/Bow_W1/Bow_W1__Starboard__Hull_Shell.fbx",
+          "triangles": 247,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Starboard__Plank_Seams",
+          "file": "models/Bow_W1/Bow_W1__Starboard__Plank_Seams.fbx",
+          "triangles": 428,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "name": "Bow_W1__Starboard__Rails_Teal",
+          "file": "models/Bow_W1/Bow_W1__Starboard__Rails_Teal.fbx",
+          "triangles": 210,
+          "local_position": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "length": 10.979999542236328,
+      "hydrostatics": {
+        "schemaVersion": 1,
+        "file": "hydrostatics/Bow_W1.json",
+        "sourceGeometrySha256": "08b46e6d41777fe6d361165cf3f332b63c28e4973ec86ef87f6209ae87644909",
+        "validWaterlineZU": [
+          -1.9199999570846558,
+          1.76
+        ],
+        "uprightOnly": true,
+        "stationCount": 317,
+        "waterlineCount": 66
+      }
+    }
+  },
+  "status": "Offline review prototype; not registered with the backend",
+  "assembled_hull_validation": {
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0,
+    "triangles": 1826
+  },
+  "repeat_tests": {
+    "0": {
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 1690
+    },
+    "2": {
+      "boundary_edges": 0,
+      "overconnected_edges": 0,
+      "degenerate_faces": 0,
+      "triangles": 1962
+    }
+  },
+  "total_visible_triangles": 10656,
+  "fittings": {
+    "chimney_position": [
+      13.139999389648438,
+      0.0,
+      1.7599999904632568
+    ],
+    "wheel_mount": "M1 unchanged",
+    "rotor_spin_axis": "local Y"
+  },
+  "bow_rule": "Select Standard_Bow_Halves for standard width, authored expanded Bow_W1 halves for expansion. Taper is baked at authoring time, never a runtime scale."
+}

@@ -1,0 +1,12 @@
+PASS hut master triangles, flat normals, vertex colours, stock groups, ground/plot bounds
+PASS empty hut contains no fish stock or work catch
+PASS Road_Straight_4m_A: triangles, colours, flat normals, socket transforms, feather alpha
+PASS Road_Straight_4m_B: triangles, colours, flat normals, socket transforms, feather alpha
+PASS Road_Straight_4m_C: triangles, colours, flat normals, socket transforms, feather alpha
+PASS Road_Straight_2m: triangles, colours, flat normals, socket transforms, feather alpha
+PASS Road_Curve_45: triangles, colours, flat normals, socket transforms, feather alpha
+PASS Road_Curve_90: triangles, colours, flat normals, socket transforms, feather alpha
+PASS Road_T_Junction: triangles, colours, flat normals, socket transforms, feather alpha
+PASS Road_End: triangles, colours, flat normals, socket transforms, feather alpha
+PASS Torch_Post_A: triangles, colours, flat normals, socket transforms
+PASS Torch_Post_B: triangles, colours, flat normals, socket transforms

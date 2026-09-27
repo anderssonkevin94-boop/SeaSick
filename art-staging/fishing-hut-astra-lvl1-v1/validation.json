@@ -1,0 +1,75 @@
+{
+  "modules": {
+    "Frame": {
+      "triangles": 1100,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Windbreak": {
+      "triangles": 484,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Canopy": {
+      "triangles": 524,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Bench": {
+      "triangles": 396,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Gear": {
+      "triangles": 352,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Net_Rack": {
+      "triangles": 776,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Crate": {
+      "triangles": 572,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Fish_01": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Fish_02": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Fish_03": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Output_Fish_04": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Work_Catch": {
+      "triangles": 72,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    },
+    "Sign": {
+      "triangles": 104,
+      "nonmanifold_edges": 0,
+      "degenerate_faces": 0
+    }
+  },
+  "all_states_triangles": 4668,
+  "plot_metres": [
+    5.5,
+    5.2
+  ],
+  "inventory_slots": 4
+}

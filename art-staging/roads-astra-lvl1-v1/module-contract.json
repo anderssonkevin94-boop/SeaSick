@@ -1,0 +1,217 @@
+{
+  "axes": "Blender +X along road, +Z up; FBX -Z forward/Y up",
+  "modules": {
+    "Road_Straight_4m_A": {
+      "file": "Road_Straight_4m_A.fbx",
+      "sockets_blender": {
+        "Start": [
+          0,
+          0,
+          0
+        ],
+        "End": [
+          4,
+          0,
+          0
+        ]
+      },
+      "width_including_feather_m": 2.16,
+      "marker_names": {
+        "Start": "Road_Straight_4m_A__Start",
+        "End": "Road_Straight_4m_A__End"
+      },
+      "end_heading_degrees": 0.0
+    },
+    "Road_Straight_4m_B": {
+      "file": "Road_Straight_4m_B.fbx",
+      "sockets_blender": {
+        "Start": [
+          0,
+          0,
+          0
+        ],
+        "End": [
+          4,
+          0,
+          0
+        ]
+      },
+      "width_including_feather_m": 2.16,
+      "marker_names": {
+        "Start": "Road_Straight_4m_B__Start",
+        "End": "Road_Straight_4m_B__End"
+      },
+      "end_heading_degrees": 0.0
+    },
+    "Road_Straight_4m_C": {
+      "file": "Road_Straight_4m_C.fbx",
+      "sockets_blender": {
+        "Start": [
+          0,
+          0,
+          0
+        ],
+        "End": [
+          4,
+          0,
+          0
+        ]
+      },
+      "width_including_feather_m": 2.16,
+      "marker_names": {
+        "Start": "Road_Straight_4m_C__Start",
+        "End": "Road_Straight_4m_C__End"
+      },
+      "end_heading_degrees": 0.0
+    },
+    "Road_Straight_2m": {
+      "file": "Road_Straight_2m.fbx",
+      "sockets_blender": {
+        "Start": [
+          0,
+          0,
+          0
+        ],
+        "End": [
+          2,
+          0,
+          0
+        ]
+      },
+      "width_including_feather_m": 2.16,
+      "marker_names": {
+        "Start": "Road_Straight_2m__Start",
+        "End": "Road_Straight_2m__End"
+      },
+      "end_heading_degrees": 0.0
+    },
+    "Road_Curve_45": {
+      "file": "Road_Curve_45.fbx",
+      "sockets_blender": {
+        "Start": [
+          0,
+          0,
+          0
+        ],
+        "End": [
+          2.545584412271571,
+          1.0544155877284287,
+          0
+        ]
+      },
+      "width_including_feather_m": 2.16,
+      "marker_names": {
+        "Start": "Road_Curve_45__Start",
+        "End": "Road_Curve_45__End"
+      },
+      "end_heading_degrees": 45.0
+    },
+    "Road_Curve_90": {
+      "file": "Road_Curve_90.fbx",
+      "sockets_blender": {
+        "Start": [
+          0,
+          0,
+          0
+        ],
+        "End": [
+          3.6,
+          3.5999999999999996,
+          0
+        ]
+      },
+      "width_including_feather_m": 2.16,
+      "marker_names": {
+        "Start": "Road_Curve_90__Start",
+        "End": "Road_Curve_90__End"
+      },
+      "end_heading_degrees": 90.0
+    },
+    "Road_T_Junction": {
+      "file": "Road_T_Junction.fbx",
+      "sockets_blender": {
+        "Start": [
+          0,
+          0,
+          0
+        ],
+        "End": [
+          4.32,
+          0,
+          0
+        ],
+        "Branch": [
+          2.16,
+          3.24,
+          0
+        ]
+      },
+      "width_including_feather_m": 2.16,
+      "marker_names": {
+        "Start": "Road_T_Junction__Start",
+        "End": "Road_T_Junction__End",
+        "Branch": "Road_T_Junction__Branch"
+      }
+    },
+    "Road_End": {
+      "file": "Road_End.fbx",
+      "sockets_blender": {
+        "Start": [
+          0,
+          0,
+          0
+        ]
+      },
+      "width_including_feather_m": 2.16,
+      "marker_names": {
+        "Start": "Road_End__Start"
+      }
+    },
+    "Torch_Post_A": {
+      "file": "Torch_Post_A.fbx",
+      "sockets_blender": {
+        "Flame_Anchor": [
+          0.06,
+          0.025,
+          1.7
+        ],
+        "Ground_Anchor": [
+          0,
+          0,
+          0
+        ]
+      },
+      "width_including_feather_m": null,
+      "marker_names": {
+        "Flame_Anchor": "Torch_Post_A__Flame_Anchor",
+        "Ground_Anchor": "Torch_Post_A__Ground_Anchor"
+      }
+    },
+    "Torch_Post_B": {
+      "file": "Torch_Post_B.fbx",
+      "sockets_blender": {
+        "Flame_Anchor": [
+          -0.1,
+          0.025,
+          1.7
+        ],
+        "Ground_Anchor": [
+          0,
+          0,
+          0
+        ]
+      },
+      "width_including_feather_m": null,
+      "marker_names": {
+        "Flame_Anchor": "Torch_Post_B__Flame_Anchor",
+        "Ground_Anchor": "Torch_Post_B__Ground_Anchor"
+      }
+    }
+  },
+  "road_surface": "open terrain-conforming ribbon; Col.a feather mask, Col.rgb dirt/edge colours",
+  "torch_spacing_suggestion_m": [
+    8,
+    12
+  ],
+  "effects": "No flame, smoke, light or flicker supplied."
+}

@@ -1,0 +1,197 @@
+{
+    "version": 1,
+    "worldSeed": 260921,
+    "savedAt": "2026-09-24 09:36",
+    "reason": "quit",
+    "timeSeconds": 71.66709618549794,
+    "ship": {
+        "rung": 12,
+        "fit": [
+            0,
+            0,
+            0,
+            0,
+            0
+        ],
+        "cells": [],
+        "x": 62.79423904418945,
+        "y": 0.8587539196014404,
+        "z": -44.36985778808594,
+        "yaw": 126.59978485107422,
+        "anchor": 0,
+        "crewNames": []
+    },
+    "hold": [],
+    "banked": [],
+    "outposts": [
+        {
+            "ledger": {
+                "stations": [],
+                "stationsMigrated": false,
+                "sourceDistance": [
+                    {
+                        "resource": "Timber",
+                        "metres": 1.3254328966140748
+                    }
+                ],
+                "hasCentre": false,
+                "centreX": 0.0,
+                "centreZ": 0.0,
+                "keyX": -26,
+                "keyZ": 159,
+                "hands": [],
+                "stores": [],
+                "stocks": [
+                    {
+                        "resource": "Timber",
+                        "standing": 88.86741638183594,
+                        "standingMax": 88.86741638183594,
+                        "regrowPerDay": 0.019999999552965165
+                    },
+                    {
+                        "resource": "Stone",
+                        "standing": 10.367865562438965,
+                        "standingMax": 10.367865562438965,
+                        "regrowPerDay": 0.0
+                    },
+                    {
+                        "resource": "Game",
+                        "standing": 4.0,
+                        "standingMax": 4.0,
+                        "regrowPerDay": 0.009999999776482582
+                    }
+                ],
+                "ceilingPer": 0,
+                "timberTaken": 0.0,
+                "treesFelled": 0,
+                "treesRegrown": 0.0,
+                "foodEaten": 0.0,
+                "rations": 0,
+                "priority": 0,
+                "recruitProgress": 0.0,
+                "hungerDays": 0.0,
+                "campfireLevel": 0,
+                "choices": [],
+                "levels": [],
+                "built": [],
+                "raised": [],
+                "builtWalls": [],
+                "sites": [],
+                "pending": {
+                    "planId": "",
+                    "x": 0.0,
+                    "z": 0.0,
+                    "needed": 0,
+                    "done": 0,
+                    "donePart": 0.0,
+                    "stoneNeeded": 0,
+                    "stoneDone": 0,
+                    "stoneDonePart": 0.0,
+                    "brickNeeded": 0,
+                    "brickDone": 0,
+                    "brickDonePart": 0.0,
+                    "yaw": 0.0,
+                    "length": 0.0,
+                    "built": 0.0,
+                    "phased": false,
+                    "clearTrees": 0,
+                    "clearRocks": 0,
+                    "clearOre": 0,
+                    "clearDone": 0.0,
+                    "clearSited": false,
+                    "isWall": false,
+                    "postA": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    },
+                    "postB": {
+                        "x": 0.0,
+                        "y": 0.0,
+                        "z": 0.0
+                    }
+                },
+                "raiders": 0,
+                "threat": 0.0,
+                "raids": 0,
+                "lastTicked": 54.00000214576721,
+                "away": {
+                    "sinceSeconds": 0.0,
+                    "res": [],
+                    "got": [],
+                    "eaten": 0.0,
+                    "hungryDays": 0.0,
+                    "raised": [],
+                    "born": [],
+                    "raidRes": [],
+                    "raidGot": [],
+                    "raids": 0
+                }
+            },
+            "campX": -25.704345703125,
+            "campY": 0.0,
+            "campZ": 159.295654296875,
+            "hasCampCentre": false,
+            "hasIsle": true,
+            "isleX": -12.0,
+            "isleZ": 81.0,
+            "isHome": true
+        }
+    ],
+    "seen": [
+        {
+            "island": "Island_Home",
+            "x": -12.0,
+            "z": 81.0,
+            "state": 2
+        },
+        {
+            "island": "Island_1",
+            "x": 60.0,
+            "z": -375.0,
+            "state": 1
+        },
+        {
+            "island": "Island_2",
+            "x": 660.0,
+            "z": 81.0,
+            "state": 1
+        },
+        {
+            "island": "Island_3",
+            "x": 420.0,
+            "z": -495.0,
+            "state": 1
+        },
+        {
+            "island": "Island_4",
+            "x": -780.0,
+            "z": -111.0,
+            "state": 1
+        },
+        {
+            "island": "Island_5",
+            "x": 324.0,
+            "z": 657.0,
+            "state": 1
+        }
+    ],
+    "trackX": [
+        7.930631160736084,
+        9.0792875289917,
+        23.193899154663087,
+        50.24795913696289
+    ],
+    "trackZ": [
+        -14.207910537719727,
+        -13.833419799804688,
+        -18.582595825195314,
+        -33.937660217285159
+    ],
+    "trackAt": [
+        54.00000214576721,
+        59.011727755423638,
+        64.01723776338622,
+        69.03578101238236
+    ]
+}

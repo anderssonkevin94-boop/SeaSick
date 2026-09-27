@@ -1,0 +1,52 @@
+{
+  "Road_Straight_4m_A": {
+    "triangles": 96,
+    "intentional_boundary_edges": 28,
+    "flat_shaded": true
+  },
+  "Road_Straight_4m_B": {
+    "triangles": 96,
+    "intentional_boundary_edges": 28,
+    "flat_shaded": true
+  },
+  "Road_Straight_4m_C": {
+    "triangles": 96,
+    "intentional_boundary_edges": 28,
+    "flat_shaded": true
+  },
+  "Road_Straight_2m": {
+    "triangles": 48,
+    "intentional_boundary_edges": 20,
+    "flat_shaded": true
+  },
+  "Road_Curve_45": {
+    "triangles": 96,
+    "intentional_boundary_edges": 28,
+    "flat_shaded": true
+  },
+  "Road_Curve_90": {
+    "triangles": 96,
+    "intentional_boundary_edges": 28,
+    "flat_shaded": true
+  },
+  "Road_T_Junction": {
+    "triangles": 120,
+    "intentional_boundary_edges": 32,
+    "flat_shaded": true
+  },
+  "Road_End": {
+    "triangles": 48,
+    "intentional_boundary_edges": 20,
+    "flat_shaded": true
+  },
+  "Torch_Post_A": {
+    "triangles": 404,
+    "intentional_boundary_edges": 0,
+    "flat_shaded": true
+  },
+  "Torch_Post_B": {
+    "triangles": 404,
+    "intentional_boundary_edges": 0,
+    "flat_shaded": true
+  }
+}

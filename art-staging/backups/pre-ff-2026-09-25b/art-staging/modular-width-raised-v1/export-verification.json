@@ -1,0 +1,122 @@
+{
+  "raised-bow/UpperRails.fbx": {
+    "triangles": 240,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/UpperPosts.fbx": {
+    "triangles": 240,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/RearGuard.fbx": {
+    "triangles": 88,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/PlankDetails.fbx": {
+    "triangles": 624,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/PortalFrames.fbx": {
+    "triangles": 84,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/InternalLadder.fbx": {
+    "triangles": 108,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/Door.fbx": {
+    "triangles": 92,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/Hatch.fbx": {
+    "triangles": 36,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/StemExtension.fbx": {
+    "triangles": 12,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/Hull_Ironwork.fbx": {
+    "triangles": 424,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/Hull_Shell.fbx": {
+    "triangles": 682,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/Plank_Seams.fbx": {
+    "triangles": 400,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/Prow.fbx": {
+    "triangles": 60,
+    "colors_and_flat_normals": true
+  },
+  "raised-bow/UpperBraceBolts.fbx": {
+    "triangles": 80,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/UpperRails.fbx": {
+    "triangles": 300,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/UpperPosts.fbx": {
+    "triangles": 300,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/ForwardGuard.fbx": {
+    "triangles": 144,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/UpperPlanks.fbx": {
+    "triangles": 600,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/UpperBraceBolts.fbx": {
+    "triangles": 160,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/PortalFrames.fbx": {
+    "triangles": 84,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/InternalLadder.fbx": {
+    "triangles": 108,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/Hatch.fbx": {
+    "triangles": 36,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/Door.fbx": {
+    "triangles": 92,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/Helm.fbx": {
+    "triangles": 280,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/Hull_Ironwork.fbx": {
+    "triangles": 852,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/Hull_Shell.fbx": {
+    "triangles": 884,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/Plank_Seams.fbx": {
+    "triangles": 432,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/TwinStairs.fbx": {
+    "triangles": 256,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/StairGuards.fbx": {
+    "triangles": 184,
+    "colors_and_flat_normals": true
+  },
+  "raised-stern/StairNosings.fbx": {
+    "triangles": 192,
+    "colors_and_flat_normals": true
+  }
+}

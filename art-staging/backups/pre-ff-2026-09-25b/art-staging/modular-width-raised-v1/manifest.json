@@ -1,0 +1,784 @@
+{
+  "interface": "W1-center-expansion-r1",
+  "status": "Offline end-section replacements; no Unity changes",
+  "modules": {
+    "raised-bow": {
+      "root": "Bow_W1",
+      "length": 12.008499145507812,
+      "moving_parts": {
+        "Door": {
+          "pivot": [
+            -0.015,
+            -2.87,
+            1.76
+          ],
+          "axis": "Z",
+          "review_angle_degrees": 65,
+          "closed_angle_degrees": 0
+        },
+        "Hatch": {
+          "pivot": [
+            2.55,
+            0.0,
+            4.36
+          ],
+          "axis": "Y",
+          "review_angle_degrees": 80,
+          "closed_angle_degrees": 0
+        }
+      },
+      "parts": {
+        "UpperRails": {
+          "file": "raised-bow/UpperRails.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "topology": {
+            "vertices": 128,
+            "triangles": 240,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "UpperPosts": {
+          "file": "raised-bow/UpperPosts.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "topology": {
+            "vertices": 160,
+            "triangles": 240,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "RearGuard": {
+          "file": "raised-bow/RearGuard.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 88,
+          "topology": {
+            "vertices": 56,
+            "triangles": 88,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "PlankDetails": {
+          "file": "raised-bow/PlankDetails.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 624,
+          "topology": {
+            "vertices": 376,
+            "triangles": 624,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "PortalFrames": {
+          "file": "raised-bow/PortalFrames.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 84,
+          "topology": {
+            "vertices": 56,
+            "triangles": 84,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "InternalLadder": {
+          "file": "raised-bow/InternalLadder.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 108,
+          "topology": {
+            "vertices": 72,
+            "triangles": 108,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Door": {
+          "file": "raised-bow/Door.fbx",
+          "position": [
+            -0.014999999664723873,
+            -2.869999885559082,
+            1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            1.1344640254974365
+          ],
+          "triangles": 92,
+          "topology": {
+            "vertices": 60,
+            "triangles": 92,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Hatch": {
+          "file": "raised-bow/Hatch.fbx",
+          "position": [
+            2.549999952316284,
+            0.0,
+            4.360000133514404
+          ],
+          "rotation_radians": [
+            0.0,
+            1.3962633609771729,
+            0.0
+          ],
+          "triangles": 36,
+          "topology": {
+            "vertices": 24,
+            "triangles": 36,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "StemExtension": {
+          "file": "raised-bow/StemExtension.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "topology": {
+            "vertices": 8,
+            "triangles": 12,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Hull_Ironwork": {
+          "file": "raised-bow/Hull_Ironwork.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 424,
+          "topology": {
+            "vertices": 232,
+            "triangles": 424,
+            "boundary_edges": 8,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Hull_Shell": {
+          "file": "raised-bow/Hull_Shell.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 682,
+          "topology": {
+            "vertices": 354,
+            "triangles": 682,
+            "boundary_edges": 28,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Plank_Seams": {
+          "file": "raised-bow/Plank_Seams.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 400,
+          "topology": {
+            "vertices": 264,
+            "triangles": 400,
+            "boundary_edges": 80,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Prow": {
+          "file": "raised-bow/Prow.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 60,
+          "topology": {
+            "vertices": 38,
+            "triangles": 60,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "UpperBraceBolts": {
+          "file": "raised-bow/UpperBraceBolts.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 80,
+          "topology": {
+            "vertices": 48,
+            "triangles": 80,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        }
+      },
+      "sockets": {
+        "Bow_W1__AftSocket": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Bow_W1__ForwardSocket": [
+          12.008499145507812,
+          0.0,
+          0.0
+        ],
+        "DoorEntry": [
+          -0.4000000059604645,
+          -2.1500000953674316,
+          1.7599999904632568
+        ],
+        "HatchExit": [
+          1.75,
+          0.0,
+          4.199999809265137
+        ],
+        "UpperDeckJoin": [
+          0.0,
+          0.0,
+          4.199999809265137
+        ]
+      }
+    },
+    "raised-stern": {
+      "root": "Stern_W1",
+      "length": 9.3,
+      "moving_parts": {
+        "Hatch": {
+          "pivot": [
+            6.75,
+            0.0,
+            4.360000133514404
+          ],
+          "axis": "Y",
+          "review_angle_degrees": -80,
+          "closed_angle_degrees": 0
+        },
+        "Door": {
+          "pivot": [
+            9.315000534057617,
+            -2.869999885559082,
+            1.7599999904632568
+          ],
+          "axis": "Z",
+          "review_angle_degrees": -65,
+          "closed_angle_degrees": 0
+        }
+      },
+      "parts": {
+        "UpperRails": {
+          "file": "raised-stern/UpperRails.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 300,
+          "topology": {
+            "vertices": 160,
+            "triangles": 300,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "UpperPosts": {
+          "file": "raised-stern/UpperPosts.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 300,
+          "topology": {
+            "vertices": 200,
+            "triangles": 300,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "ForwardGuard": {
+          "file": "raised-stern/ForwardGuard.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 144,
+          "topology": {
+            "vertices": 88,
+            "triangles": 144,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "UpperPlanks": {
+          "file": "raised-stern/UpperPlanks.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 600,
+          "topology": {
+            "vertices": 376,
+            "triangles": 600,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "UpperBraceBolts": {
+          "file": "raised-stern/UpperBraceBolts.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 160,
+          "topology": {
+            "vertices": 96,
+            "triangles": 160,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "PortalFrames": {
+          "file": "raised-stern/PortalFrames.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            -0.0,
+            0.0
+          ],
+          "triangles": 84,
+          "topology": {
+            "vertices": 56,
+            "triangles": 84,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "InternalLadder": {
+          "file": "raised-stern/InternalLadder.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            -0.0,
+            0.0
+          ],
+          "triangles": 108,
+          "topology": {
+            "vertices": 72,
+            "triangles": 108,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Hatch": {
+          "file": "raised-stern/Hatch.fbx",
+          "position": [
+            6.75,
+            0.0,
+            4.360000133514404
+          ],
+          "rotation_radians": [
+            -0.0,
+            -1.3962633609771729,
+            -0.0
+          ],
+          "triangles": 36,
+          "topology": {
+            "vertices": 24,
+            "triangles": 36,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Door": {
+          "file": "raised-stern/Door.fbx",
+          "position": [
+            9.315000534057617,
+            -2.869999885559082,
+            1.7599999904632568
+          ],
+          "rotation_radians": [
+            -0.0,
+            -0.0,
+            -1.1344640254974365
+          ],
+          "triangles": 92,
+          "topology": {
+            "vertices": 60,
+            "triangles": 92,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Helm": {
+          "file": "raised-stern/Helm.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 280,
+          "topology": {
+            "vertices": 184,
+            "triangles": 280,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Hull_Ironwork": {
+          "file": "raised-stern/Hull_Ironwork.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 852,
+          "topology": {
+            "vertices": 468,
+            "triangles": 852,
+            "boundary_edges": 8,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Hull_Shell": {
+          "file": "raised-stern/Hull_Shell.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 884,
+          "topology": {
+            "vertices": 452,
+            "triangles": 884,
+            "boundary_edges": 22,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "Plank_Seams": {
+          "file": "raised-stern/Plank_Seams.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 432,
+          "topology": {
+            "vertices": 288,
+            "triangles": 432,
+            "boundary_edges": 96,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "TwinStairs": {
+          "file": "raised-stern/TwinStairs.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 256,
+          "topology": {
+            "vertices": 132,
+            "triangles": 256,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "StairGuards": {
+          "file": "raised-stern/StairGuards.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 184,
+          "topology": {
+            "vertices": 112,
+            "triangles": 184,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        },
+        "StairNosings": {
+          "file": "raised-stern/StairNosings.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 192,
+          "topology": {
+            "vertices": 128,
+            "triangles": 192,
+            "boundary_edges": 0,
+            "overconnected_edges": 0,
+            "degenerate_faces": 0
+          }
+        }
+      },
+      "sockets": {
+        "Stern_W1__AftSocket": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "Stern_W1__ForwardSocket": [
+          9.300000190734863,
+          0.0,
+          0.0
+        ],
+        "SternDoorEntry": [
+          9.699999809265137,
+          -2.1500000953674316,
+          1.7599999904632568
+        ],
+        "SternHatchExit": [
+          7.550000190734863,
+          0.0,
+          4.199999809265137
+        ],
+        "SternStairPortBottom": [
+          9.260000228881836,
+          5.210000038146973,
+          1.7599999904632568
+        ],
+        "SternStairPortTop": [
+          6.059999942779541,
+          5.210000038146973,
+          4.199999809265137
+        ],
+        "SternStairStarboardBottom": [
+          9.260000228881836,
+          -5.210000038146973,
+          1.7599999904632568
+        ],
+        "SternStairStarboardTop": [
+          6.059999942779541,
+          -5.210000038146973,
+          4.199999809265137
+        ],
+        "SternUpperDeckJoin": [
+          9.300000190734863,
+          0.0,
+          4.199999809265137
+        ],
+        "WheelModuleSocket": [
+          0.7200002670288086,
+          0.0,
+          0.3499999940395355
+        ]
+      }
+    }
+  },
+  "remaining": [
+    "Raised middle bay not supplied",
+    "Same-height end-to-end upper deck joins need a separate tested treatment",
+    "Runtime UI, navigation and balance integration not included"
+  ],
+  "assembled_hull": {
+    "boundary_edges": 0,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0,
+    "triangles": 1708
+  },
+  "wheel_rotation_samples_passed": 72,
+  "triangles": 11142
+}

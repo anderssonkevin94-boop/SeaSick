@@ -1,0 +1,2 @@
+PASS hut master triangles, flat normals, vertex colours, stock groups, ground/plot bounds
+PASS empty hut contains no fish stock or work catch

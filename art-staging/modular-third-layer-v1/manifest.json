@@ -1,0 +1,497 @@
+{
+  "interface": "W1-center-expansion-r1",
+  "layer_rise": 2.44,
+  "mount_height": 4.2,
+  "third_deck_height": 6.640000000000001,
+  "modules": {
+    "Stern_W1": {
+      "mount_position": [
+        0.0,
+        0.0,
+        4.199999809265137
+      ],
+      "parts": {
+        "Upper_Stern_W1__BraceExtensions": {
+          "file": "Stern_W1/Upper_Stern_W1__BraceExtensions.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 208,
+          "optional": false
+        },
+        "Upper_Stern_W1__Hatch": {
+          "file": "Stern_W1/Upper_Stern_W1__Hatch.fbx",
+          "position": [
+            6.75,
+            0.0,
+            2.6000001430511475
+          ],
+          "rotation_radians": [
+            -0.0,
+            -1.3962633609771729,
+            -0.0
+          ],
+          "triangles": 36,
+          "optional": false
+        },
+        "Upper_Stern_W1__Helm": {
+          "file": "Stern_W1/Upper_Stern_W1__Helm.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 280,
+          "optional": false
+        },
+        "Upper_Stern_W1__InternalLadder": {
+          "file": "Stern_W1/Upper_Stern_W1__InternalLadder.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            -0.0,
+            0.0
+          ],
+          "triangles": 108,
+          "optional": false
+        },
+        "Upper_Stern_W1__OptionalEndClosures": {
+          "file": "Stern_W1/Upper_Stern_W1__OptionalEndClosures.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 2,
+          "optional": true
+        },
+        "Upper_Stern_W1__PortalFrames": {
+          "file": "Stern_W1/Upper_Stern_W1__PortalFrames.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            -0.0,
+            0.0
+          ],
+          "triangles": 48,
+          "optional": false
+        },
+        "Upper_Stern_W1__Shell": {
+          "file": "Stern_W1/Upper_Stern_W1__Shell.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 192,
+          "optional": false
+        },
+        "Upper_Stern_W1__UpperPlanks": {
+          "file": "Stern_W1/Upper_Stern_W1__UpperPlanks.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "optional": false
+        },
+        "Upper_Stern_W1__UpperPosts": {
+          "file": "Stern_W1/Upper_Stern_W1__UpperPosts.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 300,
+          "optional": false
+        },
+        "Upper_Stern_W1__UpperRails": {
+          "file": "Stern_W1/Upper_Stern_W1__UpperRails.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 300,
+          "optional": false
+        },
+        "Upper_Stern_W1__WallPlanks": {
+          "file": "Stern_W1/Upper_Stern_W1__WallPlanks.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 636,
+          "optional": false
+        }
+      }
+    },
+    "Midship_W1": {
+      "mount_position": [
+        9.300000190734863,
+        0.0,
+        4.199999809265137
+      ],
+      "parts": {
+        "Upper_Midship_W1__BraceExtensions": {
+          "file": "Midship_W1/Upper_Midship_W1__BraceExtensions.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 104,
+          "optional": false
+        },
+        "Upper_Midship_W1__OptionalEndClosures": {
+          "file": "Midship_W1/Upper_Midship_W1__OptionalEndClosures.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 8,
+          "optional": true
+        },
+        "Upper_Midship_W1__Shell": {
+          "file": "Midship_W1/Upper_Midship_W1__Shell.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 16,
+          "optional": false
+        },
+        "Upper_Midship_W1__UpperPlanks": {
+          "file": "Midship_W1/Upper_Midship_W1__UpperPlanks.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 408,
+          "optional": false
+        },
+        "Upper_Midship_W1__UpperPosts": {
+          "file": "Midship_W1/Upper_Midship_W1__UpperPosts.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 144,
+          "optional": false
+        },
+        "Upper_Midship_W1__UpperRails": {
+          "file": "Midship_W1/Upper_Midship_W1__UpperRails.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 56,
+          "optional": false
+        },
+        "Upper_Midship_W1__WallPlanks": {
+          "file": "Midship_W1/Upper_Midship_W1__WallPlanks.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 72,
+          "optional": false
+        }
+      }
+    },
+    "Bow_W1": {
+      "mount_position": [
+        15.300000190734863,
+        0.0,
+        4.199999809265137
+      ],
+      "parts": {
+        "Upper_Bow_W1__BraceExtensions": {
+          "file": "Bow_W1/Upper_Bow_W1__BraceExtensions.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 104,
+          "optional": false
+        },
+        "Upper_Bow_W1__Hatch": {
+          "file": "Bow_W1/Upper_Bow_W1__Hatch.fbx",
+          "position": [
+            2.549999952316284,
+            0.0,
+            2.6000001430511475
+          ],
+          "rotation_radians": [
+            0.0,
+            1.3962633609771729,
+            0.0
+          ],
+          "triangles": 36,
+          "optional": false
+        },
+        "Upper_Bow_W1__InternalLadder": {
+          "file": "Bow_W1/Upper_Bow_W1__InternalLadder.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 108,
+          "optional": false
+        },
+        "Upper_Bow_W1__OptionalEndClosures": {
+          "file": "Bow_W1/Upper_Bow_W1__OptionalEndClosures.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 2,
+          "optional": true
+        },
+        "Upper_Bow_W1__PlankDetails": {
+          "file": "Bow_W1/Upper_Bow_W1__PlankDetails.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "optional": false
+        },
+        "Upper_Bow_W1__PortalFrames": {
+          "file": "Bow_W1/Upper_Bow_W1__PortalFrames.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 48,
+          "optional": false
+        },
+        "Upper_Bow_W1__Prow": {
+          "file": "Bow_W1/Upper_Bow_W1__Prow.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 60,
+          "optional": false
+        },
+        "Upper_Bow_W1__Shell": {
+          "file": "Bow_W1/Upper_Bow_W1__Shell.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 217,
+          "optional": false
+        },
+        "Upper_Bow_W1__StemExtension": {
+          "file": "Bow_W1/Upper_Bow_W1__StemExtension.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 12,
+          "optional": false
+        },
+        "Upper_Bow_W1__UpperPosts": {
+          "file": "Bow_W1/Upper_Bow_W1__UpperPosts.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "optional": false
+        },
+        "Upper_Bow_W1__UpperRails": {
+          "file": "Bow_W1/Upper_Bow_W1__UpperRails.fbx",
+          "position": [
+            0.0,
+            0.0,
+            -1.7599999904632568
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 240,
+          "optional": false
+        },
+        "Upper_Bow_W1__WallPlanks": {
+          "file": "Bow_W1/Upper_Bow_W1__WallPlanks.fbx",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_radians": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "triangles": 552,
+          "optional": false
+        }
+      }
+    }
+  },
+  "status": "Offline shape prototype; crew clearance and stability NOT certified",
+  "chimney_position": [
+    12.300000190734863,
+    0.0,
+    6.639999866485596
+  ],
+  "upper_shell_check": {
+    "boundary_edges": 69,
+    "overconnected_edges": 0,
+    "degenerate_faces": 0,
+    "triangles": 427
+  }
+}
