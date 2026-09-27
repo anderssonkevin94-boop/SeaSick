@@ -32,31 +32,40 @@ namespace SeaSick.UI.Sheets
 
         public bool StillValid => outpost != null && ladder != null;
 
-        /// **Midnight header, 2026-09-27** (audit #10): a drawn ladder glyph
-        /// replaces the "☰" that used to sit here and read like a menu.
+        WatchTiles.Head head;
+
+        /// **Midnight card, 2026-09-27** (audit #10): ladder glyph, island,
+        /// a "standing" pill; Up / Flights / Climb chips; the one thing worth
+        /// knowing (raiders climb it too); Tear down (tap twice) · Close.
         public VisualElement BuildHeader()
         {
-            var icon = new StationPage.Glyph("ladder", MidnightLandHud.Ice, "cp-glyph");
-            var head = CampPages.IconHeader(StationPage.Cap(Title), icon, out var sub);
-            sub.text = "standing";
-            return head;
+            head = CardKit.Head("ladder", "Ladder");
+            head.SetSub(StationPage.Cap(StationPage.IslandName(outpost)));
+            head.SetPill("standing", StationPage.PillGood);
+            return head.Root;
         }
 
-        public VisualElement BuildActions()
-            => SheetKit.Actions(SheetKit.Btn("Tear down", TearDown, false, true));
+        public VisualElement BuildActions() => null;
 
         public VisualElement Build()
         {
-            var root = new VisualElement();
-            root.style.flexDirection = FlexDirection.Column;
+            var root = CardKit.Page(out var col);
             if (ladder == null) return root;
-            root.Add(SheetKit.Text($"{ladder.Rise:0} m up", true, false, 22f));
+            var chips = CardKit.Chips(col);
+            WatchTiles.Set(WatchTiles.Chip(chips, "UP", true), $"{ladder.Rise:0} m");
             int f = ladder.Flights, l = ladder.Landings;
-            root.Add(SheetKit.Text(
-                $"{f} flight{(f == 1 ? "" : "s")} · {l} landing{(l == 1 ? "" : "s")} · "
-                + $"{ladder.ClimbSeconds:0} s to climb", false, true, 12f));
-            root.Add(SheetKit.Note("Your people climb it when it's the shorter way. So do "
-                + "raiders — a ladder round a wall is a way in. Animals can't."));
+            WatchTiles.Set(WatchTiles.Chip(chips, "FLIGHTS", false),
+                l > 0 ? $"{f} · {l} landing{(l == 1 ? "" : "s")}" : f.ToString());
+            WatchTiles.Set(WatchTiles.Chip(chips, "CLIMB", false), $"{ladder.ClimbSeconds:0} s");
+
+            var now = new CardKit.Now(col, new WatchTiles.Glyph("sword"));
+            now.Set("Raiders climb it too",
+                "Your people take it when it's the shorter way. A ladder round a wall is a way in. Animals can't use it.");
+            now.Tone(1);
+
+            var acts = CardKit.Acts(root);
+            new CardKit.Confirm(acts, "Tear down", "Tap again · logs lost", TearDown);
+            CardKit.Act(acts, "Close", () => Sheets.Close());
             return root;
         }
 

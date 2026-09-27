@@ -1106,6 +1106,18 @@ namespace SeaSick.World
             }
         }
 
+        /// Huts standing inside `WarmHutRadius` of the fire -- the Campfire
+        /// card's "warm ring" count (2026-09-27).
+        public int WarmHutCount
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < raised.Count; i++) if (IsWarmRow(i)) n++;
+                return n;
+            }
+        }
+
         /// Is `hands[handIndex]` one of the warm ones? Deterministic: warm
         /// beds fill first, by hand order, the same "no assignment table"
         /// shortcut `HousingCapacity`/`Housed` already take for beds in

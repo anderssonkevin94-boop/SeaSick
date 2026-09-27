@@ -37,7 +37,10 @@ namespace SeaSick.UI.Sheets
             // than the old camp sheet's first page. The old sheet stays one
             // tap away -- the overview's ☰ and every Go that needs the build
             // list or the hands -- until the ledger drawer replaces it.
-            Sheets.Register<Campfire>(f => OverviewFor(SheetBits.OutpostOf(f)));
+            // **Later 2026-09-27**: the fire opens its own Campfire card
+            // (level, raise, warmth, food days); the Overview is its thumb
+            // button and the drawer's first row. `FireSheet` is gone.
+            Sheets.Register<Campfire>(f => CampfireFor(SheetBits.OutpostOf(f)));
 
             // **A length of wall is its own thing, 2026-09-23.** Before
             // the `Building` rule below, because a `WallSegment` IS a
@@ -94,7 +97,7 @@ namespace SeaSick.UI.Sheets
                 // the fire") and never reached the shipyard (2026-09-27).
                 if (b.GetComponent<DryDockSlip>() != null) return null;
                 var camp = SheetBits.OutpostOf(b);
-                if (b.Kind == BuildKind.Fire) return OverviewFor(camp);
+                if (b.Kind == BuildKind.Fire) return CampfireFor(camp);
                 // The watchtower opens its own Lookout card (menu rework #1,
                 // 2026-09-27) -- who stands the watch, why it matters -- not
                 // the old camp sheet's orders page.
@@ -119,7 +122,7 @@ namespace SeaSick.UI.Sheets
                 }
                 bool hasRecipes = Recipes.StationHasRecipes(b.Id);
                 bool hasUpgrade = Techs.MaxLevel(b.Id) > 1;
-                if (!hasRecipes && !hasUpgrade) return FireFor(camp);
+                if (!hasRecipes && !hasUpgrade) return OverviewFor(camp);
                 return new StationSheet(camp, b);
             });
 
@@ -180,15 +183,15 @@ namespace SeaSick.UI.Sheets
             });
         }
 
-        static ISheet FireFor(Outpost camp, string focus = null)
+        static ISheet CampfireFor(Outpost camp)
         {
             if (camp == null || camp.Ledger == null) return null;
             if (!camp.HasCamp && !camp.Building) return null;
-            return new FireSheet(camp, focus);
+            return new CampfireSheet(camp);
         }
 
         /// The camp's overview (`CampOverviewSheet`), on the same terms as
-        /// `FireFor`: a camp, or at least a fire going up.
+        /// `CampfireFor`: a camp, or at least a fire going up.
         static ISheet OverviewFor(Outpost camp)
         {
             if (camp == null || camp.Ledger == null) return null;

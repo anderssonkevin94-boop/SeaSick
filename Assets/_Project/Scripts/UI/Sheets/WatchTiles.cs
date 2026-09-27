@@ -93,11 +93,15 @@ namespace SeaSick.UI.Sheets
             readonly VisualElement pill;
             int pillKind = -1;
 
-            public Head(string glyph, string titleText)
+            public Head(string glyph, string titleText) : this(new Glyph(glyph), titleText) { }
+
+            /// Any drawn glyph in the tile (`StationPage.Glyph` for the small
+            /// world-object cards, 2026-09-27).
+            public Head(VisualElement glyph, string titleText)
             {
                 Root = WatchTiles.Root("st-head");
                 var gl = Box("lk-glyph-box");
-                gl.Add(new Glyph(glyph));
+                gl.Add(glyph);
                 Root.Add(gl);
 
                 var words = Box("st-head-words");
@@ -124,6 +128,7 @@ namespace SeaSick.UI.Sheets
             public void SetPill(string text, int kind)
             {
                 Set(pillText, text);
+                Show(pill, !string.IsNullOrEmpty(text));
                 if (kind == pillKind) return;
                 pillKind = kind;
                 pill.EnableInClassList("st-pill--wait", kind == StationPage.PillWait);

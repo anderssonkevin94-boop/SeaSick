@@ -1367,6 +1367,15 @@ namespace SeaSick.UI.Sheets
                         p.Arc(new Vector2(12 * s, 12 * s), 6.5f * s, 0f, 360f);
                         p.Stroke();
                         break;
+                    // The campfire card (2026-09-27): a flame over two logs.
+                    case "fire":
+                        p.BeginPath();
+                        p.MoveTo(new Vector2(12 * s, 3 * s));
+                        p.BezierCurveTo(new Vector2(17 * s, 8 * s), new Vector2(18 * s, 12 * s), new Vector2(12 * s, 16 * s));
+                        p.BezierCurveTo(new Vector2(6 * s, 12 * s), new Vector2(8 * s, 8 * s), new Vector2(12 * s, 3 * s));
+                        p.Stroke();
+                        Line(5, 17, 19, 21); Line(5, 21, 19, 17);
+                        break;
                     case "pier":
                         Line(3, 9, 21, 9);
                         Line(6, 9, 6, 20); Line(12, 9, 12, 20); Line(18, 9, 18, 20);

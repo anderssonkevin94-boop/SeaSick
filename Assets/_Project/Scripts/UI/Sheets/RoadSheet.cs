@@ -31,29 +31,38 @@ namespace SeaSick.UI.Sheets
 
         public bool StillValid => outpost != null && road != null;
 
-        /// **Midnight header, 2026-09-27** (audit #10): a drawn road glyph
-        /// replaces the "☰" that used to sit here and read like a menu.
+        WatchTiles.Head head;
+
+        /// **Midnight card, 2026-09-27** (audit #10): road glyph, island, a
+        /// "standing" pill; Length / On foot chips; how people use it; Tear
+        /// down (tap twice) · Close.
         public VisualElement BuildHeader()
         {
-            var icon = new StationPage.Glyph("road", MidnightLandHud.Ice, "cp-glyph");
-            var head = CampPages.IconHeader(StationPage.Cap(Title), icon, out var sub);
-            sub.text = "standing";
-            return head;
+            head = CardKit.Head("road", "Road");
+            head.SetSub(StationPage.Cap(StationPage.IslandName(outpost)));
+            head.SetPill("standing", StationPage.PillGood);
+            return head.Root;
         }
 
-        public VisualElement BuildActions()
-            => SheetKit.Actions(SheetKit.Btn("Tear down", TearDown, false, true));
+        public VisualElement BuildActions() => null;
 
         public VisualElement Build()
         {
-            var root = new VisualElement();
-            root.style.flexDirection = FlexDirection.Column;
+            var root = CardKit.Page(out var col);
             if (road == null) return root;
-            root.Add(SheetKit.Text($"{road.Length:0} m of road", true, false, 22f));
+            var chips = CardKit.Chips(col);
+            WatchTiles.Set(WatchTiles.Chip(chips, "LENGTH", true), $"{road.Length:0} m");
             int pct = Mathf.RoundToInt((CampRoads.SpeedMultiplier - 1f) * 100f);
-            root.Add(SheetKit.Text($"{pct}% faster on foot", false, true, 12f));
-            root.Add(SheetKit.Note("Your people take a road whenever it gets them there sooner, "
-                + "and join or leave it wherever suits them."));
+            var foot = WatchTiles.Chip(chips, "ON FOOT", false);
+            WatchTiles.Set(foot, $"{pct}% faster");
+            WatchTiles.Tone(foot, 0);
+
+            var now = new CardKit.Now(col, CardKit.GlyphIcon("road"));
+            now.Set("Used when it's quicker", "People join and leave it wherever suits them.");
+
+            var acts = CardKit.Acts(root);
+            new CardKit.Confirm(acts, "Tear down", "Tap again · stone lost", TearDown);
+            CardKit.Act(acts, "Close", () => Sheets.Close());
             return root;
         }
 

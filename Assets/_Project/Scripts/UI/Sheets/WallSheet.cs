@@ -30,13 +30,11 @@ namespace SeaSick.UI.Sheets
         readonly Outpost outpost;
         readonly WallSegment wall;
 
-        Label state;
-        VisualElement bar;
-        VisualElement note;
-        Button gateBtn;
-        Button repairBtn;
-        int barKey = -99;
-        Label sub;
+        WatchTiles.Head head;
+        Label hpV, lenV, kindV;
+        CardKit.Bar bar;
+        CardKit.Now now;
+        Button mainBtn;
 
         public WallSheet(Outpost camp, WallSegment segment)
         {
@@ -52,56 +50,33 @@ namespace SeaSick.UI.Sheets
 
         public bool StillValid => outpost != null && wall != null;
 
-        /// **Midnight header, 2026-09-27** (audit #10): a drawn wall/gate
-        /// glyph -- not the old parchment badge -- title, and a subtitle
-        /// that carries "breached"/"standing" (`Refresh` keeps it current).
+        /// **Midnight card, 2026-09-27** (audit #10): wall glyph, island,
+        /// a standing / breached pill; Strength / Length / Kind chips over a
+        /// strength bar; the story card; the thumb row -- Tear down (tap
+        /// twice) · the one verb this wall has right now (Make a gate,
+        /// Repair, or Close when neither applies).
         public VisualElement BuildHeader()
         {
-            var icon = new StationPage.Glyph("wall", MidnightLandHud.Ice, "cp-glyph");
-            var head = CampPages.IconHeader(StationPage.Cap(Title), icon, out sub);
-            return head;
+            head = CardKit.Head("wall", StationPage.Cap(Title));
+            head.SetSub(StationPage.Cap(StationPage.IslandName(outpost)));
+            return head.Root;
         }
 
-        /// **Repair swaps in for "make this a gate" while it's down
-        /// (2026-09-26).** Both buttons are built once, here, and never
-        /// again -- `BuildActions` runs only on open, but a breach or a
-        /// finished repair can happen while the sheet is still up, so
-        /// `Refresh` is what toggles which one shows (`style.display`),
-        /// the same trick `AshoreRail` uses for its own state swap.
-        /// "Tear down" says what it costs you (nothing) and what it gives
-        /// you back (nothing) in the note above rather than in the button,
-        /// so the button stays a verb.
-        public VisualElement BuildActions()
-        {
-            repairBtn = SheetKit.Btn("Repair", Repair, true);
-
-            if (wall != null && wall.IsGate)
-                return SheetKit.Actions(
-                    repairBtn,
-                    SheetKit.Btn("Tear down", TearDown, false, true));
-
-            gateBtn = SheetKit.Btn("Make this a gate", MakeGate, true);
-            return SheetKit.Actions(
-                gateBtn,
-                repairBtn,
-                SheetKit.Btn("Tear down", TearDown, false, true));
-        }
+        public VisualElement BuildActions() => null;
 
         public VisualElement Build()
         {
-            state = null; bar = null; note = null;
-            barKey = -99;
+            var root = CardKit.Page(out var col);
+            var chips = CardKit.Chips(col);
+            hpV = WatchTiles.Chip(chips, "STRENGTH", true);
+            lenV = WatchTiles.Chip(chips, "LENGTH", false);
+            kindV = WatchTiles.Chip(chips, "KIND", false);
+            bar = new CardKit.Bar(col);
+            now = new CardKit.Now(col, CardKit.GlyphIcon("wall"));
 
-            var root = new VisualElement();
-            root.style.flexDirection = FlexDirection.Column;
-
-            state = SheetKit.Text("", true, false, 22f);
-            bar = SheetBits.Holder();
-            root.Add(SheetKit.Row(state, bar));
-
-            note = SheetBits.Holder();
-            root.Add(note);
-
+            var acts = CardKit.Acts(root);
+            new CardKit.Confirm(acts, "Tear down", "Tap again · logs lost", TearDown);
+            mainBtn = CardKit.Act(acts, "", Main, 1);
             Refresh();
             return root;
         }
@@ -109,36 +84,45 @@ namespace SeaSick.UI.Sheets
         public void Refresh()
         {
             if (wall == null) return;
-            if (sub != null) sub.text = wall.Breached ? "breached" : "standing";
+            bool breached = wall.Breached;
+            var repair = QueuedRepair();
+            var gate = QueuedGate();
+            if (head != null)
+            {
+                if (breached) head.SetPill(repair != null ? "Repair ordered" : "Breached",
+                    repair != null ? StationPage.PillWait : StationPage.PillBad);
+                else if (gate != null) head.SetPill("Gate ordered", StationPage.PillWait);
+                else head.SetPill("standing", StationPage.PillGood);
+            }
+            if (hpV == null) return;
+
             float fill = wall.MaxHp > 0f ? Mathf.Clamp01(wall.Hp / wall.MaxHp) : 0f;
-            int pct = Mathf.RoundToInt(fill * 100f);
-            if (pct != barKey)
-            {
-                barKey = pct;
-                if (state != null) state.text = pct + "%";
-                SheetBits.Swap(bar, SheetKit.Bar(fill,
-                    wall.Breached ? SheetTheme.Ember : SheetTheme.Timber, 10f));
-            }
+            WatchTiles.Set(hpV, $"{Mathf.RoundToInt(fill * 100f)}%");
+            WatchTiles.Tone(hpV, breached ? 2 : fill < 0.5f ? 1 : 0);
+            WatchTiles.Set(lenV, $"{wall.Length:0.#} m");
+            WatchTiles.Set(kindV, wall.IsGate ? "Gate" : "Palisade");
+            bar.Set(fill, breached ? CardKit.Ember : fill < 0.5f ? CardKit.Amber : (Color?)null);
 
-            if (note == null) return;
-            note.Clear();
-            note.Add(SheetKit.Text($"{wall.Length:0.#} m · {Mathf.CeilToInt(wall.Hp)} of "
-                + $"{Mathf.CeilToInt(wall.MaxHp)} left", false, true, 12f));
-            note.Add(SheetKit.Note(Story()));
+            now.Set(breached ? "Broken through" : wall.IsGate ? "Your people walk through" : "Raiders break it to get in",
+                Story());
+            now.Tone(breached ? 2 : gate != null || repair != null ? 1 : -1);
 
-            if (gateBtn != null)
-            {
-                gateBtn.style.display = wall.Breached ? DisplayStyle.None : DisplayStyle.Flex;
-                gateBtn.SetEnabled(!wall.Breached && QueuedGate() == null);
-            }
-            if (repairBtn != null)
-            {
-                bool breached = wall.Breached;
-                repairBtn.style.display = breached ? DisplayStyle.Flex : DisplayStyle.None;
-                bool ordered = QueuedRepair() != null;
-                repairBtn.SetEnabled(breached && !ordered);
-                repairBtn.text = ordered ? "Repair ordered" : "Repair";
-            }
+            string text;
+            bool enabled = true, pri = true;
+            if (breached) { text = repair != null ? "Repair ordered" : "Repair"; enabled = repair == null; }
+            else if (!wall.IsGate) { text = gate != null ? "Gate ordered" : "Make a gate"; enabled = gate == null; }
+            else { text = "Close"; pri = false; }
+            if (mainBtn.text != text) mainBtn.text = text;
+            mainBtn.SetEnabled(enabled);
+            CardKit.Primary(mainBtn, pri);
+        }
+
+        void Main()
+        {
+            if (wall == null) return;
+            if (wall.Breached) Repair();
+            else if (!wall.IsGate) MakeGate();
+            else Sheets.Close();
         }
 
         string Story()

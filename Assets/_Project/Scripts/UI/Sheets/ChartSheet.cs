@@ -58,41 +58,24 @@ namespace SeaSick.UI.Sheets
         public void SetTab(int index) { }
         public Color Accent => SheetTheme.Sea;
 
-        /// **Midnight header, 2026-09-27** (audit #10): a drawn compass
-        /// glyph instead of the old parchment "N" badge, title fixed at
-        /// "The chart" and the day/islands/camps sentence moved to the
-        /// subtitle -- the same shape every other restyled sheet uses.
+        WatchTiles.Head head;
+
+        /// **Midnight card, 2026-09-27** (audit #10): compass glyph, "The
+        /// chart", the day / islands / camps line as the subtitle. The body
+        /// (`Build`) is the map in a rounded frame, the hint, a Track
+        /// segmented control and a pick tile; the thumb row is Close · Set
+        /// course (or Clear course).
         public VisualElement BuildHeader()
         {
-            var icon = new StationPage.Glyph("chart", MidnightLandHud.Ice, "cp-glyph");
-            var head = CampPages.IconHeader("The chart", icon, out var sub);
-            subLabel = sub;
-            return head;
+            head = CardKit.Head("chart", "The chart");
+            head.SetPill(null, StationPage.PillGood);
+            headKey = long.MinValue;
+            return head.Root;
         }
 
-        /// The chart's three verbs, pinned at the bottom of the frame. The
-        /// host calls this after `Build`, so `chart` is already up and the
-        /// track toggle's repaint has something to repaint.
-        public VisualElement BuildActions()
-        {
-            trackBtn = SheetKit.Btn("track · last day", () =>
-            {
-                showTrack = !showTrack;
-                // The button says what it will do next, not what it is: on a
-                // 400 px card there is no room for a pill and a label both.
-                trackBtn.text = showTrack ? "track · last day" : "track · off";
-                chart.MarkDirtyRepaint();
-            }, false, true);
+        public VisualElement BuildActions() => null;
 
-            // A readout that is also the way out of a selection: pressing the
-            // name drops it, which is the only "never mind" the sheet has.
-            pickBtn = SheetKit.Btn("—", () => { selected = null; wordsKey = long.MinValue; Refresh(); });
-            courseBtn = SheetKit.Btn("Set course", OnCourse, true);
-
-            var row = SheetKit.Actions(trackBtn, pickBtn, courseBtn);
-            Refresh();
-            return row;
-        }
+        public bool WantsTallSheet => true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         public static void Register() => ChartHook.Factory = () => new ChartSheet();
@@ -119,9 +102,6 @@ namespace SeaSick.UI.Sheets
 
         VisualElement chart;      // the drawing, and the parent of every word on it
         VisualElement words;      // labels that move with the fit
-        Label subLabel;
-        Button trackBtn;
-        Button pickBtn;
         Button courseBtn;
 
         bool showTrack = true;
@@ -140,22 +120,23 @@ namespace SeaSick.UI.Sheets
 
         // --- build ---------------------------------------------------------------
 
+        VisualElement trackOn, trackOff;
+        CardKit.Tile pickTile;
+
         public VisualElement Build()
         {
-            var root = new VisualElement();
-            root.style.flexDirection = FlexDirection.Column;
+            var root = CardKit.Page(out var col);
 
             chart = new VisualElement();
+            chart.AddToClassList("ck-map");
             chart.style.width = Length.Percent(100f);
             chart.style.height = 220f;
-            chart.style.marginTop = 6f;
-            chart.style.marginBottom = 8f;
             chart.style.overflow = Overflow.Hidden;
             chart.pickingMode = PickingMode.Position;
             chart.generateVisualContent += Paint;
             chart.RegisterCallback<GeometryChangedEvent>(OnGeometry);
             chart.RegisterCallback<PointerDownEvent>(OnPointer);
-            root.Add(chart);
+            col.Add(chart);
 
             words = new VisualElement();
             words.style.position = Position.Absolute;
@@ -164,12 +145,49 @@ namespace SeaSick.UI.Sheets
             words.pickingMode = PickingMode.Ignore;
             chart.Add(words);
 
-            root.Add(SheetKit.Text("Tap an island for its name. Tap a flame to set course.",
-                false, true, 12f));
+            var hint = StationPage.Text("Tap an island for its name. Tap a flame, then Set course.", "ck-note");
+            col.Add(hint);
 
+            // Track: last day / off, Station.uss's segmented control.
+            var seg = WatchTiles.Box("st-seg");
+            seg.AddToClassList("ck-seg");
+            seg.pickingMode = PickingMode.Position;
+            var on = new Button(() => SetTrack(true)) { text = "Track: last day" };
+            on.AddToClassList("st-seg-btn");
+            on.AddToClassList("st-seg-btn--first");
+            var off = new Button(() => SetTrack(false)) { text = "Track off" };
+            off.AddToClassList("st-seg-btn");
+            seg.Add(on);
+            seg.Add(off);
+            trackOn = on; trackOff = off;
+            col.Add(seg);
+            SetTrack(showTrack);
+
+            // What "Set course" would do; a tap drops the pick.
+            var grid = CardKit.Grid(col);
+            grid.style.marginTop = 8f;
+            pickTile = new CardKit.Tile(_ => { selected = null; wordsKey = long.MinValue; Refresh(); }, false);
+            pickTile.Root.AddToClassList("ck-tile--wide");
+            var compass = new StationPage.Glyph("chart", MidnightLandHud.Ice, "ck-glyph-fill");
+            compass.style.width = Length.Percent(100f);
+            compass.style.height = Length.Percent(100f);
+            pickTile.Ico.Add(compass);
+            grid.Add(pickTile.Root);
+
+            var acts = CardKit.Acts(root);
+            CardKit.Act(acts, "Close", () => Sheets.Close());
+            courseBtn = CardKit.Act(acts, "Set course", OnCourse, 1);
 
             Refresh();
             return root;
+        }
+
+        void SetTrack(bool show)
+        {
+            showTrack = show;
+            trackOn?.EnableInClassList("st-seg-btn--on", show);
+            trackOff?.EnableInClassList("st-seg-btn--on", !show);
+            chart?.MarkDirtyRepaint();
         }
 
         void OnGeometry(GeometryChangedEvent evt)
@@ -178,7 +196,7 @@ namespace SeaSick.UI.Sheets
             // A chart is a wide thing. On the docked phone card the body is
             // wider than it is allowed to be tall, and on the desk column it
             // is 400 px — both want the same ratio and a floor under it.
-            float want = Mathf.Clamp(vw / 1.5f, 180f, 320f);
+            float want = Mathf.Clamp(vw / 1.5f, 170f, 260f);
             if (!Mathf.Approximately(chart.style.height.value.value, want))
                 chart.style.height = want;
             vh = evt.newRect.height;
@@ -202,10 +220,10 @@ namespace SeaSick.UI.Sheets
             if (hk != headKey)
             {
                 headKey = hk;
-                if (subLabel != null)
-                    subLabel.text = "Day " + TimeOfDay.Day + " · " + Cap(Words(seenCount))
+                if (head != null)
+                    head.SetSub("Day " + TimeOfDay.Day + " · " + Cap(Words(seenCount))
                         + (seenCount == 1 ? " island seen, " : " islands seen, ")
-                        + Words(camps) + (camps == 1 ? " camp" : " camps");
+                        + Words(camps) + (camps == 1 ? " camp" : " camps"));
             }
 
             Fit();
@@ -219,32 +237,40 @@ namespace SeaSick.UI.Sheets
             // The picked button is a readout, not an action: it says what
             // "Set course" would do. With nothing picked it offers the same
             // answer `ChartData` gives everything else — the nearest pier.
-            string label = "—";
+            string label = null, sub = null;
             bool canSet = false;
             if (selected != null)
             {
                 foreach (var i in isles)
                 {
                     if (i.island != selected) continue;
-                    label = (i.seen == Seen.Landed ? i.name : "unseen land")
-                          + " · " + Km(Vector2.Distance(ChartData.ShipPos, i.centre));
+                    label = i.seen == Seen.Landed ? i.name : "Unseen land";
+                    sub = Km(Vector2.Distance(ChartData.ShipPos, i.centre))
+                        + (i.outpost != null ? " · tap to drop" : " · no camp · tap to drop");
                     canSet = i.outpost != null;
                     break;
                 }
             }
             else if (ChartData.TryCourse(out _, out string where, out float d))
             {
-                label = where + " · " + Km(d);
+                label = where;
+                sub = Km(d) + " · the course";
             }
-            if (pickBtn != null) pickBtn.text = label;
+            if (pickTile != null)
+            {
+                pickTile.Set(label ?? "Nothing picked", sub ?? "Tap a flame on the chart");
+                pickTile.State(selected != null);
+            }
 
             if (courseBtn == null) return;
             // **One button, and it never says two things at once.** With a
             // camp picked it sets the course; with nothing picked and a
             // course already set it is the way to drop it; otherwise it is
             // simply not a decision that can be made yet.
-            courseBtn.text = canSet ? "Set course" : "Clear course";
+            string t = canSet ? "Set course" : ChartData.HasCourse ? "Clear course" : "Set course";
+            if (courseBtn.text != t) courseBtn.text = t;
             courseBtn.SetEnabled(canSet || ChartData.HasCourse);
+            CardKit.Primary(courseBtn, canSet);
         }
 
         void OnCourse()

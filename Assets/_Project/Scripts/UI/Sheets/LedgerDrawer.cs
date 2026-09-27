@@ -27,8 +27,7 @@ namespace SeaSick.UI.Sheets
         /// **The camp overview seam.** Another sheet (`CampOverviewSheet`,
         /// goal chain + campfire) is being written beside this one. Set this
         /// to `c => new CampOverviewSheet(c)` from wherever that lands; until
-        /// then the drawer looks the type up by name, and falls back to the
-        /// campfire sheet.
+        /// then the drawer builds a `CampOverviewSheet` itself.
         public static Func<Outpost, ISheet> CampOverviewFactory;
 
         public static bool IsOpen { get; private set; }
@@ -41,13 +40,7 @@ namespace SeaSick.UI.Sheets
             if (camp == null) return null;
             var made = CampOverviewFactory != null ? CampOverviewFactory(camp) : null;
             if (made != null) return made;
-            var t = Type.GetType("SeaSick.UI.Sheets.CampOverviewSheet");
-            if (t != null && typeof(ISheet).IsAssignableFrom(t))
-            {
-                try { if (Activator.CreateInstance(t, camp) is ISheet s) return s; }
-                catch (Exception e) { Debug.LogWarning("[Ledger] CampOverviewSheet(camp) failed: " + e.Message); }
-            }
-            return new FireSheet(camp);
+            return new CampOverviewSheet(camp);
         }
 
         // --- tones (mockup C table) ---
@@ -274,7 +267,7 @@ namespace SeaSick.UI.Sheets
             var overview = NewRow(campCard, ItemIcon(Res.Food, "food"), "Overview", false);
             overview.open = () => CampOverview(MidnightLandHud.Camp);
             overview.current = () => Sheets.Current != null
-                && Sheets.Current.GetType().Name == "CampOverviewSheet";
+                && Sheets.Current is CampOverviewSheet;
             updates.Add(() =>
             {
                 int n = alertCount;
@@ -372,26 +365,7 @@ namespace SeaSick.UI.Sheets
         /// destination.
         static ISheet GatherSheet(Outpost camp, string res)
         {
-            var made = TryOpen("GatherSheet", camp, res);
-            if (made != null) return made;
-            var l = camp != null ? camp.Ledger : null;
-            if (l == null) return null;
-            foreach (var h in l.hands)
-                if (h != null && h.order == OutpostOrder.Gather && h.target == res)
-                    return new HandSheet(camp, h.name);
-            return CampAlerts.People(camp);
-        }
-
-        /// A sheet built by name (`CampOverviewSheet`'s own pattern) -- lets
-        /// `LedgerDrawer` wire a row to a class another agent is landing in
-        /// the same pass without this file failing to compile in the
-        /// meantime.
-        static ISheet TryOpen(string typeName, params object[] args)
-        {
-            var t = typeof(LedgerDrawer).Assembly.GetType("SeaSick.UI.Sheets." + typeName);
-            if (t == null || !typeof(ISheet).IsAssignableFrom(t)) return null;
-            try { return Activator.CreateInstance(t, args) as ISheet; }
-            catch (Exception e) { Debug.LogWarning($"[Ledger] {typeName} ctor failed: {e.Message}"); return null; }
+            return camp != null && camp.Ledger != null ? new GatherSheet(camp, res) : null;
         }
 
         readonly StringBuilder sb = new StringBuilder(48);

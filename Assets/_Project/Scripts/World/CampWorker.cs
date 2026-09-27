@@ -1300,7 +1300,13 @@ namespace SeaSick.World
                     if (!Walk(door, dt)) return;
                     phase = Phase.Working;
                     wait = Random.Range(ShiftShortest, ShiftLongest);
-                    acting?.Set(ModeAt(r.target));
+                    // No building stood yet (assigned to a post before it is
+                    // built): `door` fell back to `home`, often the fire
+                    // ring, and there is no bench, forge or pot to work --
+                    // Kevin, 2026-09-27, saw a "cook" stirring a stick at the
+                    // campfire this way. Idle hands, not a tool mimed on
+                    // nothing.
+                    acting?.Set(post != null ? ModeAt(r.target) : VillagerActing.Mode.None);
                     return;
 
                 case Phase.Working:

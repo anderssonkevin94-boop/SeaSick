@@ -128,65 +128,6 @@ namespace SeaSick.UI.Sheets
         // Stores
         // ------------------------------------------------------------------
 
-        /// One of the three numbers across the top of a camp sheet: TIMBER /
-        /// 23 / "of 30" / a bar. `big` and `small` are separate because they
-        /// are different weights, and because the unit is the part the eye
-        /// should skip once it has learnt it.
-        /// **Three of these sit side by side in a 420 px card, so every part of
-        /// one has to be a BLOCK in a column.** The first version let the
-        /// eyebrow, the number and the unit find their own places in a flex
-        /// row and they landed on top of each other — "TIMBER" printed through
-        /// the "23", and the unit sat up at eyebrow height. Each row here is
-        /// therefore explicit: label, then one baseline row of number + unit,
-        /// then the bar, and whatever the caller appends after that.
-        public static VisualElement Store(string label, string big, string small,
-                                          float frac01, Color col)
-        {
-            var box = new VisualElement();
-            box.AddToClassList(SheetTheme.Store);
-            box.style.flexDirection = FlexDirection.Column;
-
-            var eb = Eyebrow(label);
-            eb.style.marginBottom = 1f;
-            box.Add(eb);
-
-            // A row of its own, with nothing stretching it: the number sets
-            // the height and the unit sits on its baseline.
-            var nums = new VisualElement();
-            nums.style.flexDirection = FlexDirection.Row;
-            nums.style.alignItems = Align.FlexEnd;
-            nums.style.flexShrink = 0f;
-            var b = new Label(big ?? "");
-            b.AddToClassList("sheet-store-big");
-            nums.Add(b);
-            var s = new Label(small ?? "");
-            s.AddToClassList("sheet-store-small");
-            if (MidnightLandHud.Active)
-            {
-                nums.style.flexDirection = FlexDirection.Column;
-                nums.style.alignItems = Align.FlexStart;
-                s.style.whiteSpace = WhiteSpace.Normal;
-                s.style.marginLeft = 0;
-                s.style.fontSize = 10f;
-            }
-            nums.Add(s);
-            box.Add(nums);
-
-            box.Add(Bar(frac01, col));
-            return box;
-        }
-
-        /// Re-point a `Store` built above without rebuilding it. Safe on a
-        /// null or on anything that is not a store.
-        public static void SetStore(VisualElement store, string big, string small, float frac01)
-        {
-            if (store == null || store.childCount < 3) return;
-            var nums = store[1];
-            if (nums.childCount > 0 && nums[0] is Label b) b.text = big ?? "";
-            if (nums.childCount > 1 && nums[1] is Label s) s.text = small ?? "";
-            SetBar(store[2], frac01);
-        }
-
         // ------------------------------------------------------------------
         // Bars
         // ------------------------------------------------------------------
@@ -230,14 +171,6 @@ namespace SeaSick.UI.Sheets
             var e = new VisualElement();
             e.AddToClassList(SheetTheme.Row);
             Fill(e, children, true);
-            return e;
-        }
-
-        public static VisualElement Col(params VisualElement[] children)
-        {
-            var e = new VisualElement();
-            e.AddToClassList(SheetTheme.Col);
-            Fill(e, children, false);
             return e;
         }
 

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using SeaSick.World;
 using SeaSick.World.Economy;
 using UnityEngine;
@@ -29,8 +28,7 @@ namespace SeaSick.UI.Sheets
     public sealed class CampOverviewSheet : ISheetFramed
     {
         /// **The ☰ hook.** The ledger drawer sets this; while nobody has, the
-        /// button looks for a `LedgerDrawer.Open()` by name and, failing
-        /// that, opens the old camp sheet so nothing becomes unreachable.
+        /// button falls back to the station page's hook.
         public static Action OpenLedger;
 
         readonly Outpost outpost;
@@ -105,20 +103,7 @@ namespace SeaSick.UI.Sheets
         void Ledger()
         {
             if (OpenLedger != null) { OpenLedger(); return; }
-            if (TryLedgerDrawer()) return;
-            if (outpost != null) Sheets.Open(new FireSheet(outpost));
-        }
-
-        /// `LedgerDrawer.Open()`, if the drawer agent's type is in the
-        /// assembly -- by name, so this file compiles with or without it.
-        static bool TryLedgerDrawer()
-        {
-            var t = typeof(CampOverviewSheet).Assembly.GetType("SeaSick.UI.Sheets.LedgerDrawer")
-                    ?? typeof(CampOverviewSheet).Assembly.GetType("SeaSick.UI.LedgerDrawer");
-            var m = t?.GetMethod("Open", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
-            if (m == null) return false;
-            m.Invoke(null, null);
-            return true;
+            StationSheet.OpenLedger?.Invoke();
         }
 
         // --- the body ---------------------------------------------------------
@@ -572,32 +557,17 @@ namespace SeaSick.UI.Sheets
 
         void OpenLarder()
         {
-            var s = TryOpen("LarderSheet", outpost);
-            if (s != null) Sheets.Open(s);
+            if (outpost != null) Sheets.Open(new LarderSheet(outpost));
         }
 
         void OpenGather(string res)
         {
-            var s = TryOpen("GatherSheet", outpost, res);
-            if (s != null) Sheets.Open(s);
+            if (outpost != null) Sheets.Open(new GatherSheet(outpost, res));
         }
 
         void OpenLookout()
         {
-            var s = TryOpen("LookoutSheet", outpost);
-            if (s != null) Sheets.Open(s);
-        }
-
-        /// A sheet built by name, so this file does not have to reference
-        /// a type another agent has not landed yet (`TryLedgerDrawer`'s own
-        /// pattern). Returns null -- the tile simply does nothing this
-        /// build -- until the class exists with a matching constructor.
-        static ISheet TryOpen(string typeName, params object[] args)
-        {
-            var t = typeof(CampOverviewSheet).Assembly.GetType("SeaSick.UI.Sheets." + typeName);
-            if (t == null || !typeof(ISheet).IsAssignableFrom(t)) return null;
-            try { return Activator.CreateInstance(t, args) as ISheet; }
-            catch (Exception e) { Debug.LogWarning($"[Overview] {typeName} ctor failed: {e.Message}"); return null; }
+            if (outpost != null) Sheets.Open(new LookoutSheet(outpost));
         }
 
         // --- the verbs -----------------------------------------------------------

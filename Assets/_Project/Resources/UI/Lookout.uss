@@ -69,3 +69,64 @@
 
 .st .lk-act--pri { background-color: rgb(164, 210, 232); border-color: rgb(164, 210, 232); color: rgb(11, 23, 32); }
 .st .lk-act--pri:hover { background-color: rgb(190, 226, 242); }
+
+/* ------------------------------------------------------------------
+ * CardKit (2026-09-27, menu rework #7 / #10 / campfire): the small
+ * Midnight cards -- Manifest, Campfire, Wall, Ladder, Road, Chart --
+ * built on `.st` + Hand.uss tiles. Everything here is `.ck-*`.
+ * ------------------------------------------------------------------ */
+
+.ck-col { flex-grow: 1; flex-shrink: 1; min-height: 0; overflow: hidden; }
+.ck-pills { flex-direction: row; flex-wrap: nowrap; margin-top: 8px; flex-shrink: 0; }
+.st .ck-pill {
+    height: 44px;
+    min-width: 0;
+    flex-shrink: 1;
+    padding: 0 14px;
+    margin: 0 8px 0 0;
+    border-radius: 22px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    color: rgb(232, 242, 246);
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.st .ck-pill:disabled { opacity: 0.6; }
+.st .ck-pill--ice { border-color: rgb(164, 210, 232); color: rgb(164, 210, 232); }
+.st .ck-pill--wait { border-color: rgb(240, 195, 106); color: rgb(240, 195, 106); }
+.st .ck-pill--good { border-color: rgb(159, 224, 194); color: rgb(159, 224, 194); }
+.st .ck-pill--bad { border-color: rgb(246, 146, 128); color: rgb(246, 146, 128); }
+
+.ck-av {
+    width: 28px;
+    height: 28px;
+    border-radius: 14px;
+    background-color: rgb(44, 74, 94);
+    align-items: center;
+    justify-content: center;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+.st .ck-av-t { font-size: 14px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st .hs-tile--on .ck-av { background-color: rgb(164, 210, 232); }
+.st .hs-tile--on .ck-av-t { color: rgb(11, 23, 32); }
+.st .ck-tile--wide { width: 100%; margin-right: 0; }
+.st .ck-tile--short .hs-tile-s { color: rgb(246, 146, 128); }
+.st .ck-tile--ok .hs-tile-s { color: rgb(159, 224, 194); }
+
+.ck-card { margin-top: 10px; flex-shrink: 0; }
+.ck-bar { margin-top: 8px; margin-bottom: 0; }
+.st .ck-note { font-size: 14px; color: rgb(166, 186, 198); white-space: normal; margin-top: 6px; }
+.ck-map {
+    border-radius: 14px;
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    background-color: rgb(18, 48, 73);
+    margin-top: 8px;
+    flex-shrink: 0;
+}
+.ck-seg { margin-top: 8px; flex-shrink: 0; }

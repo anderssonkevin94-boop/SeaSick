@@ -126,7 +126,11 @@ namespace SeaSick.UI.Sheets
 
             bool pinned = GoalPin.IsBuildPinned(outpost, planId);
             int kind = (pinned ? 1 : 0) * 2 + (unlocked ? 1 : 0);
-            if (kind != pinKind)
+            // `Build()` calls `Refresh()` before `SheetHost.FillTab` gets to
+            // `BuildActions()` (Build fills the body first, actions second),
+            // so the first Refresh runs with `pinBtn` still null. Guard it
+            // here rather than reorder FillTab for every sheet's sake.
+            if (pinBtn != null && kind != pinKind)
             {
                 pinKind = kind;
                 pinBtn.text = pinned ? "Goal ✓" : "Set as goal";
