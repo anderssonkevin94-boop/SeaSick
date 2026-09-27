@@ -88,6 +88,19 @@ namespace SeaSick.Save
         /// story logged yet, which is exactly what an empty list means.
         public List<SeaSick.World.Life.LifeRecord> lives = new List<SeaSick.World.Life.LifeRecord>();
         public List<SeaSick.World.Life.GraveRecord> graveyard = new List<SeaSick.World.Life.GraveRecord>();
+
+        /// **Phase 5a (man overboard).** Crew the sea gave back to an
+        /// island rather than the ship -- phase 7 fetches them. Added after
+        /// version 1 shipped, deliberately NOT a version bump, same
+        /// reasoning as `lives`/`graveyard` above.
+        public List<SeaSick.World.Life.CastawayRecord> castaways = new List<SeaSick.World.Life.CastawayRecord>();
+
+        /// **Phase 5a.** Set once the scripted first man-overboard has
+        /// resolved (rescued, washed ashore, or lost) -- until then, no
+        /// OTHER crew member can go over, and once it fires nobody else's
+        /// grip is even ticked down. False (absent) in an old save is
+        /// exactly right: the scripted event still has to happen for them.
+        public bool firstOverboardDone;
     }
 
     [System.Serializable]

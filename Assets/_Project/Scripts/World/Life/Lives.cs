@@ -50,6 +50,10 @@ namespace SeaSick.World.Life
     {
         static readonly Dictionary<string, LifeRecord> records = new Dictionary<string, LifeRecord>();
         static readonly List<GraveRecord> graveyard = new List<GraveRecord>();
+        /// **Phase 5a.** Washed-ashore swimmers, waiting to be fetched.
+        /// Removing a name from here is phase 7's job (ferrying); nothing
+        /// in phase 5a ever un-castaways anyone.
+        static readonly List<CastawayRecord> castaways = new List<CastawayRecord>();
 
         /// Raised the instant `OutpostLedger.Die` writes a `GraveRecord` --
         /// phase 3's tombstone-siting flow subscribes to this. Not saved;
@@ -59,6 +63,7 @@ namespace SeaSick.World.Life
 
         public static IReadOnlyDictionary<string, LifeRecord> Records => records;
         public static IReadOnlyList<GraveRecord> Graveyard => graveyard;
+        public static IReadOnlyList<CastawayRecord> Castaways => castaways;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Boot()
@@ -67,7 +72,25 @@ namespace SeaSick.World.Life
             // rather than carry a dead session's cast into a fresh load.
             records.Clear();
             graveyard.Clear();
+            castaways.Clear();
             Died = null;
+        }
+
+        /// **Phase 5a.** Somebody the sea gave back, but not to the ship.
+        /// Called once by `Swimmer`'s timeout path; never removes anyone
+        /// (phase 7's job).
+        public static void MarkCastaway(CastawayRecord c)
+        {
+            if (c == null || string.IsNullOrEmpty(c.name)) return;
+            castaways.Add(c);
+        }
+
+        /// Is this name already ashore as a castaway?
+        public static bool IsCastaway(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return false;
+            foreach (var c in castaways) if (c.name == name) return true;
+            return false;
         }
 
         /// The record for `name`, created empty if this is the first time
@@ -90,7 +113,7 @@ namespace SeaSick.World.Life
         {
             if (string.IsNullOrEmpty(name)) return false;
             foreach (var g in graveyard) if (g.name == name) return true;
-            return false;
+            return IsCastaway(name);
         }
 
         /// **Log one event on `name`.** Creates the record lazily. A repeat
@@ -160,6 +183,16 @@ namespace SeaSick.World.Life
             outGraves.AddRange(graveyard);
         }
 
+        /// **Phase 5a.** Castaways ride a separate list (`SaveData.castaways`)
+        /// -- called alongside `SyncTo` rather than folded into it, so an
+        /// old save (no castaways yet) still round-trips the lives/graves
+        /// call exactly as before.
+        public static void SyncCastawaysTo(List<CastawayRecord> outCastaways)
+        {
+            outCastaways.Clear();
+            outCastaways.AddRange(castaways);
+        }
+
         /// Rebuild the live registry from a save's lists. Call right after
         /// reading the file, before anything else logs an event. Missing in
         /// an old save (null lists) reads as nobody has a story yet.
@@ -181,6 +214,18 @@ namespace SeaSick.World.Life
                         g.story ??= new string[3];
                         graveyard.Add(g);
                     }
+        }
+
+        /// Companion to `SyncCastawaysTo` -- see there for why it is not
+        /// folded into `SyncFrom`. Missing in an old save reads as nobody
+        /// washed ashore yet.
+        public static void SyncCastawaysFrom(List<CastawayRecord> savedCastaways)
+        {
+            castaways.Clear();
+            if (savedCastaways != null)
+                foreach (var c in savedCastaways)
+                    if (c != null && !string.IsNullOrEmpty(c.name))
+                        castaways.Add(c);
         }
     }
 }

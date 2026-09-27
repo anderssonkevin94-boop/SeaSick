@@ -1,4 +1,6 @@
 using UnityEngine;
+using SeaSick.Ship;
+using SeaSick.Ship.Overboard;
 
 namespace SeaSick.Crew
 {
@@ -20,6 +22,18 @@ namespace SeaSick.Crew
         [SerializeField] bool assignGunsInOrder = true;
 
         CrewAgent[] crew;
+        AnchorController anchor;
+
+        void Start() => anchor = GetComponent<AnchorController>();
+
+        /// **Phase 5a.** The scripted first man-overboard is bookkept per
+        /// ship here — one roster, one voyage's worth of "how long have we
+        /// been sailing calmly" (`FirstOverboard.Tick`).
+        void Update()
+        {
+            if (anchor == null) anchor = GetComponent<AnchorController>();
+            FirstOverboard.Tick(this, anchor, Time.deltaTime);
+        }
 
         /// Everyone aboard or ashore, in scene order — the gun assignment index.
         public CrewAgent[] All

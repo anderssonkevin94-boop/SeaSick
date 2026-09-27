@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using SeaSick.Ship;
+using SeaSick.Ship.Overboard;
+using SeaSick.World.Life;
 using UnityEngine;
 
 namespace SeaSick.Crew
@@ -29,8 +31,8 @@ namespace SeaSick.Crew
         [Tooltip("Seconds to go green in a bad sea, and to get their colour back in a calm one.")]
         [SerializeField] Vector2 sicknessHalflife = new Vector2(22f, 45f);
 
-        [Header("Heaving (cosmetic only)")]
-        [Tooltip("How queasy before they start retching. They never leave their post to do it.")]
+        [Header("Heaving -- and now the rail (phase 5a, 2026-09-28)")]
+        [Tooltip("How queasy before they start retching. **They used to never leave their post for it; now they WALK to the rail, heave there, and walk back** -- their station goes unmanned for the round trip, same as a hand sent to the buckets.")]
         [SerializeField] float heaveThreshold = 0.72f;
         [Tooltip("Seconds between heaves, at the threshold and at the very worst.")]
         [SerializeField] Vector2 heaveInterval = new Vector2(26f, 7f);
@@ -94,10 +96,28 @@ namespace SeaSick.Crew
             PutBackOnStation();
         }
 
-        /// Standing at their post and free to work it. Bailing, ashore, or
-        /// over the side means no — this is the single question every ship
-        /// system asks before it does anything. Being sick is NOT a reason.
-        public bool Available => state == State.Station;
+        /// Standing at their post and free to work it. Bailing, ashore, at
+        /// or travelling to the rail, resting off a rescue, or over the side
+        /// means no — this is the single question every ship system asks
+        /// before it does anything. Being sick is NOT a reason on its own.
+        public bool Available => state == State.Station && restLeft <= 0f;
+
+        /// **Phase 5a.** 0..1, starts full. Drains toward zero in a rough,
+        /// heeling or slammed sea (see `TrackGrip`); refills whenever none
+        /// of that is happening, calm water included. Ticks for EVERY
+        /// aboard hand, station or rail alike — only somebody actually AT
+        /// the rail (`IsAtRail`) can go over when it runs out.
+        public float Grip01 { get; private set; } = 1f;
+
+        /// At the rail right now — heaving, or gripping it through a
+        /// warning. The only place a fall can happen.
+        public bool IsAtRail => state == State.AtRail || state == State.RailHold;
+
+        /// Real seconds left of a post-rescue rest (`ApplyRescueAftermath`)
+        /// — standing at their post but not working it yet, soaked and
+        /// shaken. Separate from the rail-warning hold, which uses `state`
+        /// alone (see `RailHold`) to keep `Available` correct.
+        float restLeft;
 
         /// **Something else is moving this body.** Set by `World.CampWorker`
         /// (and the Hand) for as long as they drive the transform of a hand
@@ -199,7 +219,11 @@ namespace SeaSick.Crew
 
         enum State
         {
-            Station, Bailing, Returning,                 // aboard
+            // aboard
+            Station, Bailing, Returning,
+            // phase 5a: the rail round-trip a heave now takes
+            RailGoing, AtRail, RailHold, RailReturning,
+            // ashore
             GoingAshore, ToNode, Chopping, ToShip, Idling, Boarding
         }
         State state = State.Station;
@@ -212,7 +236,8 @@ namespace SeaSick.Crew
         /// refit guard, which will not rebuild a deck a hand is out of.
         public Transform HomeShip => ship;
         public bool IsAboard => state == State.Station || state == State.Bailing
-            || state == State.Returning;
+            || state == State.Returning || state == State.RailGoing
+            || state == State.AtRail || state == State.RailHold || state == State.RailReturning;
 
         Transform ship;
         Vector3 shoreTarget;
@@ -415,6 +440,8 @@ namespace SeaSick.Crew
 
         SmoothnessMeter meter;
         Ship.ShipMotor motor;
+        Ship.HullIntegrity hull;
+        Ship.AnchorController anchor;
         float walkSpeedSeen;      // metres/second, smoothed, for the Animator
         Vector3 lastSample;
         bool sampledAshore;
@@ -492,6 +519,8 @@ namespace SeaSick.Crew
         {
             meter = GetComponentInParent<SmoothnessMeter>();
             motor = GetComponentInParent<Ship.ShipMotor>();
+            hull = GetComponentInParent<Ship.HullIntegrity>();
+            anchor = GetComponentInParent<Ship.AnchorController>();
             block = new MaterialPropertyBlock();
             if (tintRenderers == null || tintRenderers.Length == 0)
                 tintRenderers = FindSkinRenderers();
@@ -506,7 +535,10 @@ namespace SeaSick.Crew
         {
             float dt = Time.deltaTime;
             TrackSickness(dt);
+            TrackGrip(dt);
+            if (restLeft > 0f) restLeft -= dt;
             TickHeaving(dt);
+            TrackRailSafety(dt);
             RunStateMachine(dt);
             TrackWalking(dt);
             ActBody(dt);
@@ -601,6 +633,37 @@ namespace SeaSick.Crew
                     if (WalkTo(stationLocal, dt))
                     {
                         transform.localRotation = Quaternion.identity;
+                        state = State.Station;
+                    }
+                    break;
+
+                // --- phase 5a: the rail round-trip ---------------------------
+                case State.RailGoing:
+                    if (WalkTo(railLocal, dt))
+                    {
+                        state = State.AtRail;
+                        heaveTimer = heaveLength;
+                        PukeCount++;
+                    }
+                    break;
+
+                case State.AtRail:
+                    // Retching in place — TickHeaving counts heaveTimer down
+                    // and moves on to RailReturning when it runs out, unless
+                    // TrackRailSafety has already pulled this into RailHold.
+                    break;
+
+                case State.RailHold:
+                    // Gripping the rail through the warning window — held
+                    // here by `TrackRailSafety`, which is also what moves us
+                    // back out (saved -> RailReturning, or overboard).
+                    break;
+
+                case State.RailReturning:
+                    if (WalkTo(stationLocal, dt))
+                    {
+                        transform.localRotation = Quaternion.identity;
+                        heaveCooldown = heaveInterval.x;
                         state = State.Station;
                     }
                     break;
@@ -735,18 +798,26 @@ namespace SeaSick.Crew
         Vector3 BailLocal => new Vector3(
             stationLocal.x * (1f - bailStepInboard), stationLocal.y, stationLocal.z);
 
-        /// Retching is on a timer of its own and never touches the state
-        /// machine: they heave where they stand and keep working.
+        /// **Phase 5a: a heave now takes them to the rail and back.** While
+        /// `AtRail`, `heaveTimer` still just counts the retch down the same
+        /// way it always did; when it runs out here it hands off to
+        /// `RailReturning` instead of going straight back to `Station`. A
+        /// new trip can only START from `State.Station` — bailing or
+        /// mid-return, they finish what they're doing first.
         void TickHeaving(float dt)
         {
-            if (heaveTimer > 0f) { heaveTimer -= dt; return; }
+            if (heaveTimer > 0f)
+            {
+                heaveTimer -= dt;
+                if (heaveTimer <= 0f && state == State.AtRail) state = State.RailReturning;
+                return;
+            }
 
             // `Puppeted` for the same reason `TrackSickness` reads it: a hand
             // at a camp is `Station`, so without this a crewman left ashore
             // still green from the crossing would retch in the middle of the
-            // village — and `ActBody` no longer has the rotation to show it
-            // with, so it would be a counter going up and nothing on screen.
-            if (!IsAboard || Puppeted || Sickness01 < HeaveAt)
+            // village.
+            if (state != State.Station || Puppeted || Sickness01 < HeaveAt)
             {
                 heaveCooldown = heaveInterval.x;
                 return;
@@ -755,10 +826,185 @@ namespace SeaSick.Crew
             heaveCooldown -= dt;
             if (heaveCooldown <= 0f)
             {
-                heaveTimer = heaveLength;
                 heaveCooldown = Mathf.Lerp(heaveInterval.x, heaveInterval.y, Severity01);
-                PukeCount++;
+                state = State.RailGoing;   // heaveTimer/PukeCount start on arrival
             }
+        }
+
+        // ------------------------------------------------- man overboard (5a)
+        //
+        // `TrackGrip` runs for every aboard hand, station or rail alike --
+        // "at the station the grip just drains/refills" (build brief). Only
+        // `TrackRailSafety`, gated on `IsAtRail`, can turn a low grip into a
+        // warning and a fall.
+
+        float NormalizeDeg(float degrees) =>
+            degrees > 180f ? degrees - 360f : degrees;
+
+        bool warnActive;
+        float warnLeft;
+        bool warnDangerSeen;
+        bool forcedTrip;
+        bool scriptedTrip;
+
+        void TrackGrip(float dt)
+        {
+            if (IsAshore || Puppeted || AtCamp || !IsAboard) { Grip01 = 1f; return; }
+
+            float rough = meter != null ? meter.Roughness01 : 0f;
+            float roughDrain = Mathf.Max(0f, rough - OverboardTuning.CalmRoughness)
+                * OverboardTuning.DrainPerRoughness;
+
+            float heel = ship != null ? Mathf.Abs(NormalizeDeg(ship.eulerAngles.z)) : 0f;
+            float heelDrain = Mathf.Max(0f, heel - OverboardTuning.HeelFreeDeg)
+                * OverboardTuning.DrainPerHeelDeg;
+
+            float slamDrain = 0f;
+            if (hull != null && Time.time - hull.LastImpactTime < 0.5f)
+                slamDrain = OverboardTuning.SlamDrainFlat
+                    * Mathf.Clamp01(hull.LastImpactSpeed / Mathf.Max(0.1f, OverboardTuning.SlamSpeedForFullHit));
+
+            float drain = roughDrain + heelDrain + slamDrain;
+            if (drain > 0f)
+            {
+                float stormMul = 1f + OverboardTuning.StormDrainMultiplierExtra * Sailing.Storminess01;
+                float nightMul = Sailing.IsNight ? OverboardTuning.NightDrainMultiplier : 1f;
+                float seaLegs = Lives.Record(DisplayName)?.seaLegs ?? 0f;
+                float seaLegsMul = Mathf.Lerp(1f, OverboardTuning.SeaLegsMinMultiplier, seaLegs);
+                drain *= stormMul * nightMul * seaLegsMul;
+                Grip01 = Mathf.Clamp01(Grip01 - drain * dt);
+            }
+            else
+            {
+                Grip01 = Mathf.Clamp01(Grip01 + OverboardTuning.RefillPerSecond * dt);
+            }
+        }
+
+        /// The warning, the hold, and the fall/save decision. Only reachable
+        /// while physically `IsAtRail` — a station hand's grip can bottom
+        /// out and it costs him nothing but colour in his knuckles.
+        void TrackRailSafety(float dt)
+        {
+            if (!IsAtRail) { warnActive = false; warnLeft = 0f; warnDangerSeen = false; return; }
+
+            // Nobody else falls until the scripted first time has run its
+            // course (build brief item 8) — except the one agent it forced
+            // into this very trip, or a dev-forced test (`forcedTrip`
+            // covers both; only an ORGANIC grip-driven trip is gated).
+            if (FirstOverboard.Blocks(this) && !forcedTrip) return;
+
+            if (!warnActive)
+            {
+                if (Grip01 <= OverboardTuning.WarnGrip || forcedTrip)
+                {
+                    warnActive = true;
+                    warnLeft = OverboardTuning.WarnSeconds;
+                    warnDangerSeen = false;
+                    state = State.RailHold;
+                    Banner.Show(DisplayName + ": \"Hold on!\"", 2f);
+                    OverboardHaptics.Warning();
+                }
+                return;
+            }
+
+            // Held at zero for the whole window — visibly gripping for
+            // their life — while the raw drain this frame decides whether
+            // the danger actually eased.
+            Grip01 = 0f;
+            float rough = meter != null ? meter.Roughness01 : 0f;
+            if (rough > OverboardTuning.CalmRoughness || forcedTrip) warnDangerSeen = true;
+
+            warnLeft -= dt;
+            if (warnLeft > 0f) return;
+
+            warnActive = false;
+            if (warnDangerSeen)
+            {
+                FallOverboard();
+            }
+            else
+            {
+                // Saved: eases back into the retch/return they were already
+                // doing, with a little grip back so the same wave can't
+                // instantly re-trigger the warning.
+                Grip01 = Mathf.Max(Grip01, OverboardTuning.WarnGrip + 0.05f);
+                forcedTrip = false;
+                state = heaveTimer > 0f ? State.AtRail : State.RailReturning;
+            }
+        }
+
+        /// **Dev panel**: knock grip down (or up) by hand, for testing the
+        /// warning/fall without waiting on real weather.
+        public void DebugAdjustGrip(float delta) => Grip01 = Mathf.Clamp01(Grip01 + delta);
+
+        /// **Dev panel / `FirstOverboard`**: force this hand to the rail and
+        /// through the normal warning+fall sequence right now, regardless of
+        /// how queasy they actually are. `scripted` marks the swimmer with
+        /// the long first-time timer and exempts them from
+        /// `FirstOverboard.Blocks` for the run this triggers.
+        public void ForceOverboardSequence(bool scripted)
+        {
+            if (!IsAboard || AtCamp) return;
+            forcedTrip = true;
+            scriptedTrip = scripted;
+            // Pulled off whatever aboard state they were in (bailing,
+            // returning, already mid rail-trip) and sent to the rail.
+            if (state != State.AtRail && state != State.RailHold) state = State.RailGoing;
+        }
+
+        /// The fall itself: splash, banner, haptic, a brief real-time
+        /// slow-down (only if nothing else has already touched
+        /// `Time.timeScale`), a swimmer spawned in their place, and this
+        /// body pulled off the roster.
+        void FallOverboard()
+        {
+            Vector3 worldPos = transform.position;
+            if (Ocean.OceanSampler.Ready) worldPos.y = Ocean.OceanSampler.SampleImmediate(worldPos).height;
+
+            Ocean.DynamicWaterSim.Splash(worldPos, 5f, 1f);
+            Banner.Show("MAN OVERBOARD!");
+            OverboardHaptics.Fall();
+            Lives.Log(DisplayName, LifeEvents.Overboard);
+
+            if (Mathf.Approximately(Time.timeScale, 1f))
+                SlowMoRunner.Run(0.35f, 0.5f);
+
+            var hullT = ship;
+            bool wasScripted = scriptedTrip;
+            forcedTrip = false;
+            scriptedTrip = false;
+            warnActive = false;
+
+            var swimmer = Swimmer.Spawn(this, hullT, worldPos, wasScripted);
+
+            // Off the books: the station empties (`Available` already false
+            // mid-trip; `CrewRoster.Refresh` drops the cached array so
+            // `AbleCount`/gun assignment stop counting this body at all).
+            gameObject.SetActive(false);
+            var roster = hullT != null ? hullT.GetComponentInParent<CrewRoster>() : null;
+            if (roster != null) roster.Refresh();
+        }
+
+        /// **`Swimmer.Rescue`**: this exact body is still here (deactivated,
+        /// never destroyed) — stand it back up on its old post.
+        public void ReboardAfterRescue()
+        {
+            state = State.Station;
+            heaveTimer = 0f;
+            heaveCooldown = heaveInterval.x;
+            warnActive = false;
+            forcedTrip = false;
+            scriptedTrip = false;
+            Grip01 = 1f;
+            PutBackOnStation();
+        }
+
+        /// Soaked and shaken: a sickness spike and a spell off station,
+        /// same shape as the drag-to-hut recovery on land.
+        public void ApplyRescueAftermath(float sicknessSpike, float offStationSeconds)
+        {
+            Sickness01 = Mathf.Clamp01(Sickness01 + sicknessSpike);
+            restLeft = Mathf.Max(restLeft, offStationSeconds);
         }
 
         /// Travel horizontally toward a world target, riding the water surface
@@ -985,11 +1231,12 @@ namespace SeaSick.Crew
             // thing that reads the weather on their faces, and `VillagerActing`
             // deliberately stays off that channel so nothing double-books it.
             if (Puppeted) { /* pose is not ours */ }
-            else if (heaveTimer > 0f && IsAboard)
+            else if ((heaveTimer > 0f || state == State.RailHold) && IsAtRail)
             {
-                // Doubled over the side where they stand — gun crews are at
-                // their own gunport anyway. Big pose: it has to read from the
-                // chase camera ~30m back, not just up close.
+                // Doubled over the rail (retching), or gripping it white-
+                // knuckled through a warning — the same big lean either way.
+                // Big pose: it has to read from the chase camera ~30m back,
+                // not just up close.
                 float heave = Mathf.Sin(Time.time * 7f) * 8f;
                 float outward = Mathf.Sign(railLocal.x != 0f ? railLocal.x : 1f);
                 transform.localRotation = Quaternion.Euler(0f, 90f * outward, 0f)

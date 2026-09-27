@@ -203,6 +203,9 @@ namespace SeaSick.Save
             // Death/rescue phase 1: the global life registry rides the save
             // the same way `TimeOfDay`/`OceanTime` would if they needed to.
             Lives.SyncTo(d.lives, d.graveyard);
+            // Phase 5a: castaways and the scripted-first-time flag.
+            Lives.SyncCastawaysTo(d.castaways);
+            d.firstOverboardDone = SeaSick.Ship.Overboard.FirstOverboard.Done;
 
             // --- the ship -------------------------------------------------
             var s = d.ship;
@@ -352,6 +355,11 @@ namespace SeaSick.Save
                 if (d.lives == null) d.lives = new List<LifeRecord>();
                 if (d.graveyard == null) d.graveyard = new List<GraveRecord>();
                 Lives.SyncFrom(d.lives, d.graveyard);
+                // Phase 5a: an old save has no castaways and the scripted
+                // first time still has to happen.
+                if (d.castaways == null) d.castaways = new List<SeaSick.World.Life.CastawayRecord>();
+                Lives.SyncCastawaysFrom(d.castaways);
+                SeaSick.Ship.Overboard.FirstOverboard.Done = d.firstOverboardDone;
                 return d;
             }
             catch (System.Exception e)
@@ -473,6 +481,10 @@ namespace SeaSick.Save
                     // Written by a build from before raiders were kept out of
                     // this list (see the writer). Not crew; never was.
                     if (who == "raider") continue;
+                    // Phase 5a: a dead or castaway name does not regenerate.
+                    // He either has a tombstone or is standing on an island
+                    // waiting to be fetched -- either way, not aboard.
+                    if (Lives.IsTaken(who)) continue;
                     if (BornVillager.Board(who, motor.transform) == null)
                         Debug.LogWarning("SaveGame: could not re-make " + who
                             + ", who was aboard");

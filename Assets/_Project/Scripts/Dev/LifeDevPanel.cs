@@ -1,6 +1,8 @@
 using UnityEngine;
 using SeaSick.World;
 using SeaSick.World.Life;
+using SeaSick.Crew;
+using SeaSick.Ship.Overboard;
 
 namespace SeaSick.Dev
 {
@@ -140,8 +142,43 @@ namespace SeaSick.Dev
             if (GUILayout.Button("All graves", GUILayout.Height(RowH)))
                 GravePlacementFlow.ShowAllGraves();
 
+            GUILayout.Space(8);
+            DrawOverboard();
+
             GUILayout.EndArea();
             GUI.matrix = old;
+        }
+
+        /// **Phase 5a.** Grip readout for every hand on the currently
+        /// loaded ship, plus force-a-fall and drain-grip buttons for
+        /// testing the warning/fall without waiting on real weather.
+        void DrawOverboard()
+        {
+            GUILayout.Label("Man overboard (dev)");
+            var roster = FindAnyObjectByType<CrewRoster>();
+            if (roster == null) { GUILayout.Label("No ship loaded."); return; }
+
+            foreach (var c in roster.All)
+            {
+                if (c == null || !c.gameObject.activeInHierarchy) continue;
+                GUILayout.BeginHorizontal();
+                GUILayout.Label(c.DisplayName + "  grip " + c.Grip01.ToString("0.00")
+                    + (c.IsAtRail ? " [RAIL]" : ""), GUILayout.Width(220));
+                if (GUILayout.Button("Drain", GUILayout.Height(RowH)))
+                    c.DebugAdjustGrip(-0.5f);
+                if (GUILayout.Button("MOB", GUILayout.Height(RowH)))
+                    c.ForceOverboardSequence(scripted: false);
+                GUILayout.EndHorizontal();
+            }
+
+            if (Swimmer.All.Count > 0)
+            {
+                GUILayout.Label("In the water:");
+                foreach (var s in Swimmer.All)
+                    if (s != null)
+                        GUILayout.Label("  " + s.CrewName + "  " + Mathf.CeilToInt(s.TimeLeft) + "s left"
+                            + (s.Scripted ? " (scripted)" : ""));
+            }
         }
     }
 }

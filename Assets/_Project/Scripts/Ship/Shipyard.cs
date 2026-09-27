@@ -918,6 +918,24 @@ namespace SeaSick.Ship
             int want = Mathf.Max(1, Berths);       // she always has a helmsman
             var live = new List<Crew.CrewAgent>(have);
 
+            // **Phase 5a: a dead or castaway name does not regenerate.**
+            // The authored cast are fixed bodies in the scene, so unlike a
+            // camp-born villager there is nothing to skip creating -- the
+            // body is already here. What we CAN do is take the name away:
+            // re-christen him out of the pool, same as a fresh clone gets,
+            // so the ship never sails with a name that belongs to a grave
+            // or a man waiting on an island.
+            System.Collections.Generic.HashSet<string> renameTaken = null;
+            for (int i = 0; i < live.Count; i++)
+            {
+                var c = live[i];
+                if (c == null) continue;
+                string dn = c.DisplayName;
+                if (string.IsNullOrEmpty(dn) || !SeaSick.World.Life.Lives.IsTaken(dn)) continue;
+                if (renameTaken == null) renameTaken = global::SeaSick.Crew.CrewNames.InUse();
+                global::SeaSick.Crew.CrewNames.Christen(c, i + 1000, renameTaken);
+            }
+
             // **A clone is a different person.** The body is copied; the name
             // is NOT. Instantiate brings the serialised `CrewMemberDef` field
             // with it, which is the template's authored asset -- so before

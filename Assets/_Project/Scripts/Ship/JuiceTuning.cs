@@ -33,6 +33,10 @@ namespace SeaSick.Ship
         /// Telegraph notch / burn haptics on iOS and Android.
         public static bool  hapticsOn         = false;  // OFF 2026-09-24: Handheld.Vibrate at launch deadlocked iOS 26's audio daemon (audiomxd XPC timeout, phone froze); a Taptic plugin later
         public static bool  soundOn           = true;   // ON by Kevin's FeelLab JSON 2026-09-24 (haptics stay off: the launch freeze was Handheld.Vibrate); read once when SpeedJuice sets up, so a live toggle needs a relaunch
+        /// Man-overboard haptics (phase 5a, `Ship.Haptics`), through the
+        /// native `SeaSickHaptics.mm` plugin -- NOT `Handheld.Vibrate`, so
+        /// this is safe to leave on despite `hapticsOn` staying off above.
+        public static bool  overboardHapticsOn = true;
 
         // ---------------------------------------------------------- signals
         //

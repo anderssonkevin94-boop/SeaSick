@@ -39,6 +39,26 @@ namespace SeaSick.World.Life
         /// Used by the story generator's fallback sentence.
         public string homeCamp = "";
         public List<LifeEvent> events = new List<LifeEvent>();
+
+        /// **Phase 5a (man overboard).** 0..1, default 0 -- lowers grip
+        /// drain and (later) rescue-side odds. Bumped by `Swimmer.Rescue`
+        /// (`OverboardTuning.RescueSeaLegsGain`); nothing else touches it
+        /// yet. Survives the save the same way every other `LifeRecord`
+        /// field does.
+        public float seaLegs;
+    }
+
+    /// **A crew member the sea gave back, but not to the ship** (phase 5a).
+    /// Saved separately from `lives`/`graveyard` -- neither dead nor aboard,
+    /// waiting on an island for phase 7's ferrying to fetch them. `island`
+    /// is the `Island` GameObject's own name (`Island_1` etc.), which is
+    /// deterministic from the world seed and therefore stable to save.
+    [System.Serializable]
+    public class CastawayRecord
+    {
+        public string name = "";
+        public string island = "";
+        public float x, z;
     }
 
     /// **One dead person**, as much as the tombstone/graveyard flow needs.
