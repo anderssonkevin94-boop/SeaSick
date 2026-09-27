@@ -45,6 +45,9 @@ namespace SeaSick.UI.Menus
             if (!SeaSick.Save.GameBoot.Decided) return;              // still on the boot overlay
             if (ShipyardModal.IsOpen) return;
             if (GameMenus.Current != GameMenus.Mode.None) return;    // a menu already owns the screen
+            // Ashore the ledger drawer's gear is the way in (2026-09-27): no
+            // second button for the same menu.
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
 
             // **The ledger at sea (2026-09-27)**: the sea twin of the land
             // drawer's ☰, top of the rail while she is under way. Takes the
@@ -64,7 +67,9 @@ namespace SeaSick.UI.Menus
             // gear tab for the same pattern. A style built per event is
             // exactly the allocation `SheetKit`'s notes on `ShipyardPanel`
             // warn against.
-            if (GUI.Button(tab, "❚❚ pause", UITheme.Button)) GameMenus.TogglePause();
+            // One small labelled button at sea -- the old "❚❚ pause" drew as
+            // blank boxes on the phone's font.
+            if (GUI.Button(tab, "Menu", UITheme.Button)) GameMenus.TogglePause();
         }
     }
 }

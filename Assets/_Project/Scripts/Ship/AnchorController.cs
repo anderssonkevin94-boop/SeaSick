@@ -1138,6 +1138,12 @@ namespace SeaSick.Ship
         /// of which puts the ship somewhere. Position is no longer this
         /// class's to choose: it bids a priority and draws in the rows it is
         /// handed.
+        /// Keyboard hints ("(space)", "(S)") only on a desk-shaped window
+        /// (`HudLayout.Wide`); a phone gets the touch wording alone (Kevin,
+        /// 2026-09-27: dev leftovers on the phone).
+        static bool Desk => SeaSick.UI.HudLayout.Wide;
+        static string KeyHint(string hint) => Desk ? hint : "";
+
         void OnGUI()
         {
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
@@ -1195,8 +1201,8 @@ namespace SeaSick.Ship
                         UIBlocker.Block(primary);
                         GUI.enabled = slow;
                         if (GUI.Button(primary, slow
-                                ? "⚓  Come alongside   (space)"
-                                : "slow down to come alongside  (S)", buttonStyle))
+                                ? (Desk ? "⚓  Come alongside   (space)" : "⚓  Come alongside")
+                                : (Desk ? "slow down to come alongside  (S)" : "slow down to come alongside"), buttonStyle))
                             ComeAlongside(dock);
                         GUI.enabled = true;
                         return;
@@ -1208,16 +1214,16 @@ namespace SeaSick.Ship
                     // resource has to be built, and only when the island under
                     // the bow changes.
                     bool res = isle.HasResources;
-                    if (landText.Changed(HudLabel.Key(beach ? 1 : 0, slowEnough ? 1 : 0,
+                    if (landText.Changed(HudLabel.Key(beach ? 1 : 0, (slowEnough ? 1 : 0) + (Desk ? 2 : 0),
                             res ? 1 : 0, res && isle.ResourceName != null
                                          ? isle.ResourceName.GetHashCode() : 0)))
                         landText.Set(!beach
                             ? "sheer cliff — find a beach"
                             : slowEnough
                                 ? (res
-                                    ? $"⚓  Land here — {isle.ResourceName}   (space)"
-                                    : "⚓  Land here — rest   (space)")
-                                : "slow down to land  (S)");
+                                    ? $"⚓  Land here — {isle.ResourceName}" + KeyHint("   (space)")
+                                    : "⚓  Land here — rest" + KeyHint("   (space)"))
+                                : "slow down to land" + KeyHint("  (S)"));
                     UIBlocker.Block(primary);
                     GUI.enabled = slowEnough && beach;
                     if (GUI.Button(primary, landText.Content, buttonStyle)) Land(isle);
@@ -1250,7 +1256,7 @@ namespace SeaSick.Ship
                     // Crew are back aboard: cast off, or put them ashore again.
                     var primary = stack.Next(bh);
                     UIBlocker.Block(primary);
-                    if (GUI.Button(primary, "⚓  Cast off   (space)", buttonStyle)) WeighAnchor();
+                    if (GUI.Button(primary, Desk ? "⚓  Cast off   (space)" : "⚓  Cast off", buttonStyle)) WeighAnchor();
 
                     if (!sheetHud) DrawMakeCamp(ref stack, u, bh, buttonStyle, infoStyle);
                     if (!sheetHud) DrawGatherParty(ref stack, bh, buttonStyle);
@@ -1289,7 +1295,7 @@ namespace SeaSick.Ship
                     {
                         if (GUI.Button(primary, party.Recalling
                                 ? "⛏  coming back aboard…"
-                                : "⛏  Recall party   (space)", buttonStyle)) RecallCrew();
+                                : Desk ? "⛏  Recall party   (space)" : "⛏  Recall party", buttonStyle)) RecallCrew();
                         int out_ = party.Ashore;
                         if (partyText.Changed(HudLabel.Key(party.DeliveredUnits, out_,
                                 party.Recalling ? 1 : 0, party.Target)))
@@ -1298,7 +1304,7 @@ namespace SeaSick.Ship
                         break;
                     }
 
-                    if (GUI.Button(primary, "recall crew aboard   (space)", buttonStyle)) RecallCrew();
+                    if (GUI.Button(primary, Desk ? "recall crew aboard   (space)" : "recall crew aboard", buttonStyle)) RecallCrew();
 
                     if (!sheetHud) DrawMakeCamp(ref stack, u, bh, buttonStyle, infoStyle);
 

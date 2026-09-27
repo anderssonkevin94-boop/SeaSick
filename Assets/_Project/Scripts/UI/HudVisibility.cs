@@ -23,6 +23,18 @@ namespace SeaSick.UI
         public static bool Crew { get => Get("crew"); set => Set("crew", value); }
         public static bool Perf { get => Get("perf", false); set => Set("perf", value); }
 
+        /// **The FEEL tuning lab's button (2026-09-27).** Kevin tunes with it,
+        /// so it stays one tap away in Settings ("Show tuning lab"), but it is
+        /// no longer on every player's screen: on by default in the editor and
+        /// development builds, off in a release. Cached, because `FeelLab`
+        /// asks on every IMGUI event.
+        public static bool TuningLab
+        {
+            get { if (tuningLab < 0) tuningLab = Get("tuninglab", Debug.isDebugBuild) ? 1 : 0; return tuningLab == 1; }
+            set { tuningLab = value ? 1 : 0; Set("tuninglab", value); }
+        }
+        static int tuningLab = -1;
+
         static bool Get(string key, bool fallback = true)
             => PlayerPrefs.GetInt(Prefix + key, fallback ? 1 : 0) != 0;
 

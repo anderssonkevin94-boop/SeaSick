@@ -416,6 +416,9 @@ namespace SeaSick.Dev
             // (2026-09-26 review: the FEEL toggle sat over the Home card).
             if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen) return;
             if (SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
+            // Settings › "Show tuning lab" (HudVisibility.TuningLab): off, the
+            // collapsed FEEL button is not drawn; an open lab stays open.
+            if (!expanded && !SeaSick.UI.HudVisibility.TuningLab) return;
             EnsureStyles();
 
             // Screen.dpi is 0 on some desktop setups; fall back to 1x there

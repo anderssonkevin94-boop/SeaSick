@@ -134,15 +134,20 @@ namespace SeaSick.UI
             int u = HudLayout.Unit;
             float pad = HudLayout.Pad;
 
+            // **No rail tab while closed (2026-09-27).** The old "⚙ ▶" tab
+            // drew as blank boxes on the phone; Settings is reached from the
+            // pause menu now (the ledger drawer's gear ashore, the rail's
+            // Menu at sea). Open, the tab is its labelled way back out.
+            if (!open) return;
             var tab = HudLayout.Place(HudLayout.Slot.RailSettings,
                                       HudLayout.RailWidth, HudLayout.RailButtonHeight);
             UIBlocker.Block(tab);
-            if (GUI.Button(tab, open ? "◀ ⚙" : "⚙ ▶", UITheme.Button))
+            if (GUI.Button(tab, "Close", UITheme.Button))
             {
-                open = !open;
-                if (!open) DevTools.CloseAll();
+                open = false;
+                DevTools.CloseAll();
+                return;
             }
-            if (!open) return;
 
             // Wide enough for a tuner's sliders when one is open, narrow
             // enough to leave the sea visible when it is just a list.
@@ -195,6 +200,10 @@ namespace SeaSick.UI
                        v => HudVisibility.Crew = v);
             y = Toggle(body, y, rowH, RowPerf, HudVisibility.Perf,
                        v => HudVisibility.Perf = v);
+            // The FEEL button (Dev/FeelLab): Kevin's tuning lab, one tap away
+            // here rather than on every screen.
+            y = Toggle(body, y, rowH, RowTuningLab, HudVisibility.TuningLab,
+                       v => HudVisibility.TuningLab = v);
 
             // The playtest save. One button, one file; what it wrote is on
             // the console, and the next launch offers CONTINUE.
@@ -304,6 +313,7 @@ namespace SeaSick.UI
         static readonly string[] RowCompass = { "◎  compass tape", "◉  compass tape" };
         static readonly string[] RowCrew = { "◎  crew", "◉  crew" };
         static readonly string[] RowPerf = { "◎  performance readout", "◉  performance readout" };
+        static readonly string[] RowTuningLab = { "◎  show tuning lab (FEEL)", "◉  show tuning lab (FEEL)" };
         static readonly string[] RowWavePhase = { "◎  smooth wave phase", "◉  smooth wave phase" };
         static readonly string[] RowShoreward = { "◎  shoreward band", "◉  shoreward band" };
         static readonly string[] RowStorm = { "◎  wandering storm", "◉  wandering storm" };
