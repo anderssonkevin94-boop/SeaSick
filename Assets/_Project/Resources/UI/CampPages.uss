@@ -1,0 +1,139 @@
+/* Camp › Build and Camp › People (BuildSheet / PeopleSheet, 2026-09-27).
+   The Ledger drawer's CAMP destinations, tall pages in the Ledger style.
+   Mockup: nav/Main.dc.html (Build tab cards, People › Crew).
+   Colours as Ledger.uss / Overview.uss: card #13222E, raised #1A3040,
+   border #2C4A5E, ice #A4D2E8, pearl #E8F2F6, muted #A6BAC6,
+   dim #7F97A6, green #9FE0C2, amber #F0C36A, red #F69280, ink #0B1720.
+   Loaded onto each page's own header and root only; every selector is
+   `cp-` so nothing here reaches another sheet. Sizes are PANEL UNITS. */
+
+.cp-root .unity-label, .cp-head .unity-label {
+    margin: 0; padding: 0;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.cp-black { -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+
+/* --- header --- */
+.cp-head-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.cp-head .cp-title {
+    font-size: 20px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-head .cp-subtitle { font-size: 12px; color: rgb(166, 186, 198); margin-top: 1px; }
+.cp-head-btn {
+    width: 44px; height: 44px; margin: 0 8px 0 0; padding: 10px; flex-shrink: 0;
+    align-items: center; justify-content: center;
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 10px;
+}
+.cp-head-btn .ledger-glyph { width: 22px; height: 22px; }
+
+/* --- page --- */
+.cp-root { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-height: 0; max-height: 100%; overflow: hidden; }
+.cp-scroll { flex-grow: 1; flex-shrink: 1; min-height: 0; margin-top: 8px; }
+.cp-list { flex-direction: column; }
+
+/* segmented tabs (Build) and filter chips (People) */
+.cp-tabs {
+    flex-direction: row; flex-shrink: 0; padding: 3px;
+    background-color: rgb(19, 34, 46); border-radius: 12px;
+}
+.cp-tab {
+    flex-grow: 1; flex-basis: 0; height: 44px; margin: 0; padding: 0 2px;
+    border-width: 0; border-radius: 9px; font-size: 14px;
+    background-color: rgba(0, 0, 0, 0); color: rgb(201, 216, 224);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.cp-tab--on {
+    background-color: rgb(164, 210, 232); color: rgb(11, 23, 32);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-chips { flex-direction: row; flex-shrink: 0; }
+.cp-chip {
+    height: 44px; padding: 0 16px; margin: 0 6px 0 0;
+    border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 22px; font-size: 14px;
+    background-color: rgb(26, 48, 64); color: rgb(201, 216, 224);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.cp-chip--on {
+    border-width: 0; background-color: rgb(164, 210, 232); color: rgb(11, 23, 32);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+
+.cp-eyebrow {
+    font-size: 12px; color: rgb(166, 186, 198); letter-spacing: 1px; margin: 8px 0 6px 2px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-note { font-size: 13px; color: rgb(166, 186, 198); white-space: normal; margin: 8px 2px; }
+
+/* --- Build: one card per plan --- */
+.cp-card {
+    flex-direction: row; align-items: center; min-height: 76px; padding: 10px; margin: 0 0 8px 0;
+    background-color: rgb(22, 40, 58); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 12px;
+}
+.cp-card--ready { background-color: rgb(26, 48, 64); border-color: rgb(164, 210, 232); }
+.cp-card--capped { opacity: 0.6; }
+.cp-card--locked {
+    min-height: 52px; background-color: rgb(16, 28, 38); border-color: rgb(44, 74, 94);
+}
+.cp-card-icon {
+    width: 48px; height: 48px; flex-shrink: 0; margin-right: 10px; border-radius: 10px;
+    background-color: rgb(14, 26, 36); align-items: center; justify-content: center;
+}
+.cp-card--locked .cp-card-icon { width: 36px; height: 36px; }
+.cp-glyph { width: 30px; height: 30px; }
+.cp-card--locked .cp-glyph { width: 22px; height: 22px; }
+.cp-card-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.cp-card-top { flex-direction: row; justify-content: space-between; align-items: flex-end; }
+.cp-root .cp-card-name {
+    font-size: 16px; color: rgb(232, 242, 246); flex-shrink: 1;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-root .cp-card--locked .cp-card-name { color: rgb(127, 151, 166); font-size: 14px; }
+.cp-root .cp-tag {
+    font-size: 11px; margin-left: 6px; flex-shrink: 0; color: rgb(127, 151, 166);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-root .cp-tag--ok { color: rgb(159, 224, 194); }
+.cp-root .cp-tag--bad { color: rgb(246, 146, 128); }
+.cp-root .cp-blurb { font-size: 13px; color: rgb(166, 186, 198); white-space: normal; margin-top: 2px; }
+.cp-root .cp-card--locked .cp-blurb { color: rgb(127, 151, 166); font-size: 12px; }
+.cp-cost-line { flex-direction: row; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.cp-cost { flex-direction: row; align-items: center; margin-right: 10px; }
+.cp-cost-icon { width: 20px; height: 20px; margin-right: 3px; flex-shrink: 0; }
+.cp-root .cp-cost-q {
+    font-size: 13px; color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-root .cp-cost--short .cp-cost-q { color: rgb(246, 146, 128); }
+.cp-root .cp-copies { font-size: 12px; color: rgb(164, 210, 232); margin-left: 2px; }
+
+/* --- People: one row per hand --- */
+.cp-hand {
+    flex-direction: row; align-items: center; min-height: 58px; padding: 8px 12px; margin: 0 0 6px 0;
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 12px;
+}
+.cp-hand--stuck { border-color: rgb(246, 146, 128); }
+.cp-avatar {
+    width: 38px; height: 38px; flex-shrink: 0; margin-right: 10px; border-radius: 19px;
+    background-color: rgb(44, 74, 94); align-items: center; justify-content: center;
+}
+.cp-hand--angry .cp-avatar { background-color: rgb(74, 42, 38); }
+.cp-root .cp-avatar-l {
+    font-size: 16px; color: rgb(232, 242, 246); -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-hand-words { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.cp-hand-top { flex-direction: row; justify-content: space-between; align-items: flex-end; }
+.cp-root .cp-hand-name {
+    font-size: 15px; color: rgb(232, 242, 246); flex-shrink: 1;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-root .cp-mood { font-size: 12px; color: rgb(166, 186, 198); margin-left: 6px; flex-shrink: 0; }
+.cp-root .cp-mood--warm { color: rgb(240, 195, 106); }
+.cp-root .cp-mood--bad { color: rgb(246, 146, 128); }
+.cp-root .cp-job { font-size: 13px; color: rgb(166, 186, 198); margin-top: 1px; }
+.cp-root .cp-stall {
+    font-size: 12px; color: rgb(246, 146, 128); white-space: normal; margin-top: 2px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.cp-root .cp-stall--warn { color: rgb(240, 195, 106); }
