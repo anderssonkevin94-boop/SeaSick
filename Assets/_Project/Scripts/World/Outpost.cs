@@ -181,6 +181,7 @@ namespace SeaSick.World
             // The invisible walkers' legs are measured on this camp's own
             // path grid while it exists (2026-09-27).
             if (ledger.router == null) ledger.router = WalkedMetres;
+            WireWalkerGuard();
             ledger.Tick(TimeOfDay.Seconds);
             FeedTheFire();
 
@@ -1535,6 +1536,7 @@ namespace SeaSick.World
         public void ArrangeHands()
         {
             if (ledger == null) return;
+            WireWalkerGuard();
             var bodies = Parked();
 
             // Count the ones who belong to the fire, so the ring is spaced by
@@ -1578,7 +1580,20 @@ namespace SeaSick.World
                 // **Where his invisible walker got to** (2026-09-27): a body
                 // put down fresh stands where the books have him, carrying
                 // what he carries (docs/DELIVERY-ON-ARRIVAL.md).
-                if (worker == null && row.wHas) { spot = new Vector3(row.wx, 0f, row.wz); lookAt = spot + a.transform.forward; }
+                if (worker == null && row.wHas)
+                {
+                    spot = new Vector3(row.wx, 0f, row.wz);
+                    // A booked spot off the island or in the sea (a save
+                    // written while something had moved the body) heals
+                    // here: he stands at the stores. Outpost.WalkerGuard.cs.
+                    if (!WalkerSpotOk(spot, false))
+                    {
+                        spot = WalkerFallback();
+                        spot.y = 0f;
+                        row.wx = spot.x; row.wz = spot.z;
+                    }
+                    lookAt = spot + a.transform.forward;
+                }
                 if (height != null) spot.y = height(spot.x, spot.z);
                 if (worker != null)
                 {

@@ -132,12 +132,23 @@ namespace SeaSick.Crew
         public void Rest()
         {
             Sickness01 = 0f;
-            if (IsAboard) ReturnToStation();
+            if (IsAboard && !AtCamp) ReturnToStation();
         }
+
+        /// **Parked at a camp: this body is not on any deck (2026-09-27).**
+        /// A hand left ashore keeps `State.Station` (he never walked off; the
+        /// outpost re-parented him), so every "back to your post" snap --
+        /// `Rest`, bailing, a re-posting -- wrote his deck `stationLocal` into
+        /// a transform whose parent is now the ISLAND: the whole camp stood
+        /// in a deck-shaped cluster 5 m under the ground by the island's
+        /// origin. `VoyageManager` rested its crew list (cached at Start,
+        /// before the save moved them ashore) every frame at home.
+        public bool AtCamp => GetComponentInParent<World.Outpost>(true) != null;
 
         /// Put them on a bucket. Ignored if they aren't aboard.
         public void StartBailing()
         {
+            if (AtCamp) return;
             if (state == State.Station || state == State.Returning) state = State.Bailing;
         }
 
@@ -183,7 +194,7 @@ namespace SeaSick.Crew
             railLocal = rail;
             // Script order isn't guaranteed, so this can land before or after
             // Start: snap them over if they're just standing about.
-            if (state == State.Station) transform.localPosition = stationLocal;
+            if (state == State.Station && !AtCamp) transform.localPosition = stationLocal;
         }
 
         enum State
@@ -711,6 +722,8 @@ namespace SeaSick.Crew
 
         void ReturnToStation()
         {
+            // Never onto a deck that is not there (see `AtCamp`).
+            if (AtCamp) { state = State.Station; return; }
             transform.localPosition = stationLocal;
             transform.localRotation = Quaternion.identity;
             heaveCooldown = heaveInterval.x;

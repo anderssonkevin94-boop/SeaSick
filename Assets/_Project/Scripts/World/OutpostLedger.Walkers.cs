@@ -401,8 +401,15 @@ namespace SeaSick.World
         {
             if (h == null) return;
             h.driven = true;
+            // Off his island or buried: something moved the body, not his
+            // feet. Keep the last good spot (Outpost.WalkerGuard.cs).
+            if (walkerOk != null && !walkerOk(p)) return;
             SetHandAt(h, p);
         }
+
+        /// Is a body's reported spot bookable? Set by the outpost (on its
+        /// island, not under its ground); null = anything goes (a probe).
+        [System.NonSerialized] public System.Func<Vector3, bool> walkerOk;
 
         /// The body reached the end of its leg (the pickup, or the drop-off).
         public void BodyArrived(OutpostHand h)

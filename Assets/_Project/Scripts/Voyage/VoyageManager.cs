@@ -199,6 +199,17 @@ namespace SeaSick.Voyage
             return false;
         }
 
+        /// Rest the hands who are ON her. `crew` is a cache, and a hand left
+        /// at a camp is still in it: resting him snapped his camp body onto a
+        /// deck that was not there, every frame she lay at home (2026-09-27).
+        void RestAboard()
+        {
+            if (crew == null || ship == null) return;
+            var hull = ship.transform;
+            foreach (var c in crew)
+                if (c != null && c.transform.IsChildOf(hull)) c.Rest();
+        }
+
         void Start()
         {
             if (ship == null) ship = FindFirstObjectByType<ShipMotor>();
@@ -392,7 +403,7 @@ namespace SeaSick.Voyage
             }
             else
             {
-                foreach (var c in crew) if (c != null) c.Rest();
+                RestAboard();
                 // Spacebar is the only way to cast off now that there is no
                 // panel button for it (2026-09-26). Not while the shipyard is
                 // open (2026-09-24, ShipyardUiProbe:
@@ -458,7 +469,10 @@ namespace SeaSick.Voyage
             held.Clear();
             TotalHeld = 0;
             ship.CargoLoad = 0f;
-            foreach (var c in crew) if (c != null) c.Rest();
+            // Re-read: hands left at camps since Start are not aboard, and
+            // hands the yard cloned since are.
+            crew = ship != null ? ship.GetComponentsInChildren<CrewAgent>(true) : new CrewAgent[0];
+            RestAboard();
             phase = Phase.Home;
         }
 
