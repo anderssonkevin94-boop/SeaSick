@@ -126,8 +126,15 @@ namespace SeaSick.World
         public static readonly string[] Gatherable =
             { Timber, Stone, Ore, Spice, Food, Game };
 
+        /// **Never a hunt drop** (2026-09-27, Kevin: hide is fine as the
+        /// only road to fire II "as long as the hide can't be gathered"): a
+        /// resource whose `ResDefs` source is `Drop` is refused here even if
+        /// somebody adds it to `Gatherable`, so no Gather order, Hand drop,
+        /// gather party or site trip can ever target it; `RecipeGraph.Validate`
+        /// names the mistake.
         public static bool IsGatherable(string r)
         {
+            if (Economy.ResDefs.TryGet(r, out var d) && d.source == Economy.ResSource.Drop) return false;
             foreach (var g in Gatherable) if (g == r) return true;
             return false;
         }

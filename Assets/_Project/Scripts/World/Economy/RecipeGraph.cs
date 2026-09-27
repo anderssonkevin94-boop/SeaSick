@@ -48,7 +48,15 @@ namespace SeaSick.World.Economy
                 if (d.campfireLevel < 1) rep.errors.Add($"resource '{d.id}' has campfireLevel {d.campfireLevel}");
             }
             foreach (var k in Res.Gatherable)
+            {
                 if (!known.Contains(k)) rep.errors.Add($"gatherable '{k}' is not in ResDefs");
+                // Hide (a `Drop`) comes off a kill and nowhere else (Kevin, 2026-09-27).
+                else if (ResDefs.TryGet(k, out var gd) && gd.source == ResSource.Drop)
+                    rep.errors.Add($"'{k}' is a hunt drop and must not be gatherable");
+            }
+            foreach (var r in Recipes.All)
+                if (ResDefs.TryGet(r.makes, out var md) && md.source == ResSource.Drop)
+                    rep.errors.Add($"recipe '{r.id}' makes hunt drop '{r.makes}'; drops come off a kill only");
 
             // --- recipes name real things, respect the tiers ---
             var stations = new HashSet<string>();
@@ -132,7 +140,7 @@ namespace SeaSick.World.Economy
                     // Hunting drops: need a spear in the pile.
                     bool canHunt = false;
                     foreach (var s in Techs.HuntingSpears) if (have.Contains(s)) canHunt = true;
-                    if (canHunt) foreach (var d in Techs.HuntDrops) if (have.Add(d.res)) grew = true;
+                    if (canHunt) foreach (var d in Techs.HuntDrops) if (d.n > 0 && have.Add(d.res)) grew = true;
                     // Upgrades payable now.
                     foreach (var u in Techs.Upgrades)
                     {
