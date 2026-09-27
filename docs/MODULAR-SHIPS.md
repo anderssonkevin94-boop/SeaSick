@@ -433,3 +433,58 @@ end variants** on the same ship; **raised ends separated by a LOW middle
 are a valid partial-deck option**, pending a traversal (stair/ramp) check
 between the levels. This is a design contract for the next raised-deck
 integration to implement against, not code that exists yet.
+
+## 14. Upper-deck layers: third deck + gun foredeck (2026-09-27)
+
+Kevin, 2026-09-27: *"import whatever assets Astra has made (even if she
+hasn't pushed them; if they need fixing later I'll deal with that), so that
+includes … the upper decks"*. Imported UNREVIEWED; every draft carrying one
+reports `ART_UNREVIEWED` (the module's `fitting.unreviewedNote`).
+
+- **Modules** (`kind: UpperDeck`, fitted like the chimney, a `FittingChoice`):
+  `deck.third.{stern,middle,bow}.w1xr.v1` (meshes
+  `Meshes/ThirdDeckW1xR_v1/`, from `art-staging/modular-third-layer-v1`) and
+  `deck.foredeck.w1r2.v1` (meshes `Meshes/Foredeck_v1/Narrow/`, from
+  `art-staging/modular-foredeck-v1/narrow`). The foredeck's `wide` variant was
+  NOT imported: it needs the W2-r1 bow, which Astra says stays unexposed.
+  `OptionalEndClosures` meshes are copied but not referenced (Astra: not
+  finished bulkheads).
+- **Sockets** (`role: deck.upper`, one socket class per piece so the
+  assembler's `FITTING_CLASS_MISMATCH` keeps each on its own section):
+  `ThirdDeckMount` at (0, 0, 4.20) on the CONNECTED raised `hull.*.w1xr.v1`
+  only (the wa/wf/wb wall variants have no third-deck art);
+  `ForedeckMount` at the V3 bow's origin (identity, per the README). A
+  second layer on one socket is `FITTING_SOCKET_TAKEN`.
+- **Schema**: `FittingSpec.layerRiseU` (> 0 = enclosed layer: the host's
+  stations get `RaiseDeck` again, a chimney inside the host's length rises
+  with it -- 12.3/6.64 u, Astra's `chimney_position`), `hidesHostVisuals`
+  (the review scene's hidden host parts: raised-deck rails/posts/planks,
+  hatch lid, helm, prow -- the assembler drops them from the host's placed
+  visuals), `unreviewedNote`; `UpperStructureSpec.deckZU`. All Z in an
+  `upperStructure` block are module-local; `RaisedDeckPhysics.RaiseCoM` adds
+  the placed origin's Z and now also runs on a single-deck ship carrying a
+  foredeck.
+- **Capacity** (`UpperDeckLayers.ExtraCapacity`, added to the host
+  section's interior budget; the raised-section rule on the host deck-cap
+  footprint x 2.44): third deck stern +5 hold/+2 berths, middle +3/+1, bow
+  +4/+1; foredeck 0/0 and +2 gun slots (listed on the bow's Guns page as
+  "Bow foredeck, port/starboard gun").
+- **Mass** (ESTIMATES, not measured on the FBX -- `lightship.rule` in each
+  JSON): third deck stern 5.02 t, middle 2.69 t, bow 3.87 t; foredeck 1.10 t.
+  Planner, raised long ship + full third deck: lightship 55.6 -> 67.2 t,
+  KG 1.35 -> 1.82 m, GM 2.45 -> 1.98 m. V3 long + foredeck with 2 guns:
+  KG 0.93 -> 0.99 m, GM 1.51 -> 1.45 m.
+- **Warnings** (`UpperDeckLayers.Warnings`, in `ShipyardReport.warnings`):
+  `ART_UNREVIEWED`, `THIRD_DECK_PARTIAL` (open ends unguarded),
+  `THIRD_DECK_NO_ACCESS` (only the end pieces have hatch + ladder),
+  `GUNS_UNDER_THIRD_DECK`, `FOREDECK_CHIMNEY_CLOSE`.
+- **UI**: `ShipyardDraft.UpperDeckOption/HasUpperDeck/ToggleUpperDeck`; a
+  "None / Third deck" or "None / Foredeck" row on the section sheet's
+  Structure page. A level toggle / section insert / removal drops a layer
+  whose socket is gone (`UpperDeckLayers.DropOrphaned`);
+  `ShipConfiguration.ShiftMiddleKeys` renumbers fittings too.
+- **Unverified**: nothing was imported or looked at in Unity (the .fbx.meta
+  files are copies of the W1xR kit's importer settings with fresh GUIDs),
+  visual part offsets/rotations are the manifest's as-is, and the Structure
+  page's extra row has not been checked for overflow on the phone.
+  Gates: `UpperDeckValidation.cs` (29 gates).
