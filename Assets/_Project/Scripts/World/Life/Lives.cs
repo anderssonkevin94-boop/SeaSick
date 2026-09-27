@@ -16,6 +16,10 @@ namespace SeaSick.World.Life
         public const string WentAboard = "WentAboard";
         public const string Hungry = "Hungry";
         public const string SurvivedRaid = "SurvivedRaid";
+        /// **Phase 4 (pout + floor).** Logged once per pout at the campfire
+        /// (`OutpostLedger.StartPout`); repeats collapse the same way any
+        /// other event does, so "sulked twice" reads as one row with count 2.
+        public const string Pouted = "Pouted";
         public const string HuntingKill = "HuntingKill";
         public const string BuildingFinished = "BuildingFinished";
 

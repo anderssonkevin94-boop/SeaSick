@@ -146,6 +146,13 @@ namespace SeaSick.World.Life
                         "Went short more than once at " + camp + ", and kept working anyway.",
                         "Knew what it was to go without, at " + camp + ".",
                     });
+                case LifeEvents.Pouted:
+                    return Pick(h, salt, new[]
+                    {
+                        "Sulked by the fire more than once, and always came back to work.",
+                        "Had his black moods at " + camp + ", and everyone learned to let them pass.",
+                        "Stood by the fire and stewed " + CountWord(e.count) + ", and picked his tools back up every time.",
+                    });
                 case LifeEvents.SurvivedRaid:
                     return Pick(h, salt, new[]
                     {

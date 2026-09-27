@@ -613,6 +613,11 @@ namespace SeaSick.World
             // over the rest of the loop.
             if (TickRescue(r, dt)) return;
 
+            // **Pouting (death/rescue phase 4)**, next in priority: a hand
+            // sulking at the fire is not doing his ordinary job either,
+            // same reasoning as the rescue check just above.
+            if (TickPout(r, dt)) return;
+
             // A new order means a new errand. Without this a hand told to go
             // to the mill finishes walking to the tree first.
             //

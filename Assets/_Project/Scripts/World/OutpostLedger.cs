@@ -229,10 +229,35 @@ namespace SeaSick.World
         /// the downed hand's own (saved) `reached`.
         [System.NonSerialized] public bool draggingNow;
 
-        /// **Out of the ordinary dispatch (phase 2)**: downed, recovering,
-        /// being dragged, or off rescuing somebody -- no new orders, no
-        /// productive work, same as `downed` alone was in phase 1.
-        public bool Busy => downed || recovering || dragged || !string.IsNullOrEmpty(rescuing);
+        // --- pout + floor (death/rescue phase 4, 2026-09-28) ----------------
+        //
+        // docs/PLAN-DEATH-RESCUE.md, "Neglect": an angry hand does not
+        // desert, he walks to the fire and sulks for a while, then goes
+        // back to whatever he was doing. `order`/`target` are left alone
+        // while he pouts, on purpose -- there is nothing to "resume", the
+        // ordinary dispatch just starts paying him again once `pouting`
+        // clears. Saved so a reload mid-pout (or mid-cooldown) picks up
+        // exactly where it left off; all default false/0, which is what an
+        // old save (nobody in it ever pouted) reads as.
+
+        /// Standing at the fire, sulking. `WorkFactor` is 0 the same way
+        /// `downed`'s is (via `Busy`); see `OutpostLedger.PoutTick`/
+        /// `StartPout`.
+        public bool pouting;
+        /// Real seconds left of this pout. Counted down only while the
+        /// camp is watched and running (`OutpostLedger.PoutTick`, called
+        /// from `Outpost.Update` beside `TickDowned`).
+        public float poutLeft;
+        /// Real seconds before this hand may pout again, even if he is
+        /// still angry. Ticks down the same watched-and-running way
+        /// `poutLeft` does.
+        public float poutCooldown;
+
+        /// **Out of the ordinary dispatch**: downed, recovering, being
+        /// dragged, off rescuing somebody (phase 2), or pouting at the fire
+        /// (phase 4) -- no new orders, no productive work, same as `downed`
+        /// alone was in phase 1.
+        public bool Busy => downed || recovering || dragged || pouting || !string.IsNullOrEmpty(rescuing);
 
         public TripLeg Leg => (TripLeg)tripLeg;
 
@@ -275,6 +300,7 @@ namespace SeaSick.World
                 if (dragged) return "being carried home";
                 if (!string.IsNullOrEmpty(rescuing))
                     return (draggingNow ? "dragging " : "running to ") + rescuing;
+                if (pouting) return "pouting at the fire · " + Mmss(poutLeft);
                 switch (order)
                 {
                     case OutpostOrder.Gather:
@@ -988,6 +1014,17 @@ namespace SeaSick.World
             h == null || h.Busy ? 0f
                 : Mathf.Max(StarvingWorkFloor, Mathf.Clamp01(h.mood / 0.5f)) * (1f + MealWorkBonus(h));
 
+        /// **Decision for Kevin to review (phase 4, 2026-09-28):** a
+        /// pouting hand is zeroed here through `Busy`, same as `downed`.
+        /// The OLDER below-half-mood slow-down below (`StarvingWorkFloor`,
+        /// the 35% floor a merely-angry-but-not-yet-pouting hand works at)
+        /// is left exactly as it was, not replaced -- so mood still costs a
+        /// camp output before anybody ever reaches the fire, and pouting is
+        /// the harder stop on top of that once the cooldown lets it fire.
+        /// Whether the two together read as "enough consequence" or as one
+        /// system doing the other's job twice is a play call, not a code
+        /// one.
+        ///
         /// **Hunger slows a hand; it does not stop one, 2026-09-23.** Kevin
         /// chose it after the stuck-buildings repro: at mood 0 the old
         /// factor was exactly zero, so a hungry camp froze with everybody
@@ -3007,10 +3044,11 @@ namespace SeaSick.World
         public string StallReason(OutpostHand h)
         {
             if (h == null) return null;
-            // **Downed/dragging/recovering (death/rescue): not a stall,
-            // never flagged "stuck".** `Doing` already says what he is
-            // doing; this must not pile a warning on top of it.
-            if (h.downed || h.recovering || h.dragged || !string.IsNullOrEmpty(h.rescuing)) return null;
+            // **Downed/dragging/recovering/pouting (death/rescue): not a
+            // stall, never flagged "stuck".** `Doing` already says what he
+            // is doing; this must not pile a warning on top of it.
+            if (h.downed || h.recovering || h.dragged || h.pouting
+                || !string.IsNullOrEmpty(h.rescuing)) return null;
             if (h.walkingIn) return "still on the way up from the ship";
             // The body's own reason first (walled off): the books say he is
             // working, the feet say he cannot get there. Display only.

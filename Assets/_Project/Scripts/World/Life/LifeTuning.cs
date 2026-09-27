@@ -34,6 +34,16 @@ namespace SeaSick.World.Life
         [Tooltip("Chance a kill (or the jab, on a miss) goes wrong and downs the hunter instead -- watched camps only, never in catch-up. Iron halves it.")]
         public float huntAccidentChance = 0.03f;
 
+        [Header("Pout + floor (phase 4)")]
+        [Tooltip("Real seconds an angry (mood < 0.5) hand stands at the fire pouting before he goes back to his order. Docs: \"5 minutes.\"")]
+        public float poutSeconds = 300f;
+
+        [Tooltip("Real seconds after a pout ends before that same hand may pout again, even if he is still angry.")]
+        public float poutCooldownSeconds = 600f;
+
+        [Tooltip("A camp never lets pouting drop the number of hands who are NOT downed/recovering/dragged/rescuing/pouting below this. A hand who would break the floor simply does not start pouting; he tries again next tick. **Also the floor for any future neglect outcome** (docs: \"a camp never drops below a minimum number of hands\") -- this one field is meant to gate whatever comes after pouting too, not just this phase.")]
+        public int minHandsFloor = 2;
+
         // --- loading -----------------------------------------------------
 
         public const string ResourcePath = "LifeTuning";
@@ -67,5 +77,8 @@ namespace SeaSick.World.Life
         public static float DragSpeed => Active != null ? Active.dragSpeed : 1.2f;
         public static float RecoverDays => Active != null ? Active.recoverDays : 120f / 180f;
         public static float HuntAccidentChance => Active != null ? Active.huntAccidentChance : 0.03f;
+        public static float PoutSeconds => Active != null ? Active.poutSeconds : 300f;
+        public static float PoutCooldownSeconds => Active != null ? Active.poutCooldownSeconds : 600f;
+        public static int MinHandsFloor => Active != null ? Active.minHandsFloor : 2;
     }
 }

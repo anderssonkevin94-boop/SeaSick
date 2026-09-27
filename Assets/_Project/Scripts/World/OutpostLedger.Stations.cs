@@ -961,6 +961,15 @@ namespace SeaSick.World
             // downed, the downed hand's rescue resets") -- `DispatchRescuers`
             // picks somebody new next tick.
             h.rescuing = "";
+            // **A pouting hand knocked down (phase 4, 2026-09-28):** `Doing`
+            // already reads `downed` ahead of `pouting`, but leaving
+            // `pouting` true would let `PoutTick` go on ticking his (now
+            // meaningless) sulk in the background and would count him
+            // against the floor twice over. Clear it outright, same as
+            // `rescuing` above; no cooldown penalty either way, since he
+            // never finished the pout he was on.
+            h.pouting = false;
+            h.poutLeft = 0f;
             Life.Lives.Log(h.name, Life.LifeEvents.Downed, CampLabel);
             return true;
         }
@@ -1530,12 +1539,36 @@ namespace SeaSick.World
             foreach (var h in hands)
             {
                 if (h == null) continue;
-                // **Downed, recovering, dragged or off rescuing (death/
-                // rescue): no new work, no new trips.** `WorkFactor` is
-                // already 0 for him, but a busy hand should not even be
+                // **Downed, recovering, dragged, off rescuing, or pouting
+                // (death/rescue): no new work, no new trips.** `WorkFactor`
+                // is already 0 for him, but a busy hand should not even be
                 // READ by the dispatcher -- skip him outright rather than
                 // trust a zero budget alone.
-                if (h.Busy) continue;
+                if (h.Busy)
+                {
+                    // **A pouting hand may still be mid-meal (phase 4,
+                    // 2026-09-28).** `EatStep` starts a hungry hand's
+                    // store-and-back trip before it knows about `Busy` (it
+                    // only ever excludes `downed`), so a hand can already be
+                    // walking a meal home the instant he turns angry enough
+                    // to pout. Left alone, `Busy` would skip him outright
+                    // from here on and the food would sit in his arms
+                    // forever, going neither into him nor back on the pile.
+                    // One explicit advance, at full pace and ignoring
+                    // `WorkFactor`'s (correct) zero for a pouting hand,
+                    // finishes that one trip so `AdvanceHaul` hands off to
+                    // `EatMeal` -- nothing else about his day runs from
+                    // here. Downed/recovering/dragged/rescuing hands never
+                    // arrive here with `h.eating` set (downed never starts
+                    // one; nothing starts one for the others either), so in
+                    // practice this only ever fires for a pouting hand.
+                    if (h.pouting && h.eating && h.Hauling)
+                    {
+                        float mealBudget = days;
+                        AdvanceHaul(h, ref mealBudget, 1f);
+                    }
+                    continue;
+                }
                 float budget = days * WorkFactor(h);
                 if (h.order == OutpostOrder.Work && IsStation(h.target))
                 {

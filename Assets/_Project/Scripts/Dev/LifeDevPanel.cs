@@ -92,6 +92,10 @@ namespace SeaSick.Dev
                         ? (hnd.reached ? "  [DOWN, reached]" : "  [DOWN " + Mathf.CeilToInt(hnd.downedLeft) + "s]")
                         : hnd.recovering ? "  [recovering " + hnd.recoverLeft.ToString("0.00") + "d]"
                         : !string.IsNullOrEmpty(hnd.rescuing) ? "  [rescuing " + hnd.rescuing + "]"
+                        // Phase 4: pouting shows its own countdown, or the
+                        // cooldown left before he could pout again.
+                        : hnd.pouting ? "  [POUT " + Mathf.CeilToInt(hnd.poutLeft) + "s]"
+                        : hnd.poutCooldown > 0f ? "  [pout cd " + Mathf.CeilToInt(hnd.poutCooldown) + "s]"
                         : "";
                     string label = hnd.name + state;
                     GUILayout.Label(label, GUILayout.Width(220));
@@ -107,6 +111,11 @@ namespace SeaSick.Dev
                         if (GUILayout.Button("Revive", GUILayout.Height(RowH)))
                             camp.Ledger.Revive(hnd);
                     }
+                    // Phase 4: force a pout right now -- ignores the
+                    // cooldown, still refuses if the floor would break
+                    // (`OutpostLedger.ForcePout`).
+                    if (!hnd.pouting && GUILayout.Button("Pout", GUILayout.Height(RowH)))
+                        camp.Ledger.ForcePout(hnd);
                     if (GUILayout.Button("Kill", GUILayout.Height(RowH)))
                         camp.Ledger.Die(hnd, string.IsNullOrEmpty(hnd.downedCause)
                             ? LifeEvents.KilledInRaid : hnd.downedCause);
