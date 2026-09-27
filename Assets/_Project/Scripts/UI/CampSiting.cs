@@ -17,12 +17,12 @@ namespace SeaSick.UI
     /// for the campfire... The whole island should be built if you want it
     /// to."* So does everything else now -- anywhere `Outpost.CanPlace`
     /// and `Outpost.TooFarFromTown` (reachability only, since this decision)
-    /// take it. What used to be the ring is now `WalkLabel`: the walk from
-    /// the stores, in words, coloured amber then ember with distance, never
-    /// refusing.
+    /// take it. (The walk label that briefly replaced the ring -- "84 m from
+    /// stores, ~70 s round trip" -- was dropped the same day: *"drop that
+    /// information. I don't need to know to the second how long it takes."*)
     ///
     /// This is the interface half of that. It owns exactly three things — the
-    /// preview ghost, the walk label, and the tap — and it owns no rules:
+    /// preview ghost, the warmth line, and the tap — and it owns no rules:
     /// whether a spot will take a building is `Outpost.CanPlace`, which is
     /// the same call the real raise makes. **A ghost that goes green on one
     /// test and a raise that refuses on another is the bug this shape exists
@@ -130,13 +130,11 @@ namespace SeaSick.UI
             GUI.Label(r, line, UITheme.Small2Centered);
         }
 
-        /// **Draw the walk label, stacked under wherever `DrawClearLine`
-        /// put its line** (2026-09-27) -- the two can be on screen together
-        /// ("clears 2 trees" and "84 m from stores" are both true of the
-        /// same spot), so this claims the row below rather than the same
-        /// one. Tinted amber/ember past `AmberMetres`/`EmberMetres`; never a
-        /// refusal, so it draws whether or not a clear line is showing.
-        public static void DrawWalkLine(Vector3 world, int buttonCount, string line, Color tint)
+        /// **Draw an info line (a Hut's warmth), stacked under wherever
+        /// `DrawClearLine` put its line** (2026-09-27) -- the two can be on
+        /// screen together, so this claims the row below rather than the
+        /// same one. Never a refusal.
+        public static void DrawInfoLine(Vector3 world, int buttonCount, string line, Color tint)
         {
             if (string.IsNullOrEmpty(line)) return;
             var row = SitingButtons.Cluster(world, buttonCount);
@@ -482,7 +480,6 @@ namespace SeaSick.UI
             outpost = null;
             Refusal = "";
             ClearLine = "";
-            WalkLine = "";
             valid = false;
             onWall = false;
             CameraRig.IslandCam.ExtraReachCentre = null;
@@ -635,23 +632,10 @@ namespace SeaSick.UI
                     ClearLine = string.IsNullOrEmpty(ClearLine) ? OnWallLine : OnWallLine + " · " + ClearLine;
             }
 
-            // **The walk, in words (2026-09-27) -- what replaced the 40 m
-            // refusal.** Only on a valid spot, past the town centre itself
-            // (there is nowhere to walk FROM until the fire stands) and
-            // never on the fire's own siting (it IS the stores).
-            WalkLine = "";
-            if (valid && outpost != null && outpost.HasCampCentre && plan.kind != BuildKind.Fire)
-            {
-                WalkLine = WalkLabel(outpost, at, out Color tint);
-                WalkTint = tint;
-            }
-
-            // **Warmth (2026-09-27) -- Kevin's "1" alongside the walk
-            // label's "4".** A Hut only: whether this spot falls inside
-            // `OutpostLedger.WarmHutRadius` and its residents would draw
-            // the mood bonus, or not. Keeps `WalkLine` -- this is its own
-            // line, same rule as the walk label about when it has anything
-            // to say.
+            // **Warmth (2026-09-27).** A Hut only: whether this spot falls
+            // inside `OutpostLedger.WarmHutRadius` and its residents would
+            // draw the mood bonus, or not. (The walk label that sat beside
+            // it is gone -- Kevin, 2026-09-27: "drop that information.")
             WarmthLine = "";
             if (valid && outpost != null && outpost.HasCampCentre && plan.id == BuildPlans.Hut.id)
                 WarmthLine = WarmthLabel(outpost, at);
@@ -660,42 +644,12 @@ namespace SeaSick.UI
             ShowGhost(true);
         }
 
-        /// **"84 m from stores · ~70 s round trip — slower hauling."**
-        ///
-        /// Kevin, 2026-09-27: doing away with the 40 m ring needs "a reason
-        /// to keep things near the centre" that comes from what already
-        /// exists, made visible -- every haul the ledger runs already pays
-        /// for distance (`OutpostLedger.PathFactor`/`WalkMetresPerSecond`,
-        /// `Outpost.SaveTripGeometry`); this is the same arithmetic, asked
-        /// about the spot under the thumb before it is committed to. Never
-        /// a refusal -- the colour is the only opinion it has.
-        public static string WalkLabel(Outpost outpost, Vector3 at, out Color tint)
-        {
-            tint = UITheme.TextDim;
-            float m = outpost != null ? outpost.WalkMetresFromStores(at) : -1f;
-            if (m < 0f) return "";
-            float seconds = 2f * m * OutpostLedger.PathFactor / OutpostLedger.WalkMetresPerSecond;
-            tint = m > EmberMetres ? UITheme.Bad : m > AmberMetres ? UITheme.Warn : UITheme.TextDim;
-            return $"{m:F0} m from stores · ~{seconds:F0} s round trip — slower hauling";
-        }
-
-        /// Past this many metres from the stores, the walk label turns
-        /// amber; past `EmberMetres`, ember. Never a refusal -- a colour
-        /// only, same spirit as the ghost's own colouring.
-        public const float AmberMetres = 60f;
-        public const float EmberMetres = 120f;
-
-        /// The walk label for the spot under the ghost right now, or "".
-        public static string WalkLine { get; private set; } = "";
-        public static Color WalkTint { get; private set; } = Color.white;
-
         /// **"warm — near the fire" / "cold — far from the fire" (2026-09-27).**
         /// A Hut only: straight-line distance from `at` to the fire against
         /// `OutpostLedger.WarmHutRadius` -- the same measure a standing
         /// hut is judged by (`OutpostLedger.IsHandWarm`'s own row test), a
         /// ghost having no ground route yet worth asking `CampPath` for
-        /// over a line this short. Never a refusal, same spirit as
-        /// `WalkLabel`.
+        /// over a line this short. Never a refusal.
         public static string WarmthLabel(Outpost outpost, Vector3 at)
         {
             if (outpost == null) return "";
@@ -793,7 +747,7 @@ namespace SeaSick.UI
                 case SitingButtons.Press.Confirm: Commit(); break;
             }
             if (valid) DrawClearLine(at, 3, ClearLine);
-            if (valid) DrawWalkLine(at, 3, WalkLine, WalkTint);
+            if (valid) DrawInfoLine(at, 3, WarmthLine, UITheme.TextDim);
         }
 
         /// **Drop the view on to what was just sited**: Kevin's call, 35 m

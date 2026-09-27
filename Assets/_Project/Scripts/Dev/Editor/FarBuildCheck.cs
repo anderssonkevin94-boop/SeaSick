@@ -14,9 +14,10 @@ using UnityEngine;
 ///
 /// 1. the spot is VALID (`CanPlace` + the one rule kept, reachability --
 ///    `Outpost.TooFarFromTown` no longer refuses on distance at all);
-/// 2. the walk LABEL is showing (`CampSiting.WalkLine`: "N m from stores ...
-///    round trip"), which is the "reason to stay close" now that the ring
-///    itself is gone;
+/// 2. a Hut's WARMTH line is showing (`CampSiting.WarmthLine`). The walk
+///    label ("N m from stores ... round trip") is GONE since 2026-09-27
+///    (Kevin: *"drop that information. I don't need to know to the second
+///    how long it takes."*);
 /// 3. the hands can actually ROUTE there afterwards (`CampPath.HasRoute`),
 ///    which is the thing the label's promise would be a lie without.
 ///
@@ -87,11 +88,9 @@ public static class FarBuildCheck
         float actualDist = Flat(CampSiting.GhostAt, c);
         sb.AppendLine($"ghost at {CampSiting.GhostAt:F0}, {actualDist:F0} m from the fire, "
             + $"valid {CampSiting.CanConfirm}, refusal \"{CampSiting.Refusal}\"");
-        sb.AppendLine($"walk label: \"{CampSiting.WalkLine}\"");
+        sb.AppendLine($"warmth line: \"{CampSiting.WarmthLine}\"");
 
-        bool labelShowsWalk = !string.IsNullOrEmpty(CampSiting.WalkLine)
-            && CampSiting.WalkLine.Contains("from stores")
-            && CampSiting.WalkLine.Contains("round trip");
+        bool labelShowsWalk = !string.IsNullOrEmpty(CampSiting.WarmthLine);
 
         if (!CampSiting.CanConfirm)
         {
