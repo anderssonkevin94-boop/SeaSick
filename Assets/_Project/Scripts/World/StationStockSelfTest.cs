@@ -620,6 +620,9 @@ namespace SeaSick.World
                 var l = Sawmill(20, 0);
                 var s = l.StationOf(BuildPlans.Sawmill.id);
                 s.Bay(Res.Timber, true).whole = 1;
+                // The bench runs only while he stands at it (2026-09-27):
+                // this gate is the bench timer, so he starts there.
+                l.hands[0].wHas = true; l.hands[0].wx = 15f; l.hands[0].wz = 0f;
                 l.PlaceOrder(BuildPlans.Sawmill.id, "boards", 3);
                 int before = Mathf.FloorToInt((float)(jobSec / q - 1e-4));
                 l.Tick(before * q + 1e-3);
@@ -1037,21 +1040,34 @@ namespace SeaSick.World
                     + $"back alongside: aboard {ship.HeldOf(T)}");
             }
 
-            // She casts off mid-trip (ship -> store): the armful is off her
-            // already and lands in the store.
+            // She casts off mid-trip (ship -> store). Before he has picked
+            // the armful up at the gangway, nothing has left her (the order
+            // keeps its count); once it is in his arms, it lands in the store.
             {
                 var l = Porters(20, 1, out var ship);
                 ship.held[S] = 9;
                 l.OrderTransfer(S, 9, false);
                 double now = l.lastTicked;
-                Advance(l, ref now, 0.02);
-                int inArms = l.CarryingTransfer(S, false);
+                Advance(l, ref now, 0.02);                 // still walking out to her
+                bool planned = l.hands[0].Hauling && !l.hands[0].haulPicked;
                 ship.present = false;
                 Advance(l, ref now, 2.0);
-                bool ok = inArms > 0 && Ashore(l, S) == inArms && ship.HeldOf(S) == 9 - inArms
-                          && l.CarriedOf(S) == 0 && l.TransferPending(S, false);
-                Gate(sb, ref fails, "transfer-ship-leaves-to-store-conserves", ok,
-                    $"{inArms} in arms when she left; ashore {Ashore(l, S)} aboard {ship.HeldOf(S)} arms {l.CarriedOf(S)}");
+                bool before = planned && ship.HeldOf(S) == 9 && Ashore(l, S) == 0 && l.CarriedOf(S) == 0
+                              && l.TransferPending(S, false);
+
+                var m = Porters(20, 1, out var ship2);
+                ship2.held[S] = 9;
+                m.OrderTransfer(S, 9, false);
+                double nm = m.lastTicked;
+                for (int i = 0; i < 20 && !m.hands[0].haulPicked; i++) Advance(m, ref nm, 0.02);
+                int inArms = m.CarriedOf(S);
+                ship2.present = false;
+                Advance(m, ref nm, 2.0);
+                bool after = inArms > 0 && Ashore(m, S) == inArms && ship2.HeldOf(S) == 9 - inArms
+                             && m.CarriedOf(S) == 0 && m.TransferPending(S, false);
+                Gate(sb, ref fails, "transfer-ship-leaves-to-store-conserves", before && after,
+                    $"left before pickup: aboard {ship.HeldOf(S)} ashore {Ashore(l, S)}; "
+                    + $"left with {inArms} in arms: ashore {Ashore(m, S)} aboard {ship2.HeldOf(S)} arms {m.CarriedOf(S)}");
             }
 
             // Re-ordered mid-trip: to a farm (not a transfer carrier) the
@@ -1066,8 +1082,12 @@ namespace SeaSick.World
                 int inArms = l.CarryingTransfer(T, true);
                 l.hands[0].order = OutpostOrder.Work;
                 l.hands[0].target = BuildPlans.Farm.id;
+                // (2026-09-27) Re-ordered, he still WALKS it there: nothing
+                // lands untouched, then it lands aboard.
                 Advance(l, ref now, 0.02);
-                bool landedNow = inArms > 0 && ship.HeldOf(T) == inArms && l.CarriedOf(T) == 0
+                bool walking = l.CarriedOf(T) == inArms && ship.HeldOf(T) == 0;
+                Advance(l, ref now, 0.2);
+                bool landedNow = inArms > 0 && walking && ship.HeldOf(T) == inArms && l.CarriedOf(T) == 0
                                  && ship.HeldOf(T) + Ashore(l, T) == 10;
 
                 var b = Porters(20, 1, out var ship2);
@@ -1081,7 +1101,7 @@ namespace SeaSick.World
                 Advance(b, ref nb, 2.0);
                 bool builderDone = ship2.HeldOf(T) == 4 && Ashore(b, T) == 6 && b.CarriedOf(T) == 0;
                 Gate(sb, ref fails, "transfer-reordered-mid-trip-conserves", landedNow && stillCarrying && builderDone,
-                    $"to farm: {inArms} in arms -> aboard {ship.HeldOf(T)}; to build: still carrying {stillCarrying}, "
+                    $"to farm: {inArms} in arms, walked on, -> aboard {ship.HeldOf(T)}; to build: still carrying {stillCarrying}, "
                     + $"then aboard {ship2.HeldOf(T)} ashore {Ashore(b, T)}");
             }
         }

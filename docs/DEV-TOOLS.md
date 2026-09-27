@@ -1397,9 +1397,13 @@ on the herd count (`GameUnclaimed`), not on a `Claimed` source; the kill IS
 the pickup. (3) Re-ordering a hand mid-trip no longer lands his load: whatever
 pass owns him now walks it there; only `RemoveHand` / station teardown still
 force a picked load into the store (it exists), and a planned load is simply
-cancelled (`CancelPlanned`). (4) `StationStockSelfTest` sections (j)/(k)/(l)/(o)
-were rewritten for the walk model and have NOT been run yet as of the commit
-that introduced them — run them before trusting a FAIL elsewhere.
+cancelled (`CancelPlanned`). (4) `StationStockSelfTest` (all sections) and `LedgerProbe.Execute()` were
+run ALL PASS on 2026-09-27 OUTSIDE the editor — the runtime assembly compiled
+with Unity's csc and run on Unity's bundled `dotnet` (8.0) with a console
+`ILogHandler`, JsonUtility round trips stubbed to identity (JsonUtility is
+native; the save gates still need the editor). Pure-ledger code runs fine that
+way; anything touching the scene, `Resources` (caught in `EconomyTuning`) or
+`JsonUtility` does not.
 
 New gates in `StationStockSelfTest` (o): `store-grows-only-at-dropoff` (a busy
 camp stepped per quantum for 3 days; no step's store growth exceeds that
