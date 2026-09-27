@@ -19,7 +19,7 @@
     font-size: 20px; color: rgb(232, 242, 246);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
-.cp-head .cp-subtitle { font-size: 12px; color: rgb(166, 186, 198); margin-top: 1px; }
+.cp-head .cp-subtitle { font-size: 13px; color: rgb(166, 186, 198); margin-top: 1px; }
 .cp-head-btn {
     width: 44px; height: 44px; margin: 0 8px 0 0; padding: 10px; flex-shrink: 0;
     align-items: center; justify-content: center;
@@ -90,13 +90,13 @@
 }
 .cp-root .cp-card--locked .cp-card-name { color: rgb(127, 151, 166); font-size: 14px; }
 .cp-root .cp-tag {
-    font-size: 11px; margin-left: 6px; flex-shrink: 0; color: rgb(127, 151, 166);
+    font-size: 12px; margin-left: 6px; flex-shrink: 0; color: rgb(127, 151, 166);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .cp-root .cp-tag--ok { color: rgb(159, 224, 194); }
 .cp-root .cp-tag--bad { color: rgb(246, 146, 128); }
 .cp-root .cp-blurb { font-size: 13px; color: rgb(166, 186, 198); white-space: normal; margin-top: 2px; }
-.cp-root .cp-card--locked .cp-blurb { color: rgb(127, 151, 166); font-size: 12px; }
+.cp-root .cp-card--locked .cp-blurb { color: rgb(127, 151, 166); font-size: 13px; }
 .cp-cost-line { flex-direction: row; align-items: center; flex-wrap: wrap; margin-top: 4px; }
 .cp-cost { flex-direction: row; align-items: center; margin-right: 10px; }
 .cp-cost-icon { width: 20px; height: 20px; margin-right: 3px; flex-shrink: 0; }
@@ -105,10 +105,10 @@
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .cp-root .cp-cost--short .cp-cost-q { color: rgb(246, 146, 128); }
-.cp-root .cp-copies { font-size: 12px; color: rgb(164, 210, 232); margin-left: 2px; }
+.cp-root .cp-copies { font-size: 13px; color: rgb(164, 210, 232); margin-left: 2px; }
 .cp-pin {
     height: 44px; min-width: 64px; padding: 0 10px; margin: 0 0 0 8px; flex-shrink: 0; white-space: normal;
-    border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 10px; font-size: 12px;
+    border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 10px; font-size: 13px;
     background-color: rgb(19, 34, 46); color: rgb(164, 210, 232); -unity-text-align: middle-center;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
@@ -135,12 +135,12 @@
     font-size: 15px; color: rgb(232, 242, 246); flex-shrink: 1;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
-.cp-root .cp-mood { font-size: 12px; color: rgb(166, 186, 198); margin-left: 6px; flex-shrink: 0; }
+.cp-root .cp-mood { font-size: 13px; color: rgb(166, 186, 198); margin-left: 6px; flex-shrink: 0; }
 .cp-root .cp-mood--warm { color: rgb(240, 195, 106); }
 .cp-root .cp-mood--bad { color: rgb(246, 146, 128); }
 .cp-root .cp-job { font-size: 13px; color: rgb(166, 186, 198); margin-top: 1px; }
 .cp-root .cp-stall {
-    font-size: 12px; color: rgb(246, 146, 128); white-space: normal; margin-top: 2px;
+    font-size: 13px; color: rgb(246, 146, 128); white-space: normal; margin-top: 2px;
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
 .cp-root .cp-stall--warn { color: rgb(240, 195, 106); }
