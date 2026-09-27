@@ -121,6 +121,10 @@ namespace SeaSick.UI.Sheets
 
         public LedgerDrawer(VisualElement root)
         {
+            // The two seams the other sheets left for the drawer: the camp
+            // overview is the drawer's own Overview row, and its ☰ opens us.
+            CampOverviewFactory = c => new CampOverviewSheet(c);
+            CampOverviewSheet.OpenLedger = Open;
             var style = Resources.Load<StyleSheet>("UI/Ledger");
             if (style != null) root.styleSheets.Add(style);
             else Debug.LogWarning("[Ledger] Resources/UI/Ledger.uss is missing — the ledger drawer will be unstyled.");
