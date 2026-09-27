@@ -1443,3 +1443,14 @@ outside the helm zone (bottom half) and must not steal building/villager
 taps -- run it after `WorldPicker` finds no sheet. `HelmInput`,
 `ShipMotor`, `ChaseCamera`/`IslandCam` stay systems-owned -- ask for a
 getter rather than editing them.
+
+## 2026-09-27 — the economy tuning file and its FEEL dials
+
+**Where every camp number lives:** `Assets/_Project/Settings/Resources/EconomyTuning.asset` (`World/Economy/EconomyTuning.cs`). Plan prices + hammer seconds, fire and upgrade prices, rate multipliers, copy caps, per-copy step, recipes, cut seconds, rock yields, meat/hide, spear life, warmth. The live multipliers are `World/Economy/EconomyFeel.cs` statics, registered in `Dev/FeelLab.cs` (`TypeFullNames` + `Ranges`), so they show on the phone's FEEL panel. GDD §6 "Economy numbers" has the table and the reasoning.
+
+Traps:
+- **The asset wins over the code.** The static tables (`BuildPlans`, `Techs`, `Recipes`) keep the same numbers as defaults, but a row in the asset overrides its code value. Change a price in the ASSET (or change both); a code-only edit is silently overridden. After a code-side change, right-click the asset → *Capture tables from code* to rewrite its tables.
+- **Tables are pushed once**, at `RuntimeInitializeOnLoadMethod(BeforeSceneLoad)` (`EconomyTuning.EnsureApplied`). Editing fire/upgrade/cap/recipe rows during play does nothing until the next play; plan prices and hammer seconds are read per call and do follow. `.asset` edits made outside the editor also need `AssetDatabase.Refresh` (see "Asset edits need refresh").
+- **FEEL's saved values beat the asset.** FeelLab restores its PlayerPrefs on startup, so a meat/hide number set on the phone persists over a changed asset until FEEL → Reset.
+- **Edit-mode tools see code defaults** (no play → nothing pushed), which is why the code and the asset must stay in step; `RecipeGraph.Validate` runs on the code tables.
+- **The site timer is hammer-only.** `PendingBuild.built` accrues only in `OutpostLedger.PayBuild` (stocked + cleared + a Build-order hand not walking a load), scaled by `EconomyTuning.CrewSpeed(N)`. `OutpostLedger.SiteLine` / `WhoIsOn` (`OutpostLedger.SiteCrew.cs`) are the site sheet's words; they READ the hauling fields on `OutpostHand` (`Hauling`, `haulRes`, `haulCount`, `haulFrom`, `haulTo`) and change nothing.
