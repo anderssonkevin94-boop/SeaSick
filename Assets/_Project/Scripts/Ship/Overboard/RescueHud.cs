@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using SeaSick.Crew;
 using SeaSick.UI;
@@ -66,9 +67,22 @@ namespace SeaSick.Ship.Overboard
             }
         }
 
+        /// Every overboard target right now, swimmers and floating cargo
+        /// alike — scratch, rebuilt each `OnGUI` (cheap: at most a handful
+        /// at once, same budget note as `Swimmer.Update`'s ocean sample).
+        static readonly List<IOverboardTarget> targets = new List<IOverboardTarget>();
+
+        static void CollectTargets()
+        {
+            targets.Clear();
+            foreach (var s in Swimmer.All) if (s != null) targets.Add(s);
+            foreach (var c in FloatingCargo.All) if (c != null) targets.Add(c);
+        }
+
         void OnGUI()
         {
-            if (Swimmer.All.Count == 0) return;
+            CollectTargets();
+            if (targets.Count == 0) return;
             var cam = Camera.main;
             if (cam == null) return;
             if (helm == null) helm = FindAnyObjectByType<HelmInput>();
@@ -76,31 +90,37 @@ namespace SeaSick.Ship.Overboard
             int u = HudLayout.Unit;
             float tapHalf = u * TapRadiusUnits;
 
-            Swimmer nearestInReach = null;
-            float nearestReachDist = float.MaxValue;
-
-            foreach (var s in Swimmer.All)
+            // Every target within throw reach, PEOPLE FIRST then cargo
+            // (build brief item 1), nearest within each group — so two
+            // targets in reach at once (item 4) each get their own row
+            // below rather than only the single nearest winning a button.
+            inReach.Clear();
+            foreach (var t in targets)
             {
-                if (s == null) continue;
-                DrawSwimmer(s, cam, u, tapHalf);
+                if (t == null || t.Resolved) continue;
+                DrawTarget(t, cam, u, tapHalf);
 
-                float rd = Vector3.Distance(s.NearestHullSide(), s.WorldPosition);
-                if (rd <= OverboardTuning.ThrowReachMetres && rd < nearestReachDist)
-                {
-                    nearestReachDist = rd;
-                    nearestInReach = s;
-                }
+                float rd = Vector3.Distance(t.NearestHullSide(), t.WorldPosition);
+                if (rd <= OverboardTuning.ThrowReachMetres) inReach.Add(t);
             }
+            inReach.Sort((a, b) =>
+            {
+                int p = a.RescuePriority.CompareTo(b.RescuePriority);
+                return p != 0 ? p : Vector3.Distance(a.NearestHullSide(), a.WorldPosition)
+                    .CompareTo(Vector3.Distance(b.NearestHullSide(), b.WorldPosition));
+            });
 
             DrawSteeringLine(u);
-            DrawThrowLine(nearestInReach, u);
+            DrawThrowLines(u);
         }
 
-        // ------------------------------------------------- per-swimmer -----
+        static readonly List<IOverboardTarget> inReach = new List<IOverboardTarget>();
 
-        void DrawSwimmer(Swimmer s, Camera cam, int u, float tapHalf)
+        // ------------------------------------------------- per-target -----
+
+        void DrawTarget(IOverboardTarget t, Camera cam, int u, float tapHalf)
         {
-            Vector3 sp = cam.WorldToScreenPoint(s.WorldPosition);
+            Vector3 sp = cam.WorldToScreenPoint(t.WorldPosition);
             bool behind = sp.z < 0f;
             // Behind the camera, WorldToScreenPoint mirrors both axes through
             // the centre — flip back so the clamp below points the right way
@@ -114,14 +134,14 @@ namespace SeaSick.Ship.Overboard
 
             if (!offscreen)
             {
-                DrawTapZone(gui, tapHalf, s);
+                DrawTapZone(gui, tapHalf, t);
                 return;
             }
 
             // Clamp to a band that prefers the TOP and SIDES over the
             // bottom, where the helm stick lives (build brief item 2) — the
             // clamp rect's own bottom edge stops at the screen's vertical
-            // middle, so even a swimmer dead astern (whose raw direction
+            // middle, so even a target dead astern (whose raw direction
             // points straight down) lands on that line instead of low over
             // the stick.
             Vector2 centre = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
@@ -133,9 +153,9 @@ namespace SeaSick.Ship.Overboard
                 Screen.width - margin * 2f, Screen.height * 0.5f - margin);
             Vector2 edgePoint = ClampToRectEdge(centre, dir, bounds);
 
-            float dist = Vector3.Distance(cam.transform.position, s.WorldPosition);
-            DrawArrow(edgePoint, dir, s.TimeLeft01, dist, u);
-            DrawTapZone(edgePoint, tapHalf, s);
+            float dist = Vector3.Distance(cam.transform.position, t.WorldPosition);
+            DrawArrow(edgePoint, dir, t.TimeLeft01, dist, u);
+            DrawTapZone(edgePoint, tapHalf, t);
         }
 
         /// Where a ray from `origin` toward `dir` first leaves `r`.
@@ -154,12 +174,12 @@ namespace SeaSick.Ship.Overboard
         /// thing that turns a tap into `HelmInput.SteerToward`. Blocks
         /// `TouchHelm` off this rect FIRST (see the class doc), then reads
         /// the tap with an ordinary (styleless, so invisible) `GUI.Button`.
-        void DrawTapZone(Vector2 guiPoint, float half, Swimmer s)
+        void DrawTapZone(Vector2 guiPoint, float half, IOverboardTarget t)
         {
             var rect = new Rect(guiPoint.x - half, guiPoint.y - half, half * 2f, half * 2f);
             UIBlocker.Block(rect);
             if (GUI.Button(rect, GUIContent.none, GUIStyle.none) && helm != null)
-                helm.SteerToward(s.transform, s.CrewName);
+                helm.SteerToward(t.Transform, t.Label);
         }
 
         void DrawArrow(Vector2 at, Vector2 dir, float timeLeft01, float distanceMetres, int u)
@@ -230,9 +250,20 @@ namespace SeaSick.Ship.Overboard
 
         // ------------------------------------------------- throw line -------
 
-        void DrawThrowLine(Swimmer nearestInReach, int u)
+        /// Hands already spoken for by a button drawn earlier this frame —
+        /// so two targets in reach at once (build brief item 4) each get
+        /// offered a DIFFERENT free hand rather than both buttons pointing
+        /// at the same nearest one.
+        static readonly HashSet<CrewAgent> claimedThisFrame = new HashSet<CrewAgent>();
+
+        /// One stacked row per target in reach (`inReach`, already ordered
+        /// people-first-then-cargo, nearest first within each) — growing
+        /// UPWARD from the same bottom-centre anchor the single button used
+        /// to sit at, so the first (highest-priority) row lands exactly
+        /// where "Throw line" always has.
+        void DrawThrowLines(int u)
         {
-            if (nearestInReach == null || helm == null) return;
+            if (inReach.Count == 0 || helm == null) return;
             var motor = helm.GetComponent<ShipMotor>();
             float speed = motor != null ? motor.CurrentSpeed : 0f;
 
@@ -240,14 +271,24 @@ namespace SeaSick.Ship.Overboard
             float btnW = Mathf.Min(HudLayout.Safe.width - HudLayout.Pad * 2f, u * 26f);
             var safe = HudLayout.Safe;
             float top = HudLayout.BottomClustersTop;
-            var rect = new Rect(safe.x + (safe.width - btnW) * 0.5f,
-                top - HudLayout.Gap - btnH, btnW, btnH);
 
+            claimedThisFrame.Clear();
+            for (int i = 0; i < inReach.Count; i++)
+            {
+                var rect = new Rect(safe.x + (safe.width - btnW) * 0.5f,
+                    top - HudLayout.Gap - btnH * (i + 1) - HudLayout.Gap * i, btnW, btnH);
+                DrawThrowLine(inReach[i], rect, speed);
+            }
+        }
+
+        void DrawThrowLine(IOverboardTarget target, Rect rect, float speed)
+        {
             if (speed > OverboardTuning.ThrowMaxSpeed)
             {
                 // No button while she's making too much way — just the hint,
                 // sized the same as the button would be so it doesn't jump
                 // the moment she slows into reach.
+                int u = HudLayout.Unit;
                 var hintStyle = new GUIStyle(GUI.skin.label)
                 {
                     fontSize = Mathf.RoundToInt(u * 0.9f),
@@ -259,10 +300,11 @@ namespace SeaSick.Ship.Overboard
             }
 
             UIBlocker.Block(rect);
-            var agent = FindNearestAvailableCrew(nearestInReach);
+            var agent = FindNearestAvailableCrew(target);
             if (agent != null)
             {
-                if (GUI.Button(rect, "Throw line")) agent.StartHaul(nearestInReach);
+                claimedThisFrame.Add(agent);
+                if (GUI.Button(rect, "Throw line to " + target.Label)) agent.StartHaul(target);
             }
             else
             {
@@ -274,20 +316,21 @@ namespace SeaSick.Ship.Overboard
         }
 
         /// The nearest hand that is `Available` (station, not resting, not
-        /// already at the rail/hauling/ashore) to the swimmer's own side of
-        /// the hull.
-        static CrewAgent FindNearestAvailableCrew(Swimmer swimmer)
+        /// already at the rail/hauling/ashore) and not already claimed by an
+        /// earlier row this frame, to the target's own side of the hull.
+        static CrewAgent FindNearestAvailableCrew(IOverboardTarget target)
         {
-            if (swimmer.Hull == null) return null;
-            var roster = swimmer.Hull.GetComponentInParent<CrewRoster>();
+            if (target.Hull == null) return null;
+            var roster = target.Hull.GetComponentInParent<CrewRoster>();
             if (roster == null) return null;
 
-            Vector3 rail = swimmer.NearestHullSide();
+            Vector3 rail = target.NearestHullSide();
             CrewAgent best = null;
             float bestDist = float.MaxValue;
             foreach (var c in roster.All)
             {
                 if (c == null || !c.gameObject.activeInHierarchy || !c.Available) continue;
+                if (claimedThisFrame.Contains(c)) continue;
                 float d = Vector3.Distance(c.transform.position, rail);
                 if (d < bestDist) { bestDist = d; best = c; }
             }

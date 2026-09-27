@@ -284,6 +284,21 @@ namespace SeaSick.Voyage
             return take;
         }
 
+        /// **Cargo overboard, recovered or returned unsalvaged on save**
+        /// (phase 6). Unlike `AddLoot`, never clamped to `MaxHold` — these
+        /// units already counted as aboard a moment before they went over
+        /// the side (or before the save that pulled them back out of the
+        /// sea), so a hold that happens to be full right now must not cost
+        /// them. The visible deck stack is the caller's, same as `AddLoot`.
+        public void ReturnCargo(int amount, string resource)
+        {
+            if (amount <= 0 || string.IsNullOrEmpty(resource)) return;
+            held.TryGetValue(resource, out int cur);
+            held[resource] = cur + amount;
+            TotalHeld += amount;
+            if (ship != null) ship.CargoLoad = HoldFill;
+        }
+
         /// Over the side. The escape valve for a ship that is going under —
         /// costs you the payoff, buys back freeboard immediately. The player's
         /// decision, at the helm, in seconds.

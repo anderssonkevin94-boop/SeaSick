@@ -1047,27 +1047,29 @@ namespace SeaSick.Crew
         // back the crew member does once picked.
 
         Vector3 haulRailLocal;
-        Swimmer haulTarget;
+        IOverboardTarget haulTarget;
         float haulTimer;
         LineRenderer haulLine;
 
-        /// **5b: send this hand to haul `swimmer` aboard.** Refuses if this
-        /// hand isn't `Available` (already covers bailing, at the rail,
-        /// hauling somebody else, resting off a rescue, ashore...). Walks to
-        /// the rail on the SWIMMER's side of the hull, at roughly her own
-        /// fore/aft position, then hauls for `OverboardTuning.HaulSeconds`.
-        public bool StartHaul(Swimmer swimmer)
+        /// **5b, generalised for phase 6: send this hand to haul `target`
+        /// aboard** — a `Swimmer` or a `FloatingCargo`, whichever
+        /// `RescueHud` picked. Refuses if this hand isn't `Available`
+        /// (already covers bailing, at the rail, hauling somebody else,
+        /// resting off a rescue, ashore...). Walks to the rail on the
+        /// TARGET's side of the hull, at roughly her own fore/aft position,
+        /// then hauls for `OverboardTuning.HaulSeconds`.
+        public bool StartHaul(IOverboardTarget target)
         {
-            if (!Available || swimmer == null || ship == null) return false;
+            if (!Available || target == null || ship == null) return false;
 
-            Vector3 local = ship.InverseTransformPoint(swimmer.WorldPosition);
+            Vector3 local = ship.InverseTransformPoint(target.WorldPosition);
             float side = Mathf.Sign(local.x != 0f ? local.x
                 : (railLocal.x != 0f ? railLocal.x : 1f));
             float halfLen = motor != null ? Mathf.Max(1f, motor.HullLength * 0.5f - 1.5f) : Mathf.Abs(railLocal.z) + 1f;
             float z = Mathf.Clamp(local.z, -halfLen, halfLen);
             haulRailLocal = new Vector3(Mathf.Abs(railLocal.x) * side, railLocal.y, z);
 
-            haulTarget = swimmer;
+            haulTarget = target;
             state = State.HaulGoing;
             return true;
         }
@@ -1098,10 +1100,10 @@ namespace SeaSick.Crew
             if (haulTimer <= 0f)
             {
                 string rescuerName = DisplayName;
-                var swimmer = haulTarget;
+                var target = haulTarget;
                 haulTarget = null;
                 DestroyHaulLine();
-                swimmer.Rescue(rescuerName);
+                target.OnHauled(rescuerName);
                 restLeft = Mathf.Max(restLeft, OverboardTuning.RescuerRecoverSeconds);
                 state = State.HaulReturning;
             }

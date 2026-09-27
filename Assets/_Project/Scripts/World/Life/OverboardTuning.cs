@@ -81,6 +81,24 @@ namespace SeaSick.World.Life
         [Tooltip("Real seconds the rescuer stays off station after a successful haul, on top of the swimmer's own rescueOffStationSeconds.")]
         public float rescuerRecoverSeconds = 6f;
 
+        [Header("Cargo overboard (phase 6)")]
+        [Tooltip("SmoothnessMeter.Roughness01 below this drains the LASHING meter nothing at all -- higher than calmRoughness, because a well-lashed hold rides out more than a queasy hand's grip does.")]
+        public float lashCalmRoughness = 0.40f;
+        [Tooltip("Lashing lost per second, per unit of roughness above lashCalmRoughness.")]
+        public float lashDrainPerRoughness = 0.35f;
+        [Tooltip("Degrees of heel below this cost the lashing nothing.")]
+        public float lashHeelFreeDeg = 16f;
+        [Tooltip("Lashing lost per second, per degree of heel above the free band.")]
+        public float lashDrainPerHeelDeg = 0.01f;
+        [Tooltip("Flat lashing hit from a hard slam (HullIntegrity.LastImpactTime within the last 0.5s), scaled by impact speed / slamSpeedForFullHit (shared with grip).")]
+        public float lashSlamDrainFlat = 0.5f;
+        [Tooltip("Lashing refilled per second whenever nothing above is draining.")]
+        public float lashRefillPerSecond = 0.06f;
+        [Tooltip("Units of the picked resource that slide off when the lashing meter empties (or fewer, if less than this is held).")]
+        public int crateUnits = 4;
+        [Tooltip("Real seconds a floating crate has before it sinks for good.")]
+        public float floatSeconds = 120f;
+
         [Header("Scripted first time")]
         [Tooltip("Real seconds under way (calm-ish water) before the scripted first man-overboard fires.")]
         public float firstTimeSailSeconds = 90f;
@@ -140,6 +158,14 @@ namespace SeaSick.World.Life
         public static float HaulPullSpeed => D != null ? D.haulPullSpeed : 2.5f;
         public static float HaulSlipMultiple => D != null ? D.haulSlipMultiple : 1.6f;
         public static float RescuerRecoverSeconds => D != null ? D.rescuerRecoverSeconds : 6f;
+        public static float LashCalmRoughness => D != null ? D.lashCalmRoughness : 0.40f;
+        public static float LashDrainPerRoughness => D != null ? D.lashDrainPerRoughness : 0.35f;
+        public static float LashHeelFreeDeg => D != null ? D.lashHeelFreeDeg : 16f;
+        public static float LashDrainPerHeelDeg => D != null ? D.lashDrainPerHeelDeg : 0.01f;
+        public static float LashSlamDrainFlat => D != null ? D.lashSlamDrainFlat : 0.5f;
+        public static float LashRefillPerSecond => D != null ? D.lashRefillPerSecond : 0.06f;
+        public static int CrateUnits => D != null ? D.crateUnits : 4;
+        public static float FloatSeconds => D != null ? D.floatSeconds : 120f;
         public static float FirstTimeSailSeconds => D != null ? D.firstTimeSailSeconds : 90f;
         public static float FirstTimeMaxRoughness => D != null ? D.firstTimeMaxRoughness : 0.35f;
         public static float FirstTimeSwimSeconds => D != null ? D.firstTimeSwimSeconds : 240f;

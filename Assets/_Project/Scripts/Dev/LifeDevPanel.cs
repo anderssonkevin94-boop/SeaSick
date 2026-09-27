@@ -2,6 +2,7 @@ using UnityEngine;
 using SeaSick.World;
 using SeaSick.World.Life;
 using SeaSick.Crew;
+using SeaSick.Ship;
 using SeaSick.Ship.Overboard;
 
 namespace SeaSick.Dev
@@ -183,6 +184,20 @@ namespace SeaSick.Dev
                     if (s != null)
                         GUILayout.Label("  " + s.CrewName + "  " + Mathf.CeilToInt(s.TimeLeft) + "s left"
                             + (s.Scripted ? " (scripted)" : ""));
+            }
+
+            // Phase 6: force a crate over the side right now, skipping the
+            // lashing meter and the first-overboard gate.
+            if (GUILayout.Button("Cargo overboard", GUILayout.Height(RowH)))
+                CargoLashing.DebugForceSlide(FindAnyObjectByType<ShipMotor>());
+
+            if (FloatingCargo.All.Count > 0)
+            {
+                GUILayout.Label("Floating cargo:");
+                foreach (var c in FloatingCargo.All)
+                    if (c != null)
+                        GUILayout.Label("  " + c.Units + " " + c.Resource + "  "
+                            + Mathf.CeilToInt(c.TimeLeft01 * OverboardTuning.FloatSeconds) + "s left");
             }
         }
     }

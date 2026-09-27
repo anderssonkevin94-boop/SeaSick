@@ -271,6 +271,15 @@ namespace SeaSick.Save
             }
 
             // --- the hold and the stores ----------------------------------
+            // Phase 6: a crate riding the sea is not written down as its own
+            // save entity -- pull every one still afloat back into the hold
+            // it came from FIRST, so a save/quit while cargo is in the water
+            // returns those units rather than losing them. Swimmers need no
+            // such step: `BornVillager.All()` below already walks inactive
+            // bodies, and an authored hand's body is part of the scene
+            // itself, so either one is already "aboard" again the moment the
+            // save reloads.
+            SeaSick.Ship.Overboard.FloatingCargo.RecallAllForSave();
             foreach (var kv in voyage.HeldStores)
                 if (kv.Value > 0) d.hold.Add(new StoreEntry { resource = kv.Key, count = kv.Value });
             foreach (var kv in voyage.BankedStores)

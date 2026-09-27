@@ -22,7 +22,7 @@ namespace SeaSick.Ship.Overboard
     /// - `TimeLeft01` -- 0..1, for the countdown ring.
     /// - `Rescue(rescuerName)` -- call this once the haul finishes; it puts
     ///   the crew member back on the roster and fires the life events.
-    public class Swimmer : MonoBehaviour
+    public class Swimmer : MonoBehaviour, IOverboardTarget
     {
         static readonly List<Swimmer> all = new List<Swimmer>();
         public static IReadOnlyList<Swimmer> All => all;
@@ -34,6 +34,14 @@ namespace SeaSick.Ship.Overboard
         public float TimeLeft01 => timeTotal > 0f ? Mathf.Clamp01(TimeLeft / timeTotal) : 0f;
         public Vector3 WorldPosition => transform.position;
         public bool Resolved { get; private set; }
+
+        // --- IOverboardTarget (phase 6) --------------------------------
+        Transform IOverboardTarget.Transform => transform;
+        string IOverboardTarget.Label => CrewName;
+        /// People before cargo (build brief item 1) — a swimmer always
+        /// outranks a floating crate.
+        int IOverboardTarget.RescuePriority => 0;
+        void IOverboardTarget.OnHauled(string rescuerName) => Rescue(rescuerName);
 
         /// **5b: the ship's own hull, for reach/haul checks** — `RescueHud`
         /// judges "within reach" off the nearest point on the SIDE of this

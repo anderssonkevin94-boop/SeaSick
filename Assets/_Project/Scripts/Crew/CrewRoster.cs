@@ -23,16 +23,25 @@ namespace SeaSick.Crew
 
         CrewAgent[] crew;
         AnchorController anchor;
+        ShipMotor motor;
 
-        void Start() => anchor = GetComponent<AnchorController>();
+        void Start()
+        {
+            anchor = GetComponent<AnchorController>();
+            motor = GetComponent<ShipMotor>();
+        }
 
         /// **Phase 5a.** The scripted first man-overboard is bookkept per
         /// ship here — one roster, one voyage's worth of "how long have we
-        /// been sailing calmly" (`FirstOverboard.Tick`).
+        /// been sailing calmly" (`FirstOverboard.Tick`). **Phase 6** ticks
+        /// the cargo-lashing meter alongside it — same "one ship's worth of
+        /// bookkeeping" reasoning.
         void Update()
         {
             if (anchor == null) anchor = GetComponent<AnchorController>();
+            if (motor == null) motor = GetComponent<ShipMotor>();
             FirstOverboard.Tick(this, anchor, Time.deltaTime);
+            CargoLashing.Tick(motor, anchor, Time.deltaTime);
         }
 
         /// Everyone aboard or ashore, in scene order — the gun assignment index.
