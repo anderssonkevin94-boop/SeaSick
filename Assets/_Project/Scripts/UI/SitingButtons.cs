@@ -25,24 +25,38 @@ namespace SeaSick.UI
 
         /// A thumb, near enough. 2.6 units is the same order as the sheet's
         /// own buttons (2.2) with the extra a round target wants.
-        public static float Diameter => HudLayout.Unit * 2.6f;
+        /// **Big round thumb buttons (2026-09-27 restyle).** At least ~0.36 in
+        /// across (≈ 55 pt on the phone, where `Unit` alone made them ~17 pt),
+        /// never smaller than the old 2.6 units on a desk.
+        public static float Diameter =>
+            Mathf.Max(HudLayout.Unit * 3.2f, Screen.dpi > 0f ? Screen.dpi * 0.36f : 0f);
         public static float Gap => HudLayout.Unit * 0.6f;
 
-        static GUIStyle glyph;
+        static GUIStyle word;
+        static Texture2D discCancel, discConfirm, discMiddle, discOff;
         static int builtFor = -1;
 
         static void Build()
         {
-            if (builtFor == HudLayout.Unit && glyph != null) return;
+            if (builtFor == HudLayout.Unit && word != null) return;
             builtFor = HudLayout.Unit;
             // Built once per size, never per frame: IMGUI keys its cached text
             // meshes on the style INSTANCE (see UITheme.ButtonPressed).
-            glyph = new GUIStyle(UITheme.Button)
+            // The disc IS the button: an invisible style over a painted disc,
+            // so IMGUI still does the hit test and hover.
+            word = new GUIStyle(GUI.skin.label)
             {
-                fontSize = HudLayout.Unit + 8,
-                padding = new RectOffset(0, 0, 0, 0),
+                fontSize = HudLayout.Unit, fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = UITheme.LedgerPearl },
             };
+            // The Ledger palette: mint confirm, ember cancel, #13222E with an
+            // ice rim for the middle one; a muted confirm while it cannot go.
+            int r = 48;
+            discCancel = UITheme.Rounded(r, UITheme.LedgerEmber, UITheme.LedgerEmber, 4);
+            discConfirm = UITheme.Rounded(r, UITheme.LedgerMint, UITheme.LedgerMint, 4);
+            discMiddle = UITheme.Rounded(r, UITheme.LedgerPanel, UITheme.LedgerIce, 5);
+            discOff = UITheme.Rounded(r, UITheme.LedgerPanel, UITheme.LedgerEdge, 5);
         }
 
         /// Where the cluster sits this frame, or an empty rect when the ghost
@@ -141,12 +155,16 @@ namespace SeaSick.UI
             UIBlocker.Block(confirm);
 
             var press = Press.None;
-            if (Tap(cancel, "✕", UITheme.Bad, true)) press = Press.Cancel;
-            if (withMiddle && Tap(rotate, middleGlyph, UITheme.Text, true)) press = Press.Rotate;
-            if (Tap(confirm, "✓", UITheme.Good, canConfirm) && canConfirm) press = Press.Confirm;
+            // Painted marks, not font glyphs: ✓ ✕ ↻ ⭯ are blank boxes in
+            // some fonts the phone falls back to. The middle one is a word.
+            if (Disc(cancel, discCancel, Mark.Cross, null, true)) press = Press.Cancel;
+            if (withMiddle && Disc(rotate, discMiddle, Mark.None, middleGlyph == "↻" ? "Turn" : "Ring", true))
+                press = Press.Rotate;
+            if (Disc(confirm, canConfirm ? discConfirm : discOff, Mark.Tick, null, canConfirm) && canConfirm)
+                press = Press.Confirm;
 
             if (!canConfirm && !string.IsNullOrEmpty(reason))
-                Say(row.center.x, row.yMax + g * 0.5f, "✕ " + reason);
+                Say(row.center.x, row.yMax + g * 0.5f, reason);
 
             return press;
         }
@@ -168,21 +186,52 @@ namespace SeaSick.UI
         static void Say(float centreX, float y, string text)
         {
             var say = new Rect(centreX - HudLayout.Unit * 9f, y,
-                               HudLayout.Unit * 18f, HudLayout.Unit * 1.4f);
-            UITheme.Rect(say, UITheme.Panel);
+                               HudLayout.Unit * 18f, HudLayout.Unit * 1.6f);
+            UITheme.ToastCard(say, UITheme.LedgerEmber);
             GUI.Label(say, text, UITheme.Small2Centered);
         }
 
-        static bool Tap(Rect r, string mark, Color tint, bool live)
+        enum Mark { None, Cross, Tick }
+
+        static bool Disc(Rect r, Texture2D disc, Mark mark, string text, bool live)
         {
-            var prevContent = GUI.contentColor;
-            var prevBg = GUI.backgroundColor;
-            GUI.contentColor = live ? tint : new Color(tint.r, tint.g, tint.b, 0.30f);
-            GUI.backgroundColor = live ? Color.white : new Color(1f, 1f, 1f, 0.45f);
-            bool hit = GUI.Button(r, mark, glyph);
-            GUI.contentColor = prevContent;
-            GUI.backgroundColor = prevBg;
+            bool hit = GUI.Button(r, GUIContent.none, GUIStyle.none);
+            if (Event.current.type == EventType.Repaint)
+            {
+                GUI.DrawTexture(r, disc, ScaleMode.StretchToFill, true);
+                var ink = mark == Mark.Tick ? (live ? UITheme.LedgerInk : UITheme.LedgerEdge)
+                        : mark == Mark.Cross ? Color.white : UITheme.LedgerPearl;
+                float s = r.width, t = Mathf.Max(3f, s * 0.085f);
+                var c = r.center;
+                if (mark == Mark.Cross)
+                {
+                    Stroke(c + new Vector2(-0.2f, -0.2f) * s, c + new Vector2(0.2f, 0.2f) * s, t, ink);
+                    Stroke(c + new Vector2(0.2f, -0.2f) * s, c + new Vector2(-0.2f, 0.2f) * s, t, ink);
+                }
+                else if (mark == Mark.Tick)
+                {
+                    var a = c + new Vector2(-0.22f, 0.02f) * s;
+                    var b = c + new Vector2(-0.07f, 0.17f) * s;
+                    var e = c + new Vector2(0.23f, -0.15f) * s;
+                    Stroke(a, b, t, ink);
+                    Stroke(b, e, t, ink);
+                }
+                else if (!string.IsNullOrEmpty(text)) GUI.Label(r, text, word);
+            }
             return hit && live;
+        }
+
+        /// A round-capped line from `a` to `b`, `w` thick (GUI space).
+        static void Stroke(Vector2 a, Vector2 b, float w, Color col)
+        {
+            var d = b - a;
+            float len = d.magnitude + w;
+            float ang = Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg;
+            var m = GUI.matrix;
+            GUIUtility.RotateAroundPivot(ang, a);
+            GUI.DrawTexture(new Rect(a.x - w * 0.5f, a.y - w * 0.5f, len, w), Texture2D.whiteTexture,
+                ScaleMode.StretchToFill, true, 0f, col, 0f, w * 0.5f);
+            GUI.matrix = m;
         }
     }
 }

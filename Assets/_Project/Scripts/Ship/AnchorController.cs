@@ -1177,7 +1177,9 @@ namespace SeaSick.Ship
             // the mouse-up that would have pressed its own button.
             if (!Prompts.Claim(Prompts.Rank.Anchor)) return;
 
-            buttonStyle = UITheme.Button;
+            // Ledger-style pills (2026-09-27 restyle): #13222E, an ice rim,
+            // round ends -- the land HUD's look, still drawn in IMGUI.
+            buttonStyle = UITheme.Pill;
             infoStyle = UITheme.Small2Centered;
             bool sheetHud = SheetsHud.SuppressLegacy;
 

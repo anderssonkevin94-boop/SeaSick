@@ -57,7 +57,7 @@ namespace SeaSick.UI
             float height = TextHeight(label.Content.text, width - pad * 2f, style) + HudLayout.Unit * 1.2f;
 
             var rect = HudLayout.ToastRow(height, width);
-            UITheme.Rect(rect, UITheme.PanelSolid);
+            UITheme.ToastCard(rect, UITheme.LedgerIce);   // Ledger toast card, ice: news from the camp
             var inset = new Rect(rect.x + pad, rect.y, rect.width - pad * 2f, rect.height);
             GUI.Label(inset, label.Content, style);
 
