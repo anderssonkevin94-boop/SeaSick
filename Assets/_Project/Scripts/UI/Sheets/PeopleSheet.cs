@@ -23,6 +23,11 @@ namespace SeaSick.UI.Sheets
     /// stalled / body-blocked once they are off the beach, or a hunter with
     /// no spear. "Unhappy" is anyone with a mood word (hungry or angry).
     ///
+    /// Above the chips, the camp's standing orders moved here from the old
+    /// campfire sheet (menu rework #8, 2026-09-27): "work first on"
+    /// (Even / Food first / Timber first) and the next-hand line with its
+    /// bar. The alert strip opens the page pre-filtered (`Filter`).
+    ///
     /// Rows are pooled and re-texted on the 0.25 s refresh, never rebuilt
     /// (a rebuilt button loses the tap it is in the middle of). The list is
     /// a clamped ScrollView only for a camp bigger than the tall band.
@@ -34,14 +39,17 @@ namespace SeaSick.UI.Sheets
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics() { OpenLedger = null; }
 
-        enum Filter { All, Stuck, Unhappy }
+        /// Which hands the list shows. The alert strip opens the page on
+        /// one (idle → Stuck, angry → Unhappy; menu rework #4).
+        public enum Filter { All, Stuck, Unhappy }
 
         readonly Outpost outpost;
         Filter filter;
 
-        public PeopleSheet(Outpost camp)
+        public PeopleSheet(Outpost camp, Filter startOn = Filter.All)
         {
             outpost = camp;
+            filter = startOn;
         }
 
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
@@ -110,6 +118,8 @@ namespace SeaSick.UI.Sheets
             CampPages.Styled(root);
             rootEl = root;
 
+            BuildCampOrders(root);
+
             var chipRow = CampPages.Classed(new VisualElement(), "cp-chips");
             chips = new Button[3];
             for (int i = 0; i < chips.Length; i++)
@@ -134,6 +144,7 @@ namespace SeaSick.UI.Sheets
             scroll.Add(emptyNote);
 
             rows.Clear();
+            priorityKey = -1;
             MarkChips();
             Refresh();
             return root;
@@ -259,6 +270,8 @@ namespace SeaSick.UI.Sheets
                 if (subtitle.text != s) subtitle.text = s;
             }
 
+            FillCampOrders(l);
+
             int stuckN = 0, unhappyN = 0;
             foreach (var h in l.hands)
             {
@@ -294,6 +307,102 @@ namespace SeaSick.UI.Sheets
                 : "";
             if (emptyNote.text != empty) emptyNote.text = empty;
             emptyNote.style.display = shown == 0 ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        // --- the camp's standing orders (menu rework #8, 2026-09-27) ----------
+        //
+        // Moved here from the old campfire sheet's orders page: what the
+        // hands work on first (`OutpostLedger.priority`, the same field the
+        // ledger's tick reads) and when the next hand arrives. Rations went
+        // to the Larder, the watch to the Lookout card.
+
+        static readonly string[] PriorityOptions = { "Even", "Food first", "Timber first" };
+
+        Button[] priorityBtns;
+        int priorityKey = -1;
+        Label recruitLine;
+        VisualElement recruitTrack, recruitFill;
+
+        void BuildCampOrders(VisualElement root)
+        {
+            root.Add(CampPages.Classed(new Label("WORK FIRST ON"), "cp-eyebrow"));
+            var seg = CampPages.Classed(new VisualElement(), "cp-tabs");
+            priorityBtns = new Button[PriorityOptions.Length];
+            for (int i = 0; i < PriorityOptions.Length; i++)
+            {
+                int index = i;
+                var b = new Button(() => SetPriority(index)) { text = PriorityOptions[i] };
+                b.AddToClassList("cp-tab");
+                seg.Add(b);
+                priorityBtns[i] = b;
+            }
+            root.Add(seg);
+
+            var rec = new VisualElement();
+            rec.style.flexDirection = FlexDirection.Row;
+            rec.style.alignItems = Align.Center;
+            rec.style.flexShrink = 0;
+            rec.style.marginTop = 6;
+            rec.style.marginBottom = 4;
+            recruitLine = CampPages.Classed(new Label(), "cp-note");
+            recruitLine.style.marginTop = 0;
+            recruitLine.style.marginBottom = 0;
+            recruitLine.style.flexShrink = 1;
+            recruitLine.style.flexGrow = 1;
+            rec.Add(recruitLine);
+            recruitTrack = new VisualElement { pickingMode = PickingMode.Ignore };
+            recruitTrack.style.width = 90;
+            recruitTrack.style.height = 8;
+            recruitTrack.style.flexShrink = 0;
+            recruitTrack.style.marginLeft = 8;
+            recruitTrack.style.backgroundColor = (Color)new Color32(30, 51, 68, 255);
+            SetRadius(recruitTrack, 4);
+            recruitFill = new VisualElement { pickingMode = PickingMode.Ignore };
+            recruitFill.style.height = Length.Percent(100);
+            recruitFill.style.backgroundColor = (Color)new Color32(159, 224, 194, 255);
+            SetRadius(recruitFill, 4);
+            recruitTrack.Add(recruitFill);
+            rec.Add(recruitTrack);
+            root.Add(rec);
+        }
+
+        static void SetRadius(VisualElement e, float r)
+        {
+            e.style.borderTopLeftRadius = r;
+            e.style.borderTopRightRadius = r;
+            e.style.borderBottomLeftRadius = r;
+            e.style.borderBottomRightRadius = r;
+        }
+
+        void SetPriority(int i)
+        {
+            var l = L;
+            if (l == null) return;
+            l.priority = (WorkPriority)i;
+            Refresh();
+        }
+
+        void FillCampOrders(OutpostLedger l)
+        {
+            if (priorityBtns == null) return;
+            int sel = (int)l.priority;
+            if (sel != priorityKey)
+            {
+                priorityKey = sel;
+                for (int i = 0; i < priorityBtns.Length; i++)
+                    priorityBtns[i].EnableInClassList("cp-tab--on", i == sel);
+            }
+
+            // One line about the next hand, and nothing about beds (the
+            // header's subtitle already counts them).
+            bool room = l.Housed < l.HousingCapacity;
+            float days = Mathf.Max(0f, OutpostLedger.DaysPerRecruit - l.recruitProgress);
+            string text = room
+                ? $"Next hand in {days:0.#} days · needs {OutpostLedger.RecruitFoodCost} food"
+                : "No room for another hand · build a hut";
+            if (recruitLine.text != text) recruitLine.text = text;
+            recruitTrack.style.display = room ? DisplayStyle.Flex : DisplayStyle.None;
+            recruitFill.style.width = Length.Percent(Mathf.Clamp01(l.RecruitProgress01) * 100f);
         }
 
         void SetChip(int i, string text)

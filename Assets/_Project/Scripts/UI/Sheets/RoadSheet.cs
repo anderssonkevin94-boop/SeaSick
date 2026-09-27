@@ -31,8 +31,15 @@ namespace SeaSick.UI.Sheets
 
         public bool StillValid => outpost != null && road != null;
 
-        public VisualElement BuildHeader() =>
-            SheetKit.Header("standing", Title, SheetTheme.Timber, "☰", () => Sheets.Close());
+        /// **Midnight header, 2026-09-27** (audit #10): a drawn road glyph
+        /// replaces the "☰" that used to sit here and read like a menu.
+        public VisualElement BuildHeader()
+        {
+            var icon = new StationPage.Glyph("road", MidnightLandHud.Ice, "cp-glyph");
+            var head = CampPages.IconHeader(StationPage.Cap(Title), icon, out var sub);
+            sub.text = "standing";
+            return head;
+        }
 
         public VisualElement BuildActions()
             => SheetKit.Actions(SheetKit.Btn("Tear down", TearDown, false, true));

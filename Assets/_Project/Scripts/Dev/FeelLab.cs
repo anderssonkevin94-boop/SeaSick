@@ -67,6 +67,8 @@ namespace SeaSick.Dev
             // The island camera's locked-angle knob (Kevin, 2026-09-27):
             // "lock in the camera at a certain angle ... a good set one."
             "SeaSick.CameraRig.IslandCamLock",
+            // The villager hero shot while a hand sheet is open (V2 Split).
+            "SeaSick.CameraRig.IslandHeroCam",
             // The economy's live dials (Kevin, 2026-09-27: "one tuning file
             // + the main ones in FEEL"); the base numbers are the
             // `EconomyTuning` asset.
@@ -110,6 +112,13 @@ namespace SeaSick.Dev
             // default 38 -- see `IslandCamLock`'s own doc comment.
             {"IslandCamLock.angleDeg", (20f, 70f)},
             {"IslandCamLock.fovDeg", (25f, 70f)},
+            {"IslandHeroCam.pitchDeg", (0f, 45f)},
+            {"IslandHeroCam.distanceTall", (4f, 40f)},
+            {"IslandHeroCam.distanceWide", (4f, 40f)},
+            {"IslandHeroCam.aimHeight", (0f, 2f)},
+            {"IslandHeroCam.rectY", (0.2f, 0.8f)},
+            {"IslandHeroCam.easeIn", (0.1f, 1.5f)},
+            {"IslandHeroCam.easeOut", (0.1f, 1.5f)},
 
             {"EconomyFeel.costMultiplier",         (0.25f, 3f)},
             {"EconomyFeel.buildTimeMultiplier",    (0.1f, 4f)},

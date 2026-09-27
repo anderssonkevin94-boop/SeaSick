@@ -134,7 +134,7 @@ namespace SeaSick.UI.Sheets
         Button goBtn;
         // today
         Label fireTitle, fireBlurb, fireNote;
-        VisualElement tilesHolder, builtHolder, todayHolder;
+        VisualElement fireCard, tilesHolder, builtHolder, todayHolder;
         Button raiseBtn;
 
         GoalChain chain;
@@ -242,7 +242,7 @@ namespace SeaSick.UI.Sheets
             var block = new VisualElement();
             block.AddToClassList("ov-block");
 
-            var fire = Classed(new VisualElement(), "ov-card");
+            var fire = fireCard = Classed(new VisualElement(), "ov-card");
             var top = Classed(new VisualElement(), "ov-card-top");
             fireTitle = Classed(new Label(), "ov-card-title");
             top.Add(fireTitle);
@@ -430,6 +430,15 @@ namespace SeaSick.UI.Sheets
 
         void DrawFire(OutpostLedger l)
         {
+            // **No duplicate Raise (2026-09-27, candidate #6).** When the
+            // camp's goal chain IS the campfire's next level, the Goal
+            // segment already shows this exact card's Raise button --
+            // hiding it here is the fix Kevin asked for rather than two
+            // buttons that pay the same thing.
+            bool dupOfGoal = chain != null && chain.kind == GoalKind.Campfire;
+            if (fireCard != null) fireCard.style.display = dupOfGoal ? DisplayStyle.None : DisplayStyle.Flex;
+            if (dupOfGoal) return;
+
             var next = l.NextCampfire;
             long key = l.CampfireLevel * 1000003L + (next != null ? 1 : 0);
             if (next != null)
@@ -534,21 +543,61 @@ namespace SeaSick.UI.Sheets
 
             var col = new VisualElement();
             string food = l.hands.Count == 0 ? "nobody to feed" : days < 0f ? "they eat nothing" : $"{days:0.#} days left";
-            col.Add(KeyValue("Food", food, days >= 0f && days < 1.5f && l.hands.Count > 0));
-            col.Add(KeyValue("Stone on the island", noStone ? "0 left" : $"{stoneLeft} left", noStone));
-            col.Add(KeyValue("Watch", watch, !l.LookoutPosted && (l.HasWatchtower || l.raiders > 0)));
+            col.Add(KeyValue("Food", food, days >= 0f && days < 1.5f && l.hands.Count > 0, OpenLarder));
+            col.Add(KeyValue("Stone on the island", noStone ? "0 left" : $"{stoneLeft} left", noStone, () => OpenGather(Res.Stone)));
+            col.Add(KeyValue("Watch", watch, !l.LookoutPosted && (l.HasWatchtower || l.raiders > 0), OpenLookout));
             SheetBits.Swap(todayHolder, col);
         }
 
-        static VisualElement KeyValue(string k, string v, bool bad)
+        /// **Tappable tiles, 2026-09-27 (candidate #6).** Each "Today" row
+        /// used to be dead information; a tap now opens the sheet that
+        /// actually answers it. The three destinations are built by other
+        /// agents in this same pass (`LarderSheet`, `GatherSheet`,
+        /// `LookoutSheet`) -- looked up by name so this file compiles
+        /// whether or not they have landed yet, the same trick
+        /// `TryLedgerDrawer` above already uses.
+        static VisualElement KeyValue(string k, string v, bool bad, System.Action onTap = null)
         {
-            var row = new VisualElement();
+            VisualElement row = onTap != null
+                ? new Button(() => onTap()) { text = "" }
+                : new VisualElement();
             row.AddToClassList("ov-kv");
+            if (onTap != null) row.AddToClassList("ov-kv--tap");
             row.Add(Classed(new Label(k), "ov-kv-k"));
             var val = Classed(new Label(v), "ov-kv-v");
             if (bad) val.AddToClassList("ov-kv-v--bad");
             row.Add(val);
             return row;
+        }
+
+        void OpenLarder()
+        {
+            var s = TryOpen("LarderSheet", outpost);
+            if (s != null) Sheets.Open(s);
+        }
+
+        void OpenGather(string res)
+        {
+            var s = TryOpen("GatherSheet", outpost, res);
+            if (s != null) Sheets.Open(s);
+        }
+
+        void OpenLookout()
+        {
+            var s = TryOpen("LookoutSheet", outpost);
+            if (s != null) Sheets.Open(s);
+        }
+
+        /// A sheet built by name, so this file does not have to reference
+        /// a type another agent has not landed yet (`TryLedgerDrawer`'s own
+        /// pattern). Returns null -- the tile simply does nothing this
+        /// build -- until the class exists with a matching constructor.
+        static ISheet TryOpen(string typeName, params object[] args)
+        {
+            var t = typeof(CampOverviewSheet).Assembly.GetType("SeaSick.UI.Sheets." + typeName);
+            if (t == null || !typeof(ISheet).IsAssignableFrom(t)) return null;
+            try { return Activator.CreateInstance(t, args) as ISheet; }
+            catch (Exception e) { Debug.LogWarning($"[Overview] {typeName} ctor failed: {e.Message}"); return null; }
         }
 
         // --- the verbs -----------------------------------------------------------

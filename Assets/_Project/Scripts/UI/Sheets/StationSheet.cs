@@ -1344,6 +1344,37 @@ namespace SeaSick.UI.Sheets
                 {
                     case "menu": Line(4, 7, 20, 7); Line(4, 12, 20, 12); Line(4, 17, 20, 17); break;
                     case "close": Line(6, 6, 18, 18); Line(18, 6, 6, 18); break;
+                    // **Small world-object sheets, 2026-09-27** (Wall / Ladder
+                    // / Road / Chart): a proper drawn icon in the header badge,
+                    // replacing the "☰" glyph that used to sit there and read
+                    // like a live menu button when it was not one.
+                    case "wall":
+                        Line(6, 5, 6, 19); Line(12, 3, 12, 19); Line(18, 5, 18, 19);
+                        Line(4, 19, 20, 19);
+                        break;
+                    case "ladder":
+                        Line(7, 4, 7, 20); Line(17, 4, 17, 20);
+                        Line(7, 7, 17, 7); Line(7, 12, 17, 12); Line(7, 17, 17, 17);
+                        break;
+                    case "road":
+                        Line(9, 20, 11, 4); Line(15, 20, 13, 4);
+                        Line(11.6f, 9.5f, 12.1f, 12.5f); Line(11.9f, 14.5f, 12.4f, 17.5f);
+                        break;
+                    case "chart":
+                        Line(12, 4, 12, 8); Line(12, 16, 12, 20);
+                        Line(4, 12, 8, 12); Line(16, 12, 20, 12);
+                        p.BeginPath();
+                        p.Arc(new Vector2(12 * s, 12 * s), 6.5f * s, 0f, 360f);
+                        p.Stroke();
+                        break;
+                    case "pier":
+                        Line(3, 9, 21, 9);
+                        Line(6, 9, 6, 20); Line(12, 9, 12, 20); Line(18, 9, 18, 20);
+                        break;
+                    case "ship":
+                        Line(5, 17, 19, 17); Line(5, 17, 7, 21); Line(19, 17, 17, 21); Line(7, 21, 17, 21);
+                        Line(12, 4, 12, 17); Line(12, 6, 17, 10);
+                        break;
                     default:
                         Line(5, 12, 19, 12);
                         p.BeginPath();

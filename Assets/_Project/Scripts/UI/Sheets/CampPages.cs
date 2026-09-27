@@ -55,6 +55,40 @@ namespace SeaSick.UI.Sheets
             return head;
         }
 
+        /// **A plain icon badge · title / subtitle · ✕ (2026-09-27).** The
+        /// same shape as `Header` above, but the leading badge is a drawn
+        /// glyph rather than a ☰ button -- for the small world-object sheets
+        /// (Wall, Ladder, Road, Chart) that have no ledger to open and were
+        /// using "☰" as decoration, which reads as a dead menu control.
+        public static VisualElement IconHeader(string titleText, VisualElement icon, out Label subtitle)
+        {
+            var head = new VisualElement();
+            head.AddToClassList(SheetTheme.Head);
+            head.AddToClassList("cp-head");
+            Styled(head);
+
+            var badge = new VisualElement { pickingMode = PickingMode.Ignore };
+            badge.AddToClassList("cp-head-btn");
+            if (icon != null) badge.Add(icon);
+            head.Add(badge);
+
+            var words = Classed(new VisualElement(), "cp-head-words");
+            words.Add(Classed(new Label(titleText), "cp-title"));
+            subtitle = Classed(new Label(), "cp-subtitle");
+            words.Add(subtitle);
+            head.Add(words);
+
+            var x = new Button(() => Sheets.Close());
+            x.AddToClassList(SheetTheme.Close);
+            x.tooltip = "Close";
+            x.text = "";
+            x.style.alignItems = Align.Center;
+            x.style.justifyContent = Justify.Center;
+            x.Add(new LandIcon("close"));
+            head.Add(x);
+            return head;
+        }
+
         /// The drawer, through whichever hook is set (the page's own, else
         /// the station page's), so ☰ is never a dead button.
         public static void OpenLedger(Action own, SeaSick.World.Outpost camp)

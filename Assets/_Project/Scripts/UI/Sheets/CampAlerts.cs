@@ -53,19 +53,19 @@ namespace SeaSick.UI.Sheets
             if (l == null) return;
 
             if (RaidLive(camp, out string raid))
-                into.Add(new Alert { text = raid, tone = Tone.Raid, open = () => new FireSheet(camp, FireSheet.FocusLookout) });
+                into.Add(new Alert { text = raid, tone = Tone.Raid, open = () => new RaidSheet(camp) });
 
             if (l.hands.Count > 0)
             {
                 float days = SheetBits.FoodDays(l);
                 if (l.Hungry)
-                    into.Add(new Alert { text = "Out of food · hands hungry", tone = Tone.Bad, open = () => People(camp) });
+                    into.Add(new Alert { text = "Out of food · hands hungry", tone = Tone.Bad, open = () => Larder(camp) });
                 else if (days >= 0f && days < 1f)
-                    into.Add(new Alert { text = "Food · under a day", tone = Tone.Bad, open = () => People(camp) });
+                    into.Add(new Alert { text = "Food · under a day", tone = Tone.Bad, open = () => Larder(camp) });
             }
 
             if (l.HasWatchtower && !l.LookoutPosted)
-                into.Add(new Alert { text = "Nobody on watch", tone = Tone.Warn, open = () => new FireSheet(camp, FireSheet.FocusLookout) });
+                into.Add(new Alert { text = "Nobody on watch", tone = Tone.Warn, open = () => new LookoutSheet(camp) });
 
             // One chip per stuck hand -- the hand is where the fix is (his
             // orders). A hunter with no spear gets the forge instead: the
@@ -95,18 +95,18 @@ namespace SeaSick.UI.Sheets
                 {
                     text = idle == 1 ? who + " · idle" : $"{idle} hands idle",
                     tone = Tone.Warn,
-                    open = () => idle == 1 ? new HandSheet(camp, who) : People(camp),
+                    open = () => idle == 1 ? new HandSheet(camp, who) : People(camp, PeopleSheet.Filter.Stuck),
                 });
             }
             if (l.TimberStarved || l.StoneStarved)
                 into.Add(new Alert
                 {
                     text = "Builders short of " + (l.TimberStarved ? "timber" : "stone"),
-                    tone = Tone.Warn, open = () => BuildList(camp),
+                    tone = Tone.Warn, open = () => ShortSite(camp),
                 });
             int angry = l.AngryCount;
             if (angry > 0)
-                into.Add(new Alert { text = $"{angry} hand{(angry == 1 ? "" : "s")} angry", tone = Tone.Warn, open = () => People(camp) });
+                into.Add(new Alert { text = $"{angry} hand{(angry == 1 ? "" : "s")} angry", tone = Tone.Warn, open = () => People(camp, PeopleSheet.Filter.Unhappy) });
         }
 
         /// A stall reason cut down to chip length. "waiting for stone: none
@@ -129,8 +129,29 @@ namespace SeaSick.UI.Sheets
             return why.Length > 24 ? why.Substring(0, 23) + "…" : why;
         }
 
-        /// Camp › People (2026-09-27; was the campfire sheet's hands tab).
-        internal static ISheet People(Outpost camp) => camp != null ? new PeopleSheet(camp) : null;
+        /// Camp › People (2026-09-27; was the campfire sheet's hands tab),
+        /// opened on a filter (idle → Stuck, angry → Unhappy; menu rework #4).
+        internal static ISheet People(Outpost camp, PeopleSheet.Filter filter = PeopleSheet.Filter.All) =>
+            camp != null ? new PeopleSheet(camp, filter) : null;
+
+        /// The food chips (menu rework #4): the Larder, not the roster.
+        internal static ISheet Larder(Outpost camp) => camp != null ? new LarderSheet(camp) : null;
+
+        /// "Builders short of X" (menu rework #5): the blueprint the
+        /// builders are serving (`OutpostLedger.Focus`), on its own site
+        /// sheet; the build list only when that drawing is not in the world.
+        internal static ISheet ShortSite(Outpost camp)
+        {
+            var l = camp != null ? camp.Ledger : null;
+            var focus = l != null ? l.Focus : null;
+            if (focus != null)
+            {
+                foreach (var s in UnityEngine.Object.FindObjectsByType<BuildSite>(UnityEngine.FindObjectsSortMode.None))
+                    if (s != null && s.Row == focus && SheetBits.OutpostOf(s) == camp)
+                        return new SiteSheet(camp, s);
+            }
+            return BuildList(camp);
+        }
 
         /// Camp › Build (2026-09-27; was the campfire sheet's build tab).
         internal static ISheet BuildList(Outpost camp, string focusPlanId = null) =>

@@ -610,6 +610,16 @@ namespace SeaSick.UI.Sheets
                 float ceiling = safe.height - (MidnightLandHud.TopHeight + MidnightLandHud.NavHeight + 160f) / PanelScale;
                 size.y = Mathf.Min(Mathf.Max(size.y, 480f / PanelScale), ceiling);
             }
+            // **The villager sheet, V2 Split (2026-09-27).** Its top edge
+            // sits `HandSheet.PhoneHeight` of the safe height up from the
+            // bottom, so the island camera can frame him in the rest
+            // (`IslandCam.HeroScreenSpot` reads `FrameRect` back).
+            else if (!HudLayout.Wide && Sheets.Current is HandSheet)
+            {
+                float lift = MidnightLandHud.Active ? (MidnightLandHud.NavHeight + 10f) / PanelScale : 0f;
+                float ceiling = safe.height - (MidnightLandHud.TopHeight + 24f) / PanelScale - Margin;
+                size.y = Mathf.Min(safe.height * HandSheet.PhoneHeight - Margin - lift, ceiling);
+            }
             // **Tall sheet, 2026-09-26.** `ISheetFramed.WantsTallSheet` is the
             // minimal opt-in: rather than changing every sheet's band, one
             // flag lets a sheet ask for the space between the top resource

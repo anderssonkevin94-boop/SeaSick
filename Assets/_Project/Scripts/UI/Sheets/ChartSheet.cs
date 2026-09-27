@@ -58,12 +58,15 @@ namespace SeaSick.UI.Sheets
         public void SetTab(int index) { }
         public Color Accent => SheetTheme.Sea;
 
+        /// **Midnight header, 2026-09-27** (audit #10): a drawn compass
+        /// glyph instead of the old parchment "N" badge, title fixed at
+        /// "The chart" and the day/islands/camps sentence moved to the
+        /// subtitle -- the same shape every other restyled sheet uses.
         public VisualElement BuildHeader()
         {
-            var head = SheetKit.Header("the chart", "", SheetTheme.Sea, "N",
-                () => Sheets.Close());
-            eyebrow = head.Q<Label>(className: SheetTheme.Eyebrow);
-            title = head.Q<Label>(className: SheetTheme.Title);
+            var icon = new StationPage.Glyph("chart", MidnightLandHud.Ice, "cp-glyph");
+            var head = CampPages.IconHeader("The chart", icon, out var sub);
+            subLabel = sub;
             return head;
         }
 
@@ -116,8 +119,7 @@ namespace SeaSick.UI.Sheets
 
         VisualElement chart;      // the drawing, and the parent of every word on it
         VisualElement words;      // labels that move with the fit
-        Label eyebrow;
-        Label title;
+        Label subLabel;
         Button trackBtn;
         Button pickBtn;
         Button courseBtn;
@@ -200,10 +202,10 @@ namespace SeaSick.UI.Sheets
             if (hk != headKey)
             {
                 headKey = hk;
-                if (eyebrow != null) eyebrow.text = ("the chart · day " + TimeOfDay.Day).ToUpperInvariant();
-                if (title != null)
-                    title.text = Cap(Words(seenCount)) + (seenCount == 1 ? " island seen, " : " islands seen, ")
-                               + Words(camps) + (camps == 1 ? " camp" : " camps");
+                if (subLabel != null)
+                    subLabel.text = "Day " + TimeOfDay.Day + " · " + Cap(Words(seenCount))
+                        + (seenCount == 1 ? " island seen, " : " islands seen, ")
+                        + Words(camps) + (camps == 1 ? " camp" : " camps");
             }
 
             Fit();

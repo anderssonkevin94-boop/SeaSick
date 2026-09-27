@@ -72,8 +72,8 @@ namespace SeaSick.UI.Sheets
             // A finished building opens its own crafting menu now, 2026-09-23
             // (Kevin: *"a crafting menu in the appropriate buildings"*) --
             // except the fire, which IS the camp, and the watchtower, whose
-            // only decision (who stands the watch) already lives on the camp
-            // sheet's lookout row. A building with nothing to make and
+            // only decision (who stands the watch) is its own Lookout card
+            // (`LookoutSheet`). A building with nothing to make and
             // nowhere to go (the pier) opens nothing at all.
             Sheets.Register<Building>(b =>
             {
@@ -95,14 +95,31 @@ namespace SeaSick.UI.Sheets
                 if (b.GetComponent<DryDockSlip>() != null) return null;
                 var camp = SheetBits.OutpostOf(b);
                 if (b.Kind == BuildKind.Fire) return OverviewFor(camp);
-                if (b.Id == OutpostLedger.WatchtowerId) return FireFor(camp, FireSheet.FocusLookout);
+                // The watchtower opens its own Lookout card (menu rework #1,
+                // 2026-09-27) -- who stands the watch, why it matters -- not
+                // the old camp sheet's orders page.
+                if (b.Id == OutpostLedger.WatchtowerId)
+                    return camp != null && camp.Ledger != null && (camp.HasCamp || camp.Building)
+                        ? new LookoutSheet(camp, b) : null;
                 if (camp == null || camp.Ledger == null) return null;
                 // The farm has its own sheet since 2026-09-23 (the building
                 // template, farm rows); it went to the camp sheet before.
                 if (b.Id == BuildPlans.Farm.id) return new FarmSheet(camp, b);
+                // **The pier's own card, 2026-09-27** (menu rework #8): she
+                // is alongside -> the manifest, the same sheet her own hull
+                // opens; otherwise a small Pier card (berth, home-berth
+                // pill, "moor here" hint) rather than the old camp sheet.
+                if (b.Kind == BuildKind.Pier)
+                {
+                    var alongside = SheetBits.Anchor;
+                    if (alongside != null && alongside.CurrentDock != null
+                        && alongside.CurrentDock.gameObject == b.gameObject)
+                        return ShipFor();
+                    return new PierSheet(camp, b);
+                }
                 bool hasRecipes = Recipes.StationHasRecipes(b.Id);
                 bool hasUpgrade = Techs.MaxLevel(b.Id) > 1;
-                if (!hasRecipes && !hasUpgrade) return FireFor(camp);   // a pier: the fire, as before
+                if (!hasRecipes && !hasUpgrade) return FireFor(camp);
                 return new StationSheet(camp, b);
             });
 

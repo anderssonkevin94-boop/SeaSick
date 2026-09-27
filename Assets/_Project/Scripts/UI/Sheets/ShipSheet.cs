@@ -135,12 +135,25 @@ namespace SeaSick.UI.Sheets
         public int CargoPerPage { get { Plan(); return cargoPerPage; } }
         public int CrewPerPage { get { Plan(); return crewPerPage; } }
 
+        Label headerSub;
+
+        /// **Midnight header, 2026-09-27** (menu rework #7): the same drawn
+        /// glyph + title + subtitle + close every other restyled sheet
+        /// uses, instead of the old round "⚓" badge with an eyebrow over
+        /// the title.
         public VisualElement BuildHeader()
         {
+            var icon = new StationPage.Glyph("ship", MidnightLandHud.Ice, "cp-glyph");
+            var head = CampPages.IconHeader(Title, icon, out headerSub);
+            SetHeaderSub();
+            return head;
+        }
+
+        void SetHeaderSub()
+        {
+            if (headerSub == null) return;
             var a = Anchor;
-            return SheetKit.Header(
-                a != null && a.CurrentDock != null ? "at the pier" : "at anchor",
-                Title, SheetTheme.Sea, "⚓", () => Sheets.Close());
+            headerSub.text = a != null && a.CurrentDock != null ? "at the pier" : "at anchor";
         }
 
         public VisualElement BuildActions()
@@ -388,6 +401,7 @@ namespace SeaSick.UI.Sheets
             var camp = Camp;
             if (camp != null) camp.CatchUp();
 
+            SetHeaderSub();
             HoldBlock(v, camp);
             StopAtBlock(camp);
             DeckBlock(v);
@@ -548,8 +562,19 @@ namespace SeaSick.UI.Sheets
                 int ashore = l.CountOf(res);
                 int cap = CampLoading.StopAt(res);
                 int sel = cap < 0 ? 0 : cap <= 0 ? 2 : 1;
+                // **An icon tile, not a bare word (2026-09-27, menu rework
+                // #7).** The same item art `StoresSheet`'s bank and every
+                // station's recipe card already draw from `ItemIconSet`.
+                var tile = new VisualElement();
+                tile.style.flexDirection = FlexDirection.Row;
+                tile.style.alignItems = Align.Center;
+                var icon = StationPage.Icon(res, "st-small-icon");
+                icon.style.width = 20f; icon.style.height = 20f;
+                icon.style.marginRight = 6f;
+                tile.Add(icon);
+                tile.Add(SheetKit.Text(CampLoading.Lower(res), false, false, 13f));
                 stopAtHolder.Add(SheetKit.ListRow(
-                    SheetKit.Text(CampLoading.Lower(res), false, false, 13f),
+                    tile,
                     SheetKit.Text(ashore.ToString(), false, true, 13f),
                     SheetKit.Segmented(StopOptions, sel, i =>
                     {

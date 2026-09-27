@@ -99,6 +99,42 @@ namespace SeaSick.CameraRig
         public static float fovDeg = 50f;
     }
 
+    /// **The villager "hero" shot (Kevin picked V2 Split, 2026-09-27).**
+    /// While a `HandSheet` is open the island camera follows that villager
+    /// and frames him in the middle of whatever part of the screen the
+    /// sheet leaves visible -- the top ~40% upright, the left of the docked
+    /// column on a desk -- closer in and at a lower pitch than the locked
+    /// island angle. No second camera, no render texture: it is the island
+    /// camera itself. Registered in `FeelLab.TypeFullNames`.
+    ///
+    /// **With `IslandCamLock`:** the lock still owns the player's tilt (the
+    /// tilt gesture stays inert, the view goes back to `angleDeg` on
+    /// close); `pitchDeg` is the one other angle the lens may take, and
+    /// only while this shot is on. 0 = keep the locked angle here too.
+    public static class IslandHeroCam
+    {
+        public static bool enabled = true;
+        /// Degrees the lens looks DOWN AT HIM (the ray through him, not the
+        /// frame's centre). The island's 28° lock is measured at the centre
+        /// of the screen; him sitting high in the top 40% at that tilt would
+        /// be seen almost edge-on, so the lens tilts itself to whatever puts
+        /// this angle on him -- the mockup's over-the-shoulder look.
+        public static float pitchDeg = 20f;
+        /// Metres from the lens to him, portrait: a 1.7 m man at ~14% of
+        /// the screen, about a third of the world visible above the sheet.
+        public static float distanceTall = 12f;
+        /// The same on a landscape screen, where most of the height shows.
+        public static float distanceWide = 9f;
+        /// Aim at his middle, not his feet.
+        public static float aimHeight = 0.9f;
+        /// Where in the visible area he sits, 0 = its bottom, 1 = its top.
+        public static float rectY = 0.5f;
+        /// Seconds to swing onto him (critically damped).
+        public static float easeIn = 0.45f;
+        /// Seconds to ease back to the old view when the sheet closes.
+        public static float easeOut = 0.5f;
+    }
+
     [DefaultExecutionOrder(-40)]
     public class IslandCam : MonoBehaviour
     {
@@ -362,13 +398,21 @@ namespace SeaSick.CameraRig
         /// island view is engaged, so a sheet opened at sea moves nothing.
         public static void Follow(Transform who)
         {
-            if (live != null && Engaged) live.FollowThis(who);
+            if (live == null || !Engaged) return;
+            // V2 Split (2026-09-27): the hand sheet's hero shot -- see
+            // `IslandHeroCam` and `HeroFollow`. Off, the old centred follow.
+            if (IslandHeroCam.enabled) live.HeroFollow(who);
+            else live.FollowThis(who);
         }
 
-        /// Let go from anywhere; the view stays where it is.
+        /// Let go from anywhere. The plain follow stays where it is; the
+        /// hero shot eases back to the view from before the sheet opened
+        /// (unless a hand took the view meanwhile).
         public static void StopFollow()
         {
-            if (live != null) live.StopFollowing();
+            if (live == null) return;
+            live.StopFollowing();
+            live.HeroStop();
         }
 
         // =====================================================================
@@ -777,6 +821,8 @@ namespace SeaSick.CameraRig
             Engaged = isle != null;
             if (subject == isle) return;
             subject = isle;
+            HeroDrop();
+            heroBlend = 0f;
             wantGround = Ground = defaultGround;
             wantPan = Pan = Vector3.zero;
             Driven = false;
@@ -812,6 +858,7 @@ namespace SeaSick.CameraRig
         /// to a height and back would only lose the fit.
         public void LookAtGround(Vector3 point, float groundMetres)
         {
+            HeroDrop();
             focus = point;
             following = null;
             wantPan = Pan = Vector3.zero;
@@ -859,6 +906,7 @@ namespace SeaSick.CameraRig
             easeElapsed = 0f;
             easeDuration = Mathf.Max(0.01f, seconds);
             easingPan = true;
+            HeroDrop();
 
             following = null;
             wantPan = Pan = Vector3.zero;
@@ -871,6 +919,10 @@ namespace SeaSick.CameraRig
         public void FollowThis(Transform who)
         {
             if (who == null) return;
+            // A world tap on him both opens his sheet (hero shot) and asks
+            // for this; whichever lands second, the hero shot wins.
+            if (heroOn && who == heroTarget) return;
+            HeroDrop();
             following = who;
             focus = who.position;
             wantPan = Pan = Vector3.zero;
@@ -889,6 +941,7 @@ namespace SeaSick.CameraRig
         /// Back to the shot the dock composed.
         public void Release()
         {
+            HeroDrop();
             focus = null;
             following = null;
             wantPan = Pan = Vector3.zero;
@@ -939,6 +992,8 @@ namespace SeaSick.CameraRig
                 wantGround = Mathf.Lerp(easeFromGround, easeToGround, e);
                 if (u >= 1f) easingPan = false;
             }
+
+            HeroStep(dt);
 
             // Whoever is being followed drags the centre with them.
             if (following != null)
@@ -1077,6 +1132,11 @@ namespace SeaSick.CameraRig
                 shot.tiltDeg = Mathf.Clamp(IslandCamLock.angleDeg,
                     Feel.minTiltDeg, Feel.yieldMaxTiltDeg);
             }
+            // A hero shot still easing out after something let go of the
+            // view (a `Release`, a `LookAt`): same lean as `Compose`.
+            if (!handsOn && heroBlend > 0.0005f)
+                shot.tiltDeg = HeroTilt(shot.tiltDeg > 0.01f
+                    ? shot.tiltDeg : ChaseCamera.DefaultOverviewTilt);
             return shot;
         }
 
@@ -1171,6 +1231,14 @@ namespace SeaSick.CameraRig
             tiltDeg = locked
                 ? Mathf.Clamp(IslandCamLock.angleDeg, Feel.minTiltDeg, Feel.yieldMaxTiltDeg)
                 : Mathf.Clamp(AutoTilt(ground) + bias, Feel.minTiltDeg, Feel.maxTiltDeg);
+            // The hand sheet's hero shot leans toward its own pitch, and
+            // then clears hills by distance like the lock does: tipping the
+            // lens up over a ridge would undo the very angle it came for.
+            if (heroBlend > 0.0005f)
+            {
+                tiltDeg = HeroTilt(tiltDeg);
+                locked = true;
+            }
 
             // A non-serialisable static, nulled by a play-mode recompile. No
             // height field means no yield, which is the right answer: the
@@ -1323,6 +1391,7 @@ namespace SeaSick.CameraRig
         void Drive()
         {
             if (following != null) StopFollowing();
+            HeroCancel();
             Latch();
         }
 
@@ -1614,5 +1683,235 @@ namespace SeaSick.CameraRig
         /// True once a gesture has taken hold of the view. `Driven` also goes
         /// true for a `LookAt` or a `ZoomTo`, which are NOT hands on the land.
         public bool HandsOn => handsOn;
+
+        // =====================================================================
+        // THE HERO SHOT: a hand sheet's villager, framed above the sheet
+        //
+        // V2 Split (Kevin, 2026-09-27). `Sheets.Open` -> `Follow` -> here.
+        // Takes hold of the view the way a gesture does (`Latch`, so the
+        // first frame is the frame before it), then eases the pivot, the
+        // zoom and a tilt lean toward a pose that puts him in the middle of
+        // the screen the sheet leaves visible, re-solved every frame so the
+        // sheet's own top edge (any height) and his walking both carry
+        // through. Any gesture cancels it until a hand sheet opens again
+        // (`Drive` -> `HeroCancel`); closing the sheet eases back to the
+        // view from before it opened (`HeroStop`).
+        // =====================================================================
+
+        Transform heroTarget;       // who; null (or an unlit body) = hold still
+        bool heroOn;                // a hand sheet is open and asked for this
+        bool heroCancelled;         // a hand took the view -- hold until reopened
+        bool heroRestoring;         // easing back to `saved*` after the close
+        float heroBlend;            // 0 = the island's own tilt, 1 = the hero lean
+        float heroCamTiltDeg = 28f; // the lens tilt that puts `pitchDeg` on him
+        float heroBlendVel, heroGroundVel;
+        Vector3 heroPivotVel;
+        float heroRestoreFor;
+
+        bool savedValid, savedPoseValid, savedHandsOn, savedDriven;
+        Vector3? savedFocus;
+        Vector3 savedPan, savedPivot;
+        float savedGround, savedRawGround;
+        Transform savedFollowing;
+
+        /// True while the hand sheet's hero shot is driving the view.
+        public bool HeroActive => heroOn && !heroCancelled;
+        public float HeroBlend => heroBlend;
+
+        float HeroTilt(float baseTilt)
+        {
+            if (IslandHeroCam.pitchDeg <= 0.01f) return baseTilt;
+            return Mathf.Lerp(baseTilt, heroCamTiltDeg, Mathf.Clamp01(heroBlend));
+        }
+
+        /// Frame this villager above the sheet. Switching villager just
+        /// re-targets: the damped pivot swings over from where it is, and
+        /// the view to go back to is still the one from before the FIRST
+        /// sheet. A body that is switched off (an unwatched camp's invisible
+        /// walker) is not tracked -- the camera holds where it is.
+        public void HeroFollow(Transform who)
+        {
+            if (subject == null) return;
+            if (!heroOn && !heroRestoring)
+            {
+                savedValid = true;
+                savedHandsOn = handsOn;
+                savedDriven = Driven;
+                savedFocus = focus;
+                savedPan = Pan;
+                savedRawGround = Ground;
+                savedFollowing = following == who ? null : following;
+                savedPoseValid = handsOn;
+                if (handsOn) { savedPivot = Pivot; savedGround = Ground; }
+            }
+            if (!heroOn) { heroPivotVel = Vector3.zero; heroGroundVel = 0f; }
+            heroOn = true;
+            heroCancelled = false;
+            heroRestoring = false;
+            heroTarget = who;
+            following = null;
+            if (handsOn) KillMotion();
+        }
+
+        /// The sheet closed (or another kind opened): ease back, unless a
+        /// hand took the view meanwhile -- then only the tilt lean eases out.
+        public void HeroStop()
+        {
+            if (!heroOn) return;
+            heroOn = false;
+            heroTarget = null;
+            if (!heroCancelled && savedValid) { heroRestoring = true; heroRestoreFor = 0f; }
+            else savedValid = false;
+            heroCancelled = false;
+        }
+
+        /// A gesture arrived: the player has the view now.
+        void HeroCancel()
+        {
+            if (heroOn) { heroCancelled = true; heroTarget = null; }
+            heroRestoring = false;
+            savedValid = false;
+        }
+
+        /// Something else aimed the view (a `LookAt`, a fly, a new island).
+        void HeroDrop()
+        {
+            heroOn = false;
+            heroCancelled = false;
+            heroRestoring = false;
+            heroTarget = null;
+            savedValid = false;
+        }
+
+        void HeroStep(float dt)
+        {
+            if (dt <= 0f) return;
+            bool live = heroOn && !heroCancelled && heroTarget != null
+                        && heroTarget.gameObject.activeInHierarchy;
+            if (live)
+            {
+                if (!handsOn)
+                {
+                    if (!Ready) return;
+                    Latch();
+                    if (!handsOn) return;
+                    if (savedValid && !savedPoseValid)
+                    {
+                        savedPivot = Pivot;
+                        savedGround = Ground;
+                        savedPoseValid = true;
+                    }
+                }
+                float ease = Mathf.Max(0.05f, IslandHeroCam.easeIn);
+                Vector3 him = heroTarget.position + Vector3.up * IslandHeroCam.aimHeight;
+                float tanHalf = Mathf.Tan(Fov() * 0.5f * Mathf.Deg2Rad);
+                Vector2 uv = HeroScreenSpot();
+                // The lean: whatever lens tilt puts `pitchDeg` on the ray
+                // through `uv` (exact on the vertical centre line).
+                float ny = (uv.y - 0.5f) * 2f * tanHalf;
+                heroCamTiltDeg = Mathf.Clamp(IslandHeroCam.pitchDeg + Mathf.Atan(ny) * Mathf.Rad2Deg,
+                                             Feel.minTiltDeg, Feel.yieldMaxTiltDeg);
+                heroBlend = Mathf.SmoothDamp(heroBlend, 1f, ref heroBlendVel, ease, Mathf.Infinity, dt);
+
+                float dist = HudLayout.Wide ? IslandHeroCam.distanceWide : IslandHeroCam.distanceTall;
+                float goalGround = ClampGround(Mathf.Max(1f, dist) * 2f * tanHalf, him);
+                Ground = wantGround = Mathf.SmoothDamp(Ground, goalGround, ref heroGroundVel,
+                                                       ease, Mathf.Infinity, dt);
+
+                Vector3 goal = HeroPivot(him, uv, tanHalf);
+                SetPivot(Vector3.SmoothDamp(Pivot, goal, ref heroPivotVel, ease, Mathf.Infinity, dt));
+                return;
+            }
+            if (heroOn) { heroPivotVel = Vector3.zero; heroGroundVel = 0f; return; }  // hold
+
+            if (heroRestoring)
+            {
+                if (!savedPoseValid || !handsOn) { HeroFinishRestore(); return; }
+                heroRestoreFor += dt;
+                float ease = Mathf.Max(0.05f, IslandHeroCam.easeOut);
+                heroBlend = Mathf.SmoothDamp(heroBlend, 0f, ref heroBlendVel, ease, Mathf.Infinity, dt);
+                Ground = wantGround = Mathf.SmoothDamp(Ground, savedGround, ref heroGroundVel,
+                                                       ease, Mathf.Infinity, dt);
+                SetPivot(Vector3.SmoothDamp(Pivot, savedPivot, ref heroPivotVel, ease, Mathf.Infinity, dt));
+                bool there = (Pivot - savedPivot).sqrMagnitude < 0.0025f
+                             && Mathf.Abs(Ground - savedGround) < 0.05f && heroBlend < 0.002f;
+                if (there || heroRestoreFor > ease * 8f + 1f) HeroFinishRestore();
+                return;
+            }
+
+            if (heroBlend > 0f)
+            {
+                heroBlend = Mathf.SmoothDamp(heroBlend, 0f, ref heroBlendVel,
+                    Mathf.Max(0.05f, IslandHeroCam.easeOut), Mathf.Infinity, dt);
+                if (heroBlend < 0.0005f) { heroBlend = 0f; heroBlendVel = 0f; }
+            }
+        }
+
+        /// Back to exactly the state before the sheet opened. A view nobody
+        /// had taken hold of goes back to being the rig's composition (the
+        /// pivot has just been eased onto that composition's own aim, so
+        /// letting go is not a pop).
+        void HeroFinishRestore()
+        {
+            heroRestoring = false;
+            heroBlend = 0f;
+            heroBlendVel = heroGroundVel = 0f;
+            heroPivotVel = Vector3.zero;
+            if (savedValid && !savedHandsOn && handsOn)
+            {
+                LetGo();
+                focus = savedFocus;
+                Pan = wantPan = savedPan;
+                Ground = wantGround = savedRawGround;
+                Driven = savedDriven;
+                following = savedFollowing != null && savedFollowing.gameObject.activeInHierarchy
+                    ? savedFollowing : null;
+            }
+            savedValid = false;
+        }
+
+        /// Where on the screen he should sit (0..1 viewport): the middle of
+        /// what the sheet leaves -- above its top edge upright, left of it
+        /// on a desk -- under the resource bar.
+        Vector2 HeroScreenSpot()
+        {
+            float W = Mathf.Max(1f, Screen.width), H = Mathf.Max(1f, Screen.height);
+            var safe = Screen.safeArea;
+            if (safe.width < 1f || safe.height < 1f) safe = new Rect(0f, 0f, W, H);
+            // Screen space, origin bottom-left.
+            float left = safe.xMin, right = safe.xMax, bottom = safe.yMin, top = safe.yMax;
+            if (UI.Sheets.SheetHost.FrameOpen)
+            {
+                Rect f = UI.Sheets.SheetHost.FrameRect;      // GUI space, top-left
+                if (HudLayout.Wide) right = Mathf.Min(right, f.xMin);
+                else bottom = Mathf.Max(bottom, H - f.yMin);   // the sheet's top edge
+            }
+            if (UI.Sheets.MidnightLandHud.Active)
+            {
+                Rect bar = UI.Sheets.MidnightLandHud.ResourcesRect;
+                if (bar.height > 0f) top = Mathf.Min(top, H - bar.yMax);
+            }
+            if (right - left < 1f) { left = safe.xMin; right = safe.xMax; }
+            if (top - bottom < 1f) { bottom = safe.yMin; top = safe.yMax; }
+            float x = (left + right) * 0.5f;
+            float y = Mathf.Lerp(bottom, top, Mathf.Clamp01(IslandHeroCam.rectY));
+            return new Vector2(x / W, y / H);
+        }
+
+        /// The pivot that puts `him` at viewport `uv`, `span` from the lens,
+        /// at the tilt the current state composes to. The lens is stood on
+        /// the ray through `uv`; the pivot is then its own centre ray's
+        /// point at the same span, which is what `OverviewPose` inverts.
+        Vector3 HeroPivot(Vector3 him, Vector2 uv, float tanHalf)
+        {
+            float span = Mathf.Max(1f, Ground / (2f * tanHalf));
+            Compose(him, Ground, azimuthDeg, tiltBiasDeg, out float tilt, out _);
+            Quaternion rot = AimRot(azimuthDeg, tilt);
+            float aspect = Mathf.Max(1f, Screen.width) / Mathf.Max(1f, Screen.height);
+            Vector3 ray = (rot * new Vector3((uv.x - 0.5f) * 2f * tanHalf * aspect,
+                                             (uv.y - 0.5f) * 2f * tanHalf, 1f)).normalized;
+            Vector3 seat = him - ray * span;
+            return seat + rot * Vector3.forward * span;
+        }
     }
 }

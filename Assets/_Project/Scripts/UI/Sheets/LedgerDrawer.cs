@@ -363,16 +363,35 @@ namespace SeaSick.UI.Sheets
             }
         }
 
-        /// The hand on this seam if there is one (his orders), else the
-        /// people list, where somebody is sent.
+        /// **The Seam card (2026-09-27, candidate #3).** Stock, who is on
+        /// it, and a way to send somebody -- instead of the old "opens the
+        /// first gatherer's HandSheet, or the whole People list if nobody
+        /// is on it" dead end. Looked up by name so this file compiles
+        /// whether or not the other agent building `GatherSheet` has
+        /// landed it yet; until then a gather row falls back to its old
+        /// destination.
         static ISheet GatherSheet(Outpost camp, string res)
         {
+            var made = TryOpen("GatherSheet", camp, res);
+            if (made != null) return made;
             var l = camp != null ? camp.Ledger : null;
             if (l == null) return null;
             foreach (var h in l.hands)
                 if (h != null && h.order == OutpostOrder.Gather && h.target == res)
                     return new HandSheet(camp, h.name);
             return CampAlerts.People(camp);
+        }
+
+        /// A sheet built by name (`CampOverviewSheet`'s own pattern) -- lets
+        /// `LedgerDrawer` wire a row to a class another agent is landing in
+        /// the same pass without this file failing to compile in the
+        /// meantime.
+        static ISheet TryOpen(string typeName, params object[] args)
+        {
+            var t = typeof(LedgerDrawer).Assembly.GetType("SeaSick.UI.Sheets." + typeName);
+            if (t == null || !typeof(ISheet).IsAssignableFrom(t)) return null;
+            try { return Activator.CreateInstance(t, args) as ISheet; }
+            catch (Exception e) { Debug.LogWarning($"[Ledger] {typeName} ctor failed: {e.Message}"); return null; }
         }
 
         readonly StringBuilder sb = new StringBuilder(48);
@@ -458,18 +477,18 @@ namespace SeaSick.UI.Sheets
                     makeRows.Add(row);
                 }
                 if (count > 0) continue;
-                var p = plan;
                 var ghost = NewRow(makeCard, ItemIcon(icon, "saw"), plan.label, true);
+                // **Both ghost states open the plan's own card now
+                // (2026-09-27, candidate #9)** -- what it costs, why it is
+                // locked if it is, and "Set as goal" -- instead of the
+                // locked row landing on whatever goal happens to be pinned
+                // and the unbuilt row landing on an unfocused catalogue.
+                string ghostPlanId = plan.id;
+                ghost.open = () => new PlanSheet(MidnightLandHud.Camp, ghostPlanId);
                 if (!l.PlanUnlocked(plan.id))
-                {
                     ghost.Set("campfire " + RecipeGraph.Roman(Techs.PlanLevel(plan.id)), Off, 0f, null, true);
-                    ghost.open = () => CampOverview(MidnightLandHud.Camp);
-                }
                 else
-                {
                     ghost.Set("not built", Off, -1f, null, true);
-                    ghost.open = () => CampAlerts.BuildList(MidnightLandHud.Camp);
-                }
                 makeRows.Add(ghost);
             }
         }

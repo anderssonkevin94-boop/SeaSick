@@ -160,6 +160,13 @@
 .ov-line { font-size: 14px; color: rgb(201, 216, 224); white-space: normal; }
 .ov-line-muted { font-size: 13px; color: rgb(166, 186, 198); margin-top: 2px; }
 .ov-kv { flex-direction: row; justify-content: space-between; align-items: center; min-height: 22px; }
+/* Tappable Today tiles (2026-09-27, candidate #6): Food/Stone/Watch open
+   the sheet that answers them instead of sitting there as dead text. */
+.ov-kv--tap {
+    min-height: 44px; padding: 0 4px; margin: 0; border-width: 0; border-radius: 8px;
+    background-color: transparent;
+}
+.ov-kv--tap:hover { background-color: rgb(26, 48, 64); }
 .ov-kv-k { font-size: 14px; color: rgb(232, 242, 246); flex-shrink: 1; }
 .ov-kv-v {
     font-size: 14px; color: rgb(232, 242, 246); margin-left: 8px; -unity-text-align: middle-right;

@@ -275,7 +275,12 @@ namespace SeaSick.UI.Sheets
                 if (i >= campList.Count) { r.root.style.display = DisplayStyle.None; r.tap = null; continue; }
                 var o = campList[i];
                 r.root.style.display = DisplayStyle.Flex;
-                r.tap = () => { ChartData.SetCourse(o); Close(); };
+                // **A tap opens a camp card, 2026-09-27 (audit #11).** It
+                // used to set the chart's course to this camp silently, with
+                // no look at what you were tapping. `CampCard` shows what
+                // the row's own text already summarises (food, alerts) and
+                // makes "Set course" an explicit button on it.
+                r.tap = () => { Close(); Sheets.Open(new CampCard(o)); };
                 var l = o.Ledger;
                 float days = SheetBits.FoodDays(l);
                 CampAlerts.Collect(o, alerts);
@@ -289,6 +294,85 @@ namespace SeaSick.UI.Sheets
                 r.Set(ChartData.PrettyName(o.Island), text, tone);
             }
             campGroup.style.display = campList.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+    }
+
+    /// **The camp card (2026-09-27, audit #11).** What a Sea Ledger CAMPS
+    /// row opens now, instead of silently setting the chart's course to it:
+    /// food, alerts, and an explicit "Set course" button. Small, like
+    /// `WallSheet` -- one page, no tabs.
+    sealed class CampCard : ISheetFramed
+    {
+        readonly Outpost camp;
+        public CampCard(Outpost o) { camp = o; }
+
+        public string[] TabLabels => null;
+        public int Tab => 0;
+        public void SetTab(int index) { }
+        public Color Accent => SheetTheme.Sea;
+        public string Title => ChartData.PrettyName(camp != null ? camp.Island : null);
+        public Vector3 AnchorWorld => camp != null ? camp.CampCentre : Vector3.zero;
+        public bool StillValid => camp != null && camp.Ledger != null && camp.HasCamp;
+
+        Label sub;
+        Label handsLine, alertLine;
+        Button courseBtn;
+        readonly List<CampAlerts.Alert> alerts = new List<CampAlerts.Alert>(8);
+
+        public VisualElement BuildHeader()
+        {
+            var icon = new StationPage.Glyph("chart", MidnightLandHud.Ice, "cp-glyph");
+            return CampPages.IconHeader(Title, icon, out sub);
+        }
+
+        public VisualElement Build()
+        {
+            var root = new VisualElement();
+            root.style.flexDirection = FlexDirection.Column;
+            handsLine = SheetKit.Text("", true, false, 20f);
+            root.Add(handsLine);
+            alertLine = SheetKit.Text("", false, true, 13f);
+            root.Add(alertLine);
+            Refresh();
+            return root;
+        }
+
+        public VisualElement BuildActions()
+        {
+            courseBtn = SheetKit.Btn("Set course", OnCourse, true);
+            return SheetKit.Actions(courseBtn);
+        }
+
+        public void Refresh()
+        {
+            if (camp == null || camp.Ledger == null) return;
+            var l = camp.Ledger;
+            float days = SheetBits.FoodDays(l);
+            string food = l.hands.Count == 0 ? "no hands"
+                : days < 0f ? "food off" : days > 99f ? "food, 99+ days" : $"food, {days:0.#} days";
+            if (sub != null) sub.text = food;
+            if (handsLine != null)
+                handsLine.text = l.hands.Count == 1 ? "1 hand" : $"{l.hands.Count} hands";
+
+            alerts.Clear();
+            CampAlerts.Collect(camp, alerts);
+            if (alertLine != null)
+                alertLine.text = alerts.Count == 0 ? "nothing needs attention"
+                    : alerts.Count == 1 ? "1 alert" : $"{alerts.Count} alerts";
+
+            bool already = ChartData.HasCourse && ChartData.Course == camp;
+            if (courseBtn != null)
+            {
+                courseBtn.text = already ? "Course set" : "Set course";
+                courseBtn.SetEnabled(!already);
+            }
+        }
+
+        void OnCourse()
+        {
+            if (camp == null) return;
+            ChartData.SetCourse(camp);
+            Sheets.Close();
         }
     }
 }

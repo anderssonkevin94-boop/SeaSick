@@ -32,6 +32,15 @@ namespace SeaSick.UI.Sheets
     /// **Kept by name, not by reference.** The rows are rebuilt from the
     /// ledger and a cached row is a row that outlives the hand.
     ///
+    /// **The V2 Split layout (Kevin picked it, 2026-09-27).** Same content,
+    /// compact: 3-wide tiles are one short row each (icon left, name and
+    /// line right), chips are single-line pills, and on the phone the frame
+    /// is `PhoneHeight` of the screen (`SheetHost.FrameSizeScreen`) so the
+    /// island camera frames him in the world above it -- `IslandCam`'s hero
+    /// shot, opened through `FollowTarget` by `Sheets.Open`. No second
+    /// camera, no render texture. On a desk the sheet is the right-hand
+    /// column as before and he is framed to the left of it.
+    ///
     /// **Built once, re-texted after.** `SheetHost` refreshes every 0.25 s
     /// and a UI Toolkit click needs press and release on the SAME element,
     /// so tiles are rebuilt only when the SET of jobs changes (a building
@@ -54,7 +63,12 @@ namespace SeaSick.UI.Sheets
 
         public string Title => who;
         public Color Accent => MidnightLandHud.Ice;
-        public bool WantsTallSheet => true;
+        /// Not the full band: the top of the screen is the world now.
+        public bool WantsTallSheet => false;
+
+        /// The phone frame's top edge, as a fraction of the safe height up
+        /// from the bottom. ~40% of the screen stays world above it.
+        public static float PhoneHeight = 0.62f;
         public string[] TabLabels => null;
         public int Tab => 0;
         public void SetTab(int index) { }
@@ -139,6 +153,7 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildHeader()
         {
             var root = Styled(StationPage.Root("st-head"));
+            root.AddToClassList("hs-head");
 
             var av = Box("hs-av");
             var circle = Box("st-avatar");
@@ -389,8 +404,10 @@ namespace SeaSick.UI.Sheets
         {
             float frame = SheetHost.FrameSizeScreen().y * SheetHost.PanelScale;
             float avail = frame - SheetHost.BorderPx - 82f - SheetHost.BodyPadPx - 22f;
-            // Now card + stall line + chips + eyebrow + dots + actions + gaps.
-            const float Rest = 420f, Row = 122f;
+            // Now card (with legs) + chips + eyebrow + actions + gaps, in
+            // the compact V2 sizes of Hand.uss; a stall line or a dots row
+            // is absorbed by the scroll's safety net.
+            const float Rest = 205f, Row = 56f;
             int rows = Mathf.Clamp(Mathf.FloorToInt((avail - Rest) / Row), 1, 3);
             return rows * 3;
         }
@@ -636,10 +653,12 @@ namespace SeaSick.UI.Sheets
                 t.icon = Box("hs-tile-ico");
                 StationPage.SetIcon(t.icon, JobIconOf(jobs[i]));
                 t.root.Add(t.icon);
+                var words = Box("hs-tile-words");
                 t.name = Text("hs-tile-n");
                 t.sub = Text("hs-tile-s");
-                t.root.Add(t.name);
-                t.root.Add(t.sub);
+                words.Add(t.name);
+                words.Add(t.sub);
+                t.root.Add(words);
                 t.who = Box("hs-who");
                 t.whoText = Text("hs-who-t");
                 t.who.Add(t.whoText);

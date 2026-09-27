@@ -1,0 +1,71 @@
+/* ------------------------------------------------------------------
+ * The Lookout and Raid cards (menu rework #1 / #2, 2026-09-27):
+ * header glyph tile, the "why" chips, the quiver / threat card, a
+ * 3-wide villager tile grid (tap = post / relieve) and the thumb row.
+ * Rides on Station.uss (`.st`) and Hand.uss (`.hs-*` chips, tiles,
+ * toast), which `LookoutSheet` / `RaidSheet` load first; everything
+ * here is `.lk-*` under `.st` so it reaches nothing else.
+ * PANEL UNITS, same scale notes as Station.uss.
+ * ------------------------------------------------------------------ */
+
+/* --- header glyph tile ------------------------------------------------ */
+
+.lk-glyph-box {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+}
+.lk-glyph { width: 34px; height: 34px; }
+
+/* --- the quiver / threat card ----------------------------------------- */
+
+.st .lk-card--warn { border-color: rgb(240, 195, 106); }
+.st .lk-card--bad { border-color: rgb(246, 146, 128); background-color: rgb(42, 26, 26); }
+.st .lk-card--good { border-color: rgb(31, 74, 60); }
+.st .lk-card .hs-now-s { white-space: normal; }
+
+/* the "nobody can be posted" note that stands in for the tiles */
+.st .lk-note { margin-top: 2px; }
+.st .lk-note-t { font-size: 16px; color: rgb(201, 216, 224); white-space: normal; }
+
+/* --- villager tiles ---------------------------------------------------- */
+
+.lk-av {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    background-color: rgb(44, 74, 94);
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+}
+.st .lk-av-t { font-size: 19px; -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.st .lk-tile--idle { border-color: rgb(159, 224, 194); }
+.st .lk-tile--idle .hs-tile-s { color: rgb(159, 224, 194); }
+.st .hs-tile--on .lk-av { background-color: rgb(164, 210, 232); }
+.st .hs-tile--on .lk-av-t { color: rgb(11, 23, 32); }
+
+.lk-pill {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 11px;
+    background-color: rgb(74, 35, 32);
+    align-items: center;
+    justify-content: center;
+}
+.st .lk-pill-t { font-size: 12px; color: rgb(246, 146, 128); -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+
+/* --- the thumb row ------------------------------------------------------ */
+
+.st .lk-act--pri { background-color: rgb(164, 210, 232); border-color: rgb(164, 210, 232); color: rgb(11, 23, 32); }
+.st .lk-act--pri:hover { background-color: rgb(190, 226, 242); }

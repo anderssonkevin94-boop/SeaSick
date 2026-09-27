@@ -36,6 +36,7 @@ namespace SeaSick.UI.Sheets
         Button gateBtn;
         Button repairBtn;
         int barKey = -99;
+        Label sub;
 
         public WallSheet(Outpost camp, WallSegment segment)
         {
@@ -51,10 +52,15 @@ namespace SeaSick.UI.Sheets
 
         public bool StillValid => outpost != null && wall != null;
 
-        public VisualElement BuildHeader() =>
-            SheetKit.Header(wall != null && wall.Breached ? "breached" : "standing",
-                Title, SheetTheme.Timber, wall != null && wall.IsGate ? "⌸" : "▤",
-                () => Sheets.Close());
+        /// **Midnight header, 2026-09-27** (audit #10): a drawn wall/gate
+        /// glyph -- not the old parchment badge -- title, and a subtitle
+        /// that carries "breached"/"standing" (`Refresh` keeps it current).
+        public VisualElement BuildHeader()
+        {
+            var icon = new StationPage.Glyph("wall", MidnightLandHud.Ice, "cp-glyph");
+            var head = CampPages.IconHeader(StationPage.Cap(Title), icon, out sub);
+            return head;
+        }
 
         /// **Repair swaps in for "make this a gate" while it's down
         /// (2026-09-26).** Both buttons are built once, here, and never
@@ -103,6 +109,7 @@ namespace SeaSick.UI.Sheets
         public void Refresh()
         {
             if (wall == null) return;
+            if (sub != null) sub.text = wall.Breached ? "breached" : "standing";
             float fill = wall.MaxHp > 0f ? Mathf.Clamp01(wall.Hp / wall.MaxHp) : 0f;
             int pct = Mathf.RoundToInt(fill * 100f);
             if (pct != barKey)

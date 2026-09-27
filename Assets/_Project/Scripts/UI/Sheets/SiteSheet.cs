@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using SeaSick.World;
+using SeaSick.World.Economy;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -108,6 +109,19 @@ namespace SeaSick.UI.Sheets
             var root = new VisualElement();
             root.style.flexDirection = FlexDirection.Column;
 
+            // **Opened with no row (2026-09-27).** Every real trigger --
+            // a tap, `SheetBootstrap`'s `BuildSite` registration -- refuses
+            // to build this sheet at all when `s.Row == null`. A caller
+            // that constructs `SiteSheet` directly (a script, a probe) can
+            // skip that guard; this is the fallback so a null row reads as
+            // one honest line instead of a blank "0%" card that closes
+            // itself a tick later.
+            if (Pending == null)
+            {
+                root.Add(SheetKit.Text("This blueprint is gone.", false, true, 14f));
+                return root;
+            }
+
             // **A ring is a bar you have not drawn yet.** The percentage is
             // the number the player reads; the bar under it is what makes it
             // a shape rather than a figure, and a real ring can replace both
@@ -190,24 +204,6 @@ namespace SeaSick.UI.Sheets
             {
                 chipsKey = key;
                 chips.Clear();
-                // **The delivered chips only appear once something has been
-                // delivered.** "0 of 5 timber · 0 of 3 stone" over "Needs 5
-                // timber and 3 stone" is the same sentence twice, and on a
-                // site nobody has carried a log to yet the first of them is
-                // pure noise.
-                if (p.done > 0 || p.stoneDone > 0 || p.brickDone > 0)
-                {
-                    var row = new List<VisualElement>
-                    {
-                        SheetKit.Text($"{p.done} of {p.needed} timber", false, false, 12f),
-                        p.stoneNeeded > 0
-                            ? SheetKit.Text($"{p.stoneDone} of {p.stoneNeeded} stone", false, false, 12f)
-                            : SheetKit.Text("", false, true, 12f),
-                    };
-                    if (p.brickNeeded > 0)
-                        row.Add(SheetKit.Text($"{p.brickDone} of {p.brickNeeded} bricks", false, false, 12f));
-                    chips.Add(SheetKit.Row(row.ToArray()));
-                }
                 // **The phase, in the site's own words** -- "clearing: 3
                 // trees, 1 rock left" comes first (2026-09-23: the CLEAR
                 // phase the villagers work through before a single log is
@@ -218,12 +214,44 @@ namespace SeaSick.UI.Sheets
                 // drawing.
                 chips.Add(SheetKit.Text(Cap(p.Cleared ? p.PhaseLine : ClearingLine(p)),
                     true, false, 13f));
+
+                // **Have/need, one chip per material this site still
+                // wants** (2026-09-27 restyle: candidate #5). A blueprint
+                // that has not been touched yet still shows "0/5 timber" --
+                // that IS the shortfall, not noise -- and a short pile is
+                // red the same way a short build-list card is (Kevin's
+                // Midnight tile language, `BuildSheet`'s cost slots).
+                var mats = new List<VisualElement>(3);
+                if (p.needed > 0) mats.Add(MaterialChip(Res.Timber, p.done, p.needed));
+                if (p.stoneNeeded > 0) mats.Add(MaterialChip(Res.Stone, p.stoneDone, p.stoneNeeded));
+                if (p.brickNeeded > 0) mats.Add(MaterialChip(Res.Brick, p.brickDone, p.brickNeeded));
+                if (mats.Count > 0) chips.Add(SheetKit.Row(mats.ToArray()));
+
+                // **Who is on it, as tappable villager tiles (2026-09-27).**
+                // A tap opens exactly the hand it is a picture of --
+                // `HandSheet(outpost, name)`, the same sheet the world tap
+                // on that villager opens.
+                if (crewOn.Count > 0)
+                {
+                    var toks = new VisualElement[crewOn.Count];
+                    for (int i = 0; i < crewOn.Count; i++)
+                    {
+                        var nm = crewOn[i].hand.name;
+                        toks[i] = SheetKit.Token(SheetBits.Initial(nm), false, SheetBits.JobGlyph(crewOn[i].hand),
+                            () => Sheets.Open(new HandSheet(outpost, nm)));
+                    }
+                    chips.Add(SheetKit.Row(toks));
+                }
+
                 string need = !p.Stocked
                     ? NeedSentence(timberLeft, stoneLeft, brickLeft)
                     : p.Complete
                         ? "Everything is in and it is going up."
                         : "Everything it wants is here; now they raise it.";
                 chips.Add(SheetKit.Note(crew + " " + need));
+                // **The idle-hand ladder's own warning** (step 5, "find that
+                // resource") -- `OutpostLedger.StallReason`, the same line
+                // the camp-wide alert chip reads.
                 if (stall.Length > 0) chips.Add(SheetKit.Note(stall));
             }
 
@@ -260,6 +288,10 @@ namespace SeaSick.UI.Sheets
             if (p.RocksLeft > 0) parts.Add(p.RocksLeft == 1 ? "1 rock" : $"{p.RocksLeft} rocks");
             return parts.Count == 0 ? "clearing" : "clearing: " + string.Join(", ", parts) + " left";
         }
+
+        /// One have/need tile: "timber · 3/5", red border while short.
+        static VisualElement MaterialChip(string res, int have, int need) =>
+            SheetKit.Chip(ResDefs.Label(res), $"{have}/{need}", have >= need ? SheetTheme.Moss : SheetTheme.Ember);
 
         static string Cap(string s) =>
             string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
