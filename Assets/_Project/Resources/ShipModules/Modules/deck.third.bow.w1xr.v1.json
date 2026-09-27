@@ -148,6 +148,18 @@
             "notes": "Bow_W1/Upper_Bow_W1__UpperRails.fbx, 240 triangles (manifest)."
         },
         {
+            "id": "Upper_Bow_W1__OptionalEndClosures",
+            "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Bow_W1/Upper_Bow_W1__OptionalEndClosures",
+            "placeholder": false,
+            "localPositionU": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "yawDegU": 0.0,
+            "notes": "Bow_W1/Upper_Bow_W1__OptionalEndClosures.fbx (manifest 'optional'). End walls of the upper box at its open ends (middle: both ends; bow: aft end; stern: fore end). Referenced 2026-09-27 after Kevin's playtest: a lone third-deck middle showed no fore/aft walls. Single-sided, outward normals; where two third-deck layers abut the faces sit back-to-back inside the closed box (unseen). Placeholder flat bulkheads, not Astra's finished end walls."
+        },
+        {
             "id": "Upper_Bow_W1__WallPlanks",
             "resourcePath": "ShipModules/Meshes/ThirdDeckW1xR_v1/Bow_W1/Upper_Bow_W1__WallPlanks",
             "placeholder": false,
