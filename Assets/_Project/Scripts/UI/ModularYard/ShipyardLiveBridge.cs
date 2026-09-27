@@ -86,9 +86,17 @@ namespace SeaSick.UI.ModularYard
         public static void Open()
         {
             if (ShipyardService.Player == null || ShipyardModal.IsOpen) return;
-            var bridge = new ShipyardLiveBridge();
             // End island gestures before the modal takes exclusive input.
             CampSiting.End(); WallSiting.End(); Hand.Instance?.Cancel();
+            if (!ShipyardModal.UseLegacyScreen)
+            {
+                // The slot yard (2026-09-27): no 3D preview, so the live
+                // ship stays where she is -- only world input is blocked.
+                ShipyardModal.OpenSlots(ShipyardService.Player, ShipyardSession.SetWorldInputBlocked);
+                Sheets.Sheets.Close();
+                return;
+            }
+            var bridge = new ShipyardLiveBridge();
             ShipyardModal.Open(bridge, SetSessionBlocked, bridge.RemovalBlocker);
             Sheets.Sheets.Close();
         }

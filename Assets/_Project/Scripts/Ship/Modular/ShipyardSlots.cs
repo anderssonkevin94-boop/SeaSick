@@ -41,6 +41,9 @@ namespace SeaSick.Ship.Modular
         /// A gun port whose cannon the battery can actually draw (false = the
         /// art has no mount there yet; a cannon still counts, and warns).
         public bool hasMount;
+        /// Position along the section, 0 = aft end, 1 = forward (the grid
+        /// def's `along`; the screen turns it into a column).
+        public float along;
         /// Catalog id of what stands here, or null when empty.
         public string moduleId;
     }
@@ -264,7 +267,7 @@ namespace SeaSick.Ship.Modular
                             var f = SlotModel.At(draft, s.key, d, c.id);
                             bool mount = false;
                             if (c.gunPort) foreach (var gm in mounts) if (gm.deck == d && gm.row == c.row) mount = true;
-                            dv.cells.Add(new SlotCellView { cellId = c.id, row = c.row, isGunPort = c.gunPort, hasMount = mount, moduleId = f?.moduleId });
+                            dv.cells.Add(new SlotCellView { cellId = c.id, row = c.row, isGunPort = c.gunPort, hasMount = mount, along = c.along, moduleId = f?.moduleId });
                             if (s.unlocked[d]) { dv.total++; if (f != null) dv.used++; }
                         }
                     sv.decks.Add(dv);

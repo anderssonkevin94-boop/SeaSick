@@ -36,7 +36,7 @@ namespace SeaSick.UI.ModularYard
             guns.text = t.guns.ToString(); gunsOf.text = $"/{t.gunPorts} ports";
             crew.text = t.crew.ToString(); crewOf.text = $"/{t.berths} beds";
             cargo.text = t.cargo.ToString(); cargoOf.text = $"/{t.cargoCap}";
-            draft.text = t.draft.ToString("0.00", CultureInfo.InvariantCulture); draftOf.text = " m";
+            draft.text = float.IsNaN(t.draft) ? "--" : t.draft.ToString("0.00", CultureInfo.InvariantCulture); draftOf.text = " m";
             Tone(guns, t.guns > t.gunPorts ? YardTone.Bad : YardTone.Plain);
             Tone(crew, t.crew > t.berths ? YardTone.Bad : YardTone.Plain);
             Tone(cargo, t.cargo > t.cargoCap ? YardTone.Bad : YardTone.Plain);

@@ -1096,3 +1096,17 @@ normalizes every edit, its `FitGun`/`RemoveGun` fit/remove a cannon in the port
 that mount serves, `RemoveSection` sends the section's fits to the store. Its
 Interior berths slider (`layouts`) has **no effect** on a slot ship — phase 2
 replaces it with the grids.
+
+### The slot screen (phase 2+3, 2026-09-27)
+
+`ShipyardLiveBridge.Open()` (dry dock sheet, Ship sheet, Ledger) now opens
+`ShipyardModal.OpenSlots(ShipyardService.Player, ...)` ->
+`UI/ModularYard/Slots/ShipyardSlotsScreen` (tabs Ship / Workshop / Dock, strip,
+section card + slot grid, drawer, press-and-hold drag, totals, blocker bar,
+pinned Confirm -> `ShipyardSlotDraft.Apply`). `ShipyardSlotsAdapter.Build`
+maps `ShipyardSlotsView` + `YardUiState` -> `YardVm`; view cell ids are
+`"<section>/<deck>/<cell>"` (same as a `remove:` fix id). `SlotCellView.along`
+(additive) gives the grid its columns. No 3D preview and the live ship is not
+hidden (only world input is blocked). The old screen (`ShipyardScreen` +
+`ShipyardPreview`) is reachable only with the dev flag
+`ShipyardModal.UseLegacyScreen = true`.
