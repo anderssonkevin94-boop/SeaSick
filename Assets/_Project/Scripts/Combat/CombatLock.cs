@@ -182,6 +182,15 @@ namespace SeaSick.Combat
             if (t != null && !ReferenceEquals(t, Locked)) LockOn(t);
         }
 
+        /// Whether a tap landing at this screen point (input space, the same
+        /// convention `PickAt` and `Pointer.position` use) would lock an
+        /// enemy — for `HelmInput`, so the SAME touch-up that locks a ship
+        /// does not also read as the helm's "tap = stop" (2026-09-27, Kevin:
+        /// tapping a ship in the lower half of the screen was locking it AND
+        /// ringing the telegraph to stop in the same gesture). Cheap: reuses
+        /// `PickAt`'s own hit test, no extra allocation or state.
+        public bool WouldLock(Vector2 screen) => PickAt(screen) != null;
+
         /// The enemy under a screen point (input space), within break range,
         /// or null. The hit circle is the hull's own projected size, but never
         /// smaller than `tapHitRadiusPt`.

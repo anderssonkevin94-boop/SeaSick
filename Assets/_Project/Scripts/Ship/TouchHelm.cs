@@ -106,6 +106,14 @@ namespace SeaSick.Ship
         /// the throttle lever; the autopilot mode ignores it. Zero at
         /// touch-down, left as it was on release (like `DragDistance01`).
         public Vector2 StickOffset { get; private set; }
+        /// Where the current (or just-released) touch went down, in SCREEN
+        /// space (origin bottom-left, the same convention `Pointer.position`
+        /// and `Camera.WorldToScreenPoint` use) — so something outside this
+        /// class can ask "was there a ship under THIS tap" with the same
+        /// point `CombatLock.PickAt` would be handed. Valid while `Dragging`
+        /// or on the frame `Tapped`/`JustReleased` fires; `anchorPoint` is
+        /// left as it was on release, same as `DragDistance01`.
+        public Vector2 AnchorScreenPos => new Vector2(anchorPoint.x, Screen.height - anchorPoint.y);
 
         int wheelId = NoTouch;
         Vector2 anchorPoint;   // GUI space, where the thumb went down

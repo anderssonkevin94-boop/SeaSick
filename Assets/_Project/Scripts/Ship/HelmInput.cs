@@ -93,6 +93,11 @@ namespace SeaSick.Ship
 
         ShipMotor motor;
         Breakers breakers;
+        /// Same GameObject as the ship (see `Awake`). Consulted before a tap
+        /// is read as "stop" — a tap that locks an enemy must not also ring
+        /// the telegraph down (2026-09-27). Null off the player ship, where
+        /// there is nothing to lock and every tap is plainly a stop.
+        SeaSick.Combat.CombatLock combatLock;
 
         /// The stick. A plain object, not a component: it has no lifetime of
         /// its own and nothing else should be able to find it.
@@ -182,7 +187,13 @@ namespace SeaSick.Ship
         {
             motor = GetComponent<ShipMotor>();
             breakers = GetComponent<Breakers>();
+            combatLock = GetComponent<SeaSick.Combat.CombatLock>();
         }
+
+        /// True when the tap `helm` just reported landed on a ship
+        /// `CombatLock` would lock — the same touch-up is about to become a
+        /// lock, so the helm must not ALSO read it as "tap = stop".
+        bool TapLocksAShip() => combatLock != null && combatLock.WouldLock(helm.AnchorScreenPos);
 
         // `Touch.activeTouches` is empty until this is on, and it is
         // ref-counted, so enabling it per-component is safe even if something
@@ -328,7 +339,7 @@ namespace SeaSick.Ship
         {
             if (helm.Tapped)
             {
-                if (HelmTuning.tapStops) { throttleOrder = 0f; astern = false; }
+                if (HelmTuning.tapStops && !TapLocksAShip()) { throttleOrder = 0f; astern = false; }
                 return;
             }
             if (!helm.Dragging) return;
@@ -424,8 +435,9 @@ namespace SeaSick.Ship
         {
             if (helm.Tapped)
             {
-                // Ring down to stop without letting go of the course.
-                if (HelmTuning.tapStops) { throttleOrder = 0f; astern = false; }
+                // Ring down to stop without letting go of the course --
+                // unless this same tap is about to lock an enemy ship.
+                if (HelmTuning.tapStops && !TapLocksAShip()) { throttleOrder = 0f; astern = false; }
                 return;
             }
 
