@@ -63,19 +63,28 @@ namespace SeaSick.World
         public static float TickSeconds = 30f;
         public static int MinPiece = 4;
         /// Half width incl. feather (Astra: 2.16 m across), feather, tip.
-        public static float HalfWidth = 1.05f;
-        public static float Feather = 0.32f;
+        public static float HalfWidth = 1.08f;
+        public static float Feather = 0.2f;
         public static float TipHalfWidth = 0.2f;
-        public static float MinOpacity = 0.5f;
-        public static float MaxOpacity = 0.93f;
+        public static float MinOpacity = 0.8f;
+        public static float MaxOpacity = 1f;
         public static float Lift = 0.02f;
         public static bool LogBuild = true;
 
-        /// Astra's trampled-earth palette (roads-astra-lvl1-v1 vertex
-        /// colours, re-exposed to sit beside the terrain's meadow albedo):
-        /// compacted centre, shoulder.
-        public static Color CentreColour = new Color(0.52f, 0.40f, 0.25f);
-        public static Color EdgeColour = new Color(0.40f, 0.30f, 0.17f);
+        /// Astra's trampled-earth palette, her exact vertex colours
+        /// (tools/blender/roads_astra_lvl1.py `COL`, sRGB): worn crown
+        /// #B09A76, earth #A38B65, shoulder #968763. v1/v2 used a darker,
+        /// redder pair (0.52/0.40/0.25 raw) that read as a brown stripe on
+        /// the phone -- Kevin 2026-09-27. `Exposure` scales all three.
+        public static Color CentreColour = new Color32(0xB0, 0x9A, 0x76, 0xFF);
+        public static Color EarthColour = new Color32(0xA3, 0x8B, 0x65, 0xFF);
+        public static Color EdgeColour = new Color32(0x96, 0x87, 0x63, 0xFF);
+        public static float Exposure = 1f;
+        /// Her Blender render reads darker at the shoulders than the raw
+        /// hex does (filmic contrast + her +-9 % patches); this puts that
+        /// back so the crown-to-shoulder step survives the game's sun.
+        public static float EarthShade = 0.95f;
+        public static float ShoulderShade = 0.84f;
 
         public static float LastBuildMs { get; private set; }
         public static int LastVertexCount { get; private set; }
@@ -445,7 +454,13 @@ namespace SeaSick.World
         // everywhere; only a small trodden yard stays round the fire.
 
         /// Kit width: 2.16 m across incl. feather (1.08 half), ~1.76 m core.
-        public static float Wobble = 0.34f;          // edge noise, metres peak-to-peak
+        public static float Wobble = 0f;             // per-pixel edge noise (v2 0.34: read smooth, not faceted)
+        /// v3 shoulders (her polygonal outline, broad bulges): a slow width
+        /// wander (~5 m) and a per-vertex facet offset, baked into the
+        /// vertex distance so the 0.5 m lattice draws them as straight edges.
+        public static float WidthWander = 0.3f;      // metres, +-
+        public static float WanderFreq = 0.33f;      // per metre (~3 m bulges, like her compacted patches)
+        public static float Facet = 0.12f;           // metres, +-
         public static float Jitter = 0.6f;           // centre-line wander, metres (peak)
         public static float TaperLength = 2.6f;      // dead ends taper over this
         public static float YardRadius = 2.8f;       // packed earth round the fire
@@ -468,6 +483,10 @@ namespace SeaSick.World
         readonly List<float> ps = new List<float>(), ps2 = new List<float>();
         readonly HashSet<long> seenEdge = new HashSet<long>();
         float[] hCache;                               // per lattice vertex, NaN = unknown
+        // Every smoothed chain of the last build, for `RoadTorches`: points
+        // in `chainPts`, (first, count, junction-at-start | junction-at-end << 1).
+        internal readonly List<Vector2> chainPts = new List<Vector2>();
+        internal readonly List<Vector3Int> chainSpans = new List<Vector3Int>();
         readonly List<Vector2> uvs = new List<Vector2>();
 
         // Scratch shared by every camp (one sheet builds at a time).
@@ -547,6 +566,7 @@ namespace SeaSick.World
                 if (z < bz0) bz0 = z; if (z > bz1) bz1 = z;
             }
             segs.Clear();
+            chainPts.Clear(); chainSpans.Clear();
             if (drawn.Count > 0)
             {
                 bx0 = Mathf.Max(1, bx0); bz0 = Mathf.Max(1, bz0);
@@ -645,7 +665,7 @@ namespace SeaSick.World
             // ---- 4. the sheet: only quads that can show ----------------------
             verts.Clear(); uvs.Clear(); tris.Clear();
             Vector3 origin = view != null ? view.transform.position : camp.CampCentre;
-            float show = hw + 0.5f * Wobble + 0.05f;
+            float show = hw + 0.5f * Wobble + WidthWander + Facet + 0.05f;
             for (int v = vmin; v < vmax; v++)
             {
                 for (int u = umin; u < umax; u++)
@@ -653,12 +673,14 @@ namespace SeaSick.World
                     int k = v * SubSide + u;
                     if (sIdx[k] == -1 && sIdx[k + 1] == -1 && sIdx[k + SubSide] == -1 && sIdx[k + SubSide + 1] == -1) continue;
                     if (Mathf.Min(Mathf.Min(sD[k], sD[k + 1]), Mathf.Min(sD[k + SubSide], sD[k + SubSide + 1])) >= show) continue;
+                    // Split along the diagonal whose ends are closer in the
+                    // SHAPED distance (what the shader draws), not the raw one.
                     int a = SheetVertex(u, v, baseX, baseZ, origin), b = SheetVertex(u + 1, v, baseX, baseZ, origin);
                     int d0 = SheetVertex(u, v + 1, baseX, baseZ, origin), e = SheetVertex(u + 1, v + 1, baseX, baseZ, origin);
                     // Clockwise seen from above (Unity front face); split
                     // along the diagonal whose ends are closer in distance so
                     // a curved edge does not zig-zag across quads.
-                    if (Mathf.Abs(sD[k] - sD[k + SubSide + 1]) <= Mathf.Abs(sD[k + 1] - sD[k + SubSide]))
+                    if (Mathf.Abs(uvs[a].x - uvs[e].x) <= Mathf.Abs(uvs[b].x - uvs[d0].x))
                     { tris.Add(a); tris.Add(d0); tris.Add(e); tris.Add(a); tris.Add(e); tris.Add(b); }
                     else
                     { tris.Add(a); tris.Add(d0); tris.Add(b); tris.Add(b); tris.Add(d0); tris.Add(e); }
@@ -684,13 +706,36 @@ namespace SeaSick.World
                 if (m.HasProperty("_HalfWidth")) m.SetFloat("_HalfWidth", HalfWidth);
                 if (m.HasProperty("_Feather")) m.SetFloat("_Feather", Feather);
                 if (m.HasProperty("_Wobble")) m.SetFloat("_Wobble", Wobble);
-                // Raw values, as v1's vertex colours were (no sRGB->linear):
-                // the palette was tuned against the meadow that way.
-                if (m.HasProperty("_CentreColour")) m.SetVector("_CentreColour", (Vector4)CentreColour);
-                if (m.HasProperty("_EdgeColour")) m.SetVector("_EdgeColour", (Vector4)EdgeColour);
+                // Her colours are sRGB hex: SetColor linearises them, as
+                // Blender did for her vertex colours.
+                if (m.HasProperty("_CentreColour")) m.SetColor("_CentreColour", CentreColour * Exposure);
+                if (m.HasProperty("_EarthColour")) m.SetColor("_EarthColour", EarthColour * (Exposure * EarthShade));
+                if (m.HasProperty("_EdgeColour")) m.SetColor("_EdgeColour", EdgeColour * (Exposure * ShoulderShade));
             }
             CopyTerrainLight(m);
             LastVertexCount = verts.Count;
+
+            // ---- 6. torch posts, in a slice of their own --------------------
+            // (first time: the art loads in yet another slice first)
+            if (!RoadTorches.ArtLoaded) { yield return null; RoadTorches.Preload(); }
+            yield return null;
+            RoadTorches.For(this).Layout();
+        }
+
+        /// The distance the shader draws: the true distance to the line,
+        /// minus a slow wander of the shoulder (so the width breathes along
+        /// the run, each side on its own) and a small per-vertex offset (so
+        /// the outline is a polygon, like her faceted shoulders). Both are
+        /// hashes of world position: every build and every load agree.
+        static float Shaped(float d, float wx, float wz)
+        {
+            if (d >= FarD) return d;
+            float wander = (Noise(wx * WanderFreq + 40.3f, wz * WanderFreq - 12.9f) - 0.5f) * 2f * WidthWander;
+            int ix = Mathf.RoundToInt(wx * 2f), iz = Mathf.RoundToInt(wz * 2f);
+            float facet = (Hash(ix * 7 + 3, iz * 13 - 5) - 0.5f) * 2f * Facet;
+            // Only the shoulders move: the crown stays where it is.
+            float w = Mathf.Clamp01((d - 0.3f) / 0.5f);
+            return d - (wander + facet) * w;
         }
 
         int SheetVertex(int u, int v, float baseX, float baseZ, Vector3 origin)
@@ -703,7 +748,7 @@ namespace SeaSick.World
             if (float.IsNaN(h)) { h = camp.GroundAt(new Vector3(wx, 0f, wz)); hCache[k] = h; }
             idx = verts.Count;
             verts.Add(new Vector3(wx - origin.x, h + Lift - origin.y, wz - origin.z));
-            uvs.Add(new Vector2(Mathf.Min(sD[k], FarD), sS[k]));
+            uvs.Add(new Vector2(Mathf.Min(Shaped(sD[k], wx, wz), FarD), sS[k]));
             if (sIdx[k] == -1) sTouched.Add(k);
             sIdx[k] = idx;
             return idx;
@@ -898,6 +943,9 @@ namespace SeaSick.World
                 pts.Clear(); pts.AddRange(pts2);
                 ps.Clear(); ps.AddRange(ps2);
             }
+            chainSpans.Add(new Vector3Int(chainPts.Count, pts.Count,
+                (!loop && !openStart ? 1 : 0) | (!loop && !openEnd ? 2 : 0)));
+            chainPts.AddRange(pts);
             // Arc length for the taper at open ends.
             float total = 0f;
             for (int n = 1; n < pts.Count; n++) total += Vector2.Distance(pts[n - 1], pts[n]);
@@ -994,6 +1042,55 @@ namespace SeaSick.World
             if (tm.HasProperty("_ShadowTint")) m.SetColor("_ShadowTint", tm.GetColor("_ShadowTint"));
             if (tm.HasProperty("_AuthoredFormLighting")) m.SetFloat("_AuthoredFormLighting", tm.GetFloat("_AuthoredFormLighting"));
         }
+
+        // --- for RoadTorches ----------------------------------------------------
+
+        internal Outpost Camp => camp;
+
+        /// Highest wear in the 3x3 cells round a point (the smoothed line
+        /// wanders up to a cell off the cells that made it).
+        internal float WearNear(Vector2 p)
+        {
+            int i = IndexOf(new Vector3(p.x, 0f, p.y));
+            if (i < 0) return 0f;
+            int x = i % Side, z = i / Side;
+            float w = 0f;
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    int nx = x + dx, nz = z + dz;
+                    if (nx < 0 || nz < 0 || nx >= Side || nz >= Side) continue;
+                    int j = nz * Side + nx;
+                    if (draw[j]) w = Mathf.Max(w, wear[j]);
+                }
+            return w;
+        }
+
+        /// Distance from a point to the drawn road's edge-free centre-lines
+        /// (plus their end/yard offsets), i.e. the sheet's raw distance.
+        internal float RoadDistance(Vector2 p)
+        {
+            float best = FarD;
+            for (int n = 0; n < segs.Count; n++)
+            {
+                Seg sg = segs[n];
+                float ex = sg.bx - sg.ax, ez = sg.bz - sg.az;
+                float ll = ex * ex + ez * ez;
+                float t = ll > 1e-6f ? Mathf.Clamp01(((p.x - sg.ax) * ex + (p.y - sg.az) * ez) / ll) : 0f;
+                float px = sg.ax + ex * t - p.x, pz = sg.az + ez * t - p.y;
+                float d = Mathf.Sqrt(px * px + pz * pz) + (sg.oa + (sg.ob - sg.oa) * t);
+                if (d < best) best = d;
+            }
+            return best;
+        }
+
+        internal bool UnderBuilding(Vector2 p)
+        {
+            int i = IndexOf(new Vector3(p.x, 0f, p.y));
+            return i >= 0 && footprint[i];
+        }
+
+        internal static float HashOf(int x, int z) => Hash(x, z);
 
         // --- dev: fast-forward wear -------------------------------------------
 

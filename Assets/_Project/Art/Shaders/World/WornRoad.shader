@@ -6,11 +6,12 @@
 // each other and nothing is blended twice, at a junction or anywhere else.
 // uv0.x is the vertex's distance (m) to the nearest SMOOTHED road
 // centre-line (negative offsets widen the fire yard, positive ones taper
-// dead ends), uv0.y the wear strength. Coverage is worked out PER PIXEL from
-// the interpolated distance plus a little world-space edge noise, so an
-// edge is a smooth curve at any zoom -- the 0.5 m lattice never shows.
-// Palette and cross-section are Astra's roads-astra-lvl1-v1 (compacted light
-// crown -> darker shoulder, soft feathered edge, 2.16 m across).
+// dead ends), uv0.y the wear strength. v3 (2026-09-27): the distance comes
+// pre-shaped (a slow width wander + a per-vertex facet, CampRoads.Shaped),
+// so the linear interpolation over the 0.5 m lattice draws Astra's faceted,
+// polygonal shoulders; per-pixel edge noise is off (`_Wobble` 0).
+// Palette and cross-section are Astra's roads-astra-lvl1-v1 exactly: worn
+// crown -> earth -> shoulder -> 0.2 m feather, 2.16 m across.
 //
 // **Never z-fights, never floats.** Each vertex is pulled TOWARD THE CAMERA
 // along its own view ray. That moves its depth and nothing else: the road
@@ -27,11 +28,13 @@ Shader "SeaSick/Worn Road"
     Properties
     {
         _Tint ("Tint", Color) = (1,1,1,1)
-        _CentreColour ("Crown colour", Color) = (0.52,0.40,0.25,1)
-        _EdgeColour ("Shoulder colour", Color) = (0.40,0.30,0.17,1)
-        _HalfWidth ("Half width incl. feather (m)", Float) = 1.05
-        _Feather ("Edge feather (m)", Float) = 0.32
-        _Wobble ("Edge noise (m)", Float) = 0.34
+        _CentreColour ("Worn centre colour", Color) = (0.69,0.60,0.46,1)
+        _EarthColour ("Earth colour", Color) = (0.64,0.55,0.40,1)
+        _EdgeColour ("Shoulder colour", Color) = (0.59,0.53,0.39,1)
+        _HalfWidth ("Half width incl. feather (m)", Float) = 1.08
+        _Feather ("Edge feather (m)", Float) = 0.2
+        _Wobble ("Per-pixel edge noise (m)", Float) = 0
+        _Patch ("Compacted patch tint (+-)", Float) = 0.09
         _GraphicLight ("Graphic light (copied from terrain)", Range(0,1)) = 0.35
         _ShadowTint ("Graphic shadow colour (copied from terrain)", Color) = (0.56,0.67,0.88,1)
         _AuthoredFormLighting ("Authored form lighting (copied from terrain)", Range(0,1)) = 0
@@ -66,7 +69,9 @@ Shader "SeaSick/Worn Road"
             CBUFFER_START(UnityPerMaterial)
                 float4 _Tint;
                 float4 _CentreColour;
+                float4 _EarthColour;
                 float4 _EdgeColour;
+                float _Patch;
                 float _HalfWidth;
                 float _Feather;
                 float _Wobble;
@@ -121,20 +126,33 @@ Shader "SeaSick/Worn Road"
 
             half4 frag(Varyings i) : SV_Target
             {
-                // Coverage from the distance to the smoothed centre-line,
-                // with irregular shoulders (two octaves of edge noise).
+                // v3 (2026-09-27, Kevin: "they don't look like the asset
+                // Astra made"): her cross-section, not a dark stripe. The
+                // distance is already faceted -- the C# side bakes a slow
+                // width wander and a per-vertex shoulder offset into it, and
+                // a 0.5 m lattice interpolates it linearly, so the iso-line
+                // IS a polygon like her shoulders. No per-pixel noise by
+                // default (`_Wobble` 0): that is what made v2 read smooth.
                 float2 xz = i.positionWS.xz;
-                float wob = (VNoise(xz * 0.55) - 0.5) + (VNoise(xz * 1.6 + 31.7) - 0.5) * 0.45;
-                float dn = i.road.x + wob * _Wobble;
-                float cover = 1.0 - smoothstep(_HalfWidth - _Feather, _HalfWidth, dn);
+                float dn = i.road.x;
+                if (_Wobble > 0) dn += ((VNoise(xz * 0.55) - 0.5) + (VNoise(xz * 1.6 + 31.7) - 0.5) * 0.45) * _Wobble;
+                float core = max(_HalfWidth - _Feather, 0.05);
+                float cover = 1.0 - smoothstep(core, _HalfWidth, dn);
                 float alpha = cover * saturate(i.road.y);
                 clip(alpha - 0.004);
 
                 float3 n = normalize(i.normalWS);
                 if (n.y < 0) n = -n;
-                float shoulder = smoothstep(0.0, 1.0, saturate((dn / max(_HalfWidth, 0.01) - 0.25) / 0.65));
-                float mottle = 0.92 + 0.16 * VNoise(xz * 0.23 + float2(17.1, -3.7));
-                float3 albedo = lerp(_CentreColour.rgb, _EdgeColour.rgb, shoulder) * mottle * _Tint.rgb;
+                // Her seven-vertex profile: worn crown at 0, earth at 0.55,
+                // shoulder at 0.88 (of a 0.88 core), feather to 1.08 --
+                // linear between, as her vertex colours interpolate.
+                float crown = core * 0.625;
+                float3 albedo = dn < crown
+                    ? lerp(_CentreColour.rgb, _EarthColour.rgb, saturate(dn / crown))
+                    : lerp(_EarthColour.rgb, _EdgeColour.rgb, saturate((dn - crown) / max(core - crown, 0.01)));
+                // Broad compacted patches (her +-9 % tint, row by row).
+                float patch = (VNoise(xz * 0.42 + float2(17.1, -3.7)) - 0.5) * 2.0;
+                albedo *= (1.0 + _Patch * patch) * _Tint.rgb;
 
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS);
                 Light light = GetMainLight(shadowCoord);
