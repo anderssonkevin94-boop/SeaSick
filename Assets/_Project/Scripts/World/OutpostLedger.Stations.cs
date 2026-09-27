@@ -125,8 +125,9 @@ namespace SeaSick.World
         /// `CampWorker.Speed` (2.6)** -- the body and the books must agree on
         /// how long a leg takes; change both together.
         public const float WalkMetresPerSecond = 2.6f;
-        /// Straight line to walked path. The ledger has no A*; bodies route
-        /// round huts and rocks (`CampPath`). A guess.
+        /// Straight line to walked path. **Unused by the books since
+        /// 2026-09-27** (legs are measured on `CampPath` through `router`,
+        /// or walked straight); kept for old callers.
         public const float PathFactor = 1.15f;
         /// Seconds per trip for picking the load up (off a store pile, a
         /// rack, a bay -- or the cut armful off the ground) and putting it
@@ -256,16 +257,19 @@ namespace SeaSick.World
             return false;
         }
 
-        /// Walked metres of one leg between pickup and drop-off.
+        /// Metres of one leg between pickup and drop-off, **for the display
+        /// estimates only** (`TripDays`). Since 2026-09-27 the straight line
+        /// -- exactly what an invisible walker with no path grid walks -- so
+        /// a forecast is never slower than the real thing without a route.
         float LegMetres(string res, HaulPlace from, int fromStation, HaulPlace to, int toStation, PendingBuild site)
         {
-            if (from == HaulPlace.Field) return SourceMetres(res) * PathFactor;
+            if (from == HaulPlace.Field) return SourceMetres(res);
             if (PlaceOf(from, fromStation, site, out var a) && PlaceOf(to, toStation, site, out var b))
             {
                 Vector3 d = b - a; d.y = 0f;
-                return d.magnitude * PathFactor;
+                return d.magnitude;
             }
-            return DefaultLegMetres * PathFactor;
+            return DefaultLegMetres;
         }
 
         static float SecondsToDays(float seconds) => seconds / Mathf.Max(0.0001f, TimeOfDay.DayLength);

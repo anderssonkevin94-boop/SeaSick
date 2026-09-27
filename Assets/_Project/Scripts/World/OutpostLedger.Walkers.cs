@@ -111,6 +111,10 @@ namespace SeaSick.World
             if (from == HaulPlace.Field) { fa = FieldPoint(res); pa = true; }
             else pa = PlaceOf(from, fromStation, site, out fa);
             bool pb = PlaceOf(to, toStation, site, out var ta);
+            // A ledger with no centre at all (a probe's): the store is the
+            // origin, which is also where `HandAt` and `FieldPoint` measure from.
+            if (!pa && from == HaulPlace.Store) { fa = Vector3.zero; pa = true; }
+            if (!pb && to == HaulPlace.Store) { ta = Vector3.zero; pb = true; }
             // An end the books cannot place (a probe's hand-written ledger):
             // `DefaultLegMetres` from the other end.
             var off = new Vector3(DefaultLegMetres, 0f, 0f);
