@@ -1,0 +1,419 @@
+/* ------------------------------------------------------------------
+ * The shipyard slot screen (mockup scratchpad shipyard/index.html,
+ * frames 1-6, Kevin approved 2026-09-27). Midnight, like Station.uss.
+ * Views in Scripts/UI/ModularYard/Slots/ (`YardPalette.Apply` loads this
+ * onto their root). Every selector is under `.ys`.
+ *
+ * Sizes are PANEL UNITS at a 390-wide reference (ShipyardSlotsPreview /
+ * ShipyardModal both scale with width), i.e. ~1 unit per iPhone point, so
+ * the mockup's CSS pixels carry over 1:1 and a 44 here is a true 44 pt.
+ * Controls the mockup drew smaller (deck tabs 36, fix 32, drawer buttons
+ * 34) are raised to 44. USS has no dashed borders: "dashed" states are a
+ * dimmer border colour instead.
+ * ------------------------------------------------------------------ */
+
+.ys .unity-label {
+    color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+    margin: 0;
+    padding: 0;
+    white-space: nowrap;
+}
+.ys .ys-black, .ys .ys-ttl-b, .ys .ys-sec-title, .ys .ys-sn, .ys .ys-mn, .ys .ys-dh-title,
+.ys .ys-tab-label, .ys .ys-tot-v, .ys .ys-tot-k, .ys .ys-cnt-n, .ys .ys-strip-label,
+.ys .ys-have, .ys .ys-rl-text, .ys .ys-empty-plus, .ys .ys-new, .ys .ys-cell-swap,
+.ys .ys-bowh > .unity-label, .ys .ys-plus-dot, .ys .ys-strip-note, .ys .ys-strip-raise {
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+
+/* buttons: strip the runtime theme, each class below paints its own */
+.ys .unity-button {
+    margin: 0;
+    padding: 0;
+    border-width: 0;
+    border-radius: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+    -unity-text-align: middle-center;
+}
+.ys .unity-button:disabled { opacity: 1; }
+
+.ys-glyph { -unity-background-scale-mode: scale-to-fit; }
+
+/* --- the screen frame (preview / adapter) ----------------------------- */
+
+.ys-screen {
+    flex-grow: 1;
+    flex-direction: column;
+    background-color: rgb(15, 27, 37);
+    padding: 2px 12px 12px 12px;
+    width: 100%;
+    max-width: 440px;
+    align-self: center;
+}
+.ys-screen > * { flex-shrink: 0; margin-bottom: 7px; }
+.ys-screen > .ys-spacer { flex-grow: 1; flex-shrink: 1; margin-bottom: 0; }
+.ys-screen > .ys-btns { margin-bottom: 0; }
+
+.ys-top { flex-direction: row; align-items: center; }
+.ys-ttl { flex-grow: 1; flex-shrink: 1; min-width: 0; margin: 0 8px; }
+.ys .ys-ttl-b { font-size: 19px; }
+.ys .ys-ttl-s { font-size: 12.5px; color: rgb(166, 186, 198); }
+
+.ys .ys-square {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    border-radius: 13px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    align-items: center;
+    justify-content: center;
+}
+.ys .ys-square:hover { background-color: rgb(26, 48, 64); }
+
+.ys-seg {
+    flex-direction: row;
+    padding: 3px;
+    background-color: rgb(11, 22, 32);
+    border-width: 2px;
+    border-color: rgb(30, 51, 68);
+    border-radius: 14px;
+}
+.ys .ys-seg-btn { flex-grow: 1; flex-basis: 0; height: 40px; border-radius: 10px; font-size: 14px; color: rgb(166, 186, 198); margin-right: 3px; }
+.ys .ys-seg-btn:hover { background-color: rgb(26, 48, 64); }
+.ys .ys-seg-btn--on, .ys .ys-seg-btn--on:hover { background-color: rgb(164, 210, 232); color: rgb(11, 23, 32); }
+
+/* --- the strip ---------------------------------------------------------- */
+
+.ys-strip {
+    height: 150px;
+    border-width: 2px;
+    border-color: rgb(30, 51, 68);
+    border-radius: 16px;
+    overflow: hidden;
+    background-color: rgb(20, 42, 56);
+}
+.ys-strip-layer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.ys-strip-hit { position: absolute; top: 0; bottom: 0; }
+.ys .ys-strip-label {
+    position: absolute;
+    bottom: 3px;
+    height: 18px;
+    font-size: 12.5px;
+    color: rgb(195, 214, 224);
+    -unity-text-align: middle-center;
+}
+.ys .ys-strip-label--on { color: rgb(164, 210, 232); }
+.ys .ys-strip-raise { position: absolute; font-size: 11px; color: rgb(164, 210, 232); -unity-text-align: middle-center; }
+.ys .ys-strip-note { position: absolute; top: 3px; left: 0; right: 0; font-size: 11.5px; color: rgb(159, 224, 194); -unity-text-align: middle-center; }
+
+.ys-plus {
+    position: absolute;
+    width: 44px;
+    height: 44px;
+    margin-left: -22px;
+    margin-top: -22px;
+    align-items: center;
+    justify-content: center;
+}
+.ys .ys-plus-dot {
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    background-color: rgb(15, 27, 37);
+    border-width: 2px;
+    border-color: rgb(164, 210, 232);
+    color: rgb(164, 210, 232);
+    font-size: 13px;
+    -unity-text-align: middle-center;
+}
+.ys-plus--locked { opacity: 0.4; }
+
+/* --- the section card --------------------------------------------------- */
+
+.ys-sec {
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(30, 51, 68);
+    border-radius: 16px;
+    padding: 7px 10px 8px 10px;
+    flex-direction: column;
+}
+.ys-sec-head { flex-direction: row; align-items: center; }
+.ys .ys-sec-title { font-size: 16px; }
+.ys .ys-sec-sub { font-size: 12.5px; color: rgb(166, 186, 198); margin-left: 6px; flex-grow: 1; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
+.ys-cnt { flex-direction: row; flex-shrink: 0; }
+.ys-cnt-chip {
+    flex-direction: row;
+    align-items: center;
+    height: 26px;
+    padding: 0 7px;
+    border-radius: 9px;
+    background-color: rgb(14, 26, 36);
+    margin-left: 5px;
+}
+.ys .ys-cnt-n { font-size: 13px; margin-left: 3px; }
+
+.ys-tabs { flex-direction: row; margin-top: 7px; margin-right: -4px; }
+.ys-tab {
+    flex-grow: 1;
+    flex-basis: 0;
+    height: 44px;
+    border-radius: 10px;
+    background-color: rgb(14, 26, 36);
+    border-width: 2px;
+    border-color: rgb(30, 51, 68);
+    align-items: center;
+    justify-content: center;
+    margin-right: 4px;
+}
+.ys .ys-tab-label { font-size: 13px; color: rgb(166, 186, 198); }
+.ys .ys-tab-small { font-size: 10.5px; color: rgb(110, 132, 148); }
+.ys .ys-tab--on { background-color: rgb(26, 48, 64); border-color: rgb(164, 210, 232); }
+.ys .ys-tab--on .ys-tab-label { color: rgb(232, 242, 246); }
+.ys .ys-tab--add { background-color: rgba(0, 0, 0, 0); border-color: rgb(44, 74, 94); }
+.ys .ys-tab--add .ys-tab-label { color: rgb(164, 210, 232); }
+.ys .ys-tab--hot { background-color: rgb(26, 48, 64); border-color: rgb(164, 210, 232); }
+.ys .ys-tab--lock { background-color: rgba(0, 0, 0, 0); border-color: rgb(30, 51, 68); }
+.ys .ys-tab--lock .ys-tab-label { color: rgb(110, 132, 148); }
+.ys .ys-tab--free { border-color: rgb(159, 224, 194); }
+.ys .ys-tab--free .ys-tab-label, .ys .ys-tab--free .ys-tab-small { color: rgb(159, 224, 194); }
+.ys .ys-tab.ys-drop-hover { border-color: rgb(164, 210, 232); background-color: rgb(26, 48, 64); }
+
+.ys-plan { flex-direction: column; margin-top: 6px; }
+.ys-bowh { flex-direction: row; justify-content: space-between; margin-left: 31px; margin-bottom: 1px; }
+.ys .ys-bowh > .unity-label { font-size: 11px; color: rgb(110, 132, 148); letter-spacing: 1px; }
+.ys-plan-row { flex-direction: row; margin-top: 5px; align-items: stretch; }
+.ys-rl { width: 26px; align-items: center; justify-content: center; flex-shrink: 0; }
+.ys .ys-rl-text { font-size: 10.5px; color: rgb(110, 132, 148); letter-spacing: 1px; flex-shrink: 0; }
+.ys-cell-gap { flex-grow: 1; flex-basis: 0; margin-left: 5px; }
+
+.ys-cell {
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    height: 50px;
+    border-radius: 12px;
+    background-color: rgb(42, 29, 18);
+    border-width: 2px;
+    border-color: rgb(74, 53, 34);
+    flex-direction: row;
+    align-items: center;
+    padding: 0 8px;
+    margin-left: 5px;
+}
+.ys-cell--empty { background-color: rgba(42, 29, 18, 0.35); border-color: rgb(90, 68, 48); justify-content: center; }
+.ys .ys-empty-plus { font-size: 22px; color: rgb(201, 171, 126); }
+.ys .ys-empty-small { font-size: 11.5px; color: rgb(168, 140, 102); margin-left: 4px; }
+.ys-cell--locked { opacity: 0.35; }
+.ys-cell--sel { border-width: 3px; border-color: rgb(164, 210, 232); padding: 0 7px; }
+.ys-notch { position: absolute; left: -5px; top: 12px; width: 6px; height: 22px; border-radius: 3px; background-color: rgb(201, 147, 57); }
+.ys .ys-new { position: absolute; top: 1px; left: 8px; font-size: 9.5px; color: rgb(240, 195, 106); letter-spacing: 0.6px; }
+
+.ys-face { flex-direction: row; align-items: center; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.ys-face-words { flex-direction: column; flex-shrink: 1; min-width: 0; margin-left: 7px; }
+.ys-si {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background-color: rgba(0, 0, 0, 0.28);
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.ys .ys-sn { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; }
+.ys .ys-ss { font-size: 11.5px; color: rgb(216, 195, 162); overflow: hidden; text-overflow: ellipsis; }
+
+.ys-del { position: absolute; top: -14px; right: -14px; width: 44px; height: 44px; align-items: center; justify-content: center; }
+.ys .ys-del-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 11px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    font-size: 11px;
+    color: rgb(166, 186, 198);
+    -unity-text-align: middle-center;
+}
+
+/* drag states (DragController adds ys-drop-ok / -no / -hover, ys-lifted, ys-pressing) */
+.ys .ys-cell-swap {
+    display: none;
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    border-radius: 10px;
+    background-color: rgb(24, 58, 47);
+    color: rgb(159, 224, 194);
+    font-size: 13px;
+    padding-left: 10px;
+    -unity-text-align: middle-left;
+    white-space: normal;
+}
+.ys .ys-cell--filled.ys-drop-ok .ys-cell-swap { display: flex; }
+.ys .ys-cell.ys-drop-ok { border-color: rgb(159, 224, 194); background-color: rgba(31, 74, 60, 0.55); }
+.ys .ys-cell.ys-drop-ok .ys-empty-plus, .ys .ys-cell.ys-drop-ok .ys-empty-small { color: rgb(159, 224, 194); }
+.ys .ys-cell.ys-drop-no { opacity: 0.35; }
+.ys .ys-cell.ys-drop-hover { border-width: 3px; background-color: rgba(31, 74, 60, 0.9); }
+.ys .ys-cell.ys-lifted { opacity: 0.35; }
+.ys .ys-cell.ys-pressing { scale: 0.96 0.96; transition-property: scale; transition-duration: 0.3s; }
+
+.ys-ghost-card {
+    width: 150px;
+    height: 58px;
+    border-radius: 12px;
+    background-color: rgb(58, 40, 24);
+    border-width: 3px;
+    border-color: rgb(164, 210, 232);
+    flex-direction: row;
+    align-items: center;
+    padding: 0 9px;
+}
+
+.ys-bin {
+    height: 50px;
+    border-radius: 14px;
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+.ys .ys-bin > .unity-label { font-size: 14px; color: rgb(166, 186, 198); -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf"); }
+.ys .ys-bin.ys-drop-hover { border-color: rgb(159, 224, 194); background-color: rgba(31, 74, 60, 0.4); }
+.ys .ys-bin.ys-drop-hover > .unity-label { color: rgb(159, 224, 194); }
+
+/* --- totals, blocker, the pinned row ------------------------------------ */
+
+.ys-tot { flex-direction: row; margin-right: -5px; }
+.ys-tot-tile {
+    flex-grow: 1;
+    flex-basis: 0;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(30, 51, 68);
+    border-radius: 12px;
+    padding: 4px 6px;
+    margin-right: 5px;
+}
+.ys .ys-tot-k { font-size: 10.5px; letter-spacing: 1px; color: rgb(127, 151, 166); }
+.ys-tot-row { flex-direction: row; align-items: flex-end; }
+.ys .ys-tot-v { font-size: 14px; }
+.ys .ys-tot-of { font-size: 12px; color: rgb(110, 132, 148); margin-bottom: 1px; }
+.ys .ys-tone-good { color: rgb(159, 224, 194); }
+.ys .ys-tone-warn { color: rgb(240, 195, 106); }
+.ys .ys-tone-bad { color: rgb(246, 146, 128); }
+
+.ys-warn {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgb(74, 35, 32);
+    border-radius: 12px;
+    padding: 3px 3px 3px 10px;
+}
+.ys .ys-warn-text { flex-grow: 1; flex-shrink: 1; font-size: 13px; color: rgb(255, 214, 207); white-space: normal; }
+.ys-warn--amber { background-color: rgb(74, 58, 26); }
+.ys .ys-warn--amber .ys-warn-text { color: rgb(255, 231, 184); }
+.ys .ys-fix {
+    flex-shrink: 0;
+    height: 44px;
+    padding: 0 12px;
+    margin-left: 8px;
+    border-radius: 10px;
+    background-color: rgba(0, 0, 0, 0.25);
+    border-width: 2px;
+    border-color: rgba(255, 255, 255, 0.18);
+    font-size: 13px;
+}
+.ys .ys-fix:hover { background-color: rgba(0, 0, 0, 0.4); }
+
+.ys-btns { flex-direction: row; }
+.ys .ys-btn2 {
+    flex-grow: 1;
+    flex-basis: 0;
+    height: 54px;
+    margin-right: 7px;
+    border-radius: 14px;
+    background-color: rgb(26, 48, 64);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    font-size: 15px;
+}
+.ys .ys-btn2:hover { background-color: rgb(33, 60, 80); }
+.ys .ys-cta {
+    flex-grow: 1.35;
+    flex-basis: 0;
+    height: 54px;
+    border-radius: 14px;
+    background-color: rgb(164, 210, 232);
+    color: rgb(11, 23, 32);
+    font-size: 16.5px;
+}
+.ys .ys-cta:hover { background-color: rgb(184, 224, 242); }
+.ys .ys-cta--moss, .ys .ys-cta--moss:hover { background-color: rgb(159, 224, 194); }
+.ys .ys-cta--off, .ys .ys-cta--off:hover {
+    background-color: rgb(26, 48, 64);
+    color: rgb(110, 132, 148);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+}
+
+/* --- the drawer ----------------------------------------------------------- */
+
+.ys-drawer-layer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+.ys-dim { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background-color: rgba(3, 8, 12, 0.62); }
+.ys-drawer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgb(15, 27, 37);
+    border-top-left-radius: 24px;
+    border-top-right-radius: 24px;
+    border-top-width: 2px;
+    border-color: rgb(44, 74, 94);
+    padding: 10px 12px 14px 12px;
+    flex-direction: column;
+}
+.ys-grab { width: 40px; height: 5px; border-radius: 3px; background-color: rgb(44, 74, 94); align-self: center; margin-bottom: 8px; }
+.ys-dh { flex-direction: row; align-items: center; margin-bottom: 8px; }
+.ys-dh-words { flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.ys .ys-dh-title { font-size: 17px; }
+.ys .ys-dh-sub { font-size: 12.5px; color: rgb(166, 186, 198); }
+.ys-mods { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
+.ys-mod {
+    width: 49%;
+    min-height: 112px;
+    background-color: rgb(19, 34, 46);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    border-radius: 14px;
+    padding: 8px;
+    margin-bottom: 7px;
+    flex-direction: column;
+}
+.ys-mod--on { border-width: 3px; border-color: rgb(164, 210, 232); padding: 7px; }
+.ys-mod--lock { background-color: rgba(0, 0, 0, 0); border-color: rgb(30, 51, 68); }
+.ys .ys-mod--lock .ys-mn { color: rgb(166, 186, 198); }
+.ys-mod--no { opacity: 0.5; }
+.ys-mh { flex-direction: row; align-items: center; flex-grow: 1; }
+.ys-mi { width: 36px; height: 36px; border-radius: 10px; background-color: rgb(14, 26, 36); align-items: center; justify-content: center; flex-shrink: 0; }
+.ys .ys-mn { font-size: 14.5px; }
+.ys .ys-ms { font-size: 12px; color: rgb(166, 186, 198); white-space: normal; }
+.ys .ys-have { font-size: 12px; color: rgb(159, 224, 194); margin: 4px 0; }
+.ys .ys-have--zero { color: rgb(240, 195, 106); }
+.ys .ys-mb {
+    height: 44px;
+    border-radius: 10px;
+    background-color: rgb(26, 48, 64);
+    border-width: 2px;
+    border-color: rgb(44, 74, 94);
+    font-size: 13px;
+}
+.ys .ys-mb:hover { background-color: rgb(33, 60, 80); }
+.ys .ys-mb--pri, .ys .ys-mb--pri:hover { background-color: rgb(164, 210, 232); border-color: rgb(164, 210, 232); color: rgb(11, 23, 32); }
+.ys .ys-mod--lock .ys-mb, .ys .ys-mod--no .ys-mb { background-color: rgba(0, 0, 0, 0); color: rgb(110, 132, 148); }
+.ys .ys-hint { background-color: rgb(26, 48, 64); border-radius: 12px; padding: 7px 10px; font-size: 13px; color: rgb(166, 186, 198); white-space: normal; }
