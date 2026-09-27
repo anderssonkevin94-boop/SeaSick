@@ -15,11 +15,18 @@ namespace SeaSick.UI.ModularYard
         readonly Material lineMaterial;
         readonly LineRenderer[] lines = new LineRenderer[12];
         RenderTexture texture;
-        Bounds bounds;
-        Bounds highlightBounds;
+        Bounds bounds;          // root-LOCAL (the ship's own frame), see Render
+        Bounds highlightBounds; // root-LOCAL
         bool hasHighlight;
         bool focusHighlight;
-        float yaw = -38f, pitch = 34f, zoom = 1f;
+        // yaw is RELATIVE to the ship's heading (root's yaw), not world:
+        // 0 = looking along the bow from astern, +90 = from port... so the
+        // same numbers frame the same shot at any slip, any island.
+        float yaw = DefaultYaw, pitch = DefaultPitch, zoom = 1f;
+        const float DefaultYaw = 40f, DefaultPitch = 32f;
+        bool staged;        // root is in the world (dry dock), terrain can occlude
+        bool userMoved;     // the player orbited since the last auto-framing
+        bool viewChosen;
         public Texture Texture => texture;
         public string Error { get; private set; }
         public event Action TextureChanged;
@@ -80,14 +87,18 @@ namespace SeaSick.UI.ModularYard
             if (slip != null)
             {
                 var anchor = slip.PreviewAnchorFor(bowReachM);
+                if (!staged || (root.transform.position - anchor.position).sqrMagnitude > .01f) viewChosen = false;
                 root.transform.SetPositionAndRotation(anchor.position, anchor.rotation);
                 camera.cullingMask = ~0;
+                staged = true;
             }
             else
             {
+                if (staged) viewChosen = false;
                 root.transform.position = new Vector3(0, 0, -1000);
                 root.transform.rotation = Quaternion.identity;
                 camera.cullingMask = 1 << 31;
+                staged = false;
             }
         }
 
@@ -119,9 +130,20 @@ namespace SeaSick.UI.ModularYard
             // gantry (DryDockSlip.PreviewAnchorFor). Bow = root-local +Z.
             var slipNow = SeaSick.World.DryDockSlip.HomeSlip;
             if (slipNow != null) StageAt(slipNow, BowReach());
+            // Bounds in root-LOCAL space: a world AABB of a ship on a slip
+            // at 45 deg is ~40% too big and shrank her in the frame.
             bool first = true;
+            var toRoot = root.transform.worldToLocalMatrix;
             foreach (var r in view.GetComponentsInChildren<Renderer>())
-            { if (first) { bounds = r.bounds; first = false; } else bounds.Encapsulate(r.bounds); }
+            {
+                if (!r.enabled || !r.gameObject.activeInHierarchy) continue;
+                var lb = r.localBounds; var m = toRoot * r.localToWorldMatrix;
+                for (int i = 0; i < 8; i++)
+                {
+                    var c = m.MultiplyPoint3x4(lb.center + Vector3.Scale(lb.extents, Corner(i)));
+                    if (first) { bounds = new Bounds(c, Vector3.zero); first = false; } else bounds.Encapsulate(c);
+                }
+            }
             foreach (var t in root.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = 31;
             outline.SetActive(false);
             hasHighlight = false;
@@ -154,16 +176,19 @@ namespace SeaSick.UI.ModularYard
                 // dock stages `root` ROTATED (bow to the head end) and, from
                 // 2026-09-26, slid along the slip, adding only its position
                 // framed the camera on open water beside the ship.
-                var wb = new Bounds(root.transform.TransformPoint(corners[0]), Vector3.zero);
-                for (int i = 1; i < 8; i++) wb.Encapsulate(root.transform.TransformPoint(corners[i]));
-                highlightBounds = wb;
+                // (2026-09-27: `Render` now frames in root-LOCAL space and
+                // transforms itself, so the local box is exactly right.)
+                highlightBounds = hb;
                 hasHighlight = true;
                 break;
             }
+            if (!viewChosen || !userMoved) ChooseView();
             Render();
         }
 
         AssemblyResult lastResult;
+
+        static Vector3 Corner(int i) => new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1);
 
         /// Where a gun slot sits along its own section, 0 = aft end .. 1 =
         /// fore end, for the Interior cutaway's markers. Both numbers come
@@ -225,27 +250,127 @@ namespace SeaSick.UI.ModularYard
             texture.Create(); camera.targetTexture = texture; TextureChanged?.Invoke(); Render();
         }
 
-        public void Orbit(Vector2 delta) { yaw -= delta.x * .35f; pitch = Mathf.Clamp(pitch + delta.y * .25f, 10, 85); Render(); }
+        /// Drag orbit, clamped so a drag can never swing the view behind the
+        /// island: a step that puts more of the hull behind land than the
+        /// current view is dropped (pitch-only / yaw-only fallbacks keep the
+        /// drag feeling alive along the free axis).
+        public void Orbit(Vector2 delta)
+        {
+            float ny = yaw - delta.x * .35f, np = Mathf.Clamp(pitch + delta.y * .25f, 10, 85);
+            if (staged)
+            {
+                int now = NearHits(yaw, pitch);
+                if (NearHits(ny, np) > now)
+                {
+                    if (NearHits(yaw, np) <= now) ny = yaw;
+                    else if (NearHits(ny, pitch) <= now) np = pitch;
+                    else { ny = yaw; np = pitch; }
+                }
+            }
+            yaw = ny; pitch = np; userMoved = true; Render();
+        }
         public void Zoom(float factor) { zoom = Mathf.Clamp(zoom * factor, .65f, 1.35f); Render(); }
-        public void SetView(bool top) { yaw = top ? 0 : -38; pitch = top ? 89.9f : 34; zoom = 1; Render(); }
+
+        /// Top: straight down, ship lying ALONG the wide preview (bow to the
+        /// right). Three-quarter (the cube button): back to the auto framing.
+        public void SetView(bool top)
+        {
+            zoom = 1; userMoved = false;
+            if (top) { yaw = 90f; pitch = 89.9f; userMoved = true; } else ChooseView();
+            Render();
+        }
+
+        // ---- framing -------------------------------------------------------
+        //
+        // 2026-09-27 (Kevin's phone): since the preview is staged IN the
+        // world dry dock (culling mask = everything), the old fixed WORLD
+        // yaw (-38) with the camera parked 65 m back put the island's hill
+        // between camera and ship at most slips -- the preview opened on a
+        // green cliff with a sliver of hull. Now: (1) yaw is relative to the
+        // ship; (2) the azimuth is picked from candidates by raycasting the
+        // hull's sample points toward the camera against the Land layer,
+        // preferring the seaward (astern) quarters; (3) the camera sits just
+        // outside the ship's bounding sphere -- it is ORTHOGRAPHIC, so the
+        // distance changes nothing in the framing, but anything farther than
+        // that (the hill) is now behind the camera and cannot draw over the
+        // ship. Terrain stays visible as backdrop; no layer culling needed.
+
+        Bounds Frame => focusHighlight && hasHighlight ? highlightBounds : bounds;
+        float ShipYaw => root.transform.eulerAngles.y;
+        Quaternion ViewRotation(float y, float p) => Quaternion.Euler(p, ShipYaw + y, 0);
+        /// Just outside the WHOLE ship's bounding sphere as seen from the
+        /// framed box's centre (a section close-up must not near-clip the
+        /// rest of the hull).
+        float CameraDistance(Bounds f) => Vector3.Distance(f.center, bounds.center) + bounds.extents.magnitude + 1.5f;
+
+        static readonly float[] CandidateYaws = { 40, -40, 60, -60, 25, -25, 80, -80, 105, -105, 130, -130, 155, -155, 180, 0 };
+        static readonly float[] CandidatePitches = { DefaultPitch, 48f, 65f };
+
+        void ChooseView()
+        {
+            viewChosen = true;
+            yaw = DefaultYaw; pitch = DefaultPitch;
+            if (!staged || bounds.size.sqrMagnitude < .001f) return;
+            int best = int.MaxValue;
+            foreach (float p in CandidatePitches)
+                foreach (float y in CandidateYaws)
+                {
+                    // near hits hide the ship (weight 100); far hits only
+                    // mean the backdrop column crosses land -- a tiebreak
+                    // that leans the view out to sea.
+                    int score = NearHits(y, p) * 100 + FarHits(y, p);
+                    if (score < best) { best = score; yaw = y; pitch = p; }
+                    if (best == 0) return;
+                }
+        }
+
+        const int LandMaskFallback = 1 << 8;
+        static int LandMask
+        {
+            get { int i = SeaSick.Terrain.LandLayer.Index; return i > 0 ? 1 << i : LandMaskFallback; }
+        }
+
+        int NearHits(float y, float p) => Hits(y, p, CameraDistance(bounds));
+        int FarHits(float y, float p) => Hits(y, p, 80f);
+
+        /// Hull sample points (box corners pulled 15% in, centre, deck
+        /// centre) that land blocks on their way to a camera at yaw/pitch.
+        int Hits(float y, float p, float range)
+        {
+            if (!staged) return 0;
+            var t = root.transform;
+            Vector3 toCam = -(ViewRotation(y, p) * Vector3.forward);
+            int hits = 0, mask = LandMask;
+            for (int i = 0; i < 10; i++)
+            {
+                Vector3 local = i < 8 ? bounds.center + Vector3.Scale(bounds.extents * .85f, Corner(i))
+                    : bounds.center + (i == 9 ? Vector3.up * bounds.extents.y * .85f : Vector3.zero);
+                if (Physics.Raycast(t.TransformPoint(local), toCam, range, mask, QueryTriggerInteraction.Ignore)) hits++;
+            }
+            return hits;
+        }
 
         public void Render()
         {
             if (texture == null || bounds.size.sqrMagnitude < .001f) return;
-            var frame = focusHighlight && hasHighlight ? highlightBounds : bounds;
-            var rotation = Quaternion.Euler(pitch, yaw, 0);
+            var frame = Frame;
+            var t = root.transform;
+            var rotation = ViewRotation(yaw, pitch);
+            float dist = CameraDistance(frame);
             camera.transform.rotation = rotation;
-            camera.transform.position = frame.center - rotation * Vector3.forward * 65;
+            camera.transform.position = t.TransformPoint(frame.center) - rotation * Vector3.forward * dist;
+            camera.nearClipPlane = .05f;
+            camera.farClipPlane = dist + 400f; // world behind the ship still draws as backdrop
             float halfX = 0, halfY = 0;
+            var inv = Quaternion.Inverse(rotation);
             for (int i = 0; i < 8; i++)
             {
-                Vector3 offset = new Vector3((i & 1) == 0 ? -frame.extents.x : frame.extents.x,
-                    (i & 2) == 0 ? -frame.extents.y : frame.extents.y, (i & 4) == 0 ? -frame.extents.z : frame.extents.z);
-                var p = Quaternion.Inverse(rotation) * offset;
+                var offset = t.rotation * Vector3.Scale(frame.extents, Corner(i));
+                var p = inv * offset;
                 halfX = Mathf.Max(halfX, Mathf.Abs(p.x)); halfY = Mathf.Max(halfY, Mathf.Abs(p.y));
             }
             camera.aspect = (float)texture.width / texture.height;
-            camera.orthographicSize = Mathf.Max(halfY, halfX / camera.aspect) * 1.18f / zoom;
+            camera.orthographicSize = Mathf.Max(halfY, halfX / camera.aspect) * 1.12f / zoom;
             camera.Render();
         }
 
