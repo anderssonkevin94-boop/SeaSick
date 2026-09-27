@@ -3976,7 +3976,13 @@ namespace SeaSick.World
 
             Vector3 p = at;
             p.y = hi;
-            var go = BuildingFactory.Raise(plan, transform, p, facing, hi - lo);
+            // A wall tower's real ground sampler, so the factory can plant a
+            // stilt under whichever corner the fixed-length kit posts do not
+            // reach -- a free-standing watchtower never needs it (it never
+            // got past `CanPlace`'s ordinary slope limit to begin with).
+            bool isWallTower = IsTowerPlan(plan) && OnWallNode(at);
+            var go = BuildingFactory.Raise(plan, transform, p, facing, hi - lo,
+                isWallTower ? (System.Func<Vector3, float>)GroundAt : null);
             var b = go.GetComponent<Building>();
             built.Add(b);
             Terrain.SceneryGround.ClearFootprintNear(p, facing, plan.footprint, 1f);
@@ -4216,8 +4222,16 @@ namespace SeaSick.World
             }
 
             float len = plan.footprint.x, wid = plan.footprint.y;
-            if (!Corners(at, Quaternion.Euler(0f, yaw, 0f), len, wid, out lo, out hi,
-                    out string footing))
+            // **A tower ON the wall stands wherever the wall itself may run**
+            // (Kevin, 2026-09-27, "yes to the watchtower plan"): the wall's
+            // own line has no across-slope limit at all -- `CanPlaceWall`
+            // only tests the slope ALONG the run, never across it -- so a
+            // footprint test that refuses the steep shoulder the palisade
+            // already stands on is refusing the wrong rule. Only a
+            // FREE-STANDING watchtower keeps the ordinary building limit.
+            bool isWallTower = IsTowerPlan(plan) && OnWallNode(at);
+            if (!Corners(at, Quaternion.Euler(0f, yaw, 0f), len, wid, isWallTower,
+                    out lo, out hi, out string footing))
             {
                 // The corner test knows which of the two it tripped on and
                 // by how much; guessing from the CENTRE's height (what this
@@ -4229,7 +4243,7 @@ namespace SeaSick.World
 
             float halfDiag = 0.5f * Mathf.Sqrt(len * len + wid * wid);
             // A tower ON the wall is not refused by the wall it joins.
-            wallTowerNode = IsTowerPlan(plan) && OnWallNode(at) ? at : (Vector3?)null;
+            wallTowerNode = isWallTower ? at : (Vector3?)null;
             bool clear = Clear(at, halfDiag, out string blocked);
             wallTowerNode = null;
             if (!clear) { why = blocked; return false; }
@@ -5116,7 +5130,7 @@ namespace SeaSick.World
         /// as a whole.
         bool Corners(Vector3 p, Quaternion facing, float len, float wid,
             out float lo, out float hi)
-            => Corners(p, facing, len, wid, out lo, out hi, out _);
+            => Corners(p, facing, len, wid, false, out lo, out hi, out _);
 
         /// **The steepest ground a building will stand on, degrees.**
         ///
@@ -5140,7 +5154,12 @@ namespace SeaSick.World
         /// measured in.
         public static float BuildSlope => Mathf.Tan(BuildSlopeDegrees * Mathf.Deg2Rad);
 
-        bool Corners(Vector3 p, Quaternion facing, float len, float wid,
+        /// `relaxSlope`: true for a watchtower siting onto a wall node --
+        /// skips the across-footprint steepness refusal (a wall may run
+        /// wherever it likes; a tower joined to it is part of the same
+        /// line) while still keeping the beach test. False for everything
+        /// else, including a free-standing watchtower.
+        bool Corners(Vector3 p, Quaternion facing, float len, float wid, bool relaxSlope,
             out float lo, out float hi, out string fail)
         {
             lo = float.MaxValue; hi = float.MinValue;
@@ -5160,7 +5179,7 @@ namespace SeaSick.World
             }
             float span = Mathf.Sqrt(len * len + wid * wid);
             float slope = (hi - lo) / span;
-            if (slope > BuildSlope)
+            if (!relaxSlope && slope > BuildSlope)
             {
                 float deg = Mathf.Atan(slope) * Mathf.Rad2Deg;
                 fail = $"too steep -- {deg:F0}° across it, and {BuildSlopeDegrees:F0}° is the limit";

@@ -143,8 +143,13 @@ namespace SeaSick.UI
         float heldYaw;
 
         /// What the ghost is facing right now. A pier faces the sea and
-        /// nothing the player does turns it -- see `Outpost.SnapPier`.
-        public float Yaw => (IsPier || IsDryDock) ? snappedYaw : heldYaw + turns * TurnStep;
+        /// nothing the player does turns it -- see `Outpost.SnapPier`. A
+        /// watchtower snapped onto the wall is the same idea (2026-09-27):
+        /// it is part of the wall now, so it squares to the run rather than
+        /// to whatever `R` last left it at -- see `Outpost.WallTowerYaw`.
+        public float Yaw => (IsPier || IsDryDock) ? snappedYaw
+            : onWall ? outpost.WallTowerYaw(at)
+            : heldYaw + turns * TurnStep;
 
         bool IsPier => plan.kind == BuildKind.Pier;
 

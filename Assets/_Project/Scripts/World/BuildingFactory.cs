@@ -43,7 +43,8 @@ namespace SeaSick.World
         /// lowest. Without that it either floats at one corner or is buried
         /// at another, and on this terrain it is always one of the two.
         public static GameObject Raise(BuildPlan plan, Transform parent,
-            Vector3 floorAt, Quaternion facing, float footing)
+            Vector3 floorAt, Quaternion facing, float footing,
+            System.Func<Vector3, float> groundAt = null)
         {
             float len = plan.footprint.x;     // along the ridge
             float wid = plan.footprint.y;     // across it
@@ -78,6 +79,13 @@ namespace SeaSick.World
                 // which he accepted. The extruded fallbacks below still pour
                 // their own footing; they are what a missing model gets.
                 root.transform.position -= new Vector3(0f, Mathf.Max(0f, footing) * SinkIntoSlope, 0f);
+                // **A wall tower's real legs (2026-09-27).** The kit's four
+                // posts are a fixed length, built for a plot that is merely
+                // uneven; sited on a steep wall shoulder the sink above can
+                // leave real air under the downhill corners. `groundAt` is
+                // only ever passed for a tower joined to the wall.
+                if (plan.id == OutpostLedger.WatchtowerId && groundAt != null)
+                    TowerLegs(root.transform, plan, groundAt);
                 // The kit's fire is a ring of stones and nothing else. The
                 // LIGHT is the whole reason a camp reads from the water at
                 // night, so it is added whatever the geometry came from.
@@ -673,6 +681,41 @@ namespace SeaSick.World
         /// down by (1 = sit on the lowest corner, 0 = the old highest-corner
         /// perch). Kit and extruded buildings are unaffected.
         const float SinkIntoSlope = 0.8f;
+
+        /// **A stilt under whichever corner of a wall tower the kit's own
+        /// (fixed-length) posts do not reach.** `root` already sits at its
+        /// final, post-sink position by the time this runs, so local y = 0
+        /// is the model's own footing line; anywhere `groundAt` reads lower
+        /// than that by more than the kit's own small stone footing
+        /// (`watchtower-astra-lvl1-v2`'s README: "small stone footings")
+        /// gets a matching timber post filling the gap down to the real
+        /// ground, embedded a little so it never floats above it. The
+        /// corner that is already close to the ground -- typically the
+        /// uphill two -- gets nothing, which is Kevin's accepted clipping.
+        static void TowerLegs(Transform root, BuildPlan plan, System.Func<Vector3, float> groundAt)
+        {
+            const float KitFootingReach = 0.5f;
+            const float Embed = 0.2f;
+            float len = plan.footprint.x, wid = plan.footprint.y;
+            // A touch in from the true corner -- near where the kit's own
+            // posts stand, not out past the platform's edge.
+            float hx = len * 0.5f - 0.3f;
+            float hz = wid * 0.5f - 0.3f;
+            var timber = Mat("towerLeg", new Color(0.30f, 0.22f, 0.14f));
+            for (int sx = -1; sx <= 1; sx += 2)
+                for (int sz = -1; sz <= 1; sz += 2)
+                {
+                    Vector3 local = new Vector3(sx * hx, 0f, sz * hz);
+                    Vector3 world = root.TransformPoint(local);
+                    float ground = groundAt(world);
+                    float drop = root.position.y - ground;
+                    if (drop <= KitFootingReach) continue;
+                    float stiltLen = drop - KitFootingReach + Embed;
+                    var stilt = Box(root, timber, new Vector3(0.22f, stiltLen, 0.22f),
+                        new Vector3(local.x, -stiltLen * 0.5f, local.z));
+                    stilt.name = "TowerLeg";
+                }
+        }
 
         static void Footing(Transform root, BuildPlan plan, float footing)
         {

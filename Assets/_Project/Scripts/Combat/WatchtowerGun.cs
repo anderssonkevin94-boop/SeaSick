@@ -16,6 +16,12 @@ namespace SeaSick.Combat
     {
         public static readonly List<WatchtowerGun> All = new List<WatchtowerGun>();
 
+        /// The kit's own walking-surface height, local to the tower's root
+        /// (`watchtower-astra-lvl1-v2`'s README: "walking surface remains
+        /// 4.61 m high"). Not `plan.ridge` (4.65, the OVERALL height) --
+        /// the gun stands on the deck, not on the rail post above it.
+        const float DeckHeight = 4.61f;
+
         [SerializeField] int hitPoints = 6;
         [SerializeField] float reload = 4f;
         [SerializeField] float range = 90f;
@@ -158,7 +164,17 @@ namespace SeaSick.Combat
 
             var pivot = new GameObject("GunPivot");
             pivot.transform.SetParent(transform, false);
-            pivot.transform.position = transform.position + Vector3.up * 7.2f;
+            // **On the platform, not floating above it (2026-09-27).** The
+            // kit's own deck sits at local y 4.61 regardless of any slope
+            // sink applied to the root (`BuildingFactory`'s per-corner
+            // sink moves the whole transform, so the model's own local
+            // measurements never change) -- see
+            // `art-staging/watchtower-astra-lvl1-v2/README.md`. `7.2f` was
+            // the old 7.5 m extruded tower's height; nobody moved the gun
+            // down when the kit shrank it to 4.65 m, so it hovered well
+            // clear of the platform (or, on a steep wall node, well BELOW
+            // it once the root sank into the slope).
+            pivot.transform.position = transform.position + Vector3.up * (DeckHeight + 0.15f);
             gunPivot = pivot.transform;
 
             var go = new GameObject("TowerGun");

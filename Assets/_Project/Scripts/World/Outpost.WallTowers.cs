@@ -199,6 +199,55 @@ namespace SeaSick.World
             }
         }
 
+        /// The flat direction of the first standing or queued run at
+        /// `node`, either way round (a line has no inherent direction) --
+        /// at either END, or PARTWAY ALONG a standing plain segment that has
+        /// not been split there yet (siting happens before `JoinTowerToWall`
+        /// runs, so a node in the middle of a run matches nothing at either
+        /// end: without the distance-to-line test below, `WallTowerYaw`
+        /// fell back to toward-the-fire for every mid-span tower). False
+        /// with `Vector3.forward` if nothing does.
+        bool WallRunDirAt(Vector3 node, out Vector3 dir)
+        {
+            for (int i = 0; i < walls.Count; i++)
+            {
+                var w = walls[i];
+                if (w == null || w.IsGate) continue;
+                if (SamePost(w.A, node)) { dir = WallVisual.Flat(w.B - w.A).normalized; return true; }
+                if (SamePost(w.B, node)) { dir = WallVisual.Flat(w.A - w.B).normalized; return true; }
+                if (w.FlatDistanceTo(node) < 0.3f) { dir = WallVisual.Flat(w.B - w.A).normalized; return true; }
+            }
+            if (ledger != null && ledger.sites != null)
+                foreach (var row in ledger.sites)
+                {
+                    if (row == null || !row.isWall) continue;
+                    if (SamePost(row.postA, node))
+                    { dir = WallVisual.Flat(row.postB - row.postA).normalized; return true; }
+                    if (SamePost(row.postB, node))
+                    { dir = WallVisual.Flat(row.postA - row.postB).normalized; return true; }
+                    if (WallSegment.FlatDistance(row.postA, row.postB, node) < 0.3f)
+                    { dir = WallVisual.Flat(row.postB - row.postA).normalized; return true; }
+                }
+            dir = Vector3.forward;
+            return false;
+        }
+
+        /// **Which way a tower joined to `node` should face while it is
+        /// being sited (Kevin, 2026-09-27): square across the wall, not
+        /// diagonal to it** -- the plan's `front` turned perpendicular to
+        /// the run, toward the camp side, the same side `WallTowerDoor`
+        /// puts the lookout on. Falls back to the ordinary toward-the-fire
+        /// facing where the node has no run yet (nothing to square to).
+        public float WallTowerYaw(Vector3 node)
+        {
+            if (!WallRunDirAt(node, out Vector3 along)) return AutoYaw(node);
+            Vector3 perp = Vector3.Cross(Vector3.up, along).normalized;
+            Vector3 toFire = CampCentre - node;
+            toFire.y = 0f;
+            if (Vector3.Dot(perp, toFire) < 0f) perp = -perp;
+            return Mathf.Atan2(perp.x, perp.z) * Mathf.Rad2Deg;
+        }
+
         /// The built watchtower standing on this node, or null.
         public Building WallTowerAt(Vector3 node)
         {
