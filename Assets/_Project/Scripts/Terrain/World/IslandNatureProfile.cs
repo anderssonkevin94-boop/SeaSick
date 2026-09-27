@@ -28,7 +28,7 @@ namespace SeaSick.Terrain
         void OnEnable()
         {
             Active = this;
-            templates.Clear();
+            templates.Clear(); Uses.Clear();
             if (meshLibrary == null || natureMaterial == null) return;
             var data = JsonUtility.FromJson<Library>(meshLibrary.text);
             foreach (var e in data.entries)
@@ -42,6 +42,7 @@ namespace SeaSick.Terrain
                     tp.height=Mathf.Max(tp.height,tp.v[i].y);
                     tp.radius=Mathf.Max(tp.radius,new Vector2(tp.v[i].x,tp.v[i].z).magnitude);
                 }
+                ColourD(e.name,tp.c);
                 templates.Add(e.name,tp);
             }
         }
@@ -52,13 +53,67 @@ namespace SeaSick.Terrain
             foreach(var mesh in resourceMeshes.Values) if(mesh!=null) Destroy(mesh);
             resourceMeshes.Clear();
         }
+        /// Dev: template lookups per name since the last world build (≈ placed instances).
+        public static readonly Dictionary<string,int> Uses=new Dictionary<string,int>();
+        /// Dev A/B: set in play mode before a reload to build the island with the legacy kit.
+        public static bool DisabledForCompare;
         public static IslandNatureProfile For(Vector3 centre)
         {
             var p=Active;
-            return p!=null && p.isActiveAndEnabled && p.templates.Count>0
+            return !DisabledForCompare && p!=null && p.isActiveAndEnabled && p.templates.Count>0
                 && Vector2.Distance(p.islandCentre,new Vector2(centre.x,centre.z))<1f ? p : null;
         }
-        public SceneryKit.Template Get(string name) => templates.TryGetValue(name,out var t) ? t : null;
+        public SceneryKit.Template Get(string name)
+        {
+            if(!templates.TryGetValue(name,out var t)) return null;
+            Uses.TryGetValue(name,out int n); Uses[name]=n+1;
+            return t;
+        }
+
+        // Colour D "cream sandstone" (Kevin 2026-09-27): one warm sandstone for
+        // every stone, warm yellow-green plants, brighter varied canopies. The
+        // baked facet value is kept; only hue/saturation move.
+        static void ColourD(string name,Color32[] c)
+        {
+            bool stone=name.StartsWith("Boulder_",StringComparison.Ordinal) || name.StartsWith("Cliff_",StringComparison.Ordinal)
+                || name.StartsWith("Shore_WashedStones",StringComparison.Ordinal) || name.StartsWith("Pebble",StringComparison.Ordinal);
+            float hue=92,sat=1.3f,val=1.08f;
+            if(name.StartsWith("Forest_",StringComparison.Ordinal))
+            {
+                string sp=name.Substring(7); int cut=sp.IndexOf('_'); if(cut>=0) sp=sp.Substring(0,cut);
+                switch(sp)
+                {
+                    case "Pine": hue=122;sat=1.05f;val=1.0f;break;
+                    case "Coastal": hue=112;sat=1.1f;val=1.04f;break;
+                    case "Birch": hue=84;sat=1.25f;val=1.2f;break;
+                    case "Young": hue=88;sat=1.35f;val=1.22f;break;
+                    case "Oak": hue=100;sat=1.2f;val=1.02f;break;
+                    case "Broadleaf": hue=92;sat=1.3f;val=1.15f;break;
+                    case "Hornbeam": hue=98;sat=1.25f;val=1.12f;break;
+                    case "Uneven": hue=95;sat=1.25f;val=1.06f;break;
+                    case "Leaning": hue=90;sat=1.25f;val=1.12f;break;
+                    case "Slender": hue=94;sat=1.2f;val=1.1f;break;
+                    default: hue=88;sat=1.3f;val=1.15f;break; // palms
+                }
+            }
+            else if(name=="Coast_DuneGrass") { hue=66;sat=1.15f;val=1.06f; }
+            for(int i=0;i<c.Length;i++)
+            {
+                Color s=((Color)c[i]).gamma;
+                Color.RGBToHSV(s,out float h,out float sa,out float v);
+                if(stone)
+                {
+                    // Lift dark facets so they read warm rather than blue-grey.
+                    h=39f/360f; sa=.20f+(1-v)*.10f; v=Mathf.Min(1,v*.85f+.14f);
+                }
+                else if(s.g>s.r && s.g>=s.b && sa>.18f)
+                {
+                    h=Mathf.Lerp(h*360,hue,.75f)/360f; sa=Mathf.Clamp01(sa*sat); v=Mathf.Min(1,v*val);
+                }
+                else continue;
+                var o=Color.HSVToRGB(h,sa,v).linear; o.a=((Color)c[i]).a; c[i]=o;
+            }
+        }
 
         public void DressResource(GameObject root,string kind,int ordinal)
         {
@@ -215,7 +270,9 @@ namespace SeaSick.Terrain
                 }
             }
             var pixels=new Color[N*N];
-            Color grass=Palette("#929E59"),dry=Palette("#B9B77A"),moss=Palette("#5E7B48"),earth=Palette("#9D895F");
+            // Colour D: three warm yellow-green tones (meadow / lush / dry, hue ~66-97 deg),
+            // moss under canopy; earth stays warm.
+            Color grass=Palette("#7DB04D"),lush=Palette("#5A8F39"),dry=Palette("#ADB562"),moss=Palette("#4E7A37"),earth=Palette("#A48C5E");
             for(int z=0;z<N;z++) for(int x=0;x<N;x++)
             {
                 float px=islandCentre.x+(x/(N-1f)-.5f)*span,pz=islandCentre.y+(z/(N-1f)-.5f)*span;
@@ -223,6 +280,8 @@ namespace SeaSick.Terrain
                 float inside=island.RadiusAt(Mathf.Atan2(delta.x,delta.y))-delta.magnitude;
                 int i=z*N+x; float noise=Patch(px,pz);
                 var c=Color.Lerp(grass,dry,Mathf.SmoothStep(0,1,(noise-.3f)*2.5f));
+                float lushPatch=Mathf.PerlinNoise(px*.021f+71,pz*.021f+13);
+                c=Color.Lerp(c,lush,Mathf.SmoothStep(0,1,(lushPatch-.52f)*4f)*.85f);
                 c=Color.Lerp(c,moss,Mathf.Clamp01(cover[i]*.52f)*.9f);
                 c=Color.Lerp(c,earth,Mathf.Clamp01((roots[i]*(noise+.45f)-.18f)*1.4f)*.85f);
                 c.a=Mathf.Clamp01(inside/8f); pixels[i]=c;

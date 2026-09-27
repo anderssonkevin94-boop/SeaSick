@@ -11,6 +11,8 @@ namespace SeaSick.World
         public Color ambientEquator=new Color(.36f,.43f,.60f);
         public Color ambientGround=new Color(.19f,.24f,.33f);
         [Range(0,1)] public float skyFill=.68f;
+        [Tooltip("Daytime multiplier on the sky ambient (which follows the blue horizon). Warm = shadows read warm, not blue.")]
+        public Color skyFillTint=Color.white;
         [Header("Golden hour")]
         [Range(.17f,.5f)] public float goldenHourElevation=.32f;
         public Color sunriseHorizon=new Color(1f,.58f,.34f);

@@ -775,6 +775,7 @@ namespace SeaSick.World
             ground  = Color.Lerp(ground,  NightAmbientTint * ground.grayscale,  hueShift);
 
             Color skyAmb = p.horizon * Mathf.Lerp(HasArtLighting ? Mathf.Lerp(.95f, artLighting.skyFill, artDay) : .95f, .62f, t);
+            if (HasArtLighting) skyAmb *= Color.Lerp(Color.white, artLighting.skyFillTint, artDay * (1f - t));
             Color equatorAmb = Color.Lerp(
                 equator, new Color(0.115f, 0.135f, 0.135f), t) * ambientScale;
             Color groundAmb = Color.Lerp(

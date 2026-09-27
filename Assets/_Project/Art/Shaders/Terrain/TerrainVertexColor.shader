@@ -74,6 +74,8 @@ Shader "SeaSick/Terrain Vertex Color"
             SAMPLER(sampler_IslandNatureGround);
             float4 _IslandNatureBounds;
             float _IslandNatureEnabled;
+            // Colour D cream sandstone, linear (sRGB ~ HSV 39 deg, s .22, v .80).
+            #define SANDSTONE float3(.604,.504,.348)
 
             // --- procedural value noise -------------------------------------
             float hash13(float3 p)
@@ -162,10 +164,13 @@ Shader "SeaSick/Terrain Vertex Color"
                     // use their real mesh planes; soft ground keeps smooth normals.
                     float3 face = normalize(cross(ddy(i.positionWS), ddx(i.positionWS)));
                     face *= dot(face,n) < 0 ? -1 : 1;
+                    rockMask *= 1-smoothstep(.83,.87,abs(face.y));
                     n = normalize(lerp(n, face, rockMask * _AuthoredFormLighting));
-                    float3 meadow = float3(.24,.38,.065);
+                    // Colour D (2026-09-27): warm yellow-green meadow, one
+                    // cream sandstone for every stone surface.
+                    float3 meadow = float3(.20,.40,.055);
                     float3 sand = float3(.78,.61,.33);
-                    float3 rock = float3(.57,.50,.39);
+                    float3 rock = SANDSTONE;
                     albedo = lerp(lerp(sand,meadow,grassMask),rock,rockMask) * _Tint.rgb;
                 }
 
@@ -220,12 +225,17 @@ Shader "SeaSick/Terrain Vertex Color"
                     float4 nature = SAMPLE_TEXTURE2D(_IslandNatureGround,sampler_IslandNatureGround,uv);
                     float land = smoothstep(_SandLine-.2,_SandLine+1.1,i.positionWS.y);
                     float rock = smoothstep(.35,.65,i.color.a);
+                    // Colour D: rock paint only where the actual facet is
+                    // steeper than ~32 degrees; flat ground stays grass.
+                    float3 facet = normalize(cross(ddy(i.positionWS), ddx(i.positionWS)));
+                    float facetUp = abs(facet.y);
+                    rock *= 1-smoothstep(.83,.87,facetUp);
                     float exposed = smoothstep(.35,.65,vnoise(float3(i.positionWS.x,0,i.positionWS.z)*.09));
                     float soilOnShelf = smoothstep(.65,.92,n.y)*(1-exposed)*.88;
                     rock *= 1-soilOnShelf;
                     float weight = inside*nature.a;
                     albedo = lerp(albedo,nature.rgb,weight*land*(1-rock));
-                    albedo = lerp(albedo,float3(.255,.262,.245),weight*rock*.65);
+                    albedo = lerp(albedo,SANDSTONE,weight*rock);
                 }
 
                 // Fade the whole detail layer out with distance. Without this
@@ -295,8 +305,9 @@ Shader "SeaSick/Terrain Vertex Color"
                 float authoredLow = smoothstep(.27-edge, .27+edge, authoredSun);
                 float authoredMid = smoothstep(.60-edge, .60+edge, authoredSun);
                 float authoredHigh = smoothstep(.82-edge, .82+edge, authoredSun);
-                float3 authoredShadow = float3(0.30, 0.42, 0.85);
-                float3 authoredMidTint = float3(0.66, 0.70, 0.82);
+                // Colour D: warm shadow bands (were blue 0.30,0.42,0.85).
+                float3 authoredShadow = float3(0.56, 0.47, 0.45);
+                float3 authoredMidTint = float3(0.80, 0.75, 0.71);
                 float3 authoredSunTint = float3(1.04, 1.03, 1.0);
                 float3 authoredTint = authoredShadow;
                 authoredTint = lerp(authoredTint, authoredMidTint, authoredLow);
@@ -306,7 +317,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 // term preserves plane-to-plane direction variation inside them.
                 // Keep each painted lighting band uniform.
                 float authoredMask = _AuthoredFormLighting * lerp(0.62, 1.0, saturate(i.color.a));
-                float3 authored = albedo * (max(0,SampleSH(float3(0,1,0))) * float3(.36,.42,.54) + light.color * authoredTint);
+                float3 authored = albedo * (max(0,SampleSH(float3(0,1,0))) * float3(.46,.42,.38) + light.color * authoredTint);
                 col = lerp(col, authored, authoredMask);
                 // Point lights: the campfire and the lamps. URP's own falloff
                 // is inverse-square, which lights a fire's stone ring and
