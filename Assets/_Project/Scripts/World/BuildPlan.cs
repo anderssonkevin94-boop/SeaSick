@@ -1,4 +1,5 @@
 using UnityEngine;
+using SeaSick.World.Economy;
 
 namespace SeaSick.World
 {
@@ -59,12 +60,14 @@ namespace SeaSick.World
         /// below argue for. Nothing pays this directly; see `cost`.
         public int baseCost;
         /// **Logs it costs to raise, and the only number anything pays.**
-        /// `BuildPlans.PlaytestCostCap` sits between this and `baseCost`, so
-        /// while the cap is on every reader -- the ledger's blueprint, the
-        /// Build menu, the probes -- sees the capped price, and none of them
-        /// can reach the raw one by accident.
-        public int cost => Scaled(BuildPlans.PlaytestCostCap > 0
-            ? Mathf.Min(baseCost, BuildPlans.PlaytestCostCap) : baseCost, PriceMul);
+        /// The tuning asset's row for this plan (`EconomyTuning.Plan`) wins
+        /// over `baseCost`, then FEEL's `costMultiplier`, then the per-copy
+        /// step. (The playtest cap of 5 is gone, 2026-09-27: Kevin, "put in
+        /// some real numbers".)
+        public int cost => Scaled(EconomyFeel.Price(TunedTimber), PriceMul);
+        int TunedTimber { get { var r = EconomyTuning.Plan(id); return r != null ? r.timber : baseCost; } }
+        int TunedStone { get { var r = EconomyTuning.Plan(id); return r != null ? r.stone : baseStoneCost; } }
+        int TunedBrick { get { var r = EconomyTuning.Plan(id); return r != null ? r.brick : baseBrickCost; } }
 
         /// **Stone it costs to raise, as priced.** Kevin, 2026-09-21: *"the
         /// buildings require wood and stone ... all buildings require at
@@ -77,12 +80,9 @@ namespace SeaSick.World
         /// part and does not need naming, because there are exactly two and
         /// every reader knows which is which.
         public int baseStoneCost;
-        /// What anything actually pays, under the same playtest cap `cost` is
-        /// under. Every stone price below is already inside it, so today this
-        /// is `baseStoneCost` -- but it goes through the cap so that a raised
-        /// stone price can never escape an experiment the timber price is in.
-        public int stoneCost => Scaled(BuildPlans.PlaytestCostCap > 0
-            ? Mathf.Min(baseStoneCost, BuildPlans.PlaytestCostCap) : baseStoneCost, PriceMul);
+        /// What anything actually pays in stone: the tuning row, FEEL's cost
+        /// multiplier, the per-copy step -- the same road as `cost`.
+        public int stoneCost => Scaled(EconomyFeel.Price(TunedStone), PriceMul);
 
         /// **The third part of a price, and nothing charges it yet,
         /// 2026-09-22.** Kevin asked for a quarry that makes "bricks for
@@ -103,9 +103,8 @@ namespace SeaSick.World
         /// cannot be found on an island at all. Somebody made it at a quarry
         /// and it is lying by the fire, or the building waits.
         public int baseBrickCost;
-        /// What anything pays, under the same playtest cap as the other two.
-        public int brickCost => Scaled(BuildPlans.PlaytestCostCap > 0
-            ? Mathf.Min(baseBrickCost, BuildPlans.PlaytestCostCap) : baseBrickCost, PriceMul);
+        /// What anything pays in brick, the same road as the other two.
+        public int brickCost => Scaled(EconomyFeel.Price(TunedBrick), PriceMul);
         /// Units of stores it adds to what this place can keep, PER RESOURCE.
         public int storeCapacity;
         /// Metres: length along the ridge, then width across it.
@@ -212,11 +211,11 @@ namespace SeaSick.World
         /// `Economy.Techs.Caps` / `OutpostLedger.CopyLimit`. (Phase 1's
         /// `allowMultiple` flag, uncapped, is gone.)
         ///
-        /// **Price multiplier for the Nth copy, applied AFTER the playtest
-        /// cap.** Zero (every plan as declared, and every struct default)
+        /// **Price multiplier for the Nth copy, applied after the tuning row
+        /// and FEEL's cost multiplier.** Zero (every plan as declared, and every struct default)
         /// means 1. Only `BuildPlans.PriceForCopy` writes it, on a copy of
         /// the plan -- so a second hut costs 125% of what the first one
-        /// actually paid, even while `PlaytestCostCap` holds the base at 5.
+        /// actually paid.
         public float priceMul;
         public float PriceMul => priceMul > 0f ? priceMul : 1f;
         static int Scaled(int n, float mul) => mul == 1f || n <= 0 ? n : Mathf.CeilToInt(n * mul - 1e-4f);
@@ -238,13 +237,42 @@ namespace SeaSick.World
     /// Everything that can be built, in the order it is offered.
     public static class BuildPlans
     {
-        /// **TEMP for playtesting, 2026-09-21.** Kevin: *"set the limit at 5
-        /// for each building (temporarily)."* While this is above zero every
-        /// plan's `cost` is `min(baseCost, PlaytestCostCap)`; the priced
-        /// numbers below stay in source untouched and come straight back when
-        /// this is set to **0 = off**. The fire is priced under the cap (4),
-        /// so `LedgerProbe`'s one-hand-one-day gate is unaffected either way.
-        public const int PlaytestCostCap = 5;
+        // **The playtest cap is gone (2026-09-27).** `PlaytestCostCap = 5`
+        // held every price at five logs from 2026-09-21; Kevin: "sure, go
+        // ahead and put in some real numbers." The prices below are the
+        // FIRST HONEST PASS (GDD "Economy numbers", tune by play), and the
+        // live copy of each is the tuning asset's row (`EconomyTuning`).
+
+        /// **Seconds ONE builder hammers a plan once every material is in
+        /// and the plot is clear** -- the code default; the tuning asset's
+        /// `hammerSeconds` wins. 0 = not listed (the old size formula,
+        /// `OutpostLedger.LabourFor`, stands in). First pass, tune by play.
+        public static float DefaultHammerSeconds(string planId) => planId switch
+        {
+            "Campfire" => 15f,
+            "Hut" => 30f,
+            "Storage" => 40f,
+            "Farm" => 30f,
+            "FishingHut" => 35f,
+            "Fletcher" => 40f,
+            "Kitchen" => 45f,
+            "Watchtower" => 45f,
+            "Sawmill" => 60f,
+            "Quarry" => 60f,
+            "Pier" => 60f,
+            "Storehouse" => 60f,
+            "Blacksmith" => 75f,
+            "DryDock" => 120f,
+            _ => 0f,
+        };
+
+        /// The live hammer time: the asset's row, else the code default.
+        /// Before FEEL's build-time multiplier.
+        public static float HammerSeconds(string planId)
+        {
+            var r = EconomyTuning.Plan(planId);
+            return r != null && r.hammerSeconds > 0f ? r.hammerSeconds : DefaultHammerSeconds(planId);
+        }
 
         /// **The first building in the game.**
         ///
@@ -252,8 +280,7 @@ namespace SeaSick.World
         /// carries 24 to the marked line and 38 stuffed with deck cargo, so
         /// a storehouse is one full hold and a log over. **Two voyages,
         /// never one** -- and the second one has to come home, which is the
-        /// decision the whole loop is made of. (**Capped at 5 for the
-        /// playtest** -- see `PlaytestCostCap`; the 25 is what it goes back to.)
+        /// decision the whole loop is made of. 
         public static readonly BuildPlan Storehouse = new BuildPlan
         {
             id = "Storehouse",
@@ -311,9 +338,8 @@ namespace SeaSick.World
         // as days of one man's work: a hut is three, a store five, a farm
         // four, a sawmill six, a smithy seven. **All guesses, none played.**
         //
-        // **And, for the playtest, none of them charged**: `PlaytestCostCap`
-        // holds every one of these at five logs until it is switched off. The
-        // numbers below are the design; the cap is the experiment.
+        // **2026-09-27: re-priced, first honest pass** (GDD "Economy
+        // numbers"); the live numbers are the tuning asset's rows.
         //
         // The footprints and ridges are NOT guesses. They are the measured
         // game bounds out of the kit's own import validation, so the four
@@ -323,11 +349,11 @@ namespace SeaSick.World
         public static readonly BuildPlan Storage = new BuildPlan
         {
             id = "Storage",
-            baseStoneCost = 3,
+            baseStoneCost = 2,
             label = "store hut",
             blurb = "keeps 20 more of each thing",
             resource = Res.Timber,
-            baseCost = 20,
+            baseCost = 16,
             storeCapacity = 20,
             footprint = new Vector2(6.46f, 5.14f),
             ridge = 3.84f,
@@ -360,11 +386,11 @@ namespace SeaSick.World
         public static readonly BuildPlan Sawmill = new BuildPlan
         {
             id = "Sawmill",
-            baseStoneCost = 3,
+            baseStoneCost = 4,
             label = "sawmill",
             blurb = "a sawyer turns timber into boards",
             resource = Res.Timber,
-            baseCost = 24,
+            baseCost = 20,
             footprint = new Vector2(7.56f, 5.85f),
             ridge = 3.84f,
             position = "sawyer",
@@ -405,7 +431,7 @@ namespace SeaSick.World
             label = "farm plot",
             blurb = "a farmhand grows food out of the ground",
             resource = Res.Timber,
-            baseCost = 16,
+            baseCost = 12,
             footprint = new Vector2(4.66f, 4.69f),
             // **2026-09-23: 2.03 m, not the old 1.01 m.** Astra's kit
             // (art-staging/farm-astra-lvl1-v1) flagged its own tool canopy
@@ -443,11 +469,11 @@ namespace SeaSick.World
         public static readonly BuildPlan Blacksmith = new BuildPlan
         {
             id = "Blacksmith",
-            baseStoneCost = 4,
+            baseStoneCost = 8,
             label = "forge",
             blurb = "a smith turns ore into tools",
             resource = Res.Timber,
-            baseCost = 28,
+            baseCost = 24,
             footprint = new Vector2(6.53f, 5.85f),
             ridge = 4.29f,
             position = "smith",
@@ -470,11 +496,11 @@ namespace SeaSick.World
         public static readonly BuildPlan Kitchen = new BuildPlan
         {
             id = "Kitchen",
-            baseStoneCost = 3,
+            baseStoneCost = 4,
             label = "kitchen",
             blurb = "a cook turns food into meals",
             resource = Res.Timber,
-            baseCost = 18,
+            baseCost = 16,
             footprint = new Vector2(6.26f, 6.12f),
             ridge = 4.18f,
             position = "cook",
@@ -517,7 +543,7 @@ namespace SeaSick.World
             label = "watchtower",
             blurb = "a lookout on watch keeps the raiders off the piles",
             resource = Res.Timber,
-            baseCost = 12,
+            baseCost = 14,
             footprint = new Vector2(2.6f, 2.6f),
             // **2026-09-23: 4.65 m, not the old 7.5 m.** Astra's V2 bare-
             // platform tower (art-staging/watchtower-astra-lvl1-v2 -- no
@@ -550,7 +576,6 @@ namespace SeaSick.World
         /// twenty-four because there is less roof on it, and the most stone
         /// of any camp building except the watchtower, because a yard for
         /// cutting rock is mostly rock. **All guesses, none played.**
-        /// (Capped at 5 for the playtest -- see `PlaytestCostCap`.)
         ///
         /// No kit model to wear, so like the watchtower and the pier it
         /// stands extruded -- as `BuildKind.Quarry`, which is a three-walled
@@ -559,11 +584,11 @@ namespace SeaSick.World
         {
             id = "Quarry",
             kind = BuildKind.Quarry,
-            baseStoneCost = 6,
+            baseStoneCost = 8,
             label = "quarry",
             blurb = "a quarryman cuts rough stone into brick",
             resource = Res.Timber,
-            baseCost = 22,
+            baseCost = 20,
             footprint = new Vector2(7.4f, 5.8f),
             ridge = 2.9f,
             position = "quarryman",
@@ -595,7 +620,6 @@ namespace SeaSick.World
         /// where the herd is thinning and there are raiders offshore --
         /// which is exactly when a player would want one and would have
         /// spent everything else. **All guesses, none played.**
-        /// (Capped at 5 for the playtest -- see `PlaytestCostCap`.)
         public static readonly BuildPlan Fletcher = new BuildPlan
         {
             id = "Fletcher",
@@ -604,7 +628,7 @@ namespace SeaSick.World
             label = "fletcher's",
             blurb = "a fletcher makes arrows from timber; the hunt and the watch both want them",
             resource = Res.Timber,
-            baseCost = 18,
+            baseCost = 14,
             footprint = new Vector2(4.84f, 4.93f),
             ridge = 3.2f,
             position = "fletcher",
@@ -696,7 +720,6 @@ namespace SeaSick.World
         /// far as 24 m to reach 2.5 m of water, and refuses a beach that
         /// never gets there. Eight logs, two days of one man: the planks
         /// are cheap, the posts are what cost. **A guess, never played.**
-        /// (Capped at 5 for the playtest -- see `PlaytestCostCap`.)
         public static readonly BuildPlan Pier = new BuildPlan
         {
             id = "Pier",
@@ -833,8 +856,9 @@ namespace SeaSick.World
             ridge = GateHeight,
         };
 
-        /// Metres of palisade per log (D1: 1 log / 2 m).
-        public const float MetresPerPalisadeLog = 2f;
+        /// Metres of palisade per log (D1: 1 log / 2 m) -- the tuning
+        /// asset's `metresPerPalisadeLog`.
+        public static float MetresPerPalisadeLog => EconomyTuning.MetresPerPalisadeLog;
 
         /// How tall a palisade stands, world metres. Taller than a man
         /// (`WorldScale`'s crew are ~1.8 m) and short enough that a camp
@@ -846,12 +870,11 @@ namespace SeaSick.World
 
         /// **What a segment of this length costs in timber.** Ceil, so a
         /// three-metre stub still costs two logs and nothing is ever free.
-        /// Through the playtest cap like every other price, so a wall
-        /// cannot escape an experiment the buildings are inside.
+        /// Metres per log from the tuning asset, then FEEL's cost multiplier.
         public static int PalisadeCost(float metres)
         {
-            int logs = Mathf.CeilToInt(Mathf.Max(0f, metres) / MetresPerPalisadeLog);
-            return PlaytestCostCap > 0 ? Mathf.Min(logs, PlaytestCostCap) : logs;
+            int logs = Mathf.CeilToInt(Mathf.Max(0f, metres) / EconomyTuning.MetresPerPalisadeLog);
+            return EconomyFeel.Price(logs);
         }
 
         /// **A chain of ladders and landings up a cliff (2026-09-27).**
@@ -872,17 +895,18 @@ namespace SeaSick.World
             ridge = 2f,
         };
 
-        /// Timber per metre of rise (PROVISIONAL, 2026-09-27, unplayed).
-        public const float LadderTimberPerMetre = 2f;
+        /// Timber per metre of rise (PROVISIONAL, 2026-09-27, unplayed) --
+        /// the tuning asset's `ladderTimberPerMetre`.
+        public static float LadderTimberPerMetre => EconomyTuning.LadderTimberPerMetre;
         /// No chain costs less than this (PROVISIONAL).
         public const int LadderMinCost = 4;
 
         /// What a chain of this rise costs in timber: 2 per metre, at least
-        /// 4, through the playtest cap like every other price.
+        /// 4, then FEEL's cost multiplier like every other price.
         public static int LadderCost(float rise)
         {
             int logs = Mathf.Max(LadderMinCost, Mathf.CeilToInt(Mathf.Max(0f, rise) * LadderTimberPerMetre));
-            return PlaytestCostCap > 0 ? Mathf.Min(logs, PlaytestCostCap) : logs;
+            return EconomyFeel.Price(logs);
         }
 
         /// The plans that go on a line between two points rather than on a
@@ -895,10 +919,11 @@ namespace SeaSick.World
         /// how many of `plan` already stand or are queued at this camp
         /// before the one being priced: 0 = the first (100%), 1 = the second
         /// (125%), 2 = the third (150%). Every part of the price (timber,
-        /// stone, brick) scales and rounds UP on its own, after the playtest
-        /// cap -- see `BuildPlan.priceMul`. Every reader that prices a build
+        /// stone, brick) scales and rounds UP on its own -- see
+        /// `BuildPlan.priceMul`. Every reader that prices a build
         /// (`Outpost.SiteFresh`, the build list's row) comes through here.
-        public const float CopyPriceStep = 0.25f;
+        /// The step itself is the tuning asset's `copyPriceStep`.
+        public static float CopyPriceStep => EconomyTuning.CopyPriceStep;
 
         public static BuildPlan PriceForCopy(BuildPlan plan, int existingCount)
         {

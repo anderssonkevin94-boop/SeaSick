@@ -65,7 +65,8 @@ namespace SeaSick.Terrain
         public static int UnitsOf(in Rock r)
         {
             float d = r.radius * 2f;
-            return d < 1.5f ? 2 : d < 2.8f ? 4 : 8;
+            // Yields from the tuning asset (`rockSmall/Medium/Large`), 2026-09-27.
+            return SeaSick.World.Economy.EconomyTuning.RockUnits(d < 1.5f ? 0 : d < 2.8f ? 1 : 2);
         }
 
         Rock[] rocks = System.Array.Empty<Rock>();

@@ -35,6 +35,17 @@ namespace SeaSick.World.Economy
 
         public static Ingredient I(string res, int n) => new Ingredient(res, n);
 
+        /// `cost` through FEEL's `costMultiplier` (each line rounded up, never
+        /// to zero). The same array back when the multiplier is 1, so the
+        /// common case allocates nothing.
+        public static Ingredient[] Scaled(Ingredient[] cost)
+        {
+            if (cost == null || cost.Length == 0 || UnityEngine.Mathf.Approximately(EconomyFeel.CostMul, 1f)) return cost ?? None;
+            var o = new Ingredient[cost.Length];
+            for (int i = 0; i < cost.Length; i++) o[i] = new Ingredient(cost[i].res, EconomyFeel.Price(cost[i].n));
+            return o;
+        }
+
         /// Every line met by the pile. `count` is the ledger's `CountOf`.
         public static bool Affordable(Ingredient[] cost, System.Func<string, int> count)
         {

@@ -575,13 +575,6 @@ namespace SeaSick.UI.Sheets
         /// the screen now.
         void BuildBuild(VisualElement root)
         {
-            // **Playtest prices, 2026-09-23.** `BuildPlans.PlaytestCostCap`
-            // caps every blueprint's cost; the list already prices in the
-            // capped number, so this just says the number is not the real
-            // one, above everything it applies to.
-            if (BuildPlans.PlaytestCostCap > 0)
-                root.Add(SheetKit.Text(
-                    $"playtest prices: capped at {BuildPlans.PlaytestCostCap}", false, true, 11f));
             root.Add(SheetKit.Eyebrow("raise a building"));
             buildListHolder = SheetBits.Holder();
             root.Add(buildListHolder);

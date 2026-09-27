@@ -9,19 +9,22 @@ namespace SeaSick.World
     {
         /// Seconds of game time to cut ONE log at the tree. Kevin: *"cutting
         /// logs should take 5 seconds for the purpose of playtesting."*
-        public const float CutSecondsPerLog = 5f;
+        /// Live since 2026-09-27: the tuning asset's `cutSecondsTimber`
+        /// over FEEL's gather speed.
+        public static float CutSecondsPerLog => Economy.EconomyTuning.CutSeconds(Res.Timber) / Economy.EconomyFeel.GatherSpeed;
 
         /// Seconds of builder time to take ONE tree off a building plot.
         /// Kevin, 2026-09-23: 5 s a tree. Read through
-        /// `OutpostLedger.ClearTreeHandDays`.
-        public const float ClearSecondsPerTree = 5f;
+        /// `OutpostLedger.ClearTreeHandDays`. The tuning asset's
+        /// `clearSecondsPerTree` since 2026-09-27.
+        public static float ClearSecondsPerTree => Economy.EconomyTuning.ClearSecondsPerTree;
 
         /// Seconds of builder time to break ONE rock off a plot. **A guess,
         /// not Kevin's number**: the tree's 5 s scaled by the stone/timber
         /// cut ratio (`Res.GatherRate`: 4 / 2.5), i.e. what a unit of stone
         /// takes to quarry (`GatherSecondsPerUnit(Stone)` = 8 s). Ore rocks
-        /// use it too.
-        public const float ClearSecondsPerRock = 8f;
+        /// use it too. The tuning asset's `clearSecondsPerRock`.
+        public static float ClearSecondsPerRock => Economy.EconomyTuning.ClearSecondsPerRock;
     }
 
     /// <summary>
@@ -184,12 +187,10 @@ namespace SeaSick.World
         /// Kevin's playtest number (`Playtest.CutSecondsPerLog`); the rest
         /// keep `Res.GatherRate`'s relation to timber (stone 8 s, ore 10 s,
         /// spice 6.7 s), so the playtest speed-up is the same for all.
-        public static float GatherSecondsPerUnit(string res)
-        {
-            if (res == Res.Timber) return Playtest.CutSecondsPerLog;
-            float rate = Mathf.Max(0.01f, Res.GatherRate(res));
-            return Playtest.CutSecondsPerLog * Res.GatherRate(Res.Timber) / rate;
-        }
+        public static float GatherSecondsPerUnit(string res) =>
+            // 2026-09-27: per resource from the tuning asset (5/8/10/6.7 s),
+            // over FEEL's gather speed.
+            Economy.EconomyTuning.CutSeconds(res) / Economy.EconomyFeel.GatherSpeed;
 
         /// The camp centre: the campfire's `raised` row, its site, or the
         /// saved centre.

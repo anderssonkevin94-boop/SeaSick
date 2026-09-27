@@ -8,8 +8,13 @@ namespace SeaSick.World.Economy
     {
         public int level;
         public string name;
-        /// Paid from the pile, at the fire, all at once.
-        public Ingredient[] cost = Cost.None;
+        /// Paid from the pile, at the fire, all at once. The number as
+        /// written (code default, or the tuning asset's row once
+        /// `EconomyTuning.EnsureApplied` has run); `cost` is what is paid.
+        public Ingredient[] baseCost = Cost.None;
+        /// What raising the fire costs: `baseCost` through FEEL's cost
+        /// multiplier.
+        public Ingredient[] cost { get => Cost.Scaled(baseCost); set => baseCost = value ?? Cost.None; }
         /// Plan ids that become buildable at this level. Anything not named
         /// at any level is buildable from the start.
         public string[] unlocksPlans = new string[0];
@@ -24,7 +29,9 @@ namespace SeaSick.World.Economy
         public string planId;
         public int toLevel;
         public int campfireLevel;
-        public Ingredient[] cost = Cost.None;
+        /// The price as written; `cost` is what is paid (FEEL's multiplier).
+        public Ingredient[] baseCost = Cost.None;
+        public Ingredient[] cost { get => Cost.Scaled(baseCost); set => baseCost = value ?? Cost.None; }
         /// Multiplier on the station's rate at this level.
         public float rateMul = 1.5f;
         /// Extra store ceiling per resource at this level, for plans with a
@@ -63,7 +70,10 @@ namespace SeaSick.World.Economy
             new CampfireLevel
             {
                 level = 2, name = "hamlet",
-                cost = Cost.Of(Cost.I(Res.Boards, 10), Cost.I(Res.Stone, 6), Cost.I(Res.Hide, 4)),
+                // 2026-09-27 first honest pass (GDD "Economy numbers"): 20 boards
+                // is 7 logs through the sawmill, 12 stone a quarter-hour of
+                // one hand, 4 hide = 4 kills on one stone spear.
+                cost = Cost.Of(Cost.I(Res.Boards, 20), Cost.I(Res.Stone, 12), Cost.I(Res.Hide, 4)),
                 unlocksPlans = new[] { "Quarry" },
                 blurb = "opens the quarry, the forge's iron work, and every building's second level",
             },
@@ -226,9 +236,23 @@ namespace SeaSick.World.Economy
 
         /// Spears used up per animal taken. A stone spear lasts four beasts,
         /// an iron one twelve.
-        public static float SpearWear(string spear) => spear == Res.IronSpear ? 1f / 12f : 0.25f;
+        /// (Animals per spear: the tuning asset's `stoneSpearAnimals` /
+        /// `ironSpearAnimals`.)
+        public static float SpearWear(string spear) => 1f / EconomyTuning.SpearAnimals(spear == Res.IronSpear);
 
-        /// What comes home beside the meat, per animal.
-        public static readonly Ingredient[] HuntDrops = { Cost.I(Res.Hide, 1) };
+        /// **What comes home beside the meat, per animal -- and the ONLY way
+        /// Hide enters a camp** (Kevin, 2026-09-27: "fine that hide is the
+        /// only way to reach campfire 2, as long as the hide can't be
+        /// gathered"). The count is FEEL's `hidePerAnimal`, rounded.
+        public static Ingredient[] HuntDrops
+        {
+            get
+            {
+                int n = UnityEngine.Mathf.Max(0, UnityEngine.Mathf.RoundToInt(EconomyFeel.hidePerAnimal));
+                if (huntDrops == null || huntDrops[0].n != n) huntDrops = new[] { Cost.I(Res.Hide, n) };
+                return huntDrops;
+            }
+        }
+        static Ingredient[] huntDrops;
     }
 }

@@ -61,8 +61,9 @@ namespace SeaSick.World
 
         /// Food per animal. **A guess** -- a goat feeds the camp for about as
         /// long as four beds of wheat, which is what makes half a day's stalk
-        /// worth walking out for.
-        public const float MeatPerAnimal = 4f;
+        /// worth walking out for. **Live**: FEEL's `EconomyFeel.meatPerAnimal`
+        /// (seeded from the tuning asset), 2026-09-27.
+        public static float MeatPerAnimal => Mathf.Max(0f, SeaSick.World.Economy.EconomyFeel.meatPerAnimal);
 
         /// Made, not found. A camp with nobody assigned never sees these.
         public const string Boards = "Boards";

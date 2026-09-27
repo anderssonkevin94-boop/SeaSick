@@ -1,0 +1,338 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0911795568064a7492b5b5135f8f1fa5, type: 3}
+  m_Name: EconomyTuning
+  m_EditorClassIdentifier: 
+  plans:
+  - planId: Campfire
+    timber: 4
+    stone: 0
+    brick: 0
+    hammerSeconds: 15
+  - planId: Storage
+    timber: 16
+    stone: 2
+    brick: 0
+    hammerSeconds: 40
+  - planId: Hut
+    timber: 12
+    stone: 2
+    brick: 0
+    hammerSeconds: 30
+  - planId: Farm
+    timber: 12
+    stone: 2
+    brick: 0
+    hammerSeconds: 30
+  - planId: FishingHut
+    timber: 14
+    stone: 2
+    brick: 0
+    hammerSeconds: 35
+  - planId: Sawmill
+    timber: 20
+    stone: 4
+    brick: 0
+    hammerSeconds: 60
+  - planId: Quarry
+    timber: 20
+    stone: 8
+    brick: 0
+    hammerSeconds: 60
+  - planId: Fletcher
+    timber: 14
+    stone: 2
+    brick: 0
+    hammerSeconds: 40
+  - planId: Kitchen
+    timber: 16
+    stone: 4
+    brick: 0
+    hammerSeconds: 45
+  - planId: Blacksmith
+    timber: 24
+    stone: 8
+    brick: 0
+    hammerSeconds: 75
+  - planId: Watchtower
+    timber: 14
+    stone: 6
+    brick: 0
+    hammerSeconds: 45
+  - planId: Pier
+    timber: 8
+    stone: 2
+    brick: 0
+    hammerSeconds: 60
+  - planId: DryDock
+    timber: 20
+    stone: 8
+    brick: 0
+    hammerSeconds: 120
+  - planId: Storehouse
+    timber: 25
+    stone: 4
+    brick: 0
+    hammerSeconds: 60
+  copyPriceStep: 0.25
+  metresPerPalisadeLog: 2
+  ladderTimberPerMetre: 2
+  hammerSecondsPerLineLog: 3
+  crewExponent: 0.75
+  fire:
+  - level: 1
+    cost: []
+  - level: 2
+    cost:
+    - res: Boards
+      n: 20
+    - res: Stone
+      n: 12
+    - res: Hide
+      n: 4
+  upgrades:
+  - planId: Sawmill
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 6
+    - res: FineBoards
+      n: 4
+    rateMul: 1.5
+  - planId: Blacksmith
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 6
+    - res: FineBoards
+      n: 4
+    rateMul: 1.5
+  - planId: Kitchen
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 4
+    - res: FineBoards
+      n: 4
+    rateMul: 1.5
+  - planId: Fletcher
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 4
+    - res: FineBoards
+      n: 3
+    rateMul: 1.5
+  - planId: FishingHut
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 4
+    - res: FineBoards
+      n: 3
+    rateMul: 1.5
+  - planId: Quarry
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 8
+    - res: FineBoards
+      n: 2
+    rateMul: 1.5
+  - planId: Hut
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 4
+    - res: FineBoards
+      n: 4
+    rateMul: 1
+  - planId: Storehouse
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 8
+    - res: FineBoards
+      n: 4
+    rateMul: 1
+  - planId: Storage
+    toLevel: 2
+    cost:
+    - res: Brick
+      n: 6
+    - res: FineBoards
+      n: 2
+    rateMul: 1
+  caps:
+  - planId: Hut
+    copies: 
+    - 2
+    - 3
+    - 4
+    - 5
+  - planId: Storage
+    copies: 
+    - 1
+    - 2
+    - 3
+    - 3
+  - planId: Storehouse
+    copies: 
+    - 1
+    - 1
+    - 2
+    - 2
+  - planId: Watchtower
+    copies: 
+    - 2
+    - 4
+    - 6
+    - 8
+  - planId: Farm
+    copies: 
+    - 1
+    - 2
+    - 2
+    - 3
+  - planId: FishingHut
+    copies: 
+    - 1
+    - 2
+    - 2
+    - 3
+  - planId: Sawmill
+    copies: 
+    - 1
+    - 1
+    - 2
+    - 2
+  - planId: Blacksmith
+    copies: 
+    - 1
+    - 1
+    - 2
+    - 2
+  - planId: Kitchen
+    copies: 
+    - 1
+    - 1
+    - 2
+    - 2
+  - planId: Fletcher
+    copies: 
+    - 1
+    - 1
+    - 2
+    - 2
+  - planId: Quarry
+    copies: 
+    - 1
+    - 1
+    - 2
+    - 2
+  recipes:
+  - recipeId: boards
+    yield: 3
+    ratePerDay: 12
+    toolWear: 0
+    takes:
+    - res: Timber
+      n: 1
+  - recipeId: fine-boards
+    yield: 1
+    ratePerDay: 2
+    toolWear: 0.05
+    takes:
+    - res: Boards
+      n: 2
+  - recipeId: meals
+    yield: 1
+    ratePerDay: 3
+    toolWear: 0
+    takes:
+    - res: Food
+      n: 1
+  - recipeId: fish
+    yield: 1
+    ratePerDay: 4
+    toolWear: 0
+    takes: []
+  - recipeId: arrows
+    yield: 3
+    ratePerDay: 3
+    toolWear: 0
+    takes:
+    - res: Timber
+      n: 1
+  - recipeId: spear
+    yield: 1
+    ratePerDay: 1.5
+    toolWear: 0
+    takes:
+    - res: Boards
+      n: 1
+    - res: Stone
+      n: 1
+  - recipeId: iron
+    yield: 1
+    ratePerDay: 1.5
+    toolWear: 0
+    takes:
+    - res: Ore
+      n: 2
+  - recipeId: saw-blade
+    yield: 1
+    ratePerDay: 0.5
+    toolWear: 0
+    takes:
+    - res: Iron
+      n: 2
+  - recipeId: tools
+    yield: 1
+    ratePerDay: 1
+    toolWear: 0
+    takes:
+    - res: Iron
+      n: 1
+    - res: Boards
+      n: 1
+  - recipeId: iron-spear
+    yield: 1
+    ratePerDay: 1
+    toolWear: 0
+    takes:
+    - res: Boards
+      n: 1
+    - res: Iron
+      n: 1
+  - recipeId: brick
+    yield: 1
+    ratePerDay: 2
+    toolWear: 0.1
+    takes:
+    - res: Stone
+      n: 1
+  cutSecondsTimber: 5
+  cutSecondsStone: 8
+  cutSecondsOre: 10
+  cutSecondsSpice: 6.67
+  clearSecondsPerTree: 5
+  clearSecondsPerRock: 8
+  rockSmall: 2
+  rockMedium: 4
+  rockLarge: 8
+  meatPerAnimal: 4
+  hidePerAnimal: 1
+  stoneSpearAnimals: 4
+  ironSpearAnimals: 12
+  warmHutRadius: 30
+  warmMoodBonusPerDay: 0.1

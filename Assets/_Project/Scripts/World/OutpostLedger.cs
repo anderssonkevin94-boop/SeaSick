@@ -433,7 +433,7 @@ namespace SeaSick.World
                 if (Stocked)
                     return built >= LabourNeeded
                         ? "going up"
-                        : $"building {Mathf.RoundToInt(Build01 * 100f)}%";
+                        : $"hammering {Mathf.RoundToInt(Build01 * 100f)}%";
                 var parts = new System.Collections.Generic.List<string>(3);
                 if (needed > 0) parts.Add($"{Mathf.Min(done, needed)}/{needed} logs");
                 if (stoneNeeded > 0) parts.Add($"{Mathf.Min(stoneDone, stoneNeeded)}/{stoneNeeded} stone");
@@ -1017,7 +1017,7 @@ namespace SeaSick.World
         /// keep its residents warm. `keyX`/`keyZ` are `SetKey`'s own
         /// rounding of the fire's position to the metre -- plenty precise
         /// against a 30 m line.
-        public const float WarmHutRadius = 30f;
+        public static float WarmHutRadius => Economy.EconomyTuning.WarmHutRadius;   // tuning asset, 2026-09-27
 
         /// Provisional, unplayed, 2026-09-27: mood a warm hand gains per
         /// day, on top of the ordinary hunger arithmetic below, climbing
@@ -1026,7 +1026,7 @@ namespace SeaSick.World
         /// buys nothing more from `WorkFactor` (it already saturates
         /// there), so in practice this speeds a hungry hand's recovery
         /// rather than helping a content one.
-        public const float WarmMoodBonusPerDay = 0.1f;
+        public static float WarmMoodBonusPerDay => Economy.EconomyTuning.WarmMoodBonusPerDay;   // tuning asset
 
         /// Is the `raised` row at `i` a Hut standing within `WarmHutRadius`
         /// of the fire? Straight-line distance -- the same measure a Hut's
@@ -2066,13 +2066,27 @@ namespace SeaSick.World
         /// `Mathf.Clamp` either side: nothing under a quarter-day (a
         /// campfire is four logs and should still be a job), nothing over
         /// one and a half (a 24-log sawmill).
+        ///
+        /// **2026-09-27: hammer SECONDS per plan** (Kevin: "we are just
+        /// talking about building time here"). One builder's seconds come
+        /// from the tuning asset (`BuildPlans.HammerSeconds`: shelter 30 s,
+        /// sawmill 60 s, forge 75 s ...), times FEEL's build-time
+        /// multiplier, in hand-days at the current day length. A line row
+        /// (palisade, gate, ladder) has no plan row and pays
+        /// `EconomyTuning.HammerSecondsPerLineLog` per unit it is made of.
+        /// Crew speed (diminishing) is applied where it is spent, `PayBuild`.
         public static float LabourFor(PendingBuild p)
         {
             if (p == null) return 0f;
-            float stuff = Mathf.Max(0, p.needed) + Mathf.Max(0, p.stoneNeeded)
-                + Mathf.Max(0, p.brickNeeded);
-            if (stuff <= 0f) return 0f;          // a free plan is free to raise
-            return BuildDaysPerHand * Mathf.Clamp(stuff / ReferenceMaterials, 0.5f, 3f);
+            float sec = BuildPlans.HammerSeconds(p.planId);
+            if (sec <= 0f)
+            {
+                float stuff = Mathf.Max(0, p.needed) + Mathf.Max(0, p.stoneNeeded)
+                    + Mathf.Max(0, p.brickNeeded);
+                if (stuff <= 0f) return 0f;          // a free plan is free to raise
+                sec = stuff * Economy.EconomyTuning.HammerSecondsPerLineLog;
+            }
+            return sec * Economy.EconomyFeel.BuildTimeMul / Mathf.Max(0.0001f, TimeOfDay.DayLength);
         }
         /// Food a day one farmhand brings in off a farm's field
         /// (`BuildPlans.Farm.rate`). Half again the felling rate: the wheat
@@ -2432,8 +2446,13 @@ namespace SeaSick.World
             if (pending == null || labour <= 0f) return;
             float want = pending.LabourNeeded - pending.built;
             if (want <= 0f) return;
-            float spend = Mathf.Min(labour, want);
-            pending.built += spend;
+            // **Diminishing returns, 2026-09-27**: N builders at the site
+            // hammer N^0.75 as fast as one (`EconomyTuning.CrewSpeed`), so
+            // each one's hand-day is worth CrewSpeed(N)/N of a lone man's.
+            int crew = Mathf.Max(1, HammerCrew());
+            float eff = Economy.EconomyTuning.CrewSpeed(crew) / crew;
+            float spend = Mathf.Min(labour, want / eff);
+            pending.built = Mathf.Min(pending.LabourNeeded, pending.built + spend * eff);
             labour -= spend;
         }
 

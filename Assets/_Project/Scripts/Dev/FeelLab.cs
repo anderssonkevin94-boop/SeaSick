@@ -67,6 +67,10 @@ namespace SeaSick.Dev
             // The island camera's locked-angle knob (Kevin, 2026-09-27):
             // "lock in the camera at a certain angle ... a good set one."
             "SeaSick.CameraRig.IslandCamLock",
+            // The economy's live dials (Kevin, 2026-09-27: "one tuning file
+            // + the main ones in FEEL"); the base numbers are the
+            // `EconomyTuning` asset.
+            "SeaSick.World.Economy.EconomyFeel",
         };
 
         /// The spec's range table, keyed "ClassName.fieldName". Anything not
@@ -105,6 +109,13 @@ namespace SeaSick.Dev
             // island" at 20, steep enough to still show a horizon at 70;
             // default 38 -- see `IslandCamLock`'s own doc comment.
             {"IslandCamLock.angleDeg", (20f, 70f)},
+
+            {"EconomyFeel.costMultiplier",         (0.25f, 3f)},
+            {"EconomyFeel.buildTimeMultiplier",    (0.1f, 4f)},
+            {"EconomyFeel.stationSpeedMultiplier", (0.25f, 4f)},
+            {"EconomyFeel.gatherSpeedMultiplier",  (0.25f, 4f)},
+            {"EconomyFeel.meatPerAnimal",          (0f, 12f)},
+            {"EconomyFeel.hidePerAnimal",          (0f, 4f)},
         };
 
         static (float min, float max) RangeFor(string key, float def)

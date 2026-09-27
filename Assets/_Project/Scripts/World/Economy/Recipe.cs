@@ -23,8 +23,12 @@ namespace SeaSick.World.Economy
         /// Outputs per batch; `takes` is the price of one batch.
         public int yield = 1;
         public Ingredient[] takes = Cost.None;
-        /// Output units one hand makes in a day. **Every one is a guess.**
-        public float ratePerDay;
+        /// Output units one hand makes in a day as written (code default, or
+        /// the tuning asset's row). **Every one is a guess.**
+        public float baseRatePerDay;
+        /// What the ledger runs: `baseRatePerDay` times FEEL's
+        /// `stationSpeedMultiplier`.
+        public float ratePerDay { get => baseRatePerDay * EconomyFeel.StationSpeed; set => baseRatePerDay = value; }
         /// Fire level needed before the recipe is offered.
         public int campfireLevel = 1;
         /// Station level needed (1 = as raised).
