@@ -387,23 +387,30 @@ namespace SeaSick.CameraRig
                 if (isDouble) cam.FlyTo(pos);
                 else
                 {
-                    var who = hand.PickAt(pos, forPickup: false);
-                    if (who != null) cam.FollowThis(who.transform);
+                    // **The building is asked FIRST, 2026-09-27** -- same
+                    // rule as `WorldPicker.Tap`: Kevin, on the phone, "when
+                    // pressing on a building someone is stationed at, the
+                    // game assumes I'm pressing the person. The building
+                    // should always be the priority thing I'm pressing. I
+                    // can choose to select the individual from the building
+                    // menu." A hand parked at a station stands right on the
+                    // building's footprint, so asking the villager first
+                    // made the man win every click even when the building
+                    // was the thing under the cursor. `Hand` has already
+                    // resolved what is under this point for its own cursor;
+                    // ask it rather than resolving a second answer that
+                    // could disagree.
+                    var t = hand.Preview(pos);
+                    if (t.building != null) BuildMenuRequest.Open(hand.Camp, t.building);
+                    // A tap on the DRAWING is a question about the drawing:
+                    // what it still wants, and whether to give it up or put
+                    // it somewhere else. Kevin, 2026-09-21.
+                    else if (t.kind == World.HandTarget.Kind.Blueprint)
+                        BuildMenuRequest.OpenBlueprint(hand.Camp);
                     else
                     {
-                        // Nobody there to follow -- but a tap that landed on
-                        // a standing building (the campfire, or anything
-                        // else already raised) opens its own menu on the
-                        // sheet. `Hand` has already resolved what is under
-                        // this point for its own cursor; ask it rather than
-                        // resolving a second answer that could disagree.
-                        var t = hand.Preview(pos);
-                        if (t.building != null) BuildMenuRequest.Open(hand.Camp, t.building);
-                        // A tap on the DRAWING is a question about the
-                        // drawing: what it still wants, and whether to give
-                        // it up or put it somewhere else. Kevin, 2026-09-21.
-                        else if (t.kind == World.HandTarget.Kind.Blueprint)
-                            BuildMenuRequest.OpenBlueprint(hand.Camp);
+                        var who = hand.PickAt(pos, forPickup: false);
+                        if (who != null) cam.FollowThis(who.transform);
                         else cam.StopFollowing();
                     }
                 }

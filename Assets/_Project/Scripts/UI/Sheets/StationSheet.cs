@@ -973,7 +973,7 @@ namespace SeaSick.UI.Sheets
             readonly string role;
             readonly System.Action changed;
             readonly Label initial, name, sub;
-            readonly Button main, off;
+            readonly Button main, off, person;
             OutpostHand current;
 
             public WorkerCard(Outpost o, string planId, System.Action changed)
@@ -985,16 +985,33 @@ namespace SeaSick.UI.Sheets
                 if (string.IsNullOrEmpty(role)) role = "hand";
 
                 Root = Card();
+
+                // **Tap the person, not just the slot, 2026-09-27.** Kevin:
+                // "I can choose to select the individual from the building
+                // menu." Avatar + name + sub open the same sheet a tap in
+                // the world does -- `HandSheet` is kept by name, not by
+                // reference, so this works whether the body is raised or
+                // still a ledger row with nobody walking around for it.
+                person = new Button(OpenPerson) { text = "" };
+                person.AddToClassList("st-worker-person");
+                Root.Add(person);
+
                 var avatar = new VisualElement(); avatar.AddToClassList("st-avatar");
+                avatar.pickingMode = PickingMode.Ignore;
                 initial = Text("?", "st-avatar-text");
                 avatar.Add(initial);
-                Root.Add(avatar);
+                person.Add(avatar);
 
                 var words = new VisualElement(); words.AddToClassList("st-worker-words");
+                words.pickingMode = PickingMode.Ignore;
                 name = Text("", "st-worker-name");
                 sub = Text("", "st-worker-sub");
                 words.Add(name); words.Add(sub);
-                Root.Add(words);
+                person.Add(words);
+
+                var chevron = Text("›", "st-worker-chevron");
+                chevron.pickingMode = PickingMode.Ignore;
+                person.Add(chevron);
 
                 main = new Button(Main) { text = "Assign" };
                 main.AddToClassList("st-btn");
@@ -1018,6 +1035,7 @@ namespace SeaSick.UI.Sheets
                     main.style.display = free != null ? DisplayStyle.Flex : DisplayStyle.None;
                     main.SetEnabled(free != null);
                     off.style.display = DisplayStyle.Flex;
+                    person.SetEnabled(true);
                 }
                 else
                 {
@@ -1028,7 +1046,16 @@ namespace SeaSick.UI.Sheets
                     main.style.display = DisplayStyle.Flex;
                     main.SetEnabled(free != null);
                     off.style.display = DisplayStyle.None;
+                    person.SetEnabled(false);
                 }
+            }
+
+            /// Opens the same sheet a tap on this hand in the world does.
+            /// `HandSheet` is kept by name, so this works with no live body.
+            void OpenPerson()
+            {
+                if (outpost == null || current == null || string.IsNullOrEmpty(current.name)) return;
+                Sheets.Open(new HandSheet(outpost, current.name));
             }
 
             void Main()

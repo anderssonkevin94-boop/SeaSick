@@ -88,32 +88,18 @@ namespace SeaSick.UI.Sheets
             var cam = Camera.main;
             if (cam == null) return;
 
-            // **The crew are asked FIRST, and they are asked in screen space.**
+            // **The building is asked FIRST, 2026-09-27.**
             //
-            // Kevin, on the phone, 2026-09-22: *"when pressing on the villager
-            // his information / commands I can give him should be the 1/3
-            // screen UI"* -- and tapping one did nothing, while tapping his
-            // token in the crew list opened the sheet. The reason is that a
-            // villager has NO COLLIDER: `Hand.PickAt` is deliberately
-            // projection rather than physics ("giving twenty of them one so
-            // that a cursor can be aimed would be paying the physics engine
-            // for an interface", Hand.cs:228). So the raycast below could
-            // never hit a hand -- it hit the beach he was standing on, found
-            // no sheet for the terrain, and closed whatever was open.
+            // Kevin, on the phone: *"when pressing on a building someone is
+            // stationed at, the game assumes I'm pressing the person. The
+            // building should always be the priority thing I'm pressing. I
+            // can choose to select the individual from the building menu."*
+            // A villager parked at a station stands right on top of the
+            // building's footprint, and the crew pick below is a generous
+            // screen-space radius (`Feel.FollowRadius01`) -- so asking the
+            // crew first, as this used to, made the man win every time,
+            // even though the building is the thing under the finger.
             //
-            // Asking `Hand` is also the only way the two agree: the cursor
-            // that highlights a villager and the tap that opens his sheet now
-            // resolve the same man, with the same generous follow radius
-            // (`Feel.FollowRadius01` of the screen height, which is the
-            // thumb-sized target a 1.8 m body at island zoom does not have).
-            var hand = Hand.Instance;
-            var who = hand != null ? hand.PickAt(screen, forPickup: false) : null;
-            if (who != null)
-            {
-                var hers = Sheets.TryCreateFor(who);
-                if (hers != null) { Sheets.Open(hers); return; }
-            }
-
             // Triggers included on purpose: `Pickable` hangs a trigger sphere
             // on anything tappable that has no collider of its own.
             //
@@ -138,6 +124,31 @@ namespace SeaSick.UI.Sheets
                 var sheet = Sheets.TryCreateFor(col);
                 if (sheet != null) { Sheets.Open(sheet); return; }
                 if (!col.isTrigger) break;
+            }
+
+            // **No building under the finger: NOW ask the crew, in screen
+            // space.** Kevin, on the phone, 2026-09-22: *"when pressing on
+            // the villager his information / commands I can give him should
+            // be the 1/3 screen UI"* -- and tapping one did nothing, while
+            // tapping his token in the crew list opened the sheet. The
+            // reason is that a villager has NO COLLIDER: `Hand.PickAt` is
+            // deliberately projection rather than physics ("giving twenty of
+            // them one so that a cursor can be aimed would be paying the
+            // physics engine for an interface", Hand.cs:228). So the raycast
+            // above could never hit a hand on its own -- a villager standing
+            // clear of any building's footprint is only ever found here.
+            //
+            // Asking `Hand` is also the only way the two agree: the cursor
+            // that highlights a villager and the tap that opens his sheet
+            // resolve the same man, with the same generous follow radius
+            // (`Feel.FollowRadius01` of the screen height, which is the
+            // thumb-sized target a 1.8 m body at island zoom does not have).
+            var hand = Hand.Instance;
+            var who = hand != null ? hand.PickAt(screen, forPickup: false) : null;
+            if (who != null)
+            {
+                var hers = Sheets.TryCreateFor(who);
+                if (hers != null) { Sheets.Open(hers); return; }
             }
 
             // Ground, water, or nothing at all: whatever was open is done.
