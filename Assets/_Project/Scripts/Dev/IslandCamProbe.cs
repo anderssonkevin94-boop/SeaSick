@@ -223,8 +223,14 @@ public class IslandCamProbe : MonoBehaviour
         sb.AppendLine("UNTOUCHED:");
         sb.AppendLine($"  {ground0:F1} m of ground at {tilt0:F2}°, free {(shot.HasValue && shot.Value.free)}, "
             + $"hands on {cam.HandsOn}");
-        Gate("an-untouched-view-is-32-degrees", Mathf.Abs(tilt0 - 32f) < 0.25f,
-            $"{tilt0:F2}°");
+        // 32° was the untouched tilt before `IslandCamLock` existed (the
+        // curve's own middle point at 165 m of ground); while locked (default
+        // ON, 2026-09-27) every shot renders at `IslandCamLock.angleDeg`
+        // (38° by default) regardless of zoom, so that is what an untouched
+        // view has to match instead.
+        float expectedTilt0 = IslandCamLock.locked ? IslandCamLock.angleDeg : 32f;
+        Gate("an-untouched-view-matches-the-set-angle", Mathf.Abs(tilt0 - expectedTilt0) < 0.25f,
+            $"{tilt0:F2}° against {expectedTilt0:F1}° (locked {IslandCamLock.locked})");
         Gate("an-untouched-view-is-165-m-of-ground",
             Mathf.Abs(ground0 - cam.DefaultGround) < 1f,
             $"{ground0:F1} m against {cam.DefaultGround:F0}");
@@ -713,8 +719,11 @@ public class IslandCamProbe : MonoBehaviour
         sb.AppendLine($"HANDED BACK: {chase.CurrentTilt:F1}° at "
             + $"{(chase.Overview.HasValue ? chase.Overview.Value.ground : -1f):F0} m of ground, "
             + $"hands on {cam.HandsOn}");
-        Gate("home-hands-the-shot-back", !cam.HandsOn && Mathf.Abs(chase.CurrentTilt - 32f) < 0.5f,
-            $"handsOn {cam.HandsOn}, {chase.CurrentTilt:F2}°");
+        // Same swap as the untouched gate above: the tilt she is handed back
+        // to is the locked angle, not the pre-lock 32°, whenever locked.
+        float expectedTiltHome = IslandCamLock.locked ? IslandCamLock.angleDeg : 32f;
+        Gate("home-hands-the-shot-back", !cam.HandsOn && Mathf.Abs(chase.CurrentTilt - expectedTiltHome) < 0.5f,
+            $"handsOn {cam.HandsOn}, {chase.CurrentTilt:F2}° against {expectedTiltHome:F1}° (locked {IslandCamLock.locked})");
 
         Finish();
     }
