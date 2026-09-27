@@ -41,7 +41,7 @@ namespace SeaSick.UI.Sheets
             foreach (var hand in ledger.hands)
                 if (hand != null && hand.order == OutpostOrder.Work && ledger.StationOfHand(hand) == station)
                 { worker = hand; break; }
-            if (worker == null) return "Needs worker";
+            if (worker == null) return null;
             if (!station.HasOrder || station.benchState != BenchState.Empty || worker.Hauling) return null;
             // Use the economy's actual blocker, not an empty bay that is being supplied.
             string reason = ledger.StallReason(worker);

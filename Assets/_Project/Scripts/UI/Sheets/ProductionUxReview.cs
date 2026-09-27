@@ -21,7 +21,7 @@ namespace SeaSick.UI.Sheets
             void Require(bool condition, string name)
             { if (!condition) throw new InvalidOperationException("Land HUD: " + name); }
             Require(SheetBits.FoodDays(ledger) < 0f, "empty camp food estimate");
-            Require(BuildingStatusLabels.Status(ledger, station) == "Needs worker", "unassigned station");
+            Require(BuildingStatusLabels.Status(ledger, station) == null, "unassigned station (no worker sign, by design)");
             var hand = new SeaSick.World.OutpostHand { order = SeaSick.World.OutpostOrder.Work,
                 target = SeaSick.World.BuildPlans.Sawmill.id };
             ledger.hands.Add(hand);

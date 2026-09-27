@@ -24,13 +24,17 @@ namespace SeaSick.UI.Sheets
         public bool StillValid => true;
         public Vector3 AnchorWorld => Outpost.Home != null ? Outpost.Home.CampCentre : Vector3.zero;
 
-        StationPage.Header header;
+        WatchTiles.Head header;
         VisualElement root, col;
         bool filled;
 
         public VisualElement BuildHeader()
         {
-            header = new StationPage.Header(Title, false, null);
+            // CardKit's head (glyph + title/sub + close, no dead menu
+            // button): the old `StationPage.Header` always drew a "☰"
+            // square that opened nothing here (no ledger to jump to), and
+            // ate the width the title needed to fit on one line.
+            header = CardKit.Head("clock", Title);
             return header.Root;
         }
 
@@ -94,10 +98,24 @@ namespace SeaSick.UI.Sheets
             top.style.alignItems = Align.Center;
             var name = StationPage.Text(StationPage.Cap(c.name), "st-worker-name");
             name.style.flexGrow = 1f;
+            name.style.flexShrink = 1f;
             top.Add(name);
-            if (c.camp != null) top.Add(StationPage.Text("Open ›", "st-line"));
+            if (c.camp != null)
+            {
+                var open = StationPage.Text("Open ›", "st-pill-text");
+                open.style.marginLeft = 10f;
+                var chip = new VisualElement();
+                chip.AddToClassList("st-pill");
+                chip.style.flexShrink = 0f;
+                chip.style.marginLeft = 10f;
+                chip.style.marginRight = 0f;
+                chip.Add(open);
+                top.Add(chip);
+            }
             card.Add(top);
 
+            // Only the rows with something to say -- a row nobody can read
+            // ("Hungry: never" on every quiet camp) is noise, not status.
             if (c.built.Count > 0) card.Add(Line("Built", string.Join(", ", c.built)));
             if (c.born.Count > 0) card.Add(Line("New hands", string.Join(", ", c.born)));
             if (c.got.Count > 0)
@@ -109,9 +127,10 @@ namespace SeaSick.UI.Sheets
                 card.Add(Line("Brought in", sb.ToString()));
             }
             if (c.hands > 0)
-                card.Add(Line($"Eaten by {c.hands} hands", c.eaten > 0f ? $"{c.eaten:0.#} fill" : "nothing"));
-            card.Add(Line("Hungry", c.hungryDays > 0.01f
-                ? AwayProgress.Span(c.hungryDays * TimeOfDay.DayLength) : "never"));
+                card.Add(Line("Eaten", $"{c.hands} hand{(c.hands == 1 ? "" : "s")}"
+                    + (c.eaten > 0f ? $" · {c.eaten:0.#} fill" : " · nothing to eat")));
+            if (c.hungryDays > 0.01f)
+                card.Add(Line("Hungry", AwayProgress.Span(c.hungryDays * TimeOfDay.DayLength)));
             if (c.unhappy > 0) card.Add(Line("Unhappy", $"{c.unhappy} of {c.hands}"));
             if (c.stall != null)
                 card.Add(Line("Stalled", AwayProgress.Span(c.stalledDays * TimeOfDay.DayLength) + " · " + c.stall));
@@ -135,6 +154,8 @@ namespace SeaSick.UI.Sheets
             var k = StationPage.Text(key, "st-line");
             k.AddToClassList("st-muted");
             k.style.minWidth = 110f;
+            k.style.flexShrink = 0f;
+            k.style.marginRight = 8f;
             var v = StationPage.Text(value, "st-line");
             v.style.flexGrow = 1f;
             v.style.flexShrink = 1f;

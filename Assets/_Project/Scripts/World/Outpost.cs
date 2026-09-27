@@ -1610,6 +1610,17 @@ namespace SeaSick.World
                     continue;
                 }
 
+                // **A lookout put down fresh is up his tower** (2026-09-27):
+                // a save loading, the camp coming into view. `CampWorker`
+                // finds him on the deck and carries on the watch from there
+                // (`TickTower`); relieved, he climbs down.
+                if (post != null && post.Id == OutpostLedger.WatchtowerId
+                    && TowerMarks(post, out _, out _, out Vector3 deck))
+                {
+                    spot = deck;
+                    lookAt = deck + (deck - CampCentre);
+                }
+
                 a.transform.position = spot;
 
                 Vector3 face = lookAt - spot;

@@ -293,6 +293,7 @@ namespace SeaSick.World
             Drop();
             ReleaseClaim();
             ForgetTrip();
+            OffTower();
             phase = Phase.Held;
             acting?.Set(VillagerActing.Mode.Dangle);
         }
@@ -321,6 +322,7 @@ namespace SeaSick.World
             Drop();
             ReleaseClaim();
             ForgetTrip();
+            OffTower();
             transform.position = from;
             flyVel = velocity;
             flyOverLand = new Vector3(from.x, Ground(from), from.z);
@@ -378,6 +380,7 @@ namespace SeaSick.World
         public void PutDown(Vector3 at)
         {
             Drop();
+            OffTower();
             if (camp != null) at.y = camp.GroundAt(at);
             transform.position = at;
             phase = Phase.Landing;
@@ -411,6 +414,11 @@ namespace SeaSick.World
             if (outpost == null || b == null) return Vector3.zero;
             // A tower on the wall: its door is on the camp side of the wall
             // (2026-09-27), whatever side the model's own mark is on.
+            // A watchtower with a ladder (2026-09-27): the lookout's ground
+            // spot is a stride out from the ladder's foot, where he starts
+            // his climb -- kept clear of any wall (`TowerLadderFoot`).
+            if (b.Id == OutpostLedger.WatchtowerId && outpost.TowerLadderFoot(b, out Vector3 foot))
+                return foot;
             if (outpost.IsWallTower(b)) return outpost.WallTowerDoor(b);
             var marks = MarksOf(b);
             if (marks.stand != null)
@@ -619,6 +627,12 @@ namespace SeaSick.World
             // (hauling, delivering), so the "a job just came off it" edge in
             // `WatchBench` is measured against last frame's books and never
             // against a baseline that went stale during a trip.
+            // **Up the watchtower (2026-09-27).** A lookout on his platform,
+            // or on its ladder either way, belongs to `TickTower` until he is
+            // back on the ground -- relieved or re-posted, he climbs down
+            // before anything else gets his legs.
+            if (TickTower(r, dt)) return;
+
             WatchBench(r);
             // A load the books have put down (or are about to) being walked
             // the last few steps and set down. Runs ahead of everything,
@@ -1270,10 +1284,12 @@ namespace SeaSick.World
         /// (`StoreSpot`; it used to be the fire ring for good).
         void TickWorkAt(OutpostHand r, float dt)
         {
-            Building post = preferred != null && preferred.Id == r.target
-                ? preferred : camp.WorkplaceOf(r);
+            Building post = WorkPostOf(r);
             Vector3 door = post != null ? WorkSpot(camp, post) : home;
             Vector3 face = post != null ? post.transform.position : lookAt;
+
+            // A lookout's shift is the platform: walk to the ladder, climb.
+            if (post != null && post.Id == OutpostLedger.WatchtowerId && TowerFootWalk(post, door, dt)) return;
 
             if (camp.Ledger != null && camp.Ledger.Stalled(r))
             {
@@ -2596,6 +2612,168 @@ namespace SeaSick.World
             }
 
             return routeAt >= route.Count - 1 ? to : route[routeAt];
+        }
+
+        // --- the watchtower platform (2026-09-27) --------------------------------
+
+        /// Where a lookout is with respect to his tower's ladder.
+        enum TowerState : byte { Ground, Up, Top, Down }
+        TowerState tower;
+        Building towerOn;
+        /// The tower's own ladder climb: separate from `climb` (the cliff
+        /// chains `Walk` starts on its own), so `Walk` never ticks it.
+        readonly LadderClimb towerClimb = new LadderClimb();
+        float lookClock = -1f;
+
+        /// Is this man on a watchtower (on its deck, or on its ladder)?
+        public bool OnTower => tower != TowerState.Ground;
+
+        /// The building this Work row is drawn at (`PreferWorkplace` first).
+        Building WorkPostOf(OutpostHand r)
+            => preferred != null && preferred.Id == r.target ? preferred : camp.WorkplaceOf(r);
+
+        /// The watchtower this row should be standing on, or null.
+        Building LookoutTower(OutpostHand r)
+        {
+            if (r == null || r.order != OutpostOrder.Work || r.target != OutpostLedger.WatchtowerId
+                || r.Hauling) return null;
+            var b = WorkPostOf(r);
+            return b != null && b.Id == OutpostLedger.WatchtowerId ? b : null;
+        }
+
+        /// Something else has the body (the Hand, a throw): he is not on the
+        /// tower any more, whatever he was doing on it.
+        void OffTower()
+        {
+            towerClimb.Cancel();
+            tower = TowerState.Ground;
+            towerOn = null;
+        }
+
+        /// **The lookout's walk to his ladder, then up it.** True when this
+        /// frame is handled; false for a tower with no ladder marks or no
+        /// clear foot (the old stand-at-the-door shift runs instead).
+        bool TowerFootWalk(Building post, Vector3 door, float dt)
+        {
+            if (!camp.TowerLadderFoot(post, out Vector3 foot)) return false;
+            acting?.Set(VillagerActing.Mode.None);
+            if (!Walk(foot, dt)) { phase = Phase.Going; return true; }
+            phase = Phase.Working;
+            // The stall guard can call a spot "reached" from a couple of
+            // metres off: never start a climb from across a wall or a hedge.
+            if (FlatDistance(transform.position, foot) > 1.5f)
+            {
+                Face(post.transform.position - transform.position, dt);
+                return true;
+            }
+            var shape = camp.TowerClimbShape(post, foot);
+            if (shape == null) return false;
+            towerOn = post;
+            tower = TowerState.Up;
+            towerClimb.Begin(camp, transform, shape, true, dt);
+            return true;
+        }
+
+        /// **Up, on, or down the tower.** True while the tower has the body.
+        ///
+        /// - Ground: nothing to do here -- unless the body was PUT on his
+        ///   tower's deck (a save loading, the camp coming into view:
+        ///   `Outpost.ArrangeHands` places a lookout there), in which case he
+        ///   is simply up.
+        /// - Up / Down: `LadderClimb` walks the tower's shape
+        ///   (`Outpost.TowerClimbShape`). A lookout relieved mid-climb finishes
+        ///   going up, then comes straight back down.
+        /// - Top: stands on the deck looking out, away from the camp, and
+        ///   sweeps the horizon slowly. Relieved, re-posted to another tower,
+        ///   or given a trip: climbs down first.
+        bool TickTower(OutpostHand r, float dt)
+        {
+            Building want = LookoutTower(r);
+            if (tower == TowerState.Ground)
+            {
+                if (want == null || !Outpost.TowerMarks(want, out _, out _, out Vector3 deck)) return false;
+                if ((transform.position - deck).sqrMagnitude > 0.8f * 0.8f) return false;
+                tower = TowerState.Top;
+                towerOn = want;
+            }
+            // The tower went from under him (burnt, pulled down): on his feet
+            // where he was.
+            if (towerOn == null)
+            {
+                OffTower();
+                Vector3 p = transform.position;
+                p.y = Ground(p);
+                transform.position = p;
+                return false;
+            }
+            acting?.Set(VillagerActing.Mode.None);
+            switch (tower)
+            {
+                case TowerState.Up:
+                {
+                    phase = Phase.Going;
+                    if (!towerClimb.Tick(camp, transform, dt)) return true;
+                    // Finished -- or dropped because something moved him.
+                    if (!Outpost.TowerMarks(towerOn, out _, out _, out Vector3 deck)
+                        || (transform.position - deck).sqrMagnitude > 1f)
+                    {
+                        OffTower();
+                        return false;
+                    }
+                    tower = TowerState.Top;
+                    return true;
+                }
+                case TowerState.Down:
+                {
+                    phase = Phase.Going;
+                    if (!towerClimb.Tick(camp, transform, dt)) return true;
+                    OffTower();
+                    Vector3 p = transform.position;
+                    float g = Ground(p);
+                    if (p.y > g + 0.3f) { p.y = g; transform.position = p; }
+                    phase = Phase.Resting;
+                    wait = 0f;
+                    return true;
+                }
+                default:
+                {
+                    if (!Outpost.TowerMarks(towerOn, out _, out _, out Vector3 deck))
+                    {
+                        towerOn = null;
+                        return TickTower(r, dt);
+                    }
+                    if (!ReferenceEquals(want, towerOn))
+                    {
+                        var shape = camp.TowerClimbShape(towerOn, WorkSpot(camp, towerOn));
+                        if (shape == null)
+                        {
+                            towerOn = null;
+                            return TickTower(r, dt);
+                        }
+                        tower = TowerState.Down;
+                        phase = Phase.Going;
+                        towerClimb.Begin(camp, transform, shape, false, dt);
+                        return true;
+                    }
+                    // Moved off it by something that is not the Hand (a
+                    // teleport home): he is wherever that put him.
+                    if ((transform.position - deck).sqrMagnitude > 1f) { OffTower(); return false; }
+                    phase = Phase.Working;
+                    transform.position = deck;
+                    // On watch: facing out, away from the camp, the gaze
+                    // drifting either side of it -- two slow sines, a
+                    // different start per man, so it reads as looking, not
+                    // as a turret.
+                    Vector3 outward = deck - camp.CampCentre;
+                    outward.y = 0f;
+                    if (outward.sqrMagnitude < 0.01f) outward = towerOn.transform.forward;
+                    if (lookClock < 0f) lookClock = Random.value * 60f;
+                    lookClock += dt;
+                    float sweep = 50f * Mathf.Sin(lookClock * 0.28f) + 15f * Mathf.Sin(lookClock * 0.9f);
+                    Face(Quaternion.Euler(0f, sweep, 0f) * outward.normalized, dt);
+                    return true;
+                }
+            }
         }
 
         /// Turn toward a direction, smoothed. Every facing in this file goes

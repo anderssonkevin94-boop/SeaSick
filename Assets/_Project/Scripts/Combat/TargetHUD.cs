@@ -32,9 +32,13 @@ namespace SeaSick.Combat
             // discarded passes were the game's biggest source of GC garbage.
             if (Event.current.type != EventType.Repaint) return;
             // Same IMGUI-blind-spot suppression as the rest of the HUD
-            // (2026-09-26 review).
+            // (2026-09-26 review). `SheetHost.FrameOpen` added 2026-09-27:
+            // IMGUI paints after UI Toolkit, so a range label like "120 m
+            // -- out of reach" used to bleed through a tall sheet (e.g. the
+            // "While you were away" card) sitting right on top of it.
             if (SeaSick.UI.ModularYard.ShipyardModal.IsOpen
-                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None) return;
+                || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None
+                || SeaSick.UI.Sheets.SheetHost.FrameOpen) return;
             if (cam == null) cam = Camera.main;
             if (cam == null) return;
 

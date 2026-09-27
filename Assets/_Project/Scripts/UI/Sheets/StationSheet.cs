@@ -1384,6 +1384,14 @@ namespace SeaSick.UI.Sheets
                         Line(5, 17, 19, 17); Line(5, 17, 7, 21); Line(19, 17, 17, 21); Line(7, 21, 17, 21);
                         Line(12, 4, 12, 17); Line(12, 6, 17, 10);
                         break;
+                    // The "while you were away" card (2026-09-27): a clock,
+                    // same drawn-glyph treatment as the other card headers.
+                    case "clock":
+                        p.BeginPath();
+                        p.Arc(new Vector2(12 * s, 12 * s), 8f * s, 0f, 360f);
+                        p.Stroke();
+                        Line(12, 12, 12, 6); Line(12, 12, 16.5f, 14.5f);
+                        break;
                     default:
                         Line(5, 12, 19, 12);
                         p.BeginPath();

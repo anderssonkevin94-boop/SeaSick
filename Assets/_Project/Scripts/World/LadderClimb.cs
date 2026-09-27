@@ -69,6 +69,27 @@ namespace SeaSick.World
 
         Vector3 start;
 
+        /// **Climb a shape that is not a cliff chain** (2026-09-27: the
+        /// watchtower's own ladder, `Outpost.TowerClimbShape`) -- the same
+        /// pose and timing. No `Ladder`, so no cooldown. A shape whose far
+        /// end is a deck (going UP a tower) leaves the body standing on the
+        /// deck, not dropped to the ground.
+        public void Begin(Outpost camp, Transform body, LadderLayout.Shape s, bool goingUp, float dt)
+        {
+            if (body == null || s == null || s.path.Count < 2) return;
+            shape = s;
+            ladder = null;
+            up = goingUp;
+            seg = 0;
+            segT = 0f;
+            Vector3 here = body.position;
+            // A first leg on the rails or a deck is drawn `Standoff` out
+            // (`Place`); start that far in so the body does not jump.
+            start = LegOf(0) == LadderLayout.Leg.Ground ? here : here + shape.run * Standoff;
+            lastSet = here;
+            Tick(camp, body, dt);
+        }
+
         int Count => shape.path.Count;
 
         Vector3 Point(int i)
@@ -111,7 +132,10 @@ namespace SeaSick.World
 
             // Off the chain, on the ground at the far end.
             Vector3 end = Point(Count - 1);
-            if (camp != null) end.y = camp.GroundAt(end);
+            // Ending on a deck (the top of a watchtower): he stands where
+            // the deck walk left him, up there.
+            if (LegOf(Count - 2) == LadderLayout.Leg.Deck) end -= shape.run * Standoff;
+            else if (camp != null) end.y = camp.GroundAt(end);
             body.position = end;
             lastSet = end;
             cooldownOn = ladder;
