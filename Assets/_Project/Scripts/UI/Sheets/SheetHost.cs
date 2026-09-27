@@ -617,7 +617,14 @@ namespace SeaSick.UI.Sheets
             // -- a desk sheet is already close to full height.
             else if (!HudLayout.Wide && Sheets.Current is ISheetFramed tallFramed && tallFramed.WantsTallSheet)
             {
-                float reserve = (MidnightLandHud.Active ? MidnightLandHud.TopHeight + MidnightLandHud.NavHeight : 0f) / PanelScale + Margin * 2f;
+                // Land HUD: the chrome sits 8 units below the safe top and the
+                // frame is lifted 10 units off the bottom (`Place`), so the
+                // reserve carries both plus a 6-unit gap -- without them the
+                // tall frame's top edge cut the alert strip's chips in half
+                // (2026-09-27, 1080x2340 overlay capture).
+                float reserve = MidnightLandHud.Active
+                    ? (MidnightLandHud.TopHeight + MidnightLandHud.NavHeight + 24f) / PanelScale + Margin
+                    : Margin * 2f;
                 float ceiling = safe.height - reserve;
                 size.y = Mathf.Max(size.y, ceiling);
             }

@@ -238,7 +238,7 @@ namespace SeaSick.World.Economy
             if (l.CampfireLevel < step.campfireLevel)
                 w.Gate(GoalRowKind.Gate, null, $"Campfire {RecipeGraph.Roman(step.campfireLevel)}",
                     $"the fire is at {RecipeGraph.Roman(l.CampfireLevel)}", "raise",
-                    new GoalStep { action = GoalAction.None, title = $"raise the fire to {RecipeGraph.Roman(step.campfireLevel)} first",
+                    new GoalStep { action = GoalAction.None, title = $"raise the fire to {RecipeGraph.Roman(step.campfireLevel)}",
                         detail = "the fire's own goal" });
             w.Lines(step.cost);
             g.CanComplete = l.CanUpgradeAt(raisedIndex, planId, out _);
