@@ -20,11 +20,15 @@ namespace SeaSick.World
     /// same road-discounted metres (`EffectiveMetres`), so a watched and an
     /// unwatched camp agree.
     ///
-    /// The heuristic is left as it was (octile, grass-priced), which makes
-    /// it inadmissible by at most the multiplier: a route may be up to that
-    /// much worse than the best one in the worst case, and a road far off
-    /// to the side may go unnoticed. That is the "within reason", and it
-    /// keeps the search as cheap as it was.
+    /// **The heuristic is discounted too (2026-09-27, `CampPath.Heuristic`)**,
+    /// not left grass-priced: undiscounted it was inadmissible by up to the
+    /// multiplier the moment any road existed, and a route that bowed out to
+    /// a road off to the side of the straight line could be missed entirely
+    /// rather than merely "up to `SpeedMultiplier` worse". Discounting it
+    /// costs search breadth on a roaded camp (see the note on `Heuristic`),
+    /// not correctness -- the "within reason" is now just "the search still
+    /// has `MaxExpansions` to work with", which a camp-sized grid stays well
+    /// inside.
     public partial class CampPath
     {
         bool[] road;

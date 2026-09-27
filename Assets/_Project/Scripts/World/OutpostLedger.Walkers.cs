@@ -374,7 +374,19 @@ namespace SeaSick.World
 
         /// **Walk an errand with no load** (a builder to his site, a worker
         /// to his bench): true once he is there. A driven hand is there when
-        /// his body is within `OnSiteMetres`; the body walks itself.
+        /// his body is within `OnSiteMetres`; the body walks itself (and the
+        /// body's own step, `CampWorker.Walk`, already carries the road
+        /// bonus).
+        ///
+        /// **Road-discounted (2026-09-27), the same rule a hauler's leg is
+        /// metered by (`RouteMetres`).** This used to cost the errand at
+        /// straight-line `d` regardless of a road underfoot -- a carried
+        /// load walked the road's leg in `RouteMetres` and got there sooner,
+        /// but a builder with empty hands walking to the very same site
+        /// along the very same road paid the grass price. `route` is what he
+        /// actually has to cover; `d` still governs how close counts as
+        /// arrived and where the short-of-goal stand spot is drawn, since
+        /// that is about physical distance to the target, not the road.
         bool WalkTo(OutpostHand h, Vector3 goal, ref float budget, float scale)
         {
             goal.y = 0f;
@@ -384,16 +396,19 @@ namespace SeaSick.World
             if (h.driven) return d <= OnSiteMetres;
             if (d <= OnSiteMetres * 0.5f) return true;
             if (scale <= 0f || budget <= Eps) return false;
-            float walk = d - OnSiteMetres * 0.25f;
+            float shortBy = OnSiteMetres * 0.25f;
+            float route = RouteMetres(p, goal);
+            float walk = Mathf.Max(0f, route - shortBy);
             float cost = SecondsToDays(walk / WalkMetresPerSecond) * scale;
             if (budget + Eps >= cost)
             {
                 budget = Mathf.Max(0f, budget - cost);
-                SetHandAt(h, Vector3.Lerp(p, goal, walk / d));
+                SetHandAt(h, Vector3.Lerp(p, goal, Mathf.Clamp01((d - shortBy) / d)));
                 return true;
             }
             float metres = budget / scale * TimeOfDay.DayLength * WalkMetresPerSecond;
-            SetHandAt(h, Vector3.Lerp(p, goal, Mathf.Clamp01(metres / d)));
+            float frac = route > 1e-4f ? metres / route : 1f;
+            SetHandAt(h, Vector3.Lerp(p, goal, Mathf.Clamp01(frac)));
             budget = 0f;
             return false;
         }

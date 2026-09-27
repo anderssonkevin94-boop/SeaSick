@@ -206,9 +206,10 @@ namespace SeaSick.UI.Sheets
 
             mainHolder = new VisualElement();
             list.Add(mainHolder);
-            // The road (2026-09-27): drawn tap to tap like the wall, shown
-            // on the first tab so it is the first thing the list offers
-            // after the houses.
+            // The road (2026-09-27): drawn tap to tap like the wall.
+            // **Lives on Defence, not Shelter (2026-09-27)** -- it sits
+            // beside the palisade and the ladder, the tab's other drawn,
+            // tap-to-tap infrastructure, rather than among the houses.
             roadHolder = new VisualElement();
             list.Add(roadHolder);
             roadCard = NewCard(roadHolder);
@@ -404,10 +405,10 @@ namespace SeaSick.UI.Sheets
                 BindMain(l, c, plans[k], states[k]);
             }
 
-            bool roads = tab == (int)Group.Shelter;
+            bool defence = tab == (int)Group.Defence;
+            bool roads = defence;
             roadHolder.style.display = roads ? DisplayStyle.Flex : DisplayStyle.None;
             if (roads) BindRoad(l, stone);
-            bool defence = tab == (int)Group.Defence;
             extrasHolder.style.display = defence ? DisplayStyle.Flex : DisplayStyle.None;
             if (defence) BindDefence(l, timber);
             emptyNote.style.display = plans.Count == 0 && !defence && locked.Count == 0

@@ -703,13 +703,37 @@ namespace SeaSick.World
         static readonly int[] DX = { 1, -1, 0, 0, 1, 1, -1, -1 };
         static readonly int[] DY = { 0, 0, 1, -1, 1, -1, 1, -1 };
 
-        /// Octile distance. Admissible because `pen` is never below 1.
+        /// Octile distance. Admissible because `pen` is never below 1 --
+        /// **and, with any road on the camp (2026-09-27), scaled by
+        /// `1 / CampRoads.SpeedMultiplier`.** Grass-priced octile is
+        /// inadmissible the moment a road exists: `RoadCost` can price a
+        /// step as low as `1/SpeedMultiplier`, so the true cheapest path can
+        /// run below what the plain heuristic promises, and A* is only
+        /// guaranteed to find the optimum when the heuristic never
+        /// overestimates. Undiscounted, a road bowed out to the side of the
+        /// straight line reads as strictly worse until the search stumbles
+        /// onto it, and a search that never stumbles onto it returns the
+        /// grass route instead -- exactly the "faster road off to the side
+        /// may go unnoticed" gap `CampPath.Roads` used to accept on purpose.
+        /// Scaling by the multiplier keeps it a true lower bound (no step is
+        /// ever cheaper than `cell / SpeedMultiplier`), so the search is
+        /// exact again.
+        ///
+        /// **The cost: a camp with roads searches less selectively.** The
+        /// discounted heuristic is uniformly weaker (by exactly
+        /// `SpeedMultiplier`, ~1.3x at today's tuning), so a query on a
+        /// roaded camp expands more cells for the same route than the old
+        /// grass heuristic did -- `MaxExpansions` (9000) is unchanged and
+        /// this is still well inside it for a camp-sized grid, but it is a
+        /// real, camp-wide slowdown, not a free correctness fix. A camp with
+        /// no roads (`anyRoad` false) is untouched: the multiplier is 1.
         float Heuristic(int i, int goal)
         {
             int dx = Mathf.Abs(i % n - goal % n);
             int dy = Mathf.Abs(i / n - goal / n);
             int lo = Mathf.Min(dx, dy);
-            return cell * ((dx + dy - 2 * lo) + 1.41421356f * lo);
+            float h = cell * ((dx + dy - 2 * lo) + 1.41421356f * lo);
+            return anyRoad ? h / CampRoads.SpeedMultiplier : h;
         }
 
         // --- grid helpers -----------------------------------------------------

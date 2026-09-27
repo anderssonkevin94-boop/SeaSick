@@ -149,6 +149,13 @@ namespace SeaSick.World
                 stoneNeeded = BuildPlans.RoadCost(run.magnitude),
                 phased = true,
             };
+            // **Claim the line's trees and rocks (2026-09-27), same as a
+            // wall.** Without this a road drew straight over standing
+            // scenery -- nothing ever owned it, so nothing ever felled it,
+            // and `ShapeOf` now knows a road row is a line (`IsRoadRow`).
+            // Before the row joins the queue, so the registry is still the
+            // one without it (`TakeFootprint`'s own rule).
+            TakeFootprint(row);
             ledger.sites.Add(row);
             if (ledger.EnlistFree() > 0 && Watched) PuppetsToWork();
             EnsureBlueprints();

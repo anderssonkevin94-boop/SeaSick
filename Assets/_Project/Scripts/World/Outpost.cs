@@ -2190,7 +2190,14 @@ namespace SeaSick.World
         ClearShape ShapeOf(PendingBuild r, out bool skip)
         {
             skip = false;
-            if (r.isWall) return ClearShape.Line(r.postA, r.postB);
+            // **A road is a line too (2026-09-27), same as a wall.** Its
+            // ends are `postA`/`postB` exactly the way a wall's are; without
+            // this it fell through to `plan.footprint` as a rectangle at
+            // `r.At` -- the wrong shape entirely (`BuildPlans.Road`'s
+            // footprint means nothing here), and, since nothing ever called
+            // `TakeFootprint` for a road row either, no tree or rock on the
+            // line was ever claimed or felled. See `Outpost.Roads.SiteRoad`.
+            if (r.isWall || IsRoadRow(r)) return ClearShape.Line(r.postA, r.postB);
             var plan = PlanFor(r.planId, r.length);
             if (plan.kind == BuildKind.Pier || plan.kind == BuildKind.DryDock) { skip = true; return default; }
             return ClearShape.Rect(r.At, r.yaw, plan.footprint);
