@@ -109,6 +109,7 @@ namespace SeaSick.Dev
             // island" at 20, steep enough to still show a horizon at 70;
             // default 38 -- see `IslandCamLock`'s own doc comment.
             {"IslandCamLock.angleDeg", (20f, 70f)},
+            {"IslandCamLock.fovDeg", (25f, 70f)},
 
             {"EconomyFeel.costMultiplier",         (0.25f, 3f)},
             {"EconomyFeel.buildTimeMultiplier",    (0.1f, 4f)},

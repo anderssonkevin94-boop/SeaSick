@@ -91,7 +91,12 @@ namespace SeaSick.CameraRig
     public static class IslandCamLock
     {
         public static bool locked = true;
-        public static float angleDeg = 38f;
+        /// 28°, not 38: Kevin picked "50° with the lower tilt" from the lens
+        /// renders on 2026-09-27 — more horizon and sea, less plan view.
+        public static float angleDeg = 28f;
+        /// The island lens while locked (vertical field of view). 50° against
+        /// the old 36°: more depth, the camp still reads (same renders).
+        public static float fovDeg = 50f;
     }
 
     [DefaultExecutionOrder(-40)]

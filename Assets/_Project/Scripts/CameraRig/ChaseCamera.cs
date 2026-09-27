@@ -484,7 +484,7 @@ namespace SeaSick.CameraRig
         /// The lens the overview settles at, for anything that has to build
         /// the same frustum by hand (see `IslandCam.ScreenRay`, which must not
         /// use the camera's own — that one lags).
-        public float OverviewFov => overviewFov;
+        public float OverviewFov => IslandCamLock.locked ? IslandCamLock.fovDeg : overviewFov;
 
         /// 0 = sailing, 1 = fully up at the island. Input stays inert until
         /// this is essentially 1: a grab against a camera still flying up
@@ -577,7 +577,7 @@ namespace SeaSick.CameraRig
         {
             float tilt = Mathf.Max(1f, overviewTilt) * Mathf.Deg2Rad;
             float span = Mathf.Max(0.1f, metres) / Mathf.Sin(tilt);
-            return span * 2f * Mathf.Tan(overviewFov * 0.5f * Mathf.Deg2Rad);
+            return span * 2f * Mathf.Tan(OverviewFov * 0.5f * Mathf.Deg2Rad);
         }
 
         /// **Metres of ground up the frame that hold a circle of `radius`
@@ -607,7 +607,7 @@ namespace SeaSick.CameraRig
         public float OverviewHeightForGround(float groundMetres)
         {
             float tilt = Mathf.Max(1f, overviewTilt) * Mathf.Deg2Rad;
-            float span = groundMetres / (2f * Mathf.Tan(overviewFov * 0.5f * Mathf.Deg2Rad));
+            float span = groundMetres / (2f * Mathf.Tan(OverviewFov * 0.5f * Mathf.Deg2Rad));
             return span * Mathf.Sin(tilt);
         }
 
@@ -989,7 +989,7 @@ namespace SeaSick.CameraRig
             if (overviewLevel > 0.001f && shot.HasValue)
             {
                 var ov = shot.Value;
-                float vfov = Mathf.Lerp(sailLens, overviewFov, overviewLevel);
+                float vfov = Mathf.Lerp(sailLens, OverviewFov, overviewLevel);
                 float tanHalf = Mathf.Tan(vfov * 0.5f * Mathf.Deg2Rad);
 
                 // The zoom is authored as METRES OF GROUND up the frame, not
@@ -1119,7 +1119,7 @@ namespace SeaSick.CameraRig
                 cam.farClipPlane = baseFarClip;
 
             if (cam != null)
-                cam.fieldOfView = Mathf.Lerp(sailLens, overviewFov, overviewLevel);
+                cam.fieldOfView = Mathf.Lerp(sailLens, OverviewFov, overviewLevel);
 
             if (!rigSeeded) { rigPos = transform.position; rigSeeded = true; }
             // `direct` is k = 1: the seat, verbatim. Written into `rigPos`
