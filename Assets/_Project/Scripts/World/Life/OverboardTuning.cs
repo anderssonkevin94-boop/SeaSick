@@ -66,7 +66,11 @@ namespace SeaSick.World.Life
         public float rescueSeaLegsGain = 0.08f;
 
         [Header("The rescue (phase 5b)")]
-        [Tooltip("Metres from the hull's rail/side (not its centre) within which \"Throw line\" appears.")]
+        [Tooltip("Sail-over pickup (Kevin 2026-09-28): a swimmer or crate within this many metres of the hull's side (or under her) climbs aboard. Starting value.")]
+        public float boardReachMetres = 5f;
+        [Tooltip("Seconds a target must stay within boardReachMetres to climb aboard. Starting value.")]
+        public float boardSeconds = 2f;
+        [Tooltip("Metres from the hull's rail/side within which a jolly boat / legacy throw-line haul reaches.")]
         public float throwReachMetres = 9f;
         [Tooltip("Ship speed (m/s) above which she's too fast to throw a line, even in reach.")]
         public float throwMaxSpeed = 1.8f;
@@ -177,6 +181,8 @@ namespace SeaSick.World.Life
         public static float RescueSicknessSpike => D != null ? D.rescueSicknessSpike : 0.9f;
         public static float RescueOffStationSeconds => D != null ? D.rescueOffStationSeconds : 30f;
         public static float RescueSeaLegsGain => D != null ? D.rescueSeaLegsGain : 0.08f;
+        public static float BoardReachMetres => D != null ? D.boardReachMetres : 5f;
+        public static float BoardSeconds => D != null ? D.boardSeconds : 2f;
         public static float ThrowReachMetres => D != null ? D.throwReachMetres : 9f;
         public static float ThrowMaxSpeed => D != null ? D.throwMaxSpeed : 1.8f;
         public static float HullHalfBeamMetres => D != null ? D.hullHalfBeamMetres : 3.5f;

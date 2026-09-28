@@ -59,6 +59,10 @@ namespace SeaSick.Ship.Overboard
             var c = go.AddComponent<FloatingCargo>();
             c.Resource = resource;
             c.Units = units;
+            // The crew's own `ship` can be unset (e.g. docked/anchored
+            // bookkeeping); fall back to the player's hull so reach checks
+            // never measure a target against itself (2026-09-28 smoke).
+            if (hull == null) { var m = Object.FindAnyObjectByType<SeaSick.Ship.ShipMotor>(); if (m != null) hull = m.transform; }
             c.ship = hull;
             c.timeTotal = Mathf.Max(10f, OverboardTuning.FloatSeconds);
             c.timeLeft = c.timeTotal;

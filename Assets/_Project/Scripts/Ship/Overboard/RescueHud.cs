@@ -28,10 +28,9 @@ namespace SeaSick.Ship.Overboard
     ///    event — the same thing the oars/ease buttons already do
     ///    (`HelmInput.cs`) — which is enough on its own; the `GUI.Button`
     ///    underneath is what actually reads the tap.
-    /// 3. **Throw line.** In reach of the hull's SIDE (not its centre), slow
-    ///    enough: a big bottom-centre button that sends the nearest
-    ///    `Available` hand to haul. Too fast: no button, a small hint
-    ///    instead. Nobody free: a disabled button that says so.
+    /// 3. **Sail over them** (2026-09-28, replaced the Throw line button):
+    ///    within `BoardReachMetres` of the hull's side for `BoardSeconds`
+    ///    and they climb aboard, a filling bar bottom-centre meanwhile.
     public class RescueHud : MonoBehaviour
     {
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -64,6 +63,53 @@ namespace SeaSick.Ship.Overboard
             {
                 if (helm == null) helm = FindAnyObjectByType<HelmInput>();
                 nextHelmLookup = Time.time + 1f;
+            }
+            TickBoarding(Time.deltaTime);
+        }
+
+        // ------------------------------------------------- sail-over pickup
+        //
+        // Kevin, 2026-09-28: *"i cant pick a guy up whose landed in the
+        // water. it should be enough that i sail over him and a quick 2
+        // second timer goes off and he climbs aboard."* No button, no speed
+        // gate: keep a target within `BoardReachMetres` of the hull's side
+        // (or under her) for `BoardSeconds` and it comes aboard. Drift out
+        // of reach and the timer starts over. The scramble net shortens it,
+        // the lifebuoy rack widens the reach.
+
+        static readonly Dictionary<IOverboardTarget, float> boarding = new Dictionary<IOverboardTarget, float>();
+        static readonly List<IOverboardTarget> boardScratch = new List<IOverboardTarget>();
+
+        static float BoardReach => OverboardTuning.BoardReachMetres + OverboardModules.ThrowReachBonusMetres() * 0.5f;
+        static float BoardTime => OverboardTuning.BoardSeconds * OverboardModules.HaulTimeMultiplier();
+
+        static float SideGap(IOverboardTarget t)
+        {
+            if (t.Hull == null) return float.MaxValue;   // no ship to climb onto
+            Vector3 a = t.NearestHullSide(), b = t.WorldPosition;
+            a.y = 0f; b.y = 0f;
+            return Vector3.Distance(a, b);
+        }
+
+        void TickBoarding(float dt)
+        {
+            if (Time.timeScale <= 0f) return;
+            CollectTargets();
+            boardScratch.Clear();
+            foreach (var kv in boarding) boardScratch.Add(kv.Key);
+            foreach (var k in boardScratch)
+                if (k == null || k.Resolved || !targets.Contains(k)) boarding.Remove(k);
+
+            foreach (var t in targets)
+            {
+                if (t == null || t.Resolved || t.BeingHauled) continue;
+                if (SideGap(t) > BoardReach) { boarding.Remove(t); continue; }
+                boarding.TryGetValue(t, out float have);
+                have += dt;
+                if (have < BoardTime) { boarding[t] = have; continue; }
+                boarding.Remove(t);
+                var helper = FindNearestAvailableCrew(t);
+                t.OnHauled(helper != null ? helper.DisplayName : "");
             }
         }
 
@@ -111,7 +157,7 @@ namespace SeaSick.Ship.Overboard
             });
 
             DrawSteeringLine(u);
-            DrawThrowLines(u);
+            DrawBoarding(u);
         }
 
         static readonly List<IOverboardTarget> inReach = new List<IOverboardTarget>();
@@ -261,6 +307,37 @@ namespace SeaSick.Ship.Overboard
         /// UPWARD from the same bottom-centre anchor the single button used
         /// to sit at, so the first (highest-priority) row lands exactly
         /// where "Throw line" always has.
+        /// "Anna is climbing aboard" with a filling bar, bottom-centre where
+        /// the Throw line button used to be. Not a button: nothing to press.
+        void DrawBoarding(int u)
+        {
+            if (boarding.Count == 0) return;
+            float h = Mathf.Max(u * 2.4f, 48f);
+            float w = Mathf.Min(HudLayout.Safe.width - HudLayout.Pad * 2f, u * 26f);
+            var safe = HudLayout.Safe;
+            float y = HudLayout.BottomClustersTop - HudLayout.Gap - h;
+            foreach (var kv in boarding)
+            {
+                if (kv.Key == null || kv.Key.Resolved) continue;
+                var rect = new Rect(safe.x + (safe.width - w) * 0.5f, y, w, h);
+                float f = Mathf.Clamp01(kv.Value / Mathf.Max(0.01f, BoardTime));
+                UITheme.Rect(rect, new Color(0f, 0f, 0f, 0.55f));
+                UITheme.Rect(new Rect(rect.x, rect.y, rect.width * f, rect.height), new Color(0.3f, 0.75f, 0.4f, 0.85f));
+                var style = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = Mathf.RoundToInt(u * 0.95f),
+                    alignment = TextAnchor.MiddleCenter,
+                };
+                style.normal.textColor = Color.white;
+                GUI.Label(rect, kv.Key.RescuePriority == 0
+                    ? kv.Key.Label + " is climbing aboard"
+                    : "Hauling in " + kv.Key.Label, style);
+                y -= h + HudLayout.Gap;
+            }
+        }
+
+        /// **Unused since 2026-09-28** (sail-over pickup replaced the
+        /// button); kept for the jolly boat's sake of the shared haul code.
         void DrawThrowLines(int u)
         {
             if (inReach.Count == 0 || helm == null) return;

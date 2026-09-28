@@ -81,6 +81,10 @@ namespace SeaSick.Ship.Overboard
             s.CrewName = agent.DisplayName;
             s.Scripted = firstTime;
             s.origin = agent;
+            // The crew's own `ship` can be unset (e.g. docked/anchored
+            // bookkeeping); fall back to the player's hull so reach checks
+            // never measure a target against itself (2026-09-28 smoke).
+            if (hull == null) { var m = Object.FindAnyObjectByType<SeaSick.Ship.ShipMotor>(); if (m != null) hull = m.transform; }
             s.ship = hull;
 
             float t = firstTime ? OverboardTuning.FirstTimeSwimSeconds : OverboardTuning.CalmSwimSeconds;
