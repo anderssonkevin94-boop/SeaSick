@@ -135,7 +135,7 @@ namespace SeaSick.Crew
 
         /// How fast they work when they are working. Flat: a queasy hand is
         /// still a hand. Kept as a seam for a future happiness/skill system.
-        public float WorkRate01 => state == State.Station ? 1f : 0f;
+        public float WorkRate01 => state == State.Station ? OverboardModules.StationWorkRateMultiplier() : 0f;
 
         /// On a bucket instead of their post.
         public bool IsBailing => state == State.Bailing;
@@ -225,6 +225,8 @@ namespace SeaSick.Crew
             RailGoing, AtRail, RailHold, RailReturning,
             // phase 5b: the haul -- a hand sent to throw the line
             HaulGoing, Hauling, HaulReturning,
+            // phase 8: out in the jolly boat -- unavailable the whole round trip
+            JollyBoatDuty,
             // ashore
             GoingAshore, ToNode, Chopping, ToShip, Idling, Boarding
         }
@@ -240,7 +242,8 @@ namespace SeaSick.Crew
         public bool IsAboard => state == State.Station || state == State.Bailing
             || state == State.Returning || state == State.RailGoing
             || state == State.AtRail || state == State.RailHold || state == State.RailReturning
-            || state == State.HaulGoing || state == State.Hauling || state == State.HaulReturning;
+            || state == State.HaulGoing || state == State.Hauling || state == State.HaulReturning
+            || state == State.JollyBoatDuty;
 
         /// **5b.** Out at the rail hauling a swimmer in, one way or another
         /// (walking out, hauling, or walking back) -- `Available` is already
@@ -682,7 +685,7 @@ namespace SeaSick.Crew
                     if (WalkTo(haulRailLocal, dt))
                     {
                         state = State.Hauling;
-                        haulTimer = OverboardTuning.HaulSeconds;
+                        haulTimer = OverboardTuning.HaulSeconds * OverboardModules.HaulTimeMultiplier();
                         EnsureHaulLine();
                     }
                     break;
@@ -902,7 +905,7 @@ namespace SeaSick.Crew
                 float nightMul = Sailing.IsNight ? OverboardTuning.NightDrainMultiplier : 1f;
                 float seaLegs = Lives.Record(DisplayName)?.seaLegs ?? 0f;
                 float seaLegsMul = Mathf.Lerp(1f, OverboardTuning.SeaLegsMinMultiplier, seaLegs);
-                drain *= stormMul * nightMul * seaLegsMul;
+                drain *= stormMul * nightMul * seaLegsMul * OverboardModules.GripDrainMultiplier();
                 Grip01 = Mathf.Clamp01(Grip01 - drain * dt);
             }
             else
@@ -929,7 +932,7 @@ namespace SeaSick.Crew
                 if (Grip01 <= OverboardTuning.WarnGrip || forcedTrip)
                 {
                     warnActive = true;
-                    warnLeft = OverboardTuning.WarnSeconds;
+                    warnLeft = OverboardTuning.WarnSeconds + OverboardModules.WarnSecondsBonus();
                     warnDangerSeen = false;
                     state = State.RailHold;
                     Banner.Show(DisplayName + ": \"Hold on!\"", 2f);
@@ -1058,9 +1061,35 @@ namespace SeaSick.Crew
         /// resting off a rescue, ashore...). Walks to the rail on the
         /// TARGET's side of the hull, at roughly her own fore/aft position,
         /// then hauls for `OverboardTuning.HaulSeconds`.
+        /// **Jolly boat (phase 8).** Reuses the same "off the roster for the
+        /// round trip" idea as a rail haul: `Available` goes false the
+        /// instant she's called away, and stays false until `JollyBoat`
+        /// calls `EndJollyBoatDuty` on her return. `JollyBoatDispatch` only
+        /// calls this on a hand that was already `Available`.
+        public bool BeginJollyBoatDuty()
+        {
+            if (!Available) return false;
+            state = State.JollyBoatDuty;
+            return true;
+        }
+
+        /// **Jolly boat (phase 8).** Called by `JollyBoat` once she's back
+        /// alongside — walks back to post exactly like the end of a bailing
+        /// or rail-haul round trip.
+        public void EndJollyBoatDuty()
+        {
+            if (state != State.JollyBoatDuty) return;
+            state = State.Returning;
+        }
+
         public bool StartHaul(IOverboardTarget target)
         {
             if (!Available || target == null || ship == null) return false;
+
+            // Lifebuoy rack (phase 8): the moment the line is thrown, not
+            // when the hand finally arrives at the rail -- a one-shot bonus
+            // per swimmer, guarded on her own so two throws can't stack it.
+            if (target is Swimmer swimmer) swimmer.ApplyLifebuoyBonusOnce(OverboardModules.ThrowLifebuoyBonusSeconds());
 
             Vector3 local = ship.InverseTransformPoint(target.WorldPosition);
             float side = Mathf.Sign(local.x != 0f ? local.x
@@ -1086,7 +1115,8 @@ namespace SeaSick.Crew
 
             Vector3 railWorld = ship != null ? ship.TransformPoint(haulRailLocal) : transform.position;
             float dist = Vector3.Distance(railWorld, haulTarget.WorldPosition);
-            if (dist > OverboardTuning.ThrowReachMetres * OverboardTuning.HaulSlipMultiple)
+            float effectiveReach = OverboardTuning.ThrowReachMetres + OverboardModules.ThrowReachBonusMetres();
+            if (dist > effectiveReach * OverboardTuning.HaulSlipMultiple)
             {
                 EndHaul();
                 return;

@@ -42,6 +42,7 @@ namespace SeaSick.Crew
             if (motor == null) motor = GetComponent<ShipMotor>();
             FirstOverboard.Tick(this, anchor, Time.deltaTime);
             CargoLashing.Tick(motor, anchor, Time.deltaTime);
+            JollyBoatDispatch.Tick(this, motor, Time.deltaTime);
         }
 
         /// Everyone aboard or ashore, in scene order — the gun assignment index.

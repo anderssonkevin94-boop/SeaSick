@@ -1,0 +1,27 @@
+{
+    "schemaVersion": 1,
+    "id": "module.bulwarks",
+    "version": 1,
+    "displayName": "Bulwarks",
+    "description": "Raised rails along the side. Less grip lost at the rail in a rough sea. Stacks up to 2.",
+    "placement": "inner",
+    "capacity": {
+        "cargo": 0,
+        "berths": 0
+    },
+    "crew": 0,
+    "massKg": 90,
+    "onePerShip": false,
+    "dockLevel": 1,
+    "equipmentId": "",
+    "effects": [
+        "railgrip:0.6",
+        "stack:2"
+    ],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 3
+        }
+    ]
+}

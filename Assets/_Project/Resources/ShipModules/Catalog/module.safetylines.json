@@ -1,0 +1,31 @@
+{
+    "schemaVersion": 1,
+    "id": "module.safetylines",
+    "version": 1,
+    "displayName": "Safety lines",
+    "description": "Lines rigged along the deck to clip onto. Almost nobody goes over -- but every hand works their post slower while clipped on.",
+    "placement": "inner",
+    "capacity": {
+        "cargo": 0,
+        "berths": 0
+    },
+    "crew": 0,
+    "massKg": 60,
+    "onePerShip": true,
+    "dockLevel": 2,
+    "equipmentId": "",
+    "effects": [
+        "railgrip:0.15",
+        "workrate:0.85"
+    ],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 2
+        },
+        {
+            "item": "hide",
+            "count": 2
+        }
+    ]
+}

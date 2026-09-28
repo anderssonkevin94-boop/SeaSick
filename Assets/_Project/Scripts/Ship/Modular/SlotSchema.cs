@@ -171,6 +171,13 @@ namespace SeaSick.Ship.Modular
         public const string BilgePump = "module.bilgepump";
         public const string Lookout = "module.lookout";
         public const string RepairBench = "module.repairbench";
+        /// Overboard shipyard modules (phase 8, docs/PLAN-DEATH-RESCUE.md
+        /// "Shipyard modules"; effects read by SeaSick.Ship.Overboard.OverboardModules).
+        public const string Bulwarks = "module.bulwarks";
+        public const string SafetyLines = "module.safetylines";
+        public const string LifebuoyRack = "module.lifebuoyrack";
+        public const string ScrambleNet = "module.scramblenet";
+        public const string JollyBoat = "module.jollyboat";
 
         readonly Dictionary<string, CatalogModule> byId = new Dictionary<string, CatalogModule>();
         readonly List<CatalogModule> ordered = new List<CatalogModule>();

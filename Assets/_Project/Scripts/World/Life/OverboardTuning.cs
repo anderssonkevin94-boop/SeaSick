@@ -99,6 +99,32 @@ namespace SeaSick.World.Life
         [Tooltip("Real seconds a floating crate has before it sinks for good.")]
         public float floatSeconds = 120f;
 
+        [Header("Shipyard modules (phase 8)")]
+        [Tooltip("Grip-drain multiplier per bulwarks module fitted (stacks multiplicatively, capped at bulwarksMaxStacks).")]
+        public float bulwarksDrainMultiplier = 0.6f;
+        [Tooltip("Most bulwarks modules that stack their grip-drain reduction.")]
+        public int bulwarksMaxStacks = 2;
+        [Tooltip("Grip-drain multiplier while safety lines are fitted (almost nobody goes over).")]
+        public float safetyLinesDrainMultiplier = 0.15f;
+        [Tooltip("Station work-rate multiplier for every hand while safety lines are fitted (the trade-off: slower sails/oars/guns).")]
+        public float safetyLinesWorkRateMultiplier = 0.85f;
+        [Tooltip("Extra throw reach, metres, while a lifebuoy rack is fitted.")]
+        public float lifebuoyReachBonusMetres = 6f;
+        [Tooltip("Swim-timer seconds added ONCE, the moment \"Throw line\" is pressed on a swimmer, while a lifebuoy rack is fitted.")]
+        public float lifebuoyTimerBonusSeconds = 45f;
+        [Tooltip("Haul-time multiplier while a scramble net is fitted (faster hauls, swimmer or cargo).")]
+        public float scrambleNetHaulMultiplier = 0.5f;
+        [Tooltip("Extra real seconds on the rail-hold warning while a lookout is fitted (spots trouble sooner).")]
+        public float lookoutWarnSecondsBonus = 0.8f;
+        [Tooltip("Extra seconds on a swimmer's timer, always, while a lookout is fitted (spotted going in).")]
+        public float lookoutSwimSecondsBonus = 30f;
+        [Tooltip("Ship speed (m/s) below which the jolly boat will launch for a swimmer.")]
+        public float jollyBoatMaxShipSpeed = 3f;
+        [Tooltip("Jolly boat rowing speed, metres/second, out and back.")]
+        public float jollyBoatRowSpeed = 2.5f;
+        [Tooltip("Fewest OTHER hull sections (middles) the ship must have for a jolly boat to be launchable -- \"big ships only\".")]
+        public int jollyBoatMinMiddleSections = 2;
+
         [Header("Scripted first time")]
         [Tooltip("Real seconds under way (calm-ish water) before the scripted first man-overboard fires.")]
         public float firstTimeSailSeconds = 90f;
@@ -166,6 +192,18 @@ namespace SeaSick.World.Life
         public static float LashRefillPerSecond => D != null ? D.lashRefillPerSecond : 0.06f;
         public static int CrateUnits => D != null ? D.crateUnits : 4;
         public static float FloatSeconds => D != null ? D.floatSeconds : 120f;
+        public static float BulwarksDrainMultiplier => D != null ? D.bulwarksDrainMultiplier : 0.6f;
+        public static int BulwarksMaxStacks => D != null ? D.bulwarksMaxStacks : 2;
+        public static float SafetyLinesDrainMultiplier => D != null ? D.safetyLinesDrainMultiplier : 0.15f;
+        public static float SafetyLinesWorkRateMultiplier => D != null ? D.safetyLinesWorkRateMultiplier : 0.85f;
+        public static float LifebuoyReachBonusMetres => D != null ? D.lifebuoyReachBonusMetres : 6f;
+        public static float LifebuoyTimerBonusSeconds => D != null ? D.lifebuoyTimerBonusSeconds : 45f;
+        public static float ScrambleNetHaulMultiplier => D != null ? D.scrambleNetHaulMultiplier : 0.5f;
+        public static float LookoutWarnSecondsBonus => D != null ? D.lookoutWarnSecondsBonus : 0.8f;
+        public static float LookoutSwimSecondsBonus => D != null ? D.lookoutSwimSecondsBonus : 30f;
+        public static float JollyBoatMaxShipSpeed => D != null ? D.jollyBoatMaxShipSpeed : 3f;
+        public static float JollyBoatRowSpeed => D != null ? D.jollyBoatRowSpeed : 2.5f;
+        public static int JollyBoatMinMiddleSections => D != null ? D.jollyBoatMinMiddleSections : 2;
         public static float FirstTimeSailSeconds => D != null ? D.firstTimeSailSeconds : 90f;
         public static float FirstTimeMaxRoughness => D != null ? D.firstTimeMaxRoughness : 0.35f;
         public static float FirstTimeSwimSeconds => D != null ? D.firstTimeSwimSeconds : 240f;

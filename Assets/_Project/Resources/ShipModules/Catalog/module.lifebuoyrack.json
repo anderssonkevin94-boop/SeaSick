@@ -1,0 +1,31 @@
+{
+    "schemaVersion": 1,
+    "id": "module.lifebuoyrack",
+    "version": 1,
+    "displayName": "Lifebuoy rack",
+    "description": "A ring buoy at the rail. Throw the line from further out, and the buoy buys the swimmer extra time the moment it's thrown.",
+    "placement": "inner",
+    "capacity": {
+        "cargo": 0,
+        "berths": 0
+    },
+    "crew": 0,
+    "massKg": 40,
+    "onePerShip": true,
+    "dockLevel": 1,
+    "equipmentId": "",
+    "effects": [
+        "throwreach:6",
+        "swimbonus:45"
+    ],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 2
+        },
+        {
+            "item": "hide",
+            "count": 1
+        }
+    ]
+}

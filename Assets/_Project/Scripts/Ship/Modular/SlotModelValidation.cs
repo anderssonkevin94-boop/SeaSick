@@ -58,7 +58,7 @@ namespace SeaSick.Ship.Modular
             var lib = ModuleLibrary.FromJson(stdJson, mods, names);
             if (readResourceText != null) { lib.LoadHydrostatics(readResourceText); lib.LoadCatalog(readResourceText); }
             var cat = lib.Catalog;
-            Gate("slots-catalog-loads", cat != null && cat.Ok && cat.All.Count == 6 && lib.Standards.slotModel != null,
+            Gate("slots-catalog-loads", cat != null && cat.Ok && cat.All.Count == 11 && lib.Standards.slotModel != null,
                 cat == null ? "no catalog (no resource reader)" : $"{cat.All.Count} modules; errors: {string.Join("; ", cat.errors)}");
             if (cat == null || !cat.Ok) return;
             var reference = ShipyardSelfTest.ReferenceFrom(hullFormJson);

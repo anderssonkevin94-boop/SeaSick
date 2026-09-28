@@ -89,6 +89,9 @@ namespace SeaSick.Ship.Overboard
                 t -= OverboardTuning.StormSwimSecondsOff * Sailing.Storminess01;
                 if (Sailing.IsNight) t -= OverboardTuning.NightSwimSecondsOff;
             }
+            // Lookout (phase 8): spotted going in, every swimmer's timer
+            // starts longer -- always, scripted first time included.
+            t += OverboardModules.SwimSecondsBonus();
             s.timeTotal = Mathf.Max(20f, t);
             s.TimeLeft = s.timeTotal;
 
@@ -297,6 +300,20 @@ namespace SeaSick.Ship.Overboard
         /// the roster through the same boarding path authored/camp-born
         /// crew use, applies the sickness spike and the off-station spell,
         /// logs the events, and hands out a small sea-legs bump.
+        bool buoyBonusGiven;
+
+        /// **Lifebuoy rack (phase 8).** Called by `CrewAgent.StartHaul` the
+        /// moment "Throw line" is pressed on this swimmer. `seconds` is 0
+        /// when no rack is fitted, and this only ever pays out once per
+        /// swimmer regardless of how many times a line gets thrown at her.
+        public void ApplyLifebuoyBonusOnce(float seconds)
+        {
+            if (buoyBonusGiven || seconds <= 0f || Resolved) return;
+            buoyBonusGiven = true;
+            TimeLeft += seconds;
+            timeTotal += seconds;
+        }
+
         public void Rescue(string rescuerName)
         {
             if (Resolved) return;

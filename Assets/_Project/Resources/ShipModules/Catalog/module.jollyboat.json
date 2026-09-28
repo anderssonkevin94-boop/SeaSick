@@ -1,0 +1,30 @@
+{
+    "schemaVersion": 1,
+    "id": "module.jollyboat",
+    "version": 1,
+    "displayName": "Jolly boat",
+    "description": "A small boat on davits. Big ships only. Launches herself for a swimmer when the ship is slow enough, rows out and back, and takes a hand out of action while she's out.",
+    "placement": "inner",
+    "capacity": {
+        "cargo": 0,
+        "berths": 0
+    },
+    "crew": 0,
+    "massKg": 220,
+    "onePerShip": true,
+    "dockLevel": 4,
+    "equipmentId": "",
+    "effects": [
+        "jollyboat"
+    ],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 8
+        },
+        {
+            "item": "iron",
+            "count": 2
+        }
+    ]
+}

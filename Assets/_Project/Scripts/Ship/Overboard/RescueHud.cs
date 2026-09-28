@@ -101,7 +101,7 @@ namespace SeaSick.Ship.Overboard
                 DrawTarget(t, cam, u, tapHalf);
 
                 float rd = Vector3.Distance(t.NearestHullSide(), t.WorldPosition);
-                if (rd <= OverboardTuning.ThrowReachMetres) inReach.Add(t);
+                if (rd <= OverboardTuning.ThrowReachMetres + OverboardModules.ThrowReachBonusMetres()) inReach.Add(t);
             }
             inReach.Sort((a, b) =>
             {

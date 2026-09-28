@@ -1,0 +1,30 @@
+{
+    "schemaVersion": 1,
+    "id": "module.scramblenet",
+    "version": 1,
+    "displayName": "Scramble net",
+    "description": "A cargo net slung down the side. Halves the time a haul takes, swimmer or cargo.",
+    "placement": "inner",
+    "capacity": {
+        "cargo": 0,
+        "berths": 0
+    },
+    "crew": 0,
+    "massKg": 50,
+    "onePerShip": true,
+    "dockLevel": 1,
+    "equipmentId": "",
+    "effects": [
+        "haul:0.5"
+    ],
+    "buildCost": [
+        {
+            "item": "boards",
+            "count": 2
+        },
+        {
+            "item": "hide",
+            "count": 2
+        }
+    ]
+}

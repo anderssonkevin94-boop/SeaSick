@@ -3,7 +3,7 @@
     "id": "module.lookout",
     "version": 1,
     "displayName": "Lookout",
-    "description": "Spots raiders and islands further. Top-most deck only, one per ship.",
+    "description": "Spots raiders and islands further -- and a hand overboard sooner: the rail warning holds longer and every swimmer's timer starts longer. Top-most deck only, one per ship.",
     "placement": "topmost",
     "capacity": {
         "cargo": 0,
@@ -15,7 +15,9 @@
     "dockLevel": 3,
     "equipmentId": "",
     "effects": [
-        "spot:1.5"
+        "spot:1.5",
+        "overboard-warn:0.8",
+        "overboard-swim:30"
     ],
     "buildCost": [
         {
