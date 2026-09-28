@@ -453,6 +453,25 @@ namespace SeaSick.World
                         if (o != null && o.planId == planId && o.ordinal > ordinal) o.ordinal--;
                 }
             }
+            // Pins follow the copies (2026-09-28): a hand pinned to the copy
+            // that went is dealt again, later copies move down one.
+            {
+                int count = CountBuilt(planId);
+                int gone = count - 1;
+                if (raisedIndex >= 0)
+                {
+                    gone = 0;
+                    for (int i = 0; i < raisedIndex; i++)
+                        if (raised[i] != null && raised[i].planId == planId) gone++;
+                }
+                if (count > 0 && hands != null)
+                    foreach (var x in hands)
+                    {
+                        if (x == null || x.target != planId || x.workPin <= 0) continue;
+                        if (x.workPin - 1 == gone) x.workPin = 0;
+                        else if (x.workPin - 1 > gone) x.workPin--;
+                    }
+            }
             built.Remove(planId);
             if (raisedIndex >= 0) raised.RemoveAt(raisedIndex);
         }
@@ -476,13 +495,10 @@ namespace SeaSick.World
             if (h == null || h.order != OutpostOrder.Work || !IsStation(h.target)) return null;
             int n = StationCountOfPlan(h.target);
             if (n <= 0) return null;
-            int k = 0;
-            foreach (var x in hands)
-            {
-                if (x == h) break;
-                if (x != null && x.order == OutpostOrder.Work && x.target == h.target) k++;
-            }
-            return StationOf(h.target, k % n);
+            // One deal for the books and the body (`OrdinalOfHand`, which
+            // `Outpost.WorkplaceOf` also reads), pins included (2026-09-28).
+            int o = OrdinalOfHand(h);
+            return StationOf(h.target, (o < 0 ? 0 : o) % n);
         }
 
         /// Keep one `StationStock` per built station instance. A station

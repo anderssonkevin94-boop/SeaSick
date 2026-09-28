@@ -112,11 +112,16 @@ namespace SeaSick.World
             if (h == null || h.order != OutpostOrder.Work || string.IsNullOrEmpty(h.target)) return -1;
             int n = CountBuilt(h.target);
             if (n <= 0) return -1;
+            // A pinned hand stands at his own copy (2026-09-28, `workPin`);
+            // the rest are dealt round the copies as before, counting only
+            // the unpinned -- so with no pins this is the old deal exactly.
+            if (h.workPin > 0 && h.workPin <= n) return h.workPin - 1;
             int k = 0;
             foreach (var x in hands)
             {
                 if (x == h) break;
-                if (x != null && x.order == OutpostOrder.Work && x.target == h.target) k++;
+                if (x != null && x.order == OutpostOrder.Work && x.target == h.target
+                    && !(x.workPin > 0 && x.workPin <= n)) k++;
             }
             return k % n;
         }

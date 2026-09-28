@@ -97,6 +97,15 @@ namespace SeaSick.World
         /// is how it behaved before.
         public bool playerIdle;
 
+        /// **Which copy of his building he works at, 1-based; 0 = dealt
+        /// (2026-09-28).** With two sawmills a Work hand used to be dealt
+        /// round the copies by his place in the hand list; the station
+        /// sheet's "assign" (Astra) needs to staff ONE copy. Set by
+        /// `Outpost.Assign(hand, station)` / `(hand, planId, ordinal)`,
+        /// cleared by any other order; `OrdinalOfHand` reads it. Saved; an
+        /// old save reads 0, i.e. dealt, which is how it behaved before.
+        public int workPin;
+
         /// What they are gathering, or which building they are assigned to.
         /// Empty for Idle and for Build, which has only ever one thing to
         /// work on.

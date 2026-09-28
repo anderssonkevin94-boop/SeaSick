@@ -3066,6 +3066,7 @@ namespace SeaSick.World
             h.order = OutpostOrder.Gather;
             h.target = resource;
             h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
+            h.workPin = 0;          // any other order drops his copy (2026-09-28)
             MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
@@ -3094,11 +3095,43 @@ namespace SeaSick.World
             h.order = OutpostOrder.Work;
             h.target = planId;
             h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
+            h.workPin = 0;          // dealt round the copies, as before
             MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
             return true;
         }
+
+        /// **Assign this hand to ONE copy of a building (2026-09-28).** For
+        /// the "no worker" badge and the station sheet (Astra): with two
+        /// sawmills, staff the one that was tapped. `ordinal` is the copy's
+        /// place among the plan's buildings (`StationStock.ordinal`, the
+        /// same numbering `OutpostLedger.StationOf(planId, ordinal)` uses).
+        /// **Nobody already working there moves**: every Work hand on the
+        /// plan is first pinned to the copy he stands at now, then this hand
+        /// is pinned to `ordinal`. False if the copy does not stand.
+        public bool Assign(OutpostHand h, string planId, int ordinal)
+        {
+            if (h == null || ledger == null) return false;
+            if (!BuildPlans.HasPosition(planId)) return false;
+            int n = CountOf(planId);
+            if (ordinal < 0 || ordinal >= n) return false;
+            foreach (var x in ledger.hands)
+            {
+                if (x == null || x == h || x.order != OutpostOrder.Work || x.target != planId) continue;
+                int at = ledger.OrdinalOfHand(x);
+                if (at >= 0) x.workPin = at + 1;
+            }
+            if (!Assign(h, planId)) return false;
+            h.workPin = ordinal + 1;
+            ArrangeHands();
+            PuppetsToWork();
+            return true;
+        }
+
+        /// The same, by the station row itself.
+        public bool Assign(OutpostHand h, StationStock station)
+            => station != null && !station.removed && Assign(h, station.planId, station.ordinal);
 
         /// **Put this one hand on the blueprint.** `Site` orders everybody to
         /// build and the crew list has never needed anything finer, but the
@@ -3111,6 +3144,7 @@ namespace SeaSick.World
             h.order = OutpostOrder.Build;
             h.target = "";
             h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
+            h.workPin = 0;          // any other order drops his copy (2026-09-28)
             MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
@@ -3130,6 +3164,7 @@ namespace SeaSick.World
             h.order = OutpostOrder.Idle;
             h.target = "";
             h.playerIdle = reserve;
+            h.workPin = 0;          // any other order drops his copy (2026-09-28)
             // Idling a hand is not "give me this job tonight" -- let the
             // evening/sleep routine reclaim him at its own next check.
             h.orderOverride = false;
