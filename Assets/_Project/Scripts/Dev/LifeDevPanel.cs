@@ -36,6 +36,10 @@ namespace SeaSick.Dev
         }
 
         const float RowH = 44f; // Apple's own minimum touch target.
+        /// Just below FeelLab's collapsed FEEL button (10, 10, 84 x 44):
+        /// Kevin, 2026-09-28, "the life button is directly on top of the
+        /// feel button so i cant press it".
+        const float Top = 10f + 44f + 8f;
         bool expanded;
         Vector2 scroll;
         GraveRecord lastDeath;
@@ -63,7 +67,7 @@ namespace SeaSick.Dev
 
             if (!expanded)
             {
-                if (GUI.Button(new Rect(8, 8, 72, RowH), "LIFE")) expanded = true;
+                if (GUI.Button(new Rect(10, Top, 84, RowH), "LIFE")) expanded = true;
                 GUI.matrix = old;
                 return;
             }
@@ -71,7 +75,7 @@ namespace SeaSick.Dev
             // Top half only, same as FeelLab: the bottom stays free for the
             // helm stick even while this is open.
             float panelH = Mathf.Min(h * 0.6f, 520f);
-            var panelRect = new Rect(8, 8, Mathf.Min(w - 16, 420f), panelH);
+            var panelRect = new Rect(8, Top, Mathf.Min(w - 16, 420f), panelH);
             GUI.Box(panelRect, "");
             GUILayout.BeginArea(panelRect);
             GUILayout.BeginHorizontal();
