@@ -46,7 +46,20 @@ namespace SeaSick.Combat
 
             var ship = EnemyShip.IdleAt(camp.Island);
             if (ship == null) return;
-            if (!camp.ShoreNear(camp.CampCentre, out Vector3 shore, out Vector3 water)) return;
+
+            // **Choose the landing by the walk, not by the sea (Kevin:
+            // "that's where the ship should land close to").** Once per
+            // raid -- never per frame -- score candidate beach points round
+            // the camp by the raider's actual walk to the pile, not by
+            // whichever beach happens to be nearest the fire.
+            Vector3 target = camp.RaidTarget();
+            bool haveLanding = camp.BestLanding(camp.CampCentre, target,
+                out Vector3 shore, out Vector3 water, out float bearing, out float cost, out float runnerUp);
+            if (!haveLanding && !camp.ShoreNear(camp.CampCentre, out shore, out water)) return;
+
+            if (haveLanding)
+                Debug.Log($"[RaidDirector] {camp.name}: landing at bearing {bearing:0}°, " +
+                          $"cost {cost:0.0} m (runner-up {(runnerUp < float.MaxValue ? runnerUp.ToString("0.0") : "-")} m)");
 
             ship.BeginRaid(new RaidSite { camp = camp, water = water, shore = shore });
             st.raidedThisVisit = true;

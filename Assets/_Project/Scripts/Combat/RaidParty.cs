@@ -224,41 +224,55 @@ namespace SeaSick.Combat
             if (target == seg) target = null;
         }
 
-        World.WallSegment Choose(Vector3 from)
+        World.WallSegment Choose(Vector3 from) => NearestBreachable(Camp, from, out _);
+
+        /// **The wall a raider standing at `from` would break, and what that
+        /// would cost him.** Shared by a party (`Choose`, one target for the
+        /// whole landing party) and by `World.Outpost.BestLanding` (scoring a
+        /// candidate beach point before anybody has landed at all -- there is
+        /// no party yet, so this has to work off the camp alone).
+        ///
+        /// "Nearest by route-able distance", approximated the way the brief
+        /// allows: nearest by straight distance AMONG the segments whose
+        /// outside point he can actually stand at. A segment on the far side
+        /// of a cliff is closer on a ruler and useless in fact.
+        public static World.WallSegment NearestBreachable(World.Outpost camp, Vector3 from, out float cost)
         {
-            if (Camp == null) return null;
-            var walls = Camp.Walls;
+            cost = float.MaxValue;
+            if (camp == null) return null;
+            var walls = camp.Walls;
             if (walls == null || walls.Count == 0) return null;
 
-            var map = World.CampPath.For(Camp);
+            var map = World.CampPath.For(camp);
 
             World.WallSegment bestReachable = null, bestAny = null;
             float dReachable = float.MaxValue, dAny = float.MaxValue;
+            Vector3 outsideAny = from, outsideReachable = from;
 
             for (int i = 0; i < walls.Count; i++)
             {
                 var seg = walls[i];
                 if (seg == null || seg.Breached) continue;
 
-                Vector3 outside = RaidWalker.OutsidePoint(seg, Camp);
+                Vector3 outside = RaidWalker.OutsidePoint(seg, camp);
                 float dx = outside.x - from.x, dz = outside.z - from.z;
                 float d = dx * dx + dz * dz;
 
-                if (d < dAny) { dAny = d; bestAny = seg; }
+                if (d < dAny) { dAny = d; bestAny = seg; outsideAny = outside; }
 
-                // "Nearest by route-able distance", approximated the way the
-                // brief allows: nearest by straight distance AMONG the
-                // segments whose outside point he can actually stand at. A
-                // segment on the far side of a cliff is closer on a ruler and
-                // useless in fact.
+                // A gate is a wall for this purpose (D2/D3: they never climb,
+                // and a shut gate is just a cheaper thing to smash) -- it is
+                // in the same list and wins on its own lower `MaxHp` once he
+                // is swinging.
                 if (map != null && !map.HasRoute(from, outside, World.CampPath.Walker.Raider)) continue;
-                if (d < dReachable) { dReachable = d; bestReachable = seg; }
+                if (d < dReachable) { dReachable = d; bestReachable = seg; outsideReachable = outside; }
             }
 
-            // A gate is a wall for this purpose (D2/D3: they never climb, and
-            // a shut gate is just a cheaper thing to smash) -- it is in the
-            // same list and wins on its own lower `MaxHp` once he is swinging.
-            return bestReachable != null ? bestReachable : bestAny;
+            var chosen = bestReachable != null ? bestReachable : bestAny;
+            Vector3 outsideChosen = bestReachable != null ? outsideReachable : outsideAny;
+            if (chosen != null)
+                cost = Vector3.Distance(from, outsideChosen) + RaidFightTuning.BreachCostMetres;
+            return chosen;
         }
 
         /// A walker made it back to the ship with one unit. Called by

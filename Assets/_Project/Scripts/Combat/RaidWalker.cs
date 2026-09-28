@@ -457,27 +457,43 @@ namespace SeaSick.Combat
                 reachTimer = 0f;
                 reachedFor = goal;
                 Vector3 here = transform.position;
-                blocked = !map.HasRoute(here, goal, World.CampPath.Walker.Raider);
+                bool hasOpen = map.HasRoute(here, goal, World.CampPath.Walker.Raider);
 
-                // **The detour, not just the dead end (2026-09-28).** Kevin:
-                // raiders "choose to run all the way left around the island
-                // instead of just the shore" -- a wall that does not fully
-                // ring the camp leaves `HasRoute` a way round, so the sealed
-                // check above says false and a man walks the long way
-                // rather than swinging an axe two metres from him. Only
-                // worth asking when the straight line is actually blocked
-                // (an open field has no detour to measure) and only a real
-                // route length, not the cheap reachability ping, tells a
-                // scenic walk from a short one.
-                if (!blocked && World.CampPath.Crosses(camp, here, goal, World.CampPath.Walker.Raider))
+                // **The shortest reasonable route, not just the dead end
+                // (2026-09-28).** Kevin: raiders should take the shortest
+                // route in -- "if that's where they wanted to walk to,
+                // that's where the ship should land close to" -- so a man
+                // shut out entirely, or one whose only open route wraps
+                // round a wall, both ask the same question: is it actually
+                // cheaper to walk there, or to break in near here? Only
+                // asked when the straight line is blocked at all (an open
+                // field has nothing to compare) and priced the same way
+                // `Outpost.BestLanding` prices a candidate beach: a real
+                // route length against a breach's walk-to-wall-plus-
+                // `breachCostMetres`, not a fixed ">2x+30m" guess that let a
+                // cheap two-metre breach lose to a long-but-not-*that*-long
+                // walk round.
+                if (!hasOpen)
+                {
+                    blocked = true;
+                }
+                else if (World.CampPath.Crosses(camp, here, goal, World.CampPath.Walker.Raider))
                 {
                     detourScratch.Clear();
-                    if (map.Route(here, goal, World.CampPath.Walker.Raider, detourScratch) && detourScratch.Count > 0)
-                    {
-                        float routed = World.CampPath.RouteMetres(here, detourScratch);
-                        float flat = Vector3.Distance(here, goal);
-                        if (routed > flat * 2f + 30f) blocked = true;
-                    }
+                    float open = map.Route(here, goal, World.CampPath.Walker.Raider, detourScratch) && detourScratch.Count > 0
+                        ? World.CampPath.RouteMetres(here, detourScratch)
+                        : Vector3.Distance(here, goal);
+
+                    var candidateSeg = party != null ? party.BreachSegment(here) : null;
+                    float breach = candidateSeg != null
+                        ? Vector3.Distance(here, OutsidePoint(candidateSeg)) + RaidFightTuning.BreachCostMetres
+                        : float.MaxValue;
+
+                    blocked = breach < open;
+                }
+                else
+                {
+                    blocked = false;
                 }
 
                 if (!blocked) StopBreaking();

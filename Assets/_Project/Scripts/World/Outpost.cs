@@ -2820,40 +2820,140 @@ namespace SeaSick.World
         {
             shore = from; water = from;
             if (height == null) return false;
-            const float Step = 0.5f, Reach = 120f, WantDepth = 5f, LandUp = 1.5f;
             float best = float.MaxValue;
             for (int k = 0; k < 16; k++)
             {
-                float a = k * (Mathf.PI * 2f / 16f);
-                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                Vector3 land = from; bool haveLand = false;
-                for (float d = Step; d <= Reach; d += Step)
-                {
-                    Vector3 q = from + dir * d;
-                    float h = height(q.x, q.z);
-                    if (!haveLand)
-                    {
-                        if (h >= 0f) land = q;
-                        else haveLand = true;   // crossed the waterline
-                    }
-                    if (haveLand && -h >= WantDepth)
-                    {
-                        if (d < best)
-                        {
-                            best = d;
-                            // Back up the beach a little so the party lands
-                            // on sand, not in the wash.
-                            Vector3 s = land - dir * LandUp;
-                            s.y = height(s.x, s.z);
-                            shore = s;
-                            q.y = 0f;
-                            water = q;
-                        }
-                        break;
-                    }
-                }
+                float bearing = k * (360f / 16f);
+                if (!ShoreAt(from, bearing, out Vector3 s, out Vector3 w, out float d)) continue;
+                if (d >= best) continue;
+                best = d; shore = s; water = w;
             }
             return best < float.MaxValue;
+        }
+
+        /// **One bearing of `ShoreNear`'s fan**, pulled out so a landing-site
+        /// search (`BestLanding`) can sample bearings on its own terms rather
+        /// than only the fixed 16 `ShoreNear` always tried. Same walk, same
+        /// numbers: a step out from `from` until the waterline, then on to
+        /// water deep enough for a hull, backed up onto dry sand. `bearingDeg`
+        /// is a compass heading (0 = +Z, clockwise), the same convention
+        /// `EnemyShip.Forward` steers by, so a bearing logged here reads the
+        /// same way a heading does.
+        public bool ShoreAt(Vector3 from, float bearingDeg, out Vector3 shore, out Vector3 water, out float distance)
+        {
+            shore = from; water = from; distance = float.MaxValue;
+            if (height == null) return false;
+            const float Step = 0.5f, Reach = 120f, WantDepth = 5f, LandUp = 1.5f;
+            float a = bearingDeg * Mathf.Deg2Rad;
+            var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+            Vector3 land = from; bool haveLand = false;
+            for (float d = Step; d <= Reach; d += Step)
+            {
+                Vector3 q = from + dir * d;
+                float h = height(q.x, q.z);
+                if (!haveLand)
+                {
+                    if (h >= 0f) land = q;
+                    else haveLand = true;   // crossed the waterline
+                }
+                if (haveLand && -h >= WantDepth)
+                {
+                    // Back up the beach a little so the party lands on sand,
+                    // not in the wash.
+                    Vector3 s = land - dir * LandUp;
+                    s.y = height(s.x, s.z);
+                    shore = s;
+                    q.y = 0f;
+                    water = q;
+                    distance = d;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// **Where the party's first walk actually goes (death/rescue
+        /// routing rework).** The store hut if one stands -- `RaidWalker.
+        /// PileSpot` works a stride outside it once the goods live in
+        /// `CampPiles` -- otherwise the fire itself. Good enough for scoring
+        /// a landing candidate; the walker's own `PileSpot` still computes
+        /// the precise stand-off once he is actually carrying something.
+        public Vector3 RaidTarget()
+        {
+            var hut = CampPiles.StoreBuildingOf(this);
+            return hut != null ? hut.transform.position : CampCentre;
+        }
+
+        /// **Choose the landing by the walk, not by the sea.** Kevin:
+        /// *"Raiders should take the shortest reasonable route in... if
+        /// that's where they wanted to walk to, that's where the ship should
+        /// land close to."* Samples the shoreline at `RaidFightTuning.
+        /// LandingCandidates` evenly spaced bearings round `from` (normally
+        /// `CampCentre`) and scores each reachable beach point by the
+        /// raider's walk to `target`: an open `CampPath` route if one exists,
+        /// or -- when the straight line is blocked by a wall -- the cheaper
+        /// of that route and a straight-ish walk to the nearest breachable
+        /// segment plus `RaidFightTuning.BreachCostMetres`. The cheapest
+        /// candidate wins; the runner-up is returned too, for the dev log.
+        ///
+        /// Run once per raid (`RaidDirector.Consider`, at the moment a raid
+        /// is launched), never per frame: at most `LandingCandidates` A*
+        /// queries, each capped by `CampPath.MaxExpansions`.
+        public bool BestLanding(Vector3 from, Vector3 target,
+            out Vector3 shore, out Vector3 water, out float bearing, out float cost, out float runnerUp)
+        {
+            shore = from; water = from; bearing = 0f; cost = float.MaxValue; runnerUp = float.MaxValue;
+            if (height == null) return false;
+
+            var map = CampPath.For(this);
+            int n = Mathf.Max(4, Combat.RaidFightTuning.LandingCandidates);
+            var corners = new List<Vector3>(16);
+
+            for (int k = 0; k < n; k++)
+            {
+                float b = k * (360f / n);
+                if (!ShoreAt(from, b, out Vector3 s, out Vector3 w, out _)) continue;
+
+                float legCost = LandingLegCost(map, s, target, corners);
+                if (legCost >= float.MaxValue) continue;
+
+                if (legCost < cost)
+                {
+                    runnerUp = cost;
+                    cost = legCost; shore = s; water = w; bearing = b;
+                }
+                else if (legCost < runnerUp) runnerUp = legCost;
+            }
+
+            return cost < float.MaxValue;
+        }
+
+        /// A raider's cost from `from` to `to`: the real route length when
+        /// the ground is open the whole way, else the cheaper of that route
+        /// (if the map found one at all, wrapping round the wall) and a
+        /// breach. Same shape as `RaidWalker.Barred`'s runtime comparison,
+        /// computed here once for a candidate that has not landed yet.
+        float LandingLegCost(CampPath map, Vector3 from, Vector3 to, List<Vector3> corners)
+        {
+            if (map == null) return Vector3.Distance(from, to);
+
+            bool hasOpen = map.HasRoute(from, to, CampPath.Walker.Raider);
+            float open = float.MaxValue;
+            if (hasOpen)
+            {
+                open = map.Route(from, to, CampPath.Walker.Raider, corners) && corners.Count > 0
+                    ? CampPath.RouteMetres(from, corners)
+                    : Vector3.Distance(from, to);
+            }
+
+            // Only worth pricing a breach when a wall actually sits between
+            // the candidate and the target -- open ground never loses to a
+            // breach, which always costs at least BreachCostMetres more.
+            if (hasOpen && !CampPath.Crosses(this, from, to, CampPath.Walker.Raider)) return open;
+
+            float breach = Combat.RaidParty.NearestBreachable(this, from, out float breachCost) != null
+                ? breachCost : float.MaxValue;
+            return Mathf.Min(open, breach);
         }
 
         /// **A building is gone**: the raiders have knocked the watchtower

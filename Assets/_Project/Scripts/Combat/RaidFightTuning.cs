@@ -64,6 +64,12 @@ namespace SeaSick.Combat
         [Tooltip("Metres a raider must close to before he can strike.")]
         public float raiderReach = 1.6f;
 
+        [Header("Landing + routing (shortest reasonable route)")]
+        [Tooltip("Metres-equivalent cost of breaking a wall segment, added to the walk to reach it, when comparing a breach against an open route. Kevin: raiders should take the shortest reasonable route in, and if a breach is nearer than walking round, that's the route.")]
+        public float breachCostMetres = 40f;
+        [Tooltip("Landing-site candidates sampled round the shoreline (evenly spaced bearings) once per raid, before the ship sails in. More is costlier at raid-start only, never per frame.")]
+        public int landingCandidates = 36;
+
         // --- loading -----------------------------------------------------
 
         public const string ResourcePath = "RaidFightTuning";
@@ -104,6 +110,9 @@ namespace SeaSick.Combat
         public static float CrouchDistance => Active != null ? Active.crouchDistance : 10f;
         public static float RaiderHitSeconds => Active != null ? Active.raiderHitSeconds : 1.2f;
         public static float RaiderReach => Active != null ? Active.raiderReach : 1.6f;
+
+        public static float BreachCostMetres => Active != null ? Active.breachCostMetres : 40f;
+        public static int LandingCandidates => Active != null ? Active.landingCandidates : 36;
 
         public static int BasePartySize => Active != null ? Active.basePartySize : 3;
         public static int HandsPerExtraRaider => Active != null ? Active.handsPerExtraRaider : 4;
