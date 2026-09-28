@@ -389,7 +389,7 @@ namespace SeaSick.World
         {
             Drop();
             OffTower();
-            if (camp != null) at.y = camp.GroundAt(at);
+            if (camp != null) at.y = WorkerPad.Foot(at, camp.GroundAt(at));
             transform.position = at;
             phase = Phase.Landing;
             landLeft = LandSeconds;
@@ -431,8 +431,12 @@ namespace SeaSick.World
             var marks = MarksOf(b);
             if (marks.stand != null)
             {
+                // **On the pad, not through it (2026-09-28):** the level 1
+                // lumber mill's stand is 0.16 m up on a timber floor; the
+                // terrain alone would sink him into the boards. `WorkerPad`
+                // is the terrain on every building without one.
                 Vector3 at = marks.stand.position;
-                at.y = outpost.GroundAt(at);
+                at.y = WorkerPad.Foot(at, outpost.GroundAt(at));
                 return at;
             }
             var plan = BuildPlans.Named(b.Id);
@@ -597,7 +601,7 @@ namespace SeaSick.World
                 {
                     phase = Phase.Downed;
                     Vector3 p = transform.position;
-                    p.y = camp.GroundAt(p);
+                    p.y = WorkerPad.Foot(p, camp.GroundAt(p));
                     transform.position = p;
                     transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 90f);
                 }
@@ -2331,10 +2335,30 @@ namespace SeaSick.World
         {
             if (climb.Active) { climb.Tick(camp, transform, dt); return false; }
             Vector3 here = transform.position;
+            // **A raised work pad's rear gate (2026-09-28, `WorkerPad`).**
+            // On to or off the lumber mill's pad by `Worker_Approach` only:
+            // the bench and racks box the rest of it in. `to` becomes the
+            // gate for this step; reaching the gate is never arriving -- the
+            // next step walks on to the real target down the lane.
+            bool gated = WorkerPad.Gate(here, to, out Vector3 via);
+            if (gated) to = via;
             Vector3 d = to - here;
             d.y = 0f;
             float dist = d.magnitude;
-            if (dist < 0.35f) { ClearRoute(); ResetStall(to, 0f); return true; }
+            if (dist < 0.35f)
+            {
+                // Arriving without a step (spawned or loaded on his spot)
+                // still stands him at the right height: on a work pad, on it
+                // (2026-09-28), rather than 0.16 m inside the platform.
+                if (camp != null)
+                {
+                    float y = WorkerPad.Foot(here, camp.GroundAt(here));
+                    if (Mathf.Abs(y - here.y) > 0.02f && y > here.y) { here.y = y; transform.position = here; }
+                }
+                ClearRoute();
+                ResetStall(to, 0f);
+                return !gated;
+            }
 
             // **The stall guard (2026-09-27).** Kevin's phone: a hand stood
             // motionless against a wall tower's ladder, between the runs, for
@@ -2345,7 +2369,7 @@ namespace SeaSick.World
             // of wherever he is wedged, re-plans, and says why on his sheet
             // (`bodyBlocked` -> `StallReason`); close enough and clear of any
             // wall, the errand counts as reached where he stands.
-            if (TickStall(here, to, dist, dt)) { ClearRoute(); return true; }
+            if (TickStall(here, to, dist, dt)) { ClearRoute(); return !gated; }
             if (escapeLeft > 0f) { StepEscape(here, dt); return false; }
 
             // Where to head THIS frame: the next corner of the route if there
@@ -2426,7 +2450,9 @@ namespace SeaSick.World
             }
             slopeStuck = 0f;
 
-            next.y = camp.GroundAt(next);
+            // Terrain, or a raised pad's boards (`WorkerPad`; a one-step
+            // 0.16 m rise at the mill, and the terrain everywhere else).
+            next.y = WorkerPad.Foot(next, camp.GroundAt(next));
             transform.position = next;
             Face(leg, dt);
             return false;
@@ -2542,7 +2568,7 @@ namespace SeaSick.World
             if (CampPath.Blocks(camp, here, next, CampPath.Walker.Hand, CampPath.WallClearance, out _)
                 || !Walkability.MayStep(camp, here, next, Walkability.Feet.Man))
             { escapeLeft = 0f; return; }
-            next.y = camp.GroundAt(next);
+            next.y = WorkerPad.Foot(next, camp.GroundAt(next));
             transform.position = next;
             Face(escapeDir, dt);
         }

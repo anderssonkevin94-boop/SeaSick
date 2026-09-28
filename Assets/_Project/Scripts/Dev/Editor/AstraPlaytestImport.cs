@@ -193,6 +193,12 @@ namespace SeaSick.Dev
 
         static void BuildSawmill()
         {
+            // **The approved level 1 lumber mill owns sawmill.prefab now
+            // (2026-09-28, `MillL1Import`).** Re-running this importer must
+            // not put the old tarp mill back over it.
+            var current=AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Project/Resources/Settlement/sawmill.prefab");
+            if(current!=null && current.transform.Find("LumberMill_L1")!=null)
+            { log.Add("Sawmill: skipped -- the level 1 lumber mill (MillL1Import) owns sawmill.prefab."); return; }
             var go=new GameObject("sawmill");
             try
             {

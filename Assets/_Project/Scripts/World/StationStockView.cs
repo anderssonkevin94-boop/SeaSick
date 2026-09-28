@@ -39,6 +39,13 @@ namespace SeaSick.World
     {
         readonly List<GameObject> inputSlots = new List<GameObject>();
         readonly List<GameObject> outputSlots = new List<GameObject>();
+        /// **The finished job, piece by piece (2026-09-28).** The level 1
+        /// lumber mill's `Bench_Finished` holds three separate
+        /// `Bench_Result_NN` boards, so a job the rack could only half take
+        /// (`OutpostLedger` hauling boards straight off the bench) shows the
+        /// boards actually left, `StationStock.benchOut`, not all three.
+        /// Empty on every kit without them: the parent toggle alone, as before.
+        readonly List<GameObject> benchResults = new List<GameObject>();
         GameObject benchLoaded, benchCutting, benchFinished, tool;
         bool discovered;
 
@@ -49,7 +56,7 @@ namespace SeaSick.World
         const int RetryFrames = 30;
         const int MaxResolveAttempts = 20;   // ~20 frames; a real station resolves on the first one
 
-        int shownInput = -1, shownOutput = -1;
+        int shownInput = -1, shownOutput = -1, shownResults = -1;
         BenchState shownBench = (BenchState)(-1);
 
         void Start()
@@ -57,7 +64,18 @@ namespace SeaSick.World
             DiscoverSlots();
             if (inputSlots.Count == 0 && outputSlots.Count == 0
                 && benchLoaded == null && benchCutting == null && benchFinished == null && tool == null)
+            {
                 enabled = false;   // nothing on this model to ever toggle
+                return;
+            }
+            // **Live stock before the first frame it is seen (2026-09-28).**
+            // `Start` runs before this object's first render, and by then
+            // `BuildingFactory` has added the `Building` and the ledger row
+            // exists (a raise, a load): resolving here means a loaded mill
+            // full of boards never shows an empty rack for a frame first.
+            // A ghost / late ledger just falls through to `Update`'s retry.
+            var s = ResolveStation();
+            if (s != null) { station = s; resolved = true; Apply(); }
         }
 
         void Update()
@@ -85,7 +103,7 @@ namespace SeaSick.World
                 sinceResolve = 0;
                 var fresh = ResolveStation();
                 if (fresh == null) { if (station.removed) { resolved = false; resolveAttempts = 0; } return; }
-                if (fresh != station) { station = fresh; shownInput = shownOutput = -1; shownBench = (BenchState)(-1); }
+                if (fresh != station) { station = fresh; shownInput = shownOutput = shownResults = -1; shownBench = (BenchState)(-1); }
             }
             Apply();
         }
@@ -135,6 +153,12 @@ namespace SeaSick.World
             if (outN != shownOutput) { SetShown(outputSlots, outN); shownOutput = outN; }
 
             if (station.benchState != shownBench) ApplyBench(station.benchState);
+            if (benchResults.Count > 0)
+            {
+                int resN = station.benchState == BenchState.Finished
+                    ? Mathf.Clamp(station.benchOut, 0, benchResults.Count) : 0;
+                if (resN != shownResults) { SetShown(benchResults, resN); shownResults = resN; }
+            }
         }
 
         void ApplyBench(BenchState bench)
@@ -145,6 +169,14 @@ namespace SeaSick.World
             if (benchFinished != null) benchFinished.SetActive(bench == BenchState.Finished);
             // Tool out only while it is actually being swung.
             if (tool != null) tool.SetActive(bench == BenchState.Working);
+            // Every piece until `Apply` says how many are left (`Preview`
+            // has no ledger, so a finished bench there shows the full job).
+            if (benchResults.Count > 0)
+            {
+                int all = bench == BenchState.Finished ? benchResults.Count : 0;
+                SetShown(benchResults, all);
+                shownResults = all;
+            }
         }
 
         /// The recipe currently on the bench (or, with nothing loaded yet,
@@ -214,6 +246,7 @@ namespace SeaSick.World
             benchLoaded = FindFirstByStem(benchRoot, BenchLoadedNames)?.gameObject;
             benchCutting = FindFirstByStem(benchRoot, BenchCuttingNames)?.gameObject;
             benchFinished = FindFirstByStem(benchRoot, BenchFinishedNames)?.gameObject;
+            if (benchFinished != null) CollectSlots(benchFinished.transform, "Bench_Result_", benchResults);
             tool = FindToolChild(transform)?.gameObject;
 
             // All hidden until the first real Apply -- an idle bench should

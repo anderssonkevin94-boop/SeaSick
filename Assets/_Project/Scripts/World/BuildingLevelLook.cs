@@ -76,12 +76,22 @@ namespace SeaSick.World
         {
             if (root == null) return;
             var look = For(level);
+            // **Every slot, 2026-09-28**: the textured level 1 kits (wall,
+            // tower, lumber mill) carry up to four materials per renderer,
+            // and `sharedMaterial` is only the first of them.
             foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
             {
-                var current = r.sharedMaterial;
-                if (current == null) continue;
-                var source = (sourceOfClone.TryGetValue(current, out var s) && s != null) ? s : current;
-                r.sharedMaterial = look.strength <= 0f ? source : TintOf(source, level, look);
+                var slots = r.sharedMaterials;
+                bool changed = false;
+                for (int i = 0; i < slots.Length; i++)
+                {
+                    var current = slots[i];
+                    if (current == null) continue;
+                    var source = (sourceOfClone.TryGetValue(current, out var s) && s != null) ? s : current;
+                    var want = look.strength <= 0f ? source : TintOf(source, level, look);
+                    if (want != current) { slots[i] = want; changed = true; }
+                }
+                if (changed) r.sharedMaterials = slots;
             }
         }
 

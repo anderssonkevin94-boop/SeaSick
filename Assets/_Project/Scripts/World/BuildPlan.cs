@@ -575,9 +575,15 @@ namespace SeaSick.World
             // fits the 2.6 x 2.6 plot). The old 7.5 m was the V1 study's
             // allowance, not this asset's real height -- do not stretch the
             // model to fill it.
-            ridge = 4.65f,
+            // **2026-09-28: 5.37 m.** The approved chunky V5 tower
+            // (art-staging/watchtower-chunky-lvl1-v5, `Art/TowerL1`) adds a
+            // pointed parapet: overall 5.37 m. This is the VISUAL top only
+            // -- the walking deck, the ladder marks and `WatchtowerGun`'s
+            // deck stay at 4.61 m.
+            ridge = 5.37f,
             position = "lookout",
-            // Astra's level-one watchtower (art-staging/watchtower-astra-lvl1-v2);
+            // Astra's level-one watchtower (art-staging/watchtower-chunky-lvl1-v5
+            // since 2026-09-28, imported by `TowerL1Import`);
             // `BuildKind.Hut` (the extruded shed) stays as the fallback if it
             // fails to load.
             prefab = "Settlement/watchtower_astra",

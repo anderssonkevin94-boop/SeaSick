@@ -18,7 +18,7 @@ namespace SeaSick.Combat
 
         /// The kit's own walking-surface height, local to the tower's root
         /// (`watchtower-astra-lvl1-v2`'s README: "walking surface remains
-        /// 4.61 m high"). Not `plan.ridge` (4.65, the OVERALL height) --
+        /// 4.61 m high"; unchanged in the chunky V5 kit). Not `plan.ridge` (5.37, the OVERALL height to the parapet tips) --
         /// the gun stands on the deck, not on the rail post above it.
         const float DeckHeight = 4.61f;
 
