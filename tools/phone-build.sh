@@ -9,8 +9,11 @@ U=00008140-001069E421DB801C
 APP=Builds/DerivedData/Build/Products/ReleaseForRunning-iphoneos/SeaSick.app
 echo "== quit editor $(date +%T)"
 ~/.unity/bin/unity cmd eval --json --code 'UnityEditor.EditorApplication.Exit(0); return "bye";' >/dev/null 2>&1
-for i in $(seq 1 30); do pgrep -if "Contents/MacOS/Unity -projectpath /Users/kevinandersson/Desktop/SeaSick" >/dev/null || break; sleep 3; done
-if pgrep -f "Contents/MacOS/Unity -projectPath /Users/kevinandersson/Desktop/SeaSick" >/dev/null || pgrep -f "Contents/MacOS/Unity -projectpath /Users/kevinandersson/Desktop/SeaSick" >/dev/null; then echo "EDITOR STILL OPEN - abort"; exit 1; fi
+# Any Unity editor process on this project, however it was launched (Hub, `open -a --args`,
+# extra -psn args between): 2026-09-28 a reopened editor slipped past the old exact pattern.
+EDITOR_RE="Unity.app/Contents/MacOS/Unity.*Desktop/SeaSick"
+for i in $(seq 1 40); do pgrep -if "$EDITOR_RE" >/dev/null || break; sleep 3; done
+if pgrep -if "$EDITOR_RE" >/dev/null; then echo "EDITOR STILL OPEN - abort"; exit 1; fi
 echo "== unity build $(date +%T)"
 tools/build-ios.sh --dev > Builds/build-ios.out 2>&1; echo "build-ios exit $?"
 grep -E "Build Finished|result=" Builds/ios-build.log | tail -2
