@@ -188,8 +188,37 @@ namespace SeaSick.World.Economy
             if (p == null) return NextCampfire(l);
             GoalChain g = p.kind == PinnedGoal.Upgrade
                 ? UpgradeAt(l, l.RaisedIndexOf(p.planId, p.ordinal), p.planId)
+                : p.kind == PinnedGoal.Stock
+                ? SpearStock(l, p.target)
                 : NextCopy(l, p.planId);
             g.Pinned = true;
+            return g;
+        }
+
+        /// **Phase 11, "the camp goal"**: keep `target` spears (stone or
+        /// iron, either counts) in the store, suggested after a raid left
+        /// hands hiding for lack of one (`OutpostLedger.PinSpearGoal`).
+        /// No production-chain drill-down like the other goals get -- a
+        /// spear is already explained in full the moment the player opens
+        /// Build › the smithy; this just tracks the count the raid asked for.
+        public static GoalChain SpearStock(OutpostLedger l, int target)
+        {
+            var g = new GoalChain { kind = GoalKind.Cost, title = "Forge spears before the next raid" };
+            if (l == null || target <= 0) return g;
+            g.HasGoal = true;
+            g.why = "Hands went unarmed in the last raid.";
+            int have = l.SpearStockCount();
+            g.total = target;
+            g.ready = System.Math.Min(have, target);
+            g.rows.Add(new GoalRow
+            {
+                depth = 0, kind = GoalRowKind.Resource, res = Res.Spear, icon = Res.Spear,
+                name = "Spears in store", have = have, need = target, qty = $"{have} / {target}",
+                state = have >= target ? GoalState.Ok : GoalState.Blocked,
+                how = "stone or iron, either counts",
+            });
+            g.CanComplete = have >= target;
+            g.Finish(GoalAction.None, "spears in the store", "stone or iron, either counts");
             return g;
         }
 

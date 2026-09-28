@@ -14,8 +14,15 @@ namespace SeaSick.World
     {
         public const string Upgrade = "upgrade";
         public const string Build = "build";
+        /// **Phase 11, "the camp goal":** a plain resource stockpile --
+        /// today only ever "N spears in the store", suggested after a raid
+        /// left hands hiding for lack of one (`Combat.RaidAlarm.End`).
+        /// `target` is the count to reach; `planId` is unused (the resource
+        /// is always the combined spear family -- see
+        /// `OutpostLedger.SpearStockGoalMet`).
+        public const string Stock = "stock";
 
-        /// `Upgrade`, `Build`, or empty for none.
+        /// `Upgrade`, `Build`, `Stock`, or empty for none.
         public string kind;
         public string planId;
         /// Upgrade: which copy of `planId`. Build: unused.
@@ -50,6 +57,7 @@ namespace SeaSick.World
                     done = i < 0 || LevelAtRaised(i, g.planId) >= g.target;
                 }
                 else if (g.kind == PinnedGoal.Build) done = CopiesHeld(g.planId) > g.target;
+                else if (g.kind == PinnedGoal.Stock) done = SpearStockCount() >= g.target;
                 else done = true;
                 if (!done) return g;
                 pinnedGoal = new PinnedGoal();
@@ -75,6 +83,23 @@ namespace SeaSick.World
             if (string.IsNullOrEmpty(planId)) return;
             pinnedGoal = new PinnedGoal { kind = PinnedGoal.Build, planId = planId, target = CopiesHeld(planId) };
         }
+
+        /// **Phase 11, "the camp goal".** Suggest keeping `target` spears
+        /// (stone or iron, either counts) in the store -- called by
+        /// `Combat.RaidAlarm.End` when a raid left hands hiding for lack of
+        /// one. Overwrites whatever goal was pinned before, the same as
+        /// `PinUpgrade`/`PinBuild` already do: a raid just happened, so this
+        /// is the more urgent ask.
+        public void PinSpearGoal(int target)
+        {
+            if (target <= 0) return;
+            pinnedGoal = new PinnedGoal { kind = PinnedGoal.Stock, target = target };
+        }
+
+        /// Spears in the store, stone and iron together -- what a raid's
+        /// alarm arms hands from (`Combat.RaidAlarm`) and what the Stock
+        /// goal above counts against.
+        public int SpearStockCount() => StoreCountOf(Res.IronSpear) + StoreCountOf(Res.Spear);
 
         public void ClearGoal() => pinnedGoal = new PinnedGoal();
 

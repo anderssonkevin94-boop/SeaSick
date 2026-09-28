@@ -369,11 +369,18 @@ namespace SeaSick.World
                 if (!string.IsNullOrEmpty(rescuing))
                     return (draggingNow ? "dragging " : "running to ") + rescuing;
                 if (pouting) return "pouting at the fire · " + Mmss(poutLeft);
-                // **Death/rescue phase 10** -- the alarm's own states, same
-                // priority band as `defending` just below.
+                // **Death/rescue phase 10/11** -- the alarm's own states, same
+                // priority band as `defending` just below. A hand hiding with
+                // a spear still in hand (the Hide-all switch caught a hunter
+                // with his own) reads as ORDERED there, not unarmed -- the
+                // one thing the row has to never claim is that he has
+                // nothing when he does.
                 if (fetchingSpear) return "fetching a spear";
-                if (hidingHut) return "hiding in the hut";
-                if (hidingCrouch) return "crouching, no spear";
+                if (hidingHut || hidingCrouch)
+                {
+                    if (!string.IsNullOrEmpty(raidSpear)) return "hiding (ordered)";
+                    return hidingHut ? "hiding, no spear" : "crouching, no spear";
+                }
                 if (defending)
                     return "defending, " + (defendSpear == Res.IronSpear ? "iron spear" : "stone spear");
                 if (raidLookout) return "on the tower";

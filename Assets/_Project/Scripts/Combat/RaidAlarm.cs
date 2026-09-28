@@ -26,6 +26,12 @@ namespace SeaSick.Combat
         {
             public bool active;
             public bool hideAllOverride;
+            /// **Phase 11 goal hook.** How many hands `Begin` sent to hide
+            /// this raid because the store ran out of spears before they got
+            /// there -- NOT hands the Hide-all switch sent in (that's the
+            /// player's own call, not a shortage). Read once by `End` to
+            /// suggest "Forge spears before the next raid", then zeroed.
+            public int hidForNoSpear;
         }
 
         static readonly Dictionary<World.Outpost, State> states = new Dictionary<World.Outpost, State>();
@@ -48,6 +54,7 @@ namespace SeaSick.Combat
             var st = StateFor(camp);
             st.active = true;
             st.hideAllOverride = false;
+            st.hidForNoSpear = 0;
 
             int storeSpears = ledger.StoreCountOf(World.Res.IronSpear) + ledger.StoreCountOf(World.Res.Spear);
 
@@ -73,7 +80,7 @@ namespace SeaSick.Combat
                 h.alarmed = true;
                 ledger.DropCarriedLoadNow(h);
                 if (i < storeSpears) h.fetchingSpear = true;
-                else AssignHide(camp, h);
+                else { AssignHide(camp, h); st.hidForNoSpear++; }
             }
         }
 
@@ -86,9 +93,16 @@ namespace SeaSick.Combat
             if (camp == null || !states.TryGetValue(camp, out var st) || !st.active) return;
             st.active = false;
             st.hideAllOverride = false;
+            int hidForNoSpear = st.hidForNoSpear;
+            st.hidForNoSpear = 0;
 
             var ledger = camp.Ledger;
             if (ledger == null || ledger.hands == null) return;
+
+            // **Phase 11, "the camp goal"**: hands went unarmed this raid --
+            // suggest forging enough spears that it doesn't happen again,
+            // capped at 4 so a huge camp doesn't get asked for an absurd pile.
+            if (hidForNoSpear > 0) ledger.PinSpearGoal(Mathf.Min(hidForNoSpear, 4));
 
             foreach (var h in ledger.hands)
             {
@@ -147,20 +161,35 @@ namespace SeaSick.Combat
             }
             else
             {
-                // Send the armed back out: the store spears left decide who
-                // re-arms, same "closest first" spirit as `Begin` without
-                // re-sorting the whole roster for a dev-only hook.
+                // **Send the armed out.** A hand who is hiding but already
+                // holds a spear -- a hunter caught out with his own
+                // (`huntArmed`, kept through `HideAll(true)` on purpose) --
+                // needs no trip to the store:
+                // clearing his hiding flags is the whole job, and
+                // `CampWorker.TickDefend` picks him up the very next frame
+                // off `raidSpear`/`huntArmed`, same as it always does. That
+                // used to be a plain count walk that sent EVERY hidden hand
+                // through `fetchingSpear`, which asked an already-armed
+                // hunter to walk to the store for a spear he was already
+                // holding. Only a hand with NOTHING in his hands draws on
+                // the store's count, closest-first spirit unchanged.
                 int available = ledger.StoreCountOf(World.Res.IronSpear) + ledger.StoreCountOf(World.Res.Spear);
                 foreach (var h in ledger.hands)
                 {
                     if (h == null || !(h.hidingHut || h.hidingCrouch)) continue;
                     h.hidingHut = false;
                     h.hidingCrouch = false;
+                    if (!string.IsNullOrEmpty(h.raidSpear)) continue;   // already armed -- TickDefend takes it from here
                     if (available > 0) { h.fetchingSpear = true; available--; }
                     else AssignHide(camp, h);
                 }
             }
         }
+
+        /// For the banner's button label (phase 11): is this camp's raid
+        /// under the player's own "hide everyone" order right now?
+        public static bool IsHiding(World.Outpost camp) =>
+            camp != null && states.TryGetValue(camp, out var st) && st.hideAllOverride;
 
         /// For the banner (phase 11): defending, hiding, spears still
         /// sitting in the store.
