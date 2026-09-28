@@ -301,6 +301,28 @@ namespace SeaSick.Ocean
         public void ReleaseForce() => forced = false;
         bool forced;
 
+        /// **Local weather** (squalls, "weather you can see coming",
+        /// 2026-09-28): 0 = no local weather pulling on the target, 1 = the
+        /// ship is at its dead centre. Whoever owns local weather knows
+        /// WHERE and WHY; this only knows how hard to blend the GLOBAL
+        /// target toward `externalTargetSeverity` when asked -- the same
+        /// division of labour `TargetHsAt` already has with `RegionField`'s
+        /// storm weight. Defaults to 0, so nothing here changes without a
+        /// caller actively asking for it every frame.
+        float externalBoost01;
+        float externalTargetSeverity = 0.85f;
+
+        /// Called every frame by whatever spawns local weather (SquallDirector).
+        /// `boost01` 0..1 -- how hard to pull; `targetSeverity` 0..1 -- what
+        /// "fully inside" feels like, same scale as `Severity01`. Safe to call
+        /// with 0 every frame there is no local weather in play; that is
+        /// exactly the no-op the default already was.
+        public void SetExternalBoost(float boost01, float targetSeverity)
+        {
+            externalBoost01 = Mathf.Clamp01(boost01);
+            externalTargetSeverity = Mathf.Clamp01(targetSeverity);
+        }
+
         void OnEnable()
         {
             Instance = this;
@@ -479,6 +501,13 @@ namespace SeaSick.Ocean
             {
                 Vector2 pos = FollowXZ();
                 float targetHs = TargetHsAt(pos, OceanTime.Now);
+
+                // Local weather (a squall) pulls the target up toward its own
+                // severity, exactly as hard as SetExternalBoost was last told.
+                // LogLerp, like everything else in this file, because the
+                // player reads wave height as a ratio.
+                if (externalBoost01 > 0f)
+                    targetHs = LogLerp(targetHs, HsAt(externalTargetSeverity), externalBoost01);
 
                 // Wait for RegionField before snapping: with no region there is
                 // no storm weight, so a frame-one jump would land on the calm
