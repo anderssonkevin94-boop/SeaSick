@@ -173,6 +173,12 @@ namespace SeaSick.World.Life
                         "Turned out for every raid on " + camp + " that ever came, spear in hand.",
                         "Held the line at " + camp + " more than once, and it held.",
                     });
+                case LifeEvents.SpearBroke:
+                    return Pick(h, salt, new[]
+                    {
+                        "Broke " + (e.count > 1 ? CountWord(e.count) + " spears" : "a spear")
+                            + " on the raiders at " + camp + ".",
+                    });
                 case LifeEvents.HuntingKill:
                     return Pick(h, salt, new[]
                     {

@@ -30,7 +30,7 @@ namespace SeaSick.World
         /// True = handled this frame.
         bool TickAlarmRole(OutpostHand r, float dt)
         {
-            bool hasRole = r.fetchingSpear || r.hidingHut || r.hidingCrouch;
+            bool hasRole = r.fetchingSpear || r.hidingHut || r.hidingCrouch || r.returningSpear;
             if (!hasRole)
             {
                 // The alarm let go of him (raid over, or `Combat.RaidAlarm`
@@ -43,13 +43,43 @@ namespace SeaSick.World
             }
             if (camp == null || camp.Ledger == null)
             {
-                r.fetchingSpear = r.hidingHut = r.hidingCrouch = false;
+                r.fetchingSpear = r.hidingHut = r.hidingCrouch = r.returningSpear = false;
                 if (bodyHidden) RevealBody(r);
                 return false;
             }
 
             if (r.fetchingSpear) return TickFetchSpear(r, dt);
+            if (r.returningSpear) return TickReturnSpear(r, dt);
             return TickHiding(r, dt);
+        }
+
+        /// **All clear, on foot (death/rescue phase 12).** Walk the exact
+        /// spear he is holding (`OutpostHand.raidSpear`) back to the store
+        /// and book it there, worn fraction and all, on arrival
+        /// (`Combat.RaidAlarm.SettleReturn`). The unwatched fallback --
+        /// the camp stops being watched mid-walk -- is `World.CampWorker.
+        /// Remove`'s own job, not this tick's: a body that vanishes never
+        /// gets another frame here to finish the trip.
+        bool TickReturnSpear(OutpostHand r, float dt)
+        {
+            if (string.IsNullOrEmpty(r.raidSpear)) { r.returningSpear = false; return false; }
+
+            var storeB = CampPiles.StoreBuildingOf(camp);
+            Vector3 goal = storeB != null ? WorkSpot(camp, storeB) : camp.CampCentre;
+
+            if (!Near(goal, FetchArriveMetres))
+            {
+                phase = Phase.Going;
+                acting?.Set(VillagerActing.Mode.None);
+                Walk(goal, dt);
+                return true;
+            }
+
+            RaidAlarm.SettleReturn(camp, r);
+            phase = Phase.Resting;
+            wait = RestSeconds;
+            acting?.Set(VillagerActing.Mode.None);
+            return true;
         }
 
         /// Walk to the store and take one spear out of it, iron first.
@@ -75,7 +105,7 @@ namespace SeaSick.World
                 : ledger.TakeFromStore(Res.Spear, 1) == 1 ? Res.Spear
                 : null;
             r.fetchingSpear = false;
-            if (got != null) r.raidSpear = got;
+            if (got != null) { r.raidSpear = got; r.raidSpearWear = 0f; }
             else RaidAlarm.AssignHide(camp, r);   // gone by the time he got there
 
             phase = Phase.Resting;

@@ -108,7 +108,7 @@ namespace SeaSick.Combat
             if (hp < 0f) hp = HpMax;
             hp -= Mathf.Max(0f, damage);
             fightTarget = attacker;
-            if (hp <= 0f) { Killed(); return; }
+            if (hp <= 0f) { Killed(attacker); return; }
             if (phase != Phase.Fighting)
             {
                 StopBreaking();
@@ -121,7 +121,7 @@ namespace SeaSick.Combat
         /// falls" -- gone already if he had already delivered it to the
         /// ship, same as `Flee`'s own drop), tells the party (morale), and
         /// lies flat to fade over `RaidFightTuning.CorpseFadeSeconds`.
-        void Killed()
+        void Killed(World.OutpostHand attacker)
         {
             if (!string.IsNullOrEmpty(carrying) && camp != null && camp.Ledger != null)
                 camp.Ledger.DropRaiderLoot(carrying, 1, transform.position);
@@ -132,6 +132,10 @@ namespace SeaSick.Combat
             deadTimer = 0f;
             transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 90f);
             Act(World.VillagerActing.Mode.None, null);
+            // **Spear wear per kill (death/rescue phase 12).**
+            RaidAlarm.WearOnKill(camp, attacker);
+            if (attacker != null && camp?.Ledger != null)
+                World.Life.Lives.Log(attacker.name, World.Life.LifeEvents.KilledRaider, camp.Ledger.CampLabel);
             party?.RaiderKilled();
         }
 

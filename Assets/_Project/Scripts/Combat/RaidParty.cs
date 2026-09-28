@@ -15,8 +15,6 @@ namespace SeaSick.Combat
     {
         public static RaidParty Active { get; private set; }
 
-        const int PartySize = 3;
-        const int MaxLoot = 8;
         const float MaxSeconds = 120f;
         const float Spacing = 1.5f;
 
@@ -24,6 +22,13 @@ namespace SeaSick.Combat
         public EnemyShip Ship { get; private set; }
         public int Stolen { get; private set; }
         public bool Landed { get; private set; }
+
+        /// **Raids grow with the camp (phase 12).** Computed once, at
+        /// `Begin`, off the camp's hands and stores -- never mid-raid, and
+        /// never for a camp nobody is watching (`Begin` only ever runs off
+        /// a landing, which only ever happens watched). Loot scales with it,
+        /// capped separately.
+        int maxLoot;
 
         /// Walkers still standing -- destroyed ones drop out of the count on
         /// their own, so this is a live readout, not a decrementing tally.
@@ -97,11 +102,30 @@ namespace SeaSick.Combat
                 ? Vector3.Cross(shoreDir.normalized, Vector3.up)
                 : Vector3.right;
 
+            // **Raids grow with the camp (phase 12).** basePartySize, plus
+            // one raider per handsPerExtraRaider hands living here, plus one
+            // per wealthPerExtraRaider whole units sitting in the stores --
+            // clamped to [basePartySize, maxPartySize]. Computed here, once,
+            // off the camp as it stands the instant the party lands --
+            // never mid-raid, never for an unwatched camp (this only ever
+            // runs off a real landing).
+            var ledger = party.Camp.Ledger;
+            int hands = ledger?.hands != null ? ledger.hands.Count : 0;
+            int wealth = ledger != null ? ledger.Total : 0;
+            int basePartySize = RaidFightTuning.BasePartySize;
+            int partySize = Mathf.Clamp(
+                basePartySize
+                    + hands / Mathf.Max(1, RaidFightTuning.HandsPerExtraRaider)
+                    + Mathf.FloorToInt(wealth / Mathf.Max(1f, RaidFightTuning.WealthPerExtraRaider)),
+                basePartySize, RaidFightTuning.MaxPartySize);
+            party.maxLoot = Mathf.Min(RaidFightTuning.MaxLootCap,
+                Mathf.RoundToInt(RaidFightTuning.MaxLootBase * partySize / (float)Mathf.Max(1, basePartySize)));
+
             // Kevin, 2026-09-22: a posted lookout with arrows looses a
             // volley as the party wades in -- two arrows drop one raider
             // before he reaches the beach, and a party of none never lands.
-            int loosed = party.Camp.Ledger != null ? party.Camp.Ledger.LookoutVolley() : 0;
-            int size = Mathf.Max(0, PartySize - loosed / 2);
+            int loosed = ledger != null ? ledger.LookoutVolley() : 0;
+            int size = Mathf.Max(0, partySize - loosed / 2);
             if (size == 0) { Destroy(go); return null; }
 
             for (int i = 0; i < size; i++)
@@ -255,17 +279,14 @@ namespace SeaSick.Combat
             // every hand still on the roster when the raiders withdraw gets
             // the event -- a downed one included, since he made it, just
             // not unhurt.
-            if (Camp.Ledger.hands != null)
-                foreach (var h in Camp.Ledger.hands)
-                    if (h != null)
-                        World.Life.Lives.Log(h.name, World.Life.LifeEvents.SurvivedRaid, Camp.Ledger.CampLabel);
-            RaidDirector.ReportResult(Camp, MoraleBroken
+            // (Logged in `LogDefenders`, which both endings call.)
+            RaidDirector.ReportResult(Camp, (MoraleBroken
                 ? "the raiders broke and ran"
                 : Stolen > 0
                     ? $"the raiders got away with {Stolen}"
-                    : "the raiders fled with nothing");
+                    : "the raiders fled with nothing") + "\nAll clear.");
             LogDefenders();
-            RaidAlarm.End(Camp);   // death/rescue phase 10: all clear
+            RaidAlarm.End(Camp);   // death/rescue phase 12: all clear
             for (int i = 0; i < walkers.Count; i++) walkers[i]?.Recall();
         }
 
@@ -278,6 +299,10 @@ namespace SeaSick.Combat
         {
             if (defendersLogged || Camp?.Ledger == null) return;
             defendersLogged = true;
+            if (Camp.Ledger.hands != null)
+                foreach (var h in Camp.Ledger.hands)
+                    if (h != null)
+                        World.Life.Lives.Log(h.name, World.Life.LifeEvents.SurvivedRaid, Camp.Ledger.CampLabel);
             foreach (var name in defendersThisRaid)
                 World.Life.Lives.Log(name, World.Life.LifeEvents.DefendedCamp, Camp.Ledger.CampLabel);
         }
@@ -294,14 +319,14 @@ namespace SeaSick.Combat
                     if (!ended)
                     {
                         ended = true;
-                        RaidDirector.ReportResult(Camp, "you sank them — the loot is back on the pile");
+                        RaidDirector.ReportResult(Camp, "you sank them — the loot is back on the pile\nAll clear.");
                         LogDefenders();
-                        RaidAlarm.End(Camp);   // death/rescue phase 10: all clear
+                        RaidAlarm.End(Camp);   // death/rescue phase 12: all clear
                     }
                     for (int i = 0; i < walkers.Count; i++) walkers[i]?.Flee();
                 }
             }
-            else if (Stolen >= MaxLoot || elapsed > MaxSeconds || MoraleBroken)
+            else if (Stolen >= maxLoot || elapsed > MaxSeconds || MoraleBroken)
             {
                 Ship.EndRaid();   // calls back into Recall()
             }

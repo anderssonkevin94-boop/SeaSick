@@ -225,6 +225,14 @@ namespace SeaSick.World
         {
             var w = Live(hand);
             if (w == null) return;
+            // **All clear, unwatched fallback (death/rescue phase 12):** a
+            // hand walking a spear home loses his body the instant the camp
+            // stops being watched -- book it into the store right now
+            // rather than leave him holding a phantom spear nobody can see
+            // (docs: "if the camp becomes unwatched ... add it to the store
+            // immediately").
+            var row = w.Row;
+            if (row != null && row.returningSpear) SeaSick.Combat.RaidAlarm.SettleReturn(w.camp, row);
             w.Drop();
             // Hand his tree back BEFORE the component goes: `Destroy` is
             // deferred to the end of the frame, so a worker who merely stopped

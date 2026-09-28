@@ -32,6 +32,12 @@ namespace SeaSick.Combat
             /// player's own call, not a shortage). Read once by `End` to
             /// suggest "Forge spears before the next raid", then zeroed.
             public int hidForNoSpear;
+            /// **All clear / broken-spear flash (phase 12).** A short line
+            /// `RaidBanner` folds into the live scoreline for a few seconds --
+            /// "All clear" once the raid ends, or "Anna's stone spear broke"
+            /// the moment a defender's spear wears out mid-fight.
+            public string flashMsg;
+            public float flashAt = -999f;
         }
 
         static readonly Dictionary<World.Outpost, State> states = new Dictionary<World.Outpost, State>();
@@ -84,10 +90,10 @@ namespace SeaSick.Combat
             }
         }
 
-        /// **All clear** (minimal, phase 12 will replace it). Called by
-        /// `RaidParty` at every ending it has (`Recall`, the sunk branch of
-        /// `Update`) -- idempotent, so touching it from more than one of
-        /// those in the same raid is harmless.
+        /// **All clear** (death/rescue phase 12). Called by `RaidParty` at
+        /// every ending it has (`Recall`, the sunk branch of `Update`) --
+        /// idempotent, so touching it from more than one of those in the
+        /// same raid is harmless.
         public static void End(World.Outpost camp)
         {
             if (camp == null || !states.TryGetValue(camp, out var st) || !st.active) return;
@@ -111,14 +117,13 @@ namespace SeaSick.Combat
                 if (!h.alarmed && string.IsNullOrEmpty(h.raidSpear)
                     && !h.fetchingSpear && !h.hidingHut && !h.hidingCrouch) continue;
 
-                // **Nothing vanishes**: a store spear still in a hand's arms
-                // (fetched, or fighting with it) goes straight back into the
-                // store count -- TODO phase 12, carried back on foot instead.
-                if (!string.IsNullOrEmpty(h.raidSpear))
-                {
-                    ledger.Add(h.raidSpear, 1);
-                    h.raidSpear = null;
-                }
+                // **Nothing vanishes, on foot (phase 12)**: a STORE spear
+                // still in a hand's arms (fetched, or fighting with it) walks
+                // itself back rather than teleporting into the pile --
+                // `World.CampWorker.TickReturnSpear` does the walking,
+                // `SettleReturn` below does the actual booking on arrival (or
+                // the instant his body goes away unwatched mid-walk).
+                if (!string.IsNullOrEmpty(h.raidSpear)) h.returningSpear = true;
                 h.alarmed = false;
                 h.fetchingSpear = false;
                 h.hidingHut = false;
@@ -128,6 +133,66 @@ namespace SeaSick.Combat
                 // raid is no longer live) -- untouched here, same division
                 // phase 9 already kept.
             }
+
+            Flash(camp, "All clear");
+        }
+
+        /// **A defender's spear walked home** (`World.CampWorker.
+        /// TickReturnSpear`, or the unwatched fallback in `World.CampWorker.
+        /// Remove` when his body goes away mid-walk). Books the worn
+        /// fraction into the store and lets the hand go.
+        public static void SettleReturn(World.Outpost camp, World.OutpostHand h)
+        {
+            if (h == null) return;
+            if (!string.IsNullOrEmpty(h.raidSpear)) camp?.Ledger?.ReturnWornSpear(h.raidSpear, h.raidSpearWear);
+            h.raidSpear = null;
+            h.raidSpearWear = 0f;
+            h.returningSpear = false;
+        }
+
+        /// **Spear wear per kill** (docs: "spears wear per kill, like
+        /// hunting, and worn-out spears break"). Called by `RaidWalker.
+        /// Killed` with the hand who landed the killing jab. A hunter's own
+        /// spear, or the phase-9 dev "Arm" flag with no store unit behind
+        /// it, wears through hunting's own path instead -- only a hand
+        /// holding an actual store spear (`raidSpear` set) is touched here.
+        public static void WearOnKill(World.Outpost camp, World.OutpostHand attacker)
+        {
+            if (attacker == null || string.IsNullOrEmpty(attacker.raidSpear)) return;
+            attacker.raidSpearWear += World.Economy.Techs.SpearWear(attacker.raidSpear);
+            if (attacker.raidSpearWear < 1f - 1e-4f) return;
+
+            // **Broken.** Gone outright -- not walked home, not returned as
+            // a fraction (there is nothing left of it). The hand goes back
+            // to bare hands; if the raid is still live he hides like anyone
+            // else with no spear.
+            string kind = attacker.raidSpear == World.Res.IronSpear ? "iron spear" : "stone spear";
+            string who = string.IsNullOrEmpty(attacker.name) ? "A" : attacker.name + "'s";
+            Flash(camp, $"{who} {kind} broke");
+            World.Life.Lives.Log(attacker.name, World.Life.LifeEvents.SpearBroke, camp?.Ledger?.CampLabel);
+
+            attacker.raidSpear = null;
+            attacker.raidSpearWear = 0f;
+            if (attacker.defending) { attacker.defending = false; attacker.defendSpear = null; }
+            if (IsActive(camp)) { attacker.alarmed = true; AssignHide(camp, attacker); }
+        }
+
+        /// Set the banner's short-lived flash line (an all-clear or a
+        /// broken spear) -- read by `Combat.RaidBanner`.
+        public static void Flash(World.Outpost camp, string msg)
+        {
+            if (camp == null) return;
+            var st = StateFor(camp);
+            st.flashMsg = msg;
+            st.flashAt = Time.unscaledTime;
+        }
+
+        /// The flash line, for as long as it should still show -- null once
+        /// that window has passed or there was never one.
+        public static string FlashMessage(World.Outpost camp, float windowSeconds = 4f)
+        {
+            if (camp == null || !states.TryGetValue(camp, out var st) || string.IsNullOrEmpty(st.flashMsg)) return null;
+            return Time.unscaledTime - st.flashAt <= windowSeconds ? st.flashMsg : null;
         }
 
         /// **Phase 11 hook** (exposed now, no button on it yet): send
@@ -152,8 +217,9 @@ namespace SeaSick.Combat
                     h.fetchingSpear = false;
                     if (!string.IsNullOrEmpty(h.raidSpear) && !h.huntArmed)
                     {
-                        ledger.Add(h.raidSpear, 1);
+                        ledger.ReturnWornSpear(h.raidSpear, h.raidSpearWear);
                         h.raidSpear = null;
+                        h.raidSpearWear = 0f;
                     }
                     h.alarmed = true;
                     AssignHide(camp, h);
@@ -221,8 +287,10 @@ namespace SeaSick.Combat
                 foreach (var h in ledger.hands)
                 {
                     if (h == null || string.IsNullOrEmpty(h.raidSpear)) continue;
-                    ledger.Add(h.raidSpear, 1);
+                    ledger.ReturnWornSpear(h.raidSpear, h.raidSpearWear);
                     h.raidSpear = null;
+                    h.raidSpearWear = 0f;
+                    h.returningSpear = false;
                 }
             }
         }

@@ -59,6 +59,10 @@ namespace SeaSick.UI
                       + $"{defending} defending · {hiding} hiding · {spearWord}"
                     : $"RAID — {party.Ashore} ashore · {party.Stolen} taken · sink the ship\n"
                       + $"{defending} defending · {hiding} hiding · {spearWord}";
+                // **Phase 12:** a spear breaking mid-fight folds in as a
+                // third line for a few seconds, on top of the scoreline.
+                string flash = SeaSick.Combat.RaidAlarm.FlashMessage(outpost);
+                if (!string.IsNullOrEmpty(flash)) text += "\n" + flash;
                 phase = 2;
             }
             else
@@ -92,7 +96,9 @@ namespace SeaSick.UI
 
             var style = phase == 2 ? WrapStyle() : UITheme.Toast;
             float width = Mathf.Min(HudLayout.Safe.width - HudLayout.Unit * 2f, HudLayout.Unit * 30f);
-            float height = phase == 2 ? HudLayout.Unit * 4.2f : HudLayout.Unit * 2.2f;
+            bool threeLines = phase == 2 && text.IndexOf('\n') != text.LastIndexOf('\n');
+            float height = phase == 2 ? HudLayout.Unit * (threeLines ? 5.6f : 4.2f)
+                : HudLayout.Unit * (text.IndexOf('\n') >= 0 ? 3.4f : 2.2f);
 
             var rect = HudLayout.ToastRow(height, width);
             UITheme.ToastCard(rect, UITheme.LedgerEmber);   // Ledger toast card, ember: a raid

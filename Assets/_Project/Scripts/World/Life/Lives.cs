@@ -45,6 +45,11 @@ namespace SeaSick.World.Life
         /// all during it (`RaidParty.Recall`), whether he landed a kill or
         /// not.
         public const string DefendedCamp = "DefendedCamp";
+        /// **Phase 12.** Logged on a defender the moment his STORE spear
+        /// wears out mid-fight (`Combat.RaidAlarm.WearOnKill`) -- a hunter's
+        /// own spear wears through the hunting path instead and never logs
+        /// this.
+        public const string SpearBroke = "SpearBroke";
 
         // --- death causes ----------------------------------------------------
         public const string KilledInRaid = "KilledInRaid";

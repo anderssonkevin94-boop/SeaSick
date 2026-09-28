@@ -42,6 +42,20 @@ namespace SeaSick.Combat
         [Tooltip("Death/rescue phase 10: metres an unarmed hand with no hut runs from the raiders' centre before crouching, kept inside the defend perimeter.")]
         public float crouchDistance = 10f;
 
+        [Header("Raids grow with the camp (phase 12)")]
+        [Tooltip("Party size with nobody home to raise it: the floor, and the minimum a raid is ever clamped down to.")]
+        public int basePartySize = 3;
+        [Tooltip("One extra raider per this many hands living at the camp (floored).")]
+        public int handsPerExtraRaider = 4;
+        [Tooltip("One extra raider per this many whole units sitting in the camp's stores (floored) -- OutpostLedger.Total, every resource together.")]
+        public float wealthPerExtraRaider = 40f;
+        [Tooltip("Party size never grows past this, however rich or crowded the camp gets.")]
+        public int maxPartySize = 7;
+        [Tooltip("Loot cap for a base-size (basePartySize) party -- scales with the party, capped at maxLootCap.")]
+        public int maxLootBase = 8;
+        [Tooltip("The loot cap never grows past this, however large the party.")]
+        public int maxLootCap = 16;
+
         [Header("Raiders fighting back")]
         [Tooltip("Real seconds between one raider's strikes once he is fighting rather than stealing.")]
         public float raiderHitSeconds = 1.2f;
@@ -88,5 +102,12 @@ namespace SeaSick.Combat
         public static float CrouchDistance => Active != null ? Active.crouchDistance : 10f;
         public static float RaiderHitSeconds => Active != null ? Active.raiderHitSeconds : 1.2f;
         public static float RaiderReach => Active != null ? Active.raiderReach : 1.6f;
+
+        public static int BasePartySize => Active != null ? Active.basePartySize : 3;
+        public static int HandsPerExtraRaider => Active != null ? Active.handsPerExtraRaider : 4;
+        public static float WealthPerExtraRaider => Active != null ? Active.wealthPerExtraRaider : 40f;
+        public static int MaxPartySize => Active != null ? Active.maxPartySize : 7;
+        public static int MaxLootBase => Active != null ? Active.maxLootBase : 8;
+        public static int MaxLootCap => Active != null ? Active.maxLootCap : 16;
     }
 }

@@ -257,7 +257,7 @@ namespace SeaSick.World
         /// dragged, off rescuing somebody (phase 2), or pouting at the fire
         /// (phase 4) -- no new orders, no productive work, same as `downed`
         /// alone was in phase 1.
-        public bool Busy => downed || recovering || dragged || pouting || defending || alarmed || !string.IsNullOrEmpty(rescuing);
+        public bool Busy => downed || recovering || dragged || pouting || defending || alarmed || returningSpear || !string.IsNullOrEmpty(rescuing);
 
         // --- village defence (death/rescue phase 9, 2026-09-28) -------------
         //
@@ -327,6 +327,29 @@ namespace SeaSick.World
         /// is display only.
         [System.NonSerialized] public bool raidLookout;
 
+        // --- all clear (death/rescue phase 12, 2026-09-28) -------------------
+        //
+        // docs/PLAN-DEATH-RESCUE.md, "All clear": a hand still holding a
+        // STORE spear when the raid ends walks it back rather than it
+        // teleporting into the pile. Never saved -- same reasoning as
+        // `alarmed`/`defending`: a reload never resumes a raid mid-anything.
+
+        /// True while this hand is walking `raidSpear` back to the store --
+        /// set by `Combat.RaidAlarm.End`, cleared by `Combat.RaidAlarm.
+        /// SettleReturn` on arrival (`World.CampWorker.TickReturnSpear`) or
+        /// the moment his body goes away unwatched. Counted in `Busy` the
+        /// same way `alarmed` already is.
+        [System.NonSerialized] public bool returningSpear;
+        /// **Wear on THIS hand's `raidSpear`, from raid kills only** (hunting
+        /// wear is a separate, existing path -- `OutpostLedger.HuntKill`).
+        /// Zeroed the moment a fresh spear is fetched
+        /// (`CampWorker.TickFetchSpear`); accrued by `Combat.RaidAlarm.
+        /// WearOnKill` per raider killed; carried into the store as a
+        /// fractional return (`OutpostLedger.ReturnWornSpear`) once he is
+        /// back, or lost outright the instant it reaches 1 (the spear
+        /// BREAKS -- `Combat.RaidAlarm.WearOnKill`).
+        [System.NonSerialized] public float raidSpearWear;
+
         public TripLeg Leg => (TripLeg)tripLeg;
 
         public bool Hauling => haulCount > 0 && !string.IsNullOrEmpty(haulRes);
@@ -376,6 +399,7 @@ namespace SeaSick.World
                 // one thing the row has to never claim is that he has
                 // nothing when he does.
                 if (fetchingSpear) return "fetching a spear";
+                if (returningSpear) return "returning a spear";
                 if (hidingHut || hidingCrouch)
                 {
                     if (!string.IsNullOrEmpty(raidSpear)) return "hiding (ordered)";

@@ -109,6 +109,26 @@ namespace SeaSick.World
             return true;
         }
 
+        /// **All clear (death/rescue phase 12).** A spear a defender is
+        /// walking home from the store lands back in the fluid "whole+part"
+        /// pool at `1 - wear` of a whole unit -- worn spears come home
+        /// lighter, run the OTHER way from how `DrawHeld` wears a stack
+        /// down, since the store keeps no per-unit wear to hand a specific
+        /// physical spear's fraction back to. Room-ignoring on purpose,
+        /// same as `SpillPart`'s own reasoning: a spear that existed and is
+        /// walking home is not lost to a ceiling it never asked to fit
+        /// under ("nothing vanishes").
+        public void ReturnWornSpear(string spear, float wear)
+        {
+            if (string.IsNullOrEmpty(spear)) return;
+            float remain = Mathf.Clamp01(1f - wear);
+            if (remain <= 0f) return;   // shouldn't reach here -- WearOnKill breaks it first
+            var st = Store(spear, true);
+            st.part += remain;
+            int whole = Mathf.FloorToInt(st.part + 1e-5f);
+            if (whole > 0) { st.whole += whole; st.part -= whole; }
+        }
+
         /// **The carcass lands at the store**: meat and hide as whole units,
         /// each as far as its room goes (net of loads walking there); the
         /// rest is lost. A trip that never killed just ends.
