@@ -4,6 +4,7 @@ using SeaSick.World.Life;
 using SeaSick.Crew;
 using SeaSick.Ship;
 using SeaSick.Ship.Overboard;
+using SeaSick.Ship.SeaLife;
 using SeaSick.Combat;
 
 namespace SeaSick.Dev
@@ -296,6 +297,22 @@ namespace SeaSick.Dev
                         GUILayout.Label("  " + c.Units + " " + c.Resource + "  "
                             + Mathf.CeilToInt(c.TimeLeft01 * OverboardTuning.FloatSeconds) + "s left");
             }
+
+            // "Things to find at sea" (2026-09-28) -- force each spawn
+            // right now instead of waiting on its own timer, for playtest.
+            GUILayout.Label("Sea life (dev)");
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Spawn flotsam", GUILayout.Height(RowH)))
+                SeaLifeDirector.DebugSpawnFlotsam();
+            if (GUILayout.Button("Spawn bottle", GUILayout.Height(RowH)))
+                SeaLifeDirector.DebugSpawnBottle();
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Spawn shoal", GUILayout.Height(RowH)))
+                SeaLifeDirector.DebugSpawnShoal();
+            if (GUILayout.Button("Dolphins now", GUILayout.Height(RowH)))
+                SeaLifeDirector.DebugDolphinsNow();
+            GUILayout.EndHorizontal();
         }
     }
 }

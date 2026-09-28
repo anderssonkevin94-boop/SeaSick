@@ -623,6 +623,13 @@ namespace SeaSick.Crew
             }
 
             float halflife = target > Sickness01 ? sicknessHalflife.x : sicknessHalflife.y;
+            // Dolphins at the bow (2026-09-28, "things to find at sea"): a
+            // reward for smooth sailing (pillar #1) -- everybody's colour
+            // comes back a bit faster while the pod rides alongside. Only
+            // the EASING half-life is touched; a rough sea still turns the
+            // deck green just as fast with dolphins in the water as without.
+            if (target <= Sickness01)
+                halflife /= SeaSick.Ship.SeaLife.DolphinPod.DecayMultiplier;
             float blend = 1f - Mathf.Exp(-(0.6931f / Mathf.Max(0.01f, halflife)) * dt);
             Sickness01 = Mathf.Clamp01(Mathf.Lerp(Sickness01, target, blend));
         }

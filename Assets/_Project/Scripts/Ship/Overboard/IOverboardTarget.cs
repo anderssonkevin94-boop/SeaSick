@@ -45,6 +45,13 @@ namespace SeaSick.Ship.Overboard
         /// once (build brief item 1) — lower sorts first.
         int RescuePriority { get; }
 
+        /// **"Things to find at sea" (2026-09-28).** True for anything the
+        /// sail-over pickup should bring aboard (a swimmer, floating cargo,
+        /// flotsam, a bottle); false for something `RescueHud` should still
+        /// show a ring/arrow/tap-to-steer for but never board — a fish
+        /// shoal, which is fished by sailing INTO it, not climbing it.
+        bool Boardable { get; }
+
         /// The nearest point on the hull's SIDE (rail), not its centre —
         /// same shape as `Swimmer.NearestHullSide`, used for the reach check
         /// and for where the haul happens.

@@ -42,6 +42,7 @@ namespace SeaSick.Ship.Overboard
         /// outranks a floating crate.
         int IOverboardTarget.RescuePriority => 0;
         void IOverboardTarget.OnHauled(string rescuerName) => Rescue(rescuerName);
+        bool IOverboardTarget.Boardable => true;
 
         /// **5b: the ship's own hull, for reach/haul checks** — `RescueHud`
         /// judges "within reach" off the nearest point on the SIDE of this

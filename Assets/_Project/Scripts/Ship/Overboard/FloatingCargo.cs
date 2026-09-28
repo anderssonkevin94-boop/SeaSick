@@ -44,6 +44,7 @@ namespace SeaSick.Ship.Overboard
         string IOverboardTarget.Label => Units + " " + Resource.ToLowerInvariant();
         /// Cargo yields to a person (build brief item 1).
         int IOverboardTarget.RescuePriority => 1;
+        bool IOverboardTarget.Boardable => true;
         public Transform Hull => ship;
         public bool BeingHauled { get; set; }
         public Vector3 HaulAnchor { get; set; }

@@ -3,6 +3,7 @@ using UnityEngine;
 using SeaSick.Crew;
 using SeaSick.UI;
 using SeaSick.World.Life;
+using SeaSick.Ship.SeaLife;
 
 namespace SeaSick.Ship.Overboard
 {
@@ -102,7 +103,7 @@ namespace SeaSick.Ship.Overboard
 
             foreach (var t in targets)
             {
-                if (t == null || t.Resolved || t.BeingHauled) continue;
+                if (t == null || t.Resolved || t.BeingHauled || !t.Boardable) continue;
                 if (SideGap(t) > BoardReach) { boarding.Remove(t); continue; }
                 boarding.TryGetValue(t, out float have);
                 have += dt;
@@ -123,6 +124,13 @@ namespace SeaSick.Ship.Overboard
             targets.Clear();
             foreach (var s in Swimmer.All) if (s != null) targets.Add(s);
             foreach (var c in FloatingCargo.All) if (c != null) targets.Add(c);
+            // "Things to find at sea" (2026-09-28): flotsam, a bottle and a
+            // fish shoal all ride the same ring/arrow/tap-to-steer this HUD
+            // already draws for a swimmer or lost cargo -- only the shoal
+            // is excluded from the boarding timer below (`Boardable`).
+            foreach (var f in FlotsamCrate.All) if (f != null) targets.Add(f);
+            foreach (var b in MessageBottle.All) if (b != null) targets.Add(b);
+            foreach (var sh in FishShoal.All) if (sh != null) targets.Add(sh);
         }
 
         void OnGUI()
