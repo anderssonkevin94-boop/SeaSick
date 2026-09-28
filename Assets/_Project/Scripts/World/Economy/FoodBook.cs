@@ -55,6 +55,7 @@ namespace SeaSick.World.Economy
             new EdibleDef { res = Res.FishPie,      fill = 1.0f,  workBonus = 0.1f },
             new EdibleDef { res = Res.RoastCarrots, fill = 1.0f },
             new EdibleDef { res = Res.Bread,        fill = 0.75f, moodPerDay = 0.05f },
+            new EdibleDef { res = Res.GrilledMeat,  fill = 0.75f },   // Kevin 2026-09-28: 30 meat and a starving village
             new EdibleDef { res = Res.GrilledFish,  fill = 0.6f },
             new EdibleDef { res = Res.BakedPotato,  fill = 0.5f },
             new EdibleDef { res = Res.Meals,        fill = 0.5f },   // ship's biscuit
@@ -121,7 +122,7 @@ namespace SeaSick.World.Economy
         {
             Res.Potato => "🥔", Res.Carrot => "🥕", Res.Onion => "🧅", Res.Wheat => "🌾", Res.Apple => "🍎",
             Res.Fish => "🐟", Res.Meat => "🍖", Res.Flour => "🌾", Res.Food => "🫐",
-            Res.BakedPotato => "🥔", Res.GrilledFish => "🐟", Res.RoastCarrots => "🥕", Res.Bread => "🍞",
+            Res.BakedPotato => "🥔", Res.GrilledFish => "🐟", Res.GrilledMeat => "🍖", Res.RoastCarrots => "🥕", Res.Bread => "🍞",
             Res.VegStew => "🍲", Res.FishPie => "🥧", Res.HuntersStew => "🍲", Res.Meals => "🍪",
             _ => "·",
         };

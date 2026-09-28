@@ -80,6 +80,11 @@ namespace SeaSick.World.Economy
                 takes = Cost.Of(Cost.I(Res.Potato, 1)), ratePerDay = Cook(15f, 1) },
             new Recipe { id = "grilled-fish", station = "Kitchen", makes = Res.GrilledFish, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Fish, 1)), ratePerDay = Cook(20f, 1) },
+            // Kevin, 2026-09-28: *"Grilled meat needs to be added to the
+            // kitchen recipes. I have 30 meat and my village is starving."*
+            // Meat only went into hunter's stew (Kitchen III, fire II).
+            new Recipe { id = "grilled-meat", station = "Kitchen", makes = Res.GrilledMeat, yield = 1,
+                takes = Cost.Of(Cost.I(Res.Meat, 1)), ratePerDay = Cook(20f, 1) },
             new Recipe { id = "roast-carrots", station = "Kitchen", makes = Res.RoastCarrots, yield = 1,
                 takes = Cost.Of(Cost.I(Res.Carrot, 2)), ratePerDay = Cook(20f, 1) },
             new Recipe { id = "bread", station = "Kitchen", makes = Res.Bread, yield = 3,

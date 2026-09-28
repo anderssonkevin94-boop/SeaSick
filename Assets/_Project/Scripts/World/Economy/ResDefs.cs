@@ -127,6 +127,8 @@ namespace SeaSick.World.Economy
                 blurb = "a potato in the coals", category = ResCategory.Food },
             new ResDef { id = Res.GrilledFish, label = "grilled fish", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
                 blurb = "a fish over the fire", category = ResCategory.Food },
+            new ResDef { id = Res.GrilledMeat, label = "grilled meat", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
+                blurb = "meat off the spit", category = ResCategory.Food },
             new ResDef { id = Res.RoastCarrots, label = "roast carrots", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 1,
                 blurb = "two carrots, a proper plate", category = ResCategory.Food },
             new ResDef { id = Res.Bread, label = "bread", tier = ResTier.Item, source = ResSource.Made, campfireLevel = 2,

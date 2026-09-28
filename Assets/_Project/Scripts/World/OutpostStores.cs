@@ -116,6 +116,7 @@ namespace SeaSick.World
         public const string Flour = "Flour";
         public const string BakedPotato = "BakedPotato";
         public const string GrilledFish = "GrilledFish";
+        public const string GrilledMeat = "GrilledMeat";
         public const string RoastCarrots = "RoastCarrots";
         public const string Bread = "Bread";
         public const string VegStew = "VegStew";
@@ -236,7 +237,7 @@ namespace SeaSick.World
             Meals => 4,
             Potato => 6, Carrot => 6, Onion => 6, Wheat => 5, Apple => 6,
             Fish => 5, Meat => 3, Flour => 4,
-            BakedPotato => 4, GrilledFish => 4, RoastCarrots => 4, Bread => 6,
+            BakedPotato => 4, GrilledFish => 4, GrilledMeat => 4, RoastCarrots => 4, Bread => 6,
             VegStew => 3, FishPie => 4, HuntersStew => 4,
             _ => 3,
         };
@@ -277,6 +278,7 @@ namespace SeaSick.World
             Flour => new Color(0.94f, 0.92f, 0.86f),
             BakedPotato => new Color(0.62f, 0.44f, 0.24f),
             GrilledFish => new Color(0.66f, 0.54f, 0.40f),
+            GrilledMeat => new Color(0.55f, 0.30f, 0.20f),
             RoastCarrots => new Color(0.82f, 0.42f, 0.16f),
             Bread => new Color(0.80f, 0.62f, 0.34f),
             VegStew => new Color(0.60f, 0.42f, 0.22f),
