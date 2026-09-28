@@ -257,7 +257,7 @@ namespace SeaSick.World
         /// dragged, off rescuing somebody (phase 2), or pouting at the fire
         /// (phase 4) -- no new orders, no productive work, same as `downed`
         /// alone was in phase 1.
-        public bool Busy => downed || recovering || dragged || pouting || defending || !string.IsNullOrEmpty(rescuing);
+        public bool Busy => downed || recovering || dragged || pouting || defending || alarmed || !string.IsNullOrEmpty(rescuing);
 
         // --- village defence (death/rescue phase 9, 2026-09-28) -------------
         //
@@ -284,6 +284,48 @@ namespace SeaSick.World
         /// start (`RaidParty.Begin`) -- never saved, a raid is over the
         /// moment nobody is watching.
         [System.NonSerialized] public int raidHitsTaken;
+
+        // --- the alarm (death/rescue phase 10, 2026-09-28) ------------------
+        //
+        // docs/PLAN-DEATH-RESCUE.md, "Village defence in raids": the moment a
+        // raid party lands, every hand not already busy (downed, rescuing,
+        // pouting) and not a posted tower lookout either arms up from the
+        // store or runs to hide. Never saved -- like `defending`, a reload
+        // always reads as "nobody is under an alarm", which is exactly right
+        // since a raid never resumes mid-fight on load.
+
+        /// True while this hand's ordinary work is displaced by a live raid's
+        /// alarm (fetching a spear, or hiding) -- set by `Combat.RaidAlarm` at
+        /// the moment a party lands, cleared when it clears the alarm.
+        /// Counted in `Busy` the same way `defending` already is.
+        [System.NonSerialized] public bool alarmed;
+        /// Walking to the store for a spear -- `CampWorker.TickFetchSpear`.
+        [System.NonSerialized] public bool fetchingSpear;
+        /// Gone into a hut: body hidden, waiting it out.
+        [System.NonSerialized] public bool hidingHut;
+        /// **Actually inside now** (as opposed to still walking to the
+        /// door): set by `CampWorker.HideBody`, cleared by `RevealBody` --
+        /// `HutHidingLabels` counts this, not `hidingHut` alone, so a hut's
+        /// "N hiding" only counts hands who have really disappeared into it.
+        [System.NonSerialized] public bool hiddenInHut;
+        /// No hut stands: crouched on the far side of the camp instead.
+        [System.NonSerialized] public bool hidingCrouch;
+        /// **The spear THIS hand is fighting with** -- a store unit he took
+        /// out (`Res.Spear`/`Res.IronSpear`), or the one a hunter already had
+        /// in hand. Read by `CampWorker.TickDefend` for the jab damage and by
+        /// `Doing` for the row text INSTEAD OF re-asking the camp-wide
+        /// `OutpostLedger.SpearInHand` snapshot -- a hand armed from an
+        /// iron-empty store keeps fighting with his stone spear even if iron
+        /// turns up in the pile a moment later. Null/empty for an unarmed
+        /// hand, and for one whose `defending` comes from the phase 9 dev
+        /// "Arm" flag rather than a real store spear.
+        [System.NonSerialized] public string raidSpear;
+        /// The camp's posted lookout, while a raid is live -- set/cleared by
+        /// `Combat.RaidAlarm` so `Doing` can say "on the tower" rather than
+        /// the ordinary "lookout" position label. Never changes what the
+        /// body does (`CampWorker.TickTower` already keeps him there); this
+        /// is display only.
+        [System.NonSerialized] public bool raidLookout;
 
         public TripLeg Leg => (TripLeg)tripLeg;
 
@@ -327,8 +369,14 @@ namespace SeaSick.World
                 if (!string.IsNullOrEmpty(rescuing))
                     return (draggingNow ? "dragging " : "running to ") + rescuing;
                 if (pouting) return "pouting at the fire · " + Mmss(poutLeft);
+                // **Death/rescue phase 10** -- the alarm's own states, same
+                // priority band as `defending` just below.
+                if (fetchingSpear) return "fetching a spear";
+                if (hidingHut) return "hiding in the hut";
+                if (hidingCrouch) return "crouching, no spear";
                 if (defending)
                     return "defending, " + (defendSpear == Res.IronSpear ? "iron spear" : "stone spear");
+                if (raidLookout) return "on the tower";
                 switch (order)
                 {
                     case OutpostOrder.Gather:
@@ -895,6 +943,20 @@ namespace SeaSick.World
             int got = s != null ? Mathf.Min(s.whole, n) : 0;
             if (s != null) s.whole -= got;
             if (got < n) got += TakeFromStations(resource, n - got);
+            return got;
+        }
+
+        /// **The store's own units only, never a station's rack or bay**
+        /// (death/rescue phase 10): a hand arming up from the pile takes a
+        /// physical spear out of the STORE, same as `StoreCountOf` counts --
+        /// a fletcher's queued input is not the camp's armoury. Returns what
+        /// was actually taken (0 or 1 in practice, but not assumed).
+        public int TakeFromStore(string resource, int n)
+        {
+            if (n <= 0) return 0;
+            var s = Store(resource);
+            int got = s != null ? Mathf.Min(s.whole, n) : 0;
+            if (s != null) s.whole -= got;
             return got;
         }
 

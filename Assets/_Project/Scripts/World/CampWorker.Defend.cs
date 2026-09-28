@@ -34,20 +34,52 @@ namespace SeaSick.World
 
             var party = RaidParty.Active;
             bool raidLive = party != null && party.Camp == camp;
-            bool armed = r.huntArmed || r.armedDefender;
+            // **Phase 10:** a hand who fetched his own spear out of the
+            // store (`Combat.RaidAlarm`/`TickFetchSpear`) is armed the same
+            // as the phase-9 dev flag or a hunter caught out with his own.
+            bool armed = r.huntArmed || r.armedDefender || !string.IsNullOrEmpty(r.raidSpear);
             if (!raidLive || !armed) return StopDefending(r, false);
-
-            RaidWalker foe = NearestRaider(party);
-            if (foe == null) return StopDefending(r, false);
 
             if (!r.defending)
             {
                 r.defending = true;
-                r.defendSpear = ledger.SpearInHand();
+                // **Per-hand spear (phase 10):** a hand armed from the store
+                // fights with the exact unit he took, iron or stone,
+                // whatever the pile does afterwards -- only the phase-9 dev
+                // "Arm" flag and a hunter with nothing here yet fall back to
+                // the camp-wide snapshot.
+                r.defendSpear = !string.IsNullOrEmpty(r.raidSpear) ? r.raidSpear : ledger.SpearInHand();
                 party.MarkDefender(r.name);
                 ledger.DropCarriedLoadNow(r);
                 Drop();
                 defendJabClock = 0f;
+            }
+
+            RaidWalker foe = NearestRaider(party);
+            if (foe == null)
+            {
+                // **Phase 10, "defend near home + gather point":** nobody to
+                // fight yet -- hold the gate/breach nearest the raiders (or,
+                // walled or not, the fire-front line) rather than drifting
+                // back to the ordinary job the moment `NearestRaider` comes
+                // up empty for a frame.
+                Vector3 gather = GatherPoint(camp, party);
+                var waitProps = HunterProps.On(gameObject);
+                if (!Near(gather, 1.2f))
+                {
+                    phase = Phase.Going;
+                    acting?.Set(VillagerActing.Mode.None);
+                    waitProps.Drive(r.defendSpear, HunterProps.Pose.Upright);
+                    Walk(gather, dt);
+                }
+                else
+                {
+                    phase = Phase.Resting;
+                    acting?.Set(VillagerActing.Mode.None);
+                    waitProps.Drive(r.defendSpear, HunterProps.Pose.Upright);
+                    Face(camp.CampCentre - transform.position, dt);
+                }
+                return true;
             }
 
             Vector3 foePos = foe.transform.position;
@@ -91,6 +123,68 @@ namespace SeaSick.World
                 acting?.Set(VillagerActing.Mode.None);
             }
             return false;
+        }
+
+        /// **Where an armed defender waits with nobody to fight yet**
+        /// (phase 10). Walled: the gate, or the breach, nearest the
+        /// raiders' own centre -- the same posts and segments
+        /// `RaidWalker.Barred`/`RaidParty.Choose` already read off
+        /// `Outpost.Walls`. No walls at all: a point toward the raiders,
+        /// `RaidFightTuning.GatherRadiusNoWalls` out from the fire -- short
+        /// of the 30 m chase line, so he is waiting at the obvious front
+        /// door rather than standing at the fire itself.
+        static Vector3 GatherPoint(Outpost camp, RaidParty party)
+        {
+            Vector3 centre = camp.CampCentre;
+            Vector3 raidersAt = RaidersCentroid(party) ?? centre + Vector3.forward * 10f;
+
+            var walls = camp.Walls;
+            if (walls != null && walls.Count > 0)
+            {
+                WallSegment best = null;
+                float bestD = float.MaxValue;
+                for (int i = 0; i < walls.Count; i++)
+                {
+                    var w = walls[i];
+                    if (w == null) continue;
+                    if (!w.IsGate && !w.Breached) continue;   // only a way in counts
+                    float d = (w.Midpoint - raidersAt).sqrMagnitude;
+                    if (d < bestD) { bestD = d; best = w; }
+                }
+                if (best != null)
+                {
+                    // The INSIDE point: `RaidWalker.OutsidePoint` gives the
+                    // raiders' own approach side, so reflect it through the
+                    // segment's midpoint to stand on the camp's side of it.
+                    Vector3 outside = RaidWalker.OutsidePoint(best, camp);
+                    Vector3 inside = best.Midpoint * 2f - outside;
+                    inside.y = camp.GroundAt(inside);
+                    return inside;
+                }
+            }
+
+            Vector3 toward = raidersAt - centre;
+            toward.y = 0f;
+            toward = toward.sqrMagnitude > 0.01f ? toward.normalized : Vector3.forward;
+            Vector3 at = centre + toward * RaidFightTuning.GatherRadiusNoWalls;
+            at.y = camp.GroundAt(at);
+            return at;
+        }
+
+        static Vector3? RaidersCentroid(RaidParty party)
+        {
+            if (party == null) return null;
+            var list = party.Walkers;
+            Vector3 sum = Vector3.zero;
+            int n = 0;
+            for (int i = 0; i < list.Count; i++)
+            {
+                var w = list[i];
+                if (w == null || w.Dead) continue;
+                sum += w.transform.position;
+                n++;
+            }
+            return n > 0 ? sum / n : (Vector3?)null;
         }
 
         /// The nearest live raider from this party who is inside the

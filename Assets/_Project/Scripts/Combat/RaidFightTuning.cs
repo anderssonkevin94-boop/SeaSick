@@ -37,6 +37,10 @@ namespace SeaSick.Combat
         public float defendRadiusNoWalls = 30f;
         [Tooltip("Hits a raider must land on this hand to knock him down. He goes down the ordinary way (OutpostLedger.Down) once reached.")]
         public int hitsToDown = 3;
+        [Tooltip("Death/rescue phase 10: how far outside the fire an armed defender waits, toward the raiders, when the camp has no walls and no raider has come inside yet. Metres from the fire, well short of defendRadiusNoWalls.")]
+        public float gatherRadiusNoWalls = 8f;
+        [Tooltip("Death/rescue phase 10: metres an unarmed hand with no hut runs from the raiders' centre before crouching, kept inside the defend perimeter.")]
+        public float crouchDistance = 10f;
 
         [Header("Raiders fighting back")]
         [Tooltip("Real seconds between one raider's strikes once he is fighting rather than stealing.")]
@@ -80,6 +84,8 @@ namespace SeaSick.Combat
         public static float JabReach => Active != null ? Active.jabReach : 1.6f;
         public static float DefendRadiusNoWalls => Active != null ? Active.defendRadiusNoWalls : 30f;
         public static int HitsToDown => Active != null ? Active.hitsToDown : 3;
+        public static float GatherRadiusNoWalls => Active != null ? Active.gatherRadiusNoWalls : 8f;
+        public static float CrouchDistance => Active != null ? Active.crouchDistance : 10f;
         public static float RaiderHitSeconds => Active != null ? Active.raiderHitSeconds : 1.2f;
         public static float RaiderReach => Active != null ? Active.raiderReach : 1.6f;
     }

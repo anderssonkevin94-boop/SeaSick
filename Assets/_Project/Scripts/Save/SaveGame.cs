@@ -284,6 +284,10 @@ namespace SeaSick.Save
             // itself, so either one is already "aboard" again the moment the
             // save reloads.
             SeaSick.Ship.Overboard.FloatingCargo.RecallAllForSave();
+            // Death/rescue phase 10: a store spear still out in a defending
+            // hand's arms mid-raid is a real unit, same as floating cargo --
+            // put it back in the count before the ledger is written down.
+            SeaSick.Combat.RaidAlarm.ReturnAllHeldSpearsForSave();
             foreach (var kv in voyage.HeldStores)
                 if (kv.Value > 0) d.hold.Add(new StoreEntry { resource = kv.Key, count = kv.Value });
             foreach (var kv in voyage.BankedStores)

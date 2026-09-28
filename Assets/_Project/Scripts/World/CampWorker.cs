@@ -618,6 +618,12 @@ namespace SeaSick.World
             // same reasoning as the rescue check just above.
             if (TickPout(r, dt)) return;
 
+            // **The alarm (death/rescue phase 10, 2026-09-28)**, same
+            // priority: fetching a spear or running to hide is not the
+            // ordinary job either, and comes before he could be armed enough
+            // for `TickDefend` to want him.
+            if (TickAlarmRole(r, dt)) return;
+
             // **Village defence (death/rescue phase 9, 2026-09-28)**, same
             // priority as the rescue/pout checks just above: an armed hand
             // fighting off a live raid is not doing his ordinary job either.

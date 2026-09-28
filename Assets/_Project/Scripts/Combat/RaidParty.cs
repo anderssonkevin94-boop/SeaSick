@@ -132,6 +132,11 @@ namespace SeaSick.Combat
             }
 
             party.landedCount = party.walkers.Count;
+
+            // **The alarm** (death/rescue phase 10, 2026-09-28): the party
+            // is ashore, so every hand at the camp stops what it was doing
+            // -- drops its load, arms up from the store or runs to hide.
+            RaidAlarm.Begin(party.Camp);
             // **Phase 9 safety net:** a raid-fight tally is never saved
             // (`OutpostHand.raidHitsTaken`), so it should already read 0 --
             // this only guards a hand who was mid-tally when the LAST raid
@@ -260,6 +265,7 @@ namespace SeaSick.Combat
                     ? $"the raiders got away with {Stolen}"
                     : "the raiders fled with nothing");
             LogDefenders();
+            RaidAlarm.End(Camp);   // death/rescue phase 10: all clear
             for (int i = 0; i < walkers.Count; i++) walkers[i]?.Recall();
         }
 
@@ -290,6 +296,7 @@ namespace SeaSick.Combat
                         ended = true;
                         RaidDirector.ReportResult(Camp, "you sank them — the loot is back on the pile");
                         LogDefenders();
+                        RaidAlarm.End(Camp);   // death/rescue phase 10: all clear
                     }
                     for (int i = 0; i < walkers.Count; i++) walkers[i]?.Flee();
                 }

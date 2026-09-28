@@ -94,6 +94,13 @@ namespace SeaSick.Dev
                 if (GUILayout.Button("Start raid now", GUILayout.Height(RowH)))
                     RaidDirector.ForceRaid(camp);
 
+                // **Phase 10 (the alarm, arming, hiding):** stock the store
+                // so the closest hands have something to arm up with the
+                // moment a party lands, without a fletcher/forge chain run
+                // first.
+                if (GUILayout.Button("Put 3 spears in store", GUILayout.Height(RowH)))
+                    camp.Ledger.Add(Res.Spear, 3);
+
                 scroll = GUILayout.BeginScrollView(scroll);
                 foreach (var hnd in camp.Ledger.hands)
                 {
