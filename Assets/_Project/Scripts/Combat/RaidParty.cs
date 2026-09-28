@@ -104,7 +104,9 @@ namespace SeaSick.Combat
 
             // **Raids grow with the camp (phase 12).** basePartySize, plus
             // one raider per handsPerExtraRaider hands living here, plus one
-            // per wealthPerExtraRaider whole units sitting in the stores --
+            // per wealthPerExtraRaider whole units sitting in the stores (at
+            // most maxWealthRaiders of those -- 2026-09-28 smoke: a 5-hand
+            // camp with 188 units drew 7 raiders at 40 per extra) --
             // clamped to [basePartySize, maxPartySize]. Computed here, once,
             // off the camp as it stands the instant the party lands --
             // never mid-raid, never for an unwatched camp (this only ever
@@ -116,7 +118,8 @@ namespace SeaSick.Combat
             int partySize = Mathf.Clamp(
                 basePartySize
                     + hands / Mathf.Max(1, RaidFightTuning.HandsPerExtraRaider)
-                    + Mathf.FloorToInt(wealth / Mathf.Max(1f, RaidFightTuning.WealthPerExtraRaider)),
+                    + Mathf.Min(RaidFightTuning.MaxWealthRaiders,
+                        Mathf.FloorToInt(wealth / Mathf.Max(1f, RaidFightTuning.WealthPerExtraRaider))),
                 basePartySize, RaidFightTuning.MaxPartySize);
             party.maxLoot = Mathf.Min(RaidFightTuning.MaxLootCap,
                 Mathf.RoundToInt(RaidFightTuning.MaxLootBase * partySize / (float)Mathf.Max(1, basePartySize)));

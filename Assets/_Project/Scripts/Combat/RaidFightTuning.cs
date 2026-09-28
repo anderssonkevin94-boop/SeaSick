@@ -48,7 +48,9 @@ namespace SeaSick.Combat
         [Tooltip("One extra raider per this many hands living at the camp (floored).")]
         public int handsPerExtraRaider = 4;
         [Tooltip("One extra raider per this many whole units sitting in the camp's stores (floored) -- OutpostLedger.Total, every resource together.")]
-        public float wealthPerExtraRaider = 40f;
+        public float wealthPerExtraRaider = 200f;
+        [Tooltip("At most this many extra raiders from stored wealth (the rest comes from the number of hands). Starting value.")]
+        public int maxWealthRaiders = 1;
         [Tooltip("Party size never grows past this, however rich or crowded the camp gets.")]
         public int maxPartySize = 7;
         [Tooltip("Loot cap for a base-size (basePartySize) party -- scales with the party, capped at maxLootCap.")]
@@ -105,7 +107,8 @@ namespace SeaSick.Combat
 
         public static int BasePartySize => Active != null ? Active.basePartySize : 3;
         public static int HandsPerExtraRaider => Active != null ? Active.handsPerExtraRaider : 4;
-        public static float WealthPerExtraRaider => Active != null ? Active.wealthPerExtraRaider : 40f;
+        public static float WealthPerExtraRaider => Active != null ? Active.wealthPerExtraRaider : 200f;
+        public static int MaxWealthRaiders => Active != null ? Active.maxWealthRaiders : 1;
         public static int MaxPartySize => Active != null ? Active.maxPartySize : 7;
         public static int MaxLootBase => Active != null ? Active.maxLootBase : 8;
         public static int MaxLootCap => Active != null ? Active.maxLootCap : 16;
