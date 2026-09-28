@@ -127,18 +127,36 @@ namespace SeaSick.UI.Sheets
                 var p = list[i];
                 var tile = new Button(() => { pickedPlot = pickedPlot == idx ? -1 : idx; plotKey = long.MinValue; Refresh(); });
                 tile.AddToClassList("st-seg-btn");
+                // **Three tiles a row, each wrapping its own two lines**
+                // (Kevin, 2026-09-28, the plots ran together as
+                // "PotatoPotatoPotato..."): `.st-seg-btn` is a segmented-row
+                // button -- flex-basis 0, flex-grow 1, fixed 56 px height,
+                // no wrapping -- which overrode the 31 % width and put every
+                // plot on one squeezed line. Undo exactly those here.
+                tile.style.flexGrow = 0f;
+                tile.style.flexShrink = 0f;
+                tile.style.flexBasis = Length.Percent(31f);
                 tile.style.width = Length.Percent(31f);
+                tile.style.height = StyleKeyword.Auto;
                 tile.style.minHeight = 64f;
-                tile.style.marginRight = 4f;
-                tile.style.marginBottom = 4f;
+                tile.style.whiteSpace = WhiteSpace.Normal;
+                tile.style.unityTextAlign = TextAnchor.MiddleCenter;
+                tile.style.fontSize = 16f;
+                tile.style.paddingTop = 6f;
+                tile.style.paddingBottom = 6f;
+                tile.style.marginLeft = 0f;
+                tile.style.marginRight = Length.Percent(2f);
+                tile.style.marginBottom = 6f;
                 tile.style.flexDirection = FlexDirection.Column;
                 if (idx == pickedPlot) tile.AddToClassList("st-seg-btn--on");
-                string icon = string.IsNullOrEmpty(p.crop) ? "＋" : p.state == PlotState.Growing && p.Grow01 < 0.5f ? "🌱" : FoodBook.Icon(p.crop);
                 string name = string.IsNullOrEmpty(p.crop) ? "Empty" : StationPage.Cap(ResDefs.Label(p.crop));
                 string state = p.state == PlotState.Ripe ? $"ripe · {FoodBook.Crop(p.crop)?.yield ?? 0}"
                     : p.state == PlotState.Growing ? Clock(p.SecondsLeft)
                     : string.IsNullOrEmpty(p.crop) ? "tap to plant" : "to plant";
-                tile.text = $"{icon} {name}\n{state}" + (p.repeat && !string.IsNullOrEmpty(p.crop) ? " ↻" : "");
+                // No emoji: the sheet font (Nunito) has none, and the phone drew
+                // them as a stray "]". An empty plot gets a plain +.
+                tile.text = (string.IsNullOrEmpty(p.crop) ? "+ " : "") + $"{name}\n{state}"
+                    + (p.repeat && !string.IsNullOrEmpty(p.crop) ? " ↻" : "");
                 plotGrid.Add(tile);
             }
 
@@ -229,6 +247,13 @@ namespace SeaSick.UI.Sheets
             yieldLine = StationPage.Text("", "st-line");
             keptLine = StationPage.Text("", "st-line");
             keptLine.AddToClassList("st-muted");
+            // Wrap inside the card rather than run off its right edge
+            // (Kevin's 2026-09-28 screenshot: "carried in by the farm…").
+            foodCol.style.flexGrow = 1f;
+            foodCol.style.flexShrink = 1f;
+            foodCol.style.minWidth = 0f;
+            yieldLine.style.whiteSpace = WhiteSpace.Normal;
+            keptLine.style.whiteSpace = WhiteSpace.Normal;
             foodCol.Add(yieldLine);
             foodCol.Add(keptLine);
             foodCard.Add(foodCol);
