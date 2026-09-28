@@ -55,6 +55,45 @@ namespace SeaSick.World
             new Dictionary<OutpostHand, Vector3>();
         const int StallLimit = 4;
 
+        /// **A plot a hand was just released from, kept from him for a few
+        /// quanta (2026-09-28).** Without it the stall guard's release sent
+        /// him straight back: `PickPlot` answered the same plot again (it is
+        /// the one with the fewest hands, his own absence included) and the
+        /// ladder's rung 3 (`FetchForSites(true)`, cutting the missing
+        /// material off the island) never got a turn. Value = the site and
+        /// the `Step` quanta left (`StallSkipQuanta`), counted down by
+        /// `AgeStallSkips`. Not saved, like `workSite`.
+        [System.NonSerialized] readonly Dictionary<OutpostHand, (PendingBuild site, int left)> stallSkip =
+            new Dictionary<OutpostHand, (PendingBuild site, int left)>();
+        const int StallSkipQuanta = 5;
+        [System.NonSerialized] readonly List<OutpostHand> stallSkipScratch = new List<OutpostHand>();
+
+        /// One `Step` quantum off every stall-guard skip; spent ones go.
+        void AgeStallSkips()
+        {
+            if (stallSkip.Count == 0) return;
+            stallSkipScratch.Clear();
+            stallSkipScratch.AddRange(stallSkip.Keys);
+            foreach (var h in stallSkipScratch)
+            {
+                var e = stallSkip[h];
+                if (--e.left <= 0) stallSkip.Remove(h);
+                else stallSkip[h] = e;
+            }
+        }
+
+        /// **This hand leaves the site ladder's books** (recalled, dead):
+        /// every per-hand dictionary keyed by his row. 2026-09-28, from
+        /// `RemoveHand`.
+        void ForgetSiteWork(OutpostHand h)
+        {
+            if (h == null) return;
+            workSite.Remove(h);
+            clearStall.Remove(h);
+            clearStallPos.Remove(h);
+            stallSkip.Remove(h);
+        }
+
         static bool PlotWork(PendingBuild s) =>
             s != null && !s.Complete && (!s.Cleared || s.Stocked);
 
@@ -102,8 +141,11 @@ namespace SeaSick.World
                 // Stall guard: a driven body stuck outside reach of an
                 // uncleared plot (nothing left there for him to claim) never
                 // closes the distance on his own -- release him rather than
-                // hold the plot forever.
-                if (h.driven && !site.Cleared)
+                // hold the plot forever. **Hammering too (2026-09-28)**: a
+                // body that cannot reach a stocked plot (no route, parked
+                // behind somebody's claim) stood holding it the same way;
+                // the test is the same one -- his body has not moved.
+                if (h.driven)
                 {
                     Vector3 at = HandAt(h);
                     bool moved = !clearStallPos.TryGetValue(h, out var last) ||
@@ -118,6 +160,7 @@ namespace SeaSick.World
                             clearStall.Remove(h);
                             clearStallPos.Remove(h);
                             workSite.Remove(h);
+                            stallSkip[h] = (site, StallSkipQuanta);
                             return budget > Eps;
                         }
                         clearStall[h] = stalls;
@@ -155,12 +198,19 @@ namespace SeaSick.World
             if (sites == null) return null;
             PendingBuild best = null;
             int bestCrew = int.MaxValue;
+            stallSkip.TryGetValue(h, out var skip);
             foreach (var s in sites)
             {
                 if (!PlotWork(s)) continue;
+                // The plot the stall guard just took him off (2026-09-28).
+                if (skip.site == s && skip.left > 0) continue;
                 int crew = 0;
+                // Only hands still on the roster and up (2026-09-28): a
+                // recalled, dead, downed or otherwise busy hand's leftover
+                // entry kept the plot "crewed" and nobody else was sent.
                 foreach (var kv in workSite)
-                    if (kv.Value == s && kv.Key != h && kv.Key.order == OutpostOrder.Build) crew++;
+                    if (kv.Value == s && kv.Key != h && kv.Key.order == OutpostOrder.Build
+                        && !kv.Key.Busy && hands != null && hands.Contains(kv.Key)) crew++;
                 // Clearing: one hand per obstruction left, as the bodies claim.
                 if (!s.Cleared && crew >= s.ClearLeft) continue;
                 if (crew < bestCrew) { best = s; bestCrew = crew; }

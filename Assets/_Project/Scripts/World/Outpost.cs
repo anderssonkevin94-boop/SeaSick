@@ -3065,6 +3065,7 @@ namespace SeaSick.World
             if (h == null || ledger == null || !Res.IsGatherable(resource)) return false;
             h.order = OutpostOrder.Gather;
             h.target = resource;
+            h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
             MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
@@ -3092,6 +3093,7 @@ namespace SeaSick.World
             if (CountOf(planId) <= 0) return false;         // it is not standing here
             h.order = OutpostOrder.Work;
             h.target = planId;
+            h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
             MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
@@ -3108,17 +3110,26 @@ namespace SeaSick.World
             if (h == null || ledger == null || !ledger.Building) return false;
             h.order = OutpostOrder.Build;
             h.target = "";
+            h.playerIdle = false;   // any other order ends his reserve (2026-09-28)
             MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
             return true;
         }
 
-        public bool OrderIdle(OutpostHand h)
+        /// **The player stands this hand down (2026-09-28).** Idle chosen
+        /// by the player is a RESERVE (`OutpostHand.playerIdle`): the idle
+        /// ladder, the hunger draft and the station hauling leave him be
+        /// until he is given another order. `reserve` false is "no job" --
+        /// for a caller that idles a hand only because it has nothing else
+        /// to give him (a swap whose old job no longer exists), so the
+        /// ladder takes him on as before.
+        public bool OrderIdle(OutpostHand h, bool reserve = true)
         {
             if (h == null) return false;
             h.order = OutpostOrder.Idle;
             h.target = "";
+            h.playerIdle = reserve;
             // Idling a hand is not "give me this job tonight" -- let the
             // evening/sleep routine reclaim him at its own next check.
             h.orderOverride = false;

@@ -61,11 +61,17 @@ namespace SeaSick.World
             return n;
         }
 
+        /// **Could `h` start a hunt trip right now** (2026-09-28): the checks
+        /// `StartHuntTrip` makes, shared with `FeedFirst` so it never drafts
+        /// a hand to a hunt that cannot start. `h` null = anybody.
+        bool HuntCanStart(OutpostHand h) =>
+            SpearInHand() != null && !HuntStoreFull() && GameUnclaimed(h) >= 1;
+
         /// Out after one animal: a spear in the pile, a beast nobody else is
         /// on, and room for some part of the carcass. False otherwise.
         bool StartHuntTrip(OutpostHand h)
         {
-            if (SpearInHand() == null || HuntStoreFull() || GameUnclaimed(h) < 1) return false;
+            if (!HuntCanStart(h)) return false;
             bool armed = HeldOf(Res.Arrows) >= 1f;
             StartTimedTrip(h, Res.Game, 1, HaulPlace.Field, -1, HaulPlace.Store, -1);
             h.workLeft = JabSeconds;
@@ -130,17 +136,26 @@ namespace SeaSick.World
         }
 
         /// **The carcass lands at the store**: meat and hide as whole units,
-        /// each as far as its room goes (net of loads walking there); the
-        /// rest is lost. A trip that never killed just ends.
+        /// each as far as its room goes (net of loads walking there). **What
+        /// does not fit is put down beside the store as a ground load
+        /// (2026-09-28)** -- it used to be deleted, which broke "nothing
+        /// vanishes" (docs/DELIVERY-ON-ARRIVAL.md); a hauler carries it in
+        /// once there is room, like any other load on the grass. A trip that
+        /// never killed just ends.
         void DepositCarcass(OutpostHand h)
         {
             if (h.huntKilled)
             {
-                int meat = Mathf.Min(Mathf.RoundToInt(Res.MeatPerAnimal), RoomFor(Res.Meat));
+                Vector3 spill = StoreAt(out var storeAt) ? storeAt : HandAt(h);
+                int meatAll = Mathf.RoundToInt(Res.MeatPerAnimal);
+                int meat = Mathf.Clamp(RoomFor(Res.Meat), 0, meatAll);
                 if (meat > 0) { Store(Res.Meat, true).whole += meat; away.Add(Res.Meat, meat); NoteDelivered(Res.Meat, meat); }
+                AddGroundLoad(Res.Meat, meatAll - meat, spill);
                 foreach (var drop in Economy.Techs.HuntDrops)
                 {
-                    int n = Mathf.Min(drop.n, RoomFor(drop.res));
+                    if (drop.n <= 0) continue;
+                    int n = Mathf.Clamp(RoomFor(drop.res), 0, drop.n);
+                    AddGroundLoad(drop.res, drop.n - n, spill);
                     if (n <= 0) continue;
                     Store(drop.res, true).whole += n;
                     away.Add(drop.res, n);

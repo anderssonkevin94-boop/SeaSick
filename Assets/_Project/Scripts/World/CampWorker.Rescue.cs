@@ -48,6 +48,17 @@ namespace SeaSick.World
                 return false;
             }
 
+            // **A sleeping rescuer wakes for it (2026-09-28).** `TickRescue`
+            // runs ahead of `TickRoutine`, so a hand the ledger picked while
+            // he was already down for the night used to drag the body
+            // straight through his own sleep pose and just stand there once
+            // he arrived -- `asleep`/`lyingByFire` never got cleared, so
+            // `TickSleep`'s "held pose, nothing more to do" kept swallowing
+            // him afterward. Wake him the same way the player's own order
+            // or dawn would; the routine sends him back to bed normally
+            // once this rescue ends.
+            if (asleep || lyingByFire) WakeBody(r);
+
             acting?.Set(VillagerActing.Mode.None);
 
             if (!down.reached)

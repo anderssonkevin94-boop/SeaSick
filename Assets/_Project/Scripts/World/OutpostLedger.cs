@@ -82,6 +82,20 @@ namespace SeaSick.World
         /// itself (`OutpostLedger.FeedFirst`), not because the player said
         /// so. Only these are sent back once the camp is fed again.
         public bool autoFood;
+        /// **Held in reserve by the player (2026-09-28, designer call).**
+        /// Two different things both read as `OutpostOrder.Idle`: "no job"
+        /// -- the system let him go (build queue emptied, his building torn
+        /// down, sent back from the hunt, walled off) and the idle ladder
+        /// makes him a builder or a runner at once -- and "Idle" CHOSEN by
+        /// the player (`Outpost.OrderIdle`), which means *leave him be*.
+        /// True only for the second: `EnlistFree`, `FeedFirst`, station
+        /// hauling and transfers pass him over. He still eats, sleeps, goes
+        /// down and takes his raid role. Set by `Outpost.OrderIdle`, cleared
+        /// by every other player order; only meaningful while `order` is
+        /// Idle (read through `OutpostLedger.Reserve`). Saved; an old save
+        /// reads false, i.e. every idle hand is free for the ladder, which
+        /// is how it behaved before.
+        public bool playerIdle;
 
         /// What they are gathering, or which building they are assigned to.
         /// Empty for Idle and for Build, which has only ever one thing to
@@ -2878,10 +2892,14 @@ namespace SeaSick.World
             ReconcileSites();
             DecayDelivered(days);
             FeedFirst();
+            ReleaseIdleBuilders();
             EnlistFree();
+            AgeStallSkips();
             EnsureStations();
             // She cast off: store -> ship armfuls go home; done orders go.
             SettleTransfers();
+            // After hours: the trip in hand is finished, no new one starts.
+            FinishTripsOffHours(days);
 
             // **A gatherer whose store is full does something else** (Kevin,
             // 2026-09-23): hauls for the stations if there is hauling to do,
@@ -2957,6 +2975,14 @@ namespace SeaSick.World
                 // what the site work left of his day goes on the transfer
                 // orders, and an armful he is already walking is walked.
                 if (budget > Eps) TransferDay(h, ref budget);
+                // **A builder with nothing on the sites runs (2026-09-28).**
+                // Every blueprint waiting on something nobody can fetch left
+                // him at the fire (ladder rung 4) while the stations sat
+                // unfed -- a hand with no job would have hauled for them.
+                // Same chores, same rule: not carrying, not held to a plot.
+                if (budget > Eps && !h.Hauling && h.order == OutpostOrder.Build
+                    && BuildSiteFor(h) == null)
+                    HaulerDay(h, ref budget);
             }
 
             // --- gathering ---------------------------------------------------
@@ -3608,10 +3634,20 @@ namespace SeaSick.World
                         h.autoFood = false;
                         // Re-ordered by the player since? Their order stands.
                         if (h.order == OutpostOrder.Gather && h.target == Res.Game)
-                        { h.order = OutpostOrder.Idle; h.target = ""; }
+                        { h.order = OutpostOrder.Idle; h.target = ""; h.playerIdle = false; }
                     }
                 return;
             }
+            // **A hunter who cannot hunt goes back to "no job" (2026-09-28).**
+            // Drafted when there was a spear and a beast; if either is gone
+            // (or the store has no room for a carcass) and he is not already
+            // out on a trip, he would stand "hunting" at the fire for good.
+            // Sent back as a SYSTEM release, never as the player's reserve,
+            // so `EnlistFree` puts him on the sites this same step.
+            foreach (var h in hands)
+                if (h != null && h.autoFood && !h.Hauling
+                    && h.order == OutpostOrder.Gather && h.target == Res.Game && !HuntCanStart(h))
+                { h.autoFood = false; h.order = OutpostOrder.Idle; h.target = ""; h.playerIdle = false; }
             if (have >= day) return;
 
             int feeding = 0;
@@ -3621,20 +3657,29 @@ namespace SeaSick.World
             if (feeding >= want) return;
             var game = Stock(Res.Game);
             if (game == null || game.standing < 1f) return;   // nothing to hunt here
+            // **Only a hunt that can start (2026-09-28)** -- `StartHuntTrip`'s
+            // own checks: a spear in the pile, room for a carcass, and a
+            // beast nobody is already after; one draft per such beast. A
+            // hand drafted without them stood at the fire "hunting" forever.
+            if (!HuntCanStart(null)) return;
+            int beasts = GameUnclaimed(null);
+            int drafted = 0;
 
             // Idle first, then builders -- never a hand the player put on
-            // other work.
-            for (int pass = 0; pass < 2 && feeding < want; pass++)
+            // other work, nor one the player is holding in reserve.
+            for (int pass = 0; pass < 2 && feeding < want && drafted < beasts; pass++)
                 foreach (var h in hands)
                 {
-                    if (feeding >= want) break;
-                    if (h == null || h.downed) continue;
+                    if (feeding >= want || drafted >= beasts) break;
+                    if (h == null || h.downed || Reserve(h)) continue;
                     var from = pass == 0 ? OutpostOrder.Idle : OutpostOrder.Build;
                     if (h.order != from) continue;
                     h.order = OutpostOrder.Gather;
                     h.target = Res.Game;
                     h.autoFood = true;
+                    h.playerIdle = false;
                     feeding++;
+                    drafted++;
                 }
         }
 
@@ -3662,9 +3707,33 @@ namespace SeaSick.World
             if (!Building || hands == null) return 0;
             int n = 0;
             foreach (var h in hands)
-                if (h != null && !h.downed && h.order == OutpostOrder.Idle)
+                if (h != null && !h.downed && h.order == OutpostOrder.Idle && !Reserve(h))
                 { h.order = OutpostOrder.Build; h.target = ""; n++; }
             return n;
+        }
+
+        /// **"Idle" the player chose, not "no job" (2026-09-28).** A hand
+        /// the player stood down is held in reserve: none of the initiative
+        /// passes (`EnlistFree`, `FeedFirst`, station hauling, transfers)
+        /// may take him. See `OutpostHand.playerIdle`. The order check keeps
+        /// a stale flag harmless should any path change his order without
+        /// clearing it.
+        public static bool Reserve(OutpostHand h) =>
+            h != null && h.playerIdle && h.order == OutpostOrder.Idle;
+
+        /// **Nothing stands to build: every builder goes back to "no job"
+        /// (2026-09-28).** `Outpost` already does this when the last site
+        /// finishes or is cancelled, but only on the paths it knows about
+        /// (and only while its scene runs); a Build hand left over any other
+        /// way -- a save, a site gone off screen -- stood about on an order
+        /// with nothing behind it. Run from `Step` next to `EnlistFree`, so
+        /// every path agrees. System release: `playerIdle` stays false.
+        void ReleaseIdleBuilders()
+        {
+            if (Building || hands == null) return;
+            foreach (var h in hands)
+                if (h != null && h.order == OutpostOrder.Build)
+                { h.order = OutpostOrder.Idle; h.target = ""; h.playerIdle = false; }
         }
 
         public void OrderAll(OutpostOrder order, string target = "")
@@ -3674,6 +3743,8 @@ namespace SeaSick.World
                 if (h == null) continue;
                 h.order = order;
                 h.target = target;
+                // A player order for everybody ends anyone's reserve (2026-09-28).
+                h.playerIdle = false;
             }
         }
     }

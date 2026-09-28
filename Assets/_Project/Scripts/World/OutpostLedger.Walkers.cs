@@ -482,7 +482,7 @@ namespace SeaSick.World
         public void BodyWorked(OutpostHand h, float gameSeconds)
         {
             if (h == null || !h.Hauling || h.Leg != TripLeg.AtPickup) return;
-            h.workLeft -= gameSeconds * TripScale(h);
+            h.workLeft -= gameSeconds * FinishScale(h);
             if (h.workLeft <= 0f) FinishPickup(h);
             if (!h.Hauling) Redispatch(h);
         }
@@ -505,6 +505,9 @@ namespace SeaSick.World
                 case OutpostOrder.Build:
                     if (sites != null) BuilderDay(h, ref b);
                     if (b > Eps && !h.Hauling) TransferDay(h, ref b);
+                    // Nothing on the sites: station chores, as `Step`'s
+                    // builder pass does (2026-09-28).
+                    if (b > Eps && !h.Hauling && BuildSiteFor(h) == null) HaulerDay(h, ref b);
                     break;
                 case OutpostOrder.Work:
                 {
@@ -514,7 +517,8 @@ namespace SeaSick.World
                     break;
                 }
                 default:
-                    HaulerDay(h, ref b);
+                    // Not a hand the player holds in reserve (2026-09-28).
+                    if (!Reserve(h)) HaulerDay(h, ref b);
                     break;
             }
         }
@@ -544,6 +548,39 @@ namespace SeaSick.World
             if (h.order == OutpostOrder.Gather && !string.IsNullOrEmpty(h.target))
                 return WorkFactorOn(h, h.target) * PriorityMultiplier(h.target);
             return WorkFactor(h);
+        }
+
+        /// **A trip already under way is finished, even after hours
+        /// (2026-09-28).** `TripScale` is 0 from the evening on (the
+        /// day/night scale), and a body's haul outranks its evening routine,
+        /// so a hand who reached a pickup at 20:59 stood frozen at it with
+        /// his axe up until 04:00. The trip he is on is finished at full
+        /// strength instead (as a pouting hand's meal is, `StepStations`);
+        /// no NEW trip starts off-hours -- every dispatch spends a budget
+        /// that is still 0 then. Busy hands (downed, pouting...) are left
+        /// at their honest zero.
+        float FinishScale(OutpostHand h)
+        {
+            float s = TripScale(h);
+            if (s > 0f || h == null || h.Busy || !h.Hauling || h.orderOverride) return s;
+            return DayNightWorkScale <= 0f ? 1f : s;
+        }
+
+        /// **The invisible walker's side of `FinishScale`** (2026-09-28):
+        /// off-hours, every undriven hand's trip in progress is walked and
+        /// worked to its drop-off with the quantum at full strength, where
+        /// the ordinary passes would spend a zero budget on it and leave the
+        /// load hanging until morning. Meals are left to the eating pass.
+        /// Run once a quantum from `Step`; a no-op in working hours.
+        void FinishTripsOffHours(float days)
+        {
+            if (hands == null || DayNightWorkScale > 0f) return;
+            foreach (var h in hands)
+            {
+                if (h == null || !h.Hauling || h.driven || h.Busy || h.eating || h.orderOverride) continue;
+                float b = days;
+                AdvanceHaul(h, ref b, 1f);
+            }
         }
 
         // --- measured deliveries (display only) ---------------------------------

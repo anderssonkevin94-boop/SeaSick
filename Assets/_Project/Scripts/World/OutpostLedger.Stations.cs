@@ -902,6 +902,12 @@ namespace SeaSick.World
         {
             if (h == null || hands == null) return false;
             if (h.Hauling) DepositHaul(h, true);
+            // **And off every plot he held (2026-09-28).** The site ladder's
+            // per-hand books (`workSite`, the stall guard) are keyed by the
+            // row; left in, a recalled or dead clearer kept counting as the
+            // crew on his plot, so `PickPlot` never sent anyone else and the
+            // blueprint's trees stood forever. `Die` comes through here.
+            ForgetSiteWork(h);
             return hands.Remove(h);
         }
 
@@ -1620,9 +1626,12 @@ namespace SeaSick.World
                 {
                     // `GatherDay` already spent his quantum, arms and all.
                 }
-                else if (h.order == OutpostOrder.Idle
+                else if ((h.order == OutpostOrder.Idle && !Reserve(h))
                          || (gatherersHaul && GatherBlocked(h)))
                 {
+                    // (A hand the PLAYER stood down is held in reserve,
+                    // 2026-09-28: no chores for him -- only a load already in
+                    // his arms is walked, by the branch below.)
                     HaulerDay(h, ref budget);
                 }
                 else if (h.Hauling && !builderScratch.Contains(h))

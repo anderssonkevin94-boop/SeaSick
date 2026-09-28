@@ -25,6 +25,16 @@ namespace SeaSick.World
     public partial class CampWorker
     {
         float defendJabClock;
+        /// **Armed for the rest of this raid (2026-09-28).** A hunter caught
+        /// out with a kill on his back is `huntArmed` right up until the
+        /// drop below -- `ledger.DropCarriedLoadNow` (via `ClearHaul`) zeroes
+        /// `huntArmed` as part of putting the carcass down, so on the VERY
+        /// NEXT frame `armed` read fresh off the hand would come up false
+        /// and he'd quit fighting one frame after he started. Latched true
+        /// the frame he actually engages while armed, and good until this
+        /// raid ends (`StopDefending`, `raidLive` false) -- `armed` below is
+        /// the fresh read OR this latch.
+        bool defendArmedLatch;
 
         /// True = handled this frame.
         bool TickDefend(OutpostHand r, float dt)
@@ -37,11 +47,16 @@ namespace SeaSick.World
             // **Phase 10:** a hand who fetched his own spear out of the
             // store (`Combat.RaidAlarm`/`TickFetchSpear`) is armed the same
             // as the phase-9 dev flag or a hunter caught out with his own.
-            bool armed = r.huntArmed || r.armedDefender || !string.IsNullOrEmpty(r.raidSpear);
+            bool armedNow = r.huntArmed || r.armedDefender || !string.IsNullOrEmpty(r.raidSpear);
+            bool armed = armedNow || defendArmedLatch;
             if (!raidLive || !armed) return StopDefending(r, false);
 
             if (!r.defending)
             {
+                // A sleeper armed by the raid gets up for it (2026-09-28), same
+                // as `TickAlarmRole`: otherwise he fights, and then stands
+                // hidden wherever the fight ended until dawn.
+                if (asleep || lyingByFire) WakeBody(r);
                 r.defending = true;
                 // **Per-hand spear (phase 10):** a hand armed from the store
                 // fights with the exact unit he took, iron or stone,
@@ -50,6 +65,7 @@ namespace SeaSick.World
                 // the camp-wide snapshot.
                 r.defendSpear = !string.IsNullOrEmpty(r.raidSpear) ? r.raidSpear : ledger.SpearInHand();
                 party.MarkDefender(r.name);
+                if (armedNow) defendArmedLatch = true;
                 ledger.DropCarriedLoadNow(r);
                 Drop();
                 defendJabClock = 0f;
@@ -114,6 +130,11 @@ namespace SeaSick.World
         /// false, so `TickDefend`'s callers read it as "not handled".
         bool StopDefending(OutpostHand r, bool _)
         {
+            // The only path here while `defendArmedLatch` is still true is
+            // the raid actually ending (`!raidLive`) -- while it's live the
+            // latch keeps `armed` true above, so this call never fires for
+            // "quietly went unarmed mid-raid".
+            defendArmedLatch = false;
             if (r != null && r.defending)
             {
                 r.defending = false;

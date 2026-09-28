@@ -556,6 +556,7 @@ namespace SeaSick.UI.Sheets
                     return site != null ? l.SiteLine(site) : "";
                 }
                 case OutpostOrder.Idle:
+                    if (OutpostLedger.Reserve(h)) return "held in reserve";
                     return l.Building ? "free hands help at the sites on their own" : "waiting for orders";
                 default:
                     return "between trips";
@@ -855,7 +856,7 @@ namespace SeaSick.UI.Sheets
                     if (outpost.OrderBuild(o)) return;
                     break;
             }
-            outpost.OrderIdle(o);
+            outpost.OrderIdle(o, reserve: false);
         }
 
         // --- icons ----------------------------------------------------------------------
@@ -895,14 +896,17 @@ namespace SeaSick.UI.Sheets
 
         // --- the two pinned verbs --------------------------------------------------------
 
-        /// Idle = free for the idle-hand ladder, which puts him on the sites
-        /// by itself while any blueprint stands (`OutpostLedger.EnlistFree`).
+        /// **Idle = held in reserve (2026-09-28, Kevin: "make idle stick").**
+        /// The player's own stand-down keeps him off the sites, the food
+        /// draft and the station hauling until he is given another order
+        /// (`OutpostHand.playerIdle`); a hand merely bumped off a job is
+        /// `OrderIdle(h, reserve: false)` and joins the idle-hand ladder.
         void StandDown()
         {
             var h = Hand;
             if (outpost == null || h == null) return;
             outpost.OrderIdle(h);
-            if (outpost.Building) ShowToast($"{who} stands down — free hands help at the sites.");
+            ShowToast($"{who} stands down — held in reserve.");
             Refresh();
         }
 

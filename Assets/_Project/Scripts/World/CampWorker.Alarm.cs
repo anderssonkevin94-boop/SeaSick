@@ -45,16 +45,33 @@ namespace SeaSick.World
                 // if he was hidden, he is seen again wherever he was left,
                 // which for a hut is the door (docs: "hiders come out, body
                 // shown at the hut door").
-                if (bodyHidden) RevealBody(r);
+                //
+                // **Except a hand asleep in his hut (2026-09-28).** `TickSleep`
+                // sets `bodyHidden` too (same flag, same hut-door renderer
+                // switch) and this branch used to run the very next frame --
+                // BEFORE `TickRoutine` -- and reveal him again, so a sleeper
+                // flashed hidden for one frame and then stood visible at the
+                // door all night. `asleep` alone owns his body while he has
+                // no alarm role; `TickRoutine`/`WakeBody` is what reveals him,
+                // at dawn or if the alarm sends him a role (below, next
+                // frame `hasRole` is true and `TickHiding`/`TickFetchSpear`
+                // take it from there).
+                if (bodyHidden && !asleep) RevealBody(r);
                 returnSpearStuck = 0f;
                 return false;
             }
             if (camp == null || camp.Ledger == null)
             {
                 r.fetchingSpear = r.hidingHut = r.hidingCrouch = r.returningSpear = false;
-                if (bodyHidden) RevealBody(r);
+                if (bodyHidden && !asleep) RevealBody(r);
                 return false;
             }
+
+            // **The alarm wakes a sleeper (2026-09-28).** A role is his whole
+            // night now: left `asleep`, the reveal guard above would keep him
+            // invisible wherever the role left him once the raid is over.
+            // Awake, the routine sends him back to bed like anyone else.
+            if (asleep || lyingByFire) WakeBody(r);
 
             if (r.fetchingSpear) return TickFetchSpear(r, dt);
             if (r.returningSpear) return TickReturnSpear(r, dt);

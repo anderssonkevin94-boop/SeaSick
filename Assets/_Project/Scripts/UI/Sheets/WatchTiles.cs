@@ -401,7 +401,7 @@ namespace SeaSick.UI.Sheets
         public void Relieve(OutpostHand h)
         {
             if (outpost == null || h == null) return;
-            outpost.OrderIdle(h);
+            outpost.OrderIdle(h, reserve: false);
             toast?.Invoke($"{h.name} comes down from the tower.");
         }
 
@@ -445,7 +445,7 @@ namespace SeaSick.UI.Sheets
                     if (outpost.OrderBuild(o)) return;
                     break;
             }
-            outpost.OrderIdle(o);
+            outpost.OrderIdle(o, reserve: false);
         }
 
         /// The best hand for the primary "Post X" button: the first idle one

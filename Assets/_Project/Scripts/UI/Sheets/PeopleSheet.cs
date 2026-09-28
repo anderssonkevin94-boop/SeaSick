@@ -204,6 +204,7 @@ namespace SeaSick.UI.Sheets
         static string StuckReason(OutpostLedger l, OutpostHand h, out bool warn)
         {
             warn = false;
+            if (OutpostLedger.Reserve(h)) return "held in reserve";
             if (h.order == OutpostOrder.Idle) { warn = true; return "waiting for orders"; }
             if (h.walkingIn) return null;
             if (h.order == OutpostOrder.Gather && h.target == Res.Game && l.HunterBlocker() != null)

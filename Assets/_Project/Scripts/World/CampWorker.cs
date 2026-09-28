@@ -2589,6 +2589,14 @@ namespace SeaSick.World
         /// order is asking for the same blocked spot again.
         const int WalledAsksBeforeGiveUp = 3;
         int walledAsks;
+        /// **Same give-up, a different cause (2026-09-28).** A route that
+        /// fails for any reason OTHER than "straight line crosses a wall"
+        /// (a target the planner can't reach at all, a stale/disagreeing
+        /// grid) used to leave `routeAge` at zero and ask again next frame
+        /// forever, with no backoff and no `bodyBlocked` message -- the
+        /// straight-line branch just below already backs off and gives up;
+        /// this counter does the same for its `else`.
+        int lostAsks;
 
         /// Metres from a target a hand stops at when the ground up to it is
         /// too steep: the tree on the bank is worked from its foot.
@@ -2607,6 +2615,7 @@ namespace SeaSick.World
             hasRoute = false;
             routeAge = 0f;
             walledAsks = 0;
+            lostAsks = 0;
             if (row != null) row.bodyBlocked = null;
         }
 
@@ -2635,7 +2644,7 @@ namespace SeaSick.World
             if (stale && CampPath.Budget())
             {
                 var map = CampPath.For(camp);
-                if (moved) walledAsks = 0;
+                if (moved) { walledAsks = 0; lostAsks = 0; }
                 routeAge = 0f;
                 routeFor = to;
                 routeAt = 0;
@@ -2670,9 +2679,28 @@ namespace SeaSick.World
                             walledAsks = 0;
                         }
                     }
-                    else walledAsks = 0;
+                    else
+                    {
+                        // **No wall, still no route (2026-09-28).** The
+                        // straight line is clear but `CampPath` couldn't
+                        // find a plan anyway (a target outside its reach
+                        // filter, a stale grid) -- back off the same as the
+                        // walled case, and give up onto Idle rather than
+                        // re-ask every frame forever. The straight-line
+                        // fallback below still carries him toward the
+                        // target while he waits out the backoff.
+                        routeAge = -NoRouteBackoff;
+                        lostAsks++;
+                        if (lostAsks >= WalledAsksBeforeGiveUp && row != null)
+                        {
+                            row.order = OutpostOrder.Idle;
+                            row.target = "";
+                            row.bodyBlocked = "can't reach that — no way there";
+                            lostAsks = 0;
+                        }
+                    }
                 }
-                else walledAsks = 0;
+                else { walledAsks = 0; lostAsks = 0; }
             }
 
             // No route (yet, or at all): the old straight line -- but never
@@ -2680,9 +2708,11 @@ namespace SeaSick.World
             // until a gate goes in, is the honest answer there. **And say
             // so** (2026-09-24): the sheet reads `bodyBlocked`, because the
             // books think he is working while his feet are at the fire.
+            // Covers both give-up causes (2026-09-28): a wall with no gate,
+            // or a route that fails for any other reason.
             if (row != null)
-                row.bodyBlocked = !hasRoute && straightCrosses && routeAge < 0f
-                    ? "walled off — no way round, needs a gate"
+                row.bodyBlocked = !hasRoute && routeAge < 0f
+                    ? (straightCrosses ? "walled off — no way round, needs a gate" : "can't reach that — no way there")
                     : null;
             if (!hasRoute || routeAt >= route.Count) return straightCrosses ? here : to;
 

@@ -253,7 +253,7 @@ namespace SeaSick.World
             foreach (var h in hands)
             {
                 if (h == null || h.Hauling) continue;
-                if (h.order == OutpostOrder.Idle || h.order == OutpostOrder.Build || GatherBlocked(h)) return true;
+                if ((h.order == OutpostOrder.Idle && !Reserve(h)) || h.order == OutpostOrder.Build || GatherBlocked(h)) return true;
             }
             return false;
         }

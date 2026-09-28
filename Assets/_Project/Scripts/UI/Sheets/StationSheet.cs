@@ -1186,7 +1186,7 @@ namespace SeaSick.UI.Sheets
                 if (l == null) return;
                 var free = SheetBits.FirstIdle(l);
                 if (free == null) return;
-                if (current != null) outpost.OrderIdle(current);
+                if (current != null) outpost.OrderIdle(current, reserve: false);
                 outpost.Assign(free, planId);
                 changed?.Invoke();
             }
@@ -1194,7 +1194,7 @@ namespace SeaSick.UI.Sheets
             void Off()
             {
                 if (outpost == null || current == null) return;
-                outpost.OrderIdle(current);
+                outpost.OrderIdle(current, reserve: false);
                 changed?.Invoke();
             }
         }
