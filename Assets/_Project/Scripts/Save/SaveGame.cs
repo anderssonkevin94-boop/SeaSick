@@ -205,6 +205,10 @@ namespace SeaSick.Save
             Lives.SyncTo(d.lives, d.graveyard);
             // Phase 5a: castaways and the scripted-first-time flag.
             Lives.SyncCastawaysTo(d.castaways);
+            // Phase 7: which islands already had their stranger roll, and
+            // which castaway names are strangers rather than washed-ashore
+            // crew.
+            Lives.SyncStrangersTo(d.strangerIslandsRolled, d.strangerNames);
             d.firstOverboardDone = SeaSick.Ship.Overboard.FirstOverboard.Done;
 
             // --- the ship -------------------------------------------------
@@ -368,6 +372,10 @@ namespace SeaSick.Save
                 // first time still has to happen.
                 if (d.castaways == null) d.castaways = new List<SeaSick.World.Life.CastawayRecord>();
                 Lives.SyncCastawaysFrom(d.castaways);
+                // Phase 7: an old save has rolled no island yet.
+                if (d.strangerIslandsRolled == null) d.strangerIslandsRolled = new List<string>();
+                if (d.strangerNames == null) d.strangerNames = new List<string>();
+                Lives.SyncStrangersFrom(d.strangerIslandsRolled, d.strangerNames);
                 SeaSick.Ship.Overboard.FirstOverboard.Done = d.firstOverboardDone;
                 return d;
             }

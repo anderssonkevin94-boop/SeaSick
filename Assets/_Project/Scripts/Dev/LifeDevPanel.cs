@@ -146,8 +146,77 @@ namespace SeaSick.Dev
             GUILayout.Space(8);
             DrawOverboard();
 
+            GUILayout.Space(8);
+            DrawRecruits();
+
             GUILayout.EndArea();
             GUI.matrix = old;
+        }
+
+        /// **Phase 7 (recruits at sea) dev helpers.** Neither one waits on
+        /// the real trigger (the ship coming within `castawayShowMetres`, or
+        /// somebody's grip actually running out) -- both just file the same
+        /// `CastawayRecord`/log calls `CastawayField`/`Swimmer` would, so
+        /// Kevin can playtest the pickup flow (`CastawayHud`) without
+        /// sailing a lap first.
+        void DrawRecruits()
+        {
+            GUILayout.Label("Recruits at sea (dev)");
+
+            if (GUILayout.Button("Spawn stranger on nearest island", GUILayout.Height(RowH)))
+            {
+                var motor = FindAnyObjectByType<ShipMotor>();
+                var isle = motor != null ? Island.Nearest(motor.transform.position) : null;
+                if (isle == null) { Banner.Show("No island nearby."); }
+                else
+                {
+                    var taken = CrewNames.InUse();
+                    string name = null;
+                    foreach (var n in CrewNames.Pool)
+                        if (!taken.Contains(n) && !Lives.IsTaken(n)) { name = n; break; }
+                    if (name == null) Banner.Show("Every name is spoken for.");
+                    else
+                    {
+                        Vector3 pos = isle.ShorePoint(0, 1, motor.transform.position);
+                        Lives.MarkCastaway(new CastawayRecord
+                        {
+                            name = name,
+                            island = isle.gameObject.name,
+                            x = pos.x,
+                            z = pos.z,
+                        });
+                        Lives.MarkStranger(name);
+                        Lives.MarkIslandRolled(isle.gameObject.name);
+                        Banner.Show(name + " found on " + isle.gameObject.name);
+                    }
+                }
+            }
+
+            if (GUILayout.Button("Wash a crew member ashore now", GUILayout.Height(RowH)))
+            {
+                var roster = FindAnyObjectByType<CrewRoster>();
+                CrewAgent pick = null;
+                if (roster != null)
+                    foreach (var a in roster.All)
+                        if (a != null && a.gameObject.activeInHierarchy) { pick = a; break; }
+                var isle = pick != null ? Island.Nearest(pick.transform.position) : null;
+                if (pick == null || isle == null) Banner.Show("No crew or island to wash up on.");
+                else
+                {
+                    string name = pick.DisplayName;
+                    Vector3 pos = isle.ShorePoint(0, 1, pick.transform.position);
+                    Lives.Log(name, LifeEvents.WashedAshore, isle.gameObject.name);
+                    Lives.MarkCastaway(new CastawayRecord
+                    {
+                        name = name,
+                        island = isle.gameObject.name,
+                        x = pos.x,
+                        z = pos.z,
+                    });
+                    pick.gameObject.SetActive(false);
+                    Banner.Show(name + " washed ashore on " + isle.gameObject.name);
+                }
+            }
         }
 
         /// **Phase 5a.** Grip readout for every hand on the currently

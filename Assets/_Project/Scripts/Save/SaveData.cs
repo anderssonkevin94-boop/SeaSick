@@ -95,6 +95,16 @@ namespace SeaSick.Save
         /// reasoning as `lives`/`graveyard` above.
         public List<SeaSick.World.Life.CastawayRecord> castaways = new List<SeaSick.World.Life.CastawayRecord>();
 
+        /// **Phase 7 (recruits at sea).** Islands `CastawayField` has
+        /// already rolled its once-per-island stranger-or-not decision for
+        /// (the `Island` GameObject's own name), and the names among
+        /// `castaways` that are strangers rather than washed-ashore crew.
+        /// Added after version 1 shipped, deliberately NOT a version bump,
+        /// same reasoning as `castaways` above: an old save has neither,
+        /// which reads as "nothing rolled yet".
+        public List<string> strangerIslandsRolled = new List<string>();
+        public List<string> strangerNames = new List<string>();
+
         /// **Phase 5a.** Set once the scripted first man-overboard has
         /// resolved (rescued, washed ashore, or lost) -- until then, no
         /// OTHER crew member can go over, and once it fires nobody else's

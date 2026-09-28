@@ -1222,6 +1222,19 @@ namespace SeaSick.World
                 target = Building ? "" : Res.Timber,
             });
             Life.Lives.Log(who, Life.LifeEvents.WentAshore, ledger?.CampLabel ?? "");
+            // **Phase 7 (ferrying).** Landed somewhere other than the camp
+            // they were first recruited/born at -- read BEFORE the log line
+            // above touches `homeCamp` (it only ever fills an empty one, so
+            // this is still the ORIGIN camp for anybody who already had
+            // one). Skipped for a name with no prior home (their first camp
+            // ever, which is just `WentAshore`, not a ferry).
+            {
+                var record = Life.Lives.Record(who);
+                string home = record != null ? record.homeCamp : "";
+                string here = ledger?.CampLabel ?? "";
+                if (!string.IsNullOrEmpty(home) && !string.IsNullOrEmpty(here) && home != here)
+                    Life.Lives.Log(who, Life.LifeEvents.Ferried, here, other: home);
+            }
 
             // **Rations from the ship** (Kevin, 2026-09-23): every hand left
             // ashore brings `ProvisionDays` of food, so the first buildings

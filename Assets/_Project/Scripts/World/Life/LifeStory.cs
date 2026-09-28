@@ -180,6 +180,28 @@ namespace SeaSick.World.Life
                         "Put down roots at " + camp + ".",
                         "Made " + camp + " a home, of sorts.",
                     });
+                case LifeEvents.WashedAshore:
+                    return Pick(h, salt, new[]
+                    {
+                        "Swam for an island and waited there to be fetched.",
+                        "Went over the side and made land on " + camp + " alone.",
+                        "Washed up on " + camp + " and waited out the days until a sail came.",
+                    });
+                case LifeEvents.FoundCastaway:
+                    return Pick(h, salt, new[]
+                    {
+                        "Was picked up from " + camp + " and never looked back.",
+                        "Waited on " + camp + " for a ship, and one finally came.",
+                        "Was found on " + camp + " with nothing, and taken aboard anyway.",
+                    });
+                case LifeEvents.Ferried:
+                    return Pick(h, salt, new[]
+                    {
+                        "Was carried from " + (string.IsNullOrEmpty(e.other) ? "another island" : e.other)
+                            + " to " + camp + " to start again.",
+                        "Left " + (string.IsNullOrEmpty(e.other) ? "one camp" : e.other)
+                            + " behind and made a new start at " + camp + ".",
+                    });
                 default:
                     return "";
             }
