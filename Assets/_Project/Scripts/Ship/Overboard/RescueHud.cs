@@ -135,6 +135,10 @@ namespace SeaSick.Ship.Overboard
 
         void OnGUI()
         {
+            // Sea markers belong to the sea view: ashore (the land HUD up)
+            // they were drawn through the island at their bearing and could
+            // not be pressed (Kevin, 2026-09-28, "unwanted artifact on screen").
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;
             CollectTargets();
             if (targets.Count == 0) return;
             var cam = Camera.main;
@@ -297,7 +301,8 @@ namespace SeaSick.Ship.Overboard
             };
             style.normal.textColor = Color.white;
             float w = Mathf.Min(Screen.width - u * 2f, u * 20f);
-            var r = new Rect((Screen.width - w) * 0.5f, u * 1.6f, w, u * 1.7f);
+            // Below the top bar and alert chips, not over the FEEL/LIFE buttons.
+            var r = new Rect((Screen.width - w) * 0.5f, Screen.height * 0.19f, w, u * 1.7f);
             if (Event.current.type == EventType.Repaint) GUI.Box(r, "");
             GUI.Label(r, label, style);
         }

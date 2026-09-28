@@ -27,6 +27,7 @@ namespace SeaSick.Ocean
 
         void OnGUI()
         {
+            if (SeaSick.UI.Sheets.MidnightLandHud.Active) return;   // sea view only
             var dir = SquallDirector.Instance;
             if (dir == null || !dir.Active) return;
             var cam = Camera.main;
