@@ -721,6 +721,16 @@ namespace SeaSick.World
                 else return;
             }
 
+            // **Villagers with a day (2026-09-28).** The evening/sleep
+            // routine, right where the ordinary dispatch below would
+            // otherwise take over -- a haul, a tower shift or a raid role
+            // above this point in `Update` already ran and returned this
+            // frame if it applied, so by here the leg he was on (if any)
+            // is finished and this is the first free moment to send him to
+            // the fire. `TickRoutine` itself skips a hand the player has
+            // just ordered through the night (`OutpostHand.orderOverride`).
+            if (TickRoutine(r, dt)) return;
+
             switch (r.order)
             {
                 case OutpostOrder.Idle: TickIdle(dt); return;

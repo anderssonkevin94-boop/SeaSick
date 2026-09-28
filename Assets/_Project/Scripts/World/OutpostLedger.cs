@@ -253,6 +253,25 @@ namespace SeaSick.World
         /// `poutLeft` does.
         public float poutCooldown;
 
+        // --- villagers with a day (2026-09-28) -------------------------------
+        //
+        // Evening/sleep/wake is presentation + a global day/night scale on
+        // `WorkFactor` (see `OutpostLedger.ActiveHour`), not a new Busy
+        // state -- a routine hand still shows up in every dispatch loop,
+        // he simply gets paid nothing for it off-hours, the same shape
+        // `WorkFactor`'s hunger floor already uses. `orderOverride` is the
+        // one exception: the player dragging a job onto a hand during the
+        // evening/night is a decision that wins, so that hand keeps his
+        // ordinary (scaled-up) `WorkFactor` and the body (`CampWorker.
+        // Routine`) leaves him alone until the next phase change. Cleared
+        // automatically once the camp is awake again (`Step`), so it never
+        // needs saving.
+        [System.NonSerialized] public bool orderOverride;
+        /// **Watched-body presentation only, not saved**: which hut (its
+        /// `GetInstanceID()`) this hand is asleep in, or 0 for "no hut, by
+        /// the fire" / not asleep. A reload just re-picks a bed next dusk.
+        [System.NonSerialized] public int sleepHutId;
+
         /// **Out of the ordinary dispatch**: downed, recovering, being
         /// dragged, off rescuing somebody (phase 2), or pouting at the fire
         /// (phase 4) -- no new orders, no productive work, same as `downed`
@@ -408,6 +427,18 @@ namespace SeaSick.World
                 if (defending)
                     return "defending, " + (defendSpear == Res.IronSpear ? "iron spear" : "stone spear");
                 if (raidLookout) return "on the tower";
+                // **Villagers with a day (2026-09-28)**: the evening/sleep
+                // routine, unless the player's own order is running through
+                // the night (`orderOverride`) -- his row keeps saying what
+                // he is actually doing then, same as daytime.
+                if (!orderOverride)
+                {
+                    var routinePhase = Life.CampLifeTuning.PhaseAtHour(TimeOfDay.Hour);
+                    if (routinePhase == Life.CampLifeTuning.RoutinePhase.Sleep)
+                        return sleepHutId != 0 ? "asleep in the hut" : "asleep by the fire";
+                    if (routinePhase == Life.CampLifeTuning.RoutinePhase.Evening)
+                        return "at the fire";
+                }
                 switch (order)
                 {
                     case OutpostOrder.Gather:
@@ -1133,7 +1164,29 @@ namespace SeaSick.World
         // docs/DELIVERY-ON-ARRIVAL.md.)
         public static float WorkFactor(OutpostHand h) =>
             h == null || h.Busy ? 0f
-                : Mathf.Max(StarvingWorkFloor, Mathf.Clamp01(h.mood / 0.5f)) * (1f + MealWorkBonus(h));
+                : Mathf.Max(StarvingWorkFloor, Mathf.Clamp01(h.mood / 0.5f)) * (1f + MealWorkBonus(h))
+                    * (h.orderOverride ? 1f : DayNightWorkScale);
+
+        /// **Villagers with a day (2026-09-28).** `0` off-hours (evening +
+        /// sleep), `Life.CampLifeTuning.AwakeWorkScale` (24 / awake hours)
+        /// the rest of the day, so the SAME per-day total comes out of a
+        /// shorter working day -- Kevin's output-neutral rule. Read off
+        /// `ActiveHour`, which `Step` sets from the exact simulated second
+        /// that quantum represents (not "now"), so a long unwatched catch-up
+        /// spanning many nights integrates each quantum against the night
+        /// or day it actually fell on. `ActiveHourKnown` stays false for
+        /// `StepForTest` (the stride-vs-bit-exact self-test harness, which
+        /// never means to exercise the day/night ladder) so its totals are
+        /// untouched -- scale 1 there, same as before this system existed.
+        public static float DayNightWorkScale =>
+            !ActiveHourKnown ? 1f
+                : Life.CampLifeTuning.IsAwakeHour(ActiveHour) ? Life.CampLifeTuning.AwakeWorkScale : 0f;
+
+        /// The hour-of-day (0..24) the Step call in progress represents.
+        /// Set by `Tick`'s loop from the same simulated-seconds timeline
+        /// `lastTicked` walks. See `DayNightWorkScale`.
+        public static float ActiveHour = 12f;
+        public static bool ActiveHourKnown;
 
         /// **Decision for Kevin to review (phase 4, 2026-09-28):** a
         /// pouting hand is zeroed here through `Busy`, same as `downed`.
@@ -1165,7 +1218,9 @@ namespace SeaSick.World
         /// hungrier they got the less food they brought in.
         public static float WorkFactorOn(OutpostHand h, string produces) =>
             h != null && h.Busy ? 0f
-                : Economy.FoodBook.IsFoodish(produces) ? (h == null ? 0f : 1f) : WorkFactor(h);
+                : Economy.FoodBook.IsFoodish(produces)
+                    ? (h == null ? 0f : (h.orderOverride ? 1f : DayNightWorkScale))
+                    : WorkFactor(h);
 
         /// **The pace this hand's CURRENT job is paid at, 0..1** -- the
         /// factor `Step` actually scales his day by, dispatched the way
@@ -2557,7 +2612,13 @@ namespace SeaSick.World
             const long MaxSteps = 50000;
             long run = steps > MaxSteps ? MaxSteps : steps;
 
-            for (long i = 0; i < run; i++) Step(QuantumDays * stride);
+            // **Villagers with a day**: each quantum is stepped at the exact
+            // simulated second it falls on (`s`), not at `nowSeconds` -- a
+            // long catch-up spans real nights and days and must scale each
+            // quantum's work by the hour it actually happened at, not by
+            // whatever the clock reads once the loop finally returns.
+            double s = lastTicked;
+            for (long i = 0; i < run; i++) { s += quantum; Step(QuantumDays * stride, s); }
             StepsRun += run;
 
             // Advance the FULL elapsed quanta even when the run was clamped,
@@ -2785,11 +2846,29 @@ namespace SeaSick.World
         /// `Tick`'s fixed quantum, so `StationStockSelfTest` can measure how
         /// far the books drift when the step size changes. The game only
         /// ever steps `QuantumDays`.
-        internal void StepForTest(float days) => Step(days);
+        internal void StepForTest(float days) => Step(days, double.NaN);
 
         /// One quantum of work. The only place the outpost's state changes.
-        void Step(float days)
+        /// `atSeconds` is the simulated-seconds position of this quantum on
+        /// `TimeOfDay`'s own clock, `Tick`'s loop only, NaN elsewhere (self
+        /// tests): see `ActiveHour`/`DayNightWorkScale`.
+        void Step(float days, double atSeconds = double.NaN)
         {
+            if (!double.IsNaN(atSeconds))
+            {
+                float dayLen = Mathf.Max(0.0001f, TimeOfDay.DayLength);
+                double f = atSeconds / dayLen;
+                f -= System.Math.Floor(f);
+                ActiveHour = (float)(f * 24.0);
+                ActiveHourKnown = true;
+                // Awake again: the player's night-time override has done its
+                // job (his order ran at full pace) and does not carry into
+                // tomorrow night on its own.
+                if (Life.CampLifeTuning.IsAwakeHour(ActiveHour) && hands != null)
+                    for (int i = 0; i < hands.Count; i++)
+                        if (hands[i] != null) hands[i].orderOverride = false;
+            }
+
             // Anything a body over-delivered since the last tick goes on the
             // pile before a single count is read. See `ReconcileSites`.
             MigratePending();

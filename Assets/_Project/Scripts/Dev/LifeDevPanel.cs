@@ -106,6 +106,20 @@ namespace SeaSick.Dev
                 if (GUILayout.Button("Put 3 spears in store", GUILayout.Height(RowH)))
                     camp.Ledger.Add(Res.Spear, 3);
 
+                // **Villagers with a day (2026-09-28):** jump the shared
+                // clock straight to each phase boundary for playtest,
+                // instead of waiting out a real day length.
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("Skip to evening", GUILayout.Height(RowH)))
+                    TimeOfDay.SetTime01(CampLifeTuning.EveningStartHour / 24f);
+                if (GUILayout.Button("Skip to night", GUILayout.Height(RowH)))
+                    TimeOfDay.SetTime01(CampLifeTuning.SleepHour / 24f);
+                if (GUILayout.Button("Skip to morning", GUILayout.Height(RowH)))
+                    TimeOfDay.SetTime01(CampLifeTuning.WakeHour / 24f);
+                GUILayout.EndHorizontal();
+                if (GUILayout.Button("Say a line now", GUILayout.Height(RowH)))
+                    VillagerChatter.DebugSayNow(camp);
+
                 scroll = GUILayout.BeginScrollView(scroll);
                 foreach (var hnd in camp.Ledger.hands)
                 {

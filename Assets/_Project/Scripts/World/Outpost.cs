@@ -2965,9 +2965,21 @@ namespace SeaSick.World
             if (h == null || ledger == null || !Res.IsGatherable(resource)) return false;
             h.order = OutpostOrder.Gather;
             h.target = resource;
+            MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
             return true;
+        }
+
+        /// **Villagers with a day (2026-09-28):** the player dragging a job
+        /// onto a hand during the evening/night wins over the routine --
+        /// he keeps working at full `WorkFactor` and the body (`CampWorker.
+        /// Routine`) leaves him be until the next phase change clears this
+        /// (`OutpostLedger.Step`). No-op during the day; harmless to call
+        /// every order.
+        static void MarkNightOrder(OutpostHand h)
+        {
+            if (h != null && !Life.CampLifeTuning.IsAwakeHour(TimeOfDay.Hour)) h.orderOverride = true;
         }
 
         /// **Assign this hand to a building.** The position is the building's,
@@ -2980,6 +2992,7 @@ namespace SeaSick.World
             if (CountOf(planId) <= 0) return false;         // it is not standing here
             h.order = OutpostOrder.Work;
             h.target = planId;
+            MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
             return true;
@@ -2995,6 +3008,7 @@ namespace SeaSick.World
             if (h == null || ledger == null || !ledger.Building) return false;
             h.order = OutpostOrder.Build;
             h.target = "";
+            MarkNightOrder(h);
             ArrangeHands();
             PuppetsToWork();
             return true;
@@ -3005,6 +3019,9 @@ namespace SeaSick.World
             if (h == null) return false;
             h.order = OutpostOrder.Idle;
             h.target = "";
+            // Idling a hand is not "give me this job tonight" -- let the
+            // evening/sleep routine reclaim him at its own next check.
+            h.orderOverride = false;
             ArrangeHands();
             return true;
         }
