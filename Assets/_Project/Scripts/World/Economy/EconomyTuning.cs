@@ -93,6 +93,10 @@ namespace SeaSick.World.Economy
         public float hammerSecondsPerLineLog = 3f;
         [Tooltip("Crew exponent: N builders hammer N^x times as fast as one (1 = linear, 0.75 = diminishing).")]
         public float crewExponent = 0.75f;
+        [Tooltip("Builder cap per blueprint: a crew grows while one more hand still adds at least this share of one lone builder's speed (0.5 at exponent 0.75 = 5 hands).")]
+        public float crewMarginalFloor = 0.5f;
+        [Tooltip("Free hands top the store up to this many timber and stone each (never past the store's room).")]
+        public int campStockReserve = 20;
 
         [Header("Fire, upgrades, caps")]
         public FireRow[] fire = new FireRow[0];
@@ -328,6 +332,34 @@ namespace SeaSick.World.Economy
         /// purpose: four men on one hut get in each other's way.
         public static float CrewSpeed(int builders) =>
             builders <= 1 ? 1f : Mathf.Pow(builders, CrewExponent);
+
+        /// **The most hands worth putting on one plot (2026-09-28).** Kevin:
+        /// the whole camp piled onto one hut while the rest of the work sat.
+        /// Derived from `CrewSpeed` rather than a flat number so it follows
+        /// the crew exponent: the largest N whose marginal gain
+        /// CrewSpeed(N) - CrewSpeed(N-1) is still at least
+        /// `crewMarginalFloor` of one lone builder (CrewSpeed(1) = 1). At
+        /// 0.75 / 0.5 that is 5; a floor of 0.2 would be ~190, i.e. no cap,
+        /// which is why the default is not 0.2. Linear crews (exponent 1)
+        /// never fall off, so the cap stops at `MaxCrewCap`.
+        public static int CrewCap
+        {
+            get
+            {
+                float floor = Mathf.Clamp(F(t => t.crewMarginalFloor, 0.5f), 0.01f, 1f) * CrewSpeed(1);
+                int n = 1;
+                while (n < MaxCrewCap && CrewSpeed(n + 1) - CrewSpeed(n) >= floor) n++;
+                return n;
+            }
+        }
+        const int MaxCrewCap = 12;
+
+        /// **Timber and stone the store is kept topped up to by hands with
+        /// nothing else to do (2026-09-28, designer call).** 0 = off.
+        public static int CampStockReserve
+        {
+            get { var t = Active; return t != null ? Mathf.Max(0, t.campStockReserve) : 20; }
+        }
 
 #if UNITY_EDITOR
         /// Rewrite every table from the code's current statics -- the way to

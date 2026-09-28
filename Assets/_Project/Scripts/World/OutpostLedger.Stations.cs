@@ -1633,6 +1633,9 @@ namespace SeaSick.World
                     // 2026-09-28: no chores for him -- only a load already in
                     // his arms is walked, by the branch below.)
                     HaulerDay(h, ref budget);
+                    // Nothing to haul: the stock top-up (2026-09-28).
+                    if (h.order == OutpostOrder.Idle && !Reserve(h) && budget > Eps && !h.Hauling)
+                        TopUpDay(h, ref budget);
                 }
                 else if (h.Hauling && !builderScratch.Contains(h))
                 {

@@ -192,7 +192,7 @@ namespace SeaSick.World
 
         /// The plot to send a free hand to: one with clearing (and an
         /// obstruction nobody else is on) or hammering, fewest hands first,
-        /// oldest breaking ties.
+        /// oldest breaking ties, never past `EconomyTuning.CrewCap` hands.
         PendingBuild PickPlot(OutpostHand h)
         {
             if (sites == null) return null;
@@ -213,6 +213,12 @@ namespace SeaSick.World
                         && !kv.Key.Busy && hands != null && hands.Contains(kv.Key)) crew++;
                 // Clearing: one hand per obstruction left, as the bodies claim.
                 if (!s.Cleared && crew >= s.ClearLeft) continue;
+                // **Builder cap (2026-09-28, designer call)**: past
+                // `EconomyTuning.CrewCap` one more hand on the plot adds
+                // little, so he is not sent -- he falls through to rung 3
+                // and then the station runs / stock top-up in `Step`'s
+                // builder pass. Fetching TO a site (rungs 1, 3) is not capped.
+                if (crew >= Economy.EconomyTuning.CrewCap) continue;
                 if (crew < bestCrew) { best = s; bestCrew = crew; }
             }
             return best;

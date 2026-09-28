@@ -508,6 +508,7 @@ namespace SeaSick.World
                     // Nothing on the sites: station chores, as `Step`'s
                     // builder pass does (2026-09-28).
                     if (b > Eps && !h.Hauling && BuildSiteFor(h) == null) HaulerDay(h, ref b);
+                    if (b > Eps && !h.Hauling && BuildSiteFor(h) == null) TopUpDay(h, ref b);
                     break;
                 case OutpostOrder.Work:
                 {
@@ -519,6 +520,7 @@ namespace SeaSick.World
                 default:
                     // Not a hand the player holds in reserve (2026-09-28).
                     if (!Reserve(h)) HaulerDay(h, ref b);
+                    if (!Reserve(h) && h.order == OutpostOrder.Idle && b > Eps && !h.Hauling) TopUpDay(h, ref b);
                     break;
             }
         }

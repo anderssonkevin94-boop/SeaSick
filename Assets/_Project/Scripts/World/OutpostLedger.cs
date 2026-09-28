@@ -393,6 +393,20 @@ namespace SeaSick.World
         /// (`OutpostLedger.Hunting`). `huntKilled` flips at the kill; the
         /// trip went out with the bow when `huntArmed`. Saved with the rest.
         public bool HuntTrip => Hauling && haulRes == Res.Game;
+
+        /// **The resource of this hand's stock top-up errand (2026-09-28)**
+        /// -- set when `OutpostLedger.TopUpDay` starts a Field -> Store trip
+        /// for a hand with no job. Not saved: a reloaded trip still lands,
+        /// it just reads by his order until the next one. Read through
+        /// `TopUpTrip`, which is false once the trip is over.
+        [System.NonSerialized] public string topUpRes;
+
+        /// On a stock top-up trip right now (no job of his own, walking
+        /// timber/stone from the island into the store).
+        public bool TopUpTrip =>
+            Hauling && !string.IsNullOrEmpty(topUpRes) && haulRes == topUpRes
+            && haulFrom == HaulPlace.Field && haulTo == HaulPlace.Store
+            && (order == OutpostOrder.Idle || order == OutpostOrder.Build);
         public bool huntKilled;
         public bool huntArmed;
         /// **A hunting accident was rolled at this kill** (death/rescue
@@ -453,6 +467,10 @@ namespace SeaSick.World
                     if (routinePhase == Life.CampLifeTuning.RoutinePhase.Evening)
                         return "at the fire";
                 }
+                // **A free hand's stock top-up (2026-09-28)** -- a system
+                // errand, his order is unchanged; the row says what he is
+                // really doing rather than "building"/"idle".
+                if (TopUpTrip) return "gathering " + topUpRes.ToLowerInvariant() + " for the store";
                 switch (order)
                 {
                     case OutpostOrder.Gather:
@@ -2891,6 +2909,7 @@ namespace SeaSick.World
             GrowPlots(days);
             ReconcileSites();
             DecayDelivered(days);
+            AgeFoodVetoes(days);
             FeedFirst();
             ReleaseIdleBuilders();
             EnlistFree();
@@ -2983,6 +3002,11 @@ namespace SeaSick.World
                 if (budget > Eps && !h.Hauling && h.order == OutpostOrder.Build
                     && BuildSiteFor(h) == null)
                     HaulerDay(h, ref budget);
+                // Still nothing: keep the store's timber/stone topped up
+                // (2026-09-28, OutpostLedger.Status.cs `TopUpDay`).
+                if (budget > Eps && !h.Hauling && h.order == OutpostOrder.Build
+                    && BuildSiteFor(h) == null)
+                    TopUpDay(h, ref budget);
             }
 
             // --- gathering ---------------------------------------------------
@@ -3633,7 +3657,7 @@ namespace SeaSick.World
                     {
                         h.autoFood = false;
                         // Re-ordered by the player since? Their order stands.
-                        if (h.order == OutpostOrder.Gather && h.target == Res.Game)
+                        if (FoodDraftOrder(h))
                         { h.order = OutpostOrder.Idle; h.target = ""; h.playerIdle = false; }
                     }
                 return;
@@ -3643,44 +3667,57 @@ namespace SeaSick.World
             // (or the store has no room for a carcass) and he is not already
             // out on a trip, he would stand "hunting" at the fire for good.
             // Sent back as a SYSTEM release, never as the player's reserve,
-            // so `EnlistFree` puts him on the sites this same step.
+            // so `EnlistFree` puts him on the sites this same step. **A
+            // drafted forager the same (2026-09-28)**: nothing left standing
+            // or no room for it.
             foreach (var h in hands)
-                if (h != null && h.autoFood && !h.Hauling
-                    && h.order == OutpostOrder.Gather && h.target == Res.Game && !HuntCanStart(h))
+                if (h != null && h.autoFood && !h.Hauling && h.order == OutpostOrder.Gather
+                    && ((h.target == Res.Game && !HuntCanStart(h))
+                        || (h.target == Res.Food && !ForageCanStart())))
                 { h.autoFood = false; h.order = OutpostOrder.Idle; h.target = ""; h.playerIdle = false; }
             if (have >= day) return;
 
             int feeding = 0;
             foreach (var h in hands)
-                if (h != null && h.order == OutpostOrder.Gather && h.target == Res.Game) feeding++;
+                if (h != null && h.order == OutpostOrder.Gather && (h.target == Res.Game || h.target == Res.Food))
+                    feeding++;
             int want = Mathf.Max(1, hands.Count / 4);
             if (feeding >= want) return;
-            var game = Stock(Res.Game);
-            if (game == null || game.standing < 1f) return;   // nothing to hunt here
             // **Only a hunt that can start (2026-09-28)** -- `StartHuntTrip`'s
             // own checks: a spear in the pile, room for a carcass, and a
             // beast nobody is already after; one draft per such beast. A
             // hand drafted without them stood at the fire "hunting" forever.
-            if (!HuntCanStart(null)) return;
-            int beasts = GameUnclaimed(null);
+            // **No hunt: forage (2026-09-28, designer call)** -- a Gather
+            // order on `Res.Food` (wild forage, the same order a player can
+            // give), when something stands to pick and the store has room.
+            // Same cap, same release at `FedDays`.
+            var game = Stock(Res.Game);
+            bool hunt = game != null && game.standing >= 1f && HuntCanStart(null);
+            if (!hunt && !ForageCanStart()) return;
+            string res = hunt ? Res.Game : Res.Food;
+            int limit = hunt ? GameUnclaimed(null) : int.MaxValue;
             int drafted = 0;
+            draftNames.Clear();
 
             // Idle first, then builders -- never a hand the player put on
-            // other work, nor one the player is holding in reserve.
-            for (int pass = 0; pass < 2 && feeding < want && drafted < beasts; pass++)
+            // other work, nor one the player is holding in reserve, nor one
+            // the player just sent back from a draft (`UndoFoodDraft`).
+            for (int pass = 0; pass < 2 && feeding < want && drafted < limit; pass++)
                 foreach (var h in hands)
                 {
-                    if (feeding >= want || drafted >= beasts) break;
-                    if (h == null || h.downed || Reserve(h)) continue;
+                    if (feeding >= want || drafted >= limit) break;
+                    if (h == null || h.Busy || Reserve(h) || FoodVetoed(h)) continue;
                     var from = pass == 0 ? OutpostOrder.Idle : OutpostOrder.Build;
                     if (h.order != from) continue;
                     h.order = OutpostOrder.Gather;
-                    h.target = Res.Game;
+                    h.target = res;
                     h.autoFood = true;
                     h.playerIdle = false;
                     feeding++;
                     drafted++;
+                    draftNames.Add(h.name);
                 }
+            if (drafted > 0) AnnounceFoodDraft(hunt);
         }
 
         /// Days of food in the pile before hunters who went on their own
