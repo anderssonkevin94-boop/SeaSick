@@ -65,12 +65,11 @@ namespace SeaSick.World
                 // up empty for a frame.
                 Vector3 gather = GatherPoint(camp, party);
                 var waitProps = HunterProps.On(gameObject);
-                if (!Near(gather, 1.2f))
+                if (!Near(gather, 1.2f) && !Walk(gather, dt))
                 {
                     phase = Phase.Going;
                     acting?.Set(VillagerActing.Mode.None);
                     waitProps.Drive(r.defendSpear, HunterProps.Pose.Upright);
-                    Walk(gather, dt);
                 }
                 else
                 {
@@ -202,7 +201,9 @@ namespace SeaSick.World
                 var w = list[i];
                 if (w == null || w.Dead) continue;
                 if (w.phase == RaidWalker.Phase.Fleeing || w.phase == RaidWalker.Phase.Recalled) continue;
-                if (!RaidWalker.InsideDefendPerimeter(camp, w.transform.position)) continue;
+                // **Cached, not a fresh A* per hand (2026-09-28, PERF).**
+                // See `RaidWalker.InsideDefendPerimeterCached`.
+                if (!w.InsideDefendPerimeterCached(camp)) continue;
                 float d = (w.transform.position - here).sqrMagnitude;
                 if (d < bestD) { bestD = d; best = w; }
             }

@@ -66,11 +66,10 @@ namespace SeaSick.World
             if (asleep || lyingByFire) WakeBody(r);   // safety: clock ran backwards on a dev scrub
 
             Vector3 spot = FireRingSpot(r);
-            if (!Near(spot, HideArriveMetres))
+            if (!Near(spot, HideArriveMetres) && !Walk(spot, dt))
             {
                 phase = Phase.Going;
                 acting?.Set(VillagerActing.Mode.None);
-                Walk(spot, dt);
                 return true;
             }
 
@@ -127,11 +126,10 @@ namespace SeaSick.World
 
             var hut = FindBedHut(r);
             Vector3 goal = hut != null ? WorkSpot(camp, hut) : camp.CampCentre;
-            if (!Near(goal, SleepArriveMetres))
+            if (!Near(goal, SleepArriveMetres) && !Walk(goal, dt))
             {
                 phase = Phase.Going;
                 acting?.Set(VillagerActing.Mode.None);
-                Walk(goal, dt);
                 return true;
             }
 

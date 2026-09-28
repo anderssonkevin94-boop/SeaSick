@@ -233,9 +233,36 @@ namespace SeaSick.Combat
             return map.HasRoute(camp.CampCentre, pos, World.CampPath.Walker.Raider);
         }
 
+        /// Seconds between re-asking `InsideDefendPerimeter` off the cache
+        /// below.
+        const float PerimeterCacheSeconds = 0.5f;
+        float perimeterCacheAt = -999f;
+        bool perimeterCache;
+
+        /// **Same answer, asked once per raider instead of once per
+        /// (raider, defending hand) pair every frame.** `World.CampWorker.
+        /// Defend.NearestRaider` used to call the static, full-A* version
+        /// above for every raider for every armed hand, every frame -- a
+        /// camp with three defenders and four raiders ran twelve searches a
+        /// frame for an answer (`pos`, the camp's own walls) that does not
+        /// depend on which hand is asking. `pos` does not need frame
+        /// accuracy either -- a raider crossing the perimeter line half a
+        /// second late reads no differently on screen.
+        public bool InsideDefendPerimeterCached(World.Outpost camp)
+        {
+            float now = Time.time;
+            if (now - perimeterCacheAt >= PerimeterCacheSeconds)
+            {
+                perimeterCacheAt = now;
+                perimeterCache = InsideDefendPerimeter(camp, transform.position);
+            }
+            return perimeterCache;
+        }
+
         // breaching state
         World.WallSegment breaking;   // the segment this body is working on, or null
         bool blocked;                 // last reach check said "no way in"
+        readonly List<Vector3> detourScratch = new List<Vector3>();
         float reachTimer;
         Vector3 reachedFor;           // the goal the last reach check was about
 
@@ -297,7 +324,7 @@ namespace SeaSick.Combat
                     if (string.IsNullOrEmpty(carrying) && !PickTarget()) { phase = Phase.Recalled; break; }
                     Vector3 goal = PileSpot(carrying);
                     if (Barred(goal, dt)) { TickBreach(dt); break; }
-                    if (Walk(goal, dt)) { phase = Phase.Taking; takeTimer = 0f; }
+                    if (Walk(goal, dt, giveUpIsArrived: false)) { phase = Phase.Taking; takeTimer = 0f; }
                     break;
                 }
 
@@ -323,7 +350,7 @@ namespace SeaSick.Combat
                     // his way back out rather than standing in the village
                     // holding a log forever.
                     if (Barred(site.shore, dt)) { TickBreach(dt); break; }
-                    if (Walk(site.shore, dt))
+                    if (Walk(site.shore, dt, giveUpIsArrived: false))
                     {
                         party.Delivered(carrying);
                         carrying = null;
@@ -429,7 +456,30 @@ namespace SeaSick.Combat
             {
                 reachTimer = 0f;
                 reachedFor = goal;
-                blocked = !map.HasRoute(transform.position, goal, World.CampPath.Walker.Raider);
+                Vector3 here = transform.position;
+                blocked = !map.HasRoute(here, goal, World.CampPath.Walker.Raider);
+
+                // **The detour, not just the dead end (2026-09-28).** Kevin:
+                // raiders "choose to run all the way left around the island
+                // instead of just the shore" -- a wall that does not fully
+                // ring the camp leaves `HasRoute` a way round, so the sealed
+                // check above says false and a man walks the long way
+                // rather than swinging an axe two metres from him. Only
+                // worth asking when the straight line is actually blocked
+                // (an open field has no detour to measure) and only a real
+                // route length, not the cheap reachability ping, tells a
+                // scenic walk from a short one.
+                if (!blocked && World.CampPath.Crosses(camp, here, goal, World.CampPath.Walker.Raider))
+                {
+                    detourScratch.Clear();
+                    if (map.Route(here, goal, World.CampPath.Walker.Raider, detourScratch) && detourScratch.Count > 0)
+                    {
+                        float routed = World.CampPath.RouteMetres(here, detourScratch);
+                        float flat = Vector3.Distance(here, goal);
+                        if (routed > flat * 2f + 30f) blocked = true;
+                    }
+                }
+
                 if (!blocked) StopBreaking();
             }
 
@@ -564,7 +614,15 @@ namespace SeaSick.Combat
         /// the climb has the body.
         readonly World.LadderClimb climb = new World.LadderClimb();
 
-        bool Walk(Vector3 to, float dt)
+        /// `giveUpIsArrived`: false for `ToPile`/`ToShip`, whose caller
+        /// treats a `true` return as "goods are right here" -- a cliff
+        /// refusal on the straight-line fallback is NOT that, and used to
+        /// read as arrived after `SlopeGiveUp`, letting a raider "steal"
+        /// from the foot of a cliff nowhere near the pile (2026-09-28).
+        /// `Fleeing`/`Recalled` keep the old `true` on purpose: those two
+        /// deliberately never breach, so the straight-line fallback giving
+        /// up as arrived is the only thing that guarantees they ever leave.
+        bool Walk(Vector3 to, float dt, bool giveUpIsArrived = true)
         {
             if (climb.Active) { climb.Tick(camp, transform, dt); return false; }
             Vector3 here = transform.position;
@@ -594,7 +652,19 @@ namespace SeaSick.Combat
             {
                 routeAge = Mathf.Max(routeAge, RePlanSeconds - 0.5f);
                 slopeStuck += dt;
-                if (dist < 4f || slopeStuck > 2f) { slopeStuck = 0f; ClearRoute(); return true; }
+                if (dist < 4f) { slopeStuck = 0f; ClearRoute(); return true; }
+                if (slopeStuck > 2f)
+                {
+                    slopeStuck = 0f;
+                    ClearRoute();
+                    if (giveUpIsArrived) return true;
+                    // Not really there -- force the next `Barred` check to
+                    // re-ask right away instead of standing at the cliff
+                    // foot with the books already thinking he arrived.
+                    blocked = true;
+                    reachTimer = ReachCheckSeconds;
+                    return false;
+                }
                 Face(leg, dt);
                 return false;
             }

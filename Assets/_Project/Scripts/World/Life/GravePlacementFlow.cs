@@ -68,6 +68,7 @@ namespace SeaSick.World.Life
         Vector3 ghostAt;
         float ghostYaw;
         bool ghostValid;
+        string ghostWhy = "";
 
         // --- the story-card stand-in ----------------------------------------
         GraveRecord storyShown;
@@ -92,27 +93,60 @@ namespace SeaSick.World.Life
 
         bool TryFindPending()
         {
-            Outpost bestCamp = null;
+            // Oldest pending grave first.
             GraveRecord best = null;
+            foreach (var g in Lives.Graveyard)
+            {
+                if (g == null || g.placed) continue;
+                if (best == null || g.diedDay < best.diedDay) best = g;
+            }
+            if (best == null) return false;
+
+            // **Which camp it goes to** (Kevin 2026-09-28, "i cant place the
+            // gravestones, it just shows up red wherever i press"): a death
+            // at sea has no camp, and the first WATCHED camp in the list used
+            // to win -- the empty home camp while he was looking at
+            // Island_2, so every tap on Island_2 was "past the shore" of the
+            // home island. Now: its own camp if it has one; else the watched
+            // camp with people nearest the ship (then any watched camp).
+            Outpost camp = null;
+            float bestD = float.MaxValue;
+            var ship = Object.FindAnyObjectByType<SeaSick.Ship.ShipMotor>();
+            Vector3 from = ship != null ? ship.transform.position
+                : (Camera.main != null ? Camera.main.transform.position : Vector3.zero);
             foreach (var o in Outpost.All)
             {
                 if (o == null || !o.Watched || o.Ledger == null) continue;
-                string label = o.Ledger.CampLabel;
-                foreach (var g in Lives.Graveyard)
-                {
-                    if (g == null || g.placed) continue;
-                    if (!(string.IsNullOrEmpty(g.camp) || g.camp == label)) continue;
-                    if (best == null || g.diedDay < best.diedDay)
-                    {
-                        best = g;
-                        bestCamp = o;
-                    }
-                }
+                if (!string.IsNullOrEmpty(best.camp) && best.camp != o.Ledger.CampLabel) continue;
+                float d = Vector3.Distance(from, o.CampCentre);
+                if (o.Ledger.hands == null || o.Ledger.hands.Count == 0) d += 100000f;
+                if (d < bestD) { bestD = d; camp = o; }
             }
-            if (best == null) return false;
-            campOutpost = bestCamp;
+            if (camp == null) return false;
+
+            // Never in the middle of a raid on that camp: the grave waits
+            // for the all clear (the Hide-all button must stay reachable).
+            var raid = SeaSick.Combat.RaidParty.Active;
+            if (raid != null && raid.Camp == camp) return false;
+
+            campOutpost = camp;
             grave = best;
             return true;
+        }
+
+        /// A sea grave follows the tap to whichever watched camp's island
+        /// was tapped.
+        void AdoptCampAt(Vector3 p)
+        {
+            if (grave == null || !string.IsNullOrEmpty(grave.camp)) return;
+            foreach (var o in Outpost.All)
+            {
+                if (o == null || o == campOutpost || !o.Watched || o.Island == null) continue;
+                if (Island.FlatDistance(p, o.Island.transform.position) > o.Island.RadiusToward(p)) continue;
+                campOutpost = o;
+                if (ghost != null) ghost.transform.SetParent(o.transform, true);
+                return;
+            }
         }
 
         void BeginPlacement()
@@ -173,7 +207,8 @@ namespace SeaSick.World.Life
 
         void Revalidate()
         {
-            ghostValid = campOutpost != null && campOutpost.CanPlace(GravePlan, ghostAt, ghostYaw, out _);
+            ghostWhy = "";
+            ghostValid = campOutpost != null && campOutpost.CanPlace(GravePlan, ghostAt, ghostYaw, out ghostWhy);
             if (ghostMat != null) ghostMat.SetColor("_BaseColor", ghostValid ? GhostValidColor : GhostInvalidColor);
         }
 
@@ -188,7 +223,10 @@ namespace SeaSick.World.Life
         {
             if (instance == null || instance.grave == null || Camera.main == null) return;
             if (GroundPick.FromScreen(Camera.main, screen, out Vector3 hit))
+            {
+                instance.AdoptCampAt(hit);
                 instance.MoveGhostTo(hit);
+            }
         }
 
         void MoveGhostTo(Vector3 p)
@@ -332,7 +370,9 @@ namespace SeaSick.World.Life
             var header = new Rect(8, h - 150, w - 16, 40);
             GUI.Box(header, "");
             GUI.Label(new Rect(header.x + 8, header.y + 4, header.width - 16, header.height - 8),
-                grave.name + " has died — choose a place for the grave");
+                ghostValid || string.IsNullOrEmpty(ghostWhy)
+                    ? grave.name + " has died — tap the ground to choose a place for the grave"
+                    : "Not here: " + ghostWhy);
 
             var confirm = new Rect(8, h - 100, w - 16, 64);
             bool was = GUI.enabled;

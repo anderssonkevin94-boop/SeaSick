@@ -29,8 +29,6 @@ namespace SeaSick.World
 
         /// A pace behind the rescuer, where a dragged body slides.
         const float DragTrail = 1.1f;
-        /// Close enough to the hut door / fire to lay him down.
-        const float DragArriveMetres = 0.6f;
 
         /// **This body is rescuing somebody**, at whatever stage: walking
         /// to him, or dragging him home. True = handled this frame (the
@@ -66,18 +64,16 @@ namespace SeaSick.World
             }
 
             // Dragging: walk together to the hut door (or the fire).
+            // **Routed, not a straight `MoveTowards` (2026-09-28).** Kevin
+            // saw pairs dragged straight through palisades, up cliffs and
+            // into buildings -- the same wall/slope guards every other
+            // errand gets (`CampPath`/`Walkability`) now carry the rescuer
+            // too, the downed body just riding a pace behind him.
             r.draggingNow = true;
             Vector3 goal = RescueGoal(out bool atHut);
             phase = Phase.Coming;
-            Vector3 pos = transform.position;
-            Vector3 flat = new Vector3(goal.x, pos.y, goal.z);
-            float dist = Vector3.Distance(new Vector3(pos.x, 0f, pos.z), new Vector3(flat.x, 0f, flat.z));
-            if (dist > DragArriveMetres)
+            if (!Walk(goal, dt))
             {
-                Vector3 next = Vector3.MoveTowards(pos, flat, Life.LifeTuning.DragSpeed * dt);
-                next.y = camp.GroundAt(next);
-                transform.position = next;
-                Face(flat - pos, dt);
                 ledger.BodyAt(r, transform.position);
                 DragDownedBodyAlong(down, ledger);
                 return true;

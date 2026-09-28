@@ -37,10 +37,10 @@ namespace SeaSick.Dev
         }
 
         const float RowH = 44f; // Apple's own minimum touch target.
-        /// Just below FeelLab's collapsed FEEL button (10, 10, 84 x 44):
-        /// Kevin, 2026-09-28, "the life button is directly on top of the
-        /// feel button so i cant press it".
-        const float Top = 10f + 44f + 8f;
+        /// The collapsed LIFE button sits to the RIGHT of FeelLab's FEEL
+        /// button (10, 10, 84 x 44): on top of it Kevin couldn't press FEEL,
+        /// and below it covered the ledger's ☰ button (both 2026-09-28).
+        const float Top = 10f;
         bool expanded;
         Vector2 scroll;
         GraveRecord lastDeath;
@@ -68,7 +68,7 @@ namespace SeaSick.Dev
 
             if (!expanded)
             {
-                if (GUI.Button(new Rect(10, Top, 84, RowH), "LIFE")) expanded = true;
+                if (GUI.Button(new Rect(10f + 84f + 8f, 10f, 84, RowH), "LIFE")) expanded = true;
                 GUI.matrix = old;
                 return;
             }
@@ -187,6 +187,9 @@ namespace SeaSick.Dev
                 GravePlacementFlow.ShowAllGraves();
 
             GUILayout.Space(8);
+            DrawWeather();
+
+            GUILayout.Space(8);
             DrawOverboard();
 
             GUILayout.Space(8);
@@ -260,6 +263,22 @@ namespace SeaSick.Dev
                     Banner.Show(name + " washed ashore on " + isle.gameObject.name);
                 }
             }
+        }
+
+        /// **"Weather you can see coming" (2026-09-28) dev helpers.** Force
+        /// the whole squall sequence -- birth banner, edge arrow, cloud
+        /// bank, sea state rise -- on demand instead of waiting out the
+        /// real ~240 s timer.
+        void DrawWeather()
+        {
+            GUILayout.Label("Weather (dev)");
+            var squalls = FindAnyObjectByType<SeaSick.Ocean.SquallDirector>();
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Squall ahead", GUILayout.Height(RowH)))
+                squalls?.DebugSpawnAhead();
+            if (GUILayout.Button("Clear weather", GUILayout.Height(RowH)))
+                squalls?.DebugClear();
+            GUILayout.EndHorizontal();
         }
 
         /// **Phase 5a.** Grip readout for every hand on the currently

@@ -21,11 +21,18 @@ namespace SeaSick.World
     {
         const float FetchArriveMetres = 1.0f;
         const float HideArriveMetres = 0.8f;
+        /// A store-bound spear can never stand out here forever (Kevin's
+        /// phone: a hand left holding a spear with nobody ticking him
+        /// again). `TickReturnSpear` books it in on its own the moment
+        /// `Walk`/`Near` call him arrived; this is only the backstop for
+        /// whatever they miss.
+        const float ReturnSpearGiveUpSeconds = 20f;
 
         /// Renderers switched off while this body is inside a hut -- not
         /// saved (nothing about an alarm role is), so a reload mid-raid just
         /// reads as "not hidden" until the next frame re-derives it.
         bool bodyHidden;
+        float returnSpearStuck;
 
         /// True = handled this frame.
         bool TickAlarmRole(OutpostHand r, float dt)
@@ -39,6 +46,7 @@ namespace SeaSick.World
                 // which for a hut is the door (docs: "hiders come out, body
                 // shown at the hut door").
                 if (bodyHidden) RevealBody(r);
+                returnSpearStuck = 0f;
                 return false;
             }
             if (camp == null || camp.Ledger == null)
@@ -67,13 +75,25 @@ namespace SeaSick.World
             var storeB = CampPiles.StoreBuildingOf(camp);
             Vector3 goal = storeB != null ? WorkSpot(camp, storeB) : camp.CampCentre;
 
-            if (!Near(goal, FetchArriveMetres))
+            // **A hand can never stand here forever.** `Walk` returning
+            // true (its own, looser arrival -- stall guard included) is
+            // arrived, same as `Near`; only asking `Near` left a hand who
+            // Walk gave up escaping toward stuck outside the tighter
+            // radius with nothing left to tick him (`ResetStall` holds him
+            // still once Walk itself is done trying).
+            if (!Near(goal, FetchArriveMetres) && !Walk(goal, dt))
             {
-                phase = Phase.Going;
-                acting?.Set(VillagerActing.Mode.None);
-                Walk(goal, dt);
-                return true;
+                returnSpearStuck += dt;
+                if (returnSpearStuck < ReturnSpearGiveUpSeconds)
+                {
+                    phase = Phase.Going;
+                    acting?.Set(VillagerActing.Mode.None);
+                    return true;
+                }
+                // Backstop: book it in from wherever he is stuck rather than
+                // hold a spear-carrier forever.
             }
+            returnSpearStuck = 0f;
 
             RaidAlarm.SettleReturn(camp, r);
             phase = Phase.Resting;
@@ -93,11 +113,10 @@ namespace SeaSick.World
             var storeB = CampPiles.StoreBuildingOf(camp);
             Vector3 goal = storeB != null ? WorkSpot(camp, storeB) : camp.CampCentre;
 
-            if (!Near(goal, FetchArriveMetres))
+            if (!Near(goal, FetchArriveMetres) && !Walk(goal, dt))
             {
                 phase = Phase.Going;
                 acting?.Set(VillagerActing.Mode.None);
-                Walk(goal, dt);
                 return true;
             }
 
@@ -126,11 +145,13 @@ namespace SeaSick.World
             Vector3 door = WorkSpot(camp, hut);
             if (!Near(door, HideArriveMetres))
             {
-                phase = Phase.Going;
-                acting?.Set(VillagerActing.Mode.None);
                 if (bodyHidden) RevealBody(r);   // still on his way in: seen walking
-                Walk(door, dt);
-                return true;
+                if (!Walk(door, dt))
+                {
+                    phase = Phase.Going;
+                    acting?.Set(VillagerActing.Mode.None);
+                    return true;
+                }
             }
 
             phase = Phase.Working;
@@ -148,11 +169,13 @@ namespace SeaSick.World
             Vector3 spot = CrouchSpot(r);
             if (!Near(spot, HideArriveMetres))
             {
-                phase = Phase.Going;
-                acting?.Set(VillagerActing.Mode.None);
                 if (bodyHidden) RevealBody(r);
-                Walk(spot, dt);
-                return true;
+                if (!Walk(spot, dt))
+                {
+                    phase = Phase.Going;
+                    acting?.Set(VillagerActing.Mode.None);
+                    return true;
+                }
             }
 
             phase = Phase.Working;
@@ -183,7 +206,19 @@ namespace SeaSick.World
             float spreadDeg = ((Mathf.Abs(hash) % 9) - 4) * 8f;   // -32..+32 degrees
             Vector3 dir = Quaternion.AngleAxis(spreadDeg, Vector3.up) * away;
 
-            Vector3 at = centre + dir * RaidFightTuning.CrouchDistance;
+            // **Reachable, not just clear ground (2026-09-28).** The radial
+            // push can land past a wall, over a cliff edge, or into the sea
+            // on an oddly-shaped camp -- `CampPath.Reachable` is the same
+            // "same walkable region as the fire" test the route planner
+            // itself trusts. Short of that, fall back toward the fire in
+            // steps rather than send him somewhere `Walk` can never land.
+            Vector3 at = centre;
+            for (float frac = 1f; frac >= 0.24f; frac -= 0.25f)
+            {
+                Vector3 candidate = centre + dir * (RaidFightTuning.CrouchDistance * frac);
+                candidate.y = camp.GroundAt(candidate);
+                if (CampPath.Reachable(camp, candidate)) { at = candidate; break; }
+            }
             at.y = camp.GroundAt(at);
             return at;
         }

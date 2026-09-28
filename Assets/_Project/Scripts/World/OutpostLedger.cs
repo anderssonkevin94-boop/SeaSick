@@ -3244,17 +3244,30 @@ namespace SeaSick.World
         public string StallReason(OutpostHand h)
         {
             if (h == null) return null;
-            // **Downed/dragging/recovering/pouting (death/rescue): not a
-            // stall, never flagged "stuck".** `Doing` already says what he
-            // is doing; this must not pile a warning on top of it.
-            if (h.downed || h.recovering || h.dragged || h.pouting
-                || !string.IsNullOrEmpty(h.rescuing)) return null;
+            // **Any state `Doing` already names ahead of the ordinary
+            // order: not a stall, never "hungry" (2026-09-28).** Used to be
+            // only downed/recovering/dragged/pouting/rescuing -- everything
+            // the phase-9/10 alarm and defence flow added since (fetching/
+            // returning a spear, hiding, defending, alarmed, on the tower)
+            // fell through to the pace check below, where `WorkFactor`
+            // reads `Busy` as a flat 0 and this printed "working slowly --
+            // hungry (0% pace)" on a hand who was doing exactly what he was
+            // told, in full view of the raid. `h.Busy` is the same list
+            // `WorkFactor` itself zeroes on, so the two can never disagree
+            // again.
+            if (h.Busy || h.raidLookout) return null;
             if (h.walkingIn) return "still on the way up from the ship";
             // The body's own reason first (walled off): the books say he is
             // working, the feet say he cannot get there. Display only.
             if (!string.IsNullOrEmpty(h.bodyBlocked)) return h.bodyBlocked;
             string cause = StallCause(h);
             if (cause != null) return cause;
+            // **Off the clock, 2026-09-28.** `WorkFactor` already reads
+            // `DayNightWorkScale` down to 0 for evening/sleep (unless
+            // `orderOverride` keeps him going through the night) -- that is
+            // not hunger either, and `Doing` already says "at the fire" /
+            // "asleep ...", so this must not relabel it.
+            if (!h.orderOverride && !Life.CampLifeTuning.IsAwakeHour(TimeOfDay.Hour)) return null;
             // **Slow, and why, 2026-09-24** (Kevin: plank making "far too
             // slow" -- the hand should SAY when he is dragging). Below
             // `SlowWorkShown` the line names the pace his current job is paid

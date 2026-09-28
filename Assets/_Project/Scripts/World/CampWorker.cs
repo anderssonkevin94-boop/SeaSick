@@ -2578,6 +2578,18 @@ namespace SeaSick.World
         /// between asks: a gate the player puts in is found that quickly.
         const float NoRouteBackoff = 3f;
 
+        /// **Give up on a walled-off errand (2026-09-28).** Kevin: a hand
+        /// with no route and a wall across the straight line used to wait
+        /// and re-ask forever when no gate exists at all -- stood there
+        /// "working" on the books while the sheet said "needs a gate" for
+        /// good. After this many failed asks in a row for the SAME
+        /// destination, the errand is dropped back to idle instead (the
+        /// idle ladder re-plans him onto something reachable); `StallReason`
+        /// still shows "walled off" while he stands there and while a fresh
+        /// order is asking for the same blocked spot again.
+        const int WalledAsksBeforeGiveUp = 3;
+        int walledAsks;
+
         /// Metres from a target a hand stops at when the ground up to it is
         /// too steep: the tree on the bank is worked from its foot.
         /// (`CampPath.ReachCells` is the same distance for target picks.)
@@ -2594,6 +2606,7 @@ namespace SeaSick.World
             routeAt = 0;
             hasRoute = false;
             routeAge = 0f;
+            walledAsks = 0;
             if (row != null) row.bodyBlocked = null;
         }
 
@@ -2622,6 +2635,7 @@ namespace SeaSick.World
             if (stale && CampPath.Budget())
             {
                 var map = CampPath.For(camp);
+                if (moved) walledAsks = 0;
                 routeAge = 0f;
                 routeFor = to;
                 routeAt = 0;
@@ -2644,8 +2658,21 @@ namespace SeaSick.World
                     // search in a closed ring has just flooded the whole
                     // ring (up to `MaxExpansions`), and a camp of hands
                     // doing that every 1.2 s is a phone's frame budget.
-                    if (straightCrosses) routeAge = -NoRouteBackoff;
+                    if (straightCrosses)
+                    {
+                        routeAge = -NoRouteBackoff;
+                        walledAsks++;
+                        if (walledAsks >= WalledAsksBeforeGiveUp && row != null)
+                        {
+                            row.order = OutpostOrder.Idle;
+                            row.target = "";
+                            row.bodyBlocked = "walled off — no way round, needs a gate";
+                            walledAsks = 0;
+                        }
+                    }
+                    else walledAsks = 0;
                 }
+                else walledAsks = 0;
             }
 
             // No route (yet, or at all): the old straight line -- but never
