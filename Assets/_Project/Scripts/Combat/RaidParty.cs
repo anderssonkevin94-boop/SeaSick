@@ -33,7 +33,10 @@ namespace SeaSick.Combat
             {
                 int n = 0;
                 for (int i = 0; i < walkers.Count; i++)
-                    if (walkers[i] != null) n++;
+                    // **Phase 9:** a killed raider leaves the live count
+                    // immediately, even though his body lingers a few
+                    // seconds to fade (`RaidWalker.Dead`).
+                    if (walkers[i] != null && !walkers[i].Dead) n++;
                 return n;
             }
         }
@@ -42,6 +45,37 @@ namespace SeaSick.Combat
         float elapsed;
         bool sunk;    // told every walker to flee already
         bool ended;   // Recall's outcome already reported
+
+        /// The live raiders (some may be `Dead`, fading, on their way out
+        /// of `walkers` on their own) -- `World.CampWorker.TickDefend` reads
+        /// this to find something to fight. Read-only: only this class
+        /// spawns or removes a walker.
+        public IReadOnlyList<RaidWalker> Walkers => walkers;
+
+        /// How many bodies actually landed (before any died) -- the morale
+        /// threshold (docs: "half the party is down") is measured against
+        /// this, not the live `Ashore` count, so a corpse still fading
+        /// counts toward it exactly once.
+        int landedCount;
+
+        /// Raiders killed this landing (death/rescue phase 9). Read by
+        /// nothing outside this file; drives `MoraleCheck`.
+        int killedCount;
+
+        /// **Half the party is down.** Set once; every remaining raider is
+        /// told to `Flee` the moment it flips, and `RaidBanner` reads it to
+        /// swap its usual scoreline for "the raiders are running".
+        public bool MoraleBroken { get; private set; }
+
+        /// Names of every hand who defended at all during this landing,
+        /// win or lose -- logged once each as `DefendedCamp` when the raid
+        /// ends (`Recall`). `World.CampWorker.TickDefend` adds a name the
+        /// first frame that hand starts fighting.
+        readonly HashSet<string> defendersThisRaid = new HashSet<string>();
+        public void MarkDefender(string handName)
+        {
+            if (!string.IsNullOrEmpty(handName)) defendersThisRaid.Add(handName);
+        }
 
         /// Called once by `EnemyShip` the frame it grounds. Spawns the party
         /// spaced out along the beach so three bodies don't stack on one
@@ -97,8 +131,33 @@ namespace SeaSick.Combat
                 party.walkers.Add(walker);
             }
 
+            party.landedCount = party.walkers.Count;
+            // **Phase 9 safety net:** a raid-fight tally is never saved
+            // (`OutpostHand.raidHitsTaken`), so it should already read 0 --
+            // this only guards a hand who was mid-tally when the LAST raid
+            // ended some other way (ship sunk, camp went unwatched) than a
+            // clean `Recall`.
+            if (party.Camp.Ledger?.hands != null)
+                foreach (var h in party.Camp.Ledger.hands)
+                    if (h != null) h.raidHitsTaken = 0;
+
             Active = party;
             return party;
+        }
+
+        /// **A raider fell** (`RaidWalker.Killed`, phase 9). Counts toward
+        /// morale; at half the landed party down, every raider still
+        /// standing runs for the ship the same way a sunk ship sends them
+        /// (`Flee`, never `Recall` -- this was NOT a clean withdrawal).
+        public void RaiderKilled()
+        {
+            killedCount++;
+            if (MoraleBroken || landedCount <= 0) return;
+            if (killedCount >= Mathf.CeilToInt(landedCount * 0.5f))
+            {
+                MoraleBroken = true;
+                for (int i = 0; i < walkers.Count; i++) walkers[i]?.Flee();
+            }
         }
 
         // --- the wall the party is breaking ------------------------------------
@@ -195,10 +254,26 @@ namespace SeaSick.Combat
                 foreach (var h in Camp.Ledger.hands)
                     if (h != null)
                         World.Life.Lives.Log(h.name, World.Life.LifeEvents.SurvivedRaid, Camp.Ledger.CampLabel);
-            RaidDirector.ReportResult(Camp, Stolen > 0
-                ? $"the raiders got away with {Stolen}"
-                : "the raiders fled with nothing");
+            RaidDirector.ReportResult(Camp, MoraleBroken
+                ? "the raiders broke and ran"
+                : Stolen > 0
+                    ? $"the raiders got away with {Stolen}"
+                    : "the raiders fled with nothing");
+            LogDefenders();
             for (int i = 0; i < walkers.Count; i++) walkers[i]?.Recall();
+        }
+
+        /// **Phase 9:** every hand who fought at all this landing gets
+        /// `DefendedCamp` once, however the raid ended (a clean withdrawal
+        /// via `Recall`, or the ship sinking below). Guarded so a raid that
+        /// somehow touches both endings only logs once.
+        bool defendersLogged;
+        void LogDefenders()
+        {
+            if (defendersLogged || Camp?.Ledger == null) return;
+            defendersLogged = true;
+            foreach (var name in defendersThisRaid)
+                World.Life.Lives.Log(name, World.Life.LifeEvents.DefendedCamp, Camp.Ledger.CampLabel);
         }
 
         void Update()
@@ -214,11 +289,12 @@ namespace SeaSick.Combat
                     {
                         ended = true;
                         RaidDirector.ReportResult(Camp, "you sank them — the loot is back on the pile");
+                        LogDefenders();
                     }
                     for (int i = 0; i < walkers.Count; i++) walkers[i]?.Flee();
                 }
             }
-            else if (Stolen >= MaxLoot || elapsed > MaxSeconds)
+            else if (Stolen >= MaxLoot || elapsed > MaxSeconds || MoraleBroken)
             {
                 Ship.EndRaid();   // calls back into Recall()
             }

@@ -257,7 +257,33 @@ namespace SeaSick.World
         /// dragged, off rescuing somebody (phase 2), or pouting at the fire
         /// (phase 4) -- no new orders, no productive work, same as `downed`
         /// alone was in phase 1.
-        public bool Busy => downed || recovering || dragged || pouting || !string.IsNullOrEmpty(rescuing);
+        public bool Busy => downed || recovering || dragged || pouting || defending || !string.IsNullOrEmpty(rescuing);
+
+        // --- village defence (death/rescue phase 9, 2026-09-28) -------------
+        //
+        // docs/PLAN-DEATH-RESCUE.md, "Village defence in raids": an armed
+        // hand near the camp during a live raid drops what he's carrying
+        // and fights. Not saved -- a raid never resumes mid-fight on load
+        // (`RaidParty` itself is not saved either), so a reload always
+        // reads as "nobody is defending yet", which is exactly right.
+
+        /// **True while this hand is fighting** (walking to a raider or
+        /// jabbing one). Counted in `Busy` so the ordinary dispatch and
+        /// `DispatchRescuers` both leave him alone. Set/cleared by
+        /// `CampWorker.TickDefend`.
+        [System.NonSerialized] public bool defending;
+        /// The spear kind he picked up to fight with, snapshotted the
+        /// moment he starts defending -- for the row text (`Doing`) only.
+        [System.NonSerialized] public string defendSpear;
+        /// **Dev-only arm flag** (`LifeDevPanel`'s "Arm" button): makes a
+        /// hand an eligible defender without a real hunt or the phase-10
+        /// alarm/arming flow. A hunter already out (`huntArmed`) is
+        /// eligible the same way -- see `CampWorker.TickDefend`.
+        [System.NonSerialized] public bool armedDefender;
+        /// Hits taken THIS raid, reset by `Down` and at the next raid's
+        /// start (`RaidParty.Begin`) -- never saved, a raid is over the
+        /// moment nobody is watching.
+        [System.NonSerialized] public int raidHitsTaken;
 
         public TripLeg Leg => (TripLeg)tripLeg;
 
@@ -301,6 +327,8 @@ namespace SeaSick.World
                 if (!string.IsNullOrEmpty(rescuing))
                     return (draggingNow ? "dragging " : "running to ") + rescuing;
                 if (pouting) return "pouting at the fire · " + Mmss(poutLeft);
+                if (defending)
+                    return "defending, " + (defendSpear == Res.IronSpear ? "iron spear" : "stone spear");
                 switch (order)
                 {
                     case OutpostOrder.Gather:

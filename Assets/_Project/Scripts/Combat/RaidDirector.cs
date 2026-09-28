@@ -62,6 +62,19 @@ namespace SeaSick.Combat
             if (camp != null) states.Remove(camp);
         }
 
+        /// **Dev-only** (`LifeDevPanel`, phase 9): skip the 25-unwatched-
+        /// seconds clock and let the very next `Consider` tick launch a
+        /// raid, same as if the camp had been watched that long already.
+        /// Still needs an idle ship on the island and something worth
+        /// taking -- `Consider`'s own gates are untouched.
+        public static void ForceRaid(World.Outpost camp)
+        {
+            if (camp == null) return;
+            var st = StateFor(camp);
+            st.watchedFor = SecondsToRaid;
+            st.raidedThisVisit = false;
+        }
+
         /// The raider currently beaching or beached at this camp, or null.
         public static EnemyShip Incoming(World.Outpost camp)
         {

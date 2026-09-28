@@ -159,6 +159,20 @@ namespace SeaSick.World.Life
                         "Stood through " + (e.count > 1 ? NumberWord(e.count) + " raids on " + camp : "a raid on " + camp) + " and walked away.",
                         "Was still standing when the raiders left " + camp + ".",
                     });
+                case LifeEvents.KilledRaider:
+                    return Pick(h, salt, new[]
+                    {
+                        "Put " + (e.count > 1 ? NumberWord(e.count) + " raiders" : "a raider") + " in the sand at " + camp + ".",
+                        "Sent " + CountWord(e.count) + " raider" + (e.count > 1 ? "s" : "") + " back to the boats at " + camp + ", the hard way.",
+                        "Was the one the raiders learned to go around, at " + camp + ".",
+                    });
+                case LifeEvents.DefendedCamp:
+                    return Pick(h, salt, new[]
+                    {
+                        "Stood at the gate with a stone spear when the boats came.",
+                        "Turned out for every raid on " + camp + " that ever came, spear in hand.",
+                        "Held the line at " + camp + " more than once, and it held.",
+                    });
                 case LifeEvents.HuntingKill:
                     return Pick(h, salt, new[]
                     {

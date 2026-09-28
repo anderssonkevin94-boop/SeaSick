@@ -37,6 +37,14 @@ namespace SeaSick.World.Life
         /// **Phase 7.** Landed at a camp other than `LifeRecord.homeCamp`
         /// (`Outpost.Station`) -- `other` carries the camp they came from.
         public const string Ferried = "Ferried";
+        /// **Phase 9 (village defence).** Logged on a defender per raider
+        /// he kills -- repeats collapse the same way any other event does,
+        /// so "killed 3 raiders" reads as one row with count 3.
+        public const string KilledRaider = "KilledRaider";
+        /// **Phase 9.** Logged once per raid on every hand who defended at
+        /// all during it (`RaidParty.Recall`), whether he landed a kill or
+        /// not.
+        public const string DefendedCamp = "DefendedCamp";
 
         // --- death causes ----------------------------------------------------
         public const string KilledInRaid = "KilledInRaid";

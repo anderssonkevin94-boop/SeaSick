@@ -4,6 +4,7 @@ using SeaSick.World.Life;
 using SeaSick.Crew;
 using SeaSick.Ship;
 using SeaSick.Ship.Overboard;
+using SeaSick.Combat;
 
 namespace SeaSick.Dev
 {
@@ -86,6 +87,13 @@ namespace SeaSick.Dev
             }
             else
             {
+                // **Phase 9 (village defence):** skip the 25 s unwatched
+                // clock and force the next raid right now, same gates
+                // (`RaidDirector.Consider`) otherwise -- an idle ship and
+                // something worth taking.
+                if (GUILayout.Button("Start raid now", GUILayout.Height(RowH)))
+                    RaidDirector.ForceRaid(camp);
+
                 scroll = GUILayout.BeginScrollView(scroll);
                 foreach (var hnd in camp.Ledger.hands)
                 {
@@ -122,6 +130,15 @@ namespace SeaSick.Dev
                     if (GUILayout.Button("Kill", GUILayout.Height(RowH)))
                         camp.Ledger.Die(hnd, string.IsNullOrEmpty(hnd.downedCause)
                             ? LifeEvents.KilledInRaid : hnd.downedCause);
+                    // **Phase 9 (village defence):** flag him an eligible
+                    // defender without a real hunt or the phase-10 alarm --
+                    // `CampWorker.TickDefend` picks him up the next frame a
+                    // raid is live and a raider is in range. Always the
+                    // stone spear for now: there is no per-hand armoury,
+                    // just the "what's in the pile" reading real hunters
+                    // use (`OutpostLedger.SpearInHand`).
+                    if (!hnd.armedDefender && GUILayout.Button("Arm (stone spear)", GUILayout.Height(RowH)))
+                        hnd.armedDefender = true;
                     GUILayout.EndHorizontal();
                 }
                 GUILayout.EndScrollView();

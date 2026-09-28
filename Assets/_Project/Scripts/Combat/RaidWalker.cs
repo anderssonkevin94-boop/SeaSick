@@ -23,7 +23,12 @@ namespace SeaSick.Combat
     /// when he stops existing is exactly what the ledger already paid out.
     public class RaidWalker : MonoBehaviour
     {
-        public enum Phase { ToPile, Taking, ToShip, Fleeing, Recalled }
+        /// **`Fighting`** (phase 9): a raider who has taken a hit stops
+        /// stealing and goes after the nearest defender instead. **`Dead`**:
+        /// hp ran out -- lying flat, fading, no longer a threat or a thief,
+        /// on his way out of `RaidParty.Walkers` (his GameObject lingers a
+        /// few seconds for the fade before `Destroy`).
+        public enum Phase { ToPile, Taking, ToShip, Fleeing, Recalled, Fighting, Dead }
 
         // Set by RaidParty right after spawning, before this body is active.
         public RaidParty party;
@@ -80,6 +85,149 @@ namespace SeaSick.Combat
         string carrying;      // resource on the shoulder, or the one being taken
         float takeTimer;
         float fleeTimer;
+
+        // --- village defence (death/rescue phase 9, 2026-09-28) ---------------
+
+        float hp = -1f;   // lazily set from RaidFightTuning.RaiderHp on first hit
+        float HpMax => RaidFightTuning.RaiderHp;
+
+        /// The hand this raider is currently fighting back against, or
+        /// null. Set by `TakeHit`; re-picked in `TickFight` if he is gone.
+        World.OutpostHand fightTarget;
+        float hitClock;
+        float deadTimer;
+
+        public bool Dead => phase == Phase.Dead;
+
+        /// **A defender's jab connects.** Below zero hp he falls; otherwise
+        /// he stops whatever he was doing (including breaching) and goes
+        /// after `attacker`. Called by `World.CampWorker.TickDefend`.
+        public void TakeHit(float damage, World.OutpostHand attacker)
+        {
+            if (Dead || phase == Phase.Fleeing || phase == Phase.Recalled) return;
+            if (hp < 0f) hp = HpMax;
+            hp -= Mathf.Max(0f, damage);
+            fightTarget = attacker;
+            if (hp <= 0f) { Killed(); return; }
+            if (phase != Phase.Fighting)
+            {
+                StopBreaking();
+                phase = Phase.Fighting;
+            }
+        }
+
+        /// **hp reaches zero.** Drops whatever loot is on his shoulder where
+        /// he falls (docs: "a killed raider drops his loot where he
+        /// falls" -- gone already if he had already delivered it to the
+        /// ship, same as `Flee`'s own drop), tells the party (morale), and
+        /// lies flat to fade over `RaidFightTuning.CorpseFadeSeconds`.
+        void Killed()
+        {
+            if (!string.IsNullOrEmpty(carrying) && camp != null && camp.Ledger != null)
+                camp.Ledger.DropRaiderLoot(carrying, 1, transform.position);
+            carrying = null;
+            StopBreaking();
+            ClearRoute();
+            phase = Phase.Dead;
+            deadTimer = 0f;
+            transform.rotation = Quaternion.Euler(0f, transform.eulerAngles.y, 90f);
+            Act(World.VillagerActing.Mode.None, null);
+            party?.RaiderKilled();
+        }
+
+        /// **The fade/sink** (phase 9): flat for the first half of
+        /// `corpseFadeSeconds`, then a slow sink into the ground for the
+        /// rest, then gone. No shader work -- a sink reads fine at this
+        /// scale and costs nothing new.
+        void TickDead(float dt)
+        {
+            deadTimer += dt;
+            float fade = Mathf.Max(0.1f, RaidFightTuning.CorpseFadeSeconds);
+            if (deadTimer > fade * 0.5f)
+            {
+                Vector3 p = transform.position;
+                p.y -= dt * 0.5f;
+                transform.position = p;
+            }
+            if (deadTimer >= fade) Destroy(gameObject);
+        }
+
+        /// **Fighting back.** Walks to `fightTarget`, strikes every
+        /// `raiderHitSeconds` once in reach. A target who is downed, gone
+        /// from the roster, or no longer defending is dropped in favour of
+        /// the nearest hand still defending; none left, and he goes back to
+        /// stealing (docs: "an unattacked raider keeps stealing" -- once
+        /// nobody is fighting him either, there is nothing left to react
+        /// to).
+        void TickFight(float dt)
+        {
+            if (!ValidTarget(fightTarget)) fightTarget = NearestDefender();
+            if (fightTarget == null) { phase = Phase.ToPile; return; }
+
+            Vector3 at = camp.Ledger.HandAt(fightTarget);
+            Vector3 here = transform.position;
+            float dist = Vector3.Distance(here, at);
+            float reach = RaidFightTuning.RaiderReach;
+
+            if (dist > reach)
+            {
+                Act(World.VillagerActing.Mode.None, null);
+                Walk(at, dt);
+                return;
+            }
+
+            Face(at - here, dt);
+            Act(World.VillagerActing.Mode.Hammer, null);   // a swing, same idiom as breaching
+            hitClock += dt;
+            if (hitClock >= RaidFightTuning.RaiderHitSeconds)
+            {
+                hitClock = 0f;
+                camp.Ledger.HitDefender(fightTarget, RaidFightTuning.HitsToDown);
+            }
+        }
+
+        bool ValidTarget(World.OutpostHand h)
+        {
+            if (h == null || camp?.Ledger?.hands == null || !camp.Ledger.hands.Contains(h)) return false;
+            return h.defending && !h.downed;
+        }
+
+        /// The nearest hand currently defending this camp, or null.
+        World.OutpostHand NearestDefender()
+        {
+            var hands = camp?.Ledger?.hands;
+            if (hands == null) return null;
+            World.OutpostHand best = null;
+            float bestD = float.MaxValue;
+            Vector3 here = transform.position;
+            foreach (var h in hands)
+            {
+                if (h == null || !h.defending || h.downed) continue;
+                float d = Vector3.SqrMagnitude(camp.Ledger.HandAt(h) - here);
+                if (d < bestD) { bestD = d; best = h; }
+            }
+            return best;
+        }
+
+        /// **The wall/enclosure test the raid code already has** (D2/D3:
+        /// walls and shut gates are solid to a raider). If routing from the
+        /// fire to `pos`, respecting that solidity, succeeds, `pos` is on
+        /// the inside -- either there is nothing barring it (no walls) or he
+        /// has already breached through. No walls at all: a plain radius
+        /// around the fire (docs: "~30 m of the fire"). Used both by
+        /// `World.CampWorker.TickDefend` (never leave this to chase) and
+        /// nowhere else.
+        public static bool InsideDefendPerimeter(World.Outpost camp, Vector3 pos)
+        {
+            if (camp == null) return false;
+            var walls = camp.Walls;
+            if (walls == null || walls.Count == 0)
+                return Vector3.Distance(camp.CampCentre, pos) <= RaidFightTuning.DefendRadiusNoWalls;
+
+            var map = World.CampPath.For(camp);
+            if (map == null) return Vector3.Distance(camp.CampCentre, pos) <= RaidFightTuning.DefendRadiusNoWalls;
+            return map.HasRoute(camp.CampCentre, pos, World.CampPath.Walker.Raider);
+        }
 
         // breaching state
         World.WallSegment breaking;   // the segment this body is working on, or null
@@ -198,6 +346,14 @@ namespace SeaSick.Combat
                         if (!string.IsNullOrEmpty(carrying)) party.Delivered(carrying);
                         Destroy(gameObject);
                     }
+                    break;
+
+                case Phase.Fighting:
+                    TickFight(dt);
+                    break;
+
+                case Phase.Dead:
+                    TickDead(dt);
                     break;
             }
         }

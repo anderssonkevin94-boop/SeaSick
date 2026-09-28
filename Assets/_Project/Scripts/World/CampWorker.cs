@@ -618,6 +618,11 @@ namespace SeaSick.World
             // same reasoning as the rescue check just above.
             if (TickPout(r, dt)) return;
 
+            // **Village defence (death/rescue phase 9, 2026-09-28)**, same
+            // priority as the rescue/pout checks just above: an armed hand
+            // fighting off a live raid is not doing his ordinary job either.
+            if (TickDefend(r, dt)) return;
+
             // A new order means a new errand. Without this a hand told to go
             // to the mill finishes walking to the tree first.
             //

@@ -31,7 +31,13 @@ namespace SeaSick.UI
             else if (SeaSick.Combat.RaidParty.Active != null && SeaSick.Combat.RaidParty.Active.Camp == outpost)
             {
                 var party = SeaSick.Combat.RaidParty.Active;
-                text = $"RAID — {party.Ashore} ashore · {party.Stolen} taken · sink the ship";
+                // **Phase 9 (village defence):** half the landing party
+                // down and the rest are running for their boat -- a
+                // different line than the ordinary scoreline while that
+                // lasts.
+                text = party.MoraleBroken
+                    ? $"the raiders are running — {party.Ashore} still on the sand"
+                    : $"RAID — {party.Ashore} ashore · {party.Stolen} taken · sink the ship";
                 phase = 2;
             }
             else

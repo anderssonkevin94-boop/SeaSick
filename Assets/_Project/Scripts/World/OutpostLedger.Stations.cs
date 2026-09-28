@@ -945,6 +945,11 @@ namespace SeaSick.World
             ClearHaul(h);
         }
 
+        /// **Public door onto `DropCarriedLoad`** for `CampWorker.TickDefend`
+        /// (phase 9): a hand pulled into a fight drops whatever he was
+        /// carrying exactly the way a hand pulled into a rescue does.
+        public void DropCarriedLoadNow(OutpostHand h) => DropCarriedLoad(h);
+
         /// Knock this hand down. No-op if he already is, or is not on the
         /// roster. **Drops whatever he had picked up where he stands**
         /// (phase 2) -- a planned-but-not-picked load is just cancelled.
@@ -970,8 +975,39 @@ namespace SeaSick.World
             // never finished the pout he was on.
             h.pouting = false;
             h.poutLeft = 0f;
+            // **Village defence (phase 9, 2026-09-28):** a hand downed
+            // fighting is not defending any more, and his tally against
+            // `hitsToDown` starts fresh if he is ever downed again.
+            h.defending = false;
+            h.defendSpear = null;
+            h.raidHitsTaken = 0;
             Life.Lives.Log(h.name, Life.LifeEvents.Downed, CampLabel);
             return true;
+        }
+
+        /// **A raider's jab connects** (phase 9). Counts a hit toward
+        /// `hitsToDown` (the raid-fight tuning, owned by `Combat` and
+        /// handed in rather than read here -- this file never references
+        /// `SeaSick.Combat`) and downs him at the limit, cause "Raid" --
+        /// `Die` maps that to `LifeEvents.KilledInRaid` if the downed timer
+        /// runs out. No-op on a hand already down or off the roster.
+        public bool HitDefender(OutpostHand h, int hitsToDown)
+        {
+            if (h == null || hands == null || !hands.Contains(h) || h.downed) return false;
+            h.raidHitsTaken++;
+            if (h.raidHitsTaken < Mathf.Max(1, hitsToDown)) return false;
+            Down(h, "Raid");
+            return true;
+        }
+
+        /// **A killed raider's loot, dropped where he fell** (phase 9) --
+        /// the same `GroundLoad` pile a dropped hand's load becomes
+        /// (`DropCarriedLoad`), so an idle hauler collects it exactly the
+        /// same way. `AddGroundLoad` itself is private; `Combat.RaidWalker`
+        /// is the only caller outside this file.
+        public void DropRaiderLoot(string res, int count, Vector3 at)
+        {
+            if (count > 0 && !string.IsNullOrEmpty(res)) AddGroundLoad(res, count, at);
         }
 
         /// Bring a downed hand back (phase 2/dev use -- nothing in phase 1
@@ -1008,6 +1044,10 @@ namespace SeaSick.World
             if (h == null || hands == null || !hands.Contains(h)) return;
             string label = CampLabel;
             if (string.IsNullOrEmpty(cause)) cause = h.downedCause;
+            // **Phase 9:** `Down`'s raid cause is the plain string "Raid";
+            // the story/grave cause needs the `LifeEvents` constant so
+            // `LifeStory.CauseLines` recognises it.
+            if (cause == "Raid") cause = Life.LifeEvents.KilledInRaid;
             var record = Lives.Record(h.name);
             int bornDay = record != null ? record.bornDay : -1;
             // **Phase 3's first-pass grave spot.** Captured before
