@@ -129,7 +129,7 @@ namespace SeaSick.World.Life
         [Tooltip("Real seconds under way (calm-ish water) before the scripted first man-overboard fires.")]
         public float firstTimeSailSeconds = 90f;
         [Tooltip("Roughness01 ceiling for \"calm-ish\" while waiting for the scripted first time.")]
-        public float firstTimeMaxRoughness = 0.35f;
+        public float firstTimeMaxRoughness = 0.45f;
         [Tooltip("Swim timer for the scripted first swimmer -- long, so Kevin learns the rescue before a storm tests him.")]
         public float firstTimeSwimSeconds = 240f;
 
@@ -205,7 +205,7 @@ namespace SeaSick.World.Life
         public static float JollyBoatRowSpeed => D != null ? D.jollyBoatRowSpeed : 2.5f;
         public static int JollyBoatMinMiddleSections => D != null ? D.jollyBoatMinMiddleSections : 2;
         public static float FirstTimeSailSeconds => D != null ? D.firstTimeSailSeconds : 90f;
-        public static float FirstTimeMaxRoughness => D != null ? D.firstTimeMaxRoughness : 0.35f;
+        public static float FirstTimeMaxRoughness => D != null ? D.firstTimeMaxRoughness : 0.45f;
         public static float FirstTimeSwimSeconds => D != null ? D.firstTimeSwimSeconds : 240f;
     }
 }

@@ -28,14 +28,23 @@ namespace SeaSick.Ship.Overboard
         public static void Tick(CrewRoster roster, AnchorController anchor, float dt)
         {
             if (Done || triggered) return;
-            if (!Sailing.IsLive(anchor)) { sailingSeconds = 0f; return; }
+            // Total time under way, NOT reset by a rough patch or an anchor
+            // stop: Kevin, 2026-09-28, *"i sailed around for over 90 seconds
+            // and no one fell off"* -- ordinary sailing sits at roughness
+            // 0.2-0.37 and every crossing of the calm line used to zero the
+            // clock, so it never got there. Now the clock only counts, and
+            // the calm check just picks the MOMENT once the time is served.
+            if (!Sailing.IsLive(anchor)) return;
+            sailingSeconds += dt;
+            if (sailingSeconds < OverboardTuning.FirstTimeSailSeconds) return;
 
             var meter = roster != null ? roster.GetComponent<SmoothnessMeter>() : null;
             float rough = meter != null ? meter.Roughness01 : 0f;
-            if (rough > OverboardTuning.FirstTimeMaxRoughness) { sailingSeconds = 0f; return; }
-
-            sailingSeconds += dt;
-            if (sailingSeconds < OverboardTuning.FirstTimeSailSeconds) return;
+            // Wait for a calm moment, but not forever: a minute past the
+            // mark it happens anyway (the long first-time timer makes up
+            // for the rougher water).
+            if (rough > OverboardTuning.FirstTimeMaxRoughness
+                && sailingSeconds < OverboardTuning.FirstTimeSailSeconds + 60f) return;
 
             var all = roster != null ? roster.All : System.Array.Empty<CrewAgent>();
             CrewAgent worst = null;
