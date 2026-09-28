@@ -54,6 +54,12 @@ namespace SeaSick.UI
             Map,
             Wind,
             Ship,
+            /// The hold readout chip + its backpack panel (2026-09-28, Kevin:
+            /// "I need some way of easily seeing my resources while I'm at
+            /// sea"). Right after `Ship` so it stacks directly under the
+            /// hull/cargo panel rather than under the minimap or the perf
+            /// counter.
+            Hold,
             Perf,
             /// The island's crew and their orders, while she lies at a camp.
             /// **In the column, not at a rect of its own** -- the first
@@ -108,7 +114,7 @@ namespace SeaSick.UI
         static Column ColumnOf(Slot s) => s switch
         {
             Slot.Crew => Column.TopLeft,
-            Slot.Map or Slot.Wind or Slot.Ship or Slot.Perf
+            Slot.Map or Slot.Wind or Slot.Ship or Slot.Hold or Slot.Perf
                 or Slot.CampCrew => Column.TopRight,
             Slot.RailSettings or Slot.RailYard or Slot.RailHome or Slot.RailPause => Column.Rail,
             Slot.Nav or Slot.Broadside => Column.BottomLeft,
