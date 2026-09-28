@@ -521,8 +521,15 @@ namespace SeaSick.World
         public static void Tint(GameObject ghost, Color colour, float alpha)
         {
             var mat = GhostMat(colour, alpha);
+            // Every slot, not just the first: the level 1 wall's pieces carry
+            // up to four materials (wood, rope, pegs, peeled tips).
             foreach (var r in ghost.GetComponentsInChildren<MeshRenderer>(true))
-                r.sharedMaterial = mat;
+            {
+                var slots = r.sharedMaterials;
+                if (slots.Length <= 1) { r.sharedMaterial = mat; continue; }
+                for (int i = 0; i < slots.Length; i++) slots[i] = mat;
+                r.sharedMaterials = slots;
+            }
         }
 
         static readonly Dictionary<int, Material> ghostMats = new Dictionary<int, Material>();

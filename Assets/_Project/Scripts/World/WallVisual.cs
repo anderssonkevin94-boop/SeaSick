@@ -3,19 +3,24 @@ using UnityEngine;
 
 namespace SeaSick.World
 {
-    /// **Astra's palisade kit on a wall segment (2026-09-23).**
+    /// **The palisade kit on a wall segment (2026-09-23).**
     ///
-    /// The kit (`art-staging/palisade-astra-lvl1-v2`, imported to
-    /// `Art/AstraPlaytest/Palisade`) is nine fixed pieces: 1 m runs A/B/C,
+    /// The kit is nine fixed pieces: 1 m runs A/B/C,
     /// 0.5 m and 0.25 m fillers, a square post, a 1 m breach, the gate and
     /// the broken gate. A segment is any length from 0.5 to 12 m at any
     /// angle, so this is the adapter between the two, and its whole policy
     /// is **tile, never stretch, never clip**:
     ///
+    /// Since 2026-09-28 the seven wall pieces are the approved level 1 wall
+    /// (`art-staging/wall-textured-v3`, `Art/WallL1`, put behind the same
+    /// wrappers by `Dev/Editor/WallL1Import`: 0.66 m rope-bound posts,
+    /// textured toon materials); the gate and the broken gate are still
+    /// Astra's (`art-staging/palisade-astra-lvl1-v2`).
+    ///
     /// - a run is filled with whole quarter-metres (1 m runs, then one
     ///   0.5, then one 0.25), the tiled span CENTRED on the segment, so
     ///   what does not fit (under 0.25 m) is split into the two ends and
-    ///   hidden inside the posts' 0.38 m shafts;
+    ///   hidden inside the posts' shafts (0.66 m);
     /// - one post per NODE, not per segment end (`WallChain`), turned to
     ///   the bisector of the runs that meet there;
     /// - an acute bend (under 45°) gives up a quarter-metre at that end so
