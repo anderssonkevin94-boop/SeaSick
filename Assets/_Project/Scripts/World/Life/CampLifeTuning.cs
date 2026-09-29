@@ -47,9 +47,9 @@ namespace SeaSick.World.Life
         [Tooltip("Real seconds a line stays up before it fades.")]
         public float lineSeconds = 3.5f;
         [Tooltip("Real seconds between one camp's lines, on average.")]
-        public float lineEverySeconds = 12f;
+        public float lineEverySeconds = 30f;
         [Tooltip("+/- real seconds of jitter added to lineEverySeconds so camps do not all talk on the same beat.")]
-        public float lineJitterSeconds = 4f;
+        public float lineJitterSeconds = 10f;
         [Tooltip("World-space height above a villager's head the line is drawn at.")]
         public float lineHeight = 2.1f;
         [Tooltip("Line text size (world units, TextMesh characterSize).")]
@@ -85,8 +85,8 @@ namespace SeaSick.World.Life
         public static float SwayHz => Active != null ? Active.swayHz : 0.35f;
         public static float BedArriveMetres => Active != null ? Active.bedArriveMetres : 1.0f;
         public static float LineSeconds => Active != null ? Active.lineSeconds : 3.5f;
-        public static float LineEverySeconds => Active != null ? Active.lineEverySeconds : 12f;
-        public static float LineJitterSeconds => Active != null ? Active.lineJitterSeconds : 4f;
+        public static float LineEverySeconds => Active != null ? Active.lineEverySeconds : 30f;
+        public static float LineJitterSeconds => Active != null ? Active.lineJitterSeconds : 10f;
         public static float LineHeight => Active != null ? Active.lineHeight : 2.1f;
         public static float LineCharSize => Active != null ? Active.lineCharSize : 0.14f;
 

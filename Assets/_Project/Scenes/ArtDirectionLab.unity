@@ -146,7 +146,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4b45c659b63604abd97eb0ebb5df3e6f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Voyage.VoyageManager
   ship: {fileID: 2143489879}
   homePoint: {fileID: 1901280689}
@@ -197,7 +197,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4c94a7b41ce424fc79cc05699b2a9f10, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Audio.SeaAudio
   windBaseVolume: 0.16
   windGustVolume: 0.34
@@ -247,7 +247,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: af03232cffec546dda81c3c9fbd0a696, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.WorldArtStyle
   shipPalette: {fileID: 2800000, guid: 0ab4fe49025e4488fa904cfeed1bfd5b, type: 3}
   sceneryMaterial: {fileID: 2100000, guid: 457d8b1d90bde447f8d8d62df0a14919, type: 2}
@@ -333,7 +333,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9177604974243554084, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: def
-      value:
+      value: 
       objectReference: {fileID: 11400000, guid: 17a2e58a252d045bdae9d866159f895a, type: 2}
     - target: {fileID: 9177604974243554084, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: railLocal.x
@@ -404,7 +404,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 291c53b7c0fce4f34adaafcb7e4e7133, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Dev.PlaytestStart
   active: 0
   bearing: {x: -1, y: 0}
@@ -439,8 +439,6 @@ GameObject:
   m_Component:
   - component: {fileID: 330744239}
   - component: {fileID: 330744238}
-  - component: {fileID: 330744240}
-  - component: {fileID: 330744241}
   - component: {fileID: 330744242}
   m_Layer: 0
   m_Name: HUD
@@ -459,7 +457,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f84646dd304b242108bb3eef0b0f755f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.StatusHUD
 --- !u!4 &330744239
 Transform:
@@ -476,35 +474,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &330744240
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 330744237}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d86e4422466474874b5ade0bef370730, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.NavigationAid
-  visibleSpan: 90
-  lookahead: 1500
-  callRatio: 1.25
-  scanHz: 3
---- !u!114 &330744241
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 330744237}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1dacc98cccdd44a8e8e7374987b91ede, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.MiniMap
-  range: 1500
 --- !u!114 &330744242
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -515,7 +484,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 25c09d092bab6462292e5a8f310da8d7, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.HomeTab
   armSeconds: 3.5
   refusalSeconds: 3
@@ -651,7 +620,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8fbfd16635dfc4665b73bf2d0099e734, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.World.SkyDirector
   ship: {fileID: 2143489877}
   sun: {fileID: 1658063630}
@@ -659,7 +628,6 @@ MonoBehaviour:
   severityWeight: 0.5
   response: 0.35
   forceStorm: -1
-  dayLength: 180
   startTime01: 0.3
   timeScale: 1
   pinTime: -1
@@ -691,6 +659,7 @@ MonoBehaviour:
   moonColor: {r: 0.62, g: 0.72, b: 1, a: 1}
   moonIntensity: 0.2
   newMoonFloor: 0.25
+  moonSetShare: 0.45
   nightAmbient: 0.18
   nightOvercast: 0.06
   nightHorizonSharp: 2.2
@@ -879,7 +848,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9177604974243554084, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: def
-      value:
+      value: 
       objectReference: {fileID: 11400000, guid: 08a1b12162bf74cd1a928db11ab36ebe, type: 2}
     - target: {fileID: 9177604974243554084, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: railLocal.x
@@ -951,7 +920,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8eca3ee572aef4519818bbd41f92d143, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DockCamTuner
   active: 0
   orbitPerPixel: 0.25
@@ -983,7 +952,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: de0120a585129486ab344e7520e9b93b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SailCamTuner
   active: 0
   heightPerPixel: 0.1
@@ -1021,7 +990,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4abaf1ed4ca514dfba012de15c33bc61, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.SeaStateController
   calm: {fileID: 11400000, guid: ec4b814f86b2842baaa5f0a37e4f79ae, type: 2}
   normal: {fileID: 11400000, guid: 79a34835b269b4440b4b48b2f3ec6d88, type: 2}
@@ -1059,7 +1028,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 57b6b6a2b635b4dde95b90a2d90a5947, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.DynamicWaterSim
   rippleShader: {fileID: 7200000, guid: aaf0eeb99ead445c1ab2528f6fa6d6f0, type: 3}
   waveSpeed: 6.5
@@ -1077,7 +1046,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fbc342d68f7cf4695ad2497bfb0a1e6e, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.RegionField
   calmRadius: 260
   wildRadius: 1150
@@ -1088,10 +1057,21 @@ MonoBehaviour:
   stormNear: 500
   stormFar: 2800
   autoBindWorld: 1
+  islandSelectRadius: 1500
+  islandRebindDistance: 250
+  islandFocus: {fileID: 0}
   shoalDepthFull: 8
   shoalDepthZero: 0.5
   chopFloor: 0.12
   breakFraction: 0.55
+  shorewardStrength: 0.35
+  shorewardFalloff: 2
+  shorewardPeriod: 9
+  shorewardSlope: 0.03
+  stormTurnRange: 30
+  stormTurnPeriod: 1300
+  stormFrontLogRange: 0.9
+  stormFrontPeriod: 640
 --- !u!114 &1016993464
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1102,7 +1082,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dbf7ddca878fc43f490fc3653e9f0171, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanPhysicsDriver
   hullFeelsCascade1: 0.3
   hullFeelsCascade0: 1
@@ -1116,7 +1096,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d331e5695a21d47639bf19a32d7024c0, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanRenderer
   settings: {fileID: 11400000, guid: 79a34835b269b4440b4b48b2f3ec6d88, type: 2}
   initialSpectrumShader: {fileID: 7200000, guid: 20a671ceac7e34f7b859395bb30619dd, type: 3}
@@ -1150,7 +1130,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5e1b93c72af84d6ea31c7048b9f26d3a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.WeatherField
   tileTexels: 256
   tileMetres: 4096
@@ -1232,7 +1212,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9177604974243554084, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: def
-      value:
+      value: 
       objectReference: {fileID: 11400000, guid: 3599349e1c5e34a4f8663ec88e84baa9, type: 2}
     - target: {fileID: 9177604974243554084, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: railLocal.x
@@ -1304,7 +1284,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 560407954ce484b06a53c0298afceee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::WaterClarityTuner
   active: 0
 --- !u!4 &1230492702
@@ -1332,7 +1312,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0b51a62f86df64e86ac3a0ff726383da, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaFoamTuner
   active: 1
 --- !u!1 &1251020369
@@ -1362,7 +1342,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1afab06d029e343e8827d36f6cba3831, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.DistantSceneryCull
   settings: {fileID: 11400000, guid: 5c62cdcbcc9044014bf6a7db7cd15be7, type: 2}
   target: {fileID: 0}
@@ -1444,7 +1424,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cede1b0310ab545d185a49f98f1fb355, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.HorizonField
   settings: {fileID: 11400000, guid: 5c62cdcbcc9044014bf6a7db7cd15be7, type: 2}
   target: {fileID: 0}
@@ -1499,7 +1479,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b745b1ce3332a46b0b4a5dcfc900cf15, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Voyage.SalvageSpawner
   ship: {fileID: 0}
   voyage: {fileID: 0}
@@ -1567,7 +1547,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b86a8298c1a844e30a755cd622562ffa, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.OceanClipmap
   material: {fileID: 2100000, guid: 0207429003d55492c8dc0746be23b82c, type: 2}
   followOverride: {fileID: 0}
@@ -1600,7 +1580,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -1743,7 +1723,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 91effc6709b304e0f99b41db3559c952, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.TerrainStreamer
   settings: {fileID: 11400000, guid: 5c62cdcbcc9044014bf6a7db7cd15be7, type: 2}
   material: {fileID: 2100000, guid: 79aa23ca82cf142fbbaadb52c5ec71d6, type: 2}
@@ -1771,7 +1751,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 4171d5b68d76a4bf597a767ec1eec6f9, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.TerrainShoreField
   settings: {fileID: 11400000, guid: 5c62cdcbcc9044014bf6a7db7cd15be7, type: 2}
   target: {fileID: 2143489877}
@@ -1788,11 +1768,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c3caf2078f92c4eacb2cb6b91f36cf2c, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.TerrainWorldPopulator
   terrain: {fileID: 11400000, guid: 5c62cdcbcc9044014bf6a7db7cd15be7, type: 2}
   world: {fileID: 11400000, guid: 8eb1a72ed680846eb83e08397806a02c, type: 2}
   homePoint: {fileID: 1901280689}
+  frameBudgetMs: 50
 --- !u!1001 &1842535512
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1859,7 +1840,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 9177604974243554084, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: def
-      value:
+      value: 
       objectReference: {fileID: 11400000, guid: 7ba7054076d0442c48080092872ddcb6, type: 2}
     - target: {fileID: 9177604974243554084, guid: 406456e02808a4eb7be68bc209baea87, type: 3}
       propertyPath: railLocal.x
@@ -1964,7 +1945,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5fc7fc3154c134c0dbcb0ace650b2b81, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.CameraRig.ChaseCamera
   target: {fileID: 2143489877}
   distance: 20.8
@@ -1990,12 +1971,25 @@ MonoBehaviour:
   cruiseDelay: 6
   cruiseInRate: 0.35
   cruiseOutRate: 1.4
+  portraitDistance: 24
+  portraitHeight: 12
+  portraitLookAhead: 6
+  portraitFov: 68
+  portraitBlendRate: 2
+  portraitZoomOut: 0.3
+  portraitStoppedPull: 0.85
+  portraitPullInRate: 0.33
+  userZoomMin: 0.6
+  userZoomMax: 1.6
+  userZoomDecay: 20
+  wheelZoomStep: 0.08
   heaveFollow: 1.5
   heaveShare: 1
   stormDrop: 4.8
   stormPullIn: 3.6
   stormResponse: 1.2
   lockMaxSwingDeg: 78
+  lockMaxSwingDegPortrait: 140
   lockPullPerMetre: 0.42
   lockMaxPull: 34
   lockBias: 0.34
@@ -2092,7 +2086,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
@@ -2386,12 +2380,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 082596c3d27b5486aba50f7fb8f0ce16, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.HelmInput
-  steerZoneHeight: 0.45
-  engageSpeed: 3.5
-  recenterSpeed: 1.2
+  steerKp: 0.04
+  steerKd: 0.02
+  rudderEaseSpeed: 3.5
   testRudder: 0
+  burnEngageFrac: 1.1
+  asternSpeedThreshold: 1.5
+  asternAngleThreshold: 135
+  stopDetent: 0.15
 --- !u!114 &2143489879
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2402,7 +2400,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cdb2b2664dcc442c0a9eb54073eec039, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.ShipMotor
   maxSpeed: 14.9906645
   acceleration: 2.6
@@ -2431,6 +2429,7 @@ MonoBehaviour:
   rollLimit: 20
   limitSpring: 6
   turnHeel: 8
+  overdrive: 1.35
   rowSpeed: 2.5455842
   headSeaPenalty: 0.45
   sailTrimRate: 0.55
@@ -2449,7 +2448,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 287940af9a08d4ee2907c640ca5d4d3b, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.SmoothnessMeter
   heaveRateCeiling: 2.7
   pitchRateCeiling: 27
@@ -2471,7 +2470,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 630f77c45ce5449058f2f277c0a3e110, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Dev.DevHUD
   visible: 0
 --- !u!114 &2143489886
@@ -2484,11 +2483,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3523d3020c86c418dba2944b8b471451, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.SpeedJuice
   sprayFullRate: 55
   wakeFullRate: 30
   shoulderRate: 75
+  bowSpeedShare: 0.3
+  bowTurnShare: 0.1
+  outsideShoulderShare: 0.55
+  shoulderTurnGate: 0.25
   beamImpactThreshold: 1.5
   beamImpactCooldown: 0.45
   seaThresholdScale: 3.5
@@ -2508,11 +2511,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0b657a1b8704f40c6887cf529b05239e, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.AnchorController
   dropTime: 0
   weighTime: 0
-  berthDistance: 11
+  landingDepth: 12
   dockRange: 55
   woodReach: 130
   startAtHomeDock: 1
@@ -2528,7 +2531,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3fbd93a74405a4404a07b75b88067e3e, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.HullIntegrity
   integrity: 1
   speedPenaltyAtWreck: 0.4
@@ -2544,6 +2547,7 @@ MonoBehaviour:
   shotShock: 0.1
   repairRate: 0.05
   timberPerHullPoint: 12
+  seawardPush: 1.2
 --- !u!114 &2143489891
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2554,7 +2558,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a8200400047394b16b28ff638d09c20d, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.Gangway
   width: 1.5
   thickness: 0.18
@@ -2570,12 +2574,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a18799dd18f8641158ac087f9140a46a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.ShipHold
   stackOrigin: {x: 0, y: 1.3083115, z: -1.2}
   perRow: 2
   spacing: 1.3
-  layerHeight: 0.85
+  rowSpacing: 1.8
   maxVisible: 24
 --- !u!114 &2143489893
 MonoBehaviour:
@@ -2587,7 +2591,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6a229554124714dafbf3ff1cde851b12, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.CannonBattery
   forePosition: {x: 2.0286007, y: 6.8}
   aftPosition: {x: 2.613401, y: 2.4}
@@ -2598,6 +2602,8 @@ MonoBehaviour:
   recoilExaggeration: 1
   gunnerInboard: 0.72
   gunportOutboard: 0.55
+  autoFireSlack: 2.5
+  autoFireReach01: 1
 --- !u!114 &2143489894
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2608,7 +2614,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9b1e577221ee9478fb3d0425e0e8a5f7, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Combat.GunneryReadout
   visible: 0
   onTargetDeg: 12
@@ -2622,7 +2628,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 776f0c81841c74f28b410e4dce20e897, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Combat.TargetHUD
   showWithin: 320
   barWidth: 84
@@ -2637,7 +2643,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b1e3bec48f1514bdd9c2e519f975b0a6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Combat.PlayerHull
   hitRadius: 4.2
   halfLength: 9.5
@@ -2652,11 +2658,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6f70b3dcd442c49dfa8627a21bba55a1, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Combat.CombatLock
   lockRange: 150
   breakRange: 200
   breakGrace: 1
+  tapMaxSeconds: 0.25
+  tapMaxMove01: 0.03
+  tapHitRadiusPt: 60
 --- !u!114 &2143489898
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2667,7 +2676,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f7afcade7e319426e87b6fb82c548432, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Crew.CrewRoster
   assignGunsInOrder: 1
 --- !u!114 &2143489899
@@ -2680,7 +2689,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b26d9fff21dd1413a9501bfd0f4b87d4, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.Bilge
   ingressPerMetre: 0.28
   maxEffectiveImmersion: 0.45
@@ -2702,7 +2711,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f39712b3d20b54cdf93c5d7321c87327, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.StormSpray
   samplesPerFrame: 24
   sampleRadius: 110
@@ -2734,7 +2743,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6a8fe8b1703f146539061ae31fc51020, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.BuoyantBody
   waterDensity: 1025
   totalVolume: 95.066666
@@ -2743,6 +2752,8 @@ MonoBehaviour:
   forwardDragFactor: 0.005
   lateralDragFactor: 0.25
   angularDragTorque: 91353.125
+  rollDampingRatio: 0.5
+  pitchDampingRatio: 0.55
   reservePerMetre: 1.5
   maxReserve: 2.5
   plowDragFactor: 0.15
@@ -2769,7 +2780,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8ac75f6491ae444f39bd469f6c013461, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ocean.BuoyancyProbeSet
   probes:
   - localPosition: {x: 0, y: -0.46999997, z: 9.387}
@@ -2857,7 +2868,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d9ef292afdc84464bbbb2566de34c474, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.HullWaterClip
   centre: {x: 0, y: 2.5193117, z: 0.5}
   semiAxes: {x: 3.02043, y: 9.8}
@@ -2873,7 +2884,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5ee9a52acc7ea4debaedb0bca6cbcd36, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.UI.ShipyardPanel
   yard: {fileID: 2143489907}
   open: 1
@@ -2887,7 +2898,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a3093ae884ed8454186beec2716412c6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.Shipyard
   nodeIndex: 12
   applyOnStart: 1
@@ -2908,7 +2919,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 833d5a48c9ac9481a89c35a238661ff5, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Ship.Breakers
   onsetRatio: 0.35
   fullRatio: 0.55

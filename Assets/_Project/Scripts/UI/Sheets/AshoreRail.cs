@@ -59,21 +59,11 @@ namespace SeaSick.UI.Sheets
                 return;
             }
 
-            // **Top right, UNDER the minimap.** The rail and the minimap are
-            // different toolkits drawing into the same corner, so neither can
-            // see the other by laying out — the rail sat across the map and,
-            // worse, across the open card's own close button.
-            //
-            // `HudLayout.HeightOf` is the IMGUI column's own answer to "how
-            // tall is the map right now", reported by the panel that drew it,
-            // so this stacks under whatever it actually was rather than under
-            // a copy of its height kept here. Zero when the map is not
-            // drawing, and then the rail takes the corner itself.
+            // Top right of the safe area. (It used to stack under the IMGUI
+            // minimap; that panel is gone, so the rail takes the corner itself.)
             float scale = root.resolvedStyle.width / Mathf.Max(1f, Screen.width);
             var safe = Screen.safeArea;
-            float mapH = HudLayout.HeightOf(HudLayout.Slot.Map);
             float top = (Screen.height - safe.yMax) * scale + 14f;
-            if (mapH > 0f) top += (mapH + HudLayout.Gap) * scale;
             // **The rail yields the corner to the frame, on a desk.** Since
             // 2026-09-22 the sheet is a FIXED region — the right third of a
             // landscape window, full height — so the corner the rail used to

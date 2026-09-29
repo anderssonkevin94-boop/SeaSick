@@ -5,15 +5,14 @@ using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    // Pooled annotations and station assignment buttons; avoid other camp chrome.
+    // Pooled BUILDING annotations and station assignment buttons ("No worker · Assign",
+    // "Needs supplies", "Output full"). No per-villager status words (Kevin, 2026-09-30).
     internal sealed class BuildingStatusLabels
     {
         const int Limit = 12;
         readonly Button[] labels = new Button[Limit];
         readonly StationStock[] targets = new StationStock[Limit];
         readonly StationStock[] pressed = new StationStock[Limit];
-        readonly List<Label> handLabels = new List<Label>();
-        readonly List<(OutpostHand hand, Transform body, string word)> hands = new List<(OutpostHand, Transform, string)>();
         readonly VisualElement root;
         readonly List<(Vector3 at, string status, StationStock station)> warnings = new List<(Vector3, string, StationStock)>();
         readonly List<Rect> occupied = new List<Rect>();
@@ -40,7 +39,6 @@ namespace SeaSick.UI.Sheets
         public void Hide()
         {
             foreach (var label in labels) label.style.display = DisplayStyle.None;
-            foreach (var label in handLabels) label.style.display = DisplayStyle.None;
         }
 
         internal static string Status(OutpostLedger ledger, StationStock station)
@@ -59,8 +57,6 @@ namespace SeaSick.UI.Sheets
             return reason != null && (reason.StartsWith("waiting for ", System.StringComparison.Ordinal)
                 || reason.StartsWith("needs a ", System.StringComparison.Ordinal)) ? "Needs supplies" : null;
         }
-
-        static int Priority(string word) => word == "Stuck" || word == "Downed" ? 1 : 0;
 
         void Assign(int index)
         {
@@ -81,15 +77,6 @@ namespace SeaSick.UI.Sheets
             {
                 previous = camp; nextRefresh = Time.unscaledTime + .5f;
                 warnings.Clear();
-                hands.Clear();
-                foreach (var hand in camp.Ledger.hands)
-                {
-                    if (hand == null) continue;
-                    var body = camp.BodyNamed(hand.name);
-                    if (body != null) hands.Add((hand, body.transform, camp.Ledger.StatusWord(hand)));
-                }
-                // Blocked villagers win crowded label space.
-                hands.Sort((a, b) => Priority(b.word).CompareTo(Priority(a.word)));
                 for (int i = 0; i < camp.Built.Count; i++)
                 {
                     var building = camp.Built[i];
@@ -144,37 +131,6 @@ namespace SeaSick.UI.Sheets
                 occupied.Add(rect);
             }
             for (int i = count; i < Limit; i++) labels[i].style.display = DisplayStyle.None;
-            int shown = 0;
-            foreach (var entry in hands)
-            {
-                if (entry.body == null || !entry.body.gameObject.activeInHierarchy) continue;
-                var point = camera.WorldToScreenPoint(entry.body.position + Vector3.up * 2.7f);
-                if (point.z <= 0f) continue;
-                var rect = new Rect(point.x - 45f / scale, Screen.height - point.y - 22f / scale, 90f / scale, 22f / scale);
-                if (!guiSafe.Contains(rect.min) || !guiSafe.Contains(rect.max)
-                    || rect.Overlaps(MidnightLandHud.ResourcesRect) || rect.Overlaps(MidnightLandHud.NavigationRect)
-                    || rect.Overlaps(chartRect) || (SheetHost.FrameOpen && rect.Overlaps(SheetHost.FrameRect))) continue;
-                bool overlap = false;
-                foreach (var taken in occupied) if (rect.Overlaps(taken)) { overlap = true; break; }
-                if (overlap) continue;
-                if (shown == handLabels.Count)
-                {
-                    var created = new Label { pickingMode = PickingMode.Ignore };
-                    created.AddToClassList("camp-hand-status");
-                    // Keep annotations below the HUD and drawer in sibling order.
-                    root.Insert(root.IndexOf(labels[0]), created);
-                    handLabels.Add(created);
-                }
-                var label = handLabels[shown++];
-                string word = entry.word;
-                label.text = word;
-                label.EnableInClassList("camp-status-danger", word == "Stuck" || word == "Downed");
-                label.EnableInClassList("camp-status-muted", word == "No work");
-                label.style.left = rect.x * scale; label.style.top = rect.y * scale;
-                label.style.display = DisplayStyle.Flex;
-                occupied.Add(rect);
-            }
-            for (int i = shown; i < handLabels.Count; i++) handLabels[i].style.display = DisplayStyle.None;
         }
     }
 }

@@ -47,18 +47,12 @@ namespace SeaSick.UI
         /// prefix; order within a column is the order of declaration.
         public enum Slot
         {
-            // --- top-left, downward ---
-            Crew,
-
             // --- top-right, downward ---
-            Map,
-            Wind,
             Ship,
             /// The hold readout chip + its backpack panel (2026-09-28, Kevin:
             /// "I need some way of easily seeing my resources while I'm at
             /// sea"). Right after `Ship` so it stacks directly under the
-            /// hull/cargo panel rather than under the minimap or the perf
-            /// counter.
+            /// hull/water panel rather than under the perf counter.
             Hold,
             Perf,
             /// The island's crew and their orders, while she lies at a camp.
@@ -80,7 +74,6 @@ namespace SeaSick.UI
             RailPause,
 
             // --- bottom-left, upward ---
-            Nav,
             Broadside,
 
             // --- bottom-right, upward ---
@@ -113,11 +106,9 @@ namespace SeaSick.UI
 
         static Column ColumnOf(Slot s) => s switch
         {
-            Slot.Crew => Column.TopRight,
-            Slot.Map or Slot.Wind or Slot.Ship or Slot.Hold or Slot.Perf
-                or Slot.CampCrew => Column.TopRight,
+            Slot.Ship or Slot.Hold or Slot.Perf or Slot.CampCrew => Column.TopRight,
             Slot.RailSettings or Slot.RailYard or Slot.RailHome or Slot.RailPause => Column.Rail,
-            Slot.Nav or Slot.Broadside => Column.BottomLeft,
+            Slot.Broadside => Column.BottomLeft,
             Slot.Wheel => Column.BottomCentre,
             _ => Column.BottomRight,
         };
@@ -485,33 +476,7 @@ namespace SeaSick.UI
             return new Rect(left + (room - width) * 0.5f, y, width, height);
         }
 
-        /// The compass tape's place: centred at the top, between the crew pips
-        /// and the minimap.
-        ///
-        /// It stays CENTRED and gives up width instead of shifting sideways,
-        /// because the middle of the tape is the bow — an off-centre compass
-        /// is a compass that lies about where the ship is pointing. What it
-        /// yields to the columns is span, which only costs a couple of degrees
-        /// of visible arc.
-        public static Rect TopCentre(float preferredWidth, float height)
-        {
-            var safe = Safe;
-            float centre = safe.x + safe.width * 0.5f;
-
-            float leftEdge = safe.x + Pad + WidestLive(Column.TopLeft) + Gap;
-            float rightEdge = safe.xMax - Pad - WidestLive(Column.TopRight) - Gap;
-
-            float room = 2f * Mathf.Min(centre - leftEdge, rightEdge - centre);
-            float w = Mathf.Max(Unit * 8f, Mathf.Min(preferredWidth, room));
-
-            // Under the top edge with a line's room above it, which is where
-            // the 'home' pip's label sits.
-            return Declare("Compass", new Rect(centre - w * 0.5f,
-                                               safe.y + Pad + Unit * 1.2f, w, height));
-        }
-
-        /// Where a transient "that happened" line goes: high and centred,
-        /// under the compass tape.
+        /// Where a transient "that happened" line goes: high and centred.
         ///
         /// Deliberately NOT the prompt slot. A toast that competes with the
         /// buttons loses every time the player is near an island or holding a
@@ -524,15 +489,6 @@ namespace SeaSick.UI
             var safe = Safe;
             if (width <= 0f) width = Unit * 16f;
             return Declare("Toast", Centred(safe.y + safe.height * 0.22f, width, height));
-        }
-
-        static float WidestLive(Column col)
-        {
-            float widest = 0f;
-            for (int j = 0; j < SlotCount; j++)
-                if (Live(j) && heights[j] > 0f && ColumnOf((Slot)j) == col)
-                    widest = Mathf.Max(widest, widths[j]);
-            return widest;
         }
     }
 }

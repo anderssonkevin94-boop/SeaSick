@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using SeaSick.World.Life;
 using SeaSick.Combat;
+using SeaSick.UI;
 
 namespace SeaSick.World
 {
@@ -13,8 +14,10 @@ namespace SeaSick.World
     /// `TextMesh` billboard, no UI (Astra owns `Scripts/UI/**`).
     ///
     /// At most one line up per watched camp at a time, on a global cooldown
-    /// (`Life.CampLifeTuning.LineEverySeconds` +/- jitter) so a camp reads
-    /// as occasionally chatty, not a wall of subtitles. The speaker is
+    /// (`Life.CampLifeTuning.LineEverySeconds`, 30 s, +/- jitter) so a camp
+    /// reads as occasionally chatty, not a wall of subtitles. A line is
+    /// only started for a villager on screen and while no sheet is open,
+    /// and is hidden while a sheet covers the view. The speaker is
     /// picked from whoever is not already lying low in a raid, and the LINE
     /// is picked by the speaker's own situation, in priority: pouting,
     /// hungry, just rescued/dragged someone (life log), a friend's death
@@ -80,6 +83,8 @@ namespace SeaSick.World
 
             cooldown -= dt;
             if (cooldown > 0f) return;
+            // A sheet is open: hold the next line back and look again soon.
+            if (SheetCovering()) { cooldown = 2f; return; }
             cooldown = CampLifeTuning.LineEverySeconds
                 + Random.Range(-CampLifeTuning.LineJitterSeconds, CampLifeTuning.LineJitterSeconds);
 
@@ -103,6 +108,8 @@ namespace SeaSick.World
             {
                 var h = hands[(start + k) % hands.Count];
                 if (h == null || string.IsNullOrEmpty(h.name)) continue;
+                // Only a villager the player can actually see speaks.
+                if (!OnScreen(camp.Ledger.HandAt(h) + Vector3.up * CampLifeTuning.LineHeight)) continue;
                 string line = Line.Pick(h, camp);
                 if (string.IsNullOrEmpty(line)) continue;
                 Speak(camp, h, line);
@@ -119,6 +126,7 @@ namespace SeaSick.World
             // a body reference (a headless hand has none) — see `HandAt`.
             tm.gameObject.name = "Line:" + h.name;
             speakerByCamp[CampKey(camp)] = h.name;
+            PositionLabel(tm, camp, CampKey(camp));   // no one-frame flash at the world origin
         }
 
         readonly Dictionary<string, string> speakerByCamp = new Dictionary<string, string>();
@@ -132,11 +140,25 @@ namespace SeaSick.World
             if (h == null) return;
             Vector3 pos = camp.Ledger.HandAt(h) + Vector3.up * CampLifeTuning.LineHeight;
             tm.transform.position = pos;
-            if (cam != null)
-            {
-                Vector3 toCam = cam.transform.position - pos;
-                if (toCam.sqrMagnitude > 0.0001f) tm.transform.rotation = Quaternion.LookRotation(toCam, Vector3.up);
-            }
+            // Screen-aligned billboard: a TextMesh reads along +X and is
+            // drawn on its -Z face, so share the camera's rotation (-Z then
+            // points back at the lens). LookRotation(cam - pos) aimed +Z at
+            // the camera and showed the mirrored back of the glyphs.
+            if (cam != null) tm.transform.rotation = cam.transform.rotation;
+
+            // Never over an open sheet, never for a villager who is off screen.
+            bool show = !SheetCovering() && OnScreen(pos);
+            foreach (var mr in tm.GetComponentsInChildren<MeshRenderer>(true))
+                if (mr.enabled != show) mr.enabled = show;
+        }
+
+        static bool SheetCovering() => HudLayout.SheetOpen || SeaSick.UI.Sheets.Sheets.IsOpen;
+
+        bool OnScreen(Vector3 world)
+        {
+            if (cam == null) return false;
+            Vector3 v = cam.WorldToViewportPoint(world);
+            return v.z > 0f && v.x > 0.06f && v.x < 0.94f && v.y > 0.06f && v.y < 0.94f;
         }
 
         void FadeLabel(TextMesh tm, float left)
@@ -144,6 +166,9 @@ namespace SeaSick.World
             if (tm == null) return;
             float a = Mathf.Clamp01(left / 0.6f);   // last 0.6 s fades out
             var c = tm.color; c.a = a; tm.color = c;
+            // The dark backing copy (child) fades with it.
+            var back = tm.transform.childCount > 0 ? tm.transform.GetChild(0).GetComponent<TextMesh>() : null;
+            if (back != null) { var b = back.color; b.a = a; back.color = b; }
         }
 
         TextMesh MakeLabel(string text)
@@ -156,16 +181,49 @@ namespace SeaSick.World
             tm.anchor = TextAnchor.MiddleCenter;
             tm.alignment = TextAlignment.Center;
             tm.color = Color.white;
-            tm.text = text;
-            var mr = go.GetComponent<MeshRenderer>();
-            if (mr != null)
-            {
-                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                mr.receiveShadows = false;
-                mr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
-                mr.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
-            }
+            tm.text = Wrap(text, 20);
+            Configure(go.GetComponent<MeshRenderer>());
+
+            // Dark backing copy, offset down-right and a hair behind (+Z is
+            // away from the viewer), so white text stays readable on sand,
+            // grass and sky alike. Child 0 by contract (see FadeLabel).
+            var bgo = new GameObject("Backing");
+            bgo.transform.SetParent(go.transform, false);
+            bgo.transform.localPosition = new Vector3(0.05f, -0.05f, 0.02f);
+            var bt = bgo.AddComponent<TextMesh>();
+            bt.characterSize = tm.characterSize;
+            bt.fontSize = tm.fontSize;
+            bt.anchor = tm.anchor;
+            bt.alignment = tm.alignment;
+            bt.color = new Color(0f, 0f, 0f, 1f);
+            bt.text = tm.text;
+            Configure(bgo.GetComponent<MeshRenderer>());
             return tm;
+        }
+
+        static void Configure(MeshRenderer mr)
+        {
+            if (mr == null) return;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            mr.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+            mr.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+        }
+
+        /// Word-wrap to a narrow column so a long line stays inside a
+        /// portrait screen instead of running off both edges.
+        static string Wrap(string text, int col)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= col) return text;
+            var sb = new System.Text.StringBuilder();
+            int lineLen = 0;
+            foreach (var word in text.Split(' '))
+            {
+                if (lineLen > 0 && lineLen + 1 + word.Length > col) { sb.Append('\n'); lineLen = 0; }
+                else if (lineLen > 0) { sb.Append(' '); lineLen++; }
+                sb.Append(word); lineLen += word.Length;
+            }
+            return sb.ToString();
         }
 
         /// **Dev**: force a line right now, for `LifeDevPanel`'s "Say a line

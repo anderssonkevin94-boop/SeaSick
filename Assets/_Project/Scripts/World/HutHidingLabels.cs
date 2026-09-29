@@ -90,12 +90,12 @@ namespace SeaSick.World
 
                 Vector3 pos = hut.transform.position + Vector3.up * HoverHeight;
                 tm.transform.position = pos;
-                if (cam != null)
-                {
-                    Vector3 toCam = cam.transform.position - pos;
-                    if (toCam.sqrMagnitude > 0.0001f)
-                        tm.transform.rotation = Quaternion.LookRotation(toCam, Vector3.up);
-                }
+                // Screen-aligned billboard. A TextMesh reads along +X and is
+                // drawn on its -Z face, so it must share the camera's own
+                // rotation (its -Z then points back at the lens). The old
+                // LookRotation(cam - pos) aimed +Z at the camera, so the
+                // camera saw the mirrored back of the glyphs.
+                if (cam != null) tm.transform.rotation = cam.transform.rotation;
             }
         }
 

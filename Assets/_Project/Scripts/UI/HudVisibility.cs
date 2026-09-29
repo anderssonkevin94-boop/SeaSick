@@ -7,9 +7,8 @@ namespace SeaSick.UI
     /// The first real entries in the settings drawer, and deliberately about
     /// the HUD rather than about the game: this project's screen problem was
     /// never that any one instrument was wrong, it was that there were too
-    /// many of them and no way to put one away. Being able to drop the minimap
-    /// and sail on the compass alone is a legitimate way to play a game whose
-    /// pitch is reading the water.
+    /// many of them and no way to put one away. (The minimap, compass tape and
+    /// crew-bar toggles went with those instruments, 2026-09-30.)
     ///
     /// Saved in `PlayerPrefs` so a choice survives the session that made it.
     /// Read through the properties, never cached: a panel that snapshots these
@@ -18,9 +17,6 @@ namespace SeaSick.UI
     {
         const string Prefix = "seasick.hud.";
 
-        public static bool Minimap { get => Get("minimap"); set => Set("minimap", value); }
-        public static bool Compass { get => Get("compass"); set => Set("compass", value); }
-        public static bool Crew { get => Get("crew"); set => Set("crew", value); }
         public static bool Perf { get => Get("perf", false); set => Set("perf", value); }
 
         /// **The FEEL tuning lab's button (2026-09-27).** Kevin tunes with it,

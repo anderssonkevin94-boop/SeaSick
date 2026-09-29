@@ -190,14 +190,8 @@ namespace SeaSick.UI
             GUI.Label(new Rect(body.x, y, body.width, u * 1.4f), "HUD", UITheme.Small);
             y += u * 1.8f;
 
-            y = Toggle(body, y, rowH, RowMinimap, HudVisibility.Minimap,
-                       v => HudVisibility.Minimap = v);
             y = Toggle(body, y, rowH, RowLandTheme, Sheets.MidnightLandHud.Enabled,
                        v => Sheets.MidnightLandHud.Enabled = v);
-            y = Toggle(body, y, rowH, RowCompass, HudVisibility.Compass,
-                       v => HudVisibility.Compass = v);
-            y = Toggle(body, y, rowH, RowCrew, HudVisibility.Crew,
-                       v => HudVisibility.Crew = v);
             y = Toggle(body, y, rowH, RowPerf, HudVisibility.Perf,
                        v => HudVisibility.Perf = v);
             // The FEEL button (Dev/FeelLab): Kevin's tuning lab, one tap away
@@ -309,9 +303,6 @@ namespace SeaSick.UI
         /// runs, and it ran four times per IMGUI EVENT — Layout, Repaint and
         /// one more per mouse move — to say four fixed things. A row has
         /// exactly two readings; there is no reason to build either twice.
-        static readonly string[] RowMinimap = { "◎  minimap & wind", "◉  minimap & wind" };
-        static readonly string[] RowCompass = { "◎  compass tape", "◉  compass tape" };
-        static readonly string[] RowCrew = { "◎  crew", "◉  crew" };
         static readonly string[] RowPerf = { "◎  performance readout", "◉  performance readout" };
         static readonly string[] RowTuningLab = { "◎  show tuning lab (FEEL)", "◉  show tuning lab (FEEL)" };
         static readonly string[] RowWavePhase = { "◎  smooth wave phase", "◉  smooth wave phase" };

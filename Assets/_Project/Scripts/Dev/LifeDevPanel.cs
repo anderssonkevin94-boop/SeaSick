@@ -15,9 +15,9 @@ namespace SeaSick.Dev
     /// (the editor, or a `--dev` phone build) -- `Debug.isDebugBuild` covers
     /// both.
     ///
-    /// Collapsed: a small "LIFE" button, top-left (the helm's floating
-    /// stick lives at the BOTTOM of the screen -- Kevin's iPhone-first rule
-    /// -- so top-left is the one corner nothing else claims). Expanded: the
+    /// Collapsed: a small "LIFE" button on the right edge, ~40% down, stacked
+    /// under FeelLab's FEEL (2026-09-30: both used to sit top-left and
+    /// overlapped the island top bar; the bottom quarter is the thumb bar). Expanded: the
     /// hands at the camp being watched, each with Down/Kill/Revive, plus
     /// the last death's name and 3-sentence story.
     ///
@@ -38,9 +38,8 @@ namespace SeaSick.Dev
         }
 
         const float RowH = 44f; // Apple's own minimum touch target.
-        /// The collapsed LIFE button sits to the RIGHT of FeelLab's FEEL
-        /// button (10, 10, 84 x 44): on top of it Kevin couldn't press FEEL,
-        /// and below it covered the ledger's ☰ button (both 2026-09-28).
+        /// `Top` is the EXPANDED panel's top offset only. The collapsed LIFE
+        /// button sits on the right edge under FeelLab's FEEL button.
         const float Top = 10f;
         bool expanded;
         Vector2 scroll;
@@ -70,7 +69,8 @@ namespace SeaSick.Dev
 
             if (!expanded)
             {
-                if (GUI.Button(new Rect(10f + 84f + 8f, 10f, 84, RowH), "LIFE")) expanded = true;
+                // Right edge, stacked under FeelLab's FEEL (same x, 40% down + one row + gap).
+                if (GUI.Button(new Rect(w - 84f - 8f, h * 0.40f + RowH + 8f, 84f, RowH), "LIFE")) expanded = true;
                 GUI.matrix = old;
                 return;
             }

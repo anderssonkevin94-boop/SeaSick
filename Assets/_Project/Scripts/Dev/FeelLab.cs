@@ -26,7 +26,7 @@ namespace SeaSick.Dev
     /// panel; that cost only exists while the panel is open and Kevin is
     /// actively tuning, never while collapsed or during ordinary play.
     ///
-    /// Collapsed: one small "FEEL" button, top-left, translucent. Nothing
+    /// Collapsed: one small "FEEL" button, right edge (~40% down), translucent. Nothing
     /// else is drawn and nothing else consumes input -- the helm zone (the
     /// bottom half of the screen, where the floating stick lives) is never
     /// touched.
@@ -502,9 +502,11 @@ namespace SeaSick.Dev
             if (!expanded)
             {
                 // Collapsed: ONLY this rect is drawn and ONLY this rect can
-                // consume a touch. Top-left, clear of the bottom-half helm
-                // zone by construction.
-                var rect = new Rect(10f, 10f, 84f, RowH);
+                // consume a touch. Right edge, ~40% down (2026-09-30): clear
+                // of the island top bar + alert strip above and of the bottom
+                // quarter (the thumb bar / helm zone) below. LIFE
+                // (`LifeDevPanel`) stacks directly underneath.
+                var rect = new Rect(logicalW - 84f - 8f, logicalH * 0.40f, 84f, RowH);
                 var prev = GUI.color;
                 GUI.color = new Color(1f, 1f, 1f, 0.55f);
                 if (GUI.Button(rect, "FEEL", buttonStyle)) expanded = true;

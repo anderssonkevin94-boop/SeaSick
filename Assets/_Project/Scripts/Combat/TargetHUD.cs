@@ -20,6 +20,11 @@ namespace SeaSick.Combat
         [SerializeField] float barWidth = 84f;
         [SerializeField] float headroom = 8.0f;     // metres above the hit centre
 
+        /// **Dev only, off by default** (Kevin, 2026-09-30: the range labels
+        /// over enemy ships are debug chrome). Flip from a probe/console:
+        /// `TargetHUD.DevLabels = true`. Never draws in a release build.
+        public static bool DevLabels;
+
         CannonBattery battery;
         Camera cam;
 
@@ -31,6 +36,7 @@ namespace SeaSick.Combat
             // the measurement — IMGUI runs OnGUI once per event, and the
             // discarded passes were the game's biggest source of GC garbage.
             if (Event.current.type != EventType.Repaint) return;
+            if (!DevLabels || !Debug.isDebugBuild) return;   // Debug.isDebugBuild is true in the editor
             // Same IMGUI-blind-spot suppression as the rest of the HUD
             // (2026-09-26 review). `SheetHost.FrameOpen` added 2026-09-27:
             // IMGUI paints after UI Toolkit, so a range label like "120 m

@@ -124,8 +124,10 @@ namespace SeaSick.Combat
                 if (cam != null)
                 {
                     Vector3 toCam = cam.transform.position - pos;
-                    if (toCam.sqrMagnitude > 0.0001f)
-                        mk.rotation = Quaternion.LookRotation(toCam, Vector3.up);
+                    // Screen-aligned (same convention as the text billboards:
+                    // -Z faces the lens). The mesh is double-sided and
+                    // symmetric, so this only removes a latent mirror bug.
+                    mk.rotation = cam.transform.rotation;
                     float dist = toCam.magnitude;
                     float s = Mathf.Clamp(dist * DistanceScale, MinScale, MaxScale);
                     mk.localScale = new Vector3(s, s, s);
