@@ -249,3 +249,65 @@
 .camp-status-danger { color: rgb(255, 133, 125); }
 .land-building-status { margin: 0; padding: 0 3px; }
 .land-building-status:disabled { opacity: 0.8; }
+
+/* ---------------- thumb bar (island UI restructure 1A, 2026-09-30) ----------------
+   Bottom actions: Camp · Build · Ship, or Cancel · Turn · confirm while placing.
+   Sizes are in the land panel's units (430x932 reference, ~pt on the phone);
+   ThumbBar.cs sets left/width/bottom/height. */
+.thumb-bar {
+    position: absolute; flex-direction: row; align-items: stretch;
+    height: 74px; margin: 0; padding: 0;
+}
+.thumb-btn {
+    flex-grow: 1; flex-shrink: 1; flex-basis: 0; min-width: 44px;
+    margin: 0 4px; padding: 6px 4px;
+    flex-direction: column; align-items: center; justify-content: center;
+    background-color: rgba(11, 23, 32, 0.92);
+    border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 18px;
+}
+.thumb-btn:hover { background-color: rgba(22, 42, 56, 0.94); border-color: rgb(44, 74, 94); }
+.thumb-btn:active { background-color: rgba(32, 57, 72, 0.96); }
+.thumb-btn--on, .thumb-btn--on:hover { border-color: rgb(164, 210, 232); background-color: rgba(32, 57, 72, 0.96); }
+.thumb-btn--primary { flex-grow: 1.4; background-color: rgb(164, 210, 232); border-color: rgb(164, 210, 232); }
+.thumb-btn--primary:hover { background-color: rgb(180, 220, 238); border-color: rgb(180, 220, 238); }
+.thumb-btn--primary:active { background-color: rgb(132, 184, 210); }
+.thumb-btn:disabled { opacity: 0.4; }
+.thumb-glyph { width: 28px; height: 28px; flex-shrink: 0; }
+.thumb-label {
+    margin: 4px 0 0 0; padding: 0; font-size: 15px; color: rgb(232, 242, 246);
+    -unity-text-align: middle-center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.thumb-btn--primary .thumb-label { color: rgb(11, 23, 32); }
+
+/* The placement instruction card, top of the screen under the status bar. */
+.thumb-card {
+    position: absolute; flex-direction: column; padding: 12px 16px;
+    background-color: rgba(11, 23, 32, 0.92);
+    border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 18px;
+}
+.thumb-card-title {
+    margin: 0; padding: 0; font-size: 18px; color: rgb(232, 242, 246); white-space: normal;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.thumb-card-hint {
+    margin: 3px 0 0 0; padding: 0; font-size: 14px; color: rgb(166, 186, 198); white-space: normal;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.thumb-card-status {
+    margin: 5px 0 0 0; padding: 0; font-size: 14px; white-space: normal;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.thumb-card-status--ok { color: rgb(156, 210, 122); }
+.thumb-card-status--bad { color: rgb(246, 146, 128); }
+
+/* The ledger drawer as a bottom sheet above the bar (LedgerDrawer.cs sets
+   left/width/bottom/height). Two classes deep so it beats Ledger.uss's
+   left-drawer rules, which load after this sheet. */
+.ledger-layer.thumb-ledger-bottom > .ledger-drawer {
+    top: auto; right: auto;
+    border-right-width: 1.5px; border-left-width: 1.5px; border-top-width: 1.5px; border-bottom-width: 1.5px;
+    border-color: rgb(44, 74, 94); border-radius: 18px;
+    translate: 0 150%;
+}
+.ledger-layer--open.thumb-ledger-bottom > .ledger-drawer { translate: 0 0; }

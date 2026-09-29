@@ -105,6 +105,9 @@ namespace SeaSick.UI
         /// this is only computed once the spot has already passed
         /// `Outpost.CanPlace`. Empty when the footprint stands clean.
         public static string ClearLine { get; private set; } = "";
+        /// What `ClearLine` was last built from; -1 = nothing built.
+        int clearTrees = -1, clearRocks = -1;
+        bool clearOnWall;
 
         /// **"clears N trees, M rocks", singular/plural correct, or "" when
         /// nothing stands in the way.** Shared with `WallSiting`, which sums
@@ -117,41 +120,6 @@ namespace SeaSick.UI
             if (trees > 0) parts.Add(trees == 1 ? "1 tree" : $"{trees} trees");
             if (rocks > 0) parts.Add(rocks == 1 ? "1 rock" : $"{rocks} rocks");
             return "clears " + string.Join(", ", parts);
-        }
-
-        /// **Draw the clear line in the same slot `SitingButtons.Draw` would
-        /// have put the refusal text in**, for a caller that does not own
-        /// that private layout. Only called while the spot is valid, so it
-        /// never collides with a refusal.
-        public static void DrawClearLine(Vector3 world, int buttonCount, string line)
-        {
-            if (string.IsNullOrEmpty(line)) return;
-            var row = SitingButtons.Cluster(world, buttonCount);
-            if (row.width <= 0f) return;
-            var r = new Rect(row.center.x - HudLayout.Unit * 9f,
-                row.yMax + SitingButtons.Gap * 0.5f,
-                HudLayout.Unit * 18f, HudLayout.Unit * 1.4f);
-            UITheme.Rect(r, UITheme.Panel);
-            GUI.Label(r, line, UITheme.Small2Centered);
-        }
-
-        /// **Draw an info line (a Hut's warmth), stacked under wherever
-        /// `DrawClearLine` put its line** (2026-09-27) -- the two can be on
-        /// screen together, so this claims the row below rather than the
-        /// same one. Never a refusal.
-        public static void DrawInfoLine(Vector3 world, int buttonCount, string line, Color tint)
-        {
-            if (string.IsNullOrEmpty(line)) return;
-            var row = SitingButtons.Cluster(world, buttonCount);
-            if (row.width <= 0f) return;
-            var r = new Rect(row.center.x - HudLayout.Unit * 9f,
-                row.yMax + SitingButtons.Gap * 0.5f + HudLayout.Unit * 1.5f,
-                HudLayout.Unit * 18f, HudLayout.Unit * 1.4f);
-            UITheme.Rect(r, UITheme.Panel);
-            var prevColor = GUI.color;
-            GUI.color = tint;
-            GUI.Label(r, line, UITheme.Small2Centered);
-            GUI.color = prevColor;
         }
 
         BuildPlan plan;
@@ -227,8 +195,221 @@ namespace SeaSick.UI
         /// under a drawing that stays exactly where it was put.
         Vector3 want;
 
-        void Awake() { Instance = this; }
-        void OnDestroy() { if (Instance == this) Instance = null; }
+        void Awake()
+        {
+            Instance = this;
+            anchor = GetComponent<SeaSick.Ship.AnchorController>();
+        }
+
+        void OnDestroy()
+        {
+            // A scene change, a save load or a ship swap takes this component
+            // with it: the bottom bar (which outlives it) and the sub-tools'
+            // statics (which outlive everything -- domain reload is off) must
+            // not be left showing a placement nobody is running.
+            if (barShown) { Sheets.ThumbBar.HidePlacement(); barShown = false; }
+            WallSiting.End();
+            RoadSiting.End();
+            LadderSiting.End();
+            if (Instance == this) Instance = null;
+        }
+
+        void OnEnable() { Sheets.Sheets.Changed += OnSheetChanged; }
+        void OnDisable() { Sheets.Sheets.Changed -= OnSheetChanged; }
+
+        /// **A sheet opening ends placement (2026-09-30).** The placement
+        /// bar and a sheet both want the bottom of the screen and the
+        /// player's attention; whatever opened the sheet is the newer
+        /// decision. The frame siting began on is exempt: the build card
+        /// that armed it closes its own sheet on that frame.
+        void OnSheetChanged()
+        {
+            if (plan.id == null || !Sheets.Sheets.IsOpen) return;
+            if (Time.frameCount <= beganFrame) return;
+            Cancel();
+        }
+
+        // =================================================================
+        // THE PLACEMENT BAR (2026-09-30, island UI restructure phase 1C)
+        //
+        // The ✕ ↻ ✓ discs under the ghost and the words under them are
+        // gone -- Kevin's rule: no icons over world assets. Every placement
+        // mode (a building, the first fire, a wall run, a road, a ladder)
+        // drives the one bottom `ThumbBar` instead: title + hint on show,
+        // the status line whenever the verdict CHANGES (never per frame),
+        // Cancel always there -- which is also the phone's first way out of
+        // a wall/road/ladder before its first point is down.
+        // =================================================================
+
+        SeaSick.Ship.AnchorController anchor;
+        /// The island she was lying at when placing began. She leaving it
+        /// (getting underway sets `CurrentIsland` null) ends placement.
+        Island startIsland;
+
+        bool barShown;
+        /// Which step's hint the bar is showing (sub-tool state as an int,
+        /// -1 for a building) -- so the hint is only pushed on a change.
+        int barStep = int.MinValue;
+        // The last status pushed, as its inputs, so it is only composed and
+        // pushed when one of them changes.
+        bool barValid;
+        string barRefusal, barDetail, barWarmth;
+        int barFetchT = -1, barFetchS = -1, barFetchB = -1;
+
+        static readonly System.Action CancelAction = End;
+        static readonly System.Action ConfirmAction = Confirm;
+        static readonly System.Action TurnAction = Rotate;
+
+        const string BuildingHint = "Drag it to move · tap the ground to jump there";
+        const string ShoreHint = "Drag it along the shore · tap the beach to jump there";
+
+        /// **The first fire on an island** -- the "Make camp" verb. A
+        /// campfire that is not a MOVE of its own blueprint can only be that:
+        /// a camp has one fire.
+        bool MakingCamp => plan.id == BuildPlans.Campfire.id && !moving;
+
+        void ShowBar()
+        {
+            string title, hint, confirm;
+            System.Action turn = null;
+            if (ladderMode) { title = "Place a ladder"; hint = LadderSiting.FootHint; confirm = "Build ladder"; }
+            else if (roadMode) { title = "Lay a road"; hint = RoadSiting.PlantHint; confirm = "Build road"; }
+            else if (wallMode) { title = "Build a wall"; hint = WallSiting.PlantHint; confirm = "Build wall"; }
+            else if (MakingCamp) { title = "Make camp here"; hint = BuildingHint; confirm = "Light the fire"; turn = TurnAction; }
+            else
+            {
+                string name = plan.id == BuildPlans.Campfire.id ? "campfire" : plan.label;
+                title = (moving ? "Move the " : "Place the ") + name;
+                bool shore = IsPier || IsDryDock;
+                hint = shore ? ShoreHint : BuildingHint;
+                confirm = moving ? "Move here" : "Build here";
+                // A pier or a dry dock faces the sea whatever R says.
+                if (!shore) turn = TurnAction;
+            }
+            Sheets.ThumbBar.ShowPlacement(title, hint, CancelAction, turn, ConfirmAction, confirm);
+            barShown = true;
+            barStep = ladderMode ? (int)LadderSiting.State.NoFoot
+                    : roadMode ? (int)RoadSiting.State.NoPoint
+                    : wallMode ? (int)WallSiting.State.NoPost : -1;
+            // "" so a sub-tool's quiet first step pushes nothing more; the
+            // null warmth forces a building's first verdict through.
+            barRefusal = barDetail = "";
+            barWarmth = null;
+            barFetchT = barFetchS = barFetchB = -1;
+            barValid = false;
+            // Nothing has been judged yet: a quiet line, ✓ off until the
+            // first verdict lands (the same frame for a building).
+            Sheets.ThumbBar.SetPlacementStatus("", true, false);
+        }
+
+        void HideBar()
+        {
+            if (!barShown) return;
+            barShown = false;
+            Sheets.ThumbBar.HidePlacement();
+        }
+
+        /// A sub-tool's frame: its step's hint and its verdict, pushed only
+        /// on a change.
+        void SyncToolBar(int step, string stretchHint, bool stretching, bool ok,
+            string refusal, string detail)
+        {
+            if (!barShown) return;
+            if (step != barStep)
+            {
+                barStep = step;
+                Sheets.ThumbBar.SetPlacementHint(stretching ? stretchHint
+                    : ladderMode ? LadderSiting.FootHint
+                    : roadMode ? RoadSiting.PlantHint : WallSiting.PlantHint);
+            }
+            if (!stretching)
+            {
+                // Nothing to judge before the first point is down.
+                if (barRefusal == "" && barDetail == "" && !barValid) return;
+                barValid = false; barRefusal = ""; barDetail = "";
+                Sheets.ThumbBar.SetPlacementStatus("", true, false);
+                return;
+            }
+            refusal ??= "";
+            detail ??= "";
+            if (barValid == ok && string.Equals(barRefusal, refusal) && string.Equals(barDetail, detail))
+                return;
+            barValid = ok; barRefusal = refusal; barDetail = detail;
+            if (ok)
+                Sheets.ThumbBar.SetPlacementStatus(
+                    detail.Length > 0 ? "Good spot · " + detail : "Good spot", true, true);
+            else
+                Sheets.ThumbBar.SetPlacementStatus(Sentence(refusal), false, false);
+        }
+
+        /// A building's frame: "Good spot · clears 3 trees · hands fetch 6
+        /// timber", or the refusal. Composed only when an input changed.
+        void SyncBuildingBar()
+        {
+            if (!barShown) return;
+            int fT = 0, fS = 0, fB = 0;
+            if (valid) Shortfall(out fT, out fS, out fB);
+            string refusal = valid ? "" : (Refusal ?? "");
+            string warmth = valid ? WarmthLine : "";
+            if (barValid == valid && string.Equals(barRefusal, refusal)
+                && string.Equals(barDetail, ClearLine) && string.Equals(barWarmth, warmth)
+                && barFetchT == fT && barFetchS == fS && barFetchB == fB)
+                return;
+            barValid = valid; barRefusal = refusal; barDetail = ClearLine; barWarmth = warmth;
+            barFetchT = fT; barFetchS = fS; barFetchB = fB;
+
+            if (!valid)
+            {
+                Sheets.ThumbBar.SetPlacementStatus(Sentence(refusal), false, false);
+                return;
+            }
+            var sb = new System.Text.StringBuilder("Good spot");
+            if (!string.IsNullOrEmpty(ClearLine)) sb.Append(" · ").Append(ClearLine);
+            if (!string.IsNullOrEmpty(warmth)) sb.Append(" · ").Append(warmth);
+            if (fT > 0 || fS > 0 || fB > 0)
+            {
+                sb.Append(" · hands fetch ");
+                bool any = false;
+                if (fT > 0) { sb.Append(fT).Append(' ').Append(ResWord(TimberRes)); any = true; }
+                if (fS > 0) { if (any) sb.Append(", "); sb.Append(fS).Append(" stone"); any = true; }
+                if (fB > 0) { if (any) sb.Append(", "); sb.Append(fB).Append(" brick"); }
+            }
+            Sheets.ThumbBar.SetPlacementStatus(sb.ToString(), true, true);
+        }
+
+        /// **What the builders will have to gather**: the price of this copy
+        /// less what the camp can already spend, per material. Nothing for a
+        /// move (already paid for) or the first fire (its logs come with the
+        /// landing party, not out of a store that does not exist yet).
+        void Shortfall(out int timber, out int stone, out int brick)
+        {
+            timber = stone = brick = 0;
+            if (moving || MakingCamp || outpost == null) return;
+            var l = outpost.Ledger;
+            if (l == null) return;
+            var priced = l.PriceOfNext(sited.id != null ? sited : plan);
+            timber = Mathf.Max(0, priced.cost - l.SpendableOf(TimberRes));
+            if (priced.stoneCost > 0) stone = Mathf.Max(0, priced.stoneCost - l.SpendableOf(Res.Stone));
+            if (priced.brickCost > 0) brick = Mathf.Max(0, priced.brickCost - l.SpendableOf(Res.Brick));
+        }
+
+        string TimberRes => string.IsNullOrEmpty(plan.resource) ? Res.Timber : plan.resource;
+
+        static string ResWord(string res) => res switch
+        {
+            Res.Timber => "timber",
+            Res.Stone => "stone",
+            Res.Brick => "brick",
+            Res.Boards => "boards",
+            _ => res.ToLowerInvariant(),
+        };
+
+        /// A refusal as the top card prints it: capitalised, never blank.
+        static string Sentence(string why)
+        {
+            if (string.IsNullOrEmpty(why)) return "Can't build here";
+            return char.IsLower(why[0]) ? char.ToUpperInvariant(why[0]) + why.Substring(1) : why;
+        }
 
         /// **The frame placing began on.** Every tap whose press went down
         /// at or before it is somebody else's tap -- see `Update`.
@@ -340,14 +521,19 @@ namespace SeaSick.UI
             // without this the release that opened siting mode was also the
             // tap that sited the building, under the button.
             Instance.beganFrame = Time.frameCount;
+            Instance.startIsland = Instance.anchor != null ? Instance.anchor.CurrentIsland : null;
 
             // **The wall fork.** A palisade is a run of posts, not a
             // rectangle on the end of a thumb, so the ghost, the start
             // point and the yaw all belong to `WallSiting` from here.
+            // Every fork shows the placement bar AT ONCE, so Cancel is on
+            // screen before the first point is planted (the phone had no
+            // way out of that step before 2026-09-30).
             Instance.ladderMode = what.id == LadderPlanId;
             if (Instance.ladderMode)
             {
                 LadderSiting.Begin(target);
+                Instance.ShowBar();
                 return;
             }
 
@@ -355,6 +541,7 @@ namespace SeaSick.UI
             if (Instance.roadMode)
             {
                 RoadSiting.Begin(target);
+                Instance.ShowBar();
                 return;
             }
 
@@ -362,10 +549,34 @@ namespace SeaSick.UI
             if (Instance.wallMode)
             {
                 WallSiting.Begin(target, what, shipTransform);
+                Instance.ShowBar();
                 return;
             }
 
             Instance.want = Instance.StartPoint();
+            Instance.ShowBar();
+        }
+
+        /// **Where a fresh drawing appears on screen, as a fraction of the
+        /// height down from the top (2026-09-30)**, when the placement card
+        /// and bar have not been laid out yet (the frame placing begins on
+        /// the bar is usually hidden under the build sheet). Screen centre
+        /// sat too close to the bottom bar's reach on a portrait phone.
+        public static float StartDownFraction = 0.4f;
+
+        /// The screen point (Input-System space, origin bottom-left) a fresh
+        /// drawing starts under: the middle of the free band between the top
+        /// placement card and the bottom thumb bar when both are known, else
+        /// `StartDownFraction` down the screen.
+        static Vector2 StartScreenPoint()
+        {
+            float h = Screen.height;
+            float guiY = h * StartDownFraction;
+            var card = Sheets.ThumbBar.CardRect;
+            var bar = Sheets.ThumbBar.Rect;
+            if (card.height > 0f && bar.height > 0f && bar.yMin > card.yMax)
+                guiY = 0.5f * (card.yMax + bar.yMin);
+            return new Vector2(Screen.width * 0.5f, h - guiY);
         }
 
         /// **Where the drawing appears before anyone has moved it.**
@@ -382,7 +593,7 @@ namespace SeaSick.UI
 
             var cam = Camera.main;
             if (cam != null && GroundPick.FromScreen(cam,
-                    new Vector2(Screen.width * 0.5f, Screen.height * 0.5f), out Vector3 mid))
+                    StartScreenPoint(), out Vector3 mid))
                 return mid;
             return Centre();
         }
@@ -414,6 +625,9 @@ namespace SeaSick.UI
         {
             var s = Instance;
             if (s == null || s.plan.id == null) return false;
+            // A press on the placement bar (or any claimed UI) is the UI's,
+            // never a grab of the drawing behind it.
+            if (UIBlocker.Blocked(screen)) return false;
             // A wall's grab target is its loose post, not a footprint —
             // same question, asked of the tool that owns the answer.
             if (s.wallMode) return WallSiting.GrabsPost(screen);
@@ -486,6 +700,7 @@ namespace SeaSick.UI
 
         void Cancel()
         {
+            HideBar();
             if (wallMode) { wallMode = false; WallSiting.End(); }
             if (ladderMode) { ladderMode = false; LadderSiting.End(); }
             if (roadMode) { roadMode = false; RoadSiting.End(); }
@@ -497,6 +712,7 @@ namespace SeaSick.UI
             outpost = null;
             Refusal = "";
             ClearLine = "";
+            clearTrees = clearRocks = -1;
             valid = false;
             onWall = false;
             CameraRig.IslandCam.ExtraReachCentre = null;
@@ -509,6 +725,10 @@ namespace SeaSick.UI
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (plan.id == null) return;
             if (outpost == null || ship == null) { Cancel(); return; }
+            // She has left the island placing began at (getting underway
+            // clears `CurrentIsland`): the drawing has no camp to go to.
+            if (anchor != null && startIsland != null && anchor.CurrentIsland != startIsland)
+            { Cancel(); return; }
 
             // **A wall run is somebody else's frame.** Escape, Enter, the
             // tap and the ghost all belong to `WallSiting`; when it says it
@@ -517,18 +737,27 @@ namespace SeaSick.UI
             {
                 if (!LadderSiting.Tick(beganFrame)) { Cancel(); return; }
                 Refusal = LadderSiting.Refusal;
+                bool on = LadderSiting.Mode == LadderSiting.State.Stretching;
+                SyncToolBar((int)LadderSiting.Mode, LadderSiting.TopHint, on,
+                    LadderSiting.CanConfirm, LadderSiting.Refusal, LadderSiting.PriceLine);
                 return;
             }
             if (roadMode)
             {
                 if (!RoadSiting.Tick(beganFrame)) { Cancel(); return; }
                 Refusal = RoadSiting.Refusal;
+                bool on = RoadSiting.Mode == RoadSiting.State.Stretching;
+                SyncToolBar((int)RoadSiting.Mode, RoadSiting.EndHint, on,
+                    RoadSiting.CanConfirm, RoadSiting.Refusal, RoadSiting.PriceLine);
                 return;
             }
             if (wallMode)
             {
                 if (!WallSiting.Tick(beganFrame)) { Cancel(); return; }
                 Refusal = WallSiting.Refusal;
+                bool on = WallSiting.Mode == WallSiting.State.Stretching;
+                SyncToolBar((int)WallSiting.Mode, WallSiting.NextHint, on,
+                    WallSiting.CanConfirm, WallSiting.Refusal, WallSiting.ClearLine);
                 return;
             }
 
@@ -563,16 +792,25 @@ namespace SeaSick.UI
                 want = ground;
 
             Evaluate();
+            SyncBuildingBar();
 
-            // Desktop: Enter is the ✓.
+            // Desktop: Enter is the bar's confirm.
             if (keys != null && (keys.enterKey.wasPressedThisFrame
                                  || keys.numpadEnterKey.wasPressedThisFrame))
                 Confirm();
         }
 
-        /// One 45° step. Public and static so the ↻ button and R press the
-        /// same thing.
-        public static void Rotate() { if (Instance != null) Instance.Turn(false); }
+        /// One 45° step. Public and static so the bar's Turn and R press the
+        /// same thing. Re-judged at once, so the status line is about the
+        /// rectangle as it now faces.
+        public static void Rotate()
+        {
+            var s = Instance;
+            if (s == null || s.plan.id == null || s.wallMode || s.roadMode || s.ladderMode) return;
+            s.Turn(false);
+            s.Evaluate();
+            s.SyncBuildingBar();
+        }
 
         void Turn(bool back)
         {
@@ -646,13 +884,23 @@ namespace SeaSick.UI
             // already saying why in `Refusal`, and a count of trees on
             // ground the player cannot build on would just be noise under
             // the same red ✕.
-            ClearLine = "";
+            // Rebuilt only when the counts change (2026-09-30): it used to be
+            // a fresh string (and a list) every frame of siting.
             if (valid && outpost != null)
             {
                 outpost.CountObstructions(sited, at, Yaw, out int trees, out int rocks);
-                ClearLine = FormatClearLine(trees, rocks);
-                if (onWall)
-                    ClearLine = string.IsNullOrEmpty(ClearLine) ? OnWallLine : OnWallLine + " · " + ClearLine;
+                if (trees != clearTrees || rocks != clearRocks || onWall != clearOnWall)
+                {
+                    clearTrees = trees; clearRocks = rocks; clearOnWall = onWall;
+                    ClearLine = FormatClearLine(trees, rocks);
+                    if (onWall)
+                        ClearLine = string.IsNullOrEmpty(ClearLine) ? OnWallLine : OnWallLine + " · " + ClearLine;
+                }
+            }
+            else if (clearTrees != -1)
+            {
+                ClearLine = "";
+                clearTrees = clearRocks = -1;
             }
 
             // **Warmth (2026-09-27).** A Hut only: whether this spot falls
@@ -751,35 +999,6 @@ namespace SeaSick.UI
 
             DropTheViewOn(outpost);
             Cancel();
-        }
-
-        /// **The three thumbs under the drawing** — see `SitingButtons`. The
-        /// mode draws them itself rather than the sheet doing it, because
-        /// they are anchored to the ghost and the ghost is this file's.
-        void OnGUI()
-        {
-            if (plan.id == null || outpost == null) return;
-            if (wallMode) { WallSiting.DrawGUI(); return; }
-            if (roadMode)
-            {
-                RoadSiting.DrawGUI();
-                if (!RoadSiting.Active) Cancel();
-                return;
-            }
-            if (ladderMode)
-            {
-                LadderSiting.DrawGUI();
-                if (!LadderSiting.Active) Cancel();
-                return;
-            }
-            switch (SitingButtons.Draw(at, valid, Refusal))
-            {
-                case SitingButtons.Press.Cancel: Cancel(); break;
-                case SitingButtons.Press.Rotate: Turn(false); Evaluate(); break;
-                case SitingButtons.Press.Confirm: Commit(); break;
-            }
-            if (valid) DrawClearLine(at, 3, ClearLine);
-            if (valid) DrawInfoLine(at, 3, WarmthLine, UITheme.TextDim);
         }
 
         /// **Drop the view on to what was just sited**: Kevin's call, 35 m

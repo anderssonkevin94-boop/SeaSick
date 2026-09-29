@@ -143,7 +143,8 @@ namespace SeaSick.UI.Sheets
                 report.AppendLine($"Terrain hit {hit}; distance before anchor: {Vector3.Distance(camera.transform.position,sheet.AnchorWorld)-Vector3.Distance(camera.transform.position,hit):0.00}m");
             Vector2 guiPoint = new Vector2(point.x, Screen.height-point.y);
             bool visible = point.z > 0f && Screen.safeArea.Contains((Vector2)point)
-                && !SheetHost.FrameRect.Contains(guiPoint) && !MidnightLandHud.ResourcesRect.Contains(guiPoint);
+                && !SheetHost.FrameRect.Contains(guiPoint) && !MidnightLandHud.ResourcesRect.Contains(guiPoint)
+                && !ThumbBar.Blocks(guiPoint);
             report.AppendLine($"Building ground anchor: {point}; outside UI: {visible}; sheet: {SheetHost.FrameRect}");
             if (!visible) failures++;
             report.AppendLine(failures == 0 ? "PASS" : $"FAIL {failures}");

@@ -166,6 +166,13 @@ namespace SeaSick.UI.Sheets
 
         public void Tick(VisualElement panelRoot)
         {
+            // Placing owns the top of the screen (its instruction card sits
+            // where the chart does ashore), and the chart answers nothing
+            // while a ghost is being positioned (phase 1 UI, 2026-09-30).
+            bool placing = ThumbBar.PlacementActive;
+            root.style.display = placing ? DisplayStyle.None : DisplayStyle.Flex;
+            if (placing) return;
+
             // Top-left, inside the safe area. The place label sits to its
             // right and is positioned off the same corner.
             float scale = panelRoot.resolvedStyle.width / Mathf.Max(1f, Screen.width);

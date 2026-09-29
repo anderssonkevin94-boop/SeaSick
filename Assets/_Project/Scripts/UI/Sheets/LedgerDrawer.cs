@@ -11,8 +11,12 @@ namespace SeaSick.UI.Sheets
     /// **The ledger drawer, 2026-09-27 (concept A1, Melvor redesign).**
     ///
     /// Kevin, on the Melvor Idle mock: *"this looks good, the UI that is"*.
-    /// A left slide-in list of everything the camp is, opened by the ☰
-    /// button at the top-left of the land HUD. It replaces the old four
+    /// A list of everything the camp is. **Since 2026-09-30 (island UI
+    /// restructure 1A) it is a bottom sheet** that slides up above the thumb
+    /// bar, opened and closed by the bar's Camp button (`ThumbBar`) --
+    /// interim, until the Camp sheet of phase 4 -- instead of a left drawer
+    /// under a ☰ at the top-left (nothing important lives top-left now:
+    /// one thumb cannot reach it). It replaces the old four
     /// bottom buttons (Build/Crew/Stores/Ship) while ashore. Four framed
     /// groups: CAMP (overview, stores, people, build), GATHER (one row per
     /// seam the island has), MAKE (one row per production building
@@ -21,7 +25,9 @@ namespace SeaSick.UI.Sheets
     ///
     /// Rows are built once per SHAPE (which seams, which buildings) and
     /// re-texted on the 0.25 s tick; only a new seam or building rebuilds
-    /// its group. Dismiss: the ✕, a tap on the scrim, or a swipe left.
+    /// its group. Dismiss: Camp again, the ✕, a tap on the scrim, or a
+    /// swipe down (only while the list is scrolled to its top, so scrolling
+    /// back up the list never closes it).
     public sealed class LedgerDrawer
     {
         /// **The camp overview seam.** Another sheet (`CampOverviewSheet`,
@@ -32,8 +38,13 @@ namespace SeaSick.UI.Sheets
 
         public static bool IsOpen { get; private set; }
 
+        /// The one drawer the land HUD built, for `ThumbBar`'s Camp button.
+        static LedgerDrawer active;
+        public static void ToggleActive() { if (active != null) active.Toggle(); }
+        public static void CloseActive() { if (active != null && IsOpen) active.Close(); }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void Reset() { IsOpen = false; }
+        static void Reset() { IsOpen = false; active = null; }
 
         internal static ISheet CampOverview(Outpost camp)
         {
@@ -111,6 +122,7 @@ namespace SeaSick.UI.Sheets
         float nextRefresh;
         Vector2 swipeStart;
         bool swiping;
+        readonly ScrollView scroll;
 
         public LedgerDrawer(VisualElement root)
         {
@@ -127,7 +139,11 @@ namespace SeaSick.UI.Sheets
 
             layer = new VisualElement { pickingMode = PickingMode.Ignore };
             layer.AddToClassList("ledger-layer");
+            // The bottom-sheet override (MidnightLand.uss, `thumb-` rules):
+            // anchored to the bottom, slides up instead of in from the left.
+            layer.AddToClassList("thumb-ledger-bottom");
             root.Add(layer);
+            active = this;
 
             scrim = new VisualElement { pickingMode = PickingMode.Ignore };
             scrim.AddToClassList("ledger-scrim");
@@ -137,12 +153,19 @@ namespace SeaSick.UI.Sheets
             drawer = new VisualElement();
             drawer.AddToClassList("ledger-drawer");
             layer.Add(drawer);
-            drawer.RegisterCallback<PointerDownEvent>(e => { swipeStart = e.position; swiping = true; }, TrickleDown.TrickleDown);
+            // Swipe DOWN to dismiss (panel y grows downward), armed only when
+            // the list is at its top, so a drag that scrolls it is a scroll.
+            drawer.RegisterCallback<PointerDownEvent>(e =>
+            {
+                swipeStart = e.position;
+                swiping = scroll == null || scroll.scrollOffset.y <= 1f;
+            }, TrickleDown.TrickleDown);
             drawer.RegisterCallback<PointerMoveEvent>(e =>
             {
                 if (!swiping) return;
                 var d = (Vector2)e.position - swipeStart;
-                if (d.x < -60f && Mathf.Abs(d.x) > Mathf.Abs(d.y) * 1.5f) { swiping = false; Close(); }
+                if (d.y > 60f && d.y > Mathf.Abs(d.x) * 1.5f) { swiping = false; Close(); }
+                else if (d.y < -12f) swiping = false;
             }, TrickleDown.TrickleDown);
             drawer.RegisterCallback<PointerUpEvent>(_ => swiping = false, TrickleDown.TrickleDown);
 
@@ -167,7 +190,7 @@ namespace SeaSick.UI.Sheets
             head.Add(close);
             drawer.Add(head);
 
-            var scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.AddToClassList("ledger-scroll");
             scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
@@ -538,14 +561,25 @@ namespace SeaSick.UI.Sheets
             layer.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
             if (!active) { if (IsOpen) Close(); return; }
 
+            // **A bottom sheet above the thumb bar.** Full width less the
+            // bar's 12-unit margins upright; centred and capped like the bar
+            // on a desk. Its top stops under the status bar, so the chips
+            // stay readable behind the scrim.
             float scale = SheetHost.PanelScale;
             var safe = Screen.safeArea;
-            float w = root.resolvedStyle.width;
+            float w = root.resolvedStyle.width, h = root.resolvedStyle.height;
             if (float.IsNaN(w) || w < 1f) w = 430f;
-            drawer.style.width = Mathf.Min(w * .81f, 380f + safe.xMin * scale);
-            drawer.style.paddingTop = (Screen.height - safe.yMax) * scale + 16f;
-            drawer.style.paddingBottom = safe.yMin * scale + 16f;
-            drawer.style.paddingLeft = safe.xMin * scale + 12f;
+            if (float.IsNaN(h) || h < 1f) h = 932f;
+            float sl = safe.xMin * scale, sr = (Screen.width - safe.xMax) * scale;
+            float bottom = Mathf.Max(ThumbBar.ReservePanel, safe.yMin * scale + ThumbBar.BottomGap);
+            float ceiling = (Screen.height - safe.yMax) * scale + 8f + MidnightLandHud.BarHeight + 8f;
+            float width = HudLayout.Wide
+                ? Mathf.Min(ThumbBar.MaxWide, w - sl - sr - ThumbBar.Side * 2f)
+                : w - sl - sr - ThumbBar.Side * 2f;
+            drawer.style.left = HudLayout.Wide ? (w - width) * .5f : sl + ThumbBar.Side;
+            drawer.style.width = width;
+            drawer.style.bottom = bottom;
+            drawer.style.height = Mathf.Max(200f, Mathf.Min(h - bottom - ceiling, Mathf.Max(420f, h * .62f)));
 
             if (!IsOpen || Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + .25f;

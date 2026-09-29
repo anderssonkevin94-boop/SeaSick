@@ -54,6 +54,7 @@ namespace SeaSick.UI.Sheets
         SelectionRing ring;
         MidnightLandHud land;
         SeaLedger sea;
+        ThumbBar.View thumb;
         bool midnight;
         readonly BuildingSheetFocus buildingFocus = new BuildingSheetFocus();
 
@@ -143,6 +144,9 @@ namespace SeaSick.UI.Sheets
             // The sea twin of the land drawer: added after it, so it draws
             // over everything else in this document too.
             sea = new SeaLedger(root);
+            // The thumb bar last of all: it draws over the ledger drawer's
+            // scrim, so Camp still closes the drawer it opened.
+            thumb = new ThumbBar.View(root);
             if (ring == null) ring = gameObject.AddComponent<SelectionRing>();
             chromeBuilt = true;
         }
@@ -691,7 +695,7 @@ namespace SeaSick.UI.Sheets
             bool suppressed = SeaSick.UI.ModularYard.ShipyardModal.IsOpen
                 || SeaSick.UI.Menus.GameMenus.Current != SeaSick.UI.Menus.GameMenus.Mode.None;
             root.style.display = suppressed ? DisplayStyle.None : DisplayStyle.Flex;
-            if (suppressed) return;
+            if (suppressed) { thumb.Hide(); return; }
 
             // A page swap destroys the element a slide is running on, and a
             // scheduler on a dead element never reports finishing. Without
@@ -700,8 +704,14 @@ namespace SeaSick.UI.Sheets
             if (animating && Time.unscaledTime > animDeadline) animating = false;
 
             bool on = Sheets.SuppressLegacy;
-            runtimePanel.referenceResolution = MidnightLandHud.Active && !HudLayout.Wide
+            // Placement uses the land panel's scale too, so the thumb bar is
+            // the same 74 pt when the first campfire is placed at an island
+            // that has no camp (and so no land HUD) yet.
+            runtimePanel.referenceResolution = (MidnightLandHud.Active || ThumbBar.PlacementActive) && !HudLayout.Wide
                 ? new Vector2Int(430, 932) : originalResolution;
+            // Before the land HUD: the food notice and the ledger drawer
+            // stack on this frame's `ThumbBar.ReservePanel`.
+            thumb.Tick(root);
             land.Tick(root);
             sea.Tick(root);
             var panelSize = new Vector2(root.resolvedStyle.width, root.resolvedStyle.height);
@@ -812,6 +822,14 @@ namespace SeaSick.UI.Sheets
                 var size = FrameSizeScreen();
                 w = size.x; h = size.y;
                 yBottom += (MidnightLandHud.NavHeight + 10f) / PanelScale;
+            }
+            // **The thumb bar hides while a sheet is open** -- except in
+            // placement mode, where it IS the active control; a sheet left
+            // open then is lifted clear of it rather than drawn under it.
+            if (ThumbBar.PlacementActive && ThumbBar.Visible)
+            {
+                float lift = ThumbBar.ReservePanel / PanelScale - yBottom;
+                if (lift > 0f) { yBottom += lift; h = Mathf.Max(80f / PanelScale, h - lift); }
             }
             FrameRect = new Rect(x, Screen.height - (yBottom + h), w, h);
             FrameOpen = true;

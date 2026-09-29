@@ -21,14 +21,12 @@ namespace SeaSick.UI.Sheets
         /// read this, so a tall sheet and the dial both start below the
         /// chips.
         public const float TopHeight = BarHeight + 6f + AlertStrip.Height;
-        const float MenuWidth = 46f;
         public static Rect NavigationRect { get; private set; }
         public static Rect ResourcesRect { get; private set; }
         public static Color Pearl => new Color32(232, 242, 246, 255);
         public static Color Ice => new Color32(164, 210, 232, 255);
         public static Color Muted => new Color32(166, 186, 198, 255);
         readonly VisualElement top;
-        readonly Button menu;
         readonly Label mood, people, food, day;
         readonly HudGlyph moodFace, foodTrend;
         readonly BuildingStatusLabels buildingStatus;
@@ -83,17 +81,13 @@ namespace SeaSick.UI.Sheets
             day = new Label(); day.AddToClassList("land-day"); top.Add(day);
             buildingStatus = new BuildingStatusLabels(root);
             campStatus = new CampStatusHud(root);
-            // **The ☰ replaces the bottom nav, 2026-09-27** (Melvor
-            // redesign): Build/Crew/Stores/Ship live in the ledger drawer.
-            // Added last, so the drawer and its scrim draw over everything
-            // else in this document.
             alerts = new AlertStrip(root);
             goalBar = new GoalBar(root);
-            menu = new Button(() => ledgerDrawer.Toggle());
-            menu.AddToClassList("ledger-menu");
-            menu.tooltip = "The ledger: camp, gather, make, sea";
-            menu.Add(new LedgerDrawer.Glyph(LedgerDrawer.Glyph.Kind.Menu));
-            root.Add(menu);
+            // **No ☰ since 2026-09-30** (island UI restructure 1A): the top
+            // bar is status only, and the ledger drawer opens from the thumb
+            // bar's Camp button at the bottom (`ThumbBar`). Added last, so
+            // the drawer and its scrim draw over everything else in this
+            // document (the thumb bar itself is added after it by SheetHost).
             ledgerDrawer = new LedgerDrawer(root);
         }
 
@@ -123,7 +117,7 @@ namespace SeaSick.UI.Sheets
         {
             bool active = Active;
             root.EnableInClassList("midnight-land", active);
-            top.style.display = menu.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
+            top.style.display = active ? DisplayStyle.Flex : DisplayStyle.None;
             ledgerDrawer.Tick(active, root, alerts.LastCount);
             if (!active)
             {
@@ -135,13 +129,11 @@ namespace SeaSick.UI.Sheets
             var safe = Screen.safeArea;
             float left = safe.xMin * scale + 8f, right = (Screen.width - safe.xMax) * scale + 8f;
             float topY = (Screen.height - safe.yMax) * scale + 8f;
-            menu.style.left = left;
-            menu.style.top = topY;
-            top.style.left = left + MenuWidth + 6f;
+            top.style.left = left;
             top.style.right = right;
             top.style.top = topY;
             alerts.Place(left, right, topY + BarHeight + 6f);
-            // The top chrome: the ☰ and the bar, plus the strip while it
+            // The top chrome: the bar, plus the strip while it
             // has a chip up (an empty strip must not eat world taps).
             float chrome = BarHeight + (AlertStrip.Showing ? 6f + AlertStrip.Height : 0f);
             // The pinned goal's slim bar (GoalBar): under the strip, or in
@@ -157,7 +149,16 @@ namespace SeaSick.UI.Sheets
                 safe.width - 16f / scale, 0f);
             var statusRect = campStatus.Tick(Camp, true, scale);
             if (statusRect.height > 0f) NavigationRect = statusRect;
-            if (!SheetHost.FrameOpen) HudLayout.ClaimSheet(NavigationRect);
+            // The IMGUI HUD keeps off the food notice AND the thumb bar.
+            if (!SheetHost.FrameOpen)
+            {
+                var claim = NavigationRect;
+                var bar = ThumbBar.Rect;
+                if (bar.height > 0f)
+                    claim = Rect.MinMaxRect(Mathf.Min(claim.xMin, bar.xMin), Mathf.Min(claim.yMin, bar.yMin),
+                        Mathf.Max(claim.xMax, bar.xMax), Mathf.Max(claim.yMax, bar.yMax));
+                HudLayout.ClaimSheet(claim);
+            }
             buildingStatus.Tick(Camp, scale);
             if (Time.unscaledTime < nextUpdate) return;
             nextUpdate = Time.unscaledTime + .25f;

@@ -1,0 +1,89 @@
+/* Build screen (BuildSheet, phase 1B of the island UI restructure, 2026-09-30).
+   One sheet, no tabs: READY TO PLACE / SHORT / CAMPFIRE N UNLOCKS, three cards
+   to a row, one fix row pinned at the bottom.
+   Palette as CampPages.uss: card #16283A, raised #1A3040, border #2C4A5E,
+   ice #A4D2E8, pearl #E8F2F6, muted #A6BAC6, dim #7F97A6, moss #9FE0C2,
+   amber #F0C36A, ink #0B1720. Loaded onto the sheet's own root only; every
+   selector is `bs-` so nothing here reaches another sheet. Sizes are PANEL
+   UNITS. The header is CampPages.IconHeader (cp- classes, CampPages.uss). */
+
+.bs-root .unity-label {
+    margin: 0; padding: 0;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
+}
+.bs-root { flex-direction: column; flex-grow: 1; flex-shrink: 1; min-height: 0; max-height: 100%; overflow: hidden; }
+.bs-scroll { flex-grow: 1; flex-shrink: 1; min-height: 0; margin-top: 4px; }
+.bs-list { flex-direction: column; padding-bottom: 6px; }
+
+/* --- section labels --- */
+.bs-root .bs-label {
+    font-size: 12px; letter-spacing: 1px; margin: 10px 0 4px 4px; color: rgb(166, 186, 198);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.bs-root .bs-label--ready { color: rgb(159, 224, 194); }
+.bs-root .bs-label--short { color: rgb(240, 195, 106); }
+.bs-root .bs-label--locked { color: rgb(127, 151, 166); }
+.bs-root .bs-note { font-size: 13px; color: rgb(166, 186, 198); white-space: normal; margin: 6px 4px; }
+.bs-root .bs-note--lock { color: rgb(164, 210, 232); }
+
+/* --- three to a row --- */
+.bs-grid { flex-direction: row; flex-wrap: wrap; }
+
+/* the tappable slot: transparent, carries the gutter; the face is what is seen */
+.bs-slot, .bs-slot:hover, .bs-slot:active, .bs-slot:focus {
+    width: 33.333%; margin: 0; padding: 4px; border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    flex-direction: column; align-items: stretch; justify-content: flex-start;
+}
+.bs-card {
+    flex-grow: 1; flex-direction: column; min-height: 100px; padding: 8px 8px 6px 8px;
+    background-color: rgb(26, 48, 64); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 12px;
+}
+.bs-slot:active .bs-card { background-color: rgb(34, 62, 82); }
+.bs-card--ready { border-color: rgb(74, 122, 108); }
+.bs-card--short { background-color: rgb(22, 40, 58); }
+.bs-card--goal { border-width: 2px; border-color: rgb(164, 210, 232); }
+.bs-root .bs-name {
+    font-size: 14px; color: rgb(232, 242, 246); white-space: normal;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.bs-root .bs-purpose { font-size: 12px; color: rgb(166, 186, 198); white-space: normal; margin-top: 2px; flex-grow: 1; }
+.bs-root .bs-cost {
+    font-size: 12px; color: rgb(159, 224, 194); white-space: normal; margin-top: 4px;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.bs-root .bs-cost--short { color: rgb(240, 195, 106); }
+
+/* NEW / GOAL: a small tab sitting on the card's top edge, clear of the name */
+.bs-root .bs-badge {
+    position: absolute; top: -8px; left: 8px; height: 16px; padding: 0 7px; border-radius: 8px;
+    font-size: 10px; letter-spacing: 1px; -unity-text-align: middle-center; color: rgb(11, 23, 32);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.bs-root .bs-badge--new { background-color: rgb(164, 210, 232); }
+.bs-root .bs-badge--goal { background-color: rgb(240, 195, 106); }
+
+/* --- locked / capped chips --- */
+.bs-chip {
+    flex-grow: 1; flex-direction: row; align-items: center; min-height: 44px; padding: 0 8px;
+    background-color: rgba(16, 28, 38, 0.6); border-radius: 12px;
+}
+.bs-chip--on { background-color: rgba(26, 48, 64, 0.9); }
+.bs-lock { width: 16px; height: 16px; margin-right: 6px; flex-shrink: 0; }
+.bs-root .bs-chip-name { font-size: 13px; color: rgb(127, 151, 166); flex-shrink: 1; white-space: normal; }
+.bs-chip--on .bs-chip-name { color: rgb(232, 242, 246); }
+.bs-dash { position: absolute; left: 0; top: 0; right: 0; bottom: 0; }
+
+/* --- the fix row, pinned under the scroll --- */
+.bs-fix {
+    flex-direction: row; align-items: center; flex-shrink: 0; margin-top: 6px; padding: 8px 10px;
+    background-color: rgb(19, 34, 46); border-width: 1.5px; border-color: rgb(94, 78, 44); border-radius: 12px;
+}
+.bs-root .bs-fix-text { font-size: 13px; color: rgb(232, 242, 246); white-space: normal; flex-grow: 1; flex-shrink: 1; min-width: 0; }
+.bs-fix-btn {
+    min-width: 116px; min-height: 44px; margin: 0 0 0 10px; padding: 0 12px; flex-shrink: 0;
+    border-width: 0; border-radius: 10px; font-size: 14px; white-space: normal;
+    background-color: rgb(164, 210, 232); color: rgb(11, 23, 32); -unity-text-align: middle-center;
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
+}
+.bs-fix-btn:active { background-color: rgb(120, 176, 204); }

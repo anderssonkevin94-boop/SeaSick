@@ -1140,8 +1140,9 @@ namespace SeaSick.Ship
         /// (`SheetBootstrap.FireFor`), and there is no campfire in the world
         /// to tap. A second `Prompts` bidder would lose the slot to this one
         /// anyway, so it lives in the stack that already owns it. The tap
-        /// starts siting exactly as the old camp bar's button did; the ghost
-        /// then carries its own ✓ ✕ ↻ (`CampSiting.OnGUI`).
+        /// starts siting exactly as the old camp bar's button did; from there
+        /// the bottom placement bar ("Make camp here" -- Cancel, Turn, "Light
+        /// the fire") is `CampSiting`'s, and this row hides while it runs.
         ///
         /// Before the survey has decided, or where it found no ground, a line
         /// says so instead of a button that could not work.

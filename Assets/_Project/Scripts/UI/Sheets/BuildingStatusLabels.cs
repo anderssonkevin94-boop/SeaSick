@@ -114,6 +114,7 @@ namespace SeaSick.UI.Sheets
                 var rect = new Rect(point.x-width*.5f/scale, Screen.height-point.y-height/scale, width/scale, height/scale);
                 if (!guiSafe.Contains(rect.min) || !guiSafe.Contains(rect.max)
                     || rect.Overlaps(MidnightLandHud.ResourcesRect) || rect.Overlaps(MidnightLandHud.NavigationRect)
+                    || rect.Overlaps(ThumbBar.Rect) || rect.Overlaps(ThumbBar.CardRect)
                     || rect.Overlaps(chartRect)
                     || (SheetHost.FrameOpen && rect.Overlaps(SheetHost.FrameRect))) continue;
                 bool overlap = false;

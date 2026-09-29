@@ -15,7 +15,7 @@ namespace SeaSick.UI
     /// you walk round the camp. Plant the first post with a tap. The next
     /// post is on the end of your thumb — drag it, or tap where you want it,
     /// and the segment between the two is drawn live, green or red, with the
-    /// refusal in words under the buttons. ✓ turns that segment into a site
+    /// refusal in the placement bar's status line. Build (✓) turns that segment into a site
     /// in the queue AT ONCE (so hands start hauling while you keep drawing)
     /// and the run continues from the post you just confirmed. ✕ stops.
     ///
@@ -32,7 +32,8 @@ namespace SeaSick.UI
     /// the Hand's pick-up, the tap's consequence, the camp bar's line — goes
     /// on getting the right answer without knowing walls exist.
     ///
-    /// Pure statics, driven from `CampSiting`'s `Update` and `OnGUI`: it has
+    /// Pure statics, driven from `CampSiting`'s `Update` (which also drives
+    /// the bottom placement bar for it, 2026-09-30): it has
     /// no lifetime of its own and nothing should be able to leave it running
     /// after siting ends.
     public static class WallSiting
@@ -95,8 +96,10 @@ namespace SeaSick.UI
         /// it is — this says which of the two shapes of placing it is.
         public static bool Active => Mode != State.Off;
 
-        /// The hint under the thumb before anything is planted.
-        public const string PlantHint = "tap the ground to plant the first post";
+        /// The placement bar's hint before anything is planted...
+        public const string PlantHint = "Tap the ground to plant the first post";
+        /// ...and once a post is down and the next one is on the thumb.
+        public const string NextHint = "Tap for the next post · Build lays this stretch · Cancel ends the wall";
 
         /// Why the segment as drawn is refused, or "" when it is good.
         /// `CampSiting.Refusal` mirrors this so the sheet and the bar print
@@ -111,6 +114,9 @@ namespace SeaSick.UI
         /// what confirming THIS drag actually costs. Set only while `valid`,
         /// same rule as `CampSiting.ClearLine`.
         static string clearLine = "";
+
+        /// That line, for the placement bar's status.
+        public static string ClearLine => clearLine;
 
         /// Is ✓ live?
         public static bool CanConfirm => Mode == State.Stretching && valid;
@@ -234,7 +240,7 @@ namespace SeaSick.UI
                 && GroundPick.FromScreen(Camera.main, IslandInput.TapAt, out Vector3 ground))
             {
                 if (Mode == State.NoPost) Plant(Snap(ground));
-                else b = Snap(ground);
+                else b = RingMagnet(Snap(ground));
             }
 
             if (Mode == State.Stretching) Evaluate();
@@ -310,7 +316,7 @@ namespace SeaSick.UI
             if (SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked) return;
             if (!dragging || Mode != State.Stretching) return;
             if (!GroundPick.FromScreen(Camera.main, screen, out Vector3 g)) return;
-            b = Snap(new Vector3(g.x + grabOffset.x, g.y, g.z + grabOffset.y));
+            b = RingMagnet(Snap(new Vector3(g.x + grabOffset.x, g.y, g.z + grabOffset.y)));
             Evaluate();
         }
 
@@ -457,11 +463,11 @@ namespace SeaSick.UI
             return true;
         }
 
-        /// **↻ — close the ring**, and nothing else. There is no rotating a
-        /// wall: a segment IS its two posts. The button only appears when B
-        /// is near the post the run started from, because that is the one
-        /// moment a third button has something to say — the last segment of
-        /// a circuit is the one that is fiddly to aim.
+        /// **Close the ring**, and nothing else. There is no rotating a
+        /// wall: a segment IS its two posts. Offered only when B is near the
+        /// post the run started from -- the last segment of a circuit is the
+        /// one that is fiddly to aim. No button drives it since the placement
+        /// bar (2026-09-30); `RingMagnet` does the same job on the thumb.
         public static bool CanCloseRing =>
             Mode == State.Stretching && hasFirst && confirmed > 0
             && Flat(a, first) > 0.01f && Flat(b, first) <= CloseRingWithin;
@@ -473,31 +479,16 @@ namespace SeaSick.UI
             Evaluate();
         }
 
-        /// Draw the cluster under the segment's midpoint and act on it.
-        /// Called from `CampSiting.OnGUI`, which is where the ghost's own
-        /// buttons are drawn, so there is one owner of that patch of screen.
-        public static void DrawGUI()
+        /// **Closing the ring without a button (2026-09-30).** The ⭯ disc
+        /// under the segment went with the rest of the IMGUI siting
+        /// controls, and the placement bar has no middle button for a wall.
+        /// So post B landing within a thumb (`GrabRadius`) of the run's
+        /// first post -- tapped or dragged -- lands ON it, which is the
+        /// fiddly last segment of a circuit made exact.
+        static Vector3 RingMagnet(Vector3 p)
         {
-            if (Mode == State.Off) return;
-
-            if (Mode == State.NoPost)
-            {
-                SitingButtons.Hint(PlantHint);
-                // With nothing planted there is no segment to hang the ✕
-                // under: Escape backs out on a desk, and a phone has no
-                // on-screen door out of this state yet.
-                return;
-            }
-
-            bool withMiddle = CanCloseRing;
-            switch (SitingButtons.Draw(ButtonsAt, valid, Refusal,
-                        withMiddle, "⭯"))
-            {
-                case SitingButtons.Press.Cancel: Stop(); break;
-                case SitingButtons.Press.Rotate: CloseRing(); break;
-                case SitingButtons.Press.Confirm: Confirm(); break;
-            }
-            if (valid) CampSiting.DrawClearLine(ButtonsAt, withMiddle ? 3 : 2, clearLine);
+            if (!hasFirst || confirmed <= 0 || Flat(a, first) <= 0.01f) return p;
+            return Flat(p, first) <= GrabRadius ? first : p;
         }
 
         // =================================================================

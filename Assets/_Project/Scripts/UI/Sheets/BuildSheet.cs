@@ -7,83 +7,124 @@ using UnityEngine.UIElements;
 
 namespace SeaSick.UI.Sheets
 {
-    /// **Camp › Build, 2026-09-27** (Kevin approved the Ledger follow-ups:
-    /// the Build tab of the nav mockup, cards not rows). What the drawer's
-    /// CAMP › Build row opens now, instead of the old campfire sheet's build
-    /// tab. One tall page: a segmented control (Shelter · Food · Industry ·
-    /// Defence · Sea), then a card per plan in that group -- a building
-    /// glyph, the name, the plan's one-line blurb, the price of the NEXT
-    /// copy as have/need item icons (red when short), and the copy count
-    /// ("×2 of 3 — 4th at campfire III"). Order: can build, then short,
-    /// then at its cap; plans the fire has not opened are grouped under
-    /// "Needs campfire II", dashed and not tappable.
+    /// **The Build screen, 2026-09-30 (phase 1B of the island UI
+    /// restructure).** One sheet, no tabs. Every plan the camp knows is
+    /// sorted by READINESS, not by kind:
+    ///
+    /// * **READY TO PLACE** (moss): unlocked, a copy is allowed, the stock
+    ///   covers it. Card: name, one-line purpose, cost.
+    /// * **SHORT · PLACE IT, HANDS GATHER THE REST** (amber): unlocked, a
+    ///   copy is allowed, the stock does not cover it. Same card; the cost
+    ///   line names ONLY what is missing. Tapping still places it (the
+    ///   builders fetch and cut what is missing, as they always have).
+    /// * **CAMPFIRE N UNLOCKS** (grey): plans the fire has not opened, and
+    ///   copies past the fire's cap ("×2 of 2 — 3rd at campfire II"), as
+    ///   compact dashed chips. A tap shows the requirement inline; nothing
+    ///   here is a dead end.
+    ///
+    /// Three cards to a row, so the whole catalogue fits the phone's tall
+    /// band; the ScrollView is only the fallback when the list is longer
+    /// than the space. The palisade, ladder and road are cards like the
+    /// others (their purpose line says how they are drawn); tapping one
+    /// starts its existing siting flow.
+    ///
+    /// **Badges.** NEW (ice) marks a plan the first time it became available
+    /// -- persisted per save slot in PlayerPrefs (`SeenKey`), and cleared
+    /// once a Build sheet has shown it. GOAL (amber, plus a 2 px ice border)
+    /// marks the pinned build goal and the plan this sheet was opened on
+    /// (`Open(camp, highlightPlanId)`).
+    ///
+    /// **The fix row** (only when something is SHORT): the one resource the
+    /// short plans lack most, who is gathering it, and a primary
+    /// "Gather <resource>" that sends the first idle hand
+    /// (`Outpost.OrderGather`, what `GatherSheet`'s send button presses), or
+    /// opens that resource's `GatherSheet` when nobody is idle.
     ///
     /// **It reads and it calls; it never decides.** Prices are
-    /// `OutpostLedger.PriceOfNext` (`BuildPlans.PriceForCopy`), caps
-    /// `CopyLimit`/`CanAddCopy` (`Techs.Caps`), locks `PlanUnlocked`. A tap
-    /// on a card is exactly what the old build rows did:
-    /// `CampSiting.Begin(outpost, plan, ship)` and the sheet folds away so
-    /// the ground is clear. A SHORT plan is still tappable (the builders
-    /// fetch and cut what is missing, as they always have); a plan at its
-    /// cap or still locked is not. Defence also carries the palisade
-    /// (`Outpost.BeginWallSiting`, the wall tool) and the ladder
-    /// (`LadderSiting.Start`), which are drawn, not sited.
-    ///
-    /// Kevin's no-scroll preference: a group holds at most five cards,
-    /// which fit the tall band on the phone; the list sits in a clamped
-    /// ScrollView only as the fallback for a short screen.
+    /// `OutpostLedger.PriceOfNext`, caps `CopyLimit`/`CanAddCopy`, locks
+    /// `PlanUnlocked`. A card tap is `CampSiting.Begin(outpost, plan,
+    /// ship)` (or the wall/ladder/road tool) followed by `Sheets.Close()`.
+    /// Every element is built once and re-texted on the 0.25 s refresh
+    /// (pools grow, never rebuild).
     public sealed class BuildSheet : ISheetFramed
     {
-        /// **The ☰ hook**, set by `LedgerDrawer`'s constructor.
+        /// **The ☰ hook**, set by `LedgerDrawer`'s constructor. Kept for its
+        /// caller; this page has no ☰ of its own now.
         public static Action OpenLedger;
 
-        enum Group { Shelter, Food, Industry, Defence, Sea }
-        static readonly string[] TabNames = { "Shelter", "Food", "Industry", "Defence", "Sea" };
-
-        /// The tab this page was last left on, this session.
-        static int lastTab = -1;
-
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        static void ResetStatics() { lastTab = -1; OpenLedger = null; }
+        static void ResetStatics() { OpenLedger = null; }
 
-        static Group GroupOf(string planId)
+        /// **The goal chain's door:** open the Build screen with this plan
+        /// carrying the GOAL badge (and scrolled into view).
+        public static void Open(Outpost camp, string highlightPlanId = null)
         {
-            if (planId == BuildPlans.Hut.id || planId == BuildPlans.Storage.id || planId == BuildPlans.Storehouse.id)
-                return Group.Shelter;
-            if (planId == BuildPlans.Farm.id || planId == BuildPlans.FishingHut.id || planId == BuildPlans.Kitchen.id)
-                return Group.Food;
-            if (planId == BuildPlans.Watchtower.id) return Group.Defence;
-            if (planId == BuildPlans.Pier.id || planId == BuildPlans.DryDock.id) return Group.Sea;
-            return Group.Industry;
+            if (camp == null || camp.Ledger == null) return;
+            Sheets.Open(new BuildSheet(camp, highlightPlanId));
+        }
+
+        /// **Start placing `p` exactly as the old cards did** -- the wall,
+        /// ladder and road are drawn by their own tools, everything else is
+        /// sited by `CampSiting.Begin` -- then fold the sheet away so the
+        /// ground is clear. Shared with `PlanSheet`'s Build button.
+        internal static void StartPlacement(Outpost o, BuildPlan p)
+        {
+            if (o == null || string.IsNullOrEmpty(p.id)) return;
+            if (p.id == BuildPlans.Palisade.id)
+            {
+                if (Outpost.BeginWallSiting == null) return;
+                Outpost.BeginWallSiting(o);
+            }
+            else if (p.id == BuildPlans.Ladder.id) LadderSiting.Start(o);
+            else if (p.id == BuildPlans.Road.id) RoadSiting.Start(o);
+            else CampSiting.Begin(o, p, SheetBits.ShipTransform);
+            // Siting takes the whole screen's attention; a sheet lying over
+            // the ground you are about to tap is the old bottom bar's bug.
+            Sheets.Close();
+        }
+
+        /// True for the plans that are drawn, not sited by one tap.
+        internal static bool IsDrawn(string planId) =>
+            planId == BuildPlans.Palisade.id || planId == BuildPlans.Ladder.id || planId == BuildPlans.Road.id;
+
+        /// **One-line purpose, three words or so** -- for a plan not listed
+        /// here, the first clause of its blurb.
+        internal static string PurposeOf(BuildPlan p)
+        {
+            if (p.id == BuildPlans.Hut.id) return p.houses > 0 ? $"Beds for {p.houses}" : "Beds";
+            if (p.id == BuildPlans.Storage.id) return "More storage";
+            if (p.id == BuildPlans.Storehouse.id) return "Much more storage";
+            if (p.id == BuildPlans.Farm.id) return "Grows food";
+            if (p.id == BuildPlans.FishingHut.id) return "Fish for food";
+            if (p.id == BuildPlans.Kitchen.id) return "Cooks dishes";
+            if (p.id == BuildPlans.Sawmill.id) return "Logs → boards";
+            if (p.id == BuildPlans.Quarry.id) return "Stone → brick";
+            if (p.id == BuildPlans.Blacksmith.id) return "Ore → tools";
+            if (p.id == BuildPlans.Fletcher.id) return "Makes arrows";
+            if (p.id == BuildPlans.Mill.id) return "Wheat → flour";
+            if (p.id == BuildPlans.Watchtower.id) return "Lookout, defence";
+            if (p.id == BuildPlans.Pier.id) return "Ship berth";
+            if (p.id == BuildPlans.DryDock.id) return "Refit your ship";
+            if (p.id == BuildPlans.Palisade.id) return "Draw a run";
+            if (p.id == BuildPlans.Road.id) return "Tap start, tap end";
+            if (p.id == BuildPlans.Ladder.id) return "Foot, then top";
+            string b = p.blurb ?? "";
+            int cut = b.IndexOfAny(new[] { ',', ';', '.' });
+            return cut > 0 ? b.Substring(0, cut) : b;
         }
 
         readonly Outpost outpost;
-        int tab;
+        readonly string highlightId;
 
-        /// `focusPlanId` opens the page on the group that plan is in (the
-        /// "no spear" alert asks for the forge).
+        /// `focusPlanId` is the plan to carry the GOAL badge (the "no spear"
+        /// alert asks for the forge); the sheet no longer has tabs to open on.
         public BuildSheet(Outpost camp, string focusPlanId = null)
         {
             outpost = camp;
-            if (!string.IsNullOrEmpty(focusPlanId)) tab = (int)GroupOf(focusPlanId);
-            else if (lastTab >= 0) tab = lastTab;
-            else tab = FirstTabWithWork();
-            lastTab = tab;
+            highlightId = string.IsNullOrEmpty(focusPlanId) ? null : focusPlanId;
         }
 
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
-
-        /// First group with a plan the camp can put up right now, else
-        /// Shelter.
-        int FirstTabWithWork()
-        {
-            var l = L;
-            if (l == null || outpost == null) return 0;
-            for (int g = 0; g < TabNames.Length; g++)
-                foreach (var p in outpost.Buildable())
-                    if ((int)GroupOf(p.id) == g && StateOf(l, p) == State.Ready) return g;
-            return 0;
-        }
 
         // --- ISheet / ISheetFramed -------------------------------------------
 
@@ -100,435 +141,631 @@ namespace SeaSick.UI.Sheets
 
         Label subtitle;
 
+        /// Hammer · Build · what you have · ✕.
         public VisualElement BuildHeader() =>
-            CampPages.Header("Build", out subtitle, () => CampPages.OpenLedger(OpenLedger, outpost));
+            CampPages.IconHeader("Build", new HammerGlyph(), out subtitle);
 
-        // --- the page ----------------------------------------------------------
+        // --- entries -------------------------------------------------------------
 
-        enum State { Ready, Short, Capped, Locked }
-
-        sealed class CostSlot
+        struct Entry
         {
-            public VisualElement root;
-            public Image icon;
-            public Label q;
-            string res, text;
-            bool? shortNow;
-
-            public void Set(string resId, string qText, bool isShort)
-            {
-                root.style.display = DisplayStyle.Flex;
-                if (res != resId) { res = resId; icon.image = ItemIconSet.Get(resId); }
-                if (text != qText) { text = qText; q.text = qText; }
-                if (shortNow != isShort) { shortNow = isShort; root.EnableInClassList("cp-cost--short", isShort); }
-            }
-
-            public void Hide() => root.style.display = DisplayStyle.None;
+            public BuildPlan plan;
+            public string id, label, purpose, cost, reason;
+            public bool amber, goal, isNew;
+            public int level;
         }
+
+        // --- cards ---------------------------------------------------------------
 
         sealed class Card
         {
             public Button root;
-            public Label name, tag, blurb, copies;
-            public VisualElement costLine;
-            public CostSlot[] costs;
-            public Button pin;
-            public BuildPlan plan;
-            public State state;
-            public Action custom;
-            string nameText, tagText, blurbText, copiesText, tagTone, stateClass;
+            public VisualElement face;
+            public Label name, purpose, cost, badge;
+            public Entry entry;
+            string nameT, purposeT, costT, badgeT, faceCls;
+            bool amberNow, goalNow;
 
-            public void Texts(string n, string t, string tone, string b, string c)
+            public void Set(in Entry e, bool shortSection)
             {
-                if (nameText != n) { nameText = n; name.text = n; }
-                if (tagText != t) { tagText = t; tag.text = t; }
-                if (tagTone != tone)
+                entry = e;
+                if (nameT != e.label) { nameT = e.label; name.text = e.label; }
+                if (purposeT != e.purpose) { purposeT = e.purpose; purpose.text = e.purpose; }
+                if (costT != e.cost) { costT = e.cost; cost.text = e.cost; }
+                if (amberNow != e.amber) { amberNow = e.amber; cost.EnableInClassList("bs-cost--short", e.amber); }
+                if (goalNow != e.goal) { goalNow = e.goal; face.EnableInClassList("bs-card--goal", e.goal); }
+                string cls = shortSection ? "bs-card--short" : "bs-card--ready";
+                if (faceCls != cls)
                 {
-                    tagTone = tone;
-                    tag.EnableInClassList("cp-tag--ok", tone == "ok");
-                    tag.EnableInClassList("cp-tag--bad", tone == "bad");
+                    if (faceCls != null) face.RemoveFromClassList(faceCls);
+                    faceCls = cls;
+                    face.AddToClassList(cls);
                 }
-                if (blurbText != b) { blurbText = b; blurb.text = b; }
-                if (copiesText != c)
+                string b = e.goal ? "GOAL" : e.isNew ? "NEW" : null;
+                if (badgeT != b)
                 {
-                    copiesText = c;
-                    copies.text = c ?? "";
-                    copies.style.display = string.IsNullOrEmpty(c) ? DisplayStyle.None : DisplayStyle.Flex;
+                    badgeT = b;
+                    badge.style.display = b == null ? DisplayStyle.None : DisplayStyle.Flex;
+                    if (b != null) badge.text = b;
+                    badge.EnableInClassList("bs-badge--goal", b == "GOAL");
+                    badge.EnableInClassList("bs-badge--new", b == "NEW");
                 }
-            }
-
-            public void Look(State s)
-            {
-                string cls = s == State.Ready ? "cp-card--ready" : s == State.Capped ? "cp-card--capped"
-                    : s == State.Locked ? "cp-card--locked" : null;
-                if (stateClass == cls) return;
-                if (stateClass != null) root.RemoveFromClassList(stateClass);
-                stateClass = cls;
-                if (cls != null) root.AddToClassList(cls);
-                costLine.style.display = s == State.Locked ? DisplayStyle.None : DisplayStyle.Flex;
             }
         }
 
-        VisualElement rootEl, tabsRow, mainHolder, extrasHolder, lockedHolder;
-        Label lockedEyebrow, emptyNote, gateNote;
-        Button[] tabButtons;
-        readonly List<Card> mainCards = new List<Card>(), lockedCards = new List<Card>();
-        Card wallCard, ladderCard, roadCard;
-        VisualElement roadHolder;
+        sealed class Chip
+        {
+            public Button root;
+            public VisualElement face;
+            public Label name;
+            public Entry entry;
+            string nameT;
+            bool onNow;
+
+            public void Set(in Entry e, bool on)
+            {
+                entry = e;
+                if (nameT != e.label) { nameT = e.label; name.text = e.label; }
+                if (onNow != on) { onNow = on; face.EnableInClassList("bs-chip--on", on); }
+            }
+        }
+
+        VisualElement rootEl, readyGrid, shortGrid, lockedGrid, fixRow;
+        Label readyLabel, shortLabel, lockedLabel, lockNote, emptyNote, fixText;
+        Button fixBtn;
+        ScrollView scroll;
+        readonly List<Card> readyCards = new List<Card>(), shortCards = new List<Card>();
+        readonly List<Chip> chips = new List<Chip>();
 
         public VisualElement Build()
         {
             var root = new VisualElement();
-            root.AddToClassList("cp-root");
-            CampPages.Styled(root);
+            root.AddToClassList("bs-root");
+            var sheet = Resources.Load<StyleSheet>("UI/BuildStrip");
+            if (sheet != null) root.styleSheets.Add(sheet);
+            else Debug.LogWarning("[BuildSheet] Resources/UI/BuildStrip.uss is missing -- the page is unstyled.");
             rootEl = root;
 
-            tabsRow = CampPages.Classed(new VisualElement(), "cp-tabs");
-            tabButtons = new Button[TabNames.Length];
-            for (int i = 0; i < TabNames.Length; i++)
-            {
-                int index = i;
-                var b = new Button(() => PickTab(index)) { text = TabNames[i] };
-                b.AddToClassList("cp-tab");
-                tabsRow.Add(b);
-                tabButtons[i] = b;
-            }
-            root.Add(tabsRow);
-
-            var scroll = new ScrollView(ScrollViewMode.Vertical);
-            scroll.AddToClassList("cp-scroll");
+            scroll = new ScrollView(ScrollViewMode.Vertical);
+            scroll.AddToClassList("bs-scroll");
             scroll.horizontalScrollerVisibility = ScrollerVisibility.Hidden;
             scroll.verticalScrollerVisibility = ScrollerVisibility.Hidden;
             scroll.touchScrollBehavior = ScrollView.TouchScrollBehavior.Clamped;
             root.Add(scroll);
-            var list = CampPages.Classed(new VisualElement(), "cp-list");
+            var list = new VisualElement();
+            list.AddToClassList("bs-list");
             scroll.Add(list);
 
-            mainHolder = new VisualElement();
-            list.Add(mainHolder);
-            // The road (2026-09-27): drawn tap to tap like the wall.
-            // **Lives on Defence, not Shelter (2026-09-27)** -- it sits
-            // beside the palisade and the ladder, the tab's other drawn,
-            // tap-to-tap infrastructure, rather than among the houses.
-            roadHolder = new VisualElement();
-            list.Add(roadHolder);
-            roadCard = NewCard(roadHolder);
-            roadCard.custom = () =>
-            {
-                if (outpost == null) return;
-                RoadSiting.Start(outpost);
-                Sheets.Close();
-            };
-            emptyNote = CampPages.Classed(new Label("Nothing in this group the fire allows yet."), "cp-note");
+            readyLabel = Section(list, "READY TO PLACE", "bs-label--ready", out readyGrid);
+            shortLabel = Section(list, "SHORT · PLACE IT, HANDS GATHER THE REST", "bs-label--short", out shortGrid);
+            lockedLabel = Section(list, "", "bs-label--locked", out lockedGrid);
+            lockNote = new Label();
+            lockNote.AddToClassList("bs-note");
+            lockNote.AddToClassList("bs-note--lock");
+            lockNote.style.display = DisplayStyle.None;
+            list.Add(lockNote);
+            emptyNote = new Label("Nothing to build yet.");
+            emptyNote.AddToClassList("bs-note");
+            emptyNote.style.display = DisplayStyle.None;
             list.Add(emptyNote);
 
-            // Defence's drawn things: the wall and the ladder. Built once and
-            // shown only on that tab.
-            extrasHolder = new VisualElement();
-            list.Add(extrasHolder);
-            wallCard = NewCard(extrasHolder);
-            wallCard.custom = () =>
-            {
-                if (Outpost.BeginWallSiting == null || outpost == null) return;
-                Outpost.BeginWallSiting(outpost);
-                Sheets.Close();
-            };
-            ladderCard = NewCard(extrasHolder);
-            ladderCard.custom = () =>
-            {
-                if (outpost == null) return;
-                LadderSiting.Start(outpost);
-                Sheets.Close();
-            };
-            gateNote = CampPages.Classed(new Label(), "cp-note");
-            extrasHolder.Add(gateNote);
+            // The fix row: built once, pinned under the scroll.
+            fixRow = new VisualElement();
+            fixRow.AddToClassList("bs-fix");
+            fixText = new Label();
+            fixText.AddToClassList("bs-fix-text");
+            fixRow.Add(fixText);
+            fixBtn = new Button(Fix) { text = "" };
+            fixBtn.AddToClassList("bs-fix-btn");
+            fixRow.Add(fixBtn);
+            fixRow.style.display = DisplayStyle.None;
+            root.Add(fixRow);
 
-            lockedEyebrow = CampPages.Classed(new Label(), "cp-eyebrow");
-            list.Add(lockedEyebrow);
-            lockedHolder = new VisualElement();
-            list.Add(lockedHolder);
-
-            mainCards.Clear();
-            lockedCards.Clear();
-            MarkTabs();
+            LoadSeen();
             Refresh();
             return root;
+        }
+
+        static Label Section(VisualElement into, string text, string cls, out VisualElement grid)
+        {
+            var label = new Label(text);
+            label.AddToClassList("bs-label");
+            label.AddToClassList(cls);
+            label.style.display = DisplayStyle.None;
+            into.Add(label);
+            grid = new VisualElement();
+            grid.AddToClassList("bs-grid");
+            into.Add(grid);
+            return label;
         }
 
         Card NewCard(VisualElement into)
         {
             var c = new Card();
-            c.root = new Button(() => Tap(c)) { text = "" };
-            c.root.AddToClassList("cp-card");
-
-            var iconBox = CampPages.Classed(new VisualElement { pickingMode = PickingMode.Ignore }, "cp-card-icon");
-            iconBox.Add(new CampPages.HouseGlyph());
-            c.root.Add(iconBox);
-
-            var words = CampPages.Classed(new VisualElement { pickingMode = PickingMode.Ignore }, "cp-card-words");
-            var top = CampPages.Classed(new VisualElement { pickingMode = PickingMode.Ignore }, "cp-card-top");
-            c.name = CampPages.Classed(new Label { pickingMode = PickingMode.Ignore }, "cp-card-name");
-            c.tag = CampPages.Classed(new Label { pickingMode = PickingMode.Ignore }, "cp-tag");
-            top.Add(c.name);
-            top.Add(c.tag);
-            words.Add(top);
-            c.blurb = CampPages.Classed(new Label { pickingMode = PickingMode.Ignore }, "cp-blurb");
-            words.Add(c.blurb);
-
-            c.costLine = CampPages.Classed(new VisualElement { pickingMode = PickingMode.Ignore }, "cp-cost-line");
-            c.costs = new CostSlot[3];
-            for (int i = 0; i < c.costs.Length; i++)
-            {
-                var slot = new CostSlot
-                {
-                    root = CampPages.Classed(new VisualElement { pickingMode = PickingMode.Ignore }, "cp-cost"),
-                    icon = CampPages.Classed(new Image { pickingMode = PickingMode.Ignore, scaleMode = ScaleMode.ScaleToFit }, "cp-cost-icon"),
-                    q = CampPages.Classed(new Label { pickingMode = PickingMode.Ignore }, "cp-cost-q"),
-                };
-                slot.root.Add(slot.icon);
-                slot.root.Add(slot.q);
-                c.costLine.Add(slot.root);
-                c.costs[i] = slot;
-            }
-            c.copies = CampPages.Classed(new Label { pickingMode = PickingMode.Ignore }, "cp-copies");
-            c.costLine.Add(c.copies);
-            words.Add(c.costLine);
-            c.root.Add(words);
-
-            // "Set as goal" on a short card (`GoalPin.SetBuild`: the next
-            // copy becomes the camp's goal, chased on the overview). A button
-            // inside the card's button: its press is stopped here so the
-            // card itself never sees it and does not start siting.
-            c.pin = new Button(() => TogglePin(c)) { text = "Set as goal" };
-            c.pin.AddToClassList("cp-pin");
-            c.pin.RegisterCallback<PointerDownEvent>(e => e.StopPropagation());
-            c.pin.RegisterCallback<PointerUpEvent>(e => e.StopPropagation());
-            c.pin.RegisterCallback<ClickEvent>(e => e.StopPropagation());
-            c.pin.style.display = DisplayStyle.None;
-            c.root.Add(c.pin);
+            c.root = new Button(() => Tap(c.entry)) { text = "" };
+            c.root.AddToClassList("bs-slot");
+            c.face = Classed(new VisualElement { pickingMode = PickingMode.Ignore }, "bs-card");
+            c.name = Classed(new Label { pickingMode = PickingMode.Ignore }, "bs-name");
+            c.purpose = Classed(new Label { pickingMode = PickingMode.Ignore }, "bs-purpose");
+            c.cost = Classed(new Label { pickingMode = PickingMode.Ignore }, "bs-cost");
+            c.badge = Classed(new Label { pickingMode = PickingMode.Ignore }, "bs-badge");
+            c.badge.style.display = DisplayStyle.None;
+            c.face.Add(c.name);
+            c.face.Add(c.purpose);
+            c.face.Add(c.cost);
+            c.face.Add(c.badge);
+            c.root.Add(c.face);
             into.Add(c.root);
             return c;
         }
 
-        void PickTab(int index)
+        Chip NewChip(VisualElement into)
         {
-            if (index == tab) return;
-            tab = index;
-            lastTab = index;
-            MarkTabs();
+            var c = new Chip();
+            c.root = new Button(null) { text = "" };
+            c.root.clicked += () => PickChip(c.entry);
+            c.root.AddToClassList("bs-slot");
+            c.face = Classed(new VisualElement { pickingMode = PickingMode.Ignore }, "bs-chip");
+            c.face.Add(new DashedFrame());
+            c.face.Add(new LockGlyph());
+            c.name = Classed(new Label { pickingMode = PickingMode.Ignore }, "bs-chip-name");
+            c.face.Add(c.name);
+            c.root.Add(c.face);
+            into.Add(c.root);
+            return c;
+        }
+
+        static T Classed<T>(T e, string cls) where T : VisualElement
+        {
+            e.AddToClassList(cls);
+            return e;
+        }
+
+        // --- taps ------------------------------------------------------------------
+
+        void Tap(Entry e)
+        {
+            if (outpost == null || string.IsNullOrEmpty(e.id)) return;
+            StartPlacement(outpost, e.plan);
+        }
+
+        string pickedChip;
+
+        void PickChip(Entry e)
+        {
+            // A second tap on the same chip folds its line away again.
+            pickedChip = pickedChip == e.id ? null : e.id;
+            pickedReason = pickedChip == null ? null : e.reason;
             Refresh();
         }
 
-        void MarkTabs()
+        string pickedReason;
+
+        // --- the seen list (NEW badges) --------------------------------------------
+
+        /// Plan ids this save has already been shown as available, joined by
+        /// commas in PlayerPrefs under `SeenKey` (per save slot).
+        readonly HashSet<string> seen = new HashSet<string>();
+        /// The ids new to THIS sheet: badged while it is open, stored as seen
+        /// straight away so the next opening starts clean.
+        readonly HashSet<string> freshHere = new HashSet<string>();
+        bool seenLoaded, seenDirty, seedSeen;
+
+        static string SeenKey =>
+            "seasick.build.seen." + (string.IsNullOrEmpty(SeaSick.Save.SaveSlots.ActiveSlotId) ? "none" : SeaSick.Save.SaveSlots.ActiveSlotId);
+
+        void LoadSeen()
         {
-            if (tabButtons == null) return;
-            for (int i = 0; i < tabButtons.Length; i++)
-                tabButtons[i].EnableInClassList("cp-tab--on", i == tab);
+            if (seenLoaded) return;
+            seenLoaded = true;
+            seen.Clear();
+            if (!PlayerPrefs.HasKey(SeenKey))
+            {
+                // First time this save opens the screen: everything on offer
+                // now is "already known", so a fresh camp shows no NEW badges.
+                seedSeen = true;
+                return;
+            }
+            foreach (var id in PlayerPrefs.GetString(SeenKey, "").Split(','))
+                if (id.Length > 0) seen.Add(id);
         }
 
-        void TogglePin(Card c)
+        void SaveSeen()
         {
-            if (outpost == null || c.plan.id == null) return;
-            if (GoalPin.IsBuildPinned(outpost, c.plan.id)) GoalPin.Clear(outpost);
-            else GoalPin.SetBuild(outpost, c.plan.id);
-            Refresh();
+            if (!seenDirty && !seedSeen) return;
+            seenDirty = false;
+            PlayerPrefs.SetString(SeenKey, string.Join(",", seen));
+            PlayerPrefs.Save();
         }
 
-        void Tap(Card c)
+        /// Note an available plan: the first sight of it is NEW.
+        bool Note(string id)
         {
-            if (c.custom != null) { c.custom(); return; }
-            if (outpost == null || c.plan.id == null) return;
-            if (c.state != State.Ready && c.state != State.Short) return;
-            CampSiting.Begin(outpost, c.plan, SheetBits.ShipTransform);
-            // Siting takes the whole screen's attention; a sheet lying over
-            // the ground you are about to tap is the old bottom bar's bug.
-            Sheets.Close();
+            if (seen.Add(id))
+            {
+                seenDirty = true;
+                if (!seedSeen) freshHere.Add(id);
+            }
+            return freshHere.Contains(id);
         }
 
-        // --- state -------------------------------------------------------------
-
-        static State StateOf(OutpostLedger l, BuildPlan p)
-        {
-            if (!l.PlanUnlocked(p.id)) return State.Locked;
-            if (!l.CanAddCopy(p.id, out _)) return State.Capped;
-            var priced = l.PriceOfNext(p);
-            if (l.SpendableOf(TimberOf(p)) < priced.cost) return State.Short;
-            if (priced.stoneCost > 0 && l.SpendableOf(Res.Stone) < priced.stoneCost) return State.Short;
-            if (priced.brickCost > 0 && l.SpendableOf(Res.Brick) < priced.brickCost) return State.Short;
-            return State.Ready;
-        }
+        // --- state -----------------------------------------------------------------
 
         static string TimberOf(BuildPlan p) => string.IsNullOrEmpty(p.resource) ? Res.Timber : p.resource;
 
         static string Cap(string s) =>
             string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
 
-        readonly List<BuildPlan> plans = new List<BuildPlan>();
-        readonly List<State> states = new List<State>();
-        readonly List<int> order = new List<int>();
-        readonly List<BuildPlan> locked = new List<BuildPlan>();
+        readonly List<Entry> ready = new List<Entry>(), shorts = new List<Entry>(), locked = new List<Entry>();
+        readonly Dictionary<string, int> missing = new Dictionary<string, int>();
+        readonly List<string> parts = new List<string>(3);
+        readonly List<string> haveRes = new List<string>(4);
+
+        void Lack(string res, int need, int have)
+        {
+            if (need <= have) return;
+            parts.Add($"{need - have} {ResDefs.Label(res)}");
+            missing.TryGetValue(res, out int m);
+            missing[res] = m + (need - have);
+        }
+
+        void Collect(OutpostLedger l)
+        {
+            ready.Clear(); shorts.Clear(); locked.Clear(); missing.Clear();
+            haveRes.Clear();
+            haveRes.Add(Res.Timber);
+            haveRes.Add(Res.Stone);
+
+            foreach (var p in outpost.Buildable())
+            {
+                if (!l.PlanUnlocked(p.id))
+                {
+                    int need = Techs.PlanLevel(p.id);
+                    locked.Add(new Entry
+                    {
+                        plan = p, id = p.id, label = Cap(p.label), level = need,
+                        reason = $"{Cap(p.label)} needs campfire {RecipeGraph.Roman(need)} (this camp is {RecipeGraph.Roman(l.CampfireLevel)}).",
+                    });
+                    continue;
+                }
+                if (!l.CanAddCopy(p.id, out _))
+                {
+                    // At its cap: a chip only when a higher fire opens another copy.
+                    int have = l.CopiesHeld(p.id), cap = l.CopyLimit(p.id);
+                    int top = Techs.MaxCopies(p.id, Techs.CapTableLevels);
+                    int unlock = top > have ? Techs.FireLevelForCopies(p.id, have + 1) : 0;
+                    if (unlock > l.CampfireLevel)
+                        locked.Add(new Entry
+                        {
+                            plan = p, id = p.id, label = Cap(p.label), level = unlock,
+                            reason = $"{Cap(p.label)} ×{have} of {cap} — {OutpostLedger.Nth(have + 1)} at campfire {RecipeGraph.Roman(unlock)}",
+                        });
+                    continue;
+                }
+
+                var priced = l.PriceOfNext(p);
+                string timberRes = TimberOf(p);
+                int haveT = l.SpendableOf(timberRes), haveS = l.SpendableOf(Res.Stone), haveB = l.SpendableOf(Res.Brick);
+                if (timberRes != Res.Timber && !haveRes.Contains(timberRes)) haveRes.Add(timberRes);
+                if (priced.brickCost > 0 && !haveRes.Contains(Res.Brick)) haveRes.Add(Res.Brick);
+
+                parts.Clear();
+                Lack(timberRes, priced.cost, haveT);
+                Lack(Res.Stone, priced.stoneCost, haveS);
+                Lack(Res.Brick, priced.brickCost, haveB);
+                bool isShort = parts.Count > 0;
+
+                string cost;
+                if (isShort) cost = "need " + string.Join(", ", parts);
+                else
+                {
+                    parts.Clear();
+                    if (priced.cost > 0) parts.Add($"{priced.cost} {ResDefs.Label(timberRes)}");
+                    if (priced.stoneCost > 0) parts.Add($"{priced.stoneCost} {ResDefs.Label(Res.Stone)}");
+                    if (priced.brickCost > 0) parts.Add($"{priced.brickCost} {ResDefs.Label(Res.Brick)}");
+                    cost = parts.Count == 0 ? "free" : string.Join(" · ", parts);
+                }
+                Add(l, new Entry { plan = p, id = p.id, label = Cap(p.label), purpose = PurposeOf(p), cost = cost, amber = isShort },
+                    isShort);
+            }
+
+            // The drawn things: palisade, ladder, road. Priced by length, so
+            // "short" only means there is none of the material at all.
+            int timber = l.SpendableOf(Res.Timber), stone = l.SpendableOf(Res.Stone);
+            if (Outpost.BeginWallSiting != null)
+                AddDrawn(l, BuildPlans.Palisade, "Palisade", Res.Timber, timber,
+                    $"1 timber / {BuildPlans.MetresPerPalisadeLog:0.#} m");
+            AddDrawn(l, BuildPlans.Ladder, "Ladder", Res.Timber, timber,
+                $"{BuildPlans.LadderTimberPerMetre:0.#} timber / m");
+            AddDrawn(l, BuildPlans.Road, "Road", Res.Stone, stone,
+                $"1 stone / {BuildPlans.RoadMetresPerStone:0.#} m");
+
+            // The goal card leads its section.
+            MoveGoalFirst(ready);
+            MoveGoalFirst(shorts);
+        }
+
+        void AddDrawn(OutpostLedger l, BuildPlan p, string label, string res, int have, string costWords)
+        {
+            bool isShort = have <= 0;
+            if (isShort) { missing.TryGetValue(res, out int m); missing[res] = m + 1; }
+            Add(l, new Entry
+            {
+                plan = p, id = p.id, label = label, purpose = PurposeOf(p), amber = isShort,
+                cost = isShort ? "need " + ResDefs.Label(res) : costWords,
+            }, isShort);
+        }
+
+        void Add(OutpostLedger l, Entry e, bool isShort)
+        {
+            e.goal = (highlightId != null && highlightId == e.id) || GoalPin.IsBuildPinned(outpost, e.id);
+            e.isNew = Note(e.id);
+            (isShort ? shorts : ready).Add(e);
+        }
+
+        static void MoveGoalFirst(List<Entry> list)
+        {
+            for (int i = 1; i < list.Count; i++)
+                if (list[i].goal)
+                {
+                    var e = list[i];
+                    list.RemoveAt(i);
+                    list.Insert(0, e);
+                    return;
+                }
+        }
+
+        // --- refresh ---------------------------------------------------------------
+
+        bool scrolledToGoal;
 
         public void Refresh()
         {
             var l = L;
             if (l == null || rootEl == null || outpost == null) return;
+            LoadSeen();
+            Collect(l);
+            SaveSeen();
+            seedSeen = false;
 
-            int timber = l.SpendableOf(Res.Timber), stone = l.SpendableOf(Res.Stone);
-            int sites = l.SiteCount;
             if (subtitle != null)
             {
-                string s = $"{timber} timber · {stone} stone to spend";
-                if (sites > 0) s += sites == 1 ? " · 1 going up" : $" · {sites} going up";
+                parts.Clear();
+                foreach (var r in haveRes) parts.Add($"{Cap(ResDefs.Label(r))} {l.SpendableOf(r)}");
+                string s = string.Join(" · ", parts);
                 if (subtitle.text != s) subtitle.text = s;
             }
 
-            plans.Clear(); states.Clear(); order.Clear(); locked.Clear();
-            foreach (var p in outpost.Buildable())
-            {
-                if ((int)GroupOf(p.id) != tab) continue;
-                var st = StateOf(l, p);
-                if (st == State.Locked) { locked.Add(p); continue; }
-                plans.Add(p);
-                states.Add(st);
-                order.Add(order.Count);
-            }
-            // Can build, then short, then at its cap; stable within each.
-            order.Sort((a, b) => states[a] != states[b] ? states[a].CompareTo(states[b]) : a.CompareTo(b));
+            BindCards(readyCards, readyGrid, readyLabel, ready, false);
+            BindCards(shortCards, shortGrid, shortLabel, shorts, true);
+            BindLocked(l);
+            bool empty = ready.Count == 0 && shorts.Count == 0 && locked.Count == 0;
+            emptyNote.style.display = empty ? DisplayStyle.Flex : DisplayStyle.None;
+            BindFix(l);
 
-            while (mainCards.Count < plans.Count) mainCards.Add(NewCard(mainHolder));
-            for (int i = 0; i < mainCards.Count; i++)
+            if (!scrolledToGoal && highlightId != null)
             {
-                var c = mainCards[i];
-                if (i >= plans.Count) { c.root.style.display = DisplayStyle.None; continue; }
-                c.root.style.display = DisplayStyle.Flex;
-                int k = order[i];
-                BindMain(l, c, plans[k], states[k]);
-            }
-
-            bool defence = tab == (int)Group.Defence;
-            bool roads = defence;
-            roadHolder.style.display = roads ? DisplayStyle.Flex : DisplayStyle.None;
-            if (roads) BindRoad(l, stone);
-            extrasHolder.style.display = defence ? DisplayStyle.Flex : DisplayStyle.None;
-            if (defence) BindDefence(l, timber);
-            emptyNote.style.display = plans.Count == 0 && !defence && locked.Count == 0
-                ? DisplayStyle.Flex : DisplayStyle.None;
-
-            while (lockedCards.Count < locked.Count) lockedCards.Add(NewCard(lockedHolder));
-            int minLevel = int.MaxValue;
-            for (int i = 0; i < lockedCards.Count; i++)
-            {
-                var c = lockedCards[i];
-                if (i >= locked.Count) { c.root.style.display = DisplayStyle.None; continue; }
-                c.root.style.display = DisplayStyle.Flex;
-                var p = locked[i];
-                int need = Techs.PlanLevel(p.id);
-                if (need < minLevel) minLevel = need;
-                c.plan = p;
-                c.state = State.Locked;
-                c.Look(State.Locked);
-                c.Texts(Cap(p.label), "campfire " + RecipeGraph.Roman(need), null, p.blurb ?? "", null);
-                c.pin.style.display = DisplayStyle.None;
-            }
-            bool anyLocked = locked.Count > 0;
-            lockedEyebrow.style.display = anyLocked ? DisplayStyle.Flex : DisplayStyle.None;
-            if (anyLocked)
-            {
-                string eb = "NEEDS CAMPFIRE " + RecipeGraph.Roman(minLevel);
-                if (lockedEyebrow.text != eb) lockedEyebrow.text = eb;
+                foreach (var c in readyCards)
+                    if (c.root.style.display != DisplayStyle.None && c.entry.id == highlightId) { ScrollTo(c.root); break; }
+                if (!scrolledToGoal)
+                    foreach (var c in shortCards)
+                        if (c.root.style.display != DisplayStyle.None && c.entry.id == highlightId) { ScrollTo(c.root); break; }
             }
         }
 
-        void BindMain(OutpostLedger l, Card c, BuildPlan p, State st)
+        void ScrollTo(VisualElement el)
         {
-            c.plan = p;
-            c.state = st;
-            c.custom = null;
-            c.Look(st);
+            scrolledToGoal = true;
+            // Layout has not run on the very first refresh; scroll a beat later.
+            el.schedule.Execute(() => { if (scroll != null && el.panel != null) scroll.ScrollTo(el); }).StartingIn(60);
+        }
 
-            var priced = l.PriceOfNext(p);
-            int slot = 0;
-            string timberRes = TimberOf(p);
-            int haveT = l.SpendableOf(timberRes);
-            c.costs[slot++].Set(timberRes, $"{haveT}/{priced.cost}", haveT < priced.cost);
-            if (priced.stoneCost > 0)
+        void BindCards(List<Card> pool, VisualElement grid, Label label, List<Entry> entries, bool shortSection)
+        {
+            while (pool.Count < entries.Count) pool.Add(NewCard(grid));
+            for (int i = 0; i < pool.Count; i++)
             {
-                int have = l.SpendableOf(Res.Stone);
-                c.costs[slot++].Set(Res.Stone, $"{have}/{priced.stoneCost}", have < priced.stoneCost);
-            }
-            if (priced.brickCost > 0)
-            {
-                int have = l.SpendableOf(Res.Brick);
-                c.costs[slot++].Set(Res.Brick, $"{have}/{priced.brickCost}", have < priced.brickCost);
-            }
-            for (; slot < c.costs.Length; slot++) c.costs[slot].Hide();
-
-            // Copies: "×2 of 3 — 4th at campfire III" (Techs.Caps).
-            int have2 = l.CopiesHeld(p.id);
-            int cap = l.CopyLimit(p.id);
-            int top = Techs.MaxCopies(p.id, Techs.CapTableLevels);
-            string copies = null;
-            if (top > 1)
-            {
-                copies = $"×{have2} of {cap}";
-                if (have2 + 1 >= cap)
+                var c = pool[i];
+                if (i >= entries.Count)
                 {
-                    int unlock = Techs.FireLevelForCopies(p.id, cap + 1);
-                    if (unlock > l.CampfireLevel)
-                        copies += $" — {OutpostLedger.Nth(cap + 1)} at campfire {RecipeGraph.Roman(unlock)}";
+                    if (c.root.style.display != DisplayStyle.None) c.root.style.display = DisplayStyle.None;
+                    continue;
                 }
+                if (c.root.style.display != DisplayStyle.Flex) c.root.style.display = DisplayStyle.Flex;
+                c.Set(entries[i], shortSection);
             }
-            else if (have2 > 0)
-                copies = l.CountBuilt(p.id) > 0 ? "built · one per camp" : "going up · one per camp";
+            var want = entries.Count > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            if (label.style.display != want) label.style.display = want;
+        }
 
-            string tag, tone;
-            switch (st)
+        void BindLocked(OutpostLedger l)
+        {
+            while (chips.Count < locked.Count) chips.Add(NewChip(lockedGrid));
+            int minLevel = int.MaxValue;
+            bool pickedStill = false;
+            for (int i = 0; i < chips.Count; i++)
             {
-                case State.Ready: tag = "can build"; tone = "ok"; break;
-                case State.Short: tag = "short"; tone = "bad"; break;
-                default: tag = top > 1 ? "full" : "built"; tone = null; break;
+                var c = chips[i];
+                if (i >= locked.Count)
+                {
+                    if (c.root.style.display != DisplayStyle.None) c.root.style.display = DisplayStyle.None;
+                    continue;
+                }
+                if (c.root.style.display != DisplayStyle.Flex) c.root.style.display = DisplayStyle.Flex;
+                var e = locked[i];
+                if (e.level < minLevel) minLevel = e.level;
+                bool on = pickedChip == e.id;
+                if (on) { pickedStill = true; pickedReason = e.reason; }
+                c.Set(e, on);
             }
-            c.Texts(Cap(p.label), tag, tone, p.blurb ?? "", copies);
+            if (!pickedStill) { pickedChip = null; pickedReason = null; }
 
-            bool pinned = GoalPin.IsBuildPinned(outpost, p.id);
-            bool showPin = st == State.Short || pinned;
-            c.pin.style.display = showPin ? DisplayStyle.Flex : DisplayStyle.None;
-            if (showPin)
+            bool any = locked.Count > 0;
+            var want = any ? DisplayStyle.Flex : DisplayStyle.None;
+            if (lockedLabel.style.display != want) lockedLabel.style.display = want;
+            if (any)
             {
-                string pt = pinned ? "Goal ✓" : "Set as goal";
-                if (c.pin.text != pt) c.pin.text = pt;
-                c.pin.EnableInClassList("cp-pin--on", pinned);
+                string t = "CAMPFIRE " + RecipeGraph.Roman(minLevel) + " UNLOCKS";
+                if (lockedLabel.text != t) lockedLabel.text = t;
+            }
+            var noteWant = pickedReason != null ? DisplayStyle.Flex : DisplayStyle.None;
+            if (lockNote.style.display != noteWant) lockNote.style.display = noteWant;
+            if (pickedReason != null && lockNote.text != pickedReason) lockNote.text = pickedReason;
+        }
+
+        // --- the fix row -----------------------------------------------------------
+
+        string fixRes;
+        bool fixCanGather;
+
+        void BindFix(OutpostLedger l)
+        {
+            // The resource the short plans lack most; a gatherable one wins a tie
+            // over boards/brick, which no hand can simply go and gather.
+            string best = null;
+            int bestN = 0;
+            bool bestGatherable = false;
+            foreach (var kv in missing)
+            {
+                bool g = Res.IsGatherable(kv.Key);
+                if (best == null || (g && !bestGatherable) || (g == bestGatherable && kv.Value > bestN))
+                { best = kv.Key; bestN = kv.Value; bestGatherable = g; }
+            }
+            fixRes = best;
+            fixCanGather = best != null && bestGatherable;
+
+            var want = best != null ? DisplayStyle.Flex : DisplayStyle.None;
+            if (fixRow.style.display != want) fixRow.style.display = want;
+            if (best == null) return;
+
+            string label = ResDefs.Label(best);
+            string line;
+            if (fixCanGather)
+            {
+                int n = l.HandsOn(OutpostOrder.Gather, best);
+                string who = n == 0 ? "Nobody is gathering." : n == 1 ? "1 hand is gathering." : $"{n} hands are gathering.";
+                line = $"{Cap(label)} is what's short. {who}";
+            }
+            else line = $"{Cap(label)} is what's short. It is made at a station, not gathered.";
+            if (fixText.text != line) fixText.text = line;
+
+            string btn = fixCanGather ? "Gather " + Cap(label) : null;
+            fixBtn.style.display = fixCanGather ? DisplayStyle.Flex : DisplayStyle.None;
+            if (btn != null && fixBtn.text != btn) fixBtn.text = btn;
+        }
+
+        /// **"Gather <resource>"**: send the first idle hand after it (the
+        /// call `GatherSheet`'s send button makes); when nobody is idle, or
+        /// the order is refused, open that resource's own page, which says
+        /// who is on it and why.
+        void Fix()
+        {
+            var l = L;
+            if (outpost == null || l == null || string.IsNullOrEmpty(fixRes) || !fixCanGather) return;
+            var idle = SheetBits.FirstIdle(l);
+            var stock = l.Stock(fixRes);
+            bool workedOut = fixRes != Res.Game && stock != null && stock.standing < 1f;
+            if (idle != null && !workedOut && outpost.OrderGather(idle, fixRes))
+            {
+                Refresh();
+                return;
+            }
+            Sheets.Open(new GatherSheet(outpost, fixRes));
+        }
+
+        // --- drawn bits --------------------------------------------------------------
+
+        /// A hammer, painted (no font glyph): the Build screen's mark.
+        sealed class HammerGlyph : VisualElement
+        {
+            public HammerGlyph()
+            {
+                pickingMode = PickingMode.Ignore;
+                style.width = 24; style.height = 24;
+                generateVisualContent += Draw;
+            }
+
+            void Draw(MeshGenerationContext ctx)
+            {
+                var p = ctx.painter2D;
+                float s = Mathf.Min(contentRect.width, contentRect.height) / 24f;
+                if (s <= 0f) return;
+                Vector2 V(float x, float y) => new Vector2(x * s, y * s);
+                p.strokeColor = MidnightLandHud.Ice;
+                p.lineWidth = 2.2f * s;
+                p.lineCap = LineCap.Round;
+                p.lineJoin = LineJoin.Round;
+                // handle
+                p.BeginPath(); p.MoveTo(V(5, 20)); p.LineTo(V(14, 11)); p.Stroke();
+                // head
+                p.lineWidth = 3.4f * s;
+                p.BeginPath(); p.MoveTo(V(11, 5)); p.LineTo(V(19, 13)); p.Stroke();
+                p.lineWidth = 2.2f * s;
+                p.BeginPath(); p.MoveTo(V(9, 9)); p.LineTo(V(15, 3)); p.Stroke();
             }
         }
 
-        void BindRoad(OutpostLedger l, int stone)
+        /// A padlock, painted: the chip's "not yet".
+        sealed class LockGlyph : VisualElement
         {
-            var road = BuildPlans.Road;
-            roadCard.state = State.Ready;
-            roadCard.Look(State.Short);   // outlined like the wall: a drawing, priced by length
-            roadCard.costs[0].Set(Res.Stone, $"{stone} · 1 per {BuildPlans.RoadMetresPerStone:0.#} m", stone <= 0);
-            roadCard.costs[1].Hide(); roadCard.costs[2].Hide();
-            roadCard.Texts("Road", "tap to tap", "ok", road.blurb ?? "", null);
+            public LockGlyph()
+            {
+                pickingMode = PickingMode.Ignore;
+                AddToClassList("bs-lock");
+                generateVisualContent += Draw;
+            }
+
+            void Draw(MeshGenerationContext ctx)
+            {
+                var p = ctx.painter2D;
+                float s = Mathf.Min(contentRect.width, contentRect.height) / 16f;
+                if (s <= 0f) return;
+                Vector2 V(float x, float y) => new Vector2(x * s, y * s);
+                p.strokeColor = new Color32(127, 151, 166, 255);
+                p.fillColor = new Color32(127, 151, 166, 255);
+                p.lineWidth = 1.6f * s;
+                p.lineCap = LineCap.Round;
+                p.BeginPath(); p.MoveTo(V(4.5f, 7)); p.LineTo(V(4.5f, 5)); p.Arc(V(8, 5), 3.5f * s, 180f, 360f); p.LineTo(V(11.5f, 7)); p.Stroke();
+                p.BeginPath(); p.MoveTo(V(3, 7)); p.LineTo(V(13, 7)); p.LineTo(V(13, 14)); p.LineTo(V(3, 14)); p.ClosePath(); p.Fill();
+            }
         }
 
-        void BindDefence(OutpostLedger l, int timber)
+        /// **A dashed rounded-rect-ish outline** (USS has no dashed border):
+        /// short strokes along the four straight edges, inset from the corners.
+        sealed class DashedFrame : VisualElement
         {
-            var wall = BuildPlans.Palisade;
-            bool wallOn = Outpost.BeginWallSiting != null;
-            wallCard.state = wallOn ? State.Ready : State.Capped;
-            wallCard.Look(wallOn ? State.Short : State.Capped);   // outlined like a plan, not "can build" bright
-            wallCard.costs[0].Set(Res.Timber, $"{timber} · 1 per {BuildPlans.MetresPerPalisadeLog:0.#} m", timber <= 0);
-            wallCard.costs[1].Hide(); wallCard.costs[2].Hide();
-            wallCard.Texts("Palisade", "draw a run", "ok", wall.blurb ?? "", null);
+            public DashedFrame()
+            {
+                pickingMode = PickingMode.Ignore;
+                AddToClassList("bs-dash");
+                generateVisualContent += Draw;
+            }
 
-            var ladder = BuildPlans.Ladder;
-            ladderCard.Look(State.Short);
-            ladderCard.costs[0].Set(Res.Timber, $"{timber} · {BuildPlans.LadderTimberPerMetre:0.#} per m", timber <= 0);
-            ladderCard.costs[1].Hide(); ladderCard.costs[2].Hide();
-            ladderCard.Texts("Ladder", "foot, then top", "ok", ladder.blurb ?? "", null);
-
-            string g = $"Gate: tap a length of standing wall to put one in it ({BuildPlans.Gate.cost} timber).";
-            if (gateNote.text != g) gateNote.text = g;
+            void Draw(MeshGenerationContext ctx)
+            {
+                var r = contentRect;
+                if (r.width < 20f || r.height < 20f) return;
+                var p = ctx.painter2D;
+                p.strokeColor = new Color32(74, 104, 124, 255);
+                p.lineWidth = 1.5f;
+                p.lineCap = LineCap.Butt;
+                const float dash = 5f, gap = 4f, inset = 8f, edge = 0.75f;
+                void Run(Vector2 a, Vector2 b)
+                {
+                    float len = Vector2.Distance(a, b);
+                    var dir = (b - a) / len;
+                    for (float t = 0f; t < len; t += dash + gap)
+                    {
+                        float e = Mathf.Min(t + dash, len);
+                        p.BeginPath(); p.MoveTo(a + dir * t); p.LineTo(a + dir * e); p.Stroke();
+                    }
+                }
+                float x0 = r.xMin + edge, x1 = r.xMax - edge, y0 = r.yMin + edge, y1 = r.yMax - edge;
+                Run(new Vector2(x0 + inset, y0), new Vector2(x1 - inset, y0));
+                Run(new Vector2(x0 + inset, y1), new Vector2(x1 - inset, y1));
+                Run(new Vector2(x0, y0 + inset), new Vector2(x0, y1 - inset));
+                Run(new Vector2(x1, y0 + inset), new Vector2(x1, y1 - inset));
+            }
         }
     }
 }

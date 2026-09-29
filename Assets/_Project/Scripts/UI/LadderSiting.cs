@@ -12,8 +12,8 @@ namespace SeaSick.UI
     /// hand as the wall tool (`WallSiting`), two points instead of a run:
     /// tap the FOOT (walkable ground below the cliff), and the TOP follows
     /// the thumb -- tap where it goes, or drag it (or drag the foot). The
-    /// whole chain is drawn live, green or red, with the refusal in words
-    /// under the buttons ("the top isn't walkable ground", "too far", "not a
+    /// whole chain is drawn live, green or red, with the refusal in the
+    /// placement bar's status line ("the top isn't walkable ground", "too far", "not a
     /// cliff — just walk"). ✓ queues it and the tool ends; ✕ backs out.
     ///
     /// **This owns no rules.** Whether it can stand is
@@ -38,7 +38,9 @@ namespace SeaSick.UI
         public static State Mode { get; private set; } = State.Off;
         public static bool Active => Mode != State.Off;
 
-        public const string FootHint = "tap the foot of the cliff";
+        /// The placement bar's hint before the foot is down, and after.
+        public const string FootHint = "Tap the foot of the cliff";
+        public const string TopHint = "Tap the top";
         public static string Refusal { get; private set; } = "";
         /// "6 timber · 9 m up" for a good chain.
         public static string PriceLine { get; private set; } = "";
@@ -200,20 +202,6 @@ namespace SeaSick.UI
             var row = outpost.SiteLadder(foot, top, out string why);
             if (row == null) { Refusal = why; valid = false; return; }
             End();
-        }
-
-        public static void DrawGUI()
-        {
-            if (Mode == State.Off) return;
-            if (Mode == State.NoFoot) { SitingButtons.Hint(FootHint); return; }
-            // ✕ / ✓ under the foot; the words say the price when it is good,
-            // the reason when it is not.
-            switch (SitingButtons.Draw(ButtonsAt, valid, Refusal, false, ""))
-            {
-                case SitingButtons.Press.Cancel: End(); break;
-                case SitingButtons.Press.Confirm: Confirm(); break;
-            }
-            if (valid) CampSiting.DrawClearLine(ButtonsAt, 2, PriceLine);
         }
 
         // --- the drawing --------------------------------------------------------

@@ -6,9 +6,9 @@ using UnityEngine.UIElements;
 namespace SeaSick.UI.Sheets
 {
     // Compact food-draft notice + "Undo all", shown ONLY while a food draft is
-    // active (the tally line was removed 2026-09-30). It sits just above the
-    // safe-area bottom edge; the bottom of the screen is becoming the thumb bar,
-    // so keep it one short row. Hidden behind sheets; notices remain undoable
+    // active (the tally line was removed 2026-09-30). It sits just ABOVE the
+    // thumb bar (`ThumbBar.ReservePanel`), or above the safe-area bottom edge
+    // when the bar is hidden; keep it one short row. Hidden behind sheets; notices remain undoable
     // until the draft ends. The ledger owns both the draft and the one-day veto.
     internal sealed class CampStatusHud
     {
@@ -75,11 +75,12 @@ namespace SeaSick.UI.Sheets
             var safe = Screen.safeArea;
             footer.style.left = safe.xMin * scale + 8f;
             footer.style.right = (Screen.width - safe.xMax) * scale + 8f;
-            footer.style.bottom = safe.yMin * scale + 8f;
+            float bottom = Mathf.Max(safe.yMin * scale + 8f, ThumbBar.ReservePanel);
+            footer.style.bottom = bottom;
             // Use actual wrapped height after layout, with a first-frame fallback.
             float height = footer.resolvedStyle.height;
             if (float.IsNaN(height) || height <= 0) height = 64f;
-            return new Rect(safe.xMin + 8f / scale, Screen.height - safe.yMin - (height + 8f) / scale,
+            return new Rect(safe.xMin + 8f / scale, Screen.height - (bottom + height) / scale,
                 safe.width - 16f / scale, height / scale);
         }
     }

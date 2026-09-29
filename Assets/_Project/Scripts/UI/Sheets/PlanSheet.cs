@@ -19,9 +19,15 @@ namespace SeaSick.UI.Sheets
     /// **It reads and it calls; it never decides.** Prices are
     /// `OutpostLedger.PriceOfNext`, the lock is `PlanUnlocked` /
     /// `Techs.PlanLevel`, exactly what `BuildSheet` reads for the same
-    /// card. Nothing here sites a building -- that stays `BuildSheet`'s
-    /// job (Camp › Build), reached from here only via "Set as goal" ->
-    /// the goal bar/overview's own Go.
+    /// card.
+    ///
+    /// **No longer a dead end (2026-09-30).** A plan that is unlocked with
+    /// a copy to spare gets a primary "Build" button -- short of material
+    /// is fine, the builders fetch the rest, as on the Build screen -- that
+    /// starts placement through `BuildSheet.StartPlacement`, the very call
+    /// a Build card makes. Otherwise the sheet says why it cannot be built
+    /// (locked, or at its cap) and "Set as goal" is what is left. Both
+    /// buttons are built once and re-texted / shown / hidden on refresh.
     public sealed class PlanSheet : ISheetFramed
     {
         readonly Outpost outpost;
@@ -49,16 +55,21 @@ namespace SeaSick.UI.Sheets
         public VisualElement BuildHeader() =>
             SheetKit.Header("not built", Title, SheetTheme.Timber, "⚒", () => Sheets.Close());
 
-        Button pinBtn;
+        Button pinBtn, buildBtn;
 
         public VisualElement BuildActions()
         {
-            pinBtn = SheetKit.Btn("Set as goal", TogglePin, true);
-            return SheetKit.Actions(pinBtn);
+            buildBtn = SheetKit.Btn("Build", StartBuild, true);
+            buildBtn.style.display = DisplayStyle.None;
+            pinBtn = SheetKit.Btn("Set as goal", TogglePin);
+            buildKind = -1;
+            pinKind = -1;
+            if (lockNote != null) Refresh();   // the body is built first; sync the new buttons
+            return SheetKit.Actions(buildBtn, pinBtn);
         }
 
         VisualElement blurb, lockNote, tiles;
-        Label copiesNote;
+        Label copiesNote, shortNote;
 
         public VisualElement Build()
         {
@@ -78,12 +89,16 @@ namespace SeaSick.UI.Sheets
             copiesNote = SheetKit.Text("", false, true, 12f);
             root.Add(copiesNote);
 
+            shortNote = SheetKit.Text("", false, true, 12f);
+            shortNote.style.display = DisplayStyle.None;
+            root.Add(shortNote);
+
             Refresh();
             return root;
         }
 
         long tilesKey = long.MinValue;
-        int pinKind = -1;
+        int pinKind = -1, buildKind = -1;
 
         public void Refresh()
         {
@@ -93,9 +108,14 @@ namespace SeaSick.UI.Sheets
 
             bool unlocked = l.PlanUnlocked(planId);
             int needLevel = Techs.PlanLevel(planId);
-            lockNote.style.display = unlocked ? DisplayStyle.None : DisplayStyle.Flex;
-            if (!unlocked)
-                SheetKit.SetNote(lockNote, $"Needs campfire {RecipeGraph.Roman(needLevel)} (this camp is {RecipeGraph.Roman(l.CampfireLevel)}).");
+            // The drawn plans (palisade, ladder, road) have no copy cap.
+            string capWhy = null;
+            bool canBuild = unlocked && (BuildSheet.IsDrawn(planId) || l.CanAddCopy(planId, out capWhy));
+            string whyNot = !unlocked
+                ? $"Needs campfire {RecipeGraph.Roman(needLevel)} (this camp is {RecipeGraph.Roman(l.CampfireLevel)})."
+                : canBuild ? null : Cap(capWhy) + ".";
+            lockNote.style.display = whyNot == null ? DisplayStyle.None : DisplayStyle.Flex;
+            if (whyNot != null) SheetKit.SetNote(lockNote, whyNot);
 
             var priced = unlocked ? l.PriceOfNext(plan) : plan;
             int haveT = l.SpendableOf(TimberOf(plan));
@@ -124,6 +144,20 @@ namespace SeaSick.UI.Sheets
             }
             else copiesNote.text = "";
 
+            // Short of material: still placeable, the builders fetch the rest.
+            bool isShort = canBuild && !BuildSheet.IsDrawn(planId)
+                           && (haveT < priced.cost || haveS < priced.stoneCost || haveB < priced.brickCost);
+            string sn = isShort ? "Short of material: place it anyway and the builders fetch the rest." : "";
+            if (shortNote.text != sn) shortNote.text = sn;
+            shortNote.style.display = isShort ? DisplayStyle.Flex : DisplayStyle.None;
+
+            int bk = canBuild ? 1 : 0;
+            if (buildBtn != null && bk != buildKind)
+            {
+                buildKind = bk;
+                buildBtn.style.display = canBuild ? DisplayStyle.Flex : DisplayStyle.None;
+            }
+
             bool pinned = GoalPin.IsBuildPinned(outpost, planId);
             int kind = (pinned ? 1 : 0) * 2 + (unlocked ? 1 : 0);
             // `Build()` calls `Refresh()` before `SheetHost.FillTab` gets to
@@ -138,6 +172,14 @@ namespace SeaSick.UI.Sheets
             }
         }
 
+        /// Start placement -- exactly the call a Build card makes -- and fold
+        /// the sheet away so the ground is clear.
+        void StartBuild()
+        {
+            if (outpost == null || string.IsNullOrEmpty(planId)) return;
+            BuildSheet.StartPlacement(outpost, Plan);
+        }
+
         void TogglePin()
         {
             if (outpost == null || string.IsNullOrEmpty(planId)) return;
@@ -146,6 +188,9 @@ namespace SeaSick.UI.Sheets
             pinKind = -1;
             Refresh();
         }
+
+        static string Cap(string s) =>
+            string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s.Substring(1);
 
         static string TimberOf(BuildPlan p) => string.IsNullOrEmpty(p.resource) ? Res.Timber : p.resource;
 

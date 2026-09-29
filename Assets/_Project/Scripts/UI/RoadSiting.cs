@@ -37,10 +37,14 @@ namespace SeaSick.UI
         public static State Mode { get; private set; } = State.Off;
         public static bool Active => Mode != State.Off;
 
-        public const string PlantHint = "tap the ground where the road starts";
+        /// The placement bar's hint before the start is down, and after.
+        public const string PlantHint = "Tap where the road starts";
+        public const string EndHint = "Tap where it ends";
 
         public static string Refusal { get; private set; } = "";
         static string priceLine = "";
+        /// "12 stone · 30 m" for a good stretch, for the placement bar.
+        public static string PriceLine => priceLine;
 
         public static bool CanConfirm => Mode == State.Stretching && valid;
 
@@ -255,23 +259,6 @@ namespace SeaSick.UI
             plantedFrame = Time.frameCount;
             b = Ground(a + heading * StartOut);
             Evaluate();
-        }
-
-        public static void DrawGUI()
-        {
-            if (Mode == State.Off) return;
-            if (Mode == State.NoPoint)
-            {
-                SitingButtons.Hint(PlantHint);
-                return;
-            }
-            switch (SitingButtons.Draw(ButtonsAt, valid, Refusal, false, ""))
-            {
-                case SitingButtons.Press.Cancel: End(); break;
-                case SitingButtons.Press.Confirm: Confirm(); break;
-            }
-            if (valid && Mode == State.Stretching)
-                CampSiting.DrawInfoLine(ButtonsAt, 2, priceLine, UITheme.TextDim);
         }
 
         // =================================================================

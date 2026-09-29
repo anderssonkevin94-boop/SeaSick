@@ -119,6 +119,9 @@ namespace SeaSick.UI
             // The ledger drawer's scrim covers the whole screen while open.
             if (Sheets.MidnightLandHud.Active && Sheets.LedgerDrawer.IsOpen) return true;
             if (Sheets.SeaLedger.IsOpen) return true;   // the sea drawer's scrim, likewise
+            // The thumb bar and the placement card (zero rects while hidden;
+            // placement shows them with no camp, so this is not gated on Active).
+            if (Sheets.ThumbBar.Blocks(guiPoint)) return true;
             if (Sheets.MidnightLandHud.Active && (Sheets.MidnightLandHud.NavigationRect.Contains(guiPoint)
                 || Sheets.MidnightLandHud.ResourcesRect.Contains(guiPoint))) return true;
             return Sheets.SheetHost.FrameOpen
