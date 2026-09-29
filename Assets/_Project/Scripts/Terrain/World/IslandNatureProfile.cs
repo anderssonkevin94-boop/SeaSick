@@ -5,18 +5,26 @@ using SeaSick.World;
 
 namespace SeaSick.Terrain
 {
-    /// Optional, island-local art treatment. Resource placement and accounting stay owned by the existing scatter.
+    /// Astra's nature kit and its placement rules (species by height/slope/
+    /// grove, groups at trunk and rock bases, shore and cliff accents, the
+    /// painted ground). Built for Island_2 and keyed to its centre; since
+    /// 2026-09-29 it dresses EVERY island (`allIslands`), because Kevin wants
+    /// "that rule / those assets on all islands". Resource placement and
+    /// accounting stay owned by the existing scatter.
     [DefaultExecutionOrder(-1100)]
     public sealed class IslandNatureProfile : MonoBehaviour
     {
+        [Tooltip("Dress every island with the kit. Off = only the island centred on islandCentre (the original Island_2 treatment).")]
+        [SerializeField] bool allIslands = true;
         [SerializeField] Vector2 islandCentre = new Vector2(660, 81);
+        [Tooltip("Half-width of the world square the ground index covers, metres from the origin. Must reach past the discovery radius plus the widest island.")]
+        [SerializeField] float groundIndexHalfExtent = 4000f;
         [SerializeField] TextAsset meshLibrary;
         [SerializeField] Material natureMaterial;
         public Material Material => natureMaterial;
         public static IslandNatureProfile Active { get; private set; }
         readonly Dictionary<string, SceneryKit.Template> templates = new Dictionary<string, SceneryKit.Template>();
         readonly Dictionary<string, Mesh> resourceMeshes = new Dictionary<string, Mesh>();
-        Texture2D ground;
         [Serializable] public class Library { public Entry[] entries; }
         [Serializable] public class Entry
         {
@@ -28,7 +36,7 @@ namespace SeaSick.Terrain
         void OnEnable()
         {
             Active = this;
-            templates.Clear(); Uses.Clear();
+            templates.Clear(); Uses.Clear(); traits.Clear(); current=null;
             if (meshLibrary == null || natureMaterial == null) return;
             var data = JsonUtility.FromJson<Library>(meshLibrary.text);
             foreach (var e in data.entries)
@@ -49,7 +57,6 @@ namespace SeaSick.Terrain
         void OnDisable()
         {
             if (Active==this) { Active=null; Shader.SetGlobalFloat("_IslandNatureEnabled",0); }
-            if (ground!=null) Destroy(ground);
             foreach(var mesh in resourceMeshes.Values) if(mesh!=null) Destroy(mesh);
             resourceMeshes.Clear();
         }
@@ -61,7 +68,73 @@ namespace SeaSick.Terrain
         {
             var p=Active;
             return !DisabledForCompare && p!=null && p.isActiveAndEnabled && p.templates.Count>0
-                && Vector2.Distance(p.islandCentre,new Vector2(centre.x,centre.z))<1f ? p : null;
+                && (p.allIslands || Vector2.Distance(p.islandCentre,new Vector2(centre.x,centre.z))<1f) ? p : null;
+        }
+
+        void LateUpdate() => NatureGroundAtlas.Flush();
+
+        // --- palms: which islands are palm islands ---------------------------
+        //
+        // Kevin, 2026-09-29: "small island with mostly sand should have palm
+        // trees". Not in Astra's notes (hers: palms in irregular coastal
+        // groups, never uniformly round every coast, and `Tree` below does
+        // that); this is the island-scale half. `Palmy` 0..1 is the larger of
+        // "small AND mostly sand" and the old latitude rule (south = tropical,
+        // `palmLatitude`), so the warm south stays palm country too.
+        sealed class IslandTrait { public Vector2 centre; public float reach, palmy; }
+        readonly List<IslandTrait> traits=new List<IslandTrait>();
+        IslandTrait current;
+
+        /// Sand line of the kit's own material (`_SandLine`, 4.3), plus the
+        /// mesher's sand-to-grass blend: ground below this reads as beach.
+        float SandTop => (natureMaterial!=null && natureMaterial.HasProperty("_SandLine") ? natureMaterial.GetFloat("_SandLine") : 4.3f)+1f;
+
+        /// Called by the scenery bake once per island, before any tree is
+        /// chosen. `tropical` is the bake's own latitude weight.
+        public void BeginIsland(Vector3 centre,float meanR,float tropical,Func<float,float,float> height)
+        {
+            current=Trait(centre,meanR,height);
+            current.palmy=Mathf.Max(current.palmy,tropical);
+        }
+
+        /// How strongly this island's low ground and beach go to palms, 0..1.
+        public float Palmy => current!=null ? current.palmy : 0f;
+
+        IslandTrait Trait(Vector3 centre,float meanR,Func<float,float,float> height)
+        {
+            var c=new Vector2(centre.x,centre.z);
+            foreach(var t in traits) if((t.centre-c).sqrMagnitude<1f) return t;
+            // Fraction of the island that is beach: sampled on a 6 m grid
+            // inside its mean radius, against the sand line.
+            int land=0,sand=0; float top=SandTop;
+            for(float z=-meanR;z<=meanR;z+=6f)
+            for(float x=-meanR;x<=meanR;x+=6f)
+            {
+                if(x*x+z*z>meanR*meanR) continue;
+                float h=height(centre.x+x,centre.z+z);
+                if(h<=0.3f) continue;
+                land++; if(h<top) sand++;
+            }
+            float sandy=land>0 ? Mathf.SmoothStep(0,1,Mathf.InverseLerp(.2f,.45f,(float)sand/land)) : 0f;
+            float small=1f-Mathf.SmoothStep(0,1,Mathf.InverseLerp(55f,95f,meanR));
+            var trait=new IslandTrait{centre=c,reach=meanR,palmy=sandy*small};
+            traits.Add(trait); return trait;
+        }
+
+        /// The trait of whichever island `at` stands on, for callers that
+        /// only have a position (resource dressing runs before the bake).
+        IslandTrait TraitAt(Vector3 at)
+        {
+            if(current!=null && (current.centre-new Vector2(at.x,at.z)).magnitude<current.reach*2.2f) return current;
+            Island best=null; float bd=float.MaxValue;
+            foreach(var isle in Island.All)
+            {
+                if(isle==null) continue;
+                float d=Island.FlatDistance(isle.transform.position,at)-isle.MaxRadius;
+                if(d<bd){bd=d;best=isle;}
+            }
+            if(best==null || Island.TerrainHeight==null) return null;
+            return Trait(best.transform.position,Mathf.Max(12f,best.MaxRadius*.75f),Island.TerrainHeight);
         }
         public SceneryKit.Template Get(string name)
         {
@@ -118,11 +191,15 @@ namespace SeaSick.Terrain
         public void DressResource(GameObject root,string kind,int ordinal)
         {
             if(kind!="Stone" && kind!="Timber") return;
-            string id=kind=="Stone" ? (ordinal%3==0 ? "Boulder_Broad" : ordinal%3==1 ? "Boulder_Long" : "Boulder_Low") : "Forest_Hornbeam";
+            // Timber is the island's own wood: a palm on a palm island.
+            var trait=kind=="Timber" ? TraitAt(root.transform.position) : null;
+            bool palm=trait!=null && trait.palmy>.5f;
+            string id=kind=="Stone" ? (ordinal%3==0 ? "Boulder_Broad" : ordinal%3==1 ? "Boulder_Long" : "Boulder_Low")
+                : palm ? (ordinal%2==0 ? "Forest_PalmStraight" : "Forest_PalmLeaning") : "Forest_Hornbeam";
             var tp=Get(id); if(tp==null) return;
             if(!resourceMeshes.TryGetValue(id,out var mesh))
             {
-                mesh=new Mesh {name="Island2_"+id,vertices=tp.v,normals=tp.n,colors32=tp.c,triangles=tp.t};
+                mesh=new Mesh {name="Nature_"+id,vertices=tp.v,normals=tp.n,colors32=tp.c,triangles=tp.t};
                 mesh.RecalculateBounds();resourceMeshes.Add(id,mesh);
             }
             // Retain root identity and existing interaction components; only replace the visible mesh.
@@ -185,7 +262,12 @@ namespace SeaSick.Terrain
             float grove=Mathf.PerlinNoise(at.x*.022f+41,at.z*.022f+83);
             string name;
             float coastal=Mathf.PerlinNoise(at.x*.018f+102,at.z*.018f+22);
-            if(at.y<7f && slope<.25f && coastal>.47f)
+            // Astra: palms in coastal PATCHES, not every low site (the noise).
+            // A palm island widens the band and drops the patch gate; and a
+            // tree the scatter stood on the beach itself is always a palm.
+            float palmy=Palmy;
+            bool onSand=at.y<SandTop;
+            if(onSand || (at.y<7f+6f*palmy && slope<.25f+.12f*palmy && coastal>.47f-.6f*palmy))
                 name=roll<.35f ? "PalmStraight" : roll<.7f ? "PalmLeaning" : roll<.9f ? "PalmShort" : "PalmTall";
             else if(slope>.5f || (at.y>24 && grove>.57f)) name=roll<.7f ? "Pine" : "Coastal";
             else if(cover<.56f && roll<.64f) name="Young";
@@ -254,14 +336,20 @@ namespace SeaSick.Terrain
         static Color Palette(string hex) { ColorUtility.TryParseHtmlString(hex,out var c); return c.linear; }
         public void PaintGround(Island island,List<SceneryWood.Tree> trees,Func<float,float,float> height)
         {
-            const int N=256;
+            const int N=NatureGroundAtlas.Size;
             float span=island.MaxRadius*2+20;
+            var islandCentre=new Vector2(island.transform.position.x,island.transform.position.z);
             var cover=new float[N*N]; var roots=new float[N*N];
+            // The stamp window is set in METRES (20 m, where the moss term is
+            // ~e^-4), not pixels: a fixed 6-pixel window was 7.8 m on Island_2
+            // but under 4 m on a small island, and cutting the fade off there
+            // drew a square stain under every trunk.
+            int win=Mathf.Clamp(Mathf.CeilToInt(20f/(span/N)),4,40);
             foreach(var tree in trees)
             {
                 int tx=Mathf.RoundToInt(((tree.baseAt.x-islandCentre.x)/span+.5f)*(N-1));
                 int tz=Mathf.RoundToInt(((tree.baseAt.z-islandCentre.y)/span+.5f)*(N-1));
-                for(int dz=-6;dz<=6;dz++) for(int dx=-6;dx<=6;dx++)
+                for(int dz=-win;dz<=win;dz++) for(int dx=-win;dx<=win;dx++)
                 {
                     int x=tx+dx,z=tz+dz; if(x<0 || z<0 || x>=N || z>=N) continue;
                     float d=(dx*dx+dz*dz)*span*span/(N*N);
@@ -286,12 +374,7 @@ namespace SeaSick.Terrain
                 c=Color.Lerp(c,earth,Mathf.Clamp01((roots[i]*(noise+.45f)-.18f)*1.4f)*.85f);
                 c.a=Mathf.Clamp01(inside/8f); pixels[i]=c;
             }
-            if(ground!=null) Destroy(ground);
-            ground=new Texture2D(N,N,TextureFormat.RGBA32,false,true) {name="Island 2 natural ground",wrapMode=TextureWrapMode.Clamp,filterMode=FilterMode.Bilinear};
-            ground.SetPixels(pixels);ground.Apply(false,true);
-            Shader.SetGlobalTexture("_IslandNatureGround",ground);
-            Shader.SetGlobalVector("_IslandNatureBounds",new Vector4(islandCentre.x,islandCentre.y,span,1/span));
-            Shader.SetGlobalFloat("_IslandNatureEnabled",1);
+            NatureGroundAtlas.Put(island,pixels,islandCentre,span,island.RadiusAt,groundIndexHalfExtent);
         }
     }
 }

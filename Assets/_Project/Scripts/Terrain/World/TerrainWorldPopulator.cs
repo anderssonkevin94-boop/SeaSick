@@ -183,6 +183,7 @@ namespace SeaSick.Terrain
             // PREVIOUS run.
             IslandScenery.Report.Clear();
             IslandFind.ResetForPlay();   // same reason: finds and the taken list are statics
+            NatureGroundAtlas.Reset();   // same reason: every island's painted ground
 
             Vector3 home = homePoint != null ? homePoint.position : Vector3.zero;
             phase = "discover";

@@ -112,6 +112,10 @@ namespace SeaSick.World
             f.collectRadius = radius;
             f.nextPoll = Time.time + (h % 100u) * 0.003f;   // stagger the polls
             if (cache) BuildCache(go.transform); else BuildCairn(go.transform);
+            // Sit on the terrain as it is DRAWN, not on the height function: a
+            // streamed LOD can be metres off it, which is how a find ends up
+            // floating or buried. Same grounder the nature kit uses.
+            go.AddComponent<SeaSick.Terrain.NatureGrounding>().AddInstance(go.transform);
             all.Add(f);
             return f;
         }

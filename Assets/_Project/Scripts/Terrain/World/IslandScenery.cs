@@ -259,6 +259,7 @@ namespace SeaSick.Terrain
             if (terrain != null)
                 tropical = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(
                     terrain.palmLatitude + terrain.palmBand, terrain.palmLatitude - terrain.palmBand, centre.z));
+            nature?.BeginIsland(centre, meanR, tropical, height);
 
             // **Where sand stops**, read off the thing that PAINTS it rather
             // than guessed at again here. The old gate was `sand + 1.2`,
@@ -324,6 +325,9 @@ namespace SeaSick.Terrain
             // woodland rather than of island size.
             float treeDensity = sculptedHome ? 1.05f : terrain != null ? terrain.treeDensity : 0.55f;
             float palmOnSand = terrain != null ? terrain.palmOnSand : 0.06f;
+            // A palm island (small and mostly sand, or tropical) grows its
+            // palms on the beach too -- `IslandNatureProfile.Palmy`.
+            if (nature != null) palmOnSand = Mathf.Lerp(palmOnSand, 0.45f, nature.Palmy);
             /// Set by `ChanceAt` for the spot it was just asked about: this
             /// one is standing on the beach, on the palm allowance. Read
             /// immediately by the caller and never across calls.

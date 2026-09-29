@@ -70,9 +70,15 @@ Shader "SeaSick/Terrain Vertex Color"
                 float _ShadowReceiverOffset;
             CBUFFER_END
 
-            TEXTURE2D(_IslandNatureGround);
-            SAMPLER(sampler_IslandNatureGround);
-            float4 _IslandNatureBounds;
+            // Every island's painted ground: one slice each, and a coarse
+            // world index (point-sampled, value = slice + 1) saying which
+            // slice covers a spot. See NatureGroundAtlas.cs.
+            TEXTURE2D_ARRAY(_IslandNatureGroundArr);
+            SAMPLER(sampler_IslandNatureGroundArr);
+            TEXTURE2D(_IslandNatureIndex);
+            SAMPLER(sampler_IslandNatureIndex);
+            float4 _IslandNatureIndexBounds;
+            float4 _IslandNatureBoundsArr[128];
             float _IslandNatureEnabled;
             // Colour D cream sandstone, linear (sRGB ~ HSV 39 deg, s .22, v .80).
             #define SANDSTONE float3(.604,.504,.348)
@@ -217,12 +223,17 @@ Shader "SeaSick/Terrain Vertex Color"
                     albedo = lerp(albedo,painted,study);
                 }
 
-                // Optional island-local ground palette. No geometry, roads or building masks.
+                // Per-island ground palette. No geometry, roads or building masks.
                 if (_IslandNatureEnabled > .5 && _CrispTerrain > .5)
                 {
-                    float2 uv = (i.positionWS.xz-_IslandNatureBounds.xy)*_IslandNatureBounds.w+.5;
-                    float inside = step(0,uv.x)*step(0,uv.y)*step(uv.x,1)*step(uv.y,1);
-                    float4 nature = SAMPLE_TEXTURE2D(_IslandNatureGround,sampler_IslandNatureGround,uv);
+                    float2 iuv = (i.positionWS.xz-_IslandNatureIndexBounds.xy)*_IslandNatureIndexBounds.z;
+                    float slot = round(SAMPLE_TEXTURE2D_LOD(_IslandNatureIndex,sampler_IslandNatureIndex,iuv,0).r*255)-1;
+                    float has = step(0,slot);
+                    slot = max(slot,0);
+                    float4 b = _IslandNatureBoundsArr[(int)slot];
+                    float2 uv = (i.positionWS.xz-b.xy)*b.w+.5;
+                    float inside = has*step(0,uv.x)*step(0,uv.y)*step(uv.x,1)*step(uv.y,1);
+                    float4 nature = SAMPLE_TEXTURE2D_ARRAY(_IslandNatureGroundArr,sampler_IslandNatureGroundArr,uv,slot);
                     float land = smoothstep(_SandLine-.2,_SandLine+1.1,i.positionWS.y);
                     float rock = smoothstep(.35,.65,i.color.a);
                     // Colour D: rock paint only where the actual facet is
