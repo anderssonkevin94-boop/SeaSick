@@ -297,3 +297,6 @@
 }
 .st .st-pin:hover { background-color: rgb(32, 57, 72); }
 .st .st-pin--on { border-color: rgb(159, 224, 194); color: rgb(159, 224, 194); }
+
+/* Leave space for the worker slot on a portrait phone. */
+.st .st-worker-assign { max-width: 140px; padding: 0 10px; white-space: normal; font-size: 16px; }

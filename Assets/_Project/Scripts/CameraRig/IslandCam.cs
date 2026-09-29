@@ -894,8 +894,15 @@ namespace SeaSick.CameraRig
                 ? Mathf.Clamp(c.OverviewGroundForHeight(heightMetres), minGround, maxGround)
                 : Mathf.Clamp(heightMetres, minGround, maxGround);
 
+            // **From the frame's actual middle, `focus + Pan` (2026-09-29).**
+            // A drag walks `Pan`, never `focus` (see `MovePivot`/`Reground`),
+            // so after any drag `focus` is still where the view was when a
+            // hand first took hold. Starting from bare `focus` and zeroing
+            // `Pan` below snapped the camera back there on the first frame
+            // and then eased off from it -- Kevin, on the phone: "whenever i
+            // press on a building the camera launches somewhere else".
             Vector3 startFocus;
-            if (focus.HasValue) startFocus = focus.Value;
+            if (focus.HasValue) startFocus = focus.Value + Pan;
             else if (c != null && c.OverviewLevel > 0.5f) startFocus = c.LastOverviewAim;
             else startFocus = point;
 
@@ -912,6 +919,17 @@ namespace SeaSick.CameraRig
             wantPan = Pan = Vector3.zero;
             focus = startFocus;
             Driven = true;
+        }
+
+        /// **Take hold of the view without moving it** -- the latch a gesture
+        /// performs, with no gesture. Stops a fling or an ease where it is.
+        /// For a caller about to reason about the view's own composed pose
+        /// (`BuildingSheetFocus`) rather than the rig's.
+        public void TakeHold()
+        {
+            if (!Ready) return;
+            KillMotion();
+            Drive();
         }
 
         /// Keep this transform in the middle of the frame until told otherwise.

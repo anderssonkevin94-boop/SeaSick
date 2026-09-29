@@ -482,9 +482,10 @@ namespace SeaSick.UI.Sheets
                 }
             }
 
-            string stuck = StuckReason(l, h);
-            Set(stuckLine, stuck != null ? StationPage.Cap(stuck) : "");
-            Show(stuckLine, stuck != null);
+            string reason = l.StatusReason(h);
+            Set(stuckLine, StationPage.Cap(reason));
+            stuckLine.style.color = l.StatusWord(h) == "Stuck" ? SheetTheme.Ember : MidnightLandHud.Muted;
+            Show(stuckLine, !string.IsNullOrEmpty(reason));
         }
 
         static string LegName(OutpostHand h, int i)

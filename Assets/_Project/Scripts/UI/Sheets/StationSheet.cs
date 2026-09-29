@@ -93,6 +93,13 @@ namespace SeaSick.UI.Sheets
         StationStock Station(OutpostLedger l) =>
             l != null && raisedIndex >= 0 ? l.StationForRaised(raisedIndex) : null;
 
+        // Resolve at the tap as well as refresh: demolition can shift raised indices.
+        StationStock CurrentStation()
+        {
+            ResolveRaisedIndex();
+            return Station(L);
+        }
+
         OutpostLedger L => outpost != null ? outpost.Ledger : null;
 
         /// The retired dropdown layout's flag; `SheetHost.FrameSizeScreen`
@@ -214,7 +221,7 @@ namespace SeaSick.UI.Sheets
             if (hasWorker)
             {
                 var s = Section(null, out _);
-                worker = new StationPage.WorkerCard(outpost, planId, () => Refresh());
+                worker = new StationPage.WorkerCard(outpost, planId, () => Refresh(), CurrentStation);
                 s.Add(worker.Root);
             }
 
@@ -409,12 +416,13 @@ namespace SeaSick.UI.Sheets
 
         /// One batch's time on the bench at THIS building's level, from the
         /// same numbers the ledger works with (`ratePerDay` × level, a
-        /// `TimeOfDay.DayLength` day).
+        /// `TimeOfDay.WorkDaySeconds` day -- the fixed 180 s the recipes are
+        /// priced in, so a longer sky day never slows a bench).
         string BatchTime(Recipe r, int level)
         {
             float rate = r.ratePerDay * Techs.RateMul(planId, level);
             if (rate <= 0f) return "";
-            float secs = TimeOfDay.DayLength * Mathf.Max(1, r.yield) / rate;
+            float secs = TimeOfDay.WorkDaySeconds * Mathf.Max(1, r.yield) / rate;
             return secs < 90f ? $"· {Mathf.RoundToInt(secs)} s" : $"· {secs / 60f:0.#} min";
         }
 
@@ -1094,15 +1102,17 @@ namespace SeaSick.UI.Sheets
             readonly string planId;
             readonly string role;
             readonly System.Action changed;
+            readonly System.Func<StationStock> stationOf;
             readonly Label initial, name, sub;
             readonly Button main, off, person;
             OutpostHand current;
 
-            public WorkerCard(Outpost o, string planId, System.Action changed)
+            public WorkerCard(Outpost o, string planId, System.Action changed, System.Func<StationStock> stationOf = null)
             {
                 outpost = o;
                 this.planId = planId;
                 this.changed = changed;
+                this.stationOf = stationOf;
                 role = BuildPlans.PositionAt(planId);
                 if (string.IsNullOrEmpty(role)) role = "hand";
 
@@ -1137,6 +1147,7 @@ namespace SeaSick.UI.Sheets
 
                 main = new Button(Main) { text = "Assign" };
                 main.AddToClassList("st-btn");
+                main.AddToClassList("st-worker-assign");
                 Root.Add(main);
                 off = new Button(Off) { text = "Unassign" };
                 off.AddToClassList("st-btn");
@@ -1146,7 +1157,7 @@ namespace SeaSick.UI.Sheets
             public void Update(OutpostLedger l, OutpostHand hand, int others)
             {
                 current = hand;
-                var free = SheetBits.FirstIdle(l);
+                var free = l.FreeHandFor(planId);
                 if (hand != null)
                 {
                     string n = string.IsNullOrEmpty(hand.name) ? "?" : hand.name;
@@ -1162,9 +1173,9 @@ namespace SeaSick.UI.Sheets
                 else
                 {
                     initial.text = "?";
-                    name.text = "Nobody";
-                    sub.text = free != null ? $"needs a {role}" : "no idle hand to post";
-                    main.text = "Assign";
+                    name.text = "No worker";
+                    sub.text = free != null ? $"needs a {role}" : "no free hand to assign";
+                    main.text = "Assign free hand";
                     main.style.display = DisplayStyle.Flex;
                     main.SetEnabled(free != null);
                     off.style.display = DisplayStyle.None;
@@ -1184,18 +1195,35 @@ namespace SeaSick.UI.Sheets
             {
                 var l = outpost != null ? outpost.Ledger : null;
                 if (l == null) return;
-                var free = SheetBits.FirstIdle(l);
+                var station = stationOf?.Invoke();
+                if (stationOf != null && (station == null || station.removed)) return;
+                var free = l.FreeHandFor(station != null ? station.planId : planId);
                 if (free == null) return;
-                if (current != null) outpost.OrderIdle(current, reserve: false);
-                outpost.Assign(free, planId);
+                var previous = station != null ? WorkerAt(l, station) : current;
+                // Seat the replacement first: the API pins existing workers before
+                // the old worker leaves, and a refused assignment changes nobody.
+                bool assigned = station != null ? outpost.Assign(free, station) : outpost.Assign(free, planId);
+                if (assigned && previous != null) outpost.OrderIdle(previous, reserve: false);
                 changed?.Invoke();
             }
 
             void Off()
             {
-                if (outpost == null || current == null) return;
-                outpost.OrderIdle(current, reserve: false);
+                if (outpost == null) return;
+                var station = stationOf?.Invoke();
+                if (stationOf != null && (station == null || station.removed)) return;
+                var hand = station != null ? WorkerAt(outpost.Ledger, station) : current;
+                if (hand == null) return;
+                outpost.OrderIdle(hand, reserve: false);
                 changed?.Invoke();
+            }
+
+            static OutpostHand WorkerAt(OutpostLedger ledger, StationStock station)
+            {
+                if (ledger == null) return null;
+                foreach (var hand in ledger.hands)
+                    if (hand != null && ledger.StationOfHand(hand) == station) return hand;
+                return null;
             }
         }
 

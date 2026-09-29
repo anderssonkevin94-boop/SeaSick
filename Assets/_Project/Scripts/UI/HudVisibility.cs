@@ -30,7 +30,7 @@ namespace SeaSick.UI
         /// asks on every IMGUI event.
         public static bool TuningLab
         {
-            get { if (tuningLab < 0) tuningLab = Get("tuninglab", Debug.isDebugBuild) ? 1 : 0; return tuningLab == 1; }
+            get { if (tuningLab < 0) tuningLab = Get("tuninglab", false) ? 1 : 0; return tuningLab == 1; }
             set { tuningLab = value ? 1 : 0; Set("tuninglab", value); }
         }
         static int tuningLab = -1;

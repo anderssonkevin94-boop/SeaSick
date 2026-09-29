@@ -27,6 +27,7 @@ namespace SeaSick.UI
 
         Texture2D discTex;
         Texture2D arrowTex;
+        AnchorController anchor;
         Texture2D ringTex;
         Texture2D maskTex;
         Color32[] maskPixels;
@@ -35,6 +36,7 @@ namespace SeaSick.UI
         void Start()
         {
             motor = FindFirstObjectByType<ShipMotor>();
+            anchor = motor != null ? motor.GetComponent<AnchorController>() : null;
             voyage = FindFirstObjectByType<VoyageManager>();
             populator = FindFirstObjectByType<TerrainWorldPopulator>();
             discTex = BuildDisc(48);
@@ -44,8 +46,11 @@ namespace SeaSick.UI
 
         void OnEnable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += Rebind;
         void OnDisable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= Rebind;
-        void Rebind(GameObject oldShip, GameObject newShip) =>
+        void Rebind(GameObject oldShip, GameObject newShip)
+        {
             motor = newShip != null ? newShip.GetComponent<ShipMotor>() : null;
+            anchor = newShip != null ? newShip.GetComponent<AnchorController>() : null;
+        }
 
         static Texture2D BuildDisc(int size)
         {
@@ -179,6 +184,12 @@ namespace SeaSick.UI
 
             if (motor == null) return;
             if (!HudVisibility.Minimap) return;
+            // Kevin, 2026-09-29: "remove minimap when docked or landed on an
+            // island" -- it is a sailing instrument; at anchor, alongside or
+            // in the island view it only covers the camp.
+            if (CameraRig.IslandCam.Engaged) return;
+            if (anchor != null && (anchor.CurrentState == AnchorController.State.Anchored
+                                   || anchor.CurrentState == AnchorController.State.Ashore)) return;
             int u = HudLayout.Unit;
             // Sized against the SAFE area, not the screen: on a notched phone
             // the difference is the map's own right-hand edge.

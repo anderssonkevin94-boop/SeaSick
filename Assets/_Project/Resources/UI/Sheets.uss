@@ -356,9 +356,9 @@
 
 .sheet-rail {
     position: absolute;
-    flex-direction: row;
-    align-items: center;
-    background-color: rgb(244, 232, 207);
+    flex-direction: column;
+    align-items: flex-start;
+    background-color: rgb(19, 34, 46);
     border-radius: 30px;
     border-width: 2px;
     border-color: rgb(31, 45, 56);
@@ -438,9 +438,9 @@
 .chart-tab {
     position: absolute;
     left: 0;
-    flex-direction: row;
-    align-items: center;
-    background-color: rgb(244, 232, 207);
+    flex-direction: column;
+    align-items: flex-start;
+    background-color: rgb(19, 34, 46);
     border-radius: 999px;
     border-width: 2px;
     border-color: rgb(31, 45, 56);
@@ -451,15 +451,15 @@
 }
 
 .chart-tab-text {
-    font-size: 13px;
-    color: rgb(31, 45, 56);
+    font-size: 17px;
+    color: rgb(244, 232, 207);
     -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
     white-space: nowrap;
 }
 
 .chart-tab-weather {
-    color: rgb(107, 91, 158);
-    margin-left: 8px;
+    color: rgb(188, 201, 213);
+    margin-left: 0px;
 }
 
 /* ---------------- the standard frame ----------------

@@ -173,7 +173,7 @@ namespace SeaSick.UI.Sheets
             root.style.left = safe.xMin * scale + 14f;
             root.style.top = (Screen.height - safe.yMax) * scale + 14f;
             bool land = MidnightLandHud.Active;
-            float chartScale = land ? (BuildingSheetFocus.IsBuilding(Sheets.Current) ? .40f : .62f) : 1f;
+            float chartScale = land ? (BuildingSheetFocus.IsBuilding(Sheets.Current) ? .40f : .62f) : .58f;
             root.style.scale = new Scale(new Vector3(chartScale, chartScale, 1f));
             root.style.transformOrigin = new TransformOrigin(0f, 0f);
             if (land)

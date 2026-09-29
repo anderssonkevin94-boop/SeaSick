@@ -113,7 +113,7 @@ namespace SeaSick.UI
 
         static Column ColumnOf(Slot s) => s switch
         {
-            Slot.Crew => Column.TopLeft,
+            Slot.Crew => Column.TopRight,
             Slot.Map or Slot.Wind or Slot.Ship or Slot.Hold or Slot.Perf
                 or Slot.CampCrew => Column.TopRight,
             Slot.RailSettings or Slot.RailYard or Slot.RailHome or Slot.RailPause => Column.Rail,
@@ -143,7 +143,7 @@ namespace SeaSick.UI
         ///
         /// It is still ONE place: "0.30 of screen height" used to be written
         /// into two files and half-copied into two more.
-        public static float RailTop01 => Wide ? 0.14f : 0.30f;
+        public static float RailTop01 => Wide ? 0.26f : 0.30f;
 
         const int SlotCount = (int)Slot.Wheel + 1;
         static readonly float[] heights = new float[SlotCount];
@@ -413,7 +413,7 @@ namespace SeaSick.UI
         static float lastRailStack;
 
         public static float RailWidth => Unit * 5.4f;
-        public static float RailButtonHeight => Unit * 2.0f;
+        public static float RailButtonHeight => Unit * 2.8f;
 
         /// Where a panel opened FROM the rail begins: under the whole rail,
         /// not under its own tab.

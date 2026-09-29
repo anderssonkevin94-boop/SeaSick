@@ -7,10 +7,10 @@ namespace SeaSick.UI
     /// point is a clean, tiny footprint on a portrait phone screen.
     public static class UITheme
     {
-        public static readonly Color Panel = new Color(0.04f, 0.07f, 0.10f, 0.62f);
+        public static readonly Color Panel = new Color(0.055f, 0.10f, 0.14f, 0.90f);
         public static readonly Color PanelSolid = new Color(0.04f, 0.07f, 0.10f, 0.92f);
         public static readonly Color Track = new Color(1f, 1f, 1f, 0.16f);
-        public static readonly Color Text = new Color(0.96f, 0.97f, 0.98f, 1f);
+        public static readonly Color Text = new Color(0.96f, 0.92f, 0.82f, 1f);
         public static readonly Color TextDim = new Color(0.96f, 0.97f, 0.98f, 0.65f);
         public static readonly Color Good = new Color(0.42f, 0.82f, 0.45f);
         public static readonly Color Warn = new Color(0.95f, 0.75f, 0.25f);
@@ -36,7 +36,7 @@ namespace SeaSick.UI
 
         /// Type scale derived from the shorter screen edge so it reads the
         /// same on a phone and in a wide editor Game view.
-        public static int Unit => Mathf.Clamp(Mathf.RoundToInt(Mathf.Min(Screen.width, Screen.height) * 0.030f), 11, 20);
+        public static int Unit => Mathf.Clamp(Mathf.RoundToInt(Mathf.Min(Screen.width, Screen.height) * 0.030f), 11, Screen.height > Screen.width ? 28 : 20);
 
         static void Build()
         {

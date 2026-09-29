@@ -29,23 +29,77 @@ namespace SeaSick.UI.Sheets
             if (islandCam == null || rig == null) return;
             if (islandCam.Grabbing) { pending = false; return; }
             if (!islandCam.Ready || !SheetHost.FrameOpen) return;
-            if (islandCam.TiltNow < 60f)
-            {
-                islandCam.OrbitAbout(new Vector2(Screen.width*.5f,Screen.height*.5f),0f,60f-islandCam.TiltNow);
-                islandCam.OrbitEnd();
-            }
-            if (!islandCam.VirtualPose(out _, out var rotation, out var fov)) return;
+            pending = false;
 
+            // **Leave the view alone unless the building is hidden (2026-09-29).**
+            // Kevin, on the phone: "whenever i press on a building the camera
+            // launches somewhere else so i have to drag myself back." The old
+            // version always re-centred the building on a fixed spot of the
+            // free area (and asked for a 60 deg tilt the lock drops), which at
+            // the locked 28 deg is a long throw every tap. Now: if the building
+            // already sits in the comfortable part of the view above the sheet,
+            // nothing moves; otherwise the camera eases the SHORTEST way that
+            // brings it just inside, at the current zoom.
             Rect free = VisibleWorldRect(Screen.safeArea, SheetHost.FrameRect, MidnightLandHud.ResourcesRect,
                 Screen.height, HudLayout.Wide, SheetHost.PanelScale);
-            Vector2 target = free.center;
-            // Leave breathing room above a building's ground-level selection ring.
-            target.y = Mathf.Lerp(free.yMin, free.yMax, .42f);
-            var uv = new Vector2(target.x / Screen.width, target.y / Screen.height);
+            Rect band = ComfortBand(free);
+            float aspect = (float)Screen.width / Mathf.Max(1, Screen.height);
+            Vector3 anchor = sheet.AnchorWorld;
+
+            if (!islandCam.VirtualPose(out var seat, out var rotation, out var fov)) return;
+            bool visible = ScreenOf(anchor, seat, rotation, fov, aspect, out Vector2 now);
+            if (visible && band.Contains(now)) return;
+
+            // Moving after all: take hold first so the pose reasoned about is
+            // the view's own, not the rig's (a no-op on the picture).
+            islandCam.TakeHold();
+            if (!islandCam.VirtualPose(out seat, out rotation, out fov)) return;
+            visible = ScreenOf(anchor, seat, rotation, fov, aspect, out now);
+            Vector2 target = visible
+                ? new Vector2(Mathf.Clamp(now.x, band.xMin, band.xMax), Mathf.Clamp(now.y, band.yMin, band.yMax))
+                : band.center;
+            if (visible && (target - now).sqrMagnitude < 1f) return;
+
             float ground = Mathf.Max(islandCam.MinGround, islandCam.Ground);
-            Vector3 pivot = PivotFor(sheet.AnchorWorld, rotation, fov, ground, uv, (float)Screen.width / Screen.height);
-            islandCam.PanToWorld(pivot, rig.OverviewHeightForGround(ground), .45f);
-            pending = false;
+            // `PivotFor` answers "centre the frame here and the anchor lands
+            // there"; the difference of two answers is the shift that carries
+            // the anchor from where it is now to `target`. Applied to the
+            // frame's own middle, and never more than one frame of ground, so
+            // a bad read can nudge the view but never launch it.
+            Vector3 to = PivotFor(anchor, rotation, fov, ground, ToUv(target), aspect);
+            Vector3 middle = islandCam.FocusPoint.HasValue ? islandCam.Pivot : to;
+            Vector3 delta = visible
+                ? to - PivotFor(anchor, rotation, fov, ground, ToUv(now), aspect)
+                : to - middle;
+            delta.y = 0f;
+            delta = Vector3.ClampMagnitude(delta, ground);
+            islandCam.PanToWorld(middle + delta, rig.OverviewHeightForGround(ground), .45f);
+        }
+
+        static Vector2 ToUv(Vector2 screen) => new Vector2(screen.x / Mathf.Max(1, Screen.width),
+            screen.y / Mathf.Max(1, Screen.height));
+
+        /// The part of the free area a building's FOOT should sit in: inset
+        /// from the sides, and kept in the lower ~60% so the building itself
+        /// (which stands up the screen from its foot) and its label fit above.
+        internal static Rect ComfortBand(Rect free)
+        {
+            float x0 = Mathf.Lerp(free.xMin, free.xMax, .12f), x1 = Mathf.Lerp(free.xMin, free.xMax, .88f);
+            float y0 = Mathf.Lerp(free.yMin, free.yMax, .12f), y1 = Mathf.Lerp(free.yMin, free.yMax, .62f);
+            return Rect.MinMaxRect(x0, y0, Mathf.Max(x0 + 1f, x1), Mathf.Max(y0 + 1f, y1));
+        }
+
+        /// Where `world` lands on screen (camera pixels, bottom-left origin)
+        /// for this pose. False when it is behind the lens.
+        internal static bool ScreenOf(Vector3 world, Vector3 seat, Quaternion rotation, float fov, float aspect, out Vector2 screen)
+        {
+            Vector3 v = Quaternion.Inverse(rotation) * (world - seat);
+            screen = default;
+            if (v.z <= .01f) return false;
+            float tan = Mathf.Tan(fov * Mathf.Deg2Rad * .5f);
+            float x = v.x / (v.z * tan * aspect), y = v.y / (v.z * tan);
+            screen = new Vector2((x + 1f) * .5f * Screen.width, (y + 1f) * .5f * Screen.height);
+            return true;
         }
 
         // Inputs from HUD layout use GUI's top-left origin; return camera screen coordinates.
