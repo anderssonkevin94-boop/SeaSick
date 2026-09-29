@@ -15,7 +15,18 @@ This project is built with a split AI workflow to conserve credits:
 - **Coplay** is being retired (Kevin is cancelling the subscription). Its MCP tools may still appear while the plugin package is installed; do not depend on them. Its only capability the CLI lacks is generative asset creation, which this project never used (models come from Blender).
 - **`docs/DEV-TOOLS.md`** — index of every probe and setup script, the edit/verify loop, and the measurement traps this project has actually hit. Read it before writing a new probe or trusting a measurement.
 
+## Building asset direction
+- Level-one building redesigns use tarp roofs and no iron attachments. Give each building its own layout and personality; vary tarp placement and silhouette rather than repeating one roof arrangement. The lumber mill brief is a triangular tarp fastened to two timber pillars and the ground.
+- Before reworking a building, inspect its current design information, prefab and runtime code as needed to understand its actual requirements: raw-material storage/piles, product piles, workstation, worker positions/access, interaction markers, footprint and visible state changes. Include only the elements that building needs; do not assume every building has a door or identical facilities.
+- Design around those gameplay requirements and preserve the implementation contracts. Identify which elements are static art and which are spawned, positioned or toggled by gameplay, so storage and work areas remain usable and are not accidentally duplicated.
+- Maintain bulky, chunky forms and clear silhouettes that read easily on the phone throughout the project. The approved wall is a style starting point, not a universal template; each building should have its own recognizable function and character.
+- Keep small details minimal and purposeful. A simple door knob can be appropriate where there is a door; decorative wood cracks and similarly fine surface clutter are excessive. Favor broad shapes, readable material separation and restrained variation.
+
 ## Folder structure
+### Approved art handoff
+- `ASTRAS_READY_ASSETS.md` is Kevin’s active queue of approved assets awaiting implementation. When he approves an asset, add/update its exact source, export, preview, materials and implementation notes there.
+- Implement the exact queued revision. After implementation and the relevant in-game checks pass, remove its entry and index row from the queue, retaining the source assets and shared dependencies on disk. Leave partial/blocked work queued with a status note.
+
 All project-authored content lives under `Assets/_Project/`:
 - `Scripts/` — C# code (namespace `SeaSick`), organized by feature subfolder
 - `Scenes/` — game scenes (template scenes live in `Assets/Scenes/` until replaced)
