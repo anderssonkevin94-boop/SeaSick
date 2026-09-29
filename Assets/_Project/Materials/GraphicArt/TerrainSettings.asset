@@ -489,7 +489,7 @@ MonoBehaviour:
   fieldSlopeMax: 0.17
   fieldMaxRise: 26
   cropSpacing: 1.95
-  farmedShare: 0.35
+  farmedShare: 0
   cragScale: 1
   headlandShare: 0.14
   shoreRock: 1

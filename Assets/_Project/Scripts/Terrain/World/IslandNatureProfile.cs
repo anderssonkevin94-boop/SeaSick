@@ -339,7 +339,7 @@ namespace SeaSick.Terrain
             const int N=NatureGroundAtlas.Size;
             float span=island.MaxRadius*2+20;
             var islandCentre=new Vector2(island.transform.position.x,island.transform.position.z);
-            var cover=new float[N*N]; var roots=new float[N*N];
+            var cover=new float[N*N];
             // The stamp window is set in METRES (20 m, where the moss term is
             // ~e^-4), not pixels: a fixed 6-pixel window was 7.8 m on Island_2
             // but under 4 m on a small island, and cutting the fade off there
@@ -354,13 +354,13 @@ namespace SeaSick.Terrain
                     int x=tx+dx,z=tz+dz; if(x<0 || z<0 || x>=N || z>=N) continue;
                     float d=(dx*dx+dz*dz)*span*span/(N*N);
                     cover[z*N+x]+=Mathf.Exp(-d/90f);
-                    roots[z*N+x]=Mathf.Max(roots[z*N+x],Mathf.Exp(-d/22f));
                 }
             }
             var pixels=new Color[N*N];
             // Colour D: three warm yellow-green tones (meadow / lush / dry, hue ~66-97 deg),
-            // moss under canopy; earth stays warm.
-            Color grass=Palette("#7DB04D"),lush=Palette("#5A8F39"),dry=Palette("#ADB562"),moss=Palette("#4E7A37"),earth=Palette("#A48C5E");
+            // moss under canopy. No bare earth at the roots: Kevin, 2026-09-29,
+            // "i really distain the brown squares under the palm trees".
+            Color grass=Palette("#7DB04D"),lush=Palette("#5A8F39"),dry=Palette("#ADB562"),moss=Palette("#4E7A37");
             for(int z=0;z<N;z++) for(int x=0;x<N;x++)
             {
                 float px=islandCentre.x+(x/(N-1f)-.5f)*span,pz=islandCentre.y+(z/(N-1f)-.5f)*span;
@@ -371,7 +371,6 @@ namespace SeaSick.Terrain
                 float lushPatch=Mathf.PerlinNoise(px*.021f+71,pz*.021f+13);
                 c=Color.Lerp(c,lush,Mathf.SmoothStep(0,1,(lushPatch-.52f)*4f)*.85f);
                 c=Color.Lerp(c,moss,Mathf.Clamp01(cover[i]*.52f)*.9f);
-                c=Color.Lerp(c,earth,Mathf.Clamp01((roots[i]*(noise+.45f)-.18f)*1.4f)*.85f);
                 c.a=Mathf.Clamp01(inside/8f); pixels[i]=c;
             }
             NatureGroundAtlas.Put(island,pixels,islandCentre,span,island.RadiusAt,groundIndexHalfExtent);
