@@ -82,6 +82,23 @@ namespace SeaSick.Ship.SeaLife
         [Tooltip("Crew sickness decay multiplier while dolphins are at the bow (Sickness01 easing, not rising).")]
         public float dolphinSicknessDecayMultiplier = 1.5f;
 
+        [Header("Large fish (Astra's approved 5.9 m fish, ambient only)")]
+        [Tooltip("Real seconds of live sailing before the next large fish appears after the last one left.")]
+        public float largeFishRespawnSeconds = 20f;
+        [Tooltip("Metres ahead of the bow, nearest / farthest, a large fish spawns.")]
+        public float largeFishAheadMin = 35f;
+        public float largeFishAheadMax = 70f;
+        [Tooltip("Cruising speed, m/s. Wander varies it 0.8-1.15x; a pass by the ship is 1.2x.")]
+        public float largeFishSpeed = 2.5f;
+        [Tooltip("Most degrees per second the fish turns. Low = broad, lazy turns.")]
+        public float largeFishTurnDegPerSec = 14f;
+        [Tooltip("Metres between the top of the dorsal fin and the local water surface.")]
+        public float largeFishFinClearance = 0.7f;
+        [Tooltip("Beyond this many metres from the ship the fish heads back toward it.")]
+        public float largeFishLeashMetres = 60f;
+        [Tooltip("Beyond this many metres from the ship the fish is removed (the next one spawns ahead).")]
+        public float largeFishDespawnMetres = 150f;
+
         [Header("Spawn safety")]
         [Tooltip("Nothing spawns within this many metres of an island's shore, or inside a camp's harbour.")]
         public float minDistanceFromShoreMetres = 60f;
@@ -140,6 +157,14 @@ namespace SeaSick.Ship.SeaLife
         public static int DolphinCountMin => D != null ? D.dolphinCountMin : 2;
         public static int DolphinCountMax => D != null ? D.dolphinCountMax : 3;
         public static float DolphinSicknessDecayMultiplier => D != null ? D.dolphinSicknessDecayMultiplier : 1.5f;
+        public static float LargeFishRespawnSeconds => D != null ? D.largeFishRespawnSeconds : 20f;
+        public static float LargeFishAheadMin => D != null ? D.largeFishAheadMin : 35f;
+        public static float LargeFishAheadMax => D != null ? D.largeFishAheadMax : 70f;
+        public static float LargeFishSpeed => D != null ? D.largeFishSpeed : 2.5f;
+        public static float LargeFishTurnDegPerSec => D != null ? D.largeFishTurnDegPerSec : 14f;
+        public static float LargeFishFinClearance => D != null ? D.largeFishFinClearance : 0.7f;
+        public static float LargeFishLeashMetres => D != null ? D.largeFishLeashMetres : 60f;
+        public static float LargeFishDespawnMetres => D != null ? D.largeFishDespawnMetres : 150f;
         public static float MinDistanceFromShoreMetres => D != null ? D.minDistanceFromShoreMetres : 60f;
     }
 }

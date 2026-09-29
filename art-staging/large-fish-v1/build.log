@@ -1,0 +1,20 @@
+/Users/kevinandersson/Desktop/SeaSick/tools/blender/large_fish_v1.py:10: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  m=bpy.data.materials.new(name);m.diffuse_color=c;m.use_nodes=True;p=m.node_tree.nodes.get('Principled BSDF');p.inputs['Base Color'].default_value=c;p.inputs['Roughness'].default_value=.64;mats.append(m)
+/Users/kevinandersson/Desktop/SeaSick/tools/blender/large_fish_v1.py:91: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  bpy.ops.mesh.primitive_plane_add(size=200,location=(0,0,-1.65));floor=bpy.context.object;floor.name='Review backdrop';m=bpy.data.materials.new('Sea blue backdrop');m.diffuse_color=(.035,.115,.15,1);m.use_nodes=True;m.node_tree.nodes.get('Principled BSDF').inputs['Base Color'].default_value=m.diffuse_color;floor.data.materials.append(m)
+00:13.792  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/large-fish-v1/fish-preview.png'
+00:26.931  render           | Saved: '/Users/kevinandersson/Desktop/SeaSick/art-staging/large-fish-v1/fish-top.png'
+BlenderMCP: cannot start server in background mode (blender -b) - commands would never execute
+BlenderMCP: run Blender with a GUI, or use a virtual display: xvfb-run -a blender
+BlenderMCP addon registered
+Info: Removed 594 vertices
+
+FBX export starting... '/Users/kevinandersson/Desktop/SeaSick/art-staging/large-fish-v1/large-fish-rigged.fbx'
+(bpy.data.armatures['FishSkeleton'], 'POSE')
+export finished in 0.0188 sec.
+Info: Saved as "large-fish.blend"
+BlenderMCP server stopped
+BlenderMCP addon unregistered
+Blender 5.1.1 (hash b70da489d7f4 built 2026-04-14 01:46:23)
+
+Blender quit

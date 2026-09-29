@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "triangles": 940,
+  "bones": 5,
+  "weighted_vertices": 506,
+  "animation_moves": true,
+  "loop_endpoints_match": true,
+  "vertex_color_layers": [
+    "GameColor"
+  ]
+}

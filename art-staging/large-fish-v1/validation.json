@@ -1,0 +1,15 @@
+{
+  "length_m": 5.88,
+  "triangles": 940,
+  "bones": [
+    "Body",
+    "Spine",
+    "TailBase",
+    "TailWrist",
+    "TailFin"
+  ],
+  "animation": "Swim_Slow_Loop, frames 1\u201349 at 24fps (2 seconds)",
+  "forward_blender": "+X",
+  "export": "FBX -Z forward, Y up",
+  "note": "Asset only; not placed in Unity. Review images have no actual ocean shader."
+}

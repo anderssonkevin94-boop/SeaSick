@@ -30,6 +30,7 @@ namespace SeaSick.Ship.SeaLife
 
         float nextFlotsamAt = -1f;
         float nextShoalAt = -1f;
+        float nextLargeFishAt = -1f;
         float dolphinSmoothFor;
         float dolphinCooldownLeft;
 
@@ -48,6 +49,7 @@ namespace SeaSick.Ship.SeaLife
             float dt = Time.deltaTime;
             TickFlotsam(dt);
             TickShoal(dt);
+            TickLargeFish();
             TickDolphins(dt);
         }
 
@@ -86,6 +88,25 @@ namespace SeaSick.Ship.SeaLife
                 return;
 
             FishShoal.Spawn(motor.transform, spot);
+        }
+
+        // --- large fish (ambient, one at a time) ---------------------------
+
+        void TickLargeFish()
+        {
+            if (LargeFish.Active != null) { nextLargeFishAt = -1f; return; }
+            if (nextLargeFishAt < 0f) nextLargeFishAt = Time.time + JitteredSeconds(SeaLifeTuning.LargeFishRespawnSeconds);
+            if (Time.time < nextLargeFishAt) return;
+            nextLargeFishAt = Time.time + JitteredSeconds(SeaLifeTuning.LargeFishRespawnSeconds);
+
+            if (!SeaLifeSpawn.TryFindSpot(motor.transform.position, motor.transform.forward,
+                    SeaLifeTuning.LargeFishAheadMin, SeaLifeTuning.LargeFishAheadMax, 35f, out var spot))
+                return;
+
+            // Swimming roughly across the bow, so the ship meets it.
+            float shipYaw = motor.transform.eulerAngles.y;
+            float heading = shipYaw + (Random.value < 0.5f ? -1f : 1f) * Random.Range(60f, 150f);
+            LargeFish.Spawn(motor.transform, spot, heading);
         }
 
         // --- dolphins -------------------------------------------------------
@@ -136,6 +157,17 @@ namespace SeaSick.Ship.SeaLife
             if (motor == null) return;
             Vector3 spot = motor.transform.position + motor.transform.forward * 60f;
             FishShoal.Spawn(motor.transform, spot);
+        }
+
+        /// Dev/probe hook: a large fish `ahead` metres off the bow, swimming
+        /// the ship's way (replaces any fish already out).
+        public static LargeFish DebugSpawnLargeFish(float ahead = 14f)
+        {
+            var motor = FindAnyObjectByType<ShipMotor>();
+            if (motor == null) return null;
+            if (LargeFish.Active != null) DestroyImmediate(LargeFish.Active.gameObject);
+            Vector3 spot = motor.transform.position + motor.transform.forward * ahead;
+            return LargeFish.Spawn(motor.transform, spot, motor.transform.eulerAngles.y);
         }
 
         public static void DebugDolphinsNow()

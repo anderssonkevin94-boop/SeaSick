@@ -101,6 +101,18 @@ Shader "SeaSick/Ocean"
         {
             Tags { "LightMode" = "UniversalForward" }
             Cull Off
+            // Stencil bit 4 = "the water is the front-most surface here".
+            // Read by `SeaSick/Fish Underwater` (Art/SeaLife/LargeFish), which
+            // draws the large fish through the opaque phone-tier water only
+            // where this pass won its depth test, so hulls and islands in
+            // front of the water still hide it. Nothing else uses stencil.
+            Stencil
+            {
+                Ref 4
+                WriteMask 4
+                Comp Always
+                Pass Replace
+            }
             HLSLPROGRAM
             // The VERTEX stage samples Texture2DArrays (SampleDisplacement,
             // three cascades) -- vertex texture fetch, which is Shader Model
@@ -755,12 +767,12 @@ Shader "SeaSick/Ocean"
                 float studyHeight=input.heightY*2.0/max(localHs,1.0);
                 float facing=saturate(dot(n,L));
                 float faceSignal=.70+(facing-saturate(L.y))*1.3+.065*studyHeight;
-                float pigmentAA=max(fwidth(faceSignal)*.85,.003);
+                float pigmentAA=max(fwidth(faceSignal)*.85,.075);
                 float midPlane=smoothstep(.61-pigmentAA,.61+pigmentAA,faceSignal);
                 float lightPlane=smoothstep(.77-pigmentAA,.77+pigmentAA,faceSignal);
                 float tipPlane=smoothstep(.88-pigmentAA,.88+pigmentAA,faceSignal);
                 half3 middleColor=lerp(deep,shallow,.52);
-                half3 paintedBody=lerp(deep*.74,middleColor*.80,midPlane);
+                half3 paintedBody=lerp(lerp(deep,middleColor,.45),middleColor*.95,midPlane);
                 paintedBody=lerp(paintedBody,shallow*.86,lightPlane);
                 paintedBody=lerp(paintedBody,shallow*1.07,tipPlane*.55);
                 paintedBody*=.84+.23*smoothstep(.38,.96,facing)
@@ -808,7 +820,7 @@ Shader "SeaSick/Ocean"
                 //   dusk; at night it lands on a cold blue-grey a shade off
                 //   the night sea, so the shoal still says "there is a bottom
                 //   here" without being the brightest thing in the frame.
-                float shoal = 1.0 - saturate(swd.z / max(_ShoalDepth, 0.5));
+                float shoal = 1.0 - smoothstep(0.0, max(_ShoalDepth, 0.5), swd.z);
                 body = lerp(body, _ShoalColor.rgb * shoreTint,
                             shoal * shoal * _ShoalStrength * swd.y);
 
@@ -1090,6 +1102,8 @@ Shader "SeaSick/Ocean"
                 float graphicFoam=max(graphicCrest,max(cleanShore,sim.g));
                 float graphicAA=max(fwidth(graphicFoam)*.35,.005);
                 graphicFoam=smoothstep(.38-graphicAA,.38+graphicAA,graphicFoam);
+                // Art-only contrast: keep actual breakers and shore surf legible.
+                graphicFoam *= lerp(.16, .85, saturate(max(breakers,storm)));
                 foamAmt=lerp(foamAmt,graphicFoam*(1-SS_LAYER_OFF.w),_PaintedStrength);
 
                 half3 col = lerp(body, sky, fresnel * _ReflectionStrength * (1.0 - foamAmt) * (1.0 - SS_LAYER_OFF.y));
