@@ -65,6 +65,7 @@ namespace SeaSick.UI.ModularYard
             if (setWorldInputBlocked == null) throw new ArgumentNullException(nameof(setWorldInputBlocked));
             var template = Resources.Load<PanelSettings>("UI/SheetPanel");
             if (template == null) throw new InvalidOperationException("UI/SheetPanel is missing.");
+            if (CoasterFamily.Is(service.Current)) { var bridge=new ShipyardLiveBridge(); return Open(bridge,setWorldInputBlocked,bridge.RemovalBlocker); }
             var draft = service.BeginSlotDraft();
             var go = new GameObject("Slot shipyard");
             var modal = go.AddComponent<ShipyardModal>();
@@ -123,7 +124,7 @@ namespace SeaSick.UI.ModularYard
         {
             screen?.Dispose(); screen = null;
             slots?.Dispose(); slots = null;
-            if (document != null) document.rootVisualElement.Clear();
+            if (document != null) document.rootVisualElement?.Clear();
             if (active == this) active = null;
             setWorldInputBlocked?.Invoke(false); setWorldInputBlocked = null;
         }

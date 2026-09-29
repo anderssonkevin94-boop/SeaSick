@@ -16,7 +16,7 @@ public static class ModularSelfTestMain
         var names = files.Select(Path.GetFileNameWithoutExtension).ToList();
         // A visual part "resolves" headlessly when its FBX exists on disk
         // (in Unity the same gate asks Resources.Load after import).
-        Func<string, bool> exists = p => File.Exists(Path.Combine(res, p + ".fbx"));
+        Func<string, bool> exists = p => (File.Exists(Path.Combine(res, p + ".fbx")) || File.Exists(Path.Combine(res, p + ".prefab")));
         string hullForm = Path.Combine(res, "Steamer/hullform.json");
         bool ok = SeaSick.Ship.Modular.ModularShipSelfTest.RunWith(File.ReadAllText(Path.Combine(dir, "standards.json")), texts, names, exists,
             File.Exists(hullForm) ? File.ReadAllText(hullForm) : null,

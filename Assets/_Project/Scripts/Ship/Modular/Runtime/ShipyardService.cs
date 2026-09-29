@@ -73,6 +73,7 @@ namespace SeaSick.Ship.Modular
 
         /// A copy of what she is built from. Mutating it changes nothing.
         public ShipConfiguration Current => current.Clone();
+        public bool IsCoaster => CoasterFamily.Is(current);
         /// A copy of what is in her dry dock (equipment a refit has taken
         /// off her, waiting to be fitted again). Mutating it changes nothing.
         public DryDock Dock => dock.Clone();
@@ -110,6 +111,9 @@ namespace SeaSick.Ship.Modular
             modularActive = false;
             dock = DryDock.Empty();
             Player = this;
+            // A new game starts on the base boat (2026-09-29); a load
+            // replaces it with the saved one straight after.
+            ApplyFromSave(CoasterFamily.Base().ToJson());
         }
 
         void OnDestroy()
@@ -175,7 +179,7 @@ namespace SeaSick.Ship.Modular
         /// Pure: checks the draft against the prototype policy, the module
         /// rules and what she is carrying now. Changes nothing.
         public ShipyardValidation Validate(ShipConfiguration draft) =>
-            ShipyardPlanner.Validate(draft == null ? null : draft.UsesSlots ? draft.Clone() : SlotModel.Migrate(draft, Library, out _),
+            ShipyardPlanner.Validate(draft == null ? null : (draft.UsesSlots || CoasterFamily.Is(draft)) ? draft.Clone() : SlotModel.Migrate(draft, Library, out _),
                 Library, reference, Snapshot());
 
         /// Validate, as the rich current-vs-proposed report the UI displays.
@@ -374,9 +378,9 @@ namespace SeaSick.Ship.Modular
         {
             var res = new ShipyardApplyResult();
             // A v1/v2 draft (an old caller) is judged as slots, like the live ship.
-            if (draft != null && !draft.UsesSlots) draft = SlotModel.Migrate(draft, Library, out _);
-            if (draft != null) draft = SlotModel.Normalized(draft, Library);
-            if (expected != null && !expected.UsesSlots) expected = SlotModel.Migrate(expected, Library, out _);
+            if (draft != null && !draft.UsesSlots && !CoasterFamily.Is(draft)) draft = SlotModel.Migrate(draft, Library, out _);
+            if (draft != null && !CoasterFamily.Is(draft)) draft = SlotModel.Normalized(draft, Library);
+            if (expected != null && !expected.UsesSlots && !CoasterFamily.Is(expected)) expected = SlotModel.Migrate(expected, Library, out _);
             if (expected == null || !expected.ValueEquals(current))
             {
                 res.issues.Add(new Rejection { code = ShipyardCodes.StaleDraft, partId = "",
@@ -416,7 +420,7 @@ namespace SeaSick.Ship.Modular
                         res.configuration = Current;
                         return res;
                     }
-                    withBuilds.Add(b);
+                    withBuilds.Add(CoasterFamily.Is(draft)&&b==ModuleCatalog.Cannon?ShipConfiguration.EquipmentCannon:b);
                 }
             // Surplus hands (2026-09-25, Kevin): never a refusal -- they go
             // ashore to the HOME settlement instead. Landing them is a real
@@ -611,10 +615,11 @@ namespace SeaSick.Ship.Modular
             dock = DryDock.FromJson(field);
             // A v2 store kept guns under their equipment id; the slot store
             // keys on catalog ids ("module.cannon").
-            SlotModel.MigrateStore(dock, Library);
+            if (current.UsesSlots) SlotModel.MigrateStore(dock, Library);
+            else if (CoasterFamily.Is(current)) { int n=dock.Count("module.cannon"); if(n>0) {dock.TryTake("module.cannon",n);dock.Add(ShipConfiguration.EquipmentCannon,n);} }
             // Modules an old configuration's migration found no cell for
             // (ApplyFromSave runs first) land here, never lost.
-            foreach (var id in pendingOverflow) dock.Add(id);
+            foreach (var id in pendingOverflow) dock.Add(CoasterFamily.Is(current) && id=="module.cannon" ? ShipConfiguration.EquipmentCannon : id);
             pendingOverflow.Clear();
         }
 
@@ -631,13 +636,8 @@ namespace SeaSick.Ship.Modular
             if (warning != null) Debug.LogWarning("[Shipyard] " + warning);
             pendingOverflow.Clear();
             pendingOverflow.AddRange(overflow);
-            if (!has)
-            {
-                // An old save: the standard steamer, drawn as she always was.
-                if (modularActive && !RevertToReference(out string why))
-                    Debug.LogError("[Shipyard] could not return her to the standard steamer: " + why);
-                return;
-            }
+            cfg = CoasterFamily.Upgrade(has ? cfg : null,Library,out var migratedOverflow);
+            pendingOverflow.AddRange(migratedOverflow);
             var refPlan = ShipyardPlanner.PlanFor(ShipConfiguration.Long(), Library, reference, null, out _);
             var plan = ShipyardPlanner.PlanFor(cfg, Library, reference, refPlan, out var asm);
             if (plan == null)
@@ -682,6 +682,7 @@ namespace SeaSick.Ship.Modular
                 if (newView.RotorPivot == null) throw new InvalidOperationException("the assembly drew no wheel");
 
                 SteamerBootstrap.Assemble(gameObject, plan.data, fresh, newView.RotorPivot, null, Options(plan));
+                if (CoasterFamily.Is(plan.config)) CoasterRuntime.Install(gameObject,newView,plan);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
                 TestFault(FaultAfterAssemble);
 #endif
@@ -706,7 +707,10 @@ namespace SeaSick.Ship.Modular
                 try
                 {
                     if (prevModular && prevPlan != null && prevView != null)
+                    {
                         SteamerBootstrap.Assemble(gameObject, prevPlan.data, prevView.gameObject, prevView.RotorPivot, null, Options(prevPlan));
+                        if(CoasterFamily.Is(prevPlan.config))CoasterRuntime.Install(gameObject,prevView,prevPlan);
+                    }
                     else
                         AssembleReference();
                 }

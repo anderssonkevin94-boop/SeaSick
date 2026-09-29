@@ -182,6 +182,28 @@ namespace SeaSick.Ship
             smoke = BuildSmoke();
         }
 
+        /// Attach the modular cannon's barrel to the existing aiming/recoil mechanism.
+        public void BindCoasterArt(Transform art)
+        {
+            Transform authoredPivot=null, muzzle=null;
+            foreach(var t in art.GetComponentsInChildren<Transform>(true))
+            {
+                if(t.name=="Elevation_Pivot")authoredPivot=t;
+                if(t.name=="Muzzle_Socket")muzzle=t;
+            }
+            if(authoredPivot==null||muzzle==null)return;
+            var direction=Vector3.ProjectOnPlane(muzzle.position-authoredPivot.position,transform.up);
+            if(direction.sqrMagnitude>.001f)
+                art.rotation=Quaternion.FromToRotation(direction.normalized,transform.forward)*art.rotation;
+            var at=authoredPivot.position;
+            authoredMuzzle=Vector3.Distance(at,muzzle.position);
+            barrelPivot.position=at;barrelPivot.rotation=transform.rotation;
+            barrel.localPosition=Vector3.zero;
+            authoredPivot.SetParent(barrel,true);
+            authoredPivot.rotation=Quaternion.FromToRotation((muzzle.position-authoredPivot.position).normalized,barrel.forward)*authoredPivot.rotation;
+            if(smoke!=null)smoke.transform.localPosition=Vector3.forward*authoredMuzzle;
+        }
+
         public void BuildAuthored(FleetGun art)
         {
             restLocalRotation = transform.localRotation;

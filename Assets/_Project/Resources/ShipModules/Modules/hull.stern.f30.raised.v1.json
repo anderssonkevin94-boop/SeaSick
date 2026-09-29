@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "id": "hull.stern.f30.raised.v1",
+  "version": 1,
+  "kind": "Stern",
+  "family": "F30R",
+  "status": "prototype",
+  "displayName": "Stern \u2014 two decks",
+  "source": "art-staging/f-coaster-runtime/kit.json",
+  "lengthU": 9.8,
+  "boundsMinU": {
+    "x": -0.2,
+    "y": -4.95,
+    "z": -1.92
+  },
+  "boundsMaxU": {
+    "x": 9.8,
+    "y": 4.95,
+    "z": 9
+  },
+  "sockets": [
+    {
+      "id": "AftSocket",
+      "role": "hull.origin",
+      "posU": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "standard": ""
+    },
+    {
+      "id": "ForwardSocket",
+      "role": "hull.fwd",
+      "posU": {
+        "x": 9.8,
+        "y": 0,
+        "z": 0
+      },
+      "standard": "F30"
+    },
+    {
+      "id": "WheelModuleSocket",
+      "role": "wheel",
+      "posU": {
+        "x": 0.12,
+        "y": 0,
+        "z": 1.6500000000000001
+      },
+      "standard": "F30-raised",
+      "radiusLimit": 3.6
+    },
+    {
+      "id": "Gun_0_-1",
+      "role": "deck.slot",
+      "posU": {
+        "x": 5.7,
+        "y": -3.46,
+        "z": 2.96
+      },
+      "standard": "equipment.deck-gun",
+      "yawDeg": 0
+    },
+    {
+      "id": "Gun_0_1",
+      "role": "deck.slot",
+      "posU": {
+        "x": 5.7,
+        "y": 3.46,
+        "z": 2.96
+      },
+      "standard": "equipment.deck-gun",
+      "yawDeg": 180
+    }
+  ],
+  "visuals": [
+    {
+      "id": "SternRaised",
+      "resourcePath": "ShipModules/Meshes/FCoaster/SternRaised"
+    }
+  ],
+  "equipmentSlots": [
+    {
+      "id": "Gun_0_-1",
+      "socketId": "Gun_0_-1",
+      "clearanceSizeU": {
+        "x": 2.05,
+        "y": 2.95,
+        "z": 2
+      },
+      "classes": [
+        "equipment.deck-gun"
+      ],
+      "provisional": false
+    },
+    {
+      "id": "Gun_0_1",
+      "socketId": "Gun_0_1",
+      "clearanceSizeU": {
+        "x": 2.05,
+        "y": 2.95,
+        "z": 2
+      },
+      "classes": [
+        "equipment.deck-gun"
+      ],
+      "provisional": false
+    }
+  ],
+  "passages": [
+    {
+      "id": "Passage0",
+      "centreU": {
+        "x": 4.9,
+        "y": 0,
+        "z": 4.66
+      },
+      "sizeU": {
+        "x": 9.8,
+        "y": 3.8,
+        "z": 3.4
+      },
+      "provisional": false
+    }
+  ],
+  "lightship": {
+    "massKg": 11700,
+    "provisional": true,
+    "rule": "Initial playable balance; tune after sailing trials."
+  },
+  "capacity": {
+    "holdCells": {
+      "value": 8,
+      "provisional": true
+    },
+    "berths": {
+      "value": 4,
+      "provisional": true
+    },
+    "gunSlots": {
+      "ids": [
+        "Gun_0_-1",
+        "Gun_0_1"
+      ],
+      "provisional": false
+    }
+  },
+  "hydrostatics": {
+    "resourcePath": "ShipModules/Hydrostatics/FCoaster/stern",
+    "validWaterlineZU": [
+      -1.92,
+      1.76
+    ],
+    "notes": "Numerical approximation of the authored station profile; initial flotation tuning."
+  },
+  "upperStructure": {
+    "massKg": 1700,
+    "centroidZU": 4.6,
+    "deckZU": 7.36,
+    "deckMassKg": 1000,
+    "wallMassKg": 700
+  }
+}

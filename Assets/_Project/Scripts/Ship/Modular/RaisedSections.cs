@@ -89,7 +89,7 @@ namespace SeaSick.Ship.Modular
         /// foreign/future/blank id degrades to "not raised" rather than
         /// throwing.
         public static DeckLevel LevelOf(string moduleId) =>
-            !string.IsNullOrEmpty(moduleId) && moduleId.Contains(".w1xr.") ? DeckLevel.Raised : DeckLevel.Low;
+            CoasterFamily.Raised(moduleId) || (!string.IsNullOrEmpty(moduleId) && moduleId.Contains(".w1xr.")) ? DeckLevel.Raised : DeckLevel.Low;
 
         /// Inverse of `ToIds`: read a configuration's ids back into levels
         /// (docs/RAISED-SECTIONS.md task item 1's "inverse"). Round-trips

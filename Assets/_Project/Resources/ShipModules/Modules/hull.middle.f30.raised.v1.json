@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 1,
+  "id": "hull.middle.f30.raised.v1",
+  "version": 1,
+  "kind": "Middle",
+  "family": "F30R",
+  "status": "prototype",
+  "displayName": "Middle \u2014 two decks",
+  "source": "art-staging/f-coaster-runtime/kit.json",
+  "lengthU": 6,
+  "boundsMinU": {
+    "x": -0.2,
+    "y": -4.95,
+    "z": -1.92
+  },
+  "boundsMaxU": {
+    "x": 6,
+    "y": 4.95,
+    "z": 9
+  },
+  "sockets": [
+    {
+      "id": "AftSocket",
+      "role": "hull.aft",
+      "posU": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "standard": "F30"
+    },
+    {
+      "id": "ForwardSocket",
+      "role": "hull.fwd",
+      "posU": {
+        "x": 6,
+        "y": 0,
+        "z": 0
+      },
+      "standard": "F30"
+    },
+    {
+      "id": "Gun_0_-1",
+      "role": "deck.slot",
+      "posU": {
+        "x": 3,
+        "y": -3.46,
+        "z": 1.76
+      },
+      "standard": "equipment.deck-gun",
+      "yawDeg": 0
+    },
+    {
+      "id": "Gun_0_1",
+      "role": "deck.slot",
+      "posU": {
+        "x": 3,
+        "y": 3.46,
+        "z": 1.76
+      },
+      "standard": "equipment.deck-gun",
+      "yawDeg": 180
+    },
+    {
+      "id": "Gun_1_-1",
+      "role": "deck.slot",
+      "posU": {
+        "x": 3,
+        "y": -3.46,
+        "z": 6.16
+      },
+      "standard": "equipment.deck-gun",
+      "yawDeg": 0
+    },
+    {
+      "id": "Gun_1_1",
+      "role": "deck.slot",
+      "posU": {
+        "x": 3,
+        "y": 3.46,
+        "z": 6.16
+      },
+      "standard": "equipment.deck-gun",
+      "yawDeg": 180
+    }
+  ],
+  "visuals": [
+    {
+      "id": "MiddleRaised",
+      "resourcePath": "ShipModules/Meshes/FCoaster/MiddleRaised"
+    }
+  ],
+  "equipmentSlots": [
+    {
+      "id": "Gun_0_-1",
+      "socketId": "Gun_0_-1",
+      "clearanceSizeU": {
+        "x": 2.05,
+        "y": 2.95,
+        "z": 2
+      },
+      "classes": [
+        "equipment.deck-gun"
+      ],
+      "provisional": false
+    },
+    {
+      "id": "Gun_0_1",
+      "socketId": "Gun_0_1",
+      "clearanceSizeU": {
+        "x": 2.05,
+        "y": 2.95,
+        "z": 2
+      },
+      "classes": [
+        "equipment.deck-gun"
+      ],
+      "provisional": false
+    },
+    {
+      "id": "Gun_1_-1",
+      "socketId": "Gun_1_-1",
+      "clearanceSizeU": {
+        "x": 2.05,
+        "y": 2.95,
+        "z": 2
+      },
+      "classes": [
+        "equipment.deck-gun"
+      ],
+      "provisional": false
+    },
+    {
+      "id": "Gun_1_1",
+      "socketId": "Gun_1_1",
+      "clearanceSizeU": {
+        "x": 2.05,
+        "y": 2.95,
+        "z": 2
+      },
+      "classes": [
+        "equipment.deck-gun"
+      ],
+      "provisional": false
+    }
+  ],
+  "passages": [
+    {
+      "id": "Passage0",
+      "centreU": {
+        "x": 3.0,
+        "y": 0,
+        "z": 3.46
+      },
+      "sizeU": {
+        "x": 6,
+        "y": 3.8,
+        "z": 3.4
+      },
+      "provisional": false
+    },
+    {
+      "id": "Passage1",
+      "centreU": {
+        "x": 3.0,
+        "y": 0,
+        "z": 7.86
+      },
+      "sizeU": {
+        "x": 6,
+        "y": 3.8,
+        "z": 3.4
+      },
+      "provisional": false
+    }
+  ],
+  "lightship": {
+    "massKg": 8200,
+    "provisional": true,
+    "rule": "Initial playable balance; tune after sailing trials."
+  },
+  "capacity": {
+    "holdCells": {
+      "value": 7,
+      "provisional": true
+    },
+    "berths": {
+      "value": 4,
+      "provisional": true
+    },
+    "gunSlots": {
+      "ids": [
+        "Gun_0_-1",
+        "Gun_0_1",
+        "Gun_1_-1",
+        "Gun_1_1"
+      ],
+      "provisional": false
+    }
+  },
+  "hydrostatics": {
+    "resourcePath": "ShipModules/Hydrostatics/FCoaster/middle",
+    "validWaterlineZU": [
+      -1.92,
+      1.76
+    ],
+    "notes": "Numerical approximation of the authored station profile; initial flotation tuning."
+  },
+  "upperStructure": {
+    "massKg": 1700,
+    "centroidZU": 4.6,
+    "deckZU": 6.16,
+    "deckMassKg": 1000,
+    "wallMassKg": 700
+  }
+}

@@ -87,6 +87,7 @@ namespace SeaSick.Ship
         public int PortCount => port.Count;
         public int StarboardCount => starboard.Count;
         public int TotalGuns => allGuns.Count;
+        public IReadOnlyList<Cannon> Guns => allGuns;
 
         /// Flat-water reach of these guns, for the gunnery readout.
         public float GunRange => starboard.Count > 0 && starboard[0] != null
@@ -154,7 +155,7 @@ namespace SeaSick.Ship
         {
             authoredBattery = false;
             foreach (var c in allGuns)
-                if (c != null) Destroy(c.gameObject);
+                if (c != null) { c.gameObject.SetActive(false); Destroy(c.gameObject); }
             port.Clear(); starboard.Clear(); allGuns.Clear();
 
             var wood = MakeWood();
@@ -225,7 +226,7 @@ namespace SeaSick.Ship
         {
             authoredBattery = false;
             foreach (var c in allGuns)
-                if (c != null) Destroy(c.gameObject);
+                if (c != null) { c.gameObject.SetActive(false); Destroy(c.gameObject); }
             port.Clear(); starboard.Clear(); allGuns.Clear();
 
             var wood = MakeWood();
@@ -291,6 +292,8 @@ namespace SeaSick.Ship
         /// Stand each assigned hand at the gun they work. This is what makes
         /// the mechanic legible: a silent gun has a visibly empty place behind
         /// it, and you can watch the person who should be there walk away.
+        public void SetGunnerClearance(float inboard) { gunnerInboard=inboard;PostGunCrews(); }
+
         void PostGunCrews()
         {
             if (roster == null) roster = GetComponent<Crew.CrewRoster>();
@@ -304,8 +307,8 @@ namespace SeaSick.Ship
                 Vector3 gun = allGuns[i].transform.localPosition;
                 float side = Mathf.Sign(gun.x);
                 hand.AssignStation(
-                    new Vector3(gun.x - side * gunnerInboard, gun.y - 0.05f, gun.z),
-                    new Vector3(gun.x + side * gunportOutboard, gun.y - 0.05f, gun.z));
+                    new Vector3(gun.x - side * gunnerInboard, gun.y, gun.z),
+                    new Vector3(gun.x + side * gunportOutboard, gun.y, gun.z));
             }
         }
 
@@ -583,8 +586,8 @@ namespace SeaSick.Ship
             int u = SeaSick.UI.HudLayout.Unit;
             // Wide enough for "stbd ▶ 2/2" and for "no crew" — at 5.6 both
             // clipped to "port 2/".
-            float bw = u * 7.4f;
-            float bh = u * 2.2f;
+            float bw = u * 6.4f;
+            float bh = u * 3.4f;
             // The band is the two buttons AND the reload bars under them, so
             // what it reserves is what it actually covers.
             float gap = u * 0.4f;
@@ -615,8 +618,8 @@ namespace SeaSick.Ship
             int manned = MannedOn(side);
             if (text.Changed(HudLabel.Key(manned == 0 ? 1 : 0, ready, side.Count)))
                 text.Set(manned == 0
-                    ? $"{label}  no crew"
-                    : $"{label}  {ready}/{side.Count}");
+                    ? $"{label}\nNo crew"
+                    : $"{label}\n{ready}/{side.Count} ready");
             if (GUI.Button(r, text.Content, style)) FireBroadside(starboardSide);
             GUI.enabled = true;
 

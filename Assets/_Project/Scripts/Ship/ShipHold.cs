@@ -56,6 +56,10 @@ namespace SeaSick.Ship
         }
 
         readonly List<Pile> piles = new List<Pile>();
+        bool abstractStorage;
+        Vector3 storageAccess;
+        public void SetAbstractStorage(bool value,Vector3 access=default)
+        {abstractStorage=value;storageAccess=access;Root().gameObject.SetActive(!value);}
         Transform anchorRoot;
         VoyageManager voyage;
         string lastAdded;
@@ -232,6 +236,7 @@ namespace SeaSick.Ship
         /// the next row.
         Vector3 SlotLocal(int slot)
         {
+            if(abstractStorage)return storageAccess;
             int row = slot / perRow, col = slot % perRow;
             Vector3 c;
             if (rows != null)

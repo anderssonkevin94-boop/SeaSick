@@ -158,7 +158,9 @@ namespace SeaSick.Ship.Modular
                     positionM = new Vector3(s.positionM.x, s.positionM.y, viewZ + s.positionM.z),
                 });
             }
-            AddForeAft(list);
+            if(CoasterFamily.Is(draft))
+                foreach(var slot in list)slot.label=(slot.side=="starboard"?"Starboard":"Port")+" · "+(slot.slotId.Contains("/Gun_1_")?"Upper deck":"Lower deck");
+            else AddForeAft(list);
             return list;
         }
 

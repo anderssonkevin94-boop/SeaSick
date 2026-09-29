@@ -16,6 +16,10 @@ using SeaSick.World;
 /// phase 0 the hammer face / axe edge / saw teeth / hoe blade should sit on
 /// it, and the returned text says by how many centimetres it misses.
 ///
+/// Chop and Hoe get a wider, higher frame: their lift carries the head well
+/// above the villager's own, and the tight chest frame cropped it out at the
+/// top of the swing -- which read as a tool flying off the hand.
+///
 /// Run (editor idle, not in play mode):
 /// `unity cmd eval --json --code 'return VillagerToolShot.Run("/tmp/villager-tools");'`
 /// Everything it creates is destroyed before it returns.
@@ -53,6 +57,11 @@ public static class VillagerToolShot
             var anim = body.GetComponentInChildren<Animator>();
             var acting = body.AddComponent<VillagerActing>();
             if (anim != null) { anim.Rebind(); anim.Update(0f); }
+            // Every shot is a manual cam.Render() inside one editor frame;
+            // without this the skin keeps the frame's first skinning and the
+            // arms never follow the pose (only the tool, a plain mesh, moves).
+            foreach (var smr in body.GetComponentsInChildren<SkinnedMeshRenderer>())
+                smr.forceMatrixRecalculationPerRender = true;
 
             marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
             marker.name = "VillagerToolShot_Work";
@@ -71,7 +80,6 @@ public static class VillagerToolShot
             camGo = new GameObject("VillagerToolShot_Cam");
             var cam = camGo.AddComponent<Camera>();
             cam.orthographic = true;
-            cam.orthographicSize = 1.05f;
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.78f, 0.80f, 0.84f);
             cam.nearClipPlane = 0.05f;
@@ -84,17 +92,19 @@ public static class VillagerToolShot
 
             var modes = new[]
             {
-                (VillagerActing.Mode.Hammer, "Hammer_Period", "Hammer_Reach", "Hammer_Face"),
-                (VillagerActing.Mode.Chop, "Chop_Period", "Axe_Reach", "Axe_Face"),
-                (VillagerActing.Mode.Saw, "Saw_Period", "Saw_Reach", "Saw_Face"),
-                (VillagerActing.Mode.Hoe, "Hoe_Period", "Hoe_Reach", "Hoe_Face"),
-                (VillagerActing.Mode.Stir, "Stir_Period", null, null),
+                // Last two: ortho half-height and look height (m above the feet).
+                (VillagerActing.Mode.Hammer, "Hammer_Period", "Hammer_Reach", "Hammer_Face", 1.05f, 0.95f),
+                (VillagerActing.Mode.Chop, "Chop_Period", "Axe_Reach", "Axe_Face", 1.75f, 1.30f),
+                (VillagerActing.Mode.Saw, "Saw_Period", "Saw_Reach", "Saw_Face", 1.05f, 0.95f),
+                (VillagerActing.Mode.Hoe, "Hoe_Period", "Hoe_Reach", "Hoe_Face", 1.75f, 1.30f),
+                (VillagerActing.Mode.Stir, "Stir_Period", null, null, 1.05f, 0.95f),
             };
             const int Phases = 8;
             const float Dt = 1f / 30f;
 
-            foreach (var (mode, periodName, reachName, faceName) in modes)
+            foreach (var (mode, periodName, reachName, faceName, frame, lookY) in modes)
             {
+                cam.orthographicSize = frame;
                 float period = Const(t, periodName, 1f);
                 acting.Set(mode);
                 for (int i = 0; i < 30; i++)           // fade the old pose out and this one in
@@ -129,7 +139,7 @@ public static class VillagerToolShot
                     else if (ph == 0)
                         sb.AppendLine($"{mode}: tool {(tool != null ? "present" : "MISSING")}");
 
-                    Vector3 look = origin + new Vector3(0f, 0.95f, 0.30f);
+                    Vector3 look = origin + new Vector3(0f, lookY, 0.30f);
                     Shoot(cam, rt, tex, look + Vector3.right * 4f, look,
                         Path.Combine(outDir, $"{mode}_{ph}_side.png"));
                     Shoot(cam, rt, tex, look + new Vector3(2.4f, 1.2f, 3.2f), look,

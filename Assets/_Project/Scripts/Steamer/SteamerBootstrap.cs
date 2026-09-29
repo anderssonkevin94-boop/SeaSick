@@ -32,9 +32,10 @@ namespace SeaSick.Steamer
         /// an open deck, so she is a better trader than the side-wheeler was.
         const int HoldCells = 16;
 
-        /// Hands aboard: one to each of the six guns, a helmsman, and one
-        /// spare so the deck is not empty when the battery is cold.
-        const int Hands = 8;
+        /// Hands aboard at a new game: four crew (Kevin, 2026-09-29: "you
+        /// have 4 crew and the captain"). The captain is the helmsman figure
+        /// at the wheel, not one of these -- he never leaves the helm.
+        const int Hands = 4;
 
         const string HullResource = "Steamer/steamer_hull";
         const string WheelResource = "Steamer/steamer_wheel";
@@ -458,7 +459,7 @@ namespace SeaSick.Steamer
                     // Same correction as the socket path below: stand the
                     // gunner on the deck at that station, not at the
                     // carriage's own height.
-                    var pos = new Vector3(g.positionM.x, DeckYAt(data, g.positionM.z), g.positionM.z);
+                    var pos = g.positionM;
                     stations.Add(new CannonBattery.GunStation(pos, g.side == "starboard"));
                 }
                 battery.Fit(stations);
@@ -500,6 +501,7 @@ namespace SeaSick.Steamer
         static void FitDeckLoad(GameObject ship, HullFormData data, GameObject hull, BuildOptions o)
         {
             var hold = ship.GetComponent<ShipHold>();
+            if(hold!=null)hold.SetAbstractStorage(false);
             if (hold == null) return;
             if (o.deckLoad != null)
             {

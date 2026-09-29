@@ -91,6 +91,7 @@ namespace SeaSick.UI.ModularYard
             if (Committed) return Refuse("This refit is already confirmed.");
             // Slot configurations (schema 3): fits with no place any more go
             // to the store, deck guns follow the cannon fits.
+            if (CoasterFamily.Is(next)) CoasterFamily.Wheel(next);
             if (next.UsesSlots) next = SlotModel.Normalized(next, library);
             var result = ShipAssembler.Assemble(next, library);
             if (!result.ok) return Refuse(Reason(result));
@@ -101,6 +102,9 @@ namespace SeaSick.UI.ModularYard
 
         /// True while the draft is built from the W1x (expanded-beam) family;
         /// false for the standard W1-r2 family (docs/SHIPYARD-API.md §15).
+        (string sternId, string[] middleIds, string bowId) SectionIds(DeckLevel stern, IList<DeckLevel> middles, DeckLevel bow) =>
+            IsCoaster ? CoasterFamily.ToIds(stern,middles,bow) : RaisedSections.ToIds(stern,middles,bow);
+        public bool IsCoaster => CoasterFamily.Is(draft);
         public bool IsWideBeam => draft.sternId == ExpandedPresets.ExpandedStern;
 
         /// The middle module id for the draft's OWN current width/deck family
@@ -108,7 +112,7 @@ namespace SeaSick.UI.ModularYard
         /// wide-beam ship's AddMiddle used to add a W1-r2 middle, which
         /// ShipAssembler refuses to join to a W1x stern/bow). Raised-deck
         /// (docs/RAISED-DECK.md sec 3) is its own family on top of wide.
-        string MiddleIdForWidth() => IsRaisedDeck ? RaisedPresets.RaisedMiddle
+        string MiddleIdForWidth() => IsCoaster ? CoasterFamily.Hull("middle",false) : IsRaisedDeck ? RaisedPresets.RaisedMiddle
             : IsWideBeam ? ExpandedPresets.ExpandedMiddle : ShipConfiguration.V3Middle;
 
         // First prototype appends/removes the bay immediately behind the bow.
@@ -167,7 +171,7 @@ namespace SeaSick.UI.ModularYard
             string middleId = MiddleIdForWidth();
             if (!CanSelect(ModuleKind.Middle, middleId)) return Refuse("This section is unavailable.");
             var next = Snapshot();
-            if (IsWideBeam)
+            if (IsWideBeam || IsCoaster)
             {
                 var levels = CurrentLevels();
                 var middles = new List<DeckLevel>(levels.middles);
@@ -175,7 +179,7 @@ namespace SeaSick.UI.ModularYard
                 DeckLevel right = index >= middles.Count ? levels.bow : middles[index];
                 DeckLevel inserted = left == DeckLevel.Raised && right == DeckLevel.Raised ? DeckLevel.Raised : DeckLevel.Low;
                 middles.Insert(index, inserted);
-                var (sId, mIds, bId) = RaisedSections.ToIds(levels.stern, middles, levels.bow);
+                var (sId, mIds, bId) = SectionIds(levels.stern, middles, levels.bow);
                 next.sternId = sId; next.middleIds = new List<string>(mIds); next.bowId = bId;
             }
             else next.middleIds.Insert(index, middleId);
@@ -201,12 +205,12 @@ namespace SeaSick.UI.ModularYard
             // Its fitted modules go to the store (slot configs), never onto a neighbour.
             next.fits?.RemoveAll(f => f != null && f.section == sectionKey);
             next.middleIds.RemoveAt(index);
-            if (IsWideBeam)
+            if (IsWideBeam || IsCoaster)
             {
                 var levels = CurrentLevels();
                 var middles = new List<DeckLevel>(levels.middles);
                 middles.RemoveAt(index);
-                var (sId, mIds, bId) = RaisedSections.ToIds(levels.stern, middles, levels.bow);
+                var (sId, mIds, bId) = SectionIds(levels.stern, middles, levels.bow);
                 next.sternId = sId; next.middleIds = new List<string>(mIds); next.bowId = bId;
             }
             string prefix = ShipAssembler.MiddleKey(index) + "/";
@@ -282,6 +286,7 @@ namespace SeaSick.UI.ModularYard
         /// their Y moved), so a fitted gun stays fitted.
         public bool SetWideBeam(bool wide)
         {
+            if (IsCoaster) return Refuse("Widening is not available for this design yet.");
             // `IsRaisedDeck` alone (the whole-hull "every section raised,
             // connected" check) is too narrow a guard here now that a
             // single section can be raised on its own (docs/RAISED-SECTIONS.md
@@ -313,8 +318,9 @@ namespace SeaSick.UI.ModularYard
         /// middle bay -- 0 middles can never have both ends raised at once).
         public string RaisedDeckUnavailableReason()
         {
+            if (IsCoaster) return null;
             if (IsRaisedDeck) return null;
-            if (!IsWideBeam) return "A raised deck needs the wide beam.";
+            if (!IsWideBeam && !IsCoaster) return "A raised deck needs the wide beam.";
             if (Count < 1) return "With no middle bays, only one end of the ship can be raised.";
             if (!CanSelect(ModuleKind.Stern, RaisedPresets.RaisedStern) || !CanSelect(ModuleKind.Bow, RaisedPresets.RaisedBow))
                 return "This deck is unavailable.";
@@ -331,6 +337,7 @@ namespace SeaSick.UI.ModularYard
         /// below are thin aliases, docs/RAISED-SECTIONS.md task item 4).
         public bool SetRaisedDeck(bool raised)
         {
+            if (IsCoaster) { var c=Snapshot(); c.sternId=CoasterFamily.Hull("stern",raised); c.bowId=CoasterFamily.Hull("bow",raised); for(int i=0;i<c.middleIds.Count;i++) c.middleIds[i]=CoasterFamily.Hull("middle",raised); CoasterFamily.Wheel(c); DropOrphanedGuns(c); return Set(c,"stern"); }
             if (IsRaisedDeck == raised) return false;
             if (raised)
             {
@@ -418,14 +425,15 @@ namespace SeaSick.UI.ModularYard
         /// would actually do.
         public string SectionUnavailableReason(string key)
         {
-            if (!IsWideBeam) return "A raised deck needs the wide beam.";
+            if (!IsWideBeam && !IsCoaster) return "A raised deck needs the wide beam.";
             if (IsSectionRaised(key)) return null;
             var levels = CurrentLevels();
             SetLevel(ref levels, key, DeckLevel.Raised);
-            var (sId, mIds, bId) = RaisedSections.ToIds(levels.stern, levels.middles, levels.bow);
+            var (sId, mIds, bId) = SectionIds(levels.stern, levels.middles, levels.bow);
             var probe = Snapshot();
             probe.sternId = sId; probe.middleIds = new List<string>(mIds); probe.bowId = bId;
             probe.equipment.Clear(); // hull-only probe; ToggleSection handles orphaned guns itself
+            if (IsCoaster) CoasterFamily.Wheel(probe);
             var result = ShipAssembler.Assemble(probe, library);
             return result.ok ? null : Reason(result);
         }
@@ -446,9 +454,10 @@ namespace SeaSick.UI.ModularYard
             if (reason != null) return Refuse(reason);
             var levels = CurrentLevels();
             SetLevel(ref levels, key, IsSectionRaised(key) ? DeckLevel.Low : DeckLevel.Raised);
-            var (sId, mIds, bId) = RaisedSections.ToIds(levels.stern, levels.middles, levels.bow);
+            var (sId, mIds, bId) = SectionIds(levels.stern, levels.middles, levels.bow);
             var next = Snapshot();
             next.sternId = sId; next.middleIds = new List<string>(mIds); next.bowId = bId;
+            if (IsCoaster) CoasterFamily.Wheel(next);
             UpperDeckLayers.DropOrphaned(next, library); // a third deck needs its connected raised section
             int orphaned = DropOrphanedGuns(next);
             bool applied = Set(next, key);
@@ -464,7 +473,7 @@ namespace SeaSick.UI.ModularYard
 
         /// The upper-deck layer this section can carry (third deck on a
         /// connected raised section, foredeck on the V3 bow), or null.
-        public string UpperDeckOption(string key) => UpperDeckLayers.OptionFor(draft, key, library, out _);
+        public string UpperDeckOption(string key) => IsCoaster ? null : UpperDeckLayers.OptionFor(draft, key, library, out _);
 
         public bool HasUpperDeck(string key) => UpperDeckLayers.Has(draft, key);
 

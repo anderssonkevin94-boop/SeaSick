@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "wheel.carrier.f30.low",
+  "version": 1,
+  "kind": "Carrier",
+  "family": "F30-low",
+  "status": "prototype",
+  "displayName": "Integrated wheel bearings",
+  "boundsMinU": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+  },
+  "boundsMaxU": {
+    "x": 0,
+    "y": 0,
+    "z": 0
+  },
+  "sockets": [],
+  "visuals": [
+    {
+      "id": "IntegratedCarrier",
+      "resourcePath": "ShipModules/Meshes/FCoaster/IntegratedCarrier"
+    }
+  ],
+  "carrier": {
+    "mount": "F30-low"
+  },
+  "lightship": {
+    "massKg": 0,
+    "provisional": true
+  }
+}

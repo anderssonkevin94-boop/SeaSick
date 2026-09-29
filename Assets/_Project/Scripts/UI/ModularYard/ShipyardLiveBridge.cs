@@ -18,6 +18,14 @@ namespace SeaSick.UI.ModularYard
         public bool TryApply(ShipConfiguration expected, ShipConfiguration draft, out string reason)
         {
             reportKey = null;
+            if(CoasterFamily.Is(draft)&&ShipyardService.Player!=null)
+            {
+                var service=ShipyardService.Player;var builds=new List<string>();
+                foreach(var row in service.DryDockPreview(draft))
+                    if(row.moduleId==ShipConfiguration.EquipmentCannon)
+                        for(int i=0;i<-row.inDockAfterApply;i++)builds.Add(ModuleCatalog.Cannon);
+                var result=service.ApplyRefit(expected,draft,builds);reason=result.ok?"":result.ToString();return result.ok;
+            }
             return adapter.TryApply(expected, draft, out reason);
         }
 
@@ -27,7 +35,11 @@ namespace SeaSick.UI.ModularYard
             string key = draft.ToJson();
             if (owner != reportOwner || key != reportKey || Time.unscaledTime - reportAt >= .25f)
             {
-                report = adapter.Report(draft); reportOwner = owner;
+                report = adapter.Report(draft);
+                if(CoasterFamily.Is(draft)&&report!=null)
+                    foreach(var row in report.dryDock)if(row.moduleId==ShipConfiguration.EquipmentCannon&&row.inDockAfterApply<0)
+                    {int count=-row.inDockAfterApply;row.inDockAfterApply=0;report.warnings.Add(new ShipyardNote{code="CANNONS_BUILT",message=$"{count} new cannon(s) will be built and fitted (prototype: free)."});}
+                reportOwner = owner;
                 reportKey = key; reportAt = Time.unscaledTime;
             }
             return report;
@@ -63,8 +75,15 @@ namespace SeaSick.UI.ModularYard
         /// `InsertMiddle`/`RemoveSection` never reference the backend type
         /// directly. Backend: `ShipConfiguration.ShiftMiddleKeys` (named
         /// "maybe" in the spec; reconcile the exact name/signature here).
-        public void RenumberLayouts(ShipConfiguration cfg, int fromIndex, int delta) =>
-            ShipConfiguration.ShiftMiddleKeys(cfg, fromIndex, delta);
+        public void RenumberLayouts(ShipConfiguration cfg, int fromIndex, int delta)
+        {
+            // Draft already shifts ordinary equipment. The shared helper also
+            // shifts fittings/layouts, so protect only those already-shifted keys.
+            var keys=new Dictionary<EquipmentChoice,string>();
+            foreach(var e in cfg.equipment)if(e?.slotId!=null&&!e.slotId.StartsWith("fitting:"))keys[e]=e.slotId;
+            ShipConfiguration.ShiftMiddleKeys(cfg,fromIndex,delta);
+            foreach(var pair in keys)pair.Key.slotId=pair.Value;
+        }
 
         public string RemovalBlocker(ShipConfiguration draft, int index)
         {
@@ -75,6 +94,7 @@ namespace SeaSick.UI.ModularYard
 
         public bool Allowed(string kind, string id)
         {
+            if (CoasterFamily.Is(id)) return ShipyardService.Player?.Library.TryGet(id,out _) == true;
             var ids = ShipyardService.Player?.AllowedModuleIds(kind);
             if (ids != null) foreach (string candidate in ids) if (candidate == id) return true;
             return false;
@@ -88,7 +108,7 @@ namespace SeaSick.UI.ModularYard
             if (ShipyardService.Player == null || ShipyardModal.IsOpen) return;
             // End island gestures before the modal takes exclusive input.
             CampSiting.End(); WallSiting.End(); Hand.Instance?.Cancel();
-            if (!ShipyardModal.UseLegacyScreen)
+            if (!ShipyardModal.UseLegacyScreen && !CoasterFamily.Is(ShipyardService.Player.Current))
             {
                 // The slot yard (2026-09-27): no 3D preview, so the live
                 // ship stays where she is -- only world input is blocked.

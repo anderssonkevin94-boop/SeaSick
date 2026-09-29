@@ -170,7 +170,7 @@ namespace SeaSick.UI.ModularYard
 
             int gunSlotCount = 0;
             if (draft.HasBackend) foreach (var s in draft.EquipmentSlots()) if (s.sectionKey == key) gunSlotCount++;
-            int gunRowsPerPage = Mathf.Max(1, Mathf.FloorToInt((bandHeight - DryDockLinePxEstimate) / GunRowPxEstimate));
+            int gunRowsPerPage = draft.IsCoaster ? 2 : Mathf.Max(1, Mathf.FloorToInt((bandHeight - DryDockLinePxEstimate) / GunRowPxEstimate));
             int gunPages = SheetKit.PageCount(Mathf.Max(1, gunSlotCount), gunRowsPerPage);
             for (int i = 0; i < gunPages; i++) pages.Add(new Pg(PageKind.Guns, i));
 
@@ -243,7 +243,7 @@ namespace SeaSick.UI.ModularYard
             bool isBow = key == ShipAssembler.StdKeyBow;
             bool isMiddle = !isStern && !isBow;
 
-            if (!draft.IsWideBeam)
+            if (!draft.IsWideBeam && !draft.IsCoaster)
             {
                 body.Add(SheetKit.Text("Deck level needs the wide beam. Set it on the overview first.", false, true));
             }
@@ -252,9 +252,9 @@ namespace SeaSick.UI.ModularYard
                 bool raised = draft.IsSectionRaised(key);
                 string reason = raised ? null : draft.SectionUnavailableReason(key);
                 var row = new VisualElement(); row.AddToClassList("yard-sheet-row"); body.Add(row);
-                var lowBtn = new Button(() => { if (raised) draft.ToggleSection(key); Fill(); }) { text = "Low" };
+                var lowBtn = new Button(() => { if (raised) draft.ToggleSection(key); Fill(); }) { text = draft.IsCoaster ? "One deck" : "Low" };
                 lowBtn.AddToClassList("yard-seg-button"); lowBtn.EnableInClassList("yard-selected", !raised); row.Add(lowBtn);
-                var raiseBtn = new Button(() => { if (!raised) draft.ToggleSection(key); Fill(); }) { text = "Raised" };
+                var raiseBtn = new Button(() => { if (!raised) draft.ToggleSection(key); Fill(); }) { text = draft.IsCoaster ? "Two decks" : "Raised" };
                 raiseBtn.AddToClassList("yard-seg-button"); raiseBtn.EnableInClassList("yard-selected", raised);
                 raiseBtn.SetEnabled(raised || reason == null); raiseBtn.tooltip = reason ?? "";
                 row.Add(raiseBtn);
@@ -294,7 +294,8 @@ namespace SeaSick.UI.ModularYard
                 body.Add(SheetKit.Text(isStern ? "The stern and bow always stay." : "The bow and stern always stay.", false, true, 12f));
             }
 
-            if (isStern)
+            if (isStern && draft.IsCoaster) body.Add(SheetKit.Text("The paddle wheel grows with the stern level.",false,true,12f));
+            if (isStern && !draft.IsCoaster)
             {
                 body.Add(PinnedRule());
                 body.Add(SheetKit.Eyebrow("paddle wheel"));
@@ -347,7 +348,7 @@ namespace SeaSick.UI.ModularYard
             var report = live?.Report(draft.Snapshot());
             int inDock = DryDockCount(report);
 
-            int rowsPerPage = Mathf.Max(1, Mathf.FloorToInt((bandHeight - DryDockLinePxEstimate) / GunRowPxEstimate));
+            int rowsPerPage = draft.IsCoaster ? 2 : Mathf.Max(1, Mathf.FloorToInt((bandHeight - DryDockLinePxEstimate) / GunRowPxEstimate));
             int from = part * rowsPerPage;
             int to = Mathf.Min(sectionSlots.Count, from + rowsPerPage);
 
@@ -386,7 +387,7 @@ namespace SeaSick.UI.ModularYard
         {
             int inDock = 0;
             if (report?.dryDock != null)
-                foreach (var r in report.dryDock) if (r != null && r.moduleId == ShipConfiguration.EquipmentCannon) inDock = r.inDockNow;
+                foreach (var r in report.dryDock) if (r != null && r.moduleId == ShipConfiguration.EquipmentCannon) inDock = Mathf.Max(0,r.inDockAfterApply);
             return inDock;
         }
 
@@ -395,11 +396,11 @@ namespace SeaSick.UI.ModularYard
         /// "nowhere does the UI explain how a cannon gets into the dry dock" --
         /// the only path this prototype has is removing one already fitted,
         /// so that is what this line says).
-        static VisualElement DryDockLine(int inDock)
+        VisualElement DryDockLine(int inDock)
         {
             string text = inDock > 0
                 ? (inDock == 1 ? "Dry dock: 1 cannon." : $"Dry dock: {inDock} cannons.")
-                : "Dry dock: empty. Remove a gun from any slot to store it here.";
+                : draft.IsCoaster ? "Empty slots can build a cannon. Free during this prototype." : "Dry dock: empty. Remove a gun from any slot to store it here.";
             var l = new Label(text); l.AddToClassList("yard-caption"); l.AddToClassList("yard-dock-line");
             return l;
         }
@@ -408,9 +409,10 @@ namespace SeaSick.UI.ModularYard
         {
             bool occupied = !string.IsNullOrEmpty(s.occupantModuleId);
             string status; bool enabled;
-            if (occupied) { status = "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
+            if (occupied) { status = draft.IsCoaster ? "Fitted — tap to store" : "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
             else if (!s.usable) { status = s.blockedReason; enabled = false; }
             else if (inDock > 0) { status = "Empty — tap to fit from the dry dock"; enabled = !draft.Committed; }
+            else if(draft.IsCoaster) { status="Build and fit — free";enabled=!draft.Committed; }
             else { status = "Empty — no gun in the dry dock."; enabled = false; }
             string slotId = s.slotId;
             var row = new Button(() => { if (occupied) draft.RemoveGun(slotId); else draft.FitGun(slotId); Fill(); });
@@ -482,10 +484,11 @@ namespace SeaSick.UI.ModularYard
                 var s = sectionSlots[si];
                 bool occupied = !string.IsNullOrEmpty(s.occupantModuleId);
                 string status; bool enabled;
-                if (occupied) { status = "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
+                if (occupied) { status = draft.IsCoaster ? "Fitted — tap to store" : "Fitted — tap to send to the dry dock"; enabled = !draft.Committed; }
                 else if (!s.usable) { status = s.blockedReason; enabled = false; }
                 else if (inDock > 0) { status = "Empty — tap to fit from the dry dock"; enabled = !draft.Committed; }
-                else { status = "Empty — no gun in the dry dock."; enabled = false; }
+                else if(draft.IsCoaster) { status="Build and fit — free";enabled=!draft.Committed; }
+            else { status = "Empty — no gun in the dry dock."; enabled = false; }
                 float along = (si + 0.5f) / Mathf.Max(1, sectionSlots.Count);
                 if (preview != null && preview.TrySlotAlong(key, s.slotId, out float real)) along = real;
                 markers.Add(new SectionCutaway.GunMarker

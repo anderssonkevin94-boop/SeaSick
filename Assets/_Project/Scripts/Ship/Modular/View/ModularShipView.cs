@@ -36,7 +36,7 @@ namespace SeaSick.Ship.Modular
             if (result == null || !result.ok) return;
             Current = result;
             float k = result.metresPerUnit;
-            var mat = materialOverride != null ? materialOverride : SeaSick.Terrain.IslandScenery.SceneryMaterial();
+            var mat = materialOverride != null ? materialOverride : CoasterFamily.Is(result.Find("stern")?.moduleId) ? CoasterOutfitting.Paint : SeaSick.Terrain.IslandScenery.SceneryMaterial();
 
             foreach (var p in result.placed)
             {
@@ -57,7 +57,9 @@ namespace SeaSick.Ship.Modular
                     foreach (var part in p.visuals)
                     {
                         if (part == null || part.placeholder || string.IsNullOrEmpty(part.resourcePath)) continue;
-                        var prefab = Resources.Load<GameObject>(part.resourcePath);
+                        string resource=part.resourcePath;
+                        if(resource=="ShipModules/Meshes/FCoaster/SternRaised") { var next=result.Find("middle[0]") ?? result.Find("bow"); if(CoasterFamily.Raised(next?.moduleId))resource+="Connected"; }
+                        var prefab = Resources.Load<GameObject>(resource);
                         if (prefab == null) { missingParts.Add(part.resourcePath); continue; }
                         var inst = Instantiate(prefab, host, false);
                         inst.name = string.IsNullOrEmpty(part.id) ? prefab.name : part.id;
@@ -73,7 +75,7 @@ namespace SeaSick.Ship.Modular
                         // every part that only ever used yawDegU before.
                         inst.transform.localRotation = ModularScale.AuthoringYawToGame(part.yawDegU) * ModularScale.AuthoringEulerToGame(part.rotationDegU)
                             * visualAxisFix * prefab.transform.localRotation;
-                        inst.transform.localScale = prefab.transform.localScale * k;
+                        inst.transform.localScale = prefab.transform.localScale * k * (CoasterFamily.Is(result.Find("stern")?.moduleId) && p.kind == ModuleKind.Equipment ? 1.35f : 1f);
                         foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
                         {
                             var mats = r.sharedMaterials;
@@ -85,6 +87,9 @@ namespace SeaSick.Ship.Modular
                     }
                 if (!drewAny) AddPlaceholderBox(host, p, k);
             }
+            CoasterOutfitting.Build(this,result);
+            if(CoasterFamily.Is(result.Find("stern")?.moduleId)&&RotorPivot!=null)
+                foreach(var r in RotorPivot.GetComponentsInChildren<MeshRenderer>())r.sharedMaterial=CoasterOutfitting.Paint;
         }
 
         public void Clear()

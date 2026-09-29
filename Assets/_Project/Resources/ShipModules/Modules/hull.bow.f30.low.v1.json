@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "id": "hull.bow.f30.low.v1",
+  "version": 1,
+  "kind": "Bow",
+  "family": "F30",
+  "status": "prototype",
+  "displayName": "Bow \u2014 base deck",
+  "source": "art-staging/f-coaster-runtime/kit.json",
+  "lengthU": 7.1,
+  "boundsMinU": {
+    "x": -0.2,
+    "y": -4.95,
+    "z": -1.92
+  },
+  "boundsMaxU": {
+    "x": 9.3,
+    "y": 4.95,
+    "z": 5
+  },
+  "sockets": [
+    {
+      "id": "AftSocket",
+      "role": "hull.aft",
+      "posU": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "standard": "F30"
+    },
+    {
+      "id": "ForwardSocket",
+      "role": "hull.tip",
+      "posU": {
+        "x": 7.1,
+        "y": 0,
+        "z": 0
+      },
+      "standard": ""
+    },
+    {
+      "id": "Stem",
+      "role": "hull.stem",
+      "posU": {
+        "x": 7.1,
+        "y": 0,
+        "z": 0
+      },
+      "standard": ""
+    },
+    {
+      "id": "Gun_0_-1",
+      "role": "deck.slot",
+      "posU": {
+        "x": 2.1,
+        "y": -3.46,
+        "z": 2.11
+      },
+      "standard": "equipment.deck-gun",
+      "yawDeg": 0
+    },
+    {
+      "id": "Gun_0_1",
+      "role": "deck.slot",
+      "posU": {
+        "x": 2.1,
+        "y": 3.46,
+        "z": 2.11
+      },
+      "standard": "equipment.deck-gun",
+      "yawDeg": 180
+    }
+  ],
+  "visuals": [
+    {
+      "id": "BowLow",
+      "resourcePath": "ShipModules/Meshes/FCoaster/BowLow"
+    }
+  ],
+  "equipmentSlots": [
+    {
+      "id": "Gun_0_-1",
+      "socketId": "Gun_0_-1",
+      "clearanceSizeU": {
+        "x": 2.05,
+        "y": 2.95,
+        "z": 2
+      },
+      "classes": [
+        "equipment.deck-gun"
+      ],
+      "provisional": false
+    },
+    {
+      "id": "Gun_0_1",
+      "socketId": "Gun_0_1",
+      "clearanceSizeU": {
+        "x": 2.05,
+        "y": 2.95,
+        "z": 2
+      },
+      "classes": [
+        "equipment.deck-gun"
+      ],
+      "provisional": false
+    }
+  ],
+  "passages": [
+    {
+      "id": "Passage0",
+      "centreU": {
+        "x": 3.55,
+        "y": 0,
+        "z": 3.8099999999999996
+      },
+      "sizeU": {
+        "x": 7.1,
+        "y": 3.8,
+        "z": 3.4
+      },
+      "provisional": false
+    }
+  ],
+  "lightship": {
+    "massKg": 6000,
+    "provisional": true,
+    "rule": "Initial playable balance; tune after sailing trials."
+  },
+  "capacity": {
+    "holdCells": {
+      "value": 5,
+      "provisional": true
+    },
+    "berths": {
+      "value": 4,
+      "provisional": true
+    },
+    "gunSlots": {
+      "ids": [
+        "Gun_0_-1",
+        "Gun_0_1"
+      ],
+      "provisional": false
+    }
+  },
+  "hydrostatics": {
+    "resourcePath": "ShipModules/Hydrostatics/FCoaster/bow",
+    "validWaterlineZU": [
+      -1.92,
+      1.76
+    ],
+    "notes": "Numerical approximation of the authored station profile; initial flotation tuning."
+  }
+}

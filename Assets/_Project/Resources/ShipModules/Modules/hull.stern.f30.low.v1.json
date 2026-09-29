@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "id": "hull.stern.f30.low.v1",
+  "version": 1,
+  "kind": "Stern",
+  "family": "F30",
+  "status": "prototype",
+  "displayName": "Stern \u2014 base deck",
+  "source": "art-staging/f-coaster-runtime/kit.json",
+  "lengthU": 9.8,
+  "boundsMinU": {
+    "x": -0.2,
+    "y": -4.95,
+    "z": -1.92
+  },
+  "boundsMaxU": {
+    "x": 9.8,
+    "y": 4.95,
+    "z": 5
+  },
+  "sockets": [
+    {
+      "id": "AftSocket",
+      "role": "hull.origin",
+      "posU": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "standard": ""
+    },
+    {
+      "id": "ForwardSocket",
+      "role": "hull.fwd",
+      "posU": {
+        "x": 9.8,
+        "y": 0,
+        "z": 0
+      },
+      "standard": "F30"
+    },
+    {
+      "id": "WheelModuleSocket",
+      "role": "wheel",
+      "posU": {
+        "x": 0.12,
+        "y": 0,
+        "z": 0.32999999999999985
+      },
+      "standard": "F30-low",
+      "radiusLimit": 2.28
+    }
+  ],
+  "visuals": [
+    {
+      "id": "SternLow",
+      "resourcePath": "ShipModules/Meshes/FCoaster/SternLow"
+    }
+  ],
+  "equipmentSlots": [],
+  "passages": [],
+  "lightship": {
+    "massKg": 10000,
+    "provisional": true,
+    "rule": "Initial playable balance; tune after sailing trials."
+  },
+  "capacity": {
+    "holdCells": {
+      "value": 6,
+      "provisional": true
+    },
+    "berths": {
+      "value": 4,
+      "provisional": true
+    },
+    "gunSlots": {
+      "ids": [],
+      "provisional": false
+    }
+  },
+  "hydrostatics": {
+    "resourcePath": "ShipModules/Hydrostatics/FCoaster/stern",
+    "validWaterlineZU": [
+      -1.92,
+      1.76
+    ],
+    "notes": "Numerical approximation of the authored station profile; initial flotation tuning."
+  }
+}

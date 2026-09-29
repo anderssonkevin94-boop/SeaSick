@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "wheel.rotor.f30.raised",
+  "version": 1,
+  "kind": "Rotor",
+  "family": "F30-raised",
+  "status": "prototype",
+  "displayName": "Stern paddle wheel",
+  "boundsMinU": {
+    "x": -3.35,
+    "y": -2.54,
+    "z": -3.35
+  },
+  "boundsMaxU": {
+    "x": 3.35,
+    "y": 2.54,
+    "z": 3.35
+  },
+  "sockets": [],
+  "visuals": [
+    {
+      "id": "Rotor",
+      "resourcePath": "ShipModules/Meshes/FCoaster/RotorRaised"
+    }
+  ],
+  "rotor": {
+    "mount": "F30-raised",
+    "nominalRadius": 3.35,
+    "sweptRadius": 3.38,
+    "paddleWidth": 5.08
+  },
+  "lightship": {
+    "massKg": 0,
+    "provisional": true
+  }
+}

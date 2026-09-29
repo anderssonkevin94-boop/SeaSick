@@ -1419,6 +1419,8 @@ namespace SeaSick.Crew
 
         bool WalkTo(Vector3 targetLocal, float dt)
         {
+            var coaster = ship != null ? ship.GetComponentInChildren<SeaSick.Ship.Modular.CoasterNavigation>() : null;
+            if (coaster != null) return coaster.Move(transform,targetLocal,walkSpeed*dt);
             Vector3 pos = Vector3.MoveTowards(transform.localPosition, targetLocal, walkSpeed * dt);
             transform.localPosition = pos;
             return (pos - targetLocal).sqrMagnitude < 0.001f;

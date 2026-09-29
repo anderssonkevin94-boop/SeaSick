@@ -103,6 +103,11 @@ namespace SeaSick.Ship.Modular
         {
             var r = new List<Rejection>();
             if (cfg == null) return r;
+            if (CoasterFamily.Is(cfg)) {
+                foreach (var key in SlotModel.SectionKeys(cfg)) if (!CoasterFamily.Is(SlotModel.HullIdOf(cfg,key))) r.Add(new Rejection {code=ShipyardCodes.NotInPrototype,partId=key,message="Use matching coaster sections."});
+                if (cfg.fittings.Count>0) r.Add(new Rejection {code=ShipyardCodes.NotInPrototype,message="This boat supports two decks; its helm and chimney are integrated."});
+                return r;
+            }
             Only(r, lib, "stern", cfg.sternId, Sterns);
             for (int i = 0; i < (cfg.middleIds?.Count ?? 0); i++)
                 Only(r, lib, ShipAssembler.MiddleKey(i), cfg.middleIds[i], Middles);
@@ -858,6 +863,7 @@ namespace SeaSick.Ship.Modular
                 p.loadDisplacementKg = rho * p.hydro.VolumeM3At(p.hydro.DeckZU - p.loadLineMarginU);
             }
             else p.loadDisplacementKg = p.lightshipKg;
+            CoasterFamily.ConfigurePlan(p);
             return p;
         }
 
@@ -1056,7 +1062,8 @@ namespace SeaSick.Ship.Modular
                             var cs = es.clearanceSizeU;
                             mn = rel + new Vector3(so.posU.x - cs.x * 0.5f, so.posU.y - cs.y * 0.5f, so.posU.z);
                             mx = rel + new Vector3(so.posU.x + cs.x * 0.5f, so.posU.y + cs.y * 0.5f, so.posU.z + cs.z);
-                            if (mn.x < -Eps || mx.x > len + Eps || (half > 0f && (mn.y < -half - Eps || mx.y > half + Eps)))
+                            float portReach = CoasterFamily.Is(od.id) ? .35f : 0f; // muzzle projects through an authored gun port
+                            if (mn.x < -Eps || mx.x > len + Eps || (half > 0f && (mn.y < -half - portReach - Eps || mx.y > half + portReach + Eps)))
                                 why = "clearance sticks out of the section";
                         }
                         if (why == null)
@@ -1239,7 +1246,7 @@ namespace SeaSick.Ship.Modular
         {
             var lost = new List<PositionedItem>();
             if (live == null || draft == null) return lost;
-            bool draftChimney = draft.assembly?.Find("fitting:" + ShipConfiguration.ChimneySocket) != null;
+            bool draftChimney = CoasterFamily.Is(draft.config) || draft.assembly?.Find("fitting:" + ShipConfiguration.ChimneySocket) != null;
             if (live.hasChimney && !draftChimney)
                 lost.Add(new PositionedItem { id = "chimney", label = "The funnel" });
             if (cur == null) return lost;
@@ -1365,6 +1372,7 @@ namespace SeaSick.Ship.Modular
         public static ShipConfiguration Decode(string json, ModuleLibrary lib, out bool hasConfig, out string warning, out List<string> overflow)
         {
             var cfg = DecodeLegacy(json, lib, out hasConfig, out warning);
+            if (CoasterFamily.Is(cfg)) { overflow = new List<string>(); return cfg; }
             return SlotModel.Migrate(cfg, lib, out overflow);
         }
 

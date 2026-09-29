@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "wheel.rotor.f30.low",
+  "version": 1,
+  "kind": "Rotor",
+  "family": "F30-low",
+  "status": "prototype",
+  "displayName": "Stern paddle wheel",
+  "boundsMinU": {
+    "x": -2.03,
+    "y": -2.54,
+    "z": -2.03
+  },
+  "boundsMaxU": {
+    "x": 2.03,
+    "y": 2.54,
+    "z": 2.03
+  },
+  "sockets": [],
+  "visuals": [
+    {
+      "id": "Rotor",
+      "resourcePath": "ShipModules/Meshes/FCoaster/RotorLow"
+    }
+  ],
+  "rotor": {
+    "mount": "F30-low",
+    "nominalRadius": 2.03,
+    "sweptRadius": 2.0599999999999996,
+    "paddleWidth": 5.08
+  },
+  "lightship": {
+    "massKg": 0,
+    "provisional": true
+  }
+}

@@ -123,6 +123,7 @@ namespace SeaSick.UI.ModularYard
             var beams = Row(hullPage, "yard-wheels");
             beamStandard = Command(beams, "Standard", () => draft.SetWideBeam(false));
             beamWide = Command(beams, "Wide", () => draft.SetWideBeam(true));
+            if (draft.IsCoaster) { beams.style.display=DisplayStyle.None; beamCaption.text="Fixed beam · 4.64 m · up to two decks"; }
             maxLengthReason = new Label(); maxLengthReason.AddToClassList("yard-caption"); maxLengthReason.AddToClassList("yard-deck-reason"); hullPage.Add(maxLengthReason);
 
             reportPage = new VisualElement(); reportPage.style.flexGrow = 1f; reportPage.style.minHeight = 0; scroll.Add(reportPage);
@@ -294,7 +295,7 @@ namespace SeaSick.UI.ModularYard
                 }
             if (report != null)
                 foreach (var note in report.warnings)
-                    if (note.code == "HANDS_ASHORE") lines.Add(note.message.TrimEnd('.'));
+                    if (note.code == "HANDS_ASHORE" || note.code == "CANNONS_BUILT") lines.Add(note.message.TrimEnd('.'));
             if (lines.Count == 0) return "No changes to the ship.";
             var sb = new System.Text.StringBuilder();
             for (int i = 0; i < lines.Count; i++) { if (i > 0) sb.Append('\n'); sb.Append("\u2022 ").Append(lines[i]); }
