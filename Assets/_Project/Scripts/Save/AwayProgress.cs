@@ -225,7 +225,7 @@ namespace SeaSick.Save
             long steps0 = OutpostLedger.StepsRun;
             double start = TimeOfDay.Seconds;
             double target = start + awaySeconds * System.Math.Max(0.0, TimeOfDay.Scale);
-            float day = Mathf.Max(1f, TimeOfDay.DayLength);
+            float day = TimeOfDay.WorkDaySeconds;   // the ledger's day: stalledDays are work days (AwaySheet)
             double chunk = ChunkDays * day;
 
             var camps = new List<Outpost>();

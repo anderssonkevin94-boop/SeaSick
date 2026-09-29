@@ -379,7 +379,7 @@ namespace SeaSick.World
                         ArriveLeg(h);
                         continue;
                     }
-                    float metres = budget / scale * TimeOfDay.DayLength * WalkMetresPerSecond;
+                    float metres = budget / scale * TimeOfDay.WorkDaySeconds * WalkMetresPerSecond;
                     MoveAlong(h, metres, leg == TripLeg.ToPickup ? PickPoint(h) : DropPoint(h));
                     budget = 0f;
                     return true;
@@ -392,7 +392,7 @@ namespace SeaSick.World
                     FinishPickup(h);
                     continue;
                 }
-                h.workLeft -= budget * TimeOfDay.DayLength;
+                h.workLeft -= budget * TimeOfDay.WorkDaySeconds;
                 budget = 0f;
                 return true;
             }
@@ -442,7 +442,7 @@ namespace SeaSick.World
                 SetHandAt(h, Vector3.Lerp(p, goal, Mathf.Clamp01((d - shortBy) / d)));
                 return true;
             }
-            float metres = budget / scale * TimeOfDay.DayLength * WalkMetresPerSecond;
+            float metres = budget / scale * TimeOfDay.WorkDaySeconds * WalkMetresPerSecond;
             float frac = route > 1e-4f ? metres / route : 1f;
             SetHandAt(h, Vector3.Lerp(p, goal, Mathf.Clamp01(frac)));
             budget = 0f;

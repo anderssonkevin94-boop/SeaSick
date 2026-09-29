@@ -369,7 +369,9 @@ namespace SeaSick.UI.Sheets
         public static string RateLine(OutpostLedger l, string res)
         {
             if (l == null) return "";
-            float perDay = l.RatePerDay(res);
+            // The ledger's rate is per WORK day (180 s); the label says
+            // "/day" to a player who counts the sun's days (2026-09-29).
+            float perDay = l.RatePerDay(res) / TimeOfDay.SkyDaysPerWorkDay;
             if (Mathf.Abs(perDay) < 0.05f) return "";
             return (perDay > 0f ? "+" : "−") + Mathf.Abs(perDay).ToString("0.#") + "/day";
         }

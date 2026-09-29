@@ -26,6 +26,14 @@ namespace SeaSick.World.Economy
         public static float meatPerAnimal = 3f;
         /// Hide per animal (asset default 1; whole units, rounded).
         public static float hidePerAnimal = 1f;
+        /// **Real seconds in one sky day** (2026-09-29, was 180 in the
+        /// scene; Kevin: "the food production cant keep up with how fast the
+        /// day cycles go"). Slows the sun, the day counter, eating and mood
+        /// drift per real minute; production stays in real seconds (the
+        /// ledger's day is the fixed `TimeOfDay.WorkDaySeconds`). Read
+        /// through `TimeOfDay.DayLength`, which re-anchors the calendar on a
+        /// live change so the sun does not jump.
+        public static float dayLengthSeconds = 480f;
 
         public static float CostMul => Mathf.Max(0.05f, costMultiplier);
         public static float BuildTimeMul => Mathf.Max(0.05f, buildTimeMultiplier);

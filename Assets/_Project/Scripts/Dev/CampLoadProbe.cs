@@ -366,7 +366,7 @@ public class CampLoadProbe : MonoBehaviour
         int visBefore = hold != null ? hold.VisibleCount : 0;
         int ashoreBefore = l.Total;
         l.lastTicked = TimeOfDay.Seconds;
-        l.Tick(TimeOfDay.Seconds + 3.0 * TimeOfDay.DayLength);
+        l.Tick(TimeOfDay.Seconds + 3.0 * TimeOfDay.WorkDaySeconds);
         camp.CatchUp();
         for (int f = 0; f < 20; f++) yield return null;
 

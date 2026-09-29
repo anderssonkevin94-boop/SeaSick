@@ -53,7 +53,7 @@ namespace SeaSick.World.Economy
         /// Output units a hand-day for a batch of `yield` that takes
         /// `seconds` of REAL time at the 180 s game day the design table was
         /// priced against (food rework, 2026-09-27).
-        public const float PricedDaySeconds = 180f;
+        public const float PricedDaySeconds = SeaSick.World.TimeOfDay.WorkDaySeconds;
         public static float Cook(float seconds, int yield) =>
             yield * PricedDaySeconds / UnityEngine.Mathf.Max(0.1f, seconds);
 

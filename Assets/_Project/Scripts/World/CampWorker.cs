@@ -1694,7 +1694,7 @@ namespace SeaSick.World
             float steps = Mathf.Ceil((left - 1e-5f) / perStep);
             if (steps > 10000f) return float.PositiveInfinity;
             steps = Mathf.Max(1f, steps);
-            double quantum = OutpostLedger.QuantumDays * (double)Mathf.Max(0.0001f, TimeOfDay.DayLength);
+            double quantum = OutpostLedger.QuantumDays * (double)TimeOfDay.WorkDaySeconds;
             double landsAt = ledger.lastTicked + steps * quantum;
             float gameLeft = (float)(landsAt - TimeOfDay.Seconds);
             return Mathf.Max(0f, gameLeft / rate) + CatchUpLag;

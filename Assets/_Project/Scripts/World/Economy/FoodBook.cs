@@ -115,7 +115,7 @@ namespace SeaSick.World.Economy
         {
             var c = Crop(res);
             if (c == null) return float.PositiveInfinity;
-            return c.growSeconds / UnityEngine.Mathf.Max(0.0001f, SeaSick.World.TimeOfDay.DayLength);
+            return c.growSeconds / SeaSick.World.TimeOfDay.WorkDaySeconds;
         }
 
         public static string Icon(string res) => res switch

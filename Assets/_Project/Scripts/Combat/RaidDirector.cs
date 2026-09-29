@@ -17,11 +17,18 @@ namespace SeaSick.Combat
     {
         const float SecondsToRaid = 25f;
 
+        /// **Raiders wait for the fire (2026-09-29, Kevin: "raiders shouldnt
+        /// show up until camp fire lvl 2.").** Below this campfire level no
+        /// raid launches -- neither the seen one here nor the banked away
+        /// one (`OutpostLedger.ThreatRatePerDay`).
+        public const int RaidsFromFireLevel = 2;
+
         class State
         {
             public float watchedFor;
             public bool raidedThisVisit;
             public bool warned;
+            public bool forced; // dev `ForceRaid` skips the fire-level gate
             public string lastResult;
             public float lastResultAt = -999f;
         }
@@ -40,6 +47,7 @@ namespace SeaSick.Combat
             var st = StateFor(camp);
             st.watchedFor += dt;
 
+            if (camp.Ledger != null && camp.Ledger.CampfireLevel < RaidsFromFireLevel && !st.forced) return;
             if (st.raidedThisVisit || camp.Ledger == null || camp.Ledger.Total <= 0) return;
             if (st.watchedFor < SecondsToRaid) return;
             if (RaidParty.Active != null) return;
@@ -86,6 +94,7 @@ namespace SeaSick.Combat
             var st = StateFor(camp);
             st.watchedFor = SecondsToRaid;
             st.raidedThisVisit = false;
+            st.forced = true;
         }
 
         /// The raider currently beaching or beached at this camp, or null.

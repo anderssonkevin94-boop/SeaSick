@@ -342,7 +342,7 @@ public class CampProbe : MonoBehaviour
         outpost.Ledger.lastTicked = TimeOfDay.Seconds;
 
         int logsAtSiting = pending != null ? pending.done : 0;
-        outpost.Ledger.Tick(TimeOfDay.Seconds + 2.0 * TimeOfDay.DayLength);
+        outpost.Ledger.Tick(TimeOfDay.Seconds + 2.0 * TimeOfDay.WorkDaySeconds);
         outpost.CatchUp();
         yield return null;
 
@@ -647,7 +647,7 @@ public class CampProbe : MonoBehaviour
         float takenBefore = outpost.Ledger.timberTaken;
         outpost.Ledger.stores.Clear();                 // room to cut into
         outpost.Ledger.lastTicked = TimeOfDay.Seconds;
-        outpost.Ledger.Tick(TimeOfDay.Seconds + 2.0 * TimeOfDay.DayLength);
+        outpost.Ledger.Tick(TimeOfDay.Seconds + 2.0 * TimeOfDay.WorkDaySeconds);
         outpost.CatchUp();
         yield return null;
 
@@ -772,7 +772,7 @@ public class CampProbe : MonoBehaviour
         outpost.Ledger.Add(Res.Timber, 8);
         int timberBefore = outpost.Ledger.CountOf(Res.Timber);
         outpost.Ledger.lastTicked = TimeOfDay.Seconds;
-        outpost.Ledger.Tick(TimeOfDay.Seconds + 2.0 * TimeOfDay.DayLength);
+        outpost.Ledger.Tick(TimeOfDay.Seconds + 2.0 * TimeOfDay.WorkDaySeconds);
         sb.AppendLine($"  two game days later: timber {timberBefore} -> "
             + $"{outpost.Ledger.CountOf(Res.Timber)}, boards {outpost.Ledger.CountOf(Res.Boards)}");
         Gate(sb, ref fails, "an-assigned-hand-produces",
@@ -797,7 +797,7 @@ public class CampProbe : MonoBehaviour
         l.hands.Add(new OutpostHand { name = "probe-2", order = OutpostOrder.Gather, target = Res.Timber });
         l.lastTicked = TimeOfDay.Seconds;
 
-        double twoDays = TimeOfDay.Seconds + 2.0 * TimeOfDay.DayLength;
+        double twoDays = TimeOfDay.Seconds + 2.0 * TimeOfDay.WorkDaySeconds;
         l.ceilingPer = outpost.KeepsOfEach;
         l.Tick(twoDays);
 
@@ -882,7 +882,7 @@ public class CampProbe : MonoBehaviour
         // A kilometre out, and time passes.
         Vector3 away = standOff + (standOff - target.transform.position).normalized * 1000f;
         Warp(motor, away, motor.transform.rotation);
-        double sailedFor = 3.0 * TimeOfDay.DayLength;
+        double sailedFor = 3.0 * TimeOfDay.WorkDaySeconds;
         TimeOfDay.Scrub(TimeOfDay.Seconds + sailedFor);
         yield return null;
 

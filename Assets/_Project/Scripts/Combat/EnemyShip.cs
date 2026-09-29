@@ -279,7 +279,6 @@ namespace SeaSick.Combat
             seaProbe = Ocean.OceanProbeRegistry.Register(transform.position);
         }
 
-        static readonly Color RaiderRed = new Color(0.62f, 0.12f, 0.10f);
         bool built;
 
         void Awake()
@@ -449,7 +448,10 @@ namespace SeaSick.Combat
                 Color c = r != null && r.sharedMaterial != null
                     && r.sharedMaterial.HasProperty("_BaseColor")
                     ? r.sharedMaterial.GetColor("_BaseColor") : Color.white;
-                skinColor.Add(Color.Lerp(c, RaiderRed, 0.68f));
+                // Kevin, 2026-09-29: "enemy ships are tinted red, please remove
+                // that" -- raiders keep the fleet art's own colours; the skin is
+                // still collected so the hit flash works.
+                skinColor.Add(c);
             }
             Tint(0f);
         }

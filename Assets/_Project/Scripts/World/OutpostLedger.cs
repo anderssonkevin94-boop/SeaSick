@@ -1387,7 +1387,9 @@ namespace SeaSick.World
                 if (cap <= 0) return "no beds";
                 if (Housed >= cap) return $"{Housed} of {cap} beds";
                 if (FoodFill() < RecruitFoodCost) return "no food to feed a newcomer";
-                float daysLeft = Mathf.Max(0f, DaysPerRecruit - recruitProgress);
+                // Work days on the books, sky days on the sheet (2026-09-29).
+                float daysLeft = Mathf.Max(0f, DaysPerRecruit - recruitProgress)
+                    * TimeOfDay.SkyDaysPerWorkDay;
                 return $"{Housed} of {cap} beds · a new hand in {daysLeft:0.#} days";
             }
         }
@@ -2170,6 +2172,9 @@ namespace SeaSick.World
             get
             {
                 if (raiders <= 0 || Total <= 0 || Guard >= 1f) return 0f;
+                // Kevin, 2026-09-29: "raiders shouldnt show up until camp
+                // fire lvl 2." -- no threat banks up while away either.
+                if (CampfireLevel < Combat.RaidDirector.RaidsFromFireLevel) return 0f;
                 return (1f - Guard) * (HasWatchtower ? 0.5f : 1f);
             }
         }
@@ -2201,6 +2206,7 @@ namespace SeaSick.World
         float ThreatRateAt(bool guarded)
         {
             if (raiders <= 0 || Total <= 0 || guarded) return 0f;
+            if (CampfireLevel < Combat.RaidDirector.RaidsFromFireLevel) return 0f; // same gate as ThreatRatePerDay
             return HasWatchtower ? 0.5f : 1f;
         }
 
@@ -2232,6 +2238,8 @@ namespace SeaSick.World
                     return $"{n} {who} offshore   ·   the lookout keeps them off";
                 if (Total <= 0)
                     return $"{n} {who} offshore   ·   nothing here to take";
+                if (CampfireLevel < Combat.RaidDirector.RaidsFromFireLevel)
+                    return $"{n} {who} offshore   ·   they leave a camp this small alone";
                 float d = DaysUntilRaid;
                 string fix = HasWatchtower
                     ? "post a lookout"
@@ -2393,9 +2401,9 @@ namespace SeaSick.World
 
         // --- the numbers, none of which have been played ---------------------
 
-        /// Game-days in one step. A day is `TimeOfDay.DayLength` (180 s while
-        /// testing), so a quantum is 3.6 seconds of real time at the current
-        /// setting.
+        /// Work-days in one step. The ledger's day is the fixed
+        /// `TimeOfDay.WorkDaySeconds` (180 s; the sky day is longer since
+        /// 2026-09-29), so a quantum is 3.6 seconds of real time.
         ///
         /// Everything advances in whole quanta and the remainder is carried, so
         /// **one call covering ten days and ten calls covering one day each
@@ -2448,7 +2456,7 @@ namespace SeaSick.World
         /// **Hand-days to take ONE tree off a building plot.** Kevin,
         /// 2026-09-23: 5 SECONDS of builder time a tree
         /// (`Playtest.ClearSecondsPerTree`), turned into days at the current
-        /// `TimeOfDay.DayLength`. The log is booked on the pile like any
+        /// `TimeOfDay.WorkDaySeconds`. The log is booked on the pile like any
         /// other. The dial for "clearing takes too long".
         public static float ClearTreeHandDays => SecondsToDays(Playtest.ClearSecondsPerTree);
         /// **Hand-days to break ONE rock off a plot**: `Playtest.ClearSecondsPerRock`
@@ -2488,7 +2496,7 @@ namespace SeaSick.World
                 if (stuff <= 0f) return 0f;          // a free plan is free to raise
                 sec = stuff * Economy.EconomyTuning.HammerSecondsPerLineLog;
             }
-            return sec * Economy.EconomyFeel.BuildTimeMul / Mathf.Max(0.0001f, TimeOfDay.DayLength);
+            return sec * Economy.EconomyFeel.BuildTimeMul / TimeOfDay.WorkDaySeconds;
         }
         /// Food a day one farmhand brings in off a farm's field
         /// (`BuildPlans.Farm.rate`). Half again the felling rate: the wheat
@@ -2623,7 +2631,10 @@ namespace SeaSick.World
 
         public void Tick(double nowSeconds)
         {
-            float dayLength = Mathf.Max(0.0001f, TimeOfDay.DayLength);
+            // The LEDGER's day, fixed at 180 real s (2026-09-29): every
+            // per-day production rate is priced against it, so a longer sky
+            // day slows only the needs (`EatStep`), never the work.
+            float dayLength = TimeOfDay.WorkDaySeconds;
             // **Time away (2026-09-27)**: `AwayProgress` may widen the step to
             // a whole multiple of the quantum ONLY when a long catch-up would
             // blow its wall-clock budget. Whole multiples keep `lastTicked` on
@@ -2897,10 +2908,9 @@ namespace SeaSick.World
         {
             if (!double.IsNaN(atSeconds))
             {
-                float dayLen = Mathf.Max(0.0001f, TimeOfDay.DayLength);
-                double f = atSeconds / dayLen;
-                f -= System.Math.Floor(f);
-                ActiveHour = (float)(f * 24.0);
+                // The SKY's hour at this step's instant (the calendar, not
+                // the ledger's work day): villagers sleep when the sun is down.
+                ActiveHour = TimeOfDay.Time01At(atSeconds) * 24f;
                 ActiveHourKnown = true;
                 // Awake again: the player's night-time override has done its
                 // job (his order ran at full pace) and does not carry into

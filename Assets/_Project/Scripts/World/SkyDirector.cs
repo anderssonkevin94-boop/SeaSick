@@ -44,9 +44,9 @@ namespace SeaSick.World
         [SerializeField] float forceStorm = -1f;
 
         [Header("Time of day")]
-        [Tooltip("Real seconds in a whole day. 180 while testing so a cycle " +
-                 "fits in a play session; 1440 shipped — a minute an hour.")]
-        [SerializeField] float dayLength = 180f;
+        // The day length is not a scene value any more (2026-09-29): it is
+        // `Economy.EconomyFeel.dayLengthSeconds` (480 s), read through
+        // `TimeOfDay.DayLength`, so the FEEL panel can move it live.
         [Tooltip("What time a run starts at. 0.30 is shortly after sunrise. " +
                  "Pushed into TimeOfDay every Awake, because TimeOfDay is a " +
                  "static and statics survive leaving play mode.")]
@@ -393,7 +393,6 @@ namespace SeaSick.World
             // whatever a probe last scrubbed it to. Reassert the whole clock
             // every run or the second play session starts at a different hour
             // than the first and nothing says so.
-            TimeOfDay.DayLength = dayLength;
             TimeOfDay.Scale = 1.0;
             TimeOfDay.Paused = false;
             // Scrub rather than SetTime01: SetTime01 preserves the day
@@ -402,7 +401,9 @@ namespace SeaSick.World
             // what should have been a first run). The moon's bearing and its
             // phase both hang off `day / synodicDays`, so every play session
             // was getting a different moon with nothing saying so.
-            TimeOfDay.Scrub(startTime01 * (double)dayLength);
+            // SetClock also resets the calendar anchor (day 0 at
+            // `startTime01`), which a day-length change had moved.
+            TimeOfDay.SetClock(startTime01 * (double)TimeOfDay.DayLength, startTime01);
 
             // Work on a copy: play-mode tuning must never write back into the
             // material asset on disk.
@@ -531,6 +532,9 @@ namespace SeaSick.World
             };
             if (HasArtLighting)
             {
+                // Clear daytime stays blue; warm hues belong to the horizon crossing.
+                day.zenith = new Color(.12f,.34f,.66f);
+                day.horizon = new Color(.58f,.74f,.86f);
                 day.light = artLighting.sunlight;
                 day.intensity = artLighting.sunIntensity;
                 day.fogStart = artLighting.fogStart;
@@ -730,7 +734,7 @@ namespace SeaSick.World
                 // Scud only tears past once it is genuinely blowing.
                 SetFloatIfChanged(ScudId,
                     Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.35f, 1f, t)), ref cScud);
-                SetFloatIfChanged(CloudScaleId, Mathf.Lerp(cloudScaleClear, cloudScaleStorm, t), ref cCloudScale);
+                SetFloatIfChanged(CloudScaleId, Mathf.Lerp(cloudScaleClear * 1.6f, cloudScaleStorm, t), ref cCloudScale);
                 SetFloatIfChanged(CloudSpeedId, Mathf.Lerp(cloudSpeedClear, cloudSpeedStorm, t), ref cCloudSpeed);
             }
 

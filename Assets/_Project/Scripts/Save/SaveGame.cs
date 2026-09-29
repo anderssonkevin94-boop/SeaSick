@@ -165,7 +165,7 @@ namespace SeaSick.Save
         public static string Summary(SaveData d)
         {
             if (d == null) return "";
-            int day = TimeOfDay.DayLength > 0f ? (int)(d.timeSeconds / TimeOfDay.DayLength) : 0;
+            int day = (int)System.Math.Floor(d.CalendarDays);
             int camps = 0;
             foreach (var o in d.outposts) if (o != null && !o.isHome) camps++;
             return "saved " + d.savedAt + "  ·  day " + day + "  ·  rung " + d.ship.rung
@@ -198,6 +198,7 @@ namespace SeaSick.Save
             d.worldSeed = pop.world != null ? pop.world.seed : 0;
             d.savedAt = System.DateTime.Now.ToString("yyyy-MM-dd HH:mm");
             d.timeSeconds = TimeOfDay.Seconds;
+            d.calendarDays = TimeOfDay.CalendarDays;
             d.savedAtUtcTicks = System.DateTime.UtcNow.Ticks;
 
             // Death/rescue phase 1: the global life registry rides the save
@@ -443,7 +444,9 @@ namespace SeaSick.Save
             }
 
             // 1. The clock. FIRST: every ledger below catches up to it.
-            TimeOfDay.Scrub(data.timeSeconds);
+            // The calendar with it (2026-09-29): the day and hour the save
+            // was at survive a day-length change; the clock is not rescaled.
+            TimeOfDay.SetClock(data.timeSeconds, data.CalendarDays);
 
             // 1a. The chart, straight after the clock and before the camps.
             // `Discovery.Apply` is monotonic, so the outposts raised in step

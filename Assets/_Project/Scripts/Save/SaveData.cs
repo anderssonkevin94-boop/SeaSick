@@ -49,6 +49,21 @@ namespace SeaSick.Save
         /// is asked to catch up.
         public double timeSeconds;
 
+        /// **The calendar at `timeSeconds`**: fractional days (day index +
+        /// time of day), 2026-09-29, when the day length became a live dial
+        /// (`TimeOfDay.DayLength`, 480 s) and stopped being
+        /// `timeSeconds / 180`. -1 on a save from before the field (JsonUtility
+        /// keeps the initializer): that save was written at 180 s days, so
+        /// its day and hour are `timeSeconds / TimeOfDay.LegacyDayLength`.
+        /// Not a version bump. `timeSeconds` itself is never rescaled: every
+        /// ledger stamp and timer in the save is on that clock.
+        public double calendarDays = -1.0;
+
+        /// The calendar this save's clock reads, old save or new.
+        public double CalendarDays => calendarDays >= 0.0
+            ? calendarDays
+            : System.Math.Max(0.0, timeSeconds) / SeaSick.World.TimeOfDay.LegacyDayLength;
+
         /// `DateTime.UtcNow.Ticks` when written (2026-09-27, time away). 0 on
         /// a save from before the field: no time away is played for it.
         public long savedAtUtcTicks;

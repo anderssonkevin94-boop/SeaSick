@@ -34,7 +34,7 @@ namespace SeaSick.World
 
         /// Real seconds until ripe (0 when ripe or empty).
         public float SecondsLeft => state != PlotState.Growing ? 0f
-            : Mathf.Max(0f, (FoodBook.GrowDays(crop) - grown) * TimeOfDay.DayLength);
+            : Mathf.Max(0f, (FoodBook.GrowDays(crop) - grown) * TimeOfDay.WorkDaySeconds);
     }
 
     /// **Food: plots, eating by fill, the food total (2026-09-27).** The
@@ -205,9 +205,17 @@ namespace SeaSick.World
         /// watched) rather than once.
         [System.NonSerialized] int hungryLoggedDay = -1;
 
-        void EatStep(float days)
+        void EatStep(float workDays)
         {
             if (hands == null || hands.Count == 0) return;
+            // **Needs run on the SKY's day (2026-09-29).** `workDays` is the
+            // ledger's step (fixed 180 s days, the unit production is priced
+            // in); eating and mood are "per day" of the sun, which is
+            // `TimeOfDay.DayLength` (480 s) -- so a hand eats one fill a sky
+            // day and his mood drifts per sky day, while every bench and
+            // field keeps its real-time pace. `hungerDays`/`hungryDays` are
+            // sky days too (the sheets turn them into spans with DayLength).
+            float days = workDays * TimeOfDay.SkyDaysPerWorkDay;
             bool starved = rations == Rations.None;
             int today = TimeOfDay.Day;
             bool logHungryToday = today != hungryLoggedDay;
@@ -390,7 +398,7 @@ namespace SeaSick.World
                 float need = SecondsToDays(Mathf.Max(0f, secs));
                 if (budget < need - Eps)
                 {
-                    p.work += budget * TimeOfDay.DayLength;
+                    p.work += budget * TimeOfDay.WorkDaySeconds;
                     return;
                 }
                 budget -= need;

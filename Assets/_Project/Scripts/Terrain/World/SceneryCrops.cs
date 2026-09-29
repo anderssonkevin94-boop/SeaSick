@@ -201,7 +201,7 @@ namespace SeaSick.Terrain
             }
             b.harvested = true;
             float regrow = Res.RegrowPerDay(Res.Food);
-            b.regrowAtDay = TimeOfDay.Seconds / Mathf.Max(1f, TimeOfDay.DayLength)
+            b.regrowAtDay = TimeOfDay.Seconds / TimeOfDay.WorkDaySeconds
                           + (regrow > 0f ? 1f / regrow : double.MaxValue);
             beds[i] = b;
         }
@@ -257,7 +257,7 @@ namespace SeaSick.Terrain
         /// through `Outpost.SyncHarvest` instead.
         public int RegrowOverdue()
         {
-            double today = TimeOfDay.Seconds / Mathf.Max(1f, TimeOfDay.DayLength);
+            double today = TimeOfDay.Seconds / TimeOfDay.WorkDaySeconds;
             int n = 0;
             for (int i = 0; i < beds.Count; i++)
                 if (beds[i].harvested && beds[i].instance != null && today >= beds[i].regrowAtDay)

@@ -117,7 +117,7 @@ namespace SeaSick.World
             int crew = HammerCrew(p);
             if (crew <= 0) return -1f;
             float days = Mathf.Max(0f, p.LabourNeeded - p.built) / Economy.EconomyTuning.CrewSpeed(crew);
-            return days * TimeOfDay.DayLength;
+            return days * TimeOfDay.WorkDaySeconds;
         }
 
         /// **The site's one status line**: "hammering · 42 s left" only

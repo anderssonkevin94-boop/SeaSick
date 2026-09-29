@@ -30,6 +30,7 @@ namespace SeaSick.Dev
         static void Install()
         {
             if (!Application.isEditor && !Debug.isDebugBuild) return;
+            if(SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked)return;
             if (FindAnyObjectByType<LifeDevPanel>(FindObjectsInactive.Include) != null) return;
             var go = new GameObject("LifeDevPanel");
             go.AddComponent<LifeDevPanel>();
@@ -59,6 +60,7 @@ namespace SeaSick.Dev
         void OnGUI()
         {
             if (!Application.isEditor && !Debug.isDebugBuild) return;
+            if(SeaSick.Ship.Modular.ShipyardSession.WorldInputBlocked)return;
 
             float scale = Mathf.Clamp(Screen.dpi > 0 ? Screen.dpi / 160f : 2f, 1f, 3f);
             var old = GUI.matrix;

@@ -269,7 +269,7 @@ namespace SeaSick.World
 
             // --- (j) trips are WALKED (2026-09-27, docs/DELIVERY-ON-ARRIVAL.md)
             {
-                float day = TimeOfDay.DayLength, qs = OutpostLedger.QuantumDays * day;
+                float day = TimeOfDay.WorkDaySeconds, qs = OutpostLedger.QuantumDays * day;
                 float v = OutpostLedger.WalkMetresPerSecond;
                 // One quantum: the builder is at the store (0 m), stoops 1 s,
                 // PICKS UP (the store drops now) and is carrying the rest.
@@ -401,7 +401,7 @@ namespace SeaSick.World
                     whyB.Contains("store is full of timber, helping build") && helpedB
                     && bs.sites[0].Complete && bs.StoreCountOf(Res.Timber) == 10,
                     $"stall '{whyB}', first quantum a site trip {helpedB}, site complete {bs.sites[0].Complete}, "
-                    + $"store back to {bs.StoreCountOf(Res.Timber)}/10 at {nb / TimeOfDay.DayLength:0.0} d");
+                    + $"store back to {bs.StoreCountOf(Res.Timber)}/10 at {nb / TimeOfDay.WorkDaySeconds:0.0} d");
 
                 // (4b) store full + a manned station wanting it: hauls for it, resumes.
                 var q = Quarry(10, 10, 0);
@@ -447,7 +447,7 @@ namespace SeaSick.World
                 Gate(sb, ref fails, rock ? "clear-rock-8s-carried" : "clear-2-trees-10s-carried",
                     clearedFirst && landed == 2 && c2.StoreCountOf(clearRes) - before == 2 && p.built > 0f,
                     $"{(rock ? "1 rock" : "2 trees")} ({clearSec:0} s of cutting) cleared in the first 18 s {clearedFirst}, "
-                    + $"{landed} {clearRes} carried to the store, then {p.built * TimeOfDay.DayLength:0.0} s of hammering");
+                    + $"{landed} {clearRes} carried to the store, then {p.built * TimeOfDay.WorkDaySeconds:0.0} s of hammering");
             }
 
             Tempo(sb, ref fails);
@@ -540,7 +540,7 @@ namespace SeaSick.World
             Gate(sb, ref fails, $"site-conserves-{tag}", cons == null, cons ?? $"timber {t0}, stone {s0} accounted every tick");
             Gate(sb, ref fails, $"site-completes-{tag}", p.Complete && sawBuild && p.done == 5 && p.stoneDone == 3
                                                       && Mathf.Approximately(p.Progress01, 1f) && l.CarriedOf(Res.Timber) == 0,
-                $"complete {p.Complete} at {now / TimeOfDay.DayLength:0.0} d, {p.done}/5 {p.stoneDone}/3, {p.Progress01:P0}");
+                $"complete {p.Complete} at {now / TimeOfDay.WorkDaySeconds:0.0} d, {p.done}/5 {p.stoneDone}/3, {p.Progress01:P0}");
             Gate(sb, ref fails, $"site-trips-{tag}", Trips(l) <= 4,
                 $"{Trips(l)} trips for 5 timber (armful 2) + 3 stone (armful 3); 4 is the least");
         }
@@ -550,7 +550,7 @@ namespace SeaSick.World
         {
             var p = l.sites[0];
             for (int i = 0; i < 1000 && !p.Stocked; i++) Advance(l, ref now, 0.02);
-            return now / TimeOfDay.DayLength;
+            return now / TimeOfDay.WorkDaySeconds;
         }
 
         static bool SameSite(OutpostLedger a, OutpostLedger b)
@@ -600,16 +600,16 @@ namespace SeaSick.World
 
         static string GatherState(OutpostLedger l)
             => $"store {l.StoreCountOf(Res.Timber)} arms {l.CarriedOf(Res.Timber)} standing {l.Stock(Res.Timber).standing:0.#} "
-             + $"taken {l.timberTaken:0.#} left {l.hands[0].haulLeft * TimeOfDay.DayLength:0.0}s";
+             + $"taken {l.timberTaken:0.#} left {l.hands[0].haulLeft * TimeOfDay.WorkDaySeconds:0.0}s";
 
         /// Whole quanta a tick of `days` advances (what `Tick` books).
         static int QuantaIn(double days)
-            => (int)((days * TimeOfDay.DayLength + 1e-3) / (OutpostLedger.QuantumDays * (double)TimeOfDay.DayLength));
+            => (int)((days * TimeOfDay.WorkDaySeconds + 1e-3) / (OutpostLedger.QuantumDays * (double)TimeOfDay.WorkDaySeconds));
 
         // --- (m) tempo, Kevin's phone playtest 2026-09-24 -------------------
         static void Tempo(StringBuilder sb, ref int fails)
         {
-            float day = TimeOfDay.DayLength;
+            float day = TimeOfDay.WorkDaySeconds;
             double q = OutpostLedger.QuantumDays * (double)day;          // seconds a quantum
             var boards = Economy.Recipes.Named("boards");
             float jobSec = day * Mathf.Max(1, boards.yield) / boards.ratePerDay;
@@ -822,7 +822,7 @@ namespace SeaSick.World
         /// being carried to the next call.
         static void Advance(OutpostLedger l, ref double now, double days)
         {
-            now += days * TimeOfDay.DayLength;
+            now += days * TimeOfDay.WorkDaySeconds;
             l.Tick(now + 1e-3);
         }
 
@@ -938,7 +938,7 @@ namespace SeaSick.World
                 var h = l.hands[0];
                 // One quantum: stoop 1 s at the store, pick up, walk toward
                 // the gangway 30 m off -- the rest of the quantum's metres.
-                float qs = OutpostLedger.QuantumDays * TimeOfDay.DayLength;
+                float qs = OutpostLedger.QuantumDays * TimeOfDay.WorkDaySeconds;
                 float wantLeft = 30f - OutpostLedger.WalkMetresPerSecond * (qs - OutpostLedger.HandleSeconds);
                 bool ok = h.Hauling && h.haulTo == HaulPlace.Ship && h.haulCount == 2 && h.haulPicked
                           && Mathf.Abs(h.legLeft - wantLeft) < 0.05f && Mathf.Abs(h.haulToX - 30f) < 1e-3f;
@@ -1193,7 +1193,7 @@ namespace SeaSick.World
         ///     (or 4 logs) of each other.
         static void Delivery(StringBuilder sb, ref int fails)
         {
-            float day = TimeOfDay.DayLength, qs = OutpostLedger.QuantumDays * day;
+            float day = TimeOfDay.WorkDaySeconds, qs = OutpostLedger.QuantumDays * day;
             {
                 var l = Busy();
                 string[] res = { Res.Timber, Res.Boards, Res.Stone, Res.Food };

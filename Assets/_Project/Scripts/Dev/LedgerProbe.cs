@@ -26,7 +26,7 @@ public class LedgerProbe : MonoBehaviour
         var sb = new StringBuilder();
         int fails = 0;
 
-        float day = Mathf.Max(0.0001f, SeaSick.World.TimeOfDay.DayLength);
+        float day = SeaSick.World.TimeOfDay.WorkDaySeconds;
         sb.AppendLine($"day = {day:F0} s, quantum = {OutpostLedger.QuantumDays:F2} day "
             + $"({OutpostLedger.QuantumDays * day:F1} s)");
         // Gathering is TRIPS since 2026-09-23 (walk out, 5 s a log, walk

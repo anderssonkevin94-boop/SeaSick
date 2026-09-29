@@ -62,8 +62,8 @@ public static class HuntCheck
     {
         var sb = new StringBuilder("HuntCheck.Ledger (hunt = trip)\n");
         bool pass = true;
-        float q = OutpostLedger.QuantumDays * TimeOfDay.DayLength;
-        sb.AppendLine($"est. trip {TimeOfDay.DayLength * new OutpostLedger().HuntTripDays(false):0}s (armed {TimeOfDay.DayLength * new OutpostLedger().HuntTripDays(true):0}s), {new OutpostLedger().HuntTripPerDay(false):0.00} kills/day");
+        float q = OutpostLedger.QuantumDays * TimeOfDay.WorkDaySeconds;
+        sb.AppendLine($"est. trip {TimeOfDay.WorkDaySeconds * new OutpostLedger().HuntTripDays(false):0}s (armed {TimeOfDay.WorkDaySeconds * new OutpostLedger().HuntTripDays(true):0}s), {new OutpostLedger().HuntTripPerDay(false):0.00} kills/day");
 
         foreach (int food in new[] { 0, 30 })
         {
@@ -118,7 +118,7 @@ public static class HuntCheck
                     phases += ph == "stalk" ? "S" : "C";
                     var b = JsonUtility.FromJson<OutpostLedger>(JsonUtility.ToJson(a));
                     var c = JsonUtility.FromJson<OutpostLedger>(JsonUtility.ToJson(a));
-                    double end = now + 3.0 * TimeOfDay.DayLength;
+                    double end = now + 3.0 * TimeOfDay.WorkDaySeconds;
                     for (double t = now + q; t <= end + 1e-6; t += q) a.Tick(t + 1e-3);
                     b.Tick(end + 1e-3);                     // saved, then one long tick
                     for (double t = now + q; t <= end + 1e-6; t += q) c.Tick(t + 1e-3);

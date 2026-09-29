@@ -133,7 +133,7 @@ namespace SeaSick.UI.Sheets
                 card.Add(Line("Hungry", AwayProgress.Span(c.hungryDays * TimeOfDay.DayLength)));
             if (c.unhappy > 0) card.Add(Line("Unhappy", $"{c.unhappy} of {c.hands}"));
             if (c.stall != null)
-                card.Add(Line("Stalled", AwayProgress.Span(c.stalledDays * TimeOfDay.DayLength) + " · " + c.stall));
+                card.Add(Line("Stalled", AwayProgress.Span(c.stalledDays * TimeOfDay.WorkDaySeconds) + " · " + c.stall));
 
             if (c.camp != null)
             {

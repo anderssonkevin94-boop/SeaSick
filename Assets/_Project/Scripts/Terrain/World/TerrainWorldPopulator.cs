@@ -748,6 +748,12 @@ namespace SeaSick.Terrain
             }
         }
 
+        /// Ladder nodes a raider may wear, 0-based (`FleetVisual.Build`):
+        /// 4 = Coastal launch (15 m, 1 port a side) .. 7 = Long sloop (18 m,
+        /// 3 ports a side). Kevin, 2026-09-29: raiders too strong, smaller hulls.
+        const int RaiderMinNode = 4;
+        const int RaiderMaxNode = 7;
+
         void BuildRaiders()
         {
             if (world.raidersPerIsland <= 0 || world.maxRaiders <= 0) return;
@@ -757,11 +763,13 @@ namespace SeaSick.Terrain
             {
                 if (isle == null) continue;
                 // **Which hull a raider wears is a distance question**, like
-                // which resource an island carries: the five mid stages of the
-                // fleet (ladder nodes 7..11, Long sloop to Guild escort) laid
-                // out by ring from home, so the first raider you meet is the
-                // smallest and the outer ring is guarded by escorts. Kevin,
-                // 2026-09-22. The player's own hull is no longer the raider's.
+                // which resource an island carries: a few small stages of the
+                // fleet laid out by ring from home, so the first raider you
+                // meet is the smallest and the outer ring has the biggest.
+                // Kevin, 2026-09-22. The player's own hull is no longer the
+                // raider's. 2026-09-29, Kevin: the raiders were overpowered,
+                // "use the smaller hulls" -- ladder nodes 4..7 (Coastal
+                // launch to Long sloop, 1..3 ports a side) instead of 7..11.
                 float ring = world.discoveryRadius > 0f
                     ? Mathf.Clamp01(Vector3.Distance(isle.transform.position, home) / world.discoveryRadius)
                     : 0f;
@@ -769,7 +777,7 @@ namespace SeaSick.Terrain
                 // innermost ring around the start point stays raider-free by
                 // distance, not by IsHome.
                 if (ring < world.raiderFreeRing || isle.MaxRadius < world.raiderMinIslandRadius || !isle.HasResources) continue;
-                int node = Mathf.Clamp(7 + Mathf.FloorToInt(ring * 5f), 7, 11);
+                int node = Mathf.Clamp(RaiderMinNode + Mathf.FloorToInt(ring * 4f), RaiderMinNode, RaiderMaxNode);
                 for (int i = 0; i < world.raidersPerIsland && posted < world.maxRaiders; i++, posted++)
                 {
                     float radius = isle.MaxRadius + world.patrolClearance + i * 26f;

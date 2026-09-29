@@ -397,7 +397,9 @@ namespace SeaSick.UI.Sheets
             // One line about the next hand, and nothing about beds (the
             // header's subtitle already counts them).
             bool room = l.Housed < l.HousingCapacity;
-            float days = Mathf.Max(0f, OutpostLedger.DaysPerRecruit - l.recruitProgress);
+            // Work days on the books, sky days on the sheet (2026-09-29).
+            float days = Mathf.Max(0f, OutpostLedger.DaysPerRecruit - l.recruitProgress)
+                * TimeOfDay.SkyDaysPerWorkDay;
             string text = room
                 ? $"Next hand in {days:0.#} days · needs {OutpostLedger.RecruitFoodCost} food"
                 : "No room for another hand · build a hut";

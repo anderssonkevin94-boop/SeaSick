@@ -457,7 +457,7 @@ public class CampLifeProbe : MonoBehaviour
 
             const float SecondsPerTree = 14f;
             double gamePerReal =
-                TimeOfDay.DayLength / (2.0 * OutpostLedger.TimberPerHandPerDay) / SecondsPerTree;
+                TimeOfDay.WorkDaySeconds / (2.0 * OutpostLedger.TimberPerHandPerDay) / SecondsPerTree;
 
             // Room in the pile, or nothing is owed and nothing falls: the
             // sawyer section put eight logs on a ten-log pile and the day
@@ -583,7 +583,7 @@ public class CampLifeProbe : MonoBehaviour
             // the cutting before it starts.
             double clockBeforeClear = clock;
             camp.Ledger.stores.Clear();
-            clock += 3.0 * TimeOfDay.DayLength;
+            clock += 3.0 * TimeOfDay.WorkDaySeconds;
             TimeOfDay.Scrub(clock);
             int flushBeforeJump = camp.FlushedTrees;
             camp.CatchUp();

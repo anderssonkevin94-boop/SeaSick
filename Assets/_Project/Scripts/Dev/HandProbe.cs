@@ -882,7 +882,7 @@ public class HandProbe : MonoBehaviour
 
             float days = Mathf.Max(2f, p.needed / OutpostLedger.TimberPerHandPerDay * 1.5f);
             camp.Ledger.lastTicked = TimeOfDay.Seconds;
-            camp.Ledger.Tick(TimeOfDay.Seconds + days * TimeOfDay.DayLength);
+            camp.Ledger.Tick(TimeOfDay.Seconds + days * TimeOfDay.WorkDaySeconds);
             camp.CatchUp();
             yield return null;
             camp.CatchUp();

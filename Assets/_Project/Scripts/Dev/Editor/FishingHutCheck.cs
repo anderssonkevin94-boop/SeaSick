@@ -107,7 +107,7 @@ public static class FishingHutCheck
         var st = l.StationOf(id);
         float got0 = AwayFood(l);
         int store0 = l.StoreCountOf(Res.Food), rack0 = st != null ? st.RackCount(Res.Food) : 0;
-        double to = l.lastTicked + days * TimeOfDay.DayLength + 1e-3;
+        double to = l.lastTicked + days * TimeOfDay.WorkDaySeconds + 1e-3;
         l.Tick(to);
         float made = AwayFood(l) - got0;
         int store1 = l.StoreCountOf(Res.Food), rack1 = st != null ? st.RackCount(Res.Food) : 0;

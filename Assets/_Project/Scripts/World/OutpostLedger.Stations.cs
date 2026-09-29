@@ -54,7 +54,7 @@ namespace SeaSick.World
     /// and walks back:
     /// `seconds = 2 * leg / WalkMetresPerSecond + HandleSeconds
     ///            + (Field ? n * GatherSecondsPerUnit(res) : 0)`,
-    /// `days = seconds / TimeOfDay.DayLength`. A leg is the straight line
+    /// `days = seconds / TimeOfDay.WorkDaySeconds`. A leg is the straight line
     /// between the two ledger positions times `PathFactor` (1.15: the ledger
     /// has no A*, the bodies walk round things). Positions the ledger knows:
     /// the STORE (first Storage/Storehouse `raised` row, else the campfire's
@@ -311,7 +311,7 @@ namespace SeaSick.World
             return DefaultLegMetres;
         }
 
-        static float SecondsToDays(float seconds) => seconds / Mathf.Max(0.0001f, TimeOfDay.DayLength);
+        static float SecondsToDays(float seconds) => seconds / TimeOfDay.WorkDaySeconds;
 
         /// **Game-days of one trip -- a DISPLAY estimate only** (2026-09-27:
         /// nothing books through this; trips are walked, docs/DELIVERY-ON-ARRIVAL.md).
