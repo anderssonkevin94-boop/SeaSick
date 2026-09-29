@@ -28,6 +28,12 @@ namespace SeaSick.Terrain
         [Tooltip("Max rise per metre over the first 12 m inland for a bearing to count as a beach. 0.70 left 93% of all shore landable; see BeachProbe.")]
         public float beachMaxSlope = 0.5f;
 
+        [Header("Island finds (shelter-only islands)")]
+        [Range(0f, 1f), Tooltip("Share of shelter-only islands whose one find is a washed-up cache; the rest carry a lookout cairn.")]
+        public float findCacheShare = 0.65f;
+        [Tooltip("The ship collects a find by sailing within this many metres of it (horizontal).")]
+        public float findCollectRadius = 35f;
+
         [Header("Resources")]
         public ResourceKind[] kinds =
         {

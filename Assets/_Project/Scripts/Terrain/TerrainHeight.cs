@@ -16,6 +16,9 @@ namespace SeaSick.Terrain
         public float erosion, erosionAmount;
         public int maskOctaves; public float maskFrequency, maskThreshold, maskFalloff;
         public float maskStretch, maskGrainCos, maskGrainSin, maskWarp, maskWarpFrequency;
+        public int regionalGrain;
+        public float grainRegionFrequency, grainBlendDegrees;
+        public float nearIslandScale, nearIslandRadius, farIslandRadius;
         public float seabedDepth, deepSeabedDepth, shelfBand;
         public float baseHeight, reliefHeight;
         public float skerryAmount, skerryFrequency, skerryThreshold, skerryClearance, skerryRelief;
@@ -51,7 +54,9 @@ namespace SeaSick.Terrain
                          SkerrySeedOffset = 86028121, VerdancySeedOffset = 22801763,
                          WarpSeedOffset = 15485867, WarpSeedOffsetB = 32452867,
                          HomeShapeSeedOffset = 24036583, HomeRollSeedOffset = 6972593,
-                         HomeCoveSeedOffset = 3021377;
+                         HomeCoveSeedOffset = 3021377,
+                         GrainSeedOffsetA = 67867967, GrainSeedOffsetB = 86028157,
+                         MaskAxisSeedStep = 7907, MaskNearSeedOffset = 57885161;
 
         public static TerrainParams From(TerrainSettings s)
         {
@@ -67,6 +72,11 @@ namespace SeaSick.Terrain
                 maskGrainCos = math.cos(math.radians(s.maskGrainAngle)),
                 maskGrainSin = math.sin(math.radians(s.maskGrainAngle)),
                 maskWarp = math.max(0f, s.maskWarp), maskWarpFrequency = s.maskWarpFrequency,
+                regionalGrain = s.regionalGrain ? 1 : 0,
+                grainRegionFrequency = s.grainRegionFrequency, grainBlendDegrees = s.grainBlendDegrees,
+                nearIslandScale = math.max(1f, s.nearIslandScale),
+                nearIslandRadius = s.nearIslandRadius,
+                farIslandRadius = math.max(s.nearIslandRadius + 1f, s.farIslandRadius),
                 maskThreshold = TerrainHeight.ThresholdForLandRatio(s.landRatio, s.maskOctaves),
                 seabedDepth = s.seabedDepth,
                 deepSeabedDepth = s.deepSeabedDepth,
@@ -300,12 +310,17 @@ namespace SeaSick.Terrain
         /// existing coast and quietly reshape an island the rest of the world
         /// has already been sited against.
         public static float Skerry(in float2 p, float c, in TerrainParams prm)
+            => Skerry(SkerryDomain(p, prm), c, prm, 0);
+
+        /// `domain` is SkerryDomain's, handed over by a caller that already
+        /// has it (the trailing int only keeps the two overloads apart).
+        static float Skerry(float2 domain, float c, in TerrainParams prm, int _)
         {
             if (prm.skerryAmount <= 0f) return 0f;
             // Islets get the SAME domain as the islands. They are the small
             // end of one archipelago, not a different world laid over it, so
             // they take the same grain and the same warp.
-            float sRaw = TerrainNoise.Fbm01(MaskDomain(p, prm),
+            float sRaw = TerrainNoise.Fbm01(domain,
                 prm.seed + TerrainParams.SkerrySeedOffset, 2, prm.skerryFrequency, 2f, 0.5f);
             float peak = math.saturate((sRaw - prm.skerryThreshold)
                 / math.max(0.01f, 1f - prm.skerryThreshold));
@@ -345,38 +360,149 @@ namespace SeaSick.Terrain
         public static float2 MaskDomain(in float2 p, in TerrainParams prm)
         {
             float2 q = p + prm.worldOffset;
+            float2 s = Stretch(q, new float2(prm.maskGrainCos, prm.maskGrainSin), prm.maskStretch);
+            return s + MaskWarpOffset(s, prm);
+        }
 
-            if (prm.maskStretch > 1.0001f)
-            {
-                float2 dir = new float2(prm.maskGrainCos, prm.maskGrainSin);
-                q -= dir * math.dot(q, dir) * (1f - 1f / prm.maskStretch);
-            }
+        /// Compresses the domain along `dir` by `stretch`, which stretches
+        /// features along it. `dir` is a CONSTANT here -- see MaskDomain.
+        static float2 Stretch(float2 q, float2 dir, float stretch)
+            => stretch > 1.0001f ? q - dir * math.dot(q, dir) * (1f - 1f / stretch) : q;
 
-            if (prm.maskWarp > 0f)
-            {
-                // Two decorrelated fields, not one field read twice at an
-                // offset: sampling the same noise twice a fixed distance apart
-                // gives a warp whose x and y are correlated, and a correlated
-                // warp slides the whole field diagonally instead of curdling
-                // it.
-                float wx = TerrainNoise.Fbm01(q, prm.seed + TerrainParams.WarpSeedOffset,
-                    3, prm.maskWarpFrequency, 2f, 0.5f) - 0.5f;
-                float wy = TerrainNoise.Fbm01(q, prm.seed + TerrainParams.WarpSeedOffsetB,
-                    3, prm.maskWarpFrequency, 2f, 0.5f) - 0.5f;
-                q += new float2(wx, wy) * (2f * prm.maskWarp);
-            }
-            return q;
+        static float2 MaskWarpOffset(float2 q, in TerrainParams prm)
+        {
+            if (prm.maskWarp <= 0f) return float2.zero;
+            // Two decorrelated fields, not one field read twice at an
+            // offset: sampling the same noise twice a fixed distance apart
+            // gives a warp whose x and y are correlated, and a correlated
+            // warp slides the whole field diagonally instead of curdling
+            // it.
+            float wx = TerrainNoise.Fbm01(q, prm.seed + TerrainParams.WarpSeedOffset,
+                3, prm.maskWarpFrequency, 2f, 0.5f) - 0.5f;
+            float wy = TerrainNoise.Fbm01(q, prm.seed + TerrainParams.WarpSeedOffsetB,
+                3, prm.maskWarpFrequency, 2f, 0.5f) - 0.5f;
+            return new float2(wx, wy) * (2f * prm.maskWarp);
         }
 
         /// The continentalness field before any islets are added to it.
+        ///
+        /// With `regionalGrain` and `nearIslandScale` both off this is the
+        /// original single field, bit for bit. With either on it is a BLEND
+        /// of up to six whole fields -- three grain axes 60 degrees apart,
+        /// each at a near-home and a far size -- which is how a pure
+        /// function of position gets a grain that turns and an island size
+        /// that grows with distance without the per-point rotation or
+        /// rescale that shreds the field at range (see MaskDomain):
+        ///
+        /// - Each field is ordinary fBm on a CONSTANT stretch, so each one is
+        ///   exactly as well behaved as the original.
+        /// - The weights come from slow fields (a selector angle, distance
+        ///   from home) and sum to one, so the blend is continuous everywhere.
+        /// - Blending independent fields shrinks their spread (two at 50/50
+        ///   has 0.71 of the sd), which would drown the land in every blend
+        ///   band. Dividing by sqrt(sum w^2) puts the spread back, so the
+        ///   landRatio threshold still holds everywhere and a blend band is
+        ///   just land of mixed character, not a moat.
+        /// - Every field has its own seed. Two stretches of the SAME noise
+        ///   are nearly the same field close to the origin, and correlated
+        ///   fields would make that normalisation overshoot.
+        ///
+        /// Only fields with weight are evaluated; most of the world sits in
+        /// one region and one size band, so most samples pay for one field.
         public static float MaskNoiseBase(in float2 p, in TerrainParams prm)
-            => TerrainNoise.Fbm01(MaskDomain(p, prm), prm.seed + TerrainParams.MaskSeedOffset,
-                prm.maskOctaves, prm.maskFrequency, 2f, 0.5f);
+            => MaskNoiseBase(p, prm, out _);
+
+        static bool BlendedMask(in TerrainParams prm)
+            => prm.regionalGrain != 0 || prm.nearIslandScale > 1.0001f;
+
+        /// Where the islet field is read. With the single-field mask it is
+        /// MaskDomain, exactly as before; with the blend there is no one
+        /// grain to give it, so islets take the shared warp unstretched --
+        /// they are too small for their grain to show.
+        static float2 SkerryDomain(in float2 p, in TerrainParams prm)
+        {
+            if (!BlendedMask(prm)) return MaskDomain(p, prm);
+            float2 q = p + prm.worldOffset;
+            return q + MaskWarpOffset(q, prm);
+        }
+
+        /// Also hands back SkerryDomain, which costs a full warp and is
+        /// already in hand here, so EvaluateBase does not pay for it twice.
+        static float MaskNoiseBase(in float2 p, in TerrainParams prm, out float2 skerryDomain)
+        {
+            bool tiers = prm.nearIslandScale > 1.0001f;
+            if (!BlendedMask(prm))
+            {
+                skerryDomain = MaskDomain(p, prm);
+                return TerrainNoise.Fbm01(skerryDomain, prm.seed + TerrainParams.MaskSeedOffset,
+                    prm.maskOctaves, prm.maskFrequency, 2f, 0.5f);
+            }
+
+            float2 q = p + prm.worldOffset;
+            // Warp read on the unstretched domain, once, and shared: the
+            // fields differ in stretch, not in wobble, so a coast in a blend
+            // band bends one way rather than two.
+            float2 warp = MaskWarpOffset(q, prm);
+            skerryDomain = q + warp;
+            float3 axisW = prm.regionalGrain != 0 ? GrainWeights(q, prm) : new float3(1f, 0f, 0f);
+            float far = tiers ? math.smoothstep(prm.nearIslandRadius, prm.farIslandRadius, math.length(p)) : 1f;
+
+            float sum = 0f, sq = 0f;
+            for (int k = 0; k < 3; k++)
+            {
+                float a = axisW[k];
+                if (a <= 0f) continue;
+                float ang = math.atan2(prm.maskGrainSin, prm.maskGrainCos) + k * (math.PI / 3f);
+                float2 qk = Stretch(q, new float2(math.cos(ang), math.sin(ang)), prm.maskStretch) + warp;
+                int axisSeed = prm.seed + TerrainParams.MaskSeedOffset + k * TerrainParams.MaskAxisSeedStep;
+                if (far > 0f)
+                {
+                    float w = a * far;
+                    sum += w * (TerrainNoise.Fbm01(qk, axisSeed, prm.maskOctaves, prm.maskFrequency, 2f, 0.5f) - 0.5f);
+                    sq += w * w;
+                }
+                if (far < 1f)
+                {
+                    float w = a * (1f - far);
+                    sum += w * (TerrainNoise.Fbm01(qk, axisSeed + TerrainParams.MaskNearSeedOffset, prm.maskOctaves,
+                        prm.maskFrequency * prm.nearIslandScale, 2f, 0.5f) - 0.5f);
+                    sq += w * w;
+                }
+            }
+            return 0.5f + sum / math.sqrt(math.max(sq, 1e-6f));
+        }
+
+        /// Which of the three grain axes a spot belongs to, as weights that
+        /// sum to one. The selector is the ANGLE of a slow 2D noise vector,
+        /// cut into three 120 degree sectors with `grainBlendDegrees` of
+        /// blend at each border: an angle is uniform where a single noise
+        /// value is not, so each grain gets a third of the sea. Where the
+        /// vector is near zero its angle means nothing and spins, so the
+        /// weights relax to a third each there instead of flickering.
+        static float3 GrainWeights(float2 q, in TerrainParams prm)
+        {
+            float gx = TerrainNoise.Fbm01(q, prm.seed + TerrainParams.GrainSeedOffsetA,
+                1, prm.grainRegionFrequency, 2f, 0.5f) - 0.5f;
+            float gy = TerrainNoise.Fbm01(q, prm.seed + TerrainParams.GrainSeedOffsetB,
+                1, prm.grainRegionFrequency, 2f, 0.5f) - 0.5f;
+            float deg = math.degrees(math.atan2(gy, gx));
+            float b = prm.grainBlendDegrees * 0.5f;
+            float3 w = float3.zero;
+            for (int k = 0; k < 3; k++)
+            {
+                float d = math.fmod(math.abs(deg - k * 120f), 360f);
+                d = math.min(d, 360f - d);
+                w[k] = 1f - math.smoothstep(60f - b, 60f + b, d);
+            }
+            w /= math.max(1e-4f, math.csum(w));
+            float settle = math.smoothstep(0.015f, 0.05f, math.length(new float2(gx, gy)));
+            return math.lerp(new float3(1f / 3f), w, settle);
+        }
 
         public static float MaskNoise(in float2 p, in TerrainParams prm)
         {
-            float c = MaskNoiseBase(p, prm);
-            return c + Skerry(p, c, prm);
+            float c = MaskNoiseBase(p, prm, out float2 sd);
+            return c + Skerry(sd, c, prm, 0);
         }
 
         /// How much of this spot's existence it owes to the islet field, in
@@ -881,8 +1007,8 @@ namespace SeaSick.Terrain
             // The mask comes FIRST now: both the ridges and the massif are
             // faded in by how far inland the spot is, so the shape field
             // cannot be computed before we know that.
-            float cBase = MaskNoiseBase(p, prm);
-            float lift = Skerry(p, cBase, prm);
+            float cBase = MaskNoiseBase(p, prm, out float2 skerryDomain);
+            float lift = Skerry(skerryDomain, cBase, prm, 0);
             float c = cBase + lift;
             s.mask = MaskFromNoise(c, p, prm);
             float interior = Interior(s.mask, prm);

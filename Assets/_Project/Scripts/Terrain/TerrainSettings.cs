@@ -98,7 +98,7 @@ namespace SeaSick.Terrain
         [Range(0.01f, 0.5f)] public float maskFalloff = 0.1f;
 
         [Header("Island shape")]
-        [Tooltip("How many times longer than wide an island runs. 1 = round lobed blobs, which is what plain fBm gives you. The axis is GLOBAL and constant: a real archipelago has a grain (glacial, tectonic) and a per-island rotation cannot be done in a pure position function without either shredding the field at range or seaming it on a grid.")]
+        [Tooltip("How many times longer than wide an island runs. 1 = round lobed blobs, which is what plain fBm gives you. Each field stretches along a CONSTANT axis (a per-point rotation shreds the field at range); regionalGrain blends three such axes so the grain still turns from region to region.")]
         [Range(1f, 4f)] public float maskStretch = 2.2f;
         [Tooltip("Which way the grain runs, degrees.")]
         [Range(0f, 180f)] public float maskGrainAngle = 34f;
@@ -106,6 +106,20 @@ namespace SeaSick.Terrain
         public float maskWarp = 110f;
         [Tooltip("Warp feature scale. Near the mask frequency re-aims whole islands; well above it only frays the coast.")]
         public float maskWarpFrequency = 1f / 900f;
+
+        [Header("Island variety")]
+        [Tooltip("Give each REGION of the sea its own grain instead of one grain for the whole world. The stretch is read along three axes 60 degrees apart and a slow selector field picks between them, so neighbouring islands still share a grain (it reads as geology) while the next group over runs another way, and islands on a boundary come out bent or crossed. Blended between whole fields, never rotated per point, so it cannot shred or seam at range.")]
+        public bool regionalGrain = true;
+        [Tooltip("Size of those regions, 1/metres. Well below maskFrequency, so an island almost always sits inside one region.")]
+        public float grainRegionFrequency = 1f / 2600f;
+        [Range(5f, 55f), Tooltip("Degrees of the selector's circle over which two grains blend. Wider = more bent, crossed islands; narrower = crisper regions.")]
+        public float grainBlendDegrees = 25f;
+        [Range(1f, 2.5f), Tooltip("How much SMALLER the islands are near home: the mask frequency is multiplied by this inside nearIslandRadius. 1 = the same size everywhere. Land ratio is untouched, so near home there are more islands, each smaller -- lots of close, quick things to find first, the big ones further out.")]
+        public float nearIslandScale = 1.5f;
+        [Tooltip("Metres from the world origin (home) out to where the near-home island size still holds.")]
+        public float nearIslandRadius = 900f;
+        [Tooltip("...and where full-size islands take over. Between the two the fields are blended, not rescaled, so nothing in the band is squashed.")]
+        public float farIslandRadius = 2200f;
         [Tooltip("Shelf floor height around land, metres (negative). This is the depth every island's shore profile was tuned against.")]
         public float seabedDepth = -12f;
         [Tooltip("Open-ocean floor height, metres (negative). Must be deeper than the deepest storm trough, or the sea clips through the seafloor.")]

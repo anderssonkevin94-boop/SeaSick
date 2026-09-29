@@ -182,6 +182,7 @@ namespace SeaSick.Terrain
             // start of a world or the look probes frame an island from the
             // PREVIOUS run.
             IslandScenery.Report.Clear();
+            IslandFind.ResetForPlay();   // same reason: finds and the taken list are statics
 
             Vector3 home = homePoint != null ? homePoint.position : Vector3.zero;
             phase = "discover";
@@ -465,6 +466,7 @@ namespace SeaSick.Terrain
             if (shelterOnly)
             {
                 island.Configure("—", 0f, meanR, false, false);
+                PlaceFind(root.transform, island, outline, beach, ring);
                 QueueDress(root.transform, meanR, island, index);
                 return island;
             }
@@ -587,6 +589,45 @@ namespace SeaSick.Terrain
 
         void QueueDress(Transform parent, float meanR, Island island, int index) =>
             dressNext = new DressJob { parent = parent, meanR = meanR, island = island, index = index };
+
+        /// **The one thing a shelter-only island is worth sailing to.** Puts an
+        /// `IslandFind` on a beach just above the waterline. Uses NO `Random`:
+        /// the build's seeded sequence must stay exactly what it was (same
+        /// seed, same islands), and the find's kind has to be stable across
+        /// loads, so everything here is a hash of the island centre.
+        void PlaceFind(Transform parent, Island island, float[] outline, bool[] beach, float ring)
+        {
+            Vector3 c = island.transform.position;
+            uint h = IslandFind.HashCentre(c);
+
+            // The first landable bearing from a hashed starting sector (any
+            // bearing if none is landable), marched inland from its waterline
+            // to the first ground clear of the wave band.
+            int sectors = outline.Length, s = (int)(h % (uint)sectors);
+            for (int k = 0; k < sectors; k++)
+                if (beach[(s + k) % sectors]) { s = (s + k) % sectors; break; }
+            float ang = s / (float)sectors * Mathf.PI * 2f;
+            float sin = Mathf.Sin(ang), cos = Mathf.Cos(ang);
+            float floor = terrain.seaLevel + 1.5f;
+
+            Vector3 best = new Vector3(c.x, Height(c.x, c.z), c.z);   // the centre if the shore is all low
+            for (float d = outline[s] - 1f; d > 0f; d -= 1f)
+            {
+                float x = c.x + sin * d, z = c.z + cos * d, y = Height(x, z);
+                if (y >= floor) { best = new Vector3(x, y, z); break; }
+            }
+
+            // Which resource a cache holds is PickKind's ring rule, hashed
+            // instead of rolled: the ring's best kind 65% of the time, else
+            // any kind the ring unlocks.
+            int top = 0;
+            for (int i = 0; i < world.kinds.Length; i++)
+                if (ring >= world.kinds[i].minRing) top = i;
+            int pick = (h >> 8) % 100u < 65u ? top : (int)((h >> 16) % (uint)(top + 1));
+
+            IslandFind.Spawn(parent, island, best, ring, world.kinds[pick].name,
+                             world.findCacheShare, world.findCollectRadius);
+        }
 
         WorldSettings.ResourceKind PickKind(float ring)
         {

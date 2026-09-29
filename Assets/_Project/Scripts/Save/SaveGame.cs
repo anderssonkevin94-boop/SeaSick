@@ -330,6 +330,7 @@ namespace SeaSick.Save
             // the player has already explored with a chart that says they
             // have not.
             d.seen = Discovery.Capture();
+            d.takenFinds = IslandFind.Capture();
             UI.Sheets.ChartData.CaptureTrack(d.trackX, d.trackZ, d.trackAt);
             return d;
         }
@@ -362,6 +363,7 @@ namespace SeaSick.Save
                 // refusal. Bumping would have thrown away Kevin's saves to
                 // add a drawing.
                 if (d.seen == null) d.seen = new List<SeenSave>();
+                if (d.takenFinds == null) d.takenFinds = new List<FindTakenSave>();
                 if (d.ship.modular == null) d.ship.modular = "";
                 if (d.ship.dryDock == null) d.ship.dryDock = "";
                 if (d.slotDisplayName == null) d.slotDisplayName = "";
@@ -449,6 +451,7 @@ namespace SeaSick.Save
             // track is aged against the clock that was just scrubbed, so it
             // has to come after the scrub and not before it.
             Discovery.Apply(data.seen);
+            IslandFind.Apply(data.takenFinds);   // the world is built by now; remove finds already taken
             UI.Sheets.ChartData.RestoreTrack(data.trackX, data.trackZ, data.trackAt);
 
             // 2. The ship. `Apply` is the free path every probe uses; the

@@ -13,6 +13,9 @@ MonoBehaviour:
   m_Name: TerrainSettings
   m_EditorClassIdentifier: Assembly-CSharp::SeaSick.Terrain.TerrainSettings
   seed: 1337
+  graphicArtPalette: 0
+  storybookLandforms: 0
+  individualTrees: 0
   seaLevel: 0
   worldRadius: 0
   worldEdgeFalloff: 500
@@ -44,14 +47,20 @@ MonoBehaviour:
   gain: 0.5
   erosion: 2
   erosionAmount: 1
-  maskFrequency: 0.00143
+  maskFrequency: 0.00125
   maskOctaves: 3
   landRatio: 0.12
   maskFalloff: 0.16
-  maskStretch: 2
+  maskStretch: 1.7
   maskGrainAngle: 34
   maskWarp: 190
   maskWarpFrequency: 0.0009090909
+  regionalGrain: 1
+  grainRegionFrequency: 0.00038461538
+  grainBlendDegrees: 25
+  nearIslandScale: 1.6
+  nearIslandRadius: 900
+  farIslandRadius: 2200
   seabedDepth: -12
   deepSeabedDepth: -180
   shelfBand: 0.12

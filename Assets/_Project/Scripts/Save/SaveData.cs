@@ -69,6 +69,12 @@ namespace SeaSick.Save
         /// See `SeaSick.World.Discovery`.
         public List<SeenSave> seen = new List<SeenSave>();
 
+        /// **Island finds already collected** (`SeaSick.World.IslandFind`), as
+        /// the find's own (x, z); matched to a find within 25 m on load. Added
+        /// after version 1 shipped, deliberately NOT a version bump, same
+        /// reasoning as `seen`: an old save has taken nothing yet.
+        public List<FindTakenSave> takenFinds = new List<FindTakenSave>();
+
         /// **The ship's wake**, as three parallel lists — the same shape
         /// `OutpostLedger.Absence` uses, and for the same reason:
         /// `JsonUtility` will not serialize a dictionary or a `Vector2`
