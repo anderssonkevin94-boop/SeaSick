@@ -876,7 +876,7 @@ namespace SeaSick.UI.Sheets
         }
 
         /// "Set as goal": this building's next level becomes the camp's
-        /// goal (the overview and the goal bar chase it); a second tap
+        /// goal (the overview and the Next card chase it); a second tap
         /// clears it back to the fire.
         void TogglePin()
         {
@@ -1241,7 +1241,7 @@ namespace SeaSick.UI.Sheets
             readonly VisualElement cost;
             readonly Button btn;
             /// "Set as goal" (GoalPin): shown while the upgrade cannot be
-            /// paid, so the camp overview and the goal bar can chase it.
+            /// paid, so the camp overview and the Next card can chase it.
             readonly Button pinBtn;
             readonly List<(Label label, string res, int n)> lines = new List<(Label, string, int)>();
             int builtLevel = -1;

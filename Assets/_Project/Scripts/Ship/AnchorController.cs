@@ -1159,6 +1159,9 @@ namespace SeaSick.Ship
                 return;
             }
             if (camp.HasCamp || camp.Building) return;
+            // The Next card's step 1 ("Make camp", island UI phase 2) is the
+            // way to the fire while it shows; this row is only the fallback.
+            if (SeaSick.UI.Sheets.NextCard.Visible) return;
             var r = stack.Next(bh);
             UIBlocker.Block(r);
             if (GUI.Button(r, MakeCampLabel, buttonStyle))

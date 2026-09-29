@@ -32,7 +32,6 @@ namespace SeaSick.UI.Sheets
         readonly BuildingStatusLabels buildingStatus;
         readonly CampStatusHud campStatus;
         readonly AlertStrip alerts;
-        readonly GoalBar goalBar;
         readonly LedgerDrawer ledgerDrawer;
         float nextUpdate;
 
@@ -82,7 +81,9 @@ namespace SeaSick.UI.Sheets
             buildingStatus = new BuildingStatusLabels(root);
             campStatus = new CampStatusHud(root);
             alerts = new AlertStrip(root);
-            goalBar = new GoalBar(root);
+            // **No GoalBar since 2026-09-30** (island UI phase 2): a pinned
+            // goal is the Next card's "YOUR GOAL" above the thumb bar
+            // (`NextCard`); the pin itself (`GoalPin`) is unchanged.
             // **No ☰ since 2026-09-30** (island UI restructure 1A): the top
             // bar is status only, and the ledger drawer opens from the thumb
             // bar's Camp button at the bottom (`ThumbBar`). Added last, so
@@ -123,7 +124,7 @@ namespace SeaSick.UI.Sheets
             {
                 NavigationRect = ResourcesRect = Rect.zero;
                 campStatus.Tick(Camp, false, SheetHost.PanelScale);
-                buildingStatus.Hide(); alerts.Hide(); goalBar.Hide(); return;
+                buildingStatus.Hide(); alerts.Hide(); return;
             }
             float scale = SheetHost.PanelScale;
             var safe = Screen.safeArea;
@@ -136,10 +137,6 @@ namespace SeaSick.UI.Sheets
             // The top chrome: the bar, plus the strip while it
             // has a chip up (an empty strip must not eat world taps).
             float chrome = BarHeight + (AlertStrip.Showing ? 6f + AlertStrip.Height : 0f);
-            // The pinned goal's slim bar (GoalBar): under the strip, or in
-            // its slot when the strip is empty.
-            float goalH = goalBar.Place(Camp, left, right, topY + BarHeight + 6f);
-            if (goalH > 0f) chrome += AlertStrip.Showing ? goalH : 6f + goalH;
             ResourcesRect = new Rect(safe.xMin + 8f / scale, Screen.height - safe.yMax + 8f / scale,
                 safe.width - 16f / scale, chrome / scale);
             // No bottom nav: a zero-height line at the foot of the safe area,
@@ -149,14 +146,12 @@ namespace SeaSick.UI.Sheets
                 safe.width - 16f / scale, 0f);
             var statusRect = campStatus.Tick(Camp, true, scale);
             if (statusRect.height > 0f) NavigationRect = statusRect;
-            // The IMGUI HUD keeps off the food notice AND the thumb bar.
+            // The IMGUI HUD keeps off the food notice, the thumb bar AND
+            // the Next card above it.
             if (!SheetHost.FrameOpen)
             {
-                var claim = NavigationRect;
-                var bar = ThumbBar.Rect;
-                if (bar.height > 0f)
-                    claim = Rect.MinMaxRect(Mathf.Min(claim.xMin, bar.xMin), Mathf.Min(claim.yMin, bar.yMin),
-                        Mathf.Max(claim.xMax, bar.xMax), Mathf.Max(claim.yMax, bar.yMax));
+                var claim = Union(NavigationRect, ThumbBar.Rect);
+                claim = Union(claim, NextCard.Rect);
                 HudLayout.ClaimSheet(claim);
             }
             buildingStatus.Tick(Camp, scale);
@@ -187,6 +182,10 @@ namespace SeaSick.UI.Sheets
                 + (trend > Flat ? "; rising" : trend < -Flat ? "; falling" : "; steady") + " at the current rate";
             day.text = "Day " + TimeOfDay.Day;
         }
+
+        static Rect Union(Rect a, Rect b) => b.height <= 0f ? a
+            : Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin),
+                Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax));
 
         internal static string CompactCount(int count) => count < 1000 ? count.ToString()
             : count < 1000000 ? (count / 1000f).ToString("0.#") + "k" : (count / 1000000f).ToString("0.#") + "m";

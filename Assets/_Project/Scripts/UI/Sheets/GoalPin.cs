@@ -7,7 +7,7 @@ namespace SeaSick.UI.Sheets
     /// door every "Set as goal" button goes through -- the station page's
     /// upgrade card today, the build list's cards next. The goal lives in
     /// the camp's ledger (`OutpostLedger.pinnedGoal`, saved with it); the
-    /// camp overview and the goal bar under the alert strip read it through
+    /// camp overview and the Next card above the thumb bar ("YOUR GOAL") read it through
     /// `GoalChain.ForCamp`.
     public static class GoalPin
     {

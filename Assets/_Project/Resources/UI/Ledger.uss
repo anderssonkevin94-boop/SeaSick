@@ -32,24 +32,12 @@
 .ledger-chip--warn { background-color: rgb(42, 36, 21); border-color: rgb(201, 147, 57); color: rgb(240, 195, 106); }
 .ledger-chip--warn:hover { background-color: rgb(58, 50, 28); }
 
-/* ---------------- pinned goal bar (GoalBar.cs) ---------------- */
-.ledger-goal {
-    position: absolute; height: 28px; margin: 0; padding: 0 12px; overflow: hidden;
-    flex-direction: row; align-items: center;
-    background-color: rgb(19, 34, 46); border-width: 1.5px; border-color: rgb(44, 74, 94); border-radius: 14px;
+/* "+N" after the one alert chip: the rest live in Camp (AlertStrip.cs). */
+.ledger-chip--more {
+    min-width: 44px; background-color: rgb(19, 34, 46); border-color: rgb(44, 74, 94); color: rgb(232, 242, 246);
+    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Black.ttf");
 }
-.ledger-goal:hover { background-color: rgb(32, 57, 72); }
-.ledger-goal--ready { border-color: rgb(159, 224, 194); }
-.ledger-goal-track {
-    position: absolute; left: 0; bottom: 0; right: 0; height: 3px; background-color: rgb(11, 22, 32);
-}
-.ledger-goal-fill { height: 3px; width: 0; background-color: rgb(164, 210, 232); }
-.ledger-goal--ready .ledger-goal-fill { background-color: rgb(159, 224, 194); }
-.ledger-goal-text {
-    flex-grow: 1; flex-shrink: 1; min-width: 0; margin: 0; padding: 0;
-    font-size: 13px; color: rgb(232, 242, 246); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    -unity-font-definition: url("project://database/Assets/_Project/Art/Fonts/Nunito-Bold.ttf");
-}
+.ledger-chip--more:hover { background-color: rgb(32, 57, 72); }
 
 /* ---------------- drawer ---------------- */
 .ledger-layer {

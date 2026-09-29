@@ -257,6 +257,18 @@ Future levels (III, IV) stay unused and unpaid until they are designed.
 
 The **player** sees recipes through a station sheet — pick a recipe, place an order (a count, or repeat until stopped), watch the bay fill from storage, watch the hands work, watch the output land on the rack and move to storage. The sheet names what is locked and why, so the player reads the ladder forward: *"I need a spear to hunt, I need a blacksmith to make one, I need boards and stone first."*
 
+### Island UI structure (2026-09-30)
+Approved blueprint (Kevin, 2026-09-30): a new structure on the existing UI Toolkit sheet engine, phone portrait and one thumb first. Phase 1 (thumb bar, one-strip Build, labelled placing) and phase 2 (the Next card and the goal chain) are built; phases 3-6 follow, each on the phone before the next.
+
+**Layers, one job each.** *Top bar* = how are we doing (backpack · mood · working/total · food days with trend · day); a tap explains a number, never hides an action. *World* = the things themselves; tap a building, hand, blueprint or the ship to open its sheet; no icons over world objects. *Bottom (thumb)* = what can I do: the **Next card** above **Camp · Build · Ship**, the only always-on controls. *Sheets* = one topic each, one main action in the thumb row. The alert strip under the top bar shows ONE chip plus "+N" (the rest live in Camp); an alert the Next card already shows is not repeated there.
+
+**The 10 rules (condensed).** 1 One main action per sheet, in the thumb row. 2 Every problem shows its fix as a button. 3 One home per topic; others link, never copy. 4 Information only where it is acted on. 5 Controls in the bottom 40 %; the top is for reading. 6 Always a way out: every mode has a labelled Cancel. 7 Teach by doing: the Next card is the tutorial, each step is the real action. 8 The ladder is visible: locked things say what unlocks them; NEW badges once. 9 Same words everywhere (hand; Assign, Build, Gather, Raise). 10 Short is still placeable: an unaffordable blueprint can be placed, and idle hands gather what is missing.
+
+**The Next card** (`UI/Sheets/NextCard.cs`): one card directly above the thumb bar, the whole card one button. It shows, in order: a pinned goal ("YOUR GOAL", `GoalPin`; replaces the old GoalBar) while incomplete; else the first open goal-chain step ("NEXT · STEP n OF m"); else the most urgent camp alert ("NEEDS YOU", its fix the tap); else nothing (no filler). Hidden while a sheet, the Camp drawer or placement is up. Before a camp exists it stands alone in the bar's slot as step 1.
+
+**The goal chain** (`UI/Sheets/GoalChainSteps.cs`, one data list): derived from the save every refresh, never scripted by time. The first step whose done test fails is current; done steps and steps whose building is locked at this fire are skipped, so an old save lands on the right step. Tapping the card performs the step (build steps open Build with the plan marked GOAL; a placed blueprint shows its progress and opens its site).
+1. Make camp (place the campfire). 2. Build a hut. 3. Grow food (a farm or fishing hut, manned). 4. Build a store hut. 5. Build a sawmill. 6. Give the sawmill a worker. 7. Make boards. 8. Build a forge. 9. Make a stone spear. 10. Send a hunter. 11. Raise the fire to II (20 boards · 12 stone · 4 hide). Then: the most urgent alert.
+
 ## 7. MVP milestone list
 Each milestone is a committable, testable slice. Sailing first; work backward.
 

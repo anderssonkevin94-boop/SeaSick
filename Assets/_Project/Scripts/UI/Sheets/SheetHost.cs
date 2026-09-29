@@ -55,6 +55,7 @@ namespace SeaSick.UI.Sheets
         MidnightLandHud land;
         SeaLedger sea;
         ThumbBar.View thumb;
+        NextCard.View nextCard;
         bool midnight;
         readonly BuildingSheetFocus buildingFocus = new BuildingSheetFocus();
 
@@ -147,6 +148,9 @@ namespace SeaSick.UI.Sheets
             // The thumb bar last of all: it draws over the ledger drawer's
             // scrim, so Camp still closes the drawer it opened.
             thumb = new ThumbBar.View(root);
+            // The Next card (phase 2) after the bar: it sits above it, in
+            // the same lane.
+            nextCard = new NextCard.View(root);
             if (ring == null) ring = gameObject.AddComponent<SelectionRing>();
             chromeBuilt = true;
         }
@@ -707,11 +711,16 @@ namespace SeaSick.UI.Sheets
             // Placement uses the land panel's scale too, so the thumb bar is
             // the same 74 pt when the first campfire is placed at an island
             // that has no camp (and so no land HUD) yet.
-            runtimePanel.referenceResolution = (MidnightLandHud.Active || ThumbBar.PlacementActive) && !HudLayout.Wide
+            // So is the Next card's lone "Make camp" at an island with no camp.
+            runtimePanel.referenceResolution = (MidnightLandHud.Active || ThumbBar.PlacementActive
+                                                || NextCard.NoCampShowing) && !HudLayout.Wide
                 ? new Vector2Int(430, 932) : originalResolution;
             // Before the land HUD: the food notice and the ledger drawer
             // stack on this frame's `ThumbBar.ReservePanel`.
             thumb.Tick(root);
+            // After the bar (its lane, its reserve), before the land HUD
+            // (whose IMGUI claim and food notice read the card's).
+            nextCard.Tick(root);
             land.Tick(root);
             sea.Tick(root);
             var panelSize = new Vector2(root.resolvedStyle.width, root.resolvedStyle.height);

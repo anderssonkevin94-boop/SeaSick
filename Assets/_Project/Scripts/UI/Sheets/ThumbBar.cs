@@ -56,9 +56,44 @@ namespace SeaSick.UI.Sheets
         /// puts its `bottom`. Zero while hidden.
         public static float ReservePanel { get; private set; }
 
-        /// Does a GUI-space point land on the bar or the placement card?
+        /// Does a GUI-space point land on the bar, the placement card, or
+        /// the Next card above the bar (`NextCard`, phase 2)?
         public static bool Blocks(Vector2 guiPoint) =>
-            Rect.Contains(guiPoint) || CardRect.Contains(guiPoint);
+            Rect.Contains(guiPoint) || CardRect.Contains(guiPoint) || NextCard.Blocks(guiPoint);
+
+        /// Something stacked on the bar (the Next card) raises the reserve
+        /// so the food notice and the ledger drawer sit above it too. Called
+        /// after the bar's own tick, the same frame.
+        internal static void RaiseReserve(float panelUnits)
+        {
+            if (panelUnits > ReservePanel) ReservePanel = panelUnits;
+        }
+
+        /// **The bar's lane**, in panel units: the left edge and width of
+        /// its buttons (the 12-unit margins already taken) and its bottom.
+        /// Shared with `NextCard`, which sits in the same lane above it --
+        /// or in the bar's own slot when there is no camp and so no bar.
+        internal static void Lane(VisualElement root, out float left, out float width, out float bottom)
+        {
+            float scale = SheetHost.PanelScale;
+            float W = root.resolvedStyle.width;
+            if (float.IsNaN(W) || W < 1f) W = Screen.width * scale;
+            var safe = Screen.safeArea;
+            if (safe.width < 1f || safe.height < 1f) safe = new Rect(0f, 0f, Screen.width, Screen.height);
+            float sl = safe.xMin * scale, sr = (Screen.width - safe.xMax) * scale;
+            float sb = safe.yMin * scale;
+            if (HudLayout.Wide)
+            {
+                width = Mathf.Min(MaxWide, W - sl - sr - Side * 2f);
+                left = (W - width) * .5f;
+            }
+            else
+            {
+                left = sl + Side;
+                width = W - sl - sr - Side * 2f;
+            }
+            bottom = sb + BottomGap;
+        }
 
         static string title = "", hint = "", status = "", confirmLabel = "Build here";
         static bool statusOk = true, canConfirm = true;
@@ -241,25 +276,10 @@ namespace SeaSick.UI.Sheets
                 if (!placing) camp.EnableInClassList("thumb-btn--on", LedgerDrawer.IsOpen);
 
                 float scale = SheetHost.PanelScale;
-                float W = root.resolvedStyle.width;
-                if (float.IsNaN(W) || W < 1f) W = Screen.width * scale;
                 var safe = Screen.safeArea;
                 if (safe.width < 1f || safe.height < 1f) safe = new Rect(0f, 0f, Screen.width, Screen.height);
-                float sl = safe.xMin * scale, sr = (Screen.width - safe.xMax) * scale;
-                float sb = safe.yMin * scale, st = (Screen.height - safe.yMax) * scale;
-
-                float left, width;
-                if (HudLayout.Wide)
-                {
-                    width = Mathf.Min(MaxWide, W - sl - sr - Side * 2f);
-                    left = (W - width) * .5f;
-                }
-                else
-                {
-                    left = sl + Side;
-                    width = W - sl - sr - Side * 2f;
-                }
-                float bottom = sb + BottomGap;
+                float st = (Screen.height - safe.yMax) * scale;
+                Lane(root, out float left, out float width, out float bottom);
                 // The buttons carry 4 units of side margin each, so the row
                 // is widened by that much and the outer buttons still meet
                 // the 12-unit margin.
@@ -276,7 +296,7 @@ namespace SeaSick.UI.Sheets
                 if (!placing) { CardRect = Rect.zero; return; }
 
                 // The card: under the status bar, the alert strip and the
-                // goal bar when the land HUD is up (all in ResourcesRect), or
+                // rest of the top chrome when the land HUD is up (all in ResourcesRect), or
                 // under the safe top when there is no camp yet.
                 float top = st + 8f;
                 if (MidnightLandHud.Active && MidnightLandHud.ResourcesRect.height > 0f)
@@ -317,10 +337,10 @@ namespace SeaSick.UI.Sheets
 
         /// **The bar's pictograms**, stroked like `HudGlyph` / `LandIcon`
         /// (no font glyphs, no emoji -- Kevin): a tent, a hammer, a ship,
-        /// and the placement trio ✕ ↻ ✓. A 24-unit grid.
+        /// the placement trio ✕ ↻ ✓, and the Next card's chevron. A 24-unit grid.
         internal sealed class Glyph : VisualElement
         {
-            public enum Kind { Camp, Build, Ship, Cancel, Turn, Confirm }
+            public enum Kind { Camp, Build, Ship, Cancel, Turn, Confirm, Chevron }
 
             readonly Kind kind;
             Color tint = MidnightLandHud.Pearl;
@@ -395,6 +415,11 @@ namespace SeaSick.UI.Sheets
                     case Kind.Confirm:
                         p.lineWidth = 2.8f * s;
                         p.BeginPath(); p.MoveTo(V(5, 12.5f)); p.LineTo(V(10, 17.5f)); p.LineTo(V(19, 7)); p.Stroke();
+                        break;
+                    case Kind.Chevron:
+                        // The Next card's "go": a heavy right chevron.
+                        p.lineWidth = 3.2f * s;
+                        p.BeginPath(); p.MoveTo(V(9, 5)); p.LineTo(V(16, 12)); p.LineTo(V(9, 19)); p.Stroke();
                         break;
                 }
             }
