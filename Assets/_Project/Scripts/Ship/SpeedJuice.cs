@@ -166,19 +166,6 @@ namespace SeaSick.Ship
             // Solid, lit foam. Translucent billboards read as grey squares over
             // dark water; opaque chunks that catch the sun read as real spray
             // and thrown water. These shrink away instead of fading out.
-            var solid = new Material(Shader.Find("Universal Render Pipeline/Particles/Lit"));
-            solid.SetColor("_BaseColor", new Color(0.97f, 0.99f, 1f, 1f));
-            solid.SetFloat("_Smoothness", 0.35f);
-            // Opaque cannot fade, but it CAN be clipped to a disc. Without
-            // this the bursts are square, which went unnoticed while they were
-            // small, bright and lit by a strong sun — and filled the screen
-            // with grey cardboard the moment the storm sea started throwing
-            // them in numbers under a dark sky.
-            solid.SetTexture("_BaseMap", SeaSick.Ocean.FoamTexture.SoftPuff());
-            solid.SetFloat("_AlphaClip", 1f);
-            solid.SetFloat("_Cutoff", 0.45f);
-            solid.EnableKeyword("_ALPHATEST_ON");
-
             // The long wake still fades, so it dissolves into the sea rather
             // than popping out of existence behind you.
             var mat = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
@@ -191,11 +178,12 @@ namespace SeaSick.Ship
             mat.SetInt("_ZWrite", 0);
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             mat.renderQueue = 3000;
+            var solid = mat; // Soft, fading water spray rather than opaque discs.
 
             // Positions are placed by `ApplyRig` at the end of Start, off the
             // hull she is actually wearing; Vector3.zero here is a placeholder.
             bowSpray = MakeSystem("BowSpray", Vector3.zero, solid, size: 0.5f,
-                speed: 5.5f, spreadAngle: 62f, lifetime: 1.0f, gravity: 1.3f, solidFoam: true);
+                speed: 5.5f, spreadAngle: 62f, lifetime: 1.0f, gravity: 1.3f, solidFoam: false);
             wake = MakeSystem("WakeFoam", Vector3.zero, mat, size: 0.8f,
                 speed: 1.0f, spreadAngle: 42f, lifetime: 5.5f, gravity: 0f, solidFoam: false);
 
@@ -203,23 +191,23 @@ namespace SeaSick.Ship
             // the shoulders rather than straight back. Solid — this is the
             // water being displaced, and it should look like it has mass.
             shoulderPort = MakeSystem("ShoulderPort", Vector3.zero, solid,
-                size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: true);
+                size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: false);
             shoulderStar = MakeSystem("ShoulderStar", Vector3.zero, solid,
-                size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: true);
+                size: 1f, speed: 2.4f, spreadAngle: 34f, lifetime: 2.6f, gravity: 0.25f, solidFoam: false);
             shoulderPort.transform.localRotation = Quaternion.Euler(-8f, -118f, 0f);
             shoulderStar.transform.localRotation = Quaternion.Euler(-8f, 118f, 0f);
 
             // Seas breaking against the beam — burst-emitted on impact rather
             // than streamed, thrown up and outboard.
             beamPort = MakeSystem("BeamSprayPort", Vector3.zero, solid,
-                size: 0.7f, speed: 7f, spreadAngle: 40f, lifetime: 1.3f, gravity: 1.6f, solidFoam: true);
+                size: 0.7f, speed: 7f, spreadAngle: 40f, lifetime: 1.3f, gravity: 1.6f, solidFoam: false);
             beamStar = MakeSystem("BeamSprayStar", Vector3.zero, solid,
-                size: 0.7f, speed: 7f, spreadAngle: 40f, lifetime: 1.3f, gravity: 1.6f, solidFoam: true);
+                size: 0.7f, speed: 7f, spreadAngle: 40f, lifetime: 1.3f, gravity: 1.6f, solidFoam: false);
 
             // Churn right under the transom — solid, close in, short-lived.
             sternWash = MakeSystem("SternWash", Vector3.zero, solid,
-                size: 0.7f, speed: 1.6f, spreadAngle: 55f, lifetime: 1.8f, gravity: 0.15f,
-                solidFoam: true);
+                size: 0.38f, speed: 1.1f, spreadAngle: 55f, lifetime: 0.85f, gravity: 0.15f,
+                solidFoam: false);
 
             // The diverging wake arms, emitted from the bow shoulders where the
             // hull first parts the water. Translucent so they dissolve into the

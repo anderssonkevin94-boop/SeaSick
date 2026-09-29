@@ -44,8 +44,8 @@ Material:
     - _PeakMaskScale: 0.55
     - _ReflectionStrength: 0.09
     - _RefractStrength: 0.22
-    - _ShoalDepth: 12.6
-    - _ShoalStrength: 0.58
+    - _ShoalDepth: 20
+    - _ShoalStrength: 0.36
     - _SpecPowerFar: 60
     - _SpecPowerNear: 160
     - _SpecStrength: 0
@@ -60,7 +60,7 @@ Material:
     - _LightColor: {r: 0.24999997, g: 0.54999995, b: 0.6, a: 1}
     - _MurkExtinction: {r: 4.55, g: 1.81, b: 1.57, a: 1}
     - _ShallowColor: {r: 0.09, g: 0.49, b: 0.74, a: 1}
-    - _ShoalColor: {r: 0.065, g: 0.64, b: 0.6, a: 1}
+    - _ShoalColor: {r: 0.075, g: 0.51, b: 0.58, a: 1}
     - _StormDeep: {r: 0.035, g: 0.07, b: 0.16, a: 1}
     - _StormShallow: {r: 0.07, g: 0.18, b: 0.28, a: 1}
     - _StormSubsurface: {r: 0.08, g: 0.3, b: 0.34, a: 1}

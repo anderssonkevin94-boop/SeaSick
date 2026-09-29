@@ -70,6 +70,7 @@ Shader "SeaSick/Terrain Vertex Color"
                 float _ShadowReceiverOffset;
             CBUFFER_END
 
+            float _SS_Night;
             // Every island's painted ground: one slice each, and a coarse
             // world index (point-sampled, value = slice + 1) saying which
             // slice covers a spot. See NatureGroundAtlas.cs.
@@ -81,7 +82,7 @@ Shader "SeaSick/Terrain Vertex Color"
             float4 _IslandNatureBoundsArr[128];
             float _IslandNatureEnabled;
             // Colour D cream sandstone, linear (sRGB ~ HSV 39 deg, s .22, v .80).
-            #define SANDSTONE float3(.604,.504,.348)
+            #define SANDSTONE float3(.56,.53,.45)
 
             // --- procedural value noise -------------------------------------
             float hash13(float3 p)
@@ -174,8 +175,8 @@ Shader "SeaSick/Terrain Vertex Color"
                     n = normalize(lerp(n, face, rockMask * _AuthoredFormLighting));
                     // Colour D (2026-09-27): warm yellow-green meadow, one
                     // cream sandstone for every stone surface.
-                    float3 meadow = float3(.20,.40,.055);
-                    float3 sand = float3(.78,.61,.33);
+                    float3 meadow = float3(.15,.34,.075);
+                    float3 sand = float3(.76,.63,.40);
                     float3 rock = SANDSTONE;
                     albedo = lerp(lerp(sand,meadow,grassMask),rock,rockMask) * _Tint.rgb;
                 }
@@ -286,6 +287,9 @@ Shader "SeaSick/Terrain Vertex Color"
                     albedo *= 1.0 + (c - 0.5) * 2.0 * _DetailStrength * fade * rocky;
                 }
 
+                // Preserve bark and sand; separate living greens from their warm surroundings.
+                float leafColor = smoothstep(.018,.065,albedo.g-albedo.r);
+                albedo *= lerp(float3(1,1,1),float3(.90,1.02,1.10),leafColor);
                 float4 shadowCoord = TransformWorldToShadowCoord(i.positionWS+n*_ShadowReceiverOffset);
                 Light light = GetMainLight(shadowCoord);
                 float ndl = saturate(dot(n, light.direction));
@@ -316,9 +320,9 @@ Shader "SeaSick/Terrain Vertex Color"
                 float authoredLow = smoothstep(.27-edge, .27+edge, authoredSun);
                 float authoredMid = smoothstep(.60-edge, .60+edge, authoredSun);
                 float authoredHigh = smoothstep(.82-edge, .82+edge, authoredSun);
-                // Colour D: warm shadow bands (were blue 0.30,0.42,0.85).
-                float3 authoredShadow = float3(0.56, 0.47, 0.45);
-                float3 authoredMidTint = float3(0.80, 0.75, 0.71);
+                // Cool shadow bands separate stone and foliage from warm sand.
+                float3 authoredShadow = float3(0.43, 0.54, 0.69);
+                float3 authoredMidTint = float3(0.73, 0.79, 0.85);
                 float3 authoredSunTint = float3(1.04, 1.03, 1.0);
                 float3 authoredTint = authoredShadow;
                 authoredTint = lerp(authoredTint, authoredMidTint, authoredLow);
@@ -328,8 +332,11 @@ Shader "SeaSick/Terrain Vertex Color"
                 // term preserves plane-to-plane direction variation inside them.
                 // Keep each painted lighting band uniform.
                 float authoredMask = _AuthoredFormLighting * lerp(0.62, 1.0, saturate(i.color.a));
-                float3 authored = albedo * (max(0,SampleSH(float3(0,1,0))) * float3(.46,.42,.38) + light.color * authoredTint);
+                float3 authored = albedo * (max(0,SampleSH(float3(0,1,0))) * float3(.40,.46,.54) + light.color * authoredTint);
                 col = lerp(col, authored, authoredMask);
+                // Restrained blue moon fill keeps shore faces legible between warm lamps.
+                col += albedo * float3(.018,.032,.058) * saturate(_SS_Night)
+                    * (.35+.65*saturate(n.y*.5+.5));
                 // Point lights: the campfire and the lamps. URP's own falloff
                 // is inverse-square, which lights a fire's stone ring and
                 // nothing past it; a camp has to read from the water, so

@@ -53,6 +53,8 @@ Shader "SeaSick/Crew Vertex Color"
                 float _Ambient;
             CBUFFER_END
 
+            float _SS_Night;
+
             struct Attributes
             {
                 float4 positionOS : POSITION;
@@ -94,7 +96,8 @@ Shader "SeaSick/Crew Vertex Color"
                 Light light = GetMainLight(shadowCoord);
                 float ndl = saturate(dot(n, light.direction));
                 float3 diffuse = light.color * light.shadowAttenuation * ndl;
-                float3 ambient = SampleSH(n) + _Ambient;
+                // Broad cool fill separates linen and skin from the warm timber, preserving sickness tint.
+                float3 ambient = SampleSH(n) + _Ambient + lerp(float3(.07,.09,.12),float3(.025,.045,.075),saturate(_SS_Night));
                 float3 col = albedo * (diffuse + ambient);
                 col = MixFog(col, i.fog);
                 return half4(col, 1);

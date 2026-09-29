@@ -19,15 +19,15 @@ Shader "SeaSick/SurfaceWake"
  half4 Frag(V i):SV_Target {
    float x=abs(i.uv.x);
    float n=Noise(float2(i.uv.x*8,i.uv.y*.65));
-   float fine=Noise(float2(i.uv.x*25,i.uv.y*1.8));
+   float fine=Noise(float2(i.uv.x*12,i.uv.y*4.5));
    float arm=1-smoothstep(.035,.12,abs(x-(.72+.15*(n-.5))));
    float churn=(1-smoothstep(.15,.60,x));
    // Solid graphic shoulders and filled churn patches, matching the
    // approved crest style. The mesh follows the real sampled water.
    float patch=smoothstep(.44,.54,fine);
-   float edge=max(arm*smoothstep(.25,.50,n),churn*patch*.9)-.38;
-   float aa=max(fwidth(edge)*.45,.005);
-   float alpha=smoothstep(-aa,aa,edge)*i.color.a;
+   float edge=max(arm*smoothstep(.25,.50,n)*.22,churn*patch*.8)-.18;
+   float aa=max(fwidth(edge)*.8,.16);
+   float alpha=smoothstep(-aa,aa,edge)*i.color.a*i.color.a*.45;
    clip(alpha-.035);
    Light sun=GetMainLight();
    half3 foam=half3(.82,.91,.91)*(sun.color*.40+.60*lerp(1,_SS_NightBodyDim,saturate(_SS_Night)));

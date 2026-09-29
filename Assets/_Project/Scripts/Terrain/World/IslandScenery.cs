@@ -867,13 +867,18 @@ namespace SeaSick.Terrain
                             if (rPlace < 0.006 * clump * shoreRock)
                             {
                                 var tp = cliffTp[(int)(rA * cliffTp.Length) % cliffTp.Length];
-                                float above = (terrain.graphicArtPalette ? 4f + 6f * rB : 5f + 13f * rB) * cragScale;
+                                float above = (terrain.graphicArtPalette ? 3.5f + 4.5f * rB : 4f + 8f * rB) * cragScale;
                                 float hgt = above - h3;                 // it has to reach the seabed
-                                float w = (terrain.graphicArtPalette ? 4.5f + 5f * rC : 2.6f + 4.4f * rC) * cragScale;
+                                float w = (terrain.graphicArtPalette ? 6f + 6f * rC : 4.5f + 5f * rC) * cragScale;
                                 var cb = CellFor(wx3, wz3);
                                 var rot = Quaternion.Euler((rA - 0.5f) * 16f, rYaw3 * 360f, (rB - 0.5f) * 14f);
-                                var at3 = new Vector3(wx3, h3 + hgt * 0.34f, wz3);
-                                StampBoth(cb, tp, tp, at3, rot, new Vector3(w, hgt, w * (0.7f + 0.5f * rC)));
+                                // Anchor the actual rotated mesh crown, not an assumed template pivot.
+                                // Deep seabeds otherwise lift a stretched shard tens of metres above its intended top.
+                                var stackScale = new Vector3(w, hgt, w * (0.7f + 0.5f * rC));
+                                float crown = float.NegativeInfinity;
+                                foreach (var vertex in tp.v) crown = Mathf.Max(crown, (rot * Vector3.Scale(vertex, stackScale)).y);
+                                var at3 = new Vector3(wx3, Mathf.Min(above, 12f) - crown, wz3);
+                                StampBoth(cb, tp, tp, at3, rot, stackScale);
                                 cb.Grow(new Vector3(wx3, h3, wz3), w, hgt);
                                 stacks++; cliffs++;
                             }

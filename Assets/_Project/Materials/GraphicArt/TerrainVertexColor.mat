@@ -19,25 +19,26 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties:
+  m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
     - _AuthoredFormLighting: 1
-    - _PaintedSurface: 1
-    - _PaintStudy: 0
     - _CrispTerrain: 1
     - _DetailFade: 260
     - _DetailScale: 3.5
     - _DetailStrength: 0
     - _GraphicLight: 0.8
     - _NormalStrength: 0
+    - _PaintStudy: 0
+    - _PaintedSurface: 1
     - _SandLine: 4.3
+    - _ShadowReceiverOffset: 0
     - _StriationStrength: 0
     m_Colors:
-    - _ShadowTint: {r: 0.8, g: 0.68, b: 0.58, a: 1}
+    - _ShadowTint: {r: 0.57, g: 0.69, b: 0.86, a: 1}
     - _Tint: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

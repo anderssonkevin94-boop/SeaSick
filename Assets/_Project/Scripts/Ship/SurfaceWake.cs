@@ -55,7 +55,7 @@ namespace SeaSick.Ship
                 float s01=JuiceTuning.Speed01(motor);
                 float turn01=JuiceTuning.Turn01(motor,JuiceTuning.YawRateDeg(body))*Mathf.Sqrt(s01);
                 stamps[0]=new Stamp{point=stern,right=right,born=Time.time,distance=distance,
-                    width=beam*.58f*Mathf.Lerp(.85f,1.2f,s01)*(1+.35f*turn01),speed=speed,speed01=s01,turn01=turn01};
+                    width=beam*.33f*Mathf.Lerp(.85f,1.2f,s01)*(1+.35f*turn01),speed=speed,speed01=s01,turn01=turn01};
                 count=Mathf.Min(count+1,Rows);
             }
             while(count>0&&Time.time-stamps[count-1].born>9)count--;
@@ -69,8 +69,8 @@ namespace SeaSick.Ship
             float widthK=1+.3f*over,spreadK=1+over,solidK=1+.5f*over;
             for(int r=0;r<Rows;r++){
                 var s=stamps[Mathf.Min(r,count-1)];float age=Time.time-s.born;
-                float width=(s.width+age*Mathf.Min(s.speed*.12f,2.5f)*spreadK)*widthK;
-                float alpha=Mathf.Clamp01(age*5+.3f)*Mathf.Clamp01((9-age)/3)*Mathf.Clamp01(s.speed/3)
+                float width=(s.width+age*Mathf.Min(s.speed*.055f,.65f)*spreadK)*widthK;
+                float alpha=Mathf.Clamp01(age*5+.3f)*Mathf.Exp(-age*.7f)*Mathf.Clamp01((7-age)/2)*Mathf.Clamp01(s.speed/3)
                     *Mathf.Lerp(.6f,1f,s.speed01)*(1+.3f*s.turn01);
                 alpha=Mathf.Clamp01(alpha*fade*solidK);
                 for(int c=0;c<Columns;c++){

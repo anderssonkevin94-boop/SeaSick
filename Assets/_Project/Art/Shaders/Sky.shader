@@ -366,8 +366,9 @@ Shader "SeaSick/Sky"
                 float3 nightCloud = lerp(float3(.012,.023,.062),float3(.065,.095,.19),smoothstep(.32,.72,pigment));
                 float moonEdge = pow(saturate(dot(dir,_SS_MoonDir.xyz)),18)*moonUp;
                 nightCloud += float3(.06,.08,.12)*moonEdge*pigment;
-                float3 dayCloud = paintedCloud * lerp(float3(.77,.80,.92),float3(1,1,1),saturate(_SS_SunDir.y*4));
-                float golden = (1-smoothstep(.06,.36,abs(_SS_SunDir.y))) * (1-_Overcast);
+                // Preserve the painted silhouette and shading, removing its baked peach cast at noon.
+                float3 dayCloud = lerp(float3(.36,.45,.61),float3(.97,.965,.93),smoothstep(.15,1.02,pigment));
+                float golden = (1-smoothstep(.04,.23,abs(_SS_SunDir.y))) * (1-_Overcast);
                 float3 warmTop = _SunColor.rgb * float3(1.05,.91,.85);
                 float3 violetBase = float3(.20,.19,.32);
                 float3 sunsetCloud = lerp(violetBase,warmTop,smoothstep(.28,.80,pigment));
