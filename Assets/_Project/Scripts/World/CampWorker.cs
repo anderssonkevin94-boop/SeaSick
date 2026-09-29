@@ -2331,6 +2331,11 @@ namespace SeaSick.World
         /// the climb has the body.
         readonly LadderClimb climb = new LadderClimb();
 
+        /// The work-pad gate's memory for the current walk target
+        /// (`WorkerPad.Gate`, 2026-09-28).
+        Vector3 padFor = new Vector3(1e9f, 0f, 1e9f);
+        bool padStartedOn, padPassed;
+
         bool Walk(Vector3 to, float dt)
         {
             if (climb.Active) { climb.Tick(camp, transform, dt); return false; }
@@ -2340,8 +2345,21 @@ namespace SeaSick.World
             // the bench and racks box the rest of it in. `to` becomes the
             // gate for this step; reaching the gate is never arriving -- the
             // next step walks on to the real target down the lane.
-            bool gated = WorkerPad.Gate(here, to, out Vector3 via);
-            if (gated) to = via;
+            // Once per trip (`padFor`): a new target re-arms the gate and
+            // notes whether he set off from the pad; reaching the gate
+            // spends it, and he goes straight on from there.
+            if ((to - padFor).sqrMagnitude > 0.01f)
+            {
+                padFor = to;
+                padStartedOn = WorkerPad.OnPad(here);
+                padPassed = false;
+            }
+            bool gated = false;
+            if (!padPassed && WorkerPad.Gate(here, to, padStartedOn, out Vector3 via))
+            {
+                if (FlatDistance(here, via) < 0.35f) padPassed = true;
+                else { gated = true; to = via; }
+            }
             Vector3 d = to - here;
             d.y = 0f;
             float dist = d.magnitude;

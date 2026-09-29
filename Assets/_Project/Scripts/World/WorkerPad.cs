@@ -106,7 +106,26 @@ namespace SeaSick.World
         /// **The rear gate.** True with `via` = the approach mark when the
         /// walk `here` -> `to` gets on to (or off) a gated pad from anywhere
         /// but its lane; false (walk straight at `to`) otherwise.
-        public static bool Gate(Vector3 here, Vector3 to, out Vector3 via)
+        /// Is `p` on any real pad's floor?
+        public static bool OnPad(Vector3 p)
+        {
+            for (int i = 0; i < live.Count; i++)
+            {
+                var pad = live[i];
+                if (pad != null && pad.Real && pad.Contains(p, 0f)) return true;
+            }
+            return false;
+        }
+
+        /// **The rear gate, once per trip (2026-09-28, Kevin: the sawyer
+        /// "spazes out").** Entering a pad from outside its lane goes by
+        /// `Worker_Approach`; leaving goes by it too, but only for a walker
+        /// who STARTED this trip on the pad (`startedOn`). The caller stops
+        /// asking once he has reached the gate (`CampWorker.Walk`): the old
+        /// per-frame rule sent a sawyer carrying boards to the front rack
+        /// back to the gate every time his straight line crossed the pad
+        /// again, for ever, and did the same to any hauler passing by.
+        public static bool Gate(Vector3 here, Vector3 to, bool startedOn, out Vector3 via)
         {
             via = to;
             for (int i = 0; i < live.Count; i++)
@@ -118,7 +137,7 @@ namespace SeaSick.World
                 bool lane = pad.InLane(here);
                 Vector3 a = pad.approach.position;
                 if (toOn && !hereOn && !lane) { via = a; return true; }
-                if (!toOn && (hereOn || lane) && FlatDistance(here, a) > Arrive) { via = a; return true; }
+                if (startedOn && !toOn && (hereOn || lane) && FlatDistance(here, a) > Arrive) { via = a; return true; }
             }
             return false;
         }
