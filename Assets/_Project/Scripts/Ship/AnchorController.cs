@@ -371,6 +371,52 @@ namespace SeaSick.Ship
             return true;
         }
 
+        Terrain.TerrainWorldPopulator populator;
+        bool WorldBuilt()
+        {
+            if (populator == null) populator = FindFirstObjectByType<Terrain.TerrainWorldPopulator>();
+            return populator != null && populator.Done && Island.TerrainHeight != null;
+        }
+
+        /// **The new-game start: open water with land in sight.** Rings out
+        /// from the world origin for the first spot that is deep water all
+        /// round (no scraping a shoal on the first frame) and has an island
+        /// 80-400 m off, and faces her at it: the first thing on screen is a
+        /// choice of where to go, not an empty horizon.
+        void StartAtSea()
+        {
+            var h = Island.TerrainHeight;
+            Vector3 best = Vector3.zero; Island aim = null; bool found = false;
+            for (float r = 0f; r <= 1500f && !found; r += 30f)
+            for (int k = 0; k < 16 && !found; k++)
+            {
+                float a = k * Mathf.PI / 8f;
+                var p = new Vector3(Mathf.Sin(a) * r, 0f, Mathf.Cos(a) * r);
+                if (h(p.x, p.z) > -6f) continue;
+                bool open = true;
+                for (int j = 0; j < 8 && open; j++)
+                {
+                    float b = j * Mathf.PI / 4f;
+                    if (h(p.x + Mathf.Sin(b) * 35f, p.z + Mathf.Cos(b) * 35f) > -3f) open = false;
+                }
+                if (!open) continue;
+                Island near = null; float gap = float.MaxValue;
+                foreach (var isle in Island.All)
+                {
+                    if (isle == null) continue;
+                    float g = Island.FlatDistance(isle.transform.position, p) - isle.MaxRadius;
+                    if (g < gap) { gap = g; near = isle; }
+                }
+                if (near == null || gap < 80f || gap > 400f) continue;
+                best = p; aim = near; found = true;
+            }
+            if (!found) { Debug.LogWarning("AnchorController: no open-water start found; staying put"); return; }
+            var to = aim.transform.position - best;
+            float yaw = Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg;
+            SeaSick.Save.SaveGame.Warp(motor, best, yaw);
+            Debug.Log($"AnchorController: new game starts at sea ({best.x:F0},{best.z:F0}) facing {aim.name}");
+        }
+
         void Update()
         {
             float dt = Time.deltaTime;
@@ -392,6 +438,14 @@ namespace SeaSick.Ship
             {
                 startedDocked = true;
                 BerthAtHome(out _);
+            }
+            // **A new game has no home** (Kevin, 2026-09-29: "you choose
+            // yourself which island to settle"). Once the world is built and
+            // there is still no home berth, she starts at sea instead.
+            if (startAtHomeDock && !startedDocked && Dock.Home == null && WorldBuilt())
+            {
+                startedDocked = true;
+                StartAtSea();
             }
 
             SpacebarCommand();

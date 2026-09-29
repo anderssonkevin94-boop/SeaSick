@@ -30,7 +30,10 @@ namespace SeaSick.World
         /// but home is now one outpost among many, not the only one there can
         /// be. Anything asking about the island the ship is AT must use `Of`,
         /// never this.
-        public static Outpost Home { get; private set; }
+        ///
+        /// Derived from the home berth (2026-09-29): the outpost on
+        /// `Island.Home`, so it follows a "make home" and is null until then.
+        public static Outpost Home => Island.Home != null ? Of(Island.Home) : null;
 
         static readonly List<Outpost> all = new List<Outpost>();
         public static IReadOnlyList<Outpost> All => all;
@@ -3302,13 +3305,11 @@ namespace SeaSick.World
         void OnEnable()
         {
             if (!all.Contains(this)) all.Add(this);
-            if (Home == null && IsHome) Home = this;
         }
 
         void OnDisable()
         {
             all.Remove(this);
-            if (Home == this) Home = null;
         }
 
         /// The outpost on this island, or null if there is not one yet. Does

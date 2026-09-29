@@ -28,12 +28,21 @@ namespace SeaSick.World
         [SerializeField] string resourceName = "Timber";
         [SerializeField] float remaining;
         [SerializeField] float radius = 40f;
-        [SerializeField] bool isHome;
 
         public string ResourceName => resourceName;
         public float Remaining => remaining;
         public float Radius => radius;
-        public bool IsHome => isHome;
+        /// **Is this the player's home island?** Not a property of the island
+        /// any more (2026-09-29, Kevin: "remove the 'home' island ... once
+        /// you've built a campfire and a pier/dock you can make it into your
+        /// home island"): it is whichever island the home berth (`Dock.Home`)
+        /// stands on, and there is none until the player names one.
+        public bool IsHome => Home == this;
+
+        /// The island the home berth is on, or null before there is one.
+        /// Set only through `Dock.Home`.
+        public static Island Home { get; private set; }
+        internal static void SetHome(Island isle) => Home = isle;
         public bool HasResources => remaining > 0.5f;
         /// How close the ship must be before the anchor option appears.
         public float AnchorRadius => radius + 30f;
@@ -161,7 +170,6 @@ namespace SeaSick.World
             remaining = amount;
             startingAmount = Mathf.Max(1f, amount);
             radius = islandRadius;
-            isHome = home;
             hasHill = islandHasHill;
         }
 

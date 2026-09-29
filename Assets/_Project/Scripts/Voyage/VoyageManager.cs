@@ -365,7 +365,11 @@ namespace SeaSick.Voyage
 
         void Update()
         {
-            if (ship == null || (homePoint == null && World.Dock.Home == null)) return;
+            // No home berth, no voyage loop: a voyage is home-to-home, and a
+            // new game has no home until the player makes one (2026-09-29).
+            // The old fallback -- "home" = back within 165 m of HomePoint --
+            // went with the pre-made home island.
+            if (ship == null || World.Dock.Home == null) return;
 
             // **A load is not a voyage** (2026-09-26, Kevin: "completed
             // voyage! set sail or build a store house" after every Continue).
@@ -408,12 +412,6 @@ namespace SeaSick.Voyage
                     if (!hasLeftHome && settled && !berthed && off > departureRange)
                         hasLeftHome = true;
                     if (hasLeftHome && berthed) CompleteVoyage();
-                }
-                else
-                {
-                    float home = Flat(ship.transform.position, homePoint.position);
-                    if (!hasLeftHome && home > homeRadius * 1.25f) hasLeftHome = true;
-                    if (hasLeftHome && home < homeRadius) CompleteVoyage();
                 }
             }
             else

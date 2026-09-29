@@ -69,8 +69,9 @@ namespace SeaSick.UI
             if (anchor == null) return;
             if (SheetsHud.SuppressLegacy) return;   // the ship's own sheet carries this while she lies at a camp
             if (SeaSick.UI.Sheets.SeaLedger.IsOpen) return;   // IMGUI draws over the sea drawer; stand aside
-            // Nothing to do at her own pier.
-            if (anchor.AtHomeDock) { armedUntil = -99f; return; }
+            // Nothing to do at her own pier -- or before there is one: a new
+            // game has no home until the player makes one (2026-09-29).
+            if (anchor.AtHomeDock || SeaSick.World.Dock.Home == null) { armedUntil = -99f; return; }
 
             int u = HudLayout.Unit;
             float pad = HudLayout.Pad;

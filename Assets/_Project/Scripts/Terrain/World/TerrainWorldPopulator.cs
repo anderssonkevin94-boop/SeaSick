@@ -215,7 +215,12 @@ namespace SeaSick.Terrain
             {
                 dressNext = default;
                 phase = "island " + i;
-                byComponent[islands[i].id] = BuildIsland(islands[i], profiles[i], i == 0, i, islands.Count);
+                // **No island is built as home** (Kevin, 2026-09-29: "remove the
+                // 'home' island ... you choose yourself which island to settle
+                // and once you've built a campfire and a pier/dock you can make
+                // it into your home island"). Every island is an ordinary one;
+                // home is whichever pier the player names (`Dock.SetHome`).
+                byComponent[islands[i].id] = BuildIsland(islands[i], profiles[i], false, i, islands.Count);
                 var job = dressNext;
                 if (job.island != null)
                 {

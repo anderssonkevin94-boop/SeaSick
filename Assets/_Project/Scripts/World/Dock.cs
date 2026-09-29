@@ -31,7 +31,20 @@ namespace SeaSick.World
         /// `Home`/`IsHome` (`AnchorController.AtHomeDock`/`BerthAtHome`,
         /// `VoyageManager.AtBerth`, `ShipyardService`) follows a move without
         /// its own code changing.
-        public static Dock Home { get; private set; }
+        public static Dock Home
+        {
+            get => home;
+            private set
+            {
+                home = value;
+                // Home is an ISLAND as well as a berth: the island this pier
+                // stands on (`Island.IsHome`, `Outpost.Home`, `Stockpile.Instance`
+                // all follow it). There is no island that is home by birth any
+                // more (2026-09-29): until a pier is named, nothing is.
+                Island.SetHome(value != null ? Island.Nearest(value.Berth) : null);
+            }
+        }
+        static Dock home;
 
         /// **The original harbour's dock**, kept aside once so a chosen pier
         /// that later gets demolished has somewhere to fall back to. Set

@@ -208,11 +208,12 @@ namespace SeaSick.UI.Sheets
             }
 
             var a = Anchor;
-            bool canHome = a != null && a.CurrentDock != null && !a.CurrentDock.IsHome;
+            bool canHome = CanMakeHome(a);
             bool feedback = Time.unscaledTime < homeFeedbackUntil;
             WatchTiles.Show(homePill, canHome || feedback);
             string ht = feedback ? homeFeedback
-                : Time.unscaledTime < homeArmedUntil ? "Tap again · home berth?" : "Make home berth";
+                : Time.unscaledTime < homeArmedUntil ? "Tap again · make this home?"
+                : SeaSick.World.Dock.Home == null ? "Make this island home" : "Move home here";
             if (homePill.text != ht) homePill.text = ht;
 
             // The hull: a pill only when there is something to press.
@@ -231,20 +232,37 @@ namespace SeaSick.UI.Sheets
             }
         }
 
-        /// First press arms it, second confirms: it permanently moves where
-        /// every refit, every voyage and her own spawn happen.
+        /// **Can this island be made home?** (Kevin, 2026-09-29: "you choose
+        /// yourself which island to settle and once you've built a campfire
+        /// and a pier/dock you can make it into your home island".) Tied up
+        /// at a pier (every dock is a player-built pier now -- there is no
+        /// harbour), on an island whose camp has its campfire, and not
+        /// already home. Home can move later by the same rule.
+        static bool CanMakeHome(AnchorController a)
+        {
+            if (a == null || a.CurrentDock == null || a.CurrentDock.IsHome) return false;
+            var isle = SeaSick.World.Island.Nearest(a.CurrentDock.Berth);
+            var camp = isle != null ? SeaSick.World.Outpost.Of(isle) : null;
+            return camp != null && camp.HasCamp;
+        }
+
+        /// First press arms it, second confirms: it moves where every refit,
+        /// every voyage and the stores' home pile are.
         void HomeBerthPressed()
         {
             var a = Anchor;
-            if (a == null || a.CurrentDock == null) return;
+            if (!CanMakeHome(a)) return;
             if (Time.unscaledTime >= homeArmedUntil) { homeArmedUntil = Time.unscaledTime + 3.5f; FillPills(); return; }
             homeArmedUntil = -99f;
             var chosen = a.CurrentDock;
             SeaSick.World.Dock.SetHome(chosen);
             var isle = SeaSick.World.Island.Nearest(chosen.Berth);
-            string label = isle != null ? isle.name + " pier" : "her new pier";
-            SeaSick.Save.SaveGame.Autosave("home berth moved to " + label);
-            homeFeedback = "Home berth: " + label;
+            // The voyage banks its homecoming into home's pile; a camp that has
+            // never had anything set down on it has none yet.
+            SeaSick.World.Stockpile.EnsureOn(isle);
+            string label = isle != null ? isle.name : "this island";
+            SeaSick.Save.SaveGame.Autosave("home moved to " + label);
+            homeFeedback = "Home: " + label;
             homeFeedbackUntil = Time.unscaledTime + 3f;
             FillPills();
             FillHeader();

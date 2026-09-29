@@ -198,15 +198,17 @@ namespace SeaSick.UI
 
         Rect ReserveNav(int u)
         {
-            if (voyage == null || voyage.HomePoint == null) return Rect.zero;
+            // "home N m" only once there is a home (2026-09-29: a new game has none).
+            if (voyage == null || SeaSick.World.Dock.Home == null) return Rect.zero;
             return HudLayout.Place(HudLayout.Slot.Nav,
                                    Mathf.Max(navWidth, u * 8f), u * 1.8f);
         }
 
         void DrawNav(Rect reserved, int u)
         {
-            if (voyage == null || voyage.HomePoint == null) return;
-            float dist = Island.FlatDistance(motor.transform.position, voyage.HomePoint.position);
+            var homeDock = SeaSick.World.Dock.Home;
+            if (voyage == null || homeDock == null) return;
+            float dist = Island.FlatDistance(motor.transform.position, homeDock.Berth);
             // Overload shows as "18/24+" rather than a number past the marked
             // line, so a loaded ship reads as loaded at a glance.
             // Keyed on exactly what is printed: speed to a tenth, distance to

@@ -617,8 +617,12 @@ namespace SeaSick.Save
             TerrainWorldPopulator pop, ShipMotor motor, MonoBehaviour host)
         {
             Outpost o = null;
-            if (os.isHome) o = Outpost.Home;
-            else
+            // **No home shortcut** (2026-09-29). Home used to be a camp the
+            // world build stood up, so `Outpost.Home` existed before any camp
+            // was restored. Home is now a player's camp named by its pier,
+            // `Outpost.Home` follows `Dock.Home`, and that is only restored in
+            // 5b, after this -- so every camp, home's included, comes back by
+            // its own island. `os.isHome` is kept in the file and not read.
             {
                 // The island she camped on, by its own centre; the land mask
                 // under the camp key only when a save predates that field.
@@ -630,8 +634,8 @@ namespace SeaSick.Save
                         + os.ledger.keyX + "," + os.ledger.keyZ + "); camp dropped");
                     yield break;
                 }
-                if (isle.IsHome) o = Outpost.Home;
-                else
+                o = Outpost.Of(isle);
+                if (o == null)
                 {
                     Outpost.BeginSurvey(isle, host);
                     float t0 = Time.realtimeSinceStartup;

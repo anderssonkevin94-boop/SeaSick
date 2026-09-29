@@ -44,7 +44,10 @@ namespace SeaSick.UI
             // Draw-only panel: skip the non-Repaint events. See StatusHUD for
             // the measurement — IMGUI runs OnGUI once per event, and the
             // discarded passes were the game's biggest source of GC garbage.
-            if (motor == null || voyage == null || voyage.HomePoint == null) return;
+            // The home mark points at the home berth, and there is none until
+            // the player makes one (2026-09-29).
+            var homeDock = SeaSick.World.Dock.Home;
+            if (motor == null || voyage == null || homeDock == null) return;
             if (!HudVisibility.Compass) return;
             if (SheetsHud.ChartActive) return;   // the chart's rim carries the bearings now
 
@@ -64,7 +67,7 @@ namespace SeaSick.UI
             UITheme.Rect(tape, UITheme.Panel);
 
             float heading = motor.Heading;
-            float homeBearing = BearingTo(motor.transform.position, voyage.HomePoint.position);
+            float homeBearing = BearingTo(motor.transform.position, homeDock.Berth);
 
             // Shade where the seas are coming from, weighted by how heavy they
             // are — a hint about the slow direction, not a forbidden zone. In

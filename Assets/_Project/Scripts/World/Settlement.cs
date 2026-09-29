@@ -11,7 +11,9 @@ namespace SeaSick.World
     /// between buildings, not a landform.
     public class Settlement : MonoBehaviour
     {
-        public static Settlement Home { get; private set; }
+        /// The survey on `Island.Home` (2026-09-29: derived from the home
+        /// berth), null before the player has made a home.
+        public static Settlement Home => Island.Home != null ? Island.Home.GetComponent<Settlement>() : null;
 
         [SerializeField] Vector3 centre;
         [SerializeField] float extent;
@@ -86,16 +88,5 @@ namespace SeaSick.World
             villageClearing = s.villageClearing;
             villageAt = s.villageAt;
         }
-
-        // Only the home island's survey claims the static. It used to be
-        // whichever enabled first, which was right while home was the only
-        // island ever surveyed -- and wrong the moment a camp surveys its own
-        // ground, because the docked camera reads `Home` to frame the village.
-        void OnEnable()
-        {
-            var isle = GetComponent<Island>();
-            if (Home == null || isle == null || isle.IsHome) Home = this;
-        }
-        void OnDisable() { if (Home == this) Home = null; }
     }
 }

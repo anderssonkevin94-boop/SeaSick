@@ -17,7 +17,11 @@ namespace SeaSick.World
         /// Home's pile. Kept because the voyage loop still banks at home
         /// specifically; anything asking about the island the ship is AT must
         /// use `Of`.
-        public static Stockpile Instance { get; private set; }
+        /// Derived from the home berth (2026-09-29): the pile on
+        /// `Island.Home`, null before the player has made a home.
+        /// Made on first ask, so a load (which rebuilds the island without
+        /// the runtime component) gets home's pile back with no save field.
+        public static Stockpile Instance => Island.Home != null ? EnsureOn(Island.Home) : null;
 
         [SerializeField] int perRow = 4;
         [SerializeField] float spacing = 1.7f;
@@ -39,16 +43,11 @@ namespace SeaSick.World
         void OnEnable()
         {
             if (!all.Contains(this)) all.Add(this);
-            // Only home claims the singleton. It used to be whichever pile
-            // enabled last -- harmless while there was exactly one, and a trap
-            // the moment a camp gets its own.
-            if (Instance == null || Island == null || Island.IsHome) Instance = this;
         }
 
         void OnDisable()
         {
             all.Remove(this);
-            if (Instance == this) Instance = null;
         }
 
         /// The pile on this island, or null if nothing has been landed there.

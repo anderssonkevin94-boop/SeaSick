@@ -20,7 +20,7 @@ MonoBehaviour:
   worldRadius: 0
   worldEdgeFalloff: 500
   worldOffset: {x: -58.950436, y: 4818.805}
-  homeIsle: 1
+  homeIsle: 0
   homeIsleCentre: {x: 0, y: 66}
   homeIsleRadius: 110
   homeIsleShape: 19
