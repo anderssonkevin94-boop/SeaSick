@@ -90,12 +90,12 @@ namespace SeaSick.Dev
 
             {"HandlingTuning.yawTauBuild",          (0.1f, 1.5f)},
             {"HandlingTuning.yawTauRelease",        (0.1f, 2f)},
-            {"HandlingTuning.turnCircleLengths",    (0.8f, 3f)},
+            {"HandlingTuning.turnCircleLengths",    (0.8f, 6f)},   // 2026-09-29: default is now 3.5, the old 3 cap would clamp it
             {"HandlingTuning.turnRateAtRest01",     (0f, 1f)},
             {"HandlingTuning.turnSpeedBleed",       (0f, 0.6f)},
             {"HandlingTuning.turnHeelDegrees",      (0f, 20f)},
             {"HandlingTuning.accelScale",           (0.3f, 3f)},
-            {"HandlingTuning.topSpeedScale",        (0.5f, 2f)},   // 2 = PaddleDrive.TopSpeedNow clamp; Kevin pinned 1.5
+            {"HandlingTuning.topSpeedScale",        (0.5f, 2f)},   // 2 = PaddleDrive.TopSpeedNow clamp; Kevin pinned 1.5 (09-24; default now 1.15)
             {"HandlingTuning.coastDownScale",       (0.3f, 3f)},
             {"HandlingTuning.paddleResponsiveness", (0f, 1.5f)},
 
@@ -103,6 +103,10 @@ namespace SeaSick.Dev
             {"JuiceTuning.camDropMeters",     (0f, 5f)},
             {"JuiceTuning.camLeanPerYawDeg",  (0f, 0.5f)},
             {"JuiceTuning.camLagSeconds",     (0f, 2f)},   // Kevin pinned 1.0
+            {"JuiceTuning.camYawLagSeconds",  (0f, 1.5f)}, // 0 = the old pinned-to-centre aim
+            {"JuiceTuning.camMaxOffCentreDeg",(0f, 18f)},  // past ~18 she leaves a portrait frame
+            {"JuiceTuning.camTurnOrbitDeg",   (0f, 30f)},  // 0 = no orbit; 25 = the old quarter
+            {"JuiceTuning.camDollyMax",       (1f, 1.5f)}, // 1.3 = the old far end
             {"JuiceTuning.sprayScale",        (0f, 5f)},   // Kevin pinned 3; particle caps bound it
             {"JuiceTuning.wakeScale",         (0f, 3f)},
             {"JuiceTuning.soundPitchRange",   (0f, 1f)},
@@ -176,9 +180,53 @@ namespace SeaSick.Dev
         string defaultsDeltaText = "DEFAULTS: (none changed)";
         float nextReadoutRefresh;
 
+        /// 2026-09-29 one-time rebase: Kevin found the handling and camera
+        /// "too rough around the edges and almost too much movement", so the
+        /// code defaults of these knobs were moved. A value saved on his phone
+        /// would silently override the new default, so the FIRST launch after
+        /// this change drops them from the saved JSON (rewritten without them)
+        /// and sets `RebaseKey`. Later SAVEs write whatever he tunes and are
+        /// kept, because the flag is already set.
+        static readonly HashSet<string> RebasedKeys = new HashSet<string>
+        {
+            "HandlingTuning.turnCircleLengths",
+            "HandlingTuning.turnRateAtRest01",
+            "HandlingTuning.topSpeedScale",
+            "JuiceTuning.camFovBoostDeg",
+            "JuiceTuning.camDropMeters",
+        };
+        const string RebaseKey = "FeelLab.rebase";
+
         void Awake()
         {
             savedAtStartup = ParseFlatJson(PlayerPrefs.GetString(PrefsKey, string.Empty));
+            if (PlayerPrefs.GetInt(RebaseKey, 0) < 1)
+            {
+                bool changed = false;
+                foreach (var key in RebasedKeys)
+                    changed |= savedAtStartup.Remove(key);
+                if (changed) PlayerPrefs.SetString(PrefsKey, DictToJson(savedAtStartup));
+                PlayerPrefs.SetInt(RebaseKey, 1);
+                PlayerPrefs.Save();
+            }
+        }
+
+        /// Same flat format as `BuildJson`, from a parsed dictionary.
+        static string DictToJson(Dictionary<string, object> dict)
+        {
+            var sb = new StringBuilder();
+            sb.Append('{');
+            bool first = true;
+            foreach (var kv in dict)
+            {
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append('"').Append(kv.Key).Append("\":");
+                if (kv.Value is bool b) sb.Append(b ? "true" : "false");
+                else sb.Append(((float)kv.Value).ToString("R", CultureInfo.InvariantCulture));
+            }
+            sb.Append('}');
+            return sb.ToString();
         }
 
         // ----------------------------------------------------------- reflection

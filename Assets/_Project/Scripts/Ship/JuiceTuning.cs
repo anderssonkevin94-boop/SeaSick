@@ -12,14 +12,32 @@ namespace SeaSick.Ship
     /// None of this changes how the ship moves. It is the feedback half: what
     /// the screen, the speaker and the hand are told about what she is doing.
     /// **Defaults = Kevin's FeelLab tuning, 2026-09-24** (phone, SAVE+LOG JSON pasted in chat after
-    /// "sailing feels a lot better"): values he changed are baked here; the
+    /// "sailing feels a lot better"): values he changed were baked here; the
     /// FeelLab still loads his saved PlayerPrefs over them on his phone.
+    /// **2026-09-29 calm-down:** camFovBoostDeg, camDropMeters and the coaster
+    /// camera's turn orbit / yaw follow were turned down (Kevin: "too rough
+    /// around the edges and almost too much movement"), so those no longer
+    /// match his 09-24 bake; his saved PlayerPrefs still win on his phone.
     public static class JuiceTuning
     {
         /// Extra vertical FOV at top speed, degrees.                 0..25
-        public static float camFovBoostDeg = 9.8f;
+        /// (2026-09-29: 9.8 -> 4; the speed dolly is the one speed effect now.)
+        public static float camFovBoostDeg = 4f;
         /// The chase camera sinks this far toward the water at top speed. 0..5
-        public static float camDropMeters = 1.07f;
+        /// (2026-09-29: 1.07 -> 0, off; it added to the sense of movement.)
+        public static float camDropMeters = 0f;
+        /// Far end of the speed dolly (seat multiplier at the burn notch, upright). 1..1.5
+        /// The near end (lying still) stays ChaseCamera.portraitStoppedPull.
+        public static float camDollyMax = 1.15f;
+        /// Coaster sailing camera: yaw follow time constant, seconds. 0 = locked on her. 0..1.5
+        /// Higher = the world pans less in a turn and she drifts off centre.
+        public static float camYawLagSeconds = 0.45f;
+        /// Coaster sailing camera: most the aim may trail the direct-at-ship yaw, degrees. 0..20
+        /// Portrait half-FOV is ~17-20, so 12 keeps her on screen.
+        public static float camMaxOffCentreDeg = 12f;
+        /// Coaster sailing camera: side swing of the seat in a sustained turn, degrees. 0..30
+        /// (2026-09-29: was a hard-coded 25 in SailingTurnOrbit.)
+        public static float camTurnOrbitDeg = 8f;
         /// Camera roll (deg) per deg/s of yaw rate, INTO the turn.     0..0.5
         public static float camLeanPerYawDeg = 0.028f;
         /// Smoothing time on the three camera effects above, seconds. 0 = instant. 0..1

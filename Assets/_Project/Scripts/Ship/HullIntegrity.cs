@@ -78,8 +78,33 @@ namespace SeaSick.Ship
             // never passes through it (measured: excludeLayers was 0 at
             // play start), so the bootstrap lives with the grounding it
             // makes room for.
-            foreach (var c in GetComponentsInChildren<Collider>(true))
-                c.excludeLayers = c.excludeLayers | SeaSick.Terrain.LandLayer.Mask;
+            ExcludeLand(gameObject);
+        }
+
+        // A refit/load rebuilds her colliders (gun boxes, deck-ramp and navy
+        // wall boxes, crew capsules) after Start ran: exclude Land again.
+        void OnEnable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced += OnShipReplaced;
+        void OnDisable() => SeaSick.Ship.Modular.ShipyardService.PlayerShipReplaced -= OnShipReplaced;
+        void OnShipReplaced(GameObject oldShip, GameObject newShip)
+        {
+            if (newShip == gameObject) ExcludeLand(gameObject);
+        }
+
+        /// **Every collider on the ship ignores the Land layer**, not just the
+        /// ones present at Start. Anything added later (Coaster gun boxes,
+        /// `CoasterNavigation`'s deck-ramp / navy-wall boxes, crew tap
+        /// capsules) otherwise collides with the terrain and, being part of
+        /// the ship's compound body, levers her over on a sloped beach. Same
+        /// rule as the hull box (`Shipyard.Refit`, `Start` above): the depth
+        /// field in `HoldOffTheLand` is what stops her at a shore. Contacts
+        /// only -- raycasts/overlaps still see both sides. Idempotent.
+        public static void ExcludeLand(GameObject ship)
+        {
+            if (ship == null) return;
+            LayerMask land = SeaSick.Terrain.LandLayer.Mask;
+            if (land.value == 0) return;
+            foreach (var c in ship.GetComponentsInChildren<Collider>(true))
+                c.excludeLayers = c.excludeLayers | land;
         }
 
         Rigidbody body;

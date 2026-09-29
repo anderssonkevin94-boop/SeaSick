@@ -746,7 +746,7 @@ namespace SeaSick.Ship
             // is the key. The cost twitches every frame; the label does not.
             int easePct = Mathf.RoundToInt(motor.EaseCost01 * 100f);
             if (easeText.Changed(HudLabel.Key(motor.Easing ? easePct : -1)))
-                easeText.Set(motor.Easing ? $"◉ easing −{easePct}%" : "◎ ease her");
+                easeText.Set(motor.Easing ? $"−{easePct}%" : "Ease");
             if (GUI.Button(easeRect, easeText.Content, easeStyle)) motor.Easing = !motor.Easing;
         }
 

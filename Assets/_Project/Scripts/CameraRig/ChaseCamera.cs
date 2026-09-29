@@ -459,6 +459,13 @@ namespace SeaSick.CameraRig
         /// before the rotation filter runs so it never accumulates.
         float appliedRoll;
         Rigidbody targetBody;
+        readonly SailingTurnOrbit turnOrbit = new SailingTurnOrbit();
+        Vector3 previousSailingPosition;
+        bool wasSailingQuarter;
+        /// Filtered camera yaw on the sailing-quarter path (2026-09-29), and whether it is seeded.
+        float sailYaw;
+        bool sailYawSeeded;
+        public float SailingQuarterAngle => turnOrbit.Angle;
 
         /// What the juice is adding right now, for the lab's readout.
         public float JuiceFov => juiceFov;
@@ -631,6 +638,7 @@ namespace SeaSick.CameraRig
         {
             cam = GetComponent<Camera>();
             Resolve();
+
         }
 
         // `Touch.activeTouches` is empty until this is on, and it is
@@ -702,6 +710,8 @@ namespace SeaSick.CameraRig
         {
             if (target == motorFor) return;
             motorFor = target;
+            turnOrbit.Reset();
+            wasSailingQuarter = false;
             motor = target != null
                 ? target.GetComponent<SeaSick.Ship.ShipMotor>() : null;
             targetBody = target != null ? target.GetComponent<Rigidbody>() : null;
@@ -733,6 +743,23 @@ namespace SeaSick.CameraRig
             if (target == null) return;
             float dt = Time.deltaTime;
             Resolve();
+            var sailingYard = target.GetComponent<SeaSick.Ship.Modular.ShipyardService>();
+            bool sailingQuarter = sailingYard != null && sailingYard.IsCoaster
+                && !PointOfInterest.HasValue && !SailOverride.HasValue
+                && !Overview.HasValue && !OverviewOverride.HasValue && overviewLevel < .001f
+                && LockTarget == null && lockLevel < .001f;
+            // Follow translation promptly, retaining angular smoothing around the hull.
+            if (sailingQuarter && wasSailingQuarter)
+            {
+                Vector3 travel = target.position - previousSailingPosition;
+                travel.y = 0f;
+                if (travel.sqrMagnitude < 100f) rigPos += travel;
+            }
+            previousSailingPosition = target.position;
+            wasSailingQuarter = sailingQuarter;
+            float orbitAngle = turnOrbit.Step(SeaSick.Ship.JuiceTuning.YawRateDeg(targetBody),
+                motor != null ? Mathf.Abs(motor.CurrentSpeed) : 0f, dt, sailingQuarter,
+                SeaSick.Ship.JuiceTuning.camTurnOrbitDeg);
 
             // What shape is the window? The same question the HUD asks, in
             // the same place, so a frame the camera composes for upright is
@@ -750,9 +777,13 @@ namespace SeaSick.CameraRig
             bool lyingStill = motor == null
                 || motor.Anchored
                 || (Mathf.Abs(motor.ThrottleOrder) < 0.02f && motor.CurrentSpeed < 0.5f);
+            // 2026-09-29: the far end is capped by JuiceTuning.camDollyMax (live
+            // knob; the scene's portraitZoomOut 0.30 would otherwise win) -- the
+            // dolly is the one speed effect kept, so it stays modest.
             float wantDolly = lyingStill
                 ? portraitStoppedPull
-                : 1f + portraitZoomOut * order01;
+                : Mathf.Min(1f + portraitZoomOut * order01,
+                            Mathf.Max(1f, SeaSick.Ship.JuiceTuning.camDollyMax));
             if (dolly < 0f) dolly = wantDolly;
             // Out at the framing rate, in at the slow one: backing off is an
             // answer to an order and should be prompt; coming closer is the
@@ -895,6 +926,18 @@ namespace SeaSick.CameraRig
                     bAhead = Mathf.Lerp(bAhead, portraitLookAhead, portrait01);
                 }
 
+                // The tall stern must not hide the working deck. Preserve the existing
+                // storm, lock-on and portrait behavior; lift only the coaster's base seat.
+                var coaster = target != null ? target.GetComponent<SeaSick.Ship.Modular.ShipyardService>() : null;
+                if (!SailOverride.HasValue && coaster != null && coaster.IsCoaster)
+                {
+                    float k = Mathf.Max(.1f,frameK);
+                    bHeight = (coaster.ActiveData.helm.y+8.3f)/k;
+                    bDist = 23f/k;
+                    bAhead = 7f/k;
+                    bLookH = 1.5f;
+                }
+
                 // Cruise is a LANDSCAPE move. Upright the preset is already
                 // backed off and lifted, and easing further out from there
                 // puts her at the bottom of a tall frame with nothing in it.
@@ -913,6 +956,10 @@ namespace SeaSick.CameraRig
 
                 anchor = shipFlat;
                 Vector3 sternDir = -flatForward;
+                // Show the carved side and working deck while preserving the horizon.
+                // Existing damping follows heading; combat framing retains its own orbit.
+                if (!SailOverride.HasValue && coaster != null && coaster.IsCoaster)
+                    sternDir = Quaternion.AngleAxis(orbitAngle * (1f - lockLevel), Vector3.up) * sternDir;
 
                 if (lockLevel > 0.001f && LockTarget != null)
                 {
@@ -945,7 +992,10 @@ namespace SeaSick.CameraRig
                 }
 
                 desired = shipFlat + sternDir * back + Vector3.up * up;
-                lookPoint = anchor + flatForward * (ahead * (1f - lockLevel))
+                Vector3 lookAheadDir = !SailOverride.HasValue && coaster != null && coaster.IsCoaster
+                    ? Quaternion.AngleAxis(orbitAngle * (1f - lockLevel), Vector3.up) * flatForward
+                    : flatForward;
+                lookPoint = anchor + lookAheadDir * (ahead * (1f - lockLevel))
                           + Vector3.up * (bLookH * frameK + seaY);
             }
 
@@ -1142,7 +1192,7 @@ namespace SeaSick.CameraRig
                 if (directOffset.sqrMagnitude < 1e-6f) directOffset = Vector3.zero;
                 rigPos = desired + directOffset;
             }
-            else rigPos = Vector3.Lerp(rigPos, desired, 1f - Mathf.Exp(-positionResponse * dt));
+            else rigPos = Vector3.Lerp(rigPos, desired, 1f - Mathf.Exp(-(sailingQuarter ? 3.5f : positionResponse) * dt));
 
             OverviewSettled = overviewLevel >= 1f && shot.HasValue
                 && (direct || (rigPos - desired).magnitude < 0.02f * Mathf.Max(10f, CurrentSpan));
@@ -1211,6 +1261,15 @@ namespace SeaSick.CameraRig
                         transform.position = new Vector3(cp.x, ground + clear, cp.z);
                 }
             }
+            if (sailingQuarter)
+            {
+                // Aim along the actual orbit radius, not the future desired seat.
+                // Otherwise heading lag sends the hull sideways out of a portrait frame.
+                Vector3 radial = shipFlat - transform.position; radial.y = 0f;
+                float aimDistance = Vector3.ProjectOnPlane(lookPoint - shipFlat, Vector3.up).magnitude;
+                Vector3 aim = shipFlat + radial.normalized * aimDistance;
+                lookPoint = new Vector3(aim.x, lookPoint.y, aim.z);
+            }
             Quaternion desiredRot = Quaternion.LookRotation(lookPoint - transform.position, Vector3.up);
             // Last frame's juice roll comes off first, so the rotation filter
             // runs on the un-rolled pose and the roll never accumulates.
@@ -1226,7 +1285,26 @@ namespace SeaSick.CameraRig
             }
             else framed = Quaternion.Slerp(unrolled, desiredRot,
                     1f - Mathf.Exp(-rotationResponse * dt));
-            appliedRoll = juiceRoll * atSea;
+            // Pitch keeps its swell smoothing; yaw is filtered on its own.
+            // 2026-09-29: it used to snap to the direct-at-ship yaw, which pinned
+            // her to screen centre and panned the whole world at the hull's turn
+            // rate (Kevin: "too rough around the edges and almost too much
+            // movement"). Now the aim eases after her with camYawLagSeconds, so
+            // she drifts a little off centre in a turn; camMaxOffCentreDeg keeps
+            // her inside the portrait frame (half-FOV ~17-20 deg) on a hard one.
+            if (sailingQuarter)
+            {
+                float directYaw = desiredRot.eulerAngles.y;
+                if (!sailYawSeeded) { sailYaw = transform.rotation.eulerAngles.y; sailYawSeeded = true; }
+                float tau = Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camYawLagSeconds);
+                float k = tau <= 1e-4f ? 1f : 1f - Mathf.Exp(-dt / tau);
+                sailYaw = Mathf.LerpAngle(sailYaw, directYaw, k);
+                float maxOff = Mathf.Max(0f, SeaSick.Ship.JuiceTuning.camMaxOffCentreDeg);
+                sailYaw = directYaw + Mathf.Clamp(Mathf.DeltaAngle(directYaw, sailYaw), -maxOff, maxOff);
+                framed = Quaternion.Euler(framed.eulerAngles.x, sailYaw, 0f);
+            }
+            else sailYawSeeded = false;
+            appliedRoll = sailingYard != null && sailingYard.IsCoaster ? 0f : juiceRoll * atSea;
             transform.rotation = framed * Quaternion.Euler(0f, 0f, appliedRoll);
 
             OverviewDirect = direct && directOffset == Vector3.zero

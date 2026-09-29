@@ -16,6 +16,10 @@ namespace SeaSick.Ship
     /// **Defaults = Kevin's FeelLab tuning, 2026-09-24** (phone, SAVE+LOG JSON pasted in chat after
     /// "sailing feels a lot better"): values he changed are baked here; the
     /// FeelLab still loads his saved PlayerPrefs over them on his phone.
+    /// **Re-based 2026-09-29** (Kevin: "too rough around the edges and almost
+    /// too much movement"): `turnCircleLengths`, `turnRateAtRest01` and
+    /// `topSpeedScale` are no longer his 09-24 bake; the FeelLab drops their
+    /// saved values once (`FeelLab.RebasedKeys`) so the new defaults show.
     public static class HandlingTuning
     {
         /// s, first-order lag for the yaw rate to BUILD toward what the helm
@@ -26,10 +30,13 @@ namespace SeaSick.Ship
         public static float yawTauRelease = 0.60f;
         /// Turn RADIUS at top speed, in hull lengths, before the flat-out
         /// falloff below: peak rate = topSpeed / (this x L). Was the constant
-        /// ShipMotor.TurnCircleLengths = 2.2 (a 4.4 L circle).       range 0.8..3
-        public static float turnCircleLengths = 1.6f;
+        /// ShipMotor.TurnCircleLengths = 2.2 (a 4.4 L circle).       range 0.8..6
+        /// 2026-09-29: 1.6 -> 3.5. Peak yaw measured ~34-43 deg/s; target is
+        /// ~15-20 deg/s. The rudder's response time (yawTau*) is unchanged.
+        public static float turnCircleLengths = 3.5f;
         /// Fraction of the peak turn rate available at zero speed.     range 0..1
-        public static float turnRateAtRest01 = 0.4f;
+        /// 2026-09-29: 0.4 -> 0.2, so she does not pivot on the spot.
+        public static float turnRateAtRest01 = 0.2f;
         /// Fraction of speed lost at the peak yaw rate:
         /// speed x (1 - this x (yawRate / peak)^2).                 range 0..0.6
         public static float turnSpeedBleed = 0.25f;
@@ -41,7 +48,9 @@ namespace SeaSick.Ship
         /// Multiplies acceleration (propulsive side only).          range 0.3..3
         public static float accelScale = 2.15f;
         /// Multiplies top speed.                                  range 0.5..1.5
-        public static float topSpeedScale = 1.5f;
+        /// 2026-09-29: 1.5 -> 1.15 (about 15 -> 11.5 m/s); burn/overdrive
+        /// still adds its burst on top.
+        public static float topSpeedScale = 1.15f;
         /// Multiplies what slows her while the telegraph is at stop
         /// (> 1 stops sooner).                                      range 0.3..3
         public static float coastDownScale = 1f;
@@ -49,6 +58,27 @@ namespace SeaSick.Ship
         /// strip-theory steamer, which also switches her yaw servo off).
         ///                                                          range 0..1.5
         public static float paddleResponsiveness = 1f;
+
+        // --- capsize safety net (2026-09-29), ExternalDrive hulls only ---
+        // The steamer/modular hulls skip ShipMotor's soft attitude limits and
+        // their strip buoyancy is small-angle, so once past ~60-70 deg she
+        // stayed inverted. Applied in `ShipMotor.ExternalRollGuard`.
+        /// deg of heel before the extra righting spring starts. Normal turn
+        /// heel and wave roll stay well inside it.                 range 20..60
+        public static float capsizeSoftRollDeg = 30f;
+        /// Extra righting spring past `capsizeSoftRollDeg`, as a multiple of
+        /// the hull's own RollStiffness (m g GM), per radian past it. range 0..6
+        public static float capsizeSoftRollStiffness = 1.5f;
+        /// Extra roll damping past the limit, as a damping ratio of that
+        /// spring (fades in over the first 10 deg past it).         range 0..3
+        public static float capsizeSoftRollDamping = 0.8f;
+        /// deg of heel (or hull up.y < 0.25) that counts as capsized. range 45..120
+        public static float capsizeRecoverRollDeg = 75f;
+        /// s she must stay capsized before she is righted.           range 0.5..6
+        public static float capsizeRecoverSeconds = 2f;
+        /// s the righting ease takes (spin zeroed, rotation eased to upright).
+        ///                                                          range 0.2..3
+        public static float capsizeRightingSeconds = 1f;
 
         /// Where the turn-rate curve peaks, as a fraction of top speed, and
         /// what is left of it flat out. From the 2026-09-18 helm design: 0.4x

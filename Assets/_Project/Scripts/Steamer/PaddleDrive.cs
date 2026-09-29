@@ -219,6 +219,10 @@ namespace SeaSick.Steamer
             servoPrimed = false;
             probesWritten = false;
             if (!Configured) return;
+            // Visual-only water rig reads this hull and the drawn rotor; forces are unchanged.
+            var waterEffects = GetComponent<ShipWaterEffects>();
+            if (waterEffects == null) waterEffects = gameObject.AddComponent<ShipWaterEffects>();
+            waterEffects.Configure(data, wheel);
 
             Derive();
             // The one way this model can silently fail its own gate: an

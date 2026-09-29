@@ -400,6 +400,131 @@ namespace SeaSick.Ship
         }
         float knockdownDeg, knockdownLeft, knockdownTotal = 1f;
 
+        // --- capsize safety net for ExternalDrive hulls (2026-09-29) ---
+        // Kevin's steamer/modular hull flipped at a beach: the soft limits
+        // below are skipped for ExternalDrive, HullFormBody only damps roll,
+        // and its buoyancy is small-angle (upY floored at 0.5), so past
+        // ~60-70 deg nothing brought her back. Two layers, both tunable in
+        // HandlingTuning (FeelLab): a soft righting spring + damper past
+        // `capsizeSoftRollDeg` (nothing inside it, so turn heel and wave roll
+        // are untouched), and, if she is still over past
+        // `capsizeRecoverRollDeg` for `capsizeRecoverSeconds`, a scripted
+        // righting: spin zeroed, rotation eased upright over
+        // `capsizeRightingSeconds`, lifted out of anything solid she is in.
+        SeaSick.Steamer.HullFormBody hullForm;
+        float capsizedFor;
+        bool righting;
+        float rightingT;
+        Quaternion rightingFrom, rightingTo;
+        static readonly Collider[] RightingOverlaps = new Collider[16];
+
+        /// True while the capsize recovery is easing her upright.
+        public bool Righting => righting;
+
+        /// Heel about her own keel, degrees, signed like `eulerAngles.z`
+        /// (+ = port side down), full +-180 range -- the euler reading wraps
+        /// and lies once she is past 90 or pitched hard.
+        float HeelDegrees()
+        {
+            Vector3 r = transform.right, u = transform.up;
+            return Mathf.Atan2(r.y, u.y) * Mathf.Rad2Deg;
+        }
+
+        void ExternalRollGuard(float dt)
+        {
+            if (rb == null || rb.isKinematic) { capsizedFor = 0f; righting = false; return; }
+
+            if (righting)
+            {
+                rightingT += dt / Mathf.Max(0.05f, HandlingTuning.capsizeRightingSeconds);
+                float e = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(rightingT));
+                Quaternion q = Quaternion.Slerp(rightingFrom, rightingTo, e);
+                rb.angularVelocity = Vector3.zero;
+                rb.MoveRotation(q);
+                LiftOutOfPenetration(q);
+                if (rightingT >= 1f) { righting = false; capsizedFor = 0f; }
+                return;
+            }
+
+            float roll = HeelDegrees();
+            float absRoll = Mathf.Abs(roll);
+            Vector3 axis = transform.forward;
+
+            // --- soft limit: a spring + damper only past the limit ---
+            // A knockdown is allowed to lay her over, as on the sail hulls.
+            float limit = HandlingTuning.capsizeSoftRollDeg;
+            if (knockdownLeft > 0f) limit = Mathf.Max(limit, 78f);
+            if (absRoll > limit)
+            {
+                if (hullForm == null) hullForm = GetComponent<SeaSick.Steamer.HullFormBody>();
+                float stiffness = hullForm != null && hullForm.RollStiffness > 0f
+                    ? hullForm.RollStiffness
+                    : rb.mass * Physics.gravity.magnitude * 0.5f; // GM 0.5 m fallback
+                float k = stiffness * Mathf.Max(0f, HandlingTuning.capsizeSoftRollStiffness);
+                float excessRad = (absRoll - limit) * Mathf.Deg2Rad;
+                float inertia = Mathf.Max(1f, RollInertia());
+                float c = 2f * Mathf.Max(0f, HandlingTuning.capsizeSoftRollDamping)
+                          * Mathf.Sqrt(Mathf.Max(k, stiffness) * inertia)
+                          * Mathf.Clamp01((absRoll - limit) / 10f);
+                float rollRate = Vector3.Dot(rb.angularVelocity, axis);
+                rb.AddTorque(axis * (-Mathf.Sign(roll) * k * excessRad - c * rollRate), ForceMode.Force);
+            }
+
+            // --- recovery: over for long enough -> right her ---
+            // Not during a knockdown: that is meant to lay her over. If it
+            // leaves her capsized, the clock starts when it ends.
+            bool over = knockdownLeft <= 0f
+                && (absRoll > HandlingTuning.capsizeRecoverRollDeg || transform.up.y < 0.25f);
+            capsizedFor = over ? capsizedFor + dt : 0f;
+            if (capsizedFor >= Mathf.Max(0.1f, HandlingTuning.capsizeRecoverSeconds))
+            {
+                righting = true;
+                rightingT = 0f;
+                rightingFrom = rb.rotation;
+                // Keep her heading; the keel's flat direction, or her deck's
+                // if she is standing on her bow/stern.
+                Vector3 f = transform.forward; f.y = 0f;
+                if (f.sqrMagnitude < 0.04f) { f = -transform.up; f.y = 0f; }
+                rightingTo = Quaternion.LookRotation(Flat(f), Vector3.up);
+                rb.angularVelocity = Vector3.zero;
+            }
+        }
+
+        /// Push her out of any solid, non-excluded collider her hull box is
+        /// inside (a pier, another hull). Land is excluded from her colliders
+        /// on purpose (`HullIntegrity.ExcludeLand`) and stays so: the shore
+        /// wall, not a lift onto the sand, is what grounds her.
+        void LiftOutOfPenetration(Quaternion rotation)
+        {
+            var box = GetComponent<BoxCollider>();
+            if (box == null || !box.enabled || box.isTrigger) return;
+            Vector3 pos = rb.position;
+            Vector3 scale = transform.lossyScale;
+            Vector3 half = Vector3.Scale(box.size, scale) * 0.5f;
+            half = new Vector3(Mathf.Abs(half.x), Mathf.Abs(half.y), Mathf.Abs(half.z));
+            Vector3 centre = pos + rotation * Vector3.Scale(box.center, scale);
+            int n = Physics.OverlapBoxNonAlloc(centre, half, RightingOverlaps, rotation, ~0,
+                QueryTriggerInteraction.Ignore);
+            Vector3 push = Vector3.zero;
+            int excluded = box.excludeLayers.value;
+            for (int i = 0; i < n; i++)
+            {
+                var other = RightingOverlaps[i];
+                if (other == null || other.isTrigger) continue;
+                if (other.attachedRigidbody == rb || other.transform.IsChildOf(transform)) continue;
+                if ((excluded & (1 << other.gameObject.layer)) != 0) continue;
+                if (Physics.ComputePenetration(box, pos, rotation, other,
+                        other.transform.position, other.transform.rotation, out Vector3 dir, out float dist))
+                    push += dir * dist;
+            }
+            if (push.sqrMagnitude > 1e-6f)
+            {
+                // Out, and never down into the sea.
+                if (push.y < 0f) push.y = 0f;
+                rb.position = pos + Vector3.ClampMagnitude(push, 3f);
+            }
+        }
+
         /// Broadside recoil: an instant roll-rate kick; the water damps it out
         /// over the next second or two, overshooting once — which is the feel.
         public void AddRecoilRoll(float degreesPerSecond)
@@ -943,7 +1068,7 @@ namespace SeaSick.Ship
 
             // Her attitude is bounded by her own flare and GM, not by a spring
             // that would fight the strip buoyancy at 16 degrees of pitch.
-            if (ExternalDrive) goto ExternalDriveKnockdown;
+            if (ExternalDrive) { ExternalRollGuard(dt); goto ExternalDriveKnockdown; }
 
             // --- soft attitude limits (replace the old hard clamps) ---
             float pitch = Signed(transform.eulerAngles.x);
